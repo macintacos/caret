@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Pre-push gate: lint + test"
+#MISE depends=["lint", "test"]
+
+set -euo pipefail
+
+echo "preflight: lint + test passed"

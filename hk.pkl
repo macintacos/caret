@@ -1,0 +1,53 @@
+amends "package://github.com/jdx/hk/releases/download/v1.45.0/hk@1.45.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.45.0/hk@1.45.0#/Builtins.pkl"
+
+// Keep the amends/import version in lockstep with the `hk` version in mise.toml.
+//
+// caret is a Bun + TypeScript + Svelte project linted/formatted by Biome. Biome
+// does NOT parse `.svelte` components, so the steps are scoped to TS/JS/JSON;
+// Svelte component linting is out of scope for v1.
+//
+// Two mappings keep the mise tasks single-purpose:
+//   mise run format -> the `fix` hook   -> `formatters` (write mode)
+//   mise run lint   -> the `check` hook -> `linters` (read-only rule checks)
+// The `pre-commit` hook runs BOTH, so every commit stays formatted and clean.
+
+// Formatters — rewrite files into canonical form (biome format).
+local formatters = new Mapping<String, Step> {
+  ["Web(Format)      [[biome]]"] = new Step {
+    glob = List("**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.json", "**/*.jsonc")
+    check = "biome format {{ files }}"
+    fix = "biome format --write {{ files }}"
+  }
+}
+
+// Linters — check rules without rewriting (biome lint; JS/TS only).
+local linters = new Mapping<String, Step> {
+  ["Web(Lint)        [[biome]]"] = new Step {
+    glob = List("**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs")
+    check = "biome lint {{ files }}"
+    fix = "biome lint --write {{ files }}"
+  }
+}
+
+hooks {
+  ["pre-commit"] {
+    fix = true
+    stash = "git"
+    steps = new Mapping<String, Step> {
+      ...formatters
+      ...linters
+    }
+  }
+
+  // `mise run format` — formatters only, in write mode.
+  ["fix"] {
+    fix = true
+    steps = formatters
+  }
+
+  // `mise run lint` — linters only (rule checks); read-only.
+  ["check"] {
+    steps = linters
+  }
+}

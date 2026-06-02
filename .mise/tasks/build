@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#MISE description="Build the UI then the binary (build-ui -> build-bin)"
+#MISE depends=["build-bin"]
+
+set -euo pipefail
+
+# build-bin depends on build-ui, so this umbrella task runs both in order.
+echo "caret build complete: bin/caret"

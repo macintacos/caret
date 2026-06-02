@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+bin/
+ui/dist/
+
+# Throwaway Phase-0 contract spike (never committed)
+spike/
+
+# Logs / OS cruft
+*.log
+.DS_Store
+
+# Nested worktrees (parity with the repo root)
+.claude/worktrees/
