@@ -234,6 +234,18 @@ test("PUT draft does not clobber the other field (either direction)", async () =
   expect(one.generalCommentDraft).toBe("keep both");
 });
 
+test("PUT draft treats an explicit null field as absent (not a clobber)", async () => {
+  await boot();
+  const { id } = await newReview();
+  await putDraft(id, { annotations: ANNS, generalCommentDraft: "keep me" });
+  // A malformed null payload must not null out a typed field — annotations
+  // would otherwise reach the client as null and crash its `.map`.
+  await putDraft(id, { annotations: null, generalCommentDraft: null });
+  const one = await (await fetch(`${base}/api/reviews/${id}`)).json();
+  expect(one.annotations).toEqual(ANNS);
+  expect(one.generalCommentDraft).toBe("keep me");
+});
+
 test("resolve clears the draft on the deny/rejected path", async () => {
   await boot();
   const { id } = await newReview();
