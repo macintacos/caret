@@ -22,6 +22,14 @@ for your platform, and registers it with Claude Code through the native plugin s
 `git clone` and no `claude --plugin-dir`. It requires [`git`](https://git-scm.com),
 [`bun`](https://bun.sh), and the [`claude`](https://claude.com/claude-code) CLI on your `PATH`.
 
+Not sure what it'll touch? Set `CARET_DRY_RUN=1` and the installer runs the same read-only
+detection — tool checks, release-tag lookup, clone-vs-update — then prints the exact commands it
+would run and changes nothing:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/install.sh | CARET_DRY_RUN=1 bash
+```
+
 Then restart Claude Code (or run `/reload-plugins`) and try it:
 
 ```sh
