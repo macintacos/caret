@@ -36,6 +36,12 @@ export function reviewsDir(): string {
   return `${stateDir()}/reviews`;
 }
 
+/** Machine-global UI prefs (last-used approve mode). One shared file under
+ * stateDir; last-write-wins. Separate from the per-review JSON in reviewsDir(). */
+export function prefsFile(): string {
+  return `${stateDir()}/prefs.json`;
+}
+
 /** Errors-only log for the short-lived `caret review` hook process. Single
  * source of truth for the path, shared by the writer and `/caret:debug`. */
 export function logFile(): string {
