@@ -2,6 +2,8 @@
 // single-file UI, bridges the hook's long-poll to the browser's decision, and
 // idle-auto-shuts-down when no reviews remain.
 
+import { mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { createDecisions } from "./decisions.ts";
 import {
   heartbeatMs as defaultHeartbeatMs,
@@ -37,6 +39,13 @@ export interface CreateServerOptions {
   routePlan?: RoutePlan;
   /** Path to the machine-global prefs file; defaults to paths.prefsFile(). */
   prefsPath?: string;
+  /** Single-instance lock file path. When set, the daemon writes the lock on a
+   * successful bind and removes it on stop(); omitted (default) means no lock is
+   * managed, so existing call sites/tests are unaffected. */
+  lockPath?: string;
+  /** Build fingerprint (paths.buildHash of the served UI) reported in
+   * /api/health and recorded in the lock, so a newer caret can detect staleness. */
+  buildId?: string;
   /** Lifecycle logger; defaults to a no-op so tests stay quiet. */
   log?: (msg: string) => void;
 }
@@ -73,6 +82,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   const onShutdown = opts.onShutdown ?? (() => process.exit(0));
   const routePlan = opts.routePlan ?? routeIncomingPlan;
   const prefsPath = opts.prefsPath ?? prefsFile();
+  const lockPath = opts.lockPath;
+  const buildId = opts.buildId;
   const log = opts.log ?? (() => {});
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount } = createDecisions();
 
@@ -142,7 +153,24 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       }
 
       if (method === "GET" && path === "/api/health") {
-        return Response.json(IDENTITY);
+        // `build` is dropped from the JSON when buildId is undefined, so a
+        // daemon with no build fingerprint reports the bare {service, version}.
+        return Response.json({ ...IDENTITY, build: buildId });
+      }
+
+      // Graceful single-instance retire (EXC-406): a newer caret asks this
+      // daemon to step down so it can take over the port. Loopback-guarded by
+      // the cross-origin check above. Pending reviews are already write-through
+      // to disk (store), so they rehydrate on the next daemon's start.
+      if (method === "POST" && path === "/api/retire") {
+        log("retire requested");
+        // Defer one tick so this 200 flushes before stop()/onShutdown (which may
+        // process.exit) — same pattern as the /resolve unblock below.
+        setTimeout(() => {
+          stop();
+          onShutdown();
+        }, 0);
+        return new Response(null, { status: 200 });
       }
 
       if (method === "GET" && (path === "/" || path === "/index.html")) {
@@ -303,11 +331,45 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   });
   log(`listening on 127.0.0.1:${server.port}`);
 
+  // Write the single-instance lock atomically (temp + rename) so a concurrent
+  // reader never sees a partial file. Best-effort: the lock is an optimization
+  // for graceful takeover, not required to serve.
+  function writeLock() {
+    if (!lockPath) return;
+    try {
+      mkdirSync(dirname(lockPath), { recursive: true });
+      const tmp = `${lockPath}.tmp.${process.pid}`;
+      writeFileSync(
+        tmp,
+        JSON.stringify({
+          pid: process.pid,
+          port: server.port,
+          build: buildId,
+          version: IDENTITY.version,
+          startedAt: Date.now(),
+        }),
+      );
+      renameSync(tmp, lockPath);
+    } catch {
+      // ignore — a missing lock only forfeits graceful takeover, never serving.
+    }
+  }
+  function removeLock() {
+    if (!lockPath) return;
+    try {
+      unlinkSync(lockPath);
+    } catch {
+      // already gone — idempotent across the multiple exit paths.
+    }
+  }
+  writeLock();
+
   function stop() {
     if (stopped) return;
     stopped = true;
     cancelIdle();
     server.stop();
+    removeLock();
   }
 
   // Startup-if-empty: arm the idle timer when no reviews were rehydrated.

@@ -3,6 +3,10 @@
 // the manual end-to-end test (two Claude instances).
 
 import { afterEach, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ensureDaemon, httpHealth } from "../src/cli.ts";
 import { createServer } from "../src/daemon.ts";
 import { createStore } from "../src/store.ts";
@@ -11,6 +15,24 @@ const servers: Array<{ stop(): void }> = [];
 afterEach(() => {
   for (const s of servers.splice(0)) s.stop();
 });
+
+/** Poll `pred` until it's true or the budget elapses. */
+async function waitFor(pred: () => boolean, ms: number): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < ms) {
+    if (pred()) return true;
+    await Bun.sleep(20);
+  }
+  return pred();
+}
+
+/** A loopback port that is free right now (probe-then-release). */
+function freePort(): number {
+  const probe = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response("x") });
+  const port = probe.port;
+  probe.stop();
+  return port;
+}
 
 test("httpHealth reports the caret identity from a live daemon", async () => {
   const srv = createServer({ store: createStore("/tmp/caret-it-x"), port: 0 });
@@ -54,5 +76,31 @@ test("ensureDaemon fails fast against a non-caret server on the port", async () 
     ).rejects.toThrow(/CARET_PORT/);
   } finally {
     foreign.stop();
+  }
+});
+
+test("the daemon writes the lock on start and removes it on SIGTERM", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-sigterm-"));
+  const lockPath = join(stateHome, "caret", "daemon.lock");
+  // A real detached daemon process — the only way to exercise runDaemon's
+  // signal/exit cleanup wiring end-to-end (lock removed on SIGTERM, EXC-406).
+  const proc = Bun.spawn([process.execPath, "src/cli.ts", "daemon"], {
+    env: {
+      ...process.env,
+      CARET_PORT: String(freePort()),
+      XDG_STATE_HOME: stateHome,
+      CARET_IDLE_MS: "600000", // don't idle-shutdown before we SIGTERM
+    },
+    stdio: ["ignore", "ignore", "ignore"],
+  });
+  try {
+    expect(await waitFor(() => existsSync(lockPath), 5000)).toBe(true);
+    proc.kill("SIGTERM");
+    expect(await waitFor(() => !existsSync(lockPath), 5000)).toBe(true);
+    await proc.exited;
+  } finally {
+    proc.kill("SIGKILL");
+    await proc.exited;
+    await rm(stateHome, { recursive: true, force: true });
   }
 });

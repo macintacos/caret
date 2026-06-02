@@ -9,12 +9,21 @@
 // allow. Every abnormal path (bad stdin, unreachable daemon, timeout, signal,
 // daemon death) emits a deny — never an allow.
 
-import { mkdirSync, openSync } from "node:fs";
+import { mkdirSync, openSync, unlinkSync } from "node:fs";
 import { dirname } from "node:path";
-import { createServer } from "./daemon.ts";
+import { createServer, type CaretServer } from "./daemon.ts";
 import { denyOutput, type HookOutput, toHookOutput } from "./feedback.ts";
 import { type ErrorContext, logError } from "./log.ts";
-import { daemonLogFile, getPort, logFile, reviewsDir, reviewTimeoutMs, stateDir } from "./paths.ts";
+import {
+  buildHash,
+  daemonLock,
+  daemonLogFile,
+  getPort,
+  logFile,
+  reviewsDir,
+  reviewTimeoutMs,
+  stateDir,
+} from "./paths.ts";
 import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "./plan-format.ts";
 import { createStore } from "./store.ts";
 import type { Decision, PlanInput } from "./types.ts";
@@ -296,11 +305,14 @@ async function runDaemon(): Promise<void> {
   const store = createStore(reviewsDir());
   await store.rehydrate();
   const html = await loadUiHtml();
+  let server: CaretServer;
   try {
-    createServer({
+    server = createServer({
       store,
       port: getPort(),
       serveHtml: html ? () => html : undefined,
+      lockPath: daemonLock(),
+      buildId: buildHash(html),
       log: (msg) => process.stderr.write(`[caret daemon] ${msg}\n`),
     });
   } catch (e) {
@@ -310,6 +322,30 @@ async function runDaemon(): Promise<void> {
     }
     throw e;
   }
+  // Cleanup is wired ONLY after a successful bind + lock write: a daemon that
+  // lost the EADDRINUSE race exits via the catch above without a lock, so it
+  // must never reach here and unlink the winner's lock. stop() removes the lock;
+  // pending reviews are already write-through to disk and rehydrate on restart.
+  const shutdown = (code: number) => {
+    server.stop();
+    process.exit(code);
+  };
+  process.once("SIGTERM", () => shutdown(0));
+  process.once("SIGINT", () => shutdown(0));
+  const onFatal = (label: string) => (err: unknown) => {
+    logError(label, err);
+    shutdown(1);
+  };
+  process.once("uncaughtException", onFatal("uncaughtException"));
+  process.once("unhandledRejection", onFatal("unhandledRejection"));
+  // Last-resort synchronous unlink in case an exit path bypassed stop().
+  process.once("exit", () => {
+    try {
+      unlinkSync(daemonLock());
+    } catch {
+      // already removed by stop(), or never written — both fine.
+    }
+  });
   // Bun.serve keeps the process alive; the daemon idle-auto-shuts-down.
 }
 
