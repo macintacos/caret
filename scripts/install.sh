@@ -16,8 +16,50 @@ REPO_URL="https://github.com/macintacos/caret.git"
 MARKETPLACE="caret"
 PLUGIN="caret"
 
-info() { printf '\033[1;34m==>\033[0m %s\n' "$1"; }
-err() { printf '\033[1;31merror:\033[0m %s\n' "$1" >&2; }
+# Dry-run is an env var, not a flag, so it survives a piped
+# `curl … | CARET_DRY_RUN=1 bash` (no `bash -s --` needed).
+DRY_RUN=0
+if [ "${CARET_DRY_RUN:-0}" = "1" ]; then DRY_RUN=1; fi
+
+# --- presentation -----------------------------------------------------------
+# Color and glyphs only on an interactive terminal with NO_COLOR unset. Anywhere
+# else (a pipe, CI, `| cat`) FANCY stays 0 and every helper degrades to a plain
+# line with no escape codes.
+FANCY=0
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then FANCY=1; fi
+
+if [ "$FANCY" -eq 1 ]; then
+  C_RESET=$'\033[0m'
+  C_BLUE=$'\033[1;34m'
+  C_GREEN=$'\033[0;32m'
+  C_RED=$'\033[1;31m'
+  C_DIM=$'\033[2m'
+  C_BOLD=$'\033[1m'
+else
+  C_RESET='' C_BLUE='' C_GREEN='' C_RED='' C_DIM='' C_BOLD=''
+fi
+
+info() { printf '%s==>%s %s\n' "$C_BLUE" "$C_RESET" "$1"; }
+err() { printf '%serror:%s %s\n' "$C_RED" "$C_RESET" "$1" >&2; }
+
+# A section header. Silent in dry-run — the plan summary speaks for that mode.
+section() {
+  if [ "$DRY_RUN" -eq 1 ]; then return 0; fi
+  printf '\n%s%s%s\n' "$C_BOLD" "$1" "$C_RESET"
+}
+
+# Per-step glyphs: → starting, ✓ done. STEP_LABEL lets ok() restate the label
+# without the caller repeating it. Both are silent in dry-run.
+STEP_LABEL=""
+step() {
+  STEP_LABEL="$1"
+  if [ "$DRY_RUN" -eq 1 ]; then return 0; fi
+  printf '  %s→%s %s\n' "$C_BLUE" "$C_RESET" "$1"
+}
+ok() {
+  if [ "$DRY_RUN" -eq 1 ]; then return 0; fi
+  printf '  %s✓%s %s\n' "$C_GREEN" "$C_RESET" "${1:-$STEP_LABEL}"
+}
 
 require() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -26,6 +68,57 @@ require() {
   }
 }
 
+# --- print-or-execute -------------------------------------------------------
+# Every mutating command goes through run(): in dry-run it is recorded (quoted)
+# into PLAN and not executed; otherwise it runs under `set -euo pipefail`. One
+# chokepoint means the dry-run preview IS the real command list — it can't drift.
+PLAN=()
+quote() {
+  local q
+  q="$(printf '%q ' "$@")"
+  printf '%s' "${q% }"
+}
+run() {
+  if [ "$DRY_RUN" -eq 1 ]; then
+    PLAN+=("$(quote "$@")")
+    return 0
+  fi
+  "$@"
+}
+
+# The dry-run summary: what was detected, the exact commands that would run, and
+# an explicit "nothing changed" closer. Drawn with a left bar so it needs no
+# right-edge width math, and it reads fine plain (no color) too.
+print_plan() {
+  local i=1 cmd
+  printf '\n%s┌─ DRY RUN ─ caret installer%s\n' "$C_BOLD" "$C_RESET"
+  printf '%s│%s\n' "$C_DIM" "$C_RESET"
+  if [ "$SRC_KIND" = "local" ]; then
+    printf '%s│%s  Source   local checkout at %s\n' "$C_DIM" "$C_RESET" "$REPO_DIR"
+    printf '%s│%s           build the current ref (%s) in place — no tag lookup, no clone\n' \
+      "$C_DIM" "$C_RESET" "$REF_DESC"
+  else
+    printf '%s│%s  Source   caret release %s\n' "$C_DIM" "$C_RESET" "$TAG"
+    if [ "$SRC_ACTION" = "update" ]; then
+      printf '%s│%s           fast-forward the existing checkout at %s\n' "$C_DIM" "$C_RESET" "$REPO_DIR"
+    else
+      printf '%s│%s           clone fresh into %s\n' "$C_DIM" "$C_RESET" "$REPO_DIR"
+    fi
+  fi
+  printf '%s│%s\n' "$C_DIM" "$C_RESET"
+  printf '%s│%s  Would run, in order:\n' "$C_DIM" "$C_RESET"
+  if [ "${#PLAN[@]}" -gt 0 ]; then
+    for cmd in "${PLAN[@]}"; do
+      printf '%s│%s    %2d  %s\n' "$C_DIM" "$C_RESET" "$i" "$cmd"
+      i=$((i + 1))
+    done
+  fi
+  printf '%s│%s\n' "$C_DIM" "$C_RESET"
+  printf '%s└─%s dry run complete — nothing was changed.\n' "$C_BOLD" "$C_RESET"
+}
+
+# --- preflight (read-only) --------------------------------------------------
+# Runs in dry-run too: a missing tool hard-fails here exactly as in a real run.
 require git "install git, then re-run"
 require bun "install Bun from https://bun.sh, then re-run"
 require claude "install Claude Code (https://claude.com/claude-code), then re-run"
@@ -44,63 +137,103 @@ latest_release_tag() {
   printf '%s' "${ref##*/}" # strip through the last slash -> "vX.Y.Z"
 }
 
-# Source resolution: if this script is being run from a file inside an existing
-# caret checkout (dev, or already cloned), build that checkout in place.
-# Otherwise clone (or fast-forward) into a stable data directory.
+# --- source resolution (read-only) ------------------------------------------
+# If this script is being run from a file inside an existing caret checkout
+# (dev, or already cloned), build that checkout in place. Otherwise resolve the
+# latest release and clone (or fast-forward) into a stable data directory. This
+# detection is identical in dry-run and a real run — only execution differs.
 REPO_DIR=""
+SRC_KIND=""
+REF_DESC=""
+TAG=""
+SRC_ACTION=""
 src="${BASH_SOURCE[0]:-}"
 if [ -n "$src" ] && [ -f "$src" ]; then
   candidate="$(cd "$(dirname "$src")/.." 2>/dev/null && pwd || true)"
   if [ -n "$candidate" ] && [ -f "$candidate/.claude-plugin/marketplace.json" ]; then
     REPO_DIR="$candidate"
-    ref_desc="$(git -C "$REPO_DIR" describe --tags --always --dirty 2>/dev/null || echo 'unknown ref')"
-    info "Using the local caret checkout at $REPO_DIR — building $ref_desc, not a published release"
+    SRC_KIND="local"
+    REF_DESC="$(git -C "$REPO_DIR" describe --tags --always --dirty 2>/dev/null || echo 'unknown ref')"
   fi
 fi
 if [ -z "$REPO_DIR" ]; then
+  SRC_KIND="release"
   REPO_DIR="${CARET_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/caret}"
-
-  tag="$(latest_release_tag)"
-  if [ -z "$tag" ]; then
+  TAG="$(latest_release_tag)"
+  if [ -z "$TAG" ]; then
     err "no caret release tags (vX.Y.Z) found at $REPO_URL — the release process may not have run yet"
     exit 1
   fi
-
   if [ -d "$REPO_DIR/.git" ]; then
-    info "Updating caret in $REPO_DIR to release $tag"
-    git -C "$REPO_DIR" fetch --depth 1 --force origin "refs/tags/$tag:refs/tags/$tag"
-    git -C "$REPO_DIR" checkout --quiet --detach "$tag"
+    SRC_ACTION="update"
   else
-    info "Cloning caret release $tag into $REPO_DIR"
-    git clone --depth 1 --branch "$tag" "$REPO_URL" "$REPO_DIR"
+    SRC_ACTION="clone"
   fi
 fi
 
-cd "$REPO_DIR"
+# --- fetch / source ---------------------------------------------------------
+if [ "$SRC_KIND" = "local" ]; then
+  section "Source"
+  step "Building the local checkout at $REPO_DIR ($REF_DESC) in place"
+  ok
+else
+  section "Fetch"
+  if [ "$SRC_ACTION" = "update" ]; then
+    step "Updating $REPO_DIR to release $TAG"
+    run git -C "$REPO_DIR" fetch --depth 1 --force origin "refs/tags/$TAG:refs/tags/$TAG"
+    run git -C "$REPO_DIR" checkout --quiet --detach "$TAG"
+    ok
+  else
+    step "Cloning release $TAG into $REPO_DIR"
+    run git clone --depth 1 --branch "$TAG" "$REPO_URL" "$REPO_DIR"
+    ok
+  fi
+fi
 
-info "Installing build dependencies (bun install)"
-bun install
+# --- build ------------------------------------------------------------------
+run cd "$REPO_DIR"
 
-info "Building the UI and the caret binary (platform-specific)"
-(cd ui && bunx vite build)
-bun build --compile --outfile bin/caret src/cli.ts
+section "Build"
+step "Installing build dependencies"
+run bun install
+ok
+
+step "Building the UI"
+run bash -c 'cd ui && bunx vite build'
+ok
+
+step "Compiling the caret binary"
+run bun build --compile --outfile bin/caret src/cli.ts
+ok
+
 # Keep a copy of the UI beside the binary as a runtime fallback.
-cp ui/dist/index.html bin/index.html
+step "Bundling the UI fallback"
+run cp ui/dist/index.html bin/index.html
+ok
 
-[ -x bin/caret ] || {
+if [ "$DRY_RUN" -eq 0 ] && [ ! -x bin/caret ]; then
   err "build did not produce bin/caret"
   exit 1
-}
+fi
 
-info "Registering caret with Claude Code"
-# Register caret's directory as a local marketplace (idempotent).
-claude plugin marketplace add "$REPO_DIR" 2>/dev/null ||
-  claude plugin marketplace update "$MARKETPLACE" >/dev/null
+# --- register ---------------------------------------------------------------
+section "Register"
+# Register caret's directory as a local marketplace (idempotent: add, else update).
+step "Registering the caret marketplace"
+run claude plugin marketplace add "$REPO_DIR" || run claude plugin marketplace update "$MARKETPLACE"
+ok
+
 # Reinstall so the freshly built binary always lands in the plugin cache, even
 # when the version is unchanged.
-claude plugin uninstall "${PLUGIN}@${MARKETPLACE}" >/dev/null 2>&1 || true
-claude plugin install "${PLUGIN}@${MARKETPLACE}" --scope user >/dev/null
-claude plugin enable "${PLUGIN}@${MARKETPLACE}" >/dev/null 2>&1 || true
+step "Installing the caret plugin"
+run claude plugin uninstall "${PLUGIN}@${MARKETPLACE}" || true
+run claude plugin install "${PLUGIN}@${MARKETPLACE}" --scope user
+run claude plugin enable "${PLUGIN}@${MARKETPLACE}" || true
+ok
 
-echo
-info "caret installed. Restart Claude Code (or run /reload-plugins), then try /caret:demo."
+if [ "$DRY_RUN" -eq 1 ]; then
+  print_plan
+else
+  echo
+  info "caret installed. Restart Claude Code (or run /reload-plugins), then try /caret:demo."
+fi
