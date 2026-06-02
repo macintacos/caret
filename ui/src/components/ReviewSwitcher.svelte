@@ -73,7 +73,6 @@
     cursor: default;
   }
   .title {
-    font-family: var(--font-display);
     font-weight: 500;
     font-size: 0.95rem;
     color: var(--ink);
@@ -130,7 +129,6 @@
     background: var(--accent-wash);
   }
   .m-title {
-    font-family: var(--font-display);
     font-size: 0.92rem;
     color: var(--ink);
   }

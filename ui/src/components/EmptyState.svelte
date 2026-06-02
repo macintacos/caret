@@ -32,7 +32,7 @@
     color: var(--ink-soft);
   }
   .glyph {
-    font-family: var(--font-display);
+    font-family: var(--font-mono);
     font-size: 6rem;
     line-height: 1;
     color: var(--accent);
@@ -50,7 +50,6 @@
     }
   }
   h2 {
-    font-family: var(--font-display);
     font-weight: 500;
     font-size: 1.7rem;
     margin: 1.5rem 0 0.5rem;

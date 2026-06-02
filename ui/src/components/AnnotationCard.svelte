@@ -165,7 +165,6 @@
   textarea {
     width: 100%;
     resize: vertical;
-    font-family: var(--font-body);
     font-size: 0.9rem;
     color: var(--ink);
     background: var(--paper);

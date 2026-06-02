@@ -109,7 +109,6 @@
     animation: pop 0.14s ease-out;
   }
   .quote {
-    font-family: var(--font-body);
     font-style: italic;
     font-size: 0.85rem;
     color: var(--ink-soft);
@@ -122,7 +121,6 @@
   textarea {
     width: 100%;
     resize: vertical;
-    font-family: var(--font-body);
     font-size: 0.9rem;
     color: var(--ink);
     background: var(--paper);
