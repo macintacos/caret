@@ -101,9 +101,8 @@
       lastLoadedKey = key;
       annotations = active.annotations.map((a) => ({ ...a }));
       focusedAnnotation = null;
-      // Seed the draft only when the review id changes — guarded separately from
-      // the id:version annotation reload so a revision (same id, new version)
-      // and the poll never re-seed over live keystrokes.
+      // Seed on id change only, via its own guard (see lastDraftLoadedId above) —
+      // independent of the id:version annotation reload around it.
       if (active.id !== lastDraftLoadedId) {
         lastDraftLoadedId = active.id;
         generalCommentDraft = active.generalCommentDraft ?? "";
