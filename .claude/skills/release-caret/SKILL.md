@@ -35,6 +35,18 @@ bun scripts/release/cli.ts compute <bump>
 - **`ok: true` and `currentVersion === previousVersion`** → the manifests still match the latest release tag, so no prepared bump is merged → run **Phase 1**.
 - **`ok: true` and `currentVersion !== previousVersion`** → the manifests are ahead of the latest tag, i.e. a prepared bump is already merged on trunk awaiting its tag → run **Phase 2**.
 
+`compute` is the phase oracle, but it needs a clean, up-to-date `trunk` (it guards the branch and reads local state). When you're **resuming Phase 2** — e.g. still on the `release/<tag>` branch Phase 1 left you on — `finalize --dry-run` is a valid alternative probe: it tags `origin/trunk` regardless of your local branch, so it reports `NOT_MERGED` while the bump isn't merged yet and `ok: true` (with the concrete `tag`/`taggedSha`) once it is. Use it to detect Phase-2 readiness without switching back to trunk first.
+
+---
+
+## Running under plan mode
+
+`/release-caret` mutates state and has two confirmation gates, so its flow has to map onto plan mode's single `ExitPlanMode` approval. **Outside plan mode this section does not apply** — both gates fire as the normal `AskUserQuestion`s written below. When you are invoked **under plan mode**, remap as follows:
+
+- **Version confirmation (Phase 1 step 2) folds into `ExitPlanMode`.** Don't raise a separate `AskUserQuestion` for the version — present the script-computed version (verbatim from `compute`'s JSON) inside the plan, and let plan approval stand in for that gate.
+- **The changelog goes in the plan, not on disk yet.** Plan mode can't write `CHANGELOG.md`, so put the full proposed changelog (heading + entries) in the plan for review. Author it to disk for real **after** exiting plan mode, before `prepare`.
+- **The remote-mutation gate (Phase 1 step 4) still fires after exiting.** Plan approval is not consent to push. Once you've exited and written the changelog, run the remote-mutation `AskUserQuestion` as normal, and pass `--yes` only after it.
+
 ---
 
 ## Phase 1 — open the release PR
@@ -50,7 +62,7 @@ If phase detection returned `NO_BASELINE`, there are no release tags yet — the
 
 On confirmation, run `bun scripts/release/cli.ts baseline --yes` (or `--dry-run` for a dry run), then re-run `compute <bump>`.
 
-Otherwise you already have the successful `compute` result from phase detection. From it, keep: `currentVersion`, `version`, `tag`, `commits[]`, `compareUrl`, `unreleasedCompareUrl`.
+Otherwise you already have the successful `compute` result from phase detection. From it, keep: `currentVersion`, `version`, `tag`, `date`, `commits[]`, `compareUrl`, `unreleasedCompareUrl`, `manifests`. (`date` stamps the changelog heading; `manifests` lists the version-bearing files the script mutates, so you never have to grep `steps.ts` for them.)
 
 ### 2. Confirm the version (AskUserQuestion #1)
 
@@ -74,7 +86,7 @@ The section heading **must** be exactly this shape so the script can parse the t
 ```
 
 - If `CHANGELOG.md` does not exist, create it with the standard header (title, intro line linking Keep a Changelog and semver, and an `## [Unreleased]` section).
-- Move the `[Unreleased]` entries under the new `## [<version>] - <DATE> - The <Theme> Release` heading; use today's date.
+- Move the `[Unreleased]` entries under the new `## [<version>] - <DATE> - The <Theme> Release` heading, stamping `<DATE>` from `compute`'s `date` field verbatim. It is already UTC `YYYY-MM-DD` in the heading's required shape — never hand-pick, paraphrase, or recompute it.
 - Group the work under the standard categories (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`) — write human-readable entries derived from `commits[]`, not raw commit subjects.
 - Reseed a fresh, empty `## [Unreleased]` above the new section.
 - Maintain the link-reference footers at the bottom, using the URLs from the script:
@@ -101,11 +113,13 @@ bun scripts/release/cli.ts prepare <bump> --yes      # real
 bun scripts/release/cli.ts prepare <bump> --dry-run  # dry run (no --yes)
 ```
 
-Parse the result and report the `prUrl`. Tell the user: once the PR is reviewed and merged, re-run `/release-caret` to finalize (tag trunk + publish the GitHub Release).
+Parse the result and report the `prUrl`. The next step is Phase 2 (tag trunk + publish the GitHub Release) once the PR is reviewed and merged. **In the same session**, just continue to Phase 2 directly after the merge is confirmed — pull trunk (or run the `finalize --dry-run` probe) and proceed. Re-invoking `/release-caret` is only needed when finalizing from a **fresh session**.
 
 ---
 
 ## Phase 2 — tag and publish
+
+`finalize` tags `origin/trunk`'s merged HEAD after an unconditional fetch, so it runs from **any** branch — including the `release/<tag>` branch Phase 1 leaves you on. You don't need to switch back to trunk first. The publish-safety gates are a clean working tree and the `NOT_MERGED` check that the bump is actually on trunk, not the working branch.
 
 ### 1. Preview the finalize
 

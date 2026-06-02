@@ -36,6 +36,8 @@ export interface Deps {
   github: GitHubOps;
   fs: FsOps;
   io: Io;
+  /** Clock seam: the current instant, injected so `compute`'s date is testable. */
+  now(): Date;
   preflight(): Promise<{ ok: boolean; output: string }>;
 }
 
@@ -225,7 +227,9 @@ export async function compute(deps: Deps, opts: { bump: BumpLevel }): Promise<Co
     releaseBranch: ctx.releaseBranch,
     compareUrl: compareUrl(repoSlug, ctx.previousTag, ctx.tag),
     unreleasedCompareUrl: compareUrl(repoSlug, ctx.tag, "HEAD"),
+    date: deps.now().toISOString().slice(0, 10),
     commits,
+    manifests: MANIFESTS,
     manifestsInSync: true,
   };
 }
@@ -440,7 +444,11 @@ export async function prepare(
 /** Phase 2: tag trunk's merged HEAD and publish the GitHub Release. */
 export async function finalize(deps: Deps, opts: { dryRun: boolean }): Promise<FinalizeResult> {
   const { defaultBranch } = await assertRepoAndGh(deps);
-  await assertBranch(deps, defaultBranch);
+  // No branch guard here: finalize tags origin/trunk's HEAD (derived after the
+  // unconditional fetch below), so the local working branch is irrelevant. After
+  // phase 1, `prepare` leaves the checkout on release/vX.Y.Z — guarding the branch
+  // here would reject every phase-2 entry. The real publish-safety gates are the
+  // clean-tree check and the NOT_MERGED triple-check below.
   await assertCleanTree(deps);
 
   // Fetch unconditionally (read-only): even a dry run must read a fresh

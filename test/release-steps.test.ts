@@ -55,6 +55,7 @@ interface Options {
   releases?: Record<string, { url: string }>;
   preflightOk?: boolean;
   available?: boolean;
+  now?: string;
 }
 
 function harness(opts: Options = {}) {
@@ -217,6 +218,7 @@ function harness(opts: Options = {}) {
     github,
     fs,
     io: { log: () => {} },
+    now: () => new Date(opts.now ?? "2026-06-02T00:00:00Z"),
     preflight: async () => ({ ok: opts.preflightOk ?? true, output: "" }),
   };
   return { deps, calls, files, state };
@@ -248,6 +250,17 @@ test("compute returns the next version, tag, and parsed commits", async () => {
   );
   expect(r.commits[0]?.issueRefs).toEqual(["EXC-1"]);
   expect(r.commits[0]?.prNumber).toBe(2);
+});
+
+test("compute surfaces the UTC date and the manifest paths", async () => {
+  const { deps } = harness();
+  const r = await compute(deps, { bump: "minor" });
+  expect(r.date).toBe("2026-06-02");
+  expect(r.manifests).toEqual([
+    "package.json",
+    ".claude-plugin/marketplace.json",
+    ".claude-plugin/plugin.json",
+  ]);
 });
 
 test("compute rejects with NO_BASELINE when there are no tags", async () => {
@@ -450,6 +463,18 @@ test("finalize tags trunk's merged HEAD and creates the release", async () => {
   expect(r.releaseUrl).toBe(
     "https://github.com/macintacos/caret/releases/tag/v0.1.0",
   );
+});
+
+test("finalize succeeds from a release branch (working branch is irrelevant)", async () => {
+  // Phase 1's `prepare` leaves the checkout on release/v0.1.0; finalize tags
+  // origin/trunk's HEAD, so the local branch must not block it.
+  const { deps, calls } = harness({ ...FINALIZE_OPTS, branch: "release/v0.1.0" });
+  const r = await finalize(deps, { dryRun: false });
+  expect(r.version).toBe("0.1.0");
+  expect(r.tag).toBe("v0.1.0");
+  expect(r.taggedSha).toBe("mergedsha");
+  expect(calls).toContain("createTag:v0.1.0@mergedsha");
+  expect(calls).toContain("releaseCreate:v0.1.0");
 });
 
 test("finalize dry-run mutates nothing", async () => {

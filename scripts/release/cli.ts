@@ -24,6 +24,7 @@ function realDeps(): Deps {
       exists: (path) => Bun.file(path).exists(),
     },
     io: { log: (m) => process.stderr.write(`${m}\n`) },
+    now: () => new Date(),
     preflight: async () => {
       // .quiet() keeps preflight's task output off our stdout (which must
       // stay a single JSON object); it is still captured into r.stdout/r.stderr.
