@@ -34,7 +34,12 @@ require claude "install Claude Code (https://claude.com/claude-code), then re-ru
 # the release tooling in scripts/release/git.ts.
 latest_release_tag() {
   local out ref
-  out="$(git ls-remote --tags --refs --sort=-v:refname "$REPO_URL" 'v*.*.*' 2>/dev/null || true)"
+  # Distinguish "couldn't reach the remote" from "remote has no release tags":
+  # ls-remote exits non-zero only on the former; an empty result is the latter.
+  if ! out="$(git ls-remote --tags --refs --sort=-v:refname "$REPO_URL" 'v*.*.*' 2>/dev/null)"; then
+    err "could not reach $REPO_URL to list release tags — check your connection and re-run"
+    exit 1
+  fi
   ref="${out%%$'\n'*}"     # first line: "<sha>\trefs/tags/vX.Y.Z"
   printf '%s' "${ref##*/}" # strip through the last slash -> "vX.Y.Z"
 }
