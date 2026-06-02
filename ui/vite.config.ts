@@ -15,9 +15,11 @@ export default defineConfig({
     },
   },
   server: {
-    // `mise run dev` proxies the JSON API to the running daemon.
+    // `mise run dev` proxies the JSON API to its isolated dev daemon. The dev
+    // task exports CARET_PORT as the single source of truth, so the daemon and
+    // this proxy can't diverge; the prod default keeps `vite build` working.
     proxy: {
-      "/api": "http://localhost:42718",
+      "/api": `http://localhost:${process.env.CARET_PORT ?? 42718}`,
     },
   },
 });

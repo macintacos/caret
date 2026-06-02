@@ -1,7 +1,40 @@
 #!/usr/bin/env bash
-#MISE description="Run the Vite dev server for the UI"
+#MISE description="Run the dev UI with an isolated, fake-plan-seeded caret daemon"
 
 set -euo pipefail
 
+# Isolation (AC1, AC5): a fixed dev port distinct from the prod default (42718)
+# and an ephemeral state dir, both exported so the daemon, driver, and Vite
+# proxy read the same values and never touch a globally-installed caret.
+export CARET_PORT="${CARET_DEV_PORT:-42719}"
+state_dir="$(mktemp -d "${TMPDIR:-/tmp}/caret-dev.XXXXXX")"
+export XDG_STATE_HOME="$state_dir"
+# Keep the dev daemon from idle-auto-shutting-down mid-session (AC4).
+export CARET_IDLE_MS=2147483647
+echo "caret dev: port=$CARET_PORT state=$state_dir"
+
+daemon_pid=""
+driver_pid=""
+
+# Reap the spawned daemon + driver and drop the ephemeral state on exit (AC6).
+cleanup() {
+  if [ -n "$driver_pid" ]; then kill "$driver_pid" 2>/dev/null || true; fi
+  if [ -n "$daemon_pid" ]; then kill "$daemon_pid" 2>/dev/null || true; fi
+  rm -rf "$state_dir"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# Stock daemon, run from source so daemon edits are live without a rebuild.
+bun src/cli.ts daemon &
+daemon_pid=$!
+
+# Seed the fake plan and play the agent's protocol side (waits for health first).
+bun scripts/dev/driver.ts &
+driver_pid=$!
+
+# Vite (foreground) proxies /api to the dev daemon via CARET_PORT. Not `exec`,
+# so the trap survives to run cleanup when Vite exits (e.g. on Ctrl-C).
 cd ui
-exec bunx vite
+bunx vite
