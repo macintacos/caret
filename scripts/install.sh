@@ -70,8 +70,8 @@ cp ui/dist/index.html bin/index.html
 
 info "Registering caret with Claude Code"
 # Register caret's directory as a local marketplace (idempotent).
-claude plugin marketplace add "$REPO_DIR" 2>/dev/null \
-  || claude plugin marketplace update "$MARKETPLACE" >/dev/null
+claude plugin marketplace add "$REPO_DIR" 2>/dev/null ||
+  claude plugin marketplace update "$MARKETPLACE" >/dev/null
 # Reinstall so the freshly built binary always lands in the plugin cache, even
 # when the version is unchanged.
 claude plugin uninstall "${PLUGIN}@${MARKETPLACE}" >/dev/null 2>&1 || true

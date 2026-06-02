@@ -31,10 +31,10 @@ claude plugin marketplace remove caret
 
 caret ships one compiled binary (`bin/caret`) with three subcommands, wired to two plan-mode hooks:
 
-| Hook | Matcher | Command | Purpose |
-| --- | --- | --- | --- |
-| `PostToolUse` | `EnterPlanMode` | `caret prewarm` | Warm-start the daemon when the model enters plan mode. |
-| `PermissionRequest` | `ExitPlanMode` | `caret review` | Block, open the plan in the browser, return the decision. |
+| Hook                | Matcher         | Command         | Purpose                                                   |
+| ------------------- | --------------- | --------------- | --------------------------------------------------------- |
+| `PostToolUse`       | `EnterPlanMode` | `caret prewarm` | Warm-start the daemon when the model enters plan mode.    |
+| `PermissionRequest` | `ExitPlanMode`  | `caret review`  | Block, open the plan in the browser, return the decision. |
 
 The `PermissionRequest`/`ExitPlanMode` hook intercepts the plan-approval request itself, so an **approve** auto-answers it (no native dialog) and a **request changes** returns the feedback to the model, which revises and re-presents (captured as a new version). This was verified empirically — `PreToolUse` does **not** work for this, because allowing the tool to run still shows the native dialog.
 
@@ -54,12 +54,12 @@ The hook emits the [PermissionRequest decision](https://code.claude.com/docs/en/
 
 ## Configuration
 
-| Env var | Default | Purpose |
-| --- | --- | --- |
-| `CARET_PORT` | `42718` | Daemon port. |
-| `CARET_TIMEOUT` | `3600` (s) | Review window before the hook fail-safe-denies, in seconds (default 1 hour; must stay below the 3900s hook budget in `hooks/hooks.json`). |
-| `CARET_IDLE_MS` | `60000` | Idle delay before the daemon auto-shuts-down with no reviews. |
-| `XDG_STATE_HOME` | `~/.local/state` | Unresolved reviews persist under `$XDG_STATE_HOME/caret/reviews/` and rehydrate on restart. |
+| Env var          | Default          | Purpose                                                                                                                                   |
+| ---------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `CARET_PORT`     | `42718`          | Daemon port.                                                                                                                              |
+| `CARET_TIMEOUT`  | `3600` (s)       | Review window before the hook fail-safe-denies, in seconds (default 1 hour; must stay below the 3900s hook budget in `hooks/hooks.json`). |
+| `CARET_IDLE_MS`  | `60000`          | Idle delay before the daemon auto-shuts-down with no reviews.                                                                             |
+| `XDG_STATE_HOME` | `~/.local/state` | Unresolved reviews persist under `$XDG_STATE_HOME/caret/reviews/` and rehydrate on restart.                                               |
 
 ## Development
 
