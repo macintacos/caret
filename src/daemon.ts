@@ -3,7 +3,7 @@
 // idle-auto-shuts-down when no reviews remain.
 
 import { createDecisions } from "./decisions.ts";
-import { IDENTITY, idleMs as defaultIdleMs } from "./paths.ts";
+import { heartbeatMs as defaultHeartbeatMs, IDENTITY, idleMs as defaultIdleMs } from "./paths.ts";
 import { routeIncomingPlan } from "./reviews.ts";
 import type { Store } from "./store.ts";
 import {
@@ -23,9 +23,13 @@ export interface CreateServerOptions {
   store: Store;
   port?: number;
   idleMs?: number;
+  /** Decision long-poll heartbeat window (ms); defaults to paths.heartbeatMs(). */
+  heartbeatMs?: number;
   serveHtml?: () => string | Promise<string>;
   onShutdown?: () => void;
   routePlan?: RoutePlan;
+  /** Lifecycle logger; defaults to a no-op so tests stay quiet. */
+  log?: (msg: string) => void;
 }
 
 export interface CaretServer {
@@ -55,10 +59,25 @@ export function isCrossOrigin(req: Request): boolean {
 export function createServer(opts: CreateServerOptions): CaretServer {
   const { store } = opts;
   const idle = opts.idleMs ?? defaultIdleMs();
+  const heartbeat = opts.heartbeatMs ?? defaultHeartbeatMs();
   const serveHtml = opts.serveHtml ?? (() => PLACEHOLDER_HTML);
   const onShutdown = opts.onShutdown ?? (() => process.exit(0));
   const routePlan = opts.routePlan ?? routeIncomingPlan;
+  const log = opts.log ?? (() => {});
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount } = createDecisions();
+
+  // Wait for a decision but no longer than `ms` — resolves to null on timeout so
+  // the handler can return a 204 heartbeat. The pending promise is left intact
+  // (not settled or cleared) so the next poll reuses it.
+  function raceDecision(id: string, ms: number): Promise<Decision | null> {
+    return new Promise<Decision | null>((resolve) => {
+      const t = setTimeout(() => resolve(null), ms);
+      awaitDecision(id).then((d) => {
+        clearTimeout(t);
+        resolve(d);
+      });
+    });
+  }
 
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   let inFlight = 0;
@@ -86,6 +105,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     // Re-check liveness atomically (single-threaded loop): never exit while a
     // review is pending, a hook is mid-long-poll, or a request is in flight.
     if (store.pendingCount() === 0 && openDecisionCount() === 0 && inFlight === 0) {
+      log("idle shutdown");
       stop();
       onShutdown();
     } else if (store.pendingCount() === 0) {
@@ -123,7 +143,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
 
       if (method === "POST" && path === "/api/reviews") {
         const body = (await req.json().catch(() => ({}))) as PlanInput;
-        return Response.json(await routePlan(body, store));
+        const routed = await routePlan(body, store);
+        log(`review created: ${routed.id}`);
+        return Response.json(routed);
       }
 
       if (method === "GET" && path === "/api/reviews") {
@@ -141,7 +163,26 @@ export function createServer(opts: CreateServerOptions): CaretServer {
         }
 
         if (method === "GET" && sub === "/decision") {
-          const decision = await awaitDecision(id);
+          // A decision may already be recorded: in memory (a deny keeps the
+          // review) or on disk (an approve removed it from memory, or the daemon
+          // restarted without rehydrating it). Serve it at once so a hook that
+          // dropped its long-poll and reconnected still receives the decision.
+          const inMem = store.get(id);
+          if (inMem?.decision) {
+            clearDecision(id);
+            return Response.json(inMem.decision);
+          }
+          if (!inMem) {
+            const disk = await store.persisted(id);
+            if (disk?.decision) {
+              clearDecision(id);
+              return Response.json(disk.decision);
+            }
+          }
+          // Otherwise wait, but only to the heartbeat window, then 204 so the
+          // client re-polls before any socket idle timeout closes the connection.
+          const decision = await raceDecision(id, heartbeat);
+          if (!decision) return new Response(null, { status: 204 });
           clearDecision(id);
           return Response.json(decision);
         }
@@ -186,6 +227,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
           // Defer one tick so THIS 200 flushes before the hook's long-poll
           // resolves (otherwise the browser's POST can appear to race the unblock).
           setTimeout(() => resolveDecision(id, decision), 0);
+          log(`review ${id} resolved: ${decision.behavior}`);
           return Response.json({ ok: true });
         }
       }
@@ -207,8 +249,11 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   const server = Bun.serve({
     port: opts.port ?? 0,
     hostname: "127.0.0.1",
+    // Well above the heartbeat window so a long-poll never idles out mid-wait.
+    idleTimeout: 30,
     fetch: handle,
   });
+  log(`listening on 127.0.0.1:${server.port}`);
 
   function stop() {
     if (stopped) return;

@@ -19,6 +19,9 @@ export interface Store {
   update(id: string, mutate: (r: Review) => void): Promise<Review | undefined>;
   /** Drop from memory; the on-disk file is left as history. */
   remove(id: string): Promise<void>;
+  /** Read a review from disk by id, including approved history no longer in
+   * memory. Returns undefined if the file is missing or unparseable. */
+  persisted(id: string): Promise<Review | undefined>;
   size(): number;
   /** Count of reviews awaiting a decision. Drives idle: a `rejected` review is
    * NOT counted — it persists to disk and rehydrates when its revision arrives,
@@ -90,6 +93,14 @@ export function createStore(dir: string): Store {
       reviews.delete(id);
       // Flush any final state to disk before dropping the tracking entry.
       if (review) await persist(review);
+    },
+
+    async persisted(id) {
+      try {
+        return JSON.parse(await readFile(join(dir, `${id}.json`), "utf-8")) as Review;
+      } catch {
+        return undefined; // missing or partial/corrupt file
+      }
     },
 
     size() {

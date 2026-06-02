@@ -94,12 +94,71 @@ test("a dropped long-poll reconnects once then succeeds", async () => {
   expect(out.hookSpecificOutput.decision.behavior).toBe("allow");
 });
 
-test("a long-poll that fails twice fails safe to deny", async () => {
+test("a 204 heartbeat re-polls until a decision arrives", async () => {
+  let calls = 0;
   const out = await runReview(
     stdin,
     reviewDeps({
       longPoll: async () => {
-        throw new Error("connection reset");
+        calls++;
+        return calls < 3 ? null : allow; // two heartbeats, then the decision
+      },
+    }),
+  );
+  expect(calls).toBe(3);
+  expect(out.hookSpecificOutput.decision.behavior).toBe("allow");
+});
+
+test("a transient drop reconnects and keeps polling (no premature deny)", async () => {
+  let reconnects = 0;
+  let calls = 0;
+  const out = await runReview(
+    stdin,
+    reviewDeps({
+      ensureDaemon: async () => {
+        reconnects++;
+        return "http://x";
+      },
+      longPoll: async () => {
+        calls++;
+        if (calls === 1) throw new Error("socket closed");
+        return allow;
+      },
+    }),
+  );
+  expect(reconnects).toBe(2); // 1 at startup + 1 reconnect after the drop
+  expect(out.hookSpecificOutput.decision.behavior).toBe("allow");
+});
+
+test("the poll loop is bounded by timeoutMs (endless heartbeats → deny)", async () => {
+  const out = await runReview(
+    stdin,
+    reviewDeps({
+      longPoll: async () => {
+        await Bun.sleep(2); // pace the loop so it isn't a hot spin
+        return null; // never decides
+      },
+      timeoutMs: 30,
+    }),
+  );
+  expect(out.hookSpecificOutput.decision.behavior).toBe("deny");
+  expect(out.hookSpecificOutput.decision.message).toContain("timed out");
+});
+
+test("an unreachable daemon mid-poll fails safe to deny", async () => {
+  let first = true;
+  const out = await runReview(
+    stdin,
+    reviewDeps({
+      longPoll: async () => {
+        throw new Error("socket closed");
+      },
+      ensureDaemon: async () => {
+        if (first) {
+          first = false;
+          return "http://x"; // startup connects
+        }
+        throw new Error("daemon gone"); // reconnect fails → deny
       },
     }),
   );

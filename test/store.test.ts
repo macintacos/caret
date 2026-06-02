@@ -94,6 +94,20 @@ test("session epoch starts at 0 and bumps independently per session", () => {
   expect(store.epochOf("OTHER")).toBe(0);
 });
 
+test("persisted reads a review (incl. decision) from disk, even after remove", async () => {
+  await store.create(
+    makeReview({ id: "d1", status: "approved", decision: { behavior: "allow", decidedAt: 5 } }),
+  );
+  await store.remove("d1"); // gone from memory, file kept as history
+  expect(store.get("d1")).toBeUndefined();
+
+  const fromDisk = await store.persisted("d1");
+  expect(fromDisk?.id).toBe("d1");
+  expect(fromDisk?.decision).toMatchObject({ behavior: "allow" });
+  // Unknown id → undefined, not a throw.
+  expect(await store.persisted("missing")).toBeUndefined();
+});
+
 test("rehydrate loads unresolved reviews, skips approved", async () => {
   await store.create(makeReview({ id: "keep-p", status: "pending" }));
   await store.create(makeReview({ id: "keep-r", status: "rejected" }));

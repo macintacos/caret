@@ -10,13 +10,16 @@ let store: Store;
 let srv: CaretServer;
 let base: string;
 
-async function boot(opts: { idleMs?: number; onShutdown?: () => void } = {}) {
+async function boot(
+  opts: { idleMs?: number; heartbeatMs?: number; onShutdown?: () => void } = {},
+) {
   store = createStore(dir);
   await store.rehydrate();
   srv = createServer({
     store,
     port: 0,
     idleMs: opts.idleMs ?? 1_000_000,
+    heartbeatMs: opts.heartbeatMs,
     onShutdown: opts.onShutdown ?? (() => {}),
   });
   base = `http://localhost:${srv.port}`;
@@ -89,6 +92,41 @@ test("resolve's 200 flushes BEFORE the long-poll resolves (one-tick defer)", asy
   const [, decision] = await Promise.all([resolve, longPoll]);
   expect(events).toEqual(["resolve", "longpoll"]);
   expect(decision).toMatchObject({ behavior: "allow" });
+});
+
+test("GET /decision returns 204 when no decision arrives within the heartbeat window", async () => {
+  await boot({ heartbeatMs: 30 });
+  const { id } = await newReview();
+  const res = await fetch(`${base}/api/reviews/${id}/decision`);
+  expect(res.status).toBe(204);
+});
+
+test("GET /decision serves a persisted deny decision on reconnect", async () => {
+  await boot({ heartbeatMs: 30 });
+  const { id } = await newReview();
+  await fetch(`${base}/api/reviews/${id}/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ behavior: "deny", feedback: "rephrase" }),
+  });
+  // A hook that dropped its long-poll reconnects and re-requests the decision.
+  const res = await fetch(`${base}/api/reviews/${id}/decision`);
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({ behavior: "deny", feedback: "rephrase" });
+});
+
+test("GET /decision serves a persisted allow decision after approve removed it from memory", async () => {
+  await boot({ heartbeatMs: 30 });
+  const { id } = await newReview();
+  await fetch(`${base}/api/reviews/${id}/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ behavior: "allow" }),
+  });
+  expect(store.get(id)).toBeUndefined(); // approve drops it from memory
+  const res = await fetch(`${base}/api/reviews/${id}/decision`);
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({ behavior: "allow" });
 });
 
 test("approve removes the review from the active set; deny keeps it as rejected", async () => {

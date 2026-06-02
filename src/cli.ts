@@ -9,10 +9,11 @@
 // allow. Every abnormal path (bad stdin, unreachable daemon, timeout, signal,
 // daemon death) emits a deny — never an allow.
 
+import { mkdirSync, openSync } from "node:fs";
 import { dirname } from "node:path";
 import { createServer } from "./daemon.ts";
 import { denyOutput, type HookOutput, toHookOutput } from "./feedback.ts";
-import { getPort, reviewsDir, reviewTimeoutMs } from "./paths.ts";
+import { getPort, reviewsDir, reviewTimeoutMs, stateDir } from "./paths.ts";
 import { createStore } from "./store.ts";
 import type { Decision, PlanInput } from "./types.ts";
 
@@ -24,7 +25,9 @@ export interface ReviewDeps {
   /** Ensure a daemon is up and return its base URL. */
   ensureDaemon: () => Promise<string>;
   postReview: (baseUrl: string, input: PlanInput) => Promise<{ id: string }>;
-  longPoll: (baseUrl: string, id: string) => Promise<Decision>;
+  /** One bounded poll: a Decision, or null on a heartbeat (re-poll). Throws on
+   * a transient drop so the caller can reconnect. */
+  longPoll: (baseUrl: string, id: string) => Promise<Decision | null>;
   openBrowser: (url: string) => void;
   timeoutMs: number;
 }
@@ -78,14 +81,25 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
     // fails to open.
     process.stderr.write(`caret: review this plan at ${url}\n`);
 
-    let decision: Decision;
-    try {
-      decision = await withTimeout(deps.longPoll(baseUrl, id), deps.timeoutMs, "review timed out");
-    } catch (err) {
-      if (err instanceof TimeoutError) throw err;
-      // Daemon may have died mid-review — reconnect once before giving up.
-      const reUrl = await deps.ensureDaemon();
-      decision = await withTimeout(deps.longPoll(reUrl, id), deps.timeoutMs, "review timed out");
+    // Poll until the browser decides: re-poll on each heartbeat (null), and on a
+    // transient drop reconnect and keep going (the decision is served on
+    // reconnect, so nothing is lost). Bounded by the review timeout — a real
+    // timeout, or an unreachable daemon (ensureDaemon throwing), bubbles out to
+    // the fail-safe deny below. Each poll is itself timeout-capped so a single
+    // hung request can't wedge the loop.
+    const start = Date.now();
+    let pollUrl = baseUrl;
+    let decision: Decision | undefined;
+    while (!decision) {
+      if (Date.now() - start >= deps.timeoutMs) throw new TimeoutError("review timed out");
+      try {
+        decision =
+          (await withTimeout(deps.longPoll(pollUrl, id), deps.timeoutMs, "review timed out")) ??
+          undefined;
+      } catch (err) {
+        if (err instanceof TimeoutError) throw err;
+        pollUrl = await deps.ensureDaemon();
+      }
     }
     return toHookOutput(decision);
   } catch (err) {
@@ -156,8 +170,17 @@ function daemonCommand(): string[] {
 }
 
 function spawnDaemon(): void {
+  // Route the detached daemon's stdout/stderr to a log file so failures are
+  // diagnosable after the fact. Best-effort: fall back to discarding output.
+  let out: number | "ignore" = "ignore";
+  try {
+    mkdirSync(stateDir(), { recursive: true });
+    out = openSync(`${stateDir()}/daemon.log`, "a");
+  } catch {
+    // ignore — logging is non-essential.
+  }
   Bun.spawn(daemonCommand(), {
-    stdio: ["ignore", "ignore", "ignore"],
+    stdio: ["ignore", out, out],
     detached: true,
     env: process.env,
   }).unref();
@@ -178,8 +201,9 @@ async function postReview(baseUrl: string, input: PlanInput): Promise<{ id: stri
   return (await res.json()) as { id: string };
 }
 
-async function longPoll(baseUrl: string, id: string): Promise<Decision> {
+async function longPoll(baseUrl: string, id: string): Promise<Decision | null> {
   const res = await fetch(`${baseUrl}/api/reviews/${id}/decision`);
+  if (res.status === 204) return null; // heartbeat: still pending — re-poll
   if (!res.ok) throw new Error(`decision long-poll failed: ${res.status}`);
   return (await res.json()) as Decision;
 }
@@ -252,6 +276,7 @@ async function runDaemon(): Promise<void> {
       store,
       port: getPort(),
       serveHtml: html ? () => html : undefined,
+      log: (msg) => process.stderr.write(`[caret daemon] ${msg}\n`),
     });
   } catch (e) {
     if (isAddrInUse(e)) {

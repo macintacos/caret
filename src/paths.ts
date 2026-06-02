@@ -56,3 +56,16 @@ export function reviewTimeoutMs(): number {
   }
   return 3_600_000;
 }
+
+/** Decision long-poll heartbeat (ms): the daemon returns a 204 "still pending"
+ * after this window so the client re-polls before any socket idle timeout can
+ * close the connection. CARET_HEARTBEAT_MS overrides; default 8s, comfortably
+ * under the daemon's 30s Bun.serve idleTimeout. */
+export function heartbeatMs(): number {
+  const raw = process.env.CARET_HEARTBEAT_MS;
+  if (raw) {
+    const n = Number(raw);
+    if (Number.isInteger(n) && n > 0) return n;
+  }
+  return 8_000;
+}
