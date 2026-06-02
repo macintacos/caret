@@ -34,7 +34,9 @@
   let activeSlug = $state<string | null>(null);
 
   let scrollEl = $state<HTMLElement | undefined>();
-  let lastLoadedId: string | null = null;
+  // Keyed on id:version so a new version (revision) also reloads the working
+  // copy — never persist stale annotations from a prior version onto the next.
+  let lastLoadedKey: string | null = null;
 
   let active = $derived(reviews.find((r) => r.id === activeId) ?? null);
 
@@ -71,19 +73,21 @@
     setUrl(id);
   }
 
-  // When the active review changes, load its annotations into the working copy.
+  // When the active review (or its version) changes, load its annotations into
+  // the working copy.
   $effect(() => {
-    if (active && active.id !== lastLoadedId) {
+    const key = active ? `${active.id}:${active.version}` : null;
+    if (active && key !== lastLoadedKey) {
       // Flush the PREVIOUS review's pending save FIRST (it snapshots the current
       // `annotations` + pendingSaveId synchronously) — before we overwrite
       // `annotations` with the new review's, or we'd save them onto the old id.
       void flushPending();
-      lastLoadedId = active.id;
+      lastLoadedKey = key;
       annotations = active.annotations.map((a) => ({ ...a }));
       focusedAnnotation = null;
     } else if (!active) {
       void flushPending();
-      lastLoadedId = null;
+      lastLoadedKey = null;
       annotations = [];
     }
   });

@@ -133,6 +133,26 @@ test("PUT annotations updates the current version", async () => {
   expect(one.annotations).toEqual(anns);
 });
 
+test("cross-origin mutating requests are blocked (CSRF guard)", async () => {
+  await boot();
+  const foreign = await fetch(`${base}/api/reviews`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: "http://evil.com" },
+    body: JSON.stringify({ sessionId: "S", plan: "# x" }),
+  });
+  expect(foreign.status).toBe(403);
+  // Same-origin (loopback) origin is allowed.
+  const local = await fetch(`${base}/api/reviews`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Origin: `http://localhost:${srv.port}`,
+    },
+    body: JSON.stringify({ sessionId: "S", plan: "# x" }),
+  });
+  expect(local.ok).toBe(true);
+});
+
 test("GET / serves HTML containing the app root", async () => {
   await boot();
   const html = await (await fetch(`${base}/`)).text();

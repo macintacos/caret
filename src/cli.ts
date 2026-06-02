@@ -274,8 +274,16 @@ async function runPrewarm(): Promise<void> {
 }
 
 async function runReviewSubcommand(): Promise<void> {
+  // Emit exactly one decision line. A signal arriving after the normal decision
+  // was written must not append a second (deny) line.
+  let responded = false;
+  const respond = (output: unknown) => {
+    if (responded) return;
+    responded = true;
+    process.stdout.write(`${JSON.stringify(output)}\n`);
+  };
   const denyAndExit = (reason: string) => {
-    process.stdout.write(`${JSON.stringify(denyOutput(reason))}\n`);
+    respond(denyOutput(reason));
     process.exit(0);
   };
   process.once("SIGINT", () => denyAndExit("caret: interrupted (SIGINT) — denying to fail safe."));
@@ -283,7 +291,7 @@ async function runReviewSubcommand(): Promise<void> {
 
   const stdin = await Bun.stdin.text();
   const out = await runReview(stdin, prodReviewDeps());
-  process.stdout.write(`${JSON.stringify(out)}\n`);
+  respond(out);
   process.exit(0);
 }
 

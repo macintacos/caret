@@ -33,6 +33,25 @@ export interface CaretServer {
   stop(): void;
 }
 
+/** Reject mutating requests that aren't same-origin (loopback). The daemon has
+ * no auth, so this is CSRF defense-in-depth: a hook/CLI request carries no
+ * Origin (allowed); the same-origin browser UI carries a loopback Origin
+ * (allowed); a page on another site carries a foreign Origin (blocked). */
+export function isCrossOrigin(req: Request): boolean {
+  const origin = req.headers.get("origin");
+  if (origin) {
+    try {
+      const host = new URL(origin).hostname;
+      if (host !== "127.0.0.1" && host !== "localhost") return true;
+    } catch {
+      return true;
+    }
+  }
+  const site = req.headers.get("sec-fetch-site");
+  if (site && site !== "same-origin" && site !== "none") return true;
+  return false;
+}
+
 export function createServer(opts: CreateServerOptions): CaretServer {
   const { store } = opts;
   const idle = opts.idleMs ?? defaultIdleMs();
@@ -87,6 +106,10 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       const url = new URL(req.url);
       const path = url.pathname;
       const method = req.method;
+
+      if ((method === "POST" || method === "PUT") && isCrossOrigin(req)) {
+        return new Response("cross-origin request blocked", { status: 403 });
+      }
 
       if (method === "GET" && path === "/api/health") {
         return Response.json(IDENTITY);
