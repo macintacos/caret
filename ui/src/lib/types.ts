@@ -41,6 +41,8 @@ export interface ClientReview {
   currentPlan: string;
   annotations: Annotation[];
   versions: PlanVersion[];
+  /** Unsent Request Changes "general comment" draft, review-scoped. */
+  generalCommentDraft: string;
   createdAt: number;
   updatedAt: number;
   decision?: unknown;
