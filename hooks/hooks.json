@@ -7,7 +7,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/bin/caret review",
-            "timeout": 600
+            "timeout": 3900
           }
         ]
       }

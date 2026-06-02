@@ -7,7 +7,7 @@
 
 import { homedir } from "node:os";
 
-export const VERSION = "0.1.0";
+export const VERSION = "0.0.1";
 export const DEFAULT_PORT = 42718;
 
 /** Identity signature returned by GET /api/health, used to detect a foreign
@@ -46,13 +46,13 @@ export function idleMs(): number {
   return 60_000;
 }
 
-/** Review timeout (ms): CARET_TIMEOUT seconds, default 300s (< 600s hook
- * budget). After this, the hook fail-safe denies. */
+/** Review timeout (ms): CARET_TIMEOUT seconds, default 3600s / 1h (< the 3900s
+ * hook budget in hooks.json). After this, the hook fail-safe denies. */
 export function reviewTimeoutMs(): number {
   const raw = process.env.CARET_TIMEOUT;
   if (raw) {
     const n = Number(raw);
     if (Number.isFinite(n) && n > 0) return Math.round(n * 1000);
   }
-  return 300_000;
+  return 3_600_000;
 }
