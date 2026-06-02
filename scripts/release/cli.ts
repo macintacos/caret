@@ -25,7 +25,7 @@ function realDeps(): Deps {
     },
     io: { log: (m) => process.stderr.write(`${m}\n`) },
     preflight: async () => {
-      // .quiet() keeps preflight's lint/test output off our stdout (which must
+      // .quiet() keeps preflight's task output off our stdout (which must
       // stay a single JSON object); it is still captured into r.stdout/r.stderr.
       const r = await $`mise run preflight`.quiet().nothrow();
       return {

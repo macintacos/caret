@@ -339,7 +339,7 @@ export async function prepare(
     }
   }
 
-  // Gate on preflight (lint + test).
+  // Gate on preflight (format, lint, test, build).
   if (apply) {
     const pf = await deps.preflight();
     if (!pf.ok) {

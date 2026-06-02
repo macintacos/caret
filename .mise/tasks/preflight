@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
-#MISE description="Pre-push gate: lint (Biome + tsc + svelte-check) + test"
-#MISE depends=["lint", "test"]
+#MISE description="Pre-push gate: format, lint (Biome + tsc + svelte-check), test, and build"
 
 set -euo pipefail
 
-echo "preflight: lint (Biome + tsc + svelte-check) + test passed"
+# Run the verification tasks directly (not via #MISE depends) so they execute in
+# a fixed order with fail-fast: format writes fixes first, then the read-only
+# checks, the test suite, and the build confirm the formatted tree is shippable.
+mise run format
+mise run lint
+mise run test
+mise run build
