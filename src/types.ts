@@ -78,6 +78,10 @@ export interface Review {
   /** Bumps on each approval for the session; drives revision threading. */
   planEpoch: number;
   versions: PlanVersion[];
+  /** Unsent "general comment" draft for the Request Changes dialog. Review-scoped
+   * (not version-scoped like annotations): it has no anchor in a specific plan
+   * text. Optional because pre-existing on-disk reviews predate the field. */
+  generalCommentDraft?: string;
   createdAt: number;
   updatedAt: number;
   decision?: Decision;
@@ -95,6 +99,8 @@ export interface ClientReview {
   currentPlan: string;
   annotations: Annotation[];
   versions: PlanVersion[];
+  /** Always a string (coerced from the optional Review field in toClientReview). */
+  generalCommentDraft: string;
   createdAt: number;
   updatedAt: number;
   decision?: Decision;
@@ -144,6 +150,7 @@ export function toClientReview(review: Review): ClientReview {
     currentPlan: cur.plan,
     annotations: cur.annotations,
     versions: review.versions,
+    generalCommentDraft: review.generalCommentDraft ?? "",
     createdAt: review.createdAt,
     updatedAt: review.updatedAt,
     decision: review.decision,

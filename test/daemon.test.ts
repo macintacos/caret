@@ -182,26 +182,79 @@ test("approve removes the review from the active set; deny keeps it as rejected"
   expect(store.get(d)?.status).toBe("rejected");
 });
 
-test("PUT annotations updates the current version", async () => {
-  await boot();
-  const { id } = await newReview();
-  const anns = [
-    {
-      id: "an1",
-      blockId: "b0",
-      startOffset: 0,
-      endOffset: 4,
-      quote: "Titl",
-      comment: "hm",
-    },
-  ];
-  await fetch(`${base}/api/reviews/${id}/annotations`, {
+const ANNS = [
+  {
+    id: "an1",
+    blockId: "b0",
+    startOffset: 0,
+    endOffset: 4,
+    quote: "Titl",
+    comment: "hm",
+  },
+];
+
+async function putDraft(id: string, body: Record<string, unknown>) {
+  return fetch(`${base}/api/reviews/${id}/draft`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ annotations: anns }),
+    body: JSON.stringify(body),
   });
+}
+
+test("PUT draft updates the current version's annotations", async () => {
+  await boot();
+  const { id } = await newReview();
+  await putDraft(id, { annotations: ANNS });
   const one = await (await fetch(`${base}/api/reviews/${id}`)).json();
-  expect(one.annotations).toEqual(anns);
+  expect(one.annotations).toEqual(ANNS);
+});
+
+test("PUT draft persists and restores the general comment draft", async () => {
+  await boot();
+  const { id } = await newReview();
+  await putDraft(id, { generalCommentDraft: "rethink the rollout" });
+  const one = await (await fetch(`${base}/api/reviews/${id}`)).json();
+  expect(one.generalCommentDraft).toBe("rethink the rollout");
+});
+
+test("PUT draft does not clobber the other field (either direction)", async () => {
+  await boot();
+  const { id } = await newReview();
+  // annotations-only write, then draft-only write: the draft must not wipe annotations.
+  await putDraft(id, { annotations: ANNS });
+  await putDraft(id, { generalCommentDraft: "keep both" });
+  let one = await (await fetch(`${base}/api/reviews/${id}`)).json();
+  expect(one.annotations).toEqual(ANNS);
+  expect(one.generalCommentDraft).toBe("keep both");
+
+  // The reverse: an annotations-only write must not wipe the existing draft.
+  await putDraft(id, { annotations: [] });
+  one = await (await fetch(`${base}/api/reviews/${id}`)).json();
+  expect(one.annotations).toEqual([]);
+  expect(one.generalCommentDraft).toBe("keep both");
+});
+
+test("resolve clears the draft on the deny/rejected path", async () => {
+  await boot();
+  const { id } = await newReview();
+  await putDraft(id, { generalCommentDraft: "unsent feedback" });
+  await resolve(id, { behavior: "deny", feedback: "fix it" });
+  // Deny keeps the review on disk as rejected — it must not retain a stale draft,
+  // and the plan text survives for the revision.
+  expect(store.get(id)?.status).toBe("rejected");
+  expect(store.get(id)?.generalCommentDraft).toBe("");
+  expect(store.get(id)?.versions.at(-1)?.plan).toBe("# Title\n\nbody");
+});
+
+test("resolve clears the draft on the approve path", async () => {
+  await boot();
+  const { id } = await newReview();
+  await putDraft(id, { generalCommentDraft: "unsent feedback" });
+  await resolve(id, { behavior: "allow" });
+  // Approve removes the review from memory; store.remove flushes the cleared
+  // draft to disk first, so the persisted record carries an empty draft.
+  expect(store.get(id)).toBeUndefined();
+  expect((await store.persisted(id))?.generalCommentDraft).toBe("");
 });
 
 test("cross-origin mutating requests are blocked (CSRF guard)", async () => {
