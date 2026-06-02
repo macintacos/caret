@@ -1,5 +1,5 @@
 {
   "name": "caret",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Review, annotate, and approve Claude Code plans in a local web UI."
 }
