@@ -13,7 +13,7 @@ import { mkdirSync, openSync } from "node:fs";
 import { dirname } from "node:path";
 import { createServer } from "./daemon.ts";
 import { denyOutput, type HookOutput, toHookOutput } from "./feedback.ts";
-import { logError } from "./log.ts";
+import { type ErrorContext, logError } from "./log.ts";
 import { daemonLogFile, getPort, logFile, reviewsDir, reviewTimeoutMs, stateDir } from "./paths.ts";
 import { createStore } from "./store.ts";
 import type { Decision, PlanInput } from "./types.ts";
@@ -63,7 +63,7 @@ interface HookStdin {
 export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOutput> {
   // Track the current step + context so the catch can log what actually failed.
   let step = "parse";
-  const ctx: { sessionId?: string; cwd?: string } = {};
+  const ctx: ErrorContext = {};
   try {
     let hook: HookStdin;
     try {
