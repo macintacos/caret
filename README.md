@@ -68,14 +68,16 @@ Requires [mise](https://mise.jdx.dev), which pins bun, biome, hk, and pkl.
 ```sh
 mise run setup      # install pinned tools + JS deps + register git hooks
 mise run build      # build:ui (Vite single-file) then build:bin (bun build --compile)
-mise run dev        # Vite UI dev server (proxies /api to the daemon on :42718)
+mise run dev        # isolated daemon + fake plan + Vite UI (dev port :42719)
 mise run test       # bun test
 mise run lint       # Biome + tsc + svelte-check (read-only); the CI/pre-commit gate
 mise run format     # Biome (write)
 mise run preflight  # lint + test before pushing
 ```
 
-`mise run lint` (and the pre-commit hook) runs Biome lint, `tsc --noEmit`, and `svelte-check` — type checking is folded into linting via `hk.pkl`. For UI dev, run a daemon (`bin/caret daemon`) alongside `mise run dev`.
+`mise run lint` (and the pre-commit hook) runs Biome lint, `tsc --noEmit`, and `svelte-check` — type checking is folded into linting via `hk.pkl`.
+
+`mise run dev` is self-contained — no separate `bin/caret daemon` needed. It starts an isolated caret daemon on a dedicated dev port (`CARET_PORT`, default `42719`, distinct from the `42718` production default) with an ephemeral `XDG_STATE_HOME`, seeds it with one fake pending plan, and runs a driver that plays the agent's side so request-changes / approve round-trips keep working. Everything is reaped on Ctrl-C, and the dev daemon never reads or writes a globally-installed caret's reviews. Override the port with `CARET_DEV_PORT` if `42719` is taken.
 
 For a quick local trial without installing, load the plugin from a checkout:
 

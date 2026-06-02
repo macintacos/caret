@@ -1,7 +1,54 @@
 #!/usr/bin/env bash
-#MISE description="Run the Vite dev server for the UI"
+#MISE description="Run the dev UI with an isolated, fake-plan-seeded caret daemon"
 
 set -euo pipefail
 
+# Isolation (AC1, AC5): a fixed dev port distinct from the prod default (42718)
+# and an ephemeral state dir, both exported so the daemon, driver, and Vite
+# proxy read the same values and never touch a globally-installed caret.
+export CARET_PORT="${CARET_DEV_PORT:-42719}"
+# Never bind the production default: the daemon's getPort() has no anti-default
+# guard, so a CARET_DEV_PORT of 42718 would squat on an installed caret (AC5).
+if [ "$CARET_PORT" = "42718" ]; then
+  echo "caret dev: CARET_DEV_PORT must differ from the production default (42718)" >&2
+  exit 1
+fi
+state_dir="$(mktemp -d "${TMPDIR:-/tmp}/caret-dev.XXXXXX")"
+export XDG_STATE_HOME="$state_dir"
+# Keep the dev daemon from idle-auto-shutting-down mid-session (AC4). This is the
+# max setTimeout delay (2^31-1 ms); a larger value overflows and clamps to 1ms.
+export CARET_IDLE_MS=2147483647
+echo "caret dev: port=$CARET_PORT state=$state_dir"
+
+daemon_pid=""
+driver_pid=""
+vite_pid=""
+
+# Reap the daemon, driver, and Vite, then drop the ephemeral state on exit, so a
+# teardown never leaves an orphan holding the dev port or stale reviews (AC6).
+cleanup() {
+  for pid in "$driver_pid" "$daemon_pid" "$vite_pid"; do
+    if [ -n "$pid" ]; then kill "$pid" 2>/dev/null || true; fi
+  done
+  wait 2>/dev/null || true
+  rm -rf "$state_dir"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# Stock daemon, run from source so daemon edits are live without a rebuild.
+bun src/cli.ts daemon &
+daemon_pid=$!
+
+# Seed the fake plan and play the agent's protocol side (waits for health first).
+bun scripts/dev/driver.ts &
+driver_pid=$!
+
+# Vite is backgrounded (not foreground/`exec`) and waited on, so a teardown
+# signal reaches the trap and cleanup reaps all three children — even if the
+# signal hits this script's PID alone rather than the whole process group.
 cd ui
-exec bunx vite
+bunx vite &
+vite_pid=$!
+wait "$vite_pid"

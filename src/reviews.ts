@@ -33,6 +33,10 @@ export async function routeIncomingPlan(input: PlanInput, store: Store): Promise
     await store.update(latest.id, (r) => {
       r.versions.push({ version, plan, annotations: [], createdAt: now });
       r.status = "pending";
+      // Re-pended and awaiting a fresh decision: drop the prior rejection so the
+      // daemon's /decision handler waits for the next decision instead of
+      // re-serving the stale deny.
+      r.decision = undefined;
     });
     return {
       id: latest.id,
