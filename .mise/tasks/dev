@@ -7,9 +7,16 @@ set -euo pipefail
 # and an ephemeral state dir, both exported so the daemon, driver, and Vite
 # proxy read the same values and never touch a globally-installed caret.
 export CARET_PORT="${CARET_DEV_PORT:-42719}"
+# Never bind the production default: the daemon's getPort() has no anti-default
+# guard, so a CARET_DEV_PORT of 42718 would squat on an installed caret (AC5).
+if [ "$CARET_PORT" = "42718" ]; then
+  echo "caret dev: CARET_DEV_PORT must differ from the production default (42718)" >&2
+  exit 1
+fi
 state_dir="$(mktemp -d "${TMPDIR:-/tmp}/caret-dev.XXXXXX")"
 export XDG_STATE_HOME="$state_dir"
-# Keep the dev daemon from idle-auto-shutting-down mid-session (AC4).
+# Keep the dev daemon from idle-auto-shutting-down mid-session (AC4). This is the
+# max setTimeout delay (2^31-1 ms); a larger value overflows and clamps to 1ms.
 export CARET_IDLE_MS=2147483647
 echo "caret dev: port=$CARET_PORT state=$state_dir"
 
