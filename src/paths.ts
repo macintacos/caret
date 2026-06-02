@@ -36,6 +36,18 @@ export function reviewsDir(): string {
   return `${stateDir()}/reviews`;
 }
 
+/** Errors-only log for the short-lived `caret review` hook process. Single
+ * source of truth for the path, shared by the writer and `/caret:debug`. */
+export function logFile(): string {
+  return `${stateDir()}/caret.log`;
+}
+
+/** Log for the detached daemon process (its stdout/stderr is redirected here
+ * by spawnDaemon). Resolved here so spawnDaemon and `/caret:debug` agree. */
+export function daemonLogFile(): string {
+  return `${stateDir()}/daemon.log`;
+}
+
 /** Idle auto-shutdown delay (ms). Overridable via CARET_IDLE_MS for tests. */
 export function idleMs(): number {
   const raw = process.env.CARET_IDLE_MS;
