@@ -2,7 +2,7 @@
 // Mutating ops (commit/tag/push) are covered by the injected-fake steps tests,
 // not here — this only proves the read commands parse correctly.
 import { expect, test } from "bun:test";
-import { createGit } from "../scripts/release/git.ts";
+import { createGit, splitPorcelain } from "../scripts/release/git.ts";
 
 const git = createGit();
 const SHA = /^[0-9a-f]{40}$/;
@@ -28,6 +28,15 @@ test("tryRevParse resolves HEAD and returns null for a missing ref", async () =>
 test("listTags and porcelainStatus return arrays", async () => {
   expect(Array.isArray(await git.listTags())).toBe(true);
   expect(Array.isArray(await git.porcelainStatus())).toBe(true);
+});
+
+test("splitPorcelain preserves a leading-space status prefix", () => {
+  // A worktree-only modification prints " M path"; the leading space must
+  // survive so a downstream slice(3) recovers the path intact.
+  expect(splitPorcelain(" M CHANGELOG.md\n")).toEqual([" M CHANGELOG.md"]);
+  expect(splitPorcelain("M  staged.ts\n D gone.ts\n")).toEqual(["M  staged.ts", " D gone.ts"]);
+  expect(splitPorcelain("")).toEqual([]);
+  expect(splitPorcelain("\n")).toEqual([]);
 });
 
 test("commitsBetween rootCommit..HEAD yields populated commits", async () => {
