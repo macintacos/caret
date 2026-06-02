@@ -13,12 +13,23 @@ if [ "$CARET_PORT" = "42718" ]; then
   echo "caret dev: CARET_DEV_PORT must differ from the production default (42718)" >&2
   exit 1
 fi
-state_dir="$(mktemp -d "${TMPDIR:-/tmp}/caret-dev.XXXXXX")"
+# State dir: ephemeral by default (isolated + wiped on exit, AC1/AC5/AC6). Set
+# CARET_DEV_STATE_DIR to a persistent path to keep state across dev restarts —
+# e.g. to exercise the daemon's on-disk persistence (remembered approve mode,
+# rehydrated reviews). A persistent dir is reused and is NOT deleted on exit.
+if [ -n "${CARET_DEV_STATE_DIR:-}" ]; then
+  state_dir="$CARET_DEV_STATE_DIR"
+  mkdir -p "$state_dir"
+  persist_state=1
+else
+  state_dir="$(mktemp -d "${TMPDIR:-/tmp}/caret-dev.XXXXXX")"
+  persist_state=0
+fi
 export XDG_STATE_HOME="$state_dir"
 # Keep the dev daemon from idle-auto-shutting-down mid-session (AC4). This is the
 # max setTimeout delay (2^31-1 ms); a larger value overflows and clamps to 1ms.
 export CARET_IDLE_MS=2147483647
-echo "caret dev: port=$CARET_PORT state=$state_dir"
+echo "caret dev: port=$CARET_PORT state=$state_dir persistent=$persist_state"
 
 daemon_pid=""
 driver_pid=""
@@ -31,7 +42,9 @@ cleanup() {
     if [ -n "$pid" ]; then kill "$pid" 2>/dev/null || true; fi
   done
   wait 2>/dev/null || true
-  rm -rf "$state_dir"
+  # Only wipe an ephemeral (mktemp) state dir; a user-provided persistent dir
+  # (CARET_DEV_STATE_DIR) is left intact so state survives across dev restarts.
+  if [ "$persist_state" = 0 ]; then rm -rf "$state_dir"; fi
 }
 trap cleanup EXIT
 trap 'exit 130' INT
