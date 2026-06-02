@@ -1,0 +1,37 @@
+# rumdl config — Markdown lint + format (one tool, both roles). Scaffolded with
+# `rumdl init` then tuned for caret. hk drives rumdl via Builtins.rumdl: `rumdl fmt`
+# formats (the `fix` hook), `rumdl check` lints (the `check` hook). Reference:
+# https://rumdl.dev
+[global]
+# Inline HTML (MD033) — the UI sanitizes rendered Markdown with DOMPurify, so this is source
+# hygiene, not a security gate. Bare URLs (MD034) are intentional. MD041 (file must open with an
+# H1) is off because caret's slash-command files (commands/*.md) intentionally lead with
+# frontmatter + prompt prose, not a title heading.
+disable = ["MD033", "MD034", "MD041"]
+
+# Respect .gitignore when scanning directories (rumdl init default).
+respect-gitignore = true
+
+# rumdl init defaults, minus CHANGELOG.md: we DO lint the CHANGELOG (MD024 below keeps
+# the keepachangelog format passing) rather than excluding it.
+exclude = [
+  ".git",
+  ".github",
+  "node_modules",
+  "vendor",
+  "dist",
+  "build",
+  "LICENSE.md",
+]
+
+[MD013]
+# Enforce a 100-char line length on prose; skip code blocks and tables, where long URLs,
+# commands, and wide columns shouldn't be reflowed.
+line-length = 100
+code-blocks = false
+tables      = false
+
+[MD024]
+# Only flag duplicate headings that are siblings (share a parent), so the CHANGELOG's
+# repeated ### Added / ### Changed / ### Fixed across version sections pass.
+siblings-only = true

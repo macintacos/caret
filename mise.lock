@@ -12,13 +12,48 @@ backend = "core:bun"
 version = "1.45.0"
 backend = "aqua:jdx/hk"
 
-[[tools."npm:prettier"]]
-version = "3.8.3"
-backend = "npm:prettier"
-
 [[tools.pkl]]
 version = "0.31.1"
 backend = "aqua:apple/pkl"
+
+[[tools.rumdl]]
+version = "0.2.2"
+backend = "aqua:rvben/rumdl"
+
+[tools.rumdl."platforms.linux-arm64"]
+checksum = "sha256:029800c8ebaac711c05c4d198bf2922c81b670de18dbcbf7a1d6967eb15a0217"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.2/rumdl-v0.2.2-aarch64-unknown-linux-musl.tar.gz"
+provenance = "github-attestations"
+
+[tools.rumdl."platforms.linux-arm64-musl"]
+checksum = "sha256:029800c8ebaac711c05c4d198bf2922c81b670de18dbcbf7a1d6967eb15a0217"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.2/rumdl-v0.2.2-aarch64-unknown-linux-musl.tar.gz"
+provenance = "github-attestations"
+
+[tools.rumdl."platforms.linux-x64"]
+checksum = "sha256:8bda8529b6970d967c3c0b363b3bed3a8c10b6d3723eaf7a74390dd92b6d6be1"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.2/rumdl-v0.2.2-x86_64-unknown-linux-musl.tar.gz"
+provenance = "github-attestations"
+
+[tools.rumdl."platforms.linux-x64-musl"]
+checksum = "sha256:8bda8529b6970d967c3c0b363b3bed3a8c10b6d3723eaf7a74390dd92b6d6be1"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.2/rumdl-v0.2.2-x86_64-unknown-linux-musl.tar.gz"
+provenance = "github-attestations"
+
+[tools.rumdl."platforms.macos-arm64"]
+checksum = "sha256:d8badbe73a8ca19e83138d553b099ae4b62e1e1c8d8f18ee1daba7ac5a43509c"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.2/rumdl-v0.2.2-aarch64-apple-darwin.tar.gz"
+provenance = "github-attestations"
+
+[tools.rumdl."platforms.macos-x64"]
+checksum = "sha256:abd5e851c51a9fa54439822b83268239b6c74907affa05df6f462915a406da88"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.2/rumdl-v0.2.2-x86_64-apple-darwin.tar.gz"
+provenance = "github-attestations"
+
+[tools.rumdl."platforms.windows-x64"]
+checksum = "sha256:73f1453b59317cc3423c6c702e84a6f52d63c9e2dbd22b7035ac26d3b720cedf"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.2/rumdl-v0.2.2-x86_64-pc-windows-msvc.zip"
+provenance = "github-attestations"
 
 [[tools.shellcheck]]
 version = "0.11.0"

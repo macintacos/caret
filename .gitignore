@@ -5,6 +5,9 @@ node_modules/
 bin/
 ui/dist/
 
+# rumdl cache (rumdl also self-ignores this via a nested .gitignore)
+.rumdl_cache/
+
 # Throwaway Phase-0 contract spike (never committed)
 spike/
 

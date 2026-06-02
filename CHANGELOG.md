@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Markdown formatting and linting now run on rumdl instead of prettier — a
+  single native binary that both formats and lints, dropping the npm-backed
+  prettier tool and adding structural Markdown linting to `mise run lint`.
+
 ## [0.0.2] - 2026-06-02 - The Foundations Release
 
 ### Added
