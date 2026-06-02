@@ -14,8 +14,12 @@ import "package://github.com/jdx/hk/releases/download/v1.45.0/hk@1.45.0#/Builtin
 //   mise run lint   -> the `check` hook -> `linters` (read-only rule + type checks)
 // The `pre-commit` hook runs BOTH, so every commit stays formatted, clean, and
 // type-checked.
+//
+// Beyond the web stack, the mappings also cover the rest of the repo: prettier
+// (Markdown only), yamlfmt (YAML), taplo (TOML), shfmt + shellcheck (shell, incl.
+// the extensionless .mise/tasks/* scripts), and pkl + pkl-format (this file).
 
-// Formatters — rewrite files into canonical form (biome format).
+// Formatters — rewrite files into canonical form.
 local formatters = new Mapping<String, Step> {
   ["Web(Format)      [[biome]]"] = new Step {
     glob = List("**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.json", "**/*.jsonc")
@@ -25,6 +29,25 @@ local formatters = new Mapping<String, Step> {
     check = "biome format --no-errors-on-unmatched {{ files }}"
     fix = "biome format --write --no-errors-on-unmatched {{ files }}"
   }
+
+  // Prettier's default glob also matches JSON/YAML/CSS/etc.; scope it to Markdown
+  // so it never fights Biome (JSON) or taplo (TOML) over the same file.
+  ["Markdown(Format) [[builtins.prettier]]"] = (Builtins.prettier) {
+    glob = List("**/*.md", "**/*.markdown")
+  }
+
+  ["YAML(Format)     [[builtins.yamlfmt]]"] = Builtins.yamlfmt
+
+  ["TOML(Format)     [[builtins.taplo_format]]"] = Builtins.taplo_format
+
+  // Keep the builtin's default extensions and add the extensionless .mise/tasks/*
+  // scripts. The builtin runs `shfmt --apply-ignore` (no -i), so 2-space indent
+  // comes from .editorconfig rather than a flag override.
+  ["Shell(Format)    [[builtins.shfmt]]"] = (Builtins.shfmt) {
+    glob = List("**/*.sh", "**/*.bash", "**/*.mksh", "**/*.bats", "**/*.zsh", ".mise/tasks/*")
+  }
+
+  ["Pkl(Format)      [[builtins.pkl_format]]"] = Builtins.pkl_format
 }
 
 // Linters — read-only checks (no rewrite): Biome lint (JS/TS) plus the type
@@ -45,6 +68,15 @@ local linters = new Mapping<String, Step> {
     glob = List("ui/**/*.svelte", "ui/**/*.ts")
     check = "bash -c 'cd ui && bunx svelte-check --tsconfig ./tsconfig.json'"
   }
+
+  // Shell lint covers the extensionless .mise/tasks/* scripts as well as *.sh.
+  ["Shell(Lint)       [[builtins.shellcheck]]"] = (Builtins.shellcheck) {
+    glob = List("**/*.sh", "**/*.bash", ".mise/tasks/*")
+  }
+
+  ["TOML(Lint)        [[builtins.taplo]]"] = Builtins.taplo
+
+  ["Pkl(Lint)         [[builtins.pkl]]"] = Builtins.pkl
 }
 
 hooks {
