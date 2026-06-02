@@ -5,14 +5,30 @@
 // `PreToolUse` (which only permits the tool to run, so the native dialog still
 // shows). See src/feedback.ts for the decision JSON this produces.
 
+import { createHash } from "node:crypto";
 import { homedir } from "node:os";
+import pkg from "../package.json" with { type: "json" };
 
-export const VERSION = "0.0.1";
+/** The shipped version, read from package.json (one of the release-synced
+ * manifests) at build time so it stays honest across releases. Hardcoding it was
+ * a root cause of EXC-406: the daemon reported a stale "0.0.1" that could never
+ * signal an upgrade. */
+export const VERSION = pkg.version;
 export const DEFAULT_PORT = 42718;
 
 /** Identity signature returned by GET /api/health, used to detect a foreign
  * process squatting on the port. */
 export const IDENTITY = { service: "caret", version: VERSION } as const;
+
+/** Short content fingerprint of the served UI HTML — the daemon's staleness
+ * signal. It changes whenever the embedded UI changes, so an upgraded binary's
+ * build differs from a still-running older daemon's. Returns "no-ui" when no UI
+ * is embedded (dev / fresh checkout), which compares equal across binaries in
+ * that same UI-less state. */
+export function buildHash(html: string | undefined): string {
+  if (!html) return "no-ui";
+  return createHash("sha256").update(html).digest("hex").slice(0, 12);
+}
 
 /** Resolve the daemon port: CARET_PORT (positive integer) or the default. */
 export function getPort(): number {
@@ -52,6 +68,13 @@ export function logFile(): string {
  * by spawnDaemon). Resolved here so spawnDaemon and `/caret:debug` agree. */
 export function daemonLogFile(): string {
   return `${stateDir()}/daemon.log`;
+}
+
+/** Single-instance lock file: written atomically on daemon bind and removed on
+ * every exit path. Holds { pid, port, build, version, startedAt } so a newer
+ * caret can discover and gracefully retire an older one (EXC-406). */
+export function daemonLock(): string {
+  return `${stateDir()}/daemon.lock`;
 }
 
 /** Idle auto-shutdown delay (ms). Overridable via CARET_IDLE_MS for tests. */
