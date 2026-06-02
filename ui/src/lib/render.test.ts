@@ -1,5 +1,6 @@
 import "../../test-setup.ts";
-import { describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
+import { initHighlighter } from "./highlight.ts";
 import { renderPlan } from "./render.ts";
 
 const SAMPLE = `# Introduction
@@ -136,5 +137,66 @@ describe("renderPlan first-heading normalization", () => {
     expect(headings).toEqual([
       { level: 1, slug: "real", text: "Real", blockId: expect.any(String) },
     ]);
+  });
+});
+
+// Runs last so the earlier suites exercise the plain (un-highlighted) path; the
+// highlighter singleton is process-global, so this beforeAll leaves it ready.
+describe("renderPlan code block highlighting", () => {
+  beforeAll(async () => {
+    await initHighlighter();
+  });
+
+  test("highlights a fenced block with a known language via shiki", () => {
+    const { html } = renderPlan("```ts\nconst x = 1;\n```\n");
+    expect(html).toContain('class="shiki');
+    expect(html).toContain("--shiki-light:");
+    expect(html).toContain("--shiki-dark:");
+    expect(html).toContain("caret-light");
+  });
+
+  test("keeps the structural id on the highlighted <pre>", () => {
+    // The code block is the only block, so its id is b0 and must land on the
+    // shiki <pre> (the first tag) so annotation anchoring still resolves.
+    const { html } = renderPlan("```ts\nconst x = 1;\n```\n");
+    const preTag = html.match(/<pre\b[^>]*>/)?.[0] ?? "";
+    expect(preTag).toContain('id="b0"');
+    expect(preTag).toContain('class="shiki');
+  });
+
+  test("token color CSS variables survive DOMPurify sanitization", () => {
+    const { html } = renderPlan("```ts\nconst x = 1;\n```\n");
+    expect(html).toMatch(/--shiki-light:\s*#[0-9a-fA-F]{3,8}/);
+    expect(html).toMatch(/--shiki-dark:\s*#[0-9a-fA-F]{3,8}/);
+  });
+
+  test("drops a hostile inline style while keeping shiki's token styles", () => {
+    const { html } = renderPlan(
+      '<div style="position:fixed;inset:0;z-index:9999">x</div>\n\n```ts\nconst y = 2;\n```\n',
+    );
+    expect(html).not.toContain("position:fixed");
+    expect(html).not.toContain("z-index");
+    expect(html).toContain("--shiki-light:");
+  });
+
+  test("an unknown language falls back to a plain <pre><code>", () => {
+    const { html } = renderPlan("```no-such-lang\nplain text\n```\n");
+    expect(html).not.toContain("shiki");
+    expect(html).toContain("<pre");
+    expect(html).toContain("<code");
+    expect(html).toContain("plain text");
+  });
+
+  test("a fenced block with no language marker renders as plain text", () => {
+    const { html } = renderPlan("```\njust text\n```\n");
+    expect(html).not.toContain("shiki");
+    expect(html).toContain("<pre");
+    expect(html).toContain("just text");
+  });
+
+  test("inline code (single backticks) is left unhighlighted", () => {
+    const { html } = renderPlan("a `inline` word\n");
+    expect(html).not.toContain("shiki");
+    expect(html).toContain("<code>inline</code>");
   });
 });
