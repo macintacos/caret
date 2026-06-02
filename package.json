@@ -1,7 +1,8 @@
 {
   "name": "caret",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "A Claude Code plugin that replaces the terminal plan-approval prompt with a local web UI for inline review, annotation, and approval.",
   "scripts": {
