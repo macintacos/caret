@@ -11,6 +11,7 @@ import yaml from "shiki/langs/yaml.mjs";
 import { caretDark, caretLight } from "./caret-theme.ts";
 
 let highlighter: HighlighterCore | null = null;
+let initPromise: Promise<void> | null = null;
 
 // The pure-JS regex engine (no oniguruma WASM) and statically-imported grammars
 // keep shiki inside vite-plugin-singlefile's no-dynamic-import / single-file
@@ -21,15 +22,18 @@ const langs = [typescript, javascript, json, yaml, toml, shellscript, diff, mark
 /**
  * Create the shared shiki highlighter once. Awaited at app bootstrap
  * (ui/src/main.ts) before the first render so renderPlan() stays synchronous.
- * Idempotent; safe to call more than once.
+ * Idempotent and concurrency-safe: the in-flight promise is memoized, so
+ * overlapping callers share one build rather than each creating a highlighter.
  */
-export async function initHighlighter(): Promise<void> {
-  if (highlighter) return;
-  highlighter = await createHighlighterCore({
+export function initHighlighter(): Promise<void> {
+  initPromise ??= createHighlighterCore({
     themes: [caretLight, caretDark],
     langs,
     engine: createJavaScriptRegexEngine({ forgiving: true }),
+  }).then((hl) => {
+    highlighter = hl;
   });
+  return initPromise;
 }
 
 /**

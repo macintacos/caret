@@ -170,6 +170,24 @@ describe("renderPlan code block highlighting", () => {
     expect(html).toMatch(/--shiki-dark:\s*#[0-9a-fA-F]{3,8}/);
   });
 
+  test("italic/bold token styles (font-style/weight vars) survive sanitization", () => {
+    // The caret theme styles comments italic, so shiki emits a
+    // --shiki-*-font-style declaration on the comment span. The sanitizer hook
+    // must keep the whole style (color included), not drop it because of the
+    // font-style declaration.
+    const { html } = renderPlan("```ts\n// a note\nconst x = 1;\n```\n");
+    expect(html).toContain("--shiki-light-font-style:italic");
+    // the comment's color must still ride along, not be stripped with it
+    expect(html).toMatch(/--shiki-light:\s*#[0-9a-fA-F]{3,8};--shiki-light-font-style/);
+  });
+
+  test("bold token styles (font-weight vars) survive sanitization", () => {
+    // The caret theme styles markdown headings bold, so shiki emits a
+    // --shiki-*-font-weight declaration; it must survive the sanitizer hook too.
+    const { html } = renderPlan("```md\n# Heading\n```\n");
+    expect(html).toContain("--shiki-light-font-weight:bold");
+  });
+
   test("drops a hostile inline style while keeping shiki's token styles", () => {
     const { html } = renderPlan(
       '<div style="position:fixed;inset:0;z-index:9999">x</div>\n\n```ts\nconst y = 2;\n```\n',

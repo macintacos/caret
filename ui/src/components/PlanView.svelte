@@ -267,19 +267,36 @@
   /* shiki dual-theme highlighting. Tokens carry per-token --shiki-light /
      --shiki-dark CSS variables (defaultColor:false) but no inline color, so the
      active one is selected here. The code-block background stays caret's
-     --paper-sunk from .prose pre above — shiki sets no inline background, so
-     there's no doubling — and only the token colors come from shiki. Switching
+     --paper-sunk from .prose pre above — shiki emits no background declaration
+     (only unconsumed --shiki-*-bg vars), so there's no doubling — and only the
+     token colors come from shiki. Switching
      prefers-color-scheme repaints via these variables with no re-highlight or
      re-render, so App.svelte's id:version cache stays valid. */
   .prose :global(pre.shiki),
   .prose :global(pre.shiki span) {
     color: var(--shiki-light);
   }
+  .prose :global(pre.shiki span) {
+    font-style: var(--shiki-light-font-style, normal);
+    font-weight: var(--shiki-light-font-weight, normal);
+  }
   @media (prefers-color-scheme: dark) {
     .prose :global(pre.shiki),
     .prose :global(pre.shiki span) {
       color: var(--shiki-dark);
     }
+    .prose :global(pre.shiki span) {
+      font-style: var(--shiki-dark-font-style, normal);
+      font-weight: var(--shiki-dark-font-weight, normal);
+    }
+  }
+  /* A selection inside a highlighted block becomes several adjacent <mark>s,
+     one per token span; drop their horizontal padding/radius so they read as a
+     single continuous highlight instead of separate pills. */
+  .prose :global(pre.shiki mark.anno) {
+    padding-left: 0;
+    padding-right: 0;
+    border-radius: 0;
   }
   .prose :global(table) {
     width: 100%;

@@ -12,11 +12,14 @@ import { Marked } from "marked";
 import { highlightToHtml } from "./highlight.ts";
 
 // Matches a `style` value that contains ONLY shiki's dual-theme output: the
-// `--shiki-light` / `--shiki-dark` token-color variables (plus `--shiki-*-bg` on
-// the <pre>), or color / background-color derived from them. Anything else
-// (`position`, `z-index`, `url(...)`, …) fails the match and is dropped.
+// `--shiki-*` custom properties (per-token `--shiki-light`/`--shiki-dark` colors,
+// `--shiki-*-bg` on the <pre>, and `--shiki-*-font-style`/`-font-weight` for
+// italic/bold tokens), or color / background-color derived from them. Values are
+// limited to inert hex / rgb / var(--shiki…) / font keywords / weight numbers.
+// Anything else (`position`, `z-index`, `url(...)`, …) fails the match and the
+// whole attribute is dropped — so this narrows, never widens, the XSS surface.
 const SHIKI_STYLE =
-  /^(?:(?:--shiki(?:-light|-dark)?(?:-bg)?|color|background-color)\s*:\s*(?:#[0-9a-fA-F]{3,8}|rgba?\([\d.,\s%]+\)|var\(--shiki[\w-]*\))\s*;?\s*)+$/;
+  /^(?:(?:--shiki[\w-]*|color|background-color)\s*:\s*(?:#[0-9a-fA-F]{3,8}|rgba?\([\d.,\s%]+\)|var\(--shiki[\w-]*\)|italic|oblique|normal|bold|bolder|lighter|\d{1,3})\s*;?\s*)+$/;
 
 // DOMPurify must bind to a `window` (happy-dom in tests, the real one in the
 // browser). Bind lazily at first use so module import never requires a DOM.
@@ -26,10 +29,10 @@ function getPurifier(): DOMPurifyInstance {
   const win =
     (globalThis as { window?: WindowLike }).window ?? (globalThis as unknown as WindowLike);
   purifier = createDOMPurify(win);
-  // Preserve shiki's token-color `style` through sanitization while keeping
-  // arbitrary inline styles out of the rendered plan: keep a `style` only when
-  // its value is shiki-shaped, drop it otherwise. Sanitize stays the terminal
-  // step (see renderPlan), so this narrows — never widens — the XSS surface.
+  // Preserve shiki's token-color `style` through sanitization: keep a `style`
+  // only when its whole value is shiki-shaped (SHIKI_STYLE), drop it otherwise.
+  // Dangerous styles (position, url(), expression(), …) never match, so this
+  // narrows — never widens — the XSS surface. Sanitize stays the terminal step.
   purifier.addHook("uponSanitizeAttribute", (_node, data) => {
     if (data.attrName === "style") {
       if (SHIKI_STYLE.test(data.attrValue.trim())) data.forceKeepAttr = true;
