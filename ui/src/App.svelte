@@ -8,6 +8,7 @@
   } from "./lib/api.ts";
   import { formatFeedback } from "./lib/feedback.ts";
   import { renderPlan, type HeadingEntry } from "./lib/render.ts";
+  import { createSafeModeGuard } from "./lib/safeMode.ts";
   import { createScrollSpy } from "./lib/scrollspy.ts";
   import type { AcceptMode, Annotation, ClientReview } from "./lib/types.ts";
 
@@ -26,6 +27,7 @@
   let connected = $state(true);
   let busy = $state(false);
   let showDialog = $state(false);
+  let safeMode = $state(false);
 
   // Working copy of annotations for the active review (edited locally, autosaved).
   let annotations = $state<Annotation[]>([]);
@@ -107,6 +109,30 @@
       () => (connected = false),
     );
     return stop;
+  });
+
+  // ----- Safe Mode -----
+  // Right after the view opens — or the tab/window regains focus — a keystroke
+  // that lands within the grace window is treated as an accidental in-flight
+  // keypress (the user was typing elsewhere when caret grabbed focus). While
+  // active, all keys are swallowed so no shortcut fires. `arm()` re-opens the
+  // grace window on every refocus.
+  $effect(() => {
+    const guard = createSafeModeGuard({
+      target: window,
+      onChange: (active) => (safeMode = active),
+    });
+    const rearm = () => guard.arm();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") guard.arm();
+    };
+    window.addEventListener("focus", rearm);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", rearm);
+      document.removeEventListener("visibilitychange", onVisible);
+      guard.destroy();
+    };
   });
 
   function mergeReviews(incoming: ClientReview[]) {
@@ -296,3 +322,83 @@
     onCancel={() => (showDialog = false)}
   />
 {/if}
+
+{#if safeMode}
+  <div class="safe-mode-toast" role="status" aria-live="polite">
+    <span class="sm-dot" aria-hidden="true"></span>
+    <div class="sm-text">
+      <strong>Safe Mode</strong>
+      <span>Ignoring input for a moment…</span>
+    </div>
+  </div>
+{/if}
+
+<style>
+  /* Transient bottom-right indicator shown only while Safe Mode swallows input.
+     Sits above the modal scrim (z-index 100) so it's visible over any dialog. */
+  .safe-mode-toast {
+    position: fixed;
+    right: 1.25rem;
+    bottom: 1.25rem;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    max-width: 18rem;
+    padding: 0.7rem 0.95rem;
+    background: var(--paper-raised);
+    color: var(--ink);
+    border: 1px solid var(--rule-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    animation: safe-mode-in 160ms ease-out;
+  }
+  .sm-dot {
+    flex: none;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: safe-mode-pulse 1.2s ease-in-out infinite;
+  }
+  .sm-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.3;
+  }
+  .sm-text strong {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .sm-text span {
+    color: var(--ink-soft);
+    font-size: 0.72rem;
+  }
+  @keyframes safe-mode-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes safe-mode-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 var(--accent-wash);
+    }
+    50% {
+      box-shadow: 0 0 0 4px transparent;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .safe-mode-toast,
+    .sm-dot {
+      animation: none;
+    }
+  }
+</style>
