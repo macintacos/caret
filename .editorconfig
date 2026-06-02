@@ -1,0 +1,13 @@
+root = true
+
+# shfmt reads .editorconfig for shell indentation. The hk `shfmt` builtin runs
+# `shfmt --apply-ignore` with no `-i` flag, so it honors these settings instead
+# of defaulting to tabs — keeping the repo's existing 2-space shell style.
+[*.{sh,bash}]
+indent_style = space
+indent_size = 2
+
+# The extensionless mise file-tasks are bash scripts too.
+[.mise/tasks/*]
+indent_style = space
+indent_size = 2
