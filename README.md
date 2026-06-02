@@ -10,7 +10,7 @@ A Claude Code plugin that replaces the terminal plan-approval prompt with a loca
 curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/install.sh | bash
 ```
 
-That one command clones caret, builds the binary for your platform, and registers it with Claude Code through the native plugin system — no manual `git clone` and no `claude --plugin-dir`. It requires [`git`](https://git-scm.com), [`bun`](https://bun.sh), and the [`claude`](https://claude.com/claude-code) CLI on your `PATH`.
+That one command clones caret at its latest release (the newest `vX.Y.Z` tag), builds the binary for your platform, and registers it with Claude Code through the native plugin system — no manual `git clone` and no `claude --plugin-dir`. It requires [`git`](https://git-scm.com), [`bun`](https://bun.sh), and the [`claude`](https://claude.com/claude-code) CLI on your `PATH`.
 
 Then restart Claude Code (or run `/reload-plugins`) and try it:
 
@@ -20,7 +20,7 @@ Then restart Claude Code (or run `/reload-plugins`) and try it:
 
 Enter plan mode, let Claude present a plan, and a browser tab opens at the deep-linked review. Select text to comment, then **Approve** (optionally "& accept edits" or "& auto mode") or **Request changes**.
 
-**Update** by re-running the same command — it pulls, rebuilds, and reinstalls. **Uninstall** with:
+**Update** by re-running the same command — it fetches the latest release, rebuilds, and reinstalls. **Uninstall** with:
 
 ```sh
 claude plugin uninstall caret@caret
