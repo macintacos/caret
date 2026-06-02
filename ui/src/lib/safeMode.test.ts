@@ -142,4 +142,14 @@ describe("createSafeModeGuard", () => {
     expect(changes).toEqual([]);
     expect(ev.defaultPrevented).toBe(false);
   });
+
+  test("a standalone keyup never triggers Safe Mode and passes through", () => {
+    const clock = makeClock();
+    const { guard, changes } = makeGuard({ now: clock.now });
+    clock.advance(50); // within the grace window, but only a keyup arrives
+    const ev = keyup();
+    expect(guard.isActive()).toBe(false);
+    expect(changes).toEqual([]);
+    expect(ev.defaultPrevented).toBe(false);
+  });
 });
