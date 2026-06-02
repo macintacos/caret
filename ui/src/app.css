@@ -176,6 +176,14 @@ button {
   cursor: pointer;
 }
 
+/* Form controls don't inherit font-family from <body>; default them to sans
+   (buttons above stay mono on purpose). */
+textarea,
+input,
+select {
+  font-family: var(--font-sans);
+}
+
 button:focus-visible,
 a:focus-visible,
 [tabindex]:focus-visible {
