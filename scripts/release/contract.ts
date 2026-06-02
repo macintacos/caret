@@ -42,6 +42,8 @@ export interface ComputeResult {
   schemaVersion: number;
   bump: BumpLevel;
   currentVersion: string;
+  /** The version of the latest release tag; the bump baseline. */
+  previousVersion: string;
   version: string;
   tag: string;
   previousTag: string | null;

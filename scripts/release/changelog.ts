@@ -18,7 +18,7 @@ export interface ChangelogSection {
   notes: string;
 }
 
-const RELEASE_HEADING = /^##\s+\[(\d+\.\d+\.\d+)\]\s+-\s+(\d{4}-\d{2}-\d{2})(?:\s+-\s+(.+\S))?\s*$/;
+const RELEASE_HEADING = /^##\s+\[(\d+\.\d+\.\d+)\]\s+-\s+(\d{4}-\d{2}-\d{2})(?:\s+-\s+(.+?))?\s*$/;
 const SECTION_START = /^##\s/;
 const LINK_REF = /^\[[^\]]+\]:\s/;
 

@@ -82,6 +82,7 @@ export interface FinalizeResult {
   phase: "finalize";
   version: string;
   tag: string;
+  title: string;
   taggedSha: string;
   releaseUrl: string | null;
   dryRun: boolean;
@@ -105,17 +106,16 @@ async function assertRepoAndGh(deps: Deps): Promise<{ repoSlug: string; defaultB
 async function assertBranch(
   deps: Deps,
   defaultBranch: string,
-  allow: string[] = [],
+  opts: { allowPrefixes?: string[] } = {},
 ): Promise<string> {
   const branch = await deps.git.currentBranch();
   if (branch === "HEAD") {
     throw new GuardError("DETACHED_HEAD", "HEAD is detached; checkout a branch.");
   }
-  if (branch !== defaultBranch && !allow.includes(branch)) {
-    throw new GuardError(
-      "WRONG_BRANCH",
-      `On ${branch}; expected ${[defaultBranch, ...allow].join(" or ")}.`,
-    );
+  const prefixes = opts.allowPrefixes ?? [];
+  if (branch !== defaultBranch && !prefixes.some((p) => branch.startsWith(p))) {
+    const allowed = [defaultBranch, ...prefixes.map((p) => `${p}*`)].join(" or ");
+    throw new GuardError("WRONG_BRANCH", `On ${branch}; expected ${allowed}.`);
   }
   return branch;
 }
@@ -129,16 +129,21 @@ async function assertCleanTree(deps: Deps, allowed: string[] = []): Promise<void
   }
 }
 
-async function readSyncedVersion(deps: Deps): Promise<string> {
-  const entries: { file: string; version: string }[] = [];
-  for (const file of MANIFESTS) {
-    entries.push({ file, version: extractVersion(await deps.fs.read(file)) });
-  }
+/** assertInSync but raising the typed MANIFEST_DRIFT guard on disagreement. */
+function syncedVersion(entries: { file: string; version: string }[]): string {
   try {
     return assertInSync(entries);
   } catch (e) {
     throw new GuardError("MANIFEST_DRIFT", (e as Error).message);
   }
+}
+
+async function readSyncedVersion(deps: Deps): Promise<string> {
+  const entries: { file: string; version: string }[] = [];
+  for (const file of MANIFESTS) {
+    entries.push({ file, version: extractVersion(await deps.fs.read(file)) });
+  }
+  return syncedVersion(entries);
 }
 
 interface ReleaseContext {
@@ -152,7 +157,6 @@ interface ReleaseContext {
   repoSlug: string;
   defaultBranch: string;
   headSha: string;
-  commits: CommitInfo[];
 }
 
 async function gatherContext(
@@ -176,14 +180,6 @@ async function gatherContext(
     throw new GuardError("TAG_EXISTS", `Tag ${tag} already exists.`);
   }
   const headSha = await deps.git.headSha();
-  const commits: CommitInfo[] = (await deps.git.commitsBetween(`${previousTag}..HEAD`)).map(
-    (c) => ({
-      sha: c.sha,
-      shortSha: c.shortSha,
-      subject: c.subject,
-      ...parseCommitMeta(c.subject),
-    }),
-  );
   return {
     bump,
     currentVersion,
@@ -195,7 +191,6 @@ async function gatherContext(
     repoSlug,
     defaultBranch,
     headSha,
-    commits,
   };
 }
 
@@ -207,11 +202,20 @@ export async function compute(deps: Deps, opts: { bump: BumpLevel }): Promise<Co
   await assertBranch(deps, defaultBranch);
   await assertCleanTree(deps);
   const ctx = await gatherContext(deps, opts.bump, repoSlug, defaultBranch);
+  const commits: CommitInfo[] = (await deps.git.commitsBetween(`${ctx.previousTag}..HEAD`)).map(
+    (c) => ({
+      sha: c.sha,
+      shortSha: c.shortSha,
+      subject: c.subject,
+      ...parseCommitMeta(c.subject),
+    }),
+  );
   return {
     ok: true,
     schemaVersion: SCHEMA_VERSION,
     bump: ctx.bump,
     currentVersion: ctx.currentVersion,
+    previousVersion: ctx.previousVersion,
     version: ctx.version,
     tag: ctx.tag,
     previousTag: ctx.previousTag,
@@ -221,7 +225,7 @@ export async function compute(deps: Deps, opts: { bump: BumpLevel }): Promise<Co
     releaseBranch: ctx.releaseBranch,
     compareUrl: compareUrl(repoSlug, ctx.previousTag, ctx.tag),
     unreleasedCompareUrl: compareUrl(repoSlug, ctx.tag, "HEAD"),
-    commits: ctx.commits,
+    commits,
     manifestsInSync: true,
   };
 }
@@ -235,14 +239,15 @@ export async function baseline(deps: Deps, opts: { dryRun: boolean }): Promise<B
   }
   const tag = BASELINE_TAG;
   const sha = await deps.git.rootCommit();
-  if ((await deps.git.localTagExists(tag)) || (await deps.git.remoteTagExists(tag))) {
+  const remoteExists = await deps.git.remoteTagExists(tag);
+  if ((await deps.git.localTagExists(tag)) || remoteExists) {
     deps.io.log(`Baseline tag ${tag} already exists; nothing to do.`);
     return {
       phase: "baseline",
       tag,
       sha,
       created: false,
-      pushed: await deps.git.remoteTagExists(tag),
+      pushed: remoteExists,
       dryRun: opts.dryRun,
     };
   }
@@ -278,9 +283,9 @@ export async function prepare(
 ): Promise<PrepareResult> {
   const apply = !opts.dryRun;
   const { repoSlug, defaultBranch } = await assertRepoAndGh(deps);
-  const ctx = await gatherContext(deps, opts.bump, repoSlug, defaultBranch);
-  await assertBranch(deps, defaultBranch, [ctx.releaseBranch]);
+  await assertBranch(deps, defaultBranch, { allowPrefixes: ["release/"] });
   await assertCleanTree(deps, [...MANIFESTS, CHANGELOG_PATH]);
+  const ctx = await gatherContext(deps, opts.bump, repoSlug, defaultBranch);
 
   // The agent authors the changelog (with the theme) before this runs.
   if (!(await deps.fs.exists(CHANGELOG_PATH))) {
@@ -312,20 +317,26 @@ export async function prepare(
     }
   }
 
-  // Bump the manifests (resume-aware: skip if already at target).
-  if (ctx.currentVersion === ctx.version) {
-    deps.io.log(`Manifests already at ${ctx.version}; skipping bump.`);
-  } else if (ctx.currentVersion === ctx.previousVersion) {
-    for (const file of MANIFESTS) {
-      const updated = editVersion(await deps.fs.read(file), ctx.currentVersion, ctx.version);
-      if (apply) await deps.fs.write(file, updated);
-      else deps.io.log(`Would bump ${file} ${ctx.currentVersion} -> ${ctx.version}.`);
+  // Bump the manifests, reading each file's actual version AFTER the checkout
+  // so a resume (release branch already bumped) skips instead of crashing.
+  for (const file of MANIFESTS) {
+    const content = await deps.fs.read(file);
+    const fileVersion = extractVersion(content);
+    if (fileVersion === ctx.version) {
+      deps.io.log(`${file} already at ${ctx.version}; skipping.`);
+      continue;
     }
-  } else {
-    throw new GuardError(
-      "MANIFEST_DRIFT",
-      `Manifests at ${ctx.currentVersion}; expected ${ctx.previousVersion} or ${ctx.version}.`,
-    );
+    if (fileVersion !== ctx.previousVersion) {
+      throw new GuardError(
+        "MANIFEST_DRIFT",
+        `${file} at ${fileVersion}; expected ${ctx.previousVersion} or ${ctx.version}.`,
+      );
+    }
+    if (apply) {
+      await deps.fs.write(file, editVersion(content, ctx.previousVersion, ctx.version));
+    } else {
+      deps.io.log(`Would bump ${file} ${ctx.previousVersion} -> ${ctx.version}.`);
+    }
   }
 
   // Gate on preflight (lint + test).
@@ -428,13 +439,13 @@ export async function prepare(
 
 /** Phase 2: tag trunk's merged HEAD and publish the GitHub Release. */
 export async function finalize(deps: Deps, opts: { dryRun: boolean }): Promise<FinalizeResult> {
-  const apply = !opts.dryRun;
   const { defaultBranch } = await assertRepoAndGh(deps);
   await assertBranch(deps, defaultBranch);
   await assertCleanTree(deps);
 
-  if (apply) await deps.git.fetch();
-  else deps.io.log("Would fetch origin + tags.");
+  // Fetch unconditionally (read-only): even a dry run must read a fresh
+  // origin/trunk so phase detection and previews reflect a merged PR.
+  await deps.git.fetch();
 
   const trunkRef = `origin/${defaultBranch}`;
   const trunkSha = await deps.git.tryRevParse(trunkRef);
@@ -459,12 +470,7 @@ export async function finalize(deps: Deps, opts: { dryRun: boolean }): Promise<F
     if (c === null) throw new GuardError("NOT_MERGED", `${file} missing on trunk.`);
     entries.push({ file, version: extractVersion(c) });
   }
-  let trunkVersion: string;
-  try {
-    trunkVersion = assertInSync(entries);
-  } catch (e) {
-    throw new GuardError("MANIFEST_DRIFT", (e as Error).message);
-  }
+  const trunkVersion = syncedVersion(entries);
   if (trunkVersion !== version) {
     throw new GuardError(
       "NOT_MERGED",
@@ -484,6 +490,7 @@ export async function finalize(deps: Deps, opts: { dryRun: boolean }): Promise<F
       phase: "finalize",
       version,
       tag,
+      title,
       taggedSha: trunkSha,
       releaseUrl: existing.url,
       dryRun: opts.dryRun,
@@ -496,6 +503,7 @@ export async function finalize(deps: Deps, opts: { dryRun: boolean }): Promise<F
       phase: "finalize",
       version,
       tag,
+      title,
       taggedSha: trunkSha,
       releaseUrl: null,
       dryRun: true,
@@ -507,7 +515,9 @@ export async function finalize(deps: Deps, opts: { dryRun: boolean }): Promise<F
     if (!(await deps.git.localTagExists(tag))) {
       await deps.git.createAnnotatedTag(tag, trunkSha, title);
     } else {
-      const localTagSha = await deps.git.tryRevParse(tag);
+      // Dereference to the commit: an annotated tag's own object SHA differs
+      // from the commit it points at.
+      const localTagSha = await deps.git.tryRevParse(`${tag}^{commit}`);
       if (localTagSha !== null && localTagSha !== trunkSha) {
         throw new GuardError(
           "TAG_EXISTS",
@@ -524,6 +534,7 @@ export async function finalize(deps: Deps, opts: { dryRun: boolean }): Promise<F
     phase: "finalize",
     version,
     tag,
+    title,
     taggedSha: trunkSha,
     releaseUrl: release.url,
     dryRun: false,

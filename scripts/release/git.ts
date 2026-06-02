@@ -83,7 +83,10 @@ export function createGit(remote = "origin"): GitOps {
     },
 
     async latestVersionTag() {
-      const out = (await $`git tag --list v*.*.* --sort=-v:refname`.text()).trim();
+      // Interpolate the glob so Bun.$ passes it literally to git instead of
+      // glob-expanding it against the cwd (which errors when nothing matches).
+      const pattern = "v*.*.*";
+      const out = (await $`git tag --list ${pattern} --sort=-v:refname`.text()).trim();
       if (out === "") return null;
       return out.split("\n")[0] ?? null;
     },
@@ -99,11 +102,12 @@ export function createGit(remote = "origin"): GitOps {
       const out = (await $`git log --format=${fmt} ${range}`.text()).trim();
       if (out === "") return [];
       return out.split("\n").map((line) => {
-        const [sha, shortSha, subject] = line.split(FIELD);
+        const parts = line.split(FIELD);
         return {
-          sha: sha ?? "",
-          shortSha: shortSha ?? "",
-          subject: subject ?? "",
+          sha: parts[0] ?? "",
+          shortSha: parts[1] ?? "",
+          // Re-join in case a subject itself contains the separator byte.
+          subject: parts.slice(2).join(FIELD),
         };
       });
     },

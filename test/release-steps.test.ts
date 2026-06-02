@@ -369,6 +369,39 @@ test("prepare reuses an already-open PR instead of opening a duplicate", async (
   expect(r.prUrl).toBe("https://github.com/macintacos/caret/pull/3");
 });
 
+test("prepare resumes cleanly when the release branch is already bumped", async () => {
+  const { deps, calls } = harness({
+    branch: "release/v0.1.0",
+    porcelain: [],
+    localBranches: ["release/v0.1.0"],
+    remoteBranches: ["release/v0.1.0"],
+    refs: {
+      "origin/trunk": "trunksha",
+      "release/v0.1.0": "z",
+      "origin/release/v0.1.0": "z",
+    },
+    files: {
+      "package.json": pkg("0.1.0"),
+      ".claude-plugin/plugin.json": pkg("0.1.0"),
+      ".claude-plugin/marketplace.json": market("0.1.0"),
+      "CHANGELOG.md": CHANGELOG,
+    },
+    prs: [
+      {
+        number: 3,
+        url: "https://github.com/macintacos/caret/pull/3",
+        state: "OPEN",
+      },
+    ],
+  });
+  const r = await prepare(deps, { bump: "minor", dryRun: false });
+  expect(r.version).toBe("0.1.0");
+  expect(r.prNumber).toBe(3);
+  expect(calls).not.toContain("write:package.json"); // bump skipped, no crash
+  expect(calls.filter((c) => c.startsWith("commit:"))).toEqual([]); // nothing to commit
+  expect(calls).not.toContain("prCreate");
+});
+
 test("prepare fails loudly when the changelog section is missing", async () => {
   const { deps } = harness({
     ...PREPARE_OPTS,
@@ -439,6 +472,19 @@ test("finalize rejects NOT_MERGED when trunk manifests lag the changelog", async
     },
   });
   await expectGuard(finalize(deps, { dryRun: false }), "NOT_MERGED");
+});
+
+test("finalize resumes a created-but-unpushed local tag without a false TAG_EXISTS", async () => {
+  const { deps, calls } = harness({
+    ...FINALIZE_OPTS,
+    tags: ["v0.0.1", "v0.1.0"], // local tag exists
+    remoteTags: ["v0.0.1"], // but was never pushed
+  });
+  const r = await finalize(deps, { dryRun: false });
+  expect(calls).not.toContain("createTag:v0.1.0@mergedsha"); // tag already local
+  expect(calls).toContain("pushTag:v0.1.0"); // push the existing tag
+  expect(calls).toContain("releaseCreate:v0.1.0");
+  expect(r.releaseUrl).toContain("v0.1.0");
 });
 
 test("finalize reuses an existing GitHub release", async () => {

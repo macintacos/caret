@@ -49,6 +49,7 @@ test("a ComputeResult round-trips through JSON unchanged", () => {
     schemaVersion: SCHEMA_VERSION,
     bump: "minor",
     currentVersion: "0.0.1",
+    previousVersion: "0.0.1",
     version: "0.1.0",
     tag: "v0.1.0",
     previousTag: "v0.0.1",

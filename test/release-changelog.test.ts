@@ -40,6 +40,14 @@ test("parseHeading reads version, date, and themed title", () => {
   );
 });
 
+test("parseHeading handles a one-character theme without dropping the heading", () => {
+  expect(parseHeading("## [0.1.0] - 2026-06-02 - X")).toEqual({
+    version: "0.1.0",
+    date: "2026-06-02",
+    title: "X",
+  });
+});
+
 test("parseHeading returns a null title when there is no theme", () => {
   expect(parseHeading("## [0.1.0] - 2026-06-02")).toEqual({
     version: "0.1.0",

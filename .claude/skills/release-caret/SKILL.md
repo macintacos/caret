@@ -24,37 +24,33 @@ Every invocation prints exactly one JSON object on stdout. Parse it. A `{ "ok": 
 
 ## Which phase am I in?
 
-Releases run in two phases across two separate invocations. Detect the phase before doing anything else by probing the finalizer:
-
-```sh
-bun scripts/release/cli.ts finalize --dry-run
-```
-
-- **`ok: false` with `errorCode: "NOT_MERGED"`** → the version bump is not on trunk yet → run **Phase 1** below.
-- **A `phase: "finalize"` result with `releaseUrl: null`** → the bump + changelog are already merged to trunk, awaiting the tag → run **Phase 2** below.
-- **A `phase: "finalize"` result with a non-null `releaseUrl`** → this version is already released. Tell the user it's published at that URL and stop.
-- **Any other `errorCode`** (`DIRTY_TREE`, `DETACHED_HEAD`, `WRONG_BRANCH`, `NO_GH`, `NOT_A_REPO`) → surface `message` and stop; the precondition must be fixed first.
-
----
-
-## Phase 1 — open the release PR
-
-### 1. Compute the version
+Releases run in two phases across two separate invocations, both started from a clean, **up-to-date** `trunk`. `compute` reads local state, so pull trunk before releasing — and again after the PR merges, before Phase 2. Detect the phase by running the version oracle once:
 
 ```sh
 bun scripts/release/cli.ts compute <bump>
 ```
 
-If the result is `ok: false` with `errorCode: "NO_BASELINE"`, there are no release tags yet. Ask the user whether to lay down the baseline:
+- **`ok: false` with `errorCode: "NO_BASELINE"`** → no release tags exist yet → run **Phase 1**, starting at step 1 (offer to lay down the baseline), then re-run `compute`.
+- **`ok: false` with any other `errorCode`** (`DIRTY_TREE`, `WRONG_BRANCH`, `DETACHED_HEAD`, `MANIFEST_DRIFT`, `NO_GH`, `NOT_A_REPO`) → surface `message` and stop; fix the precondition (usually clean or pull trunk) first.
+- **`ok: true` and `currentVersion === previousVersion`** → the manifests still match the latest release tag, so no prepared bump is merged → run **Phase 1**.
+- **`ok: true` and `currentVersion !== previousVersion`** → the manifests are ahead of the latest tag, i.e. a prepared bump is already merged on trunk awaiting its tag → run **Phase 2**.
 
-> **No baseline tag exists yet.** The first release needs `v0.0.1` on the repository's initial commit so future releases have a range to bump from.
+---
+
+## Phase 1 — open the release PR
+
+### 1. Baseline (first release only)
+
+If phase detection returned `NO_BASELINE`, there are no release tags yet — the first release needs `v0.0.1` on the repository's initial commit so future releases have a range to bump from. Ask:
+
+> **No baseline tag exists yet.** The first release tags the repository's initial commit as `v0.0.1` so future releases have a range to bump from.
 >
 > - **Tag the initial commit as v0.0.1** — runs `baseline`, pushing the tag.
 > - **Cancel**
 
-On confirmation, run `bun scripts/release/cli.ts baseline --yes` (or `--dry-run` for a dry run), then re-run `compute`. For any other `errorCode`, surface `message` and stop.
+On confirmation, run `bun scripts/release/cli.ts baseline --yes` (or `--dry-run` for a dry run), then re-run `compute <bump>`.
 
-From a successful result, keep: `currentVersion`, `version`, `tag`, `commits[]`, `compareUrl`, `unreleasedCompareUrl`.
+Otherwise you already have the successful `compute` result from phase detection. From it, keep: `currentVersion`, `version`, `tag`, `commits[]`, `compareUrl`, `unreleasedCompareUrl`.
 
 ### 2. Confirm the version (AskUserQuestion #1)
 
@@ -111,16 +107,22 @@ Parse the result and report the `prUrl`. Tell the user: once the PR is reviewed 
 
 ## Phase 2 — tag and publish
 
-You already have the finalize dry-run result from phase detection (`version`, `tag`, `taggedSha`).
+### 1. Preview the finalize
 
-### 1. Confirm the remote mutation (AskUserQuestion)
+```sh
+bun scripts/release/cli.ts finalize --dry-run
+```
+
+This fetches `origin/trunk` and returns the concrete `version`, `tag`, `title`, and `taggedSha` (trunk's merged HEAD) without mutating anything. If it instead returns `ok: false` with `NOT_MERGED`, the bump isn't on `origin/trunk` yet — tell the user to merge the Phase 1 PR (and pull trunk) first, then stop.
+
+### 2. Confirm the remote mutation (AskUserQuestion)
 
 > **Tag and publish `<title>`?** This tags trunk's merged HEAD (`<taggedSha>`) as `<tag>`, pushes the tag, and creates the GitHub Release from the `[<version>]` changelog section.
 >
 > - **Tag and publish** (Recommended)
 > - **Cancel**
 
-### 2. Run finalize
+### 3. Run finalize
 
 ```sh
 bun scripts/release/cli.ts finalize --yes      # real
@@ -135,5 +137,5 @@ Parse the result and report the `releaseUrl`. The release is live.
 
 - The script computes and owns the version; you only confirm it. If a script call fails, stop and surface its `message` — do not retry with a hand-edited version or work around the guard.
 - Author the changelog heading in the exact `## [<version>] - <DATE> - The <Theme> Release` shape, or `prepare`/`finalize` cannot recover the themed title.
-- Two confirmations gate a real release — the version (Phase 1 step 2) and the remote mutation (Phase 1 step 4 / Phase 2 step 1). Pass `--yes` only after the remote-mutation confirmation. A dry run skips `--yes` entirely.
+- Two confirmations gate a real release — the version (Phase 1 step 2) and the remote mutation (Phase 1 step 4 / Phase 2 step 2). Pass `--yes` only after the remote-mutation confirmation. A dry run skips `--yes` entirely.
 - The script is safe to re-run after a partial failure — it detects an existing branch, PR, tag, or release and resumes or no-ops. If a run is interrupted, just invoke `/release-caret` again.
