@@ -86,6 +86,14 @@ test("bySession returns a session's reviews newest-first", async () => {
   expect(store.bySession("S").map((r) => r.id)).toEqual(["new", "old"]);
 });
 
+test("session epoch starts at 0 and bumps independently per session", () => {
+  expect(store.epochOf("S")).toBe(0);
+  store.bumpEpoch("S");
+  store.bumpEpoch("S");
+  expect(store.epochOf("S")).toBe(2);
+  expect(store.epochOf("OTHER")).toBe(0);
+});
+
 test("rehydrate loads unresolved reviews, skips approved", async () => {
   await store.create(makeReview({ id: "keep-p", status: "pending" }));
   await store.create(makeReview({ id: "keep-r", status: "rejected" }));

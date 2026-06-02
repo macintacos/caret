@@ -20,11 +20,17 @@ export interface Store {
   /** Drop from memory; the on-disk file is left as history. */
   remove(id: string): Promise<void>;
   size(): number;
+  /** Current approval epoch for a session (count of approvals so far). */
+  epochOf(sessionId: string): number;
+  /** Increment a session's approval epoch (called on each approval). */
+  bumpEpoch(sessionId: string): void;
   rehydrate(): Promise<void>;
 }
 
 export function createStore(dir: string): Store {
   const reviews = new Map<string, Review>();
+  // Per-session approval epoch (in-memory; resets when the daemon restarts).
+  const epochs = new Map<string, number>();
   // Serialize writes per id so concurrent mutations never interleave on one file.
   const writeChains = new Map<string, Promise<void>>();
 
@@ -84,6 +90,14 @@ export function createStore(dir: string): Store {
 
     size() {
       return reviews.size;
+    },
+
+    epochOf(sessionId) {
+      return epochs.get(sessionId) ?? 0;
+    },
+
+    bumpEpoch(sessionId) {
+      epochs.set(sessionId, (epochs.get(sessionId) ?? 0) + 1);
     },
 
     async rehydrate() {

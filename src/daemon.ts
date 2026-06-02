@@ -2,24 +2,21 @@
 // single-file UI, bridges the hook's long-poll to the browser's decision, and
 // idle-auto-shuts-down when no reviews remain.
 
-import { randomUUID } from "node:crypto";
 import { createDecisions } from "./decisions.ts";
 import { IDENTITY, idleMs as defaultIdleMs } from "./paths.ts";
+import { routeIncomingPlan } from "./reviews.ts";
 import type { Store } from "./store.ts";
-import { currentVersion, type Decision, type Review, toClientReview } from "./types.ts";
+import {
+  currentVersion,
+  type Decision,
+  type PlanInput,
+  type Review,
+  toClientReview,
+} from "./types.ts";
 
 const PLACEHOLDER_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>caret</title></head><body><div id="app">caret daemon — UI not built yet</div></body></html>`;
 
-/** Input accepted by POST /api/reviews. */
-export interface PlanInput {
-  sessionId?: string;
-  cwd?: string;
-  title?: string;
-  plan?: string;
-}
-
-/** Decides whether an incoming plan starts a new review or appends a version.
- * Phase 5 ships the "always new thread" default; Phase 6 injects threading. */
+/** Decides whether an incoming plan starts a new review or appends a version. */
 export type RoutePlan = (input: PlanInput, store: Store) => Promise<{ id: string }>;
 
 export interface CreateServerOptions {
@@ -36,42 +33,12 @@ export interface CaretServer {
   stop(): void;
 }
 
-/** Derive a human title from the plan's first heading / non-empty line. */
-export function deriveTitle(plan: string): string {
-  for (const line of plan.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    return trimmed.replace(/^#+\s*/, "").slice(0, 120) || "Untitled plan";
-  }
-  return "Untitled plan";
-}
-
-/** Default routing: every incoming plan starts a new review thread. */
-export const newThreadRoutePlan: RoutePlan = async (input, store) => {
-  const id = randomUUID();
-  const now = Date.now();
-  const plan = input.plan ?? "";
-  const review: Review = {
-    id,
-    sessionId: input.sessionId ?? `anon-${now}`,
-    cwd: input.cwd ?? "",
-    title: input.title?.trim() || deriveTitle(plan),
-    status: "pending",
-    planEpoch: 0,
-    versions: [{ version: 1, plan, annotations: [], createdAt: now }],
-    createdAt: now,
-    updatedAt: now,
-  };
-  await store.create(review);
-  return { id };
-};
-
 export function createServer(opts: CreateServerOptions): CaretServer {
   const { store } = opts;
   const idle = opts.idleMs ?? defaultIdleMs();
   const serveHtml = opts.serveHtml ?? (() => PLACEHOLDER_HTML);
   const onShutdown = opts.onShutdown ?? (() => process.exit(0));
-  const routePlan = opts.routePlan ?? newThreadRoutePlan;
+  const routePlan = opts.routePlan ?? routeIncomingPlan;
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount } = createDecisions();
 
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -176,7 +143,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
             feedback?: string;
             acceptMode?: Decision["acceptMode"];
           };
-          if (!store.get(id)) return notFound();
+          const existing = store.get(id);
+          if (!existing) return notFound();
           const decision: Decision = {
             behavior: body.behavior === "deny" ? "deny" : "allow",
             feedback: body.feedback,
@@ -188,8 +156,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
             r.decision = decision;
             r.status = decision.behavior === "allow" ? "approved" : "rejected";
           });
-          // Approval is terminal — drop it from the active set so idle can fire.
-          if (decision.behavior === "allow") await store.remove(id);
+          // Approval is terminal: bump the session epoch (so a later plan is a
+          // fresh thread) and drop it from the active set so idle can fire.
+          if (decision.behavior === "allow") {
+            store.bumpEpoch(existing.sessionId);
+            await store.remove(id);
+          }
           refreshIdle();
           // Defer one tick so THIS 200 flushes before the hook's long-poll
           // resolves (otherwise the browser's POST can appear to race the unblock).
@@ -216,5 +188,5 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // Startup-if-empty: arm the idle timer when no reviews were rehydrated.
   refreshIdle();
 
-  return { port: server.port, stop };
+  return { port: server.port ?? 0, stop };
 }

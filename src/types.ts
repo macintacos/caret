@@ -93,6 +93,22 @@ export interface ClientReview {
   decision?: Decision;
 }
 
+/** Body of POST /api/reviews (an incoming plan from the hook). */
+export interface PlanInput {
+  sessionId?: string;
+  cwd?: string;
+  title?: string;
+  plan?: string;
+}
+
+/** Result of routing an incoming plan through the threading state machine. */
+export interface RouteResult {
+  id: string;
+  action: "new" | "append";
+  version: number;
+  planEpoch: number;
+}
+
 /** Body of POST /api/reviews/:id/resolve. */
 export interface ResolveBody {
   behavior: Behavior;
