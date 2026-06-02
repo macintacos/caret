@@ -66,6 +66,7 @@ function injectAttrs(html: string, attrs: string): string {
  */
 export function renderPlan(markdown: string): RenderResult {
   let counter = 0;
+  let firstHeadingSeen = false;
   const headings: HeadingEntry[] = [];
   const usedSlugs = new Map<string, number>();
 
@@ -76,6 +77,17 @@ export function renderPlan(markdown: string): RenderResult {
   for (const name of BLOCK_METHODS) {
     overrides[name] = function (this: { parser: unknown }, token: unknown) {
       const blockId = `b${counter++}`;
+
+      // Normalize the plan's first heading to H1 regardless of its authored level.
+      // Agents pick inconsistent top-of-file heading levels; we fix the rendered
+      // view here rather than rewriting the source file. Only the first heading is
+      // touched — later headings keep their authored levels. marked derives the tag
+      // from `token.depth`, so mutate it before delegating to the base renderer.
+      if (name === "heading" && !firstHeadingSeen) {
+        (token as { depth: number }).depth = 1;
+        firstHeadingSeen = true;
+      }
+
       // Defer to the default renderer for the actual markup. `name` is always a
       // real block method, so the lookup is non-null.
       const renderers = DefaultRenderer as unknown as {

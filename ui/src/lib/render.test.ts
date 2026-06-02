@@ -88,3 +88,42 @@ describe("renderPlan sanitization", () => {
     expect(html).not.toContain("onclick");
   });
 });
+
+describe("renderPlan first-heading normalization", () => {
+  test("promotes an authored ## first heading to <h1>", () => {
+    const { html, headings } = renderPlan("## Title\n\nbody\n");
+    expect(html).toContain("<h1");
+    expect(html).not.toContain("<h2");
+    expect(headings[0]).toMatchObject({ level: 1, text: "Title" });
+  });
+
+  test("promotes an authored ### first heading to <h1>", () => {
+    const { html } = renderPlan("### Deep\n");
+    expect(html).toContain("<h1");
+    expect(html).not.toContain("<h3");
+  });
+
+  test("promotes a setext (underlined) first heading to <h1>", () => {
+    const { html, headings } = renderPlan("Title\n---\n\nbody\n");
+    expect(html).toContain("<h1");
+    expect(headings[0]).toMatchObject({ level: 1, text: "Title" });
+  });
+
+  test("leaves headings after the first at their authored level", () => {
+    const { html, headings } = renderPlan("## Title\n\n### Sub\n");
+    expect(html).toContain("<h1");
+    expect(html).toContain("<h3");
+    expect(headings).toEqual([
+      { level: 1, slug: "title", text: "Title", blockId: "b0" },
+      { level: 3, slug: "sub", text: "Sub", blockId: expect.any(String) },
+    ]);
+  });
+
+  test("leaves an already-<h1> first heading unchanged", () => {
+    const { html, headings } = renderPlan("# Title\n\n## Sub\n");
+    expect(html).toContain("<h1");
+    expect(html).toContain("<h2");
+    expect(headings[0]).toMatchObject({ level: 1, text: "Title" });
+    expect(headings[1]).toMatchObject({ level: 2, text: "Sub" });
+  });
+});
