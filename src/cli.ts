@@ -9,6 +9,7 @@
 // allow. Every abnormal path (bad stdin, unreachable daemon, timeout, signal,
 // daemon death) emits a deny — never an allow.
 
+import { dirname } from "node:path";
 import { createServer } from "./daemon.ts";
 import { denyOutput, type HookOutput, toHookOutput } from "./feedback.ts";
 import { getPort, reviewsDir, reviewTimeoutMs } from "./paths.ts";
@@ -221,11 +222,37 @@ function prodReviewDeps(): ReviewDeps {
 // Subcommand entrypoints
 // ---------------------------------------------------------------------------
 
-async function runDaemon(serveHtml?: () => string): Promise<void> {
+/** Resolve the UI HTML: embedded asset → file beside the binary → undefined
+ * (daemon then serves its built-in placeholder). */
+async function loadUiHtml(): Promise<string | undefined> {
+  try {
+    const mod = await import("./ui-asset.ts");
+    if (typeof mod.default === "string" && mod.default.length > 0) {
+      return mod.default;
+    }
+  } catch {
+    // UI not built / not embedded — fall through.
+  }
+  try {
+    const beside = `${dirname(process.execPath)}/index.html`;
+    const file = Bun.file(beside);
+    if (await file.exists()) return await file.text();
+  } catch {
+    // ignore
+  }
+  return undefined;
+}
+
+async function runDaemon(): Promise<void> {
   const store = createStore(reviewsDir());
   await store.rehydrate();
+  const html = await loadUiHtml();
   try {
-    createServer({ store, port: getPort(), serveHtml });
+    createServer({
+      store,
+      port: getPort(),
+      serveHtml: html ? () => html : undefined,
+    });
   } catch (e) {
     if (isAddrInUse(e)) {
       process.stderr.write("caret: another daemon won the port; exiting.\n");
