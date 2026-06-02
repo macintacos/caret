@@ -367,9 +367,19 @@ test("a deny does not change the remembered approve mode", async () => {
   expect(await waitForPrefMode("acceptEdits")).toBe("acceptEdits");
 
   const { id: d } = await newReview();
-  await resolve(d, { behavior: "deny", feedback: "redo" });
+  // Even a deny that carries an acceptMode must not move the remembered value —
+  // the write is gated on behavior === "allow", not on the token's absence.
+  await resolve(d, { behavior: "deny", acceptMode: "auto", feedback: "redo" });
   await Bun.sleep(30); // give any (erroneous) write a chance to land
   expect(await prefMode()).toBe("acceptEdits");
+});
+
+test("an allow with an unrecognized acceptMode leaves prefs at 'default'", async () => {
+  await boot();
+  const { id } = await newReview();
+  await resolve(id, { behavior: "allow", acceptMode: "turbo" });
+  await Bun.sleep(30); // the daemon's isAcceptMode guard should reject the write
+  expect(await prefMode()).toBe("default");
 });
 
 test("the remembered approve mode survives a daemon restart", async () => {
