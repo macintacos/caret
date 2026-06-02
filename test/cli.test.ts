@@ -4,8 +4,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureDaemon, runReview } from "../src/cli.ts";
-import { PLAN_FORMAT_DENY_MESSAGE } from "../src/plan-format.ts";
 import { logFile } from "../src/paths.ts";
+import { PLAN_FORMAT_DENY_MESSAGE } from "../src/plan-format.ts";
 import type { Decision } from "../src/types.ts";
 
 const allow: Decision = { behavior: "allow", decidedAt: 1 };
