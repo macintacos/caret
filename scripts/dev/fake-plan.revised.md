@@ -2,11 +2,16 @@
 
 ## Context
 
-Operations needs a cheap, dependency-free way to check that the service is up. There is no liveness endpoint today, so the uptime monitor falls back to hitting `/` — which renders the full home page and skews the latency graphs.
+Operations needs a cheap, dependency-free way to check that the service is up. There is no
+liveness endpoint today, so the uptime monitor falls back to hitting `/` — which renders the
+full home page and skews the latency graphs.
 
 ## Approach
 
-Add a single `GET /health` route that returns `200 OK` with a small JSON body. It touches no database and holds no locks, so it stays fast even when the rest of the app is under load. The route mirrors the existing router registration pattern, so nothing new is introduced beyond the handler itself.
+Add a single `GET /health` route that returns `200 OK` with a small JSON body. It touches
+no database and holds no locks, so it stays fast even when the rest of the app is under load.
+The route mirrors the existing router registration pattern, so nothing new is introduced
+beyond the handler itself.
 
 ## Steps
 
@@ -17,10 +22,15 @@ Add a single `GET /health` route that returns `200 OK` with a small JSON body. I
 
 ## Revision notes (addressing the requested changes)
 
-- **Versioning:** mount the route under the existing `/api/v1` prefix as `GET /api/v1/health`, so it's consistent with every other endpoint rather than living at the bare root.
-- **No wall-clock skew:** compute `uptime` from a monotonic clock captured at process start, not from `Date.now()` deltas, so a system clock adjustment can't report a negative or jumping uptime.
-- **Method guard:** return `405 Method Not Allowed` for non-`GET` verbs on the route instead of falling through to the 404 handler.
+- **Versioning:** mount the route under the existing `/api/v1` prefix as `GET /api/v1/health`,
+  so it's consistent with every other endpoint rather than living at the bare root.
+- **No wall-clock skew:** compute `uptime` from a monotonic clock captured at process start,
+  not from `Date.now()` deltas, so a system clock adjustment can't report a negative or
+  jumping uptime.
+- **Method guard:** return `405 Method Not Allowed` for non-`GET` verbs on the route instead
+  of falling through to the 404 handler.
 
 ## Out of scope
 
-Readiness checks (dependency probing for the database and cache) are a follow-up — this change is liveness only.
+Readiness checks (dependency probing for the database and cache) are a follow-up — this
+change is liveness only.

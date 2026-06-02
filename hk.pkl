@@ -15,9 +15,10 @@ import "package://github.com/jdx/hk/releases/download/v1.45.0/hk@1.45.0#/Builtin
 // The `pre-commit` hook runs BOTH, so every commit stays formatted, clean, and
 // type-checked.
 //
-// Beyond the web stack, the mappings also cover the rest of the repo: prettier
-// (Markdown only), yamlfmt (YAML), taplo (TOML), shfmt + shellcheck (shell, incl.
-// the extensionless .mise/tasks/* scripts), and pkl + pkl-format (this file).
+// Beyond the web stack, the mappings also cover the rest of the repo: rumdl
+// (Markdown format + lint), yamlfmt (YAML), taplo (TOML), shfmt + shellcheck
+// (shell, incl. the extensionless .mise/tasks/* scripts), and pkl + pkl-format
+// (this file).
 
 // Formatters — rewrite files into canonical form.
 local formatters = new Mapping<String, Step> {
@@ -30,10 +31,13 @@ local formatters = new Mapping<String, Step> {
     fix = "biome format --write --no-errors-on-unmatched {{ files }}"
   }
 
-  // Prettier's default glob also matches JSON/YAML/CSS/etc.; scope it to Markdown
-  // so it never fights Biome (JSON) or taplo (TOML) over the same file.
-  ["Markdown(Format) [[builtins.prettier]]"] = (Builtins.prettier) {
-    glob = List("**/*.md", "**/*.markdown")
+  // rumdl owns Markdown — one native binary for both format and lint. The format
+  // step runs `rumdl fmt` (applies fixes, formatter-style exit codes — won't fail on
+  // leftover lint); the Markdown(Lint) step below enforces read-only `rumdl check`.
+  // Override only `fix` — the builtin's glob (**/*.md, **/*.markdown) and its
+  // check_diff = "rumdl check --diff" are inherited. Config lives in .rumdl.toml.
+  ["Markdown(Format) [[builtins.rumdl]]"] = (Builtins.rumdl) {
+    fix = "rumdl fmt {{ files }}"
   }
 
   ["YAML(Format)     [[builtins.yamlfmt]]"] = Builtins.yamlfmt
@@ -72,6 +76,13 @@ local linters = new Mapping<String, Step> {
   // Shell lint covers the extensionless .mise/tasks/* scripts as well as *.sh.
   ["Shell(Lint)       [[builtins.shellcheck]]"] = (Builtins.shellcheck) {
     glob = List("**/*.sh", "**/*.bash", ".mise/tasks/*")
+  }
+
+  // Same rumdl binary, read-only: `rumdl check` reports violations (exit 1). In
+  // pre-commit (fix=true) the inherited fix = "rumdl check --fix" auto-resolves
+  // fixable lint after the formatter's `rumdl fmt`, so a commit converges in one pass.
+  ["Markdown(Lint)    [[builtins.rumdl]]"] = (Builtins.rumdl) {
+    check = "rumdl check {{ files }}"
   }
 
   ["TOML(Lint)        [[builtins.taplo]]"] = Builtins.taplo

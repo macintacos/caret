@@ -1,8 +1,15 @@
 # 🥕 caret
 
-> ⚠️ **Prototype.** caret is an early prototype and may change substantially over the next little while — interfaces, hooks, storage, and the install flow are all still settling. Expect rough edges and breaking changes.
+> ⚠️ **Prototype.** caret is an early prototype and may change substantially over the next little
+> while — interfaces, hooks, storage, and the install flow are all still settling. Expect rough
+> edges and breaking changes.
 
-A Claude Code plugin that replaces the terminal plan-approval prompt with a local web UI. When Claude presents a plan via `ExitPlanMode`, caret opens it in your browser so you can read it rendered as HTML, **annotate passages inline** (Google-Docs style), and **approve** or **request changes**. Your decision — and all annotation feedback — flows straight back to the agent. A single local daemon is shared across concurrent Claude sessions, so several in-flight plans are reviewed from one browser tab via a switcher.
+A Claude Code plugin that replaces the terminal plan-approval prompt with a local web UI. When
+Claude presents a plan via `ExitPlanMode`, caret opens it in your browser so you can read it
+rendered as HTML, **annotate passages inline** (Google-Docs style), and **approve** or **request
+changes**. Your decision — and all annotation feedback — flows straight back to the agent. A single
+local daemon is shared across concurrent Claude sessions, so several in-flight plans are reviewed
+from one browser tab via a switcher.
 
 ## Install
 
@@ -10,7 +17,10 @@ A Claude Code plugin that replaces the terminal plan-approval prompt with a loca
 curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/install.sh | bash
 ```
 
-That one command clones caret at its latest release (the newest `vX.Y.Z` tag), builds the binary for your platform, and registers it with Claude Code through the native plugin system — no manual `git clone` and no `claude --plugin-dir`. It requires [`git`](https://git-scm.com), [`bun`](https://bun.sh), and the [`claude`](https://claude.com/claude-code) CLI on your `PATH`.
+That one command clones caret at its latest release (the newest `vX.Y.Z` tag), builds the binary
+for your platform, and registers it with Claude Code through the native plugin system — no manual
+`git clone` and no `claude --plugin-dir`. It requires [`git`](https://git-scm.com),
+[`bun`](https://bun.sh), and the [`claude`](https://claude.com/claude-code) CLI on your `PATH`.
 
 Then restart Claude Code (or run `/reload-plugins`) and try it:
 
@@ -18,9 +28,12 @@ Then restart Claude Code (or run `/reload-plugins`) and try it:
 /caret:demo    # presents a short fake plan to exercise the flow
 ```
 
-Enter plan mode, let Claude present a plan, and a browser tab opens at the deep-linked review. Select text to comment, then **Approve** (optionally "& accept edits" or "& auto mode") or **Request changes**.
+Enter plan mode, let Claude present a plan, and a browser tab opens at the deep-linked review.
+Select text to comment, then **Approve** (optionally "& accept edits" or "& auto mode") or
+**Request changes**.
 
-**Update** by re-running the same command — it fetches the latest release, rebuilds, and reinstalls. **Uninstall** with:
+**Update** by re-running the same command — it fetches the latest release, rebuilds, and reinstalls.
+**Uninstall** with:
 
 ```sh
 claude plugin uninstall caret@caret
@@ -36,7 +49,11 @@ caret ships one compiled binary (`bin/caret`) with three subcommands, wired to t
 | `PostToolUse`       | `EnterPlanMode` | `caret prewarm` | Warm-start the daemon when the model enters plan mode.    |
 | `PermissionRequest` | `ExitPlanMode`  | `caret review`  | Block, open the plan in the browser, return the decision. |
 
-The `PermissionRequest`/`ExitPlanMode` hook intercepts the plan-approval request itself, so an **approve** auto-answers it (no native dialog) and a **request changes** returns the feedback to the model, which revises and re-presents (captured as a new version). This was verified empirically — `PreToolUse` does **not** work for this, because allowing the tool to run still shows the native dialog.
+The `PermissionRequest`/`ExitPlanMode` hook intercepts the plan-approval request itself, so an
+**approve** auto-answers it (no native dialog) and a **request changes** returns the feedback to the
+model, which revises and re-presents (captured as a new version). This was verified empirically —
+`PreToolUse` does **not** work for this, because allowing the tool to run still shows the native
+dialog.
 
 The hook emits the [PermissionRequest decision](https://code.claude.com/docs/en/hooks) on stdout:
 
@@ -50,7 +67,8 @@ The hook emits the [PermissionRequest decision](https://code.claude.com/docs/en/
   "decision": { "behavior": "deny", "message": "<formatted annotations + comment>" } } }
 ```
 
-**Fail-safe = deny.** On a bad payload, an unreachable daemon, a timeout, a signal, or daemon death, caret emits `deny` with an explanation — it never auto-approves an unreviewed plan.
+**Fail-safe = deny.** On a bad payload, an unreachable daemon, a timeout, a signal, or daemon death,
+caret emits `deny` with an explanation — it never auto-approves an unreviewed plan.
 
 ## Configuration
 
@@ -75,9 +93,15 @@ mise run format     # Biome (write)
 mise run preflight  # format + lint + test + build before pushing
 ```
 
-`mise run lint` (and the pre-commit hook) runs Biome lint, `tsc --noEmit`, and `svelte-check` — type checking is folded into linting via `hk.pkl`.
+`mise run lint` (and the pre-commit hook) runs Biome lint, `tsc --noEmit`, and `svelte-check` —
+type checking is folded into linting via `hk.pkl`.
 
-`mise run dev` is self-contained — no separate `bin/caret daemon` needed. It starts an isolated caret daemon on a dedicated dev port (`CARET_PORT`, default `42719`, distinct from the `42718` production default) with an ephemeral `XDG_STATE_HOME`, seeds it with one fake pending plan, and runs a driver that plays the agent's side so request-changes / approve round-trips keep working. Everything is reaped on Ctrl-C, and the dev daemon never reads or writes a globally-installed caret's reviews. Override the port with `CARET_DEV_PORT` if `42719` is taken.
+`mise run dev` is self-contained — no separate `bin/caret daemon` needed. It starts an isolated
+caret daemon on a dedicated dev port (`CARET_PORT`, default `42719`, distinct from the `42718`
+production default) with an ephemeral `XDG_STATE_HOME`, seeds it with one fake pending plan, and
+runs a driver that plays the agent's side so request-changes / approve round-trips keep working.
+Everything is reaped on Ctrl-C, and the dev daemon never reads or writes a globally-installed
+caret's reviews. Override the port with `CARET_DEV_PORT` if `42719` is taken.
 
 For a quick local trial without installing, load the plugin from a checkout:
 
