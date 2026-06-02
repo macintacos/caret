@@ -3,12 +3,19 @@
 // idle-auto-shuts-down when no reviews remain.
 
 import { createDecisions } from "./decisions.ts";
-import { heartbeatMs as defaultHeartbeatMs, IDENTITY, idleMs as defaultIdleMs } from "./paths.ts";
+import {
+  heartbeatMs as defaultHeartbeatMs,
+  IDENTITY,
+  idleMs as defaultIdleMs,
+  prefsFile,
+} from "./paths.ts";
+import { readApproveMode, writeApproveMode } from "./prefs.ts";
 import { routeIncomingPlan } from "./reviews.ts";
 import type { Store } from "./store.ts";
 import {
   currentVersion,
   type Decision,
+  isAcceptMode,
   type PlanInput,
   type Review,
   toClientReview,
@@ -28,6 +35,8 @@ export interface CreateServerOptions {
   serveHtml?: () => string | Promise<string>;
   onShutdown?: () => void;
   routePlan?: RoutePlan;
+  /** Path to the machine-global prefs file; defaults to paths.prefsFile(). */
+  prefsPath?: string;
   /** Lifecycle logger; defaults to a no-op so tests stay quiet. */
   log?: (msg: string) => void;
 }
@@ -63,6 +72,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   const serveHtml = opts.serveHtml ?? (() => PLACEHOLDER_HTML);
   const onShutdown = opts.onShutdown ?? (() => process.exit(0));
   const routePlan = opts.routePlan ?? routeIncomingPlan;
+  const prefsPath = opts.prefsPath ?? prefsFile();
   const log = opts.log ?? (() => {});
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount } = createDecisions();
 
@@ -152,6 +162,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
         return Response.json(store.list().map(toClientReview));
       }
 
+      // Machine-global UI prefs, read once on UI load (deliberately not part of
+      // the 2s /api/reviews poll). Fail-safe: returns "default" if unreadable.
+      if (method === "GET" && path === "/api/prefs") {
+        return Response.json({ approveMode: await readApproveMode(prefsPath) });
+      }
+
       const m = path.match(idRoute);
       if (m) {
         const id = decodeURIComponent(m[1] as string);
@@ -223,6 +239,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
           if (decision.behavior === "allow") {
             store.bumpEpoch(existing.sessionId);
             await store.remove(id);
+            // Remember the chosen mode for the UI's next load. Fire-and-forget:
+            // never awaited, so it can't delay the 200 that unblocks the
+            // long-polling hook. A bare allow (no acceptMode) leaves prefs as-is.
+            if (isAcceptMode(decision.acceptMode)) {
+              void writeApproveMode(decision.acceptMode, prefsPath).catch(() => {});
+            }
           }
           // Defer one tick so THIS 200 flushes before the hook's long-poll
           // resolves (otherwise the browser's POST can appear to race the unblock).

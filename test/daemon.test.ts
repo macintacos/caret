@@ -24,6 +24,7 @@ async function boot(
   srv = createServer({
     store,
     port: 0,
+    prefsPath: join(dir, "prefs.json"),
     idleMs: opts.idleMs ?? 1_000_000,
     heartbeatMs: opts.heartbeatMs,
     onShutdown: opts.onShutdown ?? (() => {}),
@@ -31,6 +32,30 @@ async function boot(
     routePlan: opts.routePlan,
   });
   base = `http://localhost:${srv.port}`;
+}
+
+async function prefMode(): Promise<string> {
+  return ((await (await fetch(`${base}/api/prefs`)).json()) as { approveMode: string }).approveMode;
+}
+
+// The prefs write on /resolve is fire-and-forget (off the hook's blocking path),
+// so poll briefly for it to land rather than asserting on a single fixed sleep.
+async function waitForPrefMode(want: string): Promise<string> {
+  let last = "";
+  for (let i = 0; i < 20; i++) {
+    last = await prefMode();
+    if (last === want) return last;
+    await Bun.sleep(10);
+  }
+  return last;
+}
+
+async function resolve(id: string, body: Record<string, unknown>) {
+  await fetch(`${base}/api/reviews/${id}/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }
 
 async function newReview(body: Record<string, unknown> = {}) {
@@ -317,4 +342,44 @@ test("a revision re-pends the review and clears the prior decision (no stale re-
   // The next long-poll must wait (204), not re-serve the stale deny.
   const res = await fetch(`${base}/api/reviews/${id}/decision`);
   expect(res.status).toBe(204);
+});
+
+test("GET /api/prefs defaults to 'default' on a fresh daemon", async () => {
+  await boot();
+  const res = await fetch(`${base}/api/prefs`);
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ approveMode: "default" });
+});
+
+test("an allow remembers the chosen acceptMode (incl. auto)", async () => {
+  await boot();
+  for (const mode of ["acceptEdits", "auto"] as const) {
+    const { id } = await newReview();
+    await resolve(id, { behavior: "allow", acceptMode: mode });
+    expect(await waitForPrefMode(mode)).toBe(mode);
+  }
+});
+
+test("a deny does not change the remembered approve mode", async () => {
+  await boot();
+  const { id: a } = await newReview();
+  await resolve(a, { behavior: "allow", acceptMode: "acceptEdits" });
+  expect(await waitForPrefMode("acceptEdits")).toBe("acceptEdits");
+
+  const { id: d } = await newReview();
+  await resolve(d, { behavior: "deny", feedback: "redo" });
+  await Bun.sleep(30); // give any (erroneous) write a chance to land
+  expect(await prefMode()).toBe("acceptEdits");
+});
+
+test("the remembered approve mode survives a daemon restart", async () => {
+  await boot();
+  const { id } = await newReview();
+  await resolve(id, { behavior: "allow", acceptMode: "auto" });
+  expect(await waitForPrefMode("auto")).toBe("auto");
+
+  // Restart: stop the server, boot a fresh one against the same state dir.
+  srv.stop();
+  await boot();
+  expect(await prefMode()).toBe("auto");
 });

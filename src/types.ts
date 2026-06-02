@@ -12,6 +12,13 @@ export type Behavior = "allow" | "deny";
  */
 export type AcceptMode = "default" | "acceptEdits" | "auto";
 
+const ACCEPT_MODES: readonly AcceptMode[] = ["default", "acceptEdits", "auto"];
+
+/** Runtime guard: is `x` a recognized AcceptMode token? */
+export function isAcceptMode(x: unknown): x is AcceptMode {
+  return typeof x === "string" && (ACCEPT_MODES as readonly string[]).includes(x);
+}
+
 /**
  * Lifecycle of a review thread:
  * - "pending"  → awaiting a browser decision (shown in the switcher)
