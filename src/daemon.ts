@@ -233,8 +233,17 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       }
 
       return notFound();
-    } catch {
-      // Never let a handler exception drop the connection without a response.
+    } catch (err) {
+      // Never let a handler exception drop the connection without a response —
+      // and log it first, since a bare 500 alone is undebuggable. The log call
+      // is itself wrapped so a broken sink can't escape and suppress the 500.
+      // NB: values reaching this sink must not embed plan bodies — today no
+      // handler error message interpolates plan content; keep it that way.
+      try {
+        log(`request error: ${err}`);
+      } catch {
+        // best-effort: the response below is what matters.
+      }
       return new Response("internal error", { status: 500 });
     } finally {
       inFlight--;

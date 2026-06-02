@@ -1,5 +1,10 @@
-import { expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ensureDaemon, runReview } from "../src/cli.ts";
+import { logFile } from "../src/paths.ts";
 import type { Decision } from "../src/types.ts";
 
 const allow: Decision = { behavior: "allow", decidedAt: 1 };
@@ -16,6 +21,21 @@ function reviewDeps(over: Partial<Parameters<typeof runReview>[1]> = {}) {
 }
 
 const stdin = JSON.stringify({ session_id: "S", cwd: "/p", tool_input: { plan: "# P" } });
+
+// Point the state dir at a throwaway temp dir so deny-path tests append to a
+// disposable caret.log instead of the real ~/.local/state/caret.
+let stateHome: string;
+let savedXdg: string | undefined;
+beforeEach(async () => {
+  stateHome = await mkdtemp(join(tmpdir(), "caret-cli-"));
+  savedXdg = process.env.XDG_STATE_HOME;
+  process.env.XDG_STATE_HOME = stateHome;
+});
+afterEach(async () => {
+  if (savedXdg === undefined) delete process.env.XDG_STATE_HOME;
+  else process.env.XDG_STATE_HOME = savedXdg;
+  await rm(stateHome, { recursive: true, force: true });
+});
 
 // ---- runReview ----
 
@@ -163,6 +183,46 @@ test("an unreachable daemon mid-poll fails safe to deny", async () => {
     }),
   );
   expect(out.hookSpecificOutput.decision.behavior).toBe("deny");
+});
+
+test("a failure logs the step + context to caret.log and surfaces the path", async () => {
+  const out = await runReview(
+    stdin,
+    reviewDeps({
+      ensureDaemon: async () => {
+        throw new Error("daemon down");
+      },
+    }),
+  );
+  // The deny reason points the user at the log.
+  expect(out.hookSpecificOutput.decision.message).toContain(logFile());
+  // The log captures which step failed, the message, and stdin context.
+  const body = readFileSync(logFile(), "utf-8");
+  expect(body).toContain("step=ensureDaemon");
+  expect(body).toContain("daemon down");
+  expect(body).toContain("sessionId=S");
+});
+
+test("a failed reconnect logs step=reconnect, not the poll step", async () => {
+  let firstEnsure = true;
+  await runReview(
+    stdin,
+    reviewDeps({
+      longPoll: async () => {
+        throw new Error("socket closed");
+      },
+      ensureDaemon: async () => {
+        if (firstEnsure) {
+          firstEnsure = false;
+          return "http://x"; // startup connects
+        }
+        throw new Error("daemon gone"); // reconnect fails → logged
+      },
+    }),
+  );
+  const body = readFileSync(logFile(), "utf-8");
+  expect(body).toContain("step=reconnect");
+  expect(body).not.toContain("step=longPoll");
 });
 
 // ---- ensureDaemon ----
