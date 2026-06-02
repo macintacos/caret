@@ -15,17 +15,19 @@ export interface ErrorContext {
 }
 
 function describe(err: unknown): { message: string; stack?: string; causes: string[] } {
-  if (err instanceof Error) {
-    const causes: string[] = [];
-    let c: unknown = err.cause;
-    while (c instanceof Error) {
-      causes.push(c.message);
-      c = c.cause;
-    }
-    if (c !== undefined && !(c instanceof Error)) causes.push(String(c));
-    return { message: err.message, stack: err.stack, causes };
+  if (!(err instanceof Error)) return { message: String(err), causes: [] };
+  const causes: string[] = [];
+  // Walk err.cause, but guard against cycles (e.g. a.cause=b, b.cause=a) — an
+  // unbounded walk here would hang the hook, which is worse than the lost trace.
+  const seen = new Set<unknown>([err]);
+  let c: unknown = err.cause;
+  while (c instanceof Error && !seen.has(c)) {
+    seen.add(c);
+    causes.push(c.message);
+    c = c.cause;
   }
-  return { message: String(err), causes: [] };
+  if (c !== undefined && !(c instanceof Error)) causes.push(String(c));
+  return { message: err.message, stack: err.stack, causes };
 }
 
 /** One record, opened by a single sentinel header line so `/caret:debug` can

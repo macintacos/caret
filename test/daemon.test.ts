@@ -246,6 +246,25 @@ test("a handler exception is logged before returning the 500", async () => {
   expect(logs.some((m) => m.includes("kaboom"))).toBe(true);
 });
 
+test("a throwing log sink during a handler error still returns the clean 500", async () => {
+  await boot({
+    // Only the handler-error log throws; the lifecycle logs at startup are fine.
+    log: (m) => {
+      if (m.includes("request error")) throw new Error("log sink broken");
+    },
+    routePlan: async () => {
+      throw new Error("kaboom");
+    },
+  });
+  const res = await fetch(`${base}/api/reviews`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sessionId: "S", plan: "# x" }),
+  });
+  expect(res.status).toBe(500);
+  expect(await res.text()).toBe("internal error");
+});
+
 test("a rejected (changes-requested) review does NOT keep the daemon alive", async () => {
   let shutdowns = 0;
   await boot({ idleMs: 30, onShutdown: () => shutdowns++ });

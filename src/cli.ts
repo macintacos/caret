@@ -107,7 +107,11 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
           undefined;
       } catch (err) {
         if (err instanceof TimeoutError) throw err;
+        // Reconnect — label this step so a failed reconnect logs the real
+        // failing op, not the poll it was recovering from.
+        step = "reconnect";
         pollUrl = await deps.ensureDaemon();
+        step = "longPoll";
       }
     }
     return toHookOutput(decision);

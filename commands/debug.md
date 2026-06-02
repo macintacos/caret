@@ -8,7 +8,7 @@ When a caret review fails you'll have seen a deny like "caret: … — denying s
 
 caret writes to its state dir — `$XDG_STATE_HOME/caret` when that variable is set, otherwise `~/.local/state/caret`:
 
-- `caret.log` — errors from the short-lived `caret review` hook process. Structured: one record per failure, each opened by a `=== caret error <timestamp> step=<step> ===` line, followed by the message, any `cause:` chain, a `context:` line, and the stack.
+- `caret.log` — errors from the short-lived `caret review` hook process. Structured: one record per failure, each opened by a `=== caret error <timestamp> step=<step> ===` line, followed by the message, any `cause:` chain, an optional `context:` line (sessionId/cwd, present only when known), and the stack.
 - `daemon.log` — the detached daemon's stdout/stderr plus its lifecycle log (`[caret daemon] …`).
 
 Resolve the directory once:

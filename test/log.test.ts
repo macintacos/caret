@@ -62,6 +62,18 @@ test("logError creates the state dir 0700 and the log file 0600", () => {
   expect(statSync(logFile()).mode & 0o777).toBe(0o600);
 });
 
+test("logError terminates on a cyclic cause chain instead of hanging", () => {
+  const a = new Error("a-err");
+  const b = new Error("b-err");
+  (a as Error).cause = b;
+  (b as Error).cause = a; // cycle: a -> b -> a
+  logError("cyclic", a);
+  const body = readFileSync(logFile(), "utf-8");
+  expect(body).toContain("step=cyclic");
+  expect(body).toContain("a-err");
+  expect(body).toContain("b-err");
+});
+
 test("logError swallows write failures instead of throwing", async () => {
   // Make the state-dir parent a regular file so mkdir/open both fail (ENOTDIR).
   const blocker = join(home, "blocker");

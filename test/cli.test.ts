@@ -203,6 +203,28 @@ test("a failure logs the step + context to caret.log and surfaces the path", asy
   expect(body).toContain("sessionId=S");
 });
 
+test("a failed reconnect logs step=reconnect, not the poll step", async () => {
+  let firstEnsure = true;
+  await runReview(
+    stdin,
+    reviewDeps({
+      longPoll: async () => {
+        throw new Error("socket closed");
+      },
+      ensureDaemon: async () => {
+        if (firstEnsure) {
+          firstEnsure = false;
+          return "http://x"; // startup connects
+        }
+        throw new Error("daemon gone"); // reconnect fails → logged
+      },
+    }),
+  );
+  const body = readFileSync(logFile(), "utf-8");
+  expect(body).toContain("step=reconnect");
+  expect(body).not.toContain("step=longPoll");
+});
+
 // ---- ensureDaemon ----
 
 function ensureDeps(over: Partial<Parameters<typeof ensureDaemon>[0]> = {}) {
