@@ -40,11 +40,11 @@ local formatters = new Mapping<String, Step> {
 
   ["TOML(Format)     [[builtins.taplo_format]]"] = Builtins.taplo_format
 
-  // Default glob is *.sh/*.bash only; extend it to the extensionless .mise/tasks/*
+  // Keep the builtin's default extensions and add the extensionless .mise/tasks/*
   // scripts. The builtin runs `shfmt --apply-ignore` (no -i), so 2-space indent
   // comes from .editorconfig rather than a flag override.
   ["Shell(Format)    [[builtins.shfmt]]"] = (Builtins.shfmt) {
-    glob = List("**/*.sh", "**/*.bash", ".mise/tasks/*")
+    glob = List("**/*.sh", "**/*.bash", "**/*.mksh", "**/*.bats", "**/*.zsh", ".mise/tasks/*")
   }
 
   ["Pkl(Format)      [[builtins.pkl_format]]"] = Builtins.pkl_format
