@@ -71,10 +71,11 @@ export async function longPollOnce(base: string, id: string): Promise<Decision |
 /** Refuse to run unless the dev port + isolated state dir are explicitly set —
  * never fall back to the production defaults and touch an installed caret. */
 export function assertDevEnv(): void {
-  const port = process.env.CARET_PORT;
-  if (!port || Number(port) === DEFAULT_PORT) {
+  const raw = process.env.CARET_PORT;
+  const port = Number(raw);
+  if (!raw || !Number.isInteger(port) || port <= 0 || port === DEFAULT_PORT) {
     throw new Error(
-      `caret dev driver requires CARET_PORT set to a dev port distinct from the production default (${DEFAULT_PORT})`,
+      `caret dev driver requires CARET_PORT set to a positive dev port distinct from the production default (${DEFAULT_PORT})`,
     );
   }
   if (!process.env.XDG_STATE_HOME) {
@@ -91,20 +92,21 @@ export async function run(): Promise<void> {
   log(`seeded fake plan as review ${id}`);
 
   for (;;) {
-    let decision: Decision | null;
     try {
-      decision = await longPollOnce(base, id);
-    } catch {
-      await Bun.sleep(500); // transient drop — back off and reconnect
-      continue;
-    }
-    if (!decision) continue; // heartbeat: still pending
-    if (decision.behavior === "deny") {
-      id = await postRevision(base);
-      log(`changes requested → posted revision as review ${id}`);
-    } else {
-      id = await seedPlan(base);
-      log(`approved → re-seeded a fresh plan as review ${id}`);
+      const decision = await longPollOnce(base, id);
+      if (!decision) continue; // heartbeat: still pending
+      if (decision.behavior === "deny") {
+        id = await postRevision(base);
+        log(`changes requested → posted revision as review ${id}`);
+      } else {
+        id = await seedPlan(base);
+        log(`approved → re-seeded a fresh plan as review ${id}`);
+      }
+    } catch (err) {
+      // Daemon blip / dropped poll / transient POST failure — back off and
+      // retry rather than letting the dev driver die mid-session.
+      log(`transient error (${err}); backing off`);
+      await Bun.sleep(500);
     }
   }
 }

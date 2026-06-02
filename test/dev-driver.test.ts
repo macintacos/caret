@@ -98,6 +98,12 @@ test("assertDevEnv requires an explicit dev port + state dir (isolation guard)",
     // Production default port → reject (never touch the installed caret).
     process.env.CARET_PORT = "42718";
     expect(() => assertDevEnv()).toThrow();
+    // Non-numeric / non-positive port → reject (the daemon would silently fall
+    // back to the production default).
+    process.env.CARET_PORT = "abc";
+    expect(() => assertDevEnv()).toThrow();
+    process.env.CARET_PORT = "0";
+    expect(() => assertDevEnv()).toThrow();
     // Dev port but no isolated state dir → reject.
     process.env.CARET_PORT = "42719";
     delete process.env.XDG_STATE_HOME;

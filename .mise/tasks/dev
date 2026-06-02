@@ -15,11 +15,15 @@ echo "caret dev: port=$CARET_PORT state=$state_dir"
 
 daemon_pid=""
 driver_pid=""
+vite_pid=""
 
-# Reap the spawned daemon + driver and drop the ephemeral state on exit (AC6).
+# Reap the daemon, driver, and Vite, then drop the ephemeral state on exit, so a
+# teardown never leaves an orphan holding the dev port or stale reviews (AC6).
 cleanup() {
-  if [ -n "$driver_pid" ]; then kill "$driver_pid" 2>/dev/null || true; fi
-  if [ -n "$daemon_pid" ]; then kill "$daemon_pid" 2>/dev/null || true; fi
+  for pid in "$driver_pid" "$daemon_pid" "$vite_pid"; do
+    if [ -n "$pid" ]; then kill "$pid" 2>/dev/null || true; fi
+  done
+  wait 2>/dev/null || true
   rm -rf "$state_dir"
 }
 trap cleanup EXIT
@@ -34,7 +38,10 @@ daemon_pid=$!
 bun scripts/dev/driver.ts &
 driver_pid=$!
 
-# Vite (foreground) proxies /api to the dev daemon via CARET_PORT. Not `exec`,
-# so the trap survives to run cleanup when Vite exits (e.g. on Ctrl-C).
+# Vite is backgrounded (not foreground/`exec`) and waited on, so a teardown
+# signal reaches the trap and cleanup reaps all three children — even if the
+# signal hits this script's PID alone rather than the whole process group.
 cd ui
-bunx vite
+bunx vite &
+vite_pid=$!
+wait "$vite_pid"
