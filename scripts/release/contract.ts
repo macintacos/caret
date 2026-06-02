@@ -19,6 +19,12 @@ export type ErrorCode =
   | "NOT_A_REPO"
   | "NO_GH"
   | "BAD_BUMP"
+  | "CHANGELOG_MISSING"
+  | "PREFLIGHT_FAILED"
+  | "BRANCH_DIVERGED"
+  | "PR_CLOSED"
+  | "ALREADY_MERGED"
+  | "NOT_MERGED"
   | "INTERNAL";
 
 /** One commit in the range since the last release, with parsed metadata. */

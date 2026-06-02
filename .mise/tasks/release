@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Cut a caret release: baseline|compute|prepare|finalize (drive via /release-caret)"
+
+set -euo pipefail
+
+exec bun scripts/release/cli.ts "$@"

@@ -34,6 +34,8 @@ export interface GitOps {
   remoteBranchExists(branch: string): Promise<boolean>;
   localTagExists(tag: string): Promise<boolean>;
   remoteTagExists(tag: string): Promise<boolean>;
+  /** Whether `ancestor` is an ancestor of `descendant` (fast-forward check). */
+  isAncestor(ancestor: string, descendant: string): Promise<boolean>;
   fetch(): Promise<void>;
   checkoutNewBranch(branch: string): Promise<void>;
   checkoutExistingBranch(branch: string): Promise<void>;
@@ -130,6 +132,11 @@ export function createGit(remote = "origin"): GitOps {
     async remoteTagExists(tag) {
       const out = (await $`git ls-remote --tags ${remote} ${tag}`.text()).trim();
       return out !== "";
+    },
+
+    async isAncestor(ancestor, descendant) {
+      const r = await $`git merge-base --is-ancestor ${ancestor} ${descendant}`.nothrow().quiet();
+      return r.exitCode === 0;
     },
 
     async fetch() {
