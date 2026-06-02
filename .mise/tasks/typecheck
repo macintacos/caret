@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Type-check the backend with tsc (no emit)"
+
+set -euo pipefail
+
+bun x tsc --noEmit
