@@ -73,7 +73,8 @@
     cursor: default;
   }
   .title {
-    font-family: var(--font-display);
+    /* Content text inside a <button>, which is mono by default — force sans. */
+    font-family: var(--font-sans);
     font-weight: 500;
     font-size: 0.95rem;
     color: var(--ink);
@@ -130,7 +131,7 @@
     background: var(--accent-wash);
   }
   .m-title {
-    font-family: var(--font-display);
+    font-family: var(--font-sans);
     font-size: 0.92rem;
     color: var(--ink);
   }

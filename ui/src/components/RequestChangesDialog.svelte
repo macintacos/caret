@@ -104,7 +104,6 @@
     margin-bottom: 1.25rem;
   }
   h2 {
-    font-family: var(--font-display);
     font-weight: 500;
     font-size: 1.35rem;
     margin: 0.25rem 0 0;
@@ -125,7 +124,6 @@
   textarea {
     width: 100%;
     resize: vertical;
-    font-family: var(--font-body);
     font-size: 1rem;
     line-height: 1.5;
     color: var(--ink);

@@ -40,7 +40,7 @@
     margin-bottom: 1.25rem;
   }
   .caret {
-    font-family: var(--font-display);
+    font-family: var(--font-mono);
     font-size: 1.1rem;
     color: var(--accent);
     line-height: 1;
@@ -59,7 +59,8 @@
     border: none;
     text-align: left;
     width: 100%;
-    font-family: var(--font-body);
+    /* TOC entries are <button>s (mono by default) but read as body text. */
+    font-family: var(--font-sans);
     font-size: 0.86rem;
     line-height: 1.35;
     color: var(--ink-soft);

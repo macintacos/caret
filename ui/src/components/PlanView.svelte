@@ -178,7 +178,6 @@
 
   /* ----- Manuscript typography for rendered plan ----- */
   .prose :global(h1) {
-    font-family: var(--font-display);
     font-weight: 600;
     font-size: 2.4rem;
     line-height: 1.1;
@@ -187,7 +186,6 @@
     scroll-margin-top: 1.5rem;
   }
   .prose :global(h2) {
-    font-family: var(--font-display);
     font-weight: 500;
     font-size: 1.65rem;
     line-height: 1.2;
@@ -197,7 +195,6 @@
     scroll-margin-top: 1.5rem;
   }
   .prose :global(h3) {
-    font-family: var(--font-display);
     font-weight: 600;
     font-size: 1.25rem;
     margin: 2rem 0 0.75rem;
@@ -206,7 +203,6 @@
   .prose :global(h4),
   .prose :global(h5),
   .prose :global(h6) {
-    font-family: var(--font-mono);
     font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;

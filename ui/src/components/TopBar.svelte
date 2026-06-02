@@ -128,6 +128,7 @@
     white-space: nowrap;
   }
   .brand-caret {
+    font-family: var(--font-mono);
     color: var(--accent);
     margin-right: 0.05em;
   }
