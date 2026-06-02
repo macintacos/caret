@@ -9,6 +9,17 @@
 import createDOMPurify from "dompurify";
 import type { DOMPurify as DOMPurifyInstance, WindowLike } from "dompurify";
 import { Marked } from "marked";
+import { highlightToHtml } from "./highlight.ts";
+
+// Matches a `style` value that contains ONLY shiki's dual-theme output: the
+// `--shiki-*` custom properties (per-token `--shiki-light`/`--shiki-dark` colors,
+// `--shiki-*-bg` on the <pre>, and `--shiki-*-font-style`/`-font-weight` for
+// italic/bold tokens), or color / background-color derived from them. Values are
+// limited to inert hex / rgb / var(--shiki…) / font keywords / weight numbers.
+// Anything else (`position`, `z-index`, `url(...)`, …) fails the match and the
+// whole attribute is dropped — so this narrows, never widens, the XSS surface.
+const SHIKI_STYLE =
+  /^(?:(?:--shiki[\w-]*|color|background-color)\s*:\s*(?:#[0-9a-fA-F]{3,8}|rgba?\([\d.,\s%]+\)|var\(--shiki[\w-]*\)|italic|oblique|normal|bold|bolder|lighter|\d{1,3})\s*;?\s*)+$/;
 
 // DOMPurify must bind to a `window` (happy-dom in tests, the real one in the
 // browser). Bind lazily at first use so module import never requires a DOM.
@@ -18,6 +29,16 @@ function getPurifier(): DOMPurifyInstance {
   const win =
     (globalThis as { window?: WindowLike }).window ?? (globalThis as unknown as WindowLike);
   purifier = createDOMPurify(win);
+  // Preserve shiki's token-color `style` through sanitization: keep a `style`
+  // only when its whole value is shiki-shaped (SHIKI_STYLE), drop it otherwise.
+  // Dangerous styles (position, url(), expression(), …) never match, so this
+  // narrows — never widens — the XSS surface. Sanitize stays the terminal step.
+  purifier.addHook("uponSanitizeAttribute", (_node, data) => {
+    if (data.attrName === "style") {
+      if (SHIKI_STYLE.test(data.attrValue.trim())) data.forceKeepAttr = true;
+      else data.keepAttr = false;
+    }
+  });
   return purifier;
 }
 
@@ -94,7 +115,20 @@ export function renderPlan(markdown: string): RenderResult {
         [k: string]: (this: { parser: unknown }, t: unknown) => string;
       };
       const base = renderers[name] as (this: { parser: unknown }, t: unknown) => string;
-      let out: string = base.call(this, token);
+
+      // Fenced code blocks are syntax-highlighted by shiki when a known language
+      // is tagged. highlightToHtml returns null for an unknown/unloaded language
+      // or a cold-start highlighter, so we fall back to marked's plain
+      // <pre><code> then. shiki's <pre class="shiki"> stays the first tag, so the
+      // id injection below still anchors on it.
+      let out: string;
+      if (name === "code") {
+        const t = token as { text: string; lang?: string };
+        const lang = (t.lang ?? "").trim().split(/\s+/)[0] || undefined;
+        out = highlightToHtml(t.text, lang) ?? base.call(this, token);
+      } else {
+        out = base.call(this, token);
+      }
 
       if (name === "heading") {
         const t = token as { depth: number; text: string };
