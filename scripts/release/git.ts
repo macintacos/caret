@@ -48,6 +48,17 @@ export interface GitOps {
 
 const FIELD = "\x1f"; // unit separator: safe field delimiter for `git log`
 
+/**
+ * Split `git status --porcelain` output into lines, preserving each line's
+ * two-char `XY ` status prefix. Trimming the whole blob would strip the leading
+ * space off a worktree-only change (` M path`), shifting the path left so a
+ * downstream `slice(3)` eats its first character — turning `CHANGELOG.md` into
+ * `HANGELOG.md` and tripping a false DIRTY_TREE.
+ */
+export function splitPorcelain(out: string): string[] {
+  return out.split("\n").filter((line) => line !== "");
+}
+
 /** Constructs the real, git-backed GitOps for a given remote (default origin). */
 export function createGit(remote = "origin"): GitOps {
   return {
@@ -61,8 +72,7 @@ export function createGit(remote = "origin"): GitOps {
     },
 
     async porcelainStatus() {
-      const out = (await $`git status --porcelain`.text()).trim();
-      return out === "" ? [] : out.split("\n");
+      return splitPorcelain(await $`git status --porcelain`.text());
     },
 
     async headSha() {
