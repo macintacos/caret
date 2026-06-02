@@ -203,7 +203,6 @@
   .prose :global(h4),
   .prose :global(h5),
   .prose :global(h6) {
-    font-family: var(--font-mono);
     font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
