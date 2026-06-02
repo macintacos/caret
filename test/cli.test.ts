@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureDaemon, runReview } from "../src/cli.ts";
 import { logFile } from "../src/paths.ts";
+import { PLAN_FORMAT_DENY_MESSAGE } from "../src/plan-format.ts";
 import type { Decision } from "../src/types.ts";
 
 const allow: Decision = { behavior: "allow", decidedAt: 1 };
@@ -223,6 +224,93 @@ test("a failed reconnect logs step=reconnect, not the poll step", async () => {
   const body = readFileSync(logFile(), "utf-8");
   expect(body).toContain("step=reconnect");
   expect(body).not.toContain("step=longPoll");
+});
+
+// ---- plan-format guard ----
+
+function planStdin(plan: string | undefined): string {
+  return JSON.stringify({ session_id: "S", cwd: "/p", tool_input: { plan } });
+}
+
+test("a bare-fence plan is denied for format before any daemon work", async () => {
+  let ensureCalls = 0;
+  let postCalls = 0;
+  const out = await runReview(
+    planStdin("# Plan\n\n```\ncode\n```\n"),
+    reviewDeps({
+      ensureDaemon: async () => {
+        ensureCalls++;
+        return "http://x";
+      },
+      postReview: async () => {
+        postCalls++;
+        return { id: "rid" };
+      },
+    }),
+  );
+  expect(out.hookSpecificOutput.decision).toMatchObject({
+    behavior: "deny",
+    message: PLAN_FORMAT_DENY_MESSAGE,
+  });
+  // The format-deny short-circuits: no daemon spin-up, no review created.
+  expect(ensureCalls).toBe(0);
+  expect(postCalls).toBe(0);
+});
+
+test("a fully-tagged plan is posted for review as before", async () => {
+  let postCalls = 0;
+  const out = await runReview(
+    planStdin("# Plan\n\n```ts\nconst x = 1;\n```\n"),
+    reviewDeps({
+      postReview: async () => {
+        postCalls++;
+        return { id: "rid" };
+      },
+    }),
+  );
+  expect(out.hookSpecificOutput.decision.behavior).toBe("allow");
+  expect(postCalls).toBe(1);
+});
+
+test("a plan with no code blocks is posted for review", async () => {
+  let postCalls = 0;
+  const out = await runReview(
+    planStdin("# Just prose, no code.\n"),
+    reviewDeps({
+      postReview: async () => {
+        postCalls++;
+        return { id: "rid" };
+      },
+    }),
+  );
+  expect(out.hookSpecificOutput.decision.behavior).toBe("allow");
+  expect(postCalls).toBe(1);
+});
+
+test("an absent plan is posted for review (no spurious format-deny)", async () => {
+  let postCalls = 0;
+  const out = await runReview(
+    planStdin(undefined),
+    reviewDeps({
+      postReview: async () => {
+        postCalls++;
+        return { id: "rid" };
+      },
+    }),
+  );
+  expect(out.hookSpecificOutput.decision.behavior).toBe("allow");
+  expect(postCalls).toBe(1);
+});
+
+test("a format-deny is logged to caret.log for diagnosability", async () => {
+  await runReview(
+    JSON.stringify({ session_id: "FMT", cwd: "/p", tool_input: { plan: "```\nx\n```\n" } }),
+    reviewDeps(),
+  );
+  const body = readFileSync(logFile(), "utf-8");
+  expect(body).toContain("step=validatePlan");
+  expect(body).toContain("code block missing language marker");
+  expect(body).toContain("sessionId=FMT");
 });
 
 // ---- ensureDaemon ----
