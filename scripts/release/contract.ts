@@ -53,7 +53,11 @@ export interface ComputeResult {
   releaseBranch: string;
   compareUrl: string;
   unreleasedCompareUrl: string;
+  /** Today's date (UTC, ISO `YYYY-MM-DD`) for the changelog heading. */
+  date: string;
   commits: CommitInfo[];
+  /** The version-bearing files `prepare`/`finalize` mutate, in mutation order. */
+  manifests: string[];
   manifestsInSync: boolean;
 }
 

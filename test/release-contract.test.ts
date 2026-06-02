@@ -59,6 +59,7 @@ test("a ComputeResult round-trips through JSON unchanged", () => {
     releaseBranch: "release/v0.1.0",
     compareUrl: compareUrl("macintacos/caret", "v0.0.1", "v0.1.0"),
     unreleasedCompareUrl: compareUrl("macintacos/caret", "v0.1.0", "HEAD"),
+    date: "2026-06-02",
     commits: [
       {
         sha: "def456",
@@ -68,6 +69,7 @@ test("a ComputeResult round-trips through JSON unchanged", () => {
         prNumber: 7,
       },
     ],
+    manifests: ["package.json", ".claude-plugin/marketplace.json", ".claude-plugin/plugin.json"],
     manifestsInSync: true,
   };
   expect(JSON.parse(JSON.stringify(result))).toEqual(result);

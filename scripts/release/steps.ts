@@ -36,6 +36,8 @@ export interface Deps {
   github: GitHubOps;
   fs: FsOps;
   io: Io;
+  /** Clock seam: the current instant, injected so `compute`'s date is testable. */
+  now(): Date;
   preflight(): Promise<{ ok: boolean; output: string }>;
 }
 
@@ -225,7 +227,9 @@ export async function compute(deps: Deps, opts: { bump: BumpLevel }): Promise<Co
     releaseBranch: ctx.releaseBranch,
     compareUrl: compareUrl(repoSlug, ctx.previousTag, ctx.tag),
     unreleasedCompareUrl: compareUrl(repoSlug, ctx.tag, "HEAD"),
+    date: deps.now().toISOString().slice(0, 10),
     commits,
+    manifests: MANIFESTS,
     manifestsInSync: true,
   };
 }

@@ -55,6 +55,7 @@ interface Options {
   releases?: Record<string, { url: string }>;
   preflightOk?: boolean;
   available?: boolean;
+  now?: string;
 }
 
 function harness(opts: Options = {}) {
@@ -217,6 +218,7 @@ function harness(opts: Options = {}) {
     github,
     fs,
     io: { log: () => {} },
+    now: () => new Date(opts.now ?? "2026-06-02T00:00:00Z"),
     preflight: async () => ({ ok: opts.preflightOk ?? true, output: "" }),
   };
   return { deps, calls, files, state };
@@ -248,6 +250,17 @@ test("compute returns the next version, tag, and parsed commits", async () => {
   );
   expect(r.commits[0]?.issueRefs).toEqual(["EXC-1"]);
   expect(r.commits[0]?.prNumber).toBe(2);
+});
+
+test("compute surfaces the UTC date and the manifest paths", async () => {
+  const { deps } = harness();
+  const r = await compute(deps, { bump: "minor" });
+  expect(r.date).toBe("2026-06-02");
+  expect(r.manifests).toEqual([
+    "package.json",
+    ".claude-plugin/marketplace.json",
+    ".claude-plugin/plugin.json",
+  ]);
 });
 
 test("compute rejects with NO_BASELINE when there are no tags", async () => {
