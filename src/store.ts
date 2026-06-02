@@ -20,6 +20,10 @@ export interface Store {
   /** Drop from memory; the on-disk file is left as history. */
   remove(id: string): Promise<void>;
   size(): number;
+  /** Count of reviews awaiting a decision. Drives idle: a `rejected` review is
+   * NOT counted — it persists to disk and rehydrates when its revision arrives,
+   * so it must not keep the daemon alive forever. */
+  pendingCount(): number;
   /** Current approval epoch for a session (count of approvals so far). */
   epochOf(sessionId: string): number;
   /** Increment a session's approval epoch (called on each approval). */
@@ -90,6 +94,12 @@ export function createStore(dir: string): Store {
 
     size() {
       return reviews.size;
+    },
+
+    pendingCount() {
+      let n = 0;
+      for (const r of reviews.values()) if (r.status === "pending") n++;
+      return n;
     },
 
     epochOf(sessionId) {

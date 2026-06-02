@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     getHealth,
+    HttpError,
     putAnnotations,
     resolveReview,
     startPolling,
@@ -36,11 +37,22 @@
   let lastLoadedId: string | null = null;
 
   let active = $derived(reviews.find((r) => r.id === activeId) ?? null);
-  let rendered = $derived(
-    active
-      ? renderPlan(active.currentPlan)
-      : ({ html: "", headings: [] as HeadingEntry[] }),
-  );
+
+  // Memoize the (expensive) markdown render on id+version so the 2s poll —
+  // which replaces `reviews` with fresh objects every tick — doesn't re-parse
+  // an unchanged plan (and needlessly churn the highlight repaint).
+  let renderCache: {
+    key: string;
+    value: { html: string; headings: HeadingEntry[] };
+  } | null = null;
+  let rendered = $derived.by(() => {
+    if (!active) return { html: "", headings: [] as HeadingEntry[] };
+    const key = `${active.id}:${active.version}`;
+    if (renderCache?.key === key) return renderCache.value;
+    const value = renderPlan(active.currentPlan);
+    renderCache = { key, value };
+    return value;
+  });
 
   // ----- Deep link -----
   function deepLinkId(): string | null {
@@ -62,11 +74,15 @@
   // When the active review changes, load its annotations into the working copy.
   $effect(() => {
     if (active && active.id !== lastLoadedId) {
+      // Flush the PREVIOUS review's pending save FIRST (it snapshots the current
+      // `annotations` + pendingSaveId synchronously) — before we overwrite
+      // `annotations` with the new review's, or we'd save them onto the old id.
+      void flushPending();
       lastLoadedId = active.id;
       annotations = active.annotations.map((a) => ({ ...a }));
       focusedAnnotation = null;
-      flushPending(); // settle any prior review's save
     } else if (!active) {
+      void flushPending();
       lastLoadedId = null;
       annotations = [];
     }
@@ -144,8 +160,10 @@
     const snapshot = annotations.map((a) => ({ ...a }));
     try {
       await putAnnotations(id, snapshot);
-    } catch {
-      connected = false;
+    } catch (err) {
+      // A non-2xx (e.g. the review was resolved/removed) is not a connection
+      // problem — the daemon answered. Only a real network failure goes offline.
+      if (!(err instanceof HttpError)) connected = false;
     }
   }
 
@@ -188,8 +206,10 @@
     try {
       await resolveReview(id, { behavior: "allow", acceptMode: mode });
       afterResolve(id);
-    } catch {
-      connected = false;
+    } catch (err) {
+      // 404/409 = already resolved or removed elsewhere → just advance.
+      if (err instanceof HttpError) afterResolve(id);
+      else connected = false;
     } finally {
       busy = false;
     }
@@ -205,8 +225,9 @@
     try {
       await resolveReview(id, { behavior: "deny", feedback });
       afterResolve(id);
-    } catch {
-      connected = false;
+    } catch (err) {
+      if (err instanceof HttpError) afterResolve(id);
+      else connected = false;
     } finally {
       busy = false;
     }

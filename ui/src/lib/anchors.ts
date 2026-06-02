@@ -102,10 +102,25 @@ function measureElementBoundary(root: Node, container: Node, offset: number): nu
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   let total = 0;
   let node = walker.nextNode() as Text | null;
-  while (node) {
-    if (boundaryNode && (node === boundaryNode || boundaryNode.contains(node))) {
-      return total;
+
+  if (boundaryNode) {
+    // Boundary is BEFORE childNodes[offset]: sum text up to that node.
+    while (node) {
+      if (node === boundaryNode || boundaryNode.contains(node)) return total;
+      total += node.data.length;
+      node = walker.nextNode() as Text | null;
     }
+    return total;
+  }
+
+  // Boundary is AFTER the container's last child (offset === childNodes.length):
+  // the char offset is the END of the container's own text — text before the
+  // container plus all text inside it. (For root itself this is its full length.)
+  let entered = false;
+  while (node) {
+    const inside = container.contains(node);
+    if (inside) entered = true;
+    else if (entered) return total; // walked past the container's subtree
     total += node.data.length;
     node = walker.nextNode() as Text | null;
   }

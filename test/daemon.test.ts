@@ -162,3 +162,35 @@ test("idle shutdown fires when the daemon boots with no reviews", async () => {
   await Bun.sleep(120);
   expect(shutdowns).toBeGreaterThanOrEqual(1);
 });
+
+test("a rejected (changes-requested) review does NOT keep the daemon alive", async () => {
+  let shutdowns = 0;
+  await boot({ idleMs: 30, onShutdown: () => shutdowns++ });
+  const { id } = await newReview();
+  await fetch(`${base}/api/reviews/${id}/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ behavior: "deny", feedback: "redo" }),
+  });
+  expect(store.get(id)?.status).toBe("rejected"); // kept on disk for the revision
+  await Bun.sleep(120);
+  expect(shutdowns).toBeGreaterThanOrEqual(1); // but idle still fires
+});
+
+test("resolving an already-resolved review is rejected (double-resolve guard)", async () => {
+  await boot();
+  const { id } = await newReview();
+  const first = await fetch(`${base}/api/reviews/${id}/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ behavior: "deny", feedback: "x" }),
+  });
+  expect(first.ok).toBe(true);
+  const second = await fetch(`${base}/api/reviews/${id}/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ behavior: "allow" }),
+  });
+  expect(second.status).toBe(404); // already rejected — not pending
+  expect(store.get(id)?.status).toBe("rejected"); // unchanged by the 2nd resolve
+});

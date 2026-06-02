@@ -43,6 +43,17 @@ describe("offsetsToRange / rangeToOffsets round-trip", () => {
     expect(range!.toString()).toBe("two");
     expect(rangeToOffsets(el, range!)).toEqual({ start: 3, end: 6 });
   });
+
+  test("range ending at the end of a nested element measures that element, not the root", () => {
+    const el = block("b0", "alpha <strong>bold</strong> tail");
+    // textContent = "alpha bold tail"; the end of <strong> is char offset 10.
+    const strong = el.querySelector("strong")!;
+    const range = document.createRange();
+    range.setStart(el.firstChild!, 0);
+    range.setEnd(strong, strong.childNodes.length); // boundary AFTER <strong>'s text
+    // Regression: previously this returned the FULL root length (15) instead of 10.
+    expect(rangeToOffsets(el, range)).toEqual({ start: 0, end: 10 });
+  });
 });
 
 describe("resolveAnnotation tiers", () => {

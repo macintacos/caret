@@ -52,22 +52,24 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     }
   }
   function armIdle() {
-    if (idleTimer || stopped || store.size() !== 0) return;
+    if (idleTimer || stopped || store.pendingCount() !== 0) return;
     idleTimer = setTimeout(maybeShutdown, idle);
   }
-  // Arm on every 1→0 transition; cancel whenever a review exists.
+  // Arm when no review is awaiting a decision; cancel while one is pending.
+  // (A `rejected` review persists to disk and rehydrates when its revision
+  // arrives, so it must not keep the daemon alive.)
   function refreshIdle() {
-    if (store.size() === 0) armIdle();
+    if (store.pendingCount() === 0) armIdle();
     else cancelIdle();
   }
   function maybeShutdown() {
     idleTimer = null;
     // Re-check liveness atomically (single-threaded loop): never exit while a
-    // review exists, a hook is mid-long-poll, or a request is in flight.
-    if (store.size() === 0 && openDecisionCount() === 0 && inFlight === 0) {
+    // review is pending, a hook is mid-long-poll, or a request is in flight.
+    if (store.pendingCount() === 0 && openDecisionCount() === 0 && inFlight === 0) {
       stop();
       onShutdown();
-    } else if (store.size() === 0) {
+    } else if (store.pendingCount() === 0) {
       armIdle();
     }
   }
@@ -80,6 +82,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
 
   async function handle(req: Request): Promise<Response> {
     inFlight++;
+    cancelIdle(); // any in-flight request defers an idle shutdown
     try {
       const url = new URL(req.url);
       const path = url.pathname;
@@ -96,11 +99,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       }
 
       if (method === "POST" && path === "/api/reviews") {
-        cancelIdle();
         const body = (await req.json().catch(() => ({}))) as PlanInput;
-        const result = await routePlan(body, store);
-        refreshIdle();
-        return Response.json(result);
+        return Response.json(await routePlan(body, store));
       }
 
       if (method === "GET" && path === "/api/reviews") {
@@ -118,33 +118,31 @@ export function createServer(opts: CreateServerOptions): CaretServer {
         }
 
         if (method === "GET" && sub === "/decision") {
-          cancelIdle();
           const decision = await awaitDecision(id);
           clearDecision(id);
           return Response.json(decision);
         }
 
         if (method === "PUT" && sub === "/annotations") {
-          cancelIdle();
           const body = (await req.json().catch(() => ({}))) as {
             annotations?: Review["versions"][number]["annotations"];
           };
           const updated = await store.update(id, (r) => {
             currentVersion(r).annotations = body.annotations ?? [];
           });
-          refreshIdle();
           return updated ? Response.json({ ok: true }) : notFound();
         }
 
         if (method === "POST" && sub === "/resolve") {
-          cancelIdle();
           const body = (await req.json().catch(() => ({}))) as {
             behavior?: "allow" | "deny";
             feedback?: string;
             acceptMode?: Decision["acceptMode"];
           };
           const existing = store.get(id);
-          if (!existing) return notFound();
+          // Only a pending review can be resolved — guards against a double
+          // resolve diverging the store from the decision the hook received.
+          if (!existing || existing.status !== "pending") return notFound();
           const decision: Decision = {
             behavior: body.behavior === "deny" ? "deny" : "allow",
             feedback: body.feedback,
@@ -162,7 +160,6 @@ export function createServer(opts: CreateServerOptions): CaretServer {
             store.bumpEpoch(existing.sessionId);
             await store.remove(id);
           }
-          refreshIdle();
           // Defer one tick so THIS 200 flushes before the hook's long-poll
           // resolves (otherwise the browser's POST can appear to race the unblock).
           setTimeout(() => resolveDecision(id, decision), 0);
@@ -171,12 +168,24 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       }
 
       return notFound();
+    } catch {
+      // Never let a handler exception drop the connection without a response.
+      return new Response("internal error", { status: 500 });
     } finally {
       inFlight--;
+      // Reconcile idle after every request — even a thrown one — so the timer
+      // is never left permanently disarmed.
+      refreshIdle();
     }
   }
 
-  const server = Bun.serve({ port: opts.port ?? 0, fetch: handle });
+  // Bind to loopback only: the daemon serves plan content and accepts approve/
+  // deny decisions with no auth, so it must never be reachable off-host.
+  const server = Bun.serve({
+    port: opts.port ?? 0,
+    hostname: "127.0.0.1",
+    fetch: handle,
+  });
 
   function stop() {
     if (stopped) return;

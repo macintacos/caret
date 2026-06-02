@@ -101,6 +101,9 @@ export function renderPlan(markdown: string): RenderResult {
 
   marked.use({ renderer: overrides as never });
 
+  // INVARIANT: attributes are string-injected into the raw HTML ABOVE, then the
+  // whole document is sanitized HERE. Sanitize MUST remain the last step — never
+  // inject id/data-slug (or anything else) after this, or it becomes an XSS hole.
   const rawHtml = marked.parse(markdown, { async: false }) as string;
   const html = getPurifier().sanitize(rawHtml, {
     ADD_ATTR: ["data-slug", "id"],

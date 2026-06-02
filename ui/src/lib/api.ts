@@ -3,8 +3,17 @@
 
 import type { Annotation, ClientReview, Health, ResolveBody } from "./types.ts";
 
+/** Thrown when the daemon responded with a non-2xx status — distinct from a
+ * network failure (the daemon is up, so it's not a connection problem). */
+export class HttpError extends Error {
+  constructor(public readonly status: number) {
+    super(`HTTP ${status}`);
+    this.name = "HttpError";
+  }
+}
+
 async function json<T>(res: Response): Promise<T> {
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok) throw new HttpError(res.status);
   return (await res.json()) as T;
 }
 
