@@ -282,17 +282,20 @@ fi
 
 # --- register ---------------------------------------------------------------
 section "Register"
-# Register caret's directory as a local marketplace (idempotent: add, else update).
+# Register caret's directory as a local marketplace (idempotent: add, else
+# update). The add's "already exists" stderr is hidden so a re-run stays clean;
+# a real failure still aborts via the update fallback returning non-zero.
 step "Registering the caret marketplace"
-run claude plugin marketplace add "$REPO_DIR" || run claude plugin marketplace update "$MARKETPLACE"
+run claude plugin marketplace add "$REPO_DIR" 2>/dev/null || run claude plugin marketplace update "$MARKETPLACE" >/dev/null
 ok
 
 # Reinstall so the freshly built binary always lands in the plugin cache, even
-# when the version is unchanged.
+# when the version is unchanged. uninstall/enable are best-effort (|| true);
+# their routine noise is hidden, matching the pre-polish installer.
 step "Installing the caret plugin"
-run claude plugin uninstall "${PLUGIN}@${MARKETPLACE}" || true
-run claude plugin install "${PLUGIN}@${MARKETPLACE}" --scope user
-run claude plugin enable "${PLUGIN}@${MARKETPLACE}" || true
+run claude plugin uninstall "${PLUGIN}@${MARKETPLACE}" >/dev/null 2>&1 || true
+run claude plugin install "${PLUGIN}@${MARKETPLACE}" --scope user >/dev/null
+run claude plugin enable "${PLUGIN}@${MARKETPLACE}" >/dev/null 2>&1 || true
 ok
 
 if [ "$DRY_RUN" -eq 1 ]; then

@@ -100,6 +100,7 @@ else
   fail "failed long step should exit non-zero"
 fi
 assert_contains "$fail_out" "✗" "failed long step prints a ✗ glyph"
+assert_absent "$fail_out" "Registering" "a failed build aborts before any registration step"
 
 if [ "$fails" -eq 0 ]; then
   printf '\nAll install.sh dry-run tests passed.\n'
