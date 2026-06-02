@@ -60,6 +60,10 @@ ok() {
   if [ "$DRY_RUN" -eq 1 ]; then return 0; fi
   printf '  %s✓%s %s\n' "$C_GREEN" "$C_RESET" "${1:-$STEP_LABEL}"
 }
+fail_step() {
+  if [ "$DRY_RUN" -eq 1 ]; then return 0; fi
+  printf '  %s✗%s %s\n' "$C_RED" "$C_RESET" "${1:-$STEP_LABEL}"
+}
 
 require() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -84,6 +88,70 @@ run() {
     return 0
   fi
   "$@"
+}
+
+# --- spinner-wrapped long steps ---------------------------------------------
+# Long steps (dependency install, the two builds) get a spinner on a TTY and a
+# plain "→ …" line otherwise. Their output is captured and shown only on
+# failure, so a success collapses to a quiet ✓ while a failure stays legible.
+# Safe under `set -euo pipefail`: the command runs inside an `if` (a failure is
+# caught, not aborted mid-helper), the real exit code is returned to the caller,
+# and the EXIT/INT trap restores the cursor and reaps the spinner on every path.
+SPIN_PID=""
+SPIN_LABEL=""
+cleanup() {
+  if [ -n "$SPIN_PID" ]; then
+    kill "$SPIN_PID" 2>/dev/null || true
+    wait "$SPIN_PID" 2>/dev/null || true
+    SPIN_PID=""
+  fi
+  if [ "$FANCY" -eq 1 ]; then printf '\033[?25h'; fi
+}
+trap cleanup EXIT
+trap 'cleanup; exit 130' INT
+
+spinner() {
+  local frames='\|/-' i=0
+  printf '\033[?25l' # hide cursor while we animate
+  while :; do
+    i=$(((i + 1) % 4))
+    printf '\r  %s%s%s %s' "$C_BLUE" "${frames:i:1}" "$C_RESET" "$SPIN_LABEL"
+    sleep 0.1
+  done
+}
+
+run_long() {
+  local label="$1"
+  shift
+  if [ "$DRY_RUN" -eq 1 ]; then
+    run "$@"
+    return 0
+  fi
+  STEP_LABEL="$label"
+  local log rc=0
+  log="$(mktemp)"
+  if [ "$FANCY" -eq 1 ]; then
+    SPIN_LABEL="$label"
+    spinner &
+    SPIN_PID=$!
+    if "$@" >"$log" 2>&1; then rc=0; else rc=$?; fi
+    kill "$SPIN_PID" 2>/dev/null || true
+    wait "$SPIN_PID" 2>/dev/null || true
+    SPIN_PID=""
+    printf '\r\033[K'  # clear the spinner line
+    printf '\033[?25h' # restore the cursor
+  else
+    printf '  %s→%s %s\n' "$C_BLUE" "$C_RESET" "$label"
+    if "$@" >"$log" 2>&1; then rc=0; else rc=$?; fi
+  fi
+  if [ "$rc" -eq 0 ]; then
+    ok "$label"
+  else
+    fail_step "$label"
+    cat "$log" >&2
+  fi
+  rm -f "$log"
+  return "$rc"
 }
 
 # The dry-run summary: what was detected, the exact commands that would run, and
@@ -194,17 +262,9 @@ fi
 run cd "$REPO_DIR"
 
 section "Build"
-step "Installing build dependencies"
-run bun install
-ok
-
-step "Building the UI"
-run bash -c 'cd ui && bunx vite build'
-ok
-
-step "Compiling the caret binary"
-run bun build --compile --outfile bin/caret src/cli.ts
-ok
+run_long "Installing build dependencies" bun install
+run_long "Building the UI" bash -c 'cd ui && bunx vite build'
+run_long "Compiling the caret binary" bun build --compile --outfile bin/caret src/cli.ts
 
 # Keep a copy of the UI beside the binary as a runtime fallback.
 step "Bundling the UI fallback"

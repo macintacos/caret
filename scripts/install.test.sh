@@ -76,6 +76,31 @@ else
 fi
 assert_contains "$missing_out" "missing" "missing-tool error names the gap"
 
+# --- a failing long step surfaces a ✗ and a non-zero exit (spinner safety) ---
+# Real-mode run with stubbed tools: `bun install` fails, so the first long step
+# errors out before any registration step — hermetic and non-mutating.
+stub_dir="$(mktemp -d)"
+for tool in git bunx claude; do
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$stub_dir/$tool"
+  chmod +x "$stub_dir/$tool"
+done
+cat >"$stub_dir/bun" <<'STUB'
+#!/usr/bin/env bash
+[ "${1:-}" = "install" ] && exit 1
+exit 0
+STUB
+chmod +x "$stub_dir/bun"
+
+rc=0
+fail_out="$(PATH="$stub_dir:$PATH" "$bash_bin" "$script" 2>&1)" || rc=$?
+rm -rf "$stub_dir"
+if [ "$rc" -ne 0 ]; then
+  ok "failed long step exits non-zero ($rc)"
+else
+  fail "failed long step should exit non-zero"
+fi
+assert_contains "$fail_out" "✗" "failed long step prints a ✗ glyph"
+
 if [ "$fails" -eq 0 ]; then
   printf '\nAll install.sh dry-run tests passed.\n'
 else
