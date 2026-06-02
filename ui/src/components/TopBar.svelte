@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { APPROVE_VARIANTS, approveLabel } from "../lib/approve.ts";
   import type { AcceptMode, ClientReview } from "../lib/types.ts";
   import ReviewSwitcher from "./ReviewSwitcher.svelte";
   import VersionLabel from "./VersionLabel.svelte";
@@ -7,26 +8,21 @@
     reviews: ClientReview[];
     active: ClientReview | null;
     busy: boolean;
+    /** Remembered approve mode; sets the primary button's mode + label. */
+    approveMode: AcceptMode;
     onSelect: (id: string) => void;
     onApprove: (mode: AcceptMode) => void;
     onRequestChanges: () => void;
   }
-  let { reviews, active, busy, onSelect, onApprove, onRequestChanges }: Props =
-    $props();
-
-  const APPROVE_VARIANTS: { mode: AcceptMode; label: string; note: string }[] = [
-    { mode: "default", label: "Approve", note: "Approve edits manually" },
-    {
-      mode: "acceptEdits",
-      label: "Approve & accept edits",
-      note: "Auto-accept file edits this session",
-    },
-    {
-      mode: "auto",
-      label: "Approve & auto mode",
-      note: "Full auto mode this session",
-    },
-  ];
+  let {
+    reviews,
+    active,
+    busy,
+    approveMode,
+    onSelect,
+    onApprove,
+    onRequestChanges,
+  }: Props = $props();
 
   let menuOpen = $state(false);
 
@@ -61,8 +57,8 @@
       </button>
 
       <div class="split">
-        <button class="approve" onclick={() => approve("default")} disabled={busy}>
-          Approve
+        <button class="approve" onclick={() => approve(approveMode)} disabled={busy}>
+          {approveLabel(approveMode)}
         </button>
         <button
           class="split-toggle"

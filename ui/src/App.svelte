@@ -1,5 +1,6 @@
 <script lang="ts">
   import {
+    getApproveMode,
     getHealth,
     HttpError,
     putAnnotations,
@@ -28,6 +29,10 @@
   let busy = $state(false);
   let showDialog = $state(false);
   let safeMode = $state(false);
+
+  // Remembered approve mode (machine-global, last-wins). Read once on load and
+  // mirrored locally on each approve so the next plan defaults to it.
+  let approveMode = $state<AcceptMode>("default");
 
   // Working copy of annotations for the active review (edited locally, autosaved).
   let annotations = $state<Annotation[]>([]);
@@ -109,6 +114,16 @@
       () => (connected = false),
     );
     return stop;
+  });
+
+  // ----- Remembered approve mode (read once on load) -----
+  // Assigns only (no reactive reads), so this effect runs a single time on
+  // mount — deliberately separate from the 2s reviews poll above. A failure
+  // leaves today's "default", matching the daemon's fail-safe.
+  $effect(() => {
+    void getApproveMode()
+      .then((m) => (approveMode = m))
+      .catch(() => {});
   });
 
   // ----- Safe Mode -----
@@ -235,6 +250,7 @@
     await flushPending();
     try {
       await resolveReview(id, { behavior: "allow", acceptMode: mode });
+      approveMode = mode; // remember locally so the next plan defaults to it
       afterResolve(id);
     } catch (err) {
       // 404/409 = already resolved or removed elsewhere → just advance.
@@ -277,6 +293,7 @@
     {reviews}
     {active}
     {busy}
+    {approveMode}
     onSelect={selectReview}
     onApprove={approve}
     onRequestChanges={() => (showDialog = true)}

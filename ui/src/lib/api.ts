@@ -1,7 +1,7 @@
 // Same-origin JSON API client. All paths are relative `/api/...`; in dev the
 // Vite proxy forwards them to the daemon on :42718.
 
-import type { Annotation, ClientReview, Health, ResolveBody } from "./types.ts";
+import type { AcceptMode, Annotation, ClientReview, Health, ResolveBody } from "./types.ts";
 
 /** Thrown when the daemon responded with a non-2xx status — distinct from a
  * network failure (the daemon is up, so it's not a connection problem). */
@@ -19,6 +19,13 @@ async function json<T>(res: Response): Promise<T> {
 
 export async function getHealth(): Promise<Health> {
   return json(await fetch("/api/health"));
+}
+
+/** One-time read (on UI load) of the machine-global remembered approve mode.
+ * Deliberately not part of the 2s reviews poll. */
+export async function getApproveMode(): Promise<AcceptMode> {
+  const { approveMode } = await json<{ approveMode: AcceptMode }>(await fetch("/api/prefs"));
+  return approveMode;
 }
 
 export async function listReviews(): Promise<ClientReview[]> {
