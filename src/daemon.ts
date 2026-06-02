@@ -233,8 +233,11 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       }
 
       return notFound();
-    } catch {
-      // Never let a handler exception drop the connection without a response.
+    } catch (err) {
+      // Never let a handler exception drop the connection without a response —
+      // and log it first, since a bare 500 alone is undebuggable. The daemon's
+      // stdout/stderr is redirected to daemon.log by spawnDaemon.
+      log(`request error: ${err}`);
       return new Response("internal error", { status: 500 });
     } finally {
       inFlight--;

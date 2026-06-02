@@ -11,7 +11,13 @@ let srv: CaretServer;
 let base: string;
 
 async function boot(
-  opts: { idleMs?: number; heartbeatMs?: number; onShutdown?: () => void } = {},
+  opts: {
+    idleMs?: number;
+    heartbeatMs?: number;
+    onShutdown?: () => void;
+    log?: (msg: string) => void;
+    routePlan?: Parameters<typeof createServer>[0]["routePlan"];
+  } = {},
 ) {
   store = createStore(dir);
   await store.rehydrate();
@@ -21,6 +27,8 @@ async function boot(
     idleMs: opts.idleMs ?? 1_000_000,
     heartbeatMs: opts.heartbeatMs,
     onShutdown: opts.onShutdown ?? (() => {}),
+    log: opts.log,
+    routePlan: opts.routePlan,
   });
   base = `http://localhost:${srv.port}`;
 }
@@ -219,6 +227,23 @@ test("idle shutdown fires when the daemon boots with no reviews", async () => {
   await boot({ idleMs: 30, onShutdown: () => shutdowns++ });
   await Bun.sleep(120);
   expect(shutdowns).toBeGreaterThanOrEqual(1);
+});
+
+test("a handler exception is logged before returning the 500", async () => {
+  const logs: string[] = [];
+  await boot({
+    log: (m) => logs.push(m),
+    routePlan: async () => {
+      throw new Error("kaboom");
+    },
+  });
+  const res = await fetch(`${base}/api/reviews`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sessionId: "S", plan: "# x" }),
+  });
+  expect(res.status).toBe(500);
+  expect(logs.some((m) => m.includes("kaboom"))).toBe(true);
 });
 
 test("a rejected (changes-requested) review does NOT keep the daemon alive", async () => {

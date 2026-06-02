@@ -13,7 +13,8 @@ import { mkdirSync, openSync } from "node:fs";
 import { dirname } from "node:path";
 import { createServer } from "./daemon.ts";
 import { denyOutput, type HookOutput, toHookOutput } from "./feedback.ts";
-import { getPort, reviewsDir, reviewTimeoutMs, stateDir } from "./paths.ts";
+import { logError } from "./log.ts";
+import { daemonLogFile, getPort, logFile, reviewsDir, reviewTimeoutMs, stateDir } from "./paths.ts";
 import { createStore } from "./store.ts";
 import type { Decision, PlanInput } from "./types.ts";
 
@@ -60,6 +61,9 @@ interface HookStdin {
 /** Run a review end-to-end, returning the hook output. Never throws — any
  * failure becomes a deny so an unreviewed plan can never ship. */
 export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOutput> {
+  // Track the current step + context so the catch can log what actually failed.
+  let step = "parse";
+  const ctx: { sessionId?: string; cwd?: string } = {};
   try {
     let hook: HookStdin;
     try {
@@ -67,13 +71,17 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
     } catch {
       throw new Error("could not parse hook stdin JSON");
     }
+    ctx.sessionId = hook.session_id;
+    ctx.cwd = hook.cwd;
     const input: PlanInput = {
       sessionId: hook.session_id,
       cwd: hook.cwd,
       plan: hook.tool_input?.plan,
     };
 
+    step = "ensureDaemon";
     const baseUrl = await deps.ensureDaemon();
+    step = "postReview";
     const { id } = await deps.postReview(baseUrl, input);
     const url = `${baseUrl}/?review=${id}`;
     deps.openBrowser(url);
@@ -81,6 +89,7 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
     // fails to open.
     process.stderr.write(`caret: review this plan at ${url}\n`);
 
+    step = "longPoll";
     // Poll until the browser decides: re-poll on each heartbeat (null), and on a
     // transient drop reconnect and keep going (the decision is served on
     // reconnect, so nothing is lost). Bounded by the review timeout — a real
@@ -103,8 +112,9 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
     }
     return toHookOutput(decision);
   } catch (err) {
+    logError(step, err, ctx);
     const msg = err instanceof Error ? err.message : String(err);
-    return denyOutput(`caret: ${msg} — denying so no unreviewed plan ships.`);
+    return denyOutput(`caret: ${msg} — denying so no unreviewed plan ships. See ${logFile()}.`);
   }
 }
 
@@ -175,7 +185,7 @@ function spawnDaemon(): void {
   let out: number | "ignore" = "ignore";
   try {
     mkdirSync(stateDir(), { recursive: true });
-    out = openSync(`${stateDir()}/daemon.log`, "a");
+    out = openSync(daemonLogFile(), "a");
   } catch {
     // ignore — logging is non-essential.
   }
@@ -308,7 +318,10 @@ async function runReviewSubcommand(): Promise<void> {
     process.stdout.write(`${JSON.stringify(output)}\n`);
   };
   const denyAndExit = (reason: string) => {
-    respond(denyOutput(reason));
+    // Only log when this signal is what actually denies the review (a signal
+    // arriving after a normal decision is already a no-op below).
+    if (!responded) logError("signal", new Error(reason));
+    respond(denyOutput(`${reason} See ${logFile()}.`));
     process.exit(0);
   };
   process.once("SIGINT", () => denyAndExit("caret: interrupted (SIGINT) — denying to fail safe."));
@@ -340,8 +353,9 @@ async function main(): Promise<void> {
 if (import.meta.main) {
   main().catch((err) => {
     // Last-resort fail-safe for the review path; harmless noise elsewhere.
+    logError("fatal", err);
     process.stdout.write(
-      `${JSON.stringify(denyOutput(`caret: fatal ${err} — denying to fail safe.`))}\n`,
+      `${JSON.stringify(denyOutput(`caret: fatal ${err} — denying to fail safe. See ${logFile()}.`))}\n`,
     );
     process.exit(0);
   });
