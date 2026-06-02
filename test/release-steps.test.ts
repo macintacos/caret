@@ -54,6 +54,8 @@ interface Options {
   prs?: PullRequestSummary[];
   releases?: Record<string, { url: string }>;
   preflightOk?: boolean;
+  /** Porcelain lines preflight's write-mode format leaves behind (e.g. `[" M src/x.ts"]`). */
+  preflightDirties?: string[];
   available?: boolean;
   now?: string;
 }
@@ -219,7 +221,14 @@ function harness(opts: Options = {}) {
     fs,
     io: { log: () => {} },
     now: () => new Date(opts.now ?? "2026-06-02T00:00:00Z"),
-    preflight: async () => ({ ok: opts.preflightOk ?? true, output: "" }),
+    preflight: async () => {
+      calls.push("preflight");
+      // Model write-mode `mise run format`: append drift to the tree without
+      // mutating the shared opts array (fresh array, not push).
+      const drift = opts.preflightDirties ?? [];
+      if (drift.length > 0) state.porcelain = [...state.porcelain, ...drift];
+      return { ok: opts.preflightOk ?? true, output: "" };
+    },
   };
   return { deps, calls, files, state };
 }
@@ -439,6 +448,20 @@ test("prepare aborts when preflight fails", async () => {
   );
 });
 
+test("prepare aborts when preflight reformats files outside the release set", async () => {
+  // Preflight write-formats and exits 0, but it touched a file the release does
+  // not stage. Committing only [MANIFESTS, CHANGELOG] would silently drop it.
+  const { deps, calls } = harness({
+    ...PREPARE_OPTS,
+    preflightDirties: [" M src/app.ts"],
+  });
+  await expectGuard(
+    prepare(deps, { bump: "minor", dryRun: false }),
+    "PREFLIGHT_DIRTY",
+  );
+  expect(calls.filter((c) => c.startsWith("commit:"))).toEqual([]); // never committed a partial set
+});
+
 // --- finalize --------------------------------------------------------------
 
 const FINALIZE_OPTS: Options = {
@@ -526,4 +549,23 @@ test("finalize reuses an existing GitHub release", async () => {
   expect(r.releaseUrl).toBe(
     "https://github.com/macintacos/caret/releases/tag/v0.1.0",
   );
+});
+
+// --- preflight gating is scoped to prepare --------------------------------
+
+test("only prepare gates on preflight; compute/baseline/finalize never invoke it", async () => {
+  // The other release paths rely on their own assertCleanTree guards and must
+  // never reach the preflight seam, so a failing/dirtying preflight cannot leak
+  // past them via a hidden gate.
+  const c = harness();
+  await compute(c.deps, { bump: "minor" });
+  expect(c.calls).not.toContain("preflight");
+
+  const b = harness();
+  await baseline(b.deps, { dryRun: false });
+  expect(b.calls).not.toContain("preflight");
+
+  const f = harness(FINALIZE_OPTS);
+  await finalize(f.deps, { dryRun: false });
+  expect(f.calls).not.toContain("preflight");
 });

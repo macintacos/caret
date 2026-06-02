@@ -122,10 +122,15 @@ async function assertBranch(
   return branch;
 }
 
-async function assertCleanTree(deps: Deps, allowed: string[] = []): Promise<void> {
-  const offending = (await deps.git.porcelainStatus())
+/** Tracked paths the working tree has changed, minus the `allowed` set. */
+async function offendingPaths(deps: Deps, allowed: string[]): Promise<string[]> {
+  return (await deps.git.porcelainStatus())
     .map((line) => line.slice(3).trim())
     .filter((path) => path !== "" && !allowed.includes(path));
+}
+
+async function assertCleanTree(deps: Deps, allowed: string[] = []): Promise<void> {
+  const offending = await offendingPaths(deps, allowed);
   if (offending.length > 0) {
     throw new GuardError("DIRTY_TREE", `Working tree has changes: ${offending.join(", ")}.`);
   }
@@ -348,6 +353,16 @@ export async function prepare(
     const pf = await deps.preflight();
     if (!pf.ok) {
       throw new GuardError("PREFLIGHT_FAILED", pf.output.trim() || "mise run preflight failed.");
+    }
+    // Preflight write-formats (`mise run format`). If it touched any tracked file
+    // outside the release's manifest+changelog set, committing only those files
+    // would silently drop the reformat — abort so the human commits formatting first.
+    const drifted = await offendingPaths(deps, [...MANIFESTS, CHANGELOG_PATH]);
+    if (drifted.length > 0) {
+      throw new GuardError(
+        "PREFLIGHT_DIRTY",
+        `Preflight reformatted files outside the release set (${drifted.join(", ")}); commit formatting on a normal PR before releasing.`,
+      );
     }
   } else {
     deps.io.log("Would gate on `mise run preflight`.");
