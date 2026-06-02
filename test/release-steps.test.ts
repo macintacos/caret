@@ -452,6 +452,18 @@ test("finalize tags trunk's merged HEAD and creates the release", async () => {
   );
 });
 
+test("finalize succeeds from a release branch (working branch is irrelevant)", async () => {
+  // Phase 1's `prepare` leaves the checkout on release/v0.1.0; finalize tags
+  // origin/trunk's HEAD, so the local branch must not block it.
+  const { deps, calls } = harness({ ...FINALIZE_OPTS, branch: "release/v0.1.0" });
+  const r = await finalize(deps, { dryRun: false });
+  expect(r.version).toBe("0.1.0");
+  expect(r.tag).toBe("v0.1.0");
+  expect(r.taggedSha).toBe("mergedsha");
+  expect(calls).toContain("createTag:v0.1.0@mergedsha");
+  expect(calls).toContain("releaseCreate:v0.1.0");
+});
+
 test("finalize dry-run mutates nothing", async () => {
   const { deps, calls } = harness(FINALIZE_OPTS);
   const r = await finalize(deps, { dryRun: true });
