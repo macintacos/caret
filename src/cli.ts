@@ -15,6 +15,7 @@ import { createServer } from "./daemon.ts";
 import { denyOutput, type HookOutput, toHookOutput } from "./feedback.ts";
 import { type ErrorContext, logError } from "./log.ts";
 import { daemonLogFile, getPort, logFile, reviewsDir, reviewTimeoutMs, stateDir } from "./paths.ts";
+import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "./plan-format.ts";
 import { createStore } from "./store.ts";
 import type { Decision, PlanInput } from "./types.ts";
 
@@ -78,6 +79,16 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
       cwd: hook.cwd,
       plan: hook.tool_input?.plan,
     };
+
+    // Reject plans with unhighlightable (untagged) code blocks before any daemon
+    // work, so a format-only reject never spins up a daemon or creates a review.
+    // The format-deny message is distinct from the fail-safe deny below; the
+    // reject is logged so reject loops are diagnosable.
+    step = "validatePlan";
+    if (hasUntaggedCodeBlock(input.plan)) {
+      logError(step, new Error("plan rejected: code block missing language marker"), ctx);
+      return denyOutput(PLAN_FORMAT_DENY_MESSAGE);
+    }
 
     step = "ensureDaemon";
     const baseUrl = await deps.ensureDaemon();
