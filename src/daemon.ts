@@ -1,0 +1,224 @@
+// The caret daemon: a single Bun.serve that holds reviews in memory, serves the
+// single-file UI, bridges the hook's long-poll to the browser's decision, and
+// idle-auto-shuts-down when no reviews remain.
+
+import { createDecisions } from "./decisions.ts";
+import { IDENTITY, idleMs as defaultIdleMs } from "./paths.ts";
+import { routeIncomingPlan } from "./reviews.ts";
+import type { Store } from "./store.ts";
+import {
+  currentVersion,
+  type Decision,
+  type PlanInput,
+  type Review,
+  toClientReview,
+} from "./types.ts";
+
+const PLACEHOLDER_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>caret</title></head><body><div id="app">caret daemon — UI not built yet</div></body></html>`;
+
+/** Decides whether an incoming plan starts a new review or appends a version. */
+export type RoutePlan = (input: PlanInput, store: Store) => Promise<{ id: string }>;
+
+export interface CreateServerOptions {
+  store: Store;
+  port?: number;
+  idleMs?: number;
+  serveHtml?: () => string | Promise<string>;
+  onShutdown?: () => void;
+  routePlan?: RoutePlan;
+}
+
+export interface CaretServer {
+  port: number;
+  stop(): void;
+}
+
+/** Reject mutating requests that aren't same-origin (loopback). The daemon has
+ * no auth, so this is CSRF defense-in-depth: a hook/CLI request carries no
+ * Origin (allowed); the same-origin browser UI carries a loopback Origin
+ * (allowed); a page on another site carries a foreign Origin (blocked). */
+export function isCrossOrigin(req: Request): boolean {
+  const origin = req.headers.get("origin");
+  if (origin) {
+    try {
+      const host = new URL(origin).hostname;
+      if (host !== "127.0.0.1" && host !== "localhost") return true;
+    } catch {
+      return true;
+    }
+  }
+  const site = req.headers.get("sec-fetch-site");
+  if (site && site !== "same-origin" && site !== "none") return true;
+  return false;
+}
+
+export function createServer(opts: CreateServerOptions): CaretServer {
+  const { store } = opts;
+  const idle = opts.idleMs ?? defaultIdleMs();
+  const serveHtml = opts.serveHtml ?? (() => PLACEHOLDER_HTML);
+  const onShutdown = opts.onShutdown ?? (() => process.exit(0));
+  const routePlan = opts.routePlan ?? routeIncomingPlan;
+  const { awaitDecision, resolveDecision, clearDecision, openDecisionCount } = createDecisions();
+
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  let inFlight = 0;
+  let stopped = false;
+
+  function cancelIdle() {
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+      idleTimer = null;
+    }
+  }
+  function armIdle() {
+    if (idleTimer || stopped || store.pendingCount() !== 0) return;
+    idleTimer = setTimeout(maybeShutdown, idle);
+  }
+  // Arm when no review is awaiting a decision; cancel while one is pending.
+  // (A `rejected` review persists to disk and rehydrates when its revision
+  // arrives, so it must not keep the daemon alive.)
+  function refreshIdle() {
+    if (store.pendingCount() === 0) armIdle();
+    else cancelIdle();
+  }
+  function maybeShutdown() {
+    idleTimer = null;
+    // Re-check liveness atomically (single-threaded loop): never exit while a
+    // review is pending, a hook is mid-long-poll, or a request is in flight.
+    if (store.pendingCount() === 0 && openDecisionCount() === 0 && inFlight === 0) {
+      stop();
+      onShutdown();
+    } else if (store.pendingCount() === 0) {
+      armIdle();
+    }
+  }
+
+  function notFound() {
+    return new Response("not found", { status: 404 });
+  }
+
+  const idRoute = /^\/api\/reviews\/([^/]+)(\/decision|\/resolve|\/annotations)?$/;
+
+  async function handle(req: Request): Promise<Response> {
+    inFlight++;
+    cancelIdle(); // any in-flight request defers an idle shutdown
+    try {
+      const url = new URL(req.url);
+      const path = url.pathname;
+      const method = req.method;
+
+      if ((method === "POST" || method === "PUT") && isCrossOrigin(req)) {
+        return new Response("cross-origin request blocked", { status: 403 });
+      }
+
+      if (method === "GET" && path === "/api/health") {
+        return Response.json(IDENTITY);
+      }
+
+      if (method === "GET" && (path === "/" || path === "/index.html")) {
+        return new Response(await serveHtml(), {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      }
+
+      if (method === "POST" && path === "/api/reviews") {
+        const body = (await req.json().catch(() => ({}))) as PlanInput;
+        return Response.json(await routePlan(body, store));
+      }
+
+      if (method === "GET" && path === "/api/reviews") {
+        return Response.json(store.list().map(toClientReview));
+      }
+
+      const m = path.match(idRoute);
+      if (m) {
+        const id = decodeURIComponent(m[1] as string);
+        const sub = m[2];
+
+        if (method === "GET" && !sub) {
+          const r = store.get(id);
+          return r ? Response.json(toClientReview(r)) : notFound();
+        }
+
+        if (method === "GET" && sub === "/decision") {
+          const decision = await awaitDecision(id);
+          clearDecision(id);
+          return Response.json(decision);
+        }
+
+        if (method === "PUT" && sub === "/annotations") {
+          const body = (await req.json().catch(() => ({}))) as {
+            annotations?: Review["versions"][number]["annotations"];
+          };
+          const updated = await store.update(id, (r) => {
+            currentVersion(r).annotations = body.annotations ?? [];
+          });
+          return updated ? Response.json({ ok: true }) : notFound();
+        }
+
+        if (method === "POST" && sub === "/resolve") {
+          const body = (await req.json().catch(() => ({}))) as {
+            behavior?: "allow" | "deny";
+            feedback?: string;
+            acceptMode?: Decision["acceptMode"];
+          };
+          const existing = store.get(id);
+          // Only a pending review can be resolved — guards against a double
+          // resolve diverging the store from the decision the hook received.
+          if (!existing || existing.status !== "pending") return notFound();
+          const decision: Decision = {
+            behavior: body.behavior === "deny" ? "deny" : "allow",
+            feedback: body.feedback,
+            acceptMode: body.acceptMode,
+            decidedAt: Date.now(),
+          };
+          // Persist the decision BEFORE unblocking the hook.
+          await store.update(id, (r) => {
+            r.decision = decision;
+            r.status = decision.behavior === "allow" ? "approved" : "rejected";
+          });
+          // Approval is terminal: bump the session epoch (so a later plan is a
+          // fresh thread) and drop it from the active set so idle can fire.
+          if (decision.behavior === "allow") {
+            store.bumpEpoch(existing.sessionId);
+            await store.remove(id);
+          }
+          // Defer one tick so THIS 200 flushes before the hook's long-poll
+          // resolves (otherwise the browser's POST can appear to race the unblock).
+          setTimeout(() => resolveDecision(id, decision), 0);
+          return Response.json({ ok: true });
+        }
+      }
+
+      return notFound();
+    } catch {
+      // Never let a handler exception drop the connection without a response.
+      return new Response("internal error", { status: 500 });
+    } finally {
+      inFlight--;
+      // Reconcile idle after every request — even a thrown one — so the timer
+      // is never left permanently disarmed.
+      refreshIdle();
+    }
+  }
+
+  // Bind to loopback only: the daemon serves plan content and accepts approve/
+  // deny decisions with no auth, so it must never be reachable off-host.
+  const server = Bun.serve({
+    port: opts.port ?? 0,
+    hostname: "127.0.0.1",
+    fetch: handle,
+  });
+
+  function stop() {
+    if (stopped) return;
+    stopped = true;
+    cancelIdle();
+    server.stop();
+  }
+
+  // Startup-if-empty: arm the idle timer when no reviews were rehydrated.
+  refreshIdle();
+
+  return { port: server.port ?? 0, stop };
+}

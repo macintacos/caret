@@ -1,0 +1,14 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "caret",
+  "description": "caret — a local web UI for reviewing, annotating, and approving Claude Code plans.",
+  "owner": { "name": "macintacos" },
+  "plugins": [
+    {
+      "name": "caret",
+      "version": "0.0.1",
+      "source": "./",
+      "description": "Review, annotate, and approve Claude Code plans in a local web UI."
+    }
+  ]
+}

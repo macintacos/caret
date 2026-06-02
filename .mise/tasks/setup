@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#MISE description="Install pinned tools, JS deps, and register git hooks"
+
+set -euo pipefail
+
+# `mise install` installs every tool in mise.toml; the postinstall hook then
+# runs `hk install --mise` to (re)register the git hooks.
+mise install
+bun install

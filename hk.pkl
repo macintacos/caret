@@ -1,0 +1,70 @@
+amends "package://github.com/jdx/hk/releases/download/v1.45.0/hk@1.45.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.45.0/hk@1.45.0#/Builtins.pkl"
+
+// Keep the amends/import version in lockstep with the `hk` version in mise.toml.
+//
+// caret is a Bun + TypeScript + Svelte project. Biome formats/lints the JS/TS/
+// JSON; type-level checking is folded into linting via tsc (backend) and
+// svelte-check (the Svelte UI, which Biome cannot parse). All three are
+// read-only linter steps, so `mise run lint` and the pre-commit hook enforce
+// types as well as style.
+//
+// Two mappings keep the mise tasks single-purpose:
+//   mise run format -> the `fix` hook   -> `formatters` (write mode)
+//   mise run lint   -> the `check` hook -> `linters` (read-only rule + type checks)
+// The `pre-commit` hook runs BOTH, so every commit stays formatted, clean, and
+// type-checked.
+
+// Formatters — rewrite files into canonical form (biome format).
+local formatters = new Mapping<String, Step> {
+  ["Web(Format)      [[biome]]"] = new Step {
+    glob = List("**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.json", "**/*.jsonc")
+    // hk's glob is broader than biome.json's `files.includes`, so a staged file
+    // can land outside biome's scope; --no-errors-on-unmatched lets it no-op
+    // instead of failing the hook.
+    check = "biome format --no-errors-on-unmatched {{ files }}"
+    fix = "biome format --write --no-errors-on-unmatched {{ files }}"
+  }
+}
+
+// Linters — read-only checks (no rewrite): Biome lint (JS/TS) plus the type
+// checkers. tsc and svelte-check are whole-project commands, so they take no
+// `{{ files }}` arg — a matching staged file just triggers the full check.
+local linters = new Mapping<String, Step> {
+  ["Web(Lint)         [[biome]]"] = new Step {
+    glob = List("**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs")
+    check = "biome lint --no-errors-on-unmatched {{ files }}"
+    fix = "biome lint --write --no-errors-on-unmatched {{ files }}"
+  }
+  ["TypeScript(Check) [[tsc]]"] = new Step {
+    glob = List("**/*.ts", "**/*.tsx")
+    exclude = List("ui/**")
+    check = "bun x tsc --noEmit"
+  }
+  ["Svelte(Check)     [[svelte-check]]"] = new Step {
+    glob = List("ui/**/*.svelte", "ui/**/*.ts")
+    check = "bash -c 'cd ui && bunx svelte-check --tsconfig ./tsconfig.json'"
+  }
+}
+
+hooks {
+  ["pre-commit"] {
+    fix = true
+    stash = "git"
+    steps = new Mapping<String, Step> {
+      ...formatters
+      ...linters
+    }
+  }
+
+  // `mise run format` — formatters only, in write mode.
+  ["fix"] {
+    fix = true
+    steps = formatters
+  }
+
+  // `mise run lint` — linters only (rule checks); read-only.
+  ["check"] {
+    steps = linters
+  }
+}

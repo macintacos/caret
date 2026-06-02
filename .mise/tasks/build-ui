@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Build the single-file Svelte UI (Vite -> ui/dist/index.html)"
+
+set -euo pipefail
+
+cd ui
+bunx vite build

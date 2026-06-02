@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Run the Vite dev server for the UI"
+
+set -euo pipefail
+
+cd ui
+exec bunx vite

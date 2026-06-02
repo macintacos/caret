@@ -1,0 +1,19 @@
+[settings]
+# Commit mise.lock for reproducible, checksum-pinned tool versions.
+lockfile = true
+
+# HK_MISE routes hk's git-hook subprocesses through `mise x`, so each hook step
+# uses the versions pinned below — even for committers who never activated mise.
+[env]
+HK_MISE = 1
+
+[tools]
+# Keep hk in lockstep with hk.pkl's amends/import version.
+hk = "1.45.0"
+pkl = "0.31.1"
+bun = "1.3.14"
+biome = "2.4.15"
+
+# (Re)register git hooks whenever tools are installed or updated.
+[hooks]
+postinstall = "hk install --mise"

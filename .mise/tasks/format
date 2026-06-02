@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Format all files (Biome, write mode)"
+
+set -euo pipefail
+
+hk fix --all --no-stage
