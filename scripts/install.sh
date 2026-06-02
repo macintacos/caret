@@ -9,6 +9,10 @@
 # needed — builds the platform-specific binary, and installs it as a plugin.
 # Re-run any time to update — it fetches the latest release, rebuilds, and
 # reinstalls. Requires `git`, `bun` (https://bun.sh), and `claude`.
+#
+# Set CARET_DRY_RUN=1 to preview without changing anything: it runs the same
+# read-only detection, then prints the exact commands it would run. As an env
+# var it survives the piped `curl … | CARET_DRY_RUN=1 bash`.
 
 set -euo pipefail
 
