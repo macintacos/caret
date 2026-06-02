@@ -1,0 +1,183 @@
+/* caret — "technical manuscript" design system.
+   A plan-review surface that reads like a marked-up engineering manuscript:
+   warm paper light theme, deep-ink dark theme, a single saturated caret-amber
+   accent (the ^ insertion mark the tool is named for), serif display + body,
+   monospace for metadata. */
+
+:root {
+  /* Type */
+  --font-display: "Fraunces", "Times New Roman", serif;
+  --font-body: "Newsreader", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Light: warm paper + ink */
+  --paper: #f6f1e7;
+  --paper-raised: #fbf7ee;
+  --paper-sunk: #efe8d8;
+  --ink: #211c18;
+  --ink-soft: #6a6157;
+  --ink-faint: #9a9082;
+  --rule: #ddd2bd;
+  --rule-strong: #c8bba1;
+
+  /* Caret amber accent */
+  --accent: #c2410c;
+  --accent-bright: #ea580c;
+  --accent-wash: #f2dcc6;
+  --accent-ink: #fff7ed;
+
+  /* Annotation highlight */
+  --mark: rgba(234, 88, 12, 0.16);
+  --mark-active: rgba(234, 88, 12, 0.32);
+  --mark-orphan: rgba(120, 113, 108, 0.18);
+
+  --ok: #15803d;
+  --shadow-card: 0 1px 2px rgba(33, 28, 24, 0.06), 0 8px 24px rgba(33, 28, 24, 0.08);
+
+  --radius: 4px;
+  --radius-lg: 8px;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #16130f;
+    --paper-raised: #1e1a14;
+    --paper-sunk: #110e0a;
+    --ink: #ece4d6;
+    --ink-soft: #a89e8d;
+    --ink-faint: #6f6759;
+    --rule: #322b22;
+    --rule-strong: #463d30;
+
+    --accent: #fb923c;
+    --accent-bright: #fdba74;
+    --accent-wash: #3a2415;
+    --accent-ink: #1a1208;
+
+    --mark: rgba(251, 146, 60, 0.18);
+    --mark-active: rgba(251, 146, 60, 0.36);
+    --mark-orphan: rgba(168, 158, 141, 0.16);
+
+    --ok: #4ade80;
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.45);
+
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 17px;
+  line-height: 1.6;
+  /* Faint paper grain via layered radial dots. */
+  background-image: radial-gradient(
+    var(--rule) 0.5px,
+    transparent 0.5px
+  );
+  background-size: 22px 22px;
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+#app {
+  height: 100%;
+}
+
+/* ----- App shell: 3-column grid ----- */
+.shell {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100%;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(300px, 380px);
+  overflow: hidden;
+  min-height: 0;
+}
+
+@media (max-width: 1080px) {
+  .columns {
+    grid-template-columns: 0 minmax(0, 1fr) minmax(260px, 340px);
+  }
+  .col-toc {
+    display: none;
+  }
+}
+
+.col {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.col-toc {
+  border-right: 1px solid var(--rule);
+  padding: 2rem 1.25rem 4rem 2rem;
+  background: var(--paper);
+}
+
+.col-plan {
+  padding: 2.5rem clamp(1.5rem, 4vw, 4rem) 6rem;
+  background: var(--paper-raised);
+  position: relative;
+}
+
+.col-gutter {
+  border-left: 1px solid var(--rule);
+  padding: 2rem 1.25rem 6rem;
+  background: var(--paper);
+}
+
+/* Scrollbars: thin, ink-toned */
+.col::-webkit-scrollbar {
+  width: 9px;
+}
+.col::-webkit-scrollbar-thumb {
+  background: var(--rule-strong);
+  border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* ----- Shared atoms ----- */
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.01em;
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+button {
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+
+button:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: 2px;
+}
