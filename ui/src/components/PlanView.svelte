@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { resolveAnnotation } from "../lib/anchors.ts";
+  import { resolveAnnotation, wrapTextRange } from "../lib/anchors.ts";
   import { captureSelection } from "../lib/selection.ts";
   import type { Annotation } from "../lib/types.ts";
   import CommentPopover from "./CommentPopover.svelte";
@@ -74,17 +74,22 @@
         resolved.push({ annotation, orphaned: true, top: null });
         continue;
       }
+      const block = getBlock(annotation.blockId);
       let top: number | null = null;
-      try {
-        const mark = document.createElement("mark");
-        mark.dataset.annotation = annotation.id;
-        mark.className = "anno";
-        if (annotation.id === activeId) mark.classList.add("active");
-        res.range.surroundContents(mark);
-        top = mark.getBoundingClientRect().top - rootTop;
-      } catch {
-        // surroundContents throws if the range crosses element boundaries;
-        // fall back to leaving the text unwrapped but still anchored.
+      if (block) {
+        // Wrap per text node so a selection crossing shiki token <span>s still
+        // highlights; all segments share one annotation id, so click/focus and
+        // the .active state keep working across the marks.
+        const marks = wrapTextRange(block, res.startOffset, res.endOffset, () => {
+          const m = document.createElement("mark");
+          m.dataset.annotation = annotation.id;
+          m.className = "anno";
+          if (annotation.id === activeId) m.classList.add("active");
+          return m;
+        });
+        const anchor = marks[0] ?? res.range;
+        top = anchor.getBoundingClientRect().top - rootTop;
+      } else {
         top = res.range.getBoundingClientRect().top - rootTop;
       }
       resolved.push({ annotation, orphaned: false, top });
@@ -258,6 +263,23 @@
     border: none;
     padding: 0;
     font-size: 0.82rem;
+  }
+  /* shiki dual-theme highlighting. Tokens carry per-token --shiki-light /
+     --shiki-dark CSS variables (defaultColor:false) but no inline color, so the
+     active one is selected here. The code-block background stays caret's
+     --paper-sunk from .prose pre above — shiki sets no inline background, so
+     there's no doubling — and only the token colors come from shiki. Switching
+     prefers-color-scheme repaints via these variables with no re-highlight or
+     re-render, so App.svelte's id:version cache stays valid. */
+  .prose :global(pre.shiki),
+  .prose :global(pre.shiki span) {
+    color: var(--shiki-light);
+  }
+  @media (prefers-color-scheme: dark) {
+    .prose :global(pre.shiki),
+    .prose :global(pre.shiki span) {
+      color: var(--shiki-dark);
+    }
   }
   .prose :global(table) {
     width: 100%;

@@ -127,6 +127,53 @@ function measureElementBoundary(root: Node, container: Node, offset: number): nu
   return total;
 }
 
+/**
+ * Wraps the [start,end) slice of `root`'s textContent in <mark> elements — one
+ * per intersected text node — and returns them in document order. A single
+ * Range.surroundContents throws when the selection crosses element boundaries;
+ * shiki splits code into per-token <span>s, so a selection inside a highlighted
+ * block routinely crosses boundaries. Splitting the work per text node keeps
+ * each surroundContents inside one text node (never throwing) so the selection
+ * still produces visible marks. `makeMark` builds a fresh element per segment
+ * (callers stamp data-annotation, classes, etc.); the slice text is preserved.
+ */
+export function wrapTextRange(
+  root: HTMLElement,
+  start: number,
+  end: number,
+  makeMark: () => HTMLElement,
+): HTMLElement[] {
+  if (end <= start) return [];
+
+  // Collect the per-node segments first — don't mutate the tree while walking.
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const segments: { node: Text; from: number; to: number }[] = [];
+  let consumed = 0;
+  let node = walker.nextNode() as Text | null;
+  while (node) {
+    const len = node.data.length;
+    const from = Math.max(start, consumed) - consumed;
+    const to = Math.min(end, consumed + len) - consumed;
+    if (to > from) segments.push({ node, from, to });
+    consumed += len;
+    node = walker.nextNode() as Text | null;
+  }
+
+  // Wrap last-to-first: each surroundContents acts within a single text node
+  // (never throws) and splitting a later node leaves earlier nodes' references
+  // and offsets intact. Prepend each new mark to keep document order.
+  const marks: HTMLElement[] = [];
+  for (const seg of [...segments].reverse()) {
+    const range = document.createRange();
+    range.setStart(seg.node, seg.from);
+    range.setEnd(seg.node, seg.to);
+    const mark = makeMark();
+    range.surroundContents(mark);
+    marks.unshift(mark);
+  }
+  return marks;
+}
+
 export interface Resolution {
   /** 1 = exact offsets, 2 = quote-repaired, 3 = orphaned (unresolvable). */
   tier: 1 | 2 | 3;

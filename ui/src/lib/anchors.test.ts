@@ -1,7 +1,7 @@
 import "../../test-setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Annotation } from "./types.ts";
-import { offsetsToRange, rangeToOffsets, resolveAnnotation } from "./anchors.ts";
+import { offsetsToRange, rangeToOffsets, resolveAnnotation, wrapTextRange } from "./anchors.ts";
 
 /** Build a detached block element with id and inner HTML. */
 function block(id: string, html: string): HTMLElement {
@@ -108,5 +108,47 @@ describe("resolveAnnotation tiers", () => {
     const res = resolveAnnotation(ann({}), () => null);
     expect(res.tier).toBe(3);
     expect(res.range).toBeNull();
+  });
+});
+
+describe("wrapTextRange (cross-node annotation painting)", () => {
+  const mk = (id: string) => () => {
+    const m = document.createElement("mark");
+    m.dataset.annotation = id;
+    m.className = "anno";
+    return m;
+  };
+
+  test("wraps a selection inside a single text node", () => {
+    const el = block("b0", "Hello world");
+    const marks = wrapTextRange(el, 0, 5, mk("a1"));
+    expect(marks.length).toBe(1);
+    expect(marks[0]!.tagName).toBe("MARK");
+    expect(marks[0]!.textContent).toBe("Hello");
+    // text is preserved, only the DOM structure changes
+    expect(el.textContent).toBe("Hello world");
+  });
+
+  test("wraps a selection spanning multiple element boundaries", () => {
+    // mimics shiki token spans: each token in its own <span>
+    const el = block("b0", "<span>const</span> <span>x</span> <span>= 1</span>");
+    expect(el.textContent).toBe("const x = 1");
+    // select "st x =" (offsets 3..9)
+    const marks = wrapTextRange(el, 3, 9, mk("a1"));
+    expect(marks.length).toBeGreaterThan(1);
+    expect(marks.map((m) => m.textContent).join("")).toBe("st x =");
+    expect(el.textContent).toBe("const x = 1");
+  });
+
+  test("every produced mark carries the annotation id from makeMark", () => {
+    const el = block("b0", "<span>aa</span><span>bb</span>");
+    const marks = wrapTextRange(el, 1, 3, mk("note-7"));
+    expect(marks.length).toBeGreaterThan(1);
+    for (const m of marks) expect(m.dataset.annotation).toBe("note-7");
+  });
+
+  test("returns an empty array for a collapsed range", () => {
+    const el = block("b0", "Hello");
+    expect(wrapTextRange(el, 2, 2, mk("a1"))).toEqual([]);
   });
 });
