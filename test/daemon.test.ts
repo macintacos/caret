@@ -296,3 +296,25 @@ test("resolving an already-resolved review is rejected (double-resolve guard)", 
   expect(second.status).toBe(404); // already rejected — not pending
   expect(store.get(id)?.status).toBe("rejected"); // unchanged by the 2nd resolve
 });
+
+test("a revision re-pends the review and clears the prior decision (no stale re-serve)", async () => {
+  await boot({ heartbeatMs: 50 });
+  const { id } = await newReview();
+  // The driver/hook is already long-polling when the browser requests changes,
+  // so the deny is delivered through the decision pipe (which drains it).
+  const poll = fetch(`${base}/api/reviews/${id}/decision`);
+  await Bun.sleep(10); // let the long-poll register before the resolve
+  await fetch(`${base}/api/reviews/${id}/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ behavior: "deny", feedback: "redo" }),
+  });
+  expect(await (await poll).json()).toMatchObject({ behavior: "deny" });
+  // Agent posts a revision in the same session → appends v2, re-pends to pending.
+  await newReview({ plan: "# v2" });
+  expect(store.get(id)?.status).toBe("pending");
+  expect(store.get(id)?.decision).toBeUndefined(); // the old deny must not linger
+  // The next long-poll must wait (204), not re-serve the stale deny.
+  const res = await fetch(`${base}/api/reviews/${id}/decision`);
+  expect(res.status).toBe(204);
+});
