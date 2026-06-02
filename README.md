@@ -1,4 +1,4 @@
-# caret
+# 🥕 caret
 
 > ⚠️ **Prototype.** caret is an early prototype and may change substantially over the next little while — interfaces, hooks, storage, and the install flow are all still settling. Expect rough edges and breaking changes.
 
