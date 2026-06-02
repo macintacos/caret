@@ -36,12 +36,17 @@ export async function getReview(id: string): Promise<ClientReview> {
   return json(await fetch(`/api/reviews/${encodeURIComponent(id)}`));
 }
 
-export async function putAnnotations(id: string, annotations: Annotation[]): Promise<void> {
+/** Autosaves the reviewer's working draft: inline annotations and the
+ * review-scoped general-comment draft, sent together from one snapshot. */
+export async function putDraft(
+  id: string,
+  draft: { annotations: Annotation[]; generalCommentDraft: string },
+): Promise<void> {
   await json<{ ok: true }>(
-    await fetch(`/api/reviews/${encodeURIComponent(id)}/annotations`, {
+    await fetch(`/api/reviews/${encodeURIComponent(id)}/draft`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ annotations }),
+      body: JSON.stringify(draft),
     }),
   );
 }

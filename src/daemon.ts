@@ -127,7 +127,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return new Response("not found", { status: 404 });
   }
 
-  const idRoute = /^\/api\/reviews\/([^/]+)(\/decision|\/resolve|\/annotations)?$/;
+  const idRoute = /^\/api\/reviews\/([^/]+)(\/decision|\/resolve|\/draft)?$/;
 
   async function handle(req: Request): Promise<Response> {
     inFlight++;
@@ -203,12 +203,25 @@ export function createServer(opts: CreateServerOptions): CaretServer {
           return Response.json(decision);
         }
 
-        if (method === "PUT" && sub === "/annotations") {
+        // Autosaves the reviewer's working draft: the version-scoped inline
+        // annotations and the review-scoped general-comment draft. Each field is
+        // independently optional so a draft-only write never wipes annotations
+        // (and vice versa) — an omitted field is left alone.
+        if (method === "PUT" && sub === "/draft") {
           const body = (await req.json().catch(() => ({}))) as {
             annotations?: Review["versions"][number]["annotations"];
+            generalCommentDraft?: string;
           };
           const updated = await store.update(id, (r) => {
-            currentVersion(r).annotations = body.annotations ?? [];
+            // `!= null` so an absent OR null field is left alone — guarding null
+            // keeps the old `?? []` null-safety (a stray null annotations would
+            // otherwise persist and crash the client's `.map`).
+            if (body.annotations != null) {
+              currentVersion(r).annotations = body.annotations;
+            }
+            if (body.generalCommentDraft != null) {
+              r.generalCommentDraft = body.generalCommentDraft;
+            }
           });
           return updated ? Response.json({ ok: true }) : notFound();
         }
@@ -233,6 +246,10 @@ export function createServer(opts: CreateServerOptions): CaretServer {
           await store.update(id, (r) => {
             r.decision = decision;
             r.status = decision.behavior === "allow" ? "approved" : "rejected";
+            // Clear the unsent draft as part of resolving (both paths): a deny
+            // keeps the review on disk as rejected and must not retain stale
+            // text; an approve removes it (store.remove flushes "" first).
+            r.generalCommentDraft = "";
           });
           // Approval is terminal: bump the session epoch (so a later plan is a
           // fresh thread) and drop it from the active set so idle can fire.

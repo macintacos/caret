@@ -3,7 +3,7 @@
     getApproveMode,
     getHealth,
     HttpError,
-    putAnnotations,
+    putDraft,
     resolveReview,
     startPolling,
   } from "./lib/api.ts";
@@ -40,10 +40,18 @@
   let focusedAnnotation = $state<string | null>(null);
   let activeSlug = $state<string | null>(null);
 
+  // Working copy of the Request Changes general-comment draft for the active
+  // review (edited locally via the dialog, autosaved alongside annotations).
+  let generalCommentDraft = $state("");
+
   let scrollEl = $state<HTMLElement | undefined>();
   // Keyed on id:version so a new version (revision) also reloads the working
   // copy — never persist stale annotations from a prior version onto the next.
   let lastLoadedKey: string | null = null;
+  // The draft is review-scoped, so it seeds on id change only — NOT on a version
+  // change (a revision keeps the same review) and NOT on the 2s poll, which would
+  // otherwise stomp live keystrokes 0–2s after each one.
+  let lastDraftLoadedId: string | null = null;
 
   let active = $derived(reviews.find((r) => r.id === activeId) ?? null);
 
@@ -86,16 +94,25 @@
     const key = active ? `${active.id}:${active.version}` : null;
     if (active && key !== lastLoadedKey) {
       // Flush the PREVIOUS review's pending save FIRST (it snapshots the current
-      // `annotations` + pendingSaveId synchronously) — before we overwrite
-      // `annotations` with the new review's, or we'd save them onto the old id.
+      // `annotations` + `generalCommentDraft` + pendingSaveId synchronously) —
+      // before we overwrite them with the new review's, or we'd save them onto
+      // the old id.
       void flushPending();
       lastLoadedKey = key;
       annotations = active.annotations.map((a) => ({ ...a }));
       focusedAnnotation = null;
+      // Seed on id change only, via its own guard (see lastDraftLoadedId above) —
+      // independent of the id:version annotation reload around it.
+      if (active.id !== lastDraftLoadedId) {
+        lastDraftLoadedId = active.id;
+        generalCommentDraft = active.generalCommentDraft ?? "";
+      }
     } else if (!active) {
       void flushPending();
       lastLoadedKey = null;
+      lastDraftLoadedId = null;
       annotations = [];
+      generalCommentDraft = "";
     }
   });
 
@@ -202,14 +219,25 @@
     if (!pendingSaveId) return;
     const id = pendingSaveId;
     pendingSaveId = null;
+    // Snapshot both fields synchronously (before any await) so a review switch
+    // mid-flush can't redirect this save onto the new review's working copy.
     const snapshot = annotations.map((a) => ({ ...a }));
+    // Whitespace-only is treated as empty — never persist a blank draft.
+    const draft = generalCommentDraft.trim() === "" ? "" : generalCommentDraft;
     try {
-      await putAnnotations(id, snapshot);
+      await putDraft(id, { annotations: snapshot, generalCommentDraft: draft });
     } catch (err) {
       // A non-2xx (e.g. the review was resolved/removed) is not a connection
       // problem — the daemon answered. Only a real network failure goes offline.
       if (!(err instanceof HttpError)) connected = false;
     }
+  }
+
+  // Lifted from RequestChangesDialog so the draft survives the dialog unmounting.
+  // Mirrors editAnnotation: mutate the working copy, then debounce-save.
+  function editGeneralComment(value: string) {
+    generalCommentDraft = value;
+    scheduleSave();
   }
 
   function createAnnotation(sel: {
@@ -270,6 +298,10 @@
     const feedback = formatFeedback(annotations, generalComment);
     try {
       await resolveReview(id, { behavior: "deny", feedback });
+      // The daemon cleared the stored draft on resolve; clear the local mirror
+      // too. A deny keeps this review id (the revision reuses it), and the seed
+      // is id-keyed, so without this the sent text would linger on reopen.
+      generalCommentDraft = "";
       afterResolve(id);
     } catch (err) {
       if (err instanceof HttpError) afterResolve(id);
@@ -335,8 +367,16 @@
 {#if showDialog && active}
   <RequestChangesDialog
     {annotations}
+    generalComment={generalCommentDraft}
+    onGeneralCommentInput={editGeneralComment}
     onSubmit={requestChanges}
-    onCancel={() => (showDialog = false)}
+    onCancel={() => {
+      showDialog = false;
+      // Flush now so a draft typed within the last 500ms debounce window is
+      // persisted before the component unmounts — survives a page reload, not
+      // just an in-session reopen.
+      void flushPending();
+    }}
   />
 {/if}
 

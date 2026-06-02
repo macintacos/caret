@@ -4,16 +4,21 @@
 
   interface Props {
     annotations: Annotation[];
+    // The general comment is lifted into App.svelte (autosaved per review), so
+    // it survives the dialog unmounting on Cancel/Escape/scrim. The dialog is a
+    // controlled view over the parent's value.
+    generalComment: string;
+    onGeneralCommentInput: (value: string) => void;
     onSubmit: (generalComment: string) => void;
     onCancel: () => void;
   }
-  let { annotations, onSubmit, onCancel }: Props = $props();
+  let { annotations, generalComment, onGeneralCommentInput, onSubmit, onCancel }: Props =
+    $props();
 
-  let general = $state("");
   let textarea = $state<HTMLTextAreaElement | undefined>();
 
   // Live preview of exactly what the agent will receive.
-  let preview = $derived(formatFeedback(annotations, general));
+  let preview = $derived(formatFeedback(annotations, generalComment));
   let inlineCount = $derived(
     annotations.filter((a) => a.comment.trim().length > 0).length,
   );
@@ -23,7 +28,7 @@
   });
 
   function submit() {
-    onSubmit(general.trim());
+    onSubmit(generalComment.trim());
   }
   function onKey(e: KeyboardEvent) {
     if (e.key === "Escape") onCancel();
@@ -53,7 +58,8 @@
       <span class="lbl">General comment</span>
       <textarea
         bind:this={textarea}
-        bind:value={general}
+        value={generalComment}
+        oninput={(e) => onGeneralCommentInput(e.currentTarget.value)}
         rows="4"
         placeholder="Describe the overall changes you want…"
       ></textarea>
