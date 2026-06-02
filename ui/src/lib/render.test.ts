@@ -88,3 +88,53 @@ describe("renderPlan sanitization", () => {
     expect(html).not.toContain("onclick");
   });
 });
+
+describe("renderPlan first-heading normalization", () => {
+  test("promotes an authored ## first heading to <h1>", () => {
+    const { html, headings } = renderPlan("## Title\n\nbody\n");
+    expect(html).toMatch(/<h1[^>]*>Title<\/h1>/);
+    expect(headings[0]).toMatchObject({ level: 1, text: "Title" });
+  });
+
+  test("promotes an authored ### first heading to <h1>", () => {
+    const { html, headings } = renderPlan("### Deep\n");
+    expect(html).toMatch(/<h1[^>]*>Deep<\/h1>/);
+    expect(headings[0]).toMatchObject({ level: 1, text: "Deep" });
+  });
+
+  test("promotes a setext (underlined) first heading to <h1>", () => {
+    const { html, headings } = renderPlan("Title\n---\n\nbody\n");
+    expect(html).toMatch(/<h1[^>]*>Title<\/h1>/);
+    expect(headings[0]).toMatchObject({ level: 1, text: "Title" });
+  });
+
+  test("leaves headings after the first at their authored level", () => {
+    const { headings } = renderPlan("## Title\n\n### Sub\n");
+    expect(headings).toEqual([
+      { level: 1, slug: "title", text: "Title", blockId: "b0" },
+      { level: 3, slug: "sub", text: "Sub", blockId: expect.any(String) },
+    ]);
+  });
+
+  test("leaves an already-<h1> first heading unchanged", () => {
+    const { headings } = renderPlan("# Title\n\n## Sub\n");
+    expect(headings[0]).toMatchObject({ level: 1, text: "Title" });
+    expect(headings[1]).toMatchObject({ level: 2, text: "Sub" });
+  });
+
+  test("a document with no headings renders without error", () => {
+    const { html, headings } = renderPlan("just a paragraph\n");
+    expect(headings).toEqual([]);
+    expect(html).toContain("<p");
+  });
+
+  test("ignores a pseudo-heading inside a leading code fence", () => {
+    // The fenced text is a code token, not a heading, so the first *real*
+    // heading is the one promoted — a property only the token-level (not
+    // string-level) approach guarantees.
+    const { headings } = renderPlan("```\n## NotAHeading\n```\n\n## Real\n");
+    expect(headings).toEqual([
+      { level: 1, slug: "real", text: "Real", blockId: expect.any(String) },
+    ]);
+  });
+});
