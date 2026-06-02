@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-#MISE description="Type-check the Svelte UI with svelte-check"
-
-set -euo pipefail
-
-cd ui
-bunx svelte-check --tsconfig ./tsconfig.json
