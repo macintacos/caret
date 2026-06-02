@@ -21,6 +21,7 @@ export type ErrorCode =
   | "BAD_BUMP"
   | "CHANGELOG_MISSING"
   | "PREFLIGHT_FAILED"
+  | "PREFLIGHT_DIRTY"
   | "BRANCH_DIVERGED"
   | "PR_CLOSED"
   | "ALREADY_MERGED"
