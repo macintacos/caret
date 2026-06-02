@@ -558,14 +558,14 @@ test("only prepare gates on preflight; compute/baseline/finalize never invoke it
   // never reach the preflight seam, so a failing/dirtying preflight cannot leak
   // past them via a hidden gate.
   const c = harness();
-  await compute(c.deps, { bump: "minor" });
+  expect(await compute(c.deps, { bump: "minor" })).toBeTruthy(); // ran to completion
   expect(c.calls).not.toContain("preflight");
 
   const b = harness();
-  await baseline(b.deps, { dryRun: false });
+  expect(await baseline(b.deps, { dryRun: false })).toBeTruthy();
   expect(b.calls).not.toContain("preflight");
 
   const f = harness(FINALIZE_OPTS);
-  await finalize(f.deps, { dryRun: false });
+  expect(await finalize(f.deps, { dryRun: false })).toBeTruthy();
   expect(f.calls).not.toContain("preflight");
 });
