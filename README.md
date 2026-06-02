@@ -72,7 +72,7 @@ mise run dev        # isolated daemon + fake plan + Vite UI (dev port :42719)
 mise run test       # bun test
 mise run lint       # Biome + tsc + svelte-check (read-only); the CI/pre-commit gate
 mise run format     # Biome (write)
-mise run preflight  # lint + test before pushing
+mise run preflight  # format + lint + test + build before pushing
 ```
 
 `mise run lint` (and the pre-commit hook) runs Biome lint, `tsc --noEmit`, and `svelte-check` — type checking is folded into linting via `hk.pkl`.
