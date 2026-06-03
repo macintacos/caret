@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Annotation } from "../lib/types.ts";
+  import AnnotationEditor from "./AnnotationEditor.svelte";
 
   interface Props {
     annotation: Annotation;
@@ -21,30 +22,6 @@
     onEdit,
     onDelete,
   }: Props = $props();
-
-  let editing = $state(false);
-  let draft = $state("");
-  let textarea = $state<HTMLTextAreaElement | undefined>();
-
-  function startEdit() {
-    draft = annotation.comment;
-    editing = true;
-    queueMicrotask(() => textarea?.focus());
-  }
-  function save() {
-    const trimmed = draft.trim();
-    editing = false;
-    if (trimmed && trimmed !== annotation.comment) onEdit(annotation.id, trimmed);
-  }
-  function onKey(e: KeyboardEvent) {
-    if (e.key === "Escape") {
-      editing = false;
-      draft = annotation.comment;
-    } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      save();
-    }
-  }
 </script>
 
 <div
@@ -68,29 +45,7 @@
     <blockquote class="quote">{annotation.quote}</blockquote>
   </header>
 
-  {#if editing}
-    <textarea
-      bind:this={textarea}
-      bind:value={draft}
-      rows="3"
-      onkeydown={onKey}
-      onblur={save}
-    ></textarea>
-  {:else}
-    <p class="comment" ondblclick={startEdit}>{annotation.comment}</p>
-  {/if}
-
-  <footer>
-    <button class="link" onclick={(e) => { e.stopPropagation(); startEdit(); }}>
-      edit
-    </button>
-    <button
-      class="link danger"
-      onclick={(e) => { e.stopPropagation(); onDelete(annotation.id); }}
-    >
-      delete
-    </button>
-  </footer>
+  <AnnotationEditor {annotation} {onEdit} {onDelete} />
 </div>
 
 <style>
@@ -157,48 +112,15 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
-  .comment {
-    font-size: 0.92rem;
-    margin: 0;
-    color: var(--ink);
-  }
-  textarea {
-    width: 100%;
-    resize: vertical;
-    font-size: 0.9rem;
-    color: var(--ink);
-    background: var(--paper);
-    border: 1px solid var(--accent);
-    border-radius: var(--radius);
-    padding: 0.4rem 0.5rem;
-  }
-  textarea:focus {
-    outline: none;
-  }
-  footer {
-    display: flex;
-    gap: 0.75rem;
-    margin-top: 0.4rem;
+  /* The edit/delete footer lives in AnnotationEditor; the sidebar keeps it calm
+     by default and reveals it on hover or when the card is active. The popover
+     host shows the same actions without this gate. */
+  .card :global(footer.anno-actions) {
     opacity: 0;
     transition: opacity 0.15s;
   }
-  .card:hover footer,
-  .card.active footer {
+  .card:hover :global(footer.anno-actions),
+  .card.active :global(footer.anno-actions) {
     opacity: 1;
-  }
-  .link {
-    background: none;
-    border: none;
-    padding: 0;
-    font-size: 0.7rem;
-    color: var(--ink-faint);
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
-  .link:hover {
-    color: var(--ink);
-  }
-  .link.danger:hover {
-    color: var(--accent);
   }
 </style>
