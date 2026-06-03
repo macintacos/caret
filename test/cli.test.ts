@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ensureDaemon, runReview } from "../src/cli.ts";
+import { computeBuildId, ensureDaemon, runReview } from "../src/cli.ts";
 import { logFile } from "../src/paths.ts";
 import { PLAN_FORMAT_DENY_MESSAGE } from "../src/plan-format.ts";
 import type { Decision } from "../src/types.ts";
@@ -477,4 +477,38 @@ test("a stale daemon that cannot be retired is reused, never denied", async () =
   );
   expect(url).toBe("http://localhost:42718");
   expect(retires).toBe(1);
+});
+
+// ---- computeBuildId: any local rebuild supersedes a running daemon ----
+
+test("computeBuildId hashes the binary when running compiled (any rebuild wins)", async () => {
+  const id = await computeBuildId({
+    isCompiled: true,
+    hashBinary: async () => "binhash123",
+    uiHash: async () => "uihash",
+  });
+  expect(id).toBe("binhash123");
+});
+
+test("computeBuildId falls back to the UI hash when the binary is unreadable", async () => {
+  const id = await computeBuildId({
+    isCompiled: true,
+    hashBinary: async () => null,
+    uiHash: async () => "uihash",
+  });
+  expect(id).toBe("uihash");
+});
+
+test("computeBuildId uses the UI hash in dev (not compiled, never reads the binary)", async () => {
+  let binaryReads = 0;
+  const id = await computeBuildId({
+    isCompiled: false,
+    hashBinary: async () => {
+      binaryReads++;
+      return "binhash";
+    },
+    uiHash: async () => "uihash",
+  });
+  expect(id).toBe("uihash");
+  expect(binaryReads).toBe(0);
 });

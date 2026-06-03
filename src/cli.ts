@@ -9,6 +9,7 @@
 // allow. Every abnormal path (bad stdin, unreachable daemon, timeout, signal,
 // daemon death) emits a deny — never an allow.
 
+import { createHash } from "node:crypto";
 import { mkdirSync, openSync, readFileSync, unlinkSync } from "node:fs";
 import { dirname } from "node:path";
 import { createServer, type CaretServer } from "./daemon.ts";
@@ -357,8 +358,8 @@ function openBrowser(url: string): void {
 async function prodEnsureDeps(): Promise<EnsureDeps> {
   return {
     baseUrl: `http://localhost:${getPort()}`,
-    // The current binary's identity: the served UI's hash + the package version.
-    currentBuild: buildHash(await loadUiHtml()),
+    // The current binary's identity: its build fingerprint + the package version.
+    currentBuild: await currentBuildId(),
     currentVersion: VERSION,
     health: httpHealth,
     readLock: readDaemonLock,
@@ -406,6 +407,52 @@ async function loadUiHtml(): Promise<string | undefined> {
   return undefined;
 }
 
+export interface BuildIdDeps {
+  /** True when running as a compiled binary (process.execPath IS caret), false
+   * under `bun run` dev. */
+  isCompiled: boolean;
+  /** Hash of the compiled binary's content, or null if it can't be read. */
+  hashBinary: () => Promise<string | null>;
+  /** Hash of the served UI HTML (the dev / fallback fingerprint). */
+  uiHash: () => Promise<string>;
+}
+
+/** The build fingerprint used to decide daemon staleness. For a compiled binary
+ * it's a hash of the binary itself, so ANY rebuild — UI or server code — yields a
+ * new fingerprint and supersedes an older running daemon (a freshly built or
+ * installed caret always wins); re-invoking the same binary still matches and
+ * reuses. Dev (`bun run`, which is port-isolated and never uses takeover) falls
+ * back to the UI hash. */
+export async function computeBuildId(deps: BuildIdDeps): Promise<string> {
+  if (deps.isCompiled) {
+    const h = await deps.hashBinary();
+    if (h) return h;
+  }
+  return deps.uiHash();
+}
+
+let cachedBuildId: string | undefined;
+
+/** computeBuildId wired to the real binary/UI and memoized per process (the
+ * build can't change while this process runs). */
+async function currentBuildId(): Promise<string> {
+  if (cachedBuildId !== undefined) return cachedBuildId;
+  const script = process.argv[1];
+  cachedBuildId = await computeBuildId({
+    isCompiled: !script?.endsWith(".ts"),
+    hashBinary: async () => {
+      try {
+        const bytes = await Bun.file(process.execPath).bytes();
+        return createHash("sha256").update(bytes).digest("hex").slice(0, 12);
+      } catch {
+        return null; // unreadable binary — fall back to the UI hash.
+      }
+    },
+    uiHash: async () => buildHash(await loadUiHtml()),
+  });
+  return cachedBuildId;
+}
+
 async function runDaemon(): Promise<void> {
   const store = createStore(reviewsDir());
   await store.rehydrate();
@@ -417,7 +464,7 @@ async function runDaemon(): Promise<void> {
       port: getPort(),
       serveHtml: html ? () => html : undefined,
       lockPath: daemonLock(),
-      buildId: buildHash(html),
+      buildId: await currentBuildId(),
       log: (msg) => process.stderr.write(`[caret daemon] ${msg}\n`),
     });
   } catch (e) {
