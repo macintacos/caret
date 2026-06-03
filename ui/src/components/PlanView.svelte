@@ -202,19 +202,22 @@
     max-width: 72ch;
     margin: 0 auto;
   }
-  /* Wide windows (≥1280px): a SINGLE horizontal-placement mechanism — a fixed
-     left margin, no offset transform fighting the auto-centring. The left margin
-     is the lane the fixed Contents panel (Toc.svelte) expands into AND the
-     source of the left-of-centre bias; margin-right:auto sends the rest of the
-     free space to the (roomier) gutter side. min() caps the lane to the free
-     space (100% - 72ch) so the content box can never drop below the 72ch
-     measure: text never rewraps, so every annotation <mark>'s vertical position
-     (and the gutter card translateY that mirrors it) is invariant under the
-     shift. Below 1280px the rule drops and `.prose` re-centres (today's
-     behaviour); 1280px pairs with the `.columns` max-width:1279px breakpoint. */
-  @media (min-width: 1280px) {
+  /* Wide windows (≥1400px): a SINGLE horizontal-placement mechanism — a fixed
+     left margin, no offset transform fighting the auto-centring. That margin is
+     the lane the fixed Contents panel (Toc.svelte) expands into AND the source of
+     the left-of-centre bias; margin-right:auto sends the remaining free space to
+     the (roomier) gutter side. The 1400px breakpoint is set so the plan track
+     always holds this 13rem lane PLUS the full 72ch measure, so the content box
+     never forces `.prose` below 72ch: text never rewraps, and every annotation
+     <mark>'s vertical position (and the gutter card translateY that mirrors it)
+     is invariant under the shift. A fixed lane (not a min()-capped one) also
+     keeps the expanded panel's right edge reliably left of the prose, so it
+     never covers the plan body. Below 1400px the rule drops and `.prose`
+     re-centres (today's behaviour); 1400px pairs with `.columns'`
+     max-width:1399px breakpoint. */
+  @media (min-width: 1400px) {
     .prose {
-      margin-left: min(13rem, calc(100% - 72ch));
+      margin-left: 13rem;
       margin-right: auto;
     }
   }

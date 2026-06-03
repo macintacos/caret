@@ -35,7 +35,7 @@
                  no-JS still navigate; onclick preserves the smooth-scroll jump. -->
             <a
               href="#{h.blockId}"
-              aria-current={h.slug === activeSlug ? "true" : undefined}
+              aria-current={h.slug === activeSlug ? "location" : undefined}
               title={h.text}
               onclick={(e) => {
                 e.preventDefault();
@@ -57,17 +57,17 @@
   .toc {
     position: fixed;
     top: 50%;
-    left: clamp(0.75rem, 2vw, 1.75rem);
+    left: clamp(0.5rem, 1.5vw, 1.25rem);
     transform: translateY(-50%);
     z-index: 30;
     /* Right padding is an invisible hover bridge: the pointer travels rail →
        panel without crossing dead space, so :hover never drops mid-traverse. */
-    padding: 0.5rem 1.25rem 0.5rem 0;
+    padding: 0.5rem 1rem 0.5rem 0;
   }
 
-  /* Single breakpoint (1280px), shared with app.css / PlanView: below it the rail
+  /* Single breakpoint (1400px), shared with app.css / PlanView: below it the rail
      is hidden and the plan re-centers (today's behaviour). */
-  @media (max-width: 1279px) {
+  @media (max-width: 1399px) {
     .toc {
       display: none;
     }
@@ -133,31 +133,27 @@
     border: 1px solid var(--rule);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
-    /* Collapsed: invisible, inert, and out of the tab order. visibility:hidden
-       (not just opacity:0) is what keeps the focusable links from hiding behind
-       an invisible panel; :focus-within reveals it before a Tab can land. */
+    /* Collapsed: transparent and mouse-inert, but the links stay in the tab order
+       — NOT visibility:hidden, which would make them unfocusable so a keyboard
+       Tab could never enter the nav to trip :focus-within. The instant a link
+       receives focus the :focus-within rule below reveals the panel, so no
+       focusable element is ever stranded behind opacity:0. */
     opacity: 0;
-    visibility: hidden;
     pointer-events: none;
     transform: translateY(-50%) translateX(-0.5rem);
     transition:
       opacity 0.22s ease,
-      transform 0.22s cubic-bezier(0.4, 0, 0.2, 1),
-      visibility 0s linear 0.22s;
-    /* Leave-delay: a brief exit over the bridge waits before collapsing, so a
-       quick re-entry doesn't flicker. The reveal rule below zeroes the delay. */
+      transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    /* Leave-delay: the collapse (this base state) waits 0.12s before starting, so
+       a quick re-entry over the hover bridge doesn't flicker. The reveal rule
+       zeroes the delay, so opening is instant. */
     transition-delay: 0.12s;
   }
   .toc:hover .panel,
   .toc:focus-within .panel {
     opacity: 1;
-    visibility: visible;
     pointer-events: auto;
     transform: translateY(-50%) translateX(0);
-    transition:
-      opacity 0.22s ease,
-      transform 0.22s cubic-bezier(0.4, 0, 0.2, 1),
-      visibility 0s;
     transition-delay: 0s;
   }
 
@@ -242,10 +238,13 @@
     }
   }
 
-  /* Touch / no-hover devices: never show a rail that can't be opened. Hide the
-     decorative ticks; keyboard users still reveal the panel via :focus-within. */
+  /* Pure touch / no-hover devices (phones, tablets — a laptop with a touchscreen
+     still reports hover:hover via its trackpad): there is no hover to open the
+     panel and often no keyboard, so hide the whole nav rather than leave a fixed
+     element that can't be opened. Desktop keeps the rail; this matches the prior
+     behaviour where the TOC was simply absent on these devices. */
   @media (hover: none), (pointer: coarse) {
-    .marks {
+    .toc {
       display: none;
     }
   }

@@ -119,11 +119,12 @@ body {
   min-height: 0;
 }
 
-@media (max-width: 1279px) {
-  /* Single breakpoint (1280px): below it the rail hides (Toc.svelte), the plan
+@media (max-width: 1399px) {
+  /* Single breakpoint (1400px): below it the rail hides (Toc.svelte), the plan
      re-centers, and the gutter narrows — today's behaviour. The threshold is set
-     where there is genuinely room above it for the panel lane + the 72ch column
-     + a roomier gutter without the expanded panel ever covering the plan body. */
+     where the plan track can hold the panel lane + the full 72ch column + a
+     roomier gutter, so above it the expanded panel never covers the plan body
+     and the 72ch column never rewraps. */
   .columns {
     grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
   }
