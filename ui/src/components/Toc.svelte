@@ -1,5 +1,6 @@
 <script lang="ts">
   import { type HeadingEntry, shouldShowRail } from "../lib/render.ts";
+  import Rail from "./Rail.svelte";
 
   interface Props {
     headings: HeadingEntry[];
@@ -13,80 +14,75 @@
 </script>
 
 {#if visible}
-  <nav class="toc" aria-label="Plan contents">
-    <!-- Tick rail: aria-hidden — screen readers and the keyboard use the panel
-         links below. One flat tick per heading in document order. Each tick is a
-         redundant mouse affordance: clicking it jumps, same as its panel link.
-         (Deliberately not focusable / no key handler — a focusable aria-hidden
-         control would strand keyboard focus; the panel <a>s are the keyboard
-         path.) -->
-    <ol class="marks" aria-hidden="true">
-      {#each headings as h (h.blockId)}
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-        <li
-          class="mark lvl-{h.level}"
-          class:active={h.slug === activeSlug}
-          title={h.text}
-          onclick={() => onJump(h.slug)}
-        ></li>
-      {/each}
-    </ol>
-
-    <!-- The Contents panel: the real, focusable navigation. -->
-    <div class="panel">
-      <p class="masthead" aria-hidden="true">
-        <span class="caret">^</span>
-        <span class="eyebrow">Contents</span>
-      </p>
-      <ul class="links">
-        {#each headings as h (h.blockId)}
-          <li class="lvl-{h.level}" class:active={h.slug === activeSlug}>
-            <!-- href targets the heading's structural id (b{n}) so middle-click /
-                 no-JS still navigate; onclick preserves the smooth-scroll jump. -->
-            <a
-              href="#{h.blockId}"
-              aria-current={h.slug === activeSlug ? "location" : undefined}
+  <!-- Wrapper exists only to hide the rail below 1400px (where the plan
+       re-centers). display:contents keeps it out of the grid until then; the
+       media query swaps to display:none, which hides the fixed rail subtree. -->
+  <div class="toc-rail">
+    <Rail side="left" placement="center" label="Plan contents" touch="hide">
+      {#snippet strip()}
+        <!-- Tick rail: aria-hidden — screen readers and the keyboard use the panel
+             links below. One flat tick per heading in document order. Each tick is
+             a redundant mouse affordance: clicking it jumps, same as its panel
+             link. (Deliberately not focusable / no key handler — a focusable
+             aria-hidden control would strand keyboard focus; the panel <a>s are
+             the keyboard path.) -->
+        <ol class="marks" aria-hidden="true">
+          {#each headings as h (h.blockId)}
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+            <li
+              class="mark lvl-{h.level}"
+              class:active={h.slug === activeSlug}
               title={h.text}
-              onclick={(e) => {
-                e.preventDefault();
-                onJump(h.slug);
-              }}
-            >{h.text}</a>
-          </li>
-        {/each}
-      </ul>
-    </div>
-  </nav>
+              onclick={() => onJump(h.slug)}
+            ></li>
+          {/each}
+        </ol>
+      {/snippet}
+
+      {#snippet panel()}
+        <p class="masthead" aria-hidden="true">
+          <span class="caret">^</span>
+          <span class="eyebrow">Contents</span>
+        </p>
+        <ul class="links">
+          {#each headings as h (h.blockId)}
+            <li class="lvl-{h.level}" class:active={h.slug === activeSlug}>
+              <!-- href targets the heading's structural id (b{n}) so middle-click /
+                   no-JS still navigate; onclick preserves the smooth-scroll jump. -->
+              <a
+                href="#{h.blockId}"
+                aria-current={h.slug === activeSlug ? "location" : undefined}
+                title={h.text}
+                onclick={(e) => {
+                  e.preventDefault();
+                  onJump(h.slug);
+                }}
+              >{h.text}</a>
+            </li>
+          {/each}
+        </ul>
+      {/snippet}
+    </Rail>
+  </div>
 {/if}
 
 <style>
-  /* Fixed, viewport-pinned contents rail, decoupled from the .columns grid so it
-     escapes that grid's overflow:hidden. It is positioned to the viewport because
-     no ancestor (.shell / #app / body) establishes a containing block — see the
-     transform warning in app.css. */
-  .toc {
-    position: fixed;
-    top: 50%;
-    left: clamp(0.5rem, 1.5vw, 1.25rem);
-    transform: translateY(-50%);
-    z-index: 30;
-    /* Right padding is an invisible hover bridge: the pointer travels rail →
-       panel without crossing dead space, so :hover never drops mid-traverse. */
-    padding: 0.5rem 1rem 0.5rem 0;
+  .toc-rail {
+    display: contents;
   }
 
   /* Single breakpoint (1400px), shared with app.css / PlanView: below it the rail
-     is hidden and the plan re-centers (today's behaviour). Range syntax keeps
-     this exactly complementary to PlanView's `width >= 1400px` — no fractional
-     band where the rail shows but the plan is still centered. */
+     is hidden and the plan re-centers (today's behaviour). Range syntax keeps this
+     exactly complementary to PlanView's `width >= 1400px` — no fractional band
+     where the rail shows but the plan is still centered. */
   @media (width < 1400px) {
-    .toc {
+    .toc-rail {
       display: none;
     }
   }
 
-  /* ----- Decorative tick rail ----- */
+  /* ----- Decorative tick rail (the Rail's `strip`) ----- */
   .marks {
     list-style: none;
     margin: 0;
@@ -143,48 +139,14 @@
     transform: scaleX(1.7);
   }
   /* Hovering the rail previews intent by brightening the inactive ticks, but it
-     must NEVER change the active section — that is the scrollspy's job alone. */
-  .toc:hover .mark:not(.active)::before {
+     must NEVER change the active section — that is the scrollspy's job alone. The
+     hover state lives on Rail's `.rail` element (a different component scope), so
+     reach it with :global. */
+  :global(.rail:hover) .mark:not(.active)::before {
     background: var(--ink-soft);
   }
 
-  /* ----- Contents panel: expands into the freed left margin ----- */
-  .panel {
-    position: absolute;
-    top: 50%;
-    left: 100%;
-    width: 14rem;
-    max-height: 74vh;
-    overflow-y: auto;
-    padding: 0.85rem 1rem 0.95rem;
-    background: var(--paper-raised);
-    border: 1px solid var(--rule);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-card);
-    /* Collapsed: transparent and mouse-inert, but the links stay in the tab order
-       — NOT visibility:hidden, which would make them unfocusable so a keyboard
-       Tab could never enter the nav to trip :focus-within. The instant a link
-       receives focus the :focus-within rule below reveals the panel, so no
-       focusable element is ever stranded behind opacity:0. */
-    opacity: 0;
-    pointer-events: none;
-    transform: translateY(-50%) translateX(-0.5rem);
-    transition:
-      opacity 0.22s ease,
-      transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
-    /* Leave-delay: the collapse (this base state) waits 0.12s before starting, so
-       a quick re-entry over the hover bridge doesn't flicker. The reveal rule
-       zeroes the delay, so opening is instant. */
-    transition-delay: 0.12s;
-  }
-  .toc:hover .panel,
-  .toc:focus-within .panel {
-    opacity: 1;
-    pointer-events: auto;
-    transform: translateY(-50%) translateX(0);
-    transition-delay: 0s;
-  }
-
+  /* ----- Contents panel content (the Rail's `panel`) ----- */
   .masthead {
     display: flex;
     align-items: center;
@@ -247,7 +209,8 @@
     color: var(--ink-faint);
   }
 
-  /* Reduced motion: reveal and active-state changes appear without animation. */
+  /* Reduced motion: the active-tick emphasis appears without animation. (The
+     panel's reduced-motion handling lives in Rail.) */
   @media (prefers-reduced-motion: reduce) {
     .mark::before {
       transition: background-color 0.01ms;
@@ -256,23 +219,6 @@
       transform: none;
       width: 2.2rem; /* emphasize by explicit length (not an animated scale) */
       height: 1px;
-    }
-    .panel,
-    .toc:hover .panel,
-    .toc:focus-within .panel {
-      transition: none;
-      transform: translateY(-50%);
-    }
-  }
-
-  /* Pure touch / no-hover devices (phones, tablets — a laptop with a touchscreen
-     still reports hover:hover via its trackpad): there is no hover to open the
-     panel and often no keyboard, so hide the whole nav rather than leave a fixed
-     element that can't be opened. Desktop keeps the rail; this matches the prior
-     behaviour where the TOC was simply absent on these devices. */
-  @media (hover: none), (pointer: coarse) {
-    .toc {
-      display: none;
     }
   }
 </style>
