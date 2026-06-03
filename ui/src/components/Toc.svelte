@@ -14,11 +14,22 @@
 
 {#if visible}
   <nav class="toc" aria-label="Plan contents">
-    <!-- Decorative tick rail: aria-hidden, not focusable. One flat tick per
-         heading in document order; the real navigation lives in the panel. -->
+    <!-- Tick rail: aria-hidden — screen readers and the keyboard use the panel
+         links below. One flat tick per heading in document order. Each tick is a
+         redundant mouse affordance: clicking it jumps, same as its panel link.
+         (Deliberately not focusable / no key handler — a focusable aria-hidden
+         control would strand keyboard focus; the panel <a>s are the keyboard
+         path.) -->
     <ol class="marks" aria-hidden="true">
       {#each headings as h (h.blockId)}
-        <li class="mark lvl-{h.level}" class:active={h.slug === activeSlug}></li>
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+        <li
+          class="mark lvl-{h.level}"
+          class:active={h.slug === activeSlug}
+          title={h.text}
+          onclick={() => onJump(h.slug)}
+        ></li>
       {/each}
     </ol>
 
@@ -83,7 +94,7 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.5rem;
+    gap: 0.2rem;
     max-height: 78vh;
     /* Many headings: keep the rail within the viewport rather than overflowing. */
     overflow: hidden;
@@ -91,9 +102,15 @@
   .mark {
     width: 0.85rem;
     height: 2px;
-    border-radius: 1px;
+    /* Transparent vertical padding enlarges the click target to ~8px while
+       background-clip keeps the visible bar a 2px tick. The reduced .marks gap
+       compensates so rail density is unchanged. */
+    padding: 0.2rem 0;
     background: var(--rule-strong);
+    background-clip: content-box;
+    border-radius: 1px;
     opacity: 0.85;
+    cursor: pointer;
     transform-origin: left center;
     transition:
       transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
