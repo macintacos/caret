@@ -207,7 +207,7 @@
      the lane the fixed Contents panel (Toc.svelte) expands into AND the source of
      the left-of-centre bias; margin-right:auto sends the remaining free space to
      the (roomier) gutter side. The 1400px breakpoint is set so the plan track
-     always holds this 13rem lane PLUS the full 72ch measure, so the content box
+     always holds this 15rem lane PLUS the full 72ch measure, so the content box
      never forces `.prose` below 72ch: text never rewraps, and every annotation
      <mark>'s vertical position (and the gutter card translateY that mirrors it)
      is invariant under the shift. A fixed lane (not a min()-capped one) also
@@ -219,7 +219,7 @@
      centred. */
   @media (width >= 1400px) {
     .prose {
-      margin-left: 13rem;
+      margin-left: 15rem;
       margin-right: auto;
     }
   }

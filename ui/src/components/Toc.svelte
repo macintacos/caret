@@ -95,21 +95,23 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 0.2rem;
-    max-height: 78vh;
-    /* Many headings: keep the rail within the viewport rather than overflowing. */
-    overflow: hidden;
+    /* No overflow clip here: it would crop the active tick's horizontal scaleX
+       emphasis so it could never render longer than the inactive ticks. Very
+       long plans let the rail run toward the viewport edges — it is a decorative
+       indicator; the scrollable panel is the real navigation. */
   }
   .mark {
-    width: 0.85rem;
-    height: 2px;
+    /* Inactive ticks: longer and lighter (thinner, lower opacity) than a plain
+       dash so they read as delicate marks. */
+    width: 1.15rem;
+    height: 1.5px;
     /* Transparent vertical padding enlarges the click target to ~8px while
-       background-clip keeps the visible bar a 2px tick. The reduced .marks gap
-       compensates so rail density is unchanged. */
+       background-clip keeps the visible bar a thin tick. */
     padding: 0.2rem 0;
     background: var(--rule-strong);
     background-clip: content-box;
     border-radius: 1px;
-    opacity: 0.85;
+    opacity: 0.75;
     cursor: pointer;
     transform-origin: left center;
     transition:
@@ -119,19 +121,23 @@
   }
   /* Deeper headings read as shorter, fainter ticks — hierarchy without labels. */
   .mark.lvl-3 {
-    width: 0.62rem;
+    width: 0.9rem;
   }
   .mark.lvl-4,
   .mark.lvl-5,
   .mark.lvl-6 {
-    width: 0.46rem;
-    opacity: 0.6;
+    width: 0.7rem;
+    opacity: 0.55;
   }
-  /* Active section = scrollspy only. Emphasis is transform/colour, never reflow. */
+  /* Active section = scrollspy only. The longest tick, and a thinner accent
+     hairline, so it clearly stands out from the inactive marks. scaleX keeps the
+     length change a transform (no layout shift); the 1px height is the crisp
+     thin-line look. */
   .mark.active {
     background: var(--accent);
     opacity: 1;
-    transform: scaleX(2.4);
+    height: 1px;
+    transform: scaleX(1.65);
   }
   /* Hovering the rail previews intent by brightening the ticks, but it must NEVER
      change the active section — that is the scrollspy's job alone. */
@@ -144,7 +150,7 @@
     position: absolute;
     top: 50%;
     left: 100%;
-    width: 12rem;
+    width: 14rem;
     max-height: 74vh;
     overflow-y: auto;
     padding: 0.85rem 1rem 0.95rem;
@@ -206,10 +212,10 @@
     text-decoration: none;
     padding: 0.26rem 0.45rem;
     border-radius: var(--radius);
-    /* Long heading text: ellipsize rather than overflow the panel. */
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    /* Long heading text wraps onto multiple lines (the panel is a fixed width and
+       scrolls vertically) rather than truncating; break unbreakable tokens so a
+       URL-like heading can never overflow horizontally. */
+    overflow-wrap: anywhere;
     transition:
       color 0.12s,
       background-color 0.12s;
@@ -247,7 +253,8 @@
     }
     .mark.active {
       transform: none;
-      width: 1.3rem; /* emphasize by length, not an animated scale */
+      width: 1.9rem; /* emphasize by length (not an animated scale) + thin height */
+      height: 1px;
     }
     .panel,
     .toc:hover .panel,
