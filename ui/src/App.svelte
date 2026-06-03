@@ -310,6 +310,15 @@
     }
   }
 
+  // Focusing from a sidebar card: the card in the open panel is itself the
+  // editing surface, so just mark the annotation active and close any inline
+  // popover — never put a second editor on the same annotation. Only a mark
+  // click (focusAnnotation) opens the popover.
+  function focusFromCard(id: string) {
+    focusedAnnotation = id;
+    popoverOpen = false;
+  }
+
   function dismissPopover() {
     popoverOpen = false;
   }
@@ -399,7 +408,7 @@
       <AnnotationRail
         {resolved}
         activeId={focusedAnnotation}
-        onFocus={focusAnnotation}
+        onFocus={focusFromCard}
         onEdit={editAnnotation}
         onDelete={deleteAnnotation}
       />

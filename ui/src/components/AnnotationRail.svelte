@@ -64,11 +64,14 @@
             aria-expanded={pinned || tapOpen}
             onclick={() => (tapOpen = !tapOpen)}
           >
+            <!-- Visual only; the button's aria-label already names the count and
+                 detached total, so the SR doesn't read the digits twice. -->
             <span class="caret" aria-hidden="true">^</span>
-            <span class="count">{count}</span>
+            <span class="count" aria-hidden="true">{count}</span>
             {#if detached > 0}
               <span
                 class="detached"
+                aria-hidden="true"
                 title="{detached} detached comment{detached === 1 ? '' : 's'}"
               >
                 {detached}⚠
