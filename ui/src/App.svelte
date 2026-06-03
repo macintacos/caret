@@ -392,13 +392,18 @@
          they escape .columns' overflow:hidden: the contents rail on the left and
          the annotation rail on the right. -->
     <Toc headings={rendered.headings} {activeSlug} onJump={jumpTo} />
-    <AnnotationRail
-      {resolved}
-      activeId={focusedAnnotation}
-      onFocus={focusAnnotation}
-      onEdit={editAnnotation}
-      onDelete={deleteAnnotation}
-    />
+    <!-- Keyed on the review id so the rail's pin / tap-open state resets when the
+         reviewer advances to the next review (pin persists only while a review is
+         open). -->
+    {#key active.id}
+      <AnnotationRail
+        {resolved}
+        activeId={focusedAnnotation}
+        onFocus={focusAnnotation}
+        onEdit={editAnnotation}
+        onDelete={deleteAnnotation}
+      />
+    {/key}
 
     <div class="columns">
       {#key active.id}

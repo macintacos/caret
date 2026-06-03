@@ -35,7 +35,11 @@
     if (scrollEl) {
       const vp = scrollEl.getBoundingClientRect();
       if (!isAnchorVisible(rect, vp)) {
-        onDismiss();
+        // Out of view: dismiss only once we've actually shown it. On mount the
+        // mark may still be off-screen because focusAnnotation kicked off a
+        // smooth scrollIntoView — wait for that scroll to bring it in rather
+        // than dismissing before the popover ever appears.
+        if (placed) onDismiss();
         return;
       }
     }
@@ -43,11 +47,6 @@
     x = p.x;
     y = p.y;
     placed = true;
-  }
-
-  function dismiss() {
-    markEl()?.focus(); // return focus to the originating mark
-    onDismiss();
   }
 
   // Follow the mark as the plan scrolls or the window resizes (rAF-throttled).
@@ -67,19 +66,23 @@
     };
   });
 
-  // Esc and click-away dismiss. A click on another mark is left to PlanView,
-  // which switches the active annotation and re-anchors a fresh popover.
+  // Esc and click-away dismiss. A click on another mark or a sidebar card drives
+  // its own focus switch (PlanView / the rail card calls onFocusAnnotation), so
+  // it must not also dismiss here — and a mouse dismiss must not steal focus back
+  // to the old mark (only the keyboard path returns focus, for accessibility).
   $effect(() => {
     function onPointerDown(e: PointerEvent) {
       const t = e.target as HTMLElement;
       if (popoverEl?.contains(t)) return;
       if (t.closest?.("mark[data-annotation]")) return;
-      dismiss();
+      if (t.closest?.("[data-annotation-card]")) return;
+      onDismiss();
     }
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
-        dismiss();
+        markEl()?.focus(); // keyboard dismiss returns focus to the mark
+        onDismiss();
       }
     }
     document.addEventListener("pointerdown", onPointerDown, true);

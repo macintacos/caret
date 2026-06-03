@@ -29,6 +29,9 @@
   }
   function onKey(e: KeyboardEvent) {
     if (e.key === "Escape") {
+      // Cancel just this edit — don't let Esc bubble to a host popover's
+      // document handler, which would dismiss the whole popover.
+      e.stopPropagation();
       editing = false;
       draft = annotation.comment;
     } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
@@ -36,6 +39,12 @@
       save();
     }
   }
+
+  // onblur saves, but a teardown (e.g. a version bump unmounting a focused
+  // editor) isn't guaranteed to fire blur — flush an in-progress edit on destroy.
+  $effect(() => () => {
+    if (editing) save();
+  });
 </script>
 
 {#if editing}
