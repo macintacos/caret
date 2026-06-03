@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureDaemon, httpHealth } from "../src/cli.ts";
 import { createServer } from "../src/daemon.ts";
+import { VERSION } from "../src/paths.ts";
 import { createStore } from "../src/store.ts";
 
 const servers: Array<{ stop(): void }> = [];
@@ -42,13 +43,25 @@ test("httpHealth reports the caret identity from a live daemon", async () => {
 });
 
 test("concurrent ensureDaemon callers both connect to a live daemon", async () => {
-  const srv = createServer({ store: createStore("/tmp/caret-it-y"), port: 0 });
+  const srv = createServer({
+    store: createStore("/tmp/caret-it-y"),
+    port: 0,
+    buildId: "it-build",
+  });
   servers.push(srv);
   const baseUrl = `http://localhost:${srv.port}`;
   let spawns = 0;
+  // Reuse against the real httpHealth: currentBuild/currentVersion match what the
+  // live daemon reports, so neither caller retires or spawns.
   const deps = {
     baseUrl,
+    currentBuild: "it-build",
+    currentVersion: VERSION,
     health: httpHealth,
+    readLock: () => null,
+    isAlive: () => false,
+    retire: async () => true,
+    removeLock: () => {},
     spawn: () => spawns++,
     backoff: async () => {},
     maxAttempts: 5,

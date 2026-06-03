@@ -77,6 +77,17 @@ export function daemonLock(): string {
   return `${stateDir()}/daemon.lock`;
 }
 
+/** Contents of the daemon lock file. Written by the daemon on bind; read by a
+ * starting caret to discover and gracefully retire an older one. `build`/
+ * `version` are optional so a partial/legacy lock still parses. */
+export interface DaemonLock {
+  pid: number;
+  port: number;
+  build?: string;
+  version?: string;
+  startedAt?: number;
+}
+
 /** Idle auto-shutdown delay (ms). Overridable via CARET_IDLE_MS for tests. */
 export function idleMs(): number {
   const raw = process.env.CARET_IDLE_MS;
