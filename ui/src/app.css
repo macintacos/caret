@@ -99,10 +99,11 @@ body {
   height: 100%;
 }
 
-/* ----- App shell: plan + annotation-gutter grid ----- */
+/* ----- App shell: plan grid + viewport-fixed rails ----- */
 /* Keep .shell, #app, and body free of `transform` / `filter` / `perspective` /
-   `will-change`: any of those establishes a containing block for the fixed TOC
-   rail (Toc.svelte `.toc`) and would break its viewport pin. */
+   `will-change`: any of those establishes a containing block for the fixed rails
+   (Toc.svelte / AnnotationRail.svelte via Rail.svelte) and would break their
+   viewport pin. */
 .shell {
   display: grid;
   grid-template-rows: auto 1fr;
@@ -111,25 +112,14 @@ body {
 
 .columns {
   display: grid;
-  /* Two tracks: plan | roomier annotation gutter. The left TOC track is gone —
-     the contents nav is a viewport-fixed rail (Toc.svelte) that escapes this
-     grid (and its `overflow: hidden`) entirely. */
-  grid-template-columns: minmax(0, 1fr) minmax(340px, 460px);
+  /* One track: the plan. Both the contents nav (left) and the annotation gutter
+     (right) are now viewport-fixed rails (Toc.svelte / AnnotationRail.svelte)
+     that escape this grid and its `overflow: hidden` entirely; the annotation
+     rail overlays the reclaimed right margin. The plan's off-center bias and the
+     72ch cap that keep <mark> positions invariant live on `.prose`. */
+  grid-template-columns: minmax(0, 1fr);
   overflow: hidden;
   min-height: 0;
-}
-
-@media (width < 1400px) {
-  /* Single breakpoint (1400px): below it the rail hides (Toc.svelte), the plan
-     re-centers, and the gutter narrows — today's behaviour. The threshold is set
-     where the plan track can hold the panel lane + the full 72ch column + a
-     roomier gutter, so above it the expanded panel never covers the plan body
-     and the 72ch column never rewraps. Range syntax (width < 1400px paired with
-     PlanView's width >= 1400px) is exhaustive — no sub-pixel band at fractional
-     zoom where the rail shows but the plan is still centered. */
-  .columns {
-    grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
-  }
 }
 
 .col {
@@ -145,12 +135,6 @@ body {
   padding: 2.5rem clamp(1.5rem, 4vw, 4rem) 6rem;
   background: var(--paper-raised);
   position: relative;
-}
-
-.col-gutter {
-  border-left: 1px solid var(--rule);
-  padding: 2rem clamp(1.25rem, 2.5vw, 2.5rem) 6rem;
-  background: var(--paper);
 }
 
 /* Scrollbars: thin, ink-toned */

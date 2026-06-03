@@ -13,7 +13,7 @@
   import { createScrollSpy } from "./lib/scrollspy.ts";
   import type { AcceptMode, Annotation, ClientReview } from "./lib/types.ts";
 
-  import AnnotationGutter from "./components/AnnotationGutter.svelte";
+  import AnnotationRail from "./components/AnnotationRail.svelte";
   import EmptyState from "./components/EmptyState.svelte";
   import PlanView, {
     type ResolvedAnnotation,
@@ -48,6 +48,7 @@
   let generalCommentDraft = $state("");
 
   let scrollEl = $state<HTMLElement | undefined>();
+  let shellEl = $state<HTMLElement | undefined>();
   // Keyed on id:version so a new version (revision) also reloads the working
   // copy — never persist stale annotations from a prior version onto the next.
   let lastLoadedKey: string | null = null;
@@ -138,6 +139,22 @@
       () => (connected = false),
     );
     return stop;
+  });
+
+  // ----- TopBar height -----
+  // Expose the TopBar's height so the fixed, full-height annotation rail can
+  // start below it (its panel must not slide under the bar).
+  $effect(() => {
+    const shell = shellEl;
+    if (!shell) return;
+    const bar = shell.querySelector<HTMLElement>(".topbar");
+    if (!bar) return;
+    const apply = () =>
+      shell.style.setProperty("--topbar-h", `${bar.offsetHeight}px`);
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(bar);
+    return () => ro.disconnect();
   });
 
   // ----- Remembered approve mode (read once on load) -----
@@ -359,7 +376,7 @@
   }
 </script>
 
-<div class="shell">
+<div class="shell" bind:this={shellEl}>
   <TopBar
     {reviews}
     {active}
@@ -371,9 +388,17 @@
   />
 
   {#if active}
-    <!-- Fixed, viewport-pinned contents rail — a sibling of (not inside) the
-         grid so it escapes .columns' overflow:hidden and pins to the viewport. -->
+    <!-- Two fixed, viewport-pinned rails — siblings of (not inside) the grid so
+         they escape .columns' overflow:hidden: the contents rail on the left and
+         the annotation rail on the right. -->
     <Toc headings={rendered.headings} {activeSlug} onJump={jumpTo} />
+    <AnnotationRail
+      {resolved}
+      activeId={focusedAnnotation}
+      onFocus={focusAnnotation}
+      onEdit={editAnnotation}
+      onDelete={deleteAnnotation}
+    />
 
     <div class="columns">
       {#key active.id}
@@ -391,16 +416,6 @@
           onDismissPopover={dismissPopover}
         />
       {/key}
-
-      <aside class="col col-gutter">
-        <AnnotationGutter
-          {resolved}
-          activeId={focusedAnnotation}
-          onFocus={focusAnnotation}
-          onEdit={editAnnotation}
-          onDelete={deleteAnnotation}
-        />
-      </aside>
     </div>
   {:else}
     <EmptyState {connected} />
