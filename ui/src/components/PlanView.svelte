@@ -2,6 +2,7 @@
   import { resolveAnnotation, wrapTextRange } from "../lib/anchors.ts";
   import { captureSelection } from "../lib/selection.ts";
   import type { Annotation } from "../lib/types.ts";
+  import AnnotationPopover from "./AnnotationPopover.svelte";
   import CommentPopover from "./CommentPopover.svelte";
 
   export interface ResolvedAnnotation {
@@ -15,6 +16,9 @@
     html: string;
     annotations: Annotation[];
     activeId: string | null;
+    /** When true (and the active annotation is anchored), the inline view/edit
+        popover is shown next to its mark. */
+    popoverOpen: boolean;
     scrollEl?: HTMLElement;
     /** Reports re-resolution results back up (for the gutter + orphan bucket). */
     onResolved: (resolved: ResolvedAnnotation[]) => void;
@@ -26,16 +30,28 @@
       comment: string;
     }) => void;
     onFocusAnnotation: (id: string) => void;
+    onEdit: (id: string, comment: string) => void;
+    onDelete: (id: string) => void;
+    onDismissPopover: () => void;
   }
   let {
     html,
     annotations,
     activeId,
+    popoverOpen,
     scrollEl = $bindable(),
     onResolved,
     onCreate,
     onFocusAnnotation,
+    onEdit,
+    onDelete,
+    onDismissPopover,
   }: Props = $props();
+
+  // The active annotation, when one is focused — the popover's data source.
+  let activeAnnotation = $derived(
+    activeId != null ? (annotations.find((a) => a.id === activeId) ?? null) : null,
+  );
 
   let root = $state<HTMLElement | undefined>();
 
@@ -80,11 +96,20 @@
         // Wrap per text node so a selection crossing shiki token <span>s still
         // highlights; all segments share one annotation id, so click/focus and
         // the .active state keep working across the marks.
+        let firstSeg = true;
         const marks = wrapTextRange(block, res.startOffset, res.endOffset, () => {
           const m = document.createElement("mark");
           m.dataset.annotation = annotation.id;
           m.className = "anno";
           if (annotation.id === activeId) m.classList.add("active");
+          if (firstSeg) {
+            // The first segment is this annotation's keyboard entry point: a
+            // single tab stop per annotation that opens the popover on Enter.
+            m.tabIndex = 0;
+            m.setAttribute("role", "button");
+            m.setAttribute("aria-label", "Annotation");
+            firstSeg = false;
+          }
           return m;
         });
         const anchor = marks[0] ?? res.range;
@@ -155,6 +180,19 @@
     }
   }
 
+  // Keyboard equivalent of clicking a mark: Enter/Space on a focused highlight
+  // opens its popover. Marks are made focusable (one tab stop each) in paint().
+  function onKeydown(e: KeyboardEvent) {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const mark = (e.target as HTMLElement).closest(
+      "mark[data-annotation]",
+    ) as HTMLElement | null;
+    if (mark?.dataset.annotation) {
+      e.preventDefault();
+      onFocusAnnotation(mark.dataset.annotation);
+    }
+  }
+
   function confirmComment(comment: string) {
     if (!pending) return;
     onCreate({
@@ -181,6 +219,7 @@
     bind:this={root}
     onmouseup={onMouseUp}
     onclick={onClick}
+    onkeydown={onKeydown}
     role="document"
   >
     {@html html}
@@ -195,6 +234,20 @@
     onConfirm={confirmComment}
     onDismiss={() => (pending = null)}
   />
+{/if}
+
+<!-- Inline view/edit popover for the focused highlight. Keyed on the active id so
+     switching marks remounts a fresh editor (and unmount flushes the prior edit). -->
+{#if popoverOpen && activeAnnotation}
+  {#key activeAnnotation.id}
+    <AnnotationPopover
+      annotation={activeAnnotation}
+      {scrollEl}
+      {onEdit}
+      {onDelete}
+      onDismiss={onDismissPopover}
+    />
+  {/key}
 {/if}
 
 <style>

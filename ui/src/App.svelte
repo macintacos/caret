@@ -38,6 +38,9 @@
   let annotations = $state<Annotation[]>([]);
   let resolved = $state<ResolvedAnnotation[]>([]);
   let focusedAnnotation = $state<string | null>(null);
+  // Whether the focused annotation's inline popover is open. Distinct from
+  // focusedAnnotation: focusing/clicking a mark opens it; creating one does not.
+  let popoverOpen = $state(false);
   let activeSlug = $state<string | null>(null);
 
   // Working copy of the Request Changes general-comment draft for the active
@@ -101,6 +104,8 @@
       lastLoadedKey = key;
       annotations = active.annotations.map((a) => ({ ...a }));
       focusedAnnotation = null;
+      // A version bump dismisses any open popover (its mark is being repainted).
+      popoverOpen = false;
       // Seed on id change only, via its own guard (see lastDraftLoadedId above) —
       // independent of the id:version annotation reload around it.
       if (active.id !== lastDraftLoadedId) {
@@ -112,6 +117,8 @@
       lastLoadedKey = null;
       lastDraftLoadedId = null;
       annotations = [];
+      focusedAnnotation = null;
+      popoverOpen = false;
       generalCommentDraft = "";
     }
   });
@@ -249,7 +256,10 @@
   }) {
     const id = crypto.randomUUID();
     annotations = [...annotations, { id, ...sel }];
+    // Highlight the new mark, but don't pop its inline editor open — creating is
+    // a separate concern (handled by CommentPopover) from view/edit.
     focusedAnnotation = id;
+    popoverOpen = false;
     scheduleSave();
   }
 
@@ -260,15 +270,44 @@
 
   function deleteAnnotation(id: string) {
     annotations = annotations.filter((a) => a.id !== id);
-    if (focusedAnnotation === id) focusedAnnotation = null;
+    if (focusedAnnotation === id) {
+      focusedAnnotation = null;
+      popoverOpen = false;
+    }
     scheduleSave();
   }
 
+  // Focus an annotation: scroll its <mark> into view and open the inline popover
+  // (the gutter card it used to scroll to is hidden now). A detached annotation
+  // has no mark, so it only becomes active — reachable via the expanded sidebar.
   function focusAnnotation(id: string) {
     focusedAnnotation = id;
-    const card = document.querySelector(`[data-annotation-card="${id}"]`);
-    card?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const r = resolved.find((x) => x.annotation.id === id);
+    if (r && !r.orphaned) {
+      popoverOpen = true;
+      document
+        .querySelector(`mark[data-annotation="${id}"]`)
+        ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } else {
+      popoverOpen = false;
+    }
   }
+
+  function dismissPopover() {
+    popoverOpen = false;
+  }
+
+  // If the active annotation drifts to detached on a re-paint (same-version
+  // offset drift), its mark is gone — close the now-anchorless popover.
+  $effect(() => {
+    if (
+      popoverOpen &&
+      focusedAnnotation &&
+      resolved.find((r) => r.annotation.id === focusedAnnotation)?.orphaned
+    ) {
+      popoverOpen = false;
+    }
+  });
 
   // ----- Resolve flow -----
   async function approve(mode: AcceptMode) {
@@ -342,10 +381,14 @@
           html={rendered.html}
           {annotations}
           activeId={focusedAnnotation}
+          {popoverOpen}
           bind:scrollEl
           onResolved={(r) => (resolved = r)}
           onCreate={createAnnotation}
           onFocusAnnotation={focusAnnotation}
+          onEdit={editAnnotation}
+          onDelete={deleteAnnotation}
+          onDismissPopover={dismissPopover}
         />
       {/key}
 
