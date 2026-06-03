@@ -244,6 +244,9 @@ if [ -z "$REPO_DIR" ]; then
 fi
 
 # --- fetch / source ---------------------------------------------------------
+# The network steps go through run_long, so git's transfer chatter (the remote:
+# counting lines, "Unpacking objects", the ref-update summary) is captured and
+# shown only on failure — a clean fetch collapses to a quiet ✓, like the builds.
 if [ "$SRC_KIND" = "local" ]; then
   section "Source"
   step "Building the local checkout at $REPO_DIR ($REF_DESC) in place"
@@ -251,14 +254,14 @@ if [ "$SRC_KIND" = "local" ]; then
 else
   section "Fetch"
   if [ "$SRC_ACTION" = "update" ]; then
-    step "Updating $REPO_DIR to release $TAG"
-    run git -C "$REPO_DIR" fetch --depth 1 --force origin "refs/tags/$TAG:refs/tags/$TAG"
-    run git -C "$REPO_DIR" checkout --quiet --detach "$TAG"
-    ok
+    # fetch + checkout as one step so the ✓ prints only after both succeed. The
+    # checkout is already --quiet; the fetch is the noisy half run_long hushes.
+    # shellcheck disable=SC2016  # $1/$2 are the inner `bash -c` positional args, expanded at runtime
+    run_long "Updating $REPO_DIR to release $TAG" \
+      bash -c 'git -C "$1" fetch --depth 1 --force origin "refs/tags/$2:refs/tags/$2" && git -C "$1" checkout --quiet --detach "$2"' _ "$REPO_DIR" "$TAG"
   else
-    step "Cloning release $TAG into $REPO_DIR"
-    run git clone --depth 1 --branch "$TAG" "$REPO_URL" "$REPO_DIR"
-    ok
+    run_long "Cloning release $TAG into $REPO_DIR" \
+      git clone --depth 1 --branch "$TAG" "$REPO_URL" "$REPO_DIR"
   fi
 fi
 
@@ -283,10 +286,11 @@ fi
 # --- register ---------------------------------------------------------------
 section "Register"
 # Register caret's directory as a local marketplace (idempotent: add, else
-# update). The add's "already exists" stderr is hidden so a re-run stays clean;
-# a real failure still aborts via the update fallback returning non-zero.
+# update). The add's chatter — it prints an "already on disk" note to stdout
+# when the marketplace exists — is hidden so a re-run stays clean; a real
+# failure still aborts via the visible-stderr update fallback.
 step "Registering the caret marketplace"
-run claude plugin marketplace add "$REPO_DIR" 2>/dev/null || run claude plugin marketplace update "$MARKETPLACE" >/dev/null
+run claude plugin marketplace add "$REPO_DIR" >/dev/null 2>&1 || run claude plugin marketplace update "$MARKETPLACE" >/dev/null
 ok
 
 # Reinstall so the freshly built binary always lands in the plugin cache, even
