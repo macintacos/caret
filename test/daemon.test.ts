@@ -145,6 +145,18 @@ test("POST /api/retire from a foreign origin is blocked (403, no shutdown)", asy
   expect(existsSync(lockPath)).toBe(true);
 });
 
+test("idle auto-shutdown removes the lock file", async () => {
+  const lockPath = join(dir, "daemon.lock");
+  let shutdowns = 0;
+  await boot({ lockPath, idleMs: 30, onShutdown: () => shutdowns++ });
+  expect(existsSync(lockPath)).toBe(true);
+  await Bun.sleep(120);
+  expect(shutdowns).toBeGreaterThanOrEqual(1);
+  // stop() runs on idle shutdown and must clear the lock (one of the required
+  // "every exit path" cases: idle, SIGTERM/SIGINT, uncaught).
+  expect(existsSync(lockPath)).toBe(false);
+});
+
 test("POST then GET reviews exposes a pending ClientReview", async () => {
   await boot();
   const { id } = await newReview({ plan: "# My Plan\n\ndetails" });

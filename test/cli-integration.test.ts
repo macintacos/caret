@@ -81,7 +81,13 @@ test("ensureDaemon fails fast against a non-caret server on the port", async () 
     await expect(
       ensureDaemon({
         baseUrl: `http://localhost:${foreign.port}`,
+        currentBuild: "b1",
+        currentVersion: VERSION,
         health: httpHealth,
+        readLock: () => null,
+        isAlive: () => false,
+        retire: async () => true,
+        removeLock: () => {},
         spawn: () => {},
         backoff: async () => {},
         maxAttempts: 3,
@@ -92,23 +98,24 @@ test("ensureDaemon fails fast against a non-caret server on the port", async () 
   }
 });
 
-test("the daemon writes the lock on start and removes it on SIGTERM", async () => {
-  const stateHome = await mkdtemp(join(tmpdir(), "caret-sigterm-"));
+// A real detached daemon process — the only way to exercise runDaemon's
+// signal/exit cleanup wiring end-to-end (lock written on start, removed on the
+// signal, EXC-406). SIGTERM and SIGINT share the same shutdown() closure.
+async function assertLockRemovedOnSignal(signal: "SIGTERM" | "SIGINT") {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-signal-"));
   const lockPath = join(stateHome, "caret", "daemon.lock");
-  // A real detached daemon process — the only way to exercise runDaemon's
-  // signal/exit cleanup wiring end-to-end (lock removed on SIGTERM, EXC-406).
   const proc = Bun.spawn([process.execPath, "src/cli.ts", "daemon"], {
     env: {
       ...process.env,
       CARET_PORT: String(freePort()),
       XDG_STATE_HOME: stateHome,
-      CARET_IDLE_MS: "600000", // don't idle-shutdown before we SIGTERM
+      CARET_IDLE_MS: "600000", // don't idle-shutdown before we signal
     },
     stdio: ["ignore", "ignore", "ignore"],
   });
   try {
     expect(await waitFor(() => existsSync(lockPath), 5000)).toBe(true);
-    proc.kill("SIGTERM");
+    proc.kill(signal);
     expect(await waitFor(() => !existsSync(lockPath), 5000)).toBe(true);
     await proc.exited;
   } finally {
@@ -116,4 +123,12 @@ test("the daemon writes the lock on start and removes it on SIGTERM", async () =
     await proc.exited;
     await rm(stateHome, { recursive: true, force: true });
   }
+}
+
+test("the daemon writes the lock on start and removes it on SIGTERM", async () => {
+  await assertLockRemovedOnSignal("SIGTERM");
+});
+
+test("the daemon removes the lock on SIGINT", async () => {
+  await assertLockRemovedOnSignal("SIGINT");
 });

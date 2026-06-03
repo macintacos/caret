@@ -6,6 +6,7 @@ import { mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { createDecisions } from "./decisions.ts";
 import {
+  type DaemonLock,
   heartbeatMs as defaultHeartbeatMs,
   IDENTITY,
   idleMs as defaultIdleMs,
@@ -338,17 +339,16 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (!lockPath) return;
     try {
       mkdirSync(dirname(lockPath), { recursive: true });
+      // Typed against the reader's DaemonLock so the on-disk shape can't drift.
+      const lock: DaemonLock = {
+        pid: process.pid,
+        port: server.port ?? 0,
+        build: buildId,
+        version: IDENTITY.version,
+        startedAt: Date.now(),
+      };
       const tmp = `${lockPath}.tmp.${process.pid}`;
-      writeFileSync(
-        tmp,
-        JSON.stringify({
-          pid: process.pid,
-          port: server.port,
-          build: buildId,
-          version: IDENTITY.version,
-          startedAt: Date.now(),
-        }),
-      );
+      writeFileSync(tmp, JSON.stringify(lock));
       renameSync(tmp, lockPath);
     } catch {
       // ignore — a missing lock only forfeits graceful takeover, never serving.
