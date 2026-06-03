@@ -213,9 +213,11 @@
      is invariant under the shift. A fixed lane (not a min()-capped one) also
      keeps the expanded panel's right edge reliably left of the prose, so it
      never covers the plan body. Below 1400px the rule drops and `.prose`
-     re-centres (today's behaviour); 1400px pairs with `.columns'`
-     max-width:1399px breakpoint. */
-  @media (min-width: 1400px) {
+     re-centres (today's behaviour). Range syntax (width >= 1400px) is exactly
+     complementary to `.columns'` / the rail's `width < 1400px`, so there is no
+     sub-pixel band at fractional zoom where the rail shows but the plan stays
+     centred. */
+  @media (width >= 1400px) {
     .prose {
       margin-left: 13rem;
       margin-right: auto;

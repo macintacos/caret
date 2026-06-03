@@ -119,12 +119,14 @@ body {
   min-height: 0;
 }
 
-@media (max-width: 1399px) {
+@media (width < 1400px) {
   /* Single breakpoint (1400px): below it the rail hides (Toc.svelte), the plan
      re-centers, and the gutter narrows — today's behaviour. The threshold is set
      where the plan track can hold the panel lane + the full 72ch column + a
      roomier gutter, so above it the expanded panel never covers the plan body
-     and the 72ch column never rewraps. */
+     and the 72ch column never rewraps. Range syntax (width < 1400px paired with
+     PlanView's width >= 1400px) is exhaustive — no sub-pixel band at fractional
+     zoom where the rail shows but the plan is still centered. */
   .columns {
     grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
   }

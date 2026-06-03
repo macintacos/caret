@@ -66,8 +66,10 @@
   }
 
   /* Single breakpoint (1400px), shared with app.css / PlanView: below it the rail
-     is hidden and the plan re-centers (today's behaviour). */
-  @media (max-width: 1399px) {
+     is hidden and the plan re-centers (today's behaviour). Range syntax keeps
+     this exactly complementary to PlanView's `width >= 1400px` — no fractional
+     band where the rail shows but the plan is still centered. */
+  @media (width < 1400px) {
     .toc {
       display: none;
     }
