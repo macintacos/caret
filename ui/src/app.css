@@ -99,7 +99,10 @@ body {
   height: 100%;
 }
 
-/* ----- App shell: 3-column grid ----- */
+/* ----- App shell: plan + annotation-gutter grid ----- */
+/* Keep .shell, #app, and body free of `transform` / `filter` / `perspective` /
+   `will-change`: any of those establishes a containing block for the fixed TOC
+   rail (Toc.svelte `.toc`) and would break its viewport pin. */
 .shell {
   display: grid;
   grid-template-rows: auto 1fr;
@@ -108,17 +111,21 @@ body {
 
 .columns {
   display: grid;
-  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(300px, 380px);
+  /* Two tracks: plan | roomier annotation gutter. The left TOC track is gone —
+     the contents nav is a viewport-fixed rail (Toc.svelte) that escapes this
+     grid (and its `overflow: hidden`) entirely. */
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 460px);
   overflow: hidden;
   min-height: 0;
 }
 
-@media (max-width: 1080px) {
+@media (max-width: 1279px) {
+  /* Single breakpoint (1280px): below it the rail hides (Toc.svelte), the plan
+     re-centers, and the gutter narrows — today's behaviour. The threshold is set
+     where there is genuinely room above it for the panel lane + the 72ch column
+     + a roomier gutter without the expanded panel ever covering the plan body. */
   .columns {
-    grid-template-columns: 0 minmax(0, 1fr) minmax(260px, 340px);
-  }
-  .col-toc {
-    display: none;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
   }
 }
 
@@ -127,13 +134,11 @@ body {
   overflow-y: auto;
 }
 
-.col-toc {
-  border-right: 1px solid var(--rule);
-  padding: 2rem 1.25rem 4rem 2rem;
-  background: var(--paper);
-}
-
 .col-plan {
+  /* The off-center bias and the lane the fixed Contents panel expands into both
+     live on `.prose` (PlanView.svelte) via its left margin; this column keeps
+     symmetric padding. Keep it un-transformed so it never becomes the fixed
+     rail's containing block. */
   padding: 2.5rem clamp(1.5rem, 4vw, 4rem) 6rem;
   background: var(--paper-raised);
   position: relative;
@@ -141,7 +146,7 @@ body {
 
 .col-gutter {
   border-left: 1px solid var(--rule);
-  padding: 2rem 1.25rem 6rem;
+  padding: 2rem clamp(1.25rem, 2.5vw, 2.5rem) 6rem;
   background: var(--paper);
 }
 

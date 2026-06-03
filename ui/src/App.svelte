@@ -332,11 +332,11 @@
   />
 
   {#if active}
-    <div class="columns">
-      <aside class="col col-toc">
-        <Toc headings={rendered.headings} {activeSlug} onJump={jumpTo} />
-      </aside>
+    <!-- Fixed, viewport-pinned contents rail — a sibling of (not inside) the
+         grid so it escapes .columns' overflow:hidden and pins to the viewport. -->
+    <Toc headings={rendered.headings} {activeSlug} onJump={jumpTo} />
 
+    <div class="columns">
       {#key active.id}
         <PlanView
           html={rendered.html}
