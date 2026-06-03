@@ -1,7 +1,7 @@
 import "../../test-setup.ts";
 import { beforeAll, describe, expect, test } from "bun:test";
 import { initHighlighter } from "./highlight.ts";
-import { renderPlan } from "./render.ts";
+import { type HeadingEntry, renderPlan, shouldShowRail } from "./render.ts";
 
 const SAMPLE = `# Introduction
 
@@ -74,6 +74,29 @@ describe("renderPlan headings", () => {
     const { headings } = renderPlan("# Setup\n\ntext\n\n# Setup\n\nmore\n");
     expect(headings[0]!.slug).toBe("setup");
     expect(headings[1]!.slug).toBe("setup-1");
+  });
+});
+
+describe("shouldShowRail", () => {
+  const headings = (n: number): HeadingEntry[] =>
+    Array.from({ length: n }, (_, i) => ({
+      level: 1,
+      slug: `h${i}`,
+      text: `Heading ${i}`,
+      blockId: `b${i}`,
+    }));
+
+  test("suppresses the rail for a plan with no headings", () => {
+    expect(shouldShowRail(headings(0))).toBe(false);
+  });
+
+  test("suppresses the rail for a single-heading plan (no one-tick rail)", () => {
+    expect(shouldShowRail(headings(1))).toBe(false);
+  });
+
+  test("shows the rail once there are two or more headings", () => {
+    expect(shouldShowRail(headings(2))).toBe(true);
+    expect(shouldShowRail(headings(5))).toBe(true);
   });
 });
 

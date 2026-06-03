@@ -50,6 +50,15 @@ export interface HeadingEntry {
   blockId: string;
 }
 
+/**
+ * Whether the contents rail should render. Suppressed for plans with no
+ * headings (nothing to navigate) and for a single heading (a one-tick rail is
+ * noise, not navigation); a rail earns its place from two headings up.
+ */
+export function shouldShowRail(headings: HeadingEntry[]): boolean {
+  return headings.length >= 2;
+}
+
 export interface RenderResult {
   html: string;
   headings: HeadingEntry[];

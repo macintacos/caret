@@ -107,6 +107,28 @@
     queueMicrotask(paint);
   });
 
+  // Re-paint when the plan article or its scroll container resizes (window
+  // resize, the off-center column settling, font load, scrollbar appearing).
+  // <mark> tops are measured relative to the article, so any reflow shifts them;
+  // paint() is idempotent (it unwraps prior marks first), so re-running realigns
+  // the gutter cards. rAF coalesces a burst of resize callbacks into one paint
+  // and measures after layout.
+  $effect(() => {
+    const el = root;
+    if (!el) return;
+    let raf = 0;
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(paint);
+    });
+    ro.observe(el);
+    if (scrollEl) ro.observe(scrollEl);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+  });
+
   function onMouseUp(e: MouseEvent) {
     if (!root) return;
     // Ignore clicks on existing marks (handled by click below).
@@ -179,6 +201,27 @@
   .prose {
     max-width: 72ch;
     margin: 0 auto;
+  }
+  /* Wide windows (≥1400px): a SINGLE horizontal-placement mechanism — a fixed
+     left margin, no offset transform fighting the auto-centring. That margin is
+     the lane the fixed Contents panel (Toc.svelte) expands into AND the source of
+     the left-of-centre bias; margin-right:auto sends the remaining free space to
+     the (roomier) gutter side. The 1400px breakpoint is set so the plan track
+     always holds this 15rem lane PLUS the full 72ch measure, so the content box
+     never forces `.prose` below 72ch: text never rewraps, and every annotation
+     <mark>'s vertical position (and the gutter card translateY that mirrors it)
+     is invariant under the shift. A fixed lane (not a min()-capped one) also
+     keeps the expanded panel's right edge reliably left of the prose, so it
+     never covers the plan body. Below 1400px the rule drops and `.prose`
+     re-centres (today's behaviour). Range syntax (width >= 1400px) is exactly
+     complementary to `.columns'` / the rail's `width < 1400px`, so there is no
+     sub-pixel band at fractional zoom where the rail shows but the plan stays
+     centred. */
+  @media (width >= 1400px) {
+    .prose {
+      margin-left: 15rem;
+      margin-right: auto;
+    }
   }
 
   /* ----- Manuscript typography for rendered plan ----- */
