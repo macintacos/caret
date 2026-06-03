@@ -100,19 +100,20 @@
        long plans let the rail run toward the viewport edges — it is a decorative
        indicator; the scrollable panel is the real navigation. */
   }
+  /* The <li> is the click target; the visible bar is a ::before so the hit area
+     and the thin bar stay independent (explicit ::before height renders exactly,
+     unlike a padded background-clip bar which collapses at sub-pixel heights). */
   .mark {
-    /* Inactive ticks: longer and lighter (thinner, lower opacity) than a plain
-       dash so they read as delicate marks. */
-    width: 1.15rem;
-    height: 1.5px;
-    /* Transparent vertical padding enlarges the click target to ~8px while
-       background-clip keeps the visible bar a thin tick. */
-    padding: 0.2rem 0;
-    background: var(--rule-strong);
-    background-clip: content-box;
-    border-radius: 1px;
-    opacity: 0.75;
+    width: 1.3rem;
+    padding: 0.22rem 0;
     cursor: pointer;
+  }
+  .mark::before {
+    content: "";
+    display: block;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--ink-faint);
     transform-origin: left center;
     transition:
       transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
@@ -121,28 +122,30 @@
   }
   /* Deeper headings read as shorter, fainter ticks — hierarchy without labels. */
   .mark.lvl-3 {
-    width: 0.9rem;
+    width: 1rem;
   }
   .mark.lvl-4,
   .mark.lvl-5,
   .mark.lvl-6 {
-    width: 0.7rem;
-    opacity: 0.55;
+    width: 0.8rem;
   }
-  /* Active section = scrollspy only. The longest tick, and a thinner accent
-     hairline, so it clearly stands out from the inactive marks. scaleX keeps the
-     length change a transform (no layout shift); the 1px height is the crisp
-     thin-line look. */
-  .mark.active {
+  .mark.lvl-4::before,
+  .mark.lvl-5::before,
+  .mark.lvl-6::before {
+    opacity: 0.7;
+  }
+  /* Active section = scrollspy only: the longest tick and a thinner (1px) accent
+     hairline so it stands out from the inactive marks. scaleX keeps the length
+     change a transform (no reflow). */
+  .mark.active::before {
     background: var(--accent);
-    opacity: 1;
     height: 1px;
-    transform: scaleX(1.65);
+    transform: scaleX(1.7);
   }
-  /* Hovering the rail previews intent by brightening the ticks, but it must NEVER
-     change the active section — that is the scrollspy's job alone. */
-  .toc:hover .marks .mark {
-    opacity: 1;
+  /* Hovering the rail previews intent by brightening the inactive ticks, but it
+     must NEVER change the active section — that is the scrollspy's job alone. */
+  .toc:hover .mark:not(.active)::before {
+    background: var(--ink-soft);
   }
 
   /* ----- Contents panel: expands into the freed left margin ----- */
@@ -246,14 +249,12 @@
 
   /* Reduced motion: reveal and active-state changes appear without animation. */
   @media (prefers-reduced-motion: reduce) {
-    .mark {
-      transition:
-        background-color 0.01ms,
-        opacity 0.01ms;
+    .mark::before {
+      transition: background-color 0.01ms;
     }
-    .mark.active {
+    .mark.active::before {
       transform: none;
-      width: 1.9rem; /* emphasize by length (not an animated scale) + thin height */
+      width: 2.2rem; /* emphasize by explicit length (not an animated scale) */
       height: 1px;
     }
     .panel,
