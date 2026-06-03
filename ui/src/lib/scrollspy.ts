@@ -41,7 +41,13 @@ export function createScrollSpy(opts: ScrollSpyOptions): () => void {
         } else {
           visible.delete(entry.target);
           // If a heading left the band by scrolling up, remember it as passed.
-          if (entry.boundingClientRect.top < 0) {
+          // Compare against the band's top edge (the root's top), NOT viewport 0:
+          // the scroll container sits below the top bar, so a heading that has
+          // scrolled past the band still has a positive viewport top (~the bar
+          // height) and would never satisfy `< 0` — which left the active stuck
+          // on the first heading once it scrolled out of the band.
+          const bandTop = entry.rootBounds?.top ?? root.getBoundingClientRect().top;
+          if (entry.boundingClientRect.top < bandTop) {
             lastPassed = entry.target as HTMLElement;
           }
         }
