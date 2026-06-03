@@ -107,6 +107,28 @@
     queueMicrotask(paint);
   });
 
+  // Re-paint when the plan article or its scroll container resizes (window
+  // resize, the off-center column settling, font load, scrollbar appearing).
+  // <mark> tops are measured relative to the article, so any reflow shifts them;
+  // paint() is idempotent (it unwraps prior marks first), so re-running realigns
+  // the gutter cards. rAF coalesces a burst of resize callbacks into one paint
+  // and measures after layout.
+  $effect(() => {
+    const el = root;
+    if (!el) return;
+    let raf = 0;
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(paint);
+    });
+    ro.observe(el);
+    if (scrollEl) ro.observe(scrollEl);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+  });
+
   function onMouseUp(e: MouseEvent) {
     if (!root) return;
     // Ignore clicks on existing marks (handled by click below).
