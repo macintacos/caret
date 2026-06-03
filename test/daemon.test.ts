@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,6 +18,8 @@ async function boot(
     onShutdown?: () => void;
     log?: (msg: string) => void;
     routePlan?: Parameters<typeof createServer>[0]["routePlan"];
+    lockPath?: string;
+    buildId?: string;
   } = {},
 ) {
   store = createStore(dir);
@@ -30,6 +33,8 @@ async function boot(
     onShutdown: opts.onShutdown ?? (() => {}),
     log: opts.log,
     routePlan: opts.routePlan,
+    lockPath: opts.lockPath,
+    buildId: opts.buildId,
   });
   base = `http://localhost:${srv.port}`;
 }
@@ -85,6 +90,71 @@ test("GET /api/health returns the caret identity signature", async () => {
   const body = await (await fetch(`${base}/api/health`)).json();
   expect(body).toMatchObject({ service: "caret" });
   expect(typeof body.version).toBe("string");
+});
+
+// ---- single-instance lock + graceful retire (EXC-406) ----
+
+test("GET /api/health includes the build fingerprint", async () => {
+  await boot({ buildId: "build-abc" });
+  const body = (await (await fetch(`${base}/api/health`)).json()) as { build?: string };
+  expect(body.build).toBe("build-abc");
+});
+
+test("the lock file is written on bind with pid/port/build/version", async () => {
+  const lockPath = join(dir, "daemon.lock");
+  await boot({ lockPath, buildId: "build-abc" });
+  const lock = JSON.parse(readFileSync(lockPath, "utf-8")) as Record<string, unknown>;
+  expect(lock.pid).toBe(process.pid);
+  expect(lock.port).toBe(srv.port);
+  expect(lock.build).toBe("build-abc");
+  expect(typeof lock.version).toBe("string");
+  expect(typeof lock.startedAt).toBe("number");
+});
+
+test("stop() removes the lock file", async () => {
+  const lockPath = join(dir, "daemon.lock");
+  await boot({ lockPath });
+  expect(existsSync(lockPath)).toBe(true);
+  srv.stop();
+  expect(existsSync(lockPath)).toBe(false);
+});
+
+test("POST /api/retire returns 200, shuts down, and removes the lock", async () => {
+  const lockPath = join(dir, "daemon.lock");
+  let shutdowns = 0;
+  await boot({ lockPath, onShutdown: () => shutdowns++ });
+  const res = await fetch(`${base}/api/retire`, { method: "POST" });
+  expect(res.status).toBe(200);
+  // The graceful path defers stop()+onShutdown one tick so the 200 flushes first.
+  await Bun.sleep(20);
+  expect(shutdowns).toBe(1);
+  expect(existsSync(lockPath)).toBe(false);
+});
+
+test("POST /api/retire from a foreign origin is blocked (403, no shutdown)", async () => {
+  const lockPath = join(dir, "daemon.lock");
+  let shutdowns = 0;
+  await boot({ lockPath, onShutdown: () => shutdowns++ });
+  const res = await fetch(`${base}/api/retire`, {
+    method: "POST",
+    headers: { Origin: "http://evil.com" },
+  });
+  expect(res.status).toBe(403);
+  await Bun.sleep(20);
+  expect(shutdowns).toBe(0);
+  expect(existsSync(lockPath)).toBe(true);
+});
+
+test("idle auto-shutdown removes the lock file", async () => {
+  const lockPath = join(dir, "daemon.lock");
+  let shutdowns = 0;
+  await boot({ lockPath, idleMs: 30, onShutdown: () => shutdowns++ });
+  expect(existsSync(lockPath)).toBe(true);
+  await Bun.sleep(120);
+  expect(shutdowns).toBeGreaterThanOrEqual(1);
+  // stop() runs on idle shutdown and must clear the lock (one of the required
+  // "every exit path" cases: idle, SIGTERM/SIGINT, uncaught).
+  expect(existsSync(lockPath)).toBe(false);
 });
 
 test("POST then GET reviews exposes a pending ClientReview", async () => {

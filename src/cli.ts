@@ -9,12 +9,24 @@
 // allow. Every abnormal path (bad stdin, unreachable daemon, timeout, signal,
 // daemon death) emits a deny — never an allow.
 
-import { mkdirSync, openSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, openSync, readFileSync, unlinkSync } from "node:fs";
 import { dirname } from "node:path";
-import { createServer } from "./daemon.ts";
+import { createServer, type CaretServer } from "./daemon.ts";
 import { denyOutput, type HookOutput, toHookOutput } from "./feedback.ts";
 import { type ErrorContext, logError } from "./log.ts";
-import { daemonLogFile, getPort, logFile, reviewsDir, reviewTimeoutMs, stateDir } from "./paths.ts";
+import {
+  buildHash,
+  type DaemonLock,
+  daemonLock,
+  daemonLogFile,
+  getPort,
+  logFile,
+  reviewsDir,
+  reviewTimeoutMs,
+  stateDir,
+  VERSION,
+} from "./paths.ts";
 import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "./plan-format.ts";
 import { createStore } from "./store.ts";
 import type { Decision, PlanInput } from "./types.ts";
@@ -133,10 +145,26 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
   }
 }
 
+/** Parsed /api/health body. `build`/`version` are absent on a pre-fix daemon. */
+type HealthBody = { service?: string; build?: string; version?: string };
+
 export interface EnsureDeps {
   baseUrl: string;
+  /** This binary's UI build fingerprint and version, for staleness comparison. */
+  currentBuild: string;
+  currentVersion: string;
   /** Returns the parsed /api/health body, or null if the connection refused. */
-  health: (baseUrl: string) => Promise<{ service?: string } | null>;
+  health: (baseUrl: string) => Promise<HealthBody | null>;
+  /** Read the daemon lock, or null if absent/unreadable. */
+  readLock: () => DaemonLock | null;
+  /** Is a PID alive? (false ⇒ an orphan lock can be removed.) */
+  isAlive: (pid: number) => boolean;
+  /** Ask a stale daemon to step down. Returns true when a graceful shutdown was
+   * initiated (POST /api/retire accepted, or SIGTERM sent to a live lock PID),
+   * false when nothing could be done (a pre-fix daemon: no route and no lock). */
+  retire: (baseUrl: string, lock: DaemonLock | null) => Promise<boolean>;
+  /** Remove an orphan lock file. */
+  removeLock: () => void;
   /** Spawn a detached daemon. May throw EADDRINUSE if it loses a race. */
   spawn: () => void;
   backoff: (attempt: number) => Promise<void>;
@@ -150,16 +178,35 @@ function isAddrInUse(e: unknown): boolean {
   return e instanceof Error && /EADDRINUSE/.test(e.message);
 }
 
-/** Ensure a caret daemon owns the port, spawning one if needed. */
+/** Ensure a caret daemon of THIS build owns the port: reuse a same-build daemon,
+ * gracefully retire a stale one and spawn a fresh daemon, and clean orphan locks
+ * (EXC-406). Never denies a review because takeover failed — an unretireable
+ * stale daemon is reused (serving its old UI) rather than left unreachable. */
 export async function ensureDaemon(deps: EnsureDeps): Promise<string> {
   for (let attempt = 0; attempt < deps.maxAttempts; attempt++) {
     const h = await deps.health(deps.baseUrl);
-    if (h && h.service === "caret") return deps.baseUrl;
+    if (h && h.service === "caret") {
+      // Reuse only a same-build, same-version daemon; otherwise it's serving a
+      // stale UI/code and must step down so this binary's daemon can take over.
+      if (h.build === deps.currentBuild && h.version === deps.currentVersion) {
+        return deps.baseUrl;
+      }
+      const retired = await deps.retire(deps.baseUrl, deps.readLock());
+      // A pre-fix daemon (no /api/retire, no lock) can't be retired: reuse it
+      // (stale UI) rather than deny the review or spin retrying — strictly no
+      // worse than before the fix. A retireable daemon is now exiting → re-poll.
+      if (!retired) return deps.baseUrl;
+      await deps.backoff(attempt);
+      continue;
+    }
     if (h && h.service !== "caret") {
       throw new Error(`port is held by a non-caret process — set CARET_PORT to a free port`);
     }
-    // Connection refused → try to start the daemon. A lost spawn race is fine:
-    // swallow EADDRINUSE and re-poll, connecting to whichever instance won.
+    // Connection refused → drop an orphan lock (dead PID) if present, then spawn.
+    // A lost spawn race is fine: swallow EADDRINUSE and re-poll, connecting to
+    // whichever instance won.
+    const lock = deps.readLock();
+    if (lock && !deps.isAlive(lock.pid)) deps.removeLock();
     try {
       deps.spawn();
     } catch (e) {
@@ -167,6 +214,11 @@ export async function ensureDaemon(deps: EnsureDeps): Promise<string> {
     }
     await deps.backoff(attempt);
   }
+  // Exhausted: never deny a review on takeover failure. If a live caret daemon
+  // is still answering (even a stale one we couldn't retire), reuse it; only
+  // throw when nothing caret is reachable.
+  const final = await deps.health(deps.baseUrl);
+  if (final && final.service === "caret") return deps.baseUrl;
   throw new Error("caret daemon did not become healthy in time");
 }
 
@@ -174,16 +226,72 @@ export async function ensureDaemon(deps: EnsureDeps): Promise<string> {
 // Production dependency implementations
 // ---------------------------------------------------------------------------
 
-export async function httpHealth(baseUrl: string): Promise<{ service?: string } | null> {
+export async function httpHealth(baseUrl: string): Promise<HealthBody | null> {
   try {
     const res = await fetch(`${baseUrl}/api/health`, {
       signal: AbortSignal.timeout(500),
     });
     if (!res.ok) return null;
-    return (await res.json()) as { service?: string };
+    return (await res.json()) as HealthBody;
   } catch {
     return null;
   }
+}
+
+/** Read + validate the daemon lock; null if missing or unparseable. */
+function readDaemonLock(): DaemonLock | null {
+  try {
+    const lock = JSON.parse(readFileSync(daemonLock(), "utf-8")) as DaemonLock;
+    if (typeof lock.pid === "number" && typeof lock.port === "number") return lock;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Liveness probe via signal 0 (kills nothing). ESRCH ⇒ dead; EPERM ⇒ alive but
+ * owned by another user (treated as alive — we must not assume it's an orphan). */
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as { code?: string }).code === "EPERM";
+  }
+}
+
+function removeDaemonLock(): void {
+  try {
+    unlinkSync(daemonLock());
+  } catch {
+    // already gone — nothing to do.
+  }
+}
+
+/** Ask a stale daemon to step down. Returns true if a graceful shutdown was
+ * initiated; false if nothing could be done (pre-fix daemon: no route, no lock). */
+async function retireDaemon(baseUrl: string, lock: DaemonLock | null): Promise<boolean> {
+  // Preferred: the daemon's own loopback retire endpoint (persists, then exits).
+  try {
+    const res = await fetch(`${baseUrl}/api/retire`, {
+      method: "POST",
+      signal: AbortSignal.timeout(1000),
+    });
+    if (res.ok) return true;
+  } catch {
+    // network error / timeout → fall through to the SIGTERM fallback.
+  }
+  // Fallback: a daemon without /api/retire (a pre-fix build) — SIGTERM the lock's
+  // PID, if we have a live one.
+  if (lock && isPidAlive(lock.pid)) {
+    try {
+      process.kill(lock.pid, "SIGTERM");
+      return true;
+    } catch {
+      // race: it already exited, or it isn't ours — nothing more we can do.
+    }
+  }
+  return false;
 }
 
 function daemonCommand(): string[] {
@@ -247,10 +355,17 @@ function openBrowser(url: string): void {
   }
 }
 
-function prodEnsureDeps(): EnsureDeps {
+async function prodEnsureDeps(): Promise<EnsureDeps> {
   return {
     baseUrl: `http://localhost:${getPort()}`,
+    // The current binary's identity: its build fingerprint + the package version.
+    currentBuild: await currentBuildId(),
+    currentVersion: VERSION,
     health: httpHealth,
+    readLock: readDaemonLock,
+    isAlive: isPidAlive,
+    retire: retireDaemon,
+    removeLock: removeDaemonLock,
     spawn: spawnDaemon,
     backoff,
     maxAttempts: 12,
@@ -259,7 +374,7 @@ function prodEnsureDeps(): EnsureDeps {
 
 function prodReviewDeps(): ReviewDeps {
   return {
-    ensureDaemon: () => ensureDaemon(prodEnsureDeps()),
+    ensureDaemon: async () => ensureDaemon(await prodEnsureDeps()),
     postReview,
     longPoll,
     openBrowser,
@@ -292,15 +407,64 @@ async function loadUiHtml(): Promise<string | undefined> {
   return undefined;
 }
 
+export interface BuildIdDeps {
+  /** True when running as a compiled binary (process.execPath IS caret), false
+   * under `bun run` dev. */
+  isCompiled: boolean;
+  /** Hash of the compiled binary's content, or null if it can't be read. */
+  hashBinary: () => Promise<string | null>;
+  /** Hash of the served UI HTML (the dev / fallback fingerprint). */
+  uiHash: () => Promise<string>;
+}
+
+/** The build fingerprint used to decide daemon staleness. For a compiled binary
+ * it's a hash of the binary itself, so ANY rebuild — UI or server code — yields a
+ * new fingerprint and supersedes an older running daemon (a freshly built or
+ * installed caret always wins); re-invoking the same binary still matches and
+ * reuses. Dev (`bun run`, which is port-isolated and never uses takeover) falls
+ * back to the UI hash. */
+export async function computeBuildId(deps: BuildIdDeps): Promise<string> {
+  if (deps.isCompiled) {
+    const h = await deps.hashBinary();
+    if (h) return h;
+  }
+  return deps.uiHash();
+}
+
+let cachedBuildId: string | undefined;
+
+/** computeBuildId wired to the real binary/UI and memoized per process (the
+ * build can't change while this process runs). */
+async function currentBuildId(): Promise<string> {
+  if (cachedBuildId !== undefined) return cachedBuildId;
+  const script = process.argv[1];
+  cachedBuildId = await computeBuildId({
+    isCompiled: !script?.endsWith(".ts"),
+    hashBinary: async () => {
+      try {
+        const bytes = await Bun.file(process.execPath).bytes();
+        return createHash("sha256").update(bytes).digest("hex").slice(0, 12);
+      } catch {
+        return null; // unreadable binary — fall back to the UI hash.
+      }
+    },
+    uiHash: async () => buildHash(await loadUiHtml()),
+  });
+  return cachedBuildId;
+}
+
 async function runDaemon(): Promise<void> {
   const store = createStore(reviewsDir());
   await store.rehydrate();
   const html = await loadUiHtml();
+  let server: CaretServer;
   try {
-    createServer({
+    server = createServer({
       store,
       port: getPort(),
       serveHtml: html ? () => html : undefined,
+      lockPath: daemonLock(),
+      buildId: await currentBuildId(),
       log: (msg) => process.stderr.write(`[caret daemon] ${msg}\n`),
     });
   } catch (e) {
@@ -310,13 +474,37 @@ async function runDaemon(): Promise<void> {
     }
     throw e;
   }
+  // Cleanup is wired ONLY after a successful bind + lock write: a daemon that
+  // lost the EADDRINUSE race exits via the catch above without a lock, so it
+  // must never reach here and unlink the winner's lock. stop() removes the lock;
+  // pending reviews are already write-through to disk and rehydrate on restart.
+  const shutdown = (code: number) => {
+    server.stop();
+    process.exit(code);
+  };
+  process.once("SIGTERM", () => shutdown(0));
+  process.once("SIGINT", () => shutdown(0));
+  const onFatal = (label: string) => (err: unknown) => {
+    logError(label, err);
+    shutdown(1);
+  };
+  process.once("uncaughtException", onFatal("uncaughtException"));
+  process.once("unhandledRejection", onFatal("unhandledRejection"));
+  // Last-resort synchronous unlink in case an exit path bypassed stop().
+  process.once("exit", () => {
+    try {
+      unlinkSync(daemonLock());
+    } catch {
+      // already removed by stop(), or never written — both fine.
+    }
+  });
   // Bun.serve keeps the process alive; the daemon idle-auto-shuts-down.
 }
 
 async function runPrewarm(): Promise<void> {
   // Best-effort warm start; never blocks or denies (it's a PostToolUse hook).
   try {
-    await ensureDaemon(prodEnsureDeps());
+    await ensureDaemon(await prodEnsureDeps());
   } catch (e) {
     process.stderr.write(`caret prewarm: ${e}\n`);
   }

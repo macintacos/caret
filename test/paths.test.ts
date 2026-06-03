@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { heartbeatMs, reviewTimeoutMs } from "../src/paths.ts";
+import pkg from "../package.json" with { type: "json" };
+import { buildHash, daemonLock, heartbeatMs, reviewTimeoutMs, stateDir, VERSION } from "../src/paths.ts";
 
 let saved: string | undefined;
 let savedHb: string | undefined;
@@ -46,4 +47,29 @@ test("heartbeatMs falls back to the default on a non-positive or invalid value",
     process.env.CARET_HEARTBEAT_MS = bad;
     expect(heartbeatMs()).toBe(8_000);
   }
+});
+
+test("VERSION reflects package.json (honest identity, not the stale 0.0.1 hardcode)", () => {
+  expect(VERSION).toBe(pkg.version);
+});
+
+test("daemonLock resolves under stateDir and honors XDG_STATE_HOME", () => {
+  const savedXdg = process.env.XDG_STATE_HOME;
+  process.env.XDG_STATE_HOME = "/tmp/caret-xdg-paths-test";
+  try {
+    expect(daemonLock()).toBe(`${stateDir()}/daemon.lock`);
+    expect(daemonLock()).toBe("/tmp/caret-xdg-paths-test/caret/daemon.lock");
+  } finally {
+    if (savedXdg === undefined) delete process.env.XDG_STATE_HOME;
+    else process.env.XDG_STATE_HOME = savedXdg;
+  }
+});
+
+test("buildHash is stable for identical input and differs for changed input", () => {
+  expect(buildHash("<html>a</html>")).toBe(buildHash("<html>a</html>"));
+  expect(buildHash("<html>a</html>")).not.toBe(buildHash("<html>b</html>"));
+});
+
+test("buildHash returns 'no-ui' when the UI is undefined", () => {
+  expect(buildHash(undefined)).toBe("no-ui");
 });

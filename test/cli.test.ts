@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ensureDaemon, runReview } from "../src/cli.ts";
+import { computeBuildId, ensureDaemon, runReview } from "../src/cli.ts";
 import { logFile } from "../src/paths.ts";
 import { PLAN_FORMAT_DENY_MESSAGE } from "../src/plan-format.ts";
 import type { Decision } from "../src/types.ts";
@@ -318,7 +318,16 @@ test("a format-deny is logged to caret.log for diagnosability", async () => {
 function ensureDeps(over: Partial<Parameters<typeof ensureDaemon>[0]> = {}) {
   return {
     baseUrl: "http://localhost:42718",
-    health: async () => ({ service: "caret" }) as { service?: string } | null,
+    currentBuild: "b1",
+    currentVersion: "v1",
+    health: async () =>
+      ({ service: "caret", build: "b1", version: "v1" }) as
+        | { service?: string; build?: string; version?: string }
+        | null,
+    readLock: () => null,
+    isAlive: () => false,
+    retire: async () => true,
+    removeLock: () => {},
     spawn: () => {},
     backoff: async () => {},
     maxAttempts: 5,
@@ -340,7 +349,8 @@ test("ensureDaemon spawns when the port is refused, then connects", async () => 
   let checks = 0;
   const url = await ensureDaemon(
     ensureDeps({
-      health: async () => (++checks === 1 ? null : { service: "caret" }),
+      health: async () =>
+        ++checks === 1 ? null : { service: "caret", build: "b1", version: "v1" },
       spawn: () => spawns++,
     }),
   );
@@ -358,7 +368,8 @@ test("ensureDaemon swallows an EADDRINUSE spawn race and connects to the winner"
   let checks = 0;
   const url = await ensureDaemon(
     ensureDeps({
-      health: async () => (++checks === 1 ? null : { service: "caret" }),
+      health: async () =>
+        ++checks === 1 ? null : { service: "caret", build: "b1", version: "v1" },
       spawn: () => {
         const e = new Error("listen EADDRINUSE") as Error & { code?: string };
         e.code = "EADDRINUSE";
@@ -373,4 +384,131 @@ test("ensureDaemon gives up after maxAttempts", async () => {
   await expect(
     ensureDaemon(ensureDeps({ health: async () => null, maxAttempts: 3 })),
   ).rejects.toThrow();
+});
+
+// ---- ensureDaemon: single-instance discovery + graceful takeover (EXC-406) ----
+
+test("ensureDaemon reuses a same-build daemon (no spawn, no retire)", async () => {
+  let spawns = 0;
+  let retires = 0;
+  const url = await ensureDaemon(
+    ensureDeps({
+      health: async () => ({ service: "caret", build: "b1", version: "v1" }),
+      spawn: () => spawns++,
+      retire: async () => {
+        retires++;
+        return true;
+      },
+    }),
+  );
+  expect(url).toBe("http://localhost:42718");
+  expect(spawns).toBe(0);
+  expect(retires).toBe(0);
+});
+
+test("ensureDaemon retires a stale-build daemon, then reuses the fresh respawn", async () => {
+  let retires = 0;
+  let spawns = 0;
+  const url = await ensureDaemon(
+    ensureDeps({
+      // Old daemon (b0) answers until retired; the port frees; a fresh daemon (b1) binds.
+      health: async () => {
+        if (retires === 0) return { service: "caret", build: "b0", version: "v1" };
+        if (spawns === 0) return null;
+        return { service: "caret", build: "b1", version: "v1" };
+      },
+      retire: async () => {
+        retires++;
+        return true;
+      },
+      spawn: () => spawns++,
+    }),
+  );
+  expect(retires).toBe(1);
+  expect(spawns).toBe(1);
+  expect(url).toBe("http://localhost:42718");
+});
+
+test("ensureDaemon treats a version mismatch as stale even when the build matches", async () => {
+  let retires = 0;
+  await ensureDaemon(
+    ensureDeps({
+      health: async () => ({ service: "caret", build: "b1", version: "v0" }),
+      retire: async () => {
+        retires++;
+        return true;
+      },
+      maxAttempts: 1,
+    }),
+  );
+  expect(retires).toBe(1);
+});
+
+test("ensureDaemon removes an orphan lock (dead PID) before spawning", async () => {
+  let removed = 0;
+  let spawns = 0;
+  let checks = 0;
+  const url = await ensureDaemon(
+    ensureDeps({
+      health: async () =>
+        ++checks === 1 ? null : { service: "caret", build: "b1", version: "v1" },
+      readLock: () => ({ pid: 999999, port: 42718 }),
+      isAlive: () => false,
+      removeLock: () => removed++,
+      spawn: () => spawns++,
+    }),
+  );
+  expect(removed).toBe(1);
+  expect(spawns).toBe(1);
+  expect(url).toBe("http://localhost:42718");
+});
+
+test("a stale daemon that cannot be retired is reused, never denied", async () => {
+  let retires = 0;
+  // A pre-fix daemon: no /api/retire and no lock, so retire can do nothing (false).
+  const url = await ensureDaemon(
+    ensureDeps({
+      health: async () => ({ service: "caret", build: "b0", version: "v0" }),
+      retire: async () => {
+        retires++;
+        return false;
+      },
+    }),
+  );
+  expect(url).toBe("http://localhost:42718");
+  expect(retires).toBe(1);
+});
+
+// ---- computeBuildId: any local rebuild supersedes a running daemon ----
+
+test("computeBuildId hashes the binary when running compiled (any rebuild wins)", async () => {
+  const id = await computeBuildId({
+    isCompiled: true,
+    hashBinary: async () => "binhash123",
+    uiHash: async () => "uihash",
+  });
+  expect(id).toBe("binhash123");
+});
+
+test("computeBuildId falls back to the UI hash when the binary is unreadable", async () => {
+  const id = await computeBuildId({
+    isCompiled: true,
+    hashBinary: async () => null,
+    uiHash: async () => "uihash",
+  });
+  expect(id).toBe("uihash");
+});
+
+test("computeBuildId uses the UI hash in dev (not compiled, never reads the binary)", async () => {
+  let binaryReads = 0;
+  const id = await computeBuildId({
+    isCompiled: false,
+    hashBinary: async () => {
+      binaryReads++;
+      return "binhash";
+    },
+    uiHash: async () => "uihash",
+  });
+  expect(id).toBe("uihash");
+  expect(binaryReads).toBe(0);
 });
