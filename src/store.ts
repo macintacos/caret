@@ -5,6 +5,7 @@
 
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { type CaretLogger, noopLogger } from "./log.ts";
 import { isUnresolved, type Review } from "./types.ts";
 
 export interface Store {
@@ -34,7 +35,7 @@ export interface Store {
   rehydrate(): Promise<void>;
 }
 
-export function createStore(dir: string): Store {
+export function createStore(dir: string, log: CaretLogger = noopLogger): Store {
   const reviews = new Map<string, Review>();
   // Per-session approval epoch (in-memory; resets when the daemon restarts).
   const epochs = new Map<string, number>();
@@ -48,6 +49,7 @@ export function createStore(dir: string): Store {
       .then(async () => {
         await mkdir(dir, { recursive: true });
         await writeFile(join(dir, `${review.id}.json`), JSON.stringify(review, null, 2));
+        log.debug("store", `review persisted: ${review.id}`, { reviewId: review.id });
       });
     writeChains.set(review.id, next);
     return next;
@@ -126,17 +128,25 @@ export function createStore(dir: string): Store {
       try {
         files = await readdir(dir);
       } catch {
-        return; // No state dir yet — nothing to rehydrate.
+        // No state dir yet — nothing to rehydrate (a normal first run).
+        log.debug("store", "no reviews dir; nothing to rehydrate");
+        return;
       }
+      let loaded = 0;
       for (const file of files) {
         if (!file.endsWith(".json")) continue;
         try {
           const review = JSON.parse(await readFile(join(dir, file), "utf-8")) as Review;
-          if (isUnresolved(review.status)) reviews.set(review.id, review);
+          if (isUnresolved(review.status)) {
+            reviews.set(review.id, review);
+            loaded++;
+          }
         } catch {
           // Skip corrupt/partial files rather than crash on startup.
+          log.warn("store", `skipping corrupt review file: ${file}`);
         }
       }
+      if (loaded > 0) log.info("store", `rehydrated ${loaded} reviews`);
     },
   };
 }

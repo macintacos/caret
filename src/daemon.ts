@@ -27,8 +27,14 @@ import {
 
 const PLACEHOLDER_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>caret</title></head><body><div id="app">caret daemon — UI not built yet</div></body></html>`;
 
-/** Decides whether an incoming plan starts a new review or appends a version. */
-export type RoutePlan = (input: PlanInput, store: Store) => Promise<{ id: string }>;
+/** Decides whether an incoming plan starts a new review or appends a version.
+ * The router owns the review record (created vs appended), so it receives the
+ * daemon's logger. */
+export type RoutePlan = (
+  input: PlanInput,
+  store: Store,
+  log?: CaretLogger,
+) => Promise<{ id: string }>;
 
 export interface CreateServerOptions {
   store: Store;
@@ -88,7 +94,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   const lockPath = opts.lockPath;
   const buildId = opts.buildId;
   const log = opts.log ?? noopLogger;
-  const { awaitDecision, resolveDecision, clearDecision, openDecisionCount } = createDecisions();
+  const { awaitDecision, resolveDecision, clearDecision, openDecisionCount } = createDecisions(log);
 
   // Wait for a decision but no longer than `ms` — resolves to null on timeout so
   // the handler can return a 204 heartbeat. The pending promise is left intact
@@ -184,8 +190,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
 
       if (method === "POST" && path === "/api/reviews") {
         const body = (await req.json().catch(() => ({}))) as PlanInput;
-        const routed = await routePlan(body, store);
-        log.info("review", `review created: ${routed.id}`);
+        // The router logs the review record (created vs appended) itself.
+        const routed = await routePlan(body, store, log);
         return Response.json(routed);
       }
 
@@ -196,7 +202,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // Machine-global UI prefs, read once on UI load (deliberately not part of
       // the 2s /api/reviews poll). Fail-safe: returns "default" if unreadable.
       if (method === "GET" && path === "/api/prefs") {
-        return Response.json({ approveMode: await readApproveMode(prefsPath) });
+        return Response.json({ approveMode: await readApproveMode(prefsPath, log) });
       }
 
       const m = path.match(idRoute);
@@ -222,6 +228,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
           if (!inMem) {
             const disk = await store.persisted(id);
             if (disk?.decision) {
+              // The reconnect-recovery path — rare and diagnostic gold when a
+              // hook dropped its long-poll or the daemon restarted mid-review.
+              log.debug("decision", `decision served from disk: ${id}`, { reviewId: id });
               clearDecision(id);
               return Response.json(disk.decision);
             }
@@ -254,6 +263,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
               r.generalCommentDraft = body.generalCommentDraft;
             }
           });
+          // Id only — draft/annotation text is reviewer prose and never logged.
+          if (updated) log.debug("draft", `draft saved: ${id}`, { reviewId: id });
           return updated ? Response.json({ ok: true }) : notFound();
         }
 
@@ -291,13 +302,20 @@ export function createServer(opts: CreateServerOptions): CaretServer {
             // never awaited, so it can't delay the 200 that unblocks the
             // long-polling hook. A bare allow (no acceptMode) leaves prefs as-is.
             if (isAcceptMode(decision.acceptMode)) {
-              void writeApproveMode(decision.acceptMode, prefsPath).catch(() => {});
+              void writeApproveMode(decision.acceptMode, prefsPath, log).catch(() => {
+                // Recoverable: prefs only seed the UI's next default.
+                log.warn("prefs", "approve mode write failed");
+              });
             }
           }
           // Defer one tick so THIS 200 flushes before the hook's long-poll
           // resolves (otherwise the browser's POST can appear to race the unblock).
           setTimeout(() => resolveDecision(id, decision), 0);
-          log.info("resolve", `review ${id} resolved: ${decision.behavior}`);
+          log.info("resolve", `review ${id} resolved: ${decision.behavior}`, {
+            reviewId: id,
+            sessionId: existing.sessionId,
+            acceptMode: decision.acceptMode,
+          });
           return Response.json({ ok: true });
         }
       }
@@ -333,7 +351,10 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     idleTimeout: 30,
     fetch: handle,
   });
-  log.info("listen", `listening on 127.0.0.1:${server.port}`);
+  log.info("listen", `listening on 127.0.0.1:${server.port}`, {
+    build: buildId,
+    version: IDENTITY.version,
+  });
 
   // Write the single-instance lock atomically (temp + rename) so a concurrent
   // reader never sees a partial file. Best-effort: the lock is an optimization

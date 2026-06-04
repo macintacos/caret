@@ -8,6 +8,7 @@
 // so a plan after an approval is provably a fresh thread.
 
 import { randomUUID } from "node:crypto";
+import { type CaretLogger, noopLogger } from "./log.ts";
 import type { Store } from "./store.ts";
 import type { PlanInput, Review, RouteResult } from "./types.ts";
 
@@ -21,7 +22,11 @@ export function deriveTitle(plan: string): string {
   return "Untitled plan";
 }
 
-export async function routeIncomingPlan(input: PlanInput, store: Store): Promise<RouteResult> {
+export async function routeIncomingPlan(
+  input: PlanInput,
+  store: Store,
+  log: CaretLogger = noopLogger,
+): Promise<RouteResult> {
   const sessionId = input.sessionId ?? `anon-${Date.now()}`;
   const plan = input.plan ?? "";
   const now = Date.now();
@@ -37,6 +42,15 @@ export async function routeIncomingPlan(input: PlanInput, store: Store): Promise
       // daemon's /decision handler waits for the next decision instead of
       // re-serving the stale deny.
       r.decision = undefined;
+    });
+    // The threading decision is logged here — not in the daemon handler — so
+    // append vs new is distinguishable and the resolved sessionId rides along.
+    log.info("review", `review appended: ${latest.id} v${version}`, {
+      reviewId: latest.id,
+      sessionId,
+      action: "append",
+      version,
+      planEpoch: latest.planEpoch,
     });
     return {
       id: latest.id,
@@ -61,5 +75,12 @@ export async function routeIncomingPlan(input: PlanInput, store: Store): Promise
     updatedAt: now,
   };
   await store.create(review);
+  log.info("review", `review created: ${id}`, {
+    reviewId: id,
+    sessionId,
+    action: "new",
+    version: 1,
+    planEpoch,
+  });
   return { id, action: "new", version: 1, planEpoch };
 }

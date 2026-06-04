@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { routeIncomingPlan } from "../src/reviews.ts";
 import { createStore, type Store } from "../src/store.ts";
 import type { PlanInput } from "../src/types.ts";
+import { recordingLog } from "./recording-log.ts";
 
 let dir: string;
 let store: Store;
@@ -97,6 +98,32 @@ test("two interleaved sessions never cross-contaminate", async () => {
   expect(s1b).toMatchObject({ id: s1.id, action: "append" }); // appended to S1
   expect(s2b.action).toBe("new"); // S2 was pending -> new thread
   expect(s2b.id).not.toBe(s2.id);
+});
+
+// ---- instrumentation (EXC-444) ----
+
+test("routing a new plan logs review created with full threading context", async () => {
+  const { recs, log } = recordingLog();
+  const r = await routeIncomingPlan(input(), store, log);
+  expect(recs).toContainEqual({
+    level: "info",
+    step: "review",
+    msg: `review created: ${r.id}`,
+    extra: { reviewId: r.id, sessionId: "S", action: "new", version: 1, planEpoch: 0 },
+  });
+});
+
+test("appending a revision logs review appended with the version", async () => {
+  const a = await routeIncomingPlan(input(), store);
+  await reject(a.id);
+  const { recs, log } = recordingLog();
+  await routeIncomingPlan(input({ plan: "# v2\n\nrevised" }), store, log);
+  expect(recs).toContainEqual({
+    level: "info",
+    step: "review",
+    msg: `review appended: ${a.id} v2`,
+    extra: { reviewId: a.id, sessionId: "S", action: "append", version: 2, planEpoch: 0 },
+  });
 });
 
 test("property: appends only follow a rejection, never crossing an approval", async () => {

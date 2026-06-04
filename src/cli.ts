@@ -502,7 +502,7 @@ async function runDaemon(): Promise<void> {
     existsSync(cfg) ? `settings: reading ${cfg}` : `settings: no config at ${cfg}; using defaults`,
     { settings: svc.current() },
   );
-  const store = createStore(reviewsDir());
+  const store = createStore(reviewsDir(), log);
   await store.rehydrate();
   const html = await loadUiHtml();
   let server: CaretServer;
