@@ -37,7 +37,7 @@ import {
 } from "./paths.ts";
 import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "./plan-format.ts";
 import { redactLogFiles } from "./redact.ts";
-import { loadSettings, settings } from "./settings.ts";
+import { loadSettings, settings, watchSettings } from "./settings.ts";
 import { createStore } from "./store.ts";
 import type { Decision, PlanInput } from "./types.ts";
 
@@ -473,23 +473,30 @@ async function currentBuildId(): Promise<string> {
 
 async function runDaemon(): Promise<void> {
   // Leveled NDJSON to stderr (spawnDaemon redirects it into daemon.log). The
-  // level and redact thunks re-read settings().current() per emit, so
-  // config.toml edits hot-reload without a restart — and the boot line below
-  // doubles as the EXC-429 settings warm: an invalid config is detected and
-  // logged here, not on first use.
+  // level and redact thunks re-read svc.current() per emit, so config.toml
+  // edits hot-reload without a restart — and the boot line below doubles as
+  // the EXC-429 settings warm: an invalid config is detected and logged here,
+  // not on first use. The watcher records which keys changed when a reload is
+  // detected (i.e. on the first emit after the edit — detection is as lazy as
+  // the reload itself). NB: a change record is an info emit, so raising
+  // [logging].level above info suppresses it like any other info record.
+  const svc = watchSettings(settings(), (changes, next) =>
+    log.info("settings", `settings changed: ${changes.join("; ")}`, { settings: next }),
+  );
   const log = createDaemonLogger(
-    () => settings().current().logging.level,
+    () => svc.current().logging.level,
     undefined,
-    () => settings().current().logging.redact,
+    () => svc.current().logging.redact,
   );
   const cfg = configFile();
   // The boot line records the effective settings: the VALIDATED parse only —
   // schema-constrained enums/booleans — never raw config text, which may hold
-  // anything (the settings.ts logValidationFailure invariant).
+  // anything (the settings.ts logValidationFailure invariant). It is also the
+  // watcher's baseline read, so boot never fires a spurious change record.
   log.info(
     "settings",
     existsSync(cfg) ? `settings: reading ${cfg}` : `settings: no config at ${cfg}; using defaults`,
-    { settings: settings().current() },
+    { settings: svc.current() },
   );
   const store = createStore(reviewsDir());
   await store.rehydrate();

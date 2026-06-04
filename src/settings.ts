@@ -126,6 +126,49 @@ export function createSettings(file = configFile()): SettingsService {
   };
 }
 
+/** Describe value changes between two settings snapshots as
+ * "table.key: old → new" lines. Validated values only (enums/booleans), so
+ * the output is safe for logs — raw config text never appears. */
+function diffSettings(prev: Settings, next: Settings): string[] {
+  const before = prev as unknown as Record<string, Record<string, unknown>>;
+  const changes: string[] = [];
+  for (const [table, keys] of Object.entries(next) as [string, Record<string, unknown>][]) {
+    for (const [key, val] of Object.entries(keys)) {
+      if (before[table]?.[key] !== val) {
+        changes.push(`${table}.${key}: ${before[table]?.[key]} → ${val}`);
+      }
+    }
+  }
+  return changes;
+}
+
+/** Decorate a SettingsService so a hot-reload that changes values invokes
+ * `onChange` with the changed keys (EXC-399: the daemon logs them). The first
+ * read seeds the baseline silently; a reload yielding equal values (touch,
+ * re-save) or a failed parse (lastGood retained) does not fire. The baseline
+ * advances BEFORE onChange runs, so a callback that logs — and thereby
+ * re-enters current() via the logger's settings thunks — sees no change and
+ * cannot recurse. */
+export function watchSettings(
+  inner: SettingsService,
+  onChange: (changes: string[], next: Settings) => void,
+): SettingsService {
+  let prev: Settings | null = null;
+  return {
+    current() {
+      const next = inner.current();
+      if (prev !== null && next !== prev) {
+        const changes = diffSettings(prev, next);
+        prev = next;
+        if (changes.length > 0) onChange(changes, next);
+      } else {
+        prev = next;
+      }
+      return next;
+    },
+  };
+}
+
 let singleton: SettingsService | undefined;
 
 /** Lazy module-level singleton — the daemon's one settings instance,

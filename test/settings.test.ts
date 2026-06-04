@@ -3,7 +3,14 @@ import { unlinkSync, utimesSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createSettings, DEFAULTS, loadSettings, settings } from "../src/settings.ts";
+import {
+  createSettings,
+  DEFAULTS,
+  loadSettings,
+  type Settings,
+  settings,
+  watchSettings,
+} from "../src/settings.ts";
 
 let dir: string;
 let file: string;
@@ -128,4 +135,57 @@ test("mutating a frozen result throws (strict mode)", async () => {
   expect(() => {
     (s.logging as { level: string }).level = "debug";
   }).toThrow(TypeError);
+});
+
+// --- watchSettings (EXC-399: hot-reload change records) ---
+
+test("watchSettings reports each changed key with old and new values", async () => {
+  await Bun.write(file, '[logging]\nlevel = "info"\n');
+  const fired: Array<{ changes: string[]; next: Settings }> = [];
+  const svc = watchSettings(createSettings(file), (changes, next) =>
+    fired.push({ changes, next }),
+  );
+  svc.current(); // first read seeds the baseline — must not fire
+  await Bun.write(file, '[logging]\nlevel = "debug"\nredact = true\n');
+  const next = svc.current();
+  expect(fired.length).toBe(1);
+  expect(fired[0].changes).toEqual([
+    "logging.level: info → debug",
+    "logging.redact: false → true",
+  ]);
+  expect(fired[0].next).toBe(next);
+});
+
+test("watchSettings does not fire when a rewrite leaves values unchanged", async () => {
+  await Bun.write(file, '[logging]\nlevel = "warn"\n');
+  let fires = 0;
+  const svc = watchSettings(createSettings(file), () => fires++);
+  svc.current();
+  // Re-write the same content: new mtime, new parsed object, equal values.
+  await Bun.write(file, '[logging]\nlevel = "warn"\n');
+  svc.current();
+  expect(fires).toBe(0);
+});
+
+test("watchSettings does not fire when an invalid rewrite keeps last-known-good", async () => {
+  await Bun.write(file, '[logging]\nlevel = "debug"\n');
+  let fires = 0;
+  const svc = watchSettings(createSettings(file), () => fires++);
+  svc.current();
+  await Bun.write(file, "[logging\nlevel ="); // malformed: lastGood retained
+  expect(svc.current().logging.level).toBe("debug");
+  expect(fires).toBe(0);
+});
+
+test("watchSettings tolerates a re-entrant current() from inside onChange", async () => {
+  await Bun.write(file, '[logging]\nredact = false\n');
+  let fires = 0;
+  const svc: { current(): Settings } = watchSettings(createSettings(file), () => {
+    fires++;
+    svc.current(); // a logging callback re-enters (emit → level thunk → current)
+  });
+  svc.current();
+  await Bun.write(file, '[logging]\nredact = true\n');
+  svc.current();
+  expect(fires).toBe(1); // the re-entrant read sees no further change
 });
