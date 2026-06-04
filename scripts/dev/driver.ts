@@ -9,7 +9,7 @@
 // feedback and resubmits; on approve it re-seeds a fresh v1. The
 // revision-threading contract lives in src/reviews.ts.
 
-import { longPoll, postReview, type ReviewDeps, runReview } from "../../src/cli.ts";
+import { httpHealth, longPoll, postReview, type ReviewDeps, runReview } from "../../src/cli.ts";
 import type { PermissionDecision } from "../../src/feedback.ts";
 import { DEFAULT_PORT } from "../../src/paths.ts";
 
@@ -19,19 +19,10 @@ export const DEV_SESSION = "caret-dev";
 
 const log = (msg: string) => process.stderr.write(`[caret dev driver] ${msg}\n`);
 
-function fixture(name: string): Promise<string> {
-  return Bun.file(`${import.meta.dir}/${name}`).text();
-}
-
-/** Poll GET /api/health until the daemon reports the caret identity. */
-export async function waitForHealth(base: string, maxAttempts = 100): Promise<void> {
+/** Poll the daemon's health endpoint until it reports the caret identity. */
+async function waitForHealth(base: string, maxAttempts = 100): Promise<void> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    try {
-      const res = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(500) });
-      if (res.ok && ((await res.json()) as { service?: string }).service === "caret") return;
-    } catch {
-      // not up yet — keep polling
-    }
+    if ((await httpHealth(base))?.service === "caret") return;
     await Bun.sleep(100);
   }
   throw new Error("caret dev daemon did not become healthy in time");
@@ -133,7 +124,7 @@ export function assertDevEnv(): void {
 export async function run(): Promise<void> {
   assertDevEnv();
   const base = `http://127.0.0.1:${process.env.CARET_PORT}`;
-  const v1 = await fixture("fake-plan.md");
+  const v1 = await Bun.file(`${import.meta.dir}/fake-plan.md`).text();
   const deps = devReviewDeps(base);
   let state: DriverState = { plan: v1, revision: 0 };
   for (;;) {

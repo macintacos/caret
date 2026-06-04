@@ -6,7 +6,7 @@ import { runReview } from "../src/cli.ts";
 import { type CaretServer, createServer } from "../src/daemon.ts";
 import { setLogLevel } from "../src/log.ts";
 import { hasUntaggedCodeBlock } from "../src/plan-format.ts";
-import { createStore, type Store } from "../src/store.ts";
+import { createStore } from "../src/store.ts";
 import {
   appendRevision,
   assertDevEnv,
@@ -21,7 +21,6 @@ import {
 const PLAN_V1 = await Bun.file(`${import.meta.dir}/../scripts/dev/fake-plan.md`).text();
 
 let dir: string;
-let store: Store;
 let srv: CaretServer;
 let base: string;
 
@@ -33,7 +32,7 @@ let savedXdg: string | undefined;
 // Boot a real in-process daemon (no browser, no spawned process), exactly the
 // pattern test/daemon.test.ts uses.
 async function boot() {
-  store = createStore(dir);
+  const store = createStore(dir);
   await store.rehydrate();
   srv = createServer({ store, port: 0, idleMs: 1_000_000, onShutdown: () => {} });
   base = `http://localhost:${srv.port}`;
