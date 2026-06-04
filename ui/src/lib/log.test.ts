@@ -1,56 +1,37 @@
 import "../../test-setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { batchEvents, type LogCapture, logCapture } from "../../test-helpers.ts";
 import { flush, startLogBridge, uiLog } from "./log.ts";
 
-// A controllable fetch double: records every call's (url, options) and lets a
-// test decide whether the next POST resolves or rejects. Restored in afterEach.
-interface FetchCall {
-  url: string;
-  options: RequestInit | undefined;
-}
-let calls: FetchCall[];
-let originalFetch: typeof globalThis.fetch;
+// Shared fetch double (test-helpers.ts): captures /api/logs POSTs and drains
+// the module-global buffer at install and restore so cases don't bleed.
+let cap: LogCapture;
 let stopBridge: (() => void) | null;
 
-function bodyEvents(call: FetchCall): Array<Record<string, unknown>> {
-  const parsed = JSON.parse(call.options?.body as string) as {
-    events: Array<Record<string, unknown>>;
-  };
-  return parsed.events;
-}
-
 beforeEach(() => {
-  calls = [];
-  originalFetch = globalThis.fetch;
-  globalThis.fetch = ((url: string, options?: RequestInit) => {
-    calls.push({ url, options });
-    return Promise.resolve(new Response(null, { status: 204 }));
-  }) as typeof globalThis.fetch;
+  cap = logCapture();
   stopBridge = null;
 });
 
 afterEach(() => {
-  globalThis.fetch = originalFetch;
   stopBridge?.();
-  // Drain any residue so cases don't bleed into each other.
-  flush();
-  calls = [];
+  cap.restore();
 });
 
 describe("uiLog buffering and flush", () => {
   test("below-threshold events buffer; explicit flush makes one ordered POST", () => {
     uiLog.info("ui", "first");
     uiLog.warn("ui", "second");
-    expect(calls).toHaveLength(0);
+    expect(cap.calls).toHaveLength(0);
 
     flush();
 
-    expect(calls).toHaveLength(1);
-    expect(calls[0]!.url).toBe("/api/logs");
-    expect((calls[0]!.options?.headers as Record<string, string>)["Content-Type"]).toBe(
+    expect(cap.calls).toHaveLength(1);
+    expect(cap.calls[0]!.url).toBe("/api/logs");
+    expect((cap.calls[0]!.options?.headers as Record<string, string>)["Content-Type"]).toBe(
       "application/json",
     );
-    const events = bodyEvents(calls[0]!);
+    const events = batchEvents(cap.calls[0]!);
     expect(events.map((e) => e.msg)).toEqual(["first", "second"]);
     expect(events[0]).toMatchObject({ level: "info", step: "ui", msg: "first" });
   });
@@ -58,19 +39,19 @@ describe("uiLog buffering and flush", () => {
   test("the 20th push auto-flushes one batch of 20", () => {
     for (let i = 0; i < 20; i++) uiLog.info("ui", `m${i}`);
 
-    expect(calls).toHaveLength(1);
-    expect(bodyEvents(calls[0]!)).toHaveLength(20);
+    expect(cap.calls).toHaveLength(1);
+    expect(batchEvents(cap.calls[0]!)).toHaveLength(20);
   });
 
   test("a rejecting fetch throws nothing and drops the batch (no requeue)", async () => {
     globalThis.fetch = ((url: string, options?: RequestInit) => {
-      calls.push({ url, options });
+      cap.calls.push({ url, options });
       return Promise.reject(new Error("network down"));
     }) as typeof globalThis.fetch;
 
     uiLog.info("ui", "doomed");
     expect(() => flush()).not.toThrow();
-    expect(calls).toHaveLength(1);
+    expect(cap.calls).toHaveLength(1);
 
     // Let the rejected promise settle; an unhandled rejection would surface here.
     await Promise.resolve();
@@ -78,7 +59,7 @@ describe("uiLog buffering and flush", () => {
     // The batch was swapped out before the request, so it is gone — a second
     // flush has nothing to send.
     flush();
-    expect(calls).toHaveLength(1);
+    expect(cap.calls).toHaveLength(1);
   });
 
   test("the ring cap keeps any single flushed batch at or under BUFFER_MAX", () => {
@@ -91,10 +72,10 @@ describe("uiLog buffering and flush", () => {
     // (no batch exceeds the cap), not the backstop's internals.
     for (let i = 0; i < 250; i++) uiLog.debug("ui", `e${i}`);
     flush();
-    for (const call of calls) {
-      expect(bodyEvents(call).length).toBeLessThanOrEqual(100);
+    for (const call of cap.calls) {
+      expect(batchEvents(call).length).toBeLessThanOrEqual(100);
     }
-    expect(calls.length).toBeGreaterThan(0);
+    expect(cap.calls.length).toBeGreaterThan(0);
   });
 
   test("DENY_KEYS values are censored at construction, recursively", () => {
@@ -102,7 +83,7 @@ describe("uiLog buffering and flush", () => {
     uiLog.info("ui", "m", original);
     flush();
 
-    const extra = bodyEvents(calls[0]!)[0]!.extra as {
+    const extra = batchEvents(cap.calls[0]!)[0]!.extra as {
       plan: string;
       nested: { feedback: string; keep: string };
     };
@@ -122,7 +103,7 @@ describe("uiLog buffering and flush", () => {
     uiLog.info("ui", "m", deep);
     flush();
 
-    const body = JSON.stringify(bodyEvents(calls[0]!));
+    const body = JSON.stringify(batchEvents(cap.calls[0]!));
     expect(body).not.toContain("deep secret");
     expect(body).toContain("<depth-capped>");
   });
@@ -132,19 +113,19 @@ describe("uiLog buffering and flush", () => {
     // at construction so a sloppy call site can't drop its neighbors.
     uiLog.info("Bad Step!", "m");
     flush();
-    expect(bodyEvents(calls[0]!)[0]!.step).toBe("ui");
+    expect(batchEvents(cap.calls[0]!)[0]!.step).toBe("ui");
   });
 
   test("msg is truncated to the endpoint's cap at construction", () => {
     uiLog.info("ui", "x".repeat(300));
     flush();
-    expect((bodyEvents(calls[0]!)[0]!.msg as string).length).toBe(256);
+    expect((batchEvents(cap.calls[0]!)[0]!.msg as string).length).toBe(256);
   });
 
   test("an array extra is wrapped into a plain object the endpoint accepts", () => {
     uiLog.info("ui", "m", [1, 2] as unknown as object);
     flush();
-    expect(bodyEvents(calls[0]!)[0]!.extra).toEqual({ value: [1, 2] });
+    expect(batchEvents(cap.calls[0]!)[0]!.extra).toEqual({ value: [1, 2] });
   });
 
   test("a cyclic extra is cut off as <cyclic>, like src/redact.ts walk", () => {
@@ -152,7 +133,7 @@ describe("uiLog buffering and flush", () => {
     a.self = a;
     uiLog.info("ui", "m", a);
     flush();
-    expect(bodyEvents(calls[0]!)[0]!.extra).toEqual({ self: "<cyclic>" });
+    expect(batchEvents(cap.calls[0]!)[0]!.extra).toEqual({ self: "<cyclic>" });
   });
 
   test("error stringifies client-side: Error -> message, other -> String()", () => {
@@ -160,14 +141,14 @@ describe("uiLog buffering and flush", () => {
     uiLog.error("ui", { code: 7 });
     flush();
 
-    const events = bodyEvents(calls[0]!);
+    const events = batchEvents(cap.calls[0]!);
     expect(events[0]).toMatchObject({ level: "error", step: "ui", msg: "boom" });
     expect(events[1]).toMatchObject({ level: "error", msg: "[object Object]" });
   });
 
   test("flush on an empty buffer makes no request", () => {
     flush();
-    expect(calls).toHaveLength(0);
+    expect(cap.calls).toHaveLength(0);
   });
 
   test("pagehide flush passes keepalive: true to fetch", () => {
@@ -186,7 +167,7 @@ describe("uiLog buffering and flush", () => {
     uiLog.info("ui", "before unload");
     (handlers.pagehide as EventListener)(new Event("pagehide"));
 
-    expect(calls).toHaveLength(1);
-    expect((calls[0]!.options as RequestInit).keepalive).toBe(true);
+    expect(cap.calls).toHaveLength(1);
+    expect((cap.calls[0]!.options as RequestInit).keepalive).toBe(true);
   });
 });

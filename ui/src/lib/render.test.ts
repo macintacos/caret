@@ -1,6 +1,8 @@
 import "../../test-setup.ts";
-import { beforeAll, describe, expect, test } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { type LogCapture, logCapture } from "../../test-helpers.ts";
 import { initHighlighter } from "./highlight.ts";
+import { flush } from "./log.ts";
 import { type HeadingEntry, renderPlan, shouldShowRail } from "./render.ts";
 
 const SAMPLE = `# Introduction
@@ -239,5 +241,52 @@ describe("renderPlan code block highlighting", () => {
     const { html } = renderPlan("a `inline` word\n");
     expect(html).not.toContain("shiki");
     expect(html).toContain("<code>inline</code>");
+  });
+});
+
+// A heading + paragraph + bullet list: three stamped block methods (heading,
+// paragraph, list) so blocks === 3, and exactly one heading. Counted by hand so
+// the assertions are deterministic, not derived from the code under test.
+const LOG_FIXTURE = `# Title
+
+A paragraph with secret-marker text.
+
+- a
+- b
+`;
+
+describe("renderPlan logging", () => {
+  // Shared fetch double (test-helpers.ts): captures /api/logs POSTs and drains
+  // the module-global buffer at install and restore, so the earlier suites'
+  // renderPlan debug records can't bleed into this capture (or vice versa).
+  let cap: LogCapture;
+
+  beforeEach(() => {
+    cap = logCapture();
+  });
+
+  afterEach(() => {
+    cap.restore();
+  });
+
+  test("emits one debug 'plan rendered' record per renderPlan call", () => {
+    renderPlan(LOG_FIXTURE);
+    flush();
+
+    const records = cap.events();
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      level: "debug",
+      step: "render",
+      msg: "plan rendered",
+      extra: { chars: LOG_FIXTURE.length, blocks: 3, headings: 1 },
+    });
+  });
+
+  test("never logs the plan text under any key", () => {
+    renderPlan(LOG_FIXTURE);
+    flush();
+
+    expect(cap.text()).not.toContain("secret-marker");
   });
 });

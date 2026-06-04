@@ -207,12 +207,19 @@ claude --plugin-dir ./    # load caret's hooks for this session only
 /reload-plugins           # if you rebuild while Claude is running
 ```
 
+### Icons
+
+caret's icons are [Lucide](https://lucide.dev) SVGs vendored verbatim at a pinned release under
+`ui/src/icons/`, rendered by `ui/src/components/Icon.svelte`. Adding one means following the
+checklist in `.claude/rules/icon-rules.md` and adding a row to
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+
 ## Layout
 
 ```text
 src/        cli.ts (subcommands) · daemon.ts (Bun.serve) · store.ts · decisions.ts · log.ts (leveled NDJSON)
             reviews.ts (revision threading) · feedback.ts · paths.ts · types.ts · settings.ts (config.toml) · redact.ts
-ui/         Svelte 5 single-file SPA (Vite + vite-plugin-singlefile)
+ui/         Svelte 5 single-file SPA (Vite + vite-plugin-singlefile) · src/icons/ vendored Lucide SVGs
 hooks/      hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode)
 commands/   /caret:demo · /caret:debug
 scripts/    install.sh (build + register via the native plugin system)
@@ -222,4 +229,5 @@ The polished diff/compare viewer for plan versions is a planned fast-follow.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). Vendored third-party assets (the Lucide icons) are itemized in
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) (ISC).

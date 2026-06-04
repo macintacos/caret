@@ -8,6 +8,8 @@
 // Framework-agnostic and unit-tested in isolation; App.svelte wires it to a
 // `window` target and reflects `onChange` into reactive state (cf. scrollspy.ts).
 
+import { uiLog } from "./log.ts";
+
 export interface SafeModeOptions {
   /** Event source to guard — `window` in the app. */
   target: EventTarget;
@@ -37,16 +39,21 @@ export function createSafeModeGuard(opts: SafeModeOptions): SafeModeGuard {
   let armedAt = now();
   let active = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  // Key events eaten during the current activation — never the keys themselves,
+  // only the count (a key sequence reconstructs what the user was typing).
+  let swallowed = 0;
 
   function eat(e: Event) {
     e.preventDefault();
     e.stopImmediatePropagation();
+    swallowed++;
   }
 
   function deactivate() {
     timer = undefined;
     if (!active) return;
     active = false;
+    uiLog.debug("ui", "safe mode released", { swallowed });
     opts.onChange(false);
   }
 
@@ -56,8 +63,10 @@ export function createSafeModeGuard(opts: SafeModeOptions): SafeModeGuard {
       return;
     }
     if (now() - armedAt <= graceMs) {
+      swallowed = 0; // reset per activation, before the triggering eat() counts
       eat(e);
       active = true;
+      uiLog.info("ui", "safe mode triggered");
       opts.onChange(true);
       if (timer) clearTimeout(timer);
       timer = setTimeout(deactivate, durationMs);

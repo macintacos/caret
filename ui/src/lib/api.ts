@@ -1,6 +1,7 @@
 // Same-origin JSON API client. All paths are relative `/api/...`; in dev the
 // Vite proxy forwards them to the daemon on :42718.
 
+import { shortId, uiLog } from "./log.ts";
 import type { AcceptMode, Annotation, ClientReview, Health, ResolveBody } from "./types.ts";
 
 /** Thrown when the daemon responded with a non-2xx status — distinct from a
@@ -24,8 +25,13 @@ export async function getHealth(): Promise<Health> {
 /** One-time read (on UI load) of the machine-global remembered approve mode.
  * Deliberately not part of the 2s reviews poll. */
 export async function getApproveMode(): Promise<AcceptMode> {
-  const { approveMode } = await json<{ approveMode: AcceptMode }>(await fetch("/api/prefs"));
-  return approveMode;
+  try {
+    const { approveMode } = await json<{ approveMode: AcceptMode }>(await fetch("/api/prefs"));
+    return approveMode;
+  } catch (err) {
+    uiLog.warn("prefs", "approve mode read failed", { reason: String(err) });
+    throw err;
+  }
 }
 
 export async function listReviews(): Promise<ClientReview[]> {
@@ -42,23 +48,52 @@ export async function putDraft(
   id: string,
   draft: { annotations: Annotation[]; generalCommentDraft: string },
 ): Promise<void> {
-  await json<{ ok: true }>(
-    await fetch(`/api/reviews/${encodeURIComponent(id)}/draft`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(draft),
-    }),
-  );
+  // Success is logged daemon-side; only the failure path is worth a UI record.
+  try {
+    await json<{ ok: true }>(
+      await fetch(`/api/reviews/${encodeURIComponent(id)}/draft`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(draft),
+      }),
+    );
+  } catch (err) {
+    uiLog.warn("draft", `draft save failed: ${shortId(id)}`, {
+      reviewId: id,
+      annotationCount: draft.annotations.length,
+      reason: String(err),
+    });
+    throw err;
+  }
 }
 
 export async function resolveReview(id: string, body: ResolveBody): Promise<void> {
-  await json<{ ok: true }>(
-    await fetch(`/api/reviews/${encodeURIComponent(id)}/resolve`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-  );
+  // Intent record before the POST: the behavior plus counts/ids only — feedback
+  // body text is never logged (see DENY_KEYS / redaction rules).
+  uiLog.info("resolve", `resolve submitted: ${shortId(id)}: ${body.behavior}`, {
+    reviewId: id,
+    ...(body.acceptMode === undefined ? {} : { acceptMode: body.acceptMode }),
+    ...(body.feedback === undefined ? {} : { feedbackChars: body.feedback.length }),
+  });
+  try {
+    await json<{ ok: true }>(
+      await fetch(`/api/reviews/${encodeURIComponent(id)}/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    );
+  } catch (err) {
+    if (err instanceof HttpError) {
+      uiLog.warn("resolve", `resolve failed: ${shortId(id)}: http ${err.status}`, {
+        reviewId: id,
+        status: err.status,
+      });
+    } else {
+      uiLog.error("resolve", err, { reviewId: id });
+    }
+    throw err;
+  }
 }
 
 /**
@@ -73,13 +108,29 @@ export function startPolling(
 ): () => void {
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  // Transition state: log only when the poll's health flips or the pending count
+  // changes — never per-tick, which would drown the timeline in noise. Health is
+  // carried by `failures` alone: zero ⟺ healthy.
+  let failures = 0;
+  let lastCount = -1;
 
   const tick = async () => {
     if (stopped) return;
     try {
       const reviews = await listReviews();
+      if (failures > 0) {
+        uiLog.info("poll", "poll recovered", { failures });
+        failures = 0;
+      }
+      if (reviews.length !== lastCount) {
+        uiLog.debug("poll", `reviews pending: ${reviews.length}`, { count: reviews.length });
+        lastCount = reviews.length;
+      }
       if (!stopped) onUpdate(reviews);
     } catch (err) {
+      // Warn only on the healthy→unhealthy transition; a sustained outage logs once.
+      if (failures === 0) uiLog.warn("poll", "poll failed", { reason: String(err) });
+      failures++;
       onError?.(err);
     } finally {
       if (!stopped) timer = setTimeout(tick, intervalMs);

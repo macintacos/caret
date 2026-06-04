@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Annotation } from "../lib/types.ts";
   import { formatFeedback } from "../lib/feedback.ts";
+  import Icon from "./Icon.svelte";
 
   interface Props {
     annotations: Annotation[];
@@ -78,8 +79,16 @@
 
     <footer>
       <button class="ghost" onclick={onCancel}>Cancel</button>
-      <button class="deny" onclick={submit} disabled={!preview}>
-        Send for revision <span class="kbd">⌘↵</span>
+      <button
+        class="deny"
+        onclick={submit}
+        disabled={!preview}
+        aria-keyshortcuts="Meta+Enter Control+Enter"
+      >
+        Send for revision
+        <span class="kbd" aria-hidden="true">
+          <Icon name="command" size={12} /><Icon name="corner-down-left" size={12} />
+        </span>
       </button>
     </footer>
   </div>
@@ -208,7 +217,9 @@
     cursor: not-allowed;
   }
   .kbd {
-    font-size: 0.7rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
     opacity: 0.75;
   }
   @keyframes fade {
