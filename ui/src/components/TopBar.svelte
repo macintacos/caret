@@ -1,6 +1,7 @@
 <script lang="ts">
   import { APPROVE_VARIANTS, approveLabel } from "../lib/approve.ts";
   import type { AcceptMode, ClientReview } from "../lib/types.ts";
+  import Icon from "./Icon.svelte";
   import ReviewSwitcher from "./ReviewSwitcher.svelte";
   import VersionLabel from "./VersionLabel.svelte";
 
@@ -53,11 +54,13 @@
 
     <div class="actions" class:busy>
       <button class="request" onclick={onRequestChanges} disabled={busy}>
+        <Icon name="corner-up-left" size={14} />
         Request changes
       </button>
 
       <div class="split">
         <button class="approve" onclick={() => approve(approveMode)} disabled={busy}>
+          <Icon name="check" size={14} />
           {approveLabel(approveMode)}
         </button>
         <button
@@ -68,7 +71,7 @@
           onclick={() => (menuOpen = !menuOpen)}
           disabled={busy}
         >
-          ▾
+          <Icon name="chevron-down" size={14} />
         </button>
 
         {#if menuOpen}
@@ -159,6 +162,9 @@
     padding: 0.5rem 0.9rem;
     font-size: 0.82rem;
     font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
   }
   .request:hover:not(:disabled) {
     border-color: var(--accent);
@@ -177,6 +183,9 @@
     padding: 0.5rem 1rem;
     font-size: 0.82rem;
     font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
   }
   .split-toggle {
     background: var(--accent);
@@ -184,7 +193,6 @@
     border: 1px solid var(--accent);
     border-radius: 0 var(--radius) var(--radius) 0;
     padding: 0.5rem 0.55rem;
-    font-size: 0.7rem;
     border-left: 1px solid color-mix(in srgb, var(--accent-ink) 30%, var(--accent));
   }
   .approve:hover:not(:disabled),
