@@ -71,8 +71,9 @@ and distinguish important events by their informative messages alone.
 Concretely:
 
 - Messages are **lowercase, factual, present tense**: `"review created: <id>"`, `"plan rejected"`.
-- `step` is a **short fixed lowercase token** naming the operation (`review`, `decision`, `idle`,
-  `listen`, `settings`). Reuse an existing token before minting a new one.
+- `step` is a **short fixed lowercase token** naming the operation (`review`, `resolve`,
+  `decision`, `idle`, `listen`, `settings`, `signal`). Reuse an existing token before minting a
+  new one.
 - `extra` keys must **not collide** with the record's own fields: `level`, `time`, `msg`, `step`,
   `pid`, `err`.
 
