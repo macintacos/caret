@@ -96,15 +96,26 @@ export async function resolveReview(id: string, body: ResolveBody): Promise<void
   }
 }
 
+// Re-check the daemon's identity every Nth successful poll: a same-port
+// takeover by a newer build can complete between 2s polls without a single
+// failed tick, so the recovery-edge check alone would miss it.
+const IDENTITY_CHECK_EVERY = 5;
+
 /**
  * Polls GET /api/reviews on an interval, invoking `onUpdate` with each fresh
  * snapshot. Returns a stop function. Errors are reported via `onError` (or
  * swallowed) so a transient daemon hiccup doesn't kill the loop.
+ *
+ * `onSwap` fires once when the daemon behind the port is replaced — its
+ * per-boot `instanceId` (GET /api/health) differs from the last seen one. The
+ * id is checked at three points: once at start (seeds the baseline), on each
+ * failure→recovery edge, and on every ~5th successful poll.
  */
 export function startPolling(
   onUpdate: (reviews: ClientReview[]) => void,
   intervalMs = 2000,
   onError?: (err: unknown) => void,
+  onSwap?: (instanceId: string) => void,
 ): () => void {
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -113,6 +124,31 @@ export function startPolling(
   // carried by `failures` alone: zero ⟺ healthy.
   let failures = 0;
   let lastCount = -1;
+  let successes = 0;
+  // Last-seen daemon identity. `undefined` until the first health read seeds it;
+  // a pre-fix daemon (no instanceId) keeps it undefined, so detection no-ops.
+  let lastInstanceId: string | undefined;
+
+  // Fetch /api/health and compare its instanceId against the baseline. Fires
+  // onSwap (and logs one warn) only when a previous id existed and differs;
+  // then advances the baseline so one swap yields one notification, not one per
+  // poll. Opaque ids only — stateDir is identifying and is never read/logged.
+  const checkIdentity = async () => {
+    let health: Health;
+    try {
+      health = await getHealth();
+    } catch {
+      return; // health hiccup is not a swap; the reviews poll tracks liveness
+    }
+    const id = health.instanceId;
+    if (id === undefined) return; // pre-fix daemon: cannot detect, skip
+    const prev = lastInstanceId;
+    lastInstanceId = id;
+    if (prev !== undefined && prev !== id) {
+      uiLog.warn("poll", "daemon instance changed", { from: prev, to: id });
+      onSwap?.(id);
+    }
+  };
 
   const tick = async () => {
     if (stopped) return;
@@ -121,11 +157,15 @@ export function startPolling(
       if (failures > 0) {
         uiLog.info("poll", "poll recovered", { failures });
         failures = 0;
+        // A swap can complete during an outage; re-check on the recovery edge.
+        await checkIdentity();
       }
       if (reviews.length !== lastCount) {
         uiLog.debug("poll", `reviews pending: ${reviews.length}`, { count: reviews.length });
         lastCount = reviews.length;
       }
+      successes++;
+      if (successes % IDENTITY_CHECK_EVERY === 0) await checkIdentity();
       if (!stopped) onUpdate(reviews);
     } catch (err) {
       // Warn only on the healthy→unhealthy transition; a sustained outage logs once.
@@ -137,7 +177,9 @@ export function startPolling(
     }
   };
 
-  void tick();
+  // Seed the identity baseline before the first poll so a later swap has
+  // something to differ from.
+  void checkIdentity().then(tick);
 
   return () => {
     stopped = true;

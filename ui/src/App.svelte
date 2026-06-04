@@ -29,6 +29,10 @@
   let busy = $state(false);
   let showDialog = $state(false);
   let safeMode = $state(false);
+  // Set when the daemon behind the port is replaced (its per-boot instanceId
+  // flips). Persistent until reload or dismiss — the reviews on screen may
+  // belong to another daemon, so a transient toast would be too easy to miss.
+  let daemonChanged = $state(false);
 
   // Remembered approve mode (machine-global, last-wins). Read once on load and
   // mirrored locally on each approve so the next plan defaults to it.
@@ -129,6 +133,7 @@
       },
       2000,
       () => (connected = false),
+      () => (daemonChanged = true),
     );
     return stop;
   });
@@ -331,6 +336,27 @@
     onRequestChanges={() => (showDialog = true)}
   />
 
+  {#if daemonChanged}
+    <div class="daemon-banner" role="alert">
+      <p class="db-text">
+        The caret daemon was replaced — reload to resync.
+      </p>
+      <div class="db-actions">
+        <button type="button" class="db-reload" onclick={() => location.reload()}>
+          Reload
+        </button>
+        <button
+          type="button"
+          class="db-dismiss"
+          aria-label="Dismiss"
+          onclick={() => (daemonChanged = false)}
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  {/if}
+
   {#if active}
     <!-- Fixed, viewport-pinned contents rail — a sibling of (not inside) the
          grid so it escapes .columns' overflow:hidden and pins to the viewport. -->
@@ -391,6 +417,94 @@
 {/if}
 
 <style>
+  /* Pin the shell's three direct children to their grid rows (app.css declares
+     `auto auto 1fr`): TopBar, the optional banner, then content. Explicit
+     placement keeps content on the 1fr row whether or not the banner is
+     present — without it, an absent banner would let content drift off 1fr.
+     `:global` because TopBar and the content elements render their own roots. */
+  .shell > :global(.topbar) {
+    grid-row: 1;
+  }
+  .shell > :global(.columns),
+  .shell > :global(.empty) {
+    grid-row: 3;
+  }
+
+  /* Persistent, dismissible banner shown when the daemon behind the port was
+     replaced (its instanceId flipped). A sibling of TopBar at the top of the
+     shell — it consumes a grid row and pushes the content down rather than
+     overlaying it, so it can't be mistaken for a transient toast. Accent left
+     rule signals urgency without an icon (icon-rules: an icon must earn its
+     place; a one-line message doesn't need one). */
+  .daemon-banner {
+    grid-row: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.6rem clamp(1rem, 3vw, 2rem);
+    background: var(--accent-wash);
+    color: var(--ink);
+    border-bottom: 1px solid var(--rule-strong);
+    border-left: 3px solid var(--accent);
+    font-size: 0.82rem;
+    animation: daemon-banner-in 160ms ease-out;
+  }
+  .db-text {
+    margin: 0;
+    min-width: 0;
+    line-height: 1.35;
+  }
+  .db-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: none;
+  }
+  .db-reload,
+  .db-dismiss {
+    font: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+    border-radius: var(--radius);
+    padding: 0.3rem 0.7rem;
+    transition: background 120ms ease;
+  }
+  .db-reload {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border: 1px solid var(--accent);
+    font-weight: 600;
+  }
+  .db-reload:hover {
+    background: var(--accent-bright);
+    border-color: var(--accent-bright);
+  }
+  .db-dismiss {
+    background: transparent;
+    color: var(--ink-soft);
+    border: 1px solid var(--rule-strong);
+  }
+  .db-dismiss:hover {
+    color: var(--ink);
+    background: var(--paper-raised);
+  }
+  @keyframes daemon-banner-in {
+    from {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .daemon-banner {
+      animation: none;
+    }
+  }
+
   /* Transient bottom-right indicator shown only while Safe Mode swallows input.
      Sits above the modal scrim (z-index 100) so it's visible over any dialog. */
   .safe-mode-toast {
