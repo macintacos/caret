@@ -93,6 +93,8 @@
     background: var(--accent);
   }
   .caret {
+    /* The ^ brand glyph keeps mono now that buttons default to sans. */
+    font-family: var(--font-mono);
     color: var(--accent-bright);
     font-weight: 700;
   }

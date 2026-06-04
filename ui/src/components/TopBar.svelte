@@ -77,7 +77,7 @@
               <li>
                 <button role="menuitem" onclick={() => approve(v.mode)}>
                   <span class="v-label">{v.label}</span>
-                  <span class="v-note mono">{v.note}</span>
+                  <span class="v-note">{v.note}</span>
                 </button>
               </li>
             {/each}
@@ -221,7 +221,6 @@
     background: var(--accent-wash);
   }
   .v-label {
-    font-family: var(--font-mono);
     font-size: 0.82rem;
     font-weight: 600;
     color: var(--ink);

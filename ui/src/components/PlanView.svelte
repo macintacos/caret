@@ -354,7 +354,6 @@
     text-align: left;
   }
   .prose :global(th) {
-    font-family: var(--font-mono);
     font-size: 0.74rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;

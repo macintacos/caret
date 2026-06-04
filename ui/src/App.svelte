@@ -408,7 +408,6 @@
     border: 1px solid var(--rule-strong);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
-    font-family: var(--font-mono);
     font-size: 0.8rem;
     animation: safe-mode-in 160ms ease-out;
   }

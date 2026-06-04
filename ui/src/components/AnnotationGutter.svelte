@@ -24,7 +24,7 @@
 <div class="gutter">
   <div class="head">
     <span class="eyebrow">Annotations</span>
-    <span class="count mono">{resolved.length}</span>
+    <span class="count">{resolved.length}</span>
   </div>
 
   {#if resolved.length === 0}
@@ -82,6 +82,8 @@
     margin-bottom: 1.25rem;
   }
   .count {
+    /* Was sized by the (now dropped) .mono atom; keep the same density. */
+    font-size: 0.78rem;
     color: var(--accent);
     font-weight: 600;
   }
