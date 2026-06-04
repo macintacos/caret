@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer, type CaretServer } from "../src/daemon.ts";
-import type { CaretLogger } from "../src/log.ts";
+import { type CaretLogger, createDaemonLogger } from "../src/log.ts";
 import { VERSION } from "../src/paths.ts";
 import { createStore, type Store } from "../src/store.ts";
 import { recordingLog } from "./recording-log.ts";
@@ -624,6 +624,197 @@ test("a decision served from disk after a memory miss is logged at debug", async
     msg: `decision served from disk: ${id.slice(0, 8)}`,
     extra: { reviewId: id },
   });
+});
+
+// ---- POST /api/logs UI log bridge (EXC-445) ----
+
+async function postLogs(
+  events: unknown,
+  init: { origin?: string; rawBody?: string; contentLength?: string } = {},
+) {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (init.origin) headers.Origin = init.origin;
+  if (init.contentLength) headers["Content-Length"] = init.contentLength;
+  return fetch(`${base}/api/logs`, {
+    method: "POST",
+    headers,
+    body: init.rawBody ?? JSON.stringify({ events }),
+  });
+}
+
+test("POST /api/logs accepts a mixed-level batch (204) and records each event", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+  const res = await postLogs([
+    { level: "info", step: "ui", msg: "panel opened" },
+    { level: "warn", step: "render", msg: "slow frame", extra: { ms: 50 } },
+  ]);
+  expect(res.status).toBe(204);
+  const ui = recs.filter((r) => r.step === "ui" || r.step === "render");
+  expect(ui.find((r) => r.msg === "panel opened")).toMatchObject({
+    level: "info",
+    step: "ui",
+    extra: { source: "ui" },
+  });
+  expect(ui.find((r) => r.msg === "slow frame")).toMatchObject({
+    level: "warn",
+    step: "render",
+    extra: { ms: 50, source: "ui" },
+  });
+});
+
+test("a client-forged extra.source is overwritten with 'ui'", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+  await postLogs([{ level: "info", step: "ui", msg: "x", extra: { source: "hook" } }]);
+  const rec = recs.find((r) => r.msg === "x");
+  expect((rec?.extra as { source?: string }).source).toBe("ui");
+});
+
+test("POST /api/logs rejects structurally invalid batches with 400", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+
+  // bad level (not in the 4-value enum)
+  expect((await postLogs([{ level: "trace", step: "ui", msg: "x" }])).status).toBe(400);
+  // bad step: uppercase
+  expect((await postLogs([{ level: "info", step: "UI", msg: "x" }])).status).toBe(400);
+  // bad step: spaces
+  expect((await postLogs([{ level: "info", step: "a b", msg: "x" }])).status).toBe(400);
+  // non-array events
+  expect((await postLogs(undefined, { rawBody: JSON.stringify({ events: "no" }) })).status).toBe(
+    400,
+  );
+  // non-object envelope
+  expect((await postLogs(undefined, { rawBody: "[]" })).status).toBe(400);
+  // malformed JSON body
+  expect((await postLogs(undefined, { rawBody: "{not json" })).status).toBe(400);
+
+  // No forwarded events — only the per-batch rejection warns landed.
+  expect(recs.every((r) => r.step === "ui" || r.step === "listen")).toBe(true);
+  expect(recs.some((r) => r.msg === "x")).toBe(false);
+});
+
+test("POST /api/logs caps event count and body size with 413", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+
+  // 101 events exceeds MAX_EVENTS (100).
+  const many = Array.from({ length: 101 }, () => ({ level: "info", step: "ui", msg: "x" }));
+  expect((await postLogs(many)).status).toBe(413);
+
+  // A body over 64 KiB exceeds MAX_BODY_BYTES (measured from the read text).
+  const big = "y".repeat(70 * 1024);
+  const res = await postLogs([{ level: "info", step: "ui", msg: big }]);
+  expect(res.status).toBe(413);
+
+  // Nothing forwarded — only the rejection warns landed.
+  expect(recs.some((r) => r.msg === "x" || r.msg.startsWith("y"))).toBe(false);
+});
+
+test("POST /api/logs strips control chars from msg but keeps TAB", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+  // Newline (a C0 control) is stripped — NDJSON line-forging defense — but TAB
+  // (U+0009) survives. Spaces are printable and are NOT stripped.
+  await postLogs([{ level: "info", step: "ui", msg: "a\nb\tc" }]);
+  const rec = recs.find((r) => r.step === "ui" && r.msg.includes("a"));
+  expect(rec?.msg).toBe("ab\tc");
+});
+
+test("POST /api/logs truncates an over-length msg to 256 chars (still 204)", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+  const long = "z".repeat(300);
+  const res = await postLogs([{ level: "info", step: "ui", msg: long }]);
+  expect(res.status).toBe(204);
+  const rec = recs.find((r) => r.step === "ui" && r.msg.startsWith("z"));
+  expect(rec?.msg.length).toBe(256);
+});
+
+test("POST /api/logs drops extra keys that collide with record fields", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+  await postLogs([
+    {
+      level: "info",
+      step: "ui",
+      msg: "collide",
+      extra: { step: "forged", pid: 999, keep: "me" },
+    },
+  ]);
+  const extra = recs.find((r) => r.msg === "collide")?.extra as Record<string, unknown>;
+  // Reserved keys (step/pid) are stripped; unreserved keys survive; source forced.
+  expect(extra.step).toBeUndefined();
+  expect(extra.pid).toBeUndefined();
+  expect(extra.keep).toBe("me");
+  expect(extra.source).toBe("ui");
+});
+
+test("POST /api/logs forwards an error-level event at level 'error'", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+  // CaretLogger.error takes err: unknown; passing the sanitized string makes the
+  // record's msg the string (a non-Error is stringified).
+  await postLogs([{ level: "error", step: "ui", msg: "render failed" }]);
+  const rec = recs.find((r) => r.msg === "render failed");
+  expect(rec?.level).toBe("error");
+  expect(rec?.step).toBe("ui");
+  expect((rec?.extra as { source?: string }).source).toBe("ui");
+});
+
+test("POST /api/logs from a foreign origin is blocked (403, nothing recorded)", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+  const res = await postLogs([{ level: "info", step: "ui", msg: "should not record" }], {
+    origin: "https://evil.example",
+  });
+  expect(res.status).toBe(403);
+  // The CSRF guard runs before the route body, so neither a forward nor a
+  // rejection warn is emitted.
+  expect(recs.some((r) => r.msg === "should not record")).toBe(false);
+  expect(recs.some((r) => r.step === "ui")).toBe(false);
+});
+
+test("POST /api/logs does not permanently defer idle shutdown", async () => {
+  let shutdowns = 0;
+  await boot({ idleMs: 30, onShutdown: () => shutdowns++ });
+  // A log POST defers idle while in flight (like any request); once it returns
+  // and no reviews are pending, the idle timer must re-arm and fire.
+  const res = await postLogs([{ level: "info", step: "ui", msg: "heartbeat" }]);
+  expect(res.status).toBe(204);
+  await Bun.sleep(120);
+  expect(shutdowns).toBeGreaterThanOrEqual(1);
+});
+
+test("a rejected log batch logs exactly one warn under step 'ui'", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+  await postLogs([{ level: "trace", step: "ui", msg: "x" }]); // bad level → 400
+  const warns = recs.filter((r) => r.level === "warn" && r.step === "ui");
+  expect(warns).toHaveLength(1);
+  expect(warns[0]).toMatchObject({
+    level: "warn",
+    step: "ui",
+    msg: "ui log batch rejected",
+    extra: { status: 400 },
+  });
+});
+
+test("a real daemon logger censors a forged plan body on the wire path", async () => {
+  // recordingLog captures extra BEFORE wrap()'s scrub, so this is the one
+  // end-to-end assertion that wire → CaretLogger → scrubValue censors a
+  // DENY_KEYS body — the bridge's core redaction promise.
+  const dest = join(dir, "daemon-e2e.log");
+  await boot({ log: createDaemonLogger(() => "info", dest) });
+  const res = await postLogs([
+    { level: "info", step: "ui", msg: "m", extra: { plan: "secret plan body" } },
+  ]);
+  expect(res.status).toBe(204);
+  const text = readFileSync(dest, "utf-8");
+  expect(text).toContain('"source":"ui"');
+  expect(text).toContain('"plan":"<redacted>"');
+  expect(text).not.toContain("secret plan body");
 });
 
 test("a failed fire-and-forget prefs write is logged at warn", async () => {

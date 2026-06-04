@@ -5,14 +5,18 @@ description: Contributor conventions for caret's pino NDJSON logging — when to
 
 # Logging Rules
 
-caret logs as leveled NDJSON via pino, across two sinks that share one record shape
-(`{"level":30,"time":...,"step":"x","msg":"...",...}`):
+caret logs as leveled NDJSON via pino, across two sinks — plus a browser bridge that writes through
+the second — sharing one record shape (`{"level":30,"time":...,"step":"x","msg":"...",...}`):
 
 - **Hook processes** (the short-lived `caret review` hook) call
   `logDebug/logInfo/logWarn/logError(step, msg, extra?)` from `src/log.ts`, which append to
   `caret.log`.
 - **The daemon** holds a `CaretLogger` built by `createDaemonLogger` (`src/log.ts`) and writes NDJSON
   to stderr, which `spawnDaemon` redirects into `daemon.log`.
+- **The browser UI** has no sink of its own: `uiLog` (`ui/src/lib/log.ts`) batches events to the
+  daemon's `POST /api/logs` (EXC-445), which writes them through the daemon's `CaretLogger` — they
+  land in `daemon.log` tagged `source: "ui"`, with leveling and redaction applied like any other
+  record.
 
 `error` is special: it takes the raw thrown value, not a string. For an `Error`, the `cause` chain is
 serialized into the record's `err` field and the `msg` derives from the error's message; for any
@@ -79,6 +83,9 @@ Concretely:
   new one.
 - Review-scoped records carry structured `reviewId` / `sessionId` fields in `extra` so one session
   stitches across the two log streams (EXC-444).
+- Every record carries a `source` field naming the emitting process — `"hook"`, `"daemon"`, or
+  `"ui"` (EXC-445). The logger attaches its own token unless `extra.source` is already set; the
+  explicit value winning is how bridged browser events stay `"ui"` through the daemon's logger.
 - `extra` keys must **not collide** with the record's own fields: `level`, `time`, `msg`, `step`,
   `pid`, `err`.
 
@@ -91,7 +98,9 @@ Concretely:
   toggle. Never log them under any key.
 - **New identifying keys must be added to `DENY_KEYS` explicitly.** Matching is exact-key only, so a
   hostname, user, email, or similar identifying key you introduce will leak until you add it to the
-  set.
+  set. The set lives in **two places**: `src/redact.ts` (authoritative, applied at write time) and
+  the hand-mirrored copy in `ui/src/lib/log.ts` (censors before the dev console mirror) — a new key
+  must be added to both.
 - **Day-to-day logs are raw.** `[logging].redact` defaults to `false`. `caret redact` produces
   shareable `*.redacted.log` copies after the fact, and `redact = true` scrubs (home paths → `~`,
   usernames in foreign home paths censored) at write time. Write every message and `extra` assuming

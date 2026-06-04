@@ -21,8 +21,16 @@ export async function readApproveMode(
     if (isAcceptMode(parsed.approveMode)) return parsed.approveMode;
     log.debug("prefs", "unrecognized approve mode; using default");
     return "default";
-  } catch {
-    log.debug("prefs", "prefs unreadable; using default approve mode");
+  } catch (err) {
+    // ENOENT is the normal first run (and every `mise run dev`, which wipes
+    // the state dir) — don't make it read like a failure.
+    const absent = (err as NodeJS.ErrnoException)?.code === "ENOENT";
+    log.debug(
+      "prefs",
+      absent
+        ? "no prefs file; using default approve mode"
+        : "prefs unreadable; using default approve mode",
+    );
     return "default";
   }
 }
