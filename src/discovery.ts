@@ -313,14 +313,14 @@ export function tallyReviews(records: ReviewStatusRecord[]): ReviewsSection {
 // Rendering
 // ---------------------------------------------------------------------------
 
-/** Render the (already-scrubbed) report as plain text: a header line, then one
- * titled block per section with aligned `key: value` lines. No ANSI. Never
- * throws — a degraded { error } section renders one error line, and missing
- * keys are simply absent. */
 /** The report's scalar header fields — everything else is a renderable
  * section, so a future Report field can't silently vanish from the render. */
 const HEADER_KEYS = new Set(["schema", "version", "generatedAt"]);
 
+/** Render the (already-scrubbed) report as plain text: a header line, then one
+ * titled block per section with aligned `key: value` lines. No ANSI. Never
+ * throws — a degraded { error } section renders one error line, and missing
+ * keys are simply absent. */
 export function renderReport(report: Report): string {
   const lines: string[] = [];
   lines.push(
