@@ -12,7 +12,7 @@
 // synchronous load); the daemon holds the settings() singleton (EXC-398/399/
 // 400 wire the first real readers).
 
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { parse as parseToml } from "smol-toml";
 import { z } from "zod";
 import { logError } from "./log.ts";
@@ -74,4 +74,56 @@ export function loadSettings(file = configFile()): Settings {
     return DEFAULTS; // absent or unreadable file
   }
   return parseAndValidate(text) ?? DEFAULTS;
+}
+
+export interface SettingsService {
+  /** Latest valid settings. Re-reads only when the file's mtime or size
+   * changed since the last look; otherwise serves the cached parse. */
+  current(): Settings;
+}
+
+/** Stat-gated cache for the long-running daemon: edits to config.toml take
+ * effect without a restart. mtime granularity can be ~1s on some filesystems,
+ * so size disambiguates; two same-size edits within the same second may not be
+ * detected until the next change (accepted). */
+export function createSettings(file = configFile()): SettingsService {
+  let lastGood = DEFAULTS;
+  let lastSig: { mtimeMs: number; size: number } | null = null;
+  return {
+    current() {
+      let st: { mtimeMs: number; size: number };
+      try {
+        st = statSync(file);
+      } catch {
+        // Absent (never existed -> DEFAULTS) or deleted mid-run / slow FS
+        // (-> last valid parse). Don't revert a running daemon on a transient
+        // unlink.
+        return lastGood;
+      }
+      if (lastSig && st.mtimeMs === lastSig.mtimeMs && st.size === lastSig.size) {
+        return lastGood;
+      }
+      let text: string;
+      try {
+        text = readFileSync(file, "utf-8");
+      } catch {
+        return lastGood; // raced delete / transient read error
+      }
+      const next = parseAndValidate(text);
+      // Advance the signature even on failure so a static bad file isn't
+      // re-parsed (and re-logged) on every get; a later edit re-triggers.
+      lastSig = { mtimeMs: st.mtimeMs, size: st.size };
+      if (next !== null) lastGood = next; // parse into a temp, swap on success
+      return lastGood;
+    },
+  };
+}
+
+let singleton: SettingsService | undefined;
+
+/** Lazy module-level singleton — the daemon's one settings instance,
+ * instantiated (warmed) at startup in runDaemon(). */
+export function settings(): SettingsService {
+  singleton ??= createSettings();
+  return singleton;
 }
