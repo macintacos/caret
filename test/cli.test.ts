@@ -484,7 +484,7 @@ test("ensureDaemon logs the spawn attempt at debug", async () => {
         ++checks === 1 ? null : { service: "caret", build: "b1", version: "v1" },
     }),
   );
-  const recs = logRecords().filter((r) => r.step === "ensureDaemon");
+  const recs = logRecords().filter((r) => r.step === "spawn");
   expect(recs.some((r) => r.msg === "daemon spawned")).toBe(true);
 });
 
@@ -506,7 +506,7 @@ test("ensureDaemon logs the stale-daemon retire at debug", async () => {
       spawn: () => spawns++,
     }),
   );
-  const recs = logRecords().filter((r) => r.step === "ensureDaemon");
+  const recs = logRecords().filter((r) => r.step === "retire");
   expect(recs.some((r) => r.msg === "stale daemon retiring")).toBe(true);
 });
 
@@ -521,7 +521,7 @@ test("ensureDaemon logs orphan-lock removal at debug", async () => {
       isAlive: () => false,
     }),
   );
-  const recs = logRecords().filter((r) => r.step === "ensureDaemon");
+  const recs = logRecords().filter((r) => r.step === "spawn");
   expect(recs.some((r) => r.msg === "orphan daemon lock removed")).toBe(true);
 });
 

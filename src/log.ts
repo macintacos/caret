@@ -53,7 +53,8 @@ const pinoOpts = {
  * method, so skip the assignment when the level is unchanged. `liveRedact`
  * (the [logging].redact switch, EXC-399) gates the redact.ts scrub of every
  * outgoing msg/extra/err — re-read per emit so it hot-reloads too. The walk
- * runs even with the switch off (plan/prompt censoring is unconditional);
+ * runs even with the switch off (plan/prompt/feedback censoring is
+ * unconditional);
  * `step` is attached after it, raw: structural fields always win and a fixed
  * step token is never PII. Errors are serialized here (errWithCause) rather
  * than via a pino serializer so the scrub can cover message/stack/cause —

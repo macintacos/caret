@@ -226,7 +226,7 @@ export async function ensureDaemon(deps: EnsureDeps): Promise<string> {
       // (stale UI) rather than deny the review or spin retrying — strictly no
       // worse than before the fix. A retireable daemon is now exiting → re-poll.
       if (!retired) return deps.baseUrl;
-      logDebug("ensureDaemon", "stale daemon retiring");
+      logDebug("retire", "stale daemon retiring");
       await deps.backoff(attempt);
       continue;
     }
@@ -239,11 +239,11 @@ export async function ensureDaemon(deps: EnsureDeps): Promise<string> {
     const lock = deps.readLock();
     if (lock && !deps.isAlive(lock.pid)) {
       deps.removeLock();
-      logDebug("ensureDaemon", "orphan daemon lock removed");
+      logDebug("spawn", "orphan daemon lock removed");
     }
     try {
       deps.spawn();
-      logDebug("ensureDaemon", "daemon spawned");
+      logDebug("spawn", "daemon spawned");
     } catch (e) {
       if (!isAddrInUse(e)) throw e;
     }
@@ -347,7 +347,7 @@ function spawnDaemon(): void {
   } catch {
     // The daemon still spawns; only its crash output is lost. Best-effort warn
     // (the same unwritable state dir usually silences caret.log too).
-    logWarn("ensureDaemon", "daemon log unopenable; discarding daemon output");
+    logWarn("spawn", "daemon log unopenable; discarding daemon output");
   }
   Bun.spawn(daemonCommand(), {
     stdio: ["ignore", out, out],
