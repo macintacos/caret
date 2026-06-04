@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Logging and configuration docs: a README "Logging & Debugging" section, `config.toml`
-  documentation, and checked-in contributor rules for logging conventions and settings.
+  documentation, and checked-in contributor rules for logging conventions and settings (#31).
 
 ## [0.0.3] - 2026-06-02 - The Hardening Release
 
