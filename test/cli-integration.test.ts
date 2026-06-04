@@ -175,3 +175,44 @@ test("caret redact reports when there are no logs to scrub", async () => {
     await rm(stateHome, { recursive: true, force: true });
   }
 });
+
+test("the daemon logs the parsed settings at startup", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-settings-boot-"));
+  const configHome = await mkdtemp(join(tmpdir(), "caret-settings-cfg-"));
+  await Bun.write(
+    join(configHome, "caret", "config.toml"),
+    "[logging]\ndebug = true\nredact = true\n",
+  );
+  const lockPath = join(stateHome, "caret", "daemon.lock");
+  const proc = Bun.spawn([process.execPath, "src/cli.ts", "daemon"], {
+    env: {
+      ...process.env,
+      CARET_PORT: String(freePort()),
+      XDG_STATE_HOME: stateHome,
+      XDG_CONFIG_HOME: configHome,
+      CARET_IDLE_MS: "600000", // don't idle-shutdown before we read the boot line
+    },
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  try {
+    // The boot settings line is emitted before the server binds (lock write),
+    // so the lock appearing means the line is already flushed (sync writes).
+    expect(await waitFor(() => existsSync(lockPath), 5000)).toBe(true);
+    proc.kill("SIGTERM");
+    await proc.exited;
+    const stderr = await new Response(proc.stderr).text();
+    const rec = stderr
+      .split("\n")
+      .filter((l) => l.startsWith("{"))
+      .map((l) => JSON.parse(l) as Record<string, unknown>)
+      .find((r) => r.step === "settings");
+    expect(rec).toBeDefined();
+    // Effective (validated) values, never raw config text.
+    expect(rec?.settings).toEqual({ logging: { level: "info", debug: true, redact: true } });
+  } finally {
+    proc.kill("SIGKILL");
+    await proc.exited;
+    await rm(stateHome, { recursive: true, force: true });
+    await rm(configHome, { recursive: true, force: true });
+  }
+});

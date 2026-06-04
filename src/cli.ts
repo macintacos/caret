@@ -483,9 +483,13 @@ async function runDaemon(): Promise<void> {
     () => settings().current().logging.redact,
   );
   const cfg = configFile();
+  // The boot line records the effective settings: the VALIDATED parse only —
+  // schema-constrained enums/booleans — never raw config text, which may hold
+  // anything (the settings.ts logValidationFailure invariant).
   log.info(
     "settings",
     existsSync(cfg) ? `settings: reading ${cfg}` : `settings: no config at ${cfg}; using defaults`,
+    { settings: settings().current() },
   );
   const store = createStore(reviewsDir());
   await store.rehydrate();
