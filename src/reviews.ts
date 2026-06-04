@@ -30,6 +30,23 @@ export async function routeIncomingPlan(
   const sessionId = input.sessionId ?? `anon-${Date.now()}`;
   const plan = input.plan ?? "";
   const now = Date.now();
+
+  // A pending review here is an orphan: a session has at most one outstanding
+  // plan hook, so a new plan means the prior hook gave up (timeout) or died
+  // without resolution (EXC-454). Expire every stale pending — not just the
+  // newest, since a pre-fix orphan can hide behind a rejected latest — before
+  // threading. Terminal on disk so it never rehydrates as approvable.
+  const expired: string[] = [];
+  for (const stale of store.bySession(sessionId).filter((r) => r.status === "pending")) {
+    await store.expire(stale.id);
+    expired.push(stale.id);
+    log.info("review", `review superseded: ${shortId(stale.id)}`, {
+      reviewId: stale.id,
+      sessionId,
+      action: "supersede",
+    });
+  }
+
   const latest = store.bySession(sessionId)[0];
 
   // Append only to a review currently awaiting revision.
@@ -57,6 +74,7 @@ export async function routeIncomingPlan(
       action: "append",
       version,
       planEpoch: latest.planEpoch,
+      expired,
     };
   }
 
@@ -82,5 +100,5 @@ export async function routeIncomingPlan(
     version: 1,
     planEpoch,
   });
-  return { id, action: "new", version: 1, planEpoch };
+  return { id, action: "new", version: 1, planEpoch, expired };
 }

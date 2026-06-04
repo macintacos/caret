@@ -123,6 +123,27 @@ test("rehydrate loads unresolved reviews, skips approved", async () => {
   expect(ids).toEqual(["keep-p", "keep-r"]);
 });
 
+test("expire marks terminal, clears the draft, persists once, and drops from memory", async () => {
+  await store.create({ ...makeReview({ id: "e1" }), generalCommentDraft: "wip note" });
+  const expired = await store.expire("e1");
+  expect(expired?.status).toBe("expired");
+  expect(store.get("e1")).toBeUndefined();
+  const onDisk = JSON.parse(await readFile(join(dir, "e1.json"), "utf-8")) as Review;
+  expect(onDisk.status).toBe("expired");
+  expect(onDisk.generalCommentDraft).toBe(""); // terminal records keep no unsent draft
+  // Unknown id → undefined, not a throw.
+  expect(await store.expire("missing")).toBeUndefined();
+});
+
+test("rehydrate skips expired reviews", async () => {
+  // The terminal-on-disk contract the EXC-454 expiry paths rely on: a record
+  // persisted as "expired" must never reload as an approvable orphan.
+  await store.create(makeReview({ id: "drop-e", status: "expired" }));
+  const fresh = createStore(dir);
+  await fresh.rehydrate();
+  expect(fresh.all()).toEqual([]);
+});
+
 // ---- instrumentation (EXC-444) ----
 
 test("rehydrate logs the loaded review count at info", async () => {

@@ -6,7 +6,7 @@ export type Behavior = "allow" | "deny";
 /** Post-approval session mode, mirroring the native plan-approval dialog. */
 export type AcceptMode = "default" | "acceptEdits" | "auto";
 
-export type ReviewStatus = "pending" | "approved" | "rejected";
+export type ReviewStatus = "pending" | "approved" | "rejected" | "expired";
 
 /** A single inline annotation, anchored within a specific plan version. */
 export interface Annotation {

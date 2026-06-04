@@ -162,9 +162,9 @@ only genuine failures sit at error.
 To raise verbosity, set `level = "debug"` in `config.toml`'s `[logging]` table
 (see [Configuration](#config-file)). It hot-reloads — no restart needed.
 
-- `/caret:debug` — the slash command that reviews the current session — pending/approved/rejected
-  plans (from the on-disk review records) plus recent errors from both logs — and helps debug
-  failures.
+- `/caret:debug` — the slash command that reviews the current session —
+  pending/approved/rejected/expired plans (from the on-disk review records) plus recent errors
+  from both logs — and helps debug failures.
 - `caret redact` — the binary's fourth subcommand: scrubs the two state-dir logs into shareable
   `*.redacted.log` siblings (home paths become `~`, usernames in foreign home paths are censored).
   For always-on scrubbing at write time, set `redact = true` in `[logging]`. Plan, prompt, and

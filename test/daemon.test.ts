@@ -386,6 +386,75 @@ test("idle shutdown fires when empty, not while a review is pending", async () =
   expect(shutdowns).toBeGreaterThanOrEqual(1);
 });
 
+test("a superseded review's decision entry does not pin idle shutdown", async () => {
+  let shutdowns = 0;
+  await boot({ idleMs: 30, heartbeatMs: 20, onShutdown: () => shutdowns++ });
+  const { id: stale } = await newReview();
+  // The (timed-out) hook long-polled once, leaving an unsettled decision entry.
+  expect((await fetch(`${base}/api/reviews/${stale}/decision`)).status).toBe(204);
+  // The session resubmits: the stale review is superseded by a fresh thread.
+  const { id: fresh } = await newReview();
+  expect(fresh).not.toBe(stale);
+  await resolve(fresh, { behavior: "allow" });
+  await Bun.sleep(120);
+  // The stale entry was cleared along with the supersede, so idle can fire.
+  expect(shutdowns).toBeGreaterThanOrEqual(1);
+});
+
+// ---- hook-initiated expire (EXC-454) ----
+
+test("POST /expire ends a pending review: terminal on disk, gone from the queue", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+  const { id } = await newReview();
+  const res = await fetch(`${base}/api/reviews/${id}/expire`, { method: "POST" });
+  expect(res.status).toBe(200);
+  expect(store.get(id)).toBeUndefined(); // dropped from memory
+  const list = (await (await fetch(`${base}/api/reviews`)).json()) as unknown[];
+  expect(list).toEqual([]);
+  // Terminal on disk: a still-pending record would rehydrate as an orphan.
+  const onDisk = JSON.parse(readFileSync(join(dir, `${id}.json`), "utf-8")) as { status: string };
+  expect(onDisk.status).toBe("expired");
+  expect(recs).toContainEqual({
+    level: "info",
+    step: "review",
+    msg: `review expired: ${id.slice(0, 8)}`,
+    extra: { reviewId: id, sessionId: "S" },
+  });
+});
+
+test("POST /expire refuses a non-pending review", async () => {
+  await boot();
+  const { id } = await newReview();
+  await resolve(id, { behavior: "deny", feedback: "no" });
+  const res = await fetch(`${base}/api/reviews/${id}/expire`, { method: "POST" });
+  expect(res.status).toBe(404);
+  expect(store.get(id)?.status).toBe("rejected"); // untouched
+});
+
+test("POST /expire clears the decision entry even when the review is gone", async () => {
+  let shutdowns = 0;
+  await boot({ idleMs: 30, heartbeatMs: 20, onShutdown: () => shutdowns++ });
+  // A zombie hook polls a review that no longer exists, re-creating an
+  // unsettled entry that would pin openDecisionCount forever.
+  expect((await fetch(`${base}/api/reviews/ghost/decision`)).status).toBe(204);
+  const res = await fetch(`${base}/api/reviews/ghost/expire`, { method: "POST" });
+  expect(res.status).toBe(404);
+  await Bun.sleep(120);
+  expect(shutdowns).toBeGreaterThanOrEqual(1); // entry cleared → idle fired
+});
+
+test("idle shutdown fires after a pending review is expired", async () => {
+  let shutdowns = 0;
+  await boot({ idleMs: 30, heartbeatMs: 20, onShutdown: () => shutdowns++ });
+  const { id } = await newReview();
+  // The hook long-polled once (unsettled entry), then timed out and expired.
+  expect((await fetch(`${base}/api/reviews/${id}/decision`)).status).toBe(204);
+  await fetch(`${base}/api/reviews/${id}/expire`, { method: "POST" });
+  await Bun.sleep(120);
+  expect(shutdowns).toBeGreaterThanOrEqual(1);
+});
+
 test("idle shutdown fires when the daemon boots with no reviews", async () => {
   let shutdowns = 0;
   await boot({ idleMs: 30, onShutdown: () => shutdowns++ });

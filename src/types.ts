@@ -24,9 +24,10 @@ export function isAcceptMode(x: unknown): x is AcceptMode {
  * - "pending"  → awaiting a browser decision (shown in the switcher)
  * - "rejected" → changes requested; awaiting a revised plan (still active)
  * - "approved" → plan accepted; terminal success
+ * - "expired"  → abandoned by its hook (timeout or supersede); terminal (EXC-454)
  * "Unresolved" means pending or rejected (see isUnresolved).
  */
-export type ReviewStatus = "pending" | "approved" | "rejected";
+export type ReviewStatus = "pending" | "approved" | "rejected" | "expired";
 
 /** A review is unresolved while it can still receive activity (pending/rejected). */
 export function isUnresolved(status: ReviewStatus): boolean {
@@ -120,6 +121,8 @@ export interface RouteResult {
   action: "new" | "append";
   version: number;
   planEpoch: number;
+  /** Stale pending reviews of the same session this routing expired (EXC-454). */
+  expired: string[];
 }
 
 /** Body of POST /api/reviews/:id/resolve. */

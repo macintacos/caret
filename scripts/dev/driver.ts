@@ -9,7 +9,14 @@
 // feedback and resubmits; on approve it re-seeds a fresh v1. The
 // revision-threading contract lives in src/reviews.ts.
 
-import { httpHealth, longPoll, postReview, type ReviewDeps, runReview } from "../../src/cli.ts";
+import {
+  expireReview,
+  httpHealth,
+  longPoll,
+  postReview,
+  type ReviewDeps,
+  runReview,
+} from "../../src/cli.ts";
 import type { PermissionDecision } from "../../src/feedback.ts";
 import { DEFAULT_PORT } from "../../src/settings.ts";
 
@@ -100,6 +107,7 @@ export function devReviewDeps(base: string): ReviewDeps {
     longPoll,
     openBrowser: () => {},
     timeoutMs: 2147483647,
+    expire: expireReview,
   };
 }
 

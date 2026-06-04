@@ -20,6 +20,10 @@ export interface Store {
   update(id: string, mutate: (r: Review) => void): Promise<Review | undefined>;
   /** Drop from memory; the on-disk file is left as history. */
   remove(id: string): Promise<void>;
+  /** Terminal expiry (EXC-454): set "expired", clear the unsent draft, drop
+   * from memory, and flush the final state to disk in one write (an expired
+   * record never rehydrates). Returns undefined when the id isn't loaded. */
+  expire(id: string): Promise<Review | undefined>;
   /** Read a review from disk by id, including approved history no longer in
    * memory. Returns undefined if the file is missing or unparseable. */
   persisted(id: string): Promise<Review | undefined>;
@@ -95,6 +99,18 @@ export function createStore(dir: string, log: CaretLogger = noopLogger): Store {
       reviews.delete(id);
       // Flush any final state to disk before dropping the tracking entry.
       if (review) await persist(review);
+    },
+
+    async expire(id) {
+      const review = reviews.get(id);
+      if (!review) return undefined;
+      review.status = "expired";
+      // Same invariant as resolve: a terminal record keeps no unsent draft.
+      review.generalCommentDraft = "";
+      review.updatedAt = Math.max(Date.now(), review.updatedAt + 1);
+      reviews.delete(id);
+      await persist(review);
+      return review;
     },
 
     async persisted(id) {
