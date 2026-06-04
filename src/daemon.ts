@@ -102,8 +102,10 @@ export interface UiLogEvent {
 
 const STEP_RE = /^[a-z][a-z0-9-]{0,31}$/;
 // The record's own NDJSON fields: an extra key colliding with one of these would
-// shadow the structural field, so they're stripped from client extra.
-const RESERVED_KEYS = new Set(["level", "time", "msg", "step", "pid", "err"]);
+// shadow the structural field, so they're stripped from client extra. `caller` is
+// stamped by src/log.ts (file:line of the call site); bridged UI records carry
+// none, so a client-sent one is a forged provenance and is dropped too (EXC-451).
+const RESERVED_KEYS = new Set(["level", "time", "msg", "step", "pid", "err", "caller"]);
 // C0/C1 control chars except TAB (U+0009). Newline (U+000A) is stripped too:
 // pino already JSON-escapes newlines at serialization, so this is defense in
 // depth for raw-text consumers of the log (redact round-trips, crash-output
