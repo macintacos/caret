@@ -362,7 +362,7 @@ export async function prepare(
     if (drifted.length > 0) {
       throw new GuardError(
         "PREFLIGHT_DIRTY",
-        `Preflight reformatted files outside the release set (${drifted.join(", ")}); commit formatting on a normal PR before releasing.`,
+        `Working tree drifted outside the release set during preflight (${drifted.join(", ")}); resolve it on a normal PR before releasing.`,
       );
     }
   } else {

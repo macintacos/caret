@@ -448,9 +448,9 @@ test("prepare aborts when preflight fails", async () => {
   );
 });
 
-test("prepare aborts when preflight reformats files outside the release set", async () => {
-  // Preflight write-formats and exits 0, but it touched a file the release does
-  // not stage. Committing only [MANIFESTS, CHANGELOG] would silently drop it.
+test("prepare aborts when the tree drifts outside the release set during preflight", async () => {
+  // Preflight is check-only, but the tree drifted anyway (whatever the cause).
+  // Committing only [MANIFESTS, CHANGELOG] would silently drop the drift.
   const { deps, calls } = harness({
     ...PREPARE_OPTS,
     preflightDirties: [" M src/app.ts"],

@@ -103,6 +103,16 @@ test("lint failure doesn't stop the others, exits 1, surfaces output and the for
   expect(r.summary).toContain("mise run format");
 });
 
+test("mise task files still declare the build-ui dependency the orchestrator skips", async () => {
+  // Pins the MISE_TASK_SKIP contract: the orchestrator hard-codes build-ui as
+  // the dependents' shared dependency. If a task file's depends ever changes,
+  // this fails so preflight's DAG gets updated alongside it.
+  for (const name of ["test-e2e", "build-bin"]) {
+    const script = await Bun.file(`.mise/tasks/${name}`).text();
+    expect(script).toContain('#MISE depends=["build-ui"]');
+  }
+});
+
 test("build-ui failure skips its dependents and reports them as skipped", async () => {
   const { calls, spawnTask } = fakeSpawner({
     "build-ui": { exitCode: 1, output: "vite exploded" },

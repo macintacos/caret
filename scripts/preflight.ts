@@ -50,10 +50,7 @@ export async function runPreflight(deps: {
   renderer?: "default" | "silent";
 }): Promise<PreflightOutcome> {
   const results = new Map<string, TaskResult>();
-  let releaseBuildUi!: (passed: boolean) => void;
-  const buildUiDone = new Promise<boolean>((resolve) => {
-    releaseBuildUi = resolve;
-  });
+  const { promise: buildUiDone, resolve: releaseBuildUi } = Promise.withResolvers<boolean>();
 
   // Spawn one task, record its result, and report whether it passed. A spawn
   // rejection (e.g. the binary itself failing to start) counts as a failure.
@@ -153,6 +150,8 @@ async function spawnMiseTask(
         .at(-1);
       if (last) onLine(last);
     }
+    const tail = decoder.decode(); // flush a partial multibyte sequence, if any
+    if (tail) chunks.push(tail);
   };
   const [exitCode] = await Promise.all([proc.exited, pump(proc.stdout), pump(proc.stderr)]);
   return { exitCode, output: chunks.join("") };
@@ -161,5 +160,8 @@ async function spawnMiseTask(
 if (import.meta.main) {
   const { exitCode, summary } = await runPreflight({ spawnTask: spawnMiseTask });
   process.stdout.write(`\n${summary}\n`);
-  process.exit(exitCode);
+  // exitCode (not process.exit) so stdout drains: a piped consumer — CI, the
+  // release gate's .quiet() — would otherwise see the summary truncated at the
+  // pipe buffer (verified: exit() after a 1MB write delivers only 64KB).
+  process.exitCode = exitCode;
 }
