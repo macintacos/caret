@@ -52,6 +52,20 @@ export function reviewsDir(): string {
   return `${stateDir()}/reviews`;
 }
 
+/** Root config dir: $XDG_CONFIG_HOME/caret or ~/.config/caret. Read lazily so
+ * tests can override XDG_CONFIG_HOME per-case. Deliberately separate from
+ * stateDir(): config survives `mise run dev` wiping XDG_STATE_HOME. */
+export function configDir(): string {
+  const base = process.env.XDG_CONFIG_HOME || `${homedir()}/.config`;
+  return `${base}/caret`;
+}
+
+/** User-editable settings file (see src/settings.ts). Single source of truth
+ * for the path. */
+export function configFile(): string {
+  return `${configDir()}/config.toml`;
+}
+
 /** Machine-global UI prefs (last-used approve mode). One shared file under
  * stateDir; last-write-wins. Separate from the per-review JSON in reviewsDir(). */
 export function prefsFile(): string {

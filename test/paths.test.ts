@@ -1,6 +1,16 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import pkg from "../package.json" with { type: "json" };
-import { buildHash, daemonLock, heartbeatMs, reviewTimeoutMs, stateDir, VERSION } from "../src/paths.ts";
+import {
+  buildHash,
+  configDir,
+  configFile,
+  daemonLock,
+  heartbeatMs,
+  reviewTimeoutMs,
+  stateDir,
+  VERSION,
+} from "../src/paths.ts";
+import { homedir } from "node:os";
 
 let saved: string | undefined;
 let savedHb: string | undefined;
@@ -62,6 +72,40 @@ test("daemonLock resolves under stateDir and honors XDG_STATE_HOME", () => {
   } finally {
     if (savedXdg === undefined) delete process.env.XDG_STATE_HOME;
     else process.env.XDG_STATE_HOME = savedXdg;
+  }
+});
+
+test("configDir honors XDG_CONFIG_HOME", () => {
+  const savedXdg = process.env.XDG_CONFIG_HOME;
+  process.env.XDG_CONFIG_HOME = "/tmp/caret-xdg-config-test";
+  try {
+    expect(configDir()).toBe("/tmp/caret-xdg-config-test/caret");
+  } finally {
+    if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = savedXdg;
+  }
+});
+
+test("configDir falls back to ~/.config/caret when XDG_CONFIG_HOME is unset", () => {
+  const savedXdg = process.env.XDG_CONFIG_HOME;
+  delete process.env.XDG_CONFIG_HOME;
+  try {
+    expect(configDir()).toBe(`${homedir()}/.config/caret`);
+  } finally {
+    if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = savedXdg;
+  }
+});
+
+test("configFile resolves config.toml under configDir", () => {
+  const savedXdg = process.env.XDG_CONFIG_HOME;
+  process.env.XDG_CONFIG_HOME = "/tmp/caret-xdg-config-test";
+  try {
+    expect(configFile()).toBe(`${configDir()}/config.toml`);
+    expect(configFile()).toBe("/tmp/caret-xdg-config-test/caret/config.toml");
+  } finally {
+    if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = savedXdg;
   }
 });
 
