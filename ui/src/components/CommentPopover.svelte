@@ -63,7 +63,7 @@
       ></textarea>
       <div class="row">
         <button class="ghost" onclick={onDismiss}>Cancel</button>
-        <button class="solid" onclick={submit}>
+        <button class="solid" onclick={submit} aria-keyshortcuts="Meta+Enter Control+Enter">
           Comment
           <span class="kbd" aria-hidden="true">
             <Icon name="command" size={12} /><Icon name="corner-down-left" size={12} />

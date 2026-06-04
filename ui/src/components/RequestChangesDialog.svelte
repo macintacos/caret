@@ -79,7 +79,12 @@
 
     <footer>
       <button class="ghost" onclick={onCancel}>Cancel</button>
-      <button class="deny" onclick={submit} disabled={!preview}>
+      <button
+        class="deny"
+        onclick={submit}
+        disabled={!preview}
+        aria-keyshortcuts="Meta+Enter Control+Enter"
+      >
         Send for revision
         <span class="kbd" aria-hidden="true">
           <Icon name="command" size={12} /><Icon name="corner-down-left" size={12} />
