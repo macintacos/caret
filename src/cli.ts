@@ -526,6 +526,53 @@ async function currentBuildId(): Promise<string> {
   return cachedBuildId;
 }
 
+export interface CommitDeps {
+  /** The commit baked in at compile time, or undefined (dev, or a build that
+   * skipped the --define). */
+  baked: string | undefined;
+  /** The source checkout's git HEAD, or null on any failure. */
+  gitHead: () => string | null;
+}
+
+/** The commit the server runs from, logged in the listen record (EXC-452).
+ * Prod binaries carry it baked via --define; dev resolves it from the source
+ * checkout; otherwise "unknown". Never throws — a missing commit must not
+ * destabilize boot. */
+export function resolveCommit(deps: CommitDeps): string {
+  if (deps.baked) return deps.baked;
+  return deps.gitHead() ?? "unknown";
+}
+
+let cachedCommit: string | undefined;
+
+/** resolveCommit wired to the baked define and the real git, memoized per
+ * process (the commit can't change while this process runs). */
+function currentCommit(): string {
+  if (cachedCommit !== undefined) return cachedCommit;
+  cachedCommit = resolveCommit({
+    // Replaced with a string literal by `--define` in the build scripts
+    // (.mise/tasks/build-bin, scripts/install.sh), so prod binaries can't be
+    // overridden by runtime env. Deliberately NOT a user setting — it's a
+    // build-time substitution token, exempt from the settings-rules.md
+    // README-documentation requirement.
+    baked: process.env.CARET_BUILD_COMMIT,
+    gitHead: () => {
+      try {
+        // -C import.meta.dir (not cwd): the daemon may be spawned anywhere,
+        // but in dev this module lives inside the source checkout. Handles
+        // worktrees; inside a compiled binary the virtual dir fails fast.
+        const r = Bun.spawnSync(["git", "-C", import.meta.dir, "rev-parse", "HEAD"]);
+        if (r.exitCode !== 0) return null;
+        const out = r.stdout.toString().trim();
+        return out.length > 0 ? out : null;
+      } catch {
+        return null; // git not on PATH — spawnSync throws rather than failing.
+      }
+    },
+  });
+  return cachedCommit;
+}
+
 async function runDaemon(): Promise<void> {
   // Leveled NDJSON to stderr (spawnDaemon redirects it into daemon.log). The
   // level and redact thunks re-read svc.current() per emit, so config.toml
@@ -577,6 +624,7 @@ async function runDaemon(): Promise<void> {
       serveHtml: html ? () => html : undefined,
       lockPath: daemonLock(),
       buildId: await currentBuildId(),
+      commit: currentCommit(),
       log,
     });
   } catch (e) {
