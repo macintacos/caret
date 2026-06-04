@@ -32,9 +32,16 @@ const SettingsSchema = z.object({
 
 export type Settings = z.infer<typeof SettingsSchema>;
 
+/** Settings are shared across callers (DEFAULTS, the service's lastGood
+ * cache) — freeze so no consumer can mutate another's view. */
+function freeze(s: Settings): Settings {
+  Object.freeze(s.logging);
+  return Object.freeze(s);
+}
+
 /** Every key at its schema default ({} has defaults for all keys, so this
  * never throws). */
-export const DEFAULTS: Settings = SettingsSchema.parse({});
+export const DEFAULTS: Settings = freeze(SettingsSchema.parse({}));
 
 /** Log a validation failure with the offending key path and zod code ONLY —
  * never issue.message/received/expected, which can embed raw config values
@@ -61,7 +68,7 @@ function parseAndValidate(text: string): Settings | null {
     logValidationFailure(res.error);
     return null;
   }
-  return res.data;
+  return freeze(res.data);
 }
 
 /** One-shot synchronous load for the short-lived hook process. Never throws:

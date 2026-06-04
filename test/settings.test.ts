@@ -102,3 +102,30 @@ test("a deleted file keeps serving last-known-good", async () => {
 test("settings() returns the same lazy singleton", () => {
   expect(settings()).toBe(settings());
 });
+
+test("DEFAULTS is frozen, nested logging included", () => {
+  expect(Object.isFrozen(DEFAULTS)).toBe(true);
+  expect(Object.isFrozen(DEFAULTS.logging)).toBe(true);
+});
+
+test("a parsed file result is frozen, nested logging included", async () => {
+  await Bun.write(file, '[logging]\nlevel = "warn"\n');
+  const s = loadSettings(file);
+  expect(Object.isFrozen(s)).toBe(true);
+  expect(Object.isFrozen(s.logging)).toBe(true);
+});
+
+test("current() yields a frozen result", async () => {
+  await Bun.write(file, '[logging]\nlevel = "warn"\n');
+  const s = createSettings(file).current();
+  expect(Object.isFrozen(s)).toBe(true);
+  expect(Object.isFrozen(s.logging)).toBe(true);
+});
+
+test("mutating a frozen result throws (strict mode)", async () => {
+  await Bun.write(file, '[logging]\nlevel = "warn"\n');
+  const s = loadSettings(file);
+  expect(() => {
+    (s.logging as { level: string }).level = "debug";
+  }).toThrow(TypeError);
+});
