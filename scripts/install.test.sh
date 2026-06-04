@@ -53,6 +53,7 @@ assert_contains "$out" "vite" "plan includes the UI build"
 # one-liner, and the dry-run plan renders it through printf %q, which
 # backslash-escapes the spaces inside it.
 assert_contains "$out" "--compile" "plan includes the binary build"
+assert_contains "$out" "CARET_BUILD_COMMIT" "plan bakes the commit into the binary"
 assert_contains "$out" "index.html" "plan includes the UI copy"
 assert_contains "$out" "claude plugin install" "plan includes the plugin install"
 assert_contains "$out" "nothing was changed" "ends with the no-change closer"

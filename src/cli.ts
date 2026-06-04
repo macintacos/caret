@@ -540,7 +540,8 @@ export interface CommitDeps {
  * destabilize boot. */
 export function resolveCommit(deps: CommitDeps): string {
   if (deps.baked) return deps.baked;
-  return deps.gitHead() ?? "unknown";
+  // || not ??: both branches treat any falsy value ("" included) as unset.
+  return deps.gitHead() || "unknown";
 }
 
 let cachedCommit: string | undefined;

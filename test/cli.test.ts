@@ -729,3 +729,8 @@ test("resolveCommit reports unknown when nothing is baked and git is unavailable
   const sha = resolveCommit({ baked: undefined, gitHead: () => null });
   expect(sha).toBe("unknown");
 });
+
+test("resolveCommit maps a degenerate empty gitHead to unknown", () => {
+  const sha = resolveCommit({ baked: undefined, gitHead: () => "" });
+  expect(sha).toBe("unknown");
+});
