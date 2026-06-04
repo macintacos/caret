@@ -10,13 +10,14 @@
 // daemon death) emits a deny — never an allow.
 
 import { createHash } from "node:crypto";
-import { mkdirSync, openSync, readFileSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, readFileSync, unlinkSync } from "node:fs";
 import { dirname } from "node:path";
 import { createServer, type CaretServer } from "./daemon.ts";
 import { denyOutput, type HookOutput, toHookOutput } from "./feedback.ts";
 import { type ErrorContext, logError } from "./log.ts";
 import {
   buildHash,
+  configFile,
   type DaemonLock,
   daemonLock,
   daemonLogFile,
@@ -28,6 +29,7 @@ import {
   VERSION,
 } from "./paths.ts";
 import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "./plan-format.ts";
+import { settings } from "./settings.ts";
 import { createStore } from "./store.ts";
 import type { Decision, PlanInput } from "./types.ts";
 
@@ -454,6 +456,15 @@ async function currentBuildId(): Promise<string> {
 }
 
 async function runDaemon(): Promise<void> {
+  const log = (msg: string) => process.stderr.write(`[caret daemon] ${msg}\n`);
+  // Record which config file this daemon reads, then warm the settings
+  // singleton (EXC-429) so an invalid config.toml is detected and logged at
+  // boot rather than on first use.
+  const cfg = configFile();
+  log(
+    existsSync(cfg) ? `settings: reading ${cfg}` : `settings: no config at ${cfg}; using defaults`,
+  );
+  settings().current();
   const store = createStore(reviewsDir());
   await store.rehydrate();
   const html = await loadUiHtml();
@@ -465,7 +476,7 @@ async function runDaemon(): Promise<void> {
       serveHtml: html ? () => html : undefined,
       lockPath: daemonLock(),
       buildId: await currentBuildId(),
-      log: (msg) => process.stderr.write(`[caret daemon] ${msg}\n`),
+      log,
     });
   } catch (e) {
     if (isAddrInUse(e)) {
