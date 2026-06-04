@@ -44,6 +44,9 @@ sid=$(jq -rs --arg cwd "$PWD" '[.[] | select(.cwd == $cwd)] | sort_by(.updatedAt
 jq -s --arg sid "$sid" '[.[] | select(.sessionId == $sid)] | sort_by(.createdAt) | .[] | {id, title, status, versions: (.versions | length), decidedAt: .decision.decidedAt, feedback: .decision.feedback}' "$dir"/reviews/*.json
 ```
 
+If `$dir/reviews` is missing or empty, the glob won't match and these commands error (shell or jq,
+depending on the shell) — treat that as "no reviews recorded", not as a failure.
+
 Present the result grouped by status:
 
 - **pending** — awaiting a decision in the browser.
@@ -56,10 +59,11 @@ revisions). Note that the field whitelist above is deliberate: `versions[].plan`
 `generalCommentDraft` hold full plan and draft bodies — never select or echo them.
 
 If no review matches the working directory (`sid` comes back empty), say so, then fall back to the
-most recently updated session across all reviews and report on it instead:
+most recently updated session across all reviews — recompute `sid` and re-run the listing command
+above with it:
 
 ```bash
-sid=$(jq -rs '[.[]] | sort_by(.updatedAt) | last | .sessionId // empty' "$dir"/reviews/*.json)
+sid=$(jq -rs 'sort_by(.updatedAt) | last | .sessionId // empty' "$dir"/reviews/*.json)
 ```
 
 ## 3. Recent errors
