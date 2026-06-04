@@ -2,24 +2,37 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runReview } from "../src/cli.ts";
 import { type CaretServer, createServer } from "../src/daemon.ts";
-import { createStore, type Store } from "../src/store.ts";
-import { assertDevEnv, DEV_SESSION, postRevision, seedPlan } from "../scripts/dev/driver.ts";
+import { setLogLevel } from "../src/log.ts";
+import { hasUntaggedCodeBlock } from "../src/plan-format.ts";
+import { createStore } from "../src/store.ts";
+import {
+  appendRevision,
+  assertDevEnv,
+  DEV_SESSION,
+  devReviewDeps,
+  hookStdin,
+  nextPlan,
+} from "../scripts/dev/driver.ts";
 
-// The fixtures the driver posts — read independently here so the assertions
+// The v1 fixture the driver seeds — read independently here so the assertions
 // don't lean on the driver's own loader.
 const PLAN_V1 = await Bun.file(`${import.meta.dir}/../scripts/dev/fake-plan.md`).text();
-const PLAN_V2 = await Bun.file(`${import.meta.dir}/../scripts/dev/fake-plan.revised.md`).text();
 
 let dir: string;
-let store: Store;
 let srv: CaretServer;
 let base: string;
+
+// Point the state dir at the per-test temp dir so the hook logging that
+// runReview performs lands in a disposable caret.log, not the real one —
+// the same hygiene test/cli.test.ts uses.
+let savedXdg: string | undefined;
 
 // Boot a real in-process daemon (no browser, no spawned process), exactly the
 // pattern test/daemon.test.ts uses.
 async function boot() {
-  store = createStore(dir);
+  const store = createStore(dir);
   await store.rehydrate();
   srv = createServer({ store, port: 0, idleMs: 1_000_000, onShutdown: () => {} });
   base = `http://localhost:${srv.port}`;
@@ -45,47 +58,146 @@ async function clientReview(id: string) {
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "caret-driver-"));
+  savedXdg = process.env.XDG_STATE_HOME;
+  process.env.XDG_STATE_HOME = dir;
 });
 afterEach(async () => {
+  if (savedXdg === undefined) delete process.env.XDG_STATE_HOME;
+  else process.env.XDG_STATE_HOME = savedXdg;
+  setLogLevel("info"); // undo any per-test level change
   srv?.stop();
   await rm(dir, { recursive: true, force: true });
 });
 
-test("seedPlan creates one pending review holding the v1 fake plan", async () => {
-  await boot();
-  const id = await seedPlan(base);
-  const r = await clientReview(id);
-  expect(r.currentPlan).toBe(PLAN_V1);
-  expect(r.version).toBe(1);
-  expect(r.status).toBe("pending");
-  expect(r.sessionId).toBe(DEV_SESSION);
-  const list = (await (await fetch(`${base}/api/reviews`)).json()) as Array<{ id: string }>;
-  expect(list.map((x) => x.id)).toEqual([id]);
+// ---- hookStdin ----
+
+test("hookStdin shapes the PermissionRequest stdin the hook parses", () => {
+  const parsed = JSON.parse(hookStdin("# P")) as {
+    session_id: string;
+    cwd: string;
+    tool_input: { plan: string };
+  };
+  expect(parsed.session_id).toBe(DEV_SESSION);
+  expect(parsed.cwd).toBe(process.cwd());
+  expect(parsed.tool_input.plan).toBe("# P");
 });
 
-test("on request-changes, postRevision threads v2 into the SAME review via sessionId", async () => {
-  await boot();
-  const id = await seedPlan(base);
-  await resolve(id, "deny", "please revise");
-  const revId = await postRevision(base);
-  expect(revId).toBe(id); // appended as a new version, not forked into a new review
-  const r = await clientReview(revId);
-  expect(r.version).toBe(2);
-  expect(r.currentPlan).toBe(PLAN_V2);
-  expect(r.status).toBe("pending");
+// ---- appendRevision ----
+
+test("appendRevision keeps the prior plan and quotes the feedback under a Revision N heading", () => {
+  const out = appendRevision("# Plan body", "use a monotonic clock", 1);
+  expect(out).toStartWith("# Plan body");
+  expect(out).toContain("## Revision 1");
+  expect(out).toContain("use a monotonic clock");
 });
 
-test("on approve, re-seeding starts a fresh pending review with v1", async () => {
+test("appendRevision never introduces untagged code blocks, even for hostile feedback", () => {
+  const hostile = [
+    "try this instead:",
+    "```",
+    "an untagged fence",
+    "```",
+    "    a four-space-indented line",
+    "````",
+    "an even longer fence",
+    "````",
+  ].join("\n");
+  const out = appendRevision(PLAN_V1, hostile, 2);
+  expect(hasUntaggedCodeBlock(out)).toBe(false);
+  expect(out).toContain("an untagged fence");
+  expect(out).toContain("an even longer fence");
+});
+
+// ---- nextPlan ----
+
+test("nextPlan on a reviewer deny appends a revision and bumps the counter", () => {
+  const next = nextPlan({ plan: PLAN_V1, revision: 0 }, { behavior: "deny", message: "tighten scope" }, PLAN_V1);
+  expect(next.action).toBe("revise");
+  expect(next.revision).toBe(1);
+  expect(next.plan).toContain("## Revision 1");
+  expect(next.plan).toContain("tighten scope");
+});
+
+test("nextPlan treats the empty-feedback default message as a real revision", () => {
+  // toHookOutput maps empty feedback to this fixed message; it is still a
+  // reviewer decision, not a fail-safe.
+  const next = nextPlan(
+    { plan: PLAN_V1, revision: 2 },
+    { behavior: "deny", message: "Plan changes requested." },
+    PLAN_V1,
+  );
+  expect(next.action).toBe("revise");
+  expect(next.revision).toBe(3);
+  expect(next.plan).toContain("## Revision 3");
+});
+
+test("nextPlan resubmits unchanged on the hook's own fail-safe deny shapes", () => {
+  const next = nextPlan(
+    { plan: PLAN_V1, revision: 1 },
+    { behavior: "deny", message: "caret: review timed out — denying so no unreviewed plan ships. See /x." },
+    PLAN_V1,
+  );
+  expect(next.action).toBe("resubmit");
+  expect(next.plan).toBe(PLAN_V1);
+  expect(next.revision).toBe(1);
+});
+
+test("nextPlan on approve re-seeds a fresh v1 and resets the counter", () => {
+  const revised = appendRevision(PLAN_V1, "feedback", 1);
+  const next = nextPlan({ plan: revised, revision: 1 }, { behavior: "allow" }, PLAN_V1);
+  expect(next.action).toBe("reseed");
+  expect(next.plan).toBe(PLAN_V1);
+  expect(next.revision).toBe(0);
+});
+
+// ---- the real hook path, end to end ----
+
+/** Poll an async probe until it returns a value or the budget elapses. */
+async function waitFor<T>(probe: () => Promise<T | undefined>, ms = 5000): Promise<T> {
+  const start = Date.now();
+  for (;;) {
+    const v = await probe();
+    if (v !== undefined) return v;
+    if (Date.now() - start > ms) throw new Error("waitFor: timed out");
+    await Bun.sleep(20);
+  }
+}
+
+test("a revision round-trips through the real runReview hook path and logs to caret.log", async () => {
   await boot();
-  const id = await seedPlan(base);
+  const deps = devReviewDeps(base);
+  // First submission: the driver's initial seed, through the real hook.
+  const first = runReview(hookStdin(PLAN_V1), deps);
+  const id = await waitFor(async () => {
+    const list = (await (await fetch(`${base}/api/reviews`)).json()) as Array<{ id: string }>;
+    return list[0]?.id;
+  });
+  await resolve(id, "deny", "needs a rollout plan");
+  const out = await first;
+  expect(out.hookSpecificOutput.decision.behavior).toBe("deny");
+  expect(out.hookSpecificOutput.decision.message).toBe("needs a rollout plan");
+  // The driver's step: append Revision 1 and resubmit through the same path.
+  const next = nextPlan({ plan: PLAN_V1, revision: 0 }, out.hookSpecificOutput.decision, PLAN_V1);
+  const second = runReview(hookStdin(next.plan), deps);
+  const threaded = await waitFor(async () => {
+    const r = await clientReview(id);
+    return r.version === 2 ? r : undefined;
+  });
+  expect(threaded.sessionId).toBe(DEV_SESSION);
+  expect(threaded.status).toBe("pending");
+  expect(threaded.currentPlan).toContain("## Revision 1");
+  expect(threaded.currentPlan).toContain("needs a rollout plan");
   await resolve(id, "allow");
-  const nextId = await seedPlan(base); // re-seed is just another seedPlan
-  expect(nextId).not.toBe(id); // approval is terminal → a new thread
-  const r = await clientReview(nextId);
-  expect(r.version).toBe(1);
-  expect(r.currentPlan).toBe(PLAN_V1);
-  expect(r.status).toBe("pending");
+  const out2 = await second;
+  expect(out2.hookSpecificOutput.decision.behavior).toBe("allow");
+  // Real hook records landed in the dev state dir's caret.log.
+  const log = await Bun.file(join(dir, "caret", "caret.log")).text();
+  expect(log).toContain('"step":"decision"');
+  expect(log).toContain("needs a rollout plan");
+  expect(log).toContain(DEV_SESSION);
 });
+
+// ---- isolation guard ----
 
 test("assertDevEnv requires an explicit dev port + state dir (isolation guard)", () => {
   const savedPort = process.env.CARET_PORT;
