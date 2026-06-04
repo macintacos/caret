@@ -72,14 +72,16 @@ export function prefsFile(): string {
   return `${stateDir()}/prefs.json`;
 }
 
-/** Errors-only log for the short-lived `caret review` hook process. Single
- * source of truth for the path, shared by the writer and `/caret:debug`. */
+/** Leveled NDJSON log for the short-lived `caret review` hook process (info
+ * default; see log.ts). Single source of truth for the path, shared by the
+ * writer and `/caret:debug`. */
 export function logFile(): string {
   return `${stateDir()}/caret.log`;
 }
 
-/** Log for the detached daemon process (its stdout/stderr is redirected here
- * by spawnDaemon). Resolved here so spawnDaemon and `/caret:debug` agree. */
+/** Log for the detached daemon process (its stdout/stderr — leveled NDJSON
+ * plus any raw crash output — is redirected here by spawnDaemon). Resolved
+ * here so spawnDaemon and `/caret:debug` agree. */
 export function daemonLogFile(): string {
   return `${stateDir()}/daemon.log`;
 }
