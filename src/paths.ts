@@ -85,11 +85,16 @@ export function daemonLock(): string {
 
 /** Contents of the daemon lock file. Written by the daemon on bind; read by a
  * starting caret to discover and gracefully retire an older one. `build`/
- * `version` are optional so a partial/legacy lock still parses. */
+ * `version` are optional so a partial/legacy lock still parses; `stateDir`/
+ * `instanceId` (EXC-461) identify which world and which boot wrote the lock,
+ * optional for the same reason. stateDir is identifying (contains the
+ * username) — never log it; log instanceId instead. */
 export interface DaemonLock {
   pid: number;
   port: number;
   build?: string;
   version?: string;
   startedAt?: number;
+  stateDir?: string;
+  instanceId?: string;
 }

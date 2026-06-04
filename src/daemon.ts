@@ -57,6 +57,14 @@ export interface CreateServerOptions {
   /** Commit the server runs from (cli.ts resolveCommit), reported in the listen
    * record so daemon.log ties a boot back to a source revision (EXC-452). */
   commit?: string;
+  /** The daemon's resolved state dir — its world identity (EXC-461), reported
+   * in /api/health and recorded in the lock so a hook can refuse to
+   * cross-attach to a foreign world. Identifying (contains the username):
+   * never logged — the listen record carries instanceId instead. */
+  stateDir?: string;
+  /** Per-boot opaque id (EXC-461), reported in /api/health and the lock so the
+   * UI can detect a daemon swap across polls. Safe to log. */
+  instanceId?: string;
   /** Leveled lifecycle logger (see log.ts CaretLogger); defaults to a no-op so
    * tests stay quiet. Lifecycle events log at info, handler failures at error. */
   log?: CaretLogger;
@@ -170,6 +178,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   const lockPath = opts.lockPath;
   const buildId = opts.buildId;
   const commit = opts.commit;
+  const stateDir = opts.stateDir;
+  const instanceId = opts.instanceId;
   const log = opts.log ?? noopLogger;
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount } = createDecisions(log);
 
@@ -241,7 +251,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       if (method === "GET" && path === "/api/health") {
         // `build` is dropped from the JSON when buildId is undefined, so a
         // daemon with no build fingerprint reports the bare {service, version}.
-        return Response.json({ ...IDENTITY, build: buildId });
+        // Same for the EXC-461 identity fields: stateDir (world) and
+        // instanceId (boot) let a hook and the UI tell daemons apart.
+        return Response.json({ ...IDENTITY, build: buildId, stateDir, instanceId });
       }
 
       // Graceful single-instance retire (EXC-406): a newer caret asks this
@@ -491,6 +503,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     build: buildId,
     version: IDENTITY.version,
     commit,
+    // instanceId only — stateDir is identifying and never reaches a log (EXC-461).
+    instanceId,
   });
 
   // Write the single-instance lock atomically (temp + rename) so a concurrent
@@ -507,6 +521,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
         build: buildId,
         version: IDENTITY.version,
         startedAt: Date.now(),
+        stateDir,
+        instanceId,
       };
       const tmp = `${lockPath}.tmp.${process.pid}`;
       writeFileSync(tmp, JSON.stringify(lock));
