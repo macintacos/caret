@@ -182,7 +182,7 @@ Requires [mise](https://mise.jdx.dev), which pins bun, biome, hk, and pkl.
 ```sh
 mise run setup      # install pinned tools + JS deps + e2e Chromium + register git hooks
 mise run build      # build:ui (Vite single-file) then build:bin (bun build --compile)
-mise run dev        # isolated daemon + fake plan + Vite UI (dev port :42719)
+mise run dev        # isolated daemon + fake plan + Vite UI (ephemeral port)
 mise run test       # bun test
 mise run test-e2e   # Playwright browser e2e (isolated daemon, Chromium)
 mise run lint       # Biome + tsc + svelte-check (read-only); the CI/pre-commit gate
@@ -194,13 +194,18 @@ mise run preflight  # format + lint + tests (unit ∥ e2e) + build before pushin
 type checking is folded into linting via `hk.pkl`.
 
 `mise run dev` is self-contained — no separate `bin/caret daemon` needed. It starts an isolated
-caret daemon on a dedicated dev port (`CARET_PORT`, default `42719`, distinct from the `42718`
-production default) with an ephemeral `XDG_STATE_HOME`, seeds it with one fake pending plan, and
-runs a driver that plays the agent's side through the real review hook path: each request-changes
-appends a revision section quoting your feedback and resubmits, and approve re-seeds a fresh plan,
-with real hook records landing in the dev state dir's `caret.log`. Everything is reaped on Ctrl-C,
-and the dev daemon never reads or writes a globally-installed caret's reviews. Override the port
-with `CARET_DEV_PORT` if `42719` is taken.
+caret daemon as `caret daemon --ephemeral`, which binds an OS-assigned port; the dev task discovers
+the real port from the daemon's lock file (`$XDG_STATE_HOME/caret/daemon.lock`, written after the
+bind) and exports it as `CARET_PORT` before starting the driver and Vite. The state dir is an
+ephemeral `XDG_STATE_HOME`, so any number of `mise run dev` sessions coexist — each claims its own
+port and state dir, and Vite auto-increments its UI port per session. The daemon is seeded with one
+fake pending plan, and a driver plays the agent's side through the real review hook path: each
+request-changes appends a revision section quoting your feedback and resubmits, and approve re-seeds
+a fresh plan, with real hook records landing in the dev state dir's `caret.log`. Everything is
+reaped on Ctrl-C, and the dev daemon never reads or writes a globally-installed caret's reviews. To
+pin a fixed dev port instead, set `CARET_DEV_PORT` to any free port other than `42718` (the
+production default); this skips `--ephemeral` and binds that port, so only one such session can run
+at a time.
 
 `mise run test-e2e` runs the Playwright specs in `e2e/` against an isolated daemon that serves the
 built single-file UI on an OS-assigned port with ephemeral state, so the suite never touches your
