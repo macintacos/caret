@@ -31,17 +31,24 @@ import {
   type DaemonLock,
   daemonLock,
   daemonLogFile,
-  getPort,
-  invalidEnvVars,
   logFile,
   reviewsDir,
-  reviewTimeoutMs,
   stateDir,
   VERSION,
 } from "./paths.ts";
 import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "./plan-format.ts";
 import { redactLogFiles } from "./redact.ts";
-import { loadSettings, settings, watchSettings } from "./settings.ts";
+import {
+  getPort,
+  heartbeatMs,
+  idleMs,
+  invalidEnvVars,
+  loadSettings,
+  reviewTimeoutMs,
+  settings,
+  type Settings,
+  watchSettings,
+} from "./settings.ts";
 import { createStore } from "./store.ts";
 import type { Decision, PlanInput } from "./types.ts";
 
@@ -393,9 +400,9 @@ function openBrowser(url: string): void {
   }
 }
 
-async function prodEnsureDeps(): Promise<EnsureDeps> {
+async function prodEnsureDeps(s: Settings): Promise<EnsureDeps> {
   return {
-    baseUrl: `http://localhost:${getPort()}`,
+    baseUrl: `http://localhost:${getPort(s)}`,
     // The current binary's identity: its build fingerprint + the package version.
     currentBuild: await currentBuildId(),
     currentVersion: VERSION,
@@ -410,13 +417,13 @@ async function prodEnsureDeps(): Promise<EnsureDeps> {
   };
 }
 
-function prodReviewDeps(): ReviewDeps {
+function prodReviewDeps(s: Settings): ReviewDeps {
   return {
-    ensureDaemon: async () => ensureDaemon(await prodEnsureDeps()),
+    ensureDaemon: async () => ensureDaemon(await prodEnsureDeps(s)),
     postReview,
     longPoll,
     openBrowser,
-    timeoutMs: reviewTimeoutMs(),
+    timeoutMs: reviewTimeoutMs(s),
   };
 }
 
@@ -511,18 +518,23 @@ async function runDaemon(): Promise<void> {
     () => svc.current().logging.redact,
   );
   const cfg = configFile();
-  // The boot line records the effective settings: the VALIDATED parse only —
-  // schema-constrained enums/booleans — never raw config text, which may hold
-  // anything (the settings.ts logValidationFailure invariant). It is also the
-  // watcher's baseline read, so boot never fires a spurious change record.
+  // The boot snapshot: logged below and reused for the startup-captured
+  // tunables (port/idle/heartbeat), so the boot record provably matches the
+  // values the server binds with — a config edit landing mid-boot can't split
+  // them. The record holds the VALIDATED parse only — schema-constrained
+  // values — never raw config text, which may hold anything (the settings.ts
+  // logValidationFailure invariant). This is also the watcher's baseline read,
+  // so boot never fires a spurious change record.
+  const boot = svc.current();
   log.info(
     "settings",
     existsSync(cfg) ? `settings: reading ${cfg}` : `settings: no config at ${cfg}; using defaults`,
-    { settings: svc.current() },
+    { settings: boot },
   );
-  // A typo'd CARET_* var silently falls back to its default — surface it once
-  // at boot so "why is it on the default port?" is answerable from the log.
-  for (const name of invalidEnvVars()) log.warn("env", `${name} invalid; using default`);
+  // A typo'd CARET_* var silently falls through to the config file, then the
+  // default — surface it once at boot so "why is it on the default port?" is
+  // answerable from the log.
+  for (const name of invalidEnvVars()) log.warn("env", `${name} invalid; using config/default`);
   const store = createStore(reviewsDir(), log);
   await store.rehydrate();
   const html = await loadUiHtml();
@@ -531,7 +543,9 @@ async function runDaemon(): Promise<void> {
   try {
     server = createServer({
       store,
-      port: getPort(),
+      port: getPort(boot),
+      idleMs: idleMs(boot),
+      heartbeatMs: heartbeatMs(boot),
       serveHtml: html ? () => html : undefined,
       lockPath: daemonLock(),
       buildId: await currentBuildId(),
@@ -582,7 +596,7 @@ async function runDaemon(): Promise<void> {
 async function runPrewarm(): Promise<void> {
   // Best-effort warm start; never blocks or denies (it's a PostToolUse hook).
   try {
-    await ensureDaemon(await prodEnsureDeps());
+    await ensureDaemon(await prodEnsureDeps(loadSettings()));
   } catch (e) {
     logDebug("prewarm", `prewarm failed: ${e instanceof Error ? e.message : e}`);
     process.stderr.write(`caret prewarm: ${e}\n`);
@@ -593,14 +607,15 @@ async function runPrewarm(): Promise<void> {
 async function runReviewSubcommand(): Promise<void> {
   // Wire [logging].level and .redact before anything can emit (the signal
   // handlers below and the review itself both log through the shared logger).
-  // One synchronous read; error records pass at every level, so a broken
-  // config still logs.
-  const { logging } = loadSettings();
-  setLogLevel(logging.level);
-  setRedact(logging.redact);
+  // One synchronous read — the same snapshot feeds the review deps below, so
+  // the hook's logging config and tunables can never come from two different
+  // reads of the file.
+  const loaded = loadSettings();
+  setLogLevel(loaded.logging.level);
+  setRedact(loaded.logging.redact);
   // Same boot-time surfacing as the daemon's — a typo'd CARET_* var otherwise
-  // silently falls back to its default.
-  for (const name of invalidEnvVars()) logWarn("env", `${name} invalid; using default`);
+  // silently falls through to the config file, then the default.
+  for (const name of invalidEnvVars()) logWarn("env", `${name} invalid; using config/default`);
   // Emit exactly one decision line. A signal arriving after the normal decision
   // was written must not append a second (deny) line.
   let responded = false;
@@ -620,7 +635,7 @@ async function runReviewSubcommand(): Promise<void> {
   process.once("SIGTERM", () => denyAndExit("caret: terminated (SIGTERM) — denying to fail safe."));
 
   const stdin = await Bun.stdin.text();
-  const out = await runReview(stdin, prodReviewDeps());
+  const out = await runReview(stdin, prodReviewDeps(loaded));
   respond(out);
   process.exit(0);
 }

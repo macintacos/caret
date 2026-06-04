@@ -11,7 +11,7 @@
 
 import { httpHealth, longPoll, postReview, type ReviewDeps, runReview } from "../../src/cli.ts";
 import type { PermissionDecision } from "../../src/feedback.ts";
-import { DEFAULT_PORT } from "../../src/paths.ts";
+import { DEFAULT_PORT } from "../../src/settings.ts";
 
 /** Fixed session for the single dev review; reused across versions so a
  * revision threads into the same review instead of forking a new one. */
