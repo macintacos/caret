@@ -53,8 +53,10 @@ trap 'exit 143' TERM
 # Stock daemon, run from source so daemon edits are live without a rebuild.
 # Local-dev only: the daemon emits NDJSON on stderr (EXC-398), so render it
 # human-readable through pino-pretty (a devDependency — production caret always
-# emits raw NDJSON; pino-pretty is never bundled into the binary).
-bun src/cli.ts daemon 2> >(bunx pino-pretty --colorize >&2) &
+# emits raw NDJSON; pino-pretty is never bundled into the binary). The
+# translateTime mask keeps the records' ISO 8601 UTC time verbatim — without
+# it pino-pretty re-renders time as local HH:MM:ss with no date.
+bun src/cli.ts daemon 2> >(bunx pino-pretty --colorize --translateTime "UTC:yyyy-mm-dd'T'HH:MM:ss.l'Z'" >&2) &
 daemon_pid=$!
 
 # Seed the fake plan and play the agent's protocol side (waits for health first).

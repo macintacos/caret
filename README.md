@@ -155,9 +155,11 @@ Browser-UI events ship to the daemon in batches (`POST /api/logs`) and land in `
 `source: "ui"`, subject to the same `[logging]` level and redact settings as everything else.
 
 Each record is one JSON object per line (pino): `level` (numeric — 20 debug, 30 info, 40 warn,
-50 error), `time` (epoch ms), `step` (a short fixed token), `source` (the emitting process —
-`"hook"`, `"daemon"`, or `"ui"`), `msg`, plus structured extras. Normal operation logs at info;
-only genuine failures sit at error.
+50 error), `time` (ISO 8601 UTC, e.g. `2026-06-04T21:25:40.038Z`), `step` (a short fixed token),
+`source` (the emitting process —
+`"hook"`, `"daemon"`, or `"ui"`), `caller` (the `file:line` of the emitting call site — on hook and
+daemon records; bridged UI records omit it), `msg`, plus structured extras. Normal operation logs at
+info; only genuine failures sit at error.
 
 To raise verbosity, set `level = "debug"` in `config.toml`'s `[logging]` table
 (see [Configuration](#config-file)). It hot-reloads — no restart needed.
