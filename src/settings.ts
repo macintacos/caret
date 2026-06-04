@@ -10,7 +10,7 @@
 //
 // Consumers: the short-lived `caret review` hook calls loadSettings() (single
 // synchronous load); the daemon holds the settings() singleton. EXC-398
-// (level) and EXC-399 (redact) read these; EXC-400 (debug) is next.
+// (level) and EXC-399 (redact) read these.
 
 import { readFileSync, statSync } from "node:fs";
 import { parse as parseToml } from "smol-toml";
