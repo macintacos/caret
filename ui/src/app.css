@@ -1,15 +1,16 @@
 /* caret — "technical manuscript" design system.
    A plan-review surface that reads like a marked-up engineering manuscript:
    warm paper light theme, deep-ink dark theme, a single saturated caret-amber
-   accent (the ^ insertion mark the tool is named for); platform sans-serif for
-   UI text, serif (Fraunces) reserved for the "caret" wordmark, monospace
+   accent (the ^ insertion mark the tool is named for); Inter Display (when
+   locally installed, else platform sans-serif) for UI text, serif (Fraunces)
+   reserved for the "caret" wordmark, monospace
    reserved for rendered code, the ^ carets, and two metadata accents
    (working-directory paths, the version badge). */
 
 :root {
   /* Type */
   --font-display: "Fraunces", "Times New Roman", serif;
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-sans: "Inter Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
   /* Light: warm paper + ink */
