@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer, type CaretServer } from "../src/daemon.ts";
-import type { CaretLogger } from "../src/log.ts";
+import { type CaretLogger, createDaemonLogger } from "../src/log.ts";
 import { VERSION } from "../src/paths.ts";
 import { createStore, type Store } from "../src/store.ts";
 import { recordingLog } from "./recording-log.ts";
@@ -799,6 +799,22 @@ test("a rejected log batch logs exactly one warn under step 'ui'", async () => {
     msg: "ui log batch rejected",
     extra: { status: 400 },
   });
+});
+
+test("a real daemon logger censors a forged plan body on the wire path", async () => {
+  // recordingLog captures extra BEFORE wrap()'s scrub, so this is the one
+  // end-to-end assertion that wire → CaretLogger → scrubValue censors a
+  // DENY_KEYS body — the bridge's core redaction promise.
+  const dest = join(dir, "daemon-e2e.log");
+  await boot({ log: createDaemonLogger(() => "info", dest) });
+  const res = await postLogs([
+    { level: "info", step: "ui", msg: "m", extra: { plan: "secret plan body" } },
+  ]);
+  expect(res.status).toBe(204);
+  const text = readFileSync(dest, "utf-8");
+  expect(text).toContain('"source":"ui"');
+  expect(text).toContain('"plan":"<redacted>"');
+  expect(text).not.toContain("secret plan body");
 });
 
 test("a failed fire-and-forget prefs write is logged at warn", async () => {
