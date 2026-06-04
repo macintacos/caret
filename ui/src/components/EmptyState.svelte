@@ -1,5 +1,7 @@
 <script lang="ts">
   // Shown when no pending reviews remain (initial load or after resolving all).
+  import Icon from "./Icon.svelte";
+
   let { connected = true }: { connected?: boolean } = $props();
 </script>
 
@@ -13,6 +15,7 @@
     </p>
   {:else}
     <p class="warn">
+      <Icon name="unplug" size={14} />
       Not connected to the caret daemon. Make sure it's running, then this will
       update automatically.
     </p>
@@ -61,6 +64,12 @@
   }
   .warn {
     color: var(--accent);
+  }
+  /* Sit the unplug glyph on the first text line. .icon is scoped to
+     Icon.svelte, so reach it with :global. */
+  .warn :global(.icon) {
+    vertical-align: -0.15em;
+    margin-right: 0.15em;
   }
   .hint {
     margin-top: 2rem;

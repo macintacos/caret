@@ -6,15 +6,10 @@ import { mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { createDecisions } from "./decisions.ts";
 import { type CaretLogger, noopLogger, shortId } from "./log.ts";
-import {
-  type DaemonLock,
-  heartbeatMs as defaultHeartbeatMs,
-  IDENTITY,
-  idleMs as defaultIdleMs,
-  prefsFile,
-} from "./paths.ts";
+import { type DaemonLock, IDENTITY, prefsFile } from "./paths.ts";
 import { readApproveMode, writeApproveMode } from "./prefs.ts";
 import { routeIncomingPlan } from "./reviews.ts";
+import { DEFAULTS } from "./settings.ts";
 import type { Store } from "./store.ts";
 import {
   currentVersion,
@@ -39,8 +34,13 @@ export type RoutePlan = (
 export interface CreateServerOptions {
   store: Store;
   port?: number;
+  /** Idle auto-shutdown delay (ms); defaults to the schema default. runDaemon
+   * passes the env/file-resolved value (settings.idleMs) captured at boot. */
   idleMs?: number;
-  /** Decision long-poll heartbeat window (ms); defaults to paths.heartbeatMs(). */
+  /** Decision long-poll heartbeat window (ms); defaults to the schema default.
+   * runDaemon passes the env/file-resolved value (settings.heartbeatMs)
+   * captured at boot. The pure defaults keep createServer free of config-file
+   * reads, so tests stay hermetic. */
   heartbeatMs?: number;
   serveHtml?: () => string | Promise<string>;
   onShutdown?: () => void;
@@ -156,8 +156,8 @@ export function parseUiLogBatch(raw: unknown): { events: UiLogEvent[] } | { stat
 
 export function createServer(opts: CreateServerOptions): CaretServer {
   const { store } = opts;
-  const idle = opts.idleMs ?? defaultIdleMs();
-  const heartbeat = opts.heartbeatMs ?? defaultHeartbeatMs();
+  const idle = opts.idleMs ?? DEFAULTS.daemon.idle_ms;
+  const heartbeat = opts.heartbeatMs ?? DEFAULTS.daemon.heartbeat_ms;
   const serveHtml = opts.serveHtml ?? (() => PLACEHOLDER_HTML);
   const onShutdown = opts.onShutdown ?? (() => process.exit(0));
   const routePlan = opts.routePlan ?? routeIncomingPlan;

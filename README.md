@@ -101,20 +101,47 @@ The `[logging]` table accepts two keys:
 Logs are raw by default; `caret redact` (see [Logging & Debugging](#logging--debugging)) produces
 shareable copies after the fact.
 
+The `[daemon]` and `[review]` tables hold the tunables the `CARET_*` environment variables also
+cover (see below); precedence is **env var > config file > default**:
+
+| Key                    | Default | Purpose                                                                                                                                                       |
+| ---------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `daemon.port`          | `42718` | Daemon port.                                                                                                                                                  |
+| `daemon.idle_ms`       | `60000` | Idle delay (ms) before the daemon auto-shuts-down with no reviews.                                                                                            |
+| `daemon.heartbeat_ms`  | `8000`  | Decision long-poll heartbeat window (ms).                                                                                                                     |
+| `review.timeout_s`     | `3600`  | Review window in seconds before the hook fail-safe-denies (default 1 hour). The schema rejects values at or above the 3900s hook budget in `hooks/hooks.json`. |
+
+Unlike the `[logging]` keys, which hot-reload live, the tunables are captured at startup: `port`,
+`idle_ms`, and `heartbeat_ms` take effect on the next daemon start, and `timeout_s` on the next
+review.
+
 ```toml
 [logging]
 level = "info"
 redact = false
+
+[daemon]
+port = 42718
+idle_ms = 60000
+heartbeat_ms = 8000
+
+[review]
+timeout_s = 3600
 ```
 
 ### Environment variables
 
-| Env var          | Default          | Purpose                                                                                                                                   |
-| ---------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `CARET_PORT`     | `42718`          | Daemon port.                                                                                                                              |
-| `CARET_TIMEOUT`  | `3600` (s)       | Review window before the hook fail-safe-denies, in seconds (default 1 hour; must stay below the 3900s hook budget in `hooks/hooks.json`). |
-| `CARET_IDLE_MS`  | `60000`          | Idle delay before the daemon auto-shuts-down with no reviews.                                                                             |
-| `XDG_STATE_HOME` | `~/.local/state` | Unresolved reviews persist under `$XDG_STATE_HOME/caret/reviews/` and rehydrate on restart.                                               |
+Each `CARET_*` var shadows its config-file key (precedence **env var > config file > default**). A
+set-but-invalid value — wrong shape or out of bounds — is ignored with one boot-time warning in the
+logs, and resolution falls through to the config file, then the default.
+
+| Env var              | Config key            | Default          | Purpose                                                                                     |
+| -------------------- | --------------------- | ---------------- | --------------------------------------------------------------------------------------------- |
+| `CARET_PORT`         | `daemon.port`         | `42718`          | Daemon port.                                                                                |
+| `CARET_TIMEOUT`      | `review.timeout_s`    | `3600` (s)       | Review window before the hook fail-safe-denies, in seconds. Values ≥ 3900 are invalid.      |
+| `CARET_IDLE_MS`      | `daemon.idle_ms`      | `60000`          | Idle delay before the daemon auto-shuts-down with no reviews.                               |
+| `CARET_HEARTBEAT_MS` | `daemon.heartbeat_ms` | `8000`           | Decision long-poll heartbeat window (ms).                                                   |
+| `XDG_STATE_HOME`     | —                     | `~/.local/state` | Unresolved reviews persist under `$XDG_STATE_HOME/caret/reviews/` and rehydrate on restart. |
 
 ## Logging & Debugging
 
@@ -180,12 +207,19 @@ claude --plugin-dir ./    # load caret's hooks for this session only
 /reload-plugins           # if you rebuild while Claude is running
 ```
 
+### Icons
+
+caret's icons are [Lucide](https://lucide.dev) SVGs vendored verbatim at a pinned release under
+`ui/src/icons/`, rendered by `ui/src/components/Icon.svelte`. Adding one means following the
+checklist in `.claude/rules/icon-rules.md` and adding a row to
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+
 ## Layout
 
 ```text
 src/        cli.ts (subcommands) · daemon.ts (Bun.serve) · store.ts · decisions.ts · log.ts (leveled NDJSON)
             reviews.ts (revision threading) · feedback.ts · paths.ts · types.ts · settings.ts (config.toml) · redact.ts
-ui/         Svelte 5 single-file SPA (Vite + vite-plugin-singlefile)
+ui/         Svelte 5 single-file SPA (Vite + vite-plugin-singlefile) · src/icons/ vendored Lucide SVGs
 hooks/      hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode)
 commands/   /caret:demo · /caret:debug
 scripts/    install.sh (build + register via the native plugin system)
@@ -195,4 +229,5 @@ The polished diff/compare viewer for plan versions is a planned fast-follow.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). Vendored third-party assets (the Lucide icons) are itemized in
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) (ISC).

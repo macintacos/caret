@@ -1,64 +1,10 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import pkg from "../package.json" with { type: "json" };
-import {
-  buildHash,
-  configDir,
-  configFile,
-  daemonLock,
-  heartbeatMs,
-  invalidEnvVars,
-  reviewTimeoutMs,
-  stateDir,
-  VERSION,
-} from "../src/paths.ts";
+import { buildHash, configDir, configFile, daemonLock, stateDir, VERSION } from "../src/paths.ts";
 import { homedir } from "node:os";
 
-let saved: string | undefined;
-let savedHb: string | undefined;
-beforeEach(() => {
-  saved = process.env.CARET_TIMEOUT;
-  savedHb = process.env.CARET_HEARTBEAT_MS;
-  delete process.env.CARET_TIMEOUT;
-  delete process.env.CARET_HEARTBEAT_MS;
-});
-afterEach(() => {
-  if (saved === undefined) delete process.env.CARET_TIMEOUT;
-  else process.env.CARET_TIMEOUT = saved;
-  if (savedHb === undefined) delete process.env.CARET_HEARTBEAT_MS;
-  else process.env.CARET_HEARTBEAT_MS = savedHb;
-});
-
-test("reviewTimeoutMs defaults to one hour when CARET_TIMEOUT is unset", () => {
-  expect(reviewTimeoutMs()).toBe(3_600_000);
-});
-
-test("reviewTimeoutMs honors CARET_TIMEOUT (seconds → ms)", () => {
-  process.env.CARET_TIMEOUT = "120";
-  expect(reviewTimeoutMs()).toBe(120_000);
-});
-
-test("reviewTimeoutMs falls back to the default on a non-positive or invalid value", () => {
-  for (const bad of ["0", "-5", "nope", ""]) {
-    process.env.CARET_TIMEOUT = bad;
-    expect(reviewTimeoutMs()).toBe(3_600_000);
-  }
-});
-
-test("heartbeatMs defaults to 8s when CARET_HEARTBEAT_MS is unset", () => {
-  expect(heartbeatMs()).toBe(8_000);
-});
-
-test("heartbeatMs honors a positive integer CARET_HEARTBEAT_MS", () => {
-  process.env.CARET_HEARTBEAT_MS = "250";
-  expect(heartbeatMs()).toBe(250);
-});
-
-test("heartbeatMs falls back to the default on a non-positive or invalid value", () => {
-  for (const bad of ["0", "-1", "1.5", "nope", ""]) {
-    process.env.CARET_HEARTBEAT_MS = bad;
-    expect(heartbeatMs()).toBe(8_000);
-  }
-});
+// The CARET_* accessor and invalidEnvVars tests moved to test/settings.test.ts
+// with the EXC-430 accessors themselves.
 
 test("VERSION reflects package.json (honest identity, not the stale 0.0.1 hardcode)", () => {
   expect(VERSION).toBe(pkg.version);
@@ -108,51 +54,6 @@ test("configFile resolves config.toml under configDir", () => {
     if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = savedXdg;
   }
-});
-
-// ---- invalidEnvVars (EXC-444) ----
-
-/** Run `fn` with the given CARET_* env values, restoring the originals after. */
-function withEnv(vars: Record<string, string>, fn: () => void) {
-  const saved = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
-  Object.assign(process.env, vars);
-  try {
-    fn();
-  } finally {
-    for (const [k, v] of Object.entries(saved)) {
-      if (v === undefined) delete process.env[k];
-      else process.env[k] = v;
-    }
-  }
-}
-
-test("invalidEnvVars is empty when no CARET_* var is set", () => {
-  expect(invalidEnvVars()).toEqual([]);
-});
-
-test("invalidEnvVars is empty when the set values are usable", () => {
-  withEnv({ CARET_PORT: "42718", CARET_TIMEOUT: "120", CARET_IDLE_MS: "0" }, () => {
-    expect(invalidEnvVars()).toEqual([]);
-  });
-});
-
-test("invalidEnvVars names each set-but-unusable CARET_* var", () => {
-  withEnv(
-    {
-      CARET_PORT: "nope",
-      CARET_TIMEOUT: "-5",
-      CARET_IDLE_MS: "1.5",
-      CARET_HEARTBEAT_MS: "0",
-    },
-    () => {
-      expect(invalidEnvVars()).toEqual([
-        "CARET_PORT",
-        "CARET_TIMEOUT",
-        "CARET_IDLE_MS",
-        "CARET_HEARTBEAT_MS",
-      ]);
-    },
-  );
 });
 
 test("buildHash is stable for identical input and differs for changed input", () => {

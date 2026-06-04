@@ -206,7 +206,8 @@ test("the daemon logs env warns, ui fallback, and the sigterm shutdown", async (
     const recs = ndjsonRecords(await new Response(proc.stderr).text());
     expect(
       recs.some(
-        (r) => r.step === "env" && r.level === 40 && r.msg === "CARET_TIMEOUT invalid; using default",
+        (r) =>
+          r.step === "env" && r.level === 40 && r.msg === "CARET_TIMEOUT invalid; using config/default",
       ),
     ).toBe(true);
     expect(recs.some((r) => r.step === "signal" && r.msg === "sigterm: shutting down")).toBe(true);
@@ -242,7 +243,8 @@ test("the review hook warns about invalid CARET_* env vars in caret.log", async 
     const recs = ndjsonRecords(await Bun.file(join(stateHome, "caret", "caret.log")).text());
     expect(
       recs.some(
-        (r) => r.step === "env" && r.level === 40 && r.msg === "CARET_PORT invalid; using default",
+        (r) =>
+          r.step === "env" && r.level === 40 && r.msg === "CARET_PORT invalid; using config/default",
       ),
     ).toBe(true);
   } finally {
@@ -279,7 +281,14 @@ test("the daemon logs the parsed settings at startup", async () => {
     expect(rec).toBeDefined();
     // Effective (validated) values, never raw config text. `debug` is no longer
     // a known key (EXC-400): zod strips it, so it never reaches the boot line.
-    expect(rec?.settings).toEqual({ logging: { level: "info", redact: true } });
+    // The daemon/review tables are the file-or-default values — the CARET_PORT /
+    // CARET_IDLE_MS env overrides above resolve in the accessors (EXC-430) and
+    // never appear in the parsed settings.
+    expect(rec?.settings).toEqual({
+      logging: { level: "info", redact: true },
+      daemon: { port: 42718, idle_ms: 60_000, heartbeat_ms: 8_000 },
+      review: { timeout_s: 3600 },
+    });
   } finally {
     proc.kill("SIGKILL");
     await proc.exited;
