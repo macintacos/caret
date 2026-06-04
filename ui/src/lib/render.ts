@@ -10,6 +10,7 @@ import createDOMPurify from "dompurify";
 import type { DOMPurify as DOMPurifyInstance, WindowLike } from "dompurify";
 import { Marked } from "marked";
 import { highlightToHtml } from "./highlight.ts";
+import { uiLog } from "./log.ts";
 
 // Matches a `style` value that contains ONLY shiki's dual-theme output: the
 // `--shiki-*` custom properties (per-token `--shiki-light`/`--shiki-dark` colors,
@@ -159,10 +160,26 @@ export function renderPlan(markdown: string): RenderResult {
   // INVARIANT: attributes are string-injected into the raw HTML ABOVE, then the
   // whole document is sanitized HERE. Sanitize MUST remain the last step — never
   // inject id/data-slug (or anything else) after this, or it becomes an XSS hole.
-  const rawHtml = marked.parse(markdown, { async: false }) as string;
-  const html = getPurifier().sanitize(rawHtml, {
-    ADD_ATTR: ["data-slug", "id"],
-    USE_PROFILES: { html: true },
+  let html: string;
+  try {
+    const rawHtml = marked.parse(markdown, { async: false }) as string;
+    html = getPurifier().sanitize(rawHtml, {
+      ADD_ATTR: ["data-slug", "id"],
+      USE_PROFILES: { html: true },
+    });
+  } catch (err) {
+    // Surface a render failure on the timeline, then rethrow unchanged so the
+    // caller still sees the same throw. Counts only — never the plan text.
+    uiLog.error("render", err, { chars: markdown.length });
+    throw err;
+  }
+
+  // App.svelte memoizes renderPlan per review id:version, so this is one record
+  // per plan version — not per poll tick.
+  uiLog.debug("render", "plan rendered", {
+    chars: markdown.length,
+    blocks: counter,
+    headings: headings.length,
   });
 
   return { html, headings };
