@@ -1,5 +1,6 @@
 import "../../test-setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { flush } from "./log.ts";
 import { createSafeModeGuard, type SafeModeGuard } from "./safeMode.ts";
 
 // A controllable clock so the grace-window logic is deterministic. The
@@ -151,5 +152,96 @@ describe("createSafeModeGuard", () => {
     expect(guard.isActive()).toBe(false);
     expect(changes).toEqual([]);
     expect(ev.defaultPrevented).toBe(false);
+  });
+});
+
+// uiLog instrumentation: activation/release records ride the same buffer the
+// log bridge POSTs to /api/logs, so we observe them by stubbing fetch and
+// draining the module-global buffer with flush() (cf. log.test.ts). Scoped to
+// its own describe so the fetch stub never leaks into the behavior tests above.
+describe("createSafeModeGuard instrumentation", () => {
+  interface FetchCall {
+    url: string;
+    options: RequestInit | undefined;
+  }
+  let calls: FetchCall[];
+  let originalFetch: typeof globalThis.fetch;
+
+  function loggedEvents(): Array<Record<string, unknown>> {
+    return calls.flatMap((call) => {
+      const parsed = JSON.parse(call.options?.body as string) as {
+        events: Array<Record<string, unknown>>;
+      };
+      return parsed.events;
+    });
+  }
+
+  // A distinctive key so the negative test can assert it never reaches the wire.
+  const SECRET_KEY = "ZxQvSecretKeystroke";
+  function key(type: "keydown" | "keyup"): KeyboardEvent {
+    const ev = new KeyboardEvent(type, { key: SECRET_KEY, cancelable: true, bubbles: true });
+    child.dispatchEvent(ev);
+    return ev;
+  }
+
+  beforeEach(() => {
+    flush(); // drain any residue from prior cases before installing the stub
+    calls = [];
+    originalFetch = globalThis.fetch;
+    globalThis.fetch = ((url: string, options?: RequestInit) => {
+      calls.push({ url, options });
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }) as typeof globalThis.fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    flush(); // drain so records don't bleed into the next case
+    calls = [];
+  });
+
+  test("activation emits exactly one info record", () => {
+    const clock = makeClock();
+    makeGuard({ now: clock.now });
+    clock.advance(100);
+    key("keydown"); // activates within the grace window
+    flush();
+
+    const events = loggedEvents();
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ level: "info", step: "ui", msg: "safe mode triggered" });
+  });
+
+  test("release emits one debug record with the swallowed count", async () => {
+    const clock = makeClock();
+    makeGuard({ now: clock.now, durationMs: 30 });
+    clock.advance(100);
+    key("keydown"); // activates (swallowed: 1)
+    key("keyup"); // eaten while active (swallowed: 2)
+    key("keydown"); // eaten while active (swallowed: 3)
+    await new Promise((r) => setTimeout(r, 60)); // let the duration timer fire
+    flush();
+
+    const release = loggedEvents().filter((e) => e.msg === "safe mode released");
+    expect(release).toHaveLength(1);
+    expect(release[0]).toMatchObject({
+      level: "debug",
+      step: "ui",
+      msg: "safe mode released",
+      extra: { swallowed: 3 },
+    });
+  });
+
+  test("no record carries key identity", async () => {
+    const clock = makeClock();
+    makeGuard({ now: clock.now, durationMs: 30 });
+    clock.advance(100);
+    key("keydown"); // activate, swallow some keys carrying the secret key value
+    key("keyup");
+    await new Promise((r) => setTimeout(r, 60));
+    flush();
+
+    const body = JSON.stringify(calls.map((c) => c.options?.body));
+    expect(body).not.toContain(SECRET_KEY);
   });
 });
