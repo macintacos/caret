@@ -25,7 +25,7 @@ import { configFile } from "./paths.ts";
 export const DEFAULT_PORT = 42718;
 
 // Per-key sub-schemas for the EXC-430 tunables, shared by the config-file
-// tables below and the CARET_* env layer (envNumber/invalidEnvVars) so "falls
+// tables below and the CARET_* env layer (envValue/invalidEnvVars) so "falls
 // back" and "flagged invalid" can never disagree. Bounds preserve the bespoke
 // predicates that lived in paths.ts. (`int()` is a JS-number check, so a TOML
 // `42718.0` parses to 42718 and passes — there is no int/float distinction.)
