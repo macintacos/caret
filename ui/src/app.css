@@ -3,9 +3,9 @@
    warm paper light theme, deep-ink dark theme, a single saturated caret-amber
    accent (the ^ insertion mark the tool is named for); Inter Display (when
    locally installed, else platform sans-serif) for UI text, serif (Fraunces)
-   reserved for the "caret" wordmark, monospace
-   reserved for rendered code, the ^ carets, and two metadata accents
-   (working-directory paths, the version badge). */
+   reserved for the "caret" wordmark, monospace reserved for rendered code,
+   the ^ carets, and two metadata accents (working-directory paths, the
+   version badge). */
 
 :root {
   /* Type */
