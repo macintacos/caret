@@ -34,7 +34,7 @@ export type RoutePlan = (
   input: PlanInput,
   store: Store,
   log?: CaretLogger,
-) => Promise<{ id: string; expired?: string[] }>;
+) => Promise<{ id: string; expired: string[] }>;
 
 export interface CreateServerOptions {
   store: Store;
@@ -264,9 +264,11 @@ export function createServer(opts: CreateServerOptions): CaretServer {
         // The router logs the review record (created vs appended) itself.
         const routed = await routePlan(body, store, log);
         // Drop superseded reviews' unsettled long-poll entries — their hooks
-        // are gone, so nothing would ever settle them and they would pin
-        // openDecisionCount, blocking idle shutdown forever (EXC-454).
-        for (const staleId of routed.expired ?? []) clearDecision(staleId);
+        // have given up (or will, at their own timeout), and a lingering
+        // unsettled entry pins openDecisionCount, blocking idle shutdown
+        // (EXC-454). A still-polling hook re-creates its entry per heartbeat,
+        // but that's bounded by its timeout, whose /expire clears it for good.
+        for (const staleId of routed.expired) clearDecision(staleId);
         return Response.json(routed);
       }
 
@@ -439,13 +441,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
           const existing = store.get(id);
           // Only a pending review can expire; resolved ones are already terminal.
           if (!existing || existing.status !== "pending") return notFound();
-          await store.update(id, (r) => {
-            r.status = "expired";
-            // Same invariant as resolve: a terminal record keeps no unsent draft.
-            r.generalCommentDraft = "";
-          });
-          // Terminal on disk (an expired review never rehydrates), out of memory.
-          await store.remove(id);
+          await store.expire(id);
           log.info("review", `review expired: ${shortId(id)}`, {
             reviewId: id,
             sessionId: existing.sessionId,

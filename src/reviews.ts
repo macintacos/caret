@@ -38,13 +38,7 @@ export async function routeIncomingPlan(
   // threading. Terminal on disk so it never rehydrates as approvable.
   const expired: string[] = [];
   for (const stale of store.bySession(sessionId).filter((r) => r.status === "pending")) {
-    await store.update(stale.id, (r) => {
-      r.status = "expired";
-      // Same invariant as the resolve handler: a terminal record must not
-      // retain unsent draft text.
-      r.generalCommentDraft = "";
-    });
-    await store.remove(stale.id);
+    await store.expire(stale.id);
     expired.push(stale.id);
     log.info("review", `review superseded: ${shortId(stale.id)}`, {
       reviewId: stale.id,

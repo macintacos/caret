@@ -94,7 +94,8 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
   // Track the current step + context so the catch can log what actually failed.
   let step = "parse";
   const ctx: ErrorContext = {};
-  // Hoisted so the catch can reach the daemon for the best-effort expire.
+  // Hoisted so the catch can reach the daemon for the best-effort expire;
+  // reconnects re-assign it, so it always holds the last-known daemon URL.
   let baseUrl: string | undefined;
   try {
     let hook: HookStdin;
@@ -147,20 +148,19 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
     // the fail-safe deny below. Each poll is itself timeout-capped so a single
     // hung request can't wedge the loop.
     const start = Date.now();
-    let pollUrl = baseUrl;
     let decision: Decision | undefined;
     while (!decision) {
       if (Date.now() - start >= deps.timeoutMs) throw new TimeoutError("review timed out");
       try {
         decision =
-          (await withTimeout(deps.longPoll(pollUrl, id), deps.timeoutMs, "review timed out")) ??
+          (await withTimeout(deps.longPoll(baseUrl, id), deps.timeoutMs, "review timed out")) ??
           undefined;
       } catch (err) {
         if (err instanceof TimeoutError) throw err;
         // Reconnect — label this step so a failed reconnect logs the real
         // failing op, not the poll it was recovering from.
         step = "reconnect";
-        pollUrl = await deps.ensureDaemon();
+        baseUrl = await deps.ensureDaemon();
         step = "longPoll";
       }
     }
@@ -395,7 +395,8 @@ export async function expireReview(baseUrl: string, id: string): Promise<void> {
     method: "POST",
     signal: AbortSignal.timeout(1000),
   });
-  if (!res.ok) throw new Error(`POST /expire failed: ${res.status}`);
+  // 404 = already terminal (resolved or superseded) — nothing left to expire.
+  if (!res.ok && res.status !== 404) throw new Error(`POST /expire failed: ${res.status}`);
 }
 
 export async function longPoll(baseUrl: string, id: string): Promise<Decision | null> {
