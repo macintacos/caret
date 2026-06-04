@@ -124,6 +124,9 @@ Logs live under `$XDG_STATE_HOME/caret` when set, otherwise `~/.local/state/care
 - `daemon.log` — the detached daemon's stdout/stderr: the same NDJSON shape (tagged with `pid`),
   possibly interleaved with raw non-JSON crash output.
 
+Browser-UI events ship to the daemon in batches (`POST /api/logs`) and land in `daemon.log` tagged
+`source: "ui"`, subject to the same `[logging]` level and redact settings as everything else.
+
 Each record is one JSON object per line (pino): `level` (numeric — 20 debug, 30 info, 40 warn,
 50 error), `time` (epoch ms), `step` (a short fixed token), `msg`, plus structured extras. Normal
 operation logs at info; only genuine failures sit at error.
