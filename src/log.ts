@@ -56,7 +56,10 @@ const pinoOpts = {
  * runs even with the switch off (plan/prompt/feedback censoring is
  * unconditional);
  * `step` is attached after it, raw: structural fields always win and a fixed
- * step token is never PII. Errors are serialized here (errWithCause) rather
+ * step token is never PII. `source` names the emitting process ("hook" or
+ * "daemon", EXC-445) so every record carries its provenance; an explicit
+ * extra.source wins — that's how the daemon tags bridged browser events "ui".
+ * Errors are serialized here (errWithCause) rather
  * than via a pino serializer so the scrub can cover message/stack/cause —
  * pino's own `redact` option can't rewrite substrings inside those strings,
  * walk an unbounded cause chain, or hot-toggle (see src/redact.ts). */
@@ -64,10 +67,12 @@ function wrap(
   logger: pino.Logger,
   liveLevel: () => LogLevel,
   liveRedact: () => boolean,
+  source: "hook" | "daemon",
 ): CaretLogger {
   function fields(extra: object | undefined, step: string, redact: boolean) {
     const out = scrubValue({ ...extra }, redact) as Record<string, unknown>;
     out.step = step;
+    out.source ??= source;
     return out;
   }
   function emit(method: "debug" | "info" | "warn", step: string, msg: string, extra?: object) {
@@ -148,6 +153,7 @@ function hook(): CaretLogger {
       pino(pinoOpts, dest),
       () => currentLevel,
       () => currentRedact,
+      "hook",
     );
   } catch {
     // Degrade silently but do NOT latch the failure: the next emit retries the
@@ -205,7 +211,7 @@ export function createDaemonLogger(
   try {
     const target = pino.destination({ ...(dest === undefined ? { fd: 2 } : { dest }), sync: true });
     const logger = pino({ ...pinoOpts, base: { pid: process.pid } }, target);
-    return wrap(logger, level, redact);
+    return wrap(logger, level, redact, "daemon");
   } catch {
     return noopLogger;
   }

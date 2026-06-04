@@ -174,6 +174,29 @@ test("createDaemonLogger writes NDJSON with pid in base and respects the level t
   expect(recs[1]).toMatchObject({ level: 20, step: "boot", msg: "now visible" });
 });
 
+// --- record provenance (EXC-445) ---
+
+test("hook records carry source 'hook'", () => {
+  logInfo("review", "created");
+  expect(records()[0]).toMatchObject({ source: "hook" });
+});
+
+test("daemon records carry source 'daemon'", () => {
+  const dest = join(home, "daemon-src.log");
+  const log = createDaemonLogger(() => "info", dest);
+  log.info("listen", "listening");
+  expect(records(dest)[0]).toMatchObject({ source: "daemon" });
+});
+
+test("an explicit extra.source wins over the logger's own tag", () => {
+  // The UI bridge forwards browser events through the daemon logger with
+  // source="ui" already set — the per-record value must not be clobbered.
+  const dest = join(home, "daemon-ui-src.log");
+  const log = createDaemonLogger(() => "info", dest);
+  log.info("ui", "ui loaded", { source: "ui" });
+  expect(records(dest)[0]).toMatchObject({ source: "ui" });
+});
+
 // --- redaction (EXC-399) ---
 
 const realHome = homedir();

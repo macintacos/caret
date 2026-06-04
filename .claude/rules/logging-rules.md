@@ -83,6 +83,9 @@ Concretely:
   new one.
 - Review-scoped records carry structured `reviewId` / `sessionId` fields in `extra` so one session
   stitches across the two log streams (EXC-444).
+- Every record carries a `source` field naming the emitting process — `"hook"`, `"daemon"`, or
+  `"ui"` (EXC-445). The logger attaches its own token unless `extra.source` is already set; the
+  explicit value winning is how bridged browser events stay `"ui"` through the daemon's logger.
 - `extra` keys must **not collide** with the record's own fields: `level`, `time`, `msg`, `step`,
   `pid`, `err`.
 
