@@ -180,7 +180,7 @@ src/        cli.ts (subcommands) · daemon.ts (Bun.serve) · store.ts · decisio
             reviews.ts (revision threading) · feedback.ts · paths.ts · types.ts · settings.ts (config.toml) · redact.ts
 ui/         Svelte 5 single-file SPA (Vite + vite-plugin-singlefile)
 hooks/      hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode)
-commands/   /caret:demo
+commands/   /caret:demo · /caret:debug
 scripts/    install.sh (build + register via the native plugin system)
 ```
 
