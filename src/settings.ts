@@ -10,13 +10,29 @@
 //
 // Consumers: the short-lived `caret review` hook calls loadSettings() (single
 // synchronous load); the daemon holds the settings() singleton. EXC-398
-// (level) and EXC-399 (redact) read these.
+// (level) and EXC-399 (redact) read these. EXC-430 folds the CARET_* tunables
+// in: the accessors at the bottom resolve env var > config file > schema
+// default, reading through the settings service.
 
 import { readFileSync, statSync } from "node:fs";
 import { parse as parseToml } from "smol-toml";
 import { z } from "zod";
 import { logError } from "./log.ts";
 import { configFile } from "./paths.ts";
+
+/** Default daemon port — the [daemon].port schema default (EXC-430; moved
+ * from paths.ts with the accessors below). */
+export const DEFAULT_PORT = 42718;
+
+// Per-key sub-schemas for the EXC-430 tunables, shared by the config-file
+// tables below and the CARET_* env layer (envNumber/invalidEnvVars) so "falls
+// back" and "flagged invalid" can never disagree. Bounds preserve the bespoke
+// predicates that lived in paths.ts. (`int()` is a JS-number check, so a TOML
+// `42718.0` parses to 42718 and passes — there is no int/float distinction.)
+const Port = z.number().int().positive();
+const TimeoutS = z.number().positive().lt(3900); // seconds, below the 3900s hook budget in hooks.json
+const IdleMs = z.number().int().nonnegative();
+const HeartbeatMs = z.number().int().positive();
 
 const SettingsSchema = z.object({
   logging: z
@@ -26,6 +42,19 @@ const SettingsSchema = z.object({
     })
     // zod 4: .default() does NOT parse its value, .prefault({}) runs {} through
     // the inner schema so a missing [logging] table picks up every key default.
+    // The same applies to the [daemon] and [review] tables below.
+    .prefault({}),
+  daemon: z
+    .object({
+      port: Port.default(DEFAULT_PORT), // EXC-430
+      idle_ms: IdleMs.default(60_000), // EXC-430
+      heartbeat_ms: HeartbeatMs.default(8_000), // EXC-430
+    })
+    .prefault({}),
+  review: z
+    .object({
+      timeout_s: TimeoutS.default(3600), // EXC-430: seconds — reviewTimeoutMs converts to ms, once
+    })
     .prefault({}),
 });
 
@@ -35,6 +64,8 @@ export type Settings = z.infer<typeof SettingsSchema>;
  * cache) — freeze so no consumer can mutate another's view. */
 function freeze(s: Settings): Settings {
   Object.freeze(s.logging);
+  Object.freeze(s.daemon);
+  Object.freeze(s.review);
   return Object.freeze(s);
 }
 
@@ -126,8 +157,8 @@ export function createSettings(file = configFile()): SettingsService {
 }
 
 /** Describe value changes between two settings snapshots as
- * "table.key: old → new" lines. Validated values only (enums/booleans), so
- * the output is safe for logs — raw config text never appears. */
+ * "table.key: old → new" lines. Validated values only (schema-constrained
+ * scalars), so the output is safe for logs — raw config text never appears. */
 function diffSettings(prev: Settings, next: Settings): string[] {
   const before = prev as unknown as Record<string, Record<string, unknown>>;
   const changes: string[] = [];
@@ -175,4 +206,68 @@ let singleton: SettingsService | undefined;
 export function settings(): SettingsService {
   singleton ??= createSettings();
   return singleton;
+}
+
+// --- EXC-430: CARET_* env layer — precedence env var > config file > default ---
+
+/** Env names paired with the sub-schema validating them, in the fixed order
+ * boot warnings report. */
+const ENV_VARS: ReadonlyArray<[name: string, schema: z.ZodType<number>]> = [
+  ["CARET_PORT", Port],
+  ["CARET_TIMEOUT", TimeoutS],
+  ["CARET_IDLE_MS", IdleMs],
+  ["CARET_HEARTBEAT_MS", HeartbeatMs],
+];
+
+/** Numeric value of an env var, or undefined when it is unset, blank, or fails
+ * the key's schema (the caller then falls through to file value, then default).
+ * Blank (empty/whitespace) counts as unset BEFORE Number() runs — an unguarded
+ * blank would coerce to 0, and 0 is a *valid* IdleMs ("shut down immediately"). */
+function envNumber(name: string, schema: z.ZodType<number>): number | undefined {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return undefined;
+  const n = Number(raw);
+  return schema.safeParse(n).success ? n : undefined;
+}
+
+/** Names of CARET_* vars that are set but unusable (their accessors fall
+ * through to file value, then default). Pure — each process entry point warns
+ * once at boot via its own logger (EXC-444). Blank counts as unset, matching
+ * envNumber. */
+export function invalidEnvVars(): string[] {
+  return ENV_VARS.filter(([name, schema]) => {
+    const raw = process.env[name];
+    return raw !== undefined && raw.trim() !== "" && !schema.safeParse(Number(raw)).success;
+  }).map(([name]) => name);
+}
+
+// The four tunable accessors (EXC-430; moved from paths.ts so they can read
+// through the settings service — paths.ts sits below log.ts and settings.ts in
+// the import graph and cannot import either). Callers capture these at startup
+// (daemon boot / review start), so a config edit takes effect on the next
+// daemon start or review, not live.
+
+/** Resolve the daemon port: CARET_PORT > [daemon].port > 42718. */
+export function getPort(s: Settings = settings().current()): number {
+  return envNumber("CARET_PORT", Port) ?? s.daemon.port;
+}
+
+/** Idle auto-shutdown delay (ms): CARET_IDLE_MS > [daemon].idle_ms > 60s. */
+export function idleMs(s: Settings = settings().current()): number {
+  return envNumber("CARET_IDLE_MS", IdleMs) ?? s.daemon.idle_ms;
+}
+
+/** Review timeout: CARET_TIMEOUT > [review].timeout_s > 3600s / 1h — all in
+ * seconds (kept below the 3900s hook budget by TimeoutS), converted to ms
+ * here, once. After this window, the hook fail-safe denies. */
+export function reviewTimeoutMs(s: Settings = settings().current()): number {
+  return Math.round((envNumber("CARET_TIMEOUT", TimeoutS) ?? s.review.timeout_s) * 1000);
+}
+
+/** Decision long-poll heartbeat (ms): CARET_HEARTBEAT_MS > [daemon].heartbeat_ms
+ * > 8s, comfortably under the daemon's 30s Bun.serve idleTimeout — the daemon
+ * returns a 204 "still pending" after this window so the client re-polls before
+ * any socket idle timeout can close the connection. */
+export function heartbeatMs(s: Settings = settings().current()): number {
+  return envNumber("CARET_HEARTBEAT_MS", HeartbeatMs) ?? s.daemon.heartbeat_ms;
 }
