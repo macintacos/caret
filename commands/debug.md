@@ -47,6 +47,9 @@ dir="${XDG_STATE_HOME:-$HOME/.local/state}/caret"
 
   For a human-readable rendering of either log: `grep '^{' <log> | bunx pino-pretty`.
 
+  If `jq` isn't available, fall back to `grep '^{' <log> | tail -n 20` and read the raw NDJSON
+  directly — each line is a self-contained JSON record.
+
 A "socket connection closed" on the hook side often has its real cause on the daemon side, so check
 both. The surrounding info records (review created/resolved, plan rejected with its `feedback`)
 give the timeline leading up to the failure:

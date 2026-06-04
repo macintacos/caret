@@ -25,26 +25,30 @@ export interface ErrorContext {
 
 /** The leveled surface both sinks expose. debug/info/warn take a human message
  * plus optional structured `extra`; error takes the raw thrown value (an
- * Error's `cause` chain is serialized) with an optional override message. */
+ * Error's `cause` chain is serialized; msg derives from it) plus optional
+ * `extra` fields (e.g. sessionId/cwd). `extra` keys must not collide with the
+ * record's own fields (level/time/msg/step/pid/err). */
 export interface CaretLogger {
   debug(step: string, msg: string, extra?: object): void;
   info(step: string, msg: string, extra?: object): void;
   warn(step: string, msg: string, extra?: object): void;
-  error(step: string, err: unknown, msg?: string): void;
+  error(step: string, err: unknown, extra?: object): void;
 }
 
 const pinoOpts = {
-  base: undefined,
+  base: undefined, // suppress pino's default {pid, hostname}; the daemon opts pid back in
   serializers: { err: pino.stdSerializers.errWithCause },
 } as const;
 
 /** Build a CaretLogger over the given pino instance, with never-throw wrapping
- * on every emit. `liveLevel` is re-applied before each call so config edits and
- * setLogLevel hot-reload. */
+ * on every emit. `liveLevel` is re-applied before each gated call so config
+ * edits and setLogLevel hot-reload; pino's level setter re-binds every level
+ * method, so skip the assignment when the level is unchanged. */
 function wrap(logger: pino.Logger, liveLevel: () => LogLevel): CaretLogger {
   function emit(method: "debug" | "info" | "warn", step: string, msg: string, extra?: object) {
     try {
-      logger.level = liveLevel();
+      const next = liveLevel();
+      if (logger.level !== next) logger.level = next;
       logger[method]({ step, ...extra }, msg);
     } catch {
       // Logging is non-essential and must never destabilize the caller.
@@ -54,12 +58,12 @@ function wrap(logger: pino.Logger, liveLevel: () => LogLevel): CaretLogger {
     debug: (step, msg, extra) => emit("debug", step, msg, extra),
     info: (step, msg, extra) => emit("info", step, msg, extra),
     warn: (step, msg, extra) => emit("warn", step, msg, extra),
-    error(step, err, msg) {
+    error(step, err, extra) {
       try {
-        logger.level = liveLevel();
-        const fields: Record<string, unknown> = { step };
+        // No level update here: error (50) passes every threshold in the set.
+        const fields: Record<string, unknown> = { step, ...extra };
         if (err instanceof Error) fields.err = err;
-        logger.error(fields, msg ?? (err instanceof Error ? err.message : String(err)));
+        logger.error(fields, err instanceof Error ? err.message : String(err));
       } catch {
         // Same swallow: a failed error write still must not propagate.
       }
@@ -81,32 +85,35 @@ export const noopLogger: CaretLogger = {
 // liveLevel thunk re-reads it on every emit, so the live instance follows along.
 let currentLevel: LogLevel = "info";
 
-// The hook's pino instance is a lazy singleton, but tests swap XDG_STATE_HOME
-// per case, so cache it keyed by the resolved logFile() path and rebuild when
-// that path changes — a stale destination would silently write to the previous
-// temp dir. Construction failure caches null and the module functions no-op.
-let hookPino: pino.Logger | null = null;
+// The hook's logger is a lazy singleton, but tests swap XDG_STATE_HOME per
+// case, so cache it keyed by the resolved logFile() path and rebuild (closing
+// the previous destination so its fd doesn't leak) when that path changes — a
+// stale destination would silently write to the previous temp dir.
+let hookDest: ReturnType<typeof pino.destination> | null = null;
+let hookView: CaretLogger | null = null;
 let hookPath: string | null = null;
 
-function hookRaw(): pino.Logger | null {
+function hook(): CaretLogger {
   const path = logFile();
-  if (hookPino && hookPath === path) return hookPino;
+  if (hookView && hookPath === path) return hookView;
   hookPath = path;
   try {
     mkdirSync(stateDir(), { recursive: true, mode: 0o700 });
-    hookPino = pino(pinoOpts, pino.destination({ dest: path, sync: true, mode: 0o600 }));
+    const dest = pino.destination({ dest: path, sync: true, mode: 0o600 });
+    try {
+      hookDest?.destroy(); // sync mode has nothing buffered; just release the fd
+    } catch {
+      // already closed — nothing to release.
+    }
+    hookDest = dest;
+    hookView = wrap(pino(pinoOpts, dest), () => currentLevel);
   } catch {
     // Degrade silently but do NOT latch the failure: the next emit retries the
     // mkdir/open (the old logger's per-call semantics), so a transient failure
     // doesn't permanently silence a long-running daemon's logError path.
-    hookPino = null;
+    hookView = null;
   }
-  return hookPino;
-}
-
-function hook(): CaretLogger {
-  const logger = hookRaw();
-  return logger ? wrap(logger, () => currentLevel) : noopLogger;
+  return hookView ?? noopLogger;
 }
 
 /** Set the hook logger's level (the hook injects loadSettings().logging.level).
@@ -132,20 +139,7 @@ export function logWarn(step: string, msg: string, extra?: object): void {
  * cause chain — is included only for real Errors; sessionId/cwd ride along from
  * ctx. Best-effort: never throws. */
 export function logError(step: string, err: unknown, ctx?: ErrorContext): void {
-  // CaretLogger.error has no slot for ctx fields, so go straight to the shared
-  // pino instance and fold step + ctx + err into one record before the write.
-  try {
-    const logger = hookRaw();
-    if (!logger) return;
-    logger.level = currentLevel;
-    const fields: Record<string, unknown> = { step };
-    if (ctx?.sessionId) fields.sessionId = ctx.sessionId;
-    if (ctx?.cwd) fields.cwd = ctx.cwd;
-    if (err instanceof Error) fields.err = err;
-    logger.error(fields, err instanceof Error ? err.message : String(err));
-  } catch {
-    // Logging is non-essential and must never destabilize the hook.
-  }
+  hook().error(step, err, ctx);
 }
 
 /** A leveled logger for the long-running daemon. Writes NDJSON to stderr (fd 2,
@@ -155,10 +149,7 @@ export function logError(step: string, err: unknown, ctx?: ErrorContext): void {
  * edits hot-reload. Never throws. */
 export function createDaemonLogger(level: () => LogLevel, dest?: string | number): CaretLogger {
   try {
-    const target =
-      dest === undefined
-        ? pino.destination({ fd: 2, sync: true })
-        : pino.destination({ dest, sync: true });
+    const target = pino.destination({ ...(dest === undefined ? { fd: 2 } : { dest }), sync: true });
     const logger = pino({ ...pinoOpts, base: { pid: process.pid } }, target);
     return wrap(logger, level);
   } catch {

@@ -397,11 +397,11 @@ function recordingLog() {
     debug: (step, msg) => recs.push({ level: "debug", step, msg }),
     info: (step, msg) => recs.push({ level: "info", step, msg }),
     warn: (step, msg) => recs.push({ level: "warn", step, msg }),
-    error: (step, err, msg) =>
+    error: (step, err) =>
       recs.push({
         level: "error",
         step,
-        msg: msg ?? (err instanceof Error ? err.message : String(err)),
+        msg: err instanceof Error ? err.message : String(err),
       }),
   };
   return { recs, log };
