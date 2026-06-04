@@ -6,6 +6,7 @@ import {
   configFile,
   daemonLock,
   heartbeatMs,
+  invalidEnvVars,
   reviewTimeoutMs,
   stateDir,
   VERSION,
@@ -107,6 +108,51 @@ test("configFile resolves config.toml under configDir", () => {
     if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = savedXdg;
   }
+});
+
+// ---- invalidEnvVars (EXC-444) ----
+
+/** Run `fn` with the given CARET_* env values, restoring the originals after. */
+function withEnv(vars: Record<string, string>, fn: () => void) {
+  const saved = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
+  Object.assign(process.env, vars);
+  try {
+    fn();
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+}
+
+test("invalidEnvVars is empty when no CARET_* var is set", () => {
+  expect(invalidEnvVars()).toEqual([]);
+});
+
+test("invalidEnvVars is empty when the set values are usable", () => {
+  withEnv({ CARET_PORT: "42718", CARET_TIMEOUT: "120", CARET_IDLE_MS: "0" }, () => {
+    expect(invalidEnvVars()).toEqual([]);
+  });
+});
+
+test("invalidEnvVars names each set-but-unusable CARET_* var", () => {
+  withEnv(
+    {
+      CARET_PORT: "nope",
+      CARET_TIMEOUT: "-5",
+      CARET_IDLE_MS: "1.5",
+      CARET_HEARTBEAT_MS: "0",
+    },
+    () => {
+      expect(invalidEnvVars()).toEqual([
+        "CARET_PORT",
+        "CARET_TIMEOUT",
+        "CARET_IDLE_MS",
+        "CARET_HEARTBEAT_MS",
+      ]);
+    },
+  );
 });
 
 test("buildHash is stable for identical input and differs for changed input", () => {

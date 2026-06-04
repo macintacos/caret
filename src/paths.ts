@@ -30,13 +30,43 @@ export function buildHash(html: string | undefined): string {
   return createHash("sha256").update(html).digest("hex").slice(0, 12);
 }
 
+// Per-var validity predicates, shared by the env getters below and
+// invalidEnvVars so "falls back to default" and "flagged invalid" never disagree.
+const isPositiveInt = (raw: string) => {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0;
+};
+const isNonNegativeInt = (raw: string) => {
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0;
+};
+const isPositiveNumber = (raw: string) => {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0;
+};
+
+const ENV_CHECKS: ReadonlyArray<[name: string, ok: (raw: string) => boolean]> = [
+  ["CARET_PORT", isPositiveInt],
+  ["CARET_TIMEOUT", isPositiveNumber],
+  ["CARET_IDLE_MS", isNonNegativeInt],
+  ["CARET_HEARTBEAT_MS", isPositiveInt],
+];
+
+/** Names of CARET_* vars that are set but unusable (their getters silently fall
+ * back to defaults). Pure — paths.ts cannot log (log.ts imports it), so each
+ * process entry point warns once at boot via its own logger (EXC-444). An empty
+ * string counts as unset, matching the getters. */
+export function invalidEnvVars(): string[] {
+  return ENV_CHECKS.filter(([name, ok]) => {
+    const raw = process.env[name];
+    return !!raw && !ok(raw);
+  }).map(([name]) => name);
+}
+
 /** Resolve the daemon port: CARET_PORT (positive integer) or the default. */
 export function getPort(): number {
   const raw = process.env.CARET_PORT;
-  if (raw) {
-    const n = Number(raw);
-    if (Number.isInteger(n) && n > 0) return n;
-  }
+  if (raw && isPositiveInt(raw)) return Number(raw);
   return DEFAULT_PORT;
 }
 
@@ -107,10 +137,7 @@ export interface DaemonLock {
 /** Idle auto-shutdown delay (ms). Overridable via CARET_IDLE_MS for tests. */
 export function idleMs(): number {
   const raw = process.env.CARET_IDLE_MS;
-  if (raw) {
-    const n = Number(raw);
-    if (Number.isInteger(n) && n >= 0) return n;
-  }
+  if (raw && isNonNegativeInt(raw)) return Number(raw);
   return 60_000;
 }
 
@@ -118,10 +145,7 @@ export function idleMs(): number {
  * hook budget in hooks.json). After this, the hook fail-safe denies. */
 export function reviewTimeoutMs(): number {
   const raw = process.env.CARET_TIMEOUT;
-  if (raw) {
-    const n = Number(raw);
-    if (Number.isFinite(n) && n > 0) return Math.round(n * 1000);
-  }
+  if (raw && isPositiveNumber(raw)) return Math.round(Number(raw) * 1000);
   return 3_600_000;
 }
 
@@ -131,9 +155,6 @@ export function reviewTimeoutMs(): number {
  * under the daemon's 30s Bun.serve idleTimeout. */
 export function heartbeatMs(): number {
   const raw = process.env.CARET_HEARTBEAT_MS;
-  if (raw) {
-    const n = Number(raw);
-    if (Number.isInteger(n) && n > 0) return n;
-  }
+  if (raw && isPositiveInt(raw)) return Number(raw);
   return 8_000;
 }

@@ -22,6 +22,9 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
 export interface ErrorContext {
   sessionId?: string;
   cwd?: string;
+  /** Set once the daemon has assigned the review an id — stitches caret.log
+   * records against the daemon's review/resolve records (EXC-444). */
+  reviewId?: string;
 }
 
 /** The leveled surface both sinks expose. debug/info/warn take a human message

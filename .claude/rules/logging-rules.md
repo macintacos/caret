@@ -72,8 +72,10 @@ Concretely:
 
 - Messages are **lowercase, factual, present tense**: `"review created: <id>"`, `"plan rejected"`.
 - `step` is a **short fixed lowercase token** naming the operation (`review`, `resolve`,
-  `decision`, `idle`, `listen`, `settings`, `signal`). Reuse an existing token before minting a
-  new one.
+  `decision`, `idle`, `listen`, `settings`, `signal`, `store`, `prefs`, `draft`, `env`, `ui`,
+  `prewarm`, `retire`, `request`, `fatal`). Reuse an existing token before minting a new one.
+- Review-scoped records carry structured `reviewId` / `sessionId` fields in `extra` so one session
+  stitches across the two log streams (EXC-444).
 - `extra` keys must **not collide** with the record's own fields: `level`, `time`, `msg`, `step`,
   `pid`, `err`.
 
