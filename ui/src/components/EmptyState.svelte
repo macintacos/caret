@@ -64,7 +64,7 @@
   }
   .hint {
     margin-top: 2rem;
-    /* Was sized by the (now dropped) .mono atom; keep the same density. */
+    /* Was sized by the (now dropped) .mono atom; keep the same size. */
     font-size: 0.78rem;
     color: var(--ink-faint);
     border-top: 1px solid var(--rule);

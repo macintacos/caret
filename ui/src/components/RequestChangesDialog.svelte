@@ -142,7 +142,7 @@
     border-color: var(--accent);
   }
   .summary {
-    /* Was sized by the (now dropped) .mono atom; keep the same density. */
+    /* Was sized by the (now dropped) .mono atom; keep the same size. */
     font-size: 0.78rem;
     color: var(--ink-faint);
     margin-top: 0.6rem;

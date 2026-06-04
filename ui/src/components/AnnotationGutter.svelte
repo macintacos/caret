@@ -82,7 +82,7 @@
     margin-bottom: 1.25rem;
   }
   .count {
-    /* Was sized by the (now dropped) .mono atom; keep the same density. */
+    /* Was sized by the (now dropped) .mono atom; keep the same size. */
     font-size: 0.78rem;
     color: var(--accent);
     font-weight: 600;
