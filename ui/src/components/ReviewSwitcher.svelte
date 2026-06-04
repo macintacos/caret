@@ -30,7 +30,7 @@
   >
     <span class="title">{active?.title ?? "—"}</span>
     {#if reviews.length > 1}
-      <span class="badge mono">{reviews.length}</span>
+      <span class="badge">{reviews.length}</span>
       <span class="chev" class:open aria-hidden="true">▾</span>
     {/if}
   </button>
@@ -73,7 +73,6 @@
     cursor: default;
   }
   .title {
-    /* Content text inside a <button>, which is mono by default — force sans. */
     font-family: var(--font-sans);
     font-weight: 500;
     font-size: 0.95rem;

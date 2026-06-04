@@ -2,8 +2,9 @@
    A plan-review surface that reads like a marked-up engineering manuscript:
    warm paper light theme, deep-ink dark theme, a single saturated caret-amber
    accent (the ^ insertion mark the tool is named for); platform sans-serif for
-   UI text, serif (Fraunces) reserved for the "caret" wordmark, monospace for
-   metadata and the ^ carets. */
+   UI text, serif (Fraunces) reserved for the "caret" wordmark, monospace
+   reserved for rendered code, the ^ carets, and two metadata accents
+   (working-directory paths, the version badge). */
 
 :root {
   /* Type */
@@ -172,7 +173,7 @@ body {
 }
 
 .eyebrow {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.66rem;
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -180,15 +181,15 @@ body {
 }
 
 button {
-  font-family: var(--font-mono);
   cursor: pointer;
 }
 
-/* Form controls don't inherit font-family from <body>; default them to sans
-   (buttons above stay mono on purpose). */
+/* Form controls don't inherit font-family from <body>; default them all to
+   sans. Mono is opt-in only (.mono or an explicit font-family). */
 textarea,
 input,
-select {
+select,
+button {
   font-family: var(--font-sans);
 }
 

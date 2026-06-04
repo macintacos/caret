@@ -65,7 +65,7 @@
       ></textarea>
     </label>
 
-    <div class="summary mono">
+    <div class="summary">
       {inlineCount} inline comment{inlineCount === 1 ? "" : "s"} will be included.
     </div>
 
@@ -120,7 +120,6 @@
   }
   .lbl {
     display: block;
-    font-family: var(--font-mono);
     font-size: 0.7rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -143,6 +142,8 @@
     border-color: var(--accent);
   }
   .summary {
+    /* Was sized by the (now dropped) .mono atom; keep the same size. */
+    font-size: 0.78rem;
     color: var(--ink-faint);
     margin-top: 0.6rem;
   }
@@ -155,7 +156,6 @@
   .preview summary {
     cursor: pointer;
     padding: 0.5rem 0.7rem;
-    font-family: var(--font-mono);
     font-size: 0.74rem;
     color: var(--ink-soft);
   }

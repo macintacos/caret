@@ -17,7 +17,7 @@
       update automatically.
     </p>
   {/if}
-  <div class="hint mono">listening &middot; polling /api/reviews</div>
+  <div class="hint">listening &middot; polling /api/reviews</div>
 </div>
 
 <style>
@@ -64,6 +64,8 @@
   }
   .hint {
     margin-top: 2rem;
+    /* Was sized by the (now dropped) .mono atom; keep the same size. */
+    font-size: 0.78rem;
     color: var(--ink-faint);
     border-top: 1px solid var(--rule);
     padding-top: 1rem;

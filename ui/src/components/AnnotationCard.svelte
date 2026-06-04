@@ -135,7 +135,6 @@
     position: relative;
   }
   .badge {
-    font-family: var(--font-mono);
     font-size: 0.6rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
