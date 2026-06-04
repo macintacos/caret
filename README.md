@@ -135,8 +135,8 @@ To raise verbosity, set `level = "debug"` in `config.toml`'s `[logging]` table
   debug it.
 - `caret redact` — the binary's fourth subcommand: scrubs the two state-dir logs into shareable
   `*.redacted.log` siblings (home paths become `~`, usernames in foreign home paths are censored).
-  For always-on scrubbing at write time, set `redact = true` in `[logging]`. Plan and prompt bodies
-  are never written to logs regardless of the toggle.
+  For always-on scrubbing at write time, set `redact = true` in `[logging]`. Plan, prompt, and
+  review-feedback bodies are never written to logs regardless of the toggle.
 
 Contributors should see `.claude/rules/logging-rules.md` for the logging conventions — when to log,
 levels, and message style.

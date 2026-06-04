@@ -328,7 +328,7 @@ test("a format-deny is logged at info — an expected reject, not an error", asy
 
 // ---- decision outcome records (EXC-398) ----
 
-test("a rejected plan is logged at info with its rejection reasoning", async () => {
+test("a rejected plan is logged at info without the feedback body (EXC-444)", async () => {
   await runReview(
     stdin,
     reviewDeps({
@@ -339,9 +339,11 @@ test("a rejected plan is logged at info with its rejection reasoning", async () 
   expect(rec).toMatchObject({
     level: 30,
     msg: "plan rejected",
-    feedback: "tighten phase 2",
+    feedbackChars: "tighten phase 2".length,
     sessionId: "S",
   });
+  // The reviewer's prose must never reach the log — only its length does.
+  expect(JSON.stringify(rec)).not.toContain("tighten phase 2");
 });
 
 test("an approved plan is logged at info", async () => {

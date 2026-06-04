@@ -44,7 +44,7 @@ test("scrubValue passes strings through when redaction is off", () => {
   expect(scrubValue(v, false)).toEqual(v);
 });
 
-test("scrubValue censors plan and prompt keys even when redaction is off", () => {
+test("scrubValue censors plan, prompt, and feedback keys even when redaction is off", () => {
   const out = scrubValue(
     { plan: "SECRET PLAN BODY", nested: { prompt: "SECRET PROMPT" }, feedback: "too vague" },
     false,
@@ -52,7 +52,7 @@ test("scrubValue censors plan and prompt keys even when redaction is off", () =>
   expect(out).toEqual({
     plan: "<redacted>",
     nested: { prompt: "<redacted>" },
-    feedback: "too vague",
+    feedback: "<redacted>",
   });
 });
 

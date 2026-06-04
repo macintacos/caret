@@ -148,10 +148,12 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
         step = "longPoll";
       }
     }
-    // The reviewer's verdict is normal operation: record it at info — a deny
-    // with its reasoning (never the plan body), an allow as a one-liner.
+    // The reviewer's verdict is normal operation: record it at info. Never the
+    // feedback body (EXC-444; reviewer prose is user-generated content like
+    // plan bodies) — only its length, so reject loops stay distinguishable
+    // from empty-feedback denies.
     if (decision.behavior === "deny") {
-      logInfo("decision", "plan rejected", { ...ctx, feedback: decision.feedback });
+      logInfo("decision", "plan rejected", { ...ctx, feedbackChars: decision.feedback?.length });
     } else {
       logInfo("decision", "plan approved", { ...ctx });
     }
