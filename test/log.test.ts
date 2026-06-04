@@ -236,6 +236,17 @@ test("with redaction on, the caller stays the repo-relative path", () => {
   expect(records()[0].caller).toMatch(CALLER);
 });
 
+test("a null extra.source reads as unset: own tag and caller attach", () => {
+  // == null in fields() preserves the replaced ??= semantics — only a real
+  // string source (the bridged-UI signal) suppresses the caller stamp.
+  const dest = join(home, "daemon-null-source.log");
+  const log = createDaemonLogger(() => "info", dest);
+  log.info("listen", "listening", { source: null });
+  const r = records(dest)[0];
+  expect(r.source).toBe("daemon");
+  expect(r.caller).toMatch(CALLER);
+});
+
 // --- redaction (EXC-399) ---
 
 const realHome = homedir();

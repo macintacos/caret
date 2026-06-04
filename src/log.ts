@@ -13,6 +13,7 @@
 // they emit regardless of the configured level for free.
 
 import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import pino from "pino";
 import { logFile, stateDir } from "./paths.ts";
 import { scrubString, scrubValue } from "./redact.ts";
@@ -24,7 +25,7 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
 // "<root>/" off captured frames to yield repo-relative paths (src/cli.ts,
 // test/log.test.ts) — see EXC-451. import.meta.dir is the directory of THIS
 // file, resolved through Bun's sourcemap remap so the compiled binary agrees.
-const PKG_ROOT = import.meta.dir.replace(/\/src$/, "");
+const PKG_ROOT = dirname(import.meta.dir);
 
 // A Bun stack frame, either named or anonymous (verified shapes):
 //   `    at fnName (/abs/path.ts:12:34)`  and  `    at /abs/path.ts:12:34`
@@ -49,11 +50,16 @@ function callerLocation(): string | undefined {
       if (!m?.[1] || !m[2]) continue; // the `Error` header line / unparseable frame
       const path = m[1];
       if (path.endsWith("src/log.ts")) continue; // our own wrapper frames
-      // Normalize: strip the package-root prefix for an in-repo path; otherwise
-      // fall back to the last two segments so the field stays compact and useful.
-      const rel = path.startsWith(`${PKG_ROOT}/`)
-        ? path.slice(PKG_ROOT.length + 1)
-        : path.split("/").slice(-2).join("/");
+      if (!path.includes("/")) continue; // pathless frames: `native:7:39`, `[eval]:1:30`
+      // Normalize: a relative path is already repo-relative (the compiled
+      // binary's sourcemapped frames come out that way); an absolute one under
+      // the package root loses that prefix; any other absolute path falls back
+      // to its last two segments so the field stays compact.
+      const rel = !path.startsWith("/")
+        ? path
+        : path.startsWith(`${PKG_ROOT}/`)
+          ? path.slice(PKG_ROOT.length + 1)
+          : path.split("/").slice(-2).join("/");
       return `${rel}:${m[2]}`;
     }
     return undefined;
@@ -122,8 +128,9 @@ function wrap(
     // attach NO caller — the call site here is the bridge, not the originator.
     // Otherwise tag the emitting process and stamp the real call site (EXC-451);
     // the caller is repo-relative so the redact scrub is normally a no-op, but
-    // run it under the toggle for belt-and-braces.
-    if (out.source === undefined) {
+    // run it under the toggle for belt-and-braces. == null (not === undefined)
+    // keeps the replaced ??= semantics: an explicit null source reads as unset.
+    if (out.source == null) {
       out.source = source;
       const caller = callerLocation();
       if (caller !== undefined) out.caller = redact ? scrubString(caller) : caller;
