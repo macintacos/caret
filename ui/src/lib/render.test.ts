@@ -1,5 +1,6 @@
 import "../../test-setup.ts";
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { type LogCapture, logCapture } from "../../test-helpers.ts";
 import { initHighlighter } from "./highlight.ts";
 import { flush } from "./log.ts";
 import { type HeadingEntry, renderPlan, shouldShowRail } from "./render.ts";
@@ -255,46 +256,24 @@ A paragraph with secret-marker text.
 `;
 
 describe("renderPlan logging", () => {
-  interface FetchCall {
-    url: string;
-    options: RequestInit | undefined;
-  }
-  let calls: FetchCall[];
-  let originalFetch: typeof globalThis.fetch;
-
-  function bodies(): Array<Record<string, unknown>> {
-    return calls.flatMap((call) => {
-      const parsed = JSON.parse(call.options?.body as string) as {
-        events: Array<Record<string, unknown>>;
-      };
-      return parsed.events;
-    });
-  }
+  // Shared fetch double (test-helpers.ts): captures /api/logs POSTs and drains
+  // the module-global buffer at install and restore, so the earlier suites'
+  // renderPlan debug records can't bleed into this capture (or vice versa).
+  let cap: LogCapture;
 
   beforeEach(() => {
-    // Drain any residue buffered by the earlier suites BEFORE capture starts, so
-    // our capture sees only this test's renderPlan call.
-    flush();
-    calls = [];
-    originalFetch = globalThis.fetch;
-    globalThis.fetch = ((url: string, options?: RequestInit) => {
-      calls.push({ url, options });
-      return Promise.resolve(new Response(null, { status: 204 }));
-    }) as typeof globalThis.fetch;
+    cap = logCapture();
   });
 
   afterEach(() => {
-    globalThis.fetch = originalFetch;
-    // Drain so nothing bleeds into the next case (or other suites).
-    flush();
-    calls = [];
+    cap.restore();
   });
 
   test("emits one debug 'plan rendered' record per renderPlan call", () => {
     renderPlan(LOG_FIXTURE);
     flush();
 
-    const records = bodies();
+    const records = cap.events();
     expect(records).toHaveLength(1);
     expect(records[0]).toMatchObject({
       level: "debug",
@@ -308,7 +287,6 @@ describe("renderPlan logging", () => {
     renderPlan(LOG_FIXTURE);
     flush();
 
-    const wire = JSON.stringify(bodies());
-    expect(wire).not.toContain("secret-marker");
+    expect(cap.text()).not.toContain("secret-marker");
   });
 });

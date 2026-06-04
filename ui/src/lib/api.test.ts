@@ -1,60 +1,23 @@
 import "../../test-setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { type LogCapture, logCapture } from "../../test-helpers.ts";
 import { getApproveMode, HttpError, putDraft, resolveReview, startPolling } from "./api.ts";
 import { flush } from "./log.ts";
 import type { Annotation, ClientReview, ResolveBody } from "./types.ts";
 
-// A URL-routing fetch double. /api/logs POSTs are captured into `logCalls`; the
-// review/prefs endpoints answer from per-test `responders` so each case can pick
-// success, a non-2xx Response, or a rejected promise. Restored in afterEach.
-interface FetchCall {
-  url: string;
-  options: RequestInit | undefined;
-}
-let logCalls: FetchCall[];
-let originalFetch: typeof globalThis.fetch;
-// Routes a non-logs request to a Response or a rejection. Default: 204 OK.
+// Shared URL-routing fetch double (test-helpers.ts): /api/logs POSTs are
+// captured; the review/prefs endpoints answer from the per-test `respond` so
+// each case can pick success, a non-2xx Response, or a rejected promise.
 let respond: (url: string, options: RequestInit | undefined) => Promise<Response>;
-
-// Parse every captured /api/logs body into one flat event list.
-function loggedEvents(): Array<Record<string, unknown>> {
-  const events: Array<Record<string, unknown>> = [];
-  for (const call of logCalls) {
-    const parsed = JSON.parse(call.options?.body as string) as {
-      events: Array<Record<string, unknown>>;
-    };
-    events.push(...parsed.events);
-  }
-  return events;
-}
-
-// Concatenated text of every captured /api/logs body — for negative assertions.
-function loggedText(): string {
-  return logCalls.map((c) => c.options?.body as string).join("");
-}
+let cap: LogCapture;
 
 beforeEach(() => {
-  logCalls = [];
-  originalFetch = globalThis.fetch;
   respond = () => Promise.resolve(new Response(null, { status: 204 }));
-  globalThis.fetch = ((url: string, options?: RequestInit) => {
-    if (url === "/api/logs") {
-      logCalls.push({ url, options });
-      return Promise.resolve(new Response(null, { status: 204 }));
-    }
-    return respond(url, options);
-  }) as typeof globalThis.fetch;
-  // Drain any residue from a prior case BEFORE clearing the capture array, so the
-  // module-global uiLog buffer can't bleed into this test.
-  flush();
-  logCalls = [];
+  cap = logCapture((url, options) => respond(url, options));
 });
 
 afterEach(() => {
-  // Drain again so a record emitted by this case doesn't surface in the next.
-  flush();
-  globalThis.fetch = originalFetch;
-  logCalls = [];
+  cap.restore();
 });
 
 function jsonResponse(value: unknown): Response {
@@ -74,7 +37,7 @@ describe("resolveReview instrumentation", () => {
     await resolveReview(ID, body);
     flush();
 
-    const records = loggedEvents();
+    const records = cap.events();
     expect(records).toHaveLength(1);
     const rec = records[0]!;
     expect(rec.level).toBe("info");
@@ -94,7 +57,7 @@ describe("resolveReview instrumentation", () => {
     await resolveReview(ID, { behavior: "deny" });
     flush();
 
-    const extra = loggedEvents()[0]!.extra as Record<string, unknown>;
+    const extra = cap.events()[0]!.extra as Record<string, unknown>;
     expect(extra.reviewId).toBe(ID);
     expect(extra).not.toHaveProperty("acceptMode");
     expect(extra).not.toHaveProperty("feedbackChars");
@@ -106,7 +69,7 @@ describe("resolveReview instrumentation", () => {
     await expect(resolveReview(ID, { behavior: "allow" })).rejects.toBeInstanceOf(HttpError);
     flush();
 
-    const records = loggedEvents();
+    const records = cap.events();
     const warn = records.find((r) => r.level === "warn");
     expect(warn).toBeDefined();
     expect(warn!.step).toBe("resolve");
@@ -120,7 +83,7 @@ describe("resolveReview instrumentation", () => {
     await expect(resolveReview(ID, { behavior: "allow" })).rejects.toThrow("network down");
     flush();
 
-    const err = loggedEvents().find((r) => r.level === "error");
+    const err = cap.events().find((r) => r.level === "error");
     expect(err).toBeDefined();
     expect(err!.step).toBe("resolve");
     expect(err!.extra).toMatchObject({ reviewId: ID });
@@ -139,7 +102,7 @@ describe("putDraft instrumentation", () => {
     await putDraft(ID, { annotations, generalCommentDraft: "" });
     flush();
 
-    expect(loggedEvents()).toHaveLength(0);
+    expect(cap.events()).toHaveLength(0);
   });
 
   test("failure warns with annotationCount and rejects", async () => {
@@ -150,7 +113,7 @@ describe("putDraft instrumentation", () => {
     );
     flush();
 
-    const warn = loggedEvents().find((r) => r.level === "warn");
+    const warn = cap.events().find((r) => r.level === "warn");
     expect(warn).toBeDefined();
     expect(warn!.step).toBe("draft");
     expect(warn!.extra).toMatchObject({ reviewId: ID, annotationCount: 2 });
@@ -164,7 +127,7 @@ describe("getApproveMode instrumentation", () => {
     await expect(getApproveMode()).rejects.toThrow("offline");
     flush();
 
-    const warn = loggedEvents().find((r) => r.level === "warn");
+    const warn = cap.events().find((r) => r.level === "warn");
     expect(warn).toBeDefined();
     expect(warn!.step).toBe("prefs");
     expect(warn!.msg as string).toContain("approve mode read failed");
@@ -204,7 +167,7 @@ describe("startPolling instrumentation", () => {
     stop();
     flush();
 
-    const records = loggedEvents();
+    const records = cap.events();
     const warns = records.filter((r) => r.level === "warn" && r.step === "poll");
     expect(warns).toHaveLength(1);
     expect(warns[0]!.msg as string).toContain("poll failed");
@@ -225,7 +188,7 @@ describe("startPolling instrumentation", () => {
     stop();
     flush();
 
-    const debug = loggedEvents().find((r) => r.level === "debug" && r.step === "poll");
+    const debug = cap.events().find((r) => r.level === "debug" && r.step === "poll");
     expect(debug).toBeDefined();
     expect(debug!.msg as string).toContain("reviews pending: 3");
     expect(debug!.extra).toMatchObject({ count: 3 });
@@ -252,7 +215,7 @@ describe("redaction — no body text reaches the wire", () => {
     ).rejects.toBeInstanceOf(HttpError);
     flush();
 
-    const text = loggedText();
+    const text = cap.text();
     expect(text).not.toContain(FEEDBACK);
     expect(text).not.toContain(QUOTE);
     expect(text).not.toContain(COMMENT);
