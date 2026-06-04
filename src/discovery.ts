@@ -269,10 +269,12 @@ function buildProcesses(deps: DiscoveryDeps): { count: number; items: ProcessIte
 }
 
 async function buildLogs(deps: DiscoveryDeps): Promise<{ caret: LogStats; daemon: LogStats }> {
-  return {
-    caret: await deps.logStats(deps.logPaths.caret),
-    daemon: await deps.logStats(deps.logPaths.daemon),
-  };
+  // The two files are independent — stat/read them concurrently.
+  const [caret, daemon] = await Promise.all([
+    deps.logStats(deps.logPaths.caret),
+    deps.logStats(deps.logPaths.daemon),
+  ]);
+  return { caret, daemon };
 }
 
 // ---------------------------------------------------------------------------
@@ -315,22 +317,16 @@ export function tallyReviews(records: ReviewStatusRecord[]): ReviewsSection {
  * titled block per section with aligned `key: value` lines. No ANSI. Never
  * throws — a degraded { error } section renders one error line, and missing
  * keys are simply absent. */
+/** The report's scalar header fields — everything else is a renderable
+ * section, so a future Report field can't silently vanish from the render. */
+const HEADER_KEYS = new Set(["schema", "version", "generatedAt"]);
+
 export function renderReport(report: Report): string {
   const lines: string[] = [];
   lines.push(
     `caret discovery (${report.schema}) version ${report.version} at ${report.generatedAt}`,
   );
-  const sections: Array<[string, unknown]> = [
-    ["system", report.system],
-    ["install", report.install],
-    ["settings", report.settings],
-    ["daemon", report.daemon],
-    ["lockAndPort", report.lockAndPort],
-    ["processes", report.processes],
-    ["reviews", report.reviews],
-    ["installState", report.installState],
-    ["logs", report.logs],
-  ];
+  const sections = Object.entries(report).filter(([key]) => !HEADER_KEYS.has(key));
   for (const [title, value] of sections) {
     lines.push("");
     lines.push(`${title}:`);
@@ -413,9 +409,10 @@ export function listProcesses(): ProcessEntry[] {
  * absent dir, or any corrupt/unreadable file, is skipped silently (mirroring
  * store.rehydrate's tolerance). NEVER reads plan / draft bodies. */
 export function listReviewFiles(): ReviewStatusRecord[] {
+  const dir = reviewsDir();
   let files: string[];
   try {
-    files = readdirSync(reviewsDir());
+    files = readdirSync(dir);
   } catch {
     return []; // absent dir — a normal first run
   }
@@ -424,7 +421,7 @@ export function listReviewFiles(): ReviewStatusRecord[] {
     if (!file.endsWith(".json")) continue;
     if (out.length >= 5000) break;
     try {
-      const raw = JSON.parse(readFileSync(join(reviewsDir(), file), "utf-8")) as {
+      const raw = JSON.parse(readFileSync(join(dir, file), "utf-8")) as {
         id?: unknown;
         status?: unknown;
       };
@@ -506,6 +503,10 @@ function readJson(path: string): unknown {
   }
 }
 
+/** caret's id in Claude Code's plugin registry: `<plugin>@<marketplace>`, both
+ * "caret" per scripts/install.sh. */
+const PLUGIN_ID = "caret@caret";
+
 /** Best-effort read of caret's Claude Code install state. Every miss degrades
  * to "unknown". Reads ONLY caret's own entries — never any other settings key
  * (privacy). hookInUserSettings is the NORMAL-false probe: caret's hooks ride
@@ -522,7 +523,7 @@ export function readClaudeInstallState(): ClaudeInstallState {
 
 function readPluginVersion(path: string): string | "unknown" {
   const json = readJson(path) as { plugins?: Record<string, unknown> } | null;
-  const entry = json?.plugins?.["caret@caret"];
+  const entry = json?.plugins?.[PLUGIN_ID];
   if (!Array.isArray(entry) || entry.length === 0) return "unknown";
   const version = (entry[0] as { version?: unknown }).version;
   return typeof version === "string" ? version : "unknown";
@@ -531,7 +532,7 @@ function readPluginVersion(path: string): string | "unknown" {
 function readPluginEnabled(path: string): boolean | "unknown" {
   const json = readJson(path) as { enabledPlugins?: Record<string, unknown> } | null;
   if (!json) return "unknown";
-  const enabled = json.enabledPlugins?.["caret@caret"];
+  const enabled = json.enabledPlugins?.[PLUGIN_ID];
   return typeof enabled === "boolean" ? enabled : "unknown";
 }
 
