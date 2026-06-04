@@ -46,7 +46,24 @@ test("writing an invalid mode is a no-op (no file created)", async () => {
 
 // ---- instrumentation (EXC-444) ----
 
-test("a read fallback (missing/corrupt file) is logged at debug", async () => {
+test("a missing prefs file logs the normal-first-run message at debug", async () => {
+  // ENOENT is the expected state before any approve has been remembered (and
+  // on every `mise run dev`, which wipes the state dir) — the record must not
+  // read like a failure.
+  const { recs, log } = recordingLog();
+  await readApproveMode(file, log);
+  expect(recs).toEqual([
+    {
+      level: "debug",
+      step: "prefs",
+      msg: "no prefs file; using default approve mode",
+      extra: undefined,
+    },
+  ]);
+});
+
+test("a corrupt prefs file logs the unreadable message at debug", async () => {
+  await Bun.write(file, "{ not valid json");
   const { recs, log } = recordingLog();
   await readApproveMode(file, log);
   expect(recs).toEqual([
