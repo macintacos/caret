@@ -22,6 +22,9 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
 export interface ErrorContext {
   sessionId?: string;
   cwd?: string;
+  /** Set once the daemon has assigned the review an id — stitches caret.log
+   * records against the daemon's review/resolve records (EXC-444). */
+  reviewId?: string;
 }
 
 /** The leveled surface both sinks expose. debug/info/warn take a human message
@@ -50,7 +53,8 @@ const pinoOpts = {
  * method, so skip the assignment when the level is unchanged. `liveRedact`
  * (the [logging].redact switch, EXC-399) gates the redact.ts scrub of every
  * outgoing msg/extra/err — re-read per emit so it hot-reloads too. The walk
- * runs even with the switch off (plan/prompt censoring is unconditional);
+ * runs even with the switch off (plan/prompt/feedback censoring is
+ * unconditional);
  * `step` is attached after it, raw: structural fields always win and a fixed
  * step token is never PII. Errors are serialized here (errWithCause) rather
  * than via a pino serializer so the scrub can cover message/stack/cause —
@@ -93,6 +97,13 @@ function wrap(
       }
     },
   };
+}
+
+/** Review-id prefix (the first UUID segment) for log MESSAGES: keeps lines
+ * scannable without restating the full id, which rides in the structured
+ * `reviewId` extra field for stitching/queries (EXC-444). */
+export function shortId(id: string): string {
+  return id.slice(0, 8);
 }
 
 /** A logger that drops everything — the degraded mode when a destination can't

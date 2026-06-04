@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createStore, type Store } from "../src/store.ts";
 import type { Review } from "../src/types.ts";
+import { recordingLog } from "./recording-log.ts";
 
 let dir: string;
 let store: Store;
@@ -120,4 +121,55 @@ test("rehydrate loads unresolved reviews, skips approved", async () => {
     .map((r) => r.id)
     .sort();
   expect(ids).toEqual(["keep-p", "keep-r"]);
+});
+
+// ---- instrumentation (EXC-444) ----
+
+test("rehydrate logs the loaded review count at info", async () => {
+  await store.create(makeReview({ id: "h1", status: "pending" }));
+  await store.create(makeReview({ id: "h2", status: "rejected" }));
+  const { recs, log } = recordingLog();
+  await createStore(dir, log).rehydrate();
+  expect(recs).toContainEqual({
+    level: "info",
+    step: "store",
+    msg: "rehydrated 2 reviews",
+    extra: undefined,
+  });
+});
+
+test("rehydrate warns per corrupt review file it skips", async () => {
+  await store.create(makeReview({ id: "good", status: "pending" }));
+  await Bun.write(join(dir, "bad.json"), "{ truncated");
+  const { recs, log } = recordingLog();
+  const fresh = createStore(dir, log);
+  await fresh.rehydrate();
+  expect(fresh.size()).toBe(1); // the good one still loads
+  const warn = recs.find((r) => r.level === "warn");
+  expect(warn?.step).toBe("store");
+  expect(warn?.msg).toBe("skipping corrupt review file: bad.json");
+});
+
+test("rehydrate with no state dir logs at debug, not warn", async () => {
+  const { recs, log } = recordingLog();
+  await createStore(join(dir, "missing"), log).rehydrate();
+  expect(recs).toEqual([
+    {
+      level: "debug",
+      step: "store",
+      msg: "no reviews dir; nothing to rehydrate",
+      extra: undefined,
+    },
+  ]);
+});
+
+test("each persist is logged at debug with the review id", async () => {
+  const { recs, log } = recordingLog();
+  await createStore(dir, log).create(makeReview({ id: "abc" }));
+  expect(recs).toContainEqual({
+    level: "debug",
+    step: "store",
+    msg: "review persisted: abc",
+    extra: { reviewId: "abc" },
+  });
 });

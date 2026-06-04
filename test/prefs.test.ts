@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readApproveMode, writeApproveMode } from "../src/prefs.ts";
+import { recordingLog } from "./recording-log.ts";
 
 let dir: string;
 let file: string;
@@ -41,4 +42,49 @@ test("writing an invalid mode is a no-op (no file created)", async () => {
   expect(await readApproveMode(file)).toBe("default");
   // The guard short-circuits before any write, so the file never appears.
   await expect(readFile(file, "utf-8")).rejects.toThrow();
+});
+
+// ---- instrumentation (EXC-444) ----
+
+test("a read fallback (missing/corrupt file) is logged at debug", async () => {
+  const { recs, log } = recordingLog();
+  await readApproveMode(file, log);
+  expect(recs).toEqual([
+    {
+      level: "debug",
+      step: "prefs",
+      msg: "prefs unreadable; using default approve mode",
+      extra: undefined,
+    },
+  ]);
+});
+
+test("an unrecognized stored value is logged at debug", async () => {
+  await Bun.write(file, JSON.stringify({ approveMode: "turbo" }));
+  const { recs, log } = recordingLog();
+  await readApproveMode(file, log);
+  expect(recs).toEqual([
+    {
+      level: "debug",
+      step: "prefs",
+      msg: "unrecognized approve mode; using default",
+      extra: undefined,
+    },
+  ]);
+});
+
+test("writing an invalid mode is logged at warn", async () => {
+  const { recs, log } = recordingLog();
+  await writeApproveMode("bogus" as never, file, log);
+  expect(recs).toEqual([
+    { level: "warn", step: "prefs", msg: "ignoring invalid approve mode", extra: undefined },
+  ]);
+});
+
+test("a successful write is logged at debug with the mode", async () => {
+  const { recs, log } = recordingLog();
+  await writeApproveMode("acceptEdits", file, log);
+  expect(recs).toEqual([
+    { level: "debug", step: "prefs", msg: "approve mode saved: acceptEdits", extra: undefined },
+  ]);
 });

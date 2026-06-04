@@ -16,11 +16,12 @@ import { daemonLogFile, logFile } from "./paths.ts";
 const CENSOR = "<redacted>";
 
 /** Keys whose values must never reach a log, toggle or no toggle — codifies
- * the "never log plan/prompt bodies" rule from src/daemon.ts as a structural
+ * the "never log plan/prompt/feedback bodies" rule (EXC-444 added feedback:
+ * reviewer prose is user-generated content like plan bodies) as a structural
  * invariant rather than a code-review convention. Exact-key matching only:
  * a future identifying key (hostname, user, email, …) must be added here
  * explicitly. */
-const DENY_KEYS = new Set(["plan", "prompt"]);
+const DENY_KEYS = new Set(["plan", "prompt", "feedback"]);
 
 /** Cause chains are short; anything deeper than this is pathological. */
 const MAX_DEPTH = 6;

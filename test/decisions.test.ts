@@ -1,6 +1,7 @@
 import { beforeEach, expect, test } from "bun:test";
 import { createDecisions, type DecisionRegistry } from "../src/decisions.ts";
 import type { Decision } from "../src/types.ts";
+import { recordingLog } from "./recording-log.ts";
 
 const decision = (behavior: "allow" | "deny"): Decision => ({
   behavior,
@@ -42,6 +43,21 @@ test("openDecisionCount tracks unsettled entries", () => {
   expect(d.openDecisionCount()).toBe(1);
   d.clearDecision("b");
   expect(d.openDecisionCount()).toBe(0);
+});
+
+test("a double resolve is logged at warn (EXC-444)", () => {
+  const { recs, log } = recordingLog();
+  const reg = createDecisions(log);
+  reg.resolveDecision("r9", decision("allow"));
+  reg.resolveDecision("r9", decision("deny"));
+  expect(recs).toEqual([
+    {
+      level: "warn",
+      step: "resolve",
+      msg: "decision already settled: r9",
+      extra: { reviewId: "r9" },
+    },
+  ]);
 });
 
 test("clearDecision removes a settled entry", () => {

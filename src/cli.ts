@@ -17,10 +17,13 @@ import { denyOutput, type HookOutput, toHookOutput } from "./feedback.ts";
 import {
   createDaemonLogger,
   type ErrorContext,
+  logDebug,
   logError,
   logInfo,
+  logWarn,
   setLogLevel,
   setRedact,
+  shortId,
 } from "./log.ts";
 import {
   buildHash,
@@ -29,6 +32,7 @@ import {
   daemonLock,
   daemonLogFile,
   getPort,
+  invalidEnvVars,
   logFile,
   reviewsDir,
   reviewTimeoutMs,
@@ -96,6 +100,9 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
     }
     ctx.sessionId = hook.session_id;
     ctx.cwd = hook.cwd;
+    // The review's start-of-timeline anchor: even a format-deny or a crashed
+    // run leaves a record of the request and its session.
+    logInfo("review", "review requested", { ...ctx });
     const input: PlanInput = {
       sessionId: hook.session_id,
       cwd: hook.cwd,
@@ -117,6 +124,10 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
     const baseUrl = await deps.ensureDaemon();
     step = "postReview";
     const { id } = await deps.postReview(baseUrl, input);
+    // From here every record — decision and error alike — carries the reviewId,
+    // stitching this stream against the daemon's review/resolve records.
+    ctx.reviewId = id;
+    logDebug("review", `review created: ${shortId(id)}`, { ...ctx });
     const url = `${baseUrl}/?review=${id}`;
     deps.openBrowser(url);
     // Also print the URL to stderr — clickable in the transcript if the browser
@@ -148,12 +159,14 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
         step = "longPoll";
       }
     }
-    // The reviewer's verdict is normal operation: record it at info — a deny
-    // with its reasoning (never the plan body), an allow as a one-liner.
+    // The reviewer's verdict is normal operation: record it at info. Never the
+    // feedback body (EXC-444; reviewer prose is user-generated content like
+    // plan bodies) — only its length, so reject loops stay distinguishable
+    // from empty-feedback denies.
     if (decision.behavior === "deny") {
-      logInfo("decision", "plan rejected", { ...ctx, feedback: decision.feedback });
+      logInfo("decision", "plan rejected", { ...ctx, feedbackChars: decision.feedback?.length });
     } else {
-      logInfo("decision", "plan approved", { ...ctx });
+      logInfo("decision", "plan approved", { ...ctx, acceptMode: decision.acceptMode });
     }
     return toHookOutput(decision);
   } catch (err) {
@@ -214,6 +227,7 @@ export async function ensureDaemon(deps: EnsureDeps): Promise<string> {
       // (stale UI) rather than deny the review or spin retrying — strictly no
       // worse than before the fix. A retireable daemon is now exiting → re-poll.
       if (!retired) return deps.baseUrl;
+      logDebug("retire", "stale daemon retiring");
       await deps.backoff(attempt);
       continue;
     }
@@ -224,9 +238,13 @@ export async function ensureDaemon(deps: EnsureDeps): Promise<string> {
     // A lost spawn race is fine: swallow EADDRINUSE and re-poll, connecting to
     // whichever instance won.
     const lock = deps.readLock();
-    if (lock && !deps.isAlive(lock.pid)) deps.removeLock();
+    if (lock && !deps.isAlive(lock.pid)) {
+      deps.removeLock();
+      logDebug("spawn", "orphan daemon lock removed");
+    }
     try {
       deps.spawn();
+      logDebug("spawn", "daemon spawned");
     } catch (e) {
       if (!isAddrInUse(e)) throw e;
     }
@@ -328,7 +346,9 @@ function spawnDaemon(): void {
     mkdirSync(stateDir(), { recursive: true });
     out = openSync(daemonLogFile(), "a");
   } catch {
-    // ignore — logging is non-essential.
+    // The daemon still spawns; only its crash output is lost. Best-effort warn
+    // (the same unwritable state dir usually silences caret.log too).
+    logWarn("spawn", "daemon log unopenable; discarding daemon output");
   }
   Bun.spawn(daemonCommand(), {
     stdio: ["ignore", out, out],
@@ -500,9 +520,13 @@ async function runDaemon(): Promise<void> {
     existsSync(cfg) ? `settings: reading ${cfg}` : `settings: no config at ${cfg}; using defaults`,
     { settings: svc.current() },
   );
-  const store = createStore(reviewsDir());
+  // A typo'd CARET_* var silently falls back to its default — surface it once
+  // at boot so "why is it on the default port?" is answerable from the log.
+  for (const name of invalidEnvVars()) log.warn("env", `${name} invalid; using default`);
+  const store = createStore(reviewsDir(), log);
   await store.rehydrate();
   const html = await loadUiHtml();
+  if (!html) log.info("ui", "no embedded ui; serving placeholder");
   let server: CaretServer;
   try {
     server = createServer({
@@ -528,10 +552,18 @@ async function runDaemon(): Promise<void> {
     server.stop();
     process.exit(code);
   };
-  process.once("SIGTERM", () => shutdown(0));
-  process.once("SIGINT", () => shutdown(0));
+  // Signal deaths leave a record (the synchronous write is durable before the
+  // exit); fatal errors log through the daemon's own sink, not caret.log.
+  process.once("SIGTERM", () => {
+    log.info("signal", "sigterm: shutting down");
+    shutdown(0);
+  });
+  process.once("SIGINT", () => {
+    log.info("signal", "sigint: shutting down");
+    shutdown(0);
+  });
   const onFatal = (label: string) => (err: unknown) => {
-    logError(label, err);
+    log.error(label, err);
     shutdown(1);
   };
   process.once("uncaughtException", onFatal("uncaughtException"));
@@ -552,6 +584,7 @@ async function runPrewarm(): Promise<void> {
   try {
     await ensureDaemon(await prodEnsureDeps());
   } catch (e) {
+    logDebug("prewarm", `prewarm failed: ${e instanceof Error ? e.message : e}`);
     process.stderr.write(`caret prewarm: ${e}\n`);
   }
   process.exit(0);
@@ -565,6 +598,9 @@ async function runReviewSubcommand(): Promise<void> {
   const { logging } = loadSettings();
   setLogLevel(logging.level);
   setRedact(logging.redact);
+  // Same boot-time surfacing as the daemon's — a typo'd CARET_* var otherwise
+  // silently falls back to its default.
+  for (const name of invalidEnvVars()) logWarn("env", `${name} invalid; using default`);
   // Emit exactly one decision line. A signal arriving after the normal decision
   // was written must not append a second (deny) line.
   let responded = false;

@@ -70,10 +70,15 @@ and distinguish important events by their informative messages alone.
 
 Concretely:
 
-- Messages are **lowercase, factual, present tense**: `"review created: <id>"`, `"plan rejected"`.
+- Messages are **lowercase, factual, present tense**: `"review created: <id8>"`, `"plan rejected"`.
+  Review ids in messages are truncated to their first 8 chars via `shortId` (`src/log.ts`) — the
+  full id rides in the record's `reviewId` field.
 - `step` is a **short fixed lowercase token** naming the operation (`review`, `resolve`,
-  `decision`, `idle`, `listen`, `settings`, `signal`). Reuse an existing token before minting a
+  `decision`, `idle`, `listen`, `settings`, `signal`, `store`, `prefs`, `draft`, `env`, `ui`,
+  `prewarm`, `retire`, `spawn`, `request`, `fatal`). Reuse an existing token before minting a
   new one.
+- Review-scoped records carry structured `reviewId` / `sessionId` fields in `extra` so one session
+  stitches across the two log streams (EXC-444).
 - `extra` keys must **not collide** with the record's own fields: `level`, `time`, `msg`, `step`,
   `pid`, `err`.
 
@@ -81,9 +86,9 @@ Concretely:
 
 **Never log identifiable data.**
 
-- **Plan and prompt bodies are structurally censored.** The `DENY_KEYS` set in `src/redact.ts`
-  censors `plan` and `prompt` values unconditionally — toggle or no toggle. Never log them under any
-  key.
+- **Plan, prompt, and feedback bodies are structurally censored.** The `DENY_KEYS` set in
+  `src/redact.ts` censors `plan`, `prompt`, and `feedback` values unconditionally — toggle or no
+  toggle. Never log them under any key.
 - **New identifying keys must be added to `DENY_KEYS` explicitly.** Matching is exact-key only, so a
   hostname, user, email, or similar identifying key you introduce will leak until you add it to the
   set.

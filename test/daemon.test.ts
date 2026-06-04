@@ -5,7 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer, type CaretServer } from "../src/daemon.ts";
 import type { CaretLogger } from "../src/log.ts";
+import { VERSION } from "../src/paths.ts";
 import { createStore, type Store } from "../src/store.ts";
+import { recordingLog } from "./recording-log.ts";
 
 let dir: string;
 let store: Store;
@@ -21,6 +23,7 @@ async function boot(
     routePlan?: Parameters<typeof createServer>[0]["routePlan"];
     lockPath?: string;
     buildId?: string;
+    prefsPath?: string;
   } = {},
 ) {
   store = createStore(dir);
@@ -28,7 +31,7 @@ async function boot(
   srv = createServer({
     store,
     port: 0,
-    prefsPath: join(dir, "prefs.json"),
+    prefsPath: opts.prefsPath ?? join(dir, "prefs.json"),
     idleMs: opts.idleMs ?? 1_000_000,
     heartbeatMs: opts.heartbeatMs,
     onShutdown: opts.onShutdown ?? (() => {}),
@@ -390,23 +393,6 @@ test("idle shutdown fires when the daemon boots with no reviews", async () => {
   expect(shutdowns).toBeGreaterThanOrEqual(1);
 });
 
-/** A CaretLogger that records every emit for assertions. */
-function recordingLog() {
-  const recs: Array<{ level: string; step: string; msg: string }> = [];
-  const log: CaretLogger = {
-    debug: (step, msg) => recs.push({ level: "debug", step, msg }),
-    info: (step, msg) => recs.push({ level: "info", step, msg }),
-    warn: (step, msg) => recs.push({ level: "warn", step, msg }),
-    error: (step, err) =>
-      recs.push({
-        level: "error",
-        step,
-        msg: err instanceof Error ? err.message : String(err),
-      }),
-  };
-  return { recs, log };
-}
-
 test("lifecycle events are logged at info: listen, review created, resolved", async () => {
   const { recs, log } = recordingLog();
   await boot({ log });
@@ -419,9 +405,9 @@ test("lifecycle events are logged at info: listen, review created, resolved", as
   await resolve(id, { behavior: "deny", feedback: "no" });
   const info = recs.filter((r) => r.level === "info");
   expect(info.some((r) => r.step === "listen" && r.msg.includes("listening on"))).toBe(true);
-  expect(info.some((r) => r.step === "review" && r.msg.includes(`review created: ${id}`))).toBe(
-    true,
-  );
+  expect(
+    info.some((r) => r.step === "review" && r.msg.includes(`review created: ${id.slice(0, 8)}`)),
+  ).toBe(true);
   expect(info.some((r) => r.step === "resolve" && r.msg.includes("resolved: deny"))).toBe(true);
 });
 
@@ -569,4 +555,90 @@ test("the remembered approve mode survives a daemon restart", async () => {
   srv.stop();
   await boot();
   expect(await prefMode()).toBe("auto");
+});
+
+// ---- instrumentation (EXC-444) ----
+
+test("the review record is emitted once, by the router, with threading extras", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+  const { id } = await newReview();
+  const review = recs.filter((r) => r.step === "review");
+  expect(review).toHaveLength(1);
+  expect(review[0]).toMatchObject({
+    level: "info",
+    msg: `review created: ${id.slice(0, 8)}`,
+    extra: { reviewId: id, sessionId: "S", action: "new", version: 1 },
+  });
+});
+
+test("the resolve record carries reviewId, sessionId, and acceptMode extras", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+  const { id } = await newReview();
+  await resolve(id, { behavior: "allow", acceptMode: "acceptEdits" });
+  const rec = recs.find((r) => r.step === "resolve");
+  expect(rec).toMatchObject({
+    level: "info",
+    msg: `review ${id.slice(0, 8)} resolved: allow`,
+    extra: { reviewId: id, sessionId: "S", acceptMode: "acceptEdits" },
+  });
+});
+
+test("the listen record carries the build fingerprint and version", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log, buildId: "b123" });
+  const rec = recs.find((r) => r.step === "listen");
+  expect(rec?.extra).toMatchObject({ build: "b123", version: VERSION });
+});
+
+test("a draft autosave is logged at debug with the review id only", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+  const { id } = await newReview();
+  await fetch(`${base}/api/reviews/${id}/draft`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ generalCommentDraft: "secret draft text" }),
+  });
+  expect(recs).toContainEqual({
+    level: "debug",
+    step: "draft",
+    msg: `draft saved: ${id.slice(0, 8)}`,
+    extra: { reviewId: id },
+  });
+  // Draft text is reviewer prose — it must never appear in any record.
+  expect(JSON.stringify(recs)).not.toContain("secret draft text");
+});
+
+test("a decision served from disk after a memory miss is logged at debug", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+  const { id } = await newReview();
+  await resolve(id, { behavior: "allow" }); // approve removes it from memory
+  const res = await fetch(`${base}/api/reviews/${id}/decision`);
+  expect(((await res.json()) as { behavior: string }).behavior).toBe("allow");
+  expect(recs).toContainEqual({
+    level: "debug",
+    step: "decision",
+    msg: `decision served from disk: ${id.slice(0, 8)}`,
+    extra: { reviewId: id },
+  });
+});
+
+test("a failed fire-and-forget prefs write is logged at warn", async () => {
+  const { recs, log } = recordingLog();
+  // prefsPath nested under a regular FILE so writeApproveMode's mkdir fails.
+  const blocker = join(dir, "blocker");
+  await Bun.write(blocker, "i am a file, not a directory");
+  await boot({ log, prefsPath: join(blocker, "prefs.json") });
+  const { id } = await newReview();
+  await resolve(id, { behavior: "allow", acceptMode: "auto" });
+  // Fire-and-forget: poll briefly for the warn to land.
+  let warn: (typeof recs)[number] | undefined;
+  for (let i = 0; i < 20 && !warn; i++) {
+    warn = recs.find((r) => r.level === "warn" && r.step === "prefs");
+    await Bun.sleep(10);
+  }
+  expect(warn?.msg).toBe("approve mode write failed");
 });

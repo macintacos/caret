@@ -328,7 +328,7 @@ test("a format-deny is logged at info — an expected reject, not an error", asy
 
 // ---- decision outcome records (EXC-398) ----
 
-test("a rejected plan is logged at info with its rejection reasoning", async () => {
+test("a rejected plan is logged at info without the feedback body (EXC-444)", async () => {
   await runReview(
     stdin,
     reviewDeps({
@@ -339,15 +339,56 @@ test("a rejected plan is logged at info with its rejection reasoning", async () 
   expect(rec).toMatchObject({
     level: 30,
     msg: "plan rejected",
-    feedback: "tighten phase 2",
+    feedbackChars: "tighten phase 2".length,
     sessionId: "S",
   });
+  // The reviewer's prose must never reach the log — only its length does.
+  expect(JSON.stringify(rec)).not.toContain("tighten phase 2");
 });
 
 test("an approved plan is logged at info", async () => {
   await runReview(stdin, reviewDeps());
   const rec = logRecords().find((r) => r.step === "decision");
   expect(rec).toMatchObject({ level: 30, msg: "plan approved", sessionId: "S" });
+});
+
+// ---- hook-path instrumentation (EXC-444) ----
+
+test("a review start is logged at info with session context", async () => {
+  await runReview(stdin, reviewDeps());
+  const rec = logRecords().find((r) => r.step === "review" && r.msg === "review requested");
+  expect(rec).toMatchObject({ level: 30, sessionId: "S", cwd: "/p" });
+});
+
+test("the posted review id is logged at debug and stitches later records", async () => {
+  setLogLevel("debug");
+  await runReview(stdin, reviewDeps());
+  const posted = logRecords().find((r) => r.msg === "review created: rid");
+  expect(posted).toMatchObject({ level: 20, step: "review", reviewId: "rid" });
+  // Once the id is known, every later record carries it — caret.log records
+  // stitch against the daemon's review/resolve records by reviewId.
+  const decision = logRecords().find((r) => r.step === "decision");
+  expect(decision).toMatchObject({ msg: "plan approved", reviewId: "rid" });
+});
+
+test("an approved plan's record carries the acceptMode", async () => {
+  await runReview(
+    stdin,
+    reviewDeps({
+      longPoll: async () => ({ behavior: "allow", acceptMode: "acceptEdits", decidedAt: 1 }),
+    }),
+  );
+  const rec = logRecords().find((r) => r.step === "decision");
+  expect(rec).toMatchObject({ msg: "plan approved", acceptMode: "acceptEdits" });
+});
+
+test("a failure after the review was posted carries the reviewId", async () => {
+  await runReview(
+    stdin,
+    reviewDeps({ longPoll: () => new Promise<Decision>(() => {}), timeoutMs: 30 }),
+  );
+  const rec = logRecords().find((r) => r.level === 50);
+  expect(rec).toMatchObject({ step: "longPoll", reviewId: "rid", sessionId: "S" });
 });
 
 test("decision info records are suppressed when the level is error", async () => {
@@ -432,6 +473,56 @@ test("ensureDaemon gives up after maxAttempts", async () => {
   await expect(
     ensureDaemon(ensureDeps({ health: async () => null, maxAttempts: 3 })),
   ).rejects.toThrow();
+});
+
+test("ensureDaemon logs the spawn attempt at debug", async () => {
+  setLogLevel("debug");
+  let checks = 0;
+  await ensureDaemon(
+    ensureDeps({
+      health: async () =>
+        ++checks === 1 ? null : { service: "caret", build: "b1", version: "v1" },
+    }),
+  );
+  const recs = logRecords().filter((r) => r.step === "spawn");
+  expect(recs.some((r) => r.msg === "daemon spawned")).toBe(true);
+});
+
+test("ensureDaemon logs the stale-daemon retire at debug", async () => {
+  setLogLevel("debug");
+  let retires = 0;
+  let spawns = 0;
+  await ensureDaemon(
+    ensureDeps({
+      health: async () => {
+        if (retires === 0) return { service: "caret", build: "b0", version: "v1" };
+        if (spawns === 0) return null;
+        return { service: "caret", build: "b1", version: "v1" };
+      },
+      retire: async () => {
+        retires++;
+        return true;
+      },
+      spawn: () => spawns++,
+    }),
+  );
+  const recs = logRecords().filter((r) => r.step === "retire");
+  expect(recs.some((r) => r.msg === "stale daemon retiring")).toBe(true);
+});
+
+test("ensureDaemon logs orphan-lock removal at debug", async () => {
+  setLogLevel("debug");
+  let checks = 0;
+  await ensureDaemon(
+    ensureDeps({
+      health: async () =>
+        ++checks === 1 ? null : { service: "caret", build: "b1", version: "v1" },
+      readLock: () => ({ pid: 4_000_000, port: 42718 }),
+      isAlive: () => false,
+    }),
+  );
+  const recs = logRecords().filter((r) => r.step === "spawn");
+  expect(recs.some((r) => r.msg === "orphan daemon lock removed")).toBe(true);
 });
 
 // ---- ensureDaemon: single-instance discovery + graceful takeover (EXC-406) ----

@@ -35,6 +35,14 @@ function freePort(): number {
   return port;
 }
 
+/** Parse NDJSON log text (a daemon's stderr or a caret.log body) into records. */
+function ndjsonRecords(text: string): Array<Record<string, unknown>> {
+  return text
+    .split("\n")
+    .filter((l) => l.startsWith("{"))
+    .map((l) => JSON.parse(l) as Record<string, unknown>);
+}
+
 test("httpHealth reports the caret identity from a live daemon", async () => {
   const srv = createServer({ store: createStore("/tmp/caret-it-x"), port: 0 });
   servers.push(srv);
@@ -176,6 +184,72 @@ test("caret redact reports when there are no logs to scrub", async () => {
   }
 });
 
+// runDaemon lifecycle records (EXC-444): ui fallback, invalid-env warns, and
+// the signal-shutdown record — only reachable through a real daemon process.
+test("the daemon logs env warns, ui fallback, and the sigterm shutdown", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-daemon-logs-"));
+  const lockPath = join(stateHome, "caret", "daemon.lock");
+  const proc = Bun.spawn([process.execPath, "src/cli.ts", "daemon"], {
+    env: {
+      ...process.env,
+      CARET_PORT: String(freePort()),
+      CARET_TIMEOUT: "nope", // set-but-invalid → one boot warn
+      XDG_STATE_HOME: stateHome,
+      CARET_IDLE_MS: "600000",
+    },
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  try {
+    expect(await waitFor(() => existsSync(lockPath), 5000)).toBe(true);
+    proc.kill("SIGTERM");
+    await proc.exited;
+    const recs = ndjsonRecords(await new Response(proc.stderr).text());
+    expect(
+      recs.some(
+        (r) => r.step === "env" && r.level === 40 && r.msg === "CARET_TIMEOUT invalid; using default",
+      ),
+    ).toBe(true);
+    expect(recs.some((r) => r.step === "signal" && r.msg === "sigterm: shutting down")).toBe(true);
+    // The ui record fires exactly when no UI is embedded/built — true on a fresh
+    // checkout and in CI; a local `mise run build-ui` artifact flips the branch,
+    // so each environment asserts its own valid outcome.
+    const uiBuilt = existsSync(join(process.cwd(), "ui", "dist", "index.html"));
+    expect(recs.some((r) => r.step === "ui" && r.msg === "no embedded ui; serving placeholder")).toBe(
+      !uiBuilt,
+    );
+  } finally {
+    proc.kill("SIGKILL");
+    await proc.exited;
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
+test("the review hook warns about invalid CARET_* env vars in caret.log", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-review-env-"));
+  const proc = Bun.spawn([process.execPath, "src/cli.ts", "review"], {
+    env: { ...process.env, XDG_STATE_HOME: stateHome, CARET_PORT: "nope" },
+    // Bad stdin: the run fail-safe-denies at the parse step, before any daemon
+    // work — the env warn must already be on disk by then.
+    stdin: new TextEncoder().encode("not json"),
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  try {
+    const exit = await proc.exited;
+    const out = await new Response(proc.stdout).text();
+    expect(exit).toBe(0);
+    expect(out).toContain('"deny"');
+    const recs = ndjsonRecords(await Bun.file(join(stateHome, "caret", "caret.log")).text());
+    expect(
+      recs.some(
+        (r) => r.step === "env" && r.level === 40 && r.msg === "CARET_PORT invalid; using default",
+      ),
+    ).toBe(true);
+  } finally {
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
 test("the daemon logs the parsed settings at startup", async () => {
   const stateHome = await mkdtemp(join(tmpdir(), "caret-settings-boot-"));
   const configHome = await mkdtemp(join(tmpdir(), "caret-settings-cfg-"));
@@ -201,11 +275,7 @@ test("the daemon logs the parsed settings at startup", async () => {
     proc.kill("SIGTERM");
     await proc.exited;
     const stderr = await new Response(proc.stderr).text();
-    const rec = stderr
-      .split("\n")
-      .filter((l) => l.startsWith("{"))
-      .map((l) => JSON.parse(l) as Record<string, unknown>)
-      .find((r) => r.step === "settings");
+    const rec = ndjsonRecords(stderr).find((r) => r.step === "settings");
     expect(rec).toBeDefined();
     // Effective (validated) values, never raw config text. `debug` is no longer
     // a known key (EXC-400): zod strips it, so it never reaches the boot line.
