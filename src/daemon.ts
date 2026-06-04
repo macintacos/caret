@@ -101,8 +101,10 @@ const STEP_RE = /^[a-z][a-z0-9-]{0,31}$/;
 // The record's own NDJSON fields: an extra key colliding with one of these would
 // shadow the structural field, so they're stripped from client extra.
 const RESERVED_KEYS = new Set(["level", "time", "msg", "step", "pid", "err"]);
-// C0/C1 control chars except TAB (U+0009). Newline (U+000A) is stripped too —
-// NDJSON line-forging defense, so a client msg can't inject a fake log line.
+// C0/C1 control chars except TAB (U+0009). Newline (U+000A) is stripped too:
+// pino already JSON-escapes newlines at serialization, so this is defense in
+// depth for raw-text consumers of the log (redact round-trips, crash-output
+// interleaving, future sinks) — not the only thing preventing a forged record.
 // Written with \u escapes (no literal control bytes in source): U+0000–U+0008,
 // U+000A–U+001F, U+007F–U+009F.
 // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control chars is the intent
@@ -270,35 +272,31 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // .catch(() => ({})) style above, which can't measure the raw text), then
       // parse in a guarded try so a malformed body is a clean 400, not a 500.
       if (method === "POST" && path === "/api/logs") {
+        // One warn per rejected batch (a recoverable oddity, not a failure) —
+        // factored so the four reject sites can't drift apart.
+        const reject = (status: 400 | 413) => {
+          log.warn("ui", "ui log batch rejected", { status });
+          return new Response(null, { status });
+        };
+        // Optimistic pre-read cap on the declared length; the post-read byte
+        // count below is the authoritative check (headers can lie or be absent).
         const declared = Number(req.headers.get("content-length"));
-        if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
-          log.warn("ui", "ui log batch rejected", { status: 413 });
-          return new Response(null, { status: 413 });
-        }
+        if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return reject(413);
         const text = await req.text();
-        if (Buffer.byteLength(text, "utf-8") > MAX_BODY_BYTES) {
-          log.warn("ui", "ui log batch rejected", { status: 413 });
-          return new Response(null, { status: 413 });
-        }
+        if (Buffer.byteLength(text, "utf-8") > MAX_BODY_BYTES) return reject(413);
         let parsed: unknown;
         try {
           parsed = JSON.parse(text);
         } catch {
-          log.warn("ui", "ui log batch rejected", { status: 400 });
-          return new Response(null, { status: 400 });
+          return reject(400);
         }
         const result = parseUiLogBatch(parsed);
-        if ("status" in result) {
-          log.warn("ui", "ui log batch rejected", { status: result.status });
-          return new Response(null, { status: result.status });
-        }
+        if ("status" in result) return reject(result.status);
         // The accept path logs nothing of its own (noise rule) — only the
-        // forwarded events. CaretLogger.error stringifies a non-Error into the
-        // record's msg, so the sanitized string is the right argument.
-        for (const ev of result.events) {
-          if (ev.level === "error") log.error(ev.step, ev.msg, ev.extra);
-          else log[ev.level](ev.step, ev.msg, ev.extra);
-        }
+        // forwarded events. All four CaretLogger methods take (step, string,
+        // extra?) here: error's String(err) on an already-sanitized string is
+        // identity, so one dispatch covers every level.
+        for (const ev of result.events) log[ev.level](ev.step, ev.msg, ev.extra);
         return new Response(null, { status: 204 });
       }
 

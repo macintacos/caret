@@ -85,8 +85,10 @@ describe("uiLog buffering and flush", () => {
     // BUFFER_MAX (100) bounds a single flush's event count so it can never 413
     // on the endpoint's MAX_EVENTS. With FLUSH_THRESHOLD (20) draining first,
     // batches are normally ~20; the drop-oldest ring is the backstop that holds
-    // the line at 100 if a drain ever stops happening. Drive a heavy burst and
-    // assert the structural guarantee the cap exists for.
+    // the line at 100 if a drain ever stops happening. NB: under the current
+    // synchronous always-draining flush the shift() backstop itself is not
+    // reachable through the public API — this asserts the observable guarantee
+    // (no batch exceeds the cap), not the backstop's internals.
     for (let i = 0; i < 250; i++) uiLog.debug("ui", `e${i}`);
     flush();
     for (const call of calls) {
@@ -123,6 +125,34 @@ describe("uiLog buffering and flush", () => {
     const body = JSON.stringify(bodyEvents(calls[0]!));
     expect(body).not.toContain("deep secret");
     expect(body).toContain("<depth-capped>");
+  });
+
+  test("an invalid step falls back to 'ui' so one event can't poison the batch", () => {
+    // The endpoint 400s a WHOLE batch on one bad event; the facade normalizes
+    // at construction so a sloppy call site can't drop its neighbors.
+    uiLog.info("Bad Step!", "m");
+    flush();
+    expect(bodyEvents(calls[0]!)[0]!.step).toBe("ui");
+  });
+
+  test("msg is truncated to the endpoint's cap at construction", () => {
+    uiLog.info("ui", "x".repeat(300));
+    flush();
+    expect((bodyEvents(calls[0]!)[0]!.msg as string).length).toBe(256);
+  });
+
+  test("an array extra is wrapped into a plain object the endpoint accepts", () => {
+    uiLog.info("ui", "m", [1, 2] as unknown as object);
+    flush();
+    expect(bodyEvents(calls[0]!)[0]!.extra).toEqual({ value: [1, 2] });
+  });
+
+  test("a cyclic extra is cut off as <cyclic>, like src/redact.ts walk", () => {
+    const a: Record<string, unknown> = {};
+    a.self = a;
+    uiLog.info("ui", "m", a);
+    flush();
+    expect(bodyEvents(calls[0]!)[0]!.extra).toEqual({ self: "<cyclic>" });
   });
 
   test("error stringifies client-side: Error -> message, other -> String()", () => {

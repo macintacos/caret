@@ -26,6 +26,13 @@ const FLUSH_INTERVAL_MS = 5000;
 // mirror, so the mirror structurally cannot print what the daemon would scrub.
 const DENY_KEYS = new Set(["plan", "prompt", "feedback"]);
 
+// Hand-mirrors of the endpoint's wire constraints (src/daemon.ts) — keep in
+// sync. The endpoint rejects a WHOLE batch (400) on one invalid event, so the
+// facade normalizes each event at construction rather than letting one sloppy
+// call site silently drop its co-batched neighbors.
+const STEP_RE = /^[a-z][a-z0-9-]{0,31}$/;
+const MAX_MSG_LEN = 256;
+
 // Cause/extra graphs are shallow; anything deeper is pathological (mirrors
 // src/redact.ts MAX_DEPTH).
 const MAX_DEPTH = 6;
@@ -41,19 +48,29 @@ interface LogEvent {
 /** Censor DENY_KEYS values in a value graph, building NEW structures so the
  * caller's object is never mutated. Runs at construction — before buffering AND
  * before the dev console mirror — so the mirror structurally cannot print what
- * the daemon would scrub. Depth-capped, like src/redact.ts's walk. The daemon
- * re-censors authoritatively on write; this is the mirror constraint + defense
- * in depth, not the only line of defense. */
-function censor(v: unknown, depth: number): unknown {
+ * the daemon would scrub. Depth-capped and cycle-tolerant like src/redact.ts's
+ * walk (`seen` tracks the current path only, so shared references are walked
+ * normally while true cycles cut off). The daemon re-censors authoritatively on
+ * write; this is the mirror constraint + defense in depth, not the only line
+ * of defense. */
+function censor(v: unknown, depth: number, seen: WeakSet<object>): unknown {
   if (v === null || typeof v !== "object") return v;
+  if (seen.has(v)) return "<cyclic>";
   // Replace (not pass through) at the cap, like src/redact.ts's walk — a
   // DENY_KEYS body nested past the cap must not reach the wire or the mirror.
   if (depth >= MAX_DEPTH) return "<depth-capped>";
-  if (Array.isArray(v)) return v.map((el) => censor(el, depth + 1));
-  const out: Record<string, unknown> = {};
-  for (const [k, val] of Object.entries(v)) {
-    out[k] = DENY_KEYS.has(k) ? CENSOR : censor(val, depth + 1);
+  seen.add(v);
+  let out: unknown;
+  if (Array.isArray(v)) {
+    out = v.map((el) => censor(el, depth + 1, seen));
+  } else {
+    const obj: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(v)) {
+      obj[k] = DENY_KEYS.has(k) ? CENSOR : censor(val, depth + 1, seen);
+    }
+    out = obj;
   }
+  seen.delete(v);
   return out;
 }
 
@@ -89,14 +106,27 @@ export function flush(opts?: { keepalive?: boolean }): void {
 
 function emit(level: LogLevel, step: string, msg: string, extra?: object): void {
   try {
-    const clean = extra === undefined ? undefined : (censor(extra, 0) as object);
-    const event: LogEvent = { level, step, msg, ...(clean === undefined ? {} : { extra: clean }) };
+    // Normalize to the wire contract: invalid step falls back to "ui", msg is
+    // truncated like the server would truncate it, and an array extra (a valid
+    // `object` to TS) is wrapped into the plain object the endpoint requires.
+    const safeStep = STEP_RE.test(step) ? step : "ui";
+    const safeMsg = msg.slice(0, MAX_MSG_LEN);
+    const obj = Array.isArray(extra) ? { value: extra } : extra;
+    const clean = obj === undefined ? undefined : (censor(obj, 0, new WeakSet()) as object);
+    const event: LogEvent = {
+      level,
+      step: safeStep,
+      msg: safeMsg,
+      ...(clean === undefined ? {} : { extra: clean }),
+    };
+    // Buffer BEFORE the mirror: a throwing (monkeypatched) console must only
+    // cost the mirror, never the wire event.
+    push(event);
     // Dev-only console mirror, on the ALREADY-censored event so it can't print a
     // DENY_KEYS body. `import.meta.env.DEV` is referenced directly so Vite's
     // static replacement strips this branch from the production single-file
     // bundle; under bun test it resolves via process.env (undefined) → off.
-    if (import.meta.env.DEV) console[level](`[${step}] ${msg}`, clean ?? "");
-    push(event);
+    if (import.meta.env.DEV) console[level](`[${safeStep}] ${safeMsg}`, clean ?? "");
   } catch {
     // Logging is non-essential and must never destabilize the UI.
   }
