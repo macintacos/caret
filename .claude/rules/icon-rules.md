@@ -15,7 +15,8 @@ per icon, copied from a single pinned Lucide release (EXC-395):
 
 `ui/src/lib/icons.ts` is a pure-TS registry: it exports `ICON_NAMES` (the source of truth for which
 icons exist) and the `IconName` type. `ui/src/lib/icons.test.ts` enforces the registry↔directory
-bijection and the verbatim-file invariants, so a drifting set fails `bun test`.
+bijection, the `Icon.svelte` wiring, the `THIRD_PARTY_LICENSES.md` rows, and the verbatim-file
+invariants, so a drifting set fails `bun test`.
 
 ## How icons render
 
@@ -37,8 +38,8 @@ bijection and the verbatim-file invariants, so a drifting set fails `bun test`.
 2. Add the name to `ICON_NAMES` in `ui/src/lib/icons.ts`.
 3. Add the static `?raw` import and the `SVGS` map entry in `ui/src/components/Icon.svelte`.
 4. Add the row to `THIRD_PARTY_LICENSES.md` (and update its pinned tag there if it changed).
-5. Run `bun test` — `icons.test.ts` enforces the registry↔directory bijection and the file
-   invariants.
+5. Run `bun test` — `icons.test.ts` gates every step above (directory, registry, `Icon.svelte`
+   wiring, and licenses row).
 
 ## Restraint
 

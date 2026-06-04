@@ -1,6 +1,6 @@
 # Third-Party Licenses
 
-This file itemizes the third-party assets vendored into the repo (currently: Lucide icons).
+This file itemizes the third-party assets vendored into the repo.
 
 ## Lucide
 
@@ -8,14 +8,14 @@ The icons under `ui/src/icons/` are copied verbatim from the Lucide release
 [`1.17.0`](https://github.com/lucide-icons/lucide/releases/tag/1.17.0). Lucide is licensed under
 the ISC license.
 
-| Icon               | Vendored path                                                      | Upstream                                                                                          |
-| ------------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `check`            | [ui/src/icons/check.svg](ui/src/icons/check.svg)                   | [check.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/check.svg)                   |
-| `chevron-down`     | [ui/src/icons/chevron-down.svg](ui/src/icons/chevron-down.svg)     | [chevron-down.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/chevron-down.svg)     |
-| `command`          | [ui/src/icons/command.svg](ui/src/icons/command.svg)               | [command.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/command.svg)               |
+| Icon | Vendored path | Upstream |
+| --- | --- | --- |
+| `check` | [ui/src/icons/check.svg](ui/src/icons/check.svg) | [check.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/check.svg) |
+| `chevron-down` | [ui/src/icons/chevron-down.svg](ui/src/icons/chevron-down.svg) | [chevron-down.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/chevron-down.svg) |
+| `command` | [ui/src/icons/command.svg](ui/src/icons/command.svg) | [command.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/command.svg) |
 | `corner-down-left` | [ui/src/icons/corner-down-left.svg](ui/src/icons/corner-down-left.svg) | [corner-down-left.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/corner-down-left.svg) |
-| `corner-up-left`   | [ui/src/icons/corner-up-left.svg](ui/src/icons/corner-up-left.svg) | [corner-up-left.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/corner-up-left.svg) |
-| `unplug`           | [ui/src/icons/unplug.svg](ui/src/icons/unplug.svg)                 | [unplug.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/unplug.svg)                 |
+| `corner-up-left` | [ui/src/icons/corner-up-left.svg](ui/src/icons/corner-up-left.svg) | [corner-up-left.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/corner-up-left.svg) |
+| `unplug` | [ui/src/icons/unplug.svg](ui/src/icons/unplug.svg) | [unplug.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/unplug.svg) |
 
 The verbatim Lucide `LICENSE` text, as published at the `1.17.0` tag, follows:
 
