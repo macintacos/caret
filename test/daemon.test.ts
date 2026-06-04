@@ -23,6 +23,7 @@ async function boot(
     routePlan?: Parameters<typeof createServer>[0]["routePlan"];
     lockPath?: string;
     buildId?: string;
+    commit?: string;
     prefsPath?: string;
   } = {},
 ) {
@@ -39,6 +40,7 @@ async function boot(
     routePlan: opts.routePlan,
     lockPath: opts.lockPath,
     buildId: opts.buildId,
+    commit: opts.commit,
   });
   base = `http://localhost:${srv.port}`;
 }
@@ -659,6 +661,13 @@ test("the listen record carries the build fingerprint and version", async () => 
   await boot({ log, buildId: "b123" });
   const rec = recs.find((r) => r.step === "listen");
   expect(rec?.extra).toMatchObject({ build: "b123", version: VERSION });
+});
+
+test("the listen record carries the commit the server runs from", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log, commit: "c0ffee0123456789abcdef0123456789abcdef01" });
+  const rec = recs.find((r) => r.step === "listen");
+  expect(rec?.extra).toMatchObject({ commit: "c0ffee0123456789abcdef0123456789abcdef01" });
 });
 
 test("a draft autosave is logged at debug with the review id only", async () => {

@@ -54,6 +54,9 @@ export interface CreateServerOptions {
   /** Build fingerprint (paths.buildHash of the served UI) reported in
    * /api/health and recorded in the lock, so a newer caret can detect staleness. */
   buildId?: string;
+  /** Commit the server runs from (cli.ts resolveCommit), reported in the listen
+   * record so daemon.log ties a boot back to a source revision (EXC-452). */
+  commit?: string;
   /** Leveled lifecycle logger (see log.ts CaretLogger); defaults to a no-op so
    * tests stay quiet. Lifecycle events log at info, handler failures at error. */
   log?: CaretLogger;
@@ -166,6 +169,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   const prefsPath = opts.prefsPath ?? prefsFile();
   const lockPath = opts.lockPath;
   const buildId = opts.buildId;
+  const commit = opts.commit;
   const log = opts.log ?? noopLogger;
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount } = createDecisions(log);
 
@@ -486,6 +490,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   log.info("listen", `listening on 127.0.0.1:${server.port}`, {
     build: buildId,
     version: IDENTITY.version,
+    commit,
   });
 
   // Write the single-instance lock atomically (temp + rename) so a concurrent
