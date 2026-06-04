@@ -180,13 +180,14 @@ levels, and message style.
 Requires [mise](https://mise.jdx.dev), which pins bun, biome, hk, and pkl.
 
 ```sh
-mise run setup      # install pinned tools + JS deps + register git hooks
+mise run setup      # install pinned tools + JS deps + e2e Chromium + register git hooks
 mise run build      # build:ui (Vite single-file) then build:bin (bun build --compile)
 mise run dev        # isolated daemon + fake plan + Vite UI (dev port :42719)
 mise run test       # bun test
+mise run test-e2e   # Playwright browser e2e (isolated daemon, Chromium)
 mise run lint       # Biome + tsc + svelte-check (read-only); the CI/pre-commit gate
 mise run format     # Biome (write)
-mise run preflight  # format + lint + test + build before pushing
+mise run preflight  # format + lint + tests (unit ∥ e2e) + build before pushing
 ```
 
 `mise run lint` (and the pre-commit hook) runs Biome lint, `tsc --noEmit`, and `svelte-check` —
@@ -200,6 +201,12 @@ appends a revision section quoting your feedback and resubmits, and approve re-s
 with real hook records landing in the dev state dir's `caret.log`. Everything is reaped on Ctrl-C,
 and the dev daemon never reads or writes a globally-installed caret's reviews. Override the port
 with `CARET_DEV_PORT` if `42719` is taken.
+
+`mise run test-e2e` runs the Playwright specs in `e2e/` against an isolated daemon that serves the
+built single-file UI on an OS-assigned port with ephemeral state, so the suite never touches your
+real daemon or `~/.local/state/caret`. `mise run setup` installs the Chromium browser the specs
+drive. For when to write an e2e spec versus a `bun test` unit versus throwaway exploration, see
+`.claude/rules/browser-testing.md`.
 
 For a quick local trial without installing, load the plugin from a checkout:
 

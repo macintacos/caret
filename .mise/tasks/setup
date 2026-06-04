@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Install pinned tools, JS deps, and register git hooks"
+#MISE description="Install pinned tools, JS deps, e2e Chromium, and register git hooks"
 
 set -euo pipefail
 
@@ -7,3 +7,5 @@ set -euo pipefail
 # runs `hk install --mise` to (re)register the git hooks.
 mise install
 bun install
+# Install the Chromium binary the Playwright e2e suite drives.
+bunx playwright install chromium
