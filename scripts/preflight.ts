@@ -127,6 +127,12 @@ function buildSummary(results: Map<string, TaskResult>): string {
   return lines.join("\n");
 }
 
+// ANSI escape sequences (color, cursor control). Children can emit them even
+// when piped — e.g. vite's clear-line progress — and a leaked cursor-control
+// code would break the plain line-per-event contract of the non-TTY fallback,
+// so display lines are stripped (buffered failure output stays raw).
+const ANSI_ESCAPES = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, "g");
+
 // Real spawner: runs `mise run <task>` with merged env, buffering combined
 // stdout+stderr and reporting the last non-empty line for the live display.
 async function spawnMiseTask(
@@ -147,7 +153,7 @@ async function spawnMiseTask(
       chunks.push(text);
       const last = text
         .split("\n")
-        .map((line) => line.trim())
+        .map((line) => line.replace(ANSI_ESCAPES, "").trim())
         .filter(Boolean)
         .at(-1);
       if (last) onLine(last);
