@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Install pinned tools, JS deps, and register git hooks"
+#MISE description="Install pinned tools, JS deps, e2e Chromium, and register git hooks"
 
 set -euo pipefail
 

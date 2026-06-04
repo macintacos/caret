@@ -178,7 +178,7 @@ levels, and message style.
 Requires [mise](https://mise.jdx.dev), which pins bun, biome, hk, and pkl.
 
 ```sh
-mise run setup      # install pinned tools + JS deps + register git hooks
+mise run setup      # install pinned tools + JS deps + e2e Chromium + register git hooks
 mise run build      # build:ui (Vite single-file) then build:bin (bun build --compile)
 mise run dev        # isolated daemon + fake plan + Vite UI (dev port :42719)
 mise run test       # bun test

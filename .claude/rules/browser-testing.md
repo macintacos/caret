@@ -10,8 +10,9 @@ common mistake: an assertion about real rendering goes stale as a unit test, and
 up as an e2e spec is slow and flaky. Decide by what you are actually testing (EXC-453):
 
 - **Real browser behavior** — text selection, focus/keyboard handling, scroll, popover positioning,
-  and timing-driven UI (the 2s decision poll, the 500ms autosave debounce, the 2s safe-mode grace
-  window) → a **committed Playwright spec** in `e2e/*.e2e.ts`. Run: `mise run test-e2e`.
+  and timing-driven UI (the 2s decision poll, the 500ms autosave debounce, safe mode's 300ms grace
+  window and 2s suppression) → a **committed Playwright spec** in `e2e/*.e2e.ts`. Run:
+  `mise run test-e2e`.
 - **Pure logic** — parsing, anchoring math, formatting, state machines → a **`bun test` unit**
   (happy-dom when a DOM API is needed, wired by `ui/test-setup.ts`).
 - **Throwaway exploration** — "what does this page actually do?" → the ad-hoc `playwright-cli`

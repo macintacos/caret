@@ -34,10 +34,11 @@ test("selection opens the popover; the comment lands, autosaves, and survives re
       range.setStart(text, idx);
       range.setEnd(text, idx + needle.length);
       const sel = window.getSelection();
-      if (!sel) return false;
+      const host = text.parentElement;
+      if (!sel || !host) return false;
       sel.removeAllRanges();
       sel.addRange(range);
-      text.parentElement?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+      host.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
       return true;
     }
     return false;
@@ -52,8 +53,10 @@ test("selection opens the popover; the comment lands, autosaves, and survives re
   // Arm the autosave listener BEFORE submitting: confirming the comment
   // schedules the debounced (500ms) PUT /draft, and awaiting the response —
   // rather than sleeping — proves the flush landed.
+  // Match on route alone (not r.ok()) so a non-2xx fails fast on the assert
+  // below instead of stalling out the waitForResponse timeout.
   const saved = page.waitForResponse(
-    (r) => r.url().includes(`/api/reviews/${id}/draft`) && r.request().method() === "PUT" && r.ok(),
+    (r) => r.url().includes(`/api/reviews/${id}/draft`) && r.request().method() === "PUT",
   );
   await page.keyboard.press("ControlOrMeta+Enter");
 
@@ -63,7 +66,7 @@ test("selection opens the popover; the comment lands, autosaves, and survives re
   await expect(card).toBeVisible();
   await expect(card.getByText(COMMENT)).toBeVisible();
 
-  await saved;
+  expect((await saved).ok()).toBe(true);
 
   // The draft survives a reload: the annotation comes back from the daemon.
   await page.reload();

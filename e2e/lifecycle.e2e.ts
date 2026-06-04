@@ -29,7 +29,7 @@ test("switching between two pending reviews shows the right plan", async ({ daem
 test("?review=<id> deep-links directly to that review", async ({ daemon, page }) => {
   await daemon.seed();
   const second = await daemon.seed({ plan: SECOND_PLAN });
-  await page.goto(`/?review=${second}`);
+  await page.goto(`/?review=${encodeURIComponent(second)}`);
 
   // Without the deep link the oldest review would win; the param overrides.
   await expect(page.locator("article.plan h1")).toHaveText("Gadget Renderer Cleanup");

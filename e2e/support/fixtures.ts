@@ -44,24 +44,46 @@ const BOOT_TIMEOUT_MS = 15_000;
 function awaitPortLine(child: ChildProcess, stderr: () => string): Promise<number> {
   return new Promise<number>((resolve, reject) => {
     let buf = "";
-    const timer = setTimeout(() => {
-      reject(new Error(`caret e2e daemon: no port line within ${BOOT_TIMEOUT_MS}ms\n${stderr()}`));
-    }, BOOT_TIMEOUT_MS);
-    child.stdout?.on("data", (chunk: Buffer) => {
+    const onData = (chunk: Buffer) => {
       buf += chunk.toString();
       const nl = buf.indexOf("\n");
       if (nl === -1) return;
-      clearTimeout(timer);
       try {
-        resolve((JSON.parse(buf.slice(0, nl)) as { port: number }).port);
+        settle(() => resolve((JSON.parse(buf.slice(0, nl)) as { port: number }).port));
       } catch (err) {
-        reject(new Error(`caret e2e daemon: bad port line ${JSON.stringify(buf.slice(0, nl))}: ${err}`));
+        settle(() =>
+          reject(new Error(`caret e2e daemon: bad port line ${JSON.stringify(buf.slice(0, nl))}: ${err}`)),
+        );
       }
-    });
-    child.once("exit", (code) => {
+    };
+    // "close" (not "exit"): exit can fire before the stdout pipe drains, which
+    // would spuriously reject even though the port line was already written.
+    const onClose = (code: number | null) => {
+      settle(() =>
+        reject(new Error(`caret e2e daemon exited (code ${code}) before reporting a port\n${stderr()}`)),
+      );
+    };
+    // Without this, a spawn failure (e.g. `bun` missing from PATH) is an
+    // unhandled "error" event that tears down the whole runner process.
+    const onError = (err: Error) => {
+      settle(() => reject(new Error(`caret e2e daemon failed to spawn: ${err.message}`)));
+    };
+    const timer = setTimeout(() => {
+      settle(() =>
+        reject(new Error(`caret e2e daemon: no port line within ${BOOT_TIMEOUT_MS}ms\n${stderr()}`)),
+      );
+    }, BOOT_TIMEOUT_MS);
+    // Settle exactly once, then detach everything so late events are inert.
+    const settle = (fn: () => void) => {
       clearTimeout(timer);
-      reject(new Error(`caret e2e daemon exited (code ${code}) before reporting a port\n${stderr()}`));
-    });
+      child.stdout?.off("data", onData);
+      child.off("close", onClose);
+      child.off("error", onError);
+      fn();
+    };
+    child.stdout?.on("data", onData);
+    child.on("close", onClose);
+    child.on("error", onError);
   });
 }
 
@@ -85,9 +107,11 @@ export const test = base.extend<{ daemon: Daemon }>({
     // Ephemeral, isolated state: the daemon's reviews/prefs/logs all live under
     // this dir and are wiped at teardown. The user's real state is never touched.
     const stateDir = await mkdtemp(join(tmpdir(), "caret-e2e."));
+    // stdin is a live pipe on purpose: the daemon self-reaps when it closes,
+    // so a SIGKILL'd runner can't leave an orphan daemon behind.
     const child = spawn("bun", [DAEMON_ENTRY], {
       env: { ...process.env, XDG_STATE_HOME: stateDir },
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
     const stderrChunks: Buffer[] = [];
     child.stderr?.on("data", (c: Buffer) => stderrChunks.push(c));

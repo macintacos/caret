@@ -53,6 +53,13 @@ const server = createServer({
   log,
 });
 
+// Self-reap if the fixture dies without running teardown (e.g. a SIGKILL'd
+// runner): the parent holds our stdin pipe, so its death closes stdin. Without
+// this, an orphan would idle for ~2^31 ms holding its port and state dir.
+process.stdin.resume();
+process.stdin.on("close", () => process.exit(0));
+process.stdin.on("end", () => process.exit(0));
+
 // The one stdout line the fixture parses. Bun.serve keeps the process alive;
 // the fixture SIGTERMs it at teardown.
 console.log(JSON.stringify({ port: server.port }));
