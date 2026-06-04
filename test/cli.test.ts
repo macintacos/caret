@@ -18,6 +18,7 @@ function reviewDeps(over: Partial<Parameters<typeof runReview>[1]> = {}) {
     longPoll: async () => allow,
     openBrowser: () => {},
     timeoutMs: 1000,
+    expire: async () => {},
     ...over,
   };
 }
@@ -113,6 +114,53 @@ test("a never-resolving long-poll times out to deny", async () => {
   );
   expect(out.hookSpecificOutput.decision.behavior).toBe("deny");
   expect(out.hookSpecificOutput.decision.message).toContain("timed out");
+});
+
+test("a timeout notifies the daemon to expire the review before denying", async () => {
+  const expired: Array<[string, string]> = [];
+  const out = await runReview(
+    stdin,
+    reviewDeps({
+      longPoll: () => new Promise<Decision>(() => {}),
+      timeoutMs: 20,
+      expire: async (baseUrl: string, id: string) => {
+        expired.push([baseUrl, id]);
+      },
+    }),
+  );
+  expect(out.hookSpecificOutput.decision.behavior).toBe("deny");
+  expect(expired).toEqual([["http://x", "rid"]]);
+});
+
+test("an expire failure never changes the fail-safe deny", async () => {
+  const out = await runReview(
+    stdin,
+    reviewDeps({
+      longPoll: () => new Promise<Decision>(() => {}),
+      timeoutMs: 20,
+      expire: async () => {
+        throw new Error("daemon gone");
+      },
+    }),
+  );
+  expect(out.hookSpecificOutput.decision.behavior).toBe("deny");
+  expect(out.hookSpecificOutput.decision.message).toContain("timed out");
+});
+
+test("no expire call when the review was never created", async () => {
+  const expired: string[] = [];
+  await runReview(
+    stdin,
+    reviewDeps({
+      ensureDaemon: async () => {
+        throw new Error("boom");
+      },
+      expire: async (_baseUrl: string, id: string) => {
+        expired.push(id);
+      },
+    }),
+  );
+  expect(expired).toEqual([]); // no review id exists to expire
 });
 
 test("a dropped long-poll reconnects once then succeeds", async () => {

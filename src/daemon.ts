@@ -218,7 +218,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return new Response("not found", { status: 404 });
   }
 
-  const idRoute = /^\/api\/reviews\/([^/]+)(\/decision|\/resolve|\/draft)?$/;
+  const idRoute = /^\/api\/reviews\/([^/]+)(\/decision|\/resolve|\/draft|\/expire)?$/;
 
   async function handle(req: Request): Promise<Response> {
     inFlight++;
@@ -424,6 +424,31 @@ export function createServer(opts: CreateServerOptions): CaretServer {
             reviewId: id,
             sessionId: existing.sessionId,
             acceptMode: decision.acceptMode,
+          });
+          return Response.json({ ok: true });
+        }
+
+        // The hook is abandoning this review — its timeout fired and it is
+        // about to emit the fail-safe deny (EXC-454). No decision is recorded
+        // and the session epoch is untouched: the plan was never reviewed.
+        if (method === "POST" && sub === "/expire") {
+          // Drop any unsettled long-poll entry unconditionally — even when the
+          // review is already gone, a zombie hook's entry would otherwise pin
+          // openDecisionCount and block idle shutdown forever.
+          clearDecision(id);
+          const existing = store.get(id);
+          // Only a pending review can expire; resolved ones are already terminal.
+          if (!existing || existing.status !== "pending") return notFound();
+          await store.update(id, (r) => {
+            r.status = "expired";
+            // Same invariant as resolve: a terminal record keeps no unsent draft.
+            r.generalCommentDraft = "";
+          });
+          // Terminal on disk (an expired review never rehydrates), out of memory.
+          await store.remove(id);
+          log.info("review", `review expired: ${shortId(id)}`, {
+            reviewId: id,
+            sessionId: existing.sessionId,
           });
           return Response.json({ ok: true });
         }

@@ -58,6 +58,9 @@ export interface ReviewDeps {
   longPoll: (baseUrl: string, id: string) => Promise<Decision | null>;
   openBrowser: (url: string) => void;
   timeoutMs: number;
+  /** Best-effort: tell the daemon the hook is abandoning this review, so it
+   * doesn't hold a pending orphan (EXC-454). Failures are swallowed. */
+  expire: (baseUrl: string, id: string) => Promise<void>;
 }
 
 class TimeoutError extends Error {}
@@ -91,6 +94,8 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
   // Track the current step + context so the catch can log what actually failed.
   let step = "parse";
   const ctx: ErrorContext = {};
+  // Hoisted so the catch can reach the daemon for the best-effort expire.
+  let baseUrl: string | undefined;
   try {
     let hook: HookStdin;
     try {
@@ -121,7 +126,7 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
     }
 
     step = "ensureDaemon";
-    const baseUrl = await deps.ensureDaemon();
+    baseUrl = await deps.ensureDaemon();
     step = "postReview";
     const { id } = await deps.postReview(baseUrl, input);
     // From here every record — decision and error alike — carries the reviewId,
@@ -171,6 +176,17 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
     return toHookOutput(decision);
   } catch (err) {
     logError(step, err, ctx);
+    // The hook is abandoning the review (timeout or post-create failure):
+    // best-effort expire so the daemon doesn't hold a pending orphan. The
+    // supersede-on-resubmit path self-heals if this never lands (EXC-454).
+    if (ctx.reviewId && baseUrl) {
+      try {
+        await deps.expire(baseUrl, ctx.reviewId);
+        logDebug("review", `review expire requested: ${shortId(ctx.reviewId)}`, { ...ctx });
+      } catch {
+        logDebug("review", "review expire failed; resubmit supersedes", { ...ctx });
+      }
+    }
     const msg = err instanceof Error ? err.message : String(err);
     return denyOutput(`caret: ${msg} — denying so no unreviewed plan ships. See ${logFile()}.`);
   }
@@ -372,6 +388,16 @@ export async function postReview(baseUrl: string, input: PlanInput): Promise<{ i
   return (await res.json()) as { id: string };
 }
 
+/** Best-effort expire: short-fused so a dying hook never hangs on it. The
+ * caller (runReview's catch) swallows any throw. */
+export async function expireReview(baseUrl: string, id: string): Promise<void> {
+  const res = await fetch(`${baseUrl}/api/reviews/${id}/expire`, {
+    method: "POST",
+    signal: AbortSignal.timeout(1000),
+  });
+  if (!res.ok) throw new Error(`POST /expire failed: ${res.status}`);
+}
+
 export async function longPoll(baseUrl: string, id: string): Promise<Decision | null> {
   const res = await fetch(`${baseUrl}/api/reviews/${id}/decision`);
   if (res.status === 204) return null; // heartbeat: still pending — re-poll
@@ -417,6 +443,7 @@ function prodReviewDeps(): ReviewDeps {
     longPoll,
     openBrowser,
     timeoutMs: reviewTimeoutMs(),
+    expire: expireReview,
   };
 }
 
