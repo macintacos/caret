@@ -133,6 +133,10 @@ export function startPolling(
   // onSwap (and logs one warn) only when a previous id existed and differs;
   // then advances the baseline so one swap yields one notification, not one per
   // poll. Opaque ids only — stateDir is identifying and is never read/logged.
+  // No in-flight guard: after the one-time boot seed, every call comes from
+  // inside the serialized tick loop (and the first periodic check is ≥5
+  // intervals out), so two checks can never overlap — keep it that way if you
+  // add a call site.
   const checkIdentity = async () => {
     let health: Health;
     try {
