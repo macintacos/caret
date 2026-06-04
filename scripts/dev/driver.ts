@@ -20,9 +20,11 @@ import {
 import type { PermissionDecision } from "../../src/feedback.ts";
 import { DEFAULT_PORT } from "../../src/settings.ts";
 
-/** Fixed session for the single dev review; reused across versions so a
- * revision threads into the same review instead of forking a new one. */
-export const DEV_SESSION = "caret-dev";
+/** Session id for the single dev review; stable for the process lifetime so a
+ * revision threads into the same review instead of forking a new one, but
+ * unique per driver instance (pid suffix) so two dev sessions deliberately
+ * sharing one daemon don't collide on session identity (EXC-461). */
+export const DEV_SESSION = `caret-dev-${process.pid}`;
 
 const log = (msg: string) => process.stderr.write(`[caret dev driver] ${msg}\n`);
 
