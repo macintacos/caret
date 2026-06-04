@@ -47,10 +47,12 @@ function callerLocation(): string | undefined {
     if (!stack) return undefined;
     for (const line of stack.split("\n")) {
       const m = FRAME.exec(line);
-      if (!m?.[1] || !m[2]) continue; // the `Error` header line / unparseable frame
+      if (!m?.[1] || !m[2]) continue; // no frame match (e.g. the `Error` header line)
       const path = m[1];
       if (path.endsWith("src/log.ts")) continue; // our own wrapper frames
-      if (!path.includes("/")) continue; // pathless frames: `native:7:39`, `[eval]:1:30`
+      // Runtime-internal frames — pathless (`native:7:39`, `[eval]:1:30`) or
+      // node:-scheme (`node:internal/...`) — are never the caller.
+      if (!path.includes("/") || path.startsWith("node:")) continue;
       // Normalize: a relative path is already repo-relative (the compiled
       // binary's sourcemapped frames come out that way); an absolute one under
       // the package root loses that prefix; any other absolute path falls back
