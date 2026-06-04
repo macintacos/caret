@@ -36,6 +36,7 @@ import {
   VERSION,
 } from "./paths.ts";
 import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "./plan-format.ts";
+import { redactLogFiles } from "./redact.ts";
 import { loadSettings, settings } from "./settings.ts";
 import { createStore } from "./store.ts";
 import type { Decision, PlanInput } from "./types.ts";
@@ -575,6 +576,25 @@ async function runReviewSubcommand(): Promise<void> {
   process.exit(0);
 }
 
+function runRedactSubcommand(): void {
+  // Scrub the state-dir logs into shareable *.redacted.log siblings (EXC-399).
+  // Human-facing output, not hook JSON: print each written path, or say nothing
+  // was found. Failures report to stderr with a non-zero exit — never the
+  // review path's deny JSON.
+  try {
+    const written = redactLogFiles();
+    if (written.length === 0) {
+      process.stdout.write("caret redact: no logs found to redact.\n");
+    } else {
+      for (const path of written) process.stdout.write(`${path}\n`);
+    }
+    process.exit(0);
+  } catch (e) {
+    process.stderr.write(`caret redact: ${e}\n`);
+    process.exit(1);
+  }
+}
+
 async function main(): Promise<void> {
   const sub = process.argv[2];
   switch (sub) {
@@ -584,9 +604,11 @@ async function main(): Promise<void> {
       return runPrewarm();
     case "review":
       return runReviewSubcommand();
+    case "redact":
+      return runRedactSubcommand();
     default:
       process.stderr.write(
-        `caret: unknown subcommand "${sub ?? ""}". Use: daemon | prewarm | review\n`,
+        `caret: unknown subcommand "${sub ?? ""}". Use: daemon | prewarm | review | redact\n`,
       );
       process.exit(1);
   }

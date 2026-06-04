@@ -5,7 +5,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureDaemon, httpHealth } from "../src/cli.ts";
 import { createServer } from "../src/daemon.ts";
@@ -131,4 +131,47 @@ test("the daemon writes the lock on start and removes it on SIGTERM", async () =
 
 test("the daemon removes the lock on SIGINT", async () => {
   await assertLockRemovedOnSignal("SIGINT");
+});
+
+// `caret redact` end-to-end: argv routing, stdout report, and the scrubbed
+// sibling files — the real subprocess, like the daemon signal tests above.
+test("caret redact scrubs state-dir logs into shareable siblings", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-redact-cli-"));
+  const logPath = join(stateHome, "caret", "caret.log");
+  const home = homedir();
+  await Bun.write(logPath, `${JSON.stringify({ step: "x", msg: `boom at ${home}/src` })}\n`);
+  const proc = Bun.spawn([process.execPath, "src/cli.ts", "redact"], {
+    env: { ...process.env, XDG_STATE_HOME: stateHome },
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  try {
+    const exit = await proc.exited;
+    const out = await new Response(proc.stdout).text();
+    const sibling = join(stateHome, "caret", "caret.redacted.log");
+    expect(exit).toBe(0);
+    expect(out).toContain(sibling);
+    const scrubbed = await Bun.file(sibling).text();
+    expect(scrubbed).not.toContain(home);
+    expect(scrubbed).toContain("~/src");
+  } finally {
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
+test("caret redact reports when there are no logs to scrub", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-redact-empty-"));
+  const proc = Bun.spawn([process.execPath, "src/cli.ts", "redact"], {
+    env: { ...process.env, XDG_STATE_HOME: stateHome },
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  try {
+    const exit = await proc.exited;
+    const out = await new Response(proc.stdout).text();
+    expect(exit).toBe(0);
+    expect(out).toContain("no logs");
+  } finally {
+    await rm(stateHome, { recursive: true, force: true });
+  }
 });
