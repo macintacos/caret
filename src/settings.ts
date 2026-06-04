@@ -219,26 +219,25 @@ const ENV_VARS: ReadonlyArray<[name: string, schema: z.ZodType<number>]> = [
   ["CARET_HEARTBEAT_MS", HeartbeatMs],
 ];
 
-/** Numeric value of an env var, or undefined when it is unset, blank, or fails
- * the key's schema (the caller then falls through to file value, then default).
- * Blank (empty/whitespace) counts as unset BEFORE Number() runs — an unguarded
- * blank would coerce to 0, and 0 is a *valid* IdleMs ("shut down immediately"). */
-function envNumber(name: string, schema: z.ZodType<number>): number | undefined {
+/** Tri-state read of a CARET_* var through its sub-schema: a number when set
+ * and valid; null when set but unusable (flagged by invalidEnvVars; `??` in the
+ * accessors falls through to file, then default); undefined when unset or
+ * blank. Blank counts as unset BEFORE Number() runs — an unguarded blank would
+ * coerce to 0, and 0 is a *valid* IdleMs ("shut down immediately"). One
+ * classifier serving both the accessors and invalidEnvVars is what keeps
+ * "falls back" and "flagged invalid" from ever disagreeing. */
+function envValue(name: string, schema: z.ZodType<number>): number | null | undefined {
   const raw = process.env[name];
   if (raw === undefined || raw.trim() === "") return undefined;
   const n = Number(raw);
-  return schema.safeParse(n).success ? n : undefined;
+  return schema.safeParse(n).success ? n : null;
 }
 
 /** Names of CARET_* vars that are set but unusable (their accessors fall
  * through to file value, then default). Pure — each process entry point warns
- * once at boot via its own logger (EXC-444). Blank counts as unset, matching
- * envNumber. */
+ * once at boot via its own logger (EXC-444). */
 export function invalidEnvVars(): string[] {
-  return ENV_VARS.filter(([name, schema]) => {
-    const raw = process.env[name];
-    return raw !== undefined && raw.trim() !== "" && !schema.safeParse(Number(raw)).success;
-  }).map(([name]) => name);
+  return ENV_VARS.filter(([name, schema]) => envValue(name, schema) === null).map(([name]) => name);
 }
 
 // The four tunable accessors (EXC-430; moved from paths.ts so they can read
@@ -249,19 +248,19 @@ export function invalidEnvVars(): string[] {
 
 /** Resolve the daemon port: CARET_PORT > [daemon].port > 42718. */
 export function getPort(s: Settings = settings().current()): number {
-  return envNumber("CARET_PORT", Port) ?? s.daemon.port;
+  return envValue("CARET_PORT", Port) ?? s.daemon.port;
 }
 
 /** Idle auto-shutdown delay (ms): CARET_IDLE_MS > [daemon].idle_ms > 60s. */
 export function idleMs(s: Settings = settings().current()): number {
-  return envNumber("CARET_IDLE_MS", IdleMs) ?? s.daemon.idle_ms;
+  return envValue("CARET_IDLE_MS", IdleMs) ?? s.daemon.idle_ms;
 }
 
 /** Review timeout: CARET_TIMEOUT > [review].timeout_s > 3600s / 1h — all in
  * seconds (kept below the 3900s hook budget by TimeoutS), converted to ms
  * here, once. After this window, the hook fail-safe denies. */
 export function reviewTimeoutMs(s: Settings = settings().current()): number {
-  return Math.round((envNumber("CARET_TIMEOUT", TimeoutS) ?? s.review.timeout_s) * 1000);
+  return Math.round((envValue("CARET_TIMEOUT", TimeoutS) ?? s.review.timeout_s) * 1000);
 }
 
 /** Decision long-poll heartbeat (ms): CARET_HEARTBEAT_MS > [daemon].heartbeat_ms
@@ -269,5 +268,5 @@ export function reviewTimeoutMs(s: Settings = settings().current()): number {
  * returns a 204 "still pending" after this window so the client re-polls before
  * any socket idle timeout can close the connection. */
 export function heartbeatMs(s: Settings = settings().current()): number {
-  return envNumber("CARET_HEARTBEAT_MS", HeartbeatMs) ?? s.daemon.heartbeat_ms;
+  return envValue("CARET_HEARTBEAT_MS", HeartbeatMs) ?? s.daemon.heartbeat_ms;
 }

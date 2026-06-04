@@ -265,22 +265,41 @@ test("an env var shadows a config-file value (env > file)", async () => {
 });
 
 test("a malformed env var falls through to the file value, then the default", async () => {
-  await Bun.write(file, "[daemon]\nport = 5000\n");
+  await Bun.write(
+    file,
+    "[daemon]\nport = 5000\nidle_ms = 1111\nheartbeat_ms = 250\n\n[review]\ntimeout_s = 120\n",
+  );
   const s = loadSettings(file);
-  withEnv({ ...NO_CARET, CARET_PORT: "nope" }, () => {
-    expect(getPort(s)).toBe(5000); // → file
-    expect(getPort(DEFAULTS)).toBe(DEFAULT_PORT); // → default when the file has no value
-  });
+  // One unusable value per var, including the newly-bounded timeout.
+  withEnv(
+    { CARET_PORT: "nope", CARET_TIMEOUT: "3900", CARET_IDLE_MS: "1.5", CARET_HEARTBEAT_MS: "0" },
+    () => {
+      expect(getPort(s)).toBe(5000); // → file
+      expect(reviewTimeoutMs(s)).toBe(120_000);
+      expect(idleMs(s)).toBe(1111);
+      expect(heartbeatMs(s)).toBe(250);
+      expect(getPort(DEFAULTS)).toBe(DEFAULT_PORT); // → default when the file has no value
+      expect(reviewTimeoutMs(DEFAULTS)).toBe(3_600_000);
+      expect(idleMs(DEFAULTS)).toBe(60_000);
+      expect(heartbeatMs(DEFAULTS)).toBe(8_000);
+    },
+  );
 });
 
 test("an empty or whitespace env var counts as unset, never as 0", async () => {
   await Bun.write(file, "[daemon]\nidle_ms = 1234\n");
   const s = loadSettings(file);
   for (const blank of ["", "   "]) {
-    withEnv({ ...NO_CARET, CARET_IDLE_MS: blank }, () => {
-      expect(idleMs(s)).toBe(1234);
-      expect(idleMs(DEFAULTS)).toBe(60_000);
-    });
+    withEnv(
+      { CARET_PORT: blank, CARET_TIMEOUT: blank, CARET_IDLE_MS: blank, CARET_HEARTBEAT_MS: blank },
+      () => {
+        expect(idleMs(s)).toBe(1234);
+        expect(idleMs(DEFAULTS)).toBe(60_000);
+        expect(getPort(DEFAULTS)).toBe(DEFAULT_PORT);
+        expect(reviewTimeoutMs(DEFAULTS)).toBe(3_600_000);
+        expect(heartbeatMs(DEFAULTS)).toBe(8_000);
+      },
+    );
   }
 });
 
