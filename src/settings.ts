@@ -107,7 +107,7 @@ export function createSettings(file = configFile()): SettingsService {
       try {
         text = readFileSync(file, "utf-8");
       } catch {
-        return lastGood; // raced delete / transient read error
+        return lastGood; // any read error: raced delete, EACCES, slow FS
       }
       const next = parseAndValidate(text);
       // Advance the signature even on failure so a static bad file isn't
