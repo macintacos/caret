@@ -480,8 +480,10 @@ async function runDaemon(): Promise<void> {
   // detected (i.e. on the first emit after the edit — detection is as lazy as
   // the reload itself). NB: a change record is an info emit, so raising
   // [logging].level above info suppresses it like any other info record.
-  const svc = watchSettings(settings(), (changes, next) =>
-    log.info("settings", `settings changed: ${changes.join("; ")}`, { settings: next }),
+  // The change record's msg already carries old → new per key; the full
+  // settings object rides only on the boot record.
+  const svc = watchSettings(settings(), (changes) =>
+    log.info("settings", `settings changed: ${changes.join("; ")}`),
   );
   const log = createDaemonLogger(
     () => svc.current().logging.level,
