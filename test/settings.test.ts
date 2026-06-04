@@ -320,6 +320,15 @@ test("invalidEnvVars names each set-but-unusable CARET_* var, in declaration ord
   );
 });
 
+test("invalidEnvVars is empty when the set values are usable", () => {
+  withEnv(
+    { CARET_PORT: "42718", CARET_TIMEOUT: "120", CARET_IDLE_MS: "0", CARET_HEARTBEAT_MS: "250" },
+    () => {
+      expect(invalidEnvVars()).toEqual([]);
+    },
+  );
+});
+
 test("invalidEnvVars treats empty and whitespace values as unset", () => {
   withEnv({ ...NO_CARET, CARET_PORT: "", CARET_IDLE_MS: "   " }, () => {
     expect(invalidEnvVars()).toEqual([]);

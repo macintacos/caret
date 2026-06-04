@@ -6,15 +6,10 @@ import { mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { createDecisions } from "./decisions.ts";
 import { type CaretLogger, noopLogger, shortId } from "./log.ts";
-import {
-  type DaemonLock,
-  heartbeatMs as defaultHeartbeatMs,
-  IDENTITY,
-  idleMs as defaultIdleMs,
-  prefsFile,
-} from "./paths.ts";
+import { type DaemonLock, IDENTITY, prefsFile } from "./paths.ts";
 import { readApproveMode, writeApproveMode } from "./prefs.ts";
 import { routeIncomingPlan } from "./reviews.ts";
+import { heartbeatMs as defaultHeartbeatMs, idleMs as defaultIdleMs } from "./settings.ts";
 import type { Store } from "./store.ts";
 import {
   currentVersion,
@@ -40,7 +35,7 @@ export interface CreateServerOptions {
   store: Store;
   port?: number;
   idleMs?: number;
-  /** Decision long-poll heartbeat window (ms); defaults to paths.heartbeatMs(). */
+  /** Decision long-poll heartbeat window (ms); defaults to settings.heartbeatMs(). */
   heartbeatMs?: number;
   serveHtml?: () => string | Promise<string>;
   onShutdown?: () => void;

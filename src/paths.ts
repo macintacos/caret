@@ -1,4 +1,5 @@
-// Port, state directory, and identity-signature resolution.
+// State/config directory and identity-signature resolution. (The CARET_*
+// tunables and their accessors live in src/settings.ts since EXC-430.)
 //
 // Phase-0 spike outcome (the contract the rest of the code relies on): plan
 // approval is gated via a `PermissionRequest` hook matching `ExitPlanMode` — NOT
@@ -14,7 +15,6 @@ import pkg from "../package.json" with { type: "json" };
  * a root cause of EXC-406: the daemon reported a stale "0.0.1" that could never
  * signal an upgrade. */
 export const VERSION = pkg.version;
-export const DEFAULT_PORT = 42718;
 
 /** Identity signature returned by GET /api/health, used to detect a foreign
  * process squatting on the port. */
@@ -28,46 +28,6 @@ export const IDENTITY = { service: "caret", version: VERSION } as const;
 export function buildHash(html: string | undefined): string {
   if (!html) return "no-ui";
   return createHash("sha256").update(html).digest("hex").slice(0, 12);
-}
-
-// Per-var validity predicates, shared by the env getters below and
-// invalidEnvVars so "falls back to default" and "flagged invalid" never disagree.
-const isPositiveInt = (raw: string) => {
-  const n = Number(raw);
-  return Number.isInteger(n) && n > 0;
-};
-const isNonNegativeInt = (raw: string) => {
-  const n = Number(raw);
-  return Number.isInteger(n) && n >= 0;
-};
-const isPositiveNumber = (raw: string) => {
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0;
-};
-
-const ENV_CHECKS: ReadonlyArray<[name: string, ok: (raw: string) => boolean]> = [
-  ["CARET_PORT", isPositiveInt],
-  ["CARET_TIMEOUT", isPositiveNumber],
-  ["CARET_IDLE_MS", isNonNegativeInt],
-  ["CARET_HEARTBEAT_MS", isPositiveInt],
-];
-
-/** Names of CARET_* vars that are set but unusable (their getters silently fall
- * back to defaults). Pure — paths.ts cannot log (log.ts imports it), so each
- * process entry point warns once at boot via its own logger (EXC-444). An empty
- * string counts as unset, matching the getters. */
-export function invalidEnvVars(): string[] {
-  return ENV_CHECKS.filter(([name, ok]) => {
-    const raw = process.env[name];
-    return !!raw && !ok(raw);
-  }).map(([name]) => name);
-}
-
-/** Resolve the daemon port: CARET_PORT (positive integer) or the default. */
-export function getPort(): number {
-  const raw = process.env.CARET_PORT;
-  if (raw && isPositiveInt(raw)) return Number(raw);
-  return DEFAULT_PORT;
 }
 
 /** Root state dir: $XDG_STATE_HOME/caret or ~/.local/state/caret. Read lazily
@@ -132,29 +92,4 @@ export interface DaemonLock {
   build?: string;
   version?: string;
   startedAt?: number;
-}
-
-/** Idle auto-shutdown delay (ms). Overridable via CARET_IDLE_MS for tests. */
-export function idleMs(): number {
-  const raw = process.env.CARET_IDLE_MS;
-  if (raw && isNonNegativeInt(raw)) return Number(raw);
-  return 60_000;
-}
-
-/** Review timeout (ms): CARET_TIMEOUT seconds, default 3600s / 1h (< the 3900s
- * hook budget in hooks.json). After this, the hook fail-safe denies. */
-export function reviewTimeoutMs(): number {
-  const raw = process.env.CARET_TIMEOUT;
-  if (raw && isPositiveNumber(raw)) return Math.round(Number(raw) * 1000);
-  return 3_600_000;
-}
-
-/** Decision long-poll heartbeat (ms): the daemon returns a 204 "still pending"
- * after this window so the client re-polls before any socket idle timeout can
- * close the connection. CARET_HEARTBEAT_MS overrides; default 8s, comfortably
- * under the daemon's 30s Bun.serve idleTimeout. */
-export function heartbeatMs(): number {
-  const raw = process.env.CARET_HEARTBEAT_MS;
-  if (raw && isPositiveInt(raw)) return Number(raw);
-  return 8_000;
 }

@@ -31,17 +31,21 @@ import {
   type DaemonLock,
   daemonLock,
   daemonLogFile,
-  getPort,
-  invalidEnvVars,
   logFile,
   reviewsDir,
-  reviewTimeoutMs,
   stateDir,
   VERSION,
 } from "./paths.ts";
 import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "./plan-format.ts";
 import { redactLogFiles } from "./redact.ts";
-import { loadSettings, settings, watchSettings } from "./settings.ts";
+import {
+  getPort,
+  invalidEnvVars,
+  loadSettings,
+  reviewTimeoutMs,
+  settings,
+  watchSettings,
+} from "./settings.ts";
 import { createStore } from "./store.ts";
 import type { Decision, PlanInput } from "./types.ts";
 
@@ -520,9 +524,10 @@ async function runDaemon(): Promise<void> {
     existsSync(cfg) ? `settings: reading ${cfg}` : `settings: no config at ${cfg}; using defaults`,
     { settings: svc.current() },
   );
-  // A typo'd CARET_* var silently falls back to its default — surface it once
-  // at boot so "why is it on the default port?" is answerable from the log.
-  for (const name of invalidEnvVars()) log.warn("env", `${name} invalid; using default`);
+  // A typo'd CARET_* var silently falls through to the config file, then the
+  // default — surface it once at boot so "why is it on the default port?" is
+  // answerable from the log.
+  for (const name of invalidEnvVars()) log.warn("env", `${name} invalid; using config/default`);
   const store = createStore(reviewsDir(), log);
   await store.rehydrate();
   const html = await loadUiHtml();
@@ -599,8 +604,8 @@ async function runReviewSubcommand(): Promise<void> {
   setLogLevel(logging.level);
   setRedact(logging.redact);
   // Same boot-time surfacing as the daemon's — a typo'd CARET_* var otherwise
-  // silently falls back to its default.
-  for (const name of invalidEnvVars()) logWarn("env", `${name} invalid; using default`);
+  // silently falls through to the config file, then the default.
+  for (const name of invalidEnvVars()) logWarn("env", `${name} invalid; using config/default`);
   // Emit exactly one decision line. A signal arriving after the normal decision
   // was written must not append a second (deny) line.
   let responded = false;

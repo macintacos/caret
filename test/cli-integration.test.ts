@@ -206,7 +206,8 @@ test("the daemon logs env warns, ui fallback, and the sigterm shutdown", async (
     const recs = ndjsonRecords(await new Response(proc.stderr).text());
     expect(
       recs.some(
-        (r) => r.step === "env" && r.level === 40 && r.msg === "CARET_TIMEOUT invalid; using default",
+        (r) =>
+          r.step === "env" && r.level === 40 && r.msg === "CARET_TIMEOUT invalid; using config/default",
       ),
     ).toBe(true);
     expect(recs.some((r) => r.step === "signal" && r.msg === "sigterm: shutting down")).toBe(true);
@@ -242,7 +243,8 @@ test("the review hook warns about invalid CARET_* env vars in caret.log", async 
     const recs = ndjsonRecords(await Bun.file(join(stateHome, "caret", "caret.log")).text());
     expect(
       recs.some(
-        (r) => r.step === "env" && r.level === 40 && r.msg === "CARET_PORT invalid; using default",
+        (r) =>
+          r.step === "env" && r.level === 40 && r.msg === "CARET_PORT invalid; using config/default",
       ),
     ).toBe(true);
   } finally {
