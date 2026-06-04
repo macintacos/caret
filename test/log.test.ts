@@ -197,6 +197,45 @@ test("an explicit extra.source wins over the logger's own tag", () => {
   expect(records(dest)[0]).toMatchObject({ source: "ui" });
 });
 
+// --- caller location (EXC-451) ---
+
+// Stack-captured repo-relative `path:line` of the emitting call site. The
+// regex pins the file to this test (so we know the frame walk skipped src/log.ts
+// and landed on the real caller) and the trailing line number.
+const CALLER = /^test\/log\.test\.ts:\d+$/;
+
+test("hook records carry the caller location", () => {
+  logInfo("review", "created");
+  expect(records()[0].caller).toMatch(CALLER);
+});
+
+test("daemon records carry the caller location", () => {
+  const dest = join(home, "daemon-caller.log");
+  const log = createDaemonLogger(() => "info", dest);
+  log.info("listen", "listening");
+  expect(records(dest)[0].caller).toMatch(CALLER);
+});
+
+test("error records carry the caller location", () => {
+  logError("boom", new Error("x"));
+  expect(records()[0].caller).toMatch(CALLER);
+});
+
+test("bridged records (explicit extra.source) omit the caller location", () => {
+  const dest = join(home, "daemon-bridged.log");
+  const log = createDaemonLogger(() => "info", dest);
+  log.info("ui", "ui loaded", { source: "ui" });
+  const r = records(dest)[0];
+  expect(r.source).toBe("ui");
+  expect(r.caller).toBeUndefined();
+});
+
+test("with redaction on, the caller stays the repo-relative path", () => {
+  setRedact(true);
+  logInfo("review", "created");
+  expect(records()[0].caller).toMatch(CALLER);
+});
+
 // --- redaction (EXC-399) ---
 
 const realHome = homedir();
