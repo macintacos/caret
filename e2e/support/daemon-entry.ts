@@ -1,0 +1,58 @@
+#!/usr/bin/env bun
+// e2e daemon launcher: boots an isolated caret daemon for one Playwright test.
+//
+// Why not `bun src/cli.ts daemon`: the CLI resolves its port through the
+// settings layer, where CARET_PORT must be a POSITIVE int — port 0 is invalid
+// and would silently fall back to the production default (42718, the user's
+// real daemon). OS-assigned ports therefore require calling createServer
+// directly, which is also hermetic (explicit opts, no config-file reads), so
+// the user's ~/.config/caret/config.toml can never leak into a test run.
+//
+// Protocol with the spawning fixture (e2e/support/fixtures.ts): stdout carries
+// EXACTLY ONE JSON line `{"port": N}`; all logs go to stderr so the port
+// handshake can't be corrupted. The fixture owns the ephemeral XDG_STATE_HOME
+// and tears it down after the test.
+
+import { createServer } from "../../src/daemon.ts";
+import { createDaemonLogger } from "../../src/log.ts";
+import { prefsFile, reviewsDir } from "../../src/paths.ts";
+import { createStore } from "../../src/store.ts";
+
+// Refuse to run without an isolated state dir — never fall back to the real
+// ~/.local/state/caret (same posture as assertDevEnv in scripts/dev/driver.ts).
+if (!process.env.XDG_STATE_HOME) {
+  console.error("caret e2e daemon: XDG_STATE_HOME must be set to an isolated state dir");
+  process.exit(1);
+}
+
+// The shipped artifact, read from disk so a stale/missing build fails loudly.
+// The mise task depends on build-ui; this guard catches direct `bunx playwright
+// test` runs that skipped it.
+const htmlPath = `${import.meta.dir}/../../ui/dist/index.html`;
+const htmlFile = Bun.file(htmlPath);
+if (!(await htmlFile.exists())) {
+  console.error(`caret e2e daemon: ${htmlPath} missing — run \`mise run build-ui\` first`);
+  process.exit(1);
+}
+const html = await htmlFile.text();
+
+const log = createDaemonLogger(() => "info"); // NDJSON to stderr
+const store = createStore(reviewsDir(), log);
+await store.rehydrate();
+
+const server = createServer({
+  store,
+  port: 0, // OS-assigned: parallel workers can never collide
+  // Max setTimeout delay (2^31-1 ms; larger overflows to ~1ms) — the daemon
+  // must never idle-shut-down mid-test. Same value .mise/tasks/dev uses.
+  idleMs: 2147483647,
+  // Belt and braces: even an unexpected idle fire must not process.exit.
+  onShutdown: () => {},
+  prefsPath: prefsFile(), // under the ephemeral state dir
+  serveHtml: () => html,
+  log,
+});
+
+// The one stdout line the fixture parses. Bun.serve keeps the process alive;
+// the fixture SIGTERMs it at teardown.
+console.log(JSON.stringify({ port: server.port }));
