@@ -820,6 +820,25 @@ test("POST /api/logs drops extra keys that collide with record fields", async ()
   expect(extra.source).toBe("ui");
 });
 
+test("POST /api/logs drops a client-forged extra.caller", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+  await postLogs([
+    {
+      level: "info",
+      step: "ui",
+      msg: "forge caller",
+      extra: { caller: "src/evil.ts:1", keep: "me" },
+    },
+  ]);
+  const extra = recs.find((r) => r.msg === "forge caller")?.extra as Record<string, unknown>;
+  // caller is a structural field stamped by src/log.ts; a client-sent one is a
+  // forgery and must be stripped, while the innocent key survives and source forced.
+  expect(extra.caller).toBeUndefined();
+  expect(extra.keep).toBe("me");
+  expect(extra.source).toBe("ui");
+});
+
 test("POST /api/logs forwards an error-level event at level 'error'", async () => {
   const { recs, log } = recordingLog();
   await boot({ log });
