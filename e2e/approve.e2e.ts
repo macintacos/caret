@@ -17,7 +17,5 @@ test("approving resolves the review in UI and API", async ({ daemon, page }) => 
 
   // API: GET /api/reviews no longer lists the id (an allow removes the review
   // from the pending set).
-  await expect
-    .poll(async () => (await daemon.listReviews()).map((r) => r.id))
-    .not.toContain(id);
+  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).not.toContain(id);
 });

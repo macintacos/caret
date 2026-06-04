@@ -36,9 +36,7 @@ test("dialog opens, Escape closes, Cmd/Ctrl+Enter submits a rejection with feedb
   await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
 
   // API: rejected, and the decision carries the feedback text.
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.decision?.behavior)
-    .toBe("deny");
+  await expect.poll(async () => (await daemon.getReview(id)).body?.decision?.behavior).toBe("deny");
   const review = (await daemon.getReview(id)).body;
   expect(review?.status).toBe("rejected");
   expect(review?.decision?.feedback).toContain(FEEDBACK);

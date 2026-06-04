@@ -52,7 +52,11 @@ function awaitPortLine(child: ChildProcess, stderr: () => string): Promise<numbe
         settle(() => resolve((JSON.parse(buf.slice(0, nl)) as { port: number }).port));
       } catch (err) {
         settle(() =>
-          reject(new Error(`caret e2e daemon: bad port line ${JSON.stringify(buf.slice(0, nl))}: ${err}`)),
+          reject(
+            new Error(
+              `caret e2e daemon: bad port line ${JSON.stringify(buf.slice(0, nl))}: ${err}`,
+            ),
+          ),
         );
       }
     };
@@ -60,7 +64,9 @@ function awaitPortLine(child: ChildProcess, stderr: () => string): Promise<numbe
     // would spuriously reject even though the port line was already written.
     const onClose = (code: number | null) => {
       settle(() =>
-        reject(new Error(`caret e2e daemon exited (code ${code}) before reporting a port\n${stderr()}`)),
+        reject(
+          new Error(`caret e2e daemon exited (code ${code}) before reporting a port\n${stderr()}`),
+        ),
       );
     };
     // Without this, a spawn failure (e.g. `bun` missing from PATH) is an
@@ -70,7 +76,9 @@ function awaitPortLine(child: ChildProcess, stderr: () => string): Promise<numbe
     };
     const timer = setTimeout(() => {
       settle(() =>
-        reject(new Error(`caret e2e daemon: no port line within ${BOOT_TIMEOUT_MS}ms\n${stderr()}`)),
+        reject(
+          new Error(`caret e2e daemon: no port line within ${BOOT_TIMEOUT_MS}ms\n${stderr()}`),
+        ),
       );
     }, BOOT_TIMEOUT_MS);
     // Settle exactly once, then detach everything so late events are inert.
@@ -103,6 +111,7 @@ async function waitForHealth(url: string): Promise<void> {
 }
 
 export const test = base.extend<{ daemon: Daemon }>({
+  // biome-ignore lint/correctness/noEmptyPattern: Playwright's fixture signature requires the destructuring slot; {} declares "no fixture dependencies"
   daemon: async ({}, use) => {
     // Ephemeral, isolated state: the daemon's reviews/prefs/logs all live under
     // this dir and are wiped at teardown. The user's real state is never touched.

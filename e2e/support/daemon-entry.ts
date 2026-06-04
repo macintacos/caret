@@ -61,5 +61,7 @@ process.stdin.on("close", () => process.exit(0));
 process.stdin.on("end", () => process.exit(0));
 
 // The one stdout line the fixture parses. Bun.serve keeps the process alive;
-// the fixture SIGTERMs it at teardown.
+// the fixture SIGTERMs it at teardown — no handler installed on purpose: the
+// runtime's default terminate is fine since reviews are write-through and
+// there is nothing to flush (runDaemon's signal handlers live in cli.ts).
 console.log(JSON.stringify({ port: server.port }));
