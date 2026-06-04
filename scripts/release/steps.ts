@@ -348,15 +348,16 @@ export async function prepare(
     }
   }
 
-  // Gate on preflight (format, lint, test, build).
+  // Gate on preflight (lint, tests, build — check-only, EXC-462).
   if (apply) {
     const pf = await deps.preflight();
     if (!pf.ok) {
       throw new GuardError("PREFLIGHT_FAILED", pf.output.trim() || "mise run preflight failed.");
     }
-    // Preflight write-formats (`mise run format`). If it touched any tracked file
-    // outside the release's manifest+changelog set, committing only those files
-    // would silently drop the reformat — abort so the human commits formatting first.
+    // Preflight is check-only (EXC-462) and must leave the tree untouched. If
+    // any tracked file outside the release's manifest+changelog set drifted
+    // anyway, committing only the release set would silently drop that change —
+    // abort so a human sorts it out first.
     const drifted = await offendingPaths(deps, [...MANIFESTS, CHANGELOG_PATH]);
     if (drifted.length > 0) {
       throw new GuardError(
