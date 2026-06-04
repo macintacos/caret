@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type ChildProcess, spawn } from "node:child_process";
-import { expect, test as base } from "@playwright/test";
+import { expect, type Page, test as base } from "@playwright/test";
 import type { ClientReview, PlanInput, RouteResult } from "../../src/types.ts";
 import { FIXTURE_PLAN } from "./fixture-plan.ts";
 
@@ -144,5 +144,21 @@ export const test = base.extend<{ daemon: Daemon }>({
     await use(daemon.url);
   },
 });
+
+/**
+ * Wait until the safe-mode grace window that opened at app mount has passed.
+ *
+ * The guard (ui/src/lib/safeMode.ts) arms a 300ms grace window when App mounts;
+ * a keystroke inside it is deliberately swallowed — that's the feature, and
+ * safe-mode.e2e.ts asserts it. Specs whose FIRST key press could otherwise race
+ * that window call this after asserting the plan is visible (mount done, so the
+ * guard armed at or before the captured instant). Not a wall-clock sleep: the
+ * condition reads performance.now(), the same clock the guard reads, so it
+ * cannot race hydration speed.
+ */
+export async function waitPastSafeModeGrace(page: Page): Promise<void> {
+  const t0 = await page.evaluate(() => performance.now());
+  await page.waitForFunction((t) => performance.now() > t + 350, t0);
+}
 
 export { expect };

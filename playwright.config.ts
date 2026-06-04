@@ -19,5 +19,16 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    {
+      name: "chromium",
+      use: {
+        ...devices["Desktop Chrome"],
+        // After the device spread (which pins 1280x720): the contents rail
+        // (Toc.svelte) is display:none below the shared 1400px breakpoint, so a
+        // sub-1400 viewport would hide it from the smoke spec.
+        viewport: { width: 1600, height: 900 },
+      },
+    },
+  ],
 });
