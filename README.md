@@ -161,9 +161,11 @@ type checking is folded into linting via `hk.pkl`.
 `mise run dev` is self-contained — no separate `bin/caret daemon` needed. It starts an isolated
 caret daemon on a dedicated dev port (`CARET_PORT`, default `42719`, distinct from the `42718`
 production default) with an ephemeral `XDG_STATE_HOME`, seeds it with one fake pending plan, and
-runs a driver that plays the agent's side so request-changes / approve round-trips keep working.
-Everything is reaped on Ctrl-C, and the dev daemon never reads or writes a globally-installed
-caret's reviews. Override the port with `CARET_DEV_PORT` if `42719` is taken.
+runs a driver that plays the agent's side through the real review hook path: each request-changes
+appends a revision section quoting your feedback and resubmits, and approve re-seeds a fresh plan,
+with real hook records landing in the dev state dir's `caret.log`. Everything is reaped on Ctrl-C,
+and the dev daemon never reads or writes a globally-installed caret's reviews. Override the port
+with `CARET_DEV_PORT` if `42719` is taken.
 
 For a quick local trial without installing, load the plugin from a checkout:
 

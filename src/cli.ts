@@ -342,7 +342,7 @@ async function backoff(attempt: number): Promise<void> {
   await Bun.sleep(ms);
 }
 
-async function postReview(baseUrl: string, input: PlanInput): Promise<{ id: string }> {
+export async function postReview(baseUrl: string, input: PlanInput): Promise<{ id: string }> {
   const res = await fetch(`${baseUrl}/api/reviews`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -352,7 +352,7 @@ async function postReview(baseUrl: string, input: PlanInput): Promise<{ id: stri
   return (await res.json()) as { id: string };
 }
 
-async function longPoll(baseUrl: string, id: string): Promise<Decision | null> {
+export async function longPoll(baseUrl: string, id: string): Promise<Decision | null> {
   const res = await fetch(`${baseUrl}/api/reviews/${id}/decision`);
   if (res.status === 204) return null; // heartbeat: still pending — re-poll
   if (!res.ok) throw new Error(`decision long-poll failed: ${res.status}`);
