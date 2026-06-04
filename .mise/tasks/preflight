@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-#MISE description="Pre-push gate: format, lint (Biome + tsc + svelte-check), test, build, and e2e"
+#MISE description="Pre-push gate: format, lint (Biome + tsc + svelte-check), tests (unit + e2e in parallel), and build"
 
 set -euo pipefail
 
 # Run the verification tasks directly (not via #MISE depends) so they execute in
 # a fixed order with fail-fast: format writes fixes first, then the read-only
-# checks, the test suite, and the build confirm the formatted tree is shippable.
-# Finally the Playwright e2e suite runs against the just-built UI.
+# checks, then the tests, and the build last confirms the formatted tree is
+# shippable. The two test suites are independent (separate runners, separate
+# processes), so `:::` runs them in parallel: mise prefixes each task's output
+# and fails the gate if either fails. test-e2e's depends=["build-ui"] gives it
+# a fresh UI inside the parallel group, so it never races the final build.
 mise run format
 mise run lint
-mise run test
+mise run test ::: test-e2e
 mise run build
-mise run test-e2e
