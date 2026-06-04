@@ -109,8 +109,8 @@ export function startPolling(
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   // Transition state: log only when the poll's health flips or the pending count
-  // changes — never per-tick, which would drown the timeline in noise.
-  let healthy = true;
+  // changes — never per-tick, which would drown the timeline in noise. Health is
+  // carried by `failures` alone: zero ⟺ healthy.
   let failures = 0;
   let lastCount = -1;
 
@@ -118,9 +118,8 @@ export function startPolling(
     if (stopped) return;
     try {
       const reviews = await listReviews();
-      if (!healthy) {
+      if (failures > 0) {
         uiLog.info("poll", "poll recovered", { failures });
-        healthy = true;
         failures = 0;
       }
       if (reviews.length !== lastCount) {
@@ -129,12 +128,9 @@ export function startPolling(
       }
       if (!stopped) onUpdate(reviews);
     } catch (err) {
-      failures++;
       // Warn only on the healthy→unhealthy transition; a sustained outage logs once.
-      if (healthy) {
-        healthy = false;
-        uiLog.warn("poll", "poll failed", { reason: String(err) });
-      }
+      if (failures === 0) uiLog.warn("poll", "poll failed", { reason: String(err) });
+      failures++;
       onError?.(err);
     } finally {
       if (!stopped) timer = setTimeout(tick, intervalMs);

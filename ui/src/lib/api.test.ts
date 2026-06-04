@@ -178,7 +178,9 @@ describe("startPolling instrumentation", () => {
   }
 
   // Await until `predicate` holds or a deadline passes, polling real timers.
-  async function until(predicate: () => boolean, timeoutMs = 500): Promise<void> {
+  // The deadline only bounds the failure case — generous so a loaded CI machine
+  // (parallel suites, saturated event loop) can't outrun it and flake.
+  async function until(predicate: () => boolean, timeoutMs = 5000): Promise<void> {
     const start = Date.now();
     while (!predicate()) {
       if (Date.now() - start > timeoutMs) throw new Error("until: timed out");
