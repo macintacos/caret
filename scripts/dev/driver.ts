@@ -1,15 +1,17 @@
 #!/usr/bin/env bun
 // Deterministic dev driver: plays the agent's side of the caret protocol so
 // `mise run dev` shows a fake plan that survives request-changes / approve
-// round-trips — no real Claude session, no LLM. It seeds one fake plan, then
-// long-polls the decision and either threads a canned revision (on
-// request-changes, reusing the sessionId) or re-seeds a fresh plan (on approve).
-//
-// Mirrors the HTTP protocol helpers in src/cli.ts (postReview / longPoll /
-// httpHealth) and the revision-threading contract in src/reviews.ts.
+// round-trips — no real Claude session, no LLM. Every submission goes through
+// the real hook logic (runReview from src/cli.ts) in-process, so format
+// validation, posting, long-polling, decision handling, and hook logging
+// (caret.log in the dev state dir) all run exactly as in production. On
+// request-changes it appends a "Revision N" section quoting the reviewer's
+// feedback and resubmits; on approve it re-seeds a fresh v1. The
+// revision-threading contract lives in src/reviews.ts.
 
+import { longPoll, postReview, type ReviewDeps, runReview } from "../../src/cli.ts";
+import type { PermissionDecision } from "../../src/feedback.ts";
 import { DEFAULT_PORT } from "../../src/paths.ts";
-import type { Decision, PlanInput } from "../../src/types.ts";
 
 /** Fixed session for the single dev review; reused across versions so a
  * revision threads into the same review instead of forking a new one. */
@@ -19,31 +21,6 @@ const log = (msg: string) => process.stderr.write(`[caret dev driver] ${msg}\n`)
 
 function fixture(name: string): Promise<string> {
   return Bun.file(`${import.meta.dir}/${name}`).text();
-}
-
-async function postPlan(base: string, plan: string): Promise<string> {
-  const input: PlanInput = { sessionId: DEV_SESSION, cwd: process.cwd(), plan };
-  const res = await fetch(`${base}/api/reviews`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  if (!res.ok) throw new Error(`POST /api/reviews failed: ${res.status}`);
-  const { id } = (await res.json()) as { id: string };
-  return id;
-}
-
-/** Seed the v1 fake plan as a new pending review. Used for the initial seed and
- * to re-seed after an approve (the prior review is gone, so this starts a fresh
- * thread). */
-export async function seedPlan(base: string): Promise<string> {
-  return postPlan(base, await fixture("fake-plan.md"));
-}
-
-/** Post the canned v2 revision, reusing DEV_SESSION so it appends as a new
- * version of the rejected review rather than forking a new one. */
-export async function postRevision(base: string): Promise<string> {
-  return postPlan(base, await fixture("fake-plan.revised.md"));
 }
 
 /** Poll GET /api/health until the daemon reports the caret identity. */
@@ -60,12 +37,79 @@ export async function waitForHealth(base: string, maxAttempts = 100): Promise<vo
   throw new Error("caret dev daemon did not become healthy in time");
 }
 
-/** One bounded decision poll: a Decision, or null on a 204 heartbeat. */
-export async function longPollOnce(base: string, id: string): Promise<Decision | null> {
-  const res = await fetch(`${base}/api/reviews/${id}/decision`);
-  if (res.status === 204) return null;
-  if (!res.ok) throw new Error(`decision long-poll failed: ${res.status}`);
-  return (await res.json()) as Decision;
+/** The hook stdin a real PermissionRequest session would pipe to `caret
+ * review`, for the fixed dev session. */
+export function hookStdin(plan: string): string {
+  return JSON.stringify({ session_id: DEV_SESSION, cwd: process.cwd(), tool_input: { plan } });
+}
+
+/** Append a "Revision N" section quoting the reviewer's feedback. The feedback
+ * is fenced as `text` with a fence longer than any backtick run it contains, so
+ * hostile feedback (untagged fences, indented code) can neither break out nor
+ * introduce an untagged block — the plan-format gate would insta-reject the
+ * revision (src/plan-format.ts). */
+export function appendRevision(plan: string, feedback: string, n: number): string {
+  const runs = feedback.match(/`+/g) ?? [];
+  const fence = "`".repeat(Math.max(3, ...runs.map((r) => r.length + 1)));
+  return [
+    plan.trimEnd(),
+    "",
+    `## Revision ${n}`,
+    "",
+    "Addressing the reviewer's feedback:",
+    "",
+    `${fence}text`,
+    feedback,
+    fence,
+    "",
+    "Adjusted the approach accordingly; resubmitting for another look.",
+    "",
+  ].join("\n");
+}
+
+/** Driver-side submission state: the plan to (re)submit and how many revision
+ * sections it carries. */
+export interface DriverState {
+  plan: string;
+  revision: number;
+}
+
+/** Pure step: from the hook's decision, compute the next submission. Approve
+ * re-seeds a fresh v1 (the daemon ended the thread; reset the counter). A deny
+ * whose message starts with "caret: " is one of the hook's own fail-safe /
+ * format denies, not reviewer feedback — resubmit unchanged rather than append
+ * a bogus revision. Any other deny is reviewer feedback (possibly the "Plan
+ * changes requested." default for empty input): append a Revision N section. */
+export function nextPlan(
+  state: DriverState,
+  decision: PermissionDecision,
+  freshPlan: string,
+): DriverState & { action: "reseed" | "revise" | "resubmit" } {
+  if (decision.behavior === "allow") return { plan: freshPlan, revision: 0, action: "reseed" };
+  const message = decision.message ?? "";
+  if (message.startsWith("caret: ")) return { ...state, action: "resubmit" };
+  const revision = state.revision + 1;
+  return { plan: appendRevision(state.plan, message, revision), revision, action: "revise" };
+}
+
+/** ReviewDeps for dev — the analog of prodReviewDeps (src/cli.ts) with the
+ * daemon owned by the mise task: ensureDaemon just waits for health on the
+ * fixed dev URL (no spawn/takeover; a throw after the health budget bubbles to
+ * runReview's fail-safe deny), the browser never opens (Vite on 5173 is the
+ * dev surface), and timeoutMs is the max setTimeout delay (a larger value
+ * overflows and clamps to ~1ms — the same trap .mise/tasks/dev documents for
+ * CARET_IDLE_MS) so an idle session never churns fail-safe denies. */
+export function devReviewDeps(base: string): ReviewDeps {
+  return {
+    ensureDaemon: async () => {
+      await waitForHealth(base);
+      return base;
+    },
+    postReview,
+    longPoll,
+    openBrowser: () => {},
+    timeoutMs: 2147483647,
+  };
 }
 
 /** Refuse to run unless the dev port + isolated state dir are explicitly set —
@@ -83,31 +127,34 @@ export function assertDevEnv(): void {
   }
 }
 
-/** Seed a plan, then keep the dev review alive across decisions forever. */
+/** Submit plans through the real hook forever: seed v1, then per decision
+ * append a feedback-quoting revision (request-changes), re-seed a fresh v1
+ * (approve), or resubmit unchanged (the hook's own fail-safe denies). */
 export async function run(): Promise<void> {
   assertDevEnv();
   const base = `http://127.0.0.1:${process.env.CARET_PORT}`;
-  await waitForHealth(base);
-  let id = await seedPlan(base);
-  log(`seeded fake plan as review ${id}`);
-
+  const v1 = await fixture("fake-plan.md");
+  const deps = devReviewDeps(base);
+  let state: DriverState = { plan: v1, revision: 0 };
   for (;;) {
-    try {
-      const decision = await longPollOnce(base, id);
-      if (!decision) continue; // heartbeat: still pending
-      if (decision.behavior === "deny") {
-        id = await postRevision(base);
-        log(`changes requested → posted revision as review ${id}`);
-      } else {
-        id = await seedPlan(base);
-        log(`approved → re-seeded a fresh plan as review ${id}`);
-      }
-    } catch (err) {
-      // Daemon blip / dropped poll / transient POST failure — back off and
-      // retry rather than letting the dev driver die mid-session.
-      log(`transient error (${err}); backing off`);
+    // Never throws: every abnormal path inside runReview becomes a deny.
+    const out = await runReview(hookStdin(state.plan), deps);
+    const next = nextPlan(state, out.hookSpecificOutput.decision, v1);
+    if (next.action === "revise") {
+      log(`changes requested → appending Revision ${next.revision} and resubmitting`);
+    } else if (next.action === "reseed") {
+      log("approved → re-seeding a fresh plan");
+    } else {
+      // Fail-safe deny from the hook itself (daemon down, poll timeout): back
+      // off so a dead daemon can't tight-loop. A fail-safe after a successful
+      // post leaves the review pending, so the resubmit starts a NEW thread
+      // (routeIncomingPlan appends only to a rejected review) and the Revision
+      // label can drift from the daemon's version number — both are accepted
+      // dev-only noise on an already-broken session.
+      log("hook fail-safe deny → resubmitting the plan unchanged");
       await Bun.sleep(500);
     }
+    state = next;
   }
 }
 
