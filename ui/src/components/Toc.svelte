@@ -82,8 +82,9 @@
      anchored to the rail (not a full-height edge strip): 2.5rem of grace above,
      below, and to the right (still >12rem short of the prose column, whose
      ≥1400px left edge is .col-plan's padding + .prose's 15rem lane), and
-     1.25rem left — exactly to the viewport edge, since the clamp above always
-     resolves to its 1.25rem max at ≥1400px. z-index:-1 keeps it painted below
+     1.25rem left — enough to reach the viewport edge, since the clamp above
+     never exceeds 1.25rem (any overshoot just clips at x=0). z-index:-1 keeps
+     it painted below
      the ticks and panel so both stay clickable; hovering it still counts as
      .toc:hover, which is all the reveal rule needs. */
   .toc::before {
