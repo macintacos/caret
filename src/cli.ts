@@ -199,14 +199,25 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
   }
 }
 
-/** Parsed /api/health body. `build`/`version` are absent on a pre-fix daemon. */
-type HealthBody = { service?: string; build?: string; version?: string };
+/** Parsed /api/health body. `build`/`version` are absent on a pre-fix daemon,
+ * `stateDir`/`instanceId` (EXC-461) on a pre-identity one. */
+type HealthBody = {
+  service?: string;
+  build?: string;
+  version?: string;
+  stateDir?: string;
+  instanceId?: string;
+};
 
 export interface EnsureDeps {
   baseUrl: string;
   /** This binary's UI build fingerprint and version, for staleness comparison. */
   currentBuild: string;
   currentVersion: string;
+  /** The hook's own resolved state dir — its world identity. A daemon whose
+   * health reports a different stateDir belongs to another world and is never
+   * reused or retired (EXC-461). */
+  currentStateDir: string;
   /** Returns the parsed /api/health body, or null if the connection refused. */
   health: (baseUrl: string) => Promise<HealthBody | null>;
   /** Read the daemon lock, or null if absent/unreadable. */
@@ -232,14 +243,35 @@ function isAddrInUse(e: unknown): boolean {
   return e instanceof Error && /EADDRINUSE/.test(e.message);
 }
 
+/** A health body whose stateDir names another world's state dir. A pre-identity
+ * daemon (no stateDir field) can't be distinguished and is treated as same-world
+ * for back-compat — on the fixed prod port it is by definition this user's own. */
+function isForeignWorld(h: HealthBody, currentStateDir: string): boolean {
+  return h.stateDir !== undefined && h.stateDir !== currentStateDir;
+}
+
+/** The foreign-world conflict is a configuration problem (two worlds sharing one
+ * port), not a takeover failure — reusing the daemon would cross-attach this
+ * world's reviews into the other world's state dir (EXC-461). Mirrors the
+ * non-caret-squatter throw below; deliberately exempt from the never-deny
+ * fallback. */
+const FOREIGN_WORLD_ERROR =
+  "port serves a different caret world (state dir mismatch) — set CARET_PORT to a free port";
+
 /** Ensure a caret daemon of THIS build owns the port: reuse a same-build daemon,
  * gracefully retire a stale one and spawn a fresh daemon, and clean orphan locks
  * (EXC-406). Never denies a review because takeover failed — an unretireable
- * stale daemon is reused (serving its old UI) rather than left unreachable. */
+ * stale daemon is reused (serving its old UI) rather than left unreachable. The
+ * one exception: a foreign world's daemon (EXC-461) is neither reused nor
+ * retired — that's a config conflict, and cross-attaching IS the bug. */
 export async function ensureDaemon(deps: EnsureDeps): Promise<string> {
   for (let attempt = 0; attempt < deps.maxAttempts; attempt++) {
     const h = await deps.health(deps.baseUrl);
     if (h && h.service === "caret") {
+      // Another world's daemon: refuse before any reuse/retire logic (EXC-461).
+      if (isForeignWorld(h, deps.currentStateDir)) {
+        throw new Error(FOREIGN_WORLD_ERROR);
+      }
       // Reuse only a same-build, same-version daemon; otherwise it's serving a
       // stale UI/code and must step down so this binary's daemon can take over.
       if (h.build === deps.currentBuild && h.version === deps.currentVersion) {
@@ -275,9 +307,13 @@ export async function ensureDaemon(deps: EnsureDeps): Promise<string> {
   }
   // Exhausted: never deny a review on takeover failure. If a live caret daemon
   // is still answering (even a stale one we couldn't retire), reuse it; only
-  // throw when nothing caret is reachable.
+  // throw when nothing caret is reachable — or when the answering daemon is a
+  // foreign world's (reusing it would cross-attach; EXC-461).
   const final = await deps.health(deps.baseUrl);
-  if (final && final.service === "caret") return deps.baseUrl;
+  if (final && final.service === "caret") {
+    if (isForeignWorld(final, deps.currentStateDir)) throw new Error(FOREIGN_WORLD_ERROR);
+    return deps.baseUrl;
+  }
   throw new Error("caret daemon did not become healthy in time");
 }
 
@@ -430,9 +466,11 @@ function openBrowser(url: string): void {
 async function prodEnsureDeps(s: Settings): Promise<EnsureDeps> {
   return {
     baseUrl: `http://localhost:${getPort(s)}`,
-    // The current binary's identity: its build fingerprint + the package version.
+    // The current binary's identity: its build fingerprint + the package version
+    // + the world it serves (resolved state dir, EXC-461).
     currentBuild: await currentBuildId(),
     currentVersion: VERSION,
+    currentStateDir: stateDir(),
     health: httpHealth,
     readLock: readDaemonLock,
     isAlive: isPidAlive,
