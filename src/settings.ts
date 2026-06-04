@@ -22,7 +22,6 @@ const SettingsSchema = z.object({
   logging: z
     .object({
       level: z.enum(["debug", "info", "warn", "error"]).default("info"), // EXC-398
-      debug: z.boolean().default(false), // EXC-400
       redact: z.boolean().default(false), // EXC-399: raw by default; `caret redact` covers after-the-fact
     })
     // zod 4: .default() does NOT parse its value, .prefault({}) runs {} through

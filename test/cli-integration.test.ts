@@ -207,8 +207,9 @@ test("the daemon logs the parsed settings at startup", async () => {
       .map((l) => JSON.parse(l) as Record<string, unknown>)
       .find((r) => r.step === "settings");
     expect(rec).toBeDefined();
-    // Effective (validated) values, never raw config text.
-    expect(rec?.settings).toEqual({ logging: { level: "info", debug: true, redact: true } });
+    // Effective (validated) values, never raw config text. `debug` is no longer
+    // a known key (EXC-400): zod strips it, so it never reaches the boot line.
+    expect(rec?.settings).toEqual({ logging: { level: "info", redact: true } });
   } finally {
     proc.kill("SIGKILL");
     await proc.exited;
