@@ -3,6 +3,7 @@
 // EXC-462: lint/test/build-ui start immediately, dependents wait on build-ui
 // and dedupe it via MISE_TASK_SKIP, failures don't hide other results, and
 // the summary surfaces failed output plus the `mise run format` hint.
+import { join } from "node:path";
 import { expect, test } from "bun:test";
 import {
   type SpawnOutcome,
@@ -108,7 +109,7 @@ test("mise task files still declare the build-ui dependency the orchestrator ski
   // the dependents' shared dependency. If a task file's depends ever changes,
   // this fails so preflight's DAG gets updated alongside it.
   for (const name of ["test-e2e", "build-bin"]) {
-    const script = await Bun.file(`.mise/tasks/${name}`).text();
+    const script = await Bun.file(join(import.meta.dir, "../.mise/tasks", name)).text();
     expect(script).toContain('#MISE depends=["build-ui"]');
   }
 });
