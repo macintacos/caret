@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { readFileSync, statSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   createDaemonLogger,
@@ -10,6 +10,7 @@ import {
   logInfo,
   logWarn,
   setLogLevel,
+  setRedact,
 } from "../src/log.ts";
 import { daemonLogFile, logFile } from "../src/paths.ts";
 
@@ -23,6 +24,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   setLogLevel("info"); // reset so level changes don't leak across tests
+  setRedact(false); // reset so redaction toggles don't leak across tests
   if (savedXdg === undefined) delete process.env.XDG_STATE_HOME;
   else process.env.XDG_STATE_HOME = savedXdg;
   await rm(home, { recursive: true, force: true });
@@ -170,6 +172,78 @@ test("createDaemonLogger writes NDJSON with pid in base and respects the level t
   expect(recs[0]).toMatchObject({ level: 30, step: "review", msg: "review created: r1", id: "r1" });
   expect(recs[0].pid).toBe(process.pid);
   expect(recs[1]).toMatchObject({ level: 20, step: "boot", msg: "now visible" });
+});
+
+// --- redaction (EXC-399) ---
+
+const realHome = homedir();
+
+test("by default (redaction off), home paths pass through raw", () => {
+  logError("raw", new Error(`boom at ${realHome}/src/cli.ts`), { cwd: `${realHome}/proj` });
+  const body = readFileSync(logFile(), "utf-8");
+  expect(body).toContain(realHome);
+});
+
+test("with redaction on, identifiable strings never reach the file but debuggability survives", () => {
+  setRedact(true);
+  logError("runReview", new Error(`failed reading ${realHome}/.config/caret/config.toml`), {
+    cwd: `${realHome}/GitLocal/proj`,
+    plan: "SECRET PLAN BODY",
+  });
+  logInfo("settings", `settings: reading ${realHome}/.config/caret/config.toml`);
+  const body = readFileSync(logFile(), "utf-8");
+  expect(body).not.toContain(realHome);
+  expect(body).not.toContain("SECRET PLAN BODY");
+  const [errRec, infoRec] = records();
+  expect(errRec.step).toBe("runReview");
+  expect(errRec.msg).toBe("failed reading ~/.config/caret/config.toml");
+  expect(errRec.cwd).toBe("~/GitLocal/proj");
+  expect(errRec.plan).toBe("<redacted>");
+  const err = errRec.err as { message: string; stack: string };
+  expect(err.message).toBe("failed reading ~/.config/caret/config.toml");
+  expect(err.stack).toMatch(/\n\s+at /); // stack shape preserved
+  expect(infoRec.msg).toBe("settings: reading ~/.config/caret/config.toml");
+});
+
+test("with redaction on, a nested cause chain is scrubbed at depth", () => {
+  setRedact(true);
+  logError("deep", new Error(`outer ${realHome}/a`, { cause: new Error(`inner ${realHome}/b`) }));
+  const err = records()[0].err as { message: string; cause: { message: string } };
+  expect(err.message).toBe("outer ~/a");
+  expect(err.cause.message).toBe("inner ~/b");
+});
+
+test("plan and prompt extras are censored even with redaction off", () => {
+  logInfo("decision", `at ${realHome}/x`, { plan: "SECRET PLAN", prompt: "SECRET PROMPT" });
+  const r = records()[0];
+  expect(r.plan).toBe("<redacted>");
+  expect(r.prompt).toBe("<redacted>");
+  expect(r.msg).toContain(realHome); // the toggle is off: paths pass through raw
+});
+
+test("a cyclic extra object never throws and writes one record", () => {
+  setRedact(true);
+  const extra: Record<string, unknown> = { ok: "fine" };
+  extra.self = extra;
+  expect(() => logInfo("cyclicExtra", "still logs", extra)).not.toThrow();
+  const recs = records();
+  expect(recs.length).toBe(1);
+  expect(recs[0].msg).toBe("still logs");
+  // The walk cuts the cycle with a marker. Its exact nesting depends on the
+  // emit path's `{ ...extra }` copy (the copy is a new root, so the original
+  // is first re-seen one level down) — assert the cut, not the position.
+  expect(JSON.stringify(recs[0].self)).toContain("<cyclic>");
+});
+
+test("createDaemonLogger redacts when its redact thunk returns true", () => {
+  const dest = join(home, "daemon-redact.log");
+  const log = createDaemonLogger(() => "info", dest, () => true);
+  log.error("request", new Error(`kaboom at ${realHome}/srv`), { cwd: `${realHome}/proj` });
+  const body = readFileSync(dest, "utf-8");
+  expect(body).not.toContain(realHome);
+  const r = records(dest)[0];
+  expect(r.msg).toBe("kaboom at ~/srv");
+  expect(r.cwd).toBe("~/proj");
 });
 
 test("createDaemonLogger error method serializes an Error", () => {

@@ -23,7 +23,7 @@ const SettingsSchema = z.object({
     .object({
       level: z.enum(["debug", "info", "warn", "error"]).default("info"), // EXC-398
       debug: z.boolean().default(false), // EXC-400
-      redact: z.boolean().default(true), // EXC-399
+      redact: z.boolean().default(false), // EXC-399: raw by default; `caret redact` covers after-the-fact
     })
     // zod 4: .default() does NOT parse its value, .prefault({}) runs {} through
     // the inner schema so a missing [logging] table picks up every key default.

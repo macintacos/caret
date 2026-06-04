@@ -23,13 +23,13 @@ afterEach(async () => {
 });
 
 test("a valid config.toml is parsed and validated", async () => {
-  await Bun.write(file, '[logging]\nlevel = "warn"\ndebug = true\nredact = false\n');
-  expect(loadSettings(file)).toEqual({ logging: { level: "warn", debug: true, redact: false } });
+  await Bun.write(file, '[logging]\nlevel = "warn"\ndebug = true\nredact = true\n');
+  expect(loadSettings(file)).toEqual({ logging: { level: "warn", debug: true, redact: true } });
 });
 
 test("an absent file yields all defaults with no error", () => {
   expect(loadSettings(file)).toEqual(DEFAULTS);
-  expect(DEFAULTS).toEqual({ logging: { level: "info", debug: false, redact: true } });
+  expect(DEFAULTS).toEqual({ logging: { level: "info", debug: false, redact: false } });
 });
 
 test("malformed TOML falls back to defaults without throwing", async () => {
@@ -52,7 +52,7 @@ test("an invalid value falls back to defaults and logs the key path, never the v
 
 test("unknown keys are ignored at the top level and inside tables", async () => {
   await Bun.write(file, '[telemetry]\nenabled = true\n\n[logging]\nlevel = "debug"\nfuture_flag = 3\n');
-  expect(loadSettings(file)).toEqual({ logging: { level: "debug", debug: false, redact: true } });
+  expect(loadSettings(file)).toEqual({ logging: { level: "debug", debug: false, redact: false } });
 });
 
 test("current() yields all defaults when the file never existed", () => {

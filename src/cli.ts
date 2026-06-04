@@ -14,7 +14,14 @@ import { existsSync, mkdirSync, openSync, readFileSync, unlinkSync } from "node:
 import { dirname } from "node:path";
 import { createServer, type CaretServer } from "./daemon.ts";
 import { denyOutput, type HookOutput, toHookOutput } from "./feedback.ts";
-import { createDaemonLogger, type ErrorContext, logError, logInfo, setLogLevel } from "./log.ts";
+import {
+  createDaemonLogger,
+  type ErrorContext,
+  logError,
+  logInfo,
+  setLogLevel,
+  setRedact,
+} from "./log.ts";
 import {
   buildHash,
   configFile,
@@ -465,11 +472,15 @@ async function currentBuildId(): Promise<string> {
 
 async function runDaemon(): Promise<void> {
   // Leveled NDJSON to stderr (spawnDaemon redirects it into daemon.log). The
-  // level thunk re-reads settings().current() per emit, so config.toml edits
-  // hot-reload without a restart — and the boot line below doubles as the
-  // EXC-429 settings warm: an invalid config is detected and logged here, not
-  // on first use.
-  const log = createDaemonLogger(() => settings().current().logging.level);
+  // level and redact thunks re-read settings().current() per emit, so
+  // config.toml edits hot-reload without a restart — and the boot line below
+  // doubles as the EXC-429 settings warm: an invalid config is detected and
+  // logged here, not on first use.
+  const log = createDaemonLogger(
+    () => settings().current().logging.level,
+    undefined,
+    () => settings().current().logging.redact,
+  );
   const cfg = configFile();
   log.info(
     "settings",
@@ -533,10 +544,13 @@ async function runPrewarm(): Promise<void> {
 }
 
 async function runReviewSubcommand(): Promise<void> {
-  // Wire [logging].level before anything can emit (the signal handlers below
-  // and the review itself both log through the shared logger). One synchronous
-  // read; error records pass at every level, so a broken config still logs.
-  setLogLevel(loadSettings().logging.level);
+  // Wire [logging].level and .redact before anything can emit (the signal
+  // handlers below and the review itself both log through the shared logger).
+  // One synchronous read; error records pass at every level, so a broken
+  // config still logs.
+  const { logging } = loadSettings();
+  setLogLevel(logging.level);
+  setRedact(logging.redact);
   // Emit exactly one decision line. A signal arriving after the normal decision
   // was written must not append a second (deny) line.
   let responded = false;
