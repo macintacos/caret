@@ -7,7 +7,7 @@ set -euo pipefail
 # (`caret daemon --ephemeral`) and this task discovers the real port from the
 # daemon's lock file — so any number of `mise run dev` sessions coexist without
 # clobbering each other. Set CARET_DEV_PORT to pin a fixed port instead.
-daemon_cmd=(bun src/cli.ts daemon --ephemeral)
+daemon_cmd=(bun src/cli.ts daemon)
 if [ -n "${CARET_DEV_PORT:-}" ]; then
   # Never bind the production default: a CARET_DEV_PORT of 42718 would squat on
   # an installed caret (AC5).
@@ -16,7 +16,8 @@ if [ -n "${CARET_DEV_PORT:-}" ]; then
     exit 1
   fi
   export CARET_PORT="$CARET_DEV_PORT"
-  daemon_cmd=(bun src/cli.ts daemon)
+else
+  daemon_cmd+=(--ephemeral)
 fi
 # State dir: ephemeral by default (isolated + wiped on exit, AC1/AC5/AC6). Set
 # CARET_DEV_STATE_DIR to a persistent path to keep state across dev restarts —
@@ -73,14 +74,18 @@ rm -f "$lock_file"
 daemon_pid=$!
 
 # Discover the daemon's bound port from its lock (written after a successful
-# bind), then hand it to the driver and the Vite proxy via CARET_PORT. Bounded
-# wait, loud failure: a session must never silently attach to a foreign daemon
-# or spin against a daemon that died on boot (EXC-461).
+# bind), then hand it to the driver and the Vite proxy via CARET_PORT. The
+# parser also requires the lock's stateDir to be OUR state dir, so a session
+# can never silently attach to a foreign daemon's lock (e.g. two sessions
+# pointed at one persistent CARET_DEV_STATE_DIR). Bounded wait, loud failure
+# — including for a daemon that died on boot (EXC-461).
 port=""
 for _ in $(seq 1 100); do
   if [ -f "$lock_file" ]; then
-    port="$(bun -e 'const p = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).port; if (!Number.isInteger(p) || p <= 0) throw new Error("bad port"); console.log(p)' "$lock_file" 2>/dev/null)" && break
-    port=""
+    # Explicit exit codes (no uncaught throw): 0 + port on a usable own-world
+    # lock, 1 on anything else (unreadable, foreign stateDir, bad port).
+    port="$(bun -e 'try { const l = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); const ok = l.stateDir === process.argv[2] && Number.isInteger(l.port) && l.port > 0; if (!ok) process.exit(1); console.log(l.port); } catch { process.exit(1); }' "$lock_file" "$state_dir/caret" 2>/dev/null)" || port=""
+    if [ -n "$port" ]; then break; fi
   fi
   if ! kill -0 "$daemon_pid" 2>/dev/null; then
     echo "caret dev: daemon exited before writing its lock — see output above" >&2
@@ -89,7 +94,14 @@ for _ in $(seq 1 100); do
   sleep 0.1
 done
 if [ -z "$port" ]; then
-  echo "caret dev: daemon lock never appeared at $lock_file — aborting" >&2
+  echo "caret dev: no usable lock at $lock_file (missing, foreign, or bad port) — aborting" >&2
+  exit 1
+fi
+# An OS-assigned ephemeral port can be 42718 on Linux (its ephemeral range
+# includes it): never let a dev daemon squat the production default — abort
+# loudly; the EXIT trap reaps the daemon.
+if [ "$port" = "42718" ]; then
+  echo "caret dev: OS assigned the production default port (42718) — rerun" >&2
   exit 1
 fi
 export CARET_PORT="$port"

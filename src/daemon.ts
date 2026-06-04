@@ -62,8 +62,9 @@ export interface CreateServerOptions {
    * cross-attach to a foreign world. Identifying (contains the username):
    * never logged — the listen record carries instanceId instead. */
   stateDir?: string;
-  /** Per-boot opaque id (EXC-461), reported in /api/health and the lock so the
-   * UI can detect a daemon swap across polls. Safe to log. */
+  /** Per-boot opaque id (EXC-461). /api/health carries it for the UI's swap
+   * detection; the lock and listen-record copies tie a lock file and a
+   * daemon.log boot back to the same boot for diagnostics. Safe to log. */
   instanceId?: string;
   /** Leveled lifecycle logger (see log.ts CaretLogger); defaults to a no-op so
    * tests stay quiet. Lifecycle events log at info, handler failures at error. */

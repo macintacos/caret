@@ -140,6 +140,8 @@ export function startPolling(
     } catch {
       return; // health hiccup is not a swap; the reviews poll tracks liveness
     }
+    // A check resolving after stop() must not fire a detached poller's onSwap.
+    if (stopped) return;
     const id = health.instanceId;
     if (id === undefined) return; // pre-fix daemon: cannot detect, skip
     const prev = lastInstanceId;
@@ -154,18 +156,21 @@ export function startPolling(
     if (stopped) return;
     try {
       const reviews = await listReviews();
+      let checked = false;
       if (failures > 0) {
         uiLog.info("poll", "poll recovered", { failures });
         failures = 0;
         // A swap can complete during an outage; re-check on the recovery edge.
         await checkIdentity();
+        checked = true;
       }
       if (reviews.length !== lastCount) {
         uiLog.debug("poll", `reviews pending: ${reviews.length}`, { count: reviews.length });
         lastCount = reviews.length;
       }
       successes++;
-      if (successes % IDENTITY_CHECK_EVERY === 0) await checkIdentity();
+      // Skip the periodic check on a tick that already checked on recovery.
+      if (!checked && successes % IDENTITY_CHECK_EVERY === 0) await checkIdentity();
       if (!stopped) onUpdate(reviews);
     } catch (err) {
       // Warn only on the healthy→unhealthy transition; a sustained outage logs once.
@@ -177,9 +182,11 @@ export function startPolling(
     }
   };
 
-  // Seed the identity baseline before the first poll so a later swap has
-  // something to differ from.
-  void checkIdentity().then(tick);
+  // Seed the identity baseline concurrently with the first poll — the seed
+  // can't detect a swap (nothing to differ from), so it must not delay the
+  // first reviews snapshot by a serial health round-trip.
+  void checkIdentity();
+  void tick();
 
   return () => {
     stopped = true;

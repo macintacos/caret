@@ -11,7 +11,7 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, openSync, readFileSync, unlinkSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, normalize } from "node:path";
 import { createServer, type CaretServer } from "./daemon.ts";
 import { denyOutput, type HookOutput, toHookOutput } from "./feedback.ts";
 import {
@@ -225,8 +225,10 @@ export interface EnsureDeps {
   /** Is a PID alive? (false ⇒ an orphan lock can be removed.) */
   isAlive: (pid: number) => boolean;
   /** Ask a stale daemon to step down. Returns true when a graceful shutdown was
-   * initiated (POST /api/retire accepted, or SIGTERM sent to a live lock PID),
-   * false when nothing could be done (a pre-fix daemon: no route and no lock). */
+   * initiated (POST /api/retire accepted, or SIGTERM sent to a live lock PID —
+   * gated on the lock naming OUR world; a foreign lock pid is never signaled,
+   * EXC-461), false when nothing could be done (a pre-fix daemon: no route and
+   * no lock). */
   retire: (baseUrl: string, lock: DaemonLock | null) => Promise<boolean>;
   /** Remove an orphan lock file. */
   removeLock: () => void;
@@ -243,11 +245,20 @@ function isAddrInUse(e: unknown): boolean {
   return e instanceof Error && /EADDRINUSE/.test(e.message);
 }
 
+/** Pure-string path comparison for world identity: normalize() flattens
+ * cosmetic differences (trailing slash, `//`, `/./`) so a daemon and hook whose
+ * XDG_STATE_HOME values differ only cosmetically still match. Deliberately no
+ * realpath — no FS access, no throw; symlinked-vs-resolved divergence stays a
+ * documented misconfiguration. */
+function sameWorldPath(a: string, b: string): boolean {
+  return normalize(a) === normalize(b);
+}
+
 /** A health body whose stateDir names another world's state dir. A pre-identity
  * daemon (no stateDir field) can't be distinguished and is treated as same-world
  * for back-compat — on the fixed prod port it is by definition this user's own. */
 function isForeignWorld(h: HealthBody, currentStateDir: string): boolean {
-  return h.stateDir !== undefined && h.stateDir !== currentStateDir;
+  return h.stateDir !== undefined && !sameWorldPath(h.stateDir, currentStateDir);
 }
 
 /** The foreign-world conflict is a configuration problem (two worlds sharing one
@@ -388,7 +399,7 @@ export async function retireDaemon(
   // only retires same-world daemons, so a foreign lock here means the lock and the
   // port disagree — killing that pid would take down another world's daemon. A
   // legacy lock (no stateDir) predates worlds and is treated as our own.
-  const sameWorld = lock?.stateDir === undefined || lock.stateDir === currentStateDir;
+  const sameWorld = lock?.stateDir === undefined || sameWorldPath(lock.stateDir, currentStateDir);
   if (lock && sameWorld && isPidAlive(lock.pid)) {
     try {
       kill(lock.pid, "SIGTERM");
