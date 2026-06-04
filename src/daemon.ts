@@ -5,6 +5,7 @@
 import { mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { createDecisions } from "./decisions.ts";
+import { type CaretLogger, noopLogger } from "./log.ts";
 import {
   type DaemonLock,
   heartbeatMs as defaultHeartbeatMs,
@@ -47,8 +48,9 @@ export interface CreateServerOptions {
   /** Build fingerprint (paths.buildHash of the served UI) reported in
    * /api/health and recorded in the lock, so a newer caret can detect staleness. */
   buildId?: string;
-  /** Lifecycle logger; defaults to a no-op so tests stay quiet. */
-  log?: (msg: string) => void;
+  /** Leveled lifecycle logger (see log.ts CaretLogger); defaults to a no-op so
+   * tests stay quiet. Lifecycle events log at info, handler failures at error. */
+  log?: CaretLogger;
 }
 
 export interface CaretServer {
@@ -85,7 +87,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   const prefsPath = opts.prefsPath ?? prefsFile();
   const lockPath = opts.lockPath;
   const buildId = opts.buildId;
-  const log = opts.log ?? (() => {});
+  const log = opts.log ?? noopLogger;
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount } = createDecisions();
 
   // Wait for a decision but no longer than `ms` — resolves to null on timeout so
@@ -127,7 +129,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     // Re-check liveness atomically (single-threaded loop): never exit while a
     // review is pending, a hook is mid-long-poll, or a request is in flight.
     if (store.pendingCount() === 0 && openDecisionCount() === 0 && inFlight === 0) {
-      log("idle shutdown");
+      log.info("idle", "idle shutdown");
       stop();
       onShutdown();
     } else if (store.pendingCount() === 0) {
@@ -164,7 +166,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // the cross-origin check above. Pending reviews are already write-through
       // to disk (store), so they rehydrate on the next daemon's start.
       if (method === "POST" && path === "/api/retire") {
-        log("retire requested");
+        log.info("retire", "retire requested");
         // Defer one tick so this 200 flushes before stop()/onShutdown (which may
         // process.exit) — same pattern as the /resolve unblock below.
         setTimeout(() => {
@@ -183,7 +185,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       if (method === "POST" && path === "/api/reviews") {
         const body = (await req.json().catch(() => ({}))) as PlanInput;
         const routed = await routePlan(body, store);
-        log(`review created: ${routed.id}`);
+        log.info("review", `review created: ${routed.id}`);
         return Response.json(routed);
       }
 
@@ -295,7 +297,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
           // Defer one tick so THIS 200 flushes before the hook's long-poll
           // resolves (otherwise the browser's POST can appear to race the unblock).
           setTimeout(() => resolveDecision(id, decision), 0);
-          log(`review ${id} resolved: ${decision.behavior}`);
+          log.info("resolve", `review ${id} resolved: ${decision.behavior}`);
           return Response.json({ ok: true });
         }
       }
@@ -303,12 +305,13 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       return notFound();
     } catch (err) {
       // Never let a handler exception drop the connection without a response —
-      // and log it first, since a bare 500 alone is undebuggable. The log call
-      // is itself wrapped so a broken sink can't escape and suppress the 500.
+      // and log it first (a genuine failure, so at error level), since a bare
+      // 500 alone is undebuggable. The log call is itself wrapped so a broken
+      // sink can't escape and suppress the 500.
       // NB: values reaching this sink must not embed plan bodies — today no
       // handler error message interpolates plan content; keep it that way.
       try {
-        log(`request error: ${err}`);
+        log.error("request", err);
       } catch {
         // best-effort: the response below is what matters.
       }
@@ -330,7 +333,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     idleTimeout: 30,
     fetch: handle,
   });
-  log(`listening on 127.0.0.1:${server.port}`);
+  log.info("listen", `listening on 127.0.0.1:${server.port}`);
 
   // Write the single-instance lock atomically (temp + rename) so a concurrent
   // reader never sees a partial file. Best-effort: the lock is an optimization

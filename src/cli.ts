@@ -14,7 +14,7 @@ import { existsSync, mkdirSync, openSync, readFileSync, unlinkSync } from "node:
 import { dirname } from "node:path";
 import { createServer, type CaretServer } from "./daemon.ts";
 import { denyOutput, type HookOutput, toHookOutput } from "./feedback.ts";
-import { type ErrorContext, logError } from "./log.ts";
+import { createDaemonLogger, type ErrorContext, logError, logInfo, setLogLevel } from "./log.ts";
 import {
   buildHash,
   configFile,
@@ -29,7 +29,7 @@ import {
   VERSION,
 } from "./paths.ts";
 import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "./plan-format.ts";
-import { settings } from "./settings.ts";
+import { loadSettings, settings } from "./settings.ts";
 import { createStore } from "./store.ts";
 import type { Decision, PlanInput } from "./types.ts";
 
@@ -97,10 +97,11 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
     // Reject plans with unhighlightable (untagged) code blocks before any daemon
     // work, so a format-only reject never spins up a daemon or creates a review.
     // The format-deny message is distinct from the fail-safe deny below; the
-    // reject is logged so reject loops are diagnosable.
+    // reject is an EXPECTED outcome, logged at info (default-on) so reject
+    // loops stay diagnosable without reading as errors.
     step = "validatePlan";
     if (hasUntaggedCodeBlock(input.plan)) {
-      logError(step, new Error("plan rejected: code block missing language marker"), ctx);
+      logInfo(step, "plan rejected: code block missing language marker", ctx);
       return denyOutput(PLAN_FORMAT_DENY_MESSAGE);
     }
 
@@ -138,6 +139,13 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
         pollUrl = await deps.ensureDaemon();
         step = "longPoll";
       }
+    }
+    // The reviewer's verdict is normal operation: record it at info — a deny
+    // with its reasoning (never the plan body), an allow as a one-liner.
+    if (decision.behavior === "deny") {
+      logInfo("decision", "plan rejected", { ...ctx, feedback: decision.feedback });
+    } else {
+      logInfo("decision", "plan approved", { ...ctx });
     }
     return toHookOutput(decision);
   } catch (err) {
@@ -456,15 +464,17 @@ async function currentBuildId(): Promise<string> {
 }
 
 async function runDaemon(): Promise<void> {
-  const log = (msg: string) => process.stderr.write(`[caret daemon] ${msg}\n`);
-  // Record which config file this daemon reads, then warm the settings
-  // singleton (EXC-429) so an invalid config.toml is detected and logged at
-  // boot rather than on first use.
+  // Leveled NDJSON to stderr (spawnDaemon redirects it into daemon.log). The
+  // level thunk re-reads settings().current() per emit, so config.toml edits
+  // hot-reload without a restart — and the boot line below doubles as the
+  // EXC-429 settings warm: an invalid config is detected and logged here, not
+  // on first use.
+  const log = createDaemonLogger(() => settings().current().logging.level);
   const cfg = configFile();
-  log(
+  log.info(
+    "settings",
     existsSync(cfg) ? `settings: reading ${cfg}` : `settings: no config at ${cfg}; using defaults`,
   );
-  settings().current();
   const store = createStore(reviewsDir());
   await store.rehydrate();
   const html = await loadUiHtml();
@@ -523,6 +533,10 @@ async function runPrewarm(): Promise<void> {
 }
 
 async function runReviewSubcommand(): Promise<void> {
+  // Wire [logging].level before anything can emit (the signal handlers below
+  // and the review itself both log through the shared logger). One synchronous
+  // read; error records pass at every level, so a broken config still logs.
+  setLogLevel(loadSettings().logging.level);
   // Emit exactly one decision line. A signal arriving after the normal decision
   // was written must not append a second (deny) line.
   let responded = false;

@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { computeBuildId, ensureDaemon, runReview } from "../src/cli.ts";
+import { setLogLevel } from "../src/log.ts";
 import { logFile } from "../src/paths.ts";
 import { PLAN_FORMAT_DENY_MESSAGE } from "../src/plan-format.ts";
 import type { Decision } from "../src/types.ts";
@@ -35,8 +36,23 @@ beforeEach(async () => {
 afterEach(async () => {
   if (savedXdg === undefined) delete process.env.XDG_STATE_HOME;
   else process.env.XDG_STATE_HOME = savedXdg;
+  setLogLevel("info"); // undo any per-test level change
   await rm(stateHome, { recursive: true, force: true });
 });
+
+/** Parse caret.log into NDJSON records ([] when the file doesn't exist). */
+function logRecords(): Array<Record<string, unknown>> {
+  let body: string;
+  try {
+    body = readFileSync(logFile(), "utf-8");
+  } catch {
+    return [];
+  }
+  return body
+    .split("\n")
+    .filter((l) => l.startsWith("{"))
+    .map((l) => JSON.parse(l) as Record<string, unknown>);
+}
 
 // ---- runReview ----
 
@@ -198,10 +214,8 @@ test("a failure logs the step + context to caret.log and surfaces the path", asy
   // The deny reason points the user at the log.
   expect(out.hookSpecificOutput.decision.message).toContain(logFile());
   // The log captures which step failed, the message, and stdin context.
-  const body = readFileSync(logFile(), "utf-8");
-  expect(body).toContain("step=ensureDaemon");
-  expect(body).toContain("daemon down");
-  expect(body).toContain("sessionId=S");
+  const rec = logRecords().find((r) => r.step === "ensureDaemon");
+  expect(rec).toMatchObject({ level: 50, msg: "daemon down", sessionId: "S", cwd: "/p" });
 });
 
 test("a failed reconnect logs step=reconnect, not the poll step", async () => {
@@ -221,9 +235,9 @@ test("a failed reconnect logs step=reconnect, not the poll step", async () => {
       },
     }),
   );
-  const body = readFileSync(logFile(), "utf-8");
-  expect(body).toContain("step=reconnect");
-  expect(body).not.toContain("step=longPoll");
+  const recs = logRecords();
+  expect(recs.some((r) => r.step === "reconnect")).toBe(true);
+  expect(recs.some((r) => r.step === "longPoll")).toBe(false);
 });
 
 // ---- plan-format guard ----
@@ -302,15 +316,49 @@ test("an absent plan is posted for review (no spurious format-deny)", async () =
   expect(postCalls).toBe(1);
 });
 
-test("a format-deny is logged to caret.log for diagnosability", async () => {
+test("a format-deny is logged at info — an expected reject, not an error", async () => {
   await runReview(
     JSON.stringify({ session_id: "FMT", cwd: "/p", tool_input: { plan: "```\nx\n```\n" } }),
     reviewDeps(),
   );
-  const body = readFileSync(logFile(), "utf-8");
-  expect(body).toContain("step=validatePlan");
-  expect(body).toContain("code block missing language marker");
-  expect(body).toContain("sessionId=FMT");
+  const rec = logRecords().find((r) => r.step === "validatePlan");
+  expect(rec).toMatchObject({ level: 30, sessionId: "FMT" });
+  expect(rec?.msg).toContain("code block missing language marker");
+});
+
+// ---- decision outcome records (EXC-398) ----
+
+test("a rejected plan is logged at info with its rejection reasoning", async () => {
+  await runReview(
+    stdin,
+    reviewDeps({
+      longPoll: async () => ({ behavior: "deny", feedback: "tighten phase 2", decidedAt: 1 }),
+    }),
+  );
+  const rec = logRecords().find((r) => r.step === "decision");
+  expect(rec).toMatchObject({
+    level: 30,
+    msg: "plan rejected",
+    feedback: "tighten phase 2",
+    sessionId: "S",
+  });
+});
+
+test("an approved plan is logged at info", async () => {
+  await runReview(stdin, reviewDeps());
+  const rec = logRecords().find((r) => r.step === "decision");
+  expect(rec).toMatchObject({ level: 30, msg: "plan approved", sessionId: "S" });
+});
+
+test("decision info records are suppressed when the level is error", async () => {
+  setLogLevel("error");
+  await runReview(
+    stdin,
+    reviewDeps({
+      longPoll: async () => ({ behavior: "deny", feedback: "nope", decidedAt: 1 }),
+    }),
+  );
+  expect(logRecords()).toHaveLength(0);
 });
 
 // ---- ensureDaemon ----

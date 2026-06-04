@@ -1,65 +1,159 @@
-// Errors-only logging for the short-lived `caret review` hook process. Entries
-// land in caret.log (see paths.logFile). The daemon logs separately to
-// daemon.log; /caret:debug reads both.
+// Leveled NDJSON logging via pino. Two sinks share one record shape
+// ({"level":30,"time":...,"step":"x","msg":"...",...}): the short-lived
+// `caret review` hook appends to caret.log (see paths.logFile); the daemon
+// logs to stderr, which spawnDaemon redirects into daemon.log. /caret:debug
+// reads both.
 //
-// Two hard rules: writes are SYNCHRONOUS (so a deny logged just before
-// process.exit in the fail-safe/signal paths is durable), and logError NEVER
-// throws (a logging failure must not turn an allow into a deny or crash a hook).
+// Two hard rules carried over from the old sentinel logger: writes are
+// SYNCHRONOUS (pino.destination({ sync: true }), so a deny logged just before
+// process.exit in the fail-safe/signal paths is durable), and logging NEVER
+// throws — construction and every emit are wrapped, degrading to a silent
+// no-op on failure (a logging failure must not turn an allow into a deny or
+// crash a hook). Error records sit at pino's highest level (50) in our set, so
+// they emit regardless of the configured level for free.
 
-import { closeSync, mkdirSync, openSync, writeSync } from "node:fs";
+import { mkdirSync } from "node:fs";
+import pino from "pino";
 import { logFile, stateDir } from "./paths.ts";
+
+export type LogLevel = "debug" | "info" | "warn" | "error";
 
 export interface ErrorContext {
   sessionId?: string;
   cwd?: string;
 }
 
-function describe(err: unknown): { message: string; stack?: string; causes: string[] } {
-  if (!(err instanceof Error)) return { message: String(err), causes: [] };
-  const causes: string[] = [];
-  // Walk err.cause, but guard against cycles (e.g. a.cause=b, b.cause=a) — an
-  // unbounded walk here would hang the hook, which is worse than the lost trace.
-  const seen = new Set<unknown>([err]);
-  let c: unknown = err.cause;
-  while (c instanceof Error && !seen.has(c)) {
-    seen.add(c);
-    causes.push(c.message);
-    c = c.cause;
+/** The leveled surface both sinks expose. debug/info/warn take a human message
+ * plus optional structured `extra`; error takes the raw thrown value (an
+ * Error's `cause` chain is serialized; msg derives from it) plus optional
+ * `extra` fields (e.g. sessionId/cwd). `extra` keys must not collide with the
+ * record's own fields (level/time/msg/step/pid/err). */
+export interface CaretLogger {
+  debug(step: string, msg: string, extra?: object): void;
+  info(step: string, msg: string, extra?: object): void;
+  warn(step: string, msg: string, extra?: object): void;
+  error(step: string, err: unknown, extra?: object): void;
+}
+
+const pinoOpts = {
+  base: undefined, // suppress pino's default {pid, hostname}; the daemon opts pid back in
+  serializers: { err: pino.stdSerializers.errWithCause },
+} as const;
+
+/** Build a CaretLogger over the given pino instance, with never-throw wrapping
+ * on every emit. `liveLevel` is re-applied before each gated call so config
+ * edits and setLogLevel hot-reload; pino's level setter re-binds every level
+ * method, so skip the assignment when the level is unchanged. */
+function wrap(logger: pino.Logger, liveLevel: () => LogLevel): CaretLogger {
+  function emit(method: "debug" | "info" | "warn", step: string, msg: string, extra?: object) {
+    try {
+      const next = liveLevel();
+      if (logger.level !== next) logger.level = next;
+      logger[method]({ ...extra, step }, msg); // step after the spread: structural fields always win
+    } catch {
+      // Logging is non-essential and must never destabilize the caller.
+    }
   }
-  if (c !== undefined && !(c instanceof Error)) causes.push(String(c));
-  return { message: err.message, stack: err.stack, causes };
+  return {
+    debug: (step, msg, extra) => emit("debug", step, msg, extra),
+    info: (step, msg, extra) => emit("info", step, msg, extra),
+    warn: (step, msg, extra) => emit("warn", step, msg, extra),
+    error(step, err, extra) {
+      try {
+        // No level update here: error (50) passes every threshold in the set.
+        const fields: Record<string, unknown> = { ...extra, step };
+        if (err instanceof Error) fields.err = err;
+        logger.error(fields, err instanceof Error ? err.message : String(err));
+      } catch {
+        // Same swallow: a failed error write still must not propagate.
+      }
+    },
+  };
 }
 
-/** One record, opened by a single sentinel header line so `/caret:debug` can
- * isolate the most recent error. Record-delimited plain text, not JSON. */
-function formatEntry(step: string, err: unknown, ctx?: ErrorContext): string {
-  const { message, stack, causes } = describe(err);
-  const lines = [
-    `=== caret error ${new Date().toISOString()} step=${step} ===`,
-    `message: ${message}`,
-  ];
-  if (causes.length) lines.push(`cause: ${causes.join(" <- ")}`);
-  const ctxParts: string[] = [];
-  if (ctx?.sessionId) ctxParts.push(`sessionId=${ctx.sessionId}`);
-  if (ctx?.cwd) ctxParts.push(`cwd=${ctx.cwd}`);
-  if (ctxParts.length) lines.push(`context: ${ctxParts.join(" ")}`);
-  lines.push(stack ?? "(no stack)");
-  return `${lines.join("\n")}\n\n`;
-}
+/** A logger that drops everything — the degraded mode when a destination can't
+ * be opened (e.g. the state dir's parent is a regular file), and the daemon's
+ * default when no logger is injected (tests stay quiet). */
+export const noopLogger: CaretLogger = {
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+};
 
-/** Append a timestamped error entry to caret.log. Best-effort: creates the
- * state dir (0700) and file (0600) if missing, writes the whole entry in one
- * atomic O_APPEND call, and swallows any failure. */
-export function logError(step: string, err: unknown, ctx?: ErrorContext): void {
+// Module-level current level for the hook logger. setLogLevel updates it; wrap's
+// liveLevel thunk re-reads it on every emit, so the live instance follows along.
+let currentLevel: LogLevel = "info";
+
+// The hook's logger is a lazy singleton, but tests swap XDG_STATE_HOME per
+// case, so cache it keyed by the resolved logFile() path and rebuild (closing
+// the previous destination so its fd doesn't leak) when that path changes — a
+// stale destination would silently write to the previous temp dir.
+let hookDest: ReturnType<typeof pino.destination> | null = null;
+let hookView: CaretLogger | null = null;
+let hookPath: string | null = null;
+
+function hook(): CaretLogger {
+  const path = logFile();
+  if (hookView && hookPath === path) return hookView;
+  hookPath = path;
   try {
     mkdirSync(stateDir(), { recursive: true, mode: 0o700 });
-    const fd = openSync(logFile(), "a", 0o600);
+    const dest = pino.destination({ dest: path, sync: true, mode: 0o600 });
     try {
-      writeSync(fd, formatEntry(step, err, ctx));
-    } finally {
-      closeSync(fd);
+      hookDest?.destroy(); // sync mode has nothing buffered; just release the fd
+    } catch {
+      // already closed — nothing to release.
     }
+    hookDest = dest;
+    hookView = wrap(pino(pinoOpts, dest), () => currentLevel);
   } catch {
-    // Logging is non-essential and must never destabilize the hook.
+    // Degrade silently but do NOT latch the failure: the next emit retries the
+    // mkdir/open (the old logger's per-call semantics), so a transient failure
+    // doesn't permanently silence a long-running daemon's logError path.
+    hookView = null;
+  }
+  return hookView ?? noopLogger;
+}
+
+/** Set the hook logger's level (the hook injects loadSettings().logging.level).
+ * Takes effect on the next emit, including for an already-built instance. */
+export function setLogLevel(level: LogLevel): void {
+  currentLevel = level;
+}
+
+export function logDebug(step: string, msg: string, extra?: object): void {
+  hook().debug(step, msg, extra);
+}
+
+export function logInfo(step: string, msg: string, extra?: object): void {
+  hook().info(step, msg, extra);
+}
+
+export function logWarn(step: string, msg: string, extra?: object): void {
+  hook().warn(step, msg, extra);
+}
+
+/** Append an error record to caret.log. msg is the Error's message (or the
+ * stringified value for a non-Error); the `err` field — with its serialized
+ * cause chain — is included only for real Errors; sessionId/cwd ride along from
+ * ctx. Best-effort: never throws. */
+export function logError(step: string, err: unknown, ctx?: ErrorContext): void {
+  hook().error(step, err, ctx);
+}
+
+/** A leveled logger for the long-running daemon. Writes NDJSON to stderr (fd 2,
+ * which spawnDaemon redirects into daemon.log) by default; `dest` overrides the
+ * sink (a file path) so tests don't spew to the real stderr. `base.pid` tags
+ * every record; the `level()` thunk is re-read before each emit so config.toml
+ * edits hot-reload. Never throws. NB: tests always pass `dest`; the fd-2
+ * default is covered by the post-build daemon smoke, not unit tests. */
+export function createDaemonLogger(level: () => LogLevel, dest?: string | number): CaretLogger {
+  try {
+    const target = pino.destination({ ...(dest === undefined ? { fd: 2 } : { dest }), sync: true });
+    const logger = pino({ ...pinoOpts, base: { pid: process.pid } }, target);
+    return wrap(logger, level);
+  } catch {
+    return noopLogger;
   }
 }
