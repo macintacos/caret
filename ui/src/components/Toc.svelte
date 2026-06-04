@@ -75,6 +75,23 @@
        panel without crossing dead space, so :hover never drops mid-traverse. */
     padding: 0.5rem 1rem 0.5rem 0;
   }
+  /* Invisible hover halo (EXC-450): the ticks alone are a tiny target, so this
+     grows the hit area well beyond them without moving anything — a
+     pseudo-element rather than more padding, because .panel is anchored at
+     left:100% of the padding box and bigger padding would shift it. The halo is
+     anchored to the rail (not a full-height edge strip): 2.5rem of grace above,
+     below, and to the right (still >12rem short of the prose column, whose
+     ≥1400px left edge is .col-plan's padding + .prose's 15rem lane), and
+     1.25rem left — exactly to the viewport edge, since the clamp above always
+     resolves to its 1.25rem max at ≥1400px. z-index:-1 keeps it painted below
+     the ticks and panel so both stay clickable; hovering it still counts as
+     .toc:hover, which is all the reveal rule needs. */
+  .toc::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: -2.5rem -2.5rem -2.5rem -1.25rem;
+  }
 
   /* Single breakpoint (1400px), shared with app.css / PlanView: below it the rail
      is hidden and the plan re-centers (today's behaviour). Range syntax keeps
