@@ -132,6 +132,13 @@ function emit(level: LogLevel, step: string, msg: string, extra?: object): void 
   }
 }
 
+/** Review-id prefix (the first UUID segment) for log MESSAGES: keeps lines
+ * scannable without restating the full id, which rides in the structured
+ * `reviewId` extra field (mirrors src/log.ts's shortId). */
+export function shortId(id: string): string {
+  return id.slice(0, 8);
+}
+
 export const uiLog = {
   debug: (step: string, msg: string, extra?: object) => emit("debug", step, msg, extra),
   info: (step: string, msg: string, extra?: object) => emit("info", step, msg, extra),
