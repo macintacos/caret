@@ -94,6 +94,9 @@ export interface CaretLogger {
 
 const pinoOpts = {
   base: undefined, // suppress pino's default {pid, hostname}; the daemon opts pid back in
+  // ISO 8601 UTC time ("2026-06-04T21:25:40.038Z") instead of pino's default
+  // epoch ms, so a human can read a record's date/time without converting.
+  timestamp: pino.stdTimeFunctions.isoTime,
   // wrap() owns error serialization (errWithCause + scrub). The identity
   // override disables pino's DEFAULT err serializer, which would re-serialize
   // the already-plain object and roll cause messages up into `message`.

@@ -247,6 +247,18 @@ test("a null extra.source reads as unset: own tag and caller attach", () => {
   expect(r.caller).toMatch(CALLER);
 });
 
+// --- timestamps ---
+
+test("records carry an ISO 8601 UTC time with the date", () => {
+  logInfo("review", "created");
+  const dest = join(home, "daemon-time.log");
+  createDaemonLogger(() => "info", dest).info("listen", "listening");
+  // Full date + ms precision + the trailing Z that pins the zone to UTC.
+  const iso = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+  expect(records()[0].time).toMatch(iso);
+  expect(records(dest)[0].time).toMatch(iso);
+});
+
 // --- redaction (EXC-399) ---
 
 const realHome = homedir();
