@@ -5,7 +5,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureDaemon, httpHealth } from "../src/cli.ts";
 import { createServer } from "../src/daemon.ts";
@@ -131,4 +131,88 @@ test("the daemon writes the lock on start and removes it on SIGTERM", async () =
 
 test("the daemon removes the lock on SIGINT", async () => {
   await assertLockRemovedOnSignal("SIGINT");
+});
+
+// `caret redact` end-to-end: argv routing, stdout report, and the scrubbed
+// sibling files — the real subprocess, like the daemon signal tests above.
+test("caret redact scrubs state-dir logs into shareable siblings", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-redact-cli-"));
+  const logPath = join(stateHome, "caret", "caret.log");
+  const home = homedir();
+  await Bun.write(logPath, `${JSON.stringify({ step: "x", msg: `boom at ${home}/src` })}\n`);
+  const proc = Bun.spawn([process.execPath, "src/cli.ts", "redact"], {
+    env: { ...process.env, XDG_STATE_HOME: stateHome },
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  try {
+    const exit = await proc.exited;
+    const out = await new Response(proc.stdout).text();
+    const sibling = join(stateHome, "caret", "caret.redacted.log");
+    expect(exit).toBe(0);
+    expect(out).toContain(sibling);
+    const scrubbed = await Bun.file(sibling).text();
+    expect(scrubbed).not.toContain(home);
+    expect(scrubbed).toContain("~/src");
+  } finally {
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
+test("caret redact reports when there are no logs to scrub", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-redact-empty-"));
+  const proc = Bun.spawn([process.execPath, "src/cli.ts", "redact"], {
+    env: { ...process.env, XDG_STATE_HOME: stateHome },
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  try {
+    const exit = await proc.exited;
+    const out = await new Response(proc.stdout).text();
+    expect(exit).toBe(0);
+    expect(out).toContain("no logs");
+  } finally {
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
+test("the daemon logs the parsed settings at startup", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-settings-boot-"));
+  const configHome = await mkdtemp(join(tmpdir(), "caret-settings-cfg-"));
+  await Bun.write(
+    join(configHome, "caret", "config.toml"),
+    "[logging]\ndebug = true\nredact = true\n",
+  );
+  const lockPath = join(stateHome, "caret", "daemon.lock");
+  const proc = Bun.spawn([process.execPath, "src/cli.ts", "daemon"], {
+    env: {
+      ...process.env,
+      CARET_PORT: String(freePort()),
+      XDG_STATE_HOME: stateHome,
+      XDG_CONFIG_HOME: configHome,
+      CARET_IDLE_MS: "600000", // don't idle-shutdown before we read the boot line
+    },
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  try {
+    // The boot settings line is emitted before the server binds (lock write),
+    // so the lock appearing means the line is already flushed (sync writes).
+    expect(await waitFor(() => existsSync(lockPath), 5000)).toBe(true);
+    proc.kill("SIGTERM");
+    await proc.exited;
+    const stderr = await new Response(proc.stderr).text();
+    const rec = stderr
+      .split("\n")
+      .filter((l) => l.startsWith("{"))
+      .map((l) => JSON.parse(l) as Record<string, unknown>)
+      .find((r) => r.step === "settings");
+    expect(rec).toBeDefined();
+    // Effective (validated) values, never raw config text.
+    expect(rec?.settings).toEqual({ logging: { level: "info", debug: true, redact: true } });
+  } finally {
+    proc.kill("SIGKILL");
+    await proc.exited;
+    await rm(stateHome, { recursive: true, force: true });
+    await rm(configHome, { recursive: true, force: true });
+  }
 });

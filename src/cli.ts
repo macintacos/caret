@@ -14,7 +14,14 @@ import { existsSync, mkdirSync, openSync, readFileSync, unlinkSync } from "node:
 import { dirname } from "node:path";
 import { createServer, type CaretServer } from "./daemon.ts";
 import { denyOutput, type HookOutput, toHookOutput } from "./feedback.ts";
-import { createDaemonLogger, type ErrorContext, logError, logInfo, setLogLevel } from "./log.ts";
+import {
+  createDaemonLogger,
+  type ErrorContext,
+  logError,
+  logInfo,
+  setLogLevel,
+  setRedact,
+} from "./log.ts";
 import {
   buildHash,
   configFile,
@@ -29,7 +36,8 @@ import {
   VERSION,
 } from "./paths.ts";
 import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "./plan-format.ts";
-import { loadSettings, settings } from "./settings.ts";
+import { redactLogFiles } from "./redact.ts";
+import { loadSettings, settings, watchSettings } from "./settings.ts";
 import { createStore } from "./store.ts";
 import type { Decision, PlanInput } from "./types.ts";
 
@@ -465,15 +473,32 @@ async function currentBuildId(): Promise<string> {
 
 async function runDaemon(): Promise<void> {
   // Leveled NDJSON to stderr (spawnDaemon redirects it into daemon.log). The
-  // level thunk re-reads settings().current() per emit, so config.toml edits
-  // hot-reload without a restart — and the boot line below doubles as the
-  // EXC-429 settings warm: an invalid config is detected and logged here, not
-  // on first use.
-  const log = createDaemonLogger(() => settings().current().logging.level);
+  // level and redact thunks re-read svc.current() per emit, so config.toml
+  // edits hot-reload without a restart — and the boot line below doubles as
+  // the EXC-429 settings warm: an invalid config is detected and logged here,
+  // not on first use. The watcher records which keys changed when a reload is
+  // detected (i.e. on the first emit after the edit — detection is as lazy as
+  // the reload itself). NB: a change record is an info emit, so raising
+  // [logging].level above info suppresses it like any other info record.
+  // The change record's msg already carries old → new per key; the full
+  // settings object rides only on the boot record.
+  const svc = watchSettings(settings(), (changes) =>
+    log.info("settings", `settings changed: ${changes.join("; ")}`),
+  );
+  const log = createDaemonLogger(
+    () => svc.current().logging.level,
+    undefined,
+    () => svc.current().logging.redact,
+  );
   const cfg = configFile();
+  // The boot line records the effective settings: the VALIDATED parse only —
+  // schema-constrained enums/booleans — never raw config text, which may hold
+  // anything (the settings.ts logValidationFailure invariant). It is also the
+  // watcher's baseline read, so boot never fires a spurious change record.
   log.info(
     "settings",
     existsSync(cfg) ? `settings: reading ${cfg}` : `settings: no config at ${cfg}; using defaults`,
+    { settings: svc.current() },
   );
   const store = createStore(reviewsDir());
   await store.rehydrate();
@@ -533,10 +558,13 @@ async function runPrewarm(): Promise<void> {
 }
 
 async function runReviewSubcommand(): Promise<void> {
-  // Wire [logging].level before anything can emit (the signal handlers below
-  // and the review itself both log through the shared logger). One synchronous
-  // read; error records pass at every level, so a broken config still logs.
-  setLogLevel(loadSettings().logging.level);
+  // Wire [logging].level and .redact before anything can emit (the signal
+  // handlers below and the review itself both log through the shared logger).
+  // One synchronous read; error records pass at every level, so a broken
+  // config still logs.
+  const { logging } = loadSettings();
+  setLogLevel(logging.level);
+  setRedact(logging.redact);
   // Emit exactly one decision line. A signal arriving after the normal decision
   // was written must not append a second (deny) line.
   let responded = false;
@@ -561,6 +589,25 @@ async function runReviewSubcommand(): Promise<void> {
   process.exit(0);
 }
 
+function runRedactSubcommand(): void {
+  // Scrub the state-dir logs into shareable *.redacted.log siblings (EXC-399).
+  // Human-facing output, not hook JSON: print each written path, or say nothing
+  // was found. Failures report to stderr with a non-zero exit — never the
+  // review path's deny JSON.
+  try {
+    const written = redactLogFiles();
+    if (written.length === 0) {
+      process.stdout.write("caret redact: no logs found to redact.\n");
+    } else {
+      for (const path of written) process.stdout.write(`${path}\n`);
+    }
+    process.exit(0);
+  } catch (e) {
+    process.stderr.write(`caret redact: ${e}\n`);
+    process.exit(1);
+  }
+}
+
 async function main(): Promise<void> {
   const sub = process.argv[2];
   switch (sub) {
@@ -570,9 +617,11 @@ async function main(): Promise<void> {
       return runPrewarm();
     case "review":
       return runReviewSubcommand();
+    case "redact":
+      return runRedactSubcommand();
     default:
       process.stderr.write(
-        `caret: unknown subcommand "${sub ?? ""}". Use: daemon | prewarm | review\n`,
+        `caret: unknown subcommand "${sub ?? ""}". Use: daemon | prewarm | review | redact\n`,
       );
       process.exit(1);
   }

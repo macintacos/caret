@@ -15,6 +15,7 @@
 import { mkdirSync } from "node:fs";
 import pino from "pino";
 import { logFile, stateDir } from "./paths.ts";
+import { scrubString, scrubValue } from "./redact.ts";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -37,19 +38,40 @@ export interface CaretLogger {
 
 const pinoOpts = {
   base: undefined, // suppress pino's default {pid, hostname}; the daemon opts pid back in
-  serializers: { err: pino.stdSerializers.errWithCause },
+  // wrap() owns error serialization (errWithCause + scrub). The identity
+  // override disables pino's DEFAULT err serializer, which would re-serialize
+  // the already-plain object and roll cause messages up into `message`.
+  serializers: { err: (v: unknown) => v },
 } as const;
 
 /** Build a CaretLogger over the given pino instance, with never-throw wrapping
  * on every emit. `liveLevel` is re-applied before each gated call so config
  * edits and setLogLevel hot-reload; pino's level setter re-binds every level
- * method, so skip the assignment when the level is unchanged. */
-function wrap(logger: pino.Logger, liveLevel: () => LogLevel): CaretLogger {
+ * method, so skip the assignment when the level is unchanged. `liveRedact`
+ * (the [logging].redact switch, EXC-399) gates the redact.ts scrub of every
+ * outgoing msg/extra/err — re-read per emit so it hot-reloads too. The walk
+ * runs even with the switch off (plan/prompt censoring is unconditional);
+ * `step` is attached after it, raw: structural fields always win and a fixed
+ * step token is never PII. Errors are serialized here (errWithCause) rather
+ * than via a pino serializer so the scrub can cover message/stack/cause —
+ * pino's own `redact` option can't rewrite substrings inside those strings,
+ * walk an unbounded cause chain, or hot-toggle (see src/redact.ts). */
+function wrap(
+  logger: pino.Logger,
+  liveLevel: () => LogLevel,
+  liveRedact: () => boolean,
+): CaretLogger {
+  function fields(extra: object | undefined, step: string, redact: boolean) {
+    const out = scrubValue({ ...extra }, redact) as Record<string, unknown>;
+    out.step = step;
+    return out;
+  }
   function emit(method: "debug" | "info" | "warn", step: string, msg: string, extra?: object) {
     try {
       const next = liveLevel();
       if (logger.level !== next) logger.level = next;
-      logger[method]({ ...extra, step }, msg); // step after the spread: structural fields always win
+      const r = liveRedact();
+      logger[method](fields(extra, step, r), r ? scrubString(msg) : msg);
     } catch {
       // Logging is non-essential and must never destabilize the caller.
     }
@@ -61,9 +83,11 @@ function wrap(logger: pino.Logger, liveLevel: () => LogLevel): CaretLogger {
     error(step, err, extra) {
       try {
         // No level update here: error (50) passes every threshold in the set.
-        const fields: Record<string, unknown> = { ...extra, step };
-        if (err instanceof Error) fields.err = err;
-        logger.error(fields, err instanceof Error ? err.message : String(err));
+        const r = liveRedact();
+        const f = fields(extra, step, r);
+        if (err instanceof Error) f.err = scrubValue(pino.stdSerializers.errWithCause(err), r);
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.error(f, r ? scrubString(msg) : msg);
       } catch {
         // Same swallow: a failed error write still must not propagate.
       }
@@ -81,9 +105,12 @@ export const noopLogger: CaretLogger = {
   error: () => {},
 };
 
-// Module-level current level for the hook logger. setLogLevel updates it; wrap's
-// liveLevel thunk re-reads it on every emit, so the live instance follows along.
+// Module-level current level + redact toggle for the hook logger. setLogLevel/
+// setRedact update them; wrap's thunks re-read on every emit, so the live
+// instance follows along. Redact defaults off to match the schema default —
+// raw logs day-to-day; `caret redact` produces shareable copies on demand.
 let currentLevel: LogLevel = "info";
+let currentRedact = false;
 
 // The hook's logger is a lazy singleton, but tests swap XDG_STATE_HOME per
 // case, so cache it keyed by the resolved logFile() path and rebuild (closing
@@ -106,7 +133,11 @@ function hook(): CaretLogger {
       // already closed — nothing to release.
     }
     hookDest = dest;
-    hookView = wrap(pino(pinoOpts, dest), () => currentLevel);
+    hookView = wrap(
+      pino(pinoOpts, dest),
+      () => currentLevel,
+      () => currentRedact,
+    );
   } catch {
     // Degrade silently but do NOT latch the failure: the next emit retries the
     // mkdir/open (the old logger's per-call semantics), so a transient failure
@@ -120,6 +151,12 @@ function hook(): CaretLogger {
  * Takes effect on the next emit, including for an already-built instance. */
 export function setLogLevel(level: LogLevel): void {
   currentLevel = level;
+}
+
+/** Set the hook logger's redact toggle (the hook injects
+ * loadSettings().logging.redact). Takes effect on the next emit. */
+export function setRedact(on: boolean): void {
+  currentRedact = on;
 }
 
 export function logDebug(step: string, msg: string, extra?: object): void {
@@ -145,14 +182,19 @@ export function logError(step: string, err: unknown, ctx?: ErrorContext): void {
 /** A leveled logger for the long-running daemon. Writes NDJSON to stderr (fd 2,
  * which spawnDaemon redirects into daemon.log) by default; `dest` overrides the
  * sink (a file path) so tests don't spew to the real stderr. `base.pid` tags
- * every record; the `level()` thunk is re-read before each emit so config.toml
- * edits hot-reload. Never throws. NB: tests always pass `dest`; the fd-2
- * default is covered by the post-build daemon smoke, not unit tests. */
-export function createDaemonLogger(level: () => LogLevel, dest?: string | number): CaretLogger {
+ * every record; the `level()` and `redact()` thunks are re-read before each
+ * emit so config.toml edits hot-reload. Never throws. NB: tests always pass
+ * `dest`; the fd-2 default is covered by the post-build daemon smoke, not
+ * unit tests. */
+export function createDaemonLogger(
+  level: () => LogLevel,
+  dest?: string | number,
+  redact: () => boolean = () => false,
+): CaretLogger {
   try {
     const target = pino.destination({ ...(dest === undefined ? { fd: 2 } : { dest }), sync: true });
     const logger = pino({ ...pinoOpts, base: { pid: process.pid } }, target);
-    return wrap(logger, level);
+    return wrap(logger, level, redact);
   } catch {
     return noopLogger;
   }
