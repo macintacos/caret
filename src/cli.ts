@@ -28,6 +28,7 @@ import {
   VERSION,
 } from "./paths.ts";
 import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "./plan-format.ts";
+import { settings } from "./settings.ts";
 import { createStore } from "./store.ts";
 import type { Decision, PlanInput } from "./types.ts";
 
@@ -454,6 +455,9 @@ async function currentBuildId(): Promise<string> {
 }
 
 async function runDaemon(): Promise<void> {
+  // Warm the settings singleton (EXC-429) so an invalid config.toml is
+  // detected and logged at boot rather than on first use.
+  settings().current();
   const store = createStore(reviewsDir());
   await store.rehydrate();
   const html = await loadUiHtml();
