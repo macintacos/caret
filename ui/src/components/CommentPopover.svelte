@@ -1,6 +1,8 @@
 <script lang="ts">
   // Floating "Comment" button anchored near a fresh text selection. Clicking it
   // opens an inline textarea; submitting emits the comment up to App.
+  import Icon from "./Icon.svelte";
+
   interface Props {
     /** Viewport coordinates (from the selection's bounding rect). */
     x: number;
@@ -62,7 +64,10 @@
       <div class="row">
         <button class="ghost" onclick={onDismiss}>Cancel</button>
         <button class="solid" onclick={submit}>
-          Comment <span class="kbd">⌘↵</span>
+          Comment
+          <span class="kbd" aria-hidden="true">
+            <Icon name="command" size={12} /><Icon name="corner-down-left" size={12} />
+          </span>
         </button>
       </div>
     </div>
@@ -167,7 +172,9 @@
     background: var(--accent-bright);
   }
   .kbd {
-    font-size: 0.7rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
     opacity: 0.8;
   }
   @keyframes pop {

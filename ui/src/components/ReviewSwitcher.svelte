@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ClientReview } from "../lib/types.ts";
+  import Icon from "./Icon.svelte";
 
   interface Props {
     reviews: ClientReview[];
@@ -31,7 +32,9 @@
     <span class="title">{active?.title ?? "—"}</span>
     {#if reviews.length > 1}
       <span class="badge">{reviews.length}</span>
-      <span class="chev" class:open aria-hidden="true">▾</span>
+      <span class="chev" class:open aria-hidden="true">
+        <Icon name="chevron-down" size={14} />
+      </span>
     {/if}
   </button>
 
@@ -90,8 +93,8 @@
     padding: 0.05rem 0.4rem;
   }
   .chev {
+    display: inline-flex;
     color: var(--ink-faint);
-    font-size: 0.7rem;
     transition: transform 0.15s;
   }
   .chev.open {
