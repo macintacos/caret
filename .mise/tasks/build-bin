@@ -7,7 +7,11 @@ set -euo pipefail
 mkdir -p bin
 # Compiles src/cli.ts (which imports ui/dist/index.html as a text asset) into a
 # standalone binary. build-ui must run first so the HTML exists at compile time.
-bun build --compile --outfile bin/caret src/cli.ts
+# The --define bakes the commit into the binary so the daemon can log the
+# revision it runs from (EXC-452) — capture first so a git failure aborts the
+# build under `set -e` instead of baking an empty string.
+CARET_BUILD_COMMIT="$(git rev-parse HEAD)"
+bun build --compile --define="process.env.CARET_BUILD_COMMIT=\"$CARET_BUILD_COMMIT\"" --outfile bin/caret src/cli.ts
 # Fallback safety net: keep a copy of the UI beside the binary in case the
 # embedded text asset is ever unavailable at runtime.
 cp ui/dist/index.html bin/index.html

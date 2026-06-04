@@ -49,7 +49,10 @@ assert_contains "$out" "local checkout" "reports the local-checkout source"
 assert_contains "$out" "in place" "reports an in-place build"
 assert_contains "$out" "bun install" "plan includes the dependency install"
 assert_contains "$out" "vite" "plan includes the UI build"
-assert_contains "$out" "bun build" "plan includes the binary build"
+# A single space-free token (like "vite" above): the compile is a bash -c
+# one-liner, and the dry-run plan renders it through printf %q, which
+# backslash-escapes the spaces inside it.
+assert_contains "$out" "--compile" "plan includes the binary build"
 assert_contains "$out" "index.html" "plan includes the UI copy"
 assert_contains "$out" "claude plugin install" "plan includes the plugin install"
 assert_contains "$out" "nothing was changed" "ends with the no-change closer"

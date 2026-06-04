@@ -271,7 +271,14 @@ run cd "$REPO_DIR"
 section "Build"
 run_long "Installing build dependencies" bun install
 run_long "Building the UI" bash -c 'cd ui && bunx vite build'
-run_long "Compiling the caret binary" bun build --compile --outfile bin/caret src/cli.ts
+# The capture rides inside the executed command (not a bare script line) so a
+# CARET_DRY_RUN=1 preview — where cwd may not be a git checkout — never runs
+# git. The --define bakes the commit into the binary so the daemon can log the
+# revision it runs from (EXC-452); capturing before exec'ing bun aborts the
+# step on a git failure instead of baking an empty string.
+# shellcheck disable=SC2016  # the capture and define expand inside the inner `bash -c` at run time
+run_long "Compiling the caret binary" \
+  bash -c 'set -euo pipefail; CARET_BUILD_COMMIT="$(git rev-parse HEAD)"; exec bun build --compile --define="process.env.CARET_BUILD_COMMIT=\"$CARET_BUILD_COMMIT\"" --outfile bin/caret src/cli.ts'
 
 # Keep a copy of the UI beside the binary as a runtime fallback.
 step "Bundling the UI fallback"
