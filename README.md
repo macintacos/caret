@@ -50,7 +50,7 @@ claude plugin marketplace remove caret
 
 ## How it works
 
-caret ships one compiled binary (`bin/caret`) with three subcommands, wired to two plan-mode hooks:
+caret ships one compiled binary (`bin/caret`) with four subcommands, wired to two plan-mode hooks:
 
 | Hook                | Matcher         | Command         | Purpose                                                   |
 | ------------------- | --------------- | --------------- | --------------------------------------------------------- |
@@ -80,12 +80,66 @@ caret emits `deny` with an explanation — it never auto-approves an unreviewed 
 
 ## Configuration
 
+### Config file
+
+caret reads optional settings from `$XDG_CONFIG_HOME/caret/config.toml` when `XDG_CONFIG_HOME` is
+set, otherwise `~/.config/caret/config.toml`. This lives deliberately apart from the state dir so
+your config survives `mise run dev`, which wipes `XDG_STATE_HOME`.
+
+The file is TOML, and both it and every key are optional — a missing file or a missing key falls
+back to defaults. An invalid file never crashes caret: it keeps the last valid parse, or the
+defaults if there has never been one. Settings hot-reload, so the file is re-read on change with no
+daemon restart needed.
+
+The `[logging]` table accepts two keys:
+
+| Key      | Default  | Purpose                                                                                                                            |
+| -------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `level`  | `"info"` | Minimum level written to the logs — one of `"debug"`, `"info"`, `"warn"`, `"error"`. Set `level = "debug"` to turn on debug logging. |
+| `redact` | `false`  | When `true`, identifiable data (home-directory paths, usernames in paths) is scrubbed from log records as they are written.         |
+
+Logs are raw by default; `caret redact` (see [Logging & Debugging](#logging--debugging)) produces
+shareable copies after the fact.
+
+```toml
+[logging]
+level = "info"
+redact = false
+```
+
+### Environment variables
+
 | Env var          | Default          | Purpose                                                                                                                                   |
 | ---------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `CARET_PORT`     | `42718`          | Daemon port.                                                                                                                              |
 | `CARET_TIMEOUT`  | `3600` (s)       | Review window before the hook fail-safe-denies, in seconds (default 1 hour; must stay below the 3900s hook budget in `hooks/hooks.json`). |
 | `CARET_IDLE_MS`  | `60000`          | Idle delay before the daemon auto-shuts-down with no reviews.                                                                             |
 | `XDG_STATE_HOME` | `~/.local/state` | Unresolved reviews persist under `$XDG_STATE_HOME/caret/reviews/` and rehydrate on restart.                                               |
+
+## Logging & Debugging
+
+Logs live under `$XDG_STATE_HOME/caret` when set, otherwise `~/.local/state/caret`:
+
+- `caret.log` — NDJSON records from the short-lived `caret review` hook process.
+- `daemon.log` — the detached daemon's stdout/stderr: the same NDJSON shape (tagged with `pid`),
+  possibly interleaved with raw non-JSON crash output.
+
+Each record is one JSON object per line (pino): `level` (numeric — 20 debug, 30 info, 40 warn,
+50 error), `time` (epoch ms), `step` (a short fixed token), `msg`, plus structured extras. Normal
+operation logs at info; only genuine failures sit at error.
+
+To raise verbosity, set `level = "debug"` in `config.toml`'s `[logging]` table
+(see [Configuration](#config-file)). It hot-reloads — no restart needed.
+
+- `/caret:debug` — the slash command that surfaces the most recent failure from both logs and helps
+  debug it.
+- `caret redact` — the binary's fourth subcommand: scrubs the two state-dir logs into shareable
+  `*.redacted.log` siblings (home paths become `~`, usernames in foreign home paths are censored).
+  For always-on scrubbing at write time, set `redact = true` in `[logging]`. Plan and prompt bodies
+  are never written to logs regardless of the toggle.
+
+Contributors should see `.claude/rules/logging-rules.md` for the logging conventions — when to log,
+levels, and message style.
 
 ## Development
 
@@ -122,11 +176,11 @@ claude --plugin-dir ./    # load caret's hooks for this session only
 ## Layout
 
 ```text
-src/        cli.ts (subcommands) · daemon.ts (Bun.serve) · store.ts · decisions.ts
-            reviews.ts (revision threading) · feedback.ts · paths.ts · types.ts
+src/        cli.ts (subcommands) · daemon.ts (Bun.serve) · store.ts · decisions.ts · log.ts (leveled NDJSON)
+            reviews.ts (revision threading) · feedback.ts · paths.ts · types.ts · settings.ts (config.toml) · redact.ts
 ui/         Svelte 5 single-file SPA (Vite + vite-plugin-singlefile)
 hooks/      hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode)
-commands/   /caret:demo
+commands/   /caret:demo · /caret:debug
 scripts/    install.sh (build + register via the native plugin system)
 ```
 
