@@ -9,7 +9,7 @@
 // allow. Every abnormal path (bad stdin, unreachable daemon, timeout, signal,
 // daemon death) emits a deny — never an allow.
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, openSync, readFileSync, unlinkSync } from "node:fs";
 import { dirname } from "node:path";
 import { createServer, type CaretServer } from "./daemon.ts";
@@ -364,8 +364,15 @@ function removeDaemonLock(): void {
 }
 
 /** Ask a stale daemon to step down. Returns true if a graceful shutdown was
- * initiated; false if nothing could be done (pre-fix daemon: no route, no lock). */
-async function retireDaemon(baseUrl: string, lock: DaemonLock | null): Promise<boolean> {
+ * initiated; false if nothing could be done (pre-fix daemon: no route, no lock).
+ * Exported for the SIGTERM-gating tests; `kill` is injectable for the same
+ * reason and defaults to the real signal. */
+export async function retireDaemon(
+  baseUrl: string,
+  lock: DaemonLock | null,
+  currentStateDir: string,
+  kill: (pid: number, signal: "SIGTERM") => void = (pid, sig) => process.kill(pid, sig),
+): Promise<boolean> {
   // Preferred: the daemon's own loopback retire endpoint (persists, then exits).
   try {
     const res = await fetch(`${baseUrl}/api/retire`, {
@@ -377,10 +384,14 @@ async function retireDaemon(baseUrl: string, lock: DaemonLock | null): Promise<b
     // network error / timeout → fall through to the SIGTERM fallback.
   }
   // Fallback: a daemon without /api/retire (a pre-fix build) — SIGTERM the lock's
-  // PID, if we have a live one.
-  if (lock && isPidAlive(lock.pid)) {
+  // PID, if we have a live one. Never a foreign world's pid (EXC-461): ensureDaemon
+  // only retires same-world daemons, so a foreign lock here means the lock and the
+  // port disagree — killing that pid would take down another world's daemon. A
+  // legacy lock (no stateDir) predates worlds and is treated as our own.
+  const sameWorld = lock?.stateDir === undefined || lock.stateDir === currentStateDir;
+  if (lock && sameWorld && isPidAlive(lock.pid)) {
     try {
-      process.kill(lock.pid, "SIGTERM");
+      kill(lock.pid, "SIGTERM");
       return true;
     } catch {
       // race: it already exited, or it isn't ours — nothing more we can do.
@@ -464,17 +475,20 @@ function openBrowser(url: string): void {
 }
 
 async function prodEnsureDeps(s: Settings): Promise<EnsureDeps> {
+  // The hook's own world (resolved state dir, EXC-461) — both its reuse
+  // identity and the retire fallback's SIGTERM gate.
+  const world = stateDir();
   return {
     baseUrl: `http://localhost:${getPort(s)}`,
     // The current binary's identity: its build fingerprint + the package version
-    // + the world it serves (resolved state dir, EXC-461).
+    // + the world it serves.
     currentBuild: await currentBuildId(),
     currentVersion: VERSION,
-    currentStateDir: stateDir(),
+    currentStateDir: world,
     health: httpHealth,
     readLock: readDaemonLock,
     isAlive: isPidAlive,
-    retire: retireDaemon,
+    retire: (baseUrl, lock) => retireDaemon(baseUrl, lock, world),
     removeLock: removeDaemonLock,
     spawn: spawnDaemon,
     backoff,
@@ -653,17 +667,26 @@ async function runDaemon(): Promise<void> {
   await store.rehydrate();
   const html = await loadUiHtml();
   if (!html) log.info("ui", "no embedded ui; serving placeholder");
+  // `caret daemon --ephemeral` (EXC-461): bind an OS-assigned port instead of
+  // the configured one. A process flag, not a setting — the dev task owns the
+  // daemon and discovers the bound port from the lock, so port resolution for
+  // hooks (getPort) is untouched.
+  const ephemeral = process.argv.includes("--ephemeral");
   let server: CaretServer;
   try {
     server = createServer({
       store,
-      port: getPort(boot),
+      port: ephemeral ? 0 : getPort(boot),
       idleMs: idleMs(boot),
       heartbeatMs: heartbeatMs(boot),
       serveHtml: html ? () => html : undefined,
       lockPath: daemonLock(),
       buildId: await currentBuildId(),
       commit: currentCommit(),
+      // World + boot identity (EXC-461): stateDir is the world key (never
+      // logged — identifying); the per-boot instanceId is the loggable handle.
+      stateDir: stateDir(),
+      instanceId: randomUUID().slice(0, 8),
       log,
     });
   } catch (e) {

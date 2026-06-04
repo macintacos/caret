@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { computeBuildId, ensureDaemon, resolveCommit, runReview } from "../src/cli.ts";
+import { computeBuildId, ensureDaemon, resolveCommit, retireDaemon, runReview } from "../src/cli.ts";
 import { setLogLevel } from "../src/log.ts";
 import { logFile } from "../src/paths.ts";
 import { PLAN_FORMAT_DENY_MESSAGE } from "../src/plan-format.ts";
@@ -753,6 +753,48 @@ test("the never-deny fallback still reuses a same-world stale daemon", async () 
     }),
   );
   expect(url).toBe("http://localhost:42718");
+});
+
+// ---- retireDaemon: SIGTERM fallback is gated on the lock's world (EXC-461) ----
+
+// http://127.0.0.1:1 — nothing listens there, so the /api/retire attempt fails
+// fast and the SIGTERM fallback is what's under test. The injected kill spy
+// keeps the test from signaling anything real; pid is our own (always alive).
+
+test("retireDaemon does not SIGTERM a foreign world's lock pid", async () => {
+  let kills = 0;
+  const ok = await retireDaemon(
+    "http://127.0.0.1:1",
+    { pid: process.pid, port: 1, stateDir: "/other/world" },
+    "/my/world",
+    () => kills++,
+  );
+  expect(ok).toBe(false);
+  expect(kills).toBe(0);
+});
+
+test("retireDaemon SIGTERMs a same-world lock pid", async () => {
+  let kills = 0;
+  const ok = await retireDaemon(
+    "http://127.0.0.1:1",
+    { pid: process.pid, port: 1, stateDir: "/my/world" },
+    "/my/world",
+    () => kills++,
+  );
+  expect(ok).toBe(true);
+  expect(kills).toBe(1);
+});
+
+test("retireDaemon treats a legacy lock (no stateDir) as same-world", async () => {
+  let kills = 0;
+  const ok = await retireDaemon(
+    "http://127.0.0.1:1",
+    { pid: process.pid, port: 1 },
+    "/my/world",
+    () => kills++,
+  );
+  expect(ok).toBe(true);
+  expect(kills).toBe(1);
 });
 
 // ---- computeBuildId: any local rebuild supersedes a running daemon ----

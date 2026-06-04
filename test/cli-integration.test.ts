@@ -65,6 +65,7 @@ test("concurrent ensureDaemon callers both connect to a live daemon", async () =
     baseUrl,
     currentBuild: "it-build",
     currentVersion: VERSION,
+    currentStateDir: "/it/world",
     health: httpHealth,
     readLock: () => null,
     isAlive: () => false,
@@ -91,6 +92,7 @@ test("ensureDaemon fails fast against a non-caret server on the port", async () 
         baseUrl: `http://localhost:${foreign.port}`,
         currentBuild: "b1",
         currentVersion: VERSION,
+        currentStateDir: "/it/world",
         health: httpHealth,
         readLock: () => null,
         isAlive: () => false,
@@ -135,6 +137,48 @@ async function assertLockRemovedOnSignal(signal: "SIGTERM" | "SIGINT") {
 
 test("the daemon writes the lock on start and removes it on SIGTERM", async () => {
   await assertLockRemovedOnSignal("SIGTERM");
+});
+
+// `caret daemon --ephemeral` (EXC-461): the daemon binds an OS-assigned port
+// regardless of the configured one, and the lock + /api/health carry the
+// world identity a dev session discovers the daemon by.
+test("an --ephemeral daemon binds an OS port and records identity in the lock", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-ephemeral-"));
+  const lockPath = join(stateHome, "caret", "daemon.lock");
+  const proc = Bun.spawn([process.execPath, "src/cli.ts", "daemon", "--ephemeral"], {
+    env: {
+      ...process.env,
+      XDG_STATE_HOME: stateHome,
+      CARET_PORT: "", // blank = unset: --ephemeral must not need a port at all
+      CARET_IDLE_MS: "600000",
+    },
+    stdio: ["ignore", "ignore", "ignore"],
+  });
+  try {
+    expect(await waitFor(() => existsSync(lockPath), 5000)).toBe(true);
+    const lock = JSON.parse(await Bun.file(lockPath).text()) as {
+      port: number;
+      stateDir?: string;
+      instanceId?: string;
+    };
+    // OS-assigned, never the configured default the env would have resolved to.
+    expect(lock.port).toBeGreaterThan(0);
+    expect(lock.port).not.toBe(42718);
+    expect(lock.stateDir).toBe(join(stateHome, "caret"));
+    expect(lock.instanceId).toMatch(/^[0-9a-f]{8}$/);
+    const h = (await (await fetch(`http://127.0.0.1:${lock.port}/api/health`)).json()) as {
+      service?: string;
+      stateDir?: string;
+      instanceId?: string;
+    };
+    expect(h.service).toBe("caret");
+    expect(h.stateDir).toBe(lock.stateDir);
+    expect(h.instanceId).toBe(lock.instanceId);
+  } finally {
+    proc.kill("SIGKILL");
+    await proc.exited;
+    await rm(stateHome, { recursive: true, force: true });
+  }
 });
 
 test("the daemon removes the lock on SIGINT", async () => {
