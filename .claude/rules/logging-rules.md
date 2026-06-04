@@ -79,8 +79,8 @@ Concretely:
   full id rides in the record's `reviewId` field.
 - `step` is a **short fixed lowercase token** naming the operation (`review`, `resolve`,
   `decision`, `idle`, `listen`, `settings`, `signal`, `store`, `prefs`, `draft`, `env`, `ui`,
-  `prewarm`, `retire`, `spawn`, `request`, `fatal`). Reuse an existing token before minting a
-  new one.
+  `poll`, `render`, `prewarm`, `retire`, `spawn`, `request`, `fatal`). Reuse an existing token
+  before minting a new one.
 - Review-scoped records carry structured `reviewId` / `sessionId` fields in `extra` so one session
   stitches across the two log streams (EXC-444).
 - Every record carries a `source` field naming the emitting process — `"hook"`, `"daemon"`, or

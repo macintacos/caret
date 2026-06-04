@@ -19,7 +19,7 @@ await initHighlighter().catch(() => {});
 const app = mount(App, { target });
 
 // A single boot event so the daemon timeline shows when a browser session came
-// up. Call-site instrumentation lands separately (EXC-446).
+// up.
 uiLog.info("ui", "ui loaded");
 
 export default app;
