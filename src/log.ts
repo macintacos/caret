@@ -49,7 +49,7 @@ function wrap(logger: pino.Logger, liveLevel: () => LogLevel): CaretLogger {
     try {
       const next = liveLevel();
       if (logger.level !== next) logger.level = next;
-      logger[method]({ step, ...extra }, msg);
+      logger[method]({ ...extra, step }, msg); // step after the spread: structural fields always win
     } catch {
       // Logging is non-essential and must never destabilize the caller.
     }
@@ -61,7 +61,7 @@ function wrap(logger: pino.Logger, liveLevel: () => LogLevel): CaretLogger {
     error(step, err, extra) {
       try {
         // No level update here: error (50) passes every threshold in the set.
-        const fields: Record<string, unknown> = { step, ...extra };
+        const fields: Record<string, unknown> = { ...extra, step };
         if (err instanceof Error) fields.err = err;
         logger.error(fields, err instanceof Error ? err.message : String(err));
       } catch {
@@ -146,7 +146,8 @@ export function logError(step: string, err: unknown, ctx?: ErrorContext): void {
  * which spawnDaemon redirects into daemon.log) by default; `dest` overrides the
  * sink (a file path) so tests don't spew to the real stderr. `base.pid` tags
  * every record; the `level()` thunk is re-read before each emit so config.toml
- * edits hot-reload. Never throws. */
+ * edits hot-reload. Never throws. NB: tests always pass `dest`; the fd-2
+ * default is covered by the post-build daemon smoke, not unit tests. */
 export function createDaemonLogger(level: () => LogLevel, dest?: string | number): CaretLogger {
   try {
     const target = pino.destination({ ...(dest === undefined ? { fd: 2 } : { dest }), sync: true });
