@@ -35,6 +35,14 @@ function freePort(): number {
   return port;
 }
 
+/** Parse NDJSON log text (a daemon's stderr or a caret.log body) into records. */
+function ndjsonRecords(text: string): Array<Record<string, unknown>> {
+  return text
+    .split("\n")
+    .filter((l) => l.startsWith("{"))
+    .map((l) => JSON.parse(l) as Record<string, unknown>);
+}
+
 test("httpHealth reports the caret identity from a live daemon", async () => {
   const srv = createServer({ store: createStore("/tmp/caret-it-x"), port: 0 });
   servers.push(srv);
@@ -195,23 +203,20 @@ test("the daemon logs env warns, ui fallback, and the sigterm shutdown", async (
     expect(await waitFor(() => existsSync(lockPath), 5000)).toBe(true);
     proc.kill("SIGTERM");
     await proc.exited;
-    const recs = (await new Response(proc.stderr).text())
-      .split("\n")
-      .filter((l) => l.startsWith("{"))
-      .map((l) => JSON.parse(l) as Record<string, unknown>);
+    const recs = ndjsonRecords(await new Response(proc.stderr).text());
     expect(
       recs.some(
         (r) => r.step === "env" && r.level === 40 && r.msg === "CARET_TIMEOUT invalid; using default",
       ),
     ).toBe(true);
     expect(recs.some((r) => r.step === "signal" && r.msg === "sigterm: shutting down")).toBe(true);
-    // The ui record only fires when no UI is embedded/built — true on a fresh
-    // checkout; skip the assertion when a local `mise run build-ui` artifact exists.
-    if (!existsSync(join(process.cwd(), "ui", "dist", "index.html"))) {
-      expect(recs.some((r) => r.step === "ui" && r.msg === "no embedded ui; serving placeholder")).toBe(
-        true,
-      );
-    }
+    // The ui record fires exactly when no UI is embedded/built — true on a fresh
+    // checkout and in CI; a local `mise run build-ui` artifact flips the branch,
+    // so each environment asserts its own valid outcome.
+    const uiBuilt = existsSync(join(process.cwd(), "ui", "dist", "index.html"));
+    expect(recs.some((r) => r.step === "ui" && r.msg === "no embedded ui; serving placeholder")).toBe(
+      !uiBuilt,
+    );
   } finally {
     proc.kill("SIGKILL");
     await proc.exited;
@@ -234,10 +239,7 @@ test("the review hook warns about invalid CARET_* env vars in caret.log", async 
     const out = await new Response(proc.stdout).text();
     expect(exit).toBe(0);
     expect(out).toContain('"deny"');
-    const recs = (await Bun.file(join(stateHome, "caret", "caret.log")).text())
-      .split("\n")
-      .filter((l) => l.startsWith("{"))
-      .map((l) => JSON.parse(l) as Record<string, unknown>);
+    const recs = ndjsonRecords(await Bun.file(join(stateHome, "caret", "caret.log")).text());
     expect(
       recs.some(
         (r) => r.step === "env" && r.level === 40 && r.msg === "CARET_PORT invalid; using default",
@@ -273,11 +275,7 @@ test("the daemon logs the parsed settings at startup", async () => {
     proc.kill("SIGTERM");
     await proc.exited;
     const stderr = await new Response(proc.stderr).text();
-    const rec = stderr
-      .split("\n")
-      .filter((l) => l.startsWith("{"))
-      .map((l) => JSON.parse(l) as Record<string, unknown>)
-      .find((r) => r.step === "settings");
+    const rec = ndjsonRecords(stderr).find((r) => r.step === "settings");
     expect(rec).toBeDefined();
     // Effective (validated) values, never raw config text.
     expect(rec?.settings).toEqual({ logging: { level: "info", debug: true, redact: true } });
