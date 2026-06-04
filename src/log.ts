@@ -68,8 +68,9 @@ function wrap(logger: pino.Logger, liveLevel: () => LogLevel): CaretLogger {
 }
 
 /** A logger that drops everything — the degraded mode when a destination can't
- * be opened (e.g. the state dir's parent is a regular file). */
-const noop: CaretLogger = {
+ * be opened (e.g. the state dir's parent is a regular file), and the daemon's
+ * default when no logger is injected (tests stay quiet). */
+export const noopLogger: CaretLogger = {
   debug: () => {},
   info: () => {},
   warn: () => {},
@@ -105,7 +106,7 @@ function hookRaw(): pino.Logger | null {
 
 function hook(): CaretLogger {
   const logger = hookRaw();
-  return logger ? wrap(logger, () => currentLevel) : noop;
+  return logger ? wrap(logger, () => currentLevel) : noopLogger;
 }
 
 /** Set the hook logger's level (the hook injects loadSettings().logging.level).
@@ -161,6 +162,6 @@ export function createDaemonLogger(level: () => LogLevel, dest?: string | number
     const logger = pino({ ...pinoOpts, base: { pid: process.pid } }, target);
     return wrap(logger, level);
   } catch {
-    return noop;
+    return noopLogger;
   }
 }

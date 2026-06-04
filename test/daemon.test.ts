@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer, type CaretServer } from "../src/daemon.ts";
+import type { CaretLogger } from "../src/log.ts";
 import { createStore, type Store } from "../src/store.ts";
 
 let dir: string;
@@ -16,7 +17,7 @@ async function boot(
     idleMs?: number;
     heartbeatMs?: number;
     onShutdown?: () => void;
-    log?: (msg: string) => void;
+    log?: CaretLogger;
     routePlan?: Parameters<typeof createServer>[0]["routePlan"];
     lockPath?: string;
     buildId?: string;
@@ -389,10 +390,45 @@ test("idle shutdown fires when the daemon boots with no reviews", async () => {
   expect(shutdowns).toBeGreaterThanOrEqual(1);
 });
 
-test("a handler exception is logged before returning the 500", async () => {
-  const logs: string[] = [];
+/** A CaretLogger that records every emit for assertions. */
+function recordingLog() {
+  const recs: Array<{ level: string; step: string; msg: string }> = [];
+  const log: CaretLogger = {
+    debug: (step, msg) => recs.push({ level: "debug", step, msg }),
+    info: (step, msg) => recs.push({ level: "info", step, msg }),
+    warn: (step, msg) => recs.push({ level: "warn", step, msg }),
+    error: (step, err, msg) =>
+      recs.push({
+        level: "error",
+        step,
+        msg: msg ?? (err instanceof Error ? err.message : String(err)),
+      }),
+  };
+  return { recs, log };
+}
+
+test("lifecycle events are logged at info: listen, review created, resolved", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+  const created = await fetch(`${base}/api/reviews`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sessionId: "S", plan: "# x" }),
+  });
+  const { id } = (await created.json()) as { id: string };
+  await resolve(id, { behavior: "deny", feedback: "no" });
+  const info = recs.filter((r) => r.level === "info");
+  expect(info.some((r) => r.step === "listen" && r.msg.includes("listening on"))).toBe(true);
+  expect(info.some((r) => r.step === "review" && r.msg.includes(`review created: ${id}`))).toBe(
+    true,
+  );
+  expect(info.some((r) => r.step === "resolve" && r.msg.includes("resolved: deny"))).toBe(true);
+});
+
+test("a handler exception is logged at error level before returning the 500", async () => {
+  const { recs, log } = recordingLog();
   await boot({
-    log: (m) => logs.push(m),
+    log,
     routePlan: async () => {
       throw new Error("kaboom");
     },
@@ -403,14 +439,20 @@ test("a handler exception is logged before returning the 500", async () => {
     body: JSON.stringify({ sessionId: "S", plan: "# x" }),
   });
   expect(res.status).toBe(500);
-  expect(logs.some((m) => m.includes("kaboom"))).toBe(true);
+  const rec = recs.find((r) => r.level === "error");
+  expect(rec?.step).toBe("request");
+  expect(rec?.msg).toContain("kaboom");
 });
 
 test("a throwing log sink during a handler error still returns the clean 500", async () => {
+  const { log } = recordingLog();
   await boot({
     // Only the handler-error log throws; the lifecycle logs at startup are fine.
-    log: (m) => {
-      if (m.includes("request error")) throw new Error("log sink broken");
+    log: {
+      ...log,
+      error: () => {
+        throw new Error("log sink broken");
+      },
     },
     routePlan: async () => {
       throw new Error("kaboom");
