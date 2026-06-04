@@ -100,6 +100,8 @@ export async function runPreflight(deps: {
     concurrent: true,
     exitOnError: false,
     renderer: deps.renderer ?? "default",
+    // Non-TTY (CI, pipes) auto-falls back to verbose: line-per-event, no
+    // cursor-control sequences — color codes may still appear; that's expected.
     fallbackRenderer: "verbose",
   });
   await listr.run();
