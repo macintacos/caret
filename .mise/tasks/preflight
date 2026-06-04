@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-#MISE description="Pre-push gate: format, lint (Biome + tsc + svelte-check), test, and build"
+#MISE description="Pre-push gate: format, lint (Biome + tsc + svelte-check), test, build, and e2e"
 
 set -euo pipefail
 
 # Run the verification tasks directly (not via #MISE depends) so they execute in
 # a fixed order with fail-fast: format writes fixes first, then the read-only
 # checks, the test suite, and the build confirm the formatted tree is shippable.
+# Finally the Playwright e2e suite runs against the just-built UI.
 mise run format
 mise run lint
 mise run test
 mise run build
+mise run test-e2e

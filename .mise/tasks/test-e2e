@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+#MISE description="Run the Playwright e2e suite against an isolated daemon"
+#MISE depends=["build-ui"]
+
+set -euo pipefail
+
+# Probe for the Chromium binary so a missing install fails actionably
+# instead of mid-suite with Playwright's runtime error.
+if ! bun -e 'import { chromium } from "@playwright/test"; import { existsSync } from "node:fs"; process.exit(existsSync(chromium.executablePath()) ? 0 : 1);' 2>/dev/null; then
+  echo "caret e2e: Chromium not installed. Run: mise run setup  (or: bunx playwright install chromium)" >&2
+  exit 1
+fi
+
+bunx playwright test
