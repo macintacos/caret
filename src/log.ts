@@ -99,6 +99,13 @@ function wrap(
   };
 }
 
+/** Review-id prefix (the first UUID segment) for log MESSAGES: keeps lines
+ * scannable without restating the full id, which rides in the structured
+ * `reviewId` extra field for stitching/queries (EXC-444). */
+export function shortId(id: string): string {
+  return id.slice(0, 8);
+}
+
 /** A logger that drops everything — the degraded mode when a destination can't
  * be opened (e.g. the state dir's parent is a regular file), and the daemon's
  * default when no logger is injected (tests stay quiet). */

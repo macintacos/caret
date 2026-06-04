@@ -70,7 +70,9 @@ and distinguish important events by their informative messages alone.
 
 Concretely:
 
-- Messages are **lowercase, factual, present tense**: `"review created: <id>"`, `"plan rejected"`.
+- Messages are **lowercase, factual, present tense**: `"review created: <id8>"`, `"plan rejected"`.
+  Review ids in messages are truncated to their first 8 chars via `shortId` (`src/log.ts`) — the
+  full id rides in the record's `reviewId` field.
 - `step` is a **short fixed lowercase token** naming the operation (`review`, `resolve`,
   `decision`, `idle`, `listen`, `settings`, `signal`, `store`, `prefs`, `draft`, `env`, `ui`,
   `prewarm`, `retire`, `spawn`, `request`, `fatal`). Reuse an existing token before minting a

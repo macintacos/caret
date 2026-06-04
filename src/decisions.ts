@@ -6,7 +6,7 @@
 // This is a factory (not a module singleton) so each daemon owns its own
 // registry and tests stay isolated.
 
-import { type CaretLogger, noopLogger } from "./log.ts";
+import { type CaretLogger, noopLogger, shortId } from "./log.ts";
 import type { Decision } from "./types.ts";
 
 export interface DecisionRegistry {
@@ -51,7 +51,7 @@ export function createDecisions(log: CaretLogger = noopLogger): DecisionRegistry
       if (entry.settled) {
         // The /resolve handler's pending-only guard makes this near-impossible;
         // reaching it means two resolution paths raced — worth attention.
-        log.warn("resolve", `decision already settled: ${id}`, { reviewId: id });
+        log.warn("resolve", `decision already settled: ${shortId(id)}`, { reviewId: id });
         return false;
       }
       entry.settled = true;

@@ -105,10 +105,11 @@ test("two interleaved sessions never cross-contaminate", async () => {
 test("routing a new plan logs review created with full threading context", async () => {
   const { recs, log } = recordingLog();
   const r = await routeIncomingPlan(input(), store, log);
+  // The msg carries only an 8-char id prefix; the full id rides in extra.
   expect(recs).toContainEqual({
     level: "info",
     step: "review",
-    msg: `review created: ${r.id}`,
+    msg: `review created: ${r.id.slice(0, 8)}`,
     extra: { reviewId: r.id, sessionId: "S", action: "new", version: 1, planEpoch: 0 },
   });
 });
@@ -121,7 +122,7 @@ test("appending a revision logs review appended with the version", async () => {
   expect(recs).toContainEqual({
     level: "info",
     step: "review",
-    msg: `review appended: ${a.id} v2`,
+    msg: `review appended: ${a.id.slice(0, 8)} v2`,
     extra: { reviewId: a.id, sessionId: "S", action: "append", version: 2, planEpoch: 0 },
   });
 });

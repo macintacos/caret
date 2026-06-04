@@ -405,9 +405,9 @@ test("lifecycle events are logged at info: listen, review created, resolved", as
   await resolve(id, { behavior: "deny", feedback: "no" });
   const info = recs.filter((r) => r.level === "info");
   expect(info.some((r) => r.step === "listen" && r.msg.includes("listening on"))).toBe(true);
-  expect(info.some((r) => r.step === "review" && r.msg.includes(`review created: ${id}`))).toBe(
-    true,
-  );
+  expect(
+    info.some((r) => r.step === "review" && r.msg.includes(`review created: ${id.slice(0, 8)}`)),
+  ).toBe(true);
   expect(info.some((r) => r.step === "resolve" && r.msg.includes("resolved: deny"))).toBe(true);
 });
 
@@ -567,7 +567,7 @@ test("the review record is emitted once, by the router, with threading extras", 
   expect(review).toHaveLength(1);
   expect(review[0]).toMatchObject({
     level: "info",
-    msg: `review created: ${id}`,
+    msg: `review created: ${id.slice(0, 8)}`,
     extra: { reviewId: id, sessionId: "S", action: "new", version: 1 },
   });
 });
@@ -580,7 +580,7 @@ test("the resolve record carries reviewId, sessionId, and acceptMode extras", as
   const rec = recs.find((r) => r.step === "resolve");
   expect(rec).toMatchObject({
     level: "info",
-    msg: `review ${id} resolved: allow`,
+    msg: `review ${id.slice(0, 8)} resolved: allow`,
     extra: { reviewId: id, sessionId: "S", acceptMode: "acceptEdits" },
   });
 });
@@ -604,7 +604,7 @@ test("a draft autosave is logged at debug with the review id only", async () => 
   expect(recs).toContainEqual({
     level: "debug",
     step: "draft",
-    msg: `draft saved: ${id}`,
+    msg: `draft saved: ${id.slice(0, 8)}`,
     extra: { reviewId: id },
   });
   // Draft text is reviewer prose — it must never appear in any record.
@@ -621,7 +621,7 @@ test("a decision served from disk after a memory miss is logged at debug", async
   expect(recs).toContainEqual({
     level: "debug",
     step: "decision",
-    msg: `decision served from disk: ${id}`,
+    msg: `decision served from disk: ${id.slice(0, 8)}`,
     extra: { reviewId: id },
   });
 });

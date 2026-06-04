@@ -5,7 +5,7 @@
 import { mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { createDecisions } from "./decisions.ts";
-import { type CaretLogger, noopLogger } from "./log.ts";
+import { type CaretLogger, noopLogger, shortId } from "./log.ts";
 import {
   type DaemonLock,
   heartbeatMs as defaultHeartbeatMs,
@@ -230,7 +230,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
             if (disk?.decision) {
               // The reconnect-recovery path — rare and diagnostic gold when a
               // hook dropped its long-poll or the daemon restarted mid-review.
-              log.debug("decision", `decision served from disk: ${id}`, { reviewId: id });
+              log.debug("decision", `decision served from disk: ${shortId(id)}`, { reviewId: id });
               clearDecision(id);
               return Response.json(disk.decision);
             }
@@ -264,7 +264,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
             }
           });
           // Id only — draft/annotation text is reviewer prose and never logged.
-          if (updated) log.debug("draft", `draft saved: ${id}`, { reviewId: id });
+          if (updated) log.debug("draft", `draft saved: ${shortId(id)}`, { reviewId: id });
           return updated ? Response.json({ ok: true }) : notFound();
         }
 
@@ -311,7 +311,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
           // Defer one tick so THIS 200 flushes before the hook's long-poll
           // resolves (otherwise the browser's POST can appear to race the unblock).
           setTimeout(() => resolveDecision(id, decision), 0);
-          log.info("resolve", `review ${id} resolved: ${decision.behavior}`, {
+          log.info("resolve", `review ${shortId(id)} resolved: ${decision.behavior}`, {
             reviewId: id,
             sessionId: existing.sessionId,
             acceptMode: decision.acceptMode,

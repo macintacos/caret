@@ -5,7 +5,7 @@
 
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type CaretLogger, noopLogger } from "./log.ts";
+import { type CaretLogger, noopLogger, shortId } from "./log.ts";
 import { isUnresolved, type Review } from "./types.ts";
 
 export interface Store {
@@ -49,7 +49,7 @@ export function createStore(dir: string, log: CaretLogger = noopLogger): Store {
       .then(async () => {
         await mkdir(dir, { recursive: true });
         await writeFile(join(dir, `${review.id}.json`), JSON.stringify(review, null, 2));
-        log.debug("store", `review persisted: ${review.id}`, { reviewId: review.id });
+        log.debug("store", `review persisted: ${shortId(review.id)}`, { reviewId: review.id });
       });
     writeChains.set(review.id, next);
     return next;

@@ -8,7 +8,7 @@
 // so a plan after an approval is provably a fresh thread.
 
 import { randomUUID } from "node:crypto";
-import { type CaretLogger, noopLogger } from "./log.ts";
+import { type CaretLogger, noopLogger, shortId } from "./log.ts";
 import type { Store } from "./store.ts";
 import type { PlanInput, Review, RouteResult } from "./types.ts";
 
@@ -45,7 +45,7 @@ export async function routeIncomingPlan(
     });
     // The threading decision is logged here — not in the daemon handler — so
     // append vs new is distinguishable and the resolved sessionId rides along.
-    log.info("review", `review appended: ${latest.id} v${version}`, {
+    log.info("review", `review appended: ${shortId(latest.id)} v${version}`, {
       reviewId: latest.id,
       sessionId,
       action: "append",
@@ -75,7 +75,7 @@ export async function routeIncomingPlan(
     updatedAt: now,
   };
   await store.create(review);
-  log.info("review", `review created: ${id}`, {
+  log.info("review", `review created: ${shortId(id)}`, {
     reviewId: id,
     sessionId,
     action: "new",

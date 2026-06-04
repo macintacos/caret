@@ -23,6 +23,7 @@ import {
   logWarn,
   setLogLevel,
   setRedact,
+  shortId,
 } from "./log.ts";
 import {
   buildHash,
@@ -126,7 +127,7 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
     // From here every record — decision and error alike — carries the reviewId,
     // stitching this stream against the daemon's review/resolve records.
     ctx.reviewId = id;
-    logDebug("review", `review created: ${id}`, { ...ctx });
+    logDebug("review", `review created: ${shortId(id)}`, { ...ctx });
     const url = `${baseUrl}/?review=${id}`;
     deps.openBrowser(url);
     // Also print the URL to stderr — clickable in the transcript if the browser
