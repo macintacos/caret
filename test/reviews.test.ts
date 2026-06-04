@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { routeIncomingPlan } from "../src/reviews.ts";
 import { createStore, type Store } from "../src/store.ts";
-import type { PlanInput } from "../src/types.ts";
+import type { PlanInput, Review } from "../src/types.ts";
 import { recordingLog } from "./recording-log.ts";
 
 let dir: string;
@@ -81,6 +81,55 @@ test("a plan arriving while a review is still pending starts a new thread", asyn
   const b = await routeIncomingPlan(input({ plan: "# other\n\nz" }), store);
   expect(b).toMatchObject({ action: "new" });
   expect(b.id).not.toBe(a.id);
+});
+
+// ---- stale-pending supersede (EXC-454) ----
+
+test("resubmitting while the latest review is pending expires the orphan", async () => {
+  const a = await routeIncomingPlan(input(), store);
+  const b = await routeIncomingPlan(input(), store);
+  expect(b.action).toBe("new");
+  expect(b.expired).toEqual([a.id]);
+  expect(store.get(a.id)).toBeUndefined(); // dropped from memory
+  expect(store.list().map((r) => r.id)).toEqual([b.id]); // exactly one approvable review
+  // Terminal on disk: a still-pending record would rehydrate as an orphan.
+  expect((await store.persisted(a.id))?.status).toBe("expired");
+});
+
+test("an orphan pending behind a rejected latest is expired; the revision still appends", async () => {
+  const a = await routeIncomingPlan(input(), store);
+  await reject(a.id);
+  // Simulate a pre-fix orphan: an older pending review for the same session
+  // (the router can no longer produce one, but on-disk state can rehydrate it).
+  const orphan: Review = {
+    id: "orphan",
+    sessionId: "S",
+    cwd: "/p",
+    title: "stale",
+    status: "pending",
+    planEpoch: 0,
+    versions: [{ version: 1, plan: "old", annotations: [], createdAt: 1 }],
+    createdAt: 1,
+    updatedAt: 1,
+  };
+  await store.create(orphan);
+  const b = await routeIncomingPlan(input({ plan: "v2" }), store);
+  expect(b).toMatchObject({ id: a.id, action: "append", version: 2 });
+  expect(b.expired).toEqual(["orphan"]);
+  expect((await store.persisted("orphan"))?.status).toBe("expired");
+  expect(store.list().map((r) => r.id)).toEqual([a.id]); // only the re-pended thread remains
+});
+
+test("superseding logs review superseded with the orphan's id", async () => {
+  const a = await routeIncomingPlan(input(), store);
+  const { recs, log } = recordingLog();
+  await routeIncomingPlan(input(), store, log);
+  expect(recs).toContainEqual({
+    level: "info",
+    step: "review",
+    msg: `review superseded: ${a.id.slice(0, 8)}`,
+    extra: { reviewId: a.id, sessionId: "S", action: "supersede" },
+  });
 });
 
 test("two interleaved sessions never cross-contaminate", async () => {

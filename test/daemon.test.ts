@@ -386,6 +386,21 @@ test("idle shutdown fires when empty, not while a review is pending", async () =
   expect(shutdowns).toBeGreaterThanOrEqual(1);
 });
 
+test("a superseded review's decision entry does not pin idle shutdown", async () => {
+  let shutdowns = 0;
+  await boot({ idleMs: 30, heartbeatMs: 20, onShutdown: () => shutdowns++ });
+  const { id: stale } = await newReview();
+  // The (timed-out) hook long-polled once, leaving an unsettled decision entry.
+  expect((await fetch(`${base}/api/reviews/${stale}/decision`)).status).toBe(204);
+  // The session resubmits: the stale review is superseded by a fresh thread.
+  const { id: fresh } = await newReview();
+  expect(fresh).not.toBe(stale);
+  await resolve(fresh, { behavior: "allow" });
+  await Bun.sleep(120);
+  // The stale entry was cleared along with the supersede, so idle can fire.
+  expect(shutdowns).toBeGreaterThanOrEqual(1);
+});
+
 test("idle shutdown fires when the daemon boots with no reviews", async () => {
   let shutdowns = 0;
   await boot({ idleMs: 30, onShutdown: () => shutdowns++ });

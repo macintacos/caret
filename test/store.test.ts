@@ -123,6 +123,15 @@ test("rehydrate loads unresolved reviews, skips approved", async () => {
   expect(ids).toEqual(["keep-p", "keep-r"]);
 });
 
+test("rehydrate skips expired reviews", async () => {
+  // The terminal-on-disk contract the EXC-454 expiry paths rely on: a record
+  // persisted as "expired" must never reload as an approvable orphan.
+  await store.create(makeReview({ id: "drop-e", status: "expired" }));
+  const fresh = createStore(dir);
+  await fresh.rehydrate();
+  expect(fresh.all()).toEqual([]);
+});
+
 // ---- instrumentation (EXC-444) ----
 
 test("rehydrate logs the loaded review count at info", async () => {

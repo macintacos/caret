@@ -34,7 +34,7 @@ export type RoutePlan = (
   input: PlanInput,
   store: Store,
   log?: CaretLogger,
-) => Promise<{ id: string }>;
+) => Promise<{ id: string; expired?: string[] }>;
 
 export interface CreateServerOptions {
   store: Store;
@@ -263,6 +263,10 @@ export function createServer(opts: CreateServerOptions): CaretServer {
         const body = (await req.json().catch(() => ({}))) as PlanInput;
         // The router logs the review record (created vs appended) itself.
         const routed = await routePlan(body, store, log);
+        // Drop superseded reviews' unsettled long-poll entries — their hooks
+        // are gone, so nothing would ever settle them and they would pin
+        // openDecisionCount, blocking idle shutdown forever (EXC-454).
+        for (const staleId of routed.expired ?? []) clearDecision(staleId);
         return Response.json(routed);
       }
 
