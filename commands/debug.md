@@ -1,5 +1,5 @@
 ---
-description: Review the current caret session — pending/approved/rejected plans plus recent errors — and help debug failures
+description: Review the current caret session — pending/approved/rejected/expired plans plus recent errors — and help debug failures
 ---
 
 caret persists every review and logs to its state dir. This command reviews the current session —
@@ -12,7 +12,8 @@ ships. See …/caret.log."
 caret writes to its state dir — `$XDG_STATE_HOME/caret` when that variable is set, otherwise `~/.local/state/caret`:
 
 - `reviews/<id>.json` — one JSON review record per file, kept on disk as history after it resolves.
-  Each record carries `id`, `sessionId`, `cwd`, `title`, `status` (`pending`/`rejected`/`approved`),
+  Each record carries `id`, `sessionId`, `cwd`, `title`, `status`
+  (`pending`/`rejected`/`approved`/`expired`),
   a `versions` array (plan revisions), and — once resolved — a `decision`
   (`behavior`/`feedback`/`acceptMode`/`decidedAt`).
 - `caret.log` — NDJSON records from the short-lived `caret review` hook process, one JSON object
@@ -53,6 +54,8 @@ Present the result grouped by status:
 - **rejected** — changes requested; awaiting a revised plan. Include a short excerpt of the
   decision `feedback`.
 - **approved** — plan accepted; terminal success.
+- **expired** — abandoned by its hook (timeout) or superseded by a resubmitted plan; terminal,
+  never reviewed (EXC-454).
 
 For each review show its id, title, and version count (`versions` above — the number of plan
 revisions). Note that the field whitelist above is deliberate: `versions[].plan` and
