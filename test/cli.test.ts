@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { computeBuildId, ensureDaemon, runReview } from "../src/cli.ts";
+import { computeBuildId, ensureDaemon, resolveCommit, runReview } from "../src/cli.ts";
 import { setLogLevel } from "../src/log.ts";
 import { logFile } from "../src/paths.ts";
 import { PLAN_FORMAT_DENY_MESSAGE } from "../src/plan-format.ts";
@@ -698,4 +698,39 @@ test("computeBuildId uses the UI hash in dev (not compiled, never reads the bina
   });
   expect(id).toBe("uihash");
   expect(binaryReads).toBe(0);
+});
+
+// ---- resolveCommit: the commit the daemon reports at startup ----
+
+test("resolveCommit prefers the baked build-time commit and never asks git", () => {
+  let gitCalls = 0;
+  const sha = resolveCommit({
+    baked: "a".repeat(40),
+    gitHead: () => {
+      gitCalls++;
+      return "f".repeat(40);
+    },
+  });
+  expect(sha).toBe("a".repeat(40));
+  expect(gitCalls).toBe(0);
+});
+
+test("resolveCommit falls back to the source checkout's git HEAD in dev", () => {
+  const sha = resolveCommit({ baked: undefined, gitHead: () => "f".repeat(40) });
+  expect(sha).toBe("f".repeat(40));
+});
+
+test("resolveCommit treats a degenerate empty bake as unset", () => {
+  const sha = resolveCommit({ baked: "", gitHead: () => "f".repeat(40) });
+  expect(sha).toBe("f".repeat(40));
+});
+
+test("resolveCommit reports unknown when nothing is baked and git is unavailable", () => {
+  const sha = resolveCommit({ baked: undefined, gitHead: () => null });
+  expect(sha).toBe("unknown");
+});
+
+test("resolveCommit maps a degenerate empty gitHead to unknown", () => {
+  const sha = resolveCommit({ baked: undefined, gitHead: () => "" });
+  expect(sha).toBe("unknown");
 });
