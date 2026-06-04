@@ -3,7 +3,14 @@ import { readFileSync, statSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { logError } from "../src/log.ts";
+import {
+  createDaemonLogger,
+  logDebug,
+  logError,
+  logInfo,
+  logWarn,
+  setLogLevel,
+} from "../src/log.ts";
 import { daemonLogFile, logFile } from "../src/paths.ts";
 
 let home: string;
@@ -15,51 +22,44 @@ beforeEach(async () => {
   process.env.XDG_STATE_HOME = home;
 });
 afterEach(async () => {
+  setLogLevel("info"); // reset so level changes don't leak across tests
   if (savedXdg === undefined) delete process.env.XDG_STATE_HOME;
   else process.env.XDG_STATE_HOME = savedXdg;
   await rm(home, { recursive: true, force: true });
 });
+
+/** Read caret.log and return its parsed NDJSON records (one per non-blank line). */
+function records(path = logFile()): Record<string, unknown>[] {
+  return readFileSync(path, "utf-8")
+    .split("\n")
+    .filter((l) => l.length > 0)
+    .map((l) => JSON.parse(l) as Record<string, unknown>);
+}
 
 test("logFile and daemonLogFile resolve under the caret state dir", () => {
   expect(logFile()).toBe(join(home, "caret", "caret.log"));
   expect(daemonLogFile()).toBe(join(home, "caret", "daemon.log"));
 });
 
-test("logError writes a sentinel-delimited entry with step, message, and stack", () => {
+test("logError writes a single-line JSON error record with step, msg, and a real stack", () => {
   logError("longPoll", new Error("boom"));
-  const body = readFileSync(logFile(), "utf-8");
-  expect(body).toMatch(/^=== caret error \d{4}-\d\d-\d\dT[\d:.]+Z step=longPoll ===$/m);
-  expect(body).toContain("boom");
-  expect(body).toMatch(/\n\s+at /); // a real stack frame
+  const recs = records();
+  expect(recs.length).toBe(1);
+  const r = recs[0];
+  expect(r.level).toBe(50);
+  expect(r.step).toBe("longPoll");
+  expect(r.msg).toBe("boom");
+  const err = r.err as { message: string; stack: string };
+  expect(err.message).toBe("boom");
+  expect(err.stack).toMatch(/\n\s+at /); // a real stack frame
 });
 
-test("logError records the error cause chain when present", () => {
+test("logError serializes a nested cause chain", () => {
   logError("ensureDaemon", new Error("outer", { cause: new Error("inner-root") }));
-  const body = readFileSync(logFile(), "utf-8");
-  expect(body).toContain("outer");
-  expect(body).toContain("inner-root");
-});
-
-test("logError records sessionId and cwd context when provided", () => {
-  logError("runReview", new Error("x"), { sessionId: "sess-42", cwd: "/tmp/proj" });
-  const body = readFileSync(logFile(), "utf-8");
-  expect(body).toContain("sess-42");
-  expect(body).toContain("/tmp/proj");
-});
-
-test("logError appends across calls rather than truncating", () => {
-  logError("first", new Error("one"));
-  logError("second", new Error("two"));
-  const body = readFileSync(logFile(), "utf-8");
-  expect(body.match(/^=== caret error /gm)?.length).toBe(2);
-  expect(body).toContain("step=first");
-  expect(body).toContain("step=second");
-});
-
-test("logError creates the state dir 0700 and the log file 0600", () => {
-  logError("perm", new Error("p"));
-  expect(statSync(join(home, "caret")).mode & 0o777).toBe(0o700);
-  expect(statSync(logFile()).mode & 0o777).toBe(0o600);
+  const r = records()[0];
+  const err = r.err as { message: string; cause: { message: string } };
+  expect(err.message).toBe("outer");
+  expect(err.cause.message).toBe("inner-root");
 });
 
 test("logError terminates on a cyclic cause chain instead of hanging", () => {
@@ -69,15 +69,116 @@ test("logError terminates on a cyclic cause chain instead of hanging", () => {
   (b as Error).cause = a; // cycle: a -> b -> a
   logError("cyclic", a);
   const body = readFileSync(logFile(), "utf-8");
-  expect(body).toContain("step=cyclic");
+  // One record written, both messages present, no hang.
+  expect(records().length).toBe(1);
   expect(body).toContain("a-err");
   expect(body).toContain("b-err");
 });
 
-test("logError swallows write failures instead of throwing", async () => {
+test("logError records sessionId and cwd context when provided", () => {
+  logError("runReview", new Error("x"), { sessionId: "sess-42", cwd: "/tmp/proj" });
+  const r = records()[0];
+  expect(r.sessionId).toBe("sess-42");
+  expect(r.cwd).toBe("/tmp/proj");
+  expect(r.step).toBe("runReview");
+});
+
+test("logError handles a non-Error value, using the string as msg", () => {
+  logError("stringy", "just a string");
+  const r = records()[0];
+  expect(r.level).toBe(50);
+  expect(r.step).toBe("stringy");
+  expect(r.msg).toBe("just a string");
+  expect(r.err).toBeUndefined();
+});
+
+test("logInfo, logWarn, and logDebug write level 30/40/20 records with step, msg, and extra", () => {
+  setLogLevel("debug"); // so the debug record is not gated out
+  logInfo("review", "created", { id: "r1" });
+  logWarn("port", "in use", { port: 42718 });
+  logDebug("trace", "detail", { n: 7 });
+  const recs = records();
+  expect(recs.length).toBe(3);
+  expect(recs[0]).toMatchObject({ level: 30, step: "review", msg: "created", id: "r1" });
+  expect(recs[1]).toMatchObject({ level: 40, step: "port", msg: "in use", port: 42718 });
+  expect(recs[2]).toMatchObject({ level: 20, step: "trace", msg: "detail", n: 7 });
+});
+
+test("at the default info level, logDebug writes nothing", () => {
+  logDebug("trace", "hidden");
+  logInfo("review", "visible");
+  const recs = records();
+  expect(recs.length).toBe(1);
+  expect(recs[0].msg).toBe("visible");
+});
+
+test("after setLogLevel('warn'), logInfo is gated but logWarn and logError emit", () => {
+  setLogLevel("warn");
+  logInfo("info", "gated");
+  logWarn("warn", "shown");
+  logError("err", new Error("also shown"));
+  const recs = records();
+  expect(recs.length).toBe(2);
+  expect(recs.map((r) => r.level)).toEqual([40, 50]);
+});
+
+test("after setLogLevel('debug'), logDebug emits", () => {
+  setLogLevel("debug");
+  logDebug("trace", "now visible");
+  const recs = records();
+  expect(recs.length).toBe(1);
+  expect(recs[0]).toMatchObject({ level: 20, msg: "now visible" });
+});
+
+test("records append across calls rather than truncating", () => {
+  logInfo("first", "one");
+  logInfo("second", "two");
+  const recs = records();
+  expect(recs.length).toBe(2);
+  expect(recs[0].step).toBe("first");
+  expect(recs[1].step).toBe("second");
+});
+
+test("logging creates the state dir 0700 and the log file 0600", () => {
+  logError("perm", new Error("p"));
+  expect(statSync(join(home, "caret")).mode & 0o777).toBe(0o700);
+  expect(statSync(logFile()).mode & 0o777).toBe(0o600);
+});
+
+test("logging swallows write failures instead of throwing", async () => {
   // Make the state-dir parent a regular file so mkdir/open both fail (ENOTDIR).
   const blocker = join(home, "blocker");
   await writeFile(blocker, "not a dir");
   process.env.XDG_STATE_HOME = join(blocker, "nested");
   expect(() => logError("doomed", new Error("nope"))).not.toThrow();
+  expect(() => logInfo("doomed", "nope")).not.toThrow();
+});
+
+test("createDaemonLogger writes NDJSON with pid in base and respects the level thunk", () => {
+  const dest = join(home, "daemon-test.log");
+  let level: "debug" | "info" | "warn" | "error" = "info";
+  const log = createDaemonLogger(() => level, dest);
+
+  log.debug("boot", "hidden at info");
+  log.info("review", "review created: r1", { id: "r1" });
+
+  level = "debug"; // hot reload: subsequent emits honour the new level
+  log.debug("boot", "now visible");
+
+  const recs = records(dest);
+  expect(recs.length).toBe(2);
+  expect(recs[0]).toMatchObject({ level: 30, step: "review", msg: "review created: r1", id: "r1" });
+  expect(recs[0].pid).toBe(process.pid);
+  expect(recs[1]).toMatchObject({ level: 20, step: "boot", msg: "now visible" });
+});
+
+test("createDaemonLogger error method serializes an Error", () => {
+  const dest = join(home, "daemon-err.log");
+  const log = createDaemonLogger(() => "info", dest);
+  log.error("request", new Error("kaboom"));
+  const r = records(dest)[0];
+  expect(r.level).toBe(50);
+  expect(r.step).toBe("request");
+  expect(r.msg).toBe("kaboom");
+  expect((r.err as { message: string }).message).toBe("kaboom");
 });
