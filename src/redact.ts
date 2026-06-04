@@ -17,7 +17,9 @@ const CENSOR = "<redacted>";
 
 /** Keys whose values must never reach a log, toggle or no toggle — codifies
  * the "never log plan/prompt bodies" rule from src/daemon.ts as a structural
- * invariant rather than a code-review convention. */
+ * invariant rather than a code-review convention. Exact-key matching only:
+ * a future identifying key (hostname, user, email, …) must be added here
+ * explicitly. */
 const DENY_KEYS = new Set(["plan", "prompt"]);
 
 /** Cause chains are short; anything deeper than this is pathological. */
