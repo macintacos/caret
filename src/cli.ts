@@ -200,7 +200,7 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
 }
 
 /** Parsed /api/health body. `build`/`version` are absent on a pre-fix daemon. */
-type HealthBody = { service?: string; build?: string; version?: string };
+type HealthBody = { service?: string; build?: string; version?: string; commit?: string };
 
 export interface EnsureDeps {
   baseUrl: string;
