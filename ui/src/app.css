@@ -35,6 +35,7 @@
   --mark-orphan: rgba(120, 113, 108, 0.18);
 
   --ok: #15803d;
+  --danger: #b91c1c;
   --shadow-card: 0 1px 2px rgba(33, 28, 24, 0.06), 0 8px 24px rgba(33, 28, 24, 0.08);
 
   --radius: 4px;
@@ -64,6 +65,7 @@
     --mark-orphan: rgba(168, 158, 141, 0.16);
 
     --ok: #4ade80;
+    --danger: #f87171;
     --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.45);
 
     color-scheme: dark;

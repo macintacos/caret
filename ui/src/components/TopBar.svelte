@@ -2,6 +2,7 @@
   import { APPROVE_VARIANTS, approveLabel } from "../lib/approve.ts";
   import type { AcceptMode, ClientReview } from "../lib/types.ts";
   import Icon from "./Icon.svelte";
+  import NotifyBell from "./NotifyBell.svelte";
   import ReviewSwitcher from "./ReviewSwitcher.svelte";
   import VersionLabel from "./VersionLabel.svelte";
 
@@ -89,6 +90,13 @@
       </div>
     </div>
   {/if}
+
+  <!-- Always-visible permission badge, pinned right in both layouts: when a
+       review is active `.context` (flex: 1) eats the slack and the bell sits
+       after `.actions`; with no review its own margin-left pushes it right. -->
+  <div class="bell-slot">
+    <NotifyBell />
+  </div>
 </header>
 
 <!-- Click-away closes the approve menu. -->
@@ -148,6 +156,12 @@
     display: flex;
     align-items: center;
     gap: 0.6rem;
+    margin-left: auto;
+  }
+  /* Pins the bell to the right edge when no review is active (`.context`'s
+     flex:1 handles the active layout; here auto resolves to 0). */
+  .bell-slot {
+    display: inline-flex;
     margin-left: auto;
   }
   .actions.busy {
