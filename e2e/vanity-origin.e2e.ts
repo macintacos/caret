@@ -1,0 +1,55 @@
+// Vanity origin (EXC-426): the UI opens under http://caret.localhost:<port>, not
+// http://localhost:<port>. Chromium computes the Origin / Sec-Fetch-Site headers
+// itself, so a mutating POST (approve, deny) carries the caret.localhost origin
+// the browser derives — which must pass the daemon's same-origin guard
+// (isCrossOrigin, src/daemon.ts). A 403 cross-origin block would fail these
+// flows, so this is committed real-browser e2e, not a unit test. Chromium
+// special-cases *.localhost to loopback, so caret.localhost reaches the per-test
+// fixture daemon bound on 127.0.0.1.
+
+import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
+
+const FEEDBACK = "Please tighten the verification section.";
+
+/** Same daemon, addressed under the caret.localhost vanity hostname. */
+function vanityOrigin(url: string): string {
+  const vanity = new URL(url);
+  vanity.hostname = "caret.localhost";
+  return vanity.origin;
+}
+
+test("approve under caret.localhost resolves the review", async ({ daemon, page }) => {
+  const id = await daemon.seed();
+  // The deep-link shape the hook actually opens, under the vanity origin.
+  await page.goto(`${vanityOrigin(daemon.url)}/?review=${id}`);
+  await expect(page.locator("article.plan h1")).toBeVisible();
+
+  // The mutating POST /api/reviews/:id/resolve carries the browser-computed
+  // caret.localhost origin; no 403 means the guard allowed it.
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+
+  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
+  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).not.toContain(id);
+});
+
+test("request changes under caret.localhost rejects with feedback", async ({ daemon, page }) => {
+  const id = await daemon.seed();
+  await page.goto(`${vanityOrigin(daemon.url)}/?review=${id}`);
+  await expect(page.locator("article.plan h1")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const dialog = page.getByRole("dialog", { name: "Request changes" });
+  await page.getByRole("button", { name: "Request changes" }).click();
+  await expect(dialog).toBeVisible();
+  await dialog.locator("textarea").fill(FEEDBACK);
+  await page.keyboard.press("ControlOrMeta+Enter");
+
+  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
+
+  // The deny POST under the vanity origin resolves the review rejected, carrying
+  // the typed feedback — proof the guard allowed the mutating request.
+  await expect.poll(async () => (await daemon.getReview(id)).body?.decision?.behavior).toBe("deny");
+  const review = (await daemon.getReview(id)).body;
+  expect(review?.status).toBe("rejected");
+  expect(review?.decision?.feedback).toContain(FEEDBACK);
+});

@@ -6,7 +6,29 @@ import { viteSingleFile } from "vite-plugin-singlefile";
 // build MUST inline all JS + CSS into one ui/dist/index.html with no siblings.
 // No dynamic import() anywhere — singlefile cannot inline async chunks.
 export default defineConfig({
-  plugins: [svelte(), viteSingleFile()],
+  plugins: [
+    svelte(),
+    viteSingleFile(),
+    {
+      // EXC-426: print the vanity origin in the dev banner. Cosmetic — the bind
+      // stays localhost (binding caret.localhost needs the OS resolver; browsers
+      // resolve *.localhost themselves). Vite serves *.localhost Hosts by
+      // default, and the daemon's same-origin guard allows caret.localhost, so
+      // the printed link works end-to-end in dev too.
+      name: "caret-vanity-url",
+      configureServer(server) {
+        const printUrls = server.printUrls.bind(server);
+        server.printUrls = () => {
+          if (server.resolvedUrls) {
+            server.resolvedUrls.local = server.resolvedUrls.local.map((u) =>
+              u.replace("//localhost", "//caret.localhost"),
+            );
+          }
+          printUrls();
+        };
+      },
+    },
+  ],
   build: {
     cssCodeSplit: false,
     assetsInlineLimit: 100_000_000,

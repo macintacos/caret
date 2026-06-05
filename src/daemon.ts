@@ -76,6 +76,11 @@ export interface CaretServer {
   stop(): void;
 }
 
+/** The vanity host the hook opens the review UI under (EXC-426). Resolves to
+ * loopback per RFC 6761 (mDNSResponder system-wide; Chrome/Firefox special-case
+ * it internally), so the 127.0.0.1 bind needs no change. */
+export const VANITY_HOST = "caret.localhost";
+
 /** Reject mutating requests that aren't same-origin (loopback). The daemon has
  * no auth, so this is CSRF defense-in-depth: a hook/CLI request carries no
  * Origin (allowed); the same-origin browser UI carries a loopback Origin
@@ -85,7 +90,7 @@ export function isCrossOrigin(req: Request): boolean {
   if (origin) {
     try {
       const host = new URL(origin).hostname;
-      if (host !== "127.0.0.1" && host !== "localhost") return true;
+      if (host !== "127.0.0.1" && host !== "localhost" && host !== VANITY_HOST) return true;
     } catch {
       return true;
     }
