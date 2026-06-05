@@ -58,7 +58,9 @@ export interface PlanNotifier {
   observe: (reviews: PlanReviewLike[]) => void;
 }
 
-const NOTIFICATION_TITLE = "caret: new plan ready";
+// The carrot is the brand pun (caret → 🥕) — and an emoji survives the OS
+// toast's bold title styling better than a lowercase wordmark prefix did.
+const NOTIFICATION_TITLE = "🥕 New plan ready";
 
 // Notification construction can throw (e.g. platforms that require a service
 // worker) — notifications are non-essential, so degrade to a no-op, but a
@@ -145,7 +147,7 @@ export function createPlanNotifier(opts: PlanNotifierOptions): PlanNotifier {
  * System Settings → Notifications → the browser; Focus/Do Not Disturb) — the
  * page's logic is fine. */
 export function fireTestNotification(): boolean {
-  const handle = defaultNotify("caret: test notification", "Notifications reach your desktop");
+  const handle = defaultNotify("🥕 Test notification", "Notifications reach your desktop");
   if (!handle) {
     uiLog.warn("ui", "test notification unavailable");
     return false;

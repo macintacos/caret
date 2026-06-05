@@ -89,7 +89,7 @@ describe("createPlanNotifier", () => {
     notifier.observe([review("a")]);
     notifier.observe([review("a"), review("b", "Add OAuth", "/repo/app")]);
     expect(fired).toHaveLength(1);
-    expect(fired[0]!.title).toBe("caret: new plan ready");
+    expect(fired[0]!.title).toBe("🥕 New plan ready");
     expect(fired[0]!.body).toContain("Add OAuth");
     expect(fired[0]!.body).toContain("/repo/app");
   });
@@ -410,7 +410,7 @@ describe("fireTestNotification", () => {
     flush();
 
     expect(constructed).toHaveLength(1);
-    expect(constructed[0]!.title).toBe("caret: test notification");
+    expect(constructed[0]!.title).toBe("🥕 Test notification");
     expect(cap.events()).toContainEqual(
       expect.objectContaining({ level: "info", msg: "test notification fired" }),
     );
