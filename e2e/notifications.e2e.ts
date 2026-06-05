@@ -28,13 +28,17 @@ interface CapturedNote {
   onclick: (() => void) | null;
 }
 
+// The window globals the stub installs. Type-only, so it crosses the
+// addInitScript/evaluate serialization boundary (a helper function couldn't).
+type StubWindow = { __notes: CapturedNote[]; __vis?: string };
+
 // Installed before any app code runs: a capturing Notification stub whose
 // static permission is the injected per-test value (see header), plus an
 // instance-level visibilityState override — headless tabs never report hidden
 // naturally, and the notifier reads document.visibilityState at poll time.
 function initStub(permission: string) {
   const notes: CapturedNote[] = [];
-  (window as unknown as { __notes: CapturedNote[] }).__notes = notes;
+  (window as unknown as StubWindow).__notes = notes;
   class StubNotification implements CapturedNote {
     title: string;
     body: string;
@@ -59,7 +63,7 @@ function initStub(permission: string) {
   Object.defineProperty(document, "visibilityState", {
     configurable: true,
     get() {
-      return (window as unknown as { __vis?: string }).__vis ?? "visible";
+      return (window as unknown as StubWindow).__vis ?? "visible";
     },
   });
 }
@@ -79,17 +83,17 @@ test("a new plan while the tab is hidden notifies; its click selects the review"
   // Hide the tab, then seed a second review through the API: the next poll
   // tick must construct exactly one notification for the genuinely-new id.
   await page.evaluate(() => {
-    (window as unknown as { __vis?: string }).__vis = "hidden";
+    (window as unknown as StubWindow).__vis = "hidden";
   });
   const second = await daemon.seed({ plan: SECOND_PLAN });
   await page.waitForFunction(
-    () => (window as unknown as { __notes: unknown[] }).__notes.length > 0,
+    () => (window as unknown as StubWindow).__notes.length > 0,
     undefined,
     { timeout: 5_000 },
   );
 
   const note = await page.evaluate(() => {
-    const [n] = (window as unknown as { __notes: CapturedNote[] }).__notes;
+    const [n] = (window as unknown as StubWindow).__notes;
     return { title: n?.title, body: n?.body };
   });
   expect(note.title).toBe("caret: new plan ready");
@@ -99,22 +103,18 @@ test("a new plan while the tab is hidden notifies; its click selects the review"
   // Click the notification: the handler focuses the window, selects that
   // review (URL + rendered plan flip), and closes the notification.
   await page.evaluate(() => {
-    const [n] = (window as unknown as { __notes: CapturedNote[] }).__notes;
+    const [n] = (window as unknown as StubWindow).__notes;
     n?.onclick?.();
   });
   await expect(page).toHaveURL(new RegExp(`review=${second}`));
   await expect(page.locator("article.plan h1")).toHaveText("Gadget Renderer Cleanup");
-  expect(
-    await page.evaluate(
-      () => (window as unknown as { __notes: CapturedNote[] }).__notes[0]?.closed,
-    ),
-  ).toBe(true);
+  expect(await page.evaluate(() => (window as unknown as StubWindow).__notes[0]?.closed)).toBe(
+    true,
+  );
 
   // The already-seen ids never re-notify across later polls (the poll has
   // ticked several times by now): still exactly one construction.
-  expect(
-    await page.evaluate(() => (window as unknown as { __notes: unknown[] }).__notes.length),
-  ).toBe(1);
+  expect(await page.evaluate(() => (window as unknown as StubWindow).__notes.length)).toBe(1);
 });
 
 test("undecided permission shows the muted, requestable badge", async ({ daemon, page }) => {

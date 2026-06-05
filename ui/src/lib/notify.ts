@@ -75,8 +75,11 @@ export function createPlanNotifier(opts: PlanNotifierOptions): PlanNotifier {
   const focus = opts.focus ?? (() => window.focus());
 
   // null until the first observe seeds it. Pruning to each snapshot bounds the
-  // set to the pending count; a pruned id reappearing counts as new again
-  // (acceptable — real review ids are fresh UUIDs).
+  // set to the pending count, and a pruned id reappearing counts as new again.
+  // That reappearance is the revision lifecycle: a request-changes round flips
+  // the review to rejected (it leaves the pending list), and the revised plan
+  // re-pends the SAME id — so a revision the user is waiting on notifies,
+  // deliberately. Only an id continuously present never re-fires.
   let seen: Set<string> | null = null;
 
   return {

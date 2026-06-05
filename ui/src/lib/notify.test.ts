@@ -99,11 +99,22 @@ describe("createPlanNotifier", () => {
     expect(fired).toHaveLength(1);
   });
 
-  test("a revision (same id, changed fields) does not fire", () => {
+  test("an id continuously present never re-fires, even with changed fields", () => {
     const { notifier, fired } = makeNotifier();
     notifier.observe([review("a", "plan v1")]);
     notifier.observe([review("a", "plan v2 (revised)")]);
     expect(fired).toHaveLength(0);
+  });
+
+  test("a revision that left and re-entered the pending list notifies", () => {
+    // The real revision lifecycle: request-changes flips the review to
+    // rejected (absent from the pending poll), then the revised plan re-pends
+    // the same id. The user asked for the revision — tell them it's ready.
+    const { notifier, fired } = makeNotifier();
+    notifier.observe([review("a", "plan v1")]);
+    notifier.observe([]); // rejected: awaiting the revision
+    notifier.observe([review("a", "plan v2 (revised)")]);
+    expect(fired).toHaveLength(1);
   });
 
   test("multiple new ids in one poll fire one notification each", () => {

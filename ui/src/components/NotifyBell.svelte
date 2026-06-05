@@ -8,7 +8,7 @@
   import Icon from "./Icon.svelte";
 
   // The Notification API may be absent (older browsers, insecure contexts) — the
-  // whole component renders nothing then. Cached so the template reads simply.
+  // whole component renders nothing then.
   const supported = typeof Notification !== "undefined";
 
   let permission = $state<NotificationPermission>(
@@ -20,9 +20,15 @@
     // Inert outside the undecided state — keep the button enabled so its tooltip
     // stays reliable (a disabled button suppresses `title` in some browsers).
     if (!presentation.canRequest) return;
-    const result = await Notification.requestPermission();
-    permission = result;
-    uiLog.info("ui", "notify permission: " + result);
+    try {
+      const result = await Notification.requestPermission();
+      permission = result;
+      uiLog.info("ui", "notify permission: " + result);
+    } catch {
+      // A rejecting requestPermission (legacy callback-only engines) must not
+      // surface as an unhandled rejection; re-read whatever the browser settled.
+      permission = Notification.permission;
+    }
   }
 </script>
 
@@ -56,7 +62,6 @@
     padding: 0.35rem;
     display: inline-flex;
     align-items: center;
-    color: var(--ink-faint);
   }
   .bell:hover {
     background: var(--paper-sunk);
