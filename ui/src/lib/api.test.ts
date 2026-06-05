@@ -159,7 +159,12 @@ describe("startPolling instrumentation", () => {
       () => Promise.resolve(jsonResponse(reviewsOfLength(1))),
     ];
     let i = 0;
-    respond = () => sequence[Math.min(i++, sequence.length - 1)]!();
+    // /api/health answers benignly (no instanceId) so it never consumes a
+    // reviews-sequence slot — the sequence drives /api/reviews alone.
+    respond = (url) =>
+      url === "/api/health"
+        ? Promise.resolve(jsonResponse({ service: "caret", version: "1" }))
+        : sequence[Math.min(i++, sequence.length - 1)]!();
 
     let updates = 0;
     const stop = startPolling(() => updates++, 1);
@@ -192,6 +197,158 @@ describe("startPolling instrumentation", () => {
     expect(debug).toBeDefined();
     expect(debug!.msg as string).toContain("reviews pending: 3");
     expect(debug!.extra).toMatchObject({ count: 3 });
+  });
+});
+
+describe("startPolling daemon identity (onSwap)", () => {
+  function reviewsOfLength(n: number): ClientReview[] {
+    return Array.from({ length: n }, (_, i) => ({ id: `r${i}` }) as unknown as ClientReview);
+  }
+
+  async function until(predicate: () => boolean, timeoutMs = 5000): Promise<void> {
+    const start = Date.now();
+    while (!predicate()) {
+      if (Date.now() - start > timeoutMs) throw new Error("until: timed out");
+      await new Promise((r) => setTimeout(r, 1));
+    }
+  }
+
+  // Route a startPolling test's two endpoints: /api/reviews answers from
+  // `reviews` (a thunk so it can change across polls), /api/health from `health`
+  // (likewise). Everything else (i.e. /api/logs) is left to the shared capture.
+  function route(reviews: () => Response, health: () => Response) {
+    respond = (url) => {
+      if (url === "/api/health") return Promise.resolve(health());
+      if (url === "/api/reviews") return Promise.resolve(reviews());
+      return Promise.resolve(new Response(null, { status: 204 }));
+    };
+  }
+
+  test("onSwap fires once when instanceId changes across a failure→recovery edge", async () => {
+    // Health flips identity while the reviews poll is mid-outage; the recovery
+    // edge re-checks identity and notices the swap.
+    let instanceId = "aaaa1111";
+    let reviewsFails = false;
+    route(
+      () => (reviewsFails ? new Response(null, { status: 503 }) : jsonResponse(reviewsOfLength(1))),
+      () => jsonResponse({ service: "caret", version: "1", instanceId }),
+    );
+
+    const swaps: string[] = [];
+    let updates = 0;
+    const stop = startPolling(
+      () => updates++,
+      1,
+      undefined,
+      (id) => swaps.push(id),
+    );
+    // Let the baseline seed (start-of-poll health check) and one good poll land.
+    await until(() => updates >= 1);
+    // Now drive an outage, swap identity behind it, then recover.
+    reviewsFails = true;
+    instanceId = "bbbb2222";
+    await new Promise((r) => setTimeout(r, 5));
+    reviewsFails = false;
+    await until(() => swaps.length >= 1);
+    stop();
+    flush();
+
+    expect(swaps).toEqual(["bbbb2222"]);
+  });
+
+  test("onSwap does not fire when instanceId is unchanged", async () => {
+    route(
+      () => jsonResponse(reviewsOfLength(1)),
+      () => jsonResponse({ service: "caret", version: "1", instanceId: "stable00" }),
+    );
+
+    const swaps: string[] = [];
+    let updates = 0;
+    const stop = startPolling(
+      () => updates++,
+      1,
+      undefined,
+      (id) => swaps.push(id),
+    );
+    await until(() => updates >= 8);
+    stop();
+    flush();
+
+    expect(swaps).toEqual([]);
+  });
+
+  test("the periodic check catches a swap with no intervening failure", async () => {
+    // A same-port takeover completes between 2s polls without any failed tick:
+    // reviews never errors, so only the periodic ~5th-poll health check sees it.
+    let instanceId = "first000";
+    route(
+      () => jsonResponse(reviewsOfLength(1)),
+      () => jsonResponse({ service: "caret", version: "1", instanceId }),
+    );
+
+    const swaps: string[] = [];
+    let updates = 0;
+    const stop = startPolling(
+      () => updates++,
+      1,
+      undefined,
+      (id) => swaps.push(id),
+    );
+    await until(() => updates >= 1);
+    instanceId = "second00";
+    await until(() => swaps.length >= 1);
+    stop();
+    flush();
+
+    expect(swaps).toEqual(["second00"]);
+  });
+
+  test("exactly one warn is logged under step poll with the opaque from/to ids", async () => {
+    let instanceId = "from1234";
+    route(
+      () => jsonResponse(reviewsOfLength(1)),
+      () => jsonResponse({ service: "caret", version: "1", instanceId }),
+    );
+
+    let updates = 0;
+    const stop = startPolling(() => updates++, 1);
+    await until(() => updates >= 1);
+    instanceId = "to567890";
+    await until(() => updates >= 8);
+    stop();
+    flush();
+
+    const warns = cap
+      .events()
+      .filter(
+        (r) =>
+          r.level === "warn" &&
+          r.step === "poll" &&
+          (r.msg as string).includes("daemon instance changed"),
+      );
+    expect(warns).toHaveLength(1);
+    expect(warns[0]!.extra).toMatchObject({ from: "from1234", to: "to567890" });
+  });
+
+  test("a pre-fix daemon (no instanceId) never fires onSwap", async () => {
+    route(
+      () => jsonResponse(reviewsOfLength(1)),
+      () => jsonResponse({ service: "caret", version: "1" }),
+    );
+
+    const swaps: string[] = [];
+    let updates = 0;
+    const stop = startPolling(
+      () => updates++,
+      1,
+      undefined,
+      (id) => swaps.push(id),
+    );
+    await until(() => updates >= 8);
+    stop();
+    flush();
+
+    expect(swaps).toEqual([]);
   });
 });
 

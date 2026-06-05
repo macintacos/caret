@@ -58,4 +58,11 @@ export interface ResolveBody {
 export interface Health {
   service: "caret";
   version: string;
+  /** Build identifier (e.g. commit). Informational; the UI does not read it. */
+  build?: string;
+  /** Daemon state directory. Identifying (contains a username) — NEVER log it. */
+  stateDir?: string;
+  /** Per-boot opaque 8-hex-char id; flips when the daemon behind the port is
+   * replaced (EXC-461). The only field the UI reads, to detect a swap. */
+  instanceId?: string;
 }

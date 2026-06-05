@@ -25,6 +25,8 @@ async function boot(
     buildId?: string;
     commit?: string;
     prefsPath?: string;
+    stateDir?: string;
+    instanceId?: string;
   } = {},
 ) {
   store = createStore(dir);
@@ -41,6 +43,8 @@ async function boot(
     lockPath: opts.lockPath,
     buildId: opts.buildId,
     commit: opts.commit,
+    stateDir: opts.stateDir,
+    instanceId: opts.instanceId,
   });
   base = `http://localhost:${srv.port}`;
 }
@@ -127,6 +131,42 @@ test("the lock file is written on bind with pid/port/build/version", async () =>
   expect(lock.build).toBe("build-abc");
   expect(typeof lock.version).toBe("string");
   expect(typeof lock.startedAt).toBe("number");
+});
+
+// ---- world identity in health + lock (EXC-461) ----
+
+test("GET /api/health includes stateDir and instanceId when provided", async () => {
+  await boot({ stateDir: "/x/caret", instanceId: "inst123" });
+  const body = (await (await fetch(`${base}/api/health`)).json()) as {
+    stateDir?: string;
+    instanceId?: string;
+  };
+  expect(body.stateDir).toBe("/x/caret");
+  expect(body.instanceId).toBe("inst123");
+});
+
+test("GET /api/health omits stateDir and instanceId when not provided", async () => {
+  await boot();
+  const body = (await (await fetch(`${base}/api/health`)).json()) as Record<string, unknown>;
+  expect("stateDir" in body).toBe(false);
+  expect("instanceId" in body).toBe(false);
+});
+
+test("the lock file records stateDir and instanceId", async () => {
+  const lockPath = join(dir, "daemon.lock");
+  await boot({ lockPath, stateDir: "/x/caret", instanceId: "inst123" });
+  const lock = JSON.parse(readFileSync(lockPath, "utf-8")) as Record<string, unknown>;
+  expect(lock.stateDir).toBe("/x/caret");
+  expect(lock.instanceId).toBe("inst123");
+});
+
+test("the listen record carries instanceId but never the state dir", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log, stateDir: "/secret-home/caret", instanceId: "inst123" });
+  const listen = recs.find((r) => r.step === "listen");
+  expect((listen?.extra as { instanceId?: string } | undefined)?.instanceId).toBe("inst123");
+  // stateDir is identifying (contains the username) — it must never reach a log.
+  expect(JSON.stringify(recs)).not.toContain("/secret-home");
 });
 
 test("stop() removes the lock file", async () => {

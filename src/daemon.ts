@@ -57,6 +57,15 @@ export interface CreateServerOptions {
   /** Commit the server runs from (cli.ts resolveCommit), reported in the listen
    * record so daemon.log ties a boot back to a source revision (EXC-452). */
   commit?: string;
+  /** The daemon's resolved state dir — its world identity (EXC-461), reported
+   * in /api/health and recorded in the lock so a hook can refuse to
+   * cross-attach to a foreign world. Identifying (contains the username):
+   * never logged — the listen record carries instanceId instead. */
+  stateDir?: string;
+  /** Per-boot opaque id (EXC-461). /api/health carries it for the UI's swap
+   * detection; the lock and listen-record copies tie a lock file and a
+   * daemon.log boot back to the same boot for diagnostics. Safe to log. */
+  instanceId?: string;
   /** Leveled lifecycle logger (see log.ts CaretLogger); defaults to a no-op so
    * tests stay quiet. Lifecycle events log at info, handler failures at error. */
   log?: CaretLogger;
@@ -170,6 +179,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   const lockPath = opts.lockPath;
   const buildId = opts.buildId;
   const commit = opts.commit;
+  const stateDir = opts.stateDir;
+  const instanceId = opts.instanceId;
   const log = opts.log ?? noopLogger;
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount } = createDecisions(log);
 
@@ -239,11 +250,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       }
 
       if (method === "GET" && path === "/api/health") {
-        // `build` and `commit` are dropped from the JSON when undefined, so a
-        // daemon with no build fingerprint or no startup commit reports the
-        // bare {service, version}. `commit` is the commit this daemon runs from
-        // (EXC-452), surfaced for a diagnostics client's discovery report.
-        return Response.json({ ...IDENTITY, build: buildId, commit });
+        // Undefined fields are dropped from the JSON, so a daemon missing any
+        // reports the bare {service, version}. `commit` is the commit this
+        // daemon runs from (EXC-452), surfaced for a diagnostics client's
+        // discovery report; stateDir (world) and instanceId (boot) are the
+        // EXC-461 identity fields that let a hook and the UI tell daemons apart.
+        return Response.json({ ...IDENTITY, build: buildId, commit, stateDir, instanceId });
       }
 
       // Graceful single-instance retire (EXC-406): a newer caret asks this
@@ -493,6 +505,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     build: buildId,
     version: IDENTITY.version,
     commit,
+    // instanceId only — stateDir is identifying and never reaches a log (EXC-461).
+    instanceId,
   });
 
   // Write the single-instance lock atomically (temp + rename) so a concurrent
@@ -509,6 +523,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
         build: buildId,
         version: IDENTITY.version,
         startedAt: Date.now(),
+        stateDir,
+        instanceId,
       };
       const tmp = `${lockPath}.tmp.${process.pid}`;
       writeFileSync(tmp, JSON.stringify(lock));

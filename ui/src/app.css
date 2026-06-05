@@ -107,7 +107,10 @@ body {
    rail (Toc.svelte `.toc`) and would break its viewport pin. */
 .shell {
   display: grid;
-  grid-template-rows: auto 1fr;
+  /* Rows: TopBar | optional daemon-replaced banner | content. The middle row
+     collapses to 0 when the banner is absent; content keeps the 1fr regardless
+     (App.svelte pins each child to its row). */
+  grid-template-rows: auto auto 1fr;
   height: 100%;
 }
 

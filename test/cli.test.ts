@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { computeBuildId, ensureDaemon, resolveCommit, runReview } from "../src/cli.ts";
+import { computeBuildId, ensureDaemon, resolveCommit, retireDaemon, runReview } from "../src/cli.ts";
 import { setLogLevel } from "../src/log.ts";
 import { logFile } from "../src/paths.ts";
 import { PLAN_FORMAT_DENY_MESSAGE } from "../src/plan-format.ts";
@@ -457,9 +457,10 @@ function ensureDeps(over: Partial<Parameters<typeof ensureDaemon>[0]> = {}) {
     baseUrl: "http://localhost:42718",
     currentBuild: "b1",
     currentVersion: "v1",
+    currentStateDir: "/my/world",
     health: async () =>
-      ({ service: "caret", build: "b1", version: "v1" }) as
-        | { service?: string; build?: string; version?: string }
+      ({ service: "caret", build: "b1", version: "v1", stateDir: "/my/world" }) as
+        | { service?: string; build?: string; version?: string; stateDir?: string }
         | null,
     readLock: () => null,
     isAlive: () => false,
@@ -664,6 +665,136 @@ test("a stale daemon that cannot be retired is reused, never denied", async () =
   );
   expect(url).toBe("http://localhost:42718");
   expect(retires).toBe(1);
+});
+
+// ---- ensureDaemon: world identity — no cross-world attach (EXC-461) ----
+
+test("ensureDaemon throws on a foreign-world daemon, never retires or spawns", async () => {
+  let retires = 0;
+  let spawns = 0;
+  await expect(
+    ensureDaemon(
+      ensureDeps({
+        health: async () => ({
+          service: "caret",
+          build: "b1",
+          version: "v1",
+          stateDir: "/other/world",
+        }),
+        retire: async () => {
+          retires++;
+          return true;
+        },
+        spawn: () => spawns++,
+      }),
+    ),
+  ).rejects.toThrow(/different caret world/);
+  expect(retires).toBe(0);
+  expect(spawns).toBe(0);
+});
+
+test("ensureDaemon reuses a same-world same-build daemon", async () => {
+  let spawns = 0;
+  const url = await ensureDaemon(ensureDeps({ spawn: () => spawns++ }));
+  expect(url).toBe("http://localhost:42718");
+  expect(spawns).toBe(0);
+});
+
+test("ensureDaemon retires a same-world stale daemon (EXC-406 preserved)", async () => {
+  let retires = 0;
+  let spawns = 0;
+  const url = await ensureDaemon(
+    ensureDeps({
+      health: async () => {
+        if (retires === 0) {
+          return { service: "caret", build: "b0", version: "v1", stateDir: "/my/world" };
+        }
+        if (spawns === 0) return null;
+        return { service: "caret", build: "b1", version: "v1", stateDir: "/my/world" };
+      },
+      retire: async () => {
+        retires++;
+        return true;
+      },
+      spawn: () => spawns++,
+    }),
+  );
+  expect(retires).toBe(1);
+  expect(spawns).toBe(1);
+  expect(url).toBe("http://localhost:42718");
+});
+
+test("the never-deny fallback refuses a foreign-world daemon", async () => {
+  let calls = 0;
+  await expect(
+    ensureDaemon(
+      ensureDeps({
+        maxAttempts: 2,
+        // Refused throughout the loop; a foreign daemon answers only at the
+        // exhausted-fallback health check.
+        health: async () =>
+          ++calls <= 2
+            ? null
+            : { service: "caret", build: "b1", version: "v1", stateDir: "/other/world" },
+      }),
+    ),
+  ).rejects.toThrow(/different caret world/);
+});
+
+test("the never-deny fallback still reuses a same-world stale daemon", async () => {
+  let calls = 0;
+  const url = await ensureDaemon(
+    ensureDeps({
+      maxAttempts: 2,
+      health: async () =>
+        ++calls <= 2
+          ? null
+          : { service: "caret", build: "b9", version: "v9", stateDir: "/my/world" },
+    }),
+  );
+  expect(url).toBe("http://localhost:42718");
+});
+
+// ---- retireDaemon: SIGTERM fallback is gated on the lock's world (EXC-461) ----
+
+// http://127.0.0.1:1 — nothing listens there, so the /api/retire attempt fails
+// fast and the SIGTERM fallback is what's under test. The injected kill spy
+// keeps the test from signaling anything real; pid is our own (always alive).
+
+test("retireDaemon does not SIGTERM a foreign world's lock pid", async () => {
+  let kills = 0;
+  const ok = await retireDaemon(
+    "http://127.0.0.1:1",
+    { pid: process.pid, port: 1, stateDir: "/other/world" },
+    "/my/world",
+    () => kills++,
+  );
+  expect(ok).toBe(false);
+  expect(kills).toBe(0);
+});
+
+test("retireDaemon SIGTERMs a same-world lock pid", async () => {
+  let kills = 0;
+  const ok = await retireDaemon(
+    "http://127.0.0.1:1",
+    { pid: process.pid, port: 1, stateDir: "/my/world" },
+    "/my/world",
+    () => kills++,
+  );
+  expect(ok).toBe(true);
+  expect(kills).toBe(1);
+});
+
+test("retireDaemon treats a legacy lock (no stateDir) as same-world", async () => {
+  let kills = 0;
+  const ok = await retireDaemon(
+    "http://127.0.0.1:1",
+    { pid: process.pid, port: 1 },
+    "/my/world",
+    () => kills++,
+  );
+  expect(ok).toBe(true);
+  expect(kills).toBe(1);
 });
 
 // ---- computeBuildId: any local rebuild supersedes a running daemon ----
