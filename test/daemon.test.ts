@@ -417,6 +417,29 @@ test("cross-origin mutating requests are blocked (CSRF guard)", async () => {
   expect(local.ok).toBe(true);
 });
 
+test("caret.localhost vanity origin is allowed; other *.localhost hosts are not (EXC-426)", async () => {
+  await boot();
+  const vanity = await fetch(`${base}/api/reviews`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Origin: `http://caret.localhost:${srv.port}`,
+    },
+    body: JSON.stringify({ sessionId: "S", plan: "# x" }),
+  });
+  expect(vanity.ok).toBe(true);
+  // Only the exact vanity host is allowlisted — a sibling *.localhost is not.
+  const sibling = await fetch(`${base}/api/reviews`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Origin: `http://other.localhost:${srv.port}`,
+    },
+    body: JSON.stringify({ sessionId: "S2", plan: "# x" }),
+  });
+  expect(sibling.status).toBe(403);
+});
+
 test("GET / serves HTML containing the app root", async () => {
   await boot();
   const html = await (await fetch(`${base}/`)).text();
