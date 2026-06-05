@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// caret hook CLI. Subcommands: daemon | prewarm | review.
+// caret hook CLI. Subcommands: daemon | prewarm | review | redact | discovery.
 //
 // Phase-0 spike outcome encoded here: plan approval is gated through a
 // PermissionRequest/ExitPlanMode hook. `review` blocks while the browser
@@ -11,8 +11,20 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, openSync, readFileSync, unlinkSync } from "node:fs";
+import { release } from "node:os";
 import { dirname, normalize } from "node:path";
 import { createServer, type CaretServer } from "./daemon.ts";
+import {
+  collectReport,
+  type DiscoveryDeps,
+  type HealthIdentity,
+  listProcesses,
+  listReviewFiles,
+  logStats,
+  readClaudeInstallState,
+  renderReport,
+  type Report,
+} from "./discovery.ts";
 import { denyOutput, type HookOutput, toHookOutput } from "./feedback.ts";
 import {
   createDaemonLogger,
@@ -37,7 +49,7 @@ import {
   VERSION,
 } from "./paths.ts";
 import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "./plan-format.ts";
-import { redactLogFiles } from "./redact.ts";
+import { redactLogFiles, scrubValue } from "./redact.ts";
 import {
   getPort,
   heartbeatMs,
@@ -199,15 +211,9 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
   }
 }
 
-/** Parsed /api/health body. `build`/`version` are absent on a pre-fix daemon,
- * `stateDir`/`instanceId` (EXC-461) on a pre-identity one. */
-type HealthBody = {
-  service?: string;
-  build?: string;
-  version?: string;
-  stateDir?: string;
-  instanceId?: string;
-};
+/** Parsed /api/health body — the shared HealthIdentity shape (every field
+ * absent on a pre-fix daemon), aliased to keep the review path's name. */
+type HealthBody = HealthIdentity;
 
 export interface EnsureDeps {
   baseUrl: string;
@@ -808,6 +814,65 @@ function runRedactSubcommand(): void {
   }
 }
 
+/** Production probes for the discovery report (EXC-464): the same primitives
+ * the review path already uses (httpHealth, readDaemonLock, isPidAlive) plus
+ * the bounded read-only readers from discovery.ts. Deliberately no removeLock
+ * or retire — discovery observes, never repairs. */
+function prodDiscoveryDeps(s: Settings): DiscoveryDeps {
+  return {
+    now: () => new Date(),
+    version: VERSION,
+    system: () => ({ platform: process.platform, os: release(), arch: process.arch }),
+    install: () => ({
+      // The same dev-vs-compiled signal daemonCommand/currentBuildId key off.
+      kind: process.argv[1]?.endsWith(".ts") ? "dev" : "prod",
+      binaryPath: process.execPath,
+      bunVersion: Bun.version,
+    }),
+    settings: () => s,
+    configPath: configFile(),
+    configExists: () => existsSync(configFile()),
+    effective: () => ({
+      port: getPort(s),
+      idleMs: idleMs(s),
+      reviewTimeoutMs: reviewTimeoutMs(s),
+      heartbeatMs: heartbeatMs(s),
+    }),
+    baseUrl: `http://localhost:${getPort(s)}`,
+    health: httpHealth,
+    readLock: readDaemonLock,
+    isPidAlive,
+    listProcesses,
+    listReviewFiles,
+    readClaudeInstallState,
+    logStats,
+    logPaths: { caret: logFile(), daemon: daemonLogFile() },
+  };
+}
+
+async function runDiscoverySubcommand(argv: string[]): Promise<void> {
+  // One-shot diagnostics snapshot (EXC-464). Human-facing output like redact:
+  // human-readable by default, --json for the machine document. ALWAYS redacted
+  // (a deliberate inversion of the raw-by-default logging posture, EXC-399) —
+  // this artifact exists to be pasted into bug reports. Exit 0 whenever a
+  // report was produced, however degraded; non-zero only when none could be.
+  try {
+    const s = loadSettings();
+    const report = await collectReport(prodDiscoveryDeps(s));
+    // scrubValue preserves the report's shape (strings scrub in place), so the
+    // cast back to Report is safe for renderReport.
+    const redacted = scrubValue(report, true) as Report;
+    const out = argv.includes("--json")
+      ? JSON.stringify(redacted, null, 2)
+      : renderReport(redacted);
+    process.stdout.write(`${out}\n`);
+    process.exit(0);
+  } catch (e) {
+    process.stderr.write(`caret discovery: ${e}\n`);
+    process.exit(1);
+  }
+}
+
 async function main(): Promise<void> {
   const sub = process.argv[2];
   switch (sub) {
@@ -819,9 +884,11 @@ async function main(): Promise<void> {
       return runReviewSubcommand();
     case "redact":
       return runRedactSubcommand();
+    case "discovery":
+      return runDiscoverySubcommand(process.argv.slice(3));
     default:
       process.stderr.write(
-        `caret: unknown subcommand "${sub ?? ""}". Use: daemon | prewarm | review | redact\n`,
+        `caret: unknown subcommand "${sub ?? ""}". Use: daemon | prewarm | review | redact | discovery\n`,
       );
       process.exit(1);
   }

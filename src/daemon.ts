@@ -250,11 +250,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       }
 
       if (method === "GET" && path === "/api/health") {
-        // `build` is dropped from the JSON when buildId is undefined, so a
-        // daemon with no build fingerprint reports the bare {service, version}.
-        // Same for the EXC-461 identity fields: stateDir (world) and
-        // instanceId (boot) let a hook and the UI tell daemons apart.
-        return Response.json({ ...IDENTITY, build: buildId, stateDir, instanceId });
+        // Undefined fields are dropped from the JSON, so a daemon missing any
+        // reports the bare {service, version}. `commit` is the commit this
+        // daemon runs from (EXC-452), surfaced for a diagnostics client's
+        // discovery report; stateDir (world) and instanceId (boot) are the
+        // EXC-461 identity fields that let a hook and the UI tell daemons apart.
+        return Response.json({ ...IDENTITY, build: buildId, commit, stateDir, instanceId });
       }
 
       // Graceful single-instance retire (EXC-406): a newer caret asks this

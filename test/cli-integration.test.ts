@@ -228,6 +228,132 @@ test("caret redact reports when there are no logs to scrub", async () => {
   }
 });
 
+// `caret discovery` end-to-end (EXC-464): argv routing (human vs --json), the
+// always-on redaction, and the exit-0-on-degraded contract — real subprocess,
+// like the redact tests above. CARET_PORT points at a just-released free port
+// so the probe never touches a real daemon; CLAUDE_CONFIG_DIR points at the
+// empty state home so installState stays hermetic ("unknown").
+function discoveryEnv(stateHome: string): Record<string, string> {
+  const env: Record<string, string> = {
+    ...(process.env as Record<string, string>),
+    XDG_STATE_HOME: stateHome,
+    CARET_PORT: String(freePort()),
+    CLAUDE_CONFIG_DIR: join(stateHome, "claude"),
+  };
+  // Force the default config path (~/.config/...): its home prefix is exactly
+  // what the always-on scrub must rewrite to ~.
+  delete env.XDG_CONFIG_HOME;
+  return env;
+}
+
+test("caret discovery prints a human-readable report and exits 0", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-discovery-human-"));
+  const proc = Bun.spawn([process.execPath, "src/cli.ts", "discovery"], {
+    env: discoveryEnv(stateHome),
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  try {
+    const exit = await proc.exited;
+    const out = await new Response(proc.stdout).text();
+    expect(exit).toBe(0);
+    expect(out.startsWith("caret discovery (caret-discovery/1)")).toBe(true);
+    // Every section title renders, and the daemon (nothing on the port) reads
+    // as unreachable.
+    for (const title of [
+      "system:",
+      "install:",
+      "settings:",
+      "daemon:",
+      "lockAndPort:",
+      "processes:",
+      "reviews:",
+      "installState:",
+      "logs:",
+    ]) {
+      expect(out).toContain(title);
+    }
+    expect(out).toContain("reachable : false");
+  } finally {
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
+test("caret discovery --json prints one parseable, redacted document", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-discovery-json-"));
+  const proc = Bun.spawn([process.execPath, "src/cli.ts", "discovery", "--json"], {
+    env: discoveryEnv(stateHome),
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  try {
+    const exit = await proc.exited;
+    const out = await new Response(proc.stdout).text();
+    expect(exit).toBe(0);
+    const report = JSON.parse(out) as Record<string, Record<string, unknown>>;
+    expect(report.schema).toBe("caret-discovery/1");
+    expect(report.version).toBe(VERSION);
+    for (const key of [
+      "system",
+      "install",
+      "settings",
+      "daemon",
+      "lockAndPort",
+      "processes",
+      "reviews",
+      "installState",
+      "logs",
+    ]) {
+      expect(report[key]).toBeDefined();
+    }
+    // Empty state + nothing on the port: every probe degrades gracefully, the
+    // run still exits 0 (the acceptance contract).
+    expect(report.daemon).toEqual({ reachable: false });
+    // Always-redacted: the home prefix never appears raw — the default config
+    // path renders as ~/.config/... and the bun binaryPath is scrubbed too.
+    expect(out).not.toContain(homedir());
+    expect(report.settings.configPath).toBe("~/.config/caret/config.toml");
+    // The flat-shape invariant: nothing was depth-clipped by the scrub.
+    expect(out).not.toContain("<depth-capped>");
+  } finally {
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
+test("caret discovery --json reports a live daemon's identity and commit", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-discovery-live-"));
+  const srv = createServer({
+    store: createStore(join(stateHome, "reviews")),
+    port: 0,
+    buildId: "it-build",
+    commit: "it-commit",
+  });
+  servers.push(srv);
+  const env = discoveryEnv(stateHome);
+  env.CARET_PORT = String(srv.port);
+  const proc = Bun.spawn([process.execPath, "src/cli.ts", "discovery", "--json"], {
+    env,
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  try {
+    const exit = await proc.exited;
+    const out = await new Response(proc.stdout).text();
+    expect(exit).toBe(0);
+    const report = JSON.parse(out) as Record<string, Record<string, unknown>>;
+    expect(report.daemon).toEqual({
+      reachable: true,
+      service: "caret",
+      daemonVersion: VERSION,
+      build: "it-build",
+      commit: "it-commit",
+    });
+    expect(report.lockAndPort.portServesCaret).toBe(true);
+  } finally {
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
 // runDaemon lifecycle records (EXC-444): ui fallback, invalid-env warns, and
 // the signal-shutdown record — only reachable through a real daemon process.
 test("the daemon logs env warns, ui fallback, and the sigterm shutdown", async () => {
