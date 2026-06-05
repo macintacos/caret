@@ -239,9 +239,11 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       }
 
       if (method === "GET" && path === "/api/health") {
-        // `build` is dropped from the JSON when buildId is undefined, so a
-        // daemon with no build fingerprint reports the bare {service, version}.
-        return Response.json({ ...IDENTITY, build: buildId });
+        // `build` and `commit` are dropped from the JSON when undefined, so a
+        // daemon with no build fingerprint or no startup commit reports the
+        // bare {service, version}. `commit` is the commit this daemon runs from
+        // (EXC-452), surfaced for a diagnostics client's discovery report.
+        return Response.json({ ...IDENTITY, build: buildId, commit });
       }
 
       // Graceful single-instance retire (EXC-406): a newer caret asks this

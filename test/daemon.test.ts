@@ -106,6 +106,18 @@ test("GET /api/health includes the build fingerprint", async () => {
   expect(body.build).toBe("build-abc");
 });
 
+test("health includes the commit when provided", async () => {
+  await boot({ commit: "c0ffee00" });
+  const body = (await (await fetch(`${base}/api/health`)).json()) as { commit?: string };
+  expect(body.commit).toBe("c0ffee00");
+});
+
+test("health omits commit when the daemon has none", async () => {
+  await boot();
+  const body = (await (await fetch(`${base}/api/health`)).json()) as { commit?: string };
+  expect(body.commit).toBeUndefined();
+});
+
 test("the lock file is written on bind with pid/port/build/version", async () => {
   const lockPath = join(dir, "daemon.lock");
   await boot({ lockPath, buildId: "build-abc" });
