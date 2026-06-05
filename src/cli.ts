@@ -13,7 +13,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, openSync, readFileSync, unlinkSync } from "node:fs";
 import { release } from "node:os";
 import { dirname, normalize } from "node:path";
-import { createServer, type CaretServer } from "./daemon.ts";
+import { createServer, type CaretServer, VANITY_HOST } from "./daemon.ts";
 import {
   collectReport,
   type DiscoveryDeps,
@@ -153,7 +153,10 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
     // stitching this stream against the daemon's review/resolve records.
     ctx.reviewId = id;
     logDebug("review", `review created: ${shortId(id)}`, { ...ctx });
-    const url = `${baseUrl}/?review=${id}`;
+    // EXC-426: humans get the vanity origin; internal fetches keep using baseUrl.
+    const open = new URL(baseUrl);
+    open.hostname = VANITY_HOST;
+    const url = `${open.origin}/?review=${id}`;
     deps.openBrowser(url);
     // Also print the URL to stderr — clickable in the transcript if the browser
     // fails to open.

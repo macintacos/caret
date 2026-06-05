@@ -62,6 +62,20 @@ test("happy path returns an allow hook output", async () => {
   expect(out.hookSpecificOutput.decision.behavior).toBe("allow");
 });
 
+test("browser opens under the caret.localhost vanity origin (EXC-426)", async () => {
+  let opened: string | undefined;
+  await runReview(
+    stdin,
+    reviewDeps({
+      ensureDaemon: async () => "http://localhost:4242",
+      openBrowser: (u) => {
+        opened = u;
+      },
+    }),
+  );
+  expect(opened).toBe("http://caret.localhost:4242/?review=rid");
+});
+
 test("deny decision passes the feedback through to message", async () => {
   const out = await runReview(
     stdin,
