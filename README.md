@@ -78,6 +78,15 @@ The hook emits the [PermissionRequest decision](https://code.claude.com/docs/en/
 **Fail-safe = deny.** On a bad payload, an unreachable daemon, a timeout, a signal, or daemon death,
 caret emits `deny` with an explanation — it never auto-approves an unreviewed plan.
 
+### Desktop notifications
+
+When a new plan lands while the caret tab is hidden, the page fires a desktop notification — clicking
+it focuses the tab and opens that review (a notification click is a user gesture, the one focus path
+browsers reliably allow). The bell badge in the top bar shows the current permission — granted,
+blocked, or undecided — and requests it on click when undecided. Page-context only, no service
+worker: the tab must be open. On macOS, Chrome's notifications are additionally gated by System
+Settings → Notifications even when the site permission is granted.
+
 ## Configuration
 
 ### Config file

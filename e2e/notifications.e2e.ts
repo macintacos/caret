@@ -1,0 +1,128 @@
+// Desktop notifications (EXC-427): the granted path is proven end-to-end —
+// the 2s poll, the seen-set diff, the badge, and the notification's click
+// wiring (URL + rendered plan flip) are all real; only two browser surfaces
+// are stubbed, of necessity:
+//
+// - window.Notification constructions (an OS toast is unobservable to any
+//   automated layer; the capturing stub records what the page constructed).
+// - Notification.permission. Headless Chromium hard-codes this surface to
+//   "denied" regardless of the context's actual permission state — verified
+//   empirically: with Playwright's notifications grant in effect,
+//   navigator.permissions.query reports "granted" while Notification.permission
+//   still reads "denied" (and "denied" vs "prompt" without the grant). The page
+//   reads the standard Notification.permission surface, so each test injects
+//   the permission its scenario needs.
+//
+// The denied branch (red bell-off badge) is covered by unit tests only
+// (ui/src/lib/notify.test.ts's bellPresentation cases) — the stub could fake
+// it here, but that would re-prove the same pure mapping with no extra wiring.
+
+import { SECOND_PLAN } from "./support/fixture-plan.ts";
+import { expect, test } from "./support/fixtures.ts";
+
+// Captured constructions of the stubbed Notification (see initStub).
+interface CapturedNote {
+  title: string;
+  body: string;
+  closed: boolean;
+  onclick: (() => void) | null;
+}
+
+// Installed before any app code runs: a capturing Notification stub whose
+// static permission is the injected per-test value (see header), plus an
+// instance-level visibilityState override — headless tabs never report hidden
+// naturally, and the notifier reads document.visibilityState at poll time.
+function initStub(permission: string) {
+  const notes: CapturedNote[] = [];
+  (window as unknown as { __notes: CapturedNote[] }).__notes = notes;
+  class StubNotification implements CapturedNote {
+    title: string;
+    body: string;
+    closed = false;
+    onclick: (() => void) | null = null;
+    constructor(title: string, options?: { body?: string }) {
+      this.title = title;
+      this.body = options?.body ?? "";
+      notes.push(this);
+    }
+    close() {
+      this.closed = true;
+    }
+    static get permission() {
+      return permission;
+    }
+    static requestPermission() {
+      return Promise.resolve(permission);
+    }
+  }
+  (window as { Notification: unknown }).Notification = StubNotification;
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get() {
+      return (window as unknown as { __vis?: string }).__vis ?? "visible";
+    },
+  });
+}
+
+test("a new plan while the tab is hidden notifies; its click selects the review", async ({
+  daemon,
+  page,
+}) => {
+  await page.addInitScript(initStub, "granted");
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator("article.plan h1")).toHaveText("Widget Cache Refactor");
+
+  // The badge reflects the granted permission (green bell).
+  await expect(page.getByRole("button", { name: "Notifications: granted" })).toBeVisible();
+
+  // Hide the tab, then seed a second review through the API: the next poll
+  // tick must construct exactly one notification for the genuinely-new id.
+  await page.evaluate(() => {
+    (window as unknown as { __vis?: string }).__vis = "hidden";
+  });
+  const second = await daemon.seed({ plan: SECOND_PLAN });
+  await page.waitForFunction(
+    () => (window as unknown as { __notes: unknown[] }).__notes.length > 0,
+    undefined,
+    { timeout: 5_000 },
+  );
+
+  const note = await page.evaluate(() => {
+    const [n] = (window as unknown as { __notes: CapturedNote[] }).__notes;
+    return { title: n?.title, body: n?.body };
+  });
+  expect(note.title).toBe("caret: new plan ready");
+  expect(note.body).toContain("Gadget Renderer Cleanup");
+  expect(note.body).toContain("/tmp/caret-e2e");
+
+  // Click the notification: the handler focuses the window, selects that
+  // review (URL + rendered plan flip), and closes the notification.
+  await page.evaluate(() => {
+    const [n] = (window as unknown as { __notes: CapturedNote[] }).__notes;
+    n?.onclick?.();
+  });
+  await expect(page).toHaveURL(new RegExp(`review=${second}`));
+  await expect(page.locator("article.plan h1")).toHaveText("Gadget Renderer Cleanup");
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { __notes: CapturedNote[] }).__notes[0]?.closed,
+    ),
+  ).toBe(true);
+
+  // The already-seen ids never re-notify across later polls (the poll has
+  // ticked several times by now): still exactly one construction.
+  expect(
+    await page.evaluate(() => (window as unknown as { __notes: unknown[] }).__notes.length),
+  ).toBe(1);
+});
+
+test("undecided permission shows the muted, requestable badge", async ({ daemon, page }) => {
+  await page.addInitScript(initStub, "default");
+  await daemon.seed();
+  await page.goto("/");
+
+  const bell = page.getByRole("button", { name: "Notifications: default" });
+  await expect(bell).toBeVisible();
+  await expect(bell).toHaveAttribute("title", "Enable desktop notifications for new plans");
+});
