@@ -4,8 +4,11 @@
   // no dynamic imports, no emitted assets. The SVGs stay verbatim: sizing is
   // CSS on the wrapper (overriding the files' width/height attributes), and
   // color rides on stroke="currentColor" from the parent's `color`.
+  import bell from "../icons/bell.svg?raw";
+  import bellOff from "../icons/bell-off.svg?raw";
   import check from "../icons/check.svg?raw";
   import chevronDown from "../icons/chevron-down.svg?raw";
+  import circleQuestionMark from "../icons/circle-question-mark.svg?raw";
   import command from "../icons/command.svg?raw";
   import cornerDownLeft from "../icons/corner-down-left.svg?raw";
   import cornerUpLeft from "../icons/corner-up-left.svg?raw";
@@ -13,8 +16,11 @@
   import type { IconName } from "../lib/icons.ts";
 
   const SVGS: Record<IconName, string> = {
+    bell,
+    "bell-off": bellOff,
     check,
     "chevron-down": chevronDown,
+    "circle-question-mark": circleQuestionMark,
     command,
     "corner-down-left": cornerDownLeft,
     "corner-up-left": cornerUpLeft,

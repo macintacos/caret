@@ -2,8 +2,11 @@
 // ui/src/icons/<name>.svg (EXC-395); icons.test.ts enforces the bijection and
 // per-file invariants. Adding an icon: see .claude/rules/icon-rules.md.
 export const ICON_NAMES = [
+  "bell",
+  "bell-off",
   "check",
   "chevron-down",
+  "circle-question-mark",
   "command",
   "corner-down-left",
   "corner-up-left",
