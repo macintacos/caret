@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// caret hook CLI. Subcommands: daemon | prewarm | review.
+// caret hook CLI. Subcommands: daemon | prewarm | review | redact | discovery.
 //
 // Phase-0 spike outcome encoded here: plan approval is gated through a
 // PermissionRequest/ExitPlanMode hook. `review` blocks while the browser
@@ -11,8 +11,20 @@
 
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, openSync, readFileSync, unlinkSync } from "node:fs";
+import { release } from "node:os";
 import { dirname } from "node:path";
 import { createServer, type CaretServer } from "./daemon.ts";
+import {
+  collectReport,
+  type DiscoveryDeps,
+  type HealthIdentity,
+  listProcesses,
+  listReviewFiles,
+  logStats,
+  readClaudeInstallState,
+  renderReport,
+  type Report,
+} from "./discovery.ts";
 import { denyOutput, type HookOutput, toHookOutput } from "./feedback.ts";
 import {
   createDaemonLogger,
@@ -37,7 +49,7 @@ import {
   VERSION,
 } from "./paths.ts";
 import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "./plan-format.ts";
-import { redactLogFiles } from "./redact.ts";
+import { redactLogFiles, scrubValue } from "./redact.ts";
 import {
   getPort,
   heartbeatMs,
@@ -199,8 +211,9 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
   }
 }
 
-/** Parsed /api/health body. `build`/`version` are absent on a pre-fix daemon. */
-type HealthBody = { service?: string; build?: string; version?: string };
+/** Parsed /api/health body — the shared HealthIdentity shape (every field
+ * absent on a pre-fix daemon), aliased to keep the review path's name. */
+type HealthBody = HealthIdentity;
 
 export interface EnsureDeps {
   baseUrl: string;
@@ -526,6 +539,54 @@ async function currentBuildId(): Promise<string> {
   return cachedBuildId;
 }
 
+export interface CommitDeps {
+  /** The commit baked in at compile time, or undefined (dev, or a build that
+   * skipped the --define). */
+  baked: string | undefined;
+  /** The source checkout's git HEAD, or null on any failure. */
+  gitHead: () => string | null;
+}
+
+/** The commit the server runs from, logged in the listen record (EXC-452).
+ * Prod binaries carry it baked via --define; dev resolves it from the source
+ * checkout; otherwise "unknown". Never throws — a missing commit must not
+ * destabilize boot. */
+export function resolveCommit(deps: CommitDeps): string {
+  if (deps.baked) return deps.baked;
+  // || not ??: both branches treat any falsy value ("" included) as unset.
+  return deps.gitHead() || "unknown";
+}
+
+let cachedCommit: string | undefined;
+
+/** resolveCommit wired to the baked define and the real git, memoized per
+ * process (the commit can't change while this process runs). */
+function currentCommit(): string {
+  if (cachedCommit !== undefined) return cachedCommit;
+  cachedCommit = resolveCommit({
+    // Replaced with a string literal by `--define` in the build scripts
+    // (.mise/tasks/build-bin, scripts/install.sh), so prod binaries can't be
+    // overridden by runtime env. Deliberately NOT a user setting — it's a
+    // build-time substitution token, exempt from the settings-rules.md
+    // README-documentation requirement.
+    baked: process.env.CARET_BUILD_COMMIT,
+    gitHead: () => {
+      try {
+        // -C import.meta.dir (not cwd): the daemon may be spawned anywhere,
+        // but in dev this module lives inside the source checkout. Handles
+        // worktrees; inside a compiled binary the virtual dir fails fast.
+        const r = Bun.spawnSync(["git", "-C", import.meta.dir, "rev-parse", "HEAD"]);
+        if (r.exitCode !== 0) return null;
+        const out = r.stdout.toString().trim();
+        return out.length > 0 ? out : null;
+      } catch {
+        return null; // git not on PATH — spawnSync throws rather than failing.
+      }
+    },
+  });
+  return cachedCommit;
+}
+
 async function runDaemon(): Promise<void> {
   // Leveled NDJSON to stderr (spawnDaemon redirects it into daemon.log). The
   // level and redact thunks re-read svc.current() per emit, so config.toml
@@ -577,6 +638,7 @@ async function runDaemon(): Promise<void> {
       serveHtml: html ? () => html : undefined,
       lockPath: daemonLock(),
       buildId: await currentBuildId(),
+      commit: currentCommit(),
       log,
     });
   } catch (e) {
@@ -687,6 +749,65 @@ function runRedactSubcommand(): void {
   }
 }
 
+/** Production probes for the discovery report (EXC-464): the same primitives
+ * the review path already uses (httpHealth, readDaemonLock, isPidAlive) plus
+ * the bounded read-only readers from discovery.ts. Deliberately no removeLock
+ * or retire — discovery observes, never repairs. */
+function prodDiscoveryDeps(s: Settings): DiscoveryDeps {
+  return {
+    now: () => new Date(),
+    version: VERSION,
+    system: () => ({ platform: process.platform, os: release(), arch: process.arch }),
+    install: () => ({
+      // The same dev-vs-compiled signal daemonCommand/currentBuildId key off.
+      kind: process.argv[1]?.endsWith(".ts") ? "dev" : "prod",
+      binaryPath: process.execPath,
+      bunVersion: Bun.version,
+    }),
+    settings: () => s,
+    configPath: configFile(),
+    configExists: () => existsSync(configFile()),
+    effective: () => ({
+      port: getPort(s),
+      idleMs: idleMs(s),
+      reviewTimeoutMs: reviewTimeoutMs(s),
+      heartbeatMs: heartbeatMs(s),
+    }),
+    baseUrl: `http://localhost:${getPort(s)}`,
+    health: httpHealth,
+    readLock: readDaemonLock,
+    isPidAlive,
+    listProcesses,
+    listReviewFiles,
+    readClaudeInstallState,
+    logStats,
+    logPaths: { caret: logFile(), daemon: daemonLogFile() },
+  };
+}
+
+async function runDiscoverySubcommand(argv: string[]): Promise<void> {
+  // One-shot diagnostics snapshot (EXC-464). Human-facing output like redact:
+  // human-readable by default, --json for the machine document. ALWAYS redacted
+  // (a deliberate inversion of the raw-by-default logging posture, EXC-399) —
+  // this artifact exists to be pasted into bug reports. Exit 0 whenever a
+  // report was produced, however degraded; non-zero only when none could be.
+  try {
+    const s = loadSettings();
+    const report = await collectReport(prodDiscoveryDeps(s));
+    // scrubValue preserves the report's shape (strings scrub in place), so the
+    // cast back to Report is safe for renderReport.
+    const redacted = scrubValue(report, true) as Report;
+    const out = argv.includes("--json")
+      ? JSON.stringify(redacted, null, 2)
+      : renderReport(redacted);
+    process.stdout.write(`${out}\n`);
+    process.exit(0);
+  } catch (e) {
+    process.stderr.write(`caret discovery: ${e}\n`);
+    process.exit(1);
+  }
+}
+
 async function main(): Promise<void> {
   const sub = process.argv[2];
   switch (sub) {
@@ -698,9 +819,11 @@ async function main(): Promise<void> {
       return runReviewSubcommand();
     case "redact":
       return runRedactSubcommand();
+    case "discovery":
+      return runDiscoverySubcommand(process.argv.slice(3));
     default:
       process.stderr.write(
-        `caret: unknown subcommand "${sub ?? ""}". Use: daemon | prewarm | review | redact\n`,
+        `caret: unknown subcommand "${sub ?? ""}". Use: daemon | prewarm | review | redact | discovery\n`,
       );
       process.exit(1);
   }

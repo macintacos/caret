@@ -155,9 +155,11 @@ Browser-UI events ship to the daemon in batches (`POST /api/logs`) and land in `
 `source: "ui"`, subject to the same `[logging]` level and redact settings as everything else.
 
 Each record is one JSON object per line (pino): `level` (numeric — 20 debug, 30 info, 40 warn,
-50 error), `time` (epoch ms), `step` (a short fixed token), `source` (the emitting process —
-`"hook"`, `"daemon"`, or `"ui"`), `msg`, plus structured extras. Normal operation logs at info;
-only genuine failures sit at error.
+50 error), `time` (ISO 8601 UTC, e.g. `2026-06-04T21:25:40.038Z`), `step` (a short fixed token),
+`source` (the emitting process —
+`"hook"`, `"daemon"`, or `"ui"`), `caller` (the `file:line` of the emitting call site — on hook and
+daemon records; bridged UI records omit it), `msg`, plus structured extras. Normal operation logs at
+info; only genuine failures sit at error.
 
 To raise verbosity, set `level = "debug"` in `config.toml`'s `[logging]` table
 (see [Configuration](#config-file)). It hot-reloads — no restart needed.
@@ -169,6 +171,18 @@ To raise verbosity, set `level = "debug"` in `config.toml`'s `[logging]` table
   `*.redacted.log` siblings (home paths become `~`, usernames in foreign home paths are censored).
   For always-on scrubbing at write time, set `redact = true` in `[logging]`. Plan, prompt, and
   review-feedback bodies are never written to logs regardless of the toggle.
+- `caret discovery` — the binary's fifth subcommand: a one-shot, read-only diagnostics snapshot of
+  the local install — running caret processes, daemon identity (version, build, startup commit),
+  lock/port state, effective settings, review counts, hook/plugin install state, log sizes and
+  error/warn counts, install/runtime info, and system basics. Human-readable by default;
+  `caret discovery --json` prints the same report as one JSON document (schema marker
+  `caret-discovery/1`). Unlike the logs, the report is **always redacted** — it exists to be pasted
+  into bug reports — and it never contains plan/prompt/feedback bodies or log contents. Probes are
+  individually bounded and degrade per-section, so the command exits 0 even when the daemon is down.
+- `/caret:discovery` — the slash command that wraps it: asks whether you want JSON or
+  human-readable output, runs the subcommand, and ends with the report in a code block ready to
+  paste into a bug report. Complements `/caret:debug` (the session timeline): discovery is the
+  point-in-time snapshot of the installation.
 
 Contributors should see `.claude/rules/logging-rules.md` for the logging conventions — when to log,
 levels, and message style.
@@ -178,13 +192,14 @@ levels, and message style.
 Requires [mise](https://mise.jdx.dev), which pins bun, biome, hk, and pkl.
 
 ```sh
-mise run setup      # install pinned tools + JS deps + register git hooks
+mise run setup      # install pinned tools + JS deps + e2e Chromium + register git hooks
 mise run build      # build:ui (Vite single-file) then build:bin (bun build --compile)
 mise run dev        # isolated daemon + fake plan + Vite UI (dev port :42719)
 mise run test       # bun test
+mise run test-e2e   # Playwright browser e2e (isolated daemon, Chromium)
 mise run lint       # Biome + tsc + svelte-check (read-only); the CI/pre-commit gate
 mise run format     # Biome (write)
-mise run preflight  # format + lint + test + build before pushing
+mise run preflight  # check-only pre-push gate: lint + tests (unit ∥ e2e) + build, concurrent
 ```
 
 `mise run lint` (and the pre-commit hook) runs Biome lint, `tsc --noEmit`, and `svelte-check` —
@@ -198,6 +213,12 @@ appends a revision section quoting your feedback and resubmits, and approve re-s
 with real hook records landing in the dev state dir's `caret.log`. Everything is reaped on Ctrl-C,
 and the dev daemon never reads or writes a globally-installed caret's reviews. Override the port
 with `CARET_DEV_PORT` if `42719` is taken.
+
+`mise run test-e2e` runs the Playwright specs in `e2e/` against an isolated daemon that serves the
+built single-file UI on an OS-assigned port with ephemeral state, so the suite never touches your
+real daemon or `~/.local/state/caret`. `mise run setup` installs the Chromium browser the specs
+drive. For when to write an e2e spec versus a `bun test` unit versus throwaway exploration, see
+`.claude/rules/browser-testing.md`.
 
 For a quick local trial without installing, load the plugin from a checkout:
 

@@ -9,8 +9,10 @@
     "includes": [
       "src/**/*.ts",
       "scripts/**/*.ts",
+      "e2e/**/*.ts",
       "ui/src/**/*.ts",
       "ui/*.ts",
+      "*.ts",
       "*.json",
       "*.jsonc",
       "!**/dist",

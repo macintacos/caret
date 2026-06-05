@@ -23,6 +23,7 @@ async function boot(
     routePlan?: Parameters<typeof createServer>[0]["routePlan"];
     lockPath?: string;
     buildId?: string;
+    commit?: string;
     prefsPath?: string;
   } = {},
 ) {
@@ -39,6 +40,7 @@ async function boot(
     routePlan: opts.routePlan,
     lockPath: opts.lockPath,
     buildId: opts.buildId,
+    commit: opts.commit,
   });
   base = `http://localhost:${srv.port}`;
 }
@@ -102,6 +104,18 @@ test("GET /api/health includes the build fingerprint", async () => {
   await boot({ buildId: "build-abc" });
   const body = (await (await fetch(`${base}/api/health`)).json()) as { build?: string };
   expect(body.build).toBe("build-abc");
+});
+
+test("health includes the commit when provided", async () => {
+  await boot({ commit: "c0ffee00" });
+  const body = (await (await fetch(`${base}/api/health`)).json()) as { commit?: string };
+  expect(body.commit).toBe("c0ffee00");
+});
+
+test("health omits commit when the daemon has none", async () => {
+  await boot();
+  const body = (await (await fetch(`${base}/api/health`)).json()) as { commit?: string };
+  expect(body.commit).toBeUndefined();
 });
 
 test("the lock file is written on bind with pid/port/build/version", async () => {
@@ -661,6 +675,13 @@ test("the listen record carries the build fingerprint and version", async () => 
   expect(rec?.extra).toMatchObject({ build: "b123", version: VERSION });
 });
 
+test("the listen record carries the commit the server runs from", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log, commit: "c0ffee0123456789abcdef0123456789abcdef01" });
+  const rec = recs.find((r) => r.step === "listen");
+  expect(rec?.extra).toMatchObject({ commit: "c0ffee0123456789abcdef0123456789abcdef01" });
+});
+
 test("a draft autosave is logged at debug with the review id only", async () => {
   const { recs, log } = recordingLog();
   await boot({ log });
@@ -816,6 +837,25 @@ test("POST /api/logs drops extra keys that collide with record fields", async ()
   // Reserved keys (step/pid) are stripped; unreserved keys survive; source forced.
   expect(extra.step).toBeUndefined();
   expect(extra.pid).toBeUndefined();
+  expect(extra.keep).toBe("me");
+  expect(extra.source).toBe("ui");
+});
+
+test("POST /api/logs drops a client-forged extra.caller", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+  await postLogs([
+    {
+      level: "info",
+      step: "ui",
+      msg: "forge caller",
+      extra: { caller: "src/evil.ts:1", keep: "me" },
+    },
+  ]);
+  const extra = recs.find((r) => r.msg === "forge caller")?.extra as Record<string, unknown>;
+  // caller is a structural field stamped by src/log.ts; a client-sent one is a
+  // forgery and must be stripped, while the innocent key survives and source forced.
+  expect(extra.caller).toBeUndefined();
   expect(extra.keep).toBe("me");
   expect(extra.source).toBe("ui");
 });

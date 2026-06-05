@@ -17,8 +17,9 @@ caret writes to its state dir — `$XDG_STATE_HOME/caret` when that variable is 
   a `versions` array (plan revisions), and — once resolved — a `decision`
   (`behavior`/`feedback`/`acceptMode`/`decidedAt`).
 - `caret.log` — NDJSON records from the short-lived `caret review` hook process, one JSON object
-  per line: `level` (pino numeric: 20 debug, 30 info, 40 warn, 50 error), `time` (epoch ms),
-  `step`, `msg`, optional `sessionId`/`cwd`/`feedback`, and — on errors — `err` with `message`,
+  per line: `level` (pino numeric: 20 debug, 30 info, 40 warn, 50 error), `time` (ISO 8601 UTC),
+  `step`, `source` (the emitting process), `caller` (the emitting `file:line`, when resolvable),
+  `msg`, optional `sessionId`/`cwd`/`feedback`, and — on errors — `err` with `message`,
   `stack`, and a nested `cause` chain. Normal operation (a review decision, a format reject) logs
   at info; only genuine failures sit at level ≥ 50.
 - `daemon.log` — the detached daemon's stdout/stderr: the same NDJSON shape (tagged with `pid`)

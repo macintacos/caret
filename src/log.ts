@@ -13,11 +13,62 @@
 // they emit regardless of the configured level for free.
 
 import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import pino from "pino";
 import { logFile, stateDir } from "./paths.ts";
 import { scrubString, scrubValue } from "./redact.ts";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
+
+// Package root, computed once: src/log.ts lives in <root>/src, so the root is
+// the parent of this module's dir. callerLocation() strips a leading
+// "<root>/" off captured frames to yield repo-relative paths (src/cli.ts,
+// test/log.test.ts) — see EXC-451. import.meta.dir is the directory of THIS
+// file, resolved through Bun's sourcemap remap so the compiled binary agrees.
+const PKG_ROOT = dirname(import.meta.dir);
+
+// A Bun stack frame, either named or anonymous (verified shapes):
+//   `    at fnName (/abs/path.ts:12:34)`  and  `    at /abs/path.ts:12:34`
+// Capture the file path (up to the line:col suffix) and the line number; the
+// column is matched but discarded. A leading `file://` is allowed and stripped.
+const FRAME = /^\s*at (?:.* \()?(?:file:\/\/)?(.+):(\d+):\d+\)?$/;
+
+/** Repo-relative `path:line` of the call site that invoked a log method, for
+ * the record's `caller` field (EXC-451) — e.g. `src/daemon.ts:295`. Parses the
+ * stack STRING rather than the V8 CallSite API because Bun remaps the string
+ * through sourcemaps, which is what the compiled binary needs. Skips the Error
+ * header and every frame inside src/log.ts (the emit→arrow→log* wrappers; depth
+ * varies by entry path, so suffix-match beats a fixed skip count), then takes
+ * the first external frame. Returns undefined — never throws — on any parse
+ * miss, so the field is simply omitted. */
+function callerLocation(): string | undefined {
+  try {
+    const stack = new Error().stack;
+    if (!stack) return undefined;
+    for (const line of stack.split("\n")) {
+      const m = FRAME.exec(line);
+      if (!m?.[1] || !m[2]) continue; // no frame match (e.g. the `Error` header line)
+      const path = m[1];
+      if (path.endsWith("src/log.ts")) continue; // our own wrapper frames
+      // Runtime-internal frames — pathless (`native:7:39`, `[eval]:1:30`) or
+      // node:-scheme (`node:internal/...`) — are never the caller.
+      if (!path.includes("/") || path.startsWith("node:")) continue;
+      // Normalize: a relative path is already repo-relative (the compiled
+      // binary's sourcemapped frames come out that way); an absolute one under
+      // the package root loses that prefix; any other absolute path falls back
+      // to its last two segments so the field stays compact.
+      const rel = !path.startsWith("/")
+        ? path
+        : path.startsWith(`${PKG_ROOT}/`)
+          ? path.slice(PKG_ROOT.length + 1)
+          : path.split("/").slice(-2).join("/");
+      return `${rel}:${m[2]}`;
+    }
+    return undefined;
+  } catch {
+    return undefined; // parsing must never destabilize a log emit
+  }
+}
 
 export interface ErrorContext {
   sessionId?: string;
@@ -31,7 +82,9 @@ export interface ErrorContext {
  * plus optional structured `extra`; error takes the raw thrown value (an
  * Error's `cause` chain is serialized; msg derives from it) plus optional
  * `extra` fields (e.g. sessionId/cwd). `extra` keys must not collide with the
- * record's own fields (level/time/msg/step/pid/err). */
+ * record's own fields (level/time/msg/step/pid/err/caller). (source is absent
+ * here on purpose: an explicit extra.source is a sanctioned override — the
+ * bridged-UI signal — not a collision.) */
 export interface CaretLogger {
   debug(step: string, msg: string, extra?: object): void;
   info(step: string, msg: string, extra?: object): void;
@@ -41,6 +94,9 @@ export interface CaretLogger {
 
 const pinoOpts = {
   base: undefined, // suppress pino's default {pid, hostname}; the daemon opts pid back in
+  // ISO 8601 UTC time ("2026-06-04T21:25:40.038Z") instead of pino's default
+  // epoch ms, so a human can read a record's date/time without converting.
+  timestamp: pino.stdTimeFunctions.isoTime,
   // wrap() owns error serialization (errWithCause + scrub). The identity
   // override disables pino's DEFAULT err serializer, which would re-serialize
   // the already-plain object and roll cause messages up into `message`.
@@ -72,13 +128,28 @@ function wrap(
   function fields(extra: object | undefined, step: string, redact: boolean) {
     const out = scrubValue({ ...extra }, redact) as Record<string, unknown>;
     out.step = step;
-    out.source ??= source;
+    // When extra already carried a source it's a bridged record (the daemon
+    // forwarding a browser event as source="ui", EXC-445): keep that tag and
+    // attach NO caller — the call site here is the bridge, not the originator.
+    // Otherwise tag the emitting process and stamp the real call site (EXC-451);
+    // the caller is repo-relative so the redact scrub is normally a no-op, but
+    // run it under the toggle for belt-and-braces. == null (not === undefined)
+    // keeps the replaced ??= semantics: an explicit null source reads as unset.
+    if (out.source == null) {
+      out.source = source;
+      const caller = callerLocation();
+      if (caller !== undefined) out.caller = redact ? scrubString(caller) : caller;
+    }
     return out;
   }
   function emit(method: "debug" | "info" | "warn", step: string, msg: string, extra?: object) {
     try {
       const next = liveLevel();
       if (logger.level !== next) logger.level = next;
+      // Bail before fields()/callerLocation() when this record is gated out, so
+      // a debug record at info level never pays for a stack capture (EXC-451).
+      // error (50) needs no such gate — it clears every threshold in the set.
+      if (!logger.isLevelEnabled(method)) return;
       const r = liveRedact();
       logger[method](fields(extra, step, r), r ? scrubString(msg) : msg);
     } catch {

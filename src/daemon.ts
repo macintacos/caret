@@ -54,6 +54,9 @@ export interface CreateServerOptions {
   /** Build fingerprint (paths.buildHash of the served UI) reported in
    * /api/health and recorded in the lock, so a newer caret can detect staleness. */
   buildId?: string;
+  /** Commit the server runs from (cli.ts resolveCommit), reported in the listen
+   * record so daemon.log ties a boot back to a source revision (EXC-452). */
+  commit?: string;
   /** Leveled lifecycle logger (see log.ts CaretLogger); defaults to a no-op so
    * tests stay quiet. Lifecycle events log at info, handler failures at error. */
   log?: CaretLogger;
@@ -99,8 +102,10 @@ export interface UiLogEvent {
 
 const STEP_RE = /^[a-z][a-z0-9-]{0,31}$/;
 // The record's own NDJSON fields: an extra key colliding with one of these would
-// shadow the structural field, so they're stripped from client extra.
-const RESERVED_KEYS = new Set(["level", "time", "msg", "step", "pid", "err"]);
+// shadow the structural field, so they're stripped from client extra. `caller` is
+// stamped by src/log.ts (file:line of the call site); bridged UI records carry
+// none, so a client-sent one is a forged provenance and is dropped too (EXC-451).
+const RESERVED_KEYS = new Set(["level", "time", "msg", "step", "pid", "err", "caller"]);
 // C0/C1 control chars except TAB (U+0009). Newline (U+000A) is stripped too:
 // pino already JSON-escapes newlines at serialization, so this is defense in
 // depth for raw-text consumers of the log (redact round-trips, crash-output
@@ -164,6 +169,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   const prefsPath = opts.prefsPath ?? prefsFile();
   const lockPath = opts.lockPath;
   const buildId = opts.buildId;
+  const commit = opts.commit;
   const log = opts.log ?? noopLogger;
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount } = createDecisions(log);
 
@@ -233,9 +239,11 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       }
 
       if (method === "GET" && path === "/api/health") {
-        // `build` is dropped from the JSON when buildId is undefined, so a
-        // daemon with no build fingerprint reports the bare {service, version}.
-        return Response.json({ ...IDENTITY, build: buildId });
+        // `build` and `commit` are dropped from the JSON when undefined, so a
+        // daemon with no build fingerprint or no startup commit reports the
+        // bare {service, version}. `commit` is the commit this daemon runs from
+        // (EXC-452), surfaced for a diagnostics client's discovery report.
+        return Response.json({ ...IDENTITY, build: buildId, commit });
       }
 
       // Graceful single-instance retire (EXC-406): a newer caret asks this
@@ -484,6 +492,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   log.info("listen", `listening on 127.0.0.1:${server.port}`, {
     build: buildId,
     version: IDENTITY.version,
+    commit,
   });
 
   // Write the single-instance lock atomically (temp + rename) so a concurrent

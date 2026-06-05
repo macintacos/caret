@@ -86,8 +86,11 @@ Concretely:
 - Every record carries a `source` field naming the emitting process — `"hook"`, `"daemon"`, or
   `"ui"` (EXC-445). The logger attaches its own token unless `extra.source` is already set; the
   explicit value winning is how bridged browser events stay `"ui"` through the daemon's logger.
+- Hook and daemon records carry a `caller` field — the emitting call site as a repo-relative
+  `file:line`, stamped by `wrap()` in `src/log.ts` (EXC-451). Bridged UI records carry none. It is
+  best-effort: the field is omitted if the stack can't be parsed (e.g. an unmapped compiled binary).
 - `extra` keys must **not collide** with the record's own fields: `level`, `time`, `msg`, `step`,
-  `pid`, `err`.
+  `pid`, `err`, `caller`.
 
 ## The redaction rule
 

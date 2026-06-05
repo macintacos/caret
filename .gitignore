@@ -11,6 +11,13 @@ ui/dist/
 # Throwaway Phase-0 contract spike (never committed)
 spike/
 
+# Playwright artifacts (failure traces/screenshots can capture rendered plan
+# text — they stay local, never committed)
+test-results/
+playwright-report/
+playwright/.cache/
+.last-run.json
+
 # Logs / OS cruft
 *.log
 .DS_Store

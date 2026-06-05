@@ -23,3 +23,9 @@ shfmt      = "3.13.1" # aqua:mvdan/sh
 # (Re)register git hooks whenever tools are installed or updated.
 [hooks]
 postinstall = "hk install --mise"
+
+# The other tasks are file tasks in .mise/tasks/; preflight is a TOML task so
+# the gate runs the TS orchestrator (concurrent DAG + live display — EXC-462).
+[tasks.preflight]
+description = "Pre-push gate (check-only): lint, unit + e2e tests, and build, run concurrently"
+run         = "bun scripts/preflight.ts"
