@@ -30,13 +30,13 @@ function review(id: string, title = `plan ${id}`, cwd = `/tmp/${id}`) {
 }
 
 // Mutable environment doubles, flipped per-observe by individual tests.
-let hidden: boolean;
+let away: boolean;
 let permission: NotificationPermission;
 let focused: number;
 let selected: string[];
 
 beforeEach(() => {
-  hidden = true;
+  away = true;
   permission = "granted";
   focused = 0;
   selected = [];
@@ -47,7 +47,7 @@ function makeNotifier(overrides?: Partial<PlanNotifierOptions>) {
   const notifier = createPlanNotifier({
     onSelect: (id) => selected.push(id),
     notify,
-    isHidden: () => hidden,
+    isAway: () => away,
     permission: () => permission,
     focus: () => focused++,
     ...overrides,
@@ -62,7 +62,7 @@ describe("createPlanNotifier", () => {
     expect(fired).toHaveLength(0);
   });
 
-  test("a new id while hidden and granted fires one notification", () => {
+  test("a new id while away and granted fires one notification", () => {
     const { notifier, fired } = makeNotifier();
     notifier.observe([review("a")]);
     notifier.observe([review("a"), review("b", "Add OAuth", "/repo/app")]);
@@ -72,10 +72,10 @@ describe("createPlanNotifier", () => {
     expect(fired[0]!.body).toContain("/repo/app");
   });
 
-  test("no notification while the tab is visible", () => {
+  test("no notification while the user is at the tab (visible and focused)", () => {
     const { notifier, fired } = makeNotifier();
     notifier.observe([]);
-    hidden = false;
+    away = false;
     notifier.observe([review("a")]);
     expect(fired).toHaveLength(0);
   });
@@ -141,7 +141,7 @@ describe("createPlanNotifier", () => {
     const notifier = createPlanNotifier({
       onSelect: (id) => selected.push(id),
       notify,
-      isHidden: () => hidden,
+      isAway: () => away,
       permission: () => permission,
       focus: () => focused++,
     });

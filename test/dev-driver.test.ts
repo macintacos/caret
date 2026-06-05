@@ -17,6 +17,7 @@ import {
   nextPlan,
   runExtraReview,
   runExtraSeeder,
+  seederInterval,
 } from "../scripts/dev/driver.ts";
 
 // The v1 fixture the driver seeds — read independently here so the assertions
@@ -255,6 +256,29 @@ test("runExtraReview runs one fresh-session review to resolution and stops", asy
   await done;
   const remaining = (await (await fetch(`${base}/api/reviews`)).json()) as Array<unknown>;
   expect(remaining).toHaveLength(0);
+});
+
+// ---- seederInterval ----
+
+test("seederInterval defaults on when unset", () => {
+  expect(seederInterval(undefined)).toEqual({ ms: 15_000, invalid: false });
+});
+
+test("seederInterval honors an explicit positive interval", () => {
+  expect(seederInterval("3000")).toEqual({ ms: 3000, invalid: false });
+});
+
+test("seederInterval treats 0 (and negatives) as an explicit off switch", () => {
+  expect(seederInterval("0")).toEqual({ ms: null, invalid: false });
+  expect(seederInterval("-5")).toEqual({ ms: null, invalid: false });
+});
+
+test("seederInterval falls back to the default on garbage, flagged invalid", () => {
+  // Mirrors the settings house style: set-but-invalid warns and falls through
+  // to the default rather than silently disabling.
+  expect(seederInterval("abc")).toEqual({ ms: 15_000, invalid: true });
+  expect(seederInterval("1.5")).toEqual({ ms: 15_000, invalid: true });
+  expect(seederInterval("")).toEqual({ ms: 15_000, invalid: true });
 });
 
 // ---- runExtraSeeder ----

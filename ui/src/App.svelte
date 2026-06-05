@@ -132,9 +132,9 @@
       (incoming) => {
         connected = true;
         // Fire a desktop notification for genuinely-new reviews while the tab
-        // is hidden (EXC-427). Observe BEFORE merge: the notifier diffs against
-        // its own seen-set, so the new-review signal stays independent of what
-        // merge selects.
+        // is hidden or unfocused (EXC-427). Observe BEFORE merge: the notifier
+        // diffs against its own seen-set, so the new-review signal stays
+        // independent of what merge selects.
         notifier.observe(incoming);
         mergeReviews(incoming);
       },

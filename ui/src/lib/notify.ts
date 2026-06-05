@@ -1,9 +1,11 @@
 // Plan notifier (EXC-427): when the 2s poll surfaces a genuinely-new review
-// while the tab is hidden and notification permission is granted, fire a
-// page-context Web Notification whose click focuses the tab and selects that
-// review. A notification click is a user gesture, so window.focus() is the one
-// focus path browsers reliably allow — the OS-level counterpart to opening a
-// new tab per plan.
+// while the user is away — tab hidden OR window unfocused — and notification
+// permission is granted, fire a page-context Web Notification whose click
+// focuses the tab and selects that review. A notification click is a user
+// gesture, so window.focus() is the one focus path browsers reliably allow —
+// the OS-level counterpart to opening a new tab per plan. visibilityState
+// alone misses the common case of a visible-but-background window, which is
+// why the away-check also reads document.hasFocus().
 //
 // Framework-agnostic and unit-tested in isolation (cf. safeMode.ts): every
 // browser surface (Notification, visibility, focus) is an injectable option,
@@ -33,8 +35,9 @@ export interface PlanNotifierOptions {
   onSelect: (id: string) => void;
   /** Construct a notification; null = unavailable. Injectable for tests. */
   notify?: (title: string, body: string) => NotificationHandle | null;
-  /** Whether the tab is hidden. Defaults to document.visibilityState. */
-  isHidden?: () => boolean;
+  /** Whether the user is away (tab hidden or window unfocused). Defaults to
+   * document.visibilityState + document.hasFocus(). */
+  isAway?: () => boolean;
   /** Current permission. Defaults to Notification.permission. */
   permission?: () => NotificationPermission;
   /** Bring the window forward on click. Defaults to window.focus(). */
@@ -44,7 +47,7 @@ export interface PlanNotifierOptions {
 export interface PlanNotifier {
   /** Feed each poll snapshot. The first call seeds the seen-set silently
    * (reviews already pending at page open are on screen, not news); later
-   * calls fire one notification per genuinely-new id when the tab is hidden
+   * calls fire one notification per genuinely-new id when the user is away
    * and permission is granted, then prune the set to the incoming ids. */
   observe: (reviews: PlanReviewLike[]) => void;
 }
@@ -70,7 +73,8 @@ function defaultPermission(): NotificationPermission {
 
 export function createPlanNotifier(opts: PlanNotifierOptions): PlanNotifier {
   const notify = opts.notify ?? defaultNotify;
-  const isHidden = opts.isHidden ?? (() => document.visibilityState !== "visible");
+  const isAway =
+    opts.isAway ?? (() => document.visibilityState !== "visible" || !document.hasFocus());
   const permission = opts.permission ?? defaultPermission;
   const focus = opts.focus ?? (() => window.focus());
 
@@ -87,7 +91,7 @@ export function createPlanNotifier(opts: PlanNotifierOptions): PlanNotifier {
       const prev = seen;
       seen = new Set(reviews.map((r) => r.id));
       if (prev === null) return; // first poll: seed silently
-      if (!isHidden() || permission() !== "granted") return;
+      if (!isAway() || permission() !== "granted") return;
       for (const r of reviews) {
         if (prev.has(r.id)) continue;
         // The body renders on the user's own desktop — never log it.
@@ -128,7 +132,7 @@ export function bellPresentation(permission: NotificationPermission): BellPresen
       return {
         icon: "bell",
         tone: "ok",
-        title: "Desktop notifications on — new plans notify you while this tab is hidden",
+        title: "Desktop notifications on — new plans notify you while caret is in the background",
         canRequest: false,
       };
     case "denied":

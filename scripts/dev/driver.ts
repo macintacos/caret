@@ -146,6 +146,22 @@ export async function runExtraReview(
   }
 }
 
+/** Default extra-review cadence; on unless explicitly disabled. */
+const SEEDER_DEFAULT_MS = 15_000;
+
+/** Resolve CARET_DEV_NEW_REVIEW_MS into a seeder interval. Unset → the
+ * default (the seeder is on out of the box); a positive integer → that
+ * cadence; 0 or negative → explicitly off (ms: null); anything else →
+ * default with `invalid` flagged so the caller warns (settings house style:
+ * set-but-invalid falls through, never silently disables). */
+export function seederInterval(raw: string | undefined): { ms: number | null; invalid: boolean } {
+  if (raw === undefined) return { ms: SEEDER_DEFAULT_MS, invalid: false };
+  const n = Number(raw);
+  if (raw === "" || !Number.isInteger(n)) return { ms: SEEDER_DEFAULT_MS, invalid: true };
+  if (n <= 0) return { ms: null, invalid: false };
+  return { ms: n, invalid: false };
+}
+
 export interface ExtraSeederDeps {
   /** Run one extra review thread to resolution (runExtraReview in prod). */
   seed: (n: number) => Promise<void>;
@@ -200,24 +216,26 @@ export async function run(): Promise<void> {
   const base = `http://127.0.0.1:${process.env.CARET_PORT}`;
   const v1 = await Bun.file(`${import.meta.dir}/fake-plan.md`).text();
   const deps = devReviewDeps(base);
-  // Opt-in extra-review seeder (EXC-427): with CARET_DEV_NEW_REVIEW_MS set,
-  // seed a genuinely-new review — fresh session, fresh review id — every N ms.
-  // Hide the tab and the next seed fires a real "new plan" desktop
-  // notification to click. Loud either way at boot: armed or set-but-invalid —
-  // a silent no-op here is indistinguishable from a broken notification.
+  // Extra-review seeder (EXC-427), ON by default: seed a genuinely-new review
+  // — fresh session, fresh review id — every interval tick, so backgrounding
+  // the tab demos a real "new plan" desktop notification with no setup.
+  // CARET_DEV_NEW_REVIEW_MS tunes the cadence; 0 disables. Loud at boot in
+  // every case — a silent no-op here is indistinguishable from a broken
+  // notification.
   const rawNewReviewMs = process.env.CARET_DEV_NEW_REVIEW_MS;
-  if (rawNewReviewMs !== undefined) {
-    const intervalMs = Number(rawNewReviewMs);
-    if (Number.isInteger(intervalMs) && intervalMs > 0) {
-      log(`extra-review seeder armed: a new review every ${intervalMs}ms`);
-      void runExtraSeeder(intervalMs, {
-        seed: (n) => runExtraReview(`${DEV_SESSION}-extra-${n}`, extraPlan(v1, n), deps),
-      }).catch((err) => log(`extra-review seeder stopped: ${err}`));
-    } else {
-      log(
-        `CARET_DEV_NEW_REVIEW_MS is set but invalid (want positive integer ms): ${rawNewReviewMs}`,
-      );
-    }
+  const { ms: intervalMs, invalid } = seederInterval(rawNewReviewMs);
+  if (invalid) {
+    log(`CARET_DEV_NEW_REVIEW_MS invalid (want integer ms; 0 disables): ${rawNewReviewMs}`);
+  }
+  if (intervalMs !== null) {
+    log(
+      `extra-review seeder armed: a new review every ${intervalMs}ms (CARET_DEV_NEW_REVIEW_MS=0 disables)`,
+    );
+    void runExtraSeeder(intervalMs, {
+      seed: (n) => runExtraReview(`${DEV_SESSION}-extra-${n}`, extraPlan(v1, n), deps),
+    }).catch((err) => log(`extra-review seeder stopped: ${err}`));
+  } else {
+    log("extra-review seeder disabled (CARET_DEV_NEW_REVIEW_MS=0)");
   }
   let state: DriverState = { plan: v1, revision: 0 };
   for (;;) {
