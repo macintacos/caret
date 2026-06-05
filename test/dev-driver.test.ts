@@ -16,6 +16,7 @@ import {
   hookStdin,
   nextPlan,
   runExtraReview,
+  runExtraSeeder,
 } from "../scripts/dev/driver.ts";
 
 // The v1 fixture the driver seeds — read independently here so the assertions
@@ -254,6 +255,52 @@ test("runExtraReview runs one fresh-session review to resolution and stops", asy
   await done;
   const remaining = (await (await fetch(`${base}/api/reviews`)).json()) as Array<unknown>;
   expect(remaining).toHaveLength(0);
+});
+
+// ---- runExtraSeeder ----
+
+// Drive the seeder loop deterministically: each tick() releases one injected
+// sleep and flushes microtasks; injected seeds resolve only when a test says
+// so (an unresolved seed is a pending extra review).
+function makeSeederHarness(maxPending?: number) {
+  let release: (() => void) | undefined;
+  const sleep = () =>
+    new Promise<void>((r) => {
+      release = r;
+    });
+  const seeds: { n: number; resolve: () => void }[] = [];
+  const seed = (n: number) =>
+    new Promise<void>((r) => {
+      seeds.push({ n, resolve: r });
+    });
+  void runExtraSeeder(1, { seed, sleep, maxPending });
+  const tick = async () => {
+    release?.();
+    await Bun.sleep(0); // let the loop run to its next sleep
+  };
+  return { seeds, tick };
+}
+
+test("runExtraSeeder seeds one numbered extra review per tick", async () => {
+  const h = makeSeederHarness();
+  await h.tick();
+  await h.tick();
+  expect(h.seeds.map((s) => s.n)).toEqual([1, 2]);
+});
+
+test("runExtraSeeder skips ticks at the pending cap and resumes on resolve", async () => {
+  // Cap 2: two unresolved extras block further seeds — a wall of unapproved
+  // extras must not pile up — but a resolve frees the next tick to seed again
+  // (the hidden-tab demo keeps working even if an earlier extra sits pending).
+  const h = makeSeederHarness(2);
+  await h.tick();
+  await h.tick();
+  await h.tick(); // at the cap: skipped
+  expect(h.seeds.map((s) => s.n)).toEqual([1, 2]);
+  h.seeds[0]?.resolve();
+  await Bun.sleep(0); // let the seeder's pending-- settle, as real seconds-apart ticks would
+  await h.tick();
+  expect(h.seeds.map((s) => s.n)).toEqual([1, 2, 3]);
 });
 
 // ---- isolation guard ----

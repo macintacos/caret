@@ -146,6 +146,37 @@ export async function runExtraReview(
   }
 }
 
+export interface ExtraSeederDeps {
+  /** Run one extra review thread to resolution (runExtraReview in prod). */
+  seed: (n: number) => Promise<void>;
+  /** Injectable for tests. Defaults to Bun.sleep. */
+  sleep?: (ms: number) => Promise<void>;
+  /** Unresolved-extras cap; ticks skip while at it. */
+  maxPending?: number;
+}
+
+/** Seed numbered extra reviews forever, one per interval tick, WITHOUT waiting
+ * for resolution — a hidden tab must keep receiving genuinely-new reviews even
+ * while an earlier extra sits unapproved. The pending cap is what bounds the
+ * pile-up instead: ticks skip while `maxPending` extras are unresolved and
+ * resume once one resolves. */
+export async function runExtraSeeder(intervalMs: number, deps: ExtraSeederDeps): Promise<never> {
+  const sleep = deps.sleep ?? Bun.sleep;
+  const maxPending = deps.maxPending ?? 3;
+  let pending = 0;
+  for (let n = 1; ; ) {
+    await sleep(intervalMs);
+    if (pending >= maxPending) continue;
+    pending++;
+    const id = n++;
+    log(`seeding extra review ${id}`);
+    void deps
+      .seed(id)
+      .then(undefined, (err) => log(`extra review ${id} failed: ${err}`))
+      .finally(() => pending--);
+  }
+}
+
 /** Refuse to run unless the dev port + isolated state dir are explicitly set —
  * never fall back to the production defaults and touch an installed caret. */
 export function assertDevEnv(): void {
@@ -170,18 +201,23 @@ export async function run(): Promise<void> {
   const v1 = await Bun.file(`${import.meta.dir}/fake-plan.md`).text();
   const deps = devReviewDeps(base);
   // Opt-in extra-review seeder (EXC-427): with CARET_DEV_NEW_REVIEW_MS set,
-  // seed a genuinely-new review — fresh session, fresh review id — every N ms,
-  // waiting for the previous extra review to resolve first. Hide the tab and
-  // the next seed fires a real "new plan" desktop notification to click.
-  const newReviewMs = Number(process.env.CARET_DEV_NEW_REVIEW_MS);
-  if (Number.isInteger(newReviewMs) && newReviewMs > 0) {
-    void (async () => {
-      for (let n = 1; ; n++) {
-        await Bun.sleep(newReviewMs);
-        log(`seeding extra review ${n} (CARET_DEV_NEW_REVIEW_MS=${newReviewMs})`);
-        await runExtraReview(`${DEV_SESSION}-extra-${n}`, extraPlan(v1, n), deps);
-      }
-    })().catch((err) => log(`extra-review seeder stopped: ${err}`));
+  // seed a genuinely-new review — fresh session, fresh review id — every N ms.
+  // Hide the tab and the next seed fires a real "new plan" desktop
+  // notification to click. Loud either way at boot: armed or set-but-invalid —
+  // a silent no-op here is indistinguishable from a broken notification.
+  const rawNewReviewMs = process.env.CARET_DEV_NEW_REVIEW_MS;
+  if (rawNewReviewMs !== undefined) {
+    const intervalMs = Number(rawNewReviewMs);
+    if (Number.isInteger(intervalMs) && intervalMs > 0) {
+      log(`extra-review seeder armed: a new review every ${intervalMs}ms`);
+      void runExtraSeeder(intervalMs, {
+        seed: (n) => runExtraReview(`${DEV_SESSION}-extra-${n}`, extraPlan(v1, n), deps),
+      }).catch((err) => log(`extra-review seeder stopped: ${err}`));
+    } else {
+      log(
+        `CARET_DEV_NEW_REVIEW_MS is set but invalid (want positive integer ms): ${rawNewReviewMs}`,
+      );
+    }
   }
   let state: DriverState = { plan: v1, revision: 0 };
   for (;;) {
