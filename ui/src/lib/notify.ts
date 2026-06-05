@@ -60,7 +60,7 @@ export interface PlanNotifier {
 
 // The carrot is the brand pun (caret → 🥕) — and an emoji survives the OS
 // toast's bold title styling better than a lowercase wordmark prefix did.
-const NOTIFICATION_TITLE = "🥕 New plan ready";
+const NOTIFICATION_TITLE = "🥕 New Plan Ready";
 
 // Notification construction can throw (e.g. platforms that require a service
 // worker) — notifications are non-essential, so degrade to a no-op, but a

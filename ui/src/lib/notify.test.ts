@@ -89,7 +89,7 @@ describe("createPlanNotifier", () => {
     notifier.observe([review("a")]);
     notifier.observe([review("a"), review("b", "Add OAuth", "/repo/app")]);
     expect(fired).toHaveLength(1);
-    expect(fired[0]!.title).toBe("🥕 New plan ready");
+    expect(fired[0]!.title).toBe("🥕 New Plan Ready");
     expect(fired[0]!.body).toContain("Add OAuth");
     expect(fired[0]!.body).toContain("/repo/app");
   });

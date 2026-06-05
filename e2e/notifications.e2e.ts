@@ -96,7 +96,7 @@ test("a new plan while the tab is hidden notifies; its click selects the review"
     const [n] = (window as unknown as StubWindow).__notes;
     return { title: n?.title, body: n?.body };
   });
-  expect(note.title).toBe("🥕 New plan ready");
+  expect(note.title).toBe("🥕 New Plan Ready");
   expect(note.body).toContain("Gadget Renderer Cleanup");
   expect(note.body).toContain("/tmp/caret-e2e");
 
