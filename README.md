@@ -81,12 +81,19 @@ caret emits `deny` with an explanation — it never auto-approves an unreviewed 
 ### Desktop notifications
 
 When a new plan lands while caret is in the background — tab hidden or window unfocused — the page
-fires a desktop notification — clicking
-it focuses the tab and opens that review (a notification click is a user gesture, the one focus path
-browsers reliably allow). The bell badge in the top bar shows the current permission — granted,
-blocked, or undecided — and requests it on click when undecided. Page-context only, no service
-worker: the tab must be open. On macOS, Chrome's notifications are additionally gated by System
-Settings → Notifications even when the site permission is granted.
+fires a desktop notification; clicking it focuses the tab and opens that review (a notification
+click is a user gesture, the one focus path browsers reliably allow). The bell badge in the top bar
+shows the current permission — granted, blocked, or undecided — requests it on click when undecided,
+and **sends a test notification on click when granted**. Page-context only, no service worker: the
+tab must be open.
+
+If the test click produces no toast, the page's side worked (the daemon log shows the fired/shown
+records) and the OS is suppressing it — a granted notification the OS blocks fails silently, with no
+error the page can catch. On macOS check, in order: System Settings → Notifications → your browser
+("Allow notifications" on, alert style not "None"), Focus / Do Not Disturb, and the
+"when mirroring or sharing" toggle if a display is shared. Note also that a *hidden* tab's poll is
+throttled by Chrome after ~5 minutes in the background, which can delay a notification by up to a
+minute; an unfocused-but-visible window polls at full rate.
 
 ## Configuration
 

@@ -17,9 +17,15 @@
 import type { IconName } from "./icons.ts";
 import { shortId, uiLog } from "./log.ts";
 
-/** Minimal surface the notifier needs from a constructed Notification. */
+/** Minimal surface the notifier needs from a constructed Notification. The
+ * show/error events are the only display feedback the platform offers: a
+ * granted notification the OS suppresses (macOS Settings, Focus mode) fails
+ * SILENTLY at the constructor — only `error` (and the absence of `show`)
+ * reveals it. */
 export interface NotificationHandle {
   onclick: (() => void) | null;
+  onshow?: (() => void) | null;
+  onerror?: (() => void) | null;
   close: () => void;
 }
 
@@ -55,14 +61,16 @@ export interface PlanNotifier {
 const NOTIFICATION_TITLE = "caret: new plan ready";
 
 // Notification construction can throw (e.g. platforms that require a service
-// worker) — notifications are non-essential, so degrade to a silent no-op.
+// worker) — notifications are non-essential, so degrade to a no-op, but a
+// LOGGED one: a swallowed construct failure is indistinguishable from a bug.
 function defaultNotify(title: string, body: string): NotificationHandle | null {
   if (typeof Notification === "undefined") return null;
   try {
     // Structurally compatible at runtime (zero-arg onclick is a valid DOM
     // handler); the cast bridges the DOM's wider (this, ev) onclick signature.
     return new Notification(title, { body }) as NotificationHandle;
-  } catch {
+  } catch (err) {
+    uiLog.warn("ui", "notification construct failed", { reason: String(err) });
     return null;
   }
 }
@@ -91,13 +99,35 @@ export function createPlanNotifier(opts: PlanNotifierOptions): PlanNotifier {
       const prev = seen;
       seen = new Set(reviews.map((r) => r.id));
       if (prev === null) return; // first poll: seed silently
-      if (!isAway() || permission() !== "granted") return;
-      for (const r of reviews) {
-        if (prev.has(r.id)) continue;
+      const fresh = reviews.filter((r) => !prev.has(r.id));
+      if (fresh.length === 0) return;
+      // Every genuinely-new id resolves to exactly one record — fired,
+      // skipped, or unavailable — because a notification the user never sees
+      // is otherwise indistinguishable from a bug. Bounded by new-id arrivals,
+      // never per-tick.
+      const skip = !isAway() ? "active" : permission() !== "granted" ? "permission" : null;
+      if (skip) {
+        for (const r of fresh) {
+          uiLog.debug("ui", `plan notification skipped (${skip}): ${shortId(r.id)}`, {
+            reviewId: r.id,
+          });
+        }
+        return;
+      }
+      for (const r of fresh) {
         // The body renders on the user's own desktop — never log it.
         const handle = notify(NOTIFICATION_TITLE, `${r.title} — ${r.cwd}`);
-        if (!handle) continue;
+        if (!handle) {
+          uiLog.warn("ui", `plan notification unavailable: ${shortId(r.id)}`, { reviewId: r.id });
+          continue;
+        }
         uiLog.info("ui", `plan notification fired: ${shortId(r.id)}`, { reviewId: r.id });
+        // Display feedback: the OS suppressing a granted notification is
+        // silent at the constructor — only these events tell the truth.
+        handle.onshow = () =>
+          uiLog.debug("ui", `plan notification shown: ${shortId(r.id)}`, { reviewId: r.id });
+        handle.onerror = () =>
+          uiLog.warn("ui", `plan notification failed: ${shortId(r.id)}`, { reviewId: r.id });
         handle.onclick = () => {
           uiLog.debug("ui", `plan notification clicked: ${shortId(r.id)}`, { reviewId: r.id });
           focus();
@@ -107,6 +137,23 @@ export function createPlanNotifier(opts: PlanNotifierOptions): PlanNotifier {
       }
     },
   };
+}
+
+/** Fire a test notification through the live default path (the granted bell's
+ * click affordance). Returns whether construction succeeded: true with nothing
+ * appearing on screen means the OS is suppressing caret's notifications (macOS
+ * System Settings → Notifications → the browser; Focus/Do Not Disturb) — the
+ * page's logic is fine. */
+export function fireTestNotification(): boolean {
+  const handle = defaultNotify("caret: test notification", "Notifications reach your desktop");
+  if (!handle) {
+    uiLog.warn("ui", "test notification unavailable");
+    return false;
+  }
+  handle.onshow = () => uiLog.debug("ui", "test notification shown");
+  handle.onerror = () => uiLog.warn("ui", "test notification failed");
+  uiLog.info("ui", "test notification fired");
+  return true;
 }
 
 // ----- Permission bell badge mapping -----
@@ -123,6 +170,8 @@ export interface BellPresentation {
   title: string;
   /** Whether a click should call Notification.requestPermission(). */
   canRequest: boolean;
+  /** Whether a click should fire a test notification (granted only). */
+  canTest: boolean;
 }
 
 /** Pure permission → badge presentation mapping for NotifyBell.svelte. */
@@ -132,8 +181,9 @@ export function bellPresentation(permission: NotificationPermission): BellPresen
       return {
         icon: "bell",
         tone: "ok",
-        title: "Desktop notifications on — new plans notify you while caret is in the background",
+        title: "Desktop notifications on — click to send a test notification",
         canRequest: false,
+        canTest: true,
       };
     case "denied":
       return {
@@ -141,6 +191,7 @@ export function bellPresentation(permission: NotificationPermission): BellPresen
         tone: "danger",
         title: "Notifications blocked — re-enable them in your browser's site settings",
         canRequest: false,
+        canTest: false,
       };
     default:
       return {
@@ -149,6 +200,7 @@ export function bellPresentation(permission: NotificationPermission): BellPresen
         tone: "muted",
         title: "Enable desktop notifications for new plans",
         canRequest: true,
+        canTest: false,
       };
   }
 }

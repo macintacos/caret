@@ -4,7 +4,7 @@
   // requests it on click. Presentation is the pure bellPresentation() mapping
   // from notify.ts; this file is only the Svelte shell + styling.
   import { uiLog } from "../lib/log.ts";
-  import { bellPresentation } from "../lib/notify.ts";
+  import { bellPresentation, fireTestNotification } from "../lib/notify.ts";
   import Icon from "./Icon.svelte";
 
   // The Notification API may be absent (older browsers, insecure contexts) — the
@@ -16,7 +16,14 @@
   );
   let presentation = $derived(bellPresentation(permission));
 
-  async function request() {
+  async function handleClick() {
+    // Granted: fire a test notification — the one-click answer to "is it
+    // caret's logic or the OS suppressing the toast?" (a granted notification
+    // the OS blocks fails silently, so an active probe is the only tell).
+    if (presentation.canTest) {
+      fireTestNotification();
+      return;
+    }
     // Inert outside the undecided state — keep the button enabled so its tooltip
     // stays reliable (a disabled button suppresses `title` in some browsers).
     if (!presentation.canRequest) return;
@@ -37,8 +44,8 @@
     class="bell tone-{presentation.tone}"
     title={presentation.title}
     aria-label="Notifications: {permission}"
-    aria-disabled={presentation.canRequest ? undefined : "true"}
-    onclick={request}
+    aria-disabled={presentation.canRequest || presentation.canTest ? undefined : "true"}
+    onclick={handleClick}
   >
     <span class="stack">
       <!-- Decorative: the button's aria-label already announces the state. -->
@@ -76,7 +83,7 @@
   .tone-muted {
     color: var(--ink-faint);
   }
-  /* canRequest is the only interactive state; the rest are read-only. */
+  /* denied is the one read-only state (request and test clicks are real). */
   .bell[aria-disabled="true"] {
     cursor: default;
   }

@@ -117,6 +117,23 @@ test("a new plan while the tab is hidden notifies; its click selects the review"
   expect(await page.evaluate(() => (window as unknown as StubWindow).__notes.length)).toBe(1);
 });
 
+test("clicking the granted bell fires a test notification", async ({ daemon, page }) => {
+  // The granted bell's click is the diagnosis affordance: it constructs a
+  // notification through the same live path the poll uses, while the user
+  // watches — construction with no visible toast means the OS is suppressing.
+  await page.addInitScript(initStub, "granted");
+  await daemon.seed();
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Notifications: granted" }).click();
+  await page.waitForFunction(
+    () =>
+      (window as unknown as StubWindow).__notes.some((n) => n.title === "caret: test notification"),
+    undefined,
+    { timeout: 5_000 },
+  );
+});
+
 test("undecided permission shows the muted, requestable badge", async ({ daemon, page }) => {
   await page.addInitScript(initStub, "default");
   await daemon.seed();
