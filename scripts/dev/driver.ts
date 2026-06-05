@@ -38,9 +38,10 @@ async function waitForHealth(base: string, maxAttempts = 100): Promise<void> {
 }
 
 /** The hook stdin a real PermissionRequest session would pipe to `caret
- * review`, for the fixed dev session. */
-export function hookStdin(plan: string): string {
-  return JSON.stringify({ session_id: DEV_SESSION, cwd: process.cwd(), tool_input: { plan } });
+ * review` — the fixed dev session by default, or an explicit session id for
+ * the extra-review seeder. */
+export function hookStdin(plan: string, sessionId = DEV_SESSION): string {
+  return JSON.stringify({ session_id: sessionId, cwd: process.cwd(), tool_input: { plan } });
 }
 
 /** Append a "Revision N" section quoting the reviewer's feedback. The feedback
@@ -113,6 +114,38 @@ export function devReviewDeps(base: string): ReviewDeps {
   };
 }
 
+/** Retitle the fake plan's h1 so an extra review is distinguishable from the
+ * primary one in the switcher and in the notification body (review titles
+ * derive from the plan's first heading, src/reviews.ts). */
+export function extraPlan(plan: string, n: number): string {
+  return plan.replace(/^# .*$/m, (title) => `${title} — extra ${n}`);
+}
+
+/** Run ONE review thread to resolution under its own session id: seed, append
+ * a feedback-quoting revision on each reviewer deny, finish on approve (no
+ * re-seed — the next extra review gets a fresh session instead). The hook's
+ * own fail-safe denies resubmit unchanged after a backoff, like the primary
+ * loop. */
+export async function runExtraReview(
+  sessionId: string,
+  plan: string,
+  deps: ReviewDeps,
+): Promise<void> {
+  let state: DriverState = { plan, revision: 0 };
+  for (;;) {
+    const out = await runReview(hookStdin(state.plan, sessionId), deps);
+    const next = nextPlan(state, out.hookSpecificOutput.decision, plan);
+    if (next.action === "reseed") return; // approved: this thread is done
+    if (next.action === "revise") {
+      log(`extra review: changes requested → appending Revision ${next.revision}`);
+    } else {
+      log("extra review: hook fail-safe deny → resubmitting unchanged");
+      await Bun.sleep(500);
+    }
+    state = next;
+  }
+}
+
 /** Refuse to run unless the dev port + isolated state dir are explicitly set —
  * never fall back to the production defaults and touch an installed caret. */
 export function assertDevEnv(): void {
@@ -136,6 +169,20 @@ export async function run(): Promise<void> {
   const base = `http://127.0.0.1:${process.env.CARET_PORT}`;
   const v1 = await Bun.file(`${import.meta.dir}/fake-plan.md`).text();
   const deps = devReviewDeps(base);
+  // Opt-in extra-review seeder (EXC-427): with CARET_DEV_NEW_REVIEW_MS set,
+  // seed a genuinely-new review — fresh session, fresh review id — every N ms,
+  // waiting for the previous extra review to resolve first. Hide the tab and
+  // the next seed fires a real "new plan" desktop notification to click.
+  const newReviewMs = Number(process.env.CARET_DEV_NEW_REVIEW_MS);
+  if (Number.isInteger(newReviewMs) && newReviewMs > 0) {
+    void (async () => {
+      for (let n = 1; ; n++) {
+        await Bun.sleep(newReviewMs);
+        log(`seeding extra review ${n} (CARET_DEV_NEW_REVIEW_MS=${newReviewMs})`);
+        await runExtraReview(`${DEV_SESSION}-extra-${n}`, extraPlan(v1, n), deps);
+      }
+    })().catch((err) => log(`extra-review seeder stopped: ${err}`));
+  }
   let state: DriverState = { plan: v1, revision: 0 };
   for (;;) {
     // Never throws: every abnormal path inside runReview becomes a deny.

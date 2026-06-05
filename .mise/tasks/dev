@@ -108,6 +108,8 @@ export CARET_PORT="$port"
 echo "caret dev: port=$CARET_PORT state=$state_dir persistent=$persist_state"
 
 # Seed the fake plan and play the agent's protocol side (waits for health first).
+# Set CARET_DEV_NEW_REVIEW_MS to also seed a genuinely-new review (fresh
+# session/id) every N ms — the manual test path for the EXC-427 notification.
 bun scripts/dev/driver.ts &
 driver_pid=$!
 

@@ -12,8 +12,10 @@ import {
   assertDevEnv,
   DEV_SESSION,
   devReviewDeps,
+  extraPlan,
   hookStdin,
   nextPlan,
+  runExtraReview,
 } from "../scripts/dev/driver.ts";
 
 // The v1 fixture the driver seeds — read independently here so the assertions
@@ -89,6 +91,21 @@ test("hookStdin shapes the PermissionRequest stdin the hook parses", () => {
   expect(parsed.session_id).toBe(DEV_SESSION);
   expect(parsed.cwd).toBe(process.cwd());
   expect(parsed.tool_input.plan).toBe("# P");
+});
+
+test("hookStdin takes an explicit session id for extra reviews", () => {
+  const parsed = JSON.parse(hookStdin("# P", "caret-dev-extra-1")) as { session_id: string };
+  expect(parsed.session_id).toBe("caret-dev-extra-1");
+});
+
+// ---- extraPlan ----
+
+test("extraPlan retitles the h1 so the extra review is distinguishable", () => {
+  // Review titles derive from the plan's first heading (src/reviews.ts), so
+  // the retitle is what the switcher and the notification body display.
+  const out = extraPlan("# Widget Cache Refactor\n\nbody", 2);
+  expect(out).toStartWith("# Widget Cache Refactor — extra 2\n");
+  expect(out).toContain("body");
 });
 
 // ---- appendRevision ----
@@ -207,6 +224,36 @@ test("a revision round-trips through the real runReview hook path and logs to ca
   expect(log).not.toContain("needs a rollout plan");
   expect(log).toContain('"feedbackChars":20');
   expect(log).toContain(DEV_SESSION);
+});
+
+test("runExtraReview runs one fresh-session review to resolution and stops", async () => {
+  await boot();
+  const deps = devReviewDeps(base);
+  const session = "caret-dev-extra-test";
+  const done = runExtraReview(session, extraPlan(PLAN_V1, 1), deps);
+  // The extra review lands under its OWN session — a genuinely-new review id,
+  // which is exactly what the notification path needs (EXC-427).
+  const seeded = await waitFor(async () => {
+    const list = (await (await fetch(`${base}/api/reviews`)).json()) as Array<{
+      id: string;
+      sessionId: string;
+      title: string;
+    }>;
+    return list.find((r) => r.sessionId === session);
+  });
+  expect(seeded.title).toContain("— extra 1");
+  // A reviewer deny threads a revision into the same extra review...
+  await resolve(seeded.id, "deny", "extra feedback");
+  const threaded = await waitFor(async () => {
+    const r = await clientReview(seeded.id);
+    return r.version === 2 ? r : undefined;
+  });
+  expect(threaded.currentPlan).toContain("## Revision 1");
+  // ...and approve ends the thread: the loop completes instead of re-seeding.
+  await resolve(seeded.id, "allow");
+  await done;
+  const remaining = (await (await fetch(`${base}/api/reviews`)).json()) as Array<unknown>;
+  expect(remaining).toHaveLength(0);
 });
 
 // ---- isolation guard ----
