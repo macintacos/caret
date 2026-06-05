@@ -12,8 +12,12 @@ import {
   assertDevEnv,
   DEV_SESSION,
   devReviewDeps,
+  extraPlan,
   hookStdin,
   nextPlan,
+  runExtraReview,
+  runExtraSeeder,
+  seederInterval,
 } from "../scripts/dev/driver.ts";
 
 // The v1 fixture the driver seeds — read independently here so the assertions
@@ -89,6 +93,21 @@ test("hookStdin shapes the PermissionRequest stdin the hook parses", () => {
   expect(parsed.session_id).toBe(DEV_SESSION);
   expect(parsed.cwd).toBe(process.cwd());
   expect(parsed.tool_input.plan).toBe("# P");
+});
+
+test("hookStdin takes an explicit session id for extra reviews", () => {
+  const parsed = JSON.parse(hookStdin("# P", "caret-dev-extra-1")) as { session_id: string };
+  expect(parsed.session_id).toBe("caret-dev-extra-1");
+});
+
+// ---- extraPlan ----
+
+test("extraPlan retitles the h1 so the extra review is distinguishable", () => {
+  // Review titles derive from the plan's first heading (src/reviews.ts), so
+  // the retitle is what the switcher and the notification body display.
+  const out = extraPlan("# Widget Cache Refactor\n\nbody", 2);
+  expect(out).toStartWith("# Widget Cache Refactor — extra 2\n");
+  expect(out).toContain("body");
 });
 
 // ---- appendRevision ----
@@ -207,6 +226,105 @@ test("a revision round-trips through the real runReview hook path and logs to ca
   expect(log).not.toContain("needs a rollout plan");
   expect(log).toContain('"feedbackChars":20');
   expect(log).toContain(DEV_SESSION);
+});
+
+test("runExtraReview runs one fresh-session review to resolution and stops", async () => {
+  await boot();
+  const deps = devReviewDeps(base);
+  const session = "caret-dev-extra-test";
+  const done = runExtraReview(session, extraPlan(PLAN_V1, 1), deps);
+  // The extra review lands under its OWN session — a genuinely-new review id,
+  // which is exactly what the notification path needs (EXC-427).
+  const seeded = await waitFor(async () => {
+    const list = (await (await fetch(`${base}/api/reviews`)).json()) as Array<{
+      id: string;
+      sessionId: string;
+      title: string;
+    }>;
+    return list.find((r) => r.sessionId === session);
+  });
+  expect(seeded.title).toContain("— extra 1");
+  // A reviewer deny threads a revision into the same extra review...
+  await resolve(seeded.id, "deny", "extra feedback");
+  const threaded = await waitFor(async () => {
+    const r = await clientReview(seeded.id);
+    return r.version === 2 ? r : undefined;
+  });
+  expect(threaded.currentPlan).toContain("## Revision 1");
+  // ...and approve ends the thread: the loop completes instead of re-seeding.
+  await resolve(seeded.id, "allow");
+  await done;
+  const remaining = (await (await fetch(`${base}/api/reviews`)).json()) as Array<unknown>;
+  expect(remaining).toHaveLength(0);
+});
+
+// ---- seederInterval ----
+
+test("seederInterval defaults on when unset", () => {
+  expect(seederInterval(undefined)).toEqual({ ms: 15_000, invalid: false });
+});
+
+test("seederInterval honors an explicit positive interval", () => {
+  expect(seederInterval("3000")).toEqual({ ms: 3000, invalid: false });
+});
+
+test("seederInterval treats 0 (and negatives) as an explicit off switch", () => {
+  expect(seederInterval("0")).toEqual({ ms: null, invalid: false });
+  expect(seederInterval("-5")).toEqual({ ms: null, invalid: false });
+});
+
+test("seederInterval falls back to the default on garbage, flagged invalid", () => {
+  // Mirrors the settings house style: set-but-invalid warns and falls through
+  // to the default rather than silently disabling.
+  expect(seederInterval("abc")).toEqual({ ms: 15_000, invalid: true });
+  expect(seederInterval("1.5")).toEqual({ ms: 15_000, invalid: true });
+  expect(seederInterval("")).toEqual({ ms: 15_000, invalid: true });
+});
+
+// ---- runExtraSeeder ----
+
+// Drive the seeder loop deterministically: each tick() releases one injected
+// sleep and flushes microtasks; injected seeds resolve only when a test says
+// so (an unresolved seed is a pending extra review).
+function makeSeederHarness(maxPending?: number) {
+  let release: (() => void) | undefined;
+  const sleep = () =>
+    new Promise<void>((r) => {
+      release = r;
+    });
+  const seeds: { n: number; resolve: () => void }[] = [];
+  const seed = (n: number) =>
+    new Promise<void>((r) => {
+      seeds.push({ n, resolve: r });
+    });
+  void runExtraSeeder(1, { seed, sleep, maxPending });
+  const tick = async () => {
+    release?.();
+    await Bun.sleep(0); // let the loop run to its next sleep
+  };
+  return { seeds, tick };
+}
+
+test("runExtraSeeder seeds one numbered extra review per tick", async () => {
+  const h = makeSeederHarness();
+  await h.tick();
+  await h.tick();
+  expect(h.seeds.map((s) => s.n)).toEqual([1, 2]);
+});
+
+test("runExtraSeeder skips ticks at the pending cap and resumes on resolve", async () => {
+  // Cap 2: two unresolved extras block further seeds — a wall of unapproved
+  // extras must not pile up — but a resolve frees the next tick to seed again
+  // (the hidden-tab demo keeps working even if an earlier extra sits pending).
+  const h = makeSeederHarness(2);
+  await h.tick();
+  await h.tick();
+  await h.tick(); // at the cap: skipped
+  expect(h.seeds.map((s) => s.n)).toEqual([1, 2]);
+  h.seeds[0]?.resolve();
+  await Bun.sleep(0); // let the seeder's pending-- settle, as real seconds-apart ticks would
+  await h.tick();
+  expect(h.seeds.map((s) => s.n)).toEqual([1, 2, 3]);
 });
 
 // ---- isolation guard ----

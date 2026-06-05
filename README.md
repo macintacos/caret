@@ -78,6 +78,23 @@ The hook emits the [PermissionRequest decision](https://code.claude.com/docs/en/
 **Fail-safe = deny.** On a bad payload, an unreachable daemon, a timeout, a signal, or daemon death,
 caret emits `deny` with an explanation — it never auto-approves an unreviewed plan.
 
+### Desktop notifications
+
+When a new plan lands while caret is in the background — tab hidden or window unfocused — the page
+fires a desktop notification; clicking it focuses the tab and opens that review (a notification
+click is a user gesture, the one focus path browsers reliably allow). The bell badge in the top bar
+shows the current permission — granted, blocked, or undecided — requests it on click when undecided,
+and **sends a test notification on click when granted**. Page-context only, no service worker: the
+tab must be open.
+
+If the test click produces no toast, the page's side worked (the daemon log shows the fired/shown
+records) and the OS is suppressing it — a granted notification the OS blocks fails silently, with no
+error the page can catch. On macOS check, in order: System Settings → Notifications → your browser
+("Allow notifications" on, alert style not "None"), Focus / Do Not Disturb, and the
+"when mirroring or sharing" toggle if a display is shared. Note also that a *hidden* tab's poll is
+throttled by Chrome after ~5 minutes in the background, which can delay a notification by up to a
+minute; an unfocused-but-visible window polls at full rate.
+
 ## Configuration
 
 ### Config file
@@ -213,7 +230,16 @@ ephemeral `XDG_STATE_HOME`, so any number of `mise run dev` sessions coexist —
 port and state dir, and Vite auto-increments its UI port per session. The daemon is seeded with one
 fake pending plan, and a driver plays the agent's side through the real review hook path: each
 request-changes appends a revision section quoting your feedback and resubmits, and approve re-seeds
-a fresh plan, with real hook records landing in the dev state dir's `caret.log`. Everything is
+a fresh plan, with real hook records landing in the dev state dir's `caret.log`. The driver also
+seeds a genuinely-new review (fresh session, fresh review id) every 15 seconds by default, capped at
+three unresolved extras at a time — grant notifications, background the tab, and the next seed fires
+a clickable desktop notification. Set `CARET_DEV_NEW_REVIEW_MS` to tune the cadence in milliseconds
+(`0` disables); the driver logs the seeder's armed/disabled state at boot either way. One
+notification gotcha: browser notification grants are per-origin **including the port**, so when an
+orphaned dev server squats Vite's port and a new session auto-increments to the next one, the UI
+lands on a fresh origin whose permission is back to "default" — the bell shows the muted "?" again
+and new plans log `plan notification skipped (permission)`. Re-grant via the bell, or kill the
+straggler holding the port (`lsof -nP -iTCP:5173 -sTCP:LISTEN`). Everything is
 reaped on Ctrl-C, and the dev daemon never reads or writes a globally-installed caret's reviews. To
 pin a fixed dev port instead, set `CARET_DEV_PORT` to any free port other than `42718` (the
 production default); this skips `--ephemeral` and binds that port, so only one such session can run

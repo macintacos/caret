@@ -10,8 +10,11 @@ the ISC license.
 
 | Icon | Vendored path | Upstream |
 | --- | --- | --- |
+| `bell` | [ui/src/icons/bell.svg](ui/src/icons/bell.svg) | [bell.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/bell.svg) |
+| `bell-off` | [ui/src/icons/bell-off.svg](ui/src/icons/bell-off.svg) | [bell-off.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/bell-off.svg) |
 | `check` | [ui/src/icons/check.svg](ui/src/icons/check.svg) | [check.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/check.svg) |
 | `chevron-down` | [ui/src/icons/chevron-down.svg](ui/src/icons/chevron-down.svg) | [chevron-down.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/chevron-down.svg) |
+| `circle-question-mark` | [ui/src/icons/circle-question-mark.svg](ui/src/icons/circle-question-mark.svg) | [circle-question-mark.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/circle-question-mark.svg) |
 | `command` | [ui/src/icons/command.svg](ui/src/icons/command.svg) | [command.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/command.svg) |
 | `corner-down-left` | [ui/src/icons/corner-down-left.svg](ui/src/icons/corner-down-left.svg) | [corner-down-left.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/corner-down-left.svg) |
 | `corner-up-left` | [ui/src/icons/corner-up-left.svg](ui/src/icons/corner-up-left.svg) | [corner-up-left.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/corner-up-left.svg) |
