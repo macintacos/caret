@@ -199,7 +199,7 @@ mise run test       # bun test
 mise run test-e2e   # Playwright browser e2e (isolated daemon, Chromium)
 mise run lint       # Biome + tsc + svelte-check (read-only); the CI/pre-commit gate
 mise run format     # Biome (write)
-mise run preflight  # format + lint + tests (unit ∥ e2e) + build before pushing
+mise run preflight  # check-only pre-push gate: lint + tests (unit ∥ e2e) + build, concurrent
 ```
 
 `mise run lint` (and the pre-commit hook) runs Biome lint, `tsc --noEmit`, and `svelte-check` —
