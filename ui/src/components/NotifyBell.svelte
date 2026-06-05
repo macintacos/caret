@@ -28,9 +28,13 @@
     // stays reliable (a disabled button suppresses `title` in some browsers).
     if (!presentation.canRequest) return;
     try {
-      const result = await Notification.requestPermission();
-      permission = result;
-      uiLog.info("ui", "notify permission: " + result);
+      await Notification.requestPermission();
+      // Trust the live static over the resolved value: the notifier gates on
+      // Notification.permission at fire time, and the two can diverge
+      // (observed: an automation-granted prompt resolves "granted" while the
+      // static stays "default"). The badge must show what will actually fire.
+      permission = Notification.permission;
+      uiLog.info("ui", "notify permission: " + permission);
     } catch {
       // A rejecting requestPermission (legacy callback-only engines) must not
       // surface as an unhandled rejection; re-read whatever the browser settled.

@@ -234,7 +234,12 @@ a fresh plan, with real hook records landing in the dev state dir's `caret.log`.
 seeds a genuinely-new review (fresh session, fresh review id) every 15 seconds by default, capped at
 three unresolved extras at a time — grant notifications, background the tab, and the next seed fires
 a clickable desktop notification. Set `CARET_DEV_NEW_REVIEW_MS` to tune the cadence in milliseconds
-(`0` disables); the driver logs the seeder's armed/disabled state at boot either way. Everything is
+(`0` disables); the driver logs the seeder's armed/disabled state at boot either way. One
+notification gotcha: browser notification grants are per-origin **including the port**, so when an
+orphaned dev server squats Vite's port and a new session auto-increments to the next one, the UI
+lands on a fresh origin whose permission is back to "default" — the bell shows the muted "?" again
+and new plans log `plan notification skipped (permission)`. Re-grant via the bell, or kill the
+straggler holding the port (`lsof -nP -iTCP:5173 -sTCP:LISTEN`). Everything is
 reaped on Ctrl-C, and the dev daemon never reads or writes a globally-installed caret's reviews. To
 pin a fixed dev port instead, set `CARET_DEV_PORT` to any free port other than `42718` (the
 production default); this skips `--ephemeral` and binds that port, so only one such session can run
