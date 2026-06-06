@@ -19,8 +19,8 @@
 // (always, regardless of [logging].redact) before printing.
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { homedir } from "node:os";
 import { basename, join } from "node:path";
+import type { InstallProbe } from "./adapters/adapter.ts";
 import { shortId } from "./log.ts";
 import type { DaemonLock } from "./paths.ts";
 import { reviewsDir } from "./paths.ts";
@@ -43,14 +43,6 @@ export interface ProcessEntry {
 export interface ReviewStatusRecord {
   id: string;
   status: string;
-}
-
-/** Best-effort read of the Claude Code install: every field degrades to
- * "unknown" rather than throwing or omitting. */
-export interface ClaudeInstallState {
-  pluginVersion: string | "unknown";
-  pluginEnabled: boolean | "unknown";
-  hookInUserSettings: boolean | "unknown";
 }
 
 /** Bounded summary of a log file: counts only, never log text. */
@@ -84,7 +76,9 @@ export interface DiscoveryDeps {
   isPidAlive: (pid: number) => boolean;
   listProcesses: () => ProcessEntry[];
   listReviewFiles: () => ReviewStatusRecord[];
-  readClaudeInstallState: () => ClaudeInstallState;
+  /** The active adapter's install probe — an agent-neutral InstallProbe; the
+   * Claude adapter supplies the implementation in prod. */
+  readAgentInstallState: () => InstallProbe;
   logStats: (path: string) => Promise<LogStats>;
   logPaths: { caret: string; daemon: string };
 }
@@ -111,7 +105,7 @@ export interface Report {
   lockAndPort: Record<string, unknown> | SectionError;
   processes: { count: number; items: ProcessItem[] } | SectionError;
   reviews: ReviewsSection | SectionError;
-  installState: ClaudeInstallState | SectionError;
+  installState: InstallProbe | SectionError;
   logs: { caret: LogStats; daemon: LogStats } | SectionError;
 }
 
@@ -138,22 +132,20 @@ export interface ReviewsSection {
 // Assembly
 // ---------------------------------------------------------------------------
 
-/** Run one section builder, degrading a throw to { error } so a single failing
- * probe can never reject the whole report. Error → message, else String(e). */
-function safe<T>(build: () => T): T | SectionError {
-  try {
-    return build();
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : String(e) };
-  }
+/** An error's message, or String(e) for a non-Error throw. The one shape every
+ * degraded section reports. */
+function errorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
 }
 
-/** Async variant for sections whose probe returns a Promise (logs). */
-async function safeAsync<T>(build: () => Promise<T>): Promise<T | SectionError> {
+/** Run one section builder, degrading a throw to { error } so a single failing
+ * probe can never reject the whole report. The builder may be sync or async;
+ * either way a throw (or rejection) becomes a SectionError. */
+async function safe<T>(build: () => T | Promise<T>): Promise<T | SectionError> {
   try {
     return await build();
   } catch (e) {
-    return { error: e instanceof Error ? e.message : String(e) };
+    return { error: errorMessage(e) };
   }
 }
 
@@ -169,22 +161,35 @@ export async function collectReport(deps: DiscoveryDeps): Promise<Report> {
   try {
     health = await deps.health(deps.baseUrl);
   } catch (e) {
-    healthError = { error: e instanceof Error ? e.message : String(e) };
+    healthError = { error: errorMessage(e) };
   }
+
+  const [system, install, settings, daemon, lockAndPort, processes, reviews, installState, logs] =
+    await Promise.all([
+      safe(() => deps.system()),
+      safe(() => deps.install()),
+      safe(() => buildSettings(deps)),
+      healthError ?? safe(() => buildDaemon(health)),
+      healthError ?? safe(() => buildLockAndPort(deps, health)),
+      safe(() => buildProcesses(deps)),
+      safe(() => tallyReviews(deps.listReviewFiles())),
+      safe(() => deps.readAgentInstallState()),
+      safe(() => buildLogs(deps)),
+    ]);
 
   return {
     schema: "caret-discovery/1",
     version: deps.version,
     generatedAt: deps.now().toISOString(),
-    system: safe(() => deps.system()),
-    install: safe(() => deps.install()),
-    settings: safe(() => buildSettings(deps)),
-    daemon: healthError ?? safe(() => buildDaemon(health)),
-    lockAndPort: healthError ?? safe(() => buildLockAndPort(deps, health)),
-    processes: safe(() => buildProcesses(deps)),
-    reviews: safe(() => tallyReviews(deps.listReviewFiles())),
-    installState: safe(() => deps.readClaudeInstallState()),
-    logs: await safeAsync(() => buildLogs(deps)),
+    system,
+    install,
+    settings,
+    daemon,
+    lockAndPort,
+    processes,
+    reviews,
+    installState,
+    logs,
   };
 }
 
@@ -479,78 +484,4 @@ export function countLogLevels(
     else if (level === 40) warns++;
   }
   return { errors, warns };
-}
-
-/** The Claude Code config dir: CLAUDE_CONFIG_DIR override, else ~/.claude. */
-function claudeConfigDir(): string {
-  return process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
-}
-
-/** Read a JSON file, or null on any failure (absent/unreadable/unparseable). */
-function readJson(path: string): unknown {
-  try {
-    return JSON.parse(readFileSync(path, "utf-8"));
-  } catch {
-    return null;
-  }
-}
-
-/** caret's id in Claude Code's plugin registry: `<plugin>@<marketplace>`, both
- * "caret" per scripts/install.sh. */
-const PLUGIN_ID = "caret@caret";
-
-/** Best-effort read of caret's Claude Code install state. Every miss degrades
- * to "unknown". Reads ONLY caret's own entries — never any other settings key
- * (privacy). hookInUserSettings is the NORMAL-false probe: caret's hooks ride
- * inside the plugin's own hooks.json, so a user-settings hook means a MANUAL
- * entry; false when settings parse but hold none, "unknown" when unreadable. */
-export function readClaudeInstallState(): ClaudeInstallState {
-  const dir = claudeConfigDir();
-  return {
-    pluginVersion: readPluginVersion(join(dir, "plugins", "installed_plugins.json")),
-    pluginEnabled: readPluginEnabled(join(dir, "settings.json")),
-    hookInUserSettings: readHookInUserSettings(join(dir, "settings.json")),
-  };
-}
-
-function readPluginVersion(path: string): string | "unknown" {
-  const json = readJson(path) as { plugins?: Record<string, unknown> } | null;
-  const entry = json?.plugins?.[PLUGIN_ID];
-  if (!Array.isArray(entry) || entry.length === 0) return "unknown";
-  const version = (entry[0] as { version?: unknown }).version;
-  return typeof version === "string" ? version : "unknown";
-}
-
-function readPluginEnabled(path: string): boolean | "unknown" {
-  const json = readJson(path) as { enabledPlugins?: Record<string, unknown> } | null;
-  if (!json) return "unknown";
-  const enabled = json.enabledPlugins?.[PLUGIN_ID];
-  return typeof enabled === "boolean" ? enabled : "unknown";
-}
-
-function readHookInUserSettings(path: string): boolean | "unknown" {
-  const json = readJson(path) as { hooks?: Record<string, unknown> } | null;
-  if (!json) return "unknown";
-  const hooks = json.hooks;
-  if (hooks === undefined || hooks === null || typeof hooks !== "object") return false;
-  // Walk every event array → every matcher → its hooks[].command, hunting a
-  // manual caret hook entry. Defensive at each hop: a malformed shape just
-  // yields no match (false), never a throw.
-  for (const eventEntry of Object.values(hooks as Record<string, unknown>)) {
-    if (!Array.isArray(eventEntry)) continue;
-    for (const matcher of eventEntry) {
-      const inner = (matcher as { hooks?: unknown })?.hooks;
-      if (!Array.isArray(inner)) continue;
-      for (const h of inner) {
-        const command = (h as { command?: unknown })?.command;
-        if (
-          typeof command === "string" &&
-          (command.includes("caret review") || command.includes("caret prewarm"))
-        ) {
-          return true;
-        }
-      }
-    }
-  }
-  return false;
 }

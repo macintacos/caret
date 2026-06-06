@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { claudeAdapter } from "../../../src/adapters/claude/index.ts";
 import { toHookOutput } from "../../../src/adapters/claude/feedback.ts";
 import type { Decision } from "../../../src/types.ts";
 
 test("emitDecision serializes a deny to the Claude PermissionRequest JSON", () => {
   const decision: Decision = { behavior: "deny", feedback: "tighten scope", decidedAt: 1 };
-  expect(claudeAdapter.emitDecision(decision)).toBe(
-    JSON.stringify(toHookOutput(decision)),
-  );
+  expect(claudeAdapter.emitDecision(decision)).toBe(JSON.stringify(toHookOutput(decision)));
   // Spot-check the wire shape so a serialization regression is visible here, not
   // only via the byte-identity check above.
   expect(JSON.parse(claudeAdapter.emitDecision(decision))).toEqual({
@@ -68,6 +68,19 @@ test("parseHookInput throws on malformed stdin so the caller can fail-safe deny"
   expect(() => claudeAdapter.parseHookInput("not json")).toThrow("could not parse hook stdin JSON");
 });
 
-test("the install-probe seam is declared but not yet wired", () => {
-  expect(() => claudeAdapter.readInstallState()).toThrow("not wired");
+test("readInstallState returns an agent-neutral InstallProbe shape", () => {
+  // The probe reads caret's own plugin entries from the Claude config dir; with
+  // no install present it degrades every field to "unknown" rather than throwing.
+  const savedClaude = process.env.CLAUDE_CONFIG_DIR;
+  process.env.CLAUDE_CONFIG_DIR = join(tmpdir(), "caret-absent-claude-config");
+  try {
+    expect(claudeAdapter.readInstallState()).toEqual({
+      pluginVersion: "unknown",
+      pluginEnabled: "unknown",
+      hookInUserSettings: "unknown",
+    });
+  } finally {
+    if (savedClaude === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = savedClaude;
+  }
 });

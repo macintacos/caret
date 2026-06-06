@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
 import { rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -10,7 +10,6 @@ import {
   listReviewFiles,
   logStats,
   parsePsLines,
-  readClaudeInstallState,
   renderReport,
   type Report,
   tallyReviews,
@@ -48,7 +47,7 @@ function discoveryDeps(over: Partial<DiscoveryDeps> = {}): DiscoveryDeps {
     isPidAlive: () => true,
     listProcesses: () => [{ pid: 111, name: "caret" }],
     listReviewFiles: () => [{ id: "abcdef12-0000", status: "pending" }],
-    readClaudeInstallState: () => ({
+    readAgentInstallState: () => ({
       pluginVersion: "0.0.3",
       pluginEnabled: true,
       hookInUserSettings: false,
@@ -130,7 +129,7 @@ const degradations: Array<
   ["isPidAlive", { isPidAlive: boom }, ["lockAndPort", "processes"]],
   ["listProcesses", { listProcesses: boom }, ["processes"]],
   ["listReviewFiles", { listReviewFiles: boom }, ["reviews"]],
-  ["readClaudeInstallState", { readClaudeInstallState: boom }, ["installState"]],
+  ["readAgentInstallState", { readAgentInstallState: boom }, ["installState"]],
   [
     "logStats",
     {
@@ -279,7 +278,7 @@ test("pendingIds are truncated to 8 chars and capped at 8 entries", async () => 
 test("installState unknowns pass through untouched", async () => {
   const report = await collectReport(
     discoveryDeps({
-      readClaudeInstallState: () => ({
+      readAgentInstallState: () => ({
         pluginVersion: "unknown",
         pluginEnabled: "unknown",
         hookInUserSettings: "unknown",
@@ -445,20 +444,13 @@ test("tallyReviews counts mixed statuses, routing an unknown status to other", (
 
 // ---- production probe readers (filesystem / process) ----
 
-// Point XDG_STATE_HOME and CLAUDE_CONFIG_DIR at throwaway temp dirs so the
-// readers touch disposable state, never the real ~/.local/state/caret or
-// ~/.claude. The state dir + its XDG wiring come from the shared helper; the
-// CLAUDE_CONFIG_DIR a few tests set is restored alongside it.
+// Point XDG_STATE_HOME at a throwaway temp dir so the readers touch disposable
+// state, never the real ~/.local/state/caret. The state dir + its XDG wiring
+// come from the shared helper.
 const stateDir = setupTempStateDir("caret-discovery-");
 let tmp: string;
-let savedClaude: string | undefined;
 beforeEach(() => {
   tmp = stateDir();
-  savedClaude = process.env.CLAUDE_CONFIG_DIR;
-});
-afterEach(() => {
-  if (savedClaude === undefined) delete process.env.CLAUDE_CONFIG_DIR;
-  else process.env.CLAUDE_CONFIG_DIR = savedClaude;
 });
 
 test("listReviewFiles returns [] when the reviews dir is absent", () => {
@@ -513,61 +505,6 @@ test("logStats counts error/warn records and reports the size, never the text", 
   // Only the contract fields are present — no log text leaks.
   expect(Object.keys(stats).sort()).toEqual(["errors", "exists", "path", "size", "warns"]);
   expectNeverLogsBody(stats, "SENSITIVE");
-});
-
-test("readClaudeInstallState reads caret's own plugin entries and is unknown when files are absent", () => {
-  process.env.CLAUDE_CONFIG_DIR = join(tmp, "claude");
-  // No files written → everything unknown (pluginEnabled/hook depend on a
-  // settings.json that is absent here).
-  expect(readClaudeInstallState()).toEqual({
-    pluginVersion: "unknown",
-    pluginEnabled: "unknown",
-    hookInUserSettings: "unknown",
-  });
-});
-
-test("readClaudeInstallState surfaces version, enabled, and a manual hook entry", async () => {
-  const dir = join(tmp, "claude");
-  const { mkdir } = await import("node:fs/promises");
-  await mkdir(join(dir, "plugins"), { recursive: true });
-  await writeFile(
-    join(dir, "plugins", "installed_plugins.json"),
-    JSON.stringify({ plugins: { "caret@caret": [{ version: "0.0.7" }] } }),
-  );
-  await writeFile(
-    join(dir, "settings.json"),
-    JSON.stringify({
-      enabledPlugins: { "caret@caret": true },
-      hooks: {
-        PreToolUse: [
-          { matcher: "ExitPlanMode", hooks: [{ type: "command", command: "caret review" }] },
-        ],
-      },
-    }),
-  );
-  process.env.CLAUDE_CONFIG_DIR = dir;
-  expect(readClaudeInstallState()).toEqual({
-    pluginVersion: "0.0.7",
-    pluginEnabled: true,
-    hookInUserSettings: true,
-  });
-});
-
-test("readClaudeInstallState reports hookInUserSettings:false for the normal plugin-only state", async () => {
-  const dir = join(tmp, "claude");
-  const { mkdir } = await import("node:fs/promises");
-  await mkdir(dir, { recursive: true });
-  // settings.json exists and parses but has no manual caret hook — the healthy
-  // case (caret's hooks live in the plugin's own hooks.json).
-  await writeFile(
-    join(dir, "settings.json"),
-    JSON.stringify({ enabledPlugins: { "caret@caret": false }, hooks: { PreToolUse: [] } }),
-  );
-  process.env.CLAUDE_CONFIG_DIR = dir;
-  const state = readClaudeInstallState();
-  expect(state.hookInUserSettings).toBe(false);
-  expect(state.pluginEnabled).toBe(false);
-  expect(state.pluginVersion).toBe("unknown"); // no installed_plugins.json
 });
 
 test("listProcesses returns an array and never throws", () => {

@@ -1,12 +1,13 @@
 // `caret discovery`: print a one-shot diagnostics snapshot (EXC-464). Wires the
 // production probes — the same primitives the review path uses (httpHealth,
-// readDaemonLock, isPidAlive) plus the bounded read-only readers from
-// discovery.ts — collects the report, and always scrubs it (a deliberate
-// inversion of the raw-by-default logging posture) since the artifact exists to
-// be pasted into bug reports.
+// readDaemonLock, isPidAlive), the bounded read-only readers from discovery.ts,
+// and the active adapter's install probe — collects the report, and always
+// scrubs it (a deliberate inversion of the raw-by-default logging posture) since
+// the artifact exists to be pasted into bug reports.
 
 import { existsSync } from "node:fs";
 import { release } from "node:os";
+import { claudeAdapter } from "../adapters/claude/index.ts";
 import { httpHealth } from "../daemon-client.ts";
 import { isPidAlive, readDaemonLock } from "../daemon-lifecycle.ts";
 import {
@@ -15,7 +16,6 @@ import {
   listProcesses,
   listReviewFiles,
   logStats,
-  readClaudeInstallState,
   renderReport,
   type Report,
 } from "../discovery.ts";
@@ -31,9 +31,10 @@ import {
 } from "../settings.ts";
 
 /** Production probes for the discovery report (EXC-464): the same primitives
- * the review path already uses (httpHealth, readDaemonLock, isPidAlive) plus
- * the bounded read-only readers from discovery.ts. Deliberately no removeLock
- * or retire — discovery observes, never repairs. */
+ * the review path already uses (httpHealth, readDaemonLock, isPidAlive), the
+ * bounded read-only readers from discovery.ts, and the active adapter's install
+ * probe. Deliberately no removeLock or retire — discovery observes, never
+ * repairs. */
 function prodDiscoveryDeps(s: Settings): DiscoveryDeps {
   return {
     now: () => new Date(),
@@ -60,7 +61,7 @@ function prodDiscoveryDeps(s: Settings): DiscoveryDeps {
     isPidAlive,
     listProcesses,
     listReviewFiles,
-    readClaudeInstallState,
+    readAgentInstallState: () => claudeAdapter.readInstallState(),
     logStats,
     logPaths: { caret: logFile(), daemon: daemonLogFile() },
   };
