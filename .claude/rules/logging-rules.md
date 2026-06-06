@@ -97,13 +97,15 @@ Concretely:
 **Never log identifiable data.**
 
 - **Plan, prompt, and feedback bodies are structurally censored.** The `DENY_KEYS` set in
-  `src/redact.ts` censors `plan`, `prompt`, and `feedback` values unconditionally — toggle or no
-  toggle. Never log them under any key.
+  `src/redact-core.ts` censors `plan`, `prompt`, and `feedback` values unconditionally — toggle or
+  no toggle. Never log them under any key.
 - **New identifying keys must be added to `DENY_KEYS` explicitly.** Matching is exact-key only, so a
   hostname, user, email, or similar identifying key you introduce will leak until you add it to the
-  set. The set lives in **two places**: `src/redact.ts` (authoritative, applied at write time) and
-  the hand-mirrored copy in `ui/src/lib/log.ts` (censors before the dev console mirror) — a new key
-  must be added to both.
+  set. `DENY_KEYS` and the censoring graph-walk live **once** in `src/redact-core.ts` — a
+  browser-safe pure-TS module both runtimes import: the daemon/hook side via `src/redact.ts` (which
+  adds the home-path string scrub and applies it at write time) and the browser side via the
+  `@core` alias in `ui/src/lib/log.ts` (which censors before the dev console mirror). A new key
+  added there covers both sides at once.
 - **Day-to-day logs are raw.** `[logging].redact` defaults to `false`. `caret redact` produces
   shareable `*.redacted.log` copies after the fact, and `redact = true` scrubs (home paths → `~`,
   usernames in foreign home paths censored) at write time. Write every message and `extra` assuming
