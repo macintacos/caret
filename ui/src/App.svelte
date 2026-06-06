@@ -1,5 +1,6 @@
 <script lang="ts">
   import { getHealth } from "./lib/api.ts";
+  import { highlightReady } from "./lib/highlightReady.svelte.ts";
   import { createPlanNotifier } from "./lib/notify.ts";
   import { createSafeModeGuard } from "./lib/safeMode.ts";
   import { createScrollSpy } from "./lib/scrollspy.ts";
@@ -59,7 +60,15 @@
     onOffline: () => selection.setConnected(false),
     clearGeneralComment: () => autosave.clearGeneralComment(),
   });
-  const renderMemo = createRenderMemo();
+  // The render memo caches per id:version to skip re-parsing on each 2s poll.
+  // The highlighter builds off the critical path (main.ts), so the first render
+  // of a plan can land before shiki is ready and produce plain <pre>. Recreating
+  // the memo when highlightReady() flips busts that cache once, so the active
+  // plan re-renders with syntax highlighting the moment the highlighter arrives.
+  let renderMemo = $derived.by(() => {
+    void highlightReady();
+    return createRenderMemo();
+  });
 
   let active = $derived(selection.active);
   let rendered = $derived(renderMemo.render(active));
