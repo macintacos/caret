@@ -9,14 +9,15 @@
 // A `deny.message` is the documented, verified feedback channel — the model
 // receives it and revises the plan.
 
-import type { AcceptMode, Behavior } from "../../types.ts";
+import type { ApproveVariantId, Behavior } from "../../types.ts";
+import { type SetModeName, setModeFor } from "./approve.ts";
 
 export interface PermissionDecision {
   behavior: Behavior;
   message?: string;
   updatedPermissions?: Array<{
     type: "setMode";
-    mode: AcceptMode;
+    mode: SetModeName;
     destination: "session";
   }>;
 }
@@ -31,16 +32,15 @@ export interface HookOutput {
 export interface DecisionInput {
   behavior: Behavior;
   feedback?: string;
-  acceptMode?: AcceptMode;
+  acceptMode?: ApproveVariantId;
 }
 
 export function toHookOutput(input: DecisionInput): HookOutput {
   if (input.behavior === "allow") {
     const decision: PermissionDecision = { behavior: "allow" };
-    if (input.acceptMode === "acceptEdits" || input.acceptMode === "auto") {
-      decision.updatedPermissions = [
-        { type: "setMode", mode: input.acceptMode, destination: "session" },
-      ];
+    const mode = setModeFor(input.acceptMode);
+    if (mode) {
+      decision.updatedPermissions = [{ type: "setMode", mode, destination: "session" }];
     }
     return {
       hookSpecificOutput: { hookEventName: "PermissionRequest", decision },

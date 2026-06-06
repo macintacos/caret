@@ -140,6 +140,26 @@ test("GET /api/health omits stateDir and instanceId when not provided", async ()
   expect("instanceId" in body).toBe(false);
 });
 
+// ---- adapter-declared approve variants in health (EXC-515) ----
+
+test("GET /api/health publishes the adapter's declared approve variants", async () => {
+  const variants = [
+    { id: "approve", label: "Approve" },
+    { id: "yolo", label: "Approve & auto", description: "all gas" },
+  ];
+  await boot({ approveVariants: variants });
+  const body = (await (await fetch(`${base}/api/health`)).json()) as {
+    approveVariants?: typeof variants;
+  };
+  expect(body.approveVariants).toEqual(variants);
+});
+
+test("GET /api/health omits approveVariants when the adapter declares none", async () => {
+  await boot();
+  const body = (await (await fetch(`${base}/api/health`)).json()) as Record<string, unknown>;
+  expect("approveVariants" in body).toBe(false);
+});
+
 test("the lock file records stateDir and instanceId", async () => {
   const lockPath = join(dir, "daemon.lock");
   await boot({ lockPath, stateDir: "/x/caret", instanceId: "inst123" });

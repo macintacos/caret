@@ -31,15 +31,22 @@ test("emitDecision carries an approve variant's setMode through to stdout", () =
   });
 });
 
-test("declares its approve variants as opaque id + label tokens", () => {
-  expect(claudeAdapter.approveVariants.map((v) => v.id)).toEqual([
-    "default",
-    "acceptEdits",
-    "auto",
+test("declares its approve variants with the reviewer-facing labels", () => {
+  // The labels are the source of truth the UI renders verbatim; pinning them
+  // here keeps the wire declaration and the e2e-pinned button text in lockstep.
+  expect(claudeAdapter.approveVariants).toEqual([
+    { id: "default", label: "Approve", description: "Approve edits manually" },
+    {
+      id: "acceptEdits",
+      label: "Approve & accept edits",
+      description: "Auto-accept file edits this session",
+    },
+    {
+      id: "auto",
+      label: "Approve & auto mode",
+      description: "Full auto mode this session",
+    },
   ]);
-  for (const variant of claudeAdapter.approveVariants) {
-    expect(variant.label.length).toBeGreaterThan(0);
-  }
 });
 
 test("parseHookInput maps Claude's hook stdin into a core PlanInput", () => {

@@ -5,6 +5,7 @@
 
 import { randomUUID } from "node:crypto";
 import { existsSync, unlinkSync } from "node:fs";
+import { claudeAdapter } from "../adapters/claude/index.ts";
 import { currentBuildId, currentCommit, loadUiHtml } from "../build-id.ts";
 import { isAddrInUse } from "../daemon-lifecycle.ts";
 import { type CaretServer, createServer } from "../daemon.ts";
@@ -72,6 +73,10 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
       // logged — identifying); the per-boot instanceId is the loggable handle.
       stateDir: stateDir(),
       instanceId: randomUUID().slice(0, 8),
+      // The agent adapter's declared approve variants, published in /api/health
+      // so the UI renders its approve split-button from the capability rather
+      // than hard-coding the tool's mode names.
+      approveVariants: claudeAdapter.approveVariants,
       log,
     });
   } catch (e) {

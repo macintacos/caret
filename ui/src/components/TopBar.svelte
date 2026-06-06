@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { APPROVE_VARIANTS, approveLabel } from "../lib/approve.ts";
+  import { approveLabel } from "../lib/approve.ts";
   import { shortCwd } from "../lib/cwd.ts";
-  import type { AcceptMode, ClientReview } from "@core/types";
+  import type { ApproveVariant, ApproveVariantId, ClientReview } from "@core/types";
   import Icon from "./Icon.svelte";
   import NotifyBell from "./NotifyBell.svelte";
   import ReviewSwitcher from "./ReviewSwitcher.svelte";
@@ -11,10 +11,12 @@
     reviews: ClientReview[];
     active: ClientReview | null;
     busy: boolean;
-    /** Remembered approve mode; sets the primary button's mode + label. */
-    approveMode: AcceptMode;
+    /** Remembered approve variant id; sets the primary button's id + label. */
+    approveMode: ApproveVariantId;
+    /** The adapter-declared approve variants to render (labels/order/default). */
+    variants: ApproveVariant[];
     onSelect: (id: string) => void;
-    onApprove: (mode: AcceptMode) => void;
+    onApprove: (mode: ApproveVariantId) => void;
     onRequestChanges: () => void;
   }
   let {
@@ -22,6 +24,7 @@
     active,
     busy,
     approveMode,
+    variants,
     onSelect,
     onApprove,
     onRequestChanges,
@@ -29,7 +32,7 @@
 
   let menuOpen = $state(false);
 
-  function approve(mode: AcceptMode) {
+  function approve(mode: ApproveVariantId) {
     menuOpen = false;
     onApprove(mode);
   }
@@ -59,7 +62,7 @@
       <div class="split">
         <button class="approve" onclick={() => approve(approveMode)} disabled={busy}>
           <Icon name="check" size={14} />
-          {approveLabel(approveMode)}
+          {approveLabel(approveMode, variants)}
         </button>
         <button
           class="split-toggle"
@@ -74,11 +77,11 @@
 
         {#if menuOpen}
           <ul class="menu" role="menu">
-            {#each APPROVE_VARIANTS as v (v.mode)}
+            {#each variants as v (v.id)}
               <li>
-                <button role="menuitem" onclick={() => approve(v.mode)}>
+                <button role="menuitem" onclick={() => approve(v.id)}>
                   <span class="v-label">{v.label}</span>
-                  <span class="v-note">{v.note}</span>
+                  {#if v.description}<span class="v-note">{v.description}</span>{/if}
                 </button>
               </li>
             {/each}

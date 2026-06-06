@@ -4,19 +4,9 @@
 // hands it raw hook stdin and gets back a core `PlanInput`. The dependency runs
 // one way: an adapter imports core types, never the reverse.
 
-import type { Decision, PlanInput } from "../types.ts";
+import type { ApproveVariant, Decision, PlanInput } from "../types.ts";
 
-/**
- * A post-approval approve variant the adapter offers (e.g. an "approve and
- * auto-accept edits" button). `id` is the opaque token the core and UI carry;
- * `label` is its human name. The full generalization away from Claude's mode
- * names is realized later; this is the stable declaration shape adapters and the
- * UI render against.
- */
-export interface ApproveVariant {
-  id: string;
-  label: string;
-}
+export type { ApproveVariant };
 
 /**
  * What the adapter can report about the agent tool's local install — surfaced by

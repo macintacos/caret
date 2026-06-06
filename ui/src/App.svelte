@@ -1,5 +1,6 @@
 <script lang="ts">
   import { getHealth } from "./lib/api.ts";
+  import { approveVariants } from "./lib/approve.ts";
   import { highlightReady } from "./lib/highlightReady.svelte.ts";
   import { createPlanNotifier } from "./lib/notify.ts";
   import { createSafeModeGuard } from "./lib/safeMode.ts";
@@ -12,7 +13,7 @@
   } from "./state/polling.svelte.ts";
   import { createRenderMemo } from "./state/render.svelte.ts";
   import { createResolve, type ResolveStore } from "./state/resolve.svelte.ts";
-  import type { AcceptMode, Annotation } from "@core/types";
+  import type { ApproveVariant, ApproveVariantId, Annotation } from "@core/types";
 
   import AnnotationGutter from "./components/AnnotationGutter.svelte";
   import EmptyState from "./components/EmptyState.svelte";
@@ -35,6 +36,11 @@
     daemonChanged: false,
   });
   let resStore = $state<ResolveStore>({ approveMode: "default", busy: false });
+  // The adapter's declared approve variants, read once from the health probe.
+  // Undefined until the probe lands (or for a daemon that predates the field);
+  // approveVariants() falls back to the built-in set so the split-button always
+  // has options.
+  let declaredVariants = $state<ApproveVariant[] | undefined>(undefined);
   let work = $state<{
     annotations: Annotation[];
     generalCommentDraft: string;
@@ -72,6 +78,9 @@
 
   let active = $derived(selection.active);
   let rendered = $derived(renderMemo.render(active));
+  // The variants the split-button renders: the declared set when present, else
+  // the built-in fallback.
+  let variants = $derived(approveVariants(declaredVariants));
 
   // ----- Working-copy reload -----
   // When the active review (or its version) changes — whether from a selection
@@ -85,9 +94,14 @@
   // No reactive reads: runs once on mount, returns the poll's stop fn.
   $effect(() => {
     // An immediate health probe sets the connection flag before the first
-    // reviews tick resolves; the poll keeps it current thereafter.
+    // reviews tick resolves; the poll keeps it current thereafter. The same
+    // probe carries the adapter's declared approve variants, captured once for
+    // the split-button.
     void getHealth()
-      .then(() => selection.setConnected(true))
+      .then((h) => {
+        selection.setConnected(true);
+        declaredVariants = h.approveVariants;
+      })
       .catch(() => selection.setConnected(false));
 
     const notifier = createPlanNotifier({ onSelect: selection.selectReview });
@@ -160,7 +174,7 @@
     el?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  function onApprove(mode: AcceptMode) {
+  function onApprove(mode: ApproveVariantId) {
     void resolve.approve(mode);
   }
   function onRequestChanges(generalComment: string) {
@@ -175,6 +189,7 @@
     {active}
     busy={resolve.busy}
     approveMode={resolve.approveMode}
+    {variants}
     onSelect={selection.selectReview}
     {onApprove}
     onRequestChanges={() => (showDialog = true)}

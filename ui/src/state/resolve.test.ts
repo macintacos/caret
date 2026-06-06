@@ -1,6 +1,6 @@
 import "../../test-setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
-import type { AcceptMode, Annotation, ResolveBody } from "@core/types";
+import type { Annotation, ApproveVariantId, ResolveBody } from "@core/types";
 import { createResolve, HttpError, isNetworkFailure, type ResolveStore } from "./resolve.svelte.ts";
 
 interface SubmitCall {
@@ -176,7 +176,7 @@ describe("loadApproveMode", () => {
   test("reads the remembered mode into the store", async () => {
     const store = makeStore();
     const resolve = createResolve(store, {
-      getApproveMode: async () => "auto" as AcceptMode,
+      getApproveMode: async () => "auto" as ApproveVariantId,
       activeId: () => null,
       annotations: () => [],
       flushPending: async () => {},
