@@ -422,6 +422,30 @@ test("the review hook warns about invalid CARET_* env vars in caret.log", async 
   }
 });
 
+test("the review hook treats an unknown flag as a parse error, not a deny", async () => {
+  // EXC-472: a CLI parse error (e.g. an unknown option on `review`) must NOT
+  // masquerade as a fail-safe deny. The flag is rejected during argv parsing —
+  // before the review action runs and reads stdin — so the process exits
+  // non-zero with nothing on stdout, never a deny written to stdout at exit 0.
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-review-parse-"));
+  const proc = Bun.spawn([process.execPath, "src/cli.ts", "review", "--nonexistent-flag"], {
+    env: { ...process.env, XDG_STATE_HOME: stateHome },
+    // Stdin is supplied so the baseline (which ignores the flag and reads stdin)
+    // resolves rather than blocking; the parse error errors before stdin is read.
+    stdin: new TextEncoder().encode("not json"),
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  try {
+    const exit = await proc.exited;
+    const out = await new Response(proc.stdout).text();
+    expect(exit).not.toBe(0);
+    expect(out).not.toContain('"deny"');
+  } finally {
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
 test("the daemon logs the parsed settings at startup", async () => {
   const stateHome = await mkdtemp(join(tmpdir(), "caret-settings-boot-"));
   const configHome = await mkdtemp(join(tmpdir(), "caret-settings-cfg-"));

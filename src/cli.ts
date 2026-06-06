@@ -13,6 +13,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, openSync, readFileSync, unlinkSync } from "node:fs";
 import { release } from "node:os";
 import { dirname, normalize } from "node:path";
+import { Command } from "@commander-js/extra-typings";
 import { createServer, type CaretServer, VANITY_HOST } from "./daemon.ts";
 import {
   collectReport,
@@ -646,7 +647,7 @@ function currentCommit(): string {
   return cachedCommit;
 }
 
-async function runDaemon(): Promise<void> {
+async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   // Leveled NDJSON to stderr (spawnDaemon redirects it into daemon.log). The
   // level and redact thunks re-read svc.current() per emit, so config.toml
   // edits hot-reload without a restart — and the boot line below doubles as
@@ -691,7 +692,7 @@ async function runDaemon(): Promise<void> {
   // the configured one. A process flag, not a setting — the dev task owns the
   // daemon and discovers the bound port from the lock, so port resolution for
   // hooks (getPort) is untouched.
-  const ephemeral = process.argv.includes("--ephemeral");
+  const ephemeral = opts.ephemeral;
   let server: CaretServer;
   try {
     server = createServer({
@@ -853,7 +854,7 @@ function prodDiscoveryDeps(s: Settings): DiscoveryDeps {
   };
 }
 
-async function runDiscoverySubcommand(argv: string[]): Promise<void> {
+async function runDiscoverySubcommand(opts: { json: boolean }): Promise<void> {
   // One-shot diagnostics snapshot (EXC-464). Human-facing output like redact:
   // human-readable by default, --json for the machine document. ALWAYS redacted
   // (a deliberate inversion of the raw-by-default logging posture, EXC-399) —
@@ -865,9 +866,7 @@ async function runDiscoverySubcommand(argv: string[]): Promise<void> {
     // scrubValue preserves the report's shape (strings scrub in place), so the
     // cast back to Report is safe for renderReport.
     const redacted = scrubValue(report, true) as Report;
-    const out = argv.includes("--json")
-      ? JSON.stringify(redacted, null, 2)
-      : renderReport(redacted);
+    const out = opts.json ? JSON.stringify(redacted, null, 2) : renderReport(redacted);
     process.stdout.write(`${out}\n`);
     process.exit(0);
   } catch (e) {
@@ -876,34 +875,64 @@ async function runDiscoverySubcommand(argv: string[]): Promise<void> {
   }
 }
 
-async function main(): Promise<void> {
-  const sub = process.argv[2];
-  switch (sub) {
-    case "daemon":
-      return runDaemon();
-    case "prewarm":
-      return runPrewarm();
-    case "review":
-      return runReviewSubcommand();
-    case "redact":
-      return runRedactSubcommand();
-    case "discovery":
-      return runDiscoverySubcommand(process.argv.slice(3));
-    default:
-      process.stderr.write(
-        `caret: unknown subcommand "${sub ?? ""}". Use: daemon | prewarm | review | redact | discovery\n`,
-      );
-      process.exit(1);
-  }
+// The CLI command tree (EXC-472). Each subcommand's action threads its parsed
+// options into the run functions, replacing the former process.argv reads. The
+// daemon self-spawn vector (daemonCommand) and runReviewSubcommand's fail-safe
+// are independent of this layer and unchanged.
+function buildProgram(): Command {
+  const program = new Command()
+    .name("caret")
+    .description("caret hook CLI: daemon | prewarm | review | redact | discovery")
+    .version(VERSION)
+    // We never call exitOverride(): a parse error (unknown command/option, bare
+    // `caret`) prints usage to stderr and exits non-zero via Commander's default,
+    // synchronously during parse. It can never reach the fail-safe catch below,
+    // so a parse error never masquerades as a deny (EXC-472).
+    .showHelpAfterError();
+
+  program
+    .command("daemon")
+    .description("run the review daemon")
+    .option("--ephemeral", "bind an OS-assigned port instead of the configured one")
+    .action((opts) => runDaemon({ ephemeral: opts.ephemeral ?? false }));
+
+  program
+    .command("prewarm")
+    .description("warm-start the daemon")
+    .action(() => runPrewarm());
+
+  program
+    .command("review")
+    .description("review a plan from stdin (ExitPlanMode hook)")
+    .action(() => runReviewSubcommand());
+
+  program
+    .command("redact")
+    .description("write redacted copies of the logs")
+    .action(() => runRedactSubcommand());
+
+  program
+    .command("discovery")
+    .description("print a diagnostics report")
+    .option("--json", "emit the machine-readable JSON document")
+    .action((opts) => runDiscoverySubcommand({ json: opts.json ?? false }));
+
+  return program;
 }
 
 if (import.meta.main) {
-  main().catch((err) => {
-    // Last-resort fail-safe for the review path; harmless noise elsewhere.
-    logError("fatal", err);
-    process.stdout.write(
-      `${JSON.stringify(denyOutput(`caret: fatal ${err} — denying to fail safe. See ${logFile()}.`))}\n`,
-    );
-    process.exit(0);
-  });
+  // KEEP the guard: cli.ts is imported by the test suites for its internal
+  // functions; parseAsync must run only when this file is the entrypoint, never
+  // on import (it would parse the test runner's argv and exit 1, killing tests).
+  // parseAsync (not parse) so an async action's rejection propagates to .catch().
+  buildProgram()
+    .parseAsync(process.argv)
+    .catch((err) => {
+      // Last-resort fail-safe for the review path; harmless noise elsewhere.
+      logError("fatal", err);
+      process.stdout.write(
+        `${JSON.stringify(denyOutput(`caret: fatal ${err} — denying to fail safe. See ${logFile()}.`))}\n`,
+      );
+      process.exit(0);
+    });
 }
