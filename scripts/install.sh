@@ -271,19 +271,13 @@ run cd "$REPO_DIR"
 section "Build"
 run_long "Installing build dependencies" bun install
 run_long "Building the UI" bash -c 'cd ui && bunx vite build'
-# The capture rides inside the executed command (not a bare script line) so a
-# CARET_DRY_RUN=1 preview — where cwd may not be a git checkout — never runs
-# git. The --define bakes the commit into the binary so the daemon can log the
-# revision it runs from (EXC-452); the capture is its own statement under the
-# inner set -e, so a git failure aborts the step instead of baking "".
-# shellcheck disable=SC2016  # the capture and define expand inside the inner `bash -c` at run time
-run_long "Compiling the caret binary" \
-  bash -c 'set -euo pipefail; CARET_BUILD_COMMIT="$(git rev-parse HEAD)"; exec bun build --compile --define="process.env.CARET_BUILD_COMMIT=\"$CARET_BUILD_COMMIT\"" --outfile bin/caret src/cli.ts'
-
-# Keep a copy of the UI beside the binary as a runtime fallback.
-step "Bundling the UI fallback"
-run cp ui/dist/index.html bin/index.html
-ok
+# Compile through the one build task so the flags can't drift from a local
+# `mise run build`: it embeds the sourcemap (readable src/*.ts stack frames),
+# bakes the commit (EXC-452), and copies the UI fallback beside the binary. Run
+# as a plain bash script so the installer needs only bun, not mise; in dry-run
+# run_long records it without executing, so its `git rev-parse` never fires in a
+# non-checkout. build-ui above leaves ui/dist/index.html in place for it.
+run_long "Compiling the caret binary" bash .mise/tasks/build-bin
 
 if [ "$DRY_RUN" -eq 0 ] && [ ! -x bin/caret ]; then
   err "build did not produce bin/caret"
