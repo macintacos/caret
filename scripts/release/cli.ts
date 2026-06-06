@@ -3,7 +3,7 @@
 // printing exactly one JSON result on stdout (so /release-caret parses rather
 // than scrapes) and all diagnostics on stderr. Exit 0 on success, 1 on any guard
 // rejection or unexpected error. Commander parses the args (EXC-473), mirroring
-// src/cli.ts's buildProgram; the one divergence is configureOutput, which routes
+// src/cli.ts's buildProgram; the main divergence is configureOutput, which routes
 // Commander's help/usage/error output to stderr to keep stdout a lone JSON object.
 
 import { Command } from "@commander-js/extra-typings";

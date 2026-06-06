@@ -28,15 +28,17 @@ test("--help routes help to stderr, leaving stdout empty", async () => {
 });
 
 test("an unknown command leaves stdout empty (usage on stderr)", async () => {
-  const { exit, stdout } = await runCli(["bogus"]);
+  const { exit, stdout, stderr } = await runCli(["bogus"]);
   expect(exit).not.toBe(0);
   expect(stdout).toBe("");
+  expect(stderr).toContain("Usage:");
 });
 
 test("a bare invocation with no subcommand leaves stdout empty", async () => {
-  const { exit, stdout } = await runCli([]);
+  const { exit, stdout, stderr } = await runCli([]);
   expect(exit).not.toBe(0);
   expect(stdout).toBe("");
+  expect(stderr).toContain("Usage:");
 });
 
 test("an invalid bump still emits a BAD_BUMP JSON object on stdout", async () => {
