@@ -25,8 +25,7 @@ test("tryRevParse resolves HEAD and returns null for a missing ref", async () =>
   expect(await git.tryRevParse("no-such-ref-xyz")).toBeNull();
 });
 
-test("listTags and porcelainStatus return arrays", async () => {
-  expect(Array.isArray(await git.listTags())).toBe(true);
+test("porcelainStatus returns an array", async () => {
   expect(Array.isArray(await git.porcelainStatus())).toBe(true);
 });
 

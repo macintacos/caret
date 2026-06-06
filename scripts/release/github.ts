@@ -5,11 +5,13 @@
 
 import { $ } from "bun";
 
+/** The PR states gh reports, uppercase end to end. */
+export type PrState = "OPEN" | "CLOSED" | "MERGED";
+
 export interface PullRequestSummary {
   number: number;
   url: string;
-  /** gh reports "OPEN" | "CLOSED" | "MERGED". */
-  state: string;
+  state: PrState;
 }
 
 export interface GitHubOps {
@@ -22,10 +24,8 @@ export interface GitHubOps {
     title: string;
     body: string;
   }): Promise<{ number: number; url: string }>;
-  prList(opts: {
-    head: string;
-    state: "open" | "closed" | "merged" | "all";
-  }): Promise<PullRequestSummary[]>;
+  /** Every PR for a head branch, across all states; callers filter on `PrState`. */
+  prList(opts: { head: string }): Promise<PullRequestSummary[]>;
   /** The release for a tag, or null if none exists. */
   releaseView(tag: string): Promise<{ url: string } | null>;
   releaseCreate(opts: { tag: string; title: string; notes: string }): Promise<{ url: string }>;
@@ -62,9 +62,9 @@ export function createGitHub(): GitHubOps {
       return { number: prNumberFromUrl(url), url };
     },
 
-    async prList({ head, state }) {
+    async prList({ head }) {
       const out = (
-        await $`gh pr list --head ${head} --state ${state} --json number,url,state`.text()
+        await $`gh pr list --head ${head} --state all --json number,url,state`.text()
       ).trim();
       if (out === "") return [];
       return JSON.parse(out) as PullRequestSummary[];

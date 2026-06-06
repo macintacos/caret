@@ -3,7 +3,6 @@ import {
   composeReleaseTitle,
   findSection,
   findTopReleasedVersion,
-  hasSection,
   parseHeading,
 } from "../scripts/release/changelog.ts";
 
@@ -82,11 +81,6 @@ test("findSection notes for the last release exclude the link-reference footers"
 
 test("findSection returns null for an absent version", () => {
   expect(findSection(CHANGELOG, "9.9.9")).toBeNull();
-});
-
-test("hasSection reflects presence", () => {
-  expect(hasSection(CHANGELOG, "0.1.0")).toBe(true);
-  expect(hasSection(CHANGELOG, "9.9.9")).toBe(false);
 });
 
 test("findTopReleasedVersion returns the first released version below Unreleased", () => {

@@ -70,7 +70,6 @@ test("a ComputeResult round-trips through JSON unchanged", () => {
       },
     ],
     manifests: ["package.json", ".claude-plugin/marketplace.json", ".claude-plugin/plugin.json"],
-    manifestsInSync: true,
   };
   expect(JSON.parse(JSON.stringify(result))).toEqual(result);
 });

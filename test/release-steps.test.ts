@@ -6,12 +6,12 @@ import type { ErrorCode } from "../scripts/release/contract.ts";
 import type { GitOps, RawCommit } from "../scripts/release/git.ts";
 import type { GitHubOps, PullRequestSummary } from "../scripts/release/github.ts";
 import {
-  type Deps,
-  type FsOps,
-  GuardError,
   baseline,
   compute,
+  type Deps,
+  type FsOps,
   finalize,
+  GuardError,
   prepare,
 } from "../scripts/release/steps.ts";
 
@@ -115,9 +115,6 @@ function harness(opts: Options = {}) {
     async rootCommit() {
       return state.root;
     },
-    async listTags() {
-      return [...state.tags];
-    },
     async latestVersionTag() {
       return state.latestTag;
     },
@@ -191,15 +188,14 @@ function harness(opts: Options = {}) {
     async defaultBranch() {
       return "trunk";
     },
-    async prCreate({ base }) {
+    async prCreate() {
       calls.push("prCreate");
       const url = "https://github.com/macintacos/caret/pull/9";
-      prs.push({ number: 9, url, state: base ? "OPEN" : "OPEN" });
+      prs.push({ number: 9, url, state: "OPEN" });
       return { number: 9, url };
     },
-    async prList({ state: st }) {
-      if (st === "all") return prs;
-      return prs.filter((p) => p.state === st.toUpperCase());
+    async prList() {
+      return prs;
     },
     async releaseView(tag) {
       return releases.get(tag) ?? null;
