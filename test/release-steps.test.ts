@@ -1,230 +1,18 @@
 // Drives the baseline/compute/prepare/finalize orchestration and its resume
-// state machine through injected fakes — no live repo, no network. Each fake
-// records mutating calls so we can assert exactly what would (or would not) run.
+// state machine through injected fakes — no live repo, no network. The fakes (and
+// the synthetic manifest/changelog/commit fixtures) live in the typed builder
+// `test/support/release-harness.ts`; each records mutating calls so we can assert
+// exactly what would (or would not) run.
 import { expect, test } from "bun:test";
 import type { ErrorCode } from "../scripts/release/contract.ts";
-import type { GitOps, RawCommit } from "../scripts/release/git.ts";
-import type { GitHubOps, PullRequestSummary } from "../scripts/release/github.ts";
+import { baseline, compute, finalize, GuardError, prepare } from "../scripts/release/steps.ts";
 import {
-  baseline,
-  compute,
-  type Deps,
-  type FsOps,
-  finalize,
-  GuardError,
-  prepare,
-} from "../scripts/release/steps.ts";
-
-const pkg = (v: string) => `{\n  "name": "caret",\n  "version": "${v}"\n}\n`;
-const market = (v: string) => `{\n  "plugins": [\n    {\n      "version": "${v}"\n    }\n  ]\n}\n`;
-
-const CHANGELOG = `# Changelog
-
-## [Unreleased]
-
-## [0.1.0] - 2026-06-02 - The Foundations Release
-
-### Added
-
-- A thing.
-
-[Unreleased]: https://github.com/macintacos/caret/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/macintacos/caret/compare/v0.0.1...v0.1.0
-`;
-
-const COMMITS: RawCommit[] = [
-  { sha: "a".repeat(40), shortSha: "aaaaaaa", subject: "EXC-1 Did a thing (#2)" },
-];
-
-interface Options {
-  branch?: string;
-  porcelain?: string[];
-  latestTag?: string | null;
-  tags?: string[];
-  remoteTags?: string[];
-  localBranches?: string[];
-  remoteBranches?: string[];
-  refs?: Record<string, string>;
-  filesAtRef?: Record<string, string>;
-  commits?: RawCommit[];
-  files?: Record<string, string>;
-  prs?: PullRequestSummary[];
-  releases?: Record<string, { url: string }>;
-  preflightOk?: boolean;
-  /** Porcelain lines preflight's write-mode format leaves behind (e.g. `[" M src/x.ts"]`). */
-  preflightDirties?: string[];
-  available?: boolean;
-  now?: string;
-}
-
-function harness(opts: Options = {}) {
-  const calls: string[] = [];
-  const state = {
-    branch: opts.branch ?? "trunk",
-    head: "headsha",
-    root: "rootsha",
-    porcelain: opts.porcelain ?? [],
-    latestTag: opts.latestTag === undefined ? "v0.0.1" : opts.latestTag,
-    tags: new Set(opts.tags ?? ["v0.0.1"]),
-    remoteTags: new Set(opts.remoteTags ?? ["v0.0.1"]),
-    localBranches: new Set(opts.localBranches ?? []),
-    remoteBranches: new Set(opts.remoteBranches ?? []),
-    refs: new Map(Object.entries(opts.refs ?? { "origin/trunk": "trunksha" })),
-    filesAtRef: new Map(Object.entries(opts.filesAtRef ?? {})),
-    commits: opts.commits ?? COMMITS,
-  };
-
-  const files = new Map(
-    Object.entries(
-      opts.files ?? {
-        "package.json": pkg("0.0.1"),
-        ".claude-plugin/plugin.json": pkg("0.0.1"),
-        ".claude-plugin/marketplace.json": market("0.0.1"),
-      },
-    ),
-  );
-
-  const fs: FsOps = {
-    async read(path) {
-      const c = files.get(path);
-      if (c === undefined) throw new Error(`ENOENT ${path}`);
-      return c;
-    },
-    async write(path, contents) {
-      files.set(path, contents);
-      calls.push(`write:${path}`);
-    },
-    async exists(path) {
-      return files.has(path);
-    },
-  };
-
-  const git: GitOps = {
-    async isRepo() {
-      return true;
-    },
-    async currentBranch() {
-      return state.branch;
-    },
-    async porcelainStatus() {
-      return state.porcelain;
-    },
-    async headSha() {
-      return state.head;
-    },
-    async rootCommit() {
-      return state.root;
-    },
-    async latestVersionTag() {
-      return state.latestTag;
-    },
-    async tryRevParse(ref) {
-      return state.refs.get(ref) ?? null;
-    },
-    async commitsBetween() {
-      return state.commits;
-    },
-    async tryFileAtRef(ref, path) {
-      return state.filesAtRef.get(`${ref}:${path}`) ?? null;
-    },
-    async localBranchExists(b) {
-      return state.localBranches.has(b);
-    },
-    async remoteBranchExists(b) {
-      return state.remoteBranches.has(b);
-    },
-    async localTagExists(t) {
-      return state.tags.has(t);
-    },
-    async remoteTagExists(t) {
-      return state.remoteTags.has(t);
-    },
-    async isAncestor() {
-      return true;
-    },
-    async fetch() {
-      calls.push("fetch");
-    },
-    async checkoutNewBranch(b) {
-      calls.push(`checkoutNew:${b}`);
-      state.branch = b;
-      state.localBranches.add(b);
-    },
-    async checkoutExistingBranch(b) {
-      calls.push(`checkout:${b}`);
-      state.branch = b;
-    },
-    async stage(paths) {
-      calls.push(`stage:${paths.join(",")}`);
-    },
-    async commit(message) {
-      calls.push(`commit:${message.split("\n")[0]}`);
-      state.porcelain = [];
-    },
-    async pushBranch(b, up) {
-      calls.push(`pushBranch:${b}:${up}`);
-      state.remoteBranches.add(b);
-    },
-    async createAnnotatedTag(tag, sha) {
-      calls.push(`createTag:${tag}@${sha}`);
-      state.tags.add(tag);
-      state.refs.set(tag, sha);
-    },
-    async pushTag(tag) {
-      calls.push(`pushTag:${tag}`);
-      state.remoteTags.add(tag);
-    },
-  };
-
-  const prs = opts.prs ?? [];
-  const releases = new Map(Object.entries(opts.releases ?? {}));
-  const github: GitHubOps = {
-    async available() {
-      return opts.available ?? true;
-    },
-    async repoSlug() {
-      return "macintacos/caret";
-    },
-    async defaultBranch() {
-      return "trunk";
-    },
-    async prCreate() {
-      calls.push("prCreate");
-      const url = "https://github.com/macintacos/caret/pull/9";
-      prs.push({ number: 9, url, state: "OPEN" });
-      return { number: 9, url };
-    },
-    async prList() {
-      return prs;
-    },
-    async releaseView(tag) {
-      return releases.get(tag) ?? null;
-    },
-    async releaseCreate({ tag }) {
-      calls.push(`releaseCreate:${tag}`);
-      const url = `https://github.com/macintacos/caret/releases/tag/${tag}`;
-      releases.set(tag, { url });
-      return { url };
-    },
-  };
-
-  const deps: Deps = {
-    git,
-    github,
-    fs,
-    io: { log: () => {} },
-    now: () => new Date(opts.now ?? "2026-06-02T00:00:00Z"),
-    preflight: async () => {
-      calls.push("preflight");
-      // Model write-mode `mise run format`: append drift to the tree without
-      // mutating the shared opts array (fresh array, not push).
-      const drift = opts.preflightDirties ?? [];
-      if (drift.length > 0) state.porcelain = [...state.porcelain, ...drift];
-      return { ok: opts.preflightOk ?? true, output: "" };
-    },
-  };
-  return { deps, calls, files, state };
-}
+  CHANGELOG,
+  type HarnessOptions,
+  makeReleaseHarness,
+  market,
+  pkg,
+} from "./support/release-harness.ts";
 
 async function expectGuard(p: Promise<unknown>, code: ErrorCode) {
   try {
@@ -239,7 +27,7 @@ async function expectGuard(p: Promise<unknown>, code: ErrorCode) {
 // --- compute ---------------------------------------------------------------
 
 test("compute returns the next version, tag, and parsed commits", async () => {
-  const { deps } = harness();
+  const { deps } = makeReleaseHarness();
   const r = await compute(deps, { bump: "minor" });
   expect(r.ok).toBe(true);
   expect(r.currentVersion).toBe("0.0.1");
@@ -253,7 +41,7 @@ test("compute returns the next version, tag, and parsed commits", async () => {
 });
 
 test("compute surfaces the UTC date and the manifest paths", async () => {
-  const { deps } = harness();
+  const { deps } = makeReleaseHarness();
   const r = await compute(deps, { bump: "minor" });
   expect(r.date).toBe("2026-06-02");
   expect(r.manifests).toEqual([
@@ -264,27 +52,27 @@ test("compute surfaces the UTC date and the manifest paths", async () => {
 });
 
 test("compute rejects with NO_BASELINE when there are no tags", async () => {
-  const { deps } = harness({ latestTag: null });
+  const { deps } = makeReleaseHarness({ latestTag: null });
   await expectGuard(compute(deps, { bump: "patch" }), "NO_BASELINE");
 });
 
 test("compute rejects a dirty tree", async () => {
-  const { deps } = harness({ porcelain: [" M src/x.ts"] });
+  const { deps } = makeReleaseHarness({ porcelain: [" M src/x.ts"] });
   await expectGuard(compute(deps, { bump: "patch" }), "DIRTY_TREE");
 });
 
 test("compute rejects a non-default branch", async () => {
-  const { deps } = harness({ branch: "feature/x" });
+  const { deps } = makeReleaseHarness({ branch: "feature/x" });
   await expectGuard(compute(deps, { bump: "patch" }), "WRONG_BRANCH");
 });
 
 test("compute rejects a detached HEAD", async () => {
-  const { deps } = harness({ branch: "HEAD" });
+  const { deps } = makeReleaseHarness({ branch: "HEAD" });
   await expectGuard(compute(deps, { bump: "patch" }), "DETACHED_HEAD");
 });
 
 test("compute rejects manifest drift", async () => {
-  const { deps } = harness({
+  const { deps } = makeReleaseHarness({
     files: {
       "package.json": pkg("0.0.1"),
       ".claude-plugin/plugin.json": pkg("0.0.2"),
@@ -295,14 +83,14 @@ test("compute rejects manifest drift", async () => {
 });
 
 test("compute rejects when the target tag already exists", async () => {
-  const { deps } = harness({ tags: ["v0.0.1", "v0.1.0"] });
+  const { deps } = makeReleaseHarness({ tags: ["v0.0.1", "v0.1.0"] });
   await expectGuard(compute(deps, { bump: "minor" }), "TAG_EXISTS");
 });
 
 // --- baseline --------------------------------------------------------------
 
 test("baseline dry-run reports the root commit without tagging", async () => {
-  const { deps, calls } = harness({ tags: [], remoteTags: [], latestTag: null });
+  const { deps, calls } = makeReleaseHarness({ tags: [], remoteTags: [], latestTag: null });
   const r = await baseline(deps, { dryRun: true });
   expect(r.tag).toBe("v0.0.1");
   expect(r.sha).toBe("rootsha");
@@ -311,7 +99,7 @@ test("baseline dry-run reports the root commit without tagging", async () => {
 });
 
 test("baseline creates and pushes the v0.0.1 tag on the root commit", async () => {
-  const { deps, calls } = harness({ tags: [], remoteTags: [], latestTag: null });
+  const { deps, calls } = makeReleaseHarness({ tags: [], remoteTags: [], latestTag: null });
   const r = await baseline(deps, { dryRun: false });
   expect(r.created).toBe(true);
   expect(r.pushed).toBe(true);
@@ -320,7 +108,7 @@ test("baseline creates and pushes the v0.0.1 tag on the root commit", async () =
 });
 
 test("baseline is a no-op when v0.0.1 already exists", async () => {
-  const { deps, calls } = harness({ tags: ["v0.0.1"], remoteTags: ["v0.0.1"] });
+  const { deps, calls } = makeReleaseHarness({ tags: ["v0.0.1"], remoteTags: ["v0.0.1"] });
   const r = await baseline(deps, { dryRun: false });
   expect(r.created).toBe(false);
   expect(calls).not.toContain("createTag:v0.0.1@rootsha");
@@ -328,7 +116,7 @@ test("baseline is a no-op when v0.0.1 already exists", async () => {
 
 // --- prepare ---------------------------------------------------------------
 
-const PREPARE_OPTS: Options = {
+const PREPARE_OPTS: HarnessOptions = {
   porcelain: ["?? CHANGELOG.md"],
   files: {
     "package.json": pkg("0.0.1"),
@@ -339,7 +127,7 @@ const PREPARE_OPTS: Options = {
 };
 
 test("prepare dry-run writes, commits, pushes, and PRs nothing", async () => {
-  const { deps, calls } = harness(PREPARE_OPTS);
+  const { deps, calls } = makeReleaseHarness(PREPARE_OPTS);
   const r = await prepare(deps, { bump: "minor", dryRun: true });
   expect(r.dryRun).toBe(true);
   expect(r.version).toBe("0.1.0");
@@ -348,7 +136,7 @@ test("prepare dry-run writes, commits, pushes, and PRs nothing", async () => {
 });
 
 test("prepare bumps manifests, commits, pushes, and opens a PR", async () => {
-  const { deps, calls, files } = harness(PREPARE_OPTS);
+  const { deps, calls, files } = makeReleaseHarness(PREPARE_OPTS);
   const r = await prepare(deps, { bump: "minor", dryRun: false });
   expect(files.get("package.json")).toContain('"version": "0.1.0"');
   expect(files.get(".claude-plugin/marketplace.json")).toContain('"version": "0.1.0"');
@@ -361,7 +149,7 @@ test("prepare bumps manifests, commits, pushes, and opens a PR", async () => {
 });
 
 test("prepare reuses an already-open PR instead of opening a duplicate", async () => {
-  const { deps, calls } = harness({
+  const { deps, calls } = makeReleaseHarness({
     ...PREPARE_OPTS,
     localBranches: ["release/v0.1.0"],
     remoteBranches: ["release/v0.1.0"],
@@ -381,7 +169,7 @@ test("prepare reuses an already-open PR instead of opening a duplicate", async (
 });
 
 test("prepare resumes cleanly when the release branch is already bumped", async () => {
-  const { deps, calls } = harness({
+  const { deps, calls } = makeReleaseHarness({
     branch: "release/v0.1.0",
     porcelain: [],
     localBranches: ["release/v0.1.0"],
@@ -414,7 +202,7 @@ test("prepare resumes cleanly when the release branch is already bumped", async 
 });
 
 test("prepare fails loudly when the changelog section is missing", async () => {
-  const { deps } = harness({
+  const { deps } = makeReleaseHarness({
     ...PREPARE_OPTS,
     files: {
       "package.json": pkg("0.0.1"),
@@ -427,14 +215,14 @@ test("prepare fails loudly when the changelog section is missing", async () => {
 });
 
 test("prepare aborts when preflight fails", async () => {
-  const { deps } = harness({ ...PREPARE_OPTS, preflightOk: false });
+  const { deps } = makeReleaseHarness({ ...PREPARE_OPTS, preflightOk: false });
   await expectGuard(prepare(deps, { bump: "minor", dryRun: false }), "PREFLIGHT_FAILED");
 });
 
 test("prepare aborts when the tree drifts outside the release set during preflight", async () => {
   // Preflight is check-only, but the tree drifted anyway (whatever the cause).
   // Committing only [MANIFESTS, CHANGELOG] would silently drop the drift.
-  const { deps, calls } = harness({
+  const { deps, calls } = makeReleaseHarness({
     ...PREPARE_OPTS,
     preflightDirties: [" M src/app.ts"],
   });
@@ -442,9 +230,96 @@ test("prepare aborts when the tree drifts outside the release set during preflig
   expect(calls.filter((c) => c.startsWith("commit:"))).toEqual([]); // never committed a partial set
 });
 
+test("prepare rejects BRANCH_DIVERGED when the remote release branch is not an ancestor", async () => {
+  // Local and remote release-branch SHAs differ and the remote is not an
+  // ancestor of local, so pushing would need a force-push the script never does.
+  const { deps, calls } = makeReleaseHarness({
+    branch: "release/v0.1.0",
+    porcelain: [],
+    localBranches: ["release/v0.1.0"],
+    remoteBranches: ["release/v0.1.0"],
+    refs: {
+      "origin/trunk": "trunksha",
+      "release/v0.1.0": "localsha",
+      "origin/release/v0.1.0": "remotesha", // diverged from local
+    },
+    ancestor: false, // remote is not an ancestor of local
+    files: {
+      "package.json": pkg("0.1.0"),
+      ".claude-plugin/plugin.json": pkg("0.1.0"),
+      ".claude-plugin/marketplace.json": market("0.1.0"),
+      "CHANGELOG.md": CHANGELOG,
+    },
+  });
+  await expectGuard(prepare(deps, { bump: "minor", dryRun: false }), "BRANCH_DIVERGED");
+  expect(calls).not.toContain("pushBranch:release/v0.1.0:false"); // never pushed over the divergence
+});
+
+test("prepare rejects ALREADY_MERGED when the release PR is already merged", async () => {
+  // The bump PR merged but the operator re-ran prepare; it must point them at
+  // finalize rather than open a duplicate or push again.
+  const { deps, calls } = makeReleaseHarness({
+    branch: "release/v0.1.0",
+    porcelain: [],
+    localBranches: ["release/v0.1.0"],
+    remoteBranches: ["release/v0.1.0"],
+    refs: {
+      "origin/trunk": "trunksha",
+      "release/v0.1.0": "z",
+      "origin/release/v0.1.0": "z",
+    },
+    files: {
+      "package.json": pkg("0.1.0"),
+      ".claude-plugin/plugin.json": pkg("0.1.0"),
+      ".claude-plugin/marketplace.json": market("0.1.0"),
+      "CHANGELOG.md": CHANGELOG,
+    },
+    prs: [
+      {
+        number: 3,
+        url: "https://github.com/macintacos/caret/pull/3",
+        state: "MERGED",
+      },
+    ],
+  });
+  await expectGuard(prepare(deps, { bump: "minor", dryRun: false }), "ALREADY_MERGED");
+  expect(calls).not.toContain("prCreate");
+});
+
+test("prepare rejects PR_CLOSED when the release PR was closed unmerged", async () => {
+  // A closed-unmerged PR means a human intervened; prepare refuses to silently
+  // open a fresh PR over the same branch.
+  const { deps, calls } = makeReleaseHarness({
+    branch: "release/v0.1.0",
+    porcelain: [],
+    localBranches: ["release/v0.1.0"],
+    remoteBranches: ["release/v0.1.0"],
+    refs: {
+      "origin/trunk": "trunksha",
+      "release/v0.1.0": "z",
+      "origin/release/v0.1.0": "z",
+    },
+    files: {
+      "package.json": pkg("0.1.0"),
+      ".claude-plugin/plugin.json": pkg("0.1.0"),
+      ".claude-plugin/marketplace.json": market("0.1.0"),
+      "CHANGELOG.md": CHANGELOG,
+    },
+    prs: [
+      {
+        number: 3,
+        url: "https://github.com/macintacos/caret/pull/3",
+        state: "CLOSED",
+      },
+    ],
+  });
+  await expectGuard(prepare(deps, { bump: "minor", dryRun: false }), "PR_CLOSED");
+  expect(calls).not.toContain("prCreate");
+});
+
 // --- finalize --------------------------------------------------------------
 
-const FINALIZE_OPTS: Options = {
+const FINALIZE_OPTS: HarnessOptions = {
   refs: { "origin/trunk": "mergedsha" },
   filesAtRef: {
     "origin/trunk:CHANGELOG.md": CHANGELOG,
@@ -455,7 +330,7 @@ const FINALIZE_OPTS: Options = {
 };
 
 test("finalize tags trunk's merged HEAD and creates the release", async () => {
-  const { deps, calls } = harness(FINALIZE_OPTS);
+  const { deps, calls } = makeReleaseHarness(FINALIZE_OPTS);
   const r = await finalize(deps, { dryRun: false });
   expect(r.version).toBe("0.1.0");
   expect(r.tag).toBe("v0.1.0");
@@ -469,7 +344,7 @@ test("finalize tags trunk's merged HEAD and creates the release", async () => {
 test("finalize succeeds from a release branch (working branch is irrelevant)", async () => {
   // Phase 1's `prepare` leaves the checkout on release/v0.1.0; finalize tags
   // origin/trunk's HEAD, so the local branch must not block it.
-  const { deps, calls } = harness({ ...FINALIZE_OPTS, branch: "release/v0.1.0" });
+  const { deps, calls } = makeReleaseHarness({ ...FINALIZE_OPTS, branch: "release/v0.1.0" });
   const r = await finalize(deps, { dryRun: false });
   expect(r.version).toBe("0.1.0");
   expect(r.tag).toBe("v0.1.0");
@@ -479,7 +354,7 @@ test("finalize succeeds from a release branch (working branch is irrelevant)", a
 });
 
 test("finalize dry-run mutates nothing", async () => {
-  const { deps, calls } = harness(FINALIZE_OPTS);
+  const { deps, calls } = makeReleaseHarness(FINALIZE_OPTS);
   const r = await finalize(deps, { dryRun: true });
   expect(r.dryRun).toBe(true);
   expect(r.taggedSha).toBe("mergedsha");
@@ -488,7 +363,7 @@ test("finalize dry-run mutates nothing", async () => {
 });
 
 test("finalize rejects NOT_MERGED when trunk manifests lag the changelog", async () => {
-  const { deps } = harness({
+  const { deps } = makeReleaseHarness({
     refs: { "origin/trunk": "mergedsha" },
     filesAtRef: {
       "origin/trunk:CHANGELOG.md": CHANGELOG,
@@ -501,7 +376,7 @@ test("finalize rejects NOT_MERGED when trunk manifests lag the changelog", async
 });
 
 test("finalize resumes a created-but-unpushed local tag without a false TAG_EXISTS", async () => {
-  const { deps, calls } = harness({
+  const { deps, calls } = makeReleaseHarness({
     ...FINALIZE_OPTS,
     tags: ["v0.0.1", "v0.1.0"], // local tag exists
     remoteTags: ["v0.0.1"], // but was never pushed
@@ -513,8 +388,25 @@ test("finalize resumes a created-but-unpushed local tag without a false TAG_EXIS
   expect(r.releaseUrl).toContain("v0.1.0");
 });
 
+test("finalize rejects TAG_EXISTS when the local tag points at another commit", async () => {
+  // The local tag exists but was created on a different commit than trunk's
+  // merged HEAD; finalize must refuse to move it (never re-tags).
+  const { deps, calls } = makeReleaseHarness({
+    ...FINALIZE_OPTS,
+    tags: ["v0.0.1", "v0.1.0"], // local tag exists
+    remoteTags: ["v0.0.1"], // but was never pushed
+    refs: {
+      "origin/trunk": "mergedsha",
+      "v0.1.0^{commit}": "stalesha", // local tag points elsewhere
+    },
+  });
+  await expectGuard(finalize(deps, { dryRun: false }), "TAG_EXISTS");
+  expect(calls).not.toContain("createTag:v0.1.0@mergedsha"); // never re-tagged
+  expect(calls).not.toContain("pushTag:v0.1.0"); // never pushed the stale tag
+});
+
 test("finalize reuses an existing GitHub release", async () => {
-  const { deps, calls } = harness({
+  const { deps, calls } = makeReleaseHarness({
     ...FINALIZE_OPTS,
     tags: ["v0.0.1", "v0.1.0"],
     remoteTags: ["v0.0.1", "v0.1.0"],
@@ -533,15 +425,15 @@ test("only prepare gates on preflight; compute/baseline/finalize never invoke it
   // The other release paths rely on their own assertCleanTree guards and must
   // never reach the preflight seam, so a failing/dirtying preflight cannot leak
   // past them via a hidden gate.
-  const c = harness();
+  const c = makeReleaseHarness();
   expect(await compute(c.deps, { bump: "minor" })).toBeTruthy(); // ran to completion
   expect(c.calls).not.toContain("preflight");
 
-  const b = harness();
+  const b = makeReleaseHarness();
   expect(await baseline(b.deps, { dryRun: false })).toBeTruthy();
   expect(b.calls).not.toContain("preflight");
 
-  const f = harness(FINALIZE_OPTS);
+  const f = makeReleaseHarness(FINALIZE_OPTS);
   expect(await finalize(f.deps, { dryRun: false })).toBeTruthy();
   expect(f.calls).not.toContain("preflight");
 });
