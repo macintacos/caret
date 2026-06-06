@@ -5,6 +5,7 @@
 import type { Decision, PlanInput } from "../../types.ts";
 import type { AgentAdapter, ApproveVariant, InstallProbe } from "../adapter.ts";
 import { toHookOutput } from "./feedback.ts";
+import { readClaudeInstallState } from "./install.ts";
 
 /**
  * Claude's post-approval approve variants. The plain approve maps to no session
@@ -27,12 +28,6 @@ interface HookStdin {
   tool_input?: { plan?: string };
 }
 
-/** Discovery's install probe is carved into this adapter by a later step; the
- * surface is declared here so callers bind against a stable shape. */
-function notWired(member: string): never {
-  throw new Error(`claude adapter: ${member} not wired`);
-}
-
 export const claudeAdapter: AgentAdapter = {
   approveVariants: APPROVE_VARIANTS,
 
@@ -52,6 +47,6 @@ export const claudeAdapter: AgentAdapter = {
   },
 
   readInstallState(): InstallProbe {
-    return notWired("readInstallState");
+    return readClaudeInstallState();
   },
 };
