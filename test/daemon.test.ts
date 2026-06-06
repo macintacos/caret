@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -39,6 +39,32 @@ async function waitForPrefMode(want: string): Promise<string> {
     await Bun.sleep(10);
   }
   return last;
+}
+
+// A promise that resolves the first time the daemon's idle/retire shutdown fires,
+// plus the onShutdown callback to hand to boot(). Awaiting the signal is the
+// deterministic alternative to sleeping past idleMs and then polling a counter:
+// the test proceeds the instant the daemon actually shuts down, never sooner and
+// no slower. `fired` lets the negative tests assert a shutdown has NOT happened
+// (within a bounded grace) without racing the promise.
+function shutdownSignal(): {
+  onShutdown: () => void;
+  shutdown: Promise<void>;
+  fired: () => boolean;
+} {
+  let resolved = false;
+  let resolve!: () => void;
+  const shutdown = new Promise<void>((r) => {
+    resolve = r;
+  });
+  return {
+    onShutdown: () => {
+      resolved = true;
+      resolve();
+    },
+    shutdown,
+    fired: () => resolved,
+  };
 }
 
 async function resolve(id: string, body: Record<string, unknown>) {
@@ -141,37 +167,38 @@ test("stop() removes the lock file", async () => {
 
 test("POST /api/retire returns 200, shuts down, and removes the lock", async () => {
   const lockPath = join(dir, "daemon.lock");
-  let shutdowns = 0;
-  await boot({ lockPath, onShutdown: () => shutdowns++ });
+  const sig = shutdownSignal();
+  await boot({ lockPath, onShutdown: sig.onShutdown });
   const res = await fetch(`${base}/api/retire`, { method: "POST" });
   expect(res.status).toBe(200);
-  // The graceful path defers stop()+onShutdown one tick so the 200 flushes first.
-  await Bun.sleep(20);
-  expect(shutdowns).toBe(1);
+  // The graceful path defers stop()+onShutdown one tick so the 200 flushes first;
+  // await the shutdown rather than sleeping past the defer.
+  await sig.shutdown;
   expect(existsSync(lockPath)).toBe(false);
 });
 
 test("POST /api/retire from a foreign origin is blocked (403, no shutdown)", async () => {
   const lockPath = join(dir, "daemon.lock");
-  let shutdowns = 0;
-  await boot({ lockPath, onShutdown: () => shutdowns++ });
+  const sig = shutdownSignal();
+  await boot({ lockPath, onShutdown: sig.onShutdown });
   const res = await fetch(`${base}/api/retire`, {
     method: "POST",
     headers: { Origin: "http://evil.com" },
   });
   expect(res.status).toBe(403);
+  // Proving the NON-event (no shutdown): no signal to await, so allow a small
+  // grace for any (erroneous) deferred shutdown to have fired, then assert it didn't.
   await Bun.sleep(20);
-  expect(shutdowns).toBe(0);
+  expect(sig.fired()).toBe(false);
   expect(existsSync(lockPath)).toBe(true);
 });
 
 test("idle auto-shutdown removes the lock file", async () => {
   const lockPath = join(dir, "daemon.lock");
-  let shutdowns = 0;
-  await boot({ lockPath, idleMs: 30, onShutdown: () => shutdowns++ });
+  const sig = shutdownSignal();
+  await boot({ lockPath, idleMs: 30, onShutdown: sig.onShutdown });
   expect(existsSync(lockPath)).toBe(true);
-  await Bun.sleep(120);
-  expect(shutdowns).toBeGreaterThanOrEqual(1);
+  await sig.shutdown;
   // stop() runs on idle shutdown and must clear the lock (one of the required
   // "every exit path" cases: idle, SIGTERM/SIGINT, uncaught).
   expect(existsSync(lockPath)).toBe(false);
@@ -404,26 +431,132 @@ test("GET / serves HTML containing the app root", async () => {
   expect(html).toContain('<div id="app">');
 });
 
+// ---- routing fallthrough (the dispatcher's default response) ----
+//
+// The route table in src/daemon.ts branches on method+path and falls through to
+// notFound() for everything else: there is no 405. Pinning these edges makes the
+// contract a future client or second adapter exercises explicit rather than
+// incidental — every unmatched request is a uniform 404 "not found".
+describe("routing fallthrough", () => {
+  test("an unknown path is a clean 404", async () => {
+    await boot();
+    for (const path of ["/api/nope", "/random", "/api/reviews/"]) {
+      const res = await fetch(`${base}${path}`);
+      expect(res.status).toBe(404);
+      expect(await res.text()).toBe("not found");
+    }
+  });
+
+  test("a wrong method on a known path falls through to 404 (no 405)", async () => {
+    await boot();
+    const { id } = await newReview();
+    // Each pair is a real route under a method it does not serve. The dispatcher
+    // has no method-not-allowed branch, so all of these are 404.
+    const cases: Array<[string, string]> = [
+      ["DELETE", "/api/reviews"],
+      ["GET", "/api/retire"],
+      ["POST", "/api/health"],
+      ["DELETE", "/api/prefs"],
+      ["PUT", `/api/reviews/${id}/resolve`], // /resolve is POST-only
+      ["GET", `/api/reviews/${id}/resolve`],
+      ["DELETE", `/api/reviews/${id}/decision`],
+      ["POST", `/api/reviews/${id}/draft`], // /draft is PUT-only
+    ];
+    for (const [method, path] of cases) {
+      const res = await fetch(`${base}${path}`, { method });
+      expect(res.status).toBe(404);
+    }
+  });
+
+  test("GET /api/reviews/:id for a nonexistent id is 404", async () => {
+    await boot();
+    const res = await fetch(`${base}/api/reviews/does-not-exist`);
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("not found");
+  });
+
+  test("a malformed :id sub-path is 404 (not a partial match)", async () => {
+    await boot();
+    const { id } = await newReview();
+    // /bogus is not one of the recognized sub-routes (decision/resolve/draft/
+    // expire), so the id-route regex doesn't match and the request 404s rather
+    // than dispatching to the wrong handler.
+    for (const method of ["GET", "POST", "PUT"]) {
+      const res = await fetch(`${base}/api/reviews/${id}/bogus`, { method });
+      expect(res.status).toBe(404);
+    }
+  });
+
+  test("the :id path segment is URL-decoded (a percent-encoded id round-trips)", async () => {
+    await boot();
+    const { id } = await newReview();
+    // Percent-encode the id's first char; the dispatcher decodes the segment, so
+    // the encoded form resolves to the same review (200), not a 404. This pins
+    // the decodeURIComponent contract a client building URLs relies on.
+    const encId = `%${id.charCodeAt(0).toString(16).toUpperCase()}${id.slice(1)}`;
+    const res = await fetch(`${base}/api/reviews/${encId}`);
+    expect(res.status).toBe(200);
+    expect((await res.json()).id).toBe(id);
+  });
+
+  test("oversize/malformed bodies on the zod routes stay lenient, not 400", async () => {
+    await boot();
+    const { id } = await newReview();
+    // The /reviews, /resolve, /draft bodies are zod-validated but deliberately
+    // lenient: a malformed body degrades to the schema fallback rather than
+    // rejecting (the cast-and-trust behavior these schemas replaced). Confirm a
+    // garbage body never turns into a 4xx on these routes.
+    const garbage = "{not valid json at all";
+
+    const create = await fetch(`${base}/api/reviews`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: garbage,
+    });
+    // The plan input falls back to {}; the router still creates a review (200).
+    expect(create.ok).toBe(true);
+
+    const resolveRes = await fetch(`${base}/api/reviews/${id}/resolve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: garbage,
+    });
+    // behavior falls back to "allow" (fail-safe never denies on a garbled body),
+    // so the still-pending review resolves with a 200 rather than a 400.
+    expect(resolveRes.ok).toBe(true);
+
+    const { id: id2 } = await newReview();
+    const draftRes = await fetch(`${base}/api/reviews/${id2}/draft`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: garbage,
+    });
+    // Both draft fields fall back to undefined (left untouched), a no-op 200.
+    expect(draftRes.ok).toBe(true);
+  });
+});
+
 test("idle shutdown fires when empty, not while a review is pending", async () => {
-  let shutdowns = 0;
-  await boot({ idleMs: 30, onShutdown: () => shutdowns++ });
+  const sig = shutdownSignal();
+  await boot({ idleMs: 30, onShutdown: sig.onShutdown });
   // A review is created before the idle timer would fire — keeps it alive.
   const { id } = await newReview();
+  // Negative leg: a pending review must hold the daemon open. No event to await,
+  // so allow well past idleMs and assert no shutdown fired.
   await Bun.sleep(80);
-  expect(shutdowns).toBe(0);
-  // Approve → removed → 1→0 transition arms idle → shutdown.
+  expect(sig.fired()).toBe(false);
+  // Approve → removed → 1→0 transition arms idle → shutdown; await it.
   await fetch(`${base}/api/reviews/${id}/resolve`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ behavior: "allow" }),
   });
-  await Bun.sleep(120);
-  expect(shutdowns).toBeGreaterThanOrEqual(1);
+  await sig.shutdown;
 });
 
 test("a superseded review's decision entry does not pin idle shutdown", async () => {
-  let shutdowns = 0;
-  await boot({ idleMs: 30, heartbeatMs: 20, onShutdown: () => shutdowns++ });
+  const sig = shutdownSignal();
+  await boot({ idleMs: 30, heartbeatMs: 20, onShutdown: sig.onShutdown });
   const { id: stale } = await newReview();
   // The (timed-out) hook long-polled once, leaving an unsettled decision entry.
   expect((await fetch(`${base}/api/reviews/${stale}/decision`)).status).toBe(204);
@@ -431,9 +564,8 @@ test("a superseded review's decision entry does not pin idle shutdown", async ()
   const { id: fresh } = await newReview();
   expect(fresh).not.toBe(stale);
   await resolve(fresh, { behavior: "allow" });
-  await Bun.sleep(120);
-  // The stale entry was cleared along with the supersede, so idle can fire.
-  expect(shutdowns).toBeGreaterThanOrEqual(1);
+  // The stale entry was cleared along with the supersede, so idle can fire — await it.
+  await sig.shutdown;
 });
 
 // ---- hook-initiated expire (EXC-454) ----
@@ -450,10 +582,12 @@ test("POST /expire ends a pending review: terminal on disk, gone from the queue"
   // Terminal on disk: a still-pending record would rehydrate as an orphan.
   const onDisk = JSON.parse(readFileSync(join(dir, `${id}.json`), "utf-8")) as { status: string };
   expect(onDisk.status).toBe("expired");
-  expect(recs).toContainEqual({
+  // The contract is the record's level/step/structured extra; the message prose
+  // is deliberately mutable, so match it loosely on the stable id prefix.
+  const expired = recs.find((r) => r.step === "review" && r.msg.includes(id.slice(0, 8)));
+  expect(expired).toMatchObject({
     level: "info",
     step: "review",
-    msg: `review expired: ${id.slice(0, 8)}`,
     extra: { reviewId: id, sessionId: "S" },
   });
 });
@@ -468,33 +602,30 @@ test("POST /expire refuses a non-pending review", async () => {
 });
 
 test("POST /expire clears the decision entry even when the review is gone", async () => {
-  let shutdowns = 0;
-  await boot({ idleMs: 30, heartbeatMs: 20, onShutdown: () => shutdowns++ });
+  const sig = shutdownSignal();
+  await boot({ idleMs: 30, heartbeatMs: 20, onShutdown: sig.onShutdown });
   // A zombie hook polls a review that no longer exists, re-creating an
   // unsettled entry that would pin openDecisionCount forever.
   expect((await fetch(`${base}/api/reviews/ghost/decision`)).status).toBe(204);
   const res = await fetch(`${base}/api/reviews/ghost/expire`, { method: "POST" });
   expect(res.status).toBe(404);
-  await Bun.sleep(120);
-  expect(shutdowns).toBeGreaterThanOrEqual(1); // entry cleared → idle fired
+  await sig.shutdown; // entry cleared → idle fired
 });
 
 test("idle shutdown fires after a pending review is expired", async () => {
-  let shutdowns = 0;
-  await boot({ idleMs: 30, heartbeatMs: 20, onShutdown: () => shutdowns++ });
+  const sig = shutdownSignal();
+  await boot({ idleMs: 30, heartbeatMs: 20, onShutdown: sig.onShutdown });
   const { id } = await newReview();
   // The hook long-polled once (unsettled entry), then timed out and expired.
   expect((await fetch(`${base}/api/reviews/${id}/decision`)).status).toBe(204);
   await fetch(`${base}/api/reviews/${id}/expire`, { method: "POST" });
-  await Bun.sleep(120);
-  expect(shutdowns).toBeGreaterThanOrEqual(1);
+  await sig.shutdown;
 });
 
 test("idle shutdown fires when the daemon boots with no reviews", async () => {
-  let shutdowns = 0;
-  await boot({ idleMs: 30, onShutdown: () => shutdowns++ });
-  await Bun.sleep(120);
-  expect(shutdowns).toBeGreaterThanOrEqual(1);
+  const sig = shutdownSignal();
+  await boot({ idleMs: 30, onShutdown: sig.onShutdown });
+  await sig.shutdown;
 });
 
 test("lifecycle events are logged at info: listen, review created, resolved", async () => {
@@ -558,8 +689,8 @@ test("a throwing log sink during a handler error still returns the clean 500", a
 });
 
 test("a rejected (changes-requested) review does NOT keep the daemon alive", async () => {
-  let shutdowns = 0;
-  await boot({ idleMs: 30, onShutdown: () => shutdowns++ });
+  const sig = shutdownSignal();
+  await boot({ idleMs: 30, onShutdown: sig.onShutdown });
   const { id } = await newReview();
   await fetch(`${base}/api/reviews/${id}/resolve`, {
     method: "POST",
@@ -567,8 +698,7 @@ test("a rejected (changes-requested) review does NOT keep the daemon alive", asy
     body: JSON.stringify({ behavior: "deny", feedback: "redo" }),
   });
   expect(store.get(id)?.status).toBe("rejected"); // kept on disk for the revision
-  await Bun.sleep(120);
-  expect(shutdowns).toBeGreaterThanOrEqual(1); // but idle still fires
+  await sig.shutdown; // but idle still fires
 });
 
 test("resolving an already-resolved review is rejected (double-resolve guard)", async () => {
@@ -669,11 +799,13 @@ test("the review record is emitted once, by the router, with threading extras", 
   const { id } = await newReview();
   const review = recs.filter((r) => r.step === "review");
   expect(review).toHaveLength(1);
+  // Pin level + structured extra (the contract); the message is mutable prose,
+  // so assert only that it carries the stable id prefix.
   expect(review[0]).toMatchObject({
     level: "info",
-    msg: `review created: ${id.slice(0, 8)}`,
     extra: { reviewId: id, sessionId: "S", action: "new", version: 1 },
   });
+  expect(review[0]?.msg).toContain(id.slice(0, 8));
 });
 
 test("the resolve record carries reviewId, sessionId, and acceptMode extras", async () => {
@@ -684,9 +816,12 @@ test("the resolve record carries reviewId, sessionId, and acceptMode extras", as
   const rec = recs.find((r) => r.step === "resolve");
   expect(rec).toMatchObject({
     level: "info",
-    msg: `review ${id.slice(0, 8)} resolved: allow`,
     extra: { reviewId: id, sessionId: "S", acceptMode: "acceptEdits" },
   });
+  // The behavior rides only in the message prose (no `behavior` extra), so match
+  // it loosely: the stable id prefix plus the resolved behavior token.
+  expect(rec?.msg).toContain(id.slice(0, 8));
+  expect(rec?.msg).toMatch(/\ballow\b/);
 });
 
 test("the listen record carries the build fingerprint and version", async () => {
@@ -712,12 +847,10 @@ test("a draft autosave is logged at debug with the review id only", async () => 
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ generalCommentDraft: "secret draft text" }),
   });
-  expect(recs).toContainEqual({
-    level: "debug",
-    step: "draft",
-    msg: `draft saved: ${id.slice(0, 8)}`,
-    extra: { reviewId: id },
-  });
+  // Level + step + reviewId are the contract; the message is mutable prose,
+  // matched loosely on the id prefix.
+  const saved = recs.find((r) => r.step === "draft" && r.msg.includes(id.slice(0, 8)));
+  expect(saved).toMatchObject({ level: "debug", step: "draft", extra: { reviewId: id } });
   // Draft text is reviewer prose — it must never appear in any record.
   expectNeverLogsBody(recs, "secret draft text");
 });
@@ -729,12 +862,9 @@ test("a decision served from disk after a memory miss is logged at debug", async
   await resolve(id, { behavior: "allow" }); // approve removes it from memory
   const res = await fetch(`${base}/api/reviews/${id}/decision`);
   expect(((await res.json()) as { behavior: string }).behavior).toBe("allow");
-  expect(recs).toContainEqual({
-    level: "debug",
-    step: "decision",
-    msg: `decision served from disk: ${id.slice(0, 8)}`,
-    extra: { reviewId: id },
-  });
+  // Level + step + reviewId are the contract; match the mutable message loosely.
+  const served = recs.find((r) => r.step === "decision" && r.msg.includes(id.slice(0, 8)));
+  expect(served).toMatchObject({ level: "debug", step: "decision", extra: { reviewId: id } });
 });
 
 // ---- POST /api/logs UI log bridge (EXC-445) ----
@@ -907,14 +1037,13 @@ test("POST /api/logs from a foreign origin is blocked (403, nothing recorded)", 
 });
 
 test("POST /api/logs does not permanently defer idle shutdown", async () => {
-  let shutdowns = 0;
-  await boot({ idleMs: 30, onShutdown: () => shutdowns++ });
+  const sig = shutdownSignal();
+  await boot({ idleMs: 30, onShutdown: sig.onShutdown });
   // A log POST defers idle while in flight (like any request); once it returns
   // and no reviews are pending, the idle timer must re-arm and fire.
   const res = await postLogs([{ level: "info", step: "ui", msg: "heartbeat" }]);
   expect(res.status).toBe(204);
-  await Bun.sleep(120);
-  expect(shutdowns).toBeGreaterThanOrEqual(1);
+  await sig.shutdown;
 });
 
 test("a rejected log batch logs exactly one warn under step 'ui'", async () => {
@@ -923,10 +1052,11 @@ test("a rejected log batch logs exactly one warn under step 'ui'", async () => {
   await postLogs([{ level: "trace", step: "ui", msg: "x" }]); // bad level → 400
   const warns = recs.filter((r) => r.level === "warn" && r.step === "ui");
   expect(warns).toHaveLength(1);
+  // The contract is one warn under step 'ui' carrying the rejected status; the
+  // message itself is mutable prose.
   expect(warns[0]).toMatchObject({
     level: "warn",
     step: "ui",
-    msg: "ui log batch rejected",
     extra: { status: 400 },
   });
 });
