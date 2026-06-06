@@ -103,6 +103,168 @@ fi
 assert_contains "$fail_out" "✗" "failed long step prints a ✗ glyph"
 assert_absent "$fail_out" "Registering" "a failed build aborts before any registration step"
 
+# --- success path through the register phase (synthetic checkout, all tools stubbed) ---
+# A real run only ever exercised the register block and run_long's success branch
+# interactively. We drive it hermetically: a synthetic local checkout (so source
+# resolution takes the in-place build path — no clone, no network) plus stub
+# git/bun/bunx/claude on PATH so nothing real builds or registers. Every tool
+# logs its argv to $CALL_LOG, letting us assert the exact register sequence.
+#
+# build-bin is copied verbatim into the synthetic checkout so the real compile
+# flow runs (through stubs): the bun stub honors `build --compile … --outfile P`
+# by writing an executable P, so the post-build `[ -x bin/caret ]` guard passes.
+
+# Lay down a synthetic checkout + stub dir. Echoes "ROOT STUBS HOME LOG" so the
+# caller can capture the paths; the caller owns cleanup.
+make_success_fixture() {
+  local root stubs home log tool
+  root="$(mktemp -d)"
+  stubs="$(mktemp -d)"
+  home="$(mktemp -d)"
+  log="$root/calls.log"
+
+  mkdir -p "$root/scripts" "$root/.claude-plugin" "$root/.mise/tasks" "$root/ui/dist"
+  cp "$script" "$root/scripts/install.sh"
+  cp "$test_dir/../.mise/tasks/build-bin" "$root/.mise/tasks/build-bin"
+  # marketplace.json's presence is the local-checkout signal; ui/dist/index.html
+  # is what build-bin's UI-fallback copy reads.
+  printf '{}\n' >"$root/.claude-plugin/marketplace.json"
+  printf '<!doctype html>\n' >"$root/ui/dist/index.html"
+
+  # git/bunx/claude: log argv, succeed. (claude is overridden per-test below.)
+  for tool in git bunx claude; do
+    {
+      printf '#!/usr/bin/env bash\n'
+      printf 'printf "%%s\\n" "%s $*" >>"%s"\n' "$tool" "$log"
+      printf 'exit 0\n'
+    } >"$stubs/$tool"
+    chmod +x "$stubs/$tool"
+  done
+
+  # bun: log argv; `build --compile … --outfile P` writes an executable P so the
+  # post-build guard passes; everything else (install) succeeds.
+  cat >"$stubs/bun" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "bun \$*" >>"$log"
+out=""
+prev=""
+for a in "\$@"; do
+  case "\$prev" in --outfile) out="\$a" ;; esac
+  case "\$a" in --outfile=*) out="\${a#--outfile=}" ;; esac
+  prev="\$a"
+done
+if [ -n "\$out" ]; then
+  printf '#!/usr/bin/env bash\nexit 0\n' >"\$out"
+  chmod +x "\$out"
+fi
+exit 0
+STUB
+  chmod +x "$stubs/bun"
+
+  printf '%s %s %s %s' "$root" "$stubs" "$home" "$log"
+}
+
+# Replace the claude stub with a body that records argv and applies a caller-set
+# exit policy: CLAUDE_FAIL is a space-separated list of plugin subcommands that
+# should exit 1 (e.g. "marketplace" or "install uninstall enable").
+write_claude_stub() {
+  local stubs="$1" log="$2" fails="${3:-}"
+  cat >"$stubs/claude" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "claude \$*" >>"$log"
+sub="\$2"  # "plugin <sub> …"
+for f in $fails; do
+  [ "\$sub" = "\$f" ] && exit 1
+done
+exit 0
+STUB
+  chmod +x "$stubs/claude"
+}
+
+# Run the synthetic installer; echoes captured stdout+stderr, sets $? to its rc.
+run_success_installer() {
+  local root="$1" stubs="$2" home="$3"
+  PATH="$stubs:$PATH" HOME="$home" NO_COLOR=1 "$bash_bin" "$root/scripts/install.sh" 2>&1
+}
+
+# Happy path: every tool succeeds.
+read -r ROOT STUBS HOME_DIR LOG < <(make_success_fixture)
+write_claude_stub "$STUBS" "$LOG"
+rc=0
+ok_out="$(run_success_installer "$ROOT" "$STUBS" "$HOME_DIR")" || rc=$?
+calls="$(cat "$LOG")"
+
+if [ "$rc" -eq 0 ]; then
+  ok "success run exits 0 through the register phase"
+else
+  fail "success run exited $rc"
+fi
+
+# The full pipeline ran, not just detection: build deps, UI build, compile.
+assert_contains "$calls" "bun install" "success run installs build dependencies"
+assert_contains "$calls" "vite build" "success run builds the UI"
+assert_contains "$calls" "build --compile" "success run compiles the binary"
+
+# Register sequence. marketplace add succeeds, so the update fallback never runs.
+assert_contains "$calls" "claude plugin marketplace add $ROOT" "register adds the marketplace"
+assert_absent "$calls" "marketplace update" "marketplace update is skipped when add succeeds"
+assert_contains "$calls" "claude plugin install caret@caret --scope user" "register installs the plugin"
+assert_contains "$calls" "claude plugin enable" "register enables the plugin"
+
+# uninstall must precede install (reinstall-to-refresh-the-cache ordering).
+uninstall_line="$(grep -n 'plugin uninstall' <<<"$calls" | head -1 | cut -d: -f1)"
+install_line="$(grep -n 'plugin install' <<<"$calls" | head -1 | cut -d: -f1)"
+if [ -n "$uninstall_line" ] && [ -n "$install_line" ] && [ "$uninstall_line" -lt "$install_line" ]; then
+  ok "register uninstalls before installing"
+else
+  fail "register should uninstall before installing (uninstall=$uninstall_line install=$install_line)"
+fi
+
+# Success-path output the non-TTY harness can observe: ✓ glyphs, no ✗, the
+# register step labels, and the final installed line.
+assert_contains "$ok_out" "✓" "success path prints ✓ glyphs"
+assert_absent "$ok_out" "✗" "success path prints no ✗ glyph"
+assert_contains "$ok_out" "Registering the caret marketplace" "success path shows the register step"
+assert_contains "$ok_out" "caret installed" "success path ends with the installed line"
+rm -rf "$ROOT" "$STUBS" "$HOME_DIR"
+
+# marketplace add → update fallback: add exits 1, so update must run.
+read -r ROOT STUBS HOME_DIR LOG < <(make_success_fixture)
+write_claude_stub "$STUBS" "$LOG" "marketplace"
+rc=0
+run_success_installer "$ROOT" "$STUBS" "$HOME_DIR" >/dev/null || rc=$?
+calls="$(cat "$LOG")"
+# `marketplace add` and `marketplace update` share the "marketplace" subcommand,
+# so this stub fails both; the install still aborts non-zero only if a non-best-
+# effort step fails. update is the fallback, and a failing update is fatal (no
+# `|| true`), so this run is expected to fail — assert the fallback was attempted.
+assert_contains "$calls" "claude plugin marketplace update caret" "add failure triggers the update fallback"
+rm -rf "$ROOT" "$STUBS" "$HOME_DIR"
+
+# Best-effort `|| true`: uninstall and enable fail, but the run still succeeds.
+read -r ROOT STUBS HOME_DIR LOG < <(make_success_fixture)
+write_claude_stub "$STUBS" "$LOG" "uninstall enable"
+rc=0
+run_success_installer "$ROOT" "$STUBS" "$HOME_DIR" >/dev/null || rc=$?
+if [ "$rc" -eq 0 ]; then
+  ok "best-effort uninstall/enable failures do not fail the install"
+else
+  fail "best-effort uninstall/enable failures should not fail the install (rc=$rc)"
+fi
+rm -rf "$ROOT" "$STUBS" "$HOME_DIR"
+
+# A failing non-best-effort register step (plugin install) aborts non-zero.
+read -r ROOT STUBS HOME_DIR LOG < <(make_success_fixture)
+write_claude_stub "$STUBS" "$LOG" "install"
+rc=0
+run_success_installer "$ROOT" "$STUBS" "$HOME_DIR" >/dev/null || rc=$?
+if [ "$rc" -ne 0 ]; then
+  ok "a failing plugin install aborts non-zero ($rc)"
+else
+  fail "a failing plugin install should abort non-zero"
+fi
+rm -rf "$ROOT" "$STUBS" "$HOME_DIR"
+
 if [ "$fails" -eq 0 ]; then
   printf '\nAll install.sh dry-run tests passed.\n'
 else
