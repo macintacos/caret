@@ -1,6 +1,12 @@
 import { afterEach, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { computeBuildId, ensureDaemon, resolveCommit, retireDaemon, runReview } from "../src/cli.ts";
+import {
+  computeBuildId,
+  ensureDaemon,
+  resolveCommit,
+  retireDaemon,
+  runReview,
+} from "../src/cli.ts";
 import { setLogLevel } from "../src/log.ts";
 import { logFile } from "../src/paths.ts";
 import { PLAN_FORMAT_DENY_MESSAGE } from "../src/plan-format.ts";
@@ -79,9 +85,7 @@ test("acceptMode passes through to updatedPermissions", async () => {
       longPoll: async () => ({ behavior: "allow", acceptMode: "acceptEdits", decidedAt: 1 }),
     }),
   );
-  expect(out.hookSpecificOutput.decision.updatedPermissions?.[0]?.mode).toBe(
-    "acceptEdits",
-  );
+  expect(out.hookSpecificOutput.decision.updatedPermissions?.[0]?.mode).toBe("acceptEdits");
 });
 
 test("invalid stdin JSON fails safe to deny (never allow)", async () => {
@@ -456,9 +460,12 @@ function ensureDeps(over: Partial<Parameters<typeof ensureDaemon>[0]> = {}) {
     currentVersion: "v1",
     currentStateDir: "/my/world",
     health: async () =>
-      ({ service: "caret", build: "b1", version: "v1", stateDir: "/my/world" }) as
-        | { service?: string; build?: string; version?: string; stateDir?: string }
-        | null,
+      ({ service: "caret", build: "b1", version: "v1", stateDir: "/my/world" }) as {
+        service?: string;
+        build?: string;
+        version?: string;
+        stateDir?: string;
+      } | null,
     readLock: () => null,
     isAlive: () => false,
     retire: async () => true,
@@ -472,9 +479,7 @@ function ensureDeps(over: Partial<Parameters<typeof ensureDaemon>[0]> = {}) {
 
 test("ensureDaemon returns immediately when the daemon is already healthy", async () => {
   let spawns = 0;
-  const url = await ensureDaemon(
-    ensureDeps({ spawn: () => spawns++ }),
-  );
+  const url = await ensureDaemon(ensureDeps({ spawn: () => spawns++ }));
   expect(url).toBe("http://localhost:42718");
   expect(spawns).toBe(0);
 });

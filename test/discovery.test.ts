@@ -85,7 +85,11 @@ test("happy path populates the section scalars from the deps", async () => {
   const report = await collectReport(discoveryDeps());
   expect(report.system).toEqual({ platform: "darwin", os: "macos", arch: "arm64" });
   expect(report.install).toEqual({ kind: "dev", binaryPath: "/bin/caret", bunVersion: "1.2.0" });
-  expect(report.daemon).toMatchObject({ reachable: true, service: "caret", daemonVersion: "1.2.3" });
+  expect(report.daemon).toMatchObject({
+    reachable: true,
+    service: "caret",
+    daemonVersion: "1.2.3",
+  });
   expect(report.settings).toMatchObject({
     configPath: "/cfg/config.toml",
     configExists: true,
@@ -115,7 +119,9 @@ const ALL_SECTIONS: Array<keyof Report> = [
 // resolves. Most probes feed one section, but a few are genuinely shared:
 // health feeds daemon+lockAndPort, and readLock/isPidAlive feed
 // lockAndPort+processes — those rows declare every affected section.
-const degradations: Array<[label: string, over: Partial<DiscoveryDeps>, affected: Array<keyof Report>]> = [
+const degradations: Array<
+  [label: string, over: Partial<DiscoveryDeps>, affected: Array<keyof Report>]
+> = [
   ["system", { system: boom }, ["system"]],
   ["install", { install: boom }, ["install"]],
   ["settings", { settings: boom }, ["settings"]],
@@ -169,7 +175,12 @@ test("lock port mismatch sets portMismatch and surfaces pidAlive from the fake",
     discoveryDeps({
       readLock: () => ({ pid: 222, port: 9999 }),
       isPidAlive: () => true,
-      effective: () => ({ port: 42718, idleMs: 60000, reviewTimeoutMs: 3600000, heartbeatMs: 8000 }),
+      effective: () => ({
+        port: 42718,
+        idleMs: 60000,
+        reviewTimeoutMs: 3600000,
+        heartbeatMs: 8000,
+      }),
     }),
   );
   expect(report.lockAndPort).toMatchObject({ lockPort: 9999, portMismatch: true, pidAlive: true });
@@ -461,7 +472,12 @@ test("listReviewFiles plucks only id+status and skips corrupt files and non-json
   await mkdir(dir, { recursive: true });
   await writeFile(
     join(dir, "good.json"),
-    JSON.stringify({ id: "rid-1", status: "pending", plan: "SECRET PLAN", generalCommentDraft: "SECRET DRAFT" }),
+    JSON.stringify({
+      id: "rid-1",
+      status: "pending",
+      plan: "SECRET PLAN",
+      generalCommentDraft: "SECRET DRAFT",
+    }),
   );
   await writeFile(join(dir, "corrupt.json"), "{ not valid json");
   await writeFile(join(dir, "notes.txt"), "ignored, not json");
@@ -473,7 +489,13 @@ test("listReviewFiles plucks only id+status and skips corrupt files and non-json
 
 test("logStats reports a missing file as not-existing with zeroed counts", async () => {
   const stats = await logStats(join(tmp, "nope.log"));
-  expect(stats).toEqual({ path: join(tmp, "nope.log"), exists: false, size: 0, errors: 0, warns: 0 });
+  expect(stats).toEqual({
+    path: join(tmp, "nope.log"),
+    exists: false,
+    size: 0,
+    errors: 0,
+    warns: 0,
+  });
 });
 
 test("logStats counts error/warn records and reports the size, never the text", async () => {
@@ -517,7 +539,9 @@ test("readClaudeInstallState surfaces version, enabled, and a manual hook entry"
     JSON.stringify({
       enabledPlugins: { "caret@caret": true },
       hooks: {
-        PreToolUse: [{ matcher: "ExitPlanMode", hooks: [{ type: "command", command: "caret review" }] }],
+        PreToolUse: [
+          { matcher: "ExitPlanMode", hooks: [{ type: "command", command: "caret review" }] },
+        ],
       },
     }),
   );

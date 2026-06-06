@@ -6,18 +6,22 @@
     "useIgnoreFile": true
   },
   "files": {
+    // Lint/format everything by default, then subtract — so a new top-level dir
+    // (e.g. an adapter dir) is in scope automatically instead of being silently
+    // skipped until someone remembers to extend an allowlist. The exclusions are
+    // build output (dist/bin), deps, and the file types Biome doesn't own here:
+    // `.svelte` (svelte-check owns the UI; Biome misparses runes as unused
+    // bindings) and `.css`/`.html` (hand-authored UI assets, not Biome's to
+    // reformat). (hk's wider glob still routes staged files here; these excludes
+    // filter them.)
     "includes": [
-      "src/**/*.ts",
-      "scripts/**/*.ts",
-      "e2e/**/*.ts",
-      "ui/src/**/*.ts",
-      "ui/*.ts",
-      "*.ts",
-      "*.json",
-      "*.jsonc",
-      "!**/dist",
+      "**",
       "!**/node_modules",
-      "!bin"
+      "!**/dist",
+      "!bin",
+      "!**/*.svelte",
+      "!**/*.css",
+      "!**/*.html"
     ]
   },
   "formatter": {
@@ -40,7 +44,9 @@
   },
   "overrides": [
     {
-      "includes": ["**/*.test.ts"],
+      // Test code (specs plus the shared test/ support harness) may use
+      // non-null assertions pragmatically over fixtures and probe results.
+      "includes": ["**/*.test.ts", "test/**"],
       "linter": {
         "rules": {
           "style": { "noNonNullAssertion": "off" }
