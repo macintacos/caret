@@ -15,6 +15,7 @@ import type { Store } from "./store.ts";
 import { MAX_BODY_BYTES, parseUiLogBatch } from "./ui-log-bridge.ts";
 import {
   type AcceptMode,
+  type ApproveVariant,
   type Behavior,
   currentVersion,
   type Decision,
@@ -72,6 +73,11 @@ export interface CreateServerOptions {
    * detection; the lock and listen-record copies tie a lock file and a
    * daemon.log boot back to the same boot for diagnostics. Safe to log. */
   instanceId?: string;
+  /** The active adapter's declared approve variants, published in /api/health so
+   * the UI renders its approve split-button from the adapter capability. Omitted
+   * (default) means the field is absent from the health body and the UI uses its
+   * built-in fallback set. */
+  approveVariants?: readonly ApproveVariant[];
   /** Leveled lifecycle logger (see log.ts CaretLogger); defaults to a no-op so
    * tests stay quiet. Lifecycle events log at info, handler failures at error. */
   log?: CaretLogger;
@@ -184,6 +190,7 @@ interface ResolvedOptions {
   commit: string | undefined;
   stateDir: string | undefined;
   instanceId: string | undefined;
+  approveVariants: readonly ApproveVariant[] | undefined;
   log: CaretLogger;
 }
 
@@ -201,6 +208,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     commit: opts.commit,
     stateDir: opts.stateDir,
     instanceId: opts.instanceId,
+    approveVariants: opts.approveVariants,
     log: opts.log ?? noopLogger,
   };
 }
@@ -224,7 +232,7 @@ function matchIdRoute(path: string): IdRoute | null {
 export function createServer(opts: CreateServerOptions): CaretServer {
   const cfg = resolveOptions(opts);
   const { store, idle, heartbeat, serveHtml, onShutdown, routePlan, prefsPath, log } = cfg;
-  const { buildId, commit, stateDir, instanceId, lockPath } = cfg;
+  const { buildId, commit, stateDir, instanceId, approveVariants, lockPath } = cfg;
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount } = createDecisions(log);
 
   // Wait for a decision but no longer than `ms` — resolves to null on timeout so
@@ -284,8 +292,17 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     // reports the bare {service, version}. `commit` is the commit this daemon
     // runs from (EXC-452), surfaced for a diagnostics client's discovery report;
     // stateDir (world) and instanceId (boot) are the EXC-461 identity fields
-    // that let a hook and the UI tell daemons apart.
-    const body: HealthIdentity = { ...IDENTITY, build: buildId, commit, stateDir, instanceId };
+    // that let a hook and the UI tell daemons apart. `approveVariants` is the
+    // active adapter's declared approve set, which the UI renders its split-
+    // button from (an absent field means the UI uses its built-in fallback).
+    const body: HealthIdentity = {
+      ...IDENTITY,
+      build: buildId,
+      commit,
+      stateDir,
+      instanceId,
+      ...(approveVariants ? { approveVariants: [...approveVariants] } : {}),
+    };
     return Response.json(body);
   }
 

@@ -8,7 +8,7 @@
 
 import { getApproveMode, HttpError, resolveReview } from "../lib/api.ts";
 import { formatFeedback } from "../lib/feedback.ts";
-import type { AcceptMode, Annotation } from "@core/types";
+import type { Annotation, ApproveVariantId } from "@core/types";
 
 export { HttpError };
 
@@ -39,20 +39,20 @@ export interface ResolveDeps {
 
 /** Backing fields the resolve flow reads and writes. */
 export interface ResolveStore {
-  /** Remembered approve mode (machine-global, last-wins). */
-  approveMode: AcceptMode;
+  /** Remembered approve variant id (machine-global, last-wins). */
+  approveMode: ApproveVariantId;
   /** True while a resolve POST is in flight. */
   busy: boolean;
 }
 
 export interface Resolve {
-  readonly approveMode: AcceptMode;
+  readonly approveMode: ApproveVariantId;
   readonly busy: boolean;
 
-  /** Read the remembered approve mode once on load. A failure leaves the
+  /** Read the remembered approve variant once on load. A failure leaves the
    * current default, matching the daemon's fail-safe. */
   loadApproveMode: () => void;
-  approve: (mode: AcceptMode) => Promise<void>;
+  approve: (mode: ApproveVariantId) => Promise<void>;
   requestChanges: (generalComment: string) => Promise<void>;
 }
 

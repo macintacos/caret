@@ -6,11 +6,32 @@
 export type Behavior = "allow" | "deny";
 
 /**
- * Post-approval session mode, mirroring the native plan-approval dialog's
- * approve variants. Emitted as `updatedPermissions:[{type:"setMode",mode}]`:
- * - "default"     → manual edit approval (no updatedPermissions)
- * - "acceptEdits" → auto-accept edits
- * - "auto"        → auto mode
+ * An opaque approve-variant token. The core stores and transports it without
+ * interpreting it: the adapter declares the set of valid ids (see
+ * `ApproveVariant` / `AgentAdapter.approveVariants`), the UI renders them, and
+ * only the adapter maps a token to its tool-specific approve semantics. A second
+ * adapter declares its own ids without touching this module.
+ */
+export type ApproveVariantId = string;
+
+/**
+ * A post-approval approve variant offered to the reviewer — the wire shape the
+ * daemon publishes (sourced from the active adapter) and the UI renders. `id` is
+ * the opaque token carried on the decision; `label` is its button text;
+ * `description` is the optional sub-label note.
+ */
+export interface ApproveVariant {
+  id: ApproveVariantId;
+  label: string;
+  description?: string;
+}
+
+/**
+ * The concrete approve-variant ids the Claude-paired daemon and prefs gate on.
+ * Distinct from the opaque `ApproveVariantId` the core carries: these are the
+ * tokens the daemon's `/resolve` route and prefs persistence validate against
+ * before seeding the remembered mode. The declaration/render path treats ids as
+ * opaque; this guard is the persistence side's recognized set.
  */
 export type AcceptMode = "default" | "acceptEdits" | "auto";
 
@@ -63,8 +84,10 @@ export interface Decision {
   behavior: Behavior;
   /** Formatted feedback (annotations + general comment) on a deny. */
   feedback?: string;
-  /** Approve variant; only meaningful when behavior === "allow". */
-  acceptMode?: AcceptMode;
+  /** The chosen approve variant's opaque id; only meaningful when
+   * behavior === "allow". The adapter interprets the token; the core stores and
+   * transports it verbatim. */
+  acceptMode?: ApproveVariantId;
   decidedAt: number;
 }
 
@@ -131,7 +154,8 @@ export interface RouteResult {
 export interface ResolveBody {
   behavior: Behavior;
   feedback?: string;
-  acceptMode?: AcceptMode;
+  /** The chosen approve variant's opaque id (see Decision.acceptMode). */
+  acceptMode?: ApproveVariantId;
 }
 
 /** Body of PUT /api/reviews/:id/draft (the reviewer's working-copy autosave).
@@ -157,6 +181,11 @@ export interface HealthIdentity {
   commit?: string;
   stateDir?: string;
   instanceId?: string;
+  /** The active adapter's declared approve variants, in display order — the wire
+   * channel that lets the UI render its approve split-button from the adapter's
+   * capability instead of hard-coding tool mode names. Optional: a daemon that
+   * predates this field omits it, and the UI falls back to its built-in set. */
+  approveVariants?: ApproveVariant[];
 }
 
 /** Returns the current (latest) version of a review. */

@@ -63,10 +63,13 @@ model, which revises and re-presents (captured as a new version). This was verif
 `PreToolUse` does **not** work for this, because allowing the tool to run still shows the native
 dialog.
 
-The hook emits the [PermissionRequest decision](https://code.claude.com/docs/en/hooks) on stdout:
+The reviewer's approve choice is an opaque variant id the core stores and the UI renders; the Claude
+adapter declares its variants (`default` / `acceptEdits` / `auto`) and maps the chosen one to a
+session `setMode` permission. The hook emits the resulting
+[PermissionRequest decision](https://code.claude.com/docs/en/hooks) on stdout:
 
 ```jsonc
-// approve (optionally switching the session into acceptEdits / auto mode)
+// approve (the acceptEdits / auto variants switch the Claude session into that mode)
 { "hookSpecificOutput": { "hookEventName": "PermissionRequest",
   "decision": { "behavior": "allow",
     "updatedPermissions": [{ "type": "setMode", "mode": "acceptEdits", "destination": "session" }] } } }
