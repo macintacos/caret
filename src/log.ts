@@ -16,7 +16,12 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import pino from "pino";
 import { logFile, stateDir } from "./paths.ts";
+import { shortId } from "./redact-core.ts";
 import { scrubString, scrubValue } from "./redact.ts";
+
+// Re-exported so the daemon/hook/store/discovery call sites import their
+// message helper from the logging module alongside the loggers themselves.
+export { shortId };
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -42,40 +47,40 @@ const FRAME = /^\s*at (?:.* \()?(?:file:\/\/)?(.+):(\d+):\d+\)?$/;
  * the first external frame. Returns undefined — never throws — on any parse
  * miss, so the field is simply omitted. */
 function callerLocation(): string | undefined {
-  try {
-    const stack = new Error().stack;
-    if (!stack) return undefined;
-    for (const line of stack.split("\n")) {
-      const m = FRAME.exec(line);
-      if (!m?.[1] || !m[2]) continue; // no frame match (e.g. the `Error` header line)
-      const path = m[1];
-      if (path.endsWith("src/log.ts")) continue; // our own wrapper frames
-      // Runtime-internal frames — pathless (`native:7:39`, `[eval]:1:30`) or
-      // node:-scheme (`node:internal/...`) — are never the caller.
-      if (!path.includes("/") || path.startsWith("node:")) continue;
-      // Normalize: a relative path is already repo-relative (the compiled
-      // binary's sourcemapped frames come out that way); an absolute one under
-      // the package root loses that prefix; any other absolute path falls back
-      // to its last two segments so the field stays compact.
-      const rel = !path.startsWith("/")
-        ? path
-        : path.startsWith(`${PKG_ROOT}/`)
-          ? path.slice(PKG_ROOT.length + 1)
-          : path.split("/").slice(-2).join("/");
-      return `${rel}:${m[2]}`;
-    }
-    return undefined;
-  } catch {
-    return undefined; // parsing must never destabilize a log emit
-  }
+	try {
+		const stack = new Error().stack;
+		if (!stack) return undefined;
+		for (const line of stack.split("\n")) {
+			const m = FRAME.exec(line);
+			if (!m?.[1] || !m[2]) continue; // no frame match (e.g. the `Error` header line)
+			const path = m[1];
+			if (path.endsWith("src/log.ts")) continue; // our own wrapper frames
+			// Runtime-internal frames — pathless (`native:7:39`, `[eval]:1:30`) or
+			// node:-scheme (`node:internal/...`) — are never the caller.
+			if (!path.includes("/") || path.startsWith("node:")) continue;
+			// Normalize: a relative path is already repo-relative (the compiled
+			// binary's sourcemapped frames come out that way); an absolute one under
+			// the package root loses that prefix; any other absolute path falls back
+			// to its last two segments so the field stays compact.
+			const rel = !path.startsWith("/")
+				? path
+				: path.startsWith(`${PKG_ROOT}/`)
+					? path.slice(PKG_ROOT.length + 1)
+					: path.split("/").slice(-2).join("/");
+			return `${rel}:${m[2]}`;
+		}
+		return undefined;
+	} catch {
+		return undefined; // parsing must never destabilize a log emit
+	}
 }
 
 export interface ErrorContext {
-  sessionId?: string;
-  cwd?: string;
-  /** Set once the daemon has assigned the review an id — stitches caret.log
-   * records against the daemon's review/resolve records (EXC-444). */
-  reviewId?: string;
+	sessionId?: string;
+	cwd?: string;
+	/** Set once the daemon has assigned the review an id — stitches caret.log
+	 * records against the daemon's review/resolve records (EXC-444). */
+	reviewId?: string;
 }
 
 /** The leveled surface both sinks expose. debug/info/warn take a human message
@@ -86,21 +91,21 @@ export interface ErrorContext {
  * here on purpose: an explicit extra.source is a sanctioned override — the
  * bridged-UI signal — not a collision.) */
 export interface CaretLogger {
-  debug(step: string, msg: string, extra?: object): void;
-  info(step: string, msg: string, extra?: object): void;
-  warn(step: string, msg: string, extra?: object): void;
-  error(step: string, err: unknown, extra?: object): void;
+	debug(step: string, msg: string, extra?: object): void;
+	info(step: string, msg: string, extra?: object): void;
+	warn(step: string, msg: string, extra?: object): void;
+	error(step: string, err: unknown, extra?: object): void;
 }
 
 const pinoOpts = {
-  base: undefined, // suppress pino's default {pid, hostname}; the daemon opts pid back in
-  // ISO 8601 UTC time ("2026-06-04T21:25:40.038Z") instead of pino's default
-  // epoch ms, so a human can read a record's date/time without converting.
-  timestamp: pino.stdTimeFunctions.isoTime,
-  // wrap() owns error serialization (errWithCause + scrub). The identity
-  // override disables pino's DEFAULT err serializer, which would re-serialize
-  // the already-plain object and roll cause messages up into `message`.
-  serializers: { err: (v: unknown) => v },
+	base: undefined, // suppress pino's default {pid, hostname}; the daemon opts pid back in
+	// ISO 8601 UTC time ("2026-06-04T21:25:40.038Z") instead of pino's default
+	// epoch ms, so a human can read a record's date/time without converting.
+	timestamp: pino.stdTimeFunctions.isoTime,
+	// wrap() owns error serialization (errWithCause + scrub). The identity
+	// override disables pino's DEFAULT err serializer, which would re-serialize
+	// the already-plain object and roll cause messages up into `message`.
+	serializers: { err: (v: unknown) => v },
 } as const;
 
 /** Build a CaretLogger over the given pino instance, with never-throw wrapping
@@ -120,76 +125,76 @@ const pinoOpts = {
  * pino's own `redact` option can't rewrite substrings inside those strings,
  * walk an unbounded cause chain, or hot-toggle (see src/redact.ts). */
 function wrap(
-  logger: pino.Logger,
-  liveLevel: () => LogLevel,
-  liveRedact: () => boolean,
-  source: "hook" | "daemon",
+	logger: pino.Logger,
+	liveLevel: () => LogLevel,
+	liveRedact: () => boolean,
+	source: "hook" | "daemon",
 ): CaretLogger {
-  function fields(extra: object | undefined, step: string, redact: boolean) {
-    const out = scrubValue({ ...extra }, redact) as Record<string, unknown>;
-    out.step = step;
-    // When extra already carried a source it's a bridged record (the daemon
-    // forwarding a browser event as source="ui", EXC-445): keep that tag and
-    // attach NO caller — the call site here is the bridge, not the originator.
-    // Otherwise tag the emitting process and stamp the real call site (EXC-451);
-    // the caller is repo-relative so the redact scrub is normally a no-op, but
-    // run it under the toggle for belt-and-braces. == null (not === undefined)
-    // keeps the replaced ??= semantics: an explicit null source reads as unset.
-    if (out.source == null) {
-      out.source = source;
-      const caller = callerLocation();
-      if (caller !== undefined) out.caller = redact ? scrubString(caller) : caller;
-    }
-    return out;
-  }
-  function emit(method: "debug" | "info" | "warn", step: string, msg: string, extra?: object) {
-    try {
-      const next = liveLevel();
-      if (logger.level !== next) logger.level = next;
-      // Bail before fields()/callerLocation() when this record is gated out, so
-      // a debug record at info level never pays for a stack capture (EXC-451).
-      // error (50) needs no such gate — it clears every threshold in the set.
-      if (!logger.isLevelEnabled(method)) return;
-      const r = liveRedact();
-      logger[method](fields(extra, step, r), r ? scrubString(msg) : msg);
-    } catch {
-      // Logging is non-essential and must never destabilize the caller.
-    }
-  }
-  return {
-    debug: (step, msg, extra) => emit("debug", step, msg, extra),
-    info: (step, msg, extra) => emit("info", step, msg, extra),
-    warn: (step, msg, extra) => emit("warn", step, msg, extra),
-    error(step, err, extra) {
-      try {
-        // No level update here: error (50) passes every threshold in the set.
-        const r = liveRedact();
-        const f = fields(extra, step, r);
-        if (err instanceof Error) f.err = scrubValue(pino.stdSerializers.errWithCause(err), r);
-        const msg = err instanceof Error ? err.message : String(err);
-        logger.error(f, r ? scrubString(msg) : msg);
-      } catch {
-        // Same swallow: a failed error write still must not propagate.
-      }
-    },
-  };
-}
-
-/** Review-id prefix (the first UUID segment) for log MESSAGES: keeps lines
- * scannable without restating the full id, which rides in the structured
- * `reviewId` extra field for stitching/queries (EXC-444). */
-export function shortId(id: string): string {
-  return id.slice(0, 8);
+	function fields(extra: object | undefined, step: string, redact: boolean) {
+		const out = scrubValue({ ...extra }, redact) as Record<string, unknown>;
+		out.step = step;
+		// When extra already carried a source it's a bridged record (the daemon
+		// forwarding a browser event as source="ui", EXC-445): keep that tag and
+		// attach NO caller — the call site here is the bridge, not the originator.
+		// Otherwise tag the emitting process and stamp the real call site (EXC-451);
+		// the caller is repo-relative so the redact scrub is normally a no-op, but
+		// run it under the toggle for belt-and-braces. == null (not === undefined)
+		// keeps the replaced ??= semantics: an explicit null source reads as unset.
+		if (out.source == null) {
+			out.source = source;
+			const caller = callerLocation();
+			if (caller !== undefined)
+				out.caller = redact ? scrubString(caller) : caller;
+		}
+		return out;
+	}
+	function emit(
+		method: "debug" | "info" | "warn",
+		step: string,
+		msg: string,
+		extra?: object,
+	) {
+		try {
+			const next = liveLevel();
+			if (logger.level !== next) logger.level = next;
+			// Bail before fields()/callerLocation() when this record is gated out, so
+			// a debug record at info level never pays for a stack capture (EXC-451).
+			// error (50) needs no such gate — it clears every threshold in the set.
+			if (!logger.isLevelEnabled(method)) return;
+			const r = liveRedact();
+			logger[method](fields(extra, step, r), r ? scrubString(msg) : msg);
+		} catch {
+			// Logging is non-essential and must never destabilize the caller.
+		}
+	}
+	return {
+		debug: (step, msg, extra) => emit("debug", step, msg, extra),
+		info: (step, msg, extra) => emit("info", step, msg, extra),
+		warn: (step, msg, extra) => emit("warn", step, msg, extra),
+		error(step, err, extra) {
+			try {
+				// No level update here: error (50) passes every threshold in the set.
+				const r = liveRedact();
+				const f = fields(extra, step, r);
+				if (err instanceof Error)
+					f.err = scrubValue(pino.stdSerializers.errWithCause(err), r);
+				const msg = err instanceof Error ? err.message : String(err);
+				logger.error(f, r ? scrubString(msg) : msg);
+			} catch {
+				// Same swallow: a failed error write still must not propagate.
+			}
+		},
+	};
 }
 
 /** A logger that drops everything — the degraded mode when a destination can't
  * be opened (e.g. the state dir's parent is a regular file), and the daemon's
  * default when no logger is injected (tests stay quiet). */
 export const noopLogger: CaretLogger = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
+	debug: () => {},
+	info: () => {},
+	warn: () => {},
+	error: () => {},
 };
 
 // Module-level current level + redact toggle for the hook logger. setLogLevel/
@@ -208,55 +213,55 @@ let hookView: CaretLogger | null = null;
 let hookPath: string | null = null;
 
 function hook(): CaretLogger {
-  const path = logFile();
-  if (hookView && hookPath === path) return hookView;
-  hookPath = path;
-  try {
-    mkdirSync(stateDir(), { recursive: true, mode: 0o700 });
-    const dest = pino.destination({ dest: path, sync: true, mode: 0o600 });
-    try {
-      hookDest?.destroy(); // sync mode has nothing buffered; just release the fd
-    } catch {
-      // already closed — nothing to release.
-    }
-    hookDest = dest;
-    hookView = wrap(
-      pino(pinoOpts, dest),
-      () => currentLevel,
-      () => currentRedact,
-      "hook",
-    );
-  } catch {
-    // Degrade silently but do NOT latch the failure: the next emit retries the
-    // mkdir/open (the old logger's per-call semantics), so a transient failure
-    // doesn't permanently silence a long-running daemon's logError path.
-    hookView = null;
-  }
-  return hookView ?? noopLogger;
+	const path = logFile();
+	if (hookView && hookPath === path) return hookView;
+	hookPath = path;
+	try {
+		mkdirSync(stateDir(), { recursive: true, mode: 0o700 });
+		const dest = pino.destination({ dest: path, sync: true, mode: 0o600 });
+		try {
+			hookDest?.destroy(); // sync mode has nothing buffered; just release the fd
+		} catch {
+			// already closed — nothing to release.
+		}
+		hookDest = dest;
+		hookView = wrap(
+			pino(pinoOpts, dest),
+			() => currentLevel,
+			() => currentRedact,
+			"hook",
+		);
+	} catch {
+		// Degrade silently but do NOT latch the failure: the next emit retries the
+		// mkdir/open (the old logger's per-call semantics), so a transient failure
+		// doesn't permanently silence a long-running daemon's logError path.
+		hookView = null;
+	}
+	return hookView ?? noopLogger;
 }
 
 /** Set the hook logger's level (the hook injects loadSettings().logging.level).
  * Takes effect on the next emit, including for an already-built instance. */
 export function setLogLevel(level: LogLevel): void {
-  currentLevel = level;
+	currentLevel = level;
 }
 
 /** Set the hook logger's redact toggle (the hook injects
  * loadSettings().logging.redact). Takes effect on the next emit. */
 export function setRedact(on: boolean): void {
-  currentRedact = on;
+	currentRedact = on;
 }
 
 export function logDebug(step: string, msg: string, extra?: object): void {
-  hook().debug(step, msg, extra);
+	hook().debug(step, msg, extra);
 }
 
 export function logInfo(step: string, msg: string, extra?: object): void {
-  hook().info(step, msg, extra);
+	hook().info(step, msg, extra);
 }
 
 export function logWarn(step: string, msg: string, extra?: object): void {
-  hook().warn(step, msg, extra);
+	hook().warn(step, msg, extra);
 }
 
 /** Append an error record to caret.log. msg is the Error's message (or the
@@ -264,7 +269,7 @@ export function logWarn(step: string, msg: string, extra?: object): void {
  * cause chain — is included only for real Errors; sessionId/cwd ride along from
  * ctx. Best-effort: never throws. */
 export function logError(step: string, err: unknown, ctx?: ErrorContext): void {
-  hook().error(step, err, ctx);
+	hook().error(step, err, ctx);
 }
 
 /** A leveled logger for the long-running daemon. Writes NDJSON to stderr (fd 2,
@@ -275,15 +280,18 @@ export function logError(step: string, err: unknown, ctx?: ErrorContext): void {
  * `dest`; the fd-2 default is covered by the post-build daemon smoke, not
  * unit tests. */
 export function createDaemonLogger(
-  level: () => LogLevel,
-  dest?: string | number,
-  redact: () => boolean = () => false,
+	level: () => LogLevel,
+	dest?: string | number,
+	redact: () => boolean = () => false,
 ): CaretLogger {
-  try {
-    const target = pino.destination({ ...(dest === undefined ? { fd: 2 } : { dest }), sync: true });
-    const logger = pino({ ...pinoOpts, base: { pid: process.pid } }, target);
-    return wrap(logger, level, redact, "daemon");
-  } catch {
-    return noopLogger;
-  }
+	try {
+		const target = pino.destination({
+			...(dest === undefined ? { fd: 2 } : { dest }),
+			sync: true,
+		});
+		const logger = pino({ ...pinoOpts, base: { pid: process.pid } }, target);
+		return wrap(logger, level, redact, "daemon");
+	} catch {
+		return noopLogger;
+	}
 }
