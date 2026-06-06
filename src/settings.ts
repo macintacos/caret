@@ -17,12 +17,14 @@
 import { readFileSync, statSync } from "node:fs";
 import { parse as parseToml } from "smol-toml";
 import { z } from "zod";
+// Re-exported so existing `from "./settings.ts"` import sites keep working; the
+// literal lives in the node-free constants module so ui/vite.config.ts can read
+// it without pulling in this module's node-only dependency chain (EXC-504).
+import { DEFAULT_PORT } from "./constants.ts";
 import { logError } from "./log.ts";
 import { configFile } from "./paths.ts";
 
-/** Default daemon port — the [daemon].port schema default (EXC-430; moved
- * from paths.ts with the accessors below). */
-export const DEFAULT_PORT = 42718;
+export { DEFAULT_PORT };
 
 // Per-key sub-schemas for the EXC-430 tunables, shared by the config-file
 // tables below and the CARET_* env layer (envValue/invalidEnvVars) so "falls
