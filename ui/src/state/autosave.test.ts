@@ -1,0 +1,286 @@
+import "../../test-setup.ts";
+import { beforeEach, describe, expect, test } from "bun:test";
+import type { Annotation, ClientReview } from "@core/types";
+import { type AutosaveStore, createAutosave } from "./autosave.svelte.ts";
+import { HttpError } from "./resolve.svelte.ts";
+
+// One recorded PUT /draft call.
+interface SaveCall {
+  id: string;
+  annotations: Annotation[];
+  generalCommentDraft: string;
+}
+
+// A manual timer: createAutosave's debounce is driven by `setTimer`/`clearTimer`
+// so tests fire the flush deterministically instead of sleeping (cf.
+// browser-testing.md's "inject the clock" rule).
+function makeTimer() {
+  let pending: (() => void) | null = null;
+  let nextHandle = 1;
+  return {
+    setTimer: (fn: () => void) => {
+      pending = fn;
+      return nextHandle++ as unknown as ReturnType<typeof setTimeout>;
+    },
+    clearTimer: () => {
+      pending = null;
+    },
+    /** Whether a flush is scheduled. */
+    armed: () => pending !== null,
+    /** Fire the scheduled flush. */
+    fire: () => {
+      const fn = pending;
+      pending = null;
+      fn?.();
+    },
+  };
+}
+
+// A working-copy review with the fields syncActive reads.
+function review(over: Partial<ClientReview>): ClientReview {
+  return {
+    id: "r1",
+    version: 1,
+    annotations: [],
+    generalCommentDraft: "",
+    ...over,
+  } as ClientReview;
+}
+
+function ann(id: string, comment = ""): Annotation {
+  return { id, blockId: "b0", startOffset: 0, endOffset: 1, quote: "q", comment };
+}
+
+function makeStore(over: Partial<AutosaveStore> = {}): AutosaveStore {
+  return { annotations: [], generalCommentDraft: "", focusedAnnotation: null, ...over };
+}
+
+let saves: SaveCall[];
+let saveResult: () => Promise<void>;
+
+function build(store: AutosaveStore, activeId: () => string | null, timer = makeTimer()) {
+  let offline = false;
+  const autosave = createAutosave(store, activeId, {
+    putDraft: async (id, draft) => {
+      saves.push({
+        id,
+        annotations: draft.annotations,
+        generalCommentDraft: draft.generalCommentDraft,
+      });
+      return saveResult();
+    },
+    setTimer: timer.setTimer,
+    clearTimer: timer.clearTimer,
+    onOffline: () => {
+      offline = true;
+    },
+  });
+  return { autosave, timer, wentOffline: () => offline };
+}
+
+beforeEach(() => {
+  saves = [];
+  saveResult = () => Promise.resolve();
+});
+
+describe("debounced autosave", () => {
+  test("an edit schedules a save that fires on the debounce", () => {
+    const store = makeStore();
+    const { autosave, timer } = build(store, () => "r1");
+    autosave.createAnnotation({
+      blockId: "b0",
+      startOffset: 0,
+      endOffset: 1,
+      quote: "q",
+      comment: "c",
+    });
+    expect(timer.armed()).toBe(true);
+    expect(saves).toHaveLength(0);
+    timer.fire();
+    expect(saves).toHaveLength(1);
+    expect(saves[0]!.id).toBe("r1");
+    expect(saves[0]!.annotations).toHaveLength(1);
+  });
+
+  test("rapid edits coalesce into a single flush", () => {
+    const store = makeStore();
+    const { autosave, timer } = build(store, () => "r1");
+    autosave.editGeneralComment("a");
+    autosave.editGeneralComment("ab");
+    autosave.editGeneralComment("abc");
+    timer.fire();
+    expect(saves).toHaveLength(1);
+    expect(saves[0]!.generalCommentDraft).toBe("abc");
+  });
+
+  test("no save is scheduled when nothing is active", () => {
+    const store = makeStore();
+    const { autosave, timer } = build(store, () => null);
+    autosave.editGeneralComment("hi");
+    expect(timer.armed()).toBe(false);
+  });
+
+  test("a whitespace-only draft is persisted as empty", async () => {
+    const store = makeStore();
+    const { autosave } = build(store, () => "r1");
+    autosave.editGeneralComment("   \n  ");
+    await autosave.flushPending();
+    expect(saves[0]!.generalCommentDraft).toBe("");
+  });
+
+  test("flushPending is a no-op when nothing is pending", async () => {
+    const store = makeStore();
+    const { autosave } = build(store, () => "r1");
+    await autosave.flushPending();
+    expect(saves).toHaveLength(0);
+  });
+
+  test("a non-2xx response does not flip the daemon offline", async () => {
+    saveResult = () => Promise.reject(new HttpError(409));
+    const store = makeStore();
+    const { autosave, wentOffline } = build(store, () => "r1");
+    autosave.editGeneralComment("x");
+    await autosave.flushPending();
+    expect(wentOffline()).toBe(false);
+  });
+
+  test("a network failure flips the daemon offline", async () => {
+    saveResult = () => Promise.reject(new Error("network down"));
+    const store = makeStore();
+    const { autosave, wentOffline } = build(store, () => "r1");
+    autosave.editGeneralComment("x");
+    await autosave.flushPending();
+    expect(wentOffline()).toBe(true);
+  });
+});
+
+describe("flushPending snapshots before await", () => {
+  test("a review switch mid-flush cannot redirect the save onto the new review", async () => {
+    const store = makeStore({ annotations: [ann("a1", "c")] });
+    let active = "r1";
+    const { autosave } = build(store, () => active);
+    autosave.editGeneralComment("draft-for-r1");
+    // Begin the flush, then synchronously mutate the working copy + active id as
+    // a switch would — the in-flight save must carry r1's snapshot, not r2's.
+    const flushing = autosave.flushPending();
+    active = "r2";
+    store.annotations = [ann("z9", "other")];
+    store.generalCommentDraft = "draft-for-r2";
+    await flushing;
+    expect(saves).toHaveLength(1);
+    expect(saves[0]!.id).toBe("r1");
+    expect(saves[0]!.annotations.map((a) => a.id)).toEqual(["a1"]);
+    expect(saves[0]!.generalCommentDraft).toBe("draft-for-r1");
+  });
+});
+
+describe("syncActive seed guards", () => {
+  test("annotations reload on an id change", () => {
+    const store = makeStore();
+    const { autosave } = build(store, () => "r1");
+    autosave.syncActive(review({ id: "r1", version: 1, annotations: [ann("a1")] }));
+    expect(store.annotations.map((a) => a.id)).toEqual(["a1"]);
+    autosave.syncActive(review({ id: "r2", version: 1, annotations: [ann("b2")] }));
+    expect(store.annotations.map((a) => a.id)).toEqual(["b2"]);
+  });
+
+  test("annotations reload on a version bump of the same review", () => {
+    const store = makeStore();
+    const { autosave } = build(store, () => "r1");
+    autosave.syncActive(review({ id: "r1", version: 1, annotations: [ann("a1")] }));
+    autosave.syncActive(review({ id: "r1", version: 2, annotations: [ann("v2")] }));
+    expect(store.annotations.map((a) => a.id)).toEqual(["v2"]);
+  });
+
+  test("annotations do NOT reload when id:version is unchanged (poll churn)", () => {
+    const store = makeStore();
+    const { autosave } = build(store, () => "r1");
+    autosave.syncActive(review({ id: "r1", version: 1, annotations: [ann("a1")] }));
+    // Locally edit the working copy, then a poll re-delivers the same id:version.
+    store.annotations = [ann("a1", "local edit")];
+    autosave.syncActive(review({ id: "r1", version: 1, annotations: [ann("a1")] }));
+    // The local edit survives — no stomp.
+    expect(store.annotations[0]!.comment).toBe("local edit");
+  });
+
+  test("the draft seeds on an id change only — not on a version bump", () => {
+    const store = makeStore();
+    const { autosave } = build(store, () => "r1");
+    autosave.syncActive(review({ id: "r1", version: 1, generalCommentDraft: "seed-1" }));
+    expect(store.generalCommentDraft).toBe("seed-1");
+    // A user types into the draft, then a revision (new version, same id) arrives.
+    store.generalCommentDraft = "live keystrokes";
+    autosave.syncActive(
+      review({ id: "r1", version: 2, generalCommentDraft: "seed-1", annotations: [ann("v2")] }),
+    );
+    // The draft is NOT re-seeded — the live text survives.
+    expect(store.generalCommentDraft).toBe("live keystrokes");
+  });
+
+  test("the draft re-seeds when the review id changes", () => {
+    const store = makeStore();
+    const { autosave } = build(store, () => "r1");
+    autosave.syncActive(review({ id: "r1", version: 1, generalCommentDraft: "seed-1" }));
+    store.generalCommentDraft = "edited";
+    autosave.syncActive(review({ id: "r2", version: 1, generalCommentDraft: "seed-2" }));
+    expect(store.generalCommentDraft).toBe("seed-2");
+  });
+
+  test("a missing draft seeds as empty string", () => {
+    const store = makeStore();
+    const { autosave } = build(store, () => "r1");
+    autosave.syncActive(review({ id: "r1", version: 1, generalCommentDraft: undefined }));
+    expect(store.generalCommentDraft).toBe("");
+  });
+
+  test("going inactive flushes, clears the working copy, and resets the guards", async () => {
+    const store = makeStore();
+    let active: string | null = "r1";
+    const { autosave } = build(store, () => active);
+    autosave.syncActive(review({ id: "r1", version: 1, generalCommentDraft: "seed" }));
+    autosave.editGeneralComment("pending"); // schedules a save for r1
+    active = null;
+    autosave.syncActive(null);
+    expect(store.annotations).toEqual([]);
+    expect(store.generalCommentDraft).toBe("");
+  });
+});
+
+describe("flush-before-switch ordering", () => {
+  test("switching reviews flushes the previous review's pending save first", () => {
+    const store = makeStore();
+    const { autosave } = build(store, () => "r1");
+    autosave.syncActive(review({ id: "r1", version: 1 }));
+    autosave.editGeneralComment("r1-draft"); // pending save for r1
+    // Switch to r2: the pending r1 save must flush BEFORE the working copy is
+    // overwritten, so it carries r1's id and draft (not r2's).
+    autosave.syncActive(review({ id: "r2", version: 1, generalCommentDraft: "r2-seed" }));
+    expect(saves).toHaveLength(1);
+    expect(saves[0]!.id).toBe("r1");
+    expect(saves[0]!.generalCommentDraft).toBe("r1-draft");
+  });
+});
+
+describe("annotation CRUD", () => {
+  test("delete clears focus when the deleted annotation was focused", () => {
+    const store = makeStore({ annotations: [ann("a1"), ann("a2")], focusedAnnotation: "a1" });
+    const { autosave } = build(store, () => "r1");
+    autosave.deleteAnnotation("a1");
+    expect(store.annotations.map((a) => a.id)).toEqual(["a2"]);
+    expect(store.focusedAnnotation).toBe(null);
+  });
+
+  test("edit updates the matching annotation's comment", () => {
+    const store = makeStore({ annotations: [ann("a1", "old")] });
+    const { autosave } = build(store, () => "r1");
+    autosave.editAnnotation("a1", "new");
+    expect(store.annotations[0]!.comment).toBe("new");
+  });
+
+  test("clearGeneralComment empties the draft", () => {
+    const store = makeStore({ generalCommentDraft: "sent" });
+    const { autosave } = build(store, () => "r1");
+    autosave.clearGeneralComment();
+    expect(store.generalCommentDraft).toBe("");
+  });
+});
