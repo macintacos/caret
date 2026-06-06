@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ClientReview } from "../lib/types.ts";
+  import type { ClientReview } from "@core/types";
   import Icon from "./Icon.svelte";
 
   interface Props {

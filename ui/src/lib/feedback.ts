@@ -3,7 +3,7 @@
 // be stable and readable: an optional general comment, then a numbered list of
 // inline comments quoting the annotated passage.
 
-import type { Annotation } from "./types.ts";
+import type { Annotation } from "@core/types";
 
 /** Collapses any run of whitespace (incl. newlines) to a single space. */
 function flatten(text: string): string {

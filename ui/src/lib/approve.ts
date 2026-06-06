@@ -2,7 +2,7 @@
 // component so the label logic (and the safety rule that "auto" never renders
 // as a bare "Approve") has a colocated unit test.
 
-import type { AcceptMode } from "./types.ts";
+import type { AcceptMode } from "@core/types";
 
 export interface ApproveVariant {
   mode: AcceptMode;

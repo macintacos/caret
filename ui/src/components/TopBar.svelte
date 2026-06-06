@@ -1,6 +1,6 @@
 <script lang="ts">
   import { APPROVE_VARIANTS, approveLabel } from "../lib/approve.ts";
-  import type { AcceptMode, ClientReview } from "../lib/types.ts";
+  import type { AcceptMode, ClientReview } from "@core/types";
   import Icon from "./Icon.svelte";
   import NotifyBell from "./NotifyBell.svelte";
   import ReviewSwitcher from "./ReviewSwitcher.svelte";

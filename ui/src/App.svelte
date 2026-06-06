@@ -12,7 +12,7 @@
   import { renderPlan, type HeadingEntry } from "./lib/render.ts";
   import { createSafeModeGuard } from "./lib/safeMode.ts";
   import { createScrollSpy } from "./lib/scrollspy.ts";
-  import type { AcceptMode, Annotation, ClientReview } from "./lib/types.ts";
+  import type { AcceptMode, Annotation, ClientReview } from "@core/types";
 
   import AnnotationGutter from "./components/AnnotationGutter.svelte";
   import EmptyState from "./components/EmptyState.svelte";

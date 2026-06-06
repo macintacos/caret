@@ -1,6 +1,6 @@
 import "../../test-setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
-import type { Annotation } from "./types.ts";
+import type { Annotation } from "@core/types";
 import { offsetsToRange, rangeToOffsets, resolveAnnotation, wrapTextRange } from "./anchors.ts";
 
 /** Build a detached block element with id and inner HTML. */
