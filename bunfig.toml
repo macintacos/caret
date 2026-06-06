@@ -1,0 +1,9 @@
+# Bun test-runner config. The UI component suite (ui/src/components/*.test.ts)
+# mounts Svelte 5 components under happy-dom; the preload compiles `.svelte`
+# files to client-side output (see ui/test-svelte-preload.ts). The preload is
+# inert for the backend suite — its onLoad filters match only `.svelte` files —
+# so it is safe to register globally here. The companion `--conditions browser`
+# flag (on the test command) selects svelte's client runtime entry; the backend
+# suite passes unchanged under it.
+[test]
+preload = ["./ui/test-svelte-preload.ts"]

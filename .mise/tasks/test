@@ -3,4 +3,7 @@
 
 set -euo pipefail
 
-bun test
+# `--conditions browser` selects svelte's client runtime entry so the UI
+# component suite can mount components under happy-dom (see bunfig.toml and
+# ui/test-svelte-preload.ts); the backend suite passes unchanged under it.
+bun test --conditions browser
