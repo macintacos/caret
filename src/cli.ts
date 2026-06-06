@@ -14,13 +14,14 @@
 
 import type { Command } from "@commander-js/extra-typings";
 import { denyOutput } from "./adapters/claude/feedback.ts";
+import { VERSION } from "./build-id.ts";
 import { runDaemon } from "./commands/daemon.ts";
 import { runDiscoverySubcommand } from "./commands/discovery.ts";
 import { runPrewarm } from "./commands/prewarm.ts";
 import { runRedactSubcommand } from "./commands/redact.ts";
 import { runReviewSubcommand } from "./commands/review.ts";
 import { logError } from "./log.ts";
-import { logFile, VERSION } from "./paths.ts";
+import { logFile } from "./paths.ts";
 import { createProgram, runProgram } from "./program.ts";
 
 // The CLI command tree (EXC-472). Each subcommand's action threads its parsed

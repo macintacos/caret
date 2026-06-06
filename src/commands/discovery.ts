@@ -8,6 +8,7 @@
 import { existsSync } from "node:fs";
 import { release } from "node:os";
 import { claudeAdapter } from "../adapters/claude/index.ts";
+import { VERSION } from "../build-id.ts";
 import { httpHealth } from "../daemon-client.ts";
 import { isPidAlive, readDaemonLock } from "../daemon-lifecycle.ts";
 import {
@@ -19,7 +20,7 @@ import {
   renderReport,
   type Report,
 } from "../discovery.ts";
-import { configFile, daemonLogFile, logFile, VERSION } from "../paths.ts";
+import { configFile, daemonLogFile, logFile } from "../paths.ts";
 import { scrubValue } from "../redact.ts";
 import {
   getPort,

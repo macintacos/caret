@@ -5,6 +5,7 @@
 
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { readJsonFile } from "./json-file.ts";
 import { type CaretLogger, noopLogger, shortId } from "./log.ts";
 import { isUnresolved, type Review } from "./types.ts";
 
@@ -108,11 +109,8 @@ export function createStore(dir: string, log: CaretLogger = noopLogger): Store {
     },
 
     async persisted(id) {
-      try {
-        return JSON.parse(await readFile(join(dir, `${id}.json`), "utf-8")) as Review;
-      } catch {
-        return undefined; // missing or partial/corrupt file
-      }
+      // null on a missing or partial/corrupt file → the absent sentinel.
+      return ((await readJsonFile(join(dir, `${id}.json`))) as Review | null) ?? undefined;
     },
 
     size() {

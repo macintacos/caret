@@ -18,6 +18,7 @@ import { callerLocation } from "./caller-location.ts";
 import { logFile, stateDir } from "./paths.ts";
 import { shortId } from "./redact-core.ts";
 import { scrubString, scrubValue } from "./redact.ts";
+import { errorMessage } from "./types.ts";
 
 // Re-exported so the daemon/hook/store/discovery call sites import their
 // message helper from the logging module alongside the loggers themselves.
@@ -121,7 +122,7 @@ function wrap(
         const r = liveRedact();
         const f = fields(extra, step, r);
         if (err instanceof Error) f.err = scrubValue(pino.stdSerializers.errWithCause(err), r);
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = errorMessage(err);
         logger.error(f, r ? scrubString(msg) : msg);
       } catch {
         // Same swallow: a failed error write still must not propagate.

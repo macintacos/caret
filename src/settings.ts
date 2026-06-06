@@ -158,17 +158,22 @@ export function createSettings(file = configFile()): SettingsService {
   };
 }
 
+/** The settings tables, typed so the diff walk stays a checked traversal of
+ * `Settings` rather than an unsafe cast to a string-indexed record. */
+const SETTINGS_TABLES = ["logging", "daemon", "review"] as const;
+
 /** Describe value changes between two settings snapshots as
  * "table.key: old → new" lines. Validated values only (schema-constrained
  * scalars), so the output is safe for logs — raw config text never appears. */
 function diffSettings(prev: Settings, next: Settings): string[] {
-  const before = prev as unknown as Record<string, Record<string, unknown>>;
   const changes: string[] = [];
-  for (const [table, keys] of Object.entries(next) as [string, Record<string, unknown>][]) {
-    for (const [key, val] of Object.entries(keys)) {
-      if (before[table]?.[key] !== val) {
-        changes.push(`${table}.${key}: ${before[table]?.[key]} → ${val}`);
-      }
+  for (const table of SETTINGS_TABLES) {
+    const prevTable = prev[table];
+    const nextTable = next[table];
+    for (const key of Object.keys(nextTable) as (keyof typeof nextTable)[]) {
+      const before = prevTable[key];
+      const after = nextTable[key];
+      if (before !== after) changes.push(`${table}.${key}: ${before} → ${after}`);
     }
   }
   return changes;
@@ -221,18 +226,42 @@ const ENV_VARS: ReadonlyArray<[name: string, schema: z.ZodType<number>]> = [
   ["CARET_HEARTBEAT_MS", HeartbeatMs],
 ];
 
-/** Tri-state read of a CARET_* var through its sub-schema: a number when set
- * and valid; null when set but unusable (flagged by invalidEnvVars; `??` in the
- * accessors falls through to file, then default); undefined when unset or
- * blank. Blank counts as unset BEFORE Number() runs — an unguarded blank would
- * coerce to 0, and 0 is a *valid* IdleMs ("shut down immediately"). One
- * classifier serving both the accessors and invalidEnvVars is what keeps
- * "falls back" and "flagged invalid" from ever disagreeing. */
-function envValue(name: string, schema: z.ZodType<number>): number | null | undefined {
-  const raw = process.env[name];
+/** Classify a CARET_* raw string through its sub-schema: a number when set and
+ * valid; null when set but unusable; undefined when unset or blank. Blank counts
+ * as unset BEFORE Number() runs — an unguarded blank would coerce to 0, and 0 is
+ * a *valid* IdleMs ("shut down immediately"). */
+function classifyEnv(
+  raw: string | undefined,
+  schema: z.ZodType<number>,
+): number | null | undefined {
   if (raw === undefined || raw.trim() === "") return undefined;
   const n = Number(raw);
   return schema.safeParse(n).success ? n : null;
+}
+
+/** Per-name memo of the last raw string and the classification it yielded.
+ * process.env is effectively immutable for a process's lifetime, so an unchanged
+ * raw value reuses the prior Number()/safeParse work; a changed value (the
+ * per-test env swaps, a hot config) re-resolves. Keyed on the raw string, so the
+ * accessors stay a live read of process.env without re-parsing on every call. */
+const envCache = new Map<
+  string,
+  { raw: string | undefined; resolved: number | null | undefined }
+>();
+
+/** Tri-state read of a CARET_* var through its sub-schema (see classifyEnv): a
+ * number when set and valid; null when set but unusable (flagged by
+ * invalidEnvVars; `??` in the accessors falls through to file, then default);
+ * undefined when unset or blank. One classifier serving both the accessors and
+ * invalidEnvVars is what keeps "falls back" and "flagged invalid" from ever
+ * disagreeing. */
+function envValue(name: string, schema: z.ZodType<number>): number | null | undefined {
+  const raw = process.env[name];
+  const memo = envCache.get(name);
+  if (memo && memo.raw === raw) return memo.resolved;
+  const resolved = classifyEnv(raw, schema);
+  envCache.set(name, { raw, resolved });
+  return resolved;
 }
 
 /** Names of CARET_* vars that are set but unusable (their accessors fall

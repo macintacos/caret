@@ -339,6 +339,21 @@ test("invalidEnvVars treats empty and whitespace values as unset", () => {
   });
 });
 
+test("an env accessor re-resolves when its raw value changes between calls", () => {
+  // The accessor caches per raw string but stays a live read: a changed value
+  // is reflected on the very next call, never served stale from the cache.
+  withEnv({ ...NO_CARET, CARET_PORT: "6000" }, () => {
+    expect(getPort(DEFAULTS)).toBe(6000);
+  });
+  withEnv({ ...NO_CARET, CARET_PORT: "7000" }, () => {
+    expect(getPort(DEFAULTS)).toBe(7000);
+  });
+  // Back to unset → falls through to the schema default, not the cached 7000.
+  withEnv(NO_CARET, () => {
+    expect(getPort(DEFAULTS)).toBe(DEFAULT_PORT);
+  });
+});
+
 test("watchSettings reports numeric tunable changes", async () => {
   await Bun.write(file, "[daemon]\nport = 42718\n");
   const fired: string[][] = [];

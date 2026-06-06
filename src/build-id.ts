@@ -1,13 +1,56 @@
-// Build + commit fingerprinting: the identity a freshly built or installed
-// caret uses to supersede an older running daemon, and the commit the daemon
-// reports at startup. Both wrap dependency-injected primitives (so the decision
-// logic is unit-testable) and memoize the resolved value per process — the build
-// and commit can't change while a process runs. Also home to loadUiHtml, the
-// embedded-UI resolver the build fingerprint and the daemon both read.
+// Build + commit fingerprinting and daemon identity: the signature a freshly
+// built or installed caret uses to supersede an older running daemon, the
+// version it reports, the UI content hash, the shape of the single-instance
+// lock, and the commit the daemon reports at startup. The build/commit resolvers
+// wrap dependency-injected primitives (so the decision logic is unit-testable)
+// and memoize the resolved value per process — neither can change while a process
+// runs. Also home to loadUiHtml, the embedded-UI resolver the build fingerprint
+// and the daemon both read.
+//
+// Phase-0 spike outcome (the contract the rest of the code relies on): plan
+// approval is gated via a `PermissionRequest` hook matching `ExitPlanMode` — NOT
+// `PreToolUse` (which only permits the tool to run, so the native dialog still
+// shows). See src/adapters/claude/ for the decision JSON this produces.
 
 import { createHash } from "node:crypto";
 import { dirname } from "node:path";
-import { buildHash } from "./paths.ts";
+import pkg from "../package.json" with { type: "json" };
+
+/** The shipped version, read from package.json (one of the release-synced
+ * manifests) at build time so it stays honest across releases. Hardcoding it was
+ * a root cause of EXC-406: the daemon reported a stale "0.0.1" that could never
+ * signal an upgrade. */
+export const VERSION = pkg.version;
+
+/** Identity signature returned by GET /api/health, used to detect a foreign
+ * process squatting on the port. */
+export const IDENTITY = { service: "caret", version: VERSION } as const;
+
+/** Short content fingerprint of the served UI HTML — the daemon's staleness
+ * signal. It changes whenever the embedded UI changes, so an upgraded binary's
+ * build differs from a still-running older daemon's. Returns "no-ui" when no UI
+ * is embedded (dev / fresh checkout), which compares equal across binaries in
+ * that same UI-less state. */
+export function buildHash(html: string | undefined): string {
+  if (!html) return "no-ui";
+  return createHash("sha256").update(html).digest("hex").slice(0, 12);
+}
+
+/** Contents of the daemon lock file. Written by the daemon on bind; read by a
+ * starting caret to discover and gracefully retire an older one. `build`/
+ * `version` are optional so a partial/legacy lock still parses; `stateDir`/
+ * `instanceId` (EXC-461) identify which world and which boot wrote the lock,
+ * optional for the same reason. stateDir is identifying (contains the
+ * username) — never log it; log instanceId instead. */
+export interface DaemonLock {
+  pid: number;
+  port: number;
+  build?: string;
+  version?: string;
+  startedAt?: number;
+  stateDir?: string;
+  instanceId?: string;
+}
 
 /** Resolve the UI HTML: embedded asset → file beside the binary → undefined
  * (daemon then serves its built-in placeholder). */

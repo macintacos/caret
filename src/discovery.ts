@@ -18,18 +18,23 @@
 // collectReport does NOT redact: the CLI caller scrubs the finished document
 // (always, regardless of [logging].redact) before printing.
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { InstallProbe } from "./adapters/adapter.ts";
+import type { DaemonLock } from "./build-id.ts";
+import { readJsonFileSync } from "./json-file.ts";
 import { shortId } from "./log.ts";
-import type { DaemonLock } from "./paths.ts";
 import { reviewsDir } from "./paths.ts";
 import type { Settings } from "./settings.ts";
-import type { HealthIdentity } from "./types.ts";
+import { errorMessage, type HealthIdentity } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // Injected probe shapes
 // ---------------------------------------------------------------------------
+
+/** The binary name the process probes match on: caret's `ps comm` basename and
+ * the name tagged onto a daemon-lock pid. One source of truth for both sites. */
+const CARET_BIN = "caret";
 
 /** A live process, identified by pid and its command name only. argv is NEVER
  * captured — it can embed identifying paths (privacy). */
@@ -59,7 +64,7 @@ export interface LogStats {
 export interface DiscoveryDeps {
   /** ISO timestamp source (injectable for tests). */
   now: () => Date;
-  /** This binary's caret version (paths.VERSION in prod). */
+  /** This binary's caret version (VERSION in prod). */
   version: string;
   system: () => { platform: string; os: string; arch: string };
   install: () => { kind: "dev" | "prod"; binaryPath: string; bunVersion: string };
@@ -131,12 +136,6 @@ export interface ReviewsSection {
 // ---------------------------------------------------------------------------
 // Assembly
 // ---------------------------------------------------------------------------
-
-/** An error's message, or String(e) for a non-Error throw. The one shape every
- * degraded section reports. */
-function errorMessage(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
-}
 
 /** Run one section builder, degrading a throw to { error } so a single failing
  * probe can never reject the whole report. The builder may be sync or async;
@@ -260,7 +259,7 @@ function buildProcesses(deps: DiscoveryDeps): { count: number; items: ProcessIte
     .map((p) => ({ pid: p.pid, name: p.name, identifiedBy: "ps comm" as const }));
   const lock = deps.readLock();
   if (lock && deps.isPidAlive(lock.pid) && !items.some((i) => i.pid === lock.pid)) {
-    items.push({ pid: lock.pid, name: "caret", identifiedBy: "daemon.lock" });
+    items.push({ pid: lock.pid, name: CARET_BIN, identifiedBy: "daemon.lock" });
   }
   return { count: items.length, items };
 }
@@ -374,8 +373,8 @@ function formatValue(v: unknown): string {
 // ---------------------------------------------------------------------------
 
 /** Parse `ps -axo pid=,comm=` output into ProcessEntry[]: one `pid comm` pair
- * per line, comm basenamed, filtered to entries named exactly "caret". Pure so
- * it's unit-testable without spawning. */
+ * per line, comm basenamed, filtered to entries named exactly the caret binary.
+ * Pure so it's unit-testable without spawning. */
 export function parsePsLines(text: string): ProcessEntry[] {
   const out: ProcessEntry[] = [];
   for (const line of text.split("\n")) {
@@ -385,7 +384,7 @@ export function parsePsLines(text: string): ProcessEntry[] {
     const [, pidStr, comm] = m ?? [];
     if (pidStr === undefined || comm === undefined) continue;
     const name = basename(comm.trim());
-    if (name === "caret") out.push({ pid: Number(pidStr), name });
+    if (name === CARET_BIN) out.push({ pid: Number(pidStr), name });
   }
   return out;
 }
@@ -417,16 +416,10 @@ export function listReviewFiles(): ReviewStatusRecord[] {
   for (const file of files) {
     if (!file.endsWith(".json")) continue;
     if (out.length >= 5000) break;
-    try {
-      const raw = JSON.parse(readFileSync(join(dir, file), "utf-8")) as {
-        id?: unknown;
-        status?: unknown;
-      };
-      if (typeof raw.id === "string" && typeof raw.status === "string") {
-        out.push({ id: raw.id, status: raw.status });
-      }
-    } catch {
-      // corrupt/unreadable — skip, like store.rehydrate.
+    // null on a corrupt/unreadable file — skipped, like store.rehydrate.
+    const raw = readJsonFileSync(join(dir, file)) as { id?: unknown; status?: unknown } | null;
+    if (raw && typeof raw.id === "string" && typeof raw.status === "string") {
+      out.push({ id: raw.id, status: raw.status });
     }
   }
   return out;

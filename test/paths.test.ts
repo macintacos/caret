@@ -1,14 +1,19 @@
 import { expect, test } from "bun:test";
-import pkg from "../package.json" with { type: "json" };
-import { buildHash, configDir, configFile, daemonLock, stateDir, VERSION } from "../src/paths.ts";
 import { homedir } from "node:os";
+import { configDir, configFile, daemonLock, stateDir } from "../src/paths.ts";
 import { withEnv } from "./support/env.ts";
 
 // The CARET_* accessor and invalidEnvVars tests moved to test/settings.test.ts
-// with the EXC-430 accessors themselves.
+// with the EXC-430 accessors themselves. The VERSION/buildHash identity tests
+// live in test/build-id.test.ts alongside those symbols.
 
-test("VERSION reflects package.json (honest identity, not the stale 0.0.1 hardcode)", () => {
-  expect(VERSION).toBe(pkg.version);
+test("stateDir honors XDG_STATE_HOME and falls back to ~/.local/state/caret", () => {
+  withEnv({ XDG_STATE_HOME: "/tmp/caret-xdg-state-test" }, () => {
+    expect(stateDir()).toBe("/tmp/caret-xdg-state-test/caret");
+  });
+  withEnv({ XDG_STATE_HOME: undefined }, () => {
+    expect(stateDir()).toBe(`${homedir()}/.local/state/caret`);
+  });
 });
 
 test("daemonLock resolves under stateDir and honors XDG_STATE_HOME", () => {
@@ -35,13 +40,4 @@ test("configFile resolves config.toml under configDir", () => {
     expect(configFile()).toBe(`${configDir()}/config.toml`);
     expect(configFile()).toBe("/tmp/caret-xdg-config-test/caret/config.toml");
   });
-});
-
-test("buildHash is stable for identical input and differs for changed input", () => {
-  expect(buildHash("<html>a</html>")).toBe(buildHash("<html>a</html>"));
-  expect(buildHash("<html>a</html>")).not.toBe(buildHash("<html>b</html>"));
-});
-
-test("buildHash returns 'no-ui' when the UI is undefined", () => {
-  expect(buildHash(undefined)).toBe("no-ui");
 });
