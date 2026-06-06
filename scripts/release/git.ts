@@ -22,7 +22,6 @@ export interface GitOps {
   headSha(): Promise<string>;
   /** The repository's earliest root commit (for the v0.0.1 baseline tag). */
   rootCommit(): Promise<string>;
-  listTags(): Promise<string[]>;
   /** Highest `vX.Y.Z` tag by semver order, or null if there are none. */
   latestVersionTag(): Promise<string | null>;
   /** Resolve a ref to a SHA, or null if it does not exist. */
@@ -85,11 +84,6 @@ export function createGit(remote = "origin"): GitOps {
       const earliest = lines[lines.length - 1];
       if (earliest === undefined) throw new Error("repository has no commits");
       return earliest;
-    },
-
-    async listTags() {
-      const out = (await $`git tag --list`.text()).trim();
-      return out === "" ? [] : out.split("\n");
     },
 
     async latestVersionTag() {

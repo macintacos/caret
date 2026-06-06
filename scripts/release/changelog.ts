@@ -63,11 +63,6 @@ export function findSection(changelog: string, version: string): ChangelogSectio
   return { heading, notes: body.join("\n").trim() };
 }
 
-/** Whether `changelog` already has a dated section for `version`. */
-export function hasSection(changelog: string, version: string): boolean {
-  return findSection(changelog, version) !== null;
-}
-
 /** The first dated release version below `[Unreleased]`, or null if none. */
 export function findTopReleasedVersion(changelog: string): string | null {
   for (const line of changelog.split("\n")) {

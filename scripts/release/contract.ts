@@ -59,7 +59,6 @@ export interface ComputeResult {
   commits: CommitInfo[];
   /** The version-bearing files `prepare`/`finalize` mutate, in mutation order. */
   manifests: string[];
-  manifestsInSync: boolean;
 }
 
 /** The failure payload for a clean, expected guard rejection. */

@@ -2,16 +2,18 @@
 // CLI entry for the release pipeline. Dispatches to the steps in steps.ts,
 // printing exactly one JSON result on stdout (so /release-caret parses rather
 // than scrapes) and all diagnostics on stderr. Exit 0 on success, 1 on any guard
-// rejection or unexpected error. Commander parses the args (EXC-473), mirroring
-// src/cli.ts's buildProgram; the main divergence is configureOutput, which routes
-// Commander's help/usage/error output to stderr to keep stdout a lone JSON object.
+// rejection or unexpected error. Commander parses the args (EXC-473) via the
+// shared scaffolding in src/program.ts; the divergence is configureOutput, which
+// routes Commander's help/usage/error output to stderr to keep stdout a lone JSON
+// object, and the onError that emits a typed JSON error rather than denying.
 
-import { Command } from "@commander-js/extra-typings";
+import type { Command } from "@commander-js/extra-typings";
 import { $ } from "bun";
-import { type ReleaseError, errorResult } from "./contract.ts";
+import { createProgram, runProgram } from "../../src/program.ts";
+import { errorResult, type ReleaseError } from "./contract.ts";
 import { createGit } from "./git.ts";
 import { createGitHub } from "./github.ts";
-import { type Deps, GuardError, baseline, compute, finalize, prepare } from "./steps.ts";
+import { baseline, compute, type Deps, finalize, GuardError, prepare } from "./steps.ts";
 import { isBumpLevel } from "./version.ts";
 
 function realDeps(): Deps {
@@ -70,21 +72,16 @@ function requireBump(bump: string): "patch" | "minor" | "major" {
 
 function buildProgram(): Command {
   const deps = realDeps();
-  const program = new Command()
-    .name("release")
-    .description("caret release pipeline: baseline | compute | prepare | finalize")
-    // Route every Commander-originated write (help, usage, parse errors, and the
-    // post-error help from showHelpAfterError) to stderr; stdout is reserved for
-    // emit()'s single JSON object so /release-caret can parse it (EXC-473).
-    .configureOutput({
-      writeOut: (s) => process.stderr.write(s),
-      writeErr: (s) => process.stderr.write(s),
-    })
-    // We never call exitOverride(): a parse error (unknown command/option, bare
-    // `release`) prints usage to stderr and exits non-zero via Commander's default,
-    // synchronously during parse. It can never reach the catch below, so a parse
-    // error never lands a JSON object on stdout.
-    .showHelpAfterError();
+  // Route every Commander-originated write (help, usage, parse errors, and the
+  // post-error help from showHelpAfterError) to stderr; stdout is reserved for
+  // emit()'s single JSON object so /release-caret can parse it (EXC-473).
+  const program = createProgram(
+    "release",
+    "caret release pipeline: baseline | compute | prepare | finalize",
+  ).configureOutput({
+    writeOut: (s) => process.stderr.write(s),
+    writeErr: (s) => process.stderr.write(s),
+  });
 
   program
     .command("compute")
@@ -128,15 +125,12 @@ function buildProgram(): Command {
 }
 
 if (import.meta.main) {
-  // parseAsync (not parse) so an async action's rejection propagates to .catch().
-  // This catch mirrors the former main()'s try/catch: a GuardError becomes its
+  // This onError mirrors the former main()'s try/catch: a GuardError becomes its
   // typed ReleaseError on stdout; any other error logs its stack to stderr and
   // emits an INTERNAL ReleaseError. Both exit 1 via fail().
-  buildProgram()
-    .parseAsync(process.argv)
-    .catch((e) => {
-      if (e instanceof GuardError) fail(errorResult(e.code, e.message));
-      process.stderr.write(`${e instanceof Error ? (e.stack ?? e.message) : String(e)}\n`);
-      fail(errorResult("INTERNAL", e instanceof Error ? e.message : String(e)));
-    });
+  runProgram(buildProgram(), (e) => {
+    if (e instanceof GuardError) fail(errorResult(e.code, e.message));
+    process.stderr.write(`${e instanceof Error ? (e.stack ?? e.message) : String(e)}\n`);
+    fail(errorResult("INTERNAL", e instanceof Error ? e.message : String(e)));
+  });
 }
