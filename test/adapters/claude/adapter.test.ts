@@ -42,7 +42,32 @@ test("declares its approve variants as opaque id + label tokens", () => {
   }
 });
 
-test("the parsing and install-probe seams are declared but not yet wired", () => {
-  expect(() => claudeAdapter.parseHookInput("{}")).toThrow("not wired");
+test("parseHookInput maps Claude's hook stdin into a core PlanInput", () => {
+  const stdin = JSON.stringify({
+    session_id: "S",
+    cwd: "/proj",
+    transcript_path: "/tmp/t.jsonl", // present in the payload but never read
+    tool_input: { plan: "# Plan" },
+  });
+  expect(claudeAdapter.parseHookInput(stdin)).toEqual({
+    sessionId: "S",
+    cwd: "/proj",
+    plan: "# Plan",
+  });
+});
+
+test("parseHookInput tolerates a payload missing every field", () => {
+  expect(claudeAdapter.parseHookInput("{}")).toEqual({
+    sessionId: undefined,
+    cwd: undefined,
+    plan: undefined,
+  });
+});
+
+test("parseHookInput throws on malformed stdin so the caller can fail-safe deny", () => {
+  expect(() => claudeAdapter.parseHookInput("not json")).toThrow("could not parse hook stdin JSON");
+});
+
+test("the install-probe seam is declared but not yet wired", () => {
   expect(() => claudeAdapter.readInstallState()).toThrow("not wired");
 });

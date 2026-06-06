@@ -1,0 +1,148 @@
+// Review orchestration core: run one plan review end-to-end and return the hook
+// output. Tool-agnostic — the Claude-specific stdin shape is parsed behind the
+// injected `parseHookInput`, so this module never names an agent's wire fields.
+//
+// FAIL-SAFE = DENY: shipping an unreviewed plan is the one outcome we never
+// allow. Every abnormal path (bad stdin, unreachable daemon, timeout, daemon
+// death) becomes a deny — runReview never throws.
+
+import { denyOutput, type HookOutput, toHookOutput } from "./adapters/claude/feedback.ts";
+import { VANITY_HOST } from "./daemon.ts";
+import { type ErrorContext, logDebug, logError, logInfo, shortId } from "./log.ts";
+import { logFile } from "./paths.ts";
+import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "./plan-format.ts";
+import type { Decision, PlanInput } from "./types.ts";
+
+export interface ReviewDeps {
+  /** Normalize the agent's raw hook stdin into a core PlanInput. Throws on input
+   * that can't be parsed — the throw becomes the fail-safe deny. */
+  parseHookInput: (stdin: string) => PlanInput;
+  /** Ensure a daemon is up and return its base URL. */
+  ensureDaemon: () => Promise<string>;
+  postReview: (baseUrl: string, input: PlanInput) => Promise<{ id: string }>;
+  /** One bounded poll: a Decision, or null on a heartbeat (re-poll). Throws on
+   * a transient drop so the caller can reconnect. */
+  longPoll: (baseUrl: string, id: string) => Promise<Decision | null>;
+  openBrowser: (url: string) => void;
+  timeoutMs: number;
+  /** Best-effort: tell the daemon the hook is abandoning this review, so it
+   * doesn't hold a pending orphan (EXC-454). Failures are swallowed. */
+  expire: (baseUrl: string, id: string) => Promise<void>;
+}
+
+class TimeoutError extends Error {}
+
+function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new TimeoutError(message)), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
+}
+
+/** Run a review end-to-end, returning the hook output. Never throws — any
+ * failure becomes a deny so an unreviewed plan can never ship. */
+export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOutput> {
+  // Track the current step + context so the catch can log what actually failed.
+  let step = "parse";
+  const ctx: ErrorContext = {};
+  // Hoisted so the catch can reach the daemon for the best-effort expire;
+  // reconnects re-assign it, so it always holds the last-known daemon URL.
+  let baseUrl: string | undefined;
+  try {
+    const input = deps.parseHookInput(stdin);
+    ctx.sessionId = input.sessionId;
+    ctx.cwd = input.cwd;
+    // The review's start-of-timeline anchor: even a format-deny or a crashed
+    // run leaves a record of the request and its session.
+    logInfo("review", "review requested", { ...ctx });
+
+    // Reject plans with unhighlightable (untagged) code blocks before any daemon
+    // work, so a format-only reject never spins up a daemon or creates a review.
+    // The format-deny message is distinct from the fail-safe deny below; the
+    // reject is an EXPECTED outcome, logged at info (default-on) so reject
+    // loops stay diagnosable without reading as errors.
+    step = "validatePlan";
+    if (hasUntaggedCodeBlock(input.plan)) {
+      logInfo(step, "plan rejected: code block missing language marker", ctx);
+      return denyOutput(PLAN_FORMAT_DENY_MESSAGE);
+    }
+
+    step = "ensureDaemon";
+    baseUrl = await deps.ensureDaemon();
+    step = "postReview";
+    const { id } = await deps.postReview(baseUrl, input);
+    // From here every record — decision and error alike — carries the reviewId,
+    // stitching this stream against the daemon's review/resolve records.
+    ctx.reviewId = id;
+    logDebug("review", `review created: ${shortId(id)}`, { ...ctx });
+    // EXC-426: humans get the vanity origin; internal fetches keep using baseUrl.
+    const open = new URL(baseUrl);
+    open.hostname = VANITY_HOST;
+    const url = `${open.origin}/?review=${id}`;
+    deps.openBrowser(url);
+    // Also print the URL to stderr — clickable in the transcript if the browser
+    // fails to open.
+    process.stderr.write(`caret: review this plan at ${url}\n`);
+
+    step = "longPoll";
+    // Poll until the browser decides: re-poll on each heartbeat (null), and on a
+    // transient drop reconnect and keep going (the decision is served on
+    // reconnect, so nothing is lost). One absolute deadline bounds the whole
+    // loop: each poll is capped at the time remaining until it, so a single hung
+    // request can't outlive the budget and an endless-heartbeat loop denies at
+    // the same instant. A real timeout, or an unreachable daemon (ensureDaemon
+    // throwing), bubbles out to the fail-safe deny below.
+    const deadline = Date.now() + deps.timeoutMs;
+    let decision: Decision | undefined;
+    while (!decision) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw new TimeoutError("review timed out");
+      try {
+        decision =
+          (await withTimeout(deps.longPoll(baseUrl, id), remaining, "review timed out")) ??
+          undefined;
+      } catch (err) {
+        if (err instanceof TimeoutError) throw err;
+        // Reconnect — label this step so a failed reconnect logs the real
+        // failing op, not the poll it was recovering from.
+        step = "reconnect";
+        baseUrl = await deps.ensureDaemon();
+        step = "longPoll";
+      }
+    }
+    // The reviewer's verdict is normal operation: record it at info. Never the
+    // feedback body (EXC-444; reviewer prose is user-generated content like
+    // plan bodies) — only its length, so reject loops stay distinguishable
+    // from empty-feedback denies.
+    if (decision.behavior === "deny") {
+      logInfo("decision", "plan rejected", { ...ctx, feedbackChars: decision.feedback?.length });
+    } else {
+      logInfo("decision", "plan approved", { ...ctx, acceptMode: decision.acceptMode });
+    }
+    return toHookOutput(decision);
+  } catch (err) {
+    logError(step, err, ctx);
+    // The hook is abandoning the review (timeout or post-create failure):
+    // best-effort expire so the daemon doesn't hold a pending orphan. The
+    // supersede-on-resubmit path self-heals if this never lands (EXC-454).
+    if (ctx.reviewId && baseUrl) {
+      try {
+        await deps.expire(baseUrl, ctx.reviewId);
+        logDebug("review", `review expire requested: ${shortId(ctx.reviewId)}`, { ...ctx });
+      } catch {
+        logDebug("review", "review expire failed; resubmit supersedes", { ...ctx });
+      }
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    return denyOutput(`caret: ${msg} — denying so no unreviewed plan ships. See ${logFile()}.`);
+  }
+}

@@ -2,7 +2,7 @@
 // Claude's hook wire protocol — the PermissionRequest decision JSON on stdout —
 // and is the composition point the CLI selects to talk to the agent.
 
-import type { Decision } from "../../types.ts";
+import type { Decision, PlanInput } from "../../types.ts";
 import type { AgentAdapter, ApproveVariant, InstallProbe } from "../adapter.ts";
 import { toHookOutput } from "./feedback.ts";
 
@@ -17,6 +17,16 @@ const APPROVE_VARIANTS: readonly ApproveVariant[] = [
   { id: "auto", label: "Approve & auto" },
 ];
 
+/** The shape of the PermissionRequest/ExitPlanMode hook stdin Claude Code pipes
+ * to `caret review`. Every field is optional: a payload missing any of them
+ * still parses to a PlanInput, and the downstream guards (plan format, daemon
+ * work) handle the gaps. */
+interface HookStdin {
+  session_id?: string;
+  cwd?: string;
+  tool_input?: { plan?: string };
+}
+
 /** Discovery's install probe is carved into this adapter by a later step; the
  * surface is declared here so callers bind against a stable shape. */
 function notWired(member: string): never {
@@ -26,8 +36,15 @@ function notWired(member: string): never {
 export const claudeAdapter: AgentAdapter = {
   approveVariants: APPROVE_VARIANTS,
 
-  parseHookInput(_stdin: string) {
-    return notWired("parseHookInput");
+  parseHookInput(stdin: string): PlanInput {
+    let hook: HookStdin;
+    try {
+      hook = JSON.parse(stdin);
+    } catch {
+      // Malformed stdin → the caller turns this throw into a fail-safe deny.
+      throw new Error("could not parse hook stdin JSON");
+    }
+    return { sessionId: hook.session_id, cwd: hook.cwd, plan: hook.tool_input?.plan };
   },
 
   emitDecision(decision: Decision): string {

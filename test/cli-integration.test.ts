@@ -7,7 +7,8 @@ import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { ensureDaemon, httpHealth } from "../src/cli.ts";
+import { httpHealth } from "../src/daemon-client.ts";
+import { ensureDaemon } from "../src/daemon-lifecycle.ts";
 import { createServer } from "../src/daemon.ts";
 import { VERSION } from "../src/paths.ts";
 import { createStore } from "../src/store.ts";
@@ -356,12 +357,15 @@ test("the daemon logs env warns, ui fallback, and the sigterm shutdown", async (
     proc.kill("SIGTERM");
     await proc.exited;
     const recs = ndjsonRecords(await new Response(proc.stderr).text());
+    // Stable contract: the invalid env var surfaces as a warn-level "env" record
+    // naming the offending var — assert step/level/var, not the exact tail.
     expect(
       recs.some(
         (r) =>
           r.step === "env" &&
           r.level === 40 &&
-          r.msg === "CARET_TIMEOUT invalid; using config/default",
+          typeof r.msg === "string" &&
+          r.msg.startsWith("CARET_TIMEOUT invalid"),
       ),
     ).toBe(true);
     expect(recs.some((r) => r.step === "signal" && r.msg === "sigterm: shutting down")).toBe(true);
@@ -395,12 +399,15 @@ test("the review hook warns about invalid CARET_* env vars in caret.log", async 
     expect(exit).toBe(0);
     expect(out).toContain('"deny"');
     const recs = ndjsonRecords(await Bun.file(join(stateHome, "caret", "caret.log")).text());
+    // Stable contract: a warn-level "env" record naming the offending var —
+    // assert step/level/var prefix, not the exact descriptive tail (F1 style).
     expect(
       recs.some(
         (r) =>
           r.step === "env" &&
           r.level === 40 &&
-          r.msg === "CARET_PORT invalid; using config/default",
+          typeof r.msg === "string" &&
+          r.msg.startsWith("CARET_PORT invalid"),
       ),
     ).toBe(true);
   } finally {
