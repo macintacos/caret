@@ -73,7 +73,8 @@
   }
   .hint {
     margin-top: 2rem;
-    /* Was sized by the (now dropped) .mono atom; keep the same size. */
+    /* Matches the .mono atom's size (0.78rem) but stays in the sans face — this
+       status line is prose, not code, so it takes the size without the mono font. */
     font-size: 0.78rem;
     color: var(--ink-faint);
     border-top: 1px solid var(--rule);

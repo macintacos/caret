@@ -129,9 +129,10 @@
     };
   });
 
-  function onMouseUp(e: MouseEvent) {
+  function onMouseUp() {
     if (!root) return;
-    // Ignore clicks on existing marks (handled by click below).
+    // A mouseup with no fresh text selection (a plain click, or a click on an
+    // existing mark — those route through onClick) clears any pending popover.
     const cap = captureSelection(root);
     if (!cap) {
       pending = null;

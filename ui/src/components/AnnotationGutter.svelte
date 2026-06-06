@@ -82,7 +82,8 @@
     margin-bottom: 1.25rem;
   }
   .count {
-    /* Was sized by the (now dropped) .mono atom; keep the same size. */
+    /* Matches the .mono atom's size (0.78rem) but stays in the sans face — the
+       annotation count is UI chrome, not code, so it takes the size only. */
     font-size: 0.78rem;
     color: var(--accent);
     font-weight: 600;

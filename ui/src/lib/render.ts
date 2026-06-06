@@ -8,7 +8,7 @@
 
 import createDOMPurify from "dompurify";
 import type { DOMPurify as DOMPurifyInstance, WindowLike } from "dompurify";
-import { Marked } from "marked";
+import { Marked, Renderer } from "marked";
 import { highlightToHtml } from "./highlight.ts";
 import { uiLog } from "./log.ts";
 
@@ -20,35 +20,36 @@ import { uiLog } from "./log.ts";
 // Anything else (`position`, `z-index`, `url(...)`, …) fails the match and the
 // whole attribute is dropped — so this narrows, never widens, the XSS surface.
 const SHIKI_STYLE =
-  /^(?:(?:--shiki[\w-]*|color|background-color)\s*:\s*(?:#[0-9a-fA-F]{3,8}|rgba?\([\d.,\s%]+\)|var\(--shiki[\w-]*\)|italic|oblique|normal|bold|bolder|lighter|\d{1,3})\s*;?\s*)+$/;
+	/^(?:(?:--shiki[\w-]*|color|background-color)\s*:\s*(?:#[0-9a-fA-F]{3,8}|rgba?\([\d.,\s%]+\)|var\(--shiki[\w-]*\)|italic|oblique|normal|bold|bolder|lighter|\d{1,3})\s*;?\s*)+$/;
 
 // DOMPurify must bind to a `window` (happy-dom in tests, the real one in the
 // browser). Bind lazily at first use so module import never requires a DOM.
 let purifier: DOMPurifyInstance | null = null;
 function getPurifier(): DOMPurifyInstance {
-  if (purifier) return purifier;
-  const win =
-    (globalThis as { window?: WindowLike }).window ?? (globalThis as unknown as WindowLike);
-  purifier = createDOMPurify(win);
-  // Preserve shiki's token-color `style` through sanitization: keep a `style`
-  // only when its whole value is shiki-shaped (SHIKI_STYLE), drop it otherwise.
-  // Dangerous styles (position, url(), expression(), …) never match, so this
-  // narrows — never widens — the XSS surface. Sanitize stays the terminal step.
-  purifier.addHook("uponSanitizeAttribute", (_node, data) => {
-    if (data.attrName === "style") {
-      if (SHIKI_STYLE.test(data.attrValue.trim())) data.forceKeepAttr = true;
-      else data.keepAttr = false;
-    }
-  });
-  return purifier;
+	if (purifier) return purifier;
+	const win =
+		(globalThis as { window?: WindowLike }).window ??
+		(globalThis as unknown as WindowLike);
+	purifier = createDOMPurify(win);
+	// Preserve shiki's token-color `style` through sanitization: keep a `style`
+	// only when its whole value is shiki-shaped (SHIKI_STYLE), drop it otherwise.
+	// Dangerous styles (position, url(), expression(), …) never match, so this
+	// narrows — never widens — the XSS surface. Sanitize stays the terminal step.
+	purifier.addHook("uponSanitizeAttribute", (_node, data) => {
+		if (data.attrName === "style") {
+			if (SHIKI_STYLE.test(data.attrValue.trim())) data.forceKeepAttr = true;
+			else data.keepAttr = false;
+		}
+	});
+	return purifier;
 }
 
 export interface HeadingEntry {
-  level: number;
-  slug: string;
-  text: string;
-  /** Structural id of the heading's block element, e.g. "b3". */
-  blockId: string;
+	level: number;
+	slug: string;
+	text: string;
+	/** Structural id of the heading's block element, e.g. "b3". */
+	blockId: string;
 }
 
 /**
@@ -57,38 +58,84 @@ export interface HeadingEntry {
  * noise, not navigation); a rail earns its place from two headings up.
  */
 export function shouldShowRail(headings: HeadingEntry[]): boolean {
-  return headings.length >= 2;
+	return headings.length >= 2;
 }
 
 export interface RenderResult {
-  html: string;
-  headings: HeadingEntry[];
+	html: string;
+	headings: HeadingEntry[];
 }
 
 /** Block-level renderer methods that should receive a structural id. */
 const BLOCK_METHODS = [
-  "heading",
-  "paragraph",
-  "blockquote",
-  "list",
-  "code",
-  "table",
-  "hr",
+	"heading",
+	"paragraph",
+	"blockquote",
+	"list",
+	"code",
+	"table",
+	"hr",
 ] as const;
 
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/[^\w\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
+// A bare Marked renderer instance whose default block methods we delegate to.
+// (Created once; stateless across renders.)
+const DefaultRenderer = new Renderer();
+
+// The override wiring below is structurally coupled to two marked internals
+// that an upgrade could silently break: each BLOCK_METHODS name must still be a
+// method on the renderer (to delegate to), and that method's output must still
+// start with the block's opening tag (so injectAttrs can stamp the structural
+// id onto it). The casts that bridge those couplings carry no compile-time
+// signal, so we assert both at runtime and throw loudly on drift rather than
+// emit ids-less HTML that breaks annotation anchoring.
+type RendererBlockMethod = (
+	this: { parser: unknown },
+	token: unknown,
+) => string;
+
+/**
+ * The default renderer's method for `name`, or a loud throw if marked dropped
+ * it. Exported for direct unit testing of the renderer-drift guard.
+ */
+export function baseBlockMethod(
+	name: (typeof BLOCK_METHODS)[number],
+): RendererBlockMethod {
+	const method = (DefaultRenderer as unknown as Record<string, unknown>)[name];
+	if (typeof method !== "function") {
+		throw new Error(
+			`render: marked Renderer has no block method "${name}" (renderer drift)`,
+		);
+	}
+	return method as RendererBlockMethod;
 }
 
-/** Inserts `attrs` into the first opening tag of `html`. */
-function injectAttrs(html: string, attrs: string): string {
-  return html.replace(/^(\s*<[a-zA-Z][\w-]*)/, `$1 ${attrs}`);
+function slugify(text: string): string {
+	return text
+		.toLowerCase()
+		.trim()
+		.replace(/[^\w\s-]/g, "")
+		.replace(/\s+/g, "-")
+		.replace(/-+/g, "-")
+		.replace(/^-|-$/g, "");
+}
+
+/** Matches the leading opening tag that injectAttrs stamps the structural id onto. */
+const OPENING_TAG = /^(\s*<[a-zA-Z][\w-]*)/;
+
+/**
+ * Inserts `attrs` into the first opening tag of `html`. A block renderer's
+ * output must start with that tag; if it doesn't (renderer drift), a silent
+ * no-op `replace` would emit a block with no structural id and break annotation
+ * anchoring, so throw loudly instead. Exported for direct unit testing of the
+ * renderer-drift guard.
+ */
+export function injectAttrs(html: string, attrs: string): string {
+	if (!OPENING_TAG.test(html)) {
+		throw new Error(
+			`render: block HTML does not start with an opening tag, cannot stamp "${attrs}" (renderer drift)`,
+		);
+	}
+	return html.replace(OPENING_TAG, `$1 ${attrs}`);
 }
 
 /**
@@ -96,96 +143,88 @@ function injectAttrs(html: string, attrs: string): string {
  * collecting the heading outline. Pure and deterministic for a given input.
  */
 export function renderPlan(markdown: string): RenderResult {
-  let counter = 0;
-  let firstHeadingSeen = false;
-  const headings: HeadingEntry[] = [];
-  const usedSlugs = new Map<string, number>();
+	let counter = 0;
+	let firstHeadingSeen = false;
+	const headings: HeadingEntry[] = [];
+	const usedSlugs = new Map<string, number>();
 
-  const marked = new Marked({ gfm: true, breaks: false });
+	const marked = new Marked({ gfm: true, breaks: false });
 
-  // Wrap each block-level renderer so it stamps an id and (for headings) a slug.
-  const overrides: Record<string, (token: unknown) => string> = {};
-  for (const name of BLOCK_METHODS) {
-    overrides[name] = function (this: { parser: unknown }, token: unknown) {
-      const blockId = `b${counter++}`;
+	// Wrap each block-level renderer so it stamps an id and (for headings) a slug.
+	const overrides: Record<string, (token: unknown) => string> = {};
+	for (const name of BLOCK_METHODS) {
+		overrides[name] = function (this: { parser: unknown }, token: unknown) {
+			const blockId = `b${counter++}`;
 
-      // Normalize the plan's first heading to H1 regardless of its authored level.
-      // Agents pick inconsistent top-of-file heading levels; we fix the rendered
-      // view here rather than rewriting the source file. Only the first heading is
-      // touched — later headings keep their authored levels. marked derives the tag
-      // from `token.depth`, so mutate it before delegating to the base renderer.
-      if (name === "heading" && !firstHeadingSeen) {
-        (token as { depth: number }).depth = 1;
-        firstHeadingSeen = true;
-      }
+			// Normalize the plan's first heading to H1 regardless of its authored level.
+			// Agents pick inconsistent top-of-file heading levels; we fix the rendered
+			// view here rather than rewriting the source file. Only the first heading is
+			// touched — later headings keep their authored levels. marked derives the tag
+			// from `token.depth`, so mutate it before delegating to the base renderer.
+			if (name === "heading" && !firstHeadingSeen) {
+				(token as { depth: number }).depth = 1;
+				firstHeadingSeen = true;
+			}
 
-      // Defer to the default renderer for the actual markup. `name` is always a
-      // real block method, so the lookup is non-null.
-      const renderers = DefaultRenderer as unknown as {
-        [k: string]: (this: { parser: unknown }, t: unknown) => string;
-      };
-      const base = renderers[name] as (this: { parser: unknown }, t: unknown) => string;
+			// Defer to the default renderer for the actual markup; baseBlockMethod
+			// throws loudly if marked dropped or renamed this block method.
+			const base = baseBlockMethod(name);
 
-      // Fenced code blocks are syntax-highlighted by shiki when a known language
-      // is tagged. highlightToHtml returns null for an unknown/unloaded language
-      // or a cold-start highlighter, so we fall back to marked's plain
-      // <pre><code> then. shiki's <pre class="shiki"> stays the first tag, so the
-      // id injection below still anchors on it.
-      let out: string;
-      if (name === "code") {
-        const t = token as { text: string; lang?: string };
-        const lang = (t.lang ?? "").trim().split(/\s+/)[0] || undefined;
-        out = highlightToHtml(t.text, lang) ?? base.call(this, token);
-      } else {
-        out = base.call(this, token);
-      }
+			// Fenced code blocks are syntax-highlighted by shiki when a known language
+			// is tagged. highlightToHtml returns null for an unknown/unloaded language
+			// or a cold-start highlighter, so we fall back to marked's plain
+			// <pre><code> then. shiki's <pre class="shiki"> stays the first tag, so the
+			// id injection below still anchors on it.
+			let out: string;
+			if (name === "code") {
+				const t = token as { text: string; lang?: string };
+				const lang = (t.lang ?? "").trim().split(/\s+/)[0] || undefined;
+				out = highlightToHtml(t.text, lang) ?? base.call(this, token);
+			} else {
+				out = base.call(this, token);
+			}
 
-      if (name === "heading") {
-        const t = token as { depth: number; text: string };
-        const baseSlug = slugify(t.text);
-        const seen = usedSlugs.get(baseSlug) ?? 0;
-        const slug = seen === 0 ? baseSlug : `${baseSlug}-${seen}`;
-        usedSlugs.set(baseSlug, seen + 1);
-        headings.push({ level: t.depth, slug, text: t.text, blockId });
-        out = injectAttrs(out, `id="${blockId}" data-slug="${slug}"`);
-      } else {
-        out = injectAttrs(out, `id="${blockId}"`);
-      }
-      return out;
-    };
-  }
+			if (name === "heading") {
+				const t = token as { depth: number; text: string };
+				const baseSlug = slugify(t.text);
+				const seen = usedSlugs.get(baseSlug) ?? 0;
+				const slug = seen === 0 ? baseSlug : `${baseSlug}-${seen}`;
+				usedSlugs.set(baseSlug, seen + 1);
+				headings.push({ level: t.depth, slug, text: t.text, blockId });
+				out = injectAttrs(out, `id="${blockId}" data-slug="${slug}"`);
+			} else {
+				out = injectAttrs(out, `id="${blockId}"`);
+			}
+			return out;
+		};
+	}
 
-  marked.use({ renderer: overrides as never });
+	marked.use({ renderer: overrides as never });
 
-  // INVARIANT: attributes are string-injected into the raw HTML ABOVE, then the
-  // whole document is sanitized HERE. Sanitize MUST remain the last step — never
-  // inject id/data-slug (or anything else) after this, or it becomes an XSS hole.
-  let html: string;
-  try {
-    const rawHtml = marked.parse(markdown, { async: false }) as string;
-    html = getPurifier().sanitize(rawHtml, {
-      ADD_ATTR: ["data-slug", "id"],
-      USE_PROFILES: { html: true },
-    });
-  } catch (err) {
-    // Surface a render failure on the timeline, then rethrow unchanged so the
-    // caller still sees the same throw. Counts only — never the plan text.
-    uiLog.error("render", err, { chars: markdown.length });
-    throw err;
-  }
+	// INVARIANT: attributes are string-injected into the raw HTML ABOVE, then the
+	// whole document is sanitized HERE. Sanitize MUST remain the last step — never
+	// inject id/data-slug (or anything else) after this, or it becomes an XSS hole.
+	let html: string;
+	try {
+		const rawHtml = marked.parse(markdown, { async: false }) as string;
+		html = getPurifier().sanitize(rawHtml, {
+			ADD_ATTR: ["data-slug", "id"],
+			USE_PROFILES: { html: true },
+		});
+	} catch (err) {
+		// Surface a render failure on the timeline, then rethrow unchanged so the
+		// caller still sees the same throw. Counts only — never the plan text.
+		uiLog.error("render", err, { chars: markdown.length });
+		throw err;
+	}
 
-  // App.svelte memoizes renderPlan per review id:version, so this is one record
-  // per plan version — not per poll tick.
-  uiLog.debug("render", "plan rendered", {
-    chars: markdown.length,
-    blocks: counter,
-    headings: headings.length,
-  });
+	// App.svelte memoizes renderPlan per review id:version, so this is one record
+	// per plan version — not per poll tick.
+	uiLog.debug("render", "plan rendered", {
+		chars: markdown.length,
+		blocks: counter,
+		headings: headings.length,
+	});
 
-  return { html, headings };
+	return { html, headings };
 }
-
-// A bare Marked renderer instance whose default block methods we delegate to.
-// (Created once; stateless across renders.)
-import { Renderer } from "marked";
-const DefaultRenderer = new Renderer();

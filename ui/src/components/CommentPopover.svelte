@@ -1,6 +1,7 @@
 <script lang="ts">
   // Floating "Comment" button anchored near a fresh text selection. Clicking it
   // opens an inline textarea; submitting emits the comment up to App.
+  import { isCancelKey, isSubmitChord } from "../lib/keys.ts";
   import Icon from "./Icon.svelte";
 
   interface Props {
@@ -29,10 +30,10 @@
   }
 
   function onKey(e: KeyboardEvent) {
-    if (e.key === "Escape") {
+    if (isCancelKey(e)) {
       e.preventDefault();
       onDismiss();
-    } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    } else if (isSubmitChord(e)) {
       e.preventDefault();
       submit();
     }
