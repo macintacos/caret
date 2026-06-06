@@ -164,11 +164,11 @@ test("watchSettings reports each changed key with old and new values", async () 
   await Bun.write(file, '[logging]\nlevel = "debug"\nredact = true\n');
   const next = svc.current();
   expect(fired.length).toBe(1);
-  expect(fired[0].changes).toEqual([
+  expect(fired[0]!.changes).toEqual([
     "logging.level: info → debug",
     "logging.redact: false → true",
   ]);
-  expect(fired[0].next).toBe(next);
+  expect(fired[0]!.next).toBe(next);
 });
 
 test("watchSettings does not fire when a rewrite leaves values unchanged", async () => {

@@ -1,18 +1,10 @@
 {
+  // The UI (browser/Svelte) program: ui/src. Adds Svelte's ambient types and
+  // isolatedModules (svelte-check compiles each module in isolation). Shared
+  // options live in ../tsconfig.base.json.
+  "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "lib": ["ESNext", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "target": "ESNext",
-    "moduleResolution": "bundler",
-    "moduleDetection": "force",
-    "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": true,
     "isolatedModules": true,
-    "noEmit": true,
-    "strict": true,
-    "skipLibCheck": true,
-    "noUncheckedIndexedAccess": true,
-    "noFallthroughCasesInSwitch": true,
     "types": ["bun", "svelte"]
   },
   "include": ["src/**/*.ts", "*.ts"]

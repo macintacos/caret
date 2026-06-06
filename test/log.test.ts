@@ -5,6 +5,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   createDaemonLogger,
+  type ErrorContext,
   logDebug,
   logError,
   logInfo,
@@ -47,7 +48,7 @@ test("logError writes a single-line JSON error record with step, msg, and a real
   logError("longPoll", new Error("boom"));
   const recs = records();
   expect(recs.length).toBe(1);
-  const r = recs[0];
+  const r = recs[0]!;
   expect(r.level).toBe(50);
   expect(r.step).toBe("longPoll");
   expect(r.msg).toBe("boom");
@@ -58,7 +59,7 @@ test("logError writes a single-line JSON error record with step, msg, and a real
 
 test("logError serializes a nested cause chain", () => {
   logError("ensureDaemon", new Error("outer", { cause: new Error("inner-root") }));
-  const r = records()[0];
+  const r = records()[0]!;
   const err = r.err as { message: string; cause: { message: string } };
   expect(err.message).toBe("outer");
   expect(err.cause.message).toBe("inner-root");
@@ -79,7 +80,7 @@ test("logError terminates on a cyclic cause chain instead of hanging", () => {
 
 test("logError records sessionId and cwd context when provided", () => {
   logError("runReview", new Error("x"), { sessionId: "sess-42", cwd: "/tmp/proj" });
-  const r = records()[0];
+  const r = records()[0]!;
   expect(r.sessionId).toBe("sess-42");
   expect(r.cwd).toBe("/tmp/proj");
   expect(r.step).toBe("runReview");
@@ -87,7 +88,7 @@ test("logError records sessionId and cwd context when provided", () => {
 
 test("logError handles a non-Error value, using the string as msg", () => {
   logError("stringy", "just a string");
-  const r = records()[0];
+  const r = records()[0]!;
   expect(r.level).toBe(50);
   expect(r.step).toBe("stringy");
   expect(r.msg).toBe("just a string");
@@ -111,7 +112,7 @@ test("at the default info level, logDebug writes nothing", () => {
   logInfo("review", "visible");
   const recs = records();
   expect(recs.length).toBe(1);
-  expect(recs[0].msg).toBe("visible");
+  expect(recs[0]!.msg).toBe("visible");
 });
 
 test("after setLogLevel('warn'), logInfo is gated but logWarn and logError emit", () => {
@@ -137,8 +138,8 @@ test("records append across calls rather than truncating", () => {
   logInfo("second", "two");
   const recs = records();
   expect(recs.length).toBe(2);
-  expect(recs[0].step).toBe("first");
-  expect(recs[1].step).toBe("second");
+  expect(recs[0]!.step).toBe("first");
+  expect(recs[1]!.step).toBe("second");
 });
 
 test("logging creates the state dir 0700 and the log file 0600", () => {
@@ -170,7 +171,7 @@ test("createDaemonLogger writes NDJSON with pid in base and respects the level t
   const recs = records(dest);
   expect(recs.length).toBe(2);
   expect(recs[0]).toMatchObject({ level: 30, step: "review", msg: "review created: r1", id: "r1" });
-  expect(recs[0].pid).toBe(process.pid);
+  expect(recs[0]!.pid).toBe(process.pid);
   expect(recs[1]).toMatchObject({ level: 20, step: "boot", msg: "now visible" });
 });
 
@@ -206,26 +207,26 @@ const CALLER = /^test\/log\.test\.ts:\d+$/;
 
 test("hook records carry the caller location", () => {
   logInfo("review", "created");
-  expect(records()[0].caller).toMatch(CALLER);
+  expect(records()[0]!.caller).toMatch(CALLER);
 });
 
 test("daemon records carry the caller location", () => {
   const dest = join(home, "daemon-caller.log");
   const log = createDaemonLogger(() => "info", dest);
   log.info("listen", "listening");
-  expect(records(dest)[0].caller).toMatch(CALLER);
+  expect(records(dest)[0]!.caller).toMatch(CALLER);
 });
 
 test("error records carry the caller location", () => {
   logError("boom", new Error("x"));
-  expect(records()[0].caller).toMatch(CALLER);
+  expect(records()[0]!.caller).toMatch(CALLER);
 });
 
 test("bridged records (explicit extra.source) omit the caller location", () => {
   const dest = join(home, "daemon-bridged.log");
   const log = createDaemonLogger(() => "info", dest);
   log.info("ui", "ui loaded", { source: "ui" });
-  const r = records(dest)[0];
+  const r = records(dest)[0]!;
   expect(r.source).toBe("ui");
   expect(r.caller).toBeUndefined();
 });
@@ -233,7 +234,7 @@ test("bridged records (explicit extra.source) omit the caller location", () => {
 test("with redaction on, the caller stays the repo-relative path", () => {
   setRedact(true);
   logInfo("review", "created");
-  expect(records()[0].caller).toMatch(CALLER);
+  expect(records()[0]!.caller).toMatch(CALLER);
 });
 
 test("a null extra.source reads as unset: own tag and caller attach", () => {
@@ -242,7 +243,7 @@ test("a null extra.source reads as unset: own tag and caller attach", () => {
   const dest = join(home, "daemon-null-source.log");
   const log = createDaemonLogger(() => "info", dest);
   log.info("listen", "listening", { source: null });
-  const r = records(dest)[0];
+  const r = records(dest)[0]!;
   expect(r.source).toBe("daemon");
   expect(r.caller).toMatch(CALLER);
 });
@@ -255,8 +256,8 @@ test("records carry an ISO 8601 UTC time with the date", () => {
   createDaemonLogger(() => "info", dest).info("listen", "listening");
   // Full date + ms precision + the trailing Z that pins the zone to UTC.
   const iso = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-  expect(records()[0].time).toMatch(iso);
-  expect(records(dest)[0].time).toMatch(iso);
+  expect(records()[0]!.time).toMatch(iso);
+  expect(records(dest)[0]!.time).toMatch(iso);
 });
 
 // --- redaction (EXC-399) ---
@@ -274,12 +275,12 @@ test("with redaction on, identifiable strings never reach the file but debuggabi
   logError("runReview", new Error(`failed reading ${realHome}/.config/caret/config.toml`), {
     cwd: `${realHome}/GitLocal/proj`,
     plan: "SECRET PLAN BODY",
-  });
+  } as ErrorContext);
   logInfo("settings", `settings: reading ${realHome}/.config/caret/config.toml`);
   const body = readFileSync(logFile(), "utf-8");
   expect(body).not.toContain(realHome);
   expect(body).not.toContain("SECRET PLAN BODY");
-  const [errRec, infoRec] = records();
+  const [errRec, infoRec] = records() as [Record<string, unknown>, Record<string, unknown>];
   expect(errRec.step).toBe("runReview");
   expect(errRec.msg).toBe("failed reading ~/.config/caret/config.toml");
   expect(errRec.cwd).toBe("~/GitLocal/proj");
@@ -293,14 +294,14 @@ test("with redaction on, identifiable strings never reach the file but debuggabi
 test("with redaction on, a nested cause chain is scrubbed at depth", () => {
   setRedact(true);
   logError("deep", new Error(`outer ${realHome}/a`, { cause: new Error(`inner ${realHome}/b`) }));
-  const err = records()[0].err as { message: string; cause: { message: string } };
+  const err = records()[0]!.err as { message: string; cause: { message: string } };
   expect(err.message).toBe("outer ~/a");
   expect(err.cause.message).toBe("inner ~/b");
 });
 
 test("plan and prompt extras are censored even with redaction off", () => {
   logInfo("decision", `at ${realHome}/x`, { plan: "SECRET PLAN", prompt: "SECRET PROMPT" });
-  const r = records()[0];
+  const r = records()[0]!;
   expect(r.plan).toBe("<redacted>");
   expect(r.prompt).toBe("<redacted>");
   expect(r.msg).toContain(realHome); // the toggle is off: paths pass through raw
@@ -313,11 +314,11 @@ test("a cyclic extra object never throws and writes one record", () => {
   expect(() => logInfo("cyclicExtra", "still logs", extra)).not.toThrow();
   const recs = records();
   expect(recs.length).toBe(1);
-  expect(recs[0].msg).toBe("still logs");
+  expect(recs[0]!.msg).toBe("still logs");
   // The walk cuts the cycle with a marker. Its exact nesting depends on the
   // emit path's `{ ...extra }` copy (the copy is a new root, so the original
   // is first re-seen one level down) — assert the cut, not the position.
-  expect(JSON.stringify(recs[0].self)).toContain("<cyclic>");
+  expect(JSON.stringify(recs[0]!.self)).toContain("<cyclic>");
 });
 
 test("createDaemonLogger redacts when its redact thunk returns true", () => {
@@ -326,7 +327,7 @@ test("createDaemonLogger redacts when its redact thunk returns true", () => {
   log.error("request", new Error(`kaboom at ${realHome}/srv`), { cwd: `${realHome}/proj` });
   const body = readFileSync(dest, "utf-8");
   expect(body).not.toContain(realHome);
-  const r = records(dest)[0];
+  const r = records(dest)[0]!;
   expect(r.msg).toBe("kaboom at ~/srv");
   expect(r.cwd).toBe("~/proj");
 });
@@ -335,7 +336,7 @@ test("createDaemonLogger error method serializes an Error", () => {
   const dest = join(home, "daemon-err.log");
   const log = createDaemonLogger(() => "info", dest);
   log.error("request", new Error("kaboom"));
-  const r = records(dest)[0];
+  const r = records(dest)[0]!;
   expect(r.level).toBe(50);
   expect(r.step).toBe("request");
   expect(r.msg).toBe("kaboom");

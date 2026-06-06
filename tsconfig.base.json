@@ -1,0 +1,21 @@
+{
+  // Shared TypeScript compiler options for caret's two type-check programs:
+  // the root program (src + scripts + test + e2e, node/bun) and the UI program
+  // (ui/src, browser/Svelte). Each side `extends` this base and overrides only
+  // its genuine differences — keeping target/module/strictness in one place so
+  // the two configs cannot silently drift (EXC-499).
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "target": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true
+  }
+}
