@@ -1,7 +1,7 @@
 <script lang="ts">
   import { resolveAnnotation, wrapTextRange } from "../lib/anchors.ts";
   import { captureSelection } from "../lib/selection.ts";
-  import type { Annotation } from "../lib/types.ts";
+  import type { Annotation } from "@core/types";
   import CommentPopover from "./CommentPopover.svelte";
 
   export interface ResolvedAnnotation {

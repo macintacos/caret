@@ -2,7 +2,13 @@
 // Vite proxy forwards them to the daemon on :42718.
 
 import { shortId, uiLog } from "./log.ts";
-import type { AcceptMode, Annotation, ClientReview, Health, ResolveBody } from "./types.ts";
+import type {
+  AcceptMode,
+  Annotation,
+  ClientReview,
+  HealthIdentity,
+  ResolveBody,
+} from "@core/types";
 
 /** Thrown when the daemon responded with a non-2xx status — distinct from a
  * network failure (the daemon is up, so it's not a connection problem). */
@@ -18,7 +24,7 @@ async function json<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
 
-export async function getHealth(): Promise<Health> {
+export async function getHealth(): Promise<HealthIdentity> {
   return json(await fetch("/api/health"));
 }
 
@@ -138,7 +144,7 @@ export function startPolling(
   // intervals out), so two checks can never overlap — keep it that way if you
   // add a call site.
   const checkIdentity = async () => {
-    let health: Health;
+    let health: HealthIdentity;
     try {
       health = await getHealth();
     } catch {

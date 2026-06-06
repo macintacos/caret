@@ -5,7 +5,13 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "isolatedModules": true,
-    "types": ["bun", "svelte"]
+    "types": ["bun", "svelte"],
+    // `@core/*` resolves to the tool-agnostic core in src/ (paths are relative
+    // to this config's dir, so one level up). The UI imports the wire contract
+    // (src/types.ts) through this alias rather than a hand-kept mirror; the vite
+    // alias and root tsconfig mirror this mapping so svelte-check, the
+    // singlefile build, and bun test agree (EXC-507).
+    "paths": { "@core/*": ["../src/*"] }
   },
   "include": ["src/**/*.ts", "*.ts"]
 }

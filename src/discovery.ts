@@ -25,24 +25,11 @@ import { shortId } from "./log.ts";
 import type { DaemonLock } from "./paths.ts";
 import { reviewsDir } from "./paths.ts";
 import type { Settings } from "./settings.ts";
+import type { HealthIdentity } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // Injected probe shapes
 // ---------------------------------------------------------------------------
-
-/** Parsed /api/health identity body. Every field optional: a pre-fix daemon or
- * a non-caret squatter may omit any of them. `stateDir` (world identity — an
- * identifying path, never logged) and `instanceId` (per-boot opaque id) are the
- * EXC-461 fields ensureDaemon and the UI key on; the report's daemon section
- * deliberately does not surface them. */
-export interface HealthIdentity {
-  service?: string;
-  version?: string;
-  build?: string;
-  commit?: string;
-  stateDir?: string;
-  instanceId?: string;
-}
 
 /** A live process, identified by pid and its command name only. argv is NEVER
  * captured — it can embed identifying paths (privacy). */

@@ -3,7 +3,7 @@
 // strategy. Offsets are measured against the *concatenated text nodes* of the
 // block element (== element.textContent), walked with a TreeWalker.
 
-import type { Annotation } from "./types.ts";
+import type { Annotation } from "@core/types";
 
 export interface Offsets {
   start: number;

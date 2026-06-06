@@ -18,7 +18,6 @@ import { createServer, type CaretServer, VANITY_HOST } from "./daemon.ts";
 import {
   collectReport,
   type DiscoveryDeps,
-  type HealthIdentity,
   listProcesses,
   listReviewFiles,
   logStats,
@@ -63,7 +62,7 @@ import {
   watchSettings,
 } from "./settings.ts";
 import { createStore } from "./store.ts";
-import type { Decision, PlanInput } from "./types.ts";
+import type { Decision, HealthIdentity, PlanInput } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // Testable cores (dependency-injected)

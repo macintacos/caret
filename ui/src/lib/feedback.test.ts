@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Annotation } from "./types.ts";
+import type { Annotation } from "@core/types";
 import { formatFeedback } from "./feedback.ts";
 
 const ann = (over: Partial<Annotation>): Annotation => ({

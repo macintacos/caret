@@ -1,4 +1,6 @@
-// Core domain types shared by the daemon, store, CLI, and (mirrored in) the UI.
+// Core domain types shared by the daemon, store, CLI, and the UI (imported
+// directly through the @core/* alias). The single wire contract — pure TS with
+// no node imports, so the browser singlefile build stays clean.
 
 /** The browser's decision on a plan. Maps to the PermissionRequest hook output. */
 export type Behavior = "allow" | "deny";
@@ -130,6 +132,23 @@ export interface ResolveBody {
   behavior: Behavior;
   feedback?: string;
   acceptMode?: AcceptMode;
+}
+
+/**
+ * GET /api/health identity body — the single wire shape for the daemon's
+ * identity probe. Every field is optional: a pre-fix daemon or a non-caret
+ * process squatting on the port may omit any of them, so consumers degrade
+ * rather than assume. `stateDir` (world identity — an identifying path, NEVER
+ * logged) and `instanceId` (per-boot opaque id) are the EXC-461 fields a hook
+ * and the UI key on to tell daemons apart.
+ */
+export interface HealthIdentity {
+  service?: string;
+  version?: string;
+  build?: string;
+  commit?: string;
+  stateDir?: string;
+  instanceId?: string;
 }
 
 /** Returns the current (latest) version of a review. */

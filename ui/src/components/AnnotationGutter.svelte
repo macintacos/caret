@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Annotation } from "../lib/types.ts";
+  import type { Annotation } from "@core/types";
   import AnnotationCard from "./AnnotationCard.svelte";
 
   interface Resolved {

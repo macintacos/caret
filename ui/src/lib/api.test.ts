@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { type LogCapture, logCapture } from "../../test-helpers.ts";
 import { getApproveMode, HttpError, putDraft, resolveReview, startPolling } from "./api.ts";
 import { flush } from "./log.ts";
-import type { Annotation, ClientReview, ResolveBody } from "./types.ts";
+import type { Annotation, ClientReview, ResolveBody } from "@core/types";
 
 // Shared URL-routing fetch double (test-helpers.ts): /api/logs POSTs are
 // captured; the review/prefs endpoints answer from the per-test `respond` so

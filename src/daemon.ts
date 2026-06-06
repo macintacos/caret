@@ -14,6 +14,7 @@ import type { Store } from "./store.ts";
 import {
   currentVersion,
   type Decision,
+  type HealthIdentity,
   isAcceptMode,
   type PlanInput,
   type Review,
@@ -260,7 +261,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
         // daemon runs from (EXC-452), surfaced for a diagnostics client's
         // discovery report; stateDir (world) and instanceId (boot) are the
         // EXC-461 identity fields that let a hook and the UI tell daemons apart.
-        return Response.json({ ...IDENTITY, build: buildId, commit, stateDir, instanceId });
+        const body: HealthIdentity = { ...IDENTITY, build: buildId, commit, stateDir, instanceId };
+        return Response.json(body);
       }
 
       // Graceful single-instance retire (EXC-406): a newer caret asks this

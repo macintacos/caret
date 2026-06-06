@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { AcceptMode } from "./types.ts";
+import type { AcceptMode } from "@core/types";
 import { approveLabel } from "./approve.ts";
 
 describe("approveLabel", () => {
