@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Annotation } from "@core/types";
+  import { isCancelKey, isSubmitChord } from "../lib/keys.ts";
 
   interface Props {
     annotation: Annotation;
@@ -37,10 +38,10 @@
     if (trimmed && trimmed !== annotation.comment) onEdit(annotation.id, trimmed);
   }
   function onKey(e: KeyboardEvent) {
-    if (e.key === "Escape") {
+    if (isCancelKey(e)) {
       editing = false;
       draft = annotation.comment;
-    } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    } else if (isSubmitChord(e)) {
       e.preventDefault();
       save();
     }

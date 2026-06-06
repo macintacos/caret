@@ -1,162 +1,261 @@
 import "../../test-setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { type LogCapture, logCapture } from "../../test-helpers.ts";
-import { getApproveMode, HttpError, putDraft, resolveReview } from "./api.ts";
+import {
+	getApproveMode,
+	getHealth,
+	getReview,
+	HttpError,
+	putDraft,
+	resolveReview,
+} from "./api.ts";
 import { flush } from "./log.ts";
 import type { Annotation, ResolveBody } from "@core/types";
 
 // Shared URL-routing fetch double (test-helpers.ts): /api/logs POSTs are
 // captured; the review/prefs endpoints answer from the per-test `respond` so
 // each case can pick success, a non-2xx Response, or a rejected promise.
-let respond: (url: string, options: RequestInit | undefined) => Promise<Response>;
+let respond: (
+	url: string,
+	options: RequestInit | undefined,
+) => Promise<Response>;
 let cap: LogCapture;
 
 beforeEach(() => {
-  respond = () => Promise.resolve(new Response(null, { status: 204 }));
-  cap = logCapture((url, options) => respond(url, options));
+	respond = () => Promise.resolve(new Response(null, { status: 204 }));
+	cap = logCapture((url, options) => respond(url, options));
 });
 
 afterEach(() => {
-  cap.restore();
+	cap.restore();
 });
 
 function jsonResponse(value: unknown): Response {
-  return new Response(JSON.stringify(value), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
+	return new Response(JSON.stringify(value), {
+		status: 200,
+		headers: { "Content-Type": "application/json" },
+	});
 }
 
 const ID = "abc12345-6789-0000-0000-000000000000";
 
 describe("resolveReview instrumentation", () => {
-  test("success emits exactly one info record with id prefix, behavior, extras", async () => {
-    respond = () => Promise.resolve(jsonResponse({ ok: true }));
-    const body: ResolveBody = { behavior: "allow", acceptMode: "auto", feedback: "looks good" };
+	test("success emits exactly one info record with id prefix, behavior, extras", async () => {
+		respond = () => Promise.resolve(jsonResponse({ ok: true }));
+		const body: ResolveBody = {
+			behavior: "allow",
+			acceptMode: "auto",
+			feedback: "looks good",
+		};
 
-    await resolveReview(ID, body);
-    flush();
+		await resolveReview(ID, body);
+		flush();
 
-    const records = cap.events();
-    expect(records).toHaveLength(1);
-    const rec = records[0]!;
-    expect(rec.level).toBe("info");
-    expect(rec.step).toBe("resolve");
-    expect(rec.msg as string).toContain("abc12345");
-    expect(rec.msg as string).toContain("allow");
-    expect(rec.extra).toMatchObject({
-      reviewId: ID,
-      acceptMode: "auto",
-      feedbackChars: "looks good".length,
-    });
-  });
+		const records = cap.events();
+		expect(records).toHaveLength(1);
+		const rec = records[0]!;
+		expect(rec.level).toBe("info");
+		expect(rec.step).toBe("resolve");
+		expect(rec.msg as string).toContain("abc12345");
+		expect(rec.msg as string).toContain("allow");
+		expect(rec.extra).toMatchObject({
+			reviewId: ID,
+			acceptMode: "auto",
+			feedbackChars: "looks good".length,
+		});
+	});
 
-  test("omits acceptMode and feedbackChars extras when absent", async () => {
-    respond = () => Promise.resolve(jsonResponse({ ok: true }));
+	test("omits acceptMode and feedbackChars extras when absent", async () => {
+		respond = () => Promise.resolve(jsonResponse({ ok: true }));
 
-    await resolveReview(ID, { behavior: "deny" });
-    flush();
+		await resolveReview(ID, { behavior: "deny" });
+		flush();
 
-    const extra = cap.events()[0]!.extra as Record<string, unknown>;
-    expect(extra.reviewId).toBe(ID);
-    expect(extra).not.toHaveProperty("acceptMode");
-    expect(extra).not.toHaveProperty("feedbackChars");
-  });
+		const extra = cap.events()[0]!.extra as Record<string, unknown>;
+		expect(extra.reviewId).toBe(ID);
+		expect(extra).not.toHaveProperty("acceptMode");
+		expect(extra).not.toHaveProperty("feedbackChars");
+	});
 
-  test("a non-2xx response warns with the status and rejects with HttpError", async () => {
-    respond = () => Promise.resolve(new Response(null, { status: 409 }));
+	test("a non-2xx response warns with the status and rejects with HttpError", async () => {
+		respond = () => Promise.resolve(new Response(null, { status: 409 }));
 
-    await expect(resolveReview(ID, { behavior: "allow" })).rejects.toBeInstanceOf(HttpError);
-    flush();
+		await expect(
+			resolveReview(ID, { behavior: "allow" }),
+		).rejects.toBeInstanceOf(HttpError);
+		flush();
 
-    const records = cap.events();
-    const warn = records.find((r) => r.level === "warn");
-    expect(warn).toBeDefined();
-    expect(warn!.step).toBe("resolve");
-    expect(warn!.msg as string).toContain("http 409");
-    expect(warn!.extra).toMatchObject({ reviewId: ID, status: 409 });
-  });
+		const records = cap.events();
+		const warn = records.find((r) => r.level === "warn");
+		expect(warn).toBeDefined();
+		expect(warn!.step).toBe("resolve");
+		expect(warn!.msg as string).toContain("http 409");
+		expect(warn!.extra).toMatchObject({ reviewId: ID, status: 409 });
+	});
 
-  test("a network reject emits an error record and rejects", async () => {
-    respond = () => Promise.reject(new Error("network down"));
+	test("a network reject emits an error record and rejects", async () => {
+		respond = () => Promise.reject(new Error("network down"));
 
-    await expect(resolveReview(ID, { behavior: "allow" })).rejects.toThrow("network down");
-    flush();
+		await expect(resolveReview(ID, { behavior: "allow" })).rejects.toThrow(
+			"network down",
+		);
+		flush();
 
-    const err = cap.events().find((r) => r.level === "error");
-    expect(err).toBeDefined();
-    expect(err!.step).toBe("resolve");
-    expect(err!.extra).toMatchObject({ reviewId: ID });
-  });
+		const err = cap.events().find((r) => r.level === "error");
+		expect(err).toBeDefined();
+		expect(err!.step).toBe("resolve");
+		expect(err!.extra).toMatchObject({ reviewId: ID });
+	});
 });
 
 describe("putDraft instrumentation", () => {
-  const annotations: Annotation[] = [
-    { id: "a1", blockId: "b1", startOffset: 0, endOffset: 4, quote: "q", comment: "c" },
-    { id: "a2", blockId: "b2", startOffset: 0, endOffset: 4, quote: "q", comment: "c" },
-  ];
+	const annotations: Annotation[] = [
+		{
+			id: "a1",
+			blockId: "b1",
+			startOffset: 0,
+			endOffset: 4,
+			quote: "q",
+			comment: "c",
+		},
+		{
+			id: "a2",
+			blockId: "b2",
+			startOffset: 0,
+			endOffset: 4,
+			quote: "q",
+			comment: "c",
+		},
+	];
 
-  test("success emits no record", async () => {
-    respond = () => Promise.resolve(jsonResponse({ ok: true }));
+	test("success emits no record", async () => {
+		respond = () => Promise.resolve(jsonResponse({ ok: true }));
 
-    await putDraft(ID, { annotations, generalCommentDraft: "" });
-    flush();
+		await putDraft(ID, { annotations, generalCommentDraft: "" });
+		flush();
 
-    expect(cap.events()).toHaveLength(0);
-  });
+		expect(cap.events()).toHaveLength(0);
+	});
 
-  test("failure warns with annotationCount and rejects", async () => {
-    respond = () => Promise.resolve(new Response(null, { status: 500 }));
+	test("failure warns with annotationCount and rejects", async () => {
+		respond = () => Promise.resolve(new Response(null, { status: 500 }));
 
-    await expect(putDraft(ID, { annotations, generalCommentDraft: "" })).rejects.toBeInstanceOf(
-      HttpError,
-    );
-    flush();
+		await expect(
+			putDraft(ID, { annotations, generalCommentDraft: "" }),
+		).rejects.toBeInstanceOf(HttpError);
+		flush();
 
-    const warn = cap.events().find((r) => r.level === "warn");
-    expect(warn).toBeDefined();
-    expect(warn!.step).toBe("draft");
-    expect(warn!.extra).toMatchObject({ reviewId: ID, annotationCount: 2 });
-  });
+		const warn = cap.events().find((r) => r.level === "warn");
+		expect(warn).toBeDefined();
+		expect(warn!.step).toBe("draft");
+		expect(warn!.extra).toMatchObject({ reviewId: ID, annotationCount: 2 });
+	});
 });
 
 describe("getApproveMode instrumentation", () => {
-  test("failure warns at step prefs and rejects", async () => {
-    respond = () => Promise.reject(new Error("offline"));
+	test("failure warns at step prefs and rejects", async () => {
+		respond = () => Promise.reject(new Error("offline"));
 
-    await expect(getApproveMode()).rejects.toThrow("offline");
-    flush();
+		await expect(getApproveMode()).rejects.toThrow("offline");
+		flush();
 
-    const warn = cap.events().find((r) => r.level === "warn");
-    expect(warn).toBeDefined();
-    expect(warn!.step).toBe("prefs");
-    expect(warn!.msg as string).toContain("approve mode read failed");
-  });
+		const warn = cap.events().find((r) => r.level === "warn");
+		expect(warn).toBeDefined();
+		expect(warn!.step).toBe("prefs");
+		expect(warn!.msg as string).toContain("approve mode read failed");
+	});
+});
+
+describe("getHealth instrumentation", () => {
+	test("success emits no record", async () => {
+		respond = () => Promise.resolve(jsonResponse({ service: "caret" }));
+
+		await getHealth();
+		flush();
+
+		expect(cap.events()).toHaveLength(0);
+	});
+
+	test("failure warns at step request and rejects", async () => {
+		respond = () => Promise.reject(new Error("offline"));
+
+		await expect(getHealth()).rejects.toThrow("offline");
+		flush();
+
+		const warn = cap.events().find((r) => r.level === "warn");
+		expect(warn).toBeDefined();
+		expect(warn!.step).toBe("request");
+		expect(warn!.msg as string).toContain("health probe failed");
+	});
+});
+
+describe("getReview instrumentation", () => {
+	test("success emits no record", async () => {
+		respond = () => Promise.resolve(jsonResponse({ id: ID }));
+
+		await getReview(ID);
+		flush();
+
+		expect(cap.events()).toHaveLength(0);
+	});
+
+	test("a non-2xx response warns with the id prefix and status", async () => {
+		respond = () => Promise.resolve(new Response(null, { status: 404 }));
+
+		await expect(getReview(ID)).rejects.toBeInstanceOf(HttpError);
+		flush();
+
+		const warn = cap.events().find((r) => r.level === "warn");
+		expect(warn).toBeDefined();
+		expect(warn!.step).toBe("request");
+		expect(warn!.msg as string).toContain("abc12345");
+		expect(warn!.msg as string).toContain("http 404");
+		expect(warn!.extra).toMatchObject({ reviewId: ID, status: 404 });
+	});
+
+	test("a network reject emits an error record and rejects", async () => {
+		respond = () => Promise.reject(new Error("network down"));
+
+		await expect(getReview(ID)).rejects.toThrow("network down");
+		flush();
+
+		const err = cap.events().find((r) => r.level === "error");
+		expect(err).toBeDefined();
+		expect(err!.step).toBe("request");
+		expect(err!.extra).toMatchObject({ reviewId: ID });
+	});
 });
 
 describe("redaction — no body text reaches the wire", () => {
-  test("feedback, quote, and comment text never appear in any /api/logs body", async () => {
-    const FEEDBACK = "SENSITIVE-FEEDBACK-PHRASE";
-    const QUOTE = "SENSITIVE-QUOTE-PHRASE";
-    const COMMENT = "SENSITIVE-COMMENT-PHRASE";
+	test("feedback, quote, and comment text never appear in any /api/logs body", async () => {
+		const FEEDBACK = "SENSITIVE-FEEDBACK-PHRASE";
+		const QUOTE = "SENSITIVE-QUOTE-PHRASE";
+		const COMMENT = "SENSITIVE-COMMENT-PHRASE";
 
-    respond = () => Promise.resolve(jsonResponse({ ok: true }));
-    await resolveReview(ID, { behavior: "deny", feedback: FEEDBACK });
+		respond = () => Promise.resolve(jsonResponse({ ok: true }));
+		await resolveReview(ID, { behavior: "deny", feedback: FEEDBACK });
 
-    respond = () => Promise.resolve(new Response(null, { status: 500 }));
-    await expect(
-      putDraft(ID, {
-        annotations: [
-          { id: "a1", blockId: "b1", startOffset: 0, endOffset: 1, quote: QUOTE, comment: COMMENT },
-        ],
-        generalCommentDraft: "",
-      }),
-    ).rejects.toBeInstanceOf(HttpError);
-    flush();
+		respond = () => Promise.resolve(new Response(null, { status: 500 }));
+		await expect(
+			putDraft(ID, {
+				annotations: [
+					{
+						id: "a1",
+						blockId: "b1",
+						startOffset: 0,
+						endOffset: 1,
+						quote: QUOTE,
+						comment: COMMENT,
+					},
+				],
+				generalCommentDraft: "",
+			}),
+		).rejects.toBeInstanceOf(HttpError);
+		flush();
 
-    const text = cap.text();
-    expect(text).not.toContain(FEEDBACK);
-    expect(text).not.toContain(QUOTE);
-    expect(text).not.toContain(COMMENT);
-  });
+		const text = cap.text();
+		expect(text).not.toContain(FEEDBACK);
+		expect(text).not.toContain(QUOTE);
+		expect(text).not.toContain(COMMENT);
+	});
 });

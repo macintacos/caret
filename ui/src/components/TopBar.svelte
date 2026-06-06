@@ -1,5 +1,6 @@
 <script lang="ts">
   import { APPROVE_VARIANTS, approveLabel } from "../lib/approve.ts";
+  import { shortCwd } from "../lib/cwd.ts";
   import type { AcceptMode, ClientReview } from "@core/types";
   import Icon from "./Icon.svelte";
   import NotifyBell from "./NotifyBell.svelte";
@@ -31,10 +32,6 @@
   function approve(mode: AcceptMode) {
     menuOpen = false;
     onApprove(mode);
-  }
-  function shortCwd(cwd: string): string {
-    const parts = cwd.split("/").filter(Boolean);
-    return parts.length <= 2 ? cwd : `…/${parts.slice(-2).join("/")}`;
   }
 </script>
 

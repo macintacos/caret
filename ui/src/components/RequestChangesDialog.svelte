@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Annotation } from "@core/types";
   import { formatFeedback } from "../lib/feedback.ts";
+  import { isCancelKey, isSubmitChord } from "../lib/keys.ts";
   import Icon from "./Icon.svelte";
 
   interface Props {
@@ -32,8 +33,8 @@
     onSubmit(generalComment.trim());
   }
   function onKey(e: KeyboardEvent) {
-    if (e.key === "Escape") onCancel();
-    else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit();
+    if (isCancelKey(e)) onCancel();
+    else if (isSubmitChord(e)) submit();
   }
 </script>
 
@@ -151,7 +152,8 @@
     border-color: var(--accent);
   }
   .summary {
-    /* Was sized by the (now dropped) .mono atom; keep the same size. */
+    /* Matches the .mono atom's size (0.78rem) but stays in the sans face — this
+       is a count summary, not code, so it takes the size without the mono font. */
     font-size: 0.78rem;
     color: var(--ink-faint);
     margin-top: 0.6rem;

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { shortCwd } from "../lib/cwd.ts";
   import type { ClientReview } from "@core/types";
   import Icon from "./Icon.svelte";
 
@@ -12,10 +13,6 @@
   let open = $state(false);
   let active = $derived(reviews.find((r) => r.id === activeId) ?? null);
 
-  function shortCwd(cwd: string): string {
-    const parts = cwd.split("/").filter(Boolean);
-    return parts.length <= 2 ? cwd : `…/${parts.slice(-2).join("/")}`;
-  }
   function pick(id: string) {
     open = false;
     onSelect(id);
