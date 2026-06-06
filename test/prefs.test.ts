@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readApproveMode, writeApproveMode } from "../src/prefs.ts";
-import { recordingLog } from "./recording-log.ts";
+import { recordingLog } from "./support/recording-log.ts";
 
 let dir: string;
 let file: string;

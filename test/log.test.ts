@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { readFileSync, statSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   createDaemonLogger,
@@ -14,29 +14,24 @@ import {
   setRedact,
 } from "../src/log.ts";
 import { daemonLogFile, logFile } from "../src/paths.ts";
+import { setupTempStateDir } from "./support/env.ts";
+import { ndjsonRecords } from "./support/ndjson.ts";
 
+// The per-test state dir doubles as the temp home these path assertions resolve
+// against; the helper owns its creation, XDG wiring, and teardown.
+const stateDir = setupTempStateDir("caret-log-");
 let home: string;
-let savedXdg: string | undefined;
-
-beforeEach(async () => {
-  home = await mkdtemp(join(tmpdir(), "caret-log-"));
-  savedXdg = process.env.XDG_STATE_HOME;
-  process.env.XDG_STATE_HOME = home;
+beforeEach(() => {
+  home = stateDir();
 });
-afterEach(async () => {
+afterEach(() => {
   setLogLevel("info"); // reset so level changes don't leak across tests
   setRedact(false); // reset so redaction toggles don't leak across tests
-  if (savedXdg === undefined) delete process.env.XDG_STATE_HOME;
-  else process.env.XDG_STATE_HOME = savedXdg;
-  await rm(home, { recursive: true, force: true });
 });
 
 /** Read caret.log and return its parsed NDJSON records (one per non-blank line). */
 function records(path = logFile()): Record<string, unknown>[] {
-  return readFileSync(path, "utf-8")
-    .split("\n")
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as Record<string, unknown>);
+  return ndjsonRecords(readFileSync(path, "utf-8"));
 }
 
 test("logFile and daemonLogFile resolve under the caret state dir", () => {

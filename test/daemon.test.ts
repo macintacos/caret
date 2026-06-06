@@ -3,50 +3,26 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createServer, type CaretServer } from "../src/daemon.ts";
-import { type CaretLogger, createDaemonLogger } from "../src/log.ts";
+import { createDaemonLogger } from "../src/log.ts";
 import { VERSION } from "../src/paths.ts";
-import { createStore, type Store } from "../src/store.ts";
-import { recordingLog } from "./recording-log.ts";
+import type { Store } from "../src/store.ts";
+import { type BootOptions, bootDaemon, type TestDaemon } from "./support/daemon.ts";
+import { recordingLog } from "./support/recording-log.ts";
+import { expectNeverLogsBody } from "./support/redaction.ts";
 
 let dir: string;
+let d: TestDaemon;
 let store: Store;
-let srv: CaretServer;
+let srv: { port: number; stop(): void };
 let base: string;
 
-async function boot(
-  opts: {
-    idleMs?: number;
-    heartbeatMs?: number;
-    onShutdown?: () => void;
-    log?: CaretLogger;
-    routePlan?: Parameters<typeof createServer>[0]["routePlan"];
-    lockPath?: string;
-    buildId?: string;
-    commit?: string;
-    prefsPath?: string;
-    stateDir?: string;
-    instanceId?: string;
-  } = {},
-) {
-  store = createStore(dir);
-  await store.rehydrate();
-  srv = createServer({
-    store,
-    port: 0,
-    prefsPath: opts.prefsPath ?? join(dir, "prefs.json"),
-    idleMs: opts.idleMs ?? 1_000_000,
-    heartbeatMs: opts.heartbeatMs,
-    onShutdown: opts.onShutdown ?? (() => {}),
-    log: opts.log,
-    routePlan: opts.routePlan,
-    lockPath: opts.lockPath,
-    buildId: opts.buildId,
-    commit: opts.commit,
-    stateDir: opts.stateDir,
-    instanceId: opts.instanceId,
-  });
-  base = `http://localhost:${srv.port}`;
+async function boot(opts: BootOptions = {}) {
+  // Default prefs into the temp dir so the prefs tests never touch the real
+  // machine-global prefs file.
+  d = await bootDaemon(dir, { prefsPath: join(dir, "prefs.json"), ...opts });
+  store = d.store;
+  srv = { port: d.port, stop: d.stop };
+  base = d.url;
 }
 
 async function prefMode(): Promise<string> {
@@ -66,25 +42,11 @@ async function waitForPrefMode(want: string): Promise<string> {
 }
 
 async function resolve(id: string, body: Record<string, unknown>) {
-  await fetch(`${base}/api/reviews/${id}/resolve`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  await d.resolve(id, body);
 }
 
 async function newReview(body: Record<string, unknown> = {}) {
-  const res = await fetch(`${base}/api/reviews`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      sessionId: "S",
-      cwd: "/tmp/p",
-      plan: "# Title\n\nbody",
-      ...body,
-    }),
-  });
-  return (await res.json()) as { id: string };
+  return { id: await d.seed(body) };
 }
 
 beforeEach(async () => {
@@ -166,7 +128,7 @@ test("the listen record carries instanceId but never the state dir", async () =>
   const listen = recs.find((r) => r.step === "listen");
   expect((listen?.extra as { instanceId?: string } | undefined)?.instanceId).toBe("inst123");
   // stateDir is identifying (contains the username) — it must never reach a log.
-  expect(JSON.stringify(recs)).not.toContain("/secret-home");
+  expectNeverLogsBody(recs, "/secret-home");
 });
 
 test("stop() removes the lock file", async () => {
@@ -322,11 +284,7 @@ const ANNS = [
 ];
 
 async function putDraft(id: string, body: Record<string, unknown>) {
-  return fetch(`${base}/api/reviews/${id}/draft`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  return d.draft(id, body);
 }
 
 test("PUT draft updates the current version's annotations", async () => {
@@ -761,7 +719,7 @@ test("a draft autosave is logged at debug with the review id only", async () => 
     extra: { reviewId: id },
   });
   // Draft text is reviewer prose — it must never appear in any record.
-  expect(JSON.stringify(recs)).not.toContain("secret draft text");
+  expectNeverLogsBody(recs, "secret draft text");
 });
 
 test("a decision served from disk after a memory miss is logged at debug", async () => {
@@ -986,7 +944,7 @@ test("a real daemon logger censors a forged plan body on the wire path", async (
   const text = readFileSync(dest, "utf-8");
   expect(text).toContain('"source":"ui"');
   expect(text).toContain('"plan":"<redacted>"');
-  expect(text).not.toContain("secret plan body");
+  expectNeverLogsBody(text, "secret plan body");
 });
 
 test("a failed fire-and-forget prefs write is logged at warn", async () => {

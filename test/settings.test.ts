@@ -17,6 +17,7 @@ import {
   settings,
   watchSettings,
 } from "../src/settings.ts";
+import { withEnv } from "./support/env.ts";
 
 let dir: string;
 let file: string;
@@ -193,23 +194,6 @@ test("watchSettings does not fire when an invalid rewrite keeps last-known-good"
 });
 
 // --- EXC-430: env-var tunables under the config schema ---
-
-/** Run `fn` with the given CARET_* values (undefined deletes), restoring after. */
-function withEnv(vars: Record<string, string | undefined>, fn: () => void) {
-  const saved = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
-  for (const [k, v] of Object.entries(vars)) {
-    if (v === undefined) delete process.env[k];
-    else process.env[k] = v;
-  }
-  try {
-    fn();
-  } finally {
-    for (const [k, v] of Object.entries(saved)) {
-      if (v === undefined) delete process.env[k];
-      else process.env[k] = v;
-    }
-  }
-}
 
 /** Baseline for accessor tests: no CARET_* var set, whatever the host machine exports. */
 const NO_CARET: Record<string, string | undefined> = {

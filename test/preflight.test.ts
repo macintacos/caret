@@ -10,6 +10,7 @@ import {
   type SpawnTask,
   runPreflight,
 } from "../scripts/preflight.ts";
+import { waitFor } from "./support/poll.ts";
 
 const ALL_TASKS = ["build-bin", "build-ui", "lint", "test", "test-e2e"];
 
@@ -40,12 +41,10 @@ function gatedSpawner() {
   return { calls, release, spawnTask };
 }
 
-async function waitFor(cond: () => boolean, ms = 1000): Promise<void> {
-  const start = Date.now();
-  while (!cond()) {
-    if (Date.now() - start > ms) throw new Error("waitFor timed out");
-    await Bun.sleep(5);
-  }
+/** Resolve once `cond` holds (throws on timeout); the 1000ms budget keeps the
+ * start-order assertions snappy. */
+function waitForCond(cond: () => boolean, ms = 1000): Promise<true> {
+  return waitFor(() => (cond() ? true : undefined), ms);
 }
 
 test("all tasks pass: exit 0, every task reported passed, build-ui spawned once", async () => {
@@ -63,12 +62,12 @@ test("lint, test, build-ui start immediately; dependents wait for build-ui", asy
   const s = gatedSpawner();
   const run = runPreflight({ spawnTask: s.spawnTask, renderer: "silent" });
 
-  await waitFor(() => s.calls.length === 3);
+  await waitForCond(() => s.calls.length === 3);
   await Bun.sleep(20); // would catch eagerly-spawned dependents
   expect([...s.calls].sort()).toEqual(["build-ui", "lint", "test"]);
 
   s.release("build-ui");
-  await waitFor(() => s.calls.length === 5);
+  await waitForCond(() => s.calls.length === 5);
   expect(s.calls).toContain("test-e2e");
   expect(s.calls).toContain("build-bin");
 

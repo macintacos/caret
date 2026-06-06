@@ -1,12 +1,8 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runReview } from "../src/cli.ts";
-import { type CaretServer, createServer } from "../src/daemon.ts";
 import { setLogLevel } from "../src/log.ts";
 import { hasUntaggedCodeBlock } from "../src/plan-format.ts";
-import { createStore } from "../src/store.ts";
 import {
   appendRevision,
   assertDevEnv,
@@ -19,40 +15,36 @@ import {
   runExtraSeeder,
   seederInterval,
 } from "../scripts/dev/driver.ts";
+import { bootDaemon, type TestDaemon } from "./support/daemon.ts";
+import { setupTempStateDir } from "./support/env.ts";
+import { waitFor } from "./support/poll.ts";
+import { expectNeverLogsBody } from "./support/redaction.ts";
 
 // The v1 fixture the driver seeds — read independently here so the assertions
 // don't lean on the driver's own loader.
 const PLAN_V1 = await Bun.file(`${import.meta.dir}/../scripts/dev/fake-plan.md`).text();
 
+// Point the state dir at the per-test temp dir so the hook logging that
+// runReview performs lands in a disposable caret.log, not the real one — the
+// daemon's store roots there too, so its caret.log is the one the tests read.
+const stateDir = setupTempStateDir("caret-driver-");
 let dir: string;
-let srv: CaretServer;
+let d: TestDaemon;
 let base: string;
 
-// Point the state dir at the per-test temp dir so the hook logging that
-// runReview performs lands in a disposable caret.log, not the real one —
-// the same hygiene test/cli.test.ts uses.
-let savedXdg: string | undefined;
-
-// Boot a real in-process daemon (no browser, no spawned process), exactly the
-// pattern test/daemon.test.ts uses.
+// Boot a real in-process daemon (no browser, no spawned process).
 async function boot() {
-  const store = createStore(dir);
-  await store.rehydrate();
-  srv = createServer({ store, port: 0, idleMs: 1_000_000, onShutdown: () => {} });
-  base = `http://localhost:${srv.port}`;
+  d = await bootDaemon(dir);
+  base = d.url;
 }
 
 // Simulate the browser's decision (the UI's POST /resolve).
 async function resolve(id: string, behavior: "allow" | "deny", feedback?: string) {
-  await fetch(`${base}/api/reviews/${id}/resolve`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ behavior, feedback }),
-  });
+  await d.resolve(id, { behavior, feedback });
 }
 
 async function clientReview(id: string) {
-  return (await (await fetch(`${base}/api/reviews/${id}`)).json()) as {
+  return (await d.getReview(id)) as unknown as {
     currentPlan: string;
     version: number;
     status: string;
@@ -60,17 +52,12 @@ async function clientReview(id: string) {
   };
 }
 
-beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), "caret-driver-"));
-  savedXdg = process.env.XDG_STATE_HOME;
-  process.env.XDG_STATE_HOME = dir;
+beforeEach(() => {
+  dir = stateDir();
 });
-afterEach(async () => {
-  if (savedXdg === undefined) delete process.env.XDG_STATE_HOME;
-  else process.env.XDG_STATE_HOME = savedXdg;
+afterEach(() => {
   setLogLevel("info"); // undo any per-test level change
-  srv?.stop();
-  await rm(dir, { recursive: true, force: true });
+  d?.stop();
 });
 
 // ---- DEV_SESSION (EXC-461) ----
@@ -180,17 +167,6 @@ test("nextPlan on approve re-seeds a fresh v1 and resets the counter", () => {
 
 // ---- the real hook path, end to end ----
 
-/** Poll an async probe until it returns a value or the budget elapses. */
-async function waitFor<T>(probe: () => Promise<T | undefined>, ms = 5000): Promise<T> {
-  const start = Date.now();
-  for (;;) {
-    const v = await probe();
-    if (v !== undefined) return v;
-    if (Date.now() - start > ms) throw new Error("waitFor: timed out");
-    await Bun.sleep(20);
-  }
-}
-
 test("a revision round-trips through the real runReview hook path and logs to caret.log", async () => {
   await boot();
   const deps = devReviewDeps(base);
@@ -223,7 +199,7 @@ test("a revision round-trips through the real runReview hook path and logs to ca
   expect(log).toContain('"step":"decision"');
   // EXC-444: reviewer feedback bodies are never logged — the rejected-plan
   // record carries only the feedback's length.
-  expect(log).not.toContain("needs a rollout plan");
+  expectNeverLogsBody(log, "needs a rollout plan");
   expect(log).toContain('"feedbackChars":20');
   expect(log).toContain(DEV_SESSION);
 });
