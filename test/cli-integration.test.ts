@@ -30,7 +30,7 @@ async function waitFor(pred: () => boolean, ms: number): Promise<boolean> {
 /** A loopback port that is free right now (probe-then-release). */
 function freePort(): number {
   const probe = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response("x") });
-  const port = probe.port;
+  const port = probe.port!;
   probe.stop();
   return port;
 }
@@ -290,7 +290,7 @@ test("caret discovery --json prints one parseable, redacted document", async () 
     const exit = await proc.exited;
     const out = await new Response(proc.stdout).text();
     expect(exit).toBe(0);
-    const report = JSON.parse(out) as Record<string, Record<string, unknown>>;
+    const report = JSON.parse(out) as Record<string, unknown>;
     expect(report.schema).toBe("caret-discovery/1");
     expect(report.version).toBe(VERSION);
     for (const key of [
@@ -312,7 +312,9 @@ test("caret discovery --json prints one parseable, redacted document", async () 
     // Always-redacted: the home prefix never appears raw — the default config
     // path renders as ~/.config/... and the bun binaryPath is scrubbed too.
     expect(out).not.toContain(homedir());
-    expect(report.settings.configPath).toBe("~/.config/caret/config.toml");
+    expect((report.settings as Record<string, unknown>).configPath).toBe(
+      "~/.config/caret/config.toml",
+    );
     // The flat-shape invariant: nothing was depth-clipped by the scrub.
     expect(out).not.toContain("<depth-capped>");
   } finally {
@@ -340,7 +342,7 @@ test("caret discovery --json reports a live daemon's identity and commit", async
     const exit = await proc.exited;
     const out = await new Response(proc.stdout).text();
     expect(exit).toBe(0);
-    const report = JSON.parse(out) as Record<string, Record<string, unknown>>;
+    const report = JSON.parse(out) as Record<string, unknown>;
     expect(report.daemon).toEqual({
       reachable: true,
       service: "caret",
@@ -348,7 +350,7 @@ test("caret discovery --json reports a live daemon's identity and commit", async
       build: "it-build",
       commit: "it-commit",
     });
-    expect(report.lockAndPort.portServesCaret).toBe(true);
+    expect((report.lockAndPort as Record<string, unknown>).portServesCaret).toBe(true);
   } finally {
     await rm(stateHome, { recursive: true, force: true });
   }

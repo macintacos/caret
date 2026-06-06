@@ -1,20 +1,15 @@
 {
+  // The root (node/bun) program: the daemon core (src), the dev/release scripts
+  // (scripts), the unit suite (test), and the Playwright e2e suite (e2e, which
+  // imports from src to boot a real daemon in-process). Browser-DOM types ride
+  // in via the shared base for e2e's page.evaluate callbacks; @playwright/test
+  // types arrive through explicit imports, never as ambient globals, so daemon
+  // code stays clear of them. Shared options live in tsconfig.base.json.
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "lib": ["ESNext", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "target": "ESNext",
-    "moduleResolution": "bundler",
-    "moduleDetection": "force",
     "resolveJsonModule": true,
-    "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": true,
-    "noEmit": true,
-    "strict": true,
-    "skipLibCheck": true,
-    "noUncheckedIndexedAccess": true,
-    "noFallthroughCasesInSwitch": true,
     "types": ["bun"]
   },
-  "include": ["src/**/*.ts", "scripts/**/*.ts", "e2e/**/*.ts", "*.ts"],
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "e2e/**/*.ts", "test/**/*.ts", "*.ts"],
   "exclude": ["node_modules", "bin", "ui", "spike"]
 }

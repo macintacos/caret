@@ -94,8 +94,8 @@ test("redactLogText scrubs NDJSON records and keeps them parseable one per line"
   const out = redactLogText(`${rec1}\n${rec2}\n`);
   const lines = out.split("\n").filter((l) => l.length > 0);
   expect(lines.length).toBe(2);
-  expect(JSON.parse(lines[0])).toEqual({ level: 50, step: "x", msg: "boom at ~/src/cli.ts" });
-  expect(JSON.parse(lines[1])).toEqual({ level: 30, step: "y", cwd: "~/proj" });
+  expect(JSON.parse(lines[0]!)).toEqual({ level: 50, step: "x", msg: "boom at ~/src/cli.ts" });
+  expect(JSON.parse(lines[1]!)).toEqual({ level: 30, step: "y", cwd: "~/proj" });
 });
 
 test("redactLogText scrubs non-JSON lines as raw text", () => {
@@ -111,7 +111,7 @@ test("redactLogText never throws on malformed JSON lines and still scrubs them",
 test("redactLogText censors denylisted keys in records", () => {
   const out = redactLogText(`${JSON.stringify({ step: "x", plan: "SECRET" })}\n`);
   expect(out).not.toContain("SECRET");
-  expect(JSON.parse(out.split("\n")[0]).plan).toBe("<redacted>");
+  expect(JSON.parse(out.split("\n")[0]!).plan).toBe("<redacted>");
 });
 
 // --- redactLogFiles ---

@@ -2,6 +2,7 @@
 // state machine through injected fakes — no live repo, no network. Each fake
 // records mutating calls so we can assert exactly what would (or would not) run.
 import { expect, test } from "bun:test";
+import type { ErrorCode } from "../scripts/release/contract.ts";
 import type { GitOps, RawCommit } from "../scripts/release/git.ts";
 import type {
   GitHubOps,
@@ -233,7 +234,7 @@ function harness(opts: Options = {}) {
   return { deps, calls, files, state };
 }
 
-async function expectGuard(p: Promise<unknown>, code: string) {
+async function expectGuard(p: Promise<unknown>, code: ErrorCode) {
   try {
     await p;
     throw new Error(`expected GuardError ${code}, but it resolved`);
