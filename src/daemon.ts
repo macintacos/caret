@@ -5,9 +5,10 @@
 import { mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
+import { type DaemonLock, IDENTITY } from "./build-id.ts";
 import { createDecisions } from "./decisions.ts";
 import { type CaretLogger, noopLogger, shortId } from "./log.ts";
-import { type DaemonLock, IDENTITY, prefsFile } from "./paths.ts";
+import { prefsFile } from "./paths.ts";
 import { readApproveMode, writeApproveMode } from "./prefs.ts";
 import { routeIncomingPlan } from "./reviews.ts";
 import { DEFAULTS } from "./settings.ts";

@@ -4,13 +4,14 @@
 import { ensureDaemon, prodEnsureDeps } from "../daemon-lifecycle.ts";
 import { logDebug } from "../log.ts";
 import { loadSettings } from "../settings.ts";
+import { errorMessage } from "../types.ts";
 
 export async function runPrewarm(): Promise<void> {
   // Best-effort warm start; never blocks or denies (it's a PostToolUse hook).
   try {
     await ensureDaemon(await prodEnsureDeps(loadSettings()));
   } catch (e) {
-    logDebug("prewarm", `prewarm failed: ${e instanceof Error ? e.message : e}`);
+    logDebug("prewarm", `prewarm failed: ${errorMessage(e)}`);
     process.stderr.write(`caret prewarm: ${e}\n`);
   }
   process.exit(0);

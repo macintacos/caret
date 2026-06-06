@@ -5,12 +5,13 @@
 // read/write/liveness primitives the takeover loop and the discovery command
 // share.
 
-import { mkdirSync, openSync, readFileSync, unlinkSync } from "node:fs";
+import { mkdirSync, openSync, unlinkSync } from "node:fs";
 import { normalize } from "node:path";
-import { currentBuildId } from "./build-id.ts";
+import { currentBuildId, type DaemonLock, VERSION } from "./build-id.ts";
 import { type HealthBody, httpHealth } from "./daemon-client.ts";
+import { readJsonFileSync } from "./json-file.ts";
 import { logDebug, logWarn } from "./log.ts";
-import { type DaemonLock, daemonLock, daemonLogFile, stateDir, VERSION } from "./paths.ts";
+import { daemonLock, daemonLogFile, stateDir } from "./paths.ts";
 import { getPort, type Settings } from "./settings.ts";
 
 export interface EnsureDeps {
@@ -134,13 +135,9 @@ export async function ensureDaemon(deps: EnsureDeps): Promise<string> {
 
 /** Read + validate the daemon lock; null if missing or unparseable. */
 export function readDaemonLock(): DaemonLock | null {
-  try {
-    const lock = JSON.parse(readFileSync(daemonLock(), "utf-8")) as DaemonLock;
-    if (typeof lock.pid === "number" && typeof lock.port === "number") return lock;
-    return null;
-  } catch {
-    return null;
-  }
+  const lock = readJsonFileSync(daemonLock()) as DaemonLock | null;
+  if (lock && typeof lock.pid === "number" && typeof lock.port === "number") return lock;
+  return null;
 }
 
 /** Liveness probe via signal 0 (kills nothing). ESRCH ⇒ dead; EPERM ⇒ alive but

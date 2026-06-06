@@ -2,6 +2,14 @@
 // directly through the @core/* alias). The single wire contract — pure TS with
 // no node imports, so the browser singlefile build stays clean.
 
+/** A thrown value as a string: an Error's message, or String() of anything else.
+ * The one coercion used wherever a caught value is rendered into a log line,
+ * deny reason, or degraded-section error. Lives here so the browser bundle can
+ * import it (no node dependency). */
+export function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 /** The browser's decision on a plan. Maps to the PermissionRequest hook output. */
 export type Behavior = "allow" | "deny";
 

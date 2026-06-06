@@ -11,7 +11,7 @@ import { VANITY_HOST } from "./daemon.ts";
 import { type ErrorContext, logDebug, logError, logInfo, shortId } from "./log.ts";
 import { logFile } from "./paths.ts";
 import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "./plan-format.ts";
-import type { Decision, PlanInput } from "./types.ts";
+import { type Decision, errorMessage, type PlanInput } from "./types.ts";
 
 export interface ReviewDeps {
   /** Normalize the agent's raw hook stdin into a core PlanInput. Throws on input
@@ -142,7 +142,7 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
         logDebug("review", "review expire failed; resubmit supersedes", { ...ctx });
       }
     }
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = errorMessage(err);
     return denyOutput(`caret: ${msg} — denying so no unreviewed plan ships. See ${logFile()}.`);
   }
 }

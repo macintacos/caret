@@ -4,23 +4,14 @@
 // always render the install-state section. Reads ONLY caret's own entries —
 // never any other settings key (privacy).
 
-import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { readJsonFileSync } from "../../json-file.ts";
 import type { InstallProbe } from "../adapter.ts";
 
 /** The Claude Code config dir: CLAUDE_CONFIG_DIR override, else ~/.claude. */
 function claudeConfigDir(): string {
   return process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
-}
-
-/** Read a JSON file, or null on any failure (absent/unreadable/unparseable). */
-function readJson(path: string): unknown {
-  try {
-    return JSON.parse(readFileSync(path, "utf-8"));
-  } catch {
-    return null;
-  }
 }
 
 /** caret's id in Claude Code's plugin registry: `<plugin>@<marketplace>`, both
@@ -42,7 +33,7 @@ export function readClaudeInstallState(): InstallProbe {
 }
 
 function readPluginVersion(path: string): string | "unknown" {
-  const json = readJson(path) as { plugins?: Record<string, unknown> } | null;
+  const json = readJsonFileSync(path) as { plugins?: Record<string, unknown> } | null;
   const entry = json?.plugins?.[PLUGIN_ID];
   if (!Array.isArray(entry) || entry.length === 0) return "unknown";
   const version = (entry[0] as { version?: unknown }).version;
@@ -50,14 +41,14 @@ function readPluginVersion(path: string): string | "unknown" {
 }
 
 function readPluginEnabled(path: string): boolean | "unknown" {
-  const json = readJson(path) as { enabledPlugins?: Record<string, unknown> } | null;
+  const json = readJsonFileSync(path) as { enabledPlugins?: Record<string, unknown> } | null;
   if (!json) return "unknown";
   const enabled = json.enabledPlugins?.[PLUGIN_ID];
   return typeof enabled === "boolean" ? enabled : "unknown";
 }
 
 function readHookInUserSettings(path: string): boolean | "unknown" {
-  const json = readJson(path) as { hooks?: Record<string, unknown> } | null;
+  const json = readJsonFileSync(path) as { hooks?: Record<string, unknown> } | null;
   if (!json) return "unknown";
   const hooks = json.hooks;
   if (hooks === undefined || hooks === null || typeof hooks !== "object") return false;
