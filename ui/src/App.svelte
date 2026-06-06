@@ -1,18 +1,17 @@
 <script lang="ts">
-  import {
-    getApproveMode,
-    getHealth,
-    HttpError,
-    putDraft,
-    resolveReview,
-    startPolling,
-  } from "./lib/api.ts";
-  import { formatFeedback } from "./lib/feedback.ts";
+  import { getHealth } from "./lib/api.ts";
   import { createPlanNotifier } from "./lib/notify.ts";
-  import { renderPlan, type HeadingEntry } from "./lib/render.ts";
   import { createSafeModeGuard } from "./lib/safeMode.ts";
   import { createScrollSpy } from "./lib/scrollspy.ts";
-  import type { AcceptMode, Annotation, ClientReview } from "@core/types";
+  import { createAutosave } from "./state/autosave.svelte.ts";
+  import {
+    createReviewSelection,
+    startPolling,
+    type SelectionStore,
+  } from "./state/polling.svelte.ts";
+  import { createRenderMemo } from "./state/render.svelte.ts";
+  import { createResolve, type ResolveStore } from "./state/resolve.svelte.ts";
+  import type { AcceptMode, Annotation } from "@core/types";
 
   import AnnotationGutter from "./components/AnnotationGutter.svelte";
   import EmptyState from "./components/EmptyState.svelte";
@@ -23,124 +22,79 @@
   import Toc from "./components/Toc.svelte";
   import TopBar from "./components/TopBar.svelte";
 
-  // ----- State -----
-  let reviews = $state<ClientReview[]>([]);
-  let activeId = $state<string | null>(null);
-  let connected = $state(true);
-  let busy = $state(false);
+  // ----- Reactive backing state -----
+  // `daemonChanged`: set when the daemon behind the port is replaced (its
+  // per-boot instanceId flips). Persistent until reload or dismiss — the
+  // reviews on screen may belong to another daemon, so a transient toast would
+  // be too easy to miss.
+  let selStore = $state<SelectionStore>({
+    reviews: [],
+    activeId: null,
+    connected: true,
+    daemonChanged: false,
+  });
+  let resStore = $state<ResolveStore>({ approveMode: "default", busy: false });
+  let work = $state<{
+    annotations: Annotation[];
+    generalCommentDraft: string;
+    focusedAnnotation: string | null;
+  }>({ annotations: [], generalCommentDraft: "", focusedAnnotation: null });
+
+  let resolvedAnnotations = $state<ResolvedAnnotation[]>([]);
+  let activeSlug = $state<string | null>(null);
   let showDialog = $state(false);
   let safeMode = $state(false);
-  // Set when the daemon behind the port is replaced (its per-boot instanceId
-  // flips). Persistent until reload or dismiss — the reviews on screen may
-  // belong to another daemon, so a transient toast would be too easy to miss.
-  let daemonChanged = $state(false);
-
-  // Remembered approve mode (machine-global, last-wins). Read once on load and
-  // mirrored locally on each approve so the next plan defaults to it.
-  let approveMode = $state<AcceptMode>("default");
-
-  // Working copy of annotations for the active review (edited locally, autosaved).
-  let annotations = $state<Annotation[]>([]);
-  let resolved = $state<ResolvedAnnotation[]>([]);
-  let focusedAnnotation = $state<string | null>(null);
-  let activeSlug = $state<string | null>(null);
-
-  // Working copy of the Request Changes general-comment draft for the active
-  // review (edited locally via the dialog, autosaved alongside annotations).
-  let generalCommentDraft = $state("");
-
   let scrollEl = $state<HTMLElement | undefined>();
-  // Keyed on id:version so a new version (revision) also reloads the working
-  // copy — never persist stale annotations from a prior version onto the next.
-  let lastLoadedKey: string | null = null;
-  // The draft is review-scoped, so it seeds on id change only — NOT on a version
-  // change (a revision keeps the same review) and NOT on the 2s poll, which would
-  // otherwise stomp live keystrokes 0–2s after each one.
-  let lastDraftLoadedId: string | null = null;
 
-  let active = $derived(reviews.find((r) => r.id === activeId) ?? null);
-
-  // Memoize the (expensive) markdown render on id+version so the 2s poll —
-  // which replaces `reviews` with fresh objects every tick — doesn't re-parse
-  // an unchanged plan (and needlessly churn the highlight repaint).
-  let renderCache: {
-    key: string;
-    value: { html: string; headings: HeadingEntry[] };
-  } | null = null;
-  let rendered = $derived.by(() => {
-    if (!active) return { html: "", headings: [] as HeadingEntry[] };
-    const key = `${active.id}:${active.version}`;
-    if (renderCache?.key === key) return renderCache.value;
-    const value = renderPlan(active.currentPlan);
-    renderCache = { key, value };
-    return value;
+  // ----- State modules -----
+  const selection = createReviewSelection(selStore);
+  const autosave = createAutosave(work, () => selection.activeId, {
+    onOffline: () => selection.setConnected(false),
   });
+  const resolve = createResolve(resStore, {
+    activeId: () => selection.activeId,
+    annotations: () => work.annotations,
+    flushPending: () => autosave.flushPending(),
+    afterResolve: (id) => selection.afterResolve(id),
+    onOffline: () => selection.setConnected(false),
+    clearGeneralComment: () => autosave.clearGeneralComment(),
+  });
+  const renderMemo = createRenderMemo();
 
-  // ----- Deep link -----
-  function deepLinkId(): string | null {
-    return new URLSearchParams(location.search).get("review");
-  }
-  function setUrl(id: string | null) {
-    const url = new URL(location.href);
-    if (id) url.searchParams.set("review", id);
-    else url.searchParams.delete("review");
-    history.replaceState(null, "", url);
-  }
+  let active = $derived(selection.active);
+  let rendered = $derived(renderMemo.render(active));
 
-  // ----- Selecting / loading a review -----
-  function selectReview(id: string | null) {
-    activeId = id;
-    setUrl(id);
-  }
-
-  // When the active review (or its version) changes, load its annotations into
-  // the working copy.
+  // ----- Working-copy reload -----
+  // When the active review (or its version) changes — whether from a selection
+  // or the 2s poll bumping the active review to a new version — reconcile the
+  // working copy. `active` is the derived dependency.
   $effect(() => {
-    const key = active ? `${active.id}:${active.version}` : null;
-    if (active && key !== lastLoadedKey) {
-      // Flush the PREVIOUS review's pending save FIRST (it snapshots the current
-      // `annotations` + `generalCommentDraft` + pendingSaveId synchronously) —
-      // before we overwrite them with the new review's, or we'd save them onto
-      // the old id.
-      void flushPending();
-      lastLoadedKey = key;
-      annotations = active.annotations.map((a) => ({ ...a }));
-      focusedAnnotation = null;
-      // Seed on id change only, via its own guard (see lastDraftLoadedId above) —
-      // independent of the id:version annotation reload around it.
-      if (active.id !== lastDraftLoadedId) {
-        lastDraftLoadedId = active.id;
-        generalCommentDraft = active.generalCommentDraft ?? "";
-      }
-    } else if (!active) {
-      void flushPending();
-      lastLoadedKey = null;
-      lastDraftLoadedId = null;
-      annotations = [];
-      generalCommentDraft = "";
-    }
+    autosave.syncActive(active);
   });
 
   // ----- Polling -----
+  // No reactive reads: runs once on mount, returns the poll's stop fn.
   $effect(() => {
+    // An immediate health probe sets the connection flag before the first
+    // reviews tick resolves; the poll keeps it current thereafter.
     void getHealth()
-      .then(() => (connected = true))
-      .catch(() => (connected = false));
+      .then(() => selection.setConnected(true))
+      .catch(() => selection.setConnected(false));
 
-    const notifier = createPlanNotifier({ onSelect: selectReview });
+    const notifier = createPlanNotifier({ onSelect: selection.selectReview });
     const stop = startPolling(
       (incoming) => {
-        connected = true;
+        selection.setConnected(true);
         // Fire a desktop notification for genuinely-new reviews while the tab
         // is hidden or unfocused (EXC-427). Observe BEFORE merge: the notifier
         // diffs against its own seen-set, so the new-review signal stays
         // independent of what merge selects.
         notifier.observe(incoming);
-        mergeReviews(incoming);
+        selection.mergeReviews(incoming);
       },
       2000,
-      () => (connected = false),
-      () => (daemonChanged = true),
+      () => selection.setConnected(false),
+      () => selection.markDaemonChanged(),
     );
     return stop;
   });
@@ -150,9 +104,7 @@
   // mount — deliberately separate from the 2s reviews poll above. A failure
   // leaves today's "default", matching the daemon's fail-safe.
   $effect(() => {
-    void getApproveMode()
-      .then((m) => (approveMode = m))
-      .catch(() => {});
+    resolve.loadApproveMode();
   });
 
   // ----- Safe Mode -----
@@ -179,19 +131,6 @@
     };
   });
 
-  function mergeReviews(incoming: ClientReview[]) {
-    reviews = incoming;
-    // Pick active: keep current if still present, else deep link, else first.
-    if (!activeId || !incoming.some((r) => r.id === activeId)) {
-      const wanted = deepLinkId();
-      const next =
-        (wanted && incoming.find((r) => r.id === wanted)?.id) ??
-        incoming[0]?.id ??
-        null;
-      if (next !== activeId) selectReview(next);
-    }
-  }
-
   // ----- Scrollspy -----
   $effect(() => {
     if (!scrollEl) return;
@@ -212,138 +151,27 @@
     el?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  // ----- Annotation CRUD + debounced autosave -----
-  let saveTimer: ReturnType<typeof setTimeout> | undefined;
-  let pendingSaveId: string | null = null;
-
-  function scheduleSave() {
-    if (!activeId) return;
-    pendingSaveId = activeId;
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(flushPending, 500);
+  function onApprove(mode: AcceptMode) {
+    void resolve.approve(mode);
   }
-
-  async function flushPending(): Promise<void> {
-    if (saveTimer) {
-      clearTimeout(saveTimer);
-      saveTimer = undefined;
-    }
-    if (!pendingSaveId) return;
-    const id = pendingSaveId;
-    pendingSaveId = null;
-    // Snapshot both fields synchronously (before any await) so a review switch
-    // mid-flush can't redirect this save onto the new review's working copy.
-    const snapshot = annotations.map((a) => ({ ...a }));
-    // Whitespace-only is treated as empty — never persist a blank draft.
-    const draft = generalCommentDraft.trim() === "" ? "" : generalCommentDraft;
-    try {
-      await putDraft(id, { annotations: snapshot, generalCommentDraft: draft });
-    } catch (err) {
-      // A non-2xx (e.g. the review was resolved/removed) is not a connection
-      // problem — the daemon answered. Only a real network failure goes offline.
-      if (!(err instanceof HttpError)) connected = false;
-    }
-  }
-
-  // Lifted from RequestChangesDialog so the draft survives the dialog unmounting.
-  // Mirrors editAnnotation: mutate the working copy, then debounce-save.
-  function editGeneralComment(value: string) {
-    generalCommentDraft = value;
-    scheduleSave();
-  }
-
-  function createAnnotation(sel: {
-    blockId: string;
-    startOffset: number;
-    endOffset: number;
-    quote: string;
-    comment: string;
-  }) {
-    const id = crypto.randomUUID();
-    annotations = [...annotations, { id, ...sel }];
-    focusedAnnotation = id;
-    scheduleSave();
-  }
-
-  function editAnnotation(id: string, comment: string) {
-    annotations = annotations.map((a) => (a.id === id ? { ...a, comment } : a));
-    scheduleSave();
-  }
-
-  function deleteAnnotation(id: string) {
-    annotations = annotations.filter((a) => a.id !== id);
-    if (focusedAnnotation === id) focusedAnnotation = null;
-    scheduleSave();
-  }
-
-  function focusAnnotation(id: string) {
-    focusedAnnotation = id;
-    const card = document.querySelector(`[data-annotation-card="${id}"]`);
-    card?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }
-
-  // ----- Resolve flow -----
-  async function approve(mode: AcceptMode) {
-    if (!activeId) return;
-    const id = activeId;
-    busy = true;
-    await flushPending();
-    try {
-      await resolveReview(id, { behavior: "allow", acceptMode: mode });
-      approveMode = mode; // remember locally so the next plan defaults to it
-      afterResolve(id);
-    } catch (err) {
-      // 404/409 = already resolved or removed elsewhere → just advance.
-      if (err instanceof HttpError) afterResolve(id);
-      else connected = false;
-    } finally {
-      busy = false;
-    }
-  }
-
-  async function requestChanges(generalComment: string) {
-    if (!activeId) return;
-    const id = activeId;
+  function onRequestChanges(generalComment: string) {
     showDialog = false;
-    busy = true;
-    await flushPending();
-    const feedback = formatFeedback(annotations, generalComment);
-    try {
-      await resolveReview(id, { behavior: "deny", feedback });
-      // The daemon cleared the stored draft on resolve; clear the local mirror
-      // too. A deny keeps this review id (the revision reuses it), and the seed
-      // is id-keyed, so without this the sent text would linger on reopen.
-      generalCommentDraft = "";
-      afterResolve(id);
-    } catch (err) {
-      if (err instanceof HttpError) afterResolve(id);
-      else connected = false;
-    } finally {
-      busy = false;
-    }
-  }
-
-  function afterResolve(id: string) {
-    const remaining = reviews.filter((r) => r.id !== id);
-    reviews = remaining;
-    // Auto-advance to the next pending review, or clear.
-    const next = remaining[0]?.id ?? null;
-    selectReview(next);
+    void resolve.requestChanges(generalComment);
   }
 </script>
 
 <div class="shell">
   <TopBar
-    {reviews}
+    reviews={selection.reviews}
     {active}
-    {busy}
-    {approveMode}
-    onSelect={selectReview}
-    onApprove={approve}
+    busy={resolve.busy}
+    approveMode={resolve.approveMode}
+    onSelect={selection.selectReview}
+    {onApprove}
     onRequestChanges={() => (showDialog = true)}
   />
 
-  {#if daemonChanged}
+  {#if selection.daemonChanged}
     <div class="daemon-banner" role="alert">
       <p class="db-text">
         The caret daemon was replaced — reload to resync.
@@ -356,7 +184,7 @@
           type="button"
           class="db-dismiss"
           aria-label="Dismiss"
-          onclick={() => (daemonChanged = false)}
+          onclick={() => selection.dismissDaemonChanged()}
         >
           Dismiss
         </button>
@@ -373,42 +201,42 @@
       {#key active.id}
         <PlanView
           html={rendered.html}
-          {annotations}
-          activeId={focusedAnnotation}
+          annotations={autosave.annotations}
+          activeId={autosave.focusedAnnotation}
           bind:scrollEl
-          onResolved={(r) => (resolved = r)}
-          onCreate={createAnnotation}
-          onFocusAnnotation={focusAnnotation}
+          onResolved={(r) => (resolvedAnnotations = r)}
+          onCreate={autosave.createAnnotation}
+          onFocusAnnotation={autosave.focusAnnotation}
         />
       {/key}
 
       <aside class="col col-gutter">
         <AnnotationGutter
-          {resolved}
-          activeId={focusedAnnotation}
-          onFocus={focusAnnotation}
-          onEdit={editAnnotation}
-          onDelete={deleteAnnotation}
+          resolved={resolvedAnnotations}
+          activeId={autosave.focusedAnnotation}
+          onFocus={autosave.focusAnnotation}
+          onEdit={autosave.editAnnotation}
+          onDelete={autosave.deleteAnnotation}
         />
       </aside>
     </div>
   {:else}
-    <EmptyState {connected} />
+    <EmptyState connected={selection.connected} />
   {/if}
 </div>
 
 {#if showDialog && active}
   <RequestChangesDialog
-    {annotations}
-    generalComment={generalCommentDraft}
-    onGeneralCommentInput={editGeneralComment}
-    onSubmit={requestChanges}
+    annotations={autosave.annotations}
+    generalComment={autosave.generalCommentDraft}
+    onGeneralCommentInput={autosave.editGeneralComment}
+    onSubmit={onRequestChanges}
     onCancel={() => {
       showDialog = false;
       // Flush now so a draft typed within the last 500ms debounce window is
       // persisted before the component unmounts — survives a page reload, not
       // just an in-session reopen.
-      void flushPending();
+      void autosave.flushPending();
     }}
   />
 {/if}
