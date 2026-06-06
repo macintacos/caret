@@ -60,7 +60,7 @@ export interface CreateServerOptions {
   /** Build fingerprint (paths.buildHash of the served UI) reported in
    * /api/health and recorded in the lock, so a newer caret can detect staleness. */
   buildId?: string;
-  /** Commit the server runs from (cli.ts resolveCommit), reported in the listen
+  /** Commit the server runs from (build-id.ts resolveCommit), reported in the listen
    * record so daemon.log ties a boot back to a source revision (EXC-452). */
   commit?: string;
   /** The daemon's resolved state dir — its world identity (EXC-461), reported

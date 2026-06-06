@@ -2,22 +2,17 @@
 // Deterministic dev driver: plays the agent's side of the caret protocol so
 // `mise run dev` shows a fake plan that survives request-changes / approve
 // round-trips — no real Claude session, no LLM. Every submission goes through
-// the real hook logic (runReview from src/cli.ts) in-process, so format
+// the real hook logic (runReview from src/review.ts) in-process, so format
 // validation, posting, long-polling, decision handling, and hook logging
 // (caret.log in the dev state dir) all run exactly as in production. On
 // request-changes it appends a "Revision N" section quoting the reviewer's
 // feedback and resubmits; on approve it re-seeds a fresh v1. The
 // revision-threading contract lives in src/reviews.ts.
 
-import {
-  expireReview,
-  httpHealth,
-  longPoll,
-  postReview,
-  type ReviewDeps,
-  runReview,
-} from "../../src/cli.ts";
 import type { PermissionDecision } from "../../src/adapters/claude/feedback.ts";
+import { claudeAdapter } from "../../src/adapters/claude/index.ts";
+import { expireReview, httpHealth, longPoll, postReview } from "../../src/daemon-client.ts";
+import { type ReviewDeps, runReview } from "../../src/review.ts";
 import { DEFAULT_PORT } from "../../src/settings.ts";
 
 /** Session id for the single dev review; stable for the process lifetime so a
@@ -93,7 +88,7 @@ export function nextPlan(
   return { plan: appendRevision(state.plan, message, revision), revision, action: "revise" };
 }
 
-/** ReviewDeps for dev — the analog of prodReviewDeps (src/cli.ts) with the
+/** ReviewDeps for dev — the analog of prodReviewDeps (src/commands/review.ts) with the
  * daemon owned by the mise task: ensureDaemon just waits for health on the
  * fixed dev URL (no spawn/takeover; a throw after the health budget bubbles to
  * runReview's fail-safe deny), the browser never opens (Vite on 5173 is the
@@ -102,6 +97,7 @@ export function nextPlan(
  * CARET_IDLE_MS) so an idle session never churns fail-safe denies. */
 export function devReviewDeps(base: string): ReviewDeps {
   return {
+    parseHookInput: (stdin) => claudeAdapter.parseHookInput(stdin),
     ensureDaemon: async () => {
       await waitForHealth(base);
       return base;

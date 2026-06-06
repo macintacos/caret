@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
-import { runReview } from "../src/cli.ts";
+import { runReview } from "../src/review.ts";
 import { setLogLevel } from "../src/log.ts";
 import { hasUntaggedCodeBlock } from "../src/plan-format.ts";
 import {

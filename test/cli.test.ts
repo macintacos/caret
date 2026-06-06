@@ -1,12 +1,9 @@
 import { afterEach, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import {
-  computeBuildId,
-  ensureDaemon,
-  resolveCommit,
-  retireDaemon,
-  runReview,
-} from "../src/cli.ts";
+import { claudeAdapter } from "../src/adapters/claude/index.ts";
+import { computeBuildId, resolveCommit } from "../src/build-id.ts";
+import { ensureDaemon, retireDaemon } from "../src/daemon-lifecycle.ts";
+import { runReview } from "../src/review.ts";
 import { setLogLevel } from "../src/log.ts";
 import { logFile } from "../src/paths.ts";
 import { PLAN_FORMAT_DENY_MESSAGE } from "../src/plan-format.ts";
@@ -18,6 +15,7 @@ const allow: Decision = { behavior: "allow", decidedAt: 1 };
 
 function reviewDeps(over: Partial<Parameters<typeof runReview>[1]> = {}) {
   return {
+    parseHookInput: (stdin: string) => claudeAdapter.parseHookInput(stdin),
     ensureDaemon: async () => "http://x",
     postReview: async () => ({ id: "rid" }),
     longPoll: async () => allow,
@@ -370,9 +368,12 @@ test("a format-deny is logged at info — an expected reject, not an error", asy
     JSON.stringify({ session_id: "FMT", cwd: "/p", tool_input: { plan: "```\nx\n```\n" } }),
     reviewDeps(),
   );
+  // Stable contract: the format reject is an info-level "validatePlan" record
+  // carrying the session — assert the step/level/field and the "plan rejected"
+  // token, not the exact descriptive tail (F1 brittleness reduction).
   const rec = logRecords().find((r) => r.step === "validatePlan");
   expect(rec).toMatchObject({ level: 30, sessionId: "FMT" });
-  expect(rec?.msg).toContain("code block missing language marker");
+  expect(typeof rec?.msg === "string" && rec.msg.startsWith("plan rejected")).toBe(true);
 });
 
 // ---- decision outcome records (EXC-398) ----
@@ -412,7 +413,9 @@ test("a review start is logged at info with session context", async () => {
 test("the posted review id is logged at debug and stitches later records", async () => {
   setLogLevel("debug");
   await runReview(stdin, reviewDeps());
-  const posted = logRecords().find((r) => r.msg === "review created: rid");
+  // Locate the create record by its stable contract (debug "review" step
+  // carrying the reviewId), not the id-embedding message prose (F1 style).
+  const posted = logRecords().find((r) => r.step === "review" && r.reviewId === "rid");
   expect(posted).toMatchObject({ level: 20, step: "review", reviewId: "rid" });
   // Once the id is known, every later record carries it — caret.log records
   // stitch against the daemon's review/resolve records by reviewId.

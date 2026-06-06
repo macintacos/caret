@@ -5,6 +5,8 @@
 // failing to start.
 import html from "../ui/dist/index.html" with { type: "text" };
 
-// With `type: "text"` the runtime value is the HTML string, but @types/bun types
-// `*.html` imports as HTMLBundle — narrow it back to string.
-export default html as unknown as string;
+// With `with { type: "text" }` the runtime value is the HTML string, but
+// @types/bun types `*.html` imports as HTMLBundle. `String()` both narrows the
+// static type to `string` and is an identity at runtime (the value is already a
+// string) — typed, with no `as unknown as string` double-cast.
+export default String(html);
