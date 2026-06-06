@@ -1,14 +1,8 @@
 <script lang="ts">
-  import { resolveAnnotation, wrapTextRange } from "../lib/anchors.ts";
   import { captureSelection } from "../lib/selection.ts";
+  import { paintAnnotations, type ResolvedAnnotation } from "../lib/planPaint.ts";
   import type { Annotation } from "@core/types";
   import CommentPopover from "./CommentPopover.svelte";
-
-  export interface ResolvedAnnotation {
-    annotation: Annotation;
-    orphaned: boolean;
-    top: number | null;
-  }
 
   interface Props {
     /** Sanitized HTML from renderPlan(). */
@@ -49,52 +43,10 @@
     y: number;
   } | null>(null);
 
-  function getBlock(blockId: string): HTMLElement | null {
-    return (root?.querySelector(`#${CSS.escape(blockId)}`) as HTMLElement) ?? null;
-  }
-
-  /** Wraps each resolved annotation's range in a <mark>, then reports tops. */
+  /** Repaints the highlight marks and reports the gutter resolution list up. */
   function paint() {
     if (!root) return;
-    // Clear previous marks (unwrap).
-    root.querySelectorAll("mark[data-annotation]").forEach((m) => {
-      const parent = m.parentNode;
-      if (!parent) return;
-      while (m.firstChild) parent.insertBefore(m.firstChild, m);
-      parent.removeChild(m);
-      parent.normalize();
-    });
-
-    const resolved: ResolvedAnnotation[] = [];
-    const rootTop = root.getBoundingClientRect().top;
-
-    for (const annotation of annotations) {
-      const res = resolveAnnotation(annotation, getBlock);
-      if (res.tier === 3 || !res.range) {
-        resolved.push({ annotation, orphaned: true, top: null });
-        continue;
-      }
-      const block = getBlock(annotation.blockId);
-      let top: number | null = null;
-      if (block) {
-        // Wrap per text node so a selection crossing shiki token <span>s still
-        // highlights; all segments share one annotation id, so click/focus and
-        // the .active state keep working across the marks.
-        const marks = wrapTextRange(block, res.startOffset, res.endOffset, () => {
-          const m = document.createElement("mark");
-          m.dataset.annotation = annotation.id;
-          m.className = "anno";
-          if (annotation.id === activeId) m.classList.add("active");
-          return m;
-        });
-        const anchor = marks[0] ?? res.range;
-        top = anchor.getBoundingClientRect().top - rootTop;
-      } else {
-        top = res.range.getBoundingClientRect().top - rootTop;
-      }
-      resolved.push({ annotation, orphaned: false, top });
-    }
-    onResolved(resolved);
+    onResolved(paintAnnotations(root, annotations, activeId));
   }
 
   // Re-paint whenever the html or annotation set changes. Use a microtask so the

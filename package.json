@@ -6,7 +6,7 @@
   "type": "module",
   "description": "A Claude Code plugin that replaces the terminal plan-approval prompt with a local web UI for inline review, annotation, and approval.",
   "scripts": {
-    "test": "bun test",
+    "test": "bun test --conditions browser",
     "lint": "mise run lint",
     "format": "mise run format",
     "build": "mise run build"

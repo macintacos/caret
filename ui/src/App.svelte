@@ -13,13 +13,12 @@
   } from "./state/polling.svelte.ts";
   import { createRenderMemo } from "./state/render.svelte.ts";
   import { createResolve, type ResolveStore } from "./state/resolve.svelte.ts";
+  import type { ResolvedAnnotation } from "./lib/planPaint.ts";
   import type { ApproveVariant, ApproveVariantId, Annotation } from "@core/types";
 
   import AnnotationGutter from "./components/AnnotationGutter.svelte";
   import EmptyState from "./components/EmptyState.svelte";
-  import PlanView, {
-    type ResolvedAnnotation,
-  } from "./components/PlanView.svelte";
+  import PlanView from "./components/PlanView.svelte";
   import RequestChangesDialog from "./components/RequestChangesDialog.svelte";
   import Toc from "./components/Toc.svelte";
   import TopBar from "./components/TopBar.svelte";
