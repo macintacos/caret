@@ -2,9 +2,11 @@
 // CLI entry for the release pipeline. Dispatches to the steps in steps.ts,
 // printing exactly one JSON result on stdout (so /release-caret parses rather
 // than scrapes) and all diagnostics on stderr. Exit 0 on success, 1 on any guard
-// rejection or unexpected error. Mirrors scripts/dev/driver.ts: import.meta.main
-// guard, stderr logging, top-level catch.
+// rejection or unexpected error. Commander parses the args (EXC-473), mirroring
+// src/cli.ts's buildProgram; the one divergence is configureOutput, which routes
+// Commander's help/usage/error output to stderr to keep stdout a lone JSON object.
 
+import { Command } from "@commander-js/extra-typings";
 import { $ } from "bun";
 import { type ReleaseError, errorResult } from "./contract.ts";
 import { createGit } from "./git.ts";
@@ -46,72 +48,95 @@ function fail(error: ReleaseError): never {
   process.exit(1);
 }
 
-const USAGE = `Usage:
-  release baseline            [--dry-run] [--yes]
-  release compute  <patch|minor|major>
-  release prepare  <patch|minor|major> [--dry-run] [--yes]
-  release finalize            [--dry-run] [--yes]`;
-
-async function main(argv: string[]): Promise<void> {
-  const args = argv.slice(2);
-  const flags = new Set(args.filter((a) => a.startsWith("--")));
-  const positional = args.filter((a) => !a.startsWith("--"));
-  const command = positional[0] ?? "";
-  const dryRun = flags.has("--dry-run");
-  const yes = flags.has("--yes");
-  const deps = realDeps();
-
-  // Mutating commands need an explicit --yes (the skill passes it only after its
-  // remote-mutation confirmation) or --dry-run to preview.
-  const requireGo = (): void => {
-    if (!dryRun && !yes) {
-      fail(
-        errorResult(
-          "INTERNAL",
-          `${command} mutates state; pass --yes to proceed or --dry-run to preview.`,
-        ),
-      );
-    }
-  };
-
-  const requireBump = (): "patch" | "minor" | "major" => {
-    const bump = positional[1] ?? "";
-    if (!isBumpLevel(bump)) {
-      fail(errorResult("BAD_BUMP", `Invalid bump ${JSON.stringify(bump)}; use patch|minor|major.`));
-    }
-    return bump;
-  };
-
-  try {
-    switch (command) {
-      case "compute":
-        emit(await compute(deps, { bump: requireBump() }));
-        return;
-      case "baseline":
-        requireGo();
-        emit(await baseline(deps, { dryRun }));
-        return;
-      case "prepare": {
-        const bump = requireBump();
-        requireGo();
-        emit(await prepare(deps, { bump, dryRun }));
-        return;
-      }
-      case "finalize":
-        requireGo();
-        emit(await finalize(deps, { dryRun }));
-        return;
-      default:
-        process.stderr.write(`${USAGE}\n`);
-        fail(errorResult("INTERNAL", `Unknown command ${JSON.stringify(command)}.`));
-    }
-  } catch (e) {
-    if (e instanceof GuardError) fail(errorResult(e.code, e.message));
-    process.stderr.write(`${e instanceof Error ? (e.stack ?? e.message) : String(e)}\n`);
-    fail(errorResult("INTERNAL", e instanceof Error ? e.message : String(e)));
+// Mutating commands need an explicit --yes (the skill passes it only after its
+// remote-mutation confirmation) or --dry-run to preview.
+function requireGo(command: string, opts: { dryRun?: boolean; yes?: boolean }): void {
+  if (!opts.dryRun && !opts.yes) {
+    fail(
+      errorResult(
+        "INTERNAL",
+        `${command} mutates state; pass --yes to proceed or --dry-run to preview.`,
+      ),
+    );
   }
 }
 
+function requireBump(bump: string): "patch" | "minor" | "major" {
+  if (!isBumpLevel(bump)) {
+    fail(errorResult("BAD_BUMP", `Invalid bump ${JSON.stringify(bump)}; use patch|minor|major.`));
+  }
+  return bump;
+}
+
+function buildProgram(): Command {
+  const deps = realDeps();
+  const program = new Command()
+    .name("release")
+    .description("caret release pipeline: baseline | compute | prepare | finalize")
+    // Route every Commander-originated write (help, usage, parse errors, and the
+    // post-error help from showHelpAfterError) to stderr; stdout is reserved for
+    // emit()'s single JSON object so /release-caret can parse it (EXC-473).
+    .configureOutput({
+      writeOut: (s) => process.stderr.write(s),
+      writeErr: (s) => process.stderr.write(s),
+    })
+    // We never call exitOverride(): a parse error (unknown command/option, bare
+    // `release`) prints usage to stderr and exits non-zero via Commander's default,
+    // synchronously during parse. It can never reach the catch below, so a parse
+    // error never lands a JSON object on stdout.
+    .showHelpAfterError();
+
+  program
+    .command("compute")
+    .description("compute the next version (read-only)")
+    .argument("<bump>", "patch | minor | major")
+    .action(async (bump) => emit(await compute(deps, { bump: requireBump(bump) })));
+
+  program
+    .command("baseline")
+    .description("tag the repo's root commit as the v0.0.1 baseline")
+    .option("--dry-run", "preview without mutating")
+    .option("--yes", "confirm the mutation")
+    .action(async (opts) => {
+      requireGo("baseline", opts);
+      emit(await baseline(deps, { dryRun: opts.dryRun ?? false }));
+    });
+
+  program
+    .command("prepare")
+    .description("phase 1: bump manifests, commit, push, open the release PR")
+    .argument("<bump>", "patch | minor | major")
+    .option("--dry-run", "preview without mutating")
+    .option("--yes", "confirm the mutation")
+    .action(async (bump, opts) => {
+      const level = requireBump(bump);
+      requireGo("prepare", opts);
+      emit(await prepare(deps, { bump: level, dryRun: opts.dryRun ?? false }));
+    });
+
+  program
+    .command("finalize")
+    .description("phase 2: tag merged trunk and publish the GitHub Release")
+    .option("--dry-run", "preview without mutating")
+    .option("--yes", "confirm the mutation")
+    .action(async (opts) => {
+      requireGo("finalize", opts);
+      emit(await finalize(deps, { dryRun: opts.dryRun ?? false }));
+    });
+
+  return program;
+}
+
 if (import.meta.main) {
-  void main(process.argv);
+  // parseAsync (not parse) so an async action's rejection propagates to .catch().
+  // This catch mirrors the former main()'s try/catch: a GuardError becomes its
+  // typed ReleaseError on stdout; any other error logs its stack to stderr and
+  // emits an INTERNAL ReleaseError. Both exit 1 via fail().
+  buildProgram()
+    .parseAsync(process.argv)
+    .catch((e) => {
+      if (e instanceof GuardError) fail(errorResult(e.code, e.message));
+      process.stderr.write(`${e instanceof Error ? (e.stack ?? e.message) : String(e)}\n`);
+      fail(errorResult("INTERNAL", e instanceof Error ? e.message : String(e)));
+    });
 }
