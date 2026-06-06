@@ -24,7 +24,7 @@ import "package://github.com/jdx/hk/releases/download/v1.45.0/hk@1.45.0#/Builtin
 local formatters = new Mapping<String, Step> {
   ["Web(Format)      [[biome]]"] = new Step {
     glob = List("**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.json", "**/*.jsonc")
-    // hk's glob is broader than biome.json's `files.includes`, so a staged file
+    // hk's glob is broader than biome.jsonc's `files.includes`, so a staged file
     // can land outside biome's scope; --no-errors-on-unmatched lets it no-op
     // instead of failing the hook.
     check = "biome format --no-errors-on-unmatched {{ files }}"
