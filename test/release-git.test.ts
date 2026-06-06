@@ -52,3 +52,44 @@ test("tryFileAtRef reads a committed file and null for an absent path", async ()
   expect(pkg).toContain('"name": "caret"');
   expect(await git.tryFileAtRef("HEAD", "does/not/exist.txt")).toBeNull();
 });
+
+test("tryFileAtRef returns null at an unresolvable ref", async () => {
+  // The `git show` shell-out exits non-zero when the ref itself is missing.
+  expect(await git.tryFileAtRef("no-such-ref-xyz", "package.json")).toBeNull();
+});
+
+test("latestVersionTag returns a v-prefixed semver tag", async () => {
+  // The worktree carries real release tags; the highest sorts first.
+  const tag = await git.latestVersionTag();
+  expect(tag).toMatch(/^v\d+\.\d+\.\d+$/);
+});
+
+test("commitsBetween yields an empty array for an empty range", async () => {
+  // `git log HEAD..HEAD` prints nothing; the empty-output branch returns [].
+  expect(await git.commitsBetween("HEAD..HEAD")).toEqual([]);
+});
+
+test("tryRevParse dereferences a tag to its commit via the ^{commit} peel", async () => {
+  // finalize peels the local tag to compare against trunk's HEAD; the peel must
+  // resolve to a real 40-char commit SHA, not the (annotated) tag object SHA.
+  const sha = await git.tryRevParse("v0.0.1^{commit}");
+  expect(sha).toMatch(SHA);
+});
+
+test("localTagExists is true for a real tag, false for a missing one", async () => {
+  // `git rev-parse --verify --quiet refs/tags/<tag>` branches on its exit code.
+  expect(await git.localTagExists("v0.0.1")).toBe(true);
+  expect(await git.localTagExists("v999.999.999")).toBe(false);
+});
+
+test("localBranchExists is false for a missing branch", async () => {
+  // The non-zero exit of the rev-parse verify maps to false, never a throw.
+  expect(await git.localBranchExists("no-such-branch-xyz")).toBe(false);
+});
+
+test("isAncestor reports the merge-base relationship", async () => {
+  // A commit is its own ancestor; a fabricated SHA is not (git exits non-zero).
+  const head = await git.headSha();
+  expect(await git.isAncestor(head, head)).toBe(true);
+  expect(await git.isAncestor("0".repeat(40), head)).toBe(false);
+});
