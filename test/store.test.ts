@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createStore, type Store } from "../src/store.ts";
 import type { Review } from "../src/types.ts";
-import { recordingLog } from "./recording-log.ts";
+import { recordingLog } from "./support/recording-log.ts";
 
 let dir: string;
 let store: Store;

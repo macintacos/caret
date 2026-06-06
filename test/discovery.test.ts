@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { rm, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   collectReport,
@@ -18,6 +18,8 @@ import {
 import { reviewsDir } from "../src/paths.ts";
 import { scrubValue } from "../src/redact.ts";
 import { DEFAULTS } from "../src/settings.ts";
+import { setupTempStateDir } from "./support/env.ts";
+import { expectNeverLogsBody } from "./support/redaction.ts";
 
 function boom(): never {
   throw new Error("probe boom");
@@ -288,7 +290,7 @@ test("a leaked plan body in a review record is censored by scrubValue and the ta
   ];
   const report = await collectReport(discoveryDeps({ listReviewFiles: () => leaky }));
   const scrubbed = scrubValue(report, true);
-  expect(JSON.stringify(scrubbed)).not.toContain("SECRET PLAN BODY TEXT");
+  expectNeverLogsBody(scrubbed, "SECRET PLAN BODY TEXT");
   // The tally is built from { id, status } only, so it is unaffected.
   expect(report.reviews).toMatchObject({ pending: 1, total: 1, pendingIds: ["abcdef12"] });
 });
@@ -434,22 +436,18 @@ test("tallyReviews counts mixed statuses, routing an unknown status to other", (
 
 // Point XDG_STATE_HOME and CLAUDE_CONFIG_DIR at throwaway temp dirs so the
 // readers touch disposable state, never the real ~/.local/state/caret or
-// ~/.claude (mirrors test/cli.test.ts's XDG override).
+// ~/.claude. The state dir + its XDG wiring come from the shared helper; the
+// CLAUDE_CONFIG_DIR a few tests set is restored alongside it.
+const stateDir = setupTempStateDir("caret-discovery-");
 let tmp: string;
-let savedXdg: string | undefined;
 let savedClaude: string | undefined;
-beforeEach(async () => {
-  tmp = await mkdtemp(join(tmpdir(), "caret-discovery-"));
-  savedXdg = process.env.XDG_STATE_HOME;
+beforeEach(() => {
+  tmp = stateDir();
   savedClaude = process.env.CLAUDE_CONFIG_DIR;
-  process.env.XDG_STATE_HOME = tmp;
 });
-afterEach(async () => {
-  if (savedXdg === undefined) delete process.env.XDG_STATE_HOME;
-  else process.env.XDG_STATE_HOME = savedXdg;
+afterEach(() => {
   if (savedClaude === undefined) delete process.env.CLAUDE_CONFIG_DIR;
   else process.env.CLAUDE_CONFIG_DIR = savedClaude;
-  await rm(tmp, { recursive: true, force: true });
 });
 
 test("listReviewFiles returns [] when the reviews dir is absent", () => {
@@ -470,8 +468,7 @@ test("listReviewFiles plucks only id+status and skips corrupt files and non-json
   const out = listReviewFiles();
   expect(out).toEqual([{ id: "rid-1", status: "pending" }]);
   // The plan/draft bodies are never read into the return value.
-  expect(JSON.stringify(out)).not.toContain("SECRET PLAN");
-  expect(JSON.stringify(out)).not.toContain("SECRET DRAFT");
+  expectNeverLogsBody(out, ["SECRET PLAN", "SECRET DRAFT"]);
 });
 
 test("logStats reports a missing file as not-existing with zeroed counts", async () => {
@@ -493,7 +490,7 @@ test("logStats counts error/warn records and reports the size, never the text", 
   expect(stats.size).toBeGreaterThan(0);
   // Only the contract fields are present — no log text leaks.
   expect(Object.keys(stats).sort()).toEqual(["errors", "exists", "path", "size", "warns"]);
-  expect(JSON.stringify(stats)).not.toContain("SENSITIVE");
+  expectNeverLogsBody(stats, "SENSITIVE");
 });
 
 test("readClaudeInstallState reads caret's own plugin entries and is unknown when files are absent", () => {

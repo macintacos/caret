@@ -11,37 +11,17 @@ import { ensureDaemon, httpHealth } from "../src/cli.ts";
 import { createServer } from "../src/daemon.ts";
 import { VERSION } from "../src/paths.ts";
 import { createStore } from "../src/store.ts";
+import { ndjsonRecords } from "./support/ndjson.ts";
+import { freePort } from "./support/net.ts";
+import { until } from "./support/poll.ts";
+import { expectNeverLogsBody } from "./support/redaction.ts";
 
+// In-process health/discovery probe servers (a bare createServer + fixed-path
+// store, distinct from bootDaemon's full boot+client). Stopped after each test.
 const servers: Array<{ stop(): void }> = [];
 afterEach(() => {
   for (const s of servers.splice(0)) s.stop();
 });
-
-/** Poll `pred` until it's true or the budget elapses. */
-async function waitFor(pred: () => boolean, ms: number): Promise<boolean> {
-  const start = Date.now();
-  while (Date.now() - start < ms) {
-    if (pred()) return true;
-    await Bun.sleep(20);
-  }
-  return pred();
-}
-
-/** A loopback port that is free right now (probe-then-release). */
-function freePort(): number {
-  const probe = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response("x") });
-  const port = probe.port!;
-  probe.stop();
-  return port;
-}
-
-/** Parse NDJSON log text (a daemon's stderr or a caret.log body) into records. */
-function ndjsonRecords(text: string): Array<Record<string, unknown>> {
-  return text
-    .split("\n")
-    .filter((l) => l.startsWith("{"))
-    .map((l) => JSON.parse(l) as Record<string, unknown>);
-}
 
 test("httpHealth reports the caret identity from a live daemon", async () => {
   const srv = createServer({ store: createStore("/tmp/caret-it-x"), port: 0 });
@@ -124,9 +104,9 @@ async function assertLockRemovedOnSignal(signal: "SIGTERM" | "SIGINT") {
     stdio: ["ignore", "ignore", "ignore"],
   });
   try {
-    expect(await waitFor(() => existsSync(lockPath), 5000)).toBe(true);
+    expect(await until(() => existsSync(lockPath), 5000)).toBe(true);
     proc.kill(signal);
-    expect(await waitFor(() => !existsSync(lockPath), 5000)).toBe(true);
+    expect(await until(() => !existsSync(lockPath), 5000)).toBe(true);
     await proc.exited;
   } finally {
     proc.kill("SIGKILL");
@@ -155,7 +135,7 @@ test("an --ephemeral daemon binds an OS port and records identity in the lock", 
     stdio: ["ignore", "ignore", "ignore"],
   });
   try {
-    expect(await waitFor(() => existsSync(lockPath), 5000)).toBe(true);
+    expect(await until(() => existsSync(lockPath), 5000)).toBe(true);
     const lock = JSON.parse(await Bun.file(lockPath).text()) as {
       port: number;
       stateDir?: string;
@@ -204,7 +184,7 @@ test("caret redact scrubs state-dir logs into shareable siblings", async () => {
     expect(exit).toBe(0);
     expect(out).toContain(sibling);
     const scrubbed = await Bun.file(sibling).text();
-    expect(scrubbed).not.toContain(home);
+    expectNeverLogsBody(scrubbed, home);
     expect(scrubbed).toContain("~/src");
   } finally {
     await rm(stateHome, { recursive: true, force: true });
@@ -311,7 +291,7 @@ test("caret discovery --json prints one parseable, redacted document", async () 
     expect(report.daemon).toEqual({ reachable: false });
     // Always-redacted: the home prefix never appears raw — the default config
     // path renders as ~/.config/... and the bun binaryPath is scrubbed too.
-    expect(out).not.toContain(homedir());
+    expectNeverLogsBody(out, homedir());
     expect((report.settings as Record<string, unknown>).configPath).toBe(
       "~/.config/caret/config.toml",
     );
@@ -372,7 +352,7 @@ test("the daemon logs env warns, ui fallback, and the sigterm shutdown", async (
     stdio: ["ignore", "ignore", "pipe"],
   });
   try {
-    expect(await waitFor(() => existsSync(lockPath), 5000)).toBe(true);
+    expect(await until(() => existsSync(lockPath), 5000)).toBe(true);
     proc.kill("SIGTERM");
     await proc.exited;
     const recs = ndjsonRecords(await new Response(proc.stderr).text());
@@ -469,7 +449,7 @@ test("the daemon logs the parsed settings at startup", async () => {
   try {
     // The boot settings line is emitted before the server binds (lock write),
     // so the lock appearing means the line is already flushed (sync writes).
-    expect(await waitFor(() => existsSync(lockPath), 5000)).toBe(true);
+    expect(await until(() => existsSync(lockPath), 5000)).toBe(true);
     proc.kill("SIGTERM");
     await proc.exited;
     const stderr = await new Response(proc.stderr).text();
