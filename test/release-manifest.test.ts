@@ -1,9 +1,5 @@
 import { expect, test } from "bun:test";
-import {
-  assertInSync,
-  editVersion,
-  extractVersion,
-} from "../scripts/release/manifest.ts";
+import { assertInSync, editVersion, extractVersion } from "../scripts/release/manifest.ts";
 
 // A package.json-shaped fixture: 2-space indent, trailing newline.
 const PKG = `{

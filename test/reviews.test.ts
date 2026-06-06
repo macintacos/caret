@@ -136,14 +136,8 @@ test("two interleaved sessions never cross-contaminate", async () => {
   const s1 = await routeIncomingPlan(input({ sessionId: "S1" }), store);
   const s2 = await routeIncomingPlan(input({ sessionId: "S2" }), store);
   await reject(s1.id);
-  const s1b = await routeIncomingPlan(
-    input({ sessionId: "S1", plan: "s1 v2" }),
-    store,
-  );
-  const s2b = await routeIncomingPlan(
-    input({ sessionId: "S2", plan: "s2 again" }),
-    store,
-  );
+  const s1b = await routeIncomingPlan(input({ sessionId: "S1", plan: "s1 v2" }), store);
+  const s2b = await routeIncomingPlan(input({ sessionId: "S2", plan: "s2 again" }), store);
   expect(s1b).toMatchObject({ id: s1.id, action: "append" }); // appended to S1
   expect(s2b.action).toBe("new"); // S2 was pending -> new thread
   expect(s2b.id).not.toBe(s2.id);
@@ -178,16 +172,7 @@ test("appending a revision logs review appended with the version", async () => {
 
 test("property: appends only follow a rejection, never crossing an approval", async () => {
   // A scripted sequence of events; assert the invariant after each plan.
-  const events = [
-    "plan",
-    "reject",
-    "plan",
-    "approve",
-    "plan",
-    "reject",
-    "plan",
-    "plan",
-  ] as const;
+  const events = ["plan", "reject", "plan", "approve", "plan", "reject", "plan", "plan"] as const;
   let lastId: string | null = null;
   let lastStatusWasRejected = false;
   for (const ev of events) {

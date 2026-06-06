@@ -359,7 +359,9 @@ test("the daemon logs env warns, ui fallback, and the sigterm shutdown", async (
     expect(
       recs.some(
         (r) =>
-          r.step === "env" && r.level === 40 && r.msg === "CARET_TIMEOUT invalid; using config/default",
+          r.step === "env" &&
+          r.level === 40 &&
+          r.msg === "CARET_TIMEOUT invalid; using config/default",
       ),
     ).toBe(true);
     expect(recs.some((r) => r.step === "signal" && r.msg === "sigterm: shutting down")).toBe(true);
@@ -367,9 +369,9 @@ test("the daemon logs env warns, ui fallback, and the sigterm shutdown", async (
     // checkout and in CI; a local `mise run build-ui` artifact flips the branch,
     // so each environment asserts its own valid outcome.
     const uiBuilt = existsSync(join(process.cwd(), "ui", "dist", "index.html"));
-    expect(recs.some((r) => r.step === "ui" && r.msg === "no embedded ui; serving placeholder")).toBe(
-      !uiBuilt,
-    );
+    expect(
+      recs.some((r) => r.step === "ui" && r.msg === "no embedded ui; serving placeholder"),
+    ).toBe(!uiBuilt);
   } finally {
     proc.kill("SIGKILL");
     await proc.exited;
@@ -396,7 +398,9 @@ test("the review hook warns about invalid CARET_* env vars in caret.log", async 
     expect(
       recs.some(
         (r) =>
-          r.step === "env" && r.level === 40 && r.msg === "CARET_PORT invalid; using config/default",
+          r.step === "env" &&
+          r.level === 40 &&
+          r.msg === "CARET_PORT invalid; using config/default",
       ),
     ).toBe(true);
   } finally {

@@ -15,9 +15,7 @@ test("approve + acceptEdits emits a setMode updatedPermissions", () => {
   const out = toHookOutput({ behavior: "allow", acceptMode: "acceptEdits" });
   expect(out.hookSpecificOutput.decision).toEqual({
     behavior: "allow",
-    updatedPermissions: [
-      { type: "setMode", mode: "acceptEdits", destination: "session" },
-    ],
+    updatedPermissions: [{ type: "setMode", mode: "acceptEdits", destination: "session" }],
   });
 });
 

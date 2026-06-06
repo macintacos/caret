@@ -35,9 +35,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 `;
 
 test("parseHeading reads version, date, and themed title", () => {
-  expect(parseHeading("## [0.1.0] - 2026-06-02 - The Foundations Release")).toEqual(
-    { version: "0.1.0", date: "2026-06-02", title: "The Foundations Release" },
-  );
+  expect(parseHeading("## [0.1.0] - 2026-06-02 - The Foundations Release")).toEqual({
+    version: "0.1.0",
+    date: "2026-06-02",
+    title: "The Foundations Release",
+  });
 });
 
 test("parseHeading handles a one-character theme without dropping the heading", () => {

@@ -318,7 +318,11 @@ test("a cyclic extra object never throws and writes one record", () => {
 
 test("createDaemonLogger redacts when its redact thunk returns true", () => {
   const dest = join(home, "daemon-redact.log");
-  const log = createDaemonLogger(() => "info", dest, () => true);
+  const log = createDaemonLogger(
+    () => "info",
+    dest,
+    () => true,
+  );
   log.error("request", new Error(`kaboom at ${realHome}/srv`), { cwd: `${realHome}/proj` });
   const body = readFileSync(dest, "utf-8");
   expect(body).not.toContain(realHome);

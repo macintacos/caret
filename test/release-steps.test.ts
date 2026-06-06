@@ -4,10 +4,7 @@
 import { expect, test } from "bun:test";
 import type { ErrorCode } from "../scripts/release/contract.ts";
 import type { GitOps, RawCommit } from "../scripts/release/git.ts";
-import type {
-  GitHubOps,
-  PullRequestSummary,
-} from "../scripts/release/github.ts";
+import type { GitHubOps, PullRequestSummary } from "../scripts/release/github.ts";
 import {
   type Deps,
   type FsOps,
@@ -19,8 +16,7 @@ import {
 } from "../scripts/release/steps.ts";
 
 const pkg = (v: string) => `{\n  "name": "caret",\n  "version": "${v}"\n}\n`;
-const market = (v: string) =>
-  `{\n  "plugins": [\n    {\n      "version": "${v}"\n    }\n  ]\n}\n`;
+const market = (v: string) => `{\n  "plugins": [\n    {\n      "version": "${v}"\n    }\n  ]\n}\n`;
 
 const CHANGELOG = `# Changelog
 
@@ -255,9 +251,7 @@ test("compute returns the next version, tag, and parsed commits", async () => {
   expect(r.tag).toBe("v0.1.0");
   expect(r.previousTag).toBe("v0.0.1");
   expect(r.releaseBranch).toBe("release/v0.1.0");
-  expect(r.compareUrl).toBe(
-    "https://github.com/macintacos/caret/compare/v0.0.1...v0.1.0",
-  );
+  expect(r.compareUrl).toBe("https://github.com/macintacos/caret/compare/v0.0.1...v0.1.0");
   expect(r.commits[0]?.issueRefs).toEqual(["EXC-1"]);
   expect(r.commits[0]?.prNumber).toBe(2);
 });
@@ -361,9 +355,7 @@ test("prepare bumps manifests, commits, pushes, and opens a PR", async () => {
   const { deps, calls, files } = harness(PREPARE_OPTS);
   const r = await prepare(deps, { bump: "minor", dryRun: false });
   expect(files.get("package.json")).toContain('"version": "0.1.0"');
-  expect(files.get(".claude-plugin/marketplace.json")).toContain(
-    '"version": "0.1.0"',
-  );
+  expect(files.get(".claude-plugin/marketplace.json")).toContain('"version": "0.1.0"');
   expect(calls).toContain("checkoutNew:release/v0.1.0");
   expect(calls).toContain("prCreate");
   expect(r.committed).toBe(true);
@@ -435,18 +427,12 @@ test("prepare fails loudly when the changelog section is missing", async () => {
       "CHANGELOG.md": "# Changelog\n\n## [Unreleased]\n",
     },
   });
-  await expectGuard(
-    prepare(deps, { bump: "minor", dryRun: false }),
-    "CHANGELOG_MISSING",
-  );
+  await expectGuard(prepare(deps, { bump: "minor", dryRun: false }), "CHANGELOG_MISSING");
 });
 
 test("prepare aborts when preflight fails", async () => {
   const { deps } = harness({ ...PREPARE_OPTS, preflightOk: false });
-  await expectGuard(
-    prepare(deps, { bump: "minor", dryRun: false }),
-    "PREFLIGHT_FAILED",
-  );
+  await expectGuard(prepare(deps, { bump: "minor", dryRun: false }), "PREFLIGHT_FAILED");
 });
 
 test("prepare aborts when the tree drifts outside the release set during preflight", async () => {
@@ -456,10 +442,7 @@ test("prepare aborts when the tree drifts outside the release set during preflig
     ...PREPARE_OPTS,
     preflightDirties: [" M src/app.ts"],
   });
-  await expectGuard(
-    prepare(deps, { bump: "minor", dryRun: false }),
-    "PREFLIGHT_DIRTY",
-  );
+  await expectGuard(prepare(deps, { bump: "minor", dryRun: false }), "PREFLIGHT_DIRTY");
   expect(calls.filter((c) => c.startsWith("commit:"))).toEqual([]); // never committed a partial set
 });
 
@@ -484,9 +467,7 @@ test("finalize tags trunk's merged HEAD and creates the release", async () => {
   expect(calls).toContain("createTag:v0.1.0@mergedsha");
   expect(calls).toContain("pushTag:v0.1.0");
   expect(calls).toContain("releaseCreate:v0.1.0");
-  expect(r.releaseUrl).toBe(
-    "https://github.com/macintacos/caret/releases/tag/v0.1.0",
-  );
+  expect(r.releaseUrl).toBe("https://github.com/macintacos/caret/releases/tag/v0.1.0");
 });
 
 test("finalize succeeds from a release branch (working branch is irrelevant)", async () => {
@@ -547,9 +528,7 @@ test("finalize reuses an existing GitHub release", async () => {
   });
   const r = await finalize(deps, { dryRun: false });
   expect(calls).not.toContain("releaseCreate:v0.1.0");
-  expect(r.releaseUrl).toBe(
-    "https://github.com/macintacos/caret/releases/tag/v0.1.0",
-  );
+  expect(r.releaseUrl).toBe("https://github.com/macintacos/caret/releases/tag/v0.1.0");
 });
 
 // --- preflight gating is scoped to prepare --------------------------------

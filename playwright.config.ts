@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { TOC_BREAKPOINT_PX } from "./ui/src/lib/layout.ts";
 
 // Real-browser e2e for the review UI (EXC-453). Specs are named *.e2e.ts so
 // `bun test` (which collects *.test.ts AND *.spec.ts repo-wide) never picks
@@ -25,9 +26,10 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         // After the device spread (which pins 1280x720): the contents rail
-        // (Toc.svelte) is display:none below the shared 1400px breakpoint, so a
-        // sub-1400 viewport would hide it from the smoke spec.
-        viewport: { width: 1600, height: 900 },
+        // (Toc.svelte) is display:none below the shared breakpoint, so the
+        // viewport is derived from it with headroom — a breakpoint change moves
+        // the viewport in lockstep instead of leaving it coupled by prose.
+        viewport: { width: TOC_BREAKPOINT_PX + 200, height: 900 },
       },
     },
   ],

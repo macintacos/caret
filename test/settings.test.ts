@@ -70,7 +70,10 @@ test("an invalid value falls back to defaults and logs the key path, never the v
 });
 
 test("unknown keys are ignored at the top level and inside tables", async () => {
-  await Bun.write(file, '[telemetry]\nenabled = true\n\n[logging]\nlevel = "debug"\nfuture_flag = 3\n');
+  await Bun.write(
+    file,
+    '[telemetry]\nenabled = true\n\n[logging]\nlevel = "debug"\nfuture_flag = 3\n',
+  );
   expect(loadSettings(file)).toEqual({ ...DEFAULTS, logging: { level: "debug", redact: false } });
 });
 
@@ -158,9 +161,7 @@ test("mutating a frozen result throws (strict mode)", async () => {
 test("watchSettings reports each changed key with old and new values", async () => {
   await Bun.write(file, '[logging]\nlevel = "info"\n');
   const fired: Array<{ changes: string[]; next: Settings }> = [];
-  const svc = watchSettings(createSettings(file), (changes, next) =>
-    fired.push({ changes, next }),
-  );
+  const svc = watchSettings(createSettings(file), (changes, next) => fired.push({ changes, next }));
   svc.current(); // first read seeds the baseline — must not fire
   await Bun.write(file, '[logging]\nlevel = "debug"\nredact = true\n');
   const next = svc.current();
@@ -349,14 +350,14 @@ test("watchSettings reports numeric tunable changes", async () => {
 });
 
 test("watchSettings tolerates a re-entrant current() from inside onChange", async () => {
-  await Bun.write(file, '[logging]\nredact = false\n');
+  await Bun.write(file, "[logging]\nredact = false\n");
   let fires = 0;
   const svc: { current(): Settings } = watchSettings(createSettings(file), () => {
     fires++;
     svc.current(); // a logging callback re-enters (emit → level thunk → current)
   });
   svc.current();
-  await Bun.write(file, '[logging]\nredact = true\n');
+  await Bun.write(file, "[logging]\nredact = true\n");
   svc.current();
   expect(fires).toBe(1); // the re-entrant read sees no further change
 });

@@ -126,7 +126,11 @@ test("appendRevision never introduces untagged code blocks, even for hostile fee
 // ---- nextPlan ----
 
 test("nextPlan on a reviewer deny appends a revision and bumps the counter", () => {
-  const next = nextPlan({ plan: PLAN_V1, revision: 0 }, { behavior: "deny", message: "tighten scope" }, PLAN_V1);
+  const next = nextPlan(
+    { plan: PLAN_V1, revision: 0 },
+    { behavior: "deny", message: "tighten scope" },
+    PLAN_V1,
+  );
   expect(next.action).toBe("revise");
   expect(next.revision).toBe(1);
   expect(next.plan).toContain("## Revision 1");
@@ -149,7 +153,10 @@ test("nextPlan treats the empty-feedback default message as a real revision", ()
 test("nextPlan resubmits unchanged on the hook's own fail-safe deny shapes", () => {
   const next = nextPlan(
     { plan: PLAN_V1, revision: 1 },
-    { behavior: "deny", message: "caret: review timed out — denying so no unreviewed plan ships. See /x." },
+    {
+      behavior: "deny",
+      message: "caret: review timed out — denying so no unreviewed plan ships. See /x.",
+    },
     PLAN_V1,
   );
   expect(next.action).toBe("resubmit");

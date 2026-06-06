@@ -5,11 +5,7 @@
 // the summary surfaces failed output plus the `mise run format` hint.
 import { join } from "node:path";
 import { expect, test } from "bun:test";
-import {
-  type SpawnOutcome,
-  type SpawnTask,
-  runPreflight,
-} from "../scripts/preflight.ts";
+import { type SpawnOutcome, type SpawnTask, runPreflight } from "../scripts/preflight.ts";
 import { waitFor } from "./support/poll.ts";
 
 const ALL_TASKS = ["build-bin", "build-ui", "lint", "test", "test-e2e"];
