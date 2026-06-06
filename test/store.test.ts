@@ -63,6 +63,13 @@ test("update mutates, bumps updatedAt, and persists", async () => {
   expect(onDisk.status).toBe("approved");
 });
 
+test("update on a missing id returns undefined and persists nothing", async () => {
+  expect(await store.update("ghost", (r) => (r.status = "approved"))).toBeUndefined();
+  expect(store.size()).toBe(0);
+  // No file is written for an id the store never tracked.
+  await expect(readFile(join(dir, "ghost.json"), "utf-8")).rejects.toThrow();
+});
+
 test("remove drops from memory but leaves the file on disk", async () => {
   await store.create(makeReview({ id: "x1" }));
   await store.remove("x1");
@@ -71,6 +78,29 @@ test("remove drops from memory but leaves the file on disk", async () => {
   // File persists as history.
   const onDisk = JSON.parse(await readFile(join(dir, "x1.json"), "utf-8"));
   expect(onDisk.id).toBe("x1");
+});
+
+test("remove flushes the final mutated state before dropping the entry", async () => {
+  await store.create(makeReview({ id: "f1", status: "pending" }));
+  await store.update("f1", (r) => {
+    r.status = "approved";
+    r.decision = { behavior: "allow", decidedAt: 7 };
+  });
+  await store.remove("f1");
+  expect(store.get("f1")).toBeUndefined();
+  // The on-disk history reflects the last in-memory state, not the create-time one.
+  const onDisk = JSON.parse(await readFile(join(dir, "f1.json"), "utf-8")) as Review;
+  expect(onDisk.status).toBe("approved");
+  expect(onDisk.decision).toMatchObject({ behavior: "allow" });
+});
+
+test("pendingCount counts only pending reviews", async () => {
+  expect(store.pendingCount()).toBe(0);
+  await store.create(makeReview({ id: "pc-p1", status: "pending" }));
+  await store.create(makeReview({ id: "pc-p2", status: "pending" }));
+  await store.create(makeReview({ id: "pc-r", status: "rejected" }));
+  await store.create(makeReview({ id: "pc-a", status: "approved" }));
+  expect(store.pendingCount()).toBe(2);
 });
 
 test("size reflects the in-memory map", async () => {
@@ -109,6 +139,11 @@ test("persisted reads a review (incl. decision) from disk, even after remove", a
   expect(await store.persisted("missing")).toBeUndefined();
 });
 
+test("persisted returns undefined for a partial/corrupt file", async () => {
+  await Bun.write(join(dir, "trunc.json"), "{ partial");
+  expect(await store.persisted("trunc")).toBeUndefined();
+});
+
 test("rehydrate loads unresolved reviews, skips approved", async () => {
   await store.create(makeReview({ id: "keep-p", status: "pending" }));
   await store.create(makeReview({ id: "keep-r", status: "rejected" }));
@@ -116,11 +151,11 @@ test("rehydrate loads unresolved reviews, skips approved", async () => {
 
   const fresh = createStore(dir);
   await fresh.rehydrate();
-  const ids = fresh
-    .all()
-    .map((r) => r.id)
-    .sort();
-  expect(ids).toEqual(["keep-p", "keep-r"]);
+  // Both unresolved reviews are tracked; the approved one is not re-tracked.
+  expect(fresh.size()).toBe(2);
+  expect(fresh.get("keep-p")?.status).toBe("pending");
+  expect(fresh.get("keep-r")?.status).toBe("rejected");
+  expect(fresh.get("drop-a")).toBeUndefined();
 });
 
 test("expire marks terminal, clears the draft, persists once, and drops from memory", async () => {
@@ -141,7 +176,8 @@ test("rehydrate skips expired reviews", async () => {
   await store.create(makeReview({ id: "drop-e", status: "expired" }));
   const fresh = createStore(dir);
   await fresh.rehydrate();
-  expect(fresh.all()).toEqual([]);
+  expect(fresh.size()).toBe(0);
+  expect(fresh.get("drop-e")).toBeUndefined();
 });
 
 // ---- instrumentation (EXC-444) ----
@@ -169,6 +205,21 @@ test("rehydrate warns per corrupt review file it skips", async () => {
   const warn = recs.find((r) => r.level === "warn");
   expect(warn?.step).toBe("store");
   expect(warn?.msg).toBe("skipping corrupt review file: bad.json");
+});
+
+test("rehydrate tolerates corrupt files among valid and resolved records", async () => {
+  // A mixed dir: a corrupt file, a valid unresolved review, and an approved
+  // one. The corrupt file is skipped (not a crash), the unresolved review
+  // loads, and the approved record is left on disk without being re-tracked.
+  await store.create(makeReview({ id: "live", status: "pending" }));
+  await store.create(makeReview({ id: "done", status: "approved" }));
+  await Bun.write(join(dir, "junk.json"), "not json at all");
+
+  const fresh = createStore(dir);
+  await fresh.rehydrate();
+  expect(fresh.size()).toBe(1);
+  expect(fresh.get("live")?.status).toBe("pending");
+  expect(fresh.get("done")).toBeUndefined();
 });
 
 test("rehydrate with no state dir logs at debug, not warn", async () => {
