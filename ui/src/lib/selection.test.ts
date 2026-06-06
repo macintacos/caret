@@ -100,4 +100,48 @@ describe("captureSelection", () => {
 
     expect(captureSelection(root)).toBeNull();
   });
+
+  test("returns null for a whitespace-only selection", () => {
+    const root = container('<p id="b0">a    b</p>');
+    const block = root.querySelector("#b0") as HTMLElement;
+    selectRange(block, 1, 5); // the run of spaces between a and b
+    expect(captureSelection(root)).toBeNull();
+  });
+});
+
+// nearestBlock is module-private; it is exercised through its only caller,
+// captureSelection. These cases pin its block-resolution branches: the /^b\d+$/
+// id match, the climb up through nested markup, the innermost-block tiebreak,
+// and the root-boundary stop that yields no block.
+describe("captureSelection block resolution (nearestBlock)", () => {
+  test("returns null when the selection is inside root but in no b-block", () => {
+    // Loose prose directly under root with no id="b{n}" ancestor.
+    const root = container("loose prose with no structural block");
+    selectRange(root, 0, 5);
+    expect(captureSelection(root)).toBeNull();
+  });
+
+  test("returns null when the enclosing element id is not the b{n} shape", () => {
+    const root = container('<h2 id="header">Title text</h2>');
+    const heading = root.querySelector("#header") as HTMLElement;
+    selectRange(heading, 0, 5); // "Title"
+    expect(captureSelection(root)).toBeNull();
+  });
+
+  test("resolves the block from a deeply nested selection node", () => {
+    const root = container('<p id="b7">lead <strong><em>deep text</em></strong> tail</p>');
+    const em = root.querySelector("em") as HTMLElement;
+    selectRange(em, 0, 4); // "deep", several elements below the b-block
+    const cap = captureSelection(root);
+    expect(cap!.blockId).toBe("b7");
+    expect(cap!.quote).toBe("deep");
+  });
+
+  test("picks the innermost b-block when blocks are nested", () => {
+    const root = container('<div id="b1"><div id="b2">inner content</div></div>');
+    const inner = root.querySelector("#b2") as HTMLElement;
+    selectRange(inner, 0, 5); // "inner"
+    const cap = captureSelection(root);
+    expect(cap!.blockId).toBe("b2"); // nearest ancestor wins over the outer b1
+  });
 });
