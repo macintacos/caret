@@ -35,22 +35,6 @@ export interface ApproveVariant {
 }
 
 /**
- * The concrete approve-variant ids the Claude-paired daemon and prefs gate on.
- * Distinct from the opaque `ApproveVariantId` the core carries: these are the
- * tokens the daemon's `/resolve` route and prefs persistence validate against
- * before seeding the remembered mode. The declaration/render path treats ids as
- * opaque; this guard is the persistence side's recognized set.
- */
-export type AcceptMode = "default" | "acceptEdits" | "auto";
-
-const ACCEPT_MODES: readonly AcceptMode[] = ["default", "acceptEdits", "auto"];
-
-/** Runtime guard: is `x` a recognized AcceptMode token? */
-export function isAcceptMode(x: unknown): x is AcceptMode {
-  return typeof x === "string" && (ACCEPT_MODES as readonly string[]).includes(x);
-}
-
-/**
  * Lifecycle of a review thread:
  * - "pending"  → awaiting a browser decision (shown in the switcher)
  * - "rejected" → changes requested; awaiting a revised plan (still active)

@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { APPROVE_VARIANTS } from "../src/adapters/claude/approve.ts";
 import { VERSION } from "../src/build-id.ts";
 import { createDaemonLogger } from "../src/log.ts";
 import type { Store } from "../src/store.ts";
@@ -23,6 +24,15 @@ async function boot(opts: BootOptions = {}) {
   store = d.store;
   srv = { port: d.port, stop: d.stop };
   base = d.url;
+}
+
+// Boot with the Claude adapter's declared approve variants — the recognized set
+// the daemon's /resolve and prefs persistence gate on in production. The
+// resolve/prefs tests exercise that token behavior ("acceptEdits"/"auto"), so
+// they boot through the adapter's real declaration rather than a bare daemon
+// (which recognizes only "default").
+async function bootClaude(opts: BootOptions = {}) {
+  await boot({ approveVariants: APPROVE_VARIANTS, ...opts });
 }
 
 async function prefMode(): Promise<string> {
@@ -769,7 +779,7 @@ test("GET /api/prefs defaults to 'default' on a fresh daemon", async () => {
 });
 
 test("an allow remembers the chosen acceptMode (incl. auto)", async () => {
-  await boot();
+  await bootClaude();
   for (const mode of ["acceptEdits", "auto"] as const) {
     const { id } = await newReview();
     await resolve(id, { behavior: "allow", acceptMode: mode });
@@ -778,7 +788,7 @@ test("an allow remembers the chosen acceptMode (incl. auto)", async () => {
 });
 
 test("a deny does not change the remembered approve mode", async () => {
-  await boot();
+  await bootClaude();
   const { id: a } = await newReview();
   await resolve(a, { behavior: "allow", acceptMode: "acceptEdits" });
   expect(await waitForPrefMode("acceptEdits")).toBe("acceptEdits");
@@ -792,22 +802,22 @@ test("a deny does not change the remembered approve mode", async () => {
 });
 
 test("an allow with an unrecognized acceptMode leaves prefs at 'default'", async () => {
-  await boot();
+  await bootClaude();
   const { id } = await newReview();
   await resolve(id, { behavior: "allow", acceptMode: "turbo" });
-  await Bun.sleep(30); // the daemon's isAcceptMode guard should reject the write
+  await Bun.sleep(30); // an id outside the declared set must not seed prefs
   expect(await prefMode()).toBe("default");
 });
 
 test("the remembered approve mode survives a daemon restart", async () => {
-  await boot();
+  await bootClaude();
   const { id } = await newReview();
   await resolve(id, { behavior: "allow", acceptMode: "auto" });
   expect(await waitForPrefMode("auto")).toBe("auto");
 
   // Restart: stop the server, boot a fresh one against the same state dir.
   srv.stop();
-  await boot();
+  await bootClaude();
   expect(await prefMode()).toBe("auto");
 });
 
@@ -830,7 +840,7 @@ test("the review record is emitted once, by the router, with threading extras", 
 
 test("the resolve record carries reviewId, sessionId, and acceptMode extras", async () => {
   const { recs, log } = recordingLog();
-  await boot({ log });
+  await bootClaude({ log });
   const { id } = await newReview();
   await resolve(id, { behavior: "allow", acceptMode: "acceptEdits" });
   const rec = recs.find((r) => r.step === "resolve");
@@ -1102,7 +1112,7 @@ test("a failed fire-and-forget prefs write is logged at warn", async () => {
   // prefsPath nested under a regular FILE so writeApproveMode's mkdir fails.
   const blocker = join(dir, "blocker");
   await Bun.write(blocker, "i am a file, not a directory");
-  await boot({ log, prefsPath: join(blocker, "prefs.json") });
+  await bootClaude({ log, prefsPath: join(blocker, "prefs.json") });
   const { id } = await newReview();
   await resolve(id, { behavior: "allow", acceptMode: "auto" });
   // Fire-and-forget: poll briefly for the warn to land.

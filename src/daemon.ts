@@ -9,20 +9,18 @@ import { type DaemonLock, IDENTITY } from "./build-id.ts";
 import { createDecisions } from "./decisions.ts";
 import { type CaretLogger, noopLogger, shortId } from "./log.ts";
 import { prefsFile } from "./paths.ts";
-import { readApproveMode, writeApproveMode } from "./prefs.ts";
+import { type ApproveModeSet, readApproveMode, writeApproveMode } from "./prefs.ts";
 import { routeIncomingPlan } from "./reviews.ts";
 import { DEFAULTS } from "./settings.ts";
 import type { Store } from "./store.ts";
 import { MAX_BODY_BYTES, parseUiLogBatch } from "./ui-log-bridge.ts";
 import {
-  type AcceptMode,
   type ApproveVariant,
   type Behavior,
   currentVersion,
   type Decision,
   type DraftBody,
   type HealthIdentity,
-  isAcceptMode,
   type PlanInput,
   type ResolveBody,
   toClientReview,
@@ -132,18 +130,18 @@ const PlanInputSchema: z.ZodType<PlanInput> = z
   .catch({});
 
 const BehaviorSchema: z.ZodType<Behavior> = z.enum(["allow", "deny"]);
-const AcceptModeSchema: z.ZodType<AcceptMode> = z.enum(["default", "acceptEdits", "auto"]);
 
 // POST /api/reviews/:id/resolve. `behavior` falls back to "allow" unless the
 // body explicitly says "deny" (fail-safe: an absent or garbled behavior never
-// denies on its own). An unrecognized `acceptMode` degrades to undefined at the
-// field, leaving the rest of the decision intact; the isAcceptMode guard
-// downstream then decides which tokens seed prefs.
+// denies on its own). `acceptMode` is an opaque approve-variant id carried
+// verbatim — a non-string degrades to undefined at the field, leaving the rest of
+// the decision intact; the handler then gates it against the adapter-declared set
+// before seeding prefs (an id outside the set never moves the remembered value).
 const ResolveBodySchema: z.ZodType<ResolveBody> = z
   .object({
     behavior: BehaviorSchema.catch("allow"),
     feedback: z.string().optional(),
-    acceptMode: AcceptModeSchema.optional().catch(undefined),
+    acceptMode: z.string().optional().catch(undefined),
   })
   .catch({ behavior: "allow" });
 
@@ -235,6 +233,17 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   const { store, idle, heartbeat, serveHtml, onShutdown, routePlan, prefsPath, log } = cfg;
   const { buildId, commit, stateDir, instanceId, approveVariants, lockPath } = cfg;
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount } = createDecisions(log);
+
+  // The set of approve-variant ids the resolve route and prefs persistence gate
+  // on, derived from the active adapter's declared variants — the daemon stays
+  // tool-agnostic, recognizing whatever the adapter declares rather than a baked
+  // enum. The fallback is the first declared id (for the Claude adapter that is
+  // "default"); a daemon with no declared variants recognizes only "default", so
+  // a fresh /api/prefs still reads "default".
+  const approveModeSet: ApproveModeSet =
+    approveVariants && approveVariants.length > 0
+      ? { valid: approveVariants.map((v) => v.id), fallback: approveVariants[0]?.id ?? "default" }
+      : { valid: ["default"], fallback: "default" };
 
   // Wait for a decision but no longer than `ms` — resolves to null on timeout so
   // the handler can return a 204 heartbeat. The pending promise is left intact
@@ -386,7 +395,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // not part of the 2s /api/reviews poll). Fail-safe: returns "default" if
   // unreadable.
   async function handlePrefs(): Promise<Response> {
-    return Response.json({ approveMode: await readApproveMode(prefsPath, log) });
+    return Response.json({ approveMode: await readApproveMode(prefsPath, log, approveModeSet) });
   }
 
   // GET /api/reviews/:id — one review as its client-facing shape.
@@ -473,11 +482,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (decision.behavior === "allow") {
       store.bumpEpoch(existing.sessionId);
       await store.remove(id);
-      // Remember the chosen mode for the UI's next load. Fire-and-forget: never
-      // awaited, so it can't delay the 200 that unblocks the long-polling hook.
-      // A bare allow (no acceptMode) leaves prefs as-is.
-      if (isAcceptMode(decision.acceptMode)) {
-        void writeApproveMode(decision.acceptMode, prefsPath, log).catch(() => {
+      // Remember the chosen variant for the UI's next load. Fire-and-forget:
+      // never awaited, so it can't delay the 200 that unblocks the long-polling
+      // hook. A bare allow (no acceptMode) leaves prefs as-is; an id outside the
+      // adapter-declared set is ignored by writeApproveMode.
+      if (decision.acceptMode !== undefined && approveModeSet.valid.includes(decision.acceptMode)) {
+        void writeApproveMode(decision.acceptMode, prefsPath, log, approveModeSet).catch(() => {
           // Recoverable: prefs only seed the UI's next default.
           log.warn("prefs", "approve mode write failed");
         });
