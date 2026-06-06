@@ -13,8 +13,6 @@ export interface Store {
   get(id: string): Review | undefined;
   /** Pending reviews (drives the switcher), oldest-first. */
   list(): Review[];
-  /** Every in-memory review. */
-  all(): Review[];
   /** A session's in-memory reviews, newest-first (for revision threading). */
   bySession(sessionId: string): Review[];
   update(id: string, mutate: (r: Review) => void): Promise<Review | undefined>;
@@ -75,10 +73,6 @@ export function createStore(dir: string, log: CaretLogger = noopLogger): Store {
         .sort((a, b) => a.createdAt - b.createdAt);
     },
 
-    all() {
-      return [...reviews.values()];
-    },
-
     bySession(sessionId) {
       return [...reviews.values()]
         .filter((r) => r.sessionId === sessionId)
@@ -126,9 +120,7 @@ export function createStore(dir: string, log: CaretLogger = noopLogger): Store {
     },
 
     pendingCount() {
-      let n = 0;
-      for (const r of reviews.values()) if (r.status === "pending") n++;
-      return n;
+      return [...reviews.values()].filter((r) => r.status === "pending").length;
     },
 
     epochOf(sessionId) {
