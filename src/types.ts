@@ -134,6 +134,14 @@ export interface ResolveBody {
   acceptMode?: AcceptMode;
 }
 
+/** Body of PUT /api/reviews/:id/draft (the reviewer's working-copy autosave).
+ * Each field is independently optional so a draft-only write never wipes
+ * annotations (and vice versa). */
+export interface DraftBody {
+  annotations?: Annotation[];
+  generalCommentDraft?: string;
+}
+
 /**
  * GET /api/health identity body — the single wire shape for the daemon's
  * identity probe. Every field is optional: a pre-fix daemon or a non-caret

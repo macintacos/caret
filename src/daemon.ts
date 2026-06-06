@@ -4,6 +4,7 @@
 
 import { mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { z } from "zod";
 import { createDecisions } from "./decisions.ts";
 import { type CaretLogger, noopLogger, shortId } from "./log.ts";
 import { type DaemonLock, IDENTITY, prefsFile } from "./paths.ts";
@@ -11,13 +12,17 @@ import { readApproveMode, writeApproveMode } from "./prefs.ts";
 import { routeIncomingPlan } from "./reviews.ts";
 import { DEFAULTS } from "./settings.ts";
 import type { Store } from "./store.ts";
+import { MAX_BODY_BYTES, parseUiLogBatch } from "./ui-log-bridge.ts";
 import {
+  type AcceptMode,
+  type Behavior,
   currentVersion,
   type Decision,
+  type DraftBody,
   type HealthIdentity,
   isAcceptMode,
   type PlanInput,
-  type Review,
+  type ResolveBody,
   toClientReview,
 } from "./types.ts";
 
@@ -101,93 +106,125 @@ export function isCrossOrigin(req: Request): boolean {
   return false;
 }
 
-// POST /api/logs caps and constraints. This route is a new trust boundary: the
-// browser UI ships log events that get written through the daemon's CaretLogger,
-// so the batch is structurally validated and its data sanitized before emit.
-const MAX_BODY_BYTES = 64 * 1024;
-const MAX_EVENTS = 100;
-const MAX_MSG_LEN = 256;
+// Request-body schemas at the browser trust boundary. They are deliberately
+// lenient — a malformed body degrades to the schema's fallback rather than
+// rejecting, matching the cast-and-trust behavior they replace. The win is a
+// named boundary and per-field validation, not stricter rejection.
 
-export interface UiLogEvent {
-  level: "debug" | "info" | "warn" | "error";
-  step: string;
-  msg: string;
-  extra?: Record<string, unknown>;
+// POST /api/reviews: an incoming plan. Every field is optional and the whole
+// object falls back to {} on a non-object body, mirroring the `req.json()
+// .catch(() => ({}))` tolerance the body parser keeps — the router then defaults
+// each absent field itself.
+const PlanInputSchema: z.ZodType<PlanInput> = z
+  .object({
+    sessionId: z.string().optional(),
+    cwd: z.string().optional(),
+    title: z.string().optional(),
+    plan: z.string().optional(),
+  })
+  .catch({});
+
+const BehaviorSchema: z.ZodType<Behavior> = z.enum(["allow", "deny"]);
+const AcceptModeSchema: z.ZodType<AcceptMode> = z.enum(["default", "acceptEdits", "auto"]);
+
+// POST /api/reviews/:id/resolve. `behavior` falls back to "allow" unless the
+// body explicitly says "deny" (fail-safe: an absent or garbled behavior never
+// denies on its own). An unrecognized `acceptMode` degrades to undefined at the
+// field, leaving the rest of the decision intact; the isAcceptMode guard
+// downstream then decides which tokens seed prefs.
+const ResolveBodySchema: z.ZodType<ResolveBody> = z
+  .object({
+    behavior: BehaviorSchema.catch("allow"),
+    feedback: z.string().optional(),
+    acceptMode: AcceptModeSchema.optional().catch(undefined),
+  })
+  .catch({ behavior: "allow" });
+
+// PUT /api/reviews/:id/draft. Each field is independently optional; the handler
+// leaves an absent field untouched (`!= null`), so a draft-only write never
+// wipes annotations and vice versa. An explicit null normalizes to undefined so
+// a malformed null payload is treated as absent, not a clobber.
+const AnnotationSchema = z.object({
+  id: z.string(),
+  blockId: z.string(),
+  startOffset: z.number(),
+  endOffset: z.number(),
+  quote: z.string(),
+  comment: z.string(),
+});
+const nullToUndefined = <T>(v: T | null | undefined): T | undefined => v ?? undefined;
+const DraftBodySchema: z.ZodType<DraftBody> = z
+  .object({
+    annotations: z.array(AnnotationSchema).nullish().transform(nullToUndefined),
+    generalCommentDraft: z.string().nullish().transform(nullToUndefined),
+  })
+  .catch({ annotations: undefined, generalCommentDraft: undefined });
+
+/** Parse a request body that may be malformed JSON. A JSON parse failure
+ * degrades to `{}`; a body that fails the schema degrades to the schema's
+ * `.catch` fallback — these routes never rejected a bad body, they tolerated
+ * it. */
+async function parseBody<T>(req: Request, schema: z.ZodType<T>): Promise<T> {
+  return schema.parse(await req.json().catch(() => ({})));
 }
 
-const STEP_RE = /^[a-z][a-z0-9-]{0,31}$/;
-// The record's own NDJSON fields: an extra key colliding with one of these would
-// shadow the structural field, so they're stripped from client extra. `caller` is
-// stamped by src/log.ts (file:line of the call site); bridged UI records carry
-// none, so a client-sent one is a forged provenance and is dropped too (EXC-451).
-const RESERVED_KEYS = new Set(["level", "time", "msg", "step", "pid", "err", "caller"]);
-// C0/C1 control chars except TAB (U+0009). Newline (U+000A) is stripped too:
-// pino already JSON-escapes newlines at serialization, so this is defense in
-// depth for raw-text consumers of the log (redact round-trips, crash-output
-// interleaving, future sinks) — not the only thing preventing a forged record.
-// Written with \u escapes (no literal control bytes in source): U+0000–U+0008,
-// U+000A–U+001F, U+007F–U+009F.
-// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control chars is the intent
-const CONTROL_RE = /[\u0000-\u0008\u000A-\u001F\u007F-\u009F]/g;
-
-function sanitizeString(s: string): string {
-  return s.replace(CONTROL_RE, "");
+/** The createServer options resolved against their defaults once, so the route
+ * handlers and lifecycle close over a single config object instead of a dozen
+ * destructured locals. */
+interface ResolvedOptions {
+  store: Store;
+  idle: number;
+  heartbeat: number;
+  serveHtml: () => string | Promise<string>;
+  onShutdown: () => void;
+  routePlan: RoutePlan;
+  prefsPath: string;
+  lockPath: string | undefined;
+  buildId: string | undefined;
+  commit: string | undefined;
+  stateDir: string | undefined;
+  instanceId: string | undefined;
+  log: CaretLogger;
 }
 
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
+function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
+  return {
+    store: opts.store,
+    idle: opts.idleMs ?? DEFAULTS.daemon.idle_ms,
+    heartbeat: opts.heartbeatMs ?? DEFAULTS.daemon.heartbeat_ms,
+    serveHtml: opts.serveHtml ?? (() => PLACEHOLDER_HTML),
+    onShutdown: opts.onShutdown ?? (() => process.exit(0)),
+    routePlan: opts.routePlan ?? routeIncomingPlan,
+    prefsPath: opts.prefsPath ?? prefsFile(),
+    lockPath: opts.lockPath,
+    buildId: opts.buildId,
+    commit: opts.commit,
+    stateDir: opts.stateDir,
+    instanceId: opts.instanceId,
+    log: opts.log ?? noopLogger,
+  };
 }
 
-/** Validate the envelope/events structurally (any violation → whole-batch 400)
- * and sanitize each event's data (always applied, never a rejection). Exported
- * for direct testability. The raw-byte cap (413) stays in the route, which holds
- * the request text; here a >MAX_EVENTS count is the only 413 case. */
-export function parseUiLogBatch(raw: unknown): { events: UiLogEvent[] } | { status: 400 | 413 } {
-  if (!isPlainObject(raw) || !Array.isArray(raw.events)) return { status: 400 };
-  if (raw.events.length > MAX_EVENTS) return { status: 413 };
-  const events: UiLogEvent[] = [];
-  for (const e of raw.events) {
-    if (!isPlainObject(e)) return { status: 400 };
-    const { level, step, msg, extra } = e;
-    if (level !== "debug" && level !== "info" && level !== "warn" && level !== "error") {
-      return { status: 400 };
-    }
-    if (typeof step !== "string" || !STEP_RE.test(step)) return { status: 400 };
-    if (typeof msg !== "string") return { status: 400 };
-    if (extra !== undefined && !isPlainObject(extra)) return { status: 400 };
+// A request matched to one of the :id sub-routes, with the review id decoded and
+// the optional sub-path (/decision, /resolve, /draft, /expire) split out.
+interface IdRoute {
+  id: string;
+  sub: string | undefined;
+}
 
-    const safeExtra: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(extra ?? {})) {
-      if (RESERVED_KEYS.has(k)) continue; // drop collisions with record fields
-      safeExtra[k] = typeof v === "string" ? sanitizeString(v) : v;
-    }
-    // Forgery defense: the server is the sole authority on provenance, so force
-    // source="ui" over any client-sent value.
-    safeExtra.source = "ui";
-    events.push({
-      level,
-      step,
-      msg: sanitizeString(msg).slice(0, MAX_MSG_LEN),
-      extra: safeExtra,
-    });
-  }
-  return { events };
+const ID_ROUTE_RE = /^\/api\/reviews\/([^/]+)(\/decision|\/resolve|\/draft|\/expire)?$/;
+
+/** Match an /api/reviews/:id[/sub] path, decoding the id; null for any other path. */
+function matchIdRoute(path: string): IdRoute | null {
+  const m = path.match(ID_ROUTE_RE);
+  if (!m) return null;
+  return { id: decodeURIComponent(m[1] as string), sub: m[2] };
 }
 
 export function createServer(opts: CreateServerOptions): CaretServer {
-  const { store } = opts;
-  const idle = opts.idleMs ?? DEFAULTS.daemon.idle_ms;
-  const heartbeat = opts.heartbeatMs ?? DEFAULTS.daemon.heartbeat_ms;
-  const serveHtml = opts.serveHtml ?? (() => PLACEHOLDER_HTML);
-  const onShutdown = opts.onShutdown ?? (() => process.exit(0));
-  const routePlan = opts.routePlan ?? routeIncomingPlan;
-  const prefsPath = opts.prefsPath ?? prefsFile();
-  const lockPath = opts.lockPath;
-  const buildId = opts.buildId;
-  const commit = opts.commit;
-  const stateDir = opts.stateDir;
-  const instanceId = opts.instanceId;
-  const log = opts.log ?? noopLogger;
+  const cfg = resolveOptions(opts);
+  const { store, idle, heartbeat, serveHtml, onShutdown, routePlan, prefsPath, log } = cfg;
+  const { buildId, commit, stateDir, instanceId, lockPath } = cfg;
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount } = createDecisions(log);
 
   // Wait for a decision but no longer than `ms` — resolves to null on timeout so
@@ -241,7 +278,248 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return new Response("not found", { status: 404 });
   }
 
-  const idRoute = /^\/api\/reviews\/([^/]+)(\/decision|\/resolve|\/draft|\/expire)?$/;
+  // GET /api/health — the daemon's identity signature.
+  function handleHealth(): Response {
+    // Undefined fields are dropped from the JSON, so a daemon missing any
+    // reports the bare {service, version}. `commit` is the commit this daemon
+    // runs from (EXC-452), surfaced for a diagnostics client's discovery report;
+    // stateDir (world) and instanceId (boot) are the EXC-461 identity fields
+    // that let a hook and the UI tell daemons apart.
+    const body: HealthIdentity = { ...IDENTITY, build: buildId, commit, stateDir, instanceId };
+    return Response.json(body);
+  }
+
+  // POST /api/retire — graceful single-instance retire (EXC-406): a newer caret
+  // asks this daemon to step down so it can take over the port. Loopback-guarded
+  // by the cross-origin check in the wrapper. Pending reviews are already
+  // write-through to disk (store), so they rehydrate on the next daemon's start.
+  function handleRetire(): Response {
+    log.info("retire", "retire requested");
+    // Defer one tick so this 200 flushes before stop()/onShutdown (which may
+    // process.exit) — same pattern as the /resolve unblock below.
+    setTimeout(() => {
+      stop();
+      onShutdown();
+    }, 0);
+    return new Response(null, { status: 200 });
+  }
+
+  // GET / or /index.html — the single-file UI.
+  async function handleHtml(): Promise<Response> {
+    return new Response(await serveHtml(), {
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
+  }
+
+  // POST /api/reviews — an incoming plan from the hook.
+  async function handleCreateReview(req: Request): Promise<Response> {
+    const body = await parseBody(req, PlanInputSchema);
+    // The router logs the review record (created vs appended) itself.
+    const routed = await routePlan(body, store, log);
+    // Drop superseded reviews' unsettled long-poll entries — their hooks have
+    // given up (or will, at their own timeout), and a lingering unsettled entry
+    // pins openDecisionCount, blocking idle shutdown (EXC-454). A still-polling
+    // hook re-creates its entry per heartbeat, but that's bounded by its
+    // timeout, whose /expire clears it for good.
+    for (const staleId of routed.expired) clearDecision(staleId);
+    return Response.json(routed);
+  }
+
+  // POST /api/logs — the UI log bridge (EXC-445): the browser ships log events
+  // written through the daemon's CaretLogger (leveling/redaction apply
+  // downstream). New trust boundary — read the body ONCE to bound its size (the
+  // body parser's .catch tolerance can't measure the raw text), then parse in a
+  // guarded try so a malformed body is a clean 400, not a 500.
+  async function handleLogs(req: Request): Promise<Response> {
+    // One warn per rejected batch (a recoverable oddity, not a failure) —
+    // factored so the four reject sites can't drift apart.
+    const reject = (status: 400 | 413) => {
+      log.warn("ui", "ui log batch rejected", { status });
+      return new Response(null, { status });
+    };
+    // Optimistic pre-read cap on the declared length; the post-read byte count
+    // below is the authoritative check (headers can lie or be absent).
+    const declared = Number(req.headers.get("content-length"));
+    if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return reject(413);
+    const text = await req.text();
+    if (Buffer.byteLength(text, "utf-8") > MAX_BODY_BYTES) return reject(413);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return reject(400);
+    }
+    const result = parseUiLogBatch(parsed);
+    if ("status" in result) return reject(result.status);
+    // The accept path logs nothing of its own (noise rule) — only the forwarded
+    // events. All four CaretLogger methods take (step, string, extra?) here:
+    // error's String(err) on an already-sanitized string is identity, so one
+    // dispatch covers every level.
+    for (const ev of result.events) log[ev.level](ev.step, ev.msg, ev.extra);
+    return new Response(null, { status: 204 });
+  }
+
+  // GET /api/reviews — the pending list as client-facing shapes.
+  function handleListReviews(): Response {
+    return Response.json(store.list().map(toClientReview));
+  }
+
+  // GET /api/prefs — machine-global UI prefs, read once on UI load (deliberately
+  // not part of the 2s /api/reviews poll). Fail-safe: returns "default" if
+  // unreadable.
+  async function handlePrefs(): Promise<Response> {
+    return Response.json({ approveMode: await readApproveMode(prefsPath, log) });
+  }
+
+  // GET /api/reviews/:id — one review as its client-facing shape.
+  function handleGetReview(id: string): Response {
+    const r = store.get(id);
+    return r ? Response.json(toClientReview(r)) : notFound();
+  }
+
+  // GET /api/reviews/:id/decision — the hook's long-poll for a decision.
+  async function handleDecision(id: string): Promise<Response> {
+    // A decision may already be recorded: in memory (a deny keeps the review) or
+    // on disk (an approve removed it from memory, or the daemon restarted
+    // without rehydrating it). Serve it at once so a hook that dropped its
+    // long-poll and reconnected still receives the decision.
+    const inMem = store.get(id);
+    if (inMem?.decision) {
+      clearDecision(id);
+      return Response.json(inMem.decision);
+    }
+    if (!inMem) {
+      const disk = await store.persisted(id);
+      if (disk?.decision) {
+        // The reconnect-recovery path — rare and diagnostic gold when a hook
+        // dropped its long-poll or the daemon restarted mid-review.
+        log.debug("decision", `decision served from disk: ${shortId(id)}`, { reviewId: id });
+        clearDecision(id);
+        return Response.json(disk.decision);
+      }
+    }
+    // Otherwise wait, but only to the heartbeat window, then 204 so the client
+    // re-polls before any socket idle timeout closes the connection.
+    const decision = await raceDecision(id, heartbeat);
+    if (!decision) return new Response(null, { status: 204 });
+    clearDecision(id);
+    return Response.json(decision);
+  }
+
+  // PUT /api/reviews/:id/draft — autosaves the reviewer's working draft: the
+  // version-scoped inline annotations and the review-scoped general-comment
+  // draft. Each field is independently optional so a draft-only write never
+  // wipes annotations (and vice versa) — an omitted field is left alone.
+  async function handleDraft(req: Request, id: string): Promise<Response> {
+    const body: DraftBody = await parseBody(req, DraftBodySchema);
+    const updated = await store.update(id, (r) => {
+      // `!= null` so an absent OR null field is left alone — guarding null keeps
+      // the old `?? []` null-safety (a stray null annotations would otherwise
+      // persist and crash the client's `.map`).
+      if (body.annotations != null) {
+        currentVersion(r).annotations = body.annotations;
+      }
+      if (body.generalCommentDraft != null) {
+        r.generalCommentDraft = body.generalCommentDraft;
+      }
+    });
+    // Id only — draft/annotation text is reviewer prose and never logged.
+    if (updated) log.debug("draft", `draft saved: ${shortId(id)}`, { reviewId: id });
+    return updated ? Response.json({ ok: true }) : notFound();
+  }
+
+  // POST /api/reviews/:id/resolve — the browser's approve/deny decision.
+  async function handleResolve(req: Request, id: string): Promise<Response> {
+    const body: ResolveBody = await parseBody(req, ResolveBodySchema);
+    const existing = store.get(id);
+    // Only a pending review can be resolved — guards against a double resolve
+    // diverging the store from the decision the hook received.
+    if (!existing || existing.status !== "pending") return notFound();
+    const decision: Decision = {
+      behavior: body.behavior === "deny" ? "deny" : "allow",
+      feedback: body.feedback,
+      acceptMode: body.acceptMode,
+      decidedAt: Date.now(),
+    };
+    // Persist the decision BEFORE unblocking the hook.
+    await store.update(id, (r) => {
+      r.decision = decision;
+      r.status = decision.behavior === "allow" ? "approved" : "rejected";
+      // Clear the unsent draft as part of resolving (both paths): a deny keeps
+      // the review on disk as rejected and must not retain stale text; an
+      // approve removes it (store.remove flushes "" first).
+      r.generalCommentDraft = "";
+    });
+    // Approval is terminal: bump the session epoch (so a later plan is a fresh
+    // thread) and drop it from the active set so idle can fire.
+    if (decision.behavior === "allow") {
+      store.bumpEpoch(existing.sessionId);
+      await store.remove(id);
+      // Remember the chosen mode for the UI's next load. Fire-and-forget: never
+      // awaited, so it can't delay the 200 that unblocks the long-polling hook.
+      // A bare allow (no acceptMode) leaves prefs as-is.
+      if (isAcceptMode(decision.acceptMode)) {
+        void writeApproveMode(decision.acceptMode, prefsPath, log).catch(() => {
+          // Recoverable: prefs only seed the UI's next default.
+          log.warn("prefs", "approve mode write failed");
+        });
+      }
+    }
+    // Defer one tick so THIS 200 flushes before the hook's long-poll resolves
+    // (otherwise the browser's POST can appear to race the unblock).
+    setTimeout(() => resolveDecision(id, decision), 0);
+    log.info("resolve", `review ${shortId(id)} resolved: ${decision.behavior}`, {
+      reviewId: id,
+      sessionId: existing.sessionId,
+      acceptMode: decision.acceptMode,
+    });
+    return Response.json({ ok: true });
+  }
+
+  // POST /api/reviews/:id/expire — the hook is abandoning this review: its
+  // timeout fired and it is about to emit the fail-safe deny (EXC-454). No
+  // decision is recorded and the session epoch is untouched: the plan was never
+  // reviewed.
+  async function handleExpire(id: string): Promise<Response> {
+    // Drop any unsettled long-poll entry unconditionally — even when the review
+    // is already gone, a zombie hook's entry would otherwise pin
+    // openDecisionCount and block idle shutdown forever.
+    clearDecision(id);
+    const existing = store.get(id);
+    // Only a pending review can expire; resolved ones are already terminal.
+    if (!existing || existing.status !== "pending") return notFound();
+    await store.expire(id);
+    log.info("review", `review expired: ${shortId(id)}`, {
+      reviewId: id,
+      sessionId: existing.sessionId,
+    });
+    return Response.json({ ok: true });
+  }
+
+  // Resolve a request to its handler by method + path, returning the Response.
+  // The wrapper (handle) owns the cross-origin guard, idle/in-flight bookkeeping,
+  // and the catch-all 500; dispatch is pure routing + business logic.
+  async function dispatch(req: Request, method: string, path: string): Promise<Response> {
+    if (method === "GET" && path === "/api/health") return handleHealth();
+    if (method === "POST" && path === "/api/retire") return handleRetire();
+    if (method === "GET" && (path === "/" || path === "/index.html")) return handleHtml();
+    if (method === "POST" && path === "/api/reviews") return handleCreateReview(req);
+    if (method === "POST" && path === "/api/logs") return handleLogs(req);
+    if (method === "GET" && path === "/api/reviews") return handleListReviews();
+    if (method === "GET" && path === "/api/prefs") return handlePrefs();
+
+    const route = matchIdRoute(path);
+    if (route) {
+      const { id, sub } = route;
+      if (method === "GET" && !sub) return handleGetReview(id);
+      if (method === "GET" && sub === "/decision") return handleDecision(id);
+      if (method === "PUT" && sub === "/draft") return handleDraft(req, id);
+      if (method === "POST" && sub === "/resolve") return handleResolve(req, id);
+      if (method === "POST" && sub === "/expire") return handleExpire(id);
+    }
+
+    return notFound();
+  }
 
   async function handle(req: Request): Promise<Response> {
     inFlight++;
@@ -255,229 +533,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
         return new Response("cross-origin request blocked", { status: 403 });
       }
 
-      if (method === "GET" && path === "/api/health") {
-        // Undefined fields are dropped from the JSON, so a daemon missing any
-        // reports the bare {service, version}. `commit` is the commit this
-        // daemon runs from (EXC-452), surfaced for a diagnostics client's
-        // discovery report; stateDir (world) and instanceId (boot) are the
-        // EXC-461 identity fields that let a hook and the UI tell daemons apart.
-        const body: HealthIdentity = { ...IDENTITY, build: buildId, commit, stateDir, instanceId };
-        return Response.json(body);
-      }
-
-      // Graceful single-instance retire (EXC-406): a newer caret asks this
-      // daemon to step down so it can take over the port. Loopback-guarded by
-      // the cross-origin check above. Pending reviews are already write-through
-      // to disk (store), so they rehydrate on the next daemon's start.
-      if (method === "POST" && path === "/api/retire") {
-        log.info("retire", "retire requested");
-        // Defer one tick so this 200 flushes before stop()/onShutdown (which may
-        // process.exit) — same pattern as the /resolve unblock below.
-        setTimeout(() => {
-          stop();
-          onShutdown();
-        }, 0);
-        return new Response(null, { status: 200 });
-      }
-
-      if (method === "GET" && (path === "/" || path === "/index.html")) {
-        return new Response(await serveHtml(), {
-          headers: { "Content-Type": "text/html; charset=utf-8" },
-        });
-      }
-
-      if (method === "POST" && path === "/api/reviews") {
-        const body = (await req.json().catch(() => ({}))) as PlanInput;
-        // The router logs the review record (created vs appended) itself.
-        const routed = await routePlan(body, store, log);
-        // Drop superseded reviews' unsettled long-poll entries — their hooks
-        // have given up (or will, at their own timeout), and a lingering
-        // unsettled entry pins openDecisionCount, blocking idle shutdown
-        // (EXC-454). A still-polling hook re-creates its entry per heartbeat,
-        // but that's bounded by its timeout, whose /expire clears it for good.
-        for (const staleId of routed.expired) clearDecision(staleId);
-        return Response.json(routed);
-      }
-
-      // UI log bridge (EXC-445): the browser ships log events written through the
-      // daemon's CaretLogger (leveling/redaction apply downstream). New trust
-      // boundary — read the body ONCE to bound its size (diverges from the
-      // .catch(() => ({})) style above, which can't measure the raw text), then
-      // parse in a guarded try so a malformed body is a clean 400, not a 500.
-      if (method === "POST" && path === "/api/logs") {
-        // One warn per rejected batch (a recoverable oddity, not a failure) —
-        // factored so the four reject sites can't drift apart.
-        const reject = (status: 400 | 413) => {
-          log.warn("ui", "ui log batch rejected", { status });
-          return new Response(null, { status });
-        };
-        // Optimistic pre-read cap on the declared length; the post-read byte
-        // count below is the authoritative check (headers can lie or be absent).
-        const declared = Number(req.headers.get("content-length"));
-        if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return reject(413);
-        const text = await req.text();
-        if (Buffer.byteLength(text, "utf-8") > MAX_BODY_BYTES) return reject(413);
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(text);
-        } catch {
-          return reject(400);
-        }
-        const result = parseUiLogBatch(parsed);
-        if ("status" in result) return reject(result.status);
-        // The accept path logs nothing of its own (noise rule) — only the
-        // forwarded events. All four CaretLogger methods take (step, string,
-        // extra?) here: error's String(err) on an already-sanitized string is
-        // identity, so one dispatch covers every level.
-        for (const ev of result.events) log[ev.level](ev.step, ev.msg, ev.extra);
-        return new Response(null, { status: 204 });
-      }
-
-      if (method === "GET" && path === "/api/reviews") {
-        return Response.json(store.list().map(toClientReview));
-      }
-
-      // Machine-global UI prefs, read once on UI load (deliberately not part of
-      // the 2s /api/reviews poll). Fail-safe: returns "default" if unreadable.
-      if (method === "GET" && path === "/api/prefs") {
-        return Response.json({ approveMode: await readApproveMode(prefsPath, log) });
-      }
-
-      const m = path.match(idRoute);
-      if (m) {
-        const id = decodeURIComponent(m[1] as string);
-        const sub = m[2];
-
-        if (method === "GET" && !sub) {
-          const r = store.get(id);
-          return r ? Response.json(toClientReview(r)) : notFound();
-        }
-
-        if (method === "GET" && sub === "/decision") {
-          // A decision may already be recorded: in memory (a deny keeps the
-          // review) or on disk (an approve removed it from memory, or the daemon
-          // restarted without rehydrating it). Serve it at once so a hook that
-          // dropped its long-poll and reconnected still receives the decision.
-          const inMem = store.get(id);
-          if (inMem?.decision) {
-            clearDecision(id);
-            return Response.json(inMem.decision);
-          }
-          if (!inMem) {
-            const disk = await store.persisted(id);
-            if (disk?.decision) {
-              // The reconnect-recovery path — rare and diagnostic gold when a
-              // hook dropped its long-poll or the daemon restarted mid-review.
-              log.debug("decision", `decision served from disk: ${shortId(id)}`, { reviewId: id });
-              clearDecision(id);
-              return Response.json(disk.decision);
-            }
-          }
-          // Otherwise wait, but only to the heartbeat window, then 204 so the
-          // client re-polls before any socket idle timeout closes the connection.
-          const decision = await raceDecision(id, heartbeat);
-          if (!decision) return new Response(null, { status: 204 });
-          clearDecision(id);
-          return Response.json(decision);
-        }
-
-        // Autosaves the reviewer's working draft: the version-scoped inline
-        // annotations and the review-scoped general-comment draft. Each field is
-        // independently optional so a draft-only write never wipes annotations
-        // (and vice versa) — an omitted field is left alone.
-        if (method === "PUT" && sub === "/draft") {
-          const body = (await req.json().catch(() => ({}))) as {
-            annotations?: Review["versions"][number]["annotations"];
-            generalCommentDraft?: string;
-          };
-          const updated = await store.update(id, (r) => {
-            // `!= null` so an absent OR null field is left alone — guarding null
-            // keeps the old `?? []` null-safety (a stray null annotations would
-            // otherwise persist and crash the client's `.map`).
-            if (body.annotations != null) {
-              currentVersion(r).annotations = body.annotations;
-            }
-            if (body.generalCommentDraft != null) {
-              r.generalCommentDraft = body.generalCommentDraft;
-            }
-          });
-          // Id only — draft/annotation text is reviewer prose and never logged.
-          if (updated) log.debug("draft", `draft saved: ${shortId(id)}`, { reviewId: id });
-          return updated ? Response.json({ ok: true }) : notFound();
-        }
-
-        if (method === "POST" && sub === "/resolve") {
-          const body = (await req.json().catch(() => ({}))) as {
-            behavior?: "allow" | "deny";
-            feedback?: string;
-            acceptMode?: Decision["acceptMode"];
-          };
-          const existing = store.get(id);
-          // Only a pending review can be resolved — guards against a double
-          // resolve diverging the store from the decision the hook received.
-          if (!existing || existing.status !== "pending") return notFound();
-          const decision: Decision = {
-            behavior: body.behavior === "deny" ? "deny" : "allow",
-            feedback: body.feedback,
-            acceptMode: body.acceptMode,
-            decidedAt: Date.now(),
-          };
-          // Persist the decision BEFORE unblocking the hook.
-          await store.update(id, (r) => {
-            r.decision = decision;
-            r.status = decision.behavior === "allow" ? "approved" : "rejected";
-            // Clear the unsent draft as part of resolving (both paths): a deny
-            // keeps the review on disk as rejected and must not retain stale
-            // text; an approve removes it (store.remove flushes "" first).
-            r.generalCommentDraft = "";
-          });
-          // Approval is terminal: bump the session epoch (so a later plan is a
-          // fresh thread) and drop it from the active set so idle can fire.
-          if (decision.behavior === "allow") {
-            store.bumpEpoch(existing.sessionId);
-            await store.remove(id);
-            // Remember the chosen mode for the UI's next load. Fire-and-forget:
-            // never awaited, so it can't delay the 200 that unblocks the
-            // long-polling hook. A bare allow (no acceptMode) leaves prefs as-is.
-            if (isAcceptMode(decision.acceptMode)) {
-              void writeApproveMode(decision.acceptMode, prefsPath, log).catch(() => {
-                // Recoverable: prefs only seed the UI's next default.
-                log.warn("prefs", "approve mode write failed");
-              });
-            }
-          }
-          // Defer one tick so THIS 200 flushes before the hook's long-poll
-          // resolves (otherwise the browser's POST can appear to race the unblock).
-          setTimeout(() => resolveDecision(id, decision), 0);
-          log.info("resolve", `review ${shortId(id)} resolved: ${decision.behavior}`, {
-            reviewId: id,
-            sessionId: existing.sessionId,
-            acceptMode: decision.acceptMode,
-          });
-          return Response.json({ ok: true });
-        }
-
-        // The hook is abandoning this review — its timeout fired and it is
-        // about to emit the fail-safe deny (EXC-454). No decision is recorded
-        // and the session epoch is untouched: the plan was never reviewed.
-        if (method === "POST" && sub === "/expire") {
-          // Drop any unsettled long-poll entry unconditionally — even when the
-          // review is already gone, a zombie hook's entry would otherwise pin
-          // openDecisionCount and block idle shutdown forever.
-          clearDecision(id);
-          const existing = store.get(id);
-          // Only a pending review can expire; resolved ones are already terminal.
-          if (!existing || existing.status !== "pending") return notFound();
-          await store.expire(id);
-          log.info("review", `review expired: ${shortId(id)}`, {
-            reviewId: id,
-            sessionId: existing.sessionId,
-          });
-          return Response.json({ ok: true });
-        }
-      }
-
-      return notFound();
+      return await dispatch(req, method, path);
     } catch (err) {
       // Never let a handler exception drop the connection without a response —
       // and log it first (a genuine failure, so at error level), since a bare
