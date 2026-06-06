@@ -9,7 +9,7 @@
 // A `deny.message` is the documented, verified feedback channel — the model
 // receives it and revises the plan.
 
-import type { AcceptMode, Behavior } from "./types.ts";
+import type { AcceptMode, Behavior } from "../../types.ts";
 
 export interface PermissionDecision {
   behavior: Behavior;

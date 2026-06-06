@@ -4,7 +4,7 @@
 // Phase-0 spike outcome (the contract the rest of the code relies on): plan
 // approval is gated via a `PermissionRequest` hook matching `ExitPlanMode` — NOT
 // `PreToolUse` (which only permits the tool to run, so the native dialog still
-// shows). See src/feedback.ts for the decision JSON this produces.
+// shows). See src/adapters/claude/ for the decision JSON this produces.
 
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";

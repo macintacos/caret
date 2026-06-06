@@ -17,7 +17,7 @@ import {
   type ReviewDeps,
   runReview,
 } from "../../src/cli.ts";
-import type { PermissionDecision } from "../../src/feedback.ts";
+import type { PermissionDecision } from "../../src/adapters/claude/feedback.ts";
 import { DEFAULT_PORT } from "../../src/settings.ts";
 
 /** Session id for the single dev review; stable for the process lifetime so a

@@ -3,7 +3,8 @@
 //
 // Phase-0 spike outcome encoded here: plan approval is gated through a
 // PermissionRequest/ExitPlanMode hook. `review` blocks while the browser
-// decides, then prints the PermissionRequest decision JSON (see feedback.ts).
+// decides, then prints the PermissionRequest decision JSON (emitted by the
+// Claude adapter, src/adapters/claude/).
 //
 // FAIL-SAFE = DENY: shipping an unreviewed plan is the one outcome we never
 // allow. Every abnormal path (bad stdin, unreachable daemon, timeout, signal,
@@ -25,7 +26,7 @@ import {
   renderReport,
   type Report,
 } from "./discovery.ts";
-import { denyOutput, type HookOutput, toHookOutput } from "./feedback.ts";
+import { denyOutput, type HookOutput, toHookOutput } from "./adapters/claude/feedback.ts";
 import {
   createDaemonLogger,
   type ErrorContext,

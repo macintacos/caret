@@ -1,0 +1,48 @@
+import { expect, test } from "bun:test";
+import { claudeAdapter } from "../../../src/adapters/claude/index.ts";
+import { toHookOutput } from "../../../src/adapters/claude/feedback.ts";
+import type { Decision } from "../../../src/types.ts";
+
+test("emitDecision serializes a deny to the Claude PermissionRequest JSON", () => {
+  const decision: Decision = { behavior: "deny", feedback: "tighten scope", decidedAt: 1 };
+  expect(claudeAdapter.emitDecision(decision)).toBe(
+    JSON.stringify(toHookOutput(decision)),
+  );
+  // Spot-check the wire shape so a serialization regression is visible here, not
+  // only via the byte-identity check above.
+  expect(JSON.parse(claudeAdapter.emitDecision(decision))).toEqual({
+    hookSpecificOutput: {
+      hookEventName: "PermissionRequest",
+      decision: { behavior: "deny", message: "tighten scope" },
+    },
+  });
+});
+
+test("emitDecision carries an approve variant's setMode through to stdout", () => {
+  const decision: Decision = { behavior: "allow", acceptMode: "auto", decidedAt: 2 };
+  expect(JSON.parse(claudeAdapter.emitDecision(decision))).toEqual({
+    hookSpecificOutput: {
+      hookEventName: "PermissionRequest",
+      decision: {
+        behavior: "allow",
+        updatedPermissions: [{ type: "setMode", mode: "auto", destination: "session" }],
+      },
+    },
+  });
+});
+
+test("declares its approve variants as opaque id + label tokens", () => {
+  expect(claudeAdapter.approveVariants.map((v) => v.id)).toEqual([
+    "default",
+    "acceptEdits",
+    "auto",
+  ]);
+  for (const variant of claudeAdapter.approveVariants) {
+    expect(variant.label.length).toBeGreaterThan(0);
+  }
+});
+
+test("the parsing and install-probe seams are declared but not yet wired", () => {
+  expect(() => claudeAdapter.parseHookInput("{}")).toThrow("not wired");
+  expect(() => claudeAdapter.readInstallState()).toThrow("not wired");
+});
