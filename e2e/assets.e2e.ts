@@ -1,8 +1,9 @@
 // Multi-asset pipeline over the wire: the daemon serves the standard Vite build
 // (index.html + content-hashed /assets/*) cleanly, and shiki's grammars arrive
-// as lazy code-split chunks on demand. The fixture daemon serves the real
-// ui/dist/ tree through the same asset seam the binary uses, so a green run here
-// proves the hashed-asset build is served end-to-end with no broken references.
+// as separate code-split chunks fetched over the wire. The fixture daemon serves
+// the real ui/dist/ tree through the same asset seam the binary uses, so a green
+// run here proves the hashed-asset build is served end-to-end with no broken
+// references.
 
 import { expect, test } from "./support/fixtures.ts";
 
@@ -72,26 +73,41 @@ test("daemon serves the hashed-asset build with zero failed same-origin requests
   expect(consoleErrors).toEqual([]);
 });
 
-test("a lazy shiki grammar chunk loads when a fenced code block renders", async ({
+test("a code-split shiki grammar chunk is served over the wire and applies", async ({
   daemon,
   page,
 }) => {
   const origin = daemon.url;
 
   // The entry bundle is index-*.js; the grammars are separate code-split chunks
-  // (typescript-*.js, json-*.js, …). The fixture plan's ```ts block drives the
-  // highlighter to dynamically import the typescript grammar chunk on demand —
-  // a request that only fires because the build code-splits the grammars out of
-  // the initial payload.
+  // (typescript-*.js, json-*.js, …) the build carves out of the initial payload.
+  // The highlighter fetches them as hashed /assets/*.js distinct from index-*,
+  // and the fixture plan's ```ts block drives the visible shiki repaint that
+  // confirms the typescript grammar chunk loaded and applied.
   const grammarChunks: string[] = [];
   page.on("response", (res) => {
     if (res.status() !== 200) return;
     const path = new URL(res.url()).pathname;
     if (!isSameOrigin(res.url(), origin)) return;
     // A hashed /assets/*.js chunk that is NOT the index entry bundle: a
-    // lazily-imported grammar chunk.
+    // code-split grammar chunk.
     if (/^\/assets\/.+\.js$/.test(path) && !/^\/assets\/index-/.test(path)) {
       grammarChunks.push(path);
+    }
+  });
+
+  // The grammar chunks fetch after first paint, off the critical path — past
+  // test 1's heading-visibility failure window. Watch for failures here so a
+  // 404 on ANY grammar chunk (not just the visible ts one) is caught over the
+  // wire: the highlighter awaits all grammars at build, so by the repaint below
+  // every chunk's request has resolved.
+  const failures: string[] = [];
+  page.on("requestfailed", (req) => {
+    if (isSameOrigin(req.url(), origin)) failures.push(`requestfailed ${req.url()}`);
+  });
+  page.on("response", (res) => {
+    if (isSameOrigin(res.url(), origin) && res.status() >= 400) {
+      failures.push(`${res.status()} ${res.url()}`);
     }
   });
 
@@ -108,7 +124,11 @@ test("a lazy shiki grammar chunk loads when a fenced code block renders", async 
     .poll(() => shiki.evaluate((el) => el.innerHTML.includes("--shiki-light:")))
     .toBe(true);
 
-  // The repaint is driven by a real network fetch of a code-split grammar chunk
-  // distinct from the entry bundle.
+  // A code-split grammar chunk distinct from the entry bundle was fetched 200
+  // over the wire during the highlighter build, and the repaint above confirms
+  // it applied.
   expect(grammarChunks.length).toBeGreaterThan(0);
+
+  // No grammar chunk (nor any other same-origin request) failed during the load.
+  expect(failures).toEqual([]);
 });

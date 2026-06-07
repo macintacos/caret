@@ -5,24 +5,31 @@
 set -euo pipefail
 
 # Release-confidence smoke: prove the COMPILED binary serves the UI purely from
-# its embedded asset manifest (EXC-521/522), not from the source tree. Kept OUT
-# of preflight on purpose — it depends on a full `bun build --compile`, which is
-# too slow for the per-push gate; this is the final-validation / pre-release run.
+# its embedded asset manifest (EXC-521/522), not from a dist tree on disk. Kept
+# OUT of preflight on purpose — it depends on a full `bun build --compile`, which
+# is too slow for the per-push gate; this is the final-validation / pre-release run.
 #
-# The embed is exercised by running the binary from a TEMP cwd with an absolute
-# binary path: ui-assets.ts's resolver falls back to a ui/dist tree relative to
-# the source if the embedded manifest is empty, so a cwd inside the repo could
-# silently mask a broken embed. From /tmp there is no such tree to fall back to.
+# Isolating the embed takes care: ui-assets.ts's resolver has two on-disk
+# fallbacks that would serve a valid UI even with a broken embed, masking the
+# failure this task exists to catch. Both key off the *binary's* location, not
+# the cwd — a compiled binary's import.meta.url is file:///$bunfs/root/<bin>, so
+# srcDist (../ui/dist relative to it) never resolves to the repo, and besideDist
+# (dirname(execPath)/ui) is the real masking source: `mise run build-bin` copies
+# ui/dist to bin/ui as a safety net, so bin/caret always has a valid sibling UI.
+# We neutralize besideDist by running a COPY of the binary alone in a temp dir
+# with no sibling ui/ — then neither disk fallback resolves and the embedded
+# manifest is the only possible asset source. (The cwd is irrelevant here.)
 
-bin="$PWD/bin/caret"
-if [ ! -x "$bin" ]; then
-  echo "smoke-bin: $bin missing or not executable (run \`mise run build\`)" >&2
+src_bin="$PWD/bin/caret"
+if [ ! -x "$src_bin" ]; then
+  echo "smoke-bin: $src_bin missing or not executable (run \`mise run build\`)" >&2
   exit 1
 fi
 
-# Isolated ephemeral state dir (its own daemon.lock + reviews), wiped on exit.
+# Isolated ephemeral state dir (its own daemon.lock + reviews) and an isolated
+# dir to hold the lone binary copy — both wiped on exit.
 state_dir="$(mktemp -d "${TMPDIR:-/tmp}/caret-smoke.XXXXXX")"
-run_dir="$(mktemp -d "${TMPDIR:-/tmp}/caret-smoke-cwd.XXXXXX")"
+run_dir="$(mktemp -d "${TMPDIR:-/tmp}/caret-smoke-bin.XXXXXX")"
 lock_file="$state_dir/caret/daemon.lock"
 daemon_pid=""
 
@@ -33,9 +40,16 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Boot the binary on an OS-assigned port (--ephemeral) from the temp cwd, with
-# the isolated state dir. A subshell `cd` keeps this script's own cwd intact.
-(cd "$run_dir" && XDG_STATE_HOME="$state_dir" "$bin" daemon --ephemeral) &
+# Copy the binary into the temp dir alone — no sibling ui/ — so besideDist
+# (dirname(execPath)/ui) has nothing to fall back to and the embed must serve.
+bin="$run_dir/caret"
+cp "$src_bin" "$bin"
+
+# Boot the copied binary on an OS-assigned port (--ephemeral) with the isolated
+# state dir. No subshell: $! is the daemon pid itself, so cleanup's kill and the
+# poll loop's `kill -0` target the real process. The cwd does not affect asset
+# resolution (it keys off execPath / $bunfs), so we leave this script's cwd as-is.
+XDG_STATE_HOME="$state_dir" "$bin" daemon --ephemeral &
 daemon_pid=$!
 
 # Discover the bound port from the lock the daemon writes after a successful
@@ -80,7 +94,8 @@ index_body="$(curl -sS "$base/")"
 # Every hashed asset URL the served index references (script src / link href
 # under /assets/). If the embed were broken the binary would serve its built-in
 # placeholder, which references no assets — so an empty set is itself a failure.
-mapfile -t asset_paths < <(printf '%s' "$index_body" | grep -oE '/assets/[A-Za-z0-9._/-]+' | sort -u)
+asset_paths=()
+while IFS= read -r line; do asset_paths+=("$line"); done < <(printf '%s' "$index_body" | grep -oE '/assets/[A-Za-z0-9._/-]+' | sort -u)
 if [ "${#asset_paths[@]}" -eq 0 ]; then
   echo "smoke-bin: served index references no /assets/ URLs (broken embed? placeholder served?)" >&2
   echo "--- served index ---" >&2
