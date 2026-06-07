@@ -1,5 +1,5 @@
 // Working-directory display helper. Pure TS (no DOM/node imports) so it stays
-// singlefile-safe and unit-testable.
+// node-free and unit-testable.
 
 /**
  * Abbreviates a cwd for display: a path of two or fewer segments is shown in

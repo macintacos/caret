@@ -4,7 +4,7 @@
 // the @core alias) import from here, so the denylist and the algorithm live in
 // ONE place rather than drifting between two hand-mirrored copies.
 //
-// Pure TS with no node imports, so it bundles into the singlefile UI as well as
+// Pure TS with no node imports, so it bundles into the browser UI as well as
 // the compiled bun binary (target architecture §5). Node-only concerns — home
 // path scrubbing, NDJSON file round-trips — stay in src/redact.ts and ride in
 // through the optional per-string transform below.

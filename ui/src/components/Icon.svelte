@@ -1,9 +1,10 @@
 <script lang="ts">
   // Renders one vendored Lucide SVG (ui/src/icons/, see icon-rules.md). The
-  // imports are static `?raw` strings so vite-plugin-singlefile inlines them —
-  // no dynamic imports, no emitted assets. The SVGs stay verbatim: sizing is
-  // CSS on the wrapper (overriding the files' width/height attributes), and
-  // color rides on stroke="currentColor" from the parent's `color`.
+  // imports are static `?raw` strings so the markup ships inside the JS bundle —
+  // no per-icon network round-trip, no emitted asset to manage, and the fixed
+  // small registry means a dynamic import would buy nothing. The SVGs stay
+  // verbatim: sizing is CSS on the wrapper (overriding the files' width/height
+  // attributes), and color rides on stroke="currentColor" from the parent's `color`.
   import bell from "../icons/bell.svg?raw";
   import bellOff from "../icons/bell-off.svg?raw";
   import check from "../icons/check.svg?raw";

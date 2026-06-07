@@ -6,8 +6,8 @@
 //
 // The e2e suite has its own daemon launcher (e2e/support/daemon-entry.ts): it
 // runs under the Playwright/node runner, binds an OS-assigned port for parallel
-// workers, and serves the built single-file artifact — a hermetic
-// createServer-with-explicit-opts posture this module does not replace.
+// workers, and serves the built ui/dist/ tree (index plus its hashed assets) —
+// a hermetic createServer-with-explicit-opts posture this module does not replace.
 import { createServer, type CaretServer, type CreateServerOptions } from "../../src/daemon.ts";
 import { createStore, type Store } from "../../src/store.ts";
 

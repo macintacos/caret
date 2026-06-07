@@ -1,5 +1,5 @@
 // Keyboard chord predicates shared by the comment/feedback editors. Pure TS so
-// they stay singlefile-safe and unit-testable; each caller keeps its own
+// they stay node-free and unit-testable; each caller keeps its own
 // preventDefault and side effects. The `aria-keyshortcuts="Meta+Enter
 // Control+Enter"` annotations on those buttons mirror `isSubmitChord`.
 
