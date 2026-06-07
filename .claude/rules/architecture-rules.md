@@ -104,6 +104,30 @@ that asset set and the daemon serves each asset by URL path with per-path MIME a
 Dynamic `import()` in the browser bundle is fine — the node-free invariant above is the only
 constraint a shared `@core` module owes.
 
+## Daemon trust model
+
+The daemon binds **loopback only** (`127.0.0.1`) and runs with **no auth**, sized for a single-user
+laptop. The posture follows from that: any local process can already reach the daemon and read plan
+content, so the daemon does not try to authenticate local callers — the one adversary it defends
+against is a **browser on another origin** that the user happens to have open.
+
+- **Read-confidentiality rests on the loopback bind + the absence of CORS headers, not on the CSRF
+  guard.** The daemon emits **no** `Access-Control-*` header on any route, so the browser's
+  same-origin policy blocks a foreign page from reading any response — even a `GET` that reaches a
+  handler. A regression test (`test/core/daemon.test.ts`, the read-confidentiality block) asserts no
+  route family ever emits an `Access-Control-*` header, so a future permissive-CORS "fix" fails
+  loudly instead of silently exposing plan bodies. Never add a CORS-grant header.
+- **The CSRF guard gates only non-safe methods.** `isCrossOrigin(req)` (`src/daemon.ts`) rejects a
+  state-changing request from a foreign Origin; safe methods (GET/HEAD, via `isSafeMethod`) are let
+  through, because the SOP already protects reads and a foreign GET can't exfiltrate the response.
+  The guard tests the verb through `isSafeMethod`, not a POST/PUT allowlist, so a future mutating
+  verb (DELETE/PATCH) is CSRF-protected by default. A same-origin browser sends a loopback Origin
+  (allowed) and a hook/CLI sends no Origin (allowed); a foreign page's write is the only thing
+  blocked.
+- **No preflight handler exists or is needed.** A same-origin request sends no `OPTIONS` preflight,
+  and a cross-origin preflight would be denied by the browser before any request body is sent (no
+  advertised CORS headers).
+
 ## Related rules
 
 - `test-layout.md` — how `test/` mirrors this same core/adapter split.
