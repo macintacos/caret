@@ -106,10 +106,35 @@ export interface CaretServer {
  * it internally), so the 127.0.0.1 bind needs no change. */
 export const VANITY_HOST = "caret.localhost";
 
-/** Reject mutating requests that aren't same-origin (loopback). The daemon has
- * no auth, so this is CSRF defense-in-depth: a hook/CLI request carries no
- * Origin (allowed); the same-origin browser UI carries a loopback Origin
- * (allowed); a page on another site carries a foreign Origin (blocked). */
+// Threat model (EXC-540). The daemon binds loopback only and runs with no auth,
+// for a single-user laptop: any local process can already reach it, so the only
+// adversary the daemon defends against is a *browser* on another origin that the
+// user happens to have open. Read-confidentiality (a foreign page must not read
+// plan bodies) rests on two things, neither of them this guard: the loopback
+// bind keeps off-host callers out, and the daemon emits no `Access-Control-*`
+// headers, so the browser's same-origin policy blocks a foreign page from
+// reading any response — even a GET that reaches a handler. Because the SOP
+// already protects reads, the CSRF guard below only gates state-changing
+// (non-safe) methods, where the browser *can* fire a cross-origin request whose
+// side effect lands even though the attacker can't read the reply. A safe
+// method (GET/HEAD) is let through deliberately; that asymmetry is the
+// read-confidentiality tax, and `test/core/daemon.test.ts` pins both halves (no
+// CORS header is ever emitted; a cross-origin GET is allowed through).
+
+/** GET and HEAD are the safe (non-mutating) HTTP methods. The CSRF guard gates
+ * only non-safe methods, so a future mutating verb (DELETE/PATCH) is guarded by
+ * default rather than needing an allowlist edit. */
+export function isSafeMethod(method: string): boolean {
+  return method === "GET" || method === "HEAD";
+}
+
+/** Reject non-safe (state-changing) requests that aren't same-origin (loopback).
+ * The daemon has no auth, so this is CSRF defense-in-depth: a hook/CLI request
+ * carries no Origin (allowed); the same-origin browser UI carries a loopback
+ * Origin (allowed); a page on another site carries a foreign Origin (blocked).
+ * No preflight (OPTIONS) handler exists or is needed — a same-origin request
+ * sends none, and the daemon advertises no CORS headers, so a cross-origin
+ * preflight would be denied by the browser before any request body is sent. */
 export function isCrossOrigin(req: Request): boolean {
   const origin = req.headers.get("origin");
   if (origin) {
@@ -607,7 +632,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       const path = url.pathname;
       const method = req.method;
 
-      if ((method === "POST" || method === "PUT") && isCrossOrigin(req)) {
+      // Gate every non-safe (state-changing) method, not a fixed POST/PUT list,
+      // so a future mutating verb is CSRF-protected by default. Safe methods
+      // (GET/HEAD) fall through — the browser's same-origin policy already
+      // blocks a foreign page from reading the response (see the guard's
+      // threat-model note above).
+      if (!isSafeMethod(method) && isCrossOrigin(req)) {
         return new Response("cross-origin request blocked", { status: 403 });
       }
 

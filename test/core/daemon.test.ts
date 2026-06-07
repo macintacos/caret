@@ -380,9 +380,7 @@ test("PUT draft updates the current version's annotations", async () => {
 test("PUT draft round-trips the optional prefix/suffix anchor context", async () => {
   await boot();
   const { id } = await newReview();
-  const withContext = [
-    { ...ANNS[0], id: "an2", prefix: "before ", suffix: " after" },
-  ];
+  const withContext = [{ ...ANNS[0], id: "an2", prefix: "before ", suffix: " after" }];
   await putDraft(id, { annotations: withContext });
   const one = await (await fetch(`${base}/api/reviews/${id}`)).json();
   expect(one.annotations).toEqual(withContext);
@@ -489,6 +487,134 @@ test("caret.localhost vanity origin is allowed; other *.localhost hosts are not 
     body: JSON.stringify({ sessionId: "S2", plan: "# x" }),
   });
   expect(sibling.status).toBe(403);
+});
+
+test("a cross-origin non-safe method is blocked even off the POST/PUT list (CSRF guard)", async () => {
+  // The guard gates every non-safe verb, not a fixed POST/PUT allowlist, so a
+  // mutating method the route table doesn't serve is still 403 at the wrapper —
+  // never reaching dispatch's uniform 404. This pins that a future mutating verb
+  // (DELETE/PATCH) is CSRF-protected by default.
+  await boot();
+  const { id } = await newReview();
+  for (const method of ["DELETE", "PATCH"]) {
+    const res = await fetch(`${base}/api/reviews/${id}`, {
+      method,
+      headers: { Origin: "http://evil.com" },
+    });
+    // 403 from the guard, NOT the 404 the same-origin method-mismatch matrix gets.
+    expect(res.status).toBe(403);
+  }
+});
+
+// ---- read-confidentiality posture (EXC-540) ----
+//
+// The daemon's read-confidentiality (a foreign page must not read plan bodies)
+// rests on the loopback bind plus the browser same-origin policy — NOT on the
+// CSRF guard, which gates only non-safe methods. These tests pin the two halves
+// of that posture so a future "fix" can't silently erode it: the daemon emits no
+// Access-Control-* header on any route (so SOP keeps blocking cross-origin
+// reads), and a cross-origin GET is deliberately allowed *through* the guard
+// (the read-confidentiality tax — the asymmetry on the allow side, not just the
+// block side).
+describe("read-confidentiality posture", () => {
+  const CORS_HEADERS = [
+    "access-control-allow-origin",
+    "access-control-allow-methods",
+    "access-control-allow-headers",
+  ];
+
+  // Assert a response carries no CORS-grant header at all. Checks the three named
+  // grant headers explicitly, then sweeps every header for an "access-control-"
+  // prefix so a future credentials/expose/max-age header trips the same wire too.
+  function expectNoCorsHeaders(res: Response, where: string) {
+    for (const h of CORS_HEADERS) {
+      expect(res.headers.get(h), `${where} must not emit ${h}`).toBeNull();
+    }
+    for (const [name] of res.headers) {
+      expect(
+        name.toLowerCase().startsWith("access-control-"),
+        `${where} must emit no Access-Control-* header (saw ${name})`,
+      ).toBe(false);
+    }
+  }
+
+  test("no route family emits an Access-Control-* header", async () => {
+    // A representative request to every route family. A future permissive-CORS
+    // 'fix' on any handler would fail loudly here rather than silently breaking
+    // read confidentiality.
+    // Short heartbeat so the /decision long-poll returns its 204 promptly.
+    await boot({
+      heartbeatMs: 30,
+      assets: fakeAssets({
+        "/index.html": '<!doctype html><html><body><div id="app"></div></body></html>',
+        "/assets/index-AB12.js": "export const x = 1;\n",
+      }),
+    });
+    const { id } = await newReview();
+    const cases: Array<[string, () => Promise<Response>]> = [
+      ["GET /api/health", () => fetch(`${base}/api/health`)],
+      ["GET /api/reviews", () => fetch(`${base}/api/reviews`)],
+      ["GET /api/reviews/:id", () => fetch(`${base}/api/reviews/${id}`)],
+      ["GET /api/reviews/:id/decision", () => fetch(`${base}/api/reviews/${id}/decision`)],
+      ["GET /api/prefs", () => fetch(`${base}/api/prefs`)],
+      ["GET / (index)", () => fetch(`${base}/`)],
+      ["GET /assets/* (asset)", () => fetch(`${base}/assets/index-AB12.js`)],
+      [
+        "PUT /api/reviews/:id/draft",
+        () =>
+          fetch(`${base}/api/reviews/${id}/draft`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ generalCommentDraft: "x" }),
+          }),
+      ],
+      [
+        "POST /api/logs",
+        () =>
+          fetch(`${base}/api/logs`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ events: [{ level: "info", step: "ui", msg: "x" }] }),
+          }),
+      ],
+      ["POST /api/retire", () => fetch(`${base}/api/retire`, { method: "POST" })],
+      ["a 404 fallthrough", () => fetch(`${base}/api/nope`)],
+    ];
+    // /resolve and /expire are terminal (they consume the pending review), so
+    // give each its own seeded id and run them last.
+    for (const [label, send] of cases) {
+      const res = await send();
+      expectNoCorsHeaders(res, label);
+    }
+    const { id: rid } = await newReview();
+    expectNoCorsHeaders(
+      await fetch(`${base}/api/reviews/${rid}/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ behavior: "allow" }),
+      }),
+      "POST /api/reviews/:id/resolve",
+    );
+    const { id: eid } = await newReview();
+    expectNoCorsHeaders(
+      await fetch(`${base}/api/reviews/${eid}/expire`, { method: "POST" }),
+      "POST /api/reviews/:id/expire",
+    );
+  });
+
+  test("a cross-origin GET is allowed through (the read-confidentiality tax)", async () => {
+    // The CSRF guard does NOT block safe methods, so a foreign page's GET reaches
+    // the handler and returns 200 — read protection is the browser's same-origin
+    // policy (no CORS header above), not this guard. This documents the asymmetry
+    // on the allow side: cross-origin writes 403, cross-origin reads pass.
+    await boot();
+    const { id } = await newReview();
+    const res = await fetch(`${base}/api/reviews/${id}`, {
+      headers: { Origin: "http://evil.com" },
+    });
+    expect(res.status).toBe(200);
+    expectNoCorsHeaders(res, "cross-origin GET /api/reviews/:id");
+  });
 });
 
 // ---- UI serving (index document + hashed sibling assets) ----
@@ -626,8 +752,11 @@ describe("routing fallthrough", () => {
   test("a wrong method on a known path falls through to 404 (no 405)", async () => {
     await boot();
     const { id } = await newReview();
-    // Each pair is a real route under a method it does not serve. The dispatcher
-    // has no method-not-allowed branch, so all of these are 404.
+    // Each pair is a real route under a method it does not serve, sent SAME-ORIGIN
+    // (no Origin header) so the CSRF guard passes and the request reaches the
+    // dispatcher. The dispatcher has no method-not-allowed branch, so all of these
+    // are 404. (A cross-origin non-safe method 403s at the guard before dispatch —
+    // see the CSRF-guard test in the read-confidentiality block above.)
     const cases: Array<[string, string]> = [
       ["DELETE", "/api/reviews"],
       ["GET", "/api/retire"],
