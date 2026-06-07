@@ -1,19 +1,31 @@
 import { afterEach, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { claudeAdapter } from "../../src/adapters/claude/index.ts";
 import { runReview } from "../../src/review.ts";
 import { setLogLevel } from "../../src/log.ts";
 import { logFile } from "../../src/paths.ts";
 import { PLAN_FORMAT_DENY_MESSAGE } from "../../src/plan-format.ts";
-import type { Decision } from "../../src/types.ts";
+import type { Decision, PlanInput } from "../../src/types.ts";
 import { ndjsonRecords } from "../support/ndjson.ts";
 import { setupTempStateDir } from "../support/env.ts";
 
 const allow: Decision = { behavior: "allow", decidedAt: 1 };
 
+// A tool-agnostic fake stdin parser: the core takes parseHookInput as an injected
+// dependency, so this suite stays in test/core/ without reaching into any
+// adapter (the real parsers live in test/adapters/<tool>/). It normalizes the
+// generic hook shape these tests pipe in below.
+function fakeParseHookInput(stdin: string): PlanInput {
+  const h = JSON.parse(stdin) as {
+    session_id?: string;
+    cwd?: string;
+    tool_input?: { plan?: string };
+  };
+  return { sessionId: h.session_id, cwd: h.cwd, plan: h.tool_input?.plan };
+}
+
 function reviewDeps(over: Partial<Parameters<typeof runReview>[1]> = {}) {
   return {
-    parseHookInput: (stdin: string) => claudeAdapter.parseHookInput(stdin),
+    parseHookInput: fakeParseHookInput,
     ensureDaemon: async () => "http://x",
     postReview: async () => ({ id: "rid" }),
     longPoll: async () => allow,

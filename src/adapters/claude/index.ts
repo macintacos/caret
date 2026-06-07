@@ -5,7 +5,7 @@
 import type { Decision, PlanInput } from "../../types.ts";
 import type { AgentAdapter, InstallProbe } from "../adapter.ts";
 import { APPROVE_VARIANTS } from "./approve.ts";
-import { toHookOutput } from "./feedback.ts";
+import { fatalDenyLine, toHookOutput } from "./feedback.ts";
 import { readClaudeInstallState } from "./install.ts";
 
 /** The shape of the PermissionRequest/ExitPlanMode hook stdin Claude Code pipes
@@ -34,6 +34,10 @@ export const claudeAdapter: AgentAdapter = {
 
   emitDecision(decision: Decision): string {
     return JSON.stringify(toHookOutput(decision));
+  },
+
+  fatalDenyLine(reason: string): string {
+    return fatalDenyLine(reason);
   },
 
   readInstallState(): InstallProbe {
