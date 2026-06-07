@@ -1,4 +1,4 @@
-// Shared layout constants. Pure TS (no node imports) so it stays singlefile-safe
+// Shared layout constants. Pure TS (no node imports) so it stays node-free
 // and is importable from both the UI and the Playwright config.
 
 /**

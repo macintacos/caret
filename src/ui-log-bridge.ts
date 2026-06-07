@@ -4,7 +4,7 @@
 // home of those wire constants and the batch parser.
 //
 // Browser-safe pure TS — no node imports — so it can be shared with the UI side
-// of the bridge (ui/src/lib/log.ts) without breaking the singlefile build.
+// of the bridge (ui/src/lib/log.ts) without breaking the browser bundle.
 
 // POST /api/logs caps and constraints.
 export const MAX_BODY_BYTES = 64 * 1024;

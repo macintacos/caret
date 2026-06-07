@@ -108,7 +108,7 @@ function emit(
 		push(event);
 		// Dev-only console mirror, on the ALREADY-censored event so it can't print a
 		// DENY_KEYS body. `import.meta.env.DEV` is referenced directly so Vite's
-		// static replacement strips this branch from the production single-file
+		// static replacement strips this branch from the production browser
 		// bundle; under bun test it resolves via process.env (undefined) → off.
 		if (import.meta.env.DEV)
 			console[level](`[${safeStep}] ${safeMsg}`, clean ?? "");
