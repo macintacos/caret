@@ -4,6 +4,7 @@
 // src/settings.ts since EXC-430; daemon identity/build fingerprinting lives in
 // src/build-id.ts.)
 
+import { chmodSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 
 /** Resolve a caret directory under one of the two XDG roots: `$<envVar>/caret`
@@ -63,4 +64,25 @@ export function daemonLogFile(): string {
  * caret can discover and gracefully retire an older one (EXC-406). */
 export function daemonLock(): string {
   return `${stateDir()}/daemon.lock`;
+}
+
+/** Create `target` (the state dir, or a child like reviewsDir()) at 0700, the
+ * single mode-enforcing path every mkdir-of-stateDir site routes through so the
+ * dir holding plan bodies is never world-readable (EXC-539). Sync so both the
+ * sync (log/lock/spawn) and async (store/prefs) callers share one helper.
+ *
+ * Recursive mkdir does NOT chmod an already-existing directory, so the root
+ * mode is otherwise a create-order race — a no-mode caller (prefs, lock, spawn)
+ * reaching it first leaves stateDir at the umask-derived 0755. We close that by
+ * chmodding `target`, and when `target` lives under stateDir (e.g. reviewsDir),
+ * tightening the root too. The helper may throw; callers keep their own failure
+ * handling. */
+export function ensureStateDir(target = stateDir()): void {
+  mkdirSync(target, { recursive: true, mode: 0o700 });
+  chmodSync(target, 0o700);
+  const root = stateDir();
+  if (target !== root && target.startsWith(`${root}/`)) {
+    mkdirSync(root, { recursive: true, mode: 0o700 });
+    chmodSync(root, 0o700);
+  }
 }

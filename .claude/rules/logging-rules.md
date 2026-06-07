@@ -120,5 +120,8 @@ Logs live under `$XDG_STATE_HOME/caret` (default `~/.local/state/caret`):
   interleaved with raw non-JSON crash output.
 
 `caret.log` is created `0600`, inside a `0700` state dir; `daemon.log` is a plain append-mode
-redirect. Writes are synchronous, so a record logged just before `process.exit` (fail-safe and
-signal paths) is durable.
+redirect. The `0700` state dir is enforced by `ensureStateDir()` (`src/paths.ts`), which every
+mkdir-of-stateDir site routes through (log, store, prefs, lock, spawn) — it chmods an already
+existing dir, so the mode holds regardless of which caller creates the dir first (EXC-539). Writes
+are synchronous, so a record logged just before `process.exit` (fail-safe and signal paths) is
+durable.

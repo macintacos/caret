@@ -5,10 +5,10 @@
 // against the adapter-declared set the caller passes in. Reads fail safe to the
 // default id; writes are fire-and-forget (never on the hook's decision path).
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { type CaretLogger, noopLogger } from "./log.ts";
-import { prefsFile } from "./paths.ts";
+import { ensureStateDir, prefsFile } from "./paths.ts";
 import type { ApproveVariantId } from "./types.ts";
 
 /** The recognized approve-variant ids and the one to fall back to. The daemon
@@ -68,7 +68,8 @@ export async function writeApproveMode(
     log.warn("prefs", "ignoring invalid approve mode");
     return;
   }
-  await mkdir(dirname(file), { recursive: true });
-  await writeFile(file, JSON.stringify({ approveMode: mode }, null, 2));
+  ensureStateDir(dirname(file));
+  // 0600: prefs.json shares the state dir with plan bodies; keep it private too.
+  await writeFile(file, JSON.stringify({ approveMode: mode }, null, 2), { mode: 0o600 });
   log.debug("prefs", `approve mode saved: ${mode}`);
 }

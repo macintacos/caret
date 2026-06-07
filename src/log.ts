@@ -12,10 +12,9 @@
 // crash a hook). Error records sit at pino's highest level (50) in our set, so
 // they emit regardless of the configured level for free.
 
-import { mkdirSync } from "node:fs";
 import pino from "pino";
 import { callerLocation } from "./caller-location.ts";
-import { logFile, stateDir } from "./paths.ts";
+import { ensureStateDir, logFile } from "./paths.ts";
 import { shortId } from "./redact-core.ts";
 import { scrubString, scrubValue } from "./redact.ts";
 import { errorMessage } from "./types.ts";
@@ -154,7 +153,7 @@ function createHookLogger(
 ): { log: CaretLogger; dest: ReturnType<typeof pino.destination> | null; path: string } {
   const path = logFile();
   try {
-    mkdirSync(stateDir(), { recursive: true, mode: 0o700 });
+    ensureStateDir();
     const dest = pino.destination({ dest: path, sync: true, mode: 0o600 });
     return { log: wrap(pino(pinoOpts, dest), level, redact, "hook"), dest, path };
   } catch {
