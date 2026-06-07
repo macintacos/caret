@@ -26,6 +26,14 @@ export const VERSION = pkg.version;
  * process squatting on the port. */
 export const IDENTITY = { service: "caret", version: VERSION } as const;
 
+/** True when running as a compiled binary (process.execPath IS caret), false
+ * under `bun run` dev where argv[1] is the `.ts` entry script. The build
+ * fingerprint, the daemon self-spawn vector, and the discovery report all key
+ * off this one signal. */
+export function isCompiledBinary(): boolean {
+  return !process.argv[1]?.endsWith(".ts");
+}
+
 /** Short content fingerprint of the served UI HTML — the daemon's staleness
  * signal. It changes whenever the embedded UI changes, so an upgraded binary's
  * build differs from a still-running older daemon's. Returns "no-ui" when no UI
@@ -103,9 +111,8 @@ let cachedBuildId: string | undefined;
  * build can't change while this process runs). */
 export async function currentBuildId(): Promise<string> {
   if (cachedBuildId !== undefined) return cachedBuildId;
-  const script = process.argv[1];
   cachedBuildId = await computeBuildId({
-    isCompiled: !script?.endsWith(".ts"),
+    isCompiled: isCompiledBinary(),
     hashBinary: async () => {
       try {
         const bytes = await Bun.file(process.execPath).bytes();

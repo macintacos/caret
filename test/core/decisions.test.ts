@@ -50,14 +50,11 @@ test("a double resolve is logged at warn (EXC-444)", () => {
   const reg = createDecisions(log);
   reg.resolveDecision("r9", decision("allow"));
   reg.resolveDecision("r9", decision("deny"));
-  expect(recs).toEqual([
-    {
-      level: "warn",
-      step: "resolve",
-      msg: "decision already settled: r9",
-      extra: { reviewId: "r9" },
-    },
-  ]);
+  // Stable contract: exactly one warn-level "resolve" record carrying the
+  // reviewId in its structured field. The id rides the durable `extra.reviewId`
+  // (warn, not error — a recoverable double-resolve); the prose isn't pinned.
+  expect(recs).toHaveLength(1);
+  expect(recs[0]).toMatchObject({ level: "warn", step: "resolve", extra: { reviewId: "r9" } });
 });
 
 test("clearDecision removes a settled entry", () => {

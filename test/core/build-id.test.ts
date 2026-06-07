@@ -1,6 +1,13 @@
 import { expect, test } from "bun:test";
 import pkg from "../../package.json" with { type: "json" };
-import { buildHash, computeBuildId, IDENTITY, resolveCommit, VERSION } from "../../src/build-id.ts";
+import {
+  buildHash,
+  computeBuildId,
+  IDENTITY,
+  isCompiledBinary,
+  resolveCommit,
+  VERSION,
+} from "../../src/build-id.ts";
 
 // The static identity surface plus the build fingerprint and commit resolver.
 
@@ -10,6 +17,23 @@ test("VERSION reflects package.json (honest identity, not the stale 0.0.1 hardco
 
 test("IDENTITY names the caret service at the current version", () => {
   expect(IDENTITY).toEqual({ service: "caret", version: pkg.version });
+});
+
+// ---- isCompiledBinary: the one dev-vs-compiled signal ----
+
+test("isCompiledBinary reads the runtime kind off argv[1]'s extension", () => {
+  // The single heuristic daemonCommand / currentBuildId / discovery all key off:
+  // a `.ts` entry script means `bun run` dev; anything else is the compiled
+  // binary (process.execPath IS caret).
+  const saved = process.argv.slice();
+  try {
+    process.argv[1] = "/some/path/src/cli.ts";
+    expect(isCompiledBinary()).toBe(false);
+    process.argv[1] = "/usr/local/bin/caret";
+    expect(isCompiledBinary()).toBe(true);
+  } finally {
+    process.argv = saved;
+  }
 });
 
 test("buildHash is stable for identical input and differs for changed input", () => {

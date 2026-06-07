@@ -8,7 +8,7 @@
 import { existsSync } from "node:fs";
 import { release } from "node:os";
 import { claudeAdapter } from "../adapters/claude/index.ts";
-import { VERSION } from "../build-id.ts";
+import { isCompiledBinary, VERSION } from "../build-id.ts";
 import { httpHealth } from "../daemon-client.ts";
 import { isPidAlive, readDaemonLock } from "../daemon-lifecycle.ts";
 import {
@@ -43,7 +43,7 @@ function prodDiscoveryDeps(s: Settings): DiscoveryDeps {
     system: () => ({ platform: process.platform, os: release(), arch: process.arch }),
     install: () => ({
       // The same dev-vs-compiled signal daemonCommand/currentBuildId key off.
-      kind: process.argv[1]?.endsWith(".ts") ? "dev" : "prod",
+      kind: isCompiledBinary() ? "prod" : "dev",
       binaryPath: process.execPath,
       bunVersion: Bun.version,
     }),

@@ -1,17 +1,25 @@
-// Review orchestration core: run one plan review end-to-end and return the hook
-// output. Tool-agnostic — the Claude-specific stdin shape is parsed behind the
-// injected `parseHookInput`, so this module never names an agent's wire fields.
+// Review orchestration core: run one plan review end-to-end and return the
+// tool-agnostic `Decision`. Tool-agnostic throughout — the agent's stdin shape
+// is parsed behind the injected `parseHookInput`, and the command layer renders
+// the returned Decision to the agent's wire string via the adapter's
+// `emitDecision`. This module names no agent's wire protocol.
 //
 // FAIL-SAFE = DENY: shipping an unreviewed plan is the one outcome we never
 // allow. Every abnormal path (bad stdin, unreachable daemon, timeout, daemon
-// death) becomes a deny — runReview never throws.
+// death) becomes a deny Decision — runReview never throws.
 
-import { denyOutput, type HookOutput, toHookOutput } from "./adapters/claude/feedback.ts";
 import { VANITY_HOST } from "./daemon.ts";
 import { type ErrorContext, logDebug, logError, logInfo, shortId } from "./log.ts";
 import { logFile } from "./paths.ts";
 import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "./plan-format.ts";
 import { type Decision, errorMessage, type PlanInput } from "./types.ts";
+
+/** A fail-safe deny the core constructs when an unreviewed plan must never ship.
+ * The reason rides in `feedback`; the adapter renders it to the tool's deny wire
+ * shape at the emission boundary. */
+function denyDecision(reason: string): Decision {
+  return { behavior: "deny", feedback: reason, decidedAt: Date.now() };
+}
 
 export interface ReviewDeps {
   /** Normalize the agent's raw hook stdin into a core PlanInput. Throws on input
@@ -48,9 +56,10 @@ function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> 
   });
 }
 
-/** Run a review end-to-end, returning the hook output. Never throws — any
- * failure becomes a deny so an unreviewed plan can never ship. */
-export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOutput> {
+/** Run a review end-to-end, returning the core `Decision`. Never throws — any
+ * failure becomes a deny so an unreviewed plan can never ship. The command layer
+ * renders the returned Decision to the agent's wire string via the adapter. */
+export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decision> {
   // Track the current step + context so the catch can log what actually failed.
   let step = "parse";
   const ctx: ErrorContext = {};
@@ -73,7 +82,7 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
     step = "validatePlan";
     if (hasUntaggedCodeBlock(input.plan)) {
       logInfo(step, "plan rejected: code block missing language marker", ctx);
-      return denyOutput(PLAN_FORMAT_DENY_MESSAGE);
+      return denyDecision(PLAN_FORMAT_DENY_MESSAGE);
     }
 
     step = "ensureDaemon";
@@ -128,7 +137,7 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
     } else {
       logInfo("decision", "plan approved", { ...ctx, acceptMode: decision.acceptMode });
     }
-    return toHookOutput(decision);
+    return decision;
   } catch (err) {
     logError(step, err, ctx);
     // The hook is abandoning the review (timeout or post-create failure):
@@ -143,6 +152,6 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<HookOu
       }
     }
     const msg = errorMessage(err);
-    return denyOutput(`caret: ${msg} — denying so no unreviewed plan ships. See ${logFile()}.`);
+    return denyDecision(`caret: ${msg} — denying so no unreviewed plan ships. See ${logFile()}.`);
   }
 }
