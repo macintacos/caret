@@ -17,15 +17,23 @@ import { loadSettings, reviewTimeoutMs, type Settings } from "../settings.ts";
 import type { Decision } from "../types.ts";
 import { warnInvalidEnvVars } from "./boot.ts";
 
+/** Select the platform's URL-opening argv: darwin `open`, win32 `cmd /c start`,
+ * anything else `xdg-open`. caret is macOS-first — the non-darwin branches ship
+ * but are exercised primarily on macOS (see README support posture). Pure so the
+ * branch selection is unit-testable without spawning. */
+export function browserOpenCmd(platform: NodeJS.Platform | string, url: string): string[] {
+  return platform === "darwin"
+    ? ["open", url]
+    : platform === "win32"
+      ? ["cmd", "/c", "start", "", url]
+      : ["xdg-open", url];
+}
+
 function openBrowser(url: string): void {
   try {
-    const cmd =
-      process.platform === "darwin"
-        ? ["open", url]
-        : process.platform === "win32"
-          ? ["cmd", "/c", "start", "", url]
-          : ["xdg-open", url];
-    Bun.spawn(cmd, { stdio: ["ignore", "ignore", "ignore"] }).unref();
+    Bun.spawn(browserOpenCmd(process.platform, url), {
+      stdio: ["ignore", "ignore", "ignore"],
+    }).unref();
   } catch {
     // Best-effort: the stderr URL is the fallback.
   }
