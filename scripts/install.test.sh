@@ -126,8 +126,8 @@ make_success_fixture() {
   mkdir -p "$root/scripts" "$root/.claude-plugin" "$root/.mise/tasks" "$root/ui/dist"
   cp "$script" "$root/scripts/install.sh"
   cp "$test_dir/../.mise/tasks/build-bin" "$root/.mise/tasks/build-bin"
-  # marketplace.json's presence is the local-checkout signal; ui/dist/index.html
-  # is what build-bin's UI-fallback copy reads.
+  # marketplace.json's presence is the local-checkout signal; the ui/dist tree
+  # is what build-bin's UI-fallback copy reads (`cp -R ui/dist bin/ui`).
   printf '{}\n' >"$root/.claude-plugin/marketplace.json"
   printf '<!doctype html>\n' >"$root/ui/dist/index.html"
 

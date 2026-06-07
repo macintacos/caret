@@ -18,6 +18,7 @@ import { createServer } from "../../src/daemon.ts";
 import { createDaemonLogger } from "../../src/log.ts";
 import { prefsFile, reviewsDir } from "../../src/paths.ts";
 import { createStore } from "../../src/store.ts";
+import { loadUiAssets } from "../../src/ui-assets.ts";
 
 // Refuse to run without an isolated state dir — never fall back to the real
 // ~/.local/state/caret (same posture as assertDevEnv in scripts/dev/driver.ts).
@@ -26,16 +27,16 @@ if (!process.env.XDG_STATE_HOME) {
   process.exit(1);
 }
 
-// The shipped artifact, read from disk so a stale/missing build fails loudly.
-// The mise task depends on build-ui; this guard catches direct `bunx playwright
-// test` runs that skipped it.
-const htmlPath = `${import.meta.dir}/../../ui/dist/index.html`;
-const htmlFile = Bun.file(htmlPath);
-if (!(await htmlFile.exists())) {
-  console.error(`caret e2e daemon: ${htmlPath} missing — run \`mise run build-ui\` first`);
+// The shipped artifact, resolved through the daemon's own asset seam so the spec
+// exercises the whole ui/dist/ tree (index plus its hashed siblings), the same
+// resolver the binary uses. Absence fails loudly so a direct `bunx playwright
+// test` that skipped build-ui doesn't silently serve the placeholder; the mise
+// task depends on build-ui.
+const assets = await loadUiAssets();
+if (!assets) {
+  console.error("caret e2e daemon: ui/dist missing — run `mise run build-ui` first");
   process.exit(1);
 }
-const html = await htmlFile.text();
 
 const log = createDaemonLogger(() => "info"); // NDJSON to stderr
 const store = createStore(reviewsDir(), log);
@@ -49,7 +50,7 @@ const server = createServer({
   // Belt and braces: even an unexpected idle fire must not process.exit.
   onShutdown: () => {},
   prefsPath: prefsFile(), // under the ephemeral state dir
-  serveHtml: () => html,
+  assets,
   log,
 });
 

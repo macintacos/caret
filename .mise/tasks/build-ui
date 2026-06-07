@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Build the single-file Svelte UI (Vite -> ui/dist/index.html)"
+#MISE description="Build the Svelte UI (Vite -> ui/dist: index.html + hashed assets)"
 
 set -euo pipefail
 

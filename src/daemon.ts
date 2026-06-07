@@ -1,6 +1,7 @@
 // The caret daemon: a single Bun.serve that holds reviews in memory, serves the
-// single-file UI, bridges the hook's long-poll to the browser's decision, and
-// idle-auto-shuts-down when no reviews remain.
+// built UI (index document plus its hashed sibling assets), bridges the hook's
+// long-poll to the browser's decision, and idle-auto-shuts-down when no reviews
+// remain.
 
 import { mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -13,6 +14,7 @@ import { type ApproveModeSet, readApproveMode, writeApproveMode } from "./prefs.
 import { routeIncomingPlan } from "./reviews.ts";
 import { DEFAULTS } from "./settings.ts";
 import type { Store } from "./store.ts";
+import type { UiAssets } from "./ui-assets.ts";
 import { MAX_BODY_BYTES, parseUiLogBatch } from "./ui-log-bridge.ts";
 import {
   type ApproveVariant,
@@ -27,6 +29,13 @@ import {
 } from "./types.ts";
 
 const PLACEHOLDER_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>caret</title></head><body><div id="app">caret daemon — UI not built yet</div></body></html>`;
+
+// The index document is served with no-cache so a redeploy never references stale
+// hashed assets; hashed siblings under /assets/* are content-addressed, so they
+// get a long immutable cache. (Vite's documented hashing guidance.)
+const INDEX_CACHE_CONTROL = "no-cache";
+const ASSET_CACHE_CONTROL = "public, max-age=31536000, immutable";
+const INDEX_PATH = "/index.html";
 
 /** Decides whether an incoming plan starts a new review or appends a version.
  * The router owns the review record (created vs appended), so it receives the
@@ -48,7 +57,12 @@ export interface CreateServerOptions {
    * captured at boot. The pure defaults keep createServer free of config-file
    * reads, so tests stay hermetic. */
   heartbeatMs?: number;
-  serveHtml?: () => string | Promise<string>;
+  /** The resolved UI asset set (ui-assets.ts loadUiAssets): its URL paths form the
+   * exact-match allowlist the daemon serves, and each path reads through Bun.file
+   * (carrying its MIME). Omitted (default) means no UI — `GET /` serves the
+   * built-in placeholder and every other UI path 404s, the posture existing tests
+   * pin. */
+  assets?: UiAssets;
   onShutdown?: () => void;
   routePlan?: RoutePlan;
   /** Path to the machine-global prefs file; defaults to paths.prefsFile(). */
@@ -180,7 +194,7 @@ interface ResolvedOptions {
   store: Store;
   idle: number;
   heartbeat: number;
-  serveHtml: () => string | Promise<string>;
+  assets: UiAssets | undefined;
   onShutdown: () => void;
   routePlan: RoutePlan;
   prefsPath: string;
@@ -198,7 +212,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     store: opts.store,
     idle: opts.idleMs ?? DEFAULTS.daemon.idle_ms,
     heartbeat: opts.heartbeatMs ?? DEFAULTS.daemon.heartbeat_ms,
-    serveHtml: opts.serveHtml ?? (() => PLACEHOLDER_HTML),
+    assets: opts.assets,
     onShutdown: opts.onShutdown ?? (() => process.exit(0)),
     routePlan: opts.routePlan ?? routeIncomingPlan,
     prefsPath: opts.prefsPath ?? prefsFile(),
@@ -230,7 +244,7 @@ function matchIdRoute(path: string): IdRoute | null {
 
 export function createServer(opts: CreateServerOptions): CaretServer {
   const cfg = resolveOptions(opts);
-  const { store, idle, heartbeat, serveHtml, onShutdown, routePlan, prefsPath, log } = cfg;
+  const { store, idle, heartbeat, assets, onShutdown, routePlan, prefsPath, log } = cfg;
   const { buildId, commit, stateDir, instanceId, approveVariants, lockPath } = cfg;
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount } = createDecisions(log);
 
@@ -331,10 +345,34 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return new Response(null, { status: 200 });
   }
 
-  // GET / or /index.html — the single-file UI.
-  async function handleHtml(): Promise<Response> {
-    return new Response(await serveHtml(), {
-      headers: { "Content-Type": "text/html; charset=utf-8" },
+  // GET / or /index.html — the UI's index document, served with no-cache so a
+  // redeploy never references stale hashed asset names. Falls back to the
+  // built-in placeholder when no UI asset set was injected (dev / fresh checkout).
+  function handleIndex(): Response {
+    const file = assets?.file(INDEX_PATH);
+    const body: BodyInit = file ?? PLACEHOLDER_HTML;
+    return new Response(body, {
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": INDEX_CACHE_CONTROL,
+      },
+    });
+  }
+
+  // GET <path> for a non-index manifest key — a hashed sibling asset (JS/CSS/
+  // fonts). The path must be an exact manifest key (the allowlist), never
+  // resolved against the filesystem, so traversal is impossible by construction.
+  // Bun.file carries the asset's MIME. Only content-addressed /assets/* names
+  // earn the long immutable cache; any other served file (e.g. a public/-copied
+  // favicon, not content-hashed) gets no-cache so a redeploy is re-fetched.
+  // Returns null for an unknown path so dispatch falls through to its uniform 404.
+  function handleAsset(path: string): Response | null {
+    if (!assets) return null;
+    const file = assets.file(path);
+    if (!file) return null;
+    const cache = path.startsWith("/assets/") ? ASSET_CACHE_CONTROL : INDEX_CACHE_CONTROL;
+    return new Response(file, {
+      headers: { "Cache-Control": cache },
     });
   }
 
@@ -530,7 +568,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   async function dispatch(req: Request, method: string, path: string): Promise<Response> {
     if (method === "GET" && path === "/api/health") return handleHealth();
     if (method === "POST" && path === "/api/retire") return handleRetire();
-    if (method === "GET" && (path === "/" || path === "/index.html")) return handleHtml();
+    if (method === "GET" && (path === "/" || path === INDEX_PATH)) return handleIndex();
     if (method === "POST" && path === "/api/reviews") return handleCreateReview(req);
     if (method === "POST" && path === "/api/logs") return handleLogs(req);
     if (method === "GET" && path === "/api/reviews") return handleListReviews();
@@ -544,6 +582,14 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       if (method === "PUT" && sub === "/draft") return handleDraft(req, id);
       if (method === "POST" && sub === "/resolve") return handleResolve(req, id);
       if (method === "POST" && sub === "/expire") return handleExpire(id);
+    }
+
+    // A hashed sibling asset (exact manifest-key match) — checked after the API
+    // routes so a UI build can never shadow one. Unknown paths fall through to
+    // the uniform 404.
+    if (method === "GET") {
+      const asset = handleAsset(path);
+      if (asset) return asset;
     }
 
     return notFound();

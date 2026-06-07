@@ -1,4 +1,7 @@
-import { expect, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import pkg from "../../package.json" with { type: "json" };
 import {
   buildHash,
@@ -8,6 +11,30 @@ import {
   resolveCommit,
   VERSION,
 } from "../../src/build-id.ts";
+import type { UiAssets } from "../../src/ui-assets.ts";
+
+// A UiAssets handle over real temp files, so buildHash reads bytes through
+// Bun.file exactly as it does in production. `paths` is sorted to match the
+// resolver's contract (the digest folds assets in sorted-path order).
+const assetDirs: string[] = [];
+function fakeAssets(files: Record<string, string>): UiAssets {
+  const root = mkdtempSync(join(tmpdir(), "caret-assets-"));
+  assetDirs.push(root);
+  const map: Record<string, string> = {};
+  for (const [urlPath, content] of Object.entries(files)) {
+    const safe = join(root, urlPath.replace(/[^A-Za-z0-9]/g, "_"));
+    writeFileSync(safe, content);
+    map[urlPath] = safe;
+  }
+  return {
+    paths: Object.keys(map).sort(),
+    file: (urlPath) => (map[urlPath] ? Bun.file(map[urlPath]) : undefined),
+  };
+}
+
+afterEach(() => {
+  for (const d of assetDirs.splice(0)) rmSync(d, { recursive: true, force: true });
+});
 
 // The static identity surface plus the build fingerprint and commit resolver.
 
@@ -36,13 +63,42 @@ test("isCompiledBinary reads the runtime kind off argv[1]'s extension", () => {
   }
 });
 
-test("buildHash is stable for identical input and differs for changed input", () => {
-  expect(buildHash("<html>a</html>")).toBe(buildHash("<html>a</html>"));
-  expect(buildHash("<html>a</html>")).not.toBe(buildHash("<html>b</html>"));
+// ---- buildHash: the UI asset-set digest (the daemon's staleness signal) ----
+
+test("buildHash is deterministic across re-invocations of the same asset set", async () => {
+  // daemon-lifecycle.ts reuse-if-same-build depends on this: a dev daemon that
+  // re-digests the same dist must produce the same id, or it would retire and
+  // respawn itself endlessly.
+  const files = { "/index.html": "<html>a</html>", "/assets/app-AB12.js": "console.log(1)" };
+  expect(await buildHash(fakeAssets(files))).toBe(await buildHash(fakeAssets(files)));
 });
 
-test("buildHash returns 'no-ui' when the UI is undefined", () => {
-  expect(buildHash(undefined)).toBe("no-ui");
+test("buildHash is order-independent (digest folds in sorted-path order)", async () => {
+  const a = fakeAssets({ "/index.html": "x", "/assets/app.js": "y" });
+  const b = fakeAssets({ "/assets/app.js": "y", "/index.html": "x" });
+  expect(await buildHash(a)).toBe(await buildHash(b));
+});
+
+test("buildHash differs when any asset's bytes change", async () => {
+  const base = await buildHash(fakeAssets({ "/index.html": "<html>a</html>" }));
+  expect(await buildHash(fakeAssets({ "/index.html": "<html>b</html>" }))).not.toBe(base);
+});
+
+test("buildHash differs when an asset's URL path changes (path is folded in)", async () => {
+  const a = await buildHash(fakeAssets({ "/assets/app-AB12.js": "code" }));
+  const b = await buildHash(fakeAssets({ "/assets/app-CD34.js": "code" }));
+  expect(a).not.toBe(b);
+});
+
+test("buildHash differs when an asset is added", async () => {
+  const one = await buildHash(fakeAssets({ "/index.html": "x" }));
+  const two = await buildHash(fakeAssets({ "/index.html": "x", "/assets/app.js": "y" }));
+  expect(one).not.toBe(two);
+});
+
+test("buildHash returns 'no-ui' when there is no UI (undefined or empty set)", async () => {
+  expect(await buildHash(undefined)).toBe("no-ui");
+  expect(await buildHash({ paths: [], file: () => undefined })).toBe("no-ui");
 });
 
 // ---- computeBuildId: any local rebuild supersedes a running daemon ----

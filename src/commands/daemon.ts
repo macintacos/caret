@@ -6,13 +6,14 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, unlinkSync } from "node:fs";
 import { claudeAdapter } from "../adapters/claude/index.ts";
-import { currentBuildId, currentCommit, loadUiHtml } from "../build-id.ts";
+import { currentBuildId, currentCommit } from "../build-id.ts";
 import { isAddrInUse } from "../daemon-lifecycle.ts";
 import { type CaretServer, createServer } from "../daemon.ts";
 import { createDaemonLogger } from "../log.ts";
 import { configFile, daemonLock, reviewsDir, stateDir } from "../paths.ts";
 import { getPort, heartbeatMs, idleMs, settings, watchSettings } from "../settings.ts";
 import { createStore } from "../store.ts";
+import { loadUiAssets } from "../ui-assets.ts";
 import { warnInvalidEnvVars } from "./boot.ts";
 
 export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
@@ -51,8 +52,8 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   warnInvalidEnvVars((msg) => log.warn("env", msg));
   const store = createStore(reviewsDir(), log);
   await store.rehydrate();
-  const html = await loadUiHtml();
-  if (!html) log.info("ui", "no embedded ui; serving placeholder");
+  const assets = await loadUiAssets();
+  if (!assets) log.info("ui", "no embedded ui; serving placeholder");
   // `caret daemon --ephemeral` (EXC-461): bind an OS-assigned port instead of
   // the configured one. A process flag, not a setting — the dev task owns the
   // daemon and discovers the bound port from the lock, so port resolution for
@@ -65,7 +66,7 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
       port: ephemeral ? 0 : getPort(boot),
       idleMs: idleMs(boot),
       heartbeatMs: heartbeatMs(boot),
-      serveHtml: html ? () => html : undefined,
+      assets,
       lockPath: daemonLock(),
       buildId: await currentBuildId(),
       commit: currentCommit(),
