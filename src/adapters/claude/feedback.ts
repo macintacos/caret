@@ -7,7 +7,21 @@
 //   request changes      -> { behavior: "deny", message: <feedback> }
 //
 // A `deny.message` is the documented, verified feedback channel — the model
-// receives it and revises the plan.
+// receives it and revises the plan. test/adapters/claude/wire-contract.test.ts
+// pins this exact wire JSON by driving a realistic PermissionRequest payload
+// through the real parse → runReview → emit path.
+//
+// Two parts of the contract are empirically-working but not pinned by Anthropic
+// docs (EXC-531); EXC-549 is the manual follow-up that verifies them against a
+// live Claude session and feeds findings back to Anthropic:
+//   1. The exact `updatedPermissions` shape — caret emits the object-array form
+//      `[{ type: "setMode", mode, destination: "session" }]`, the live shape; a
+//      top-level `setMode` is NOT what the documentation mandates.
+//   2. Whether a per-hook `timeout` override above the documented 600s default is
+//      honored or silently clamped. hooks/hooks.json declares 3900s; the review
+//      timeout ceiling stays strictly below it (see HOOK_TIMEOUT_S, with the
+//      coupling pinned by test/adapters/claude/hooks-timeout.test.ts) so caret's
+//      own fail-safe deny always emits before Claude could kill the hook.
 
 import type { ApproveVariantId, Behavior } from "../../types.ts";
 import { type SetModeName, setModeFor } from "./approve.ts";

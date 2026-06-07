@@ -20,7 +20,7 @@ import { z } from "zod";
 // Re-exported so existing `from "./settings.ts"` import sites keep working; the
 // literal lives in the node-free constants module so ui/vite.config.ts can read
 // it without pulling in this module's node-only dependency chain (EXC-504).
-import { DEFAULT_PORT } from "./constants.ts";
+import { DEFAULT_PORT, HOOK_TIMEOUT_S } from "./constants.ts";
 import { logError } from "./log.ts";
 import { configFile } from "./paths.ts";
 
@@ -32,7 +32,7 @@ export { DEFAULT_PORT };
 // predicates that lived in paths.ts. (`int()` is a JS-number check, so a TOML
 // `42718.0` parses to 42718 and passes — there is no int/float distinction.)
 const Port = z.number().int().positive();
-const TimeoutS = z.number().positive().lt(3900); // seconds, below the 3900s hook budget in hooks.json
+const TimeoutS = z.number().positive().lt(HOOK_TIMEOUT_S); // seconds, strictly below the hooks.json hook budget
 const IdleMs = z.number().int().nonnegative();
 const HeartbeatMs = z.number().int().positive();
 
