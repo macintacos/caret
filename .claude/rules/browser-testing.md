@@ -31,9 +31,9 @@ swept into the unit runner and crash it. `.e2e.ts` keeps the two runners disjoin
 Every spec goes through `e2e/support/fixtures.ts`; never stand up a daemon by hand inside a spec.
 
 - **Per-test isolated daemon.** The fixture boots a fresh daemon on an OS-assigned port (port 0),
-  serving the built single-file `ui/dist/index.html`, with an ephemeral `XDG_STATE_HOME` wiped at
-  teardown and idle shutdown disabled. The user's real daemon (`:42718`) and `~/.local/state/caret`
-  are never touched.
+  serving the built `ui/dist/` tree (index plus its hashed assets), with an ephemeral
+  `XDG_STATE_HOME` wiped at teardown and idle shutdown disabled. The user's real daemon (`:42718`)
+  and `~/.local/state/caret` are never touched.
 - **Seed through the public API.** Reviews are created by `POST /api/reviews`, the same surface a
   real hook uses — never by reaching into the store directly.
 - **No external daemon, no dev driver.** A spec must not reuse a running daemon, depend on

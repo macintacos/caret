@@ -239,7 +239,7 @@ Requires [mise](https://mise.jdx.dev), which pins bun, biome, hk, and pkl.
 
 ```sh
 mise run setup      # install pinned tools + JS deps + e2e Chromium + register git hooks
-mise run build      # build:ui (Vite single-file) then build:bin (bun build --compile)
+mise run build      # build:ui (Vite multi-asset) then build:bin (bun build --compile, embeds the UI)
 mise run dev        # isolated daemon + fake plan + Vite UI (ephemeral port)
 mise run test       # bun test
 mise run test-e2e   # Playwright browser e2e (isolated daemon, Chromium)
@@ -275,7 +275,7 @@ production default); this skips `--ephemeral` and binds that port, so only one s
 at a time.
 
 `mise run test-e2e` runs the Playwright specs in `e2e/` against an isolated daemon that serves the
-built single-file UI on an OS-assigned port with ephemeral state, so the suite never touches your
+built `ui/dist/` artifact on an OS-assigned port with ephemeral state, so the suite never touches your
 real daemon or `~/.local/state/caret`. `mise run setup` installs the Chromium browser the specs
 drive. For when to write an e2e spec versus a `bun test` unit versus throwaway exploration, see
 `.claude/rules/browser-testing.md`.
@@ -302,10 +302,10 @@ src/                tool-agnostic core (flat): cli.ts (Commander tree) · review
                     daemon.ts (Bun.serve) · daemon-lifecycle.ts · daemon-client.ts · store.ts · reviews.ts (revision threading)
                     decisions.ts · prefs.ts · log.ts (leveled NDJSON) · caller-location.ts · redact.ts · redact-core.ts (browser-safe)
                     settings.ts (config.toml) · constants.ts · paths.ts · build-id.ts (VERSION/identity/lock) · types.ts (wire contract)
-                    json-file.ts · plan-format.ts · ui-asset.ts · ui-log-bridge.ts (/api/logs) · program.ts (shared CLI scaffolding)
+                    json-file.ts · plan-format.ts · ui-assets.ts (resolves the embedded UI for the daemon to serve) · ui-log-bridge.ts (/api/logs) · program.ts (shared CLI scaffolding)
 src/commands/       per-subcommand entrypoints (daemon, prewarm, review, redact, discovery, boot)
 src/adapters/       adapter.ts (AgentAdapter interface) · claude/ (the Claude Code adapter: hook parse, decision emission, approve variants, install probe)
-ui/                 Svelte 5 single-file SPA (Vite + vite-plugin-singlefile) · src/state/ runes state modules · src/icons/ vendored Lucide SVGs
+ui/                 Svelte 5 multi-asset SPA (Vite) embedded into the binary via the build-generated asset manifest, served by the daemon by URL path · src/state/ runes state modules · src/icons/ vendored Lucide SVGs
 hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode) — Claude-adapter packaging
 commands/           /caret:demo · /caret:debug · /caret:discovery — Claude-adapter packaging (agent-specific behavioral prose)
 test/               core/ (tool-agnostic suites) · adapters/claude/ (Claude-adapter suites + fixtures) · scripts/ (release + dev tooling) · support/ (shared scaffolding)

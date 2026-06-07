@@ -23,8 +23,9 @@ invariants, so a drifting set fails `bun test`.
 `ui/src/components/Icon.svelte` renders one icon by `name`:
 
 - **Static `?raw` imports only.** Each SVG is imported as a `?raw` string and inlined via `{@html}`,
-  which keeps the singlefile build (`vite-plugin-singlefile`) safe — no emitted assets. Never reach
-  for a dynamic import; it would break the single-file bundle.
+  so the markup ships inside the JS bundle with no per-icon network round-trip and no emitted asset
+  to manage. Keep the imports static: a dynamic import would buy nothing here (the registry is fixed
+  and small) and only add a runtime fetch and a loading state for markup that may as well be inlined.
 - **`name`** is an `IconName` from `ICON_NAMES` — the registry, not a free string.
 - **`size`** is a px prop (square) applied as CSS on the wrapper, overriding the SVG's own
   width/height. Color rides on `stroke="currentColor"` from the parent's `color`.

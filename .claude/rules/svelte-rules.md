@@ -69,7 +69,7 @@ popover positioning, timing windows). That is e2e. The unit-vs-e2e split is gove
   places is a token, declared once.
 - **A constant coupled across files gets one named source.** A breakpoint that a media query, a
   component, and the Playwright viewport all depend on lives as `TOC_BREAKPOINT_PX` in
-  `ui/src/lib/layout.ts` (pure TS, singlefile-safe), and `layout.test.ts` asserts the `@media` rules
+  `ui/src/lib/layout.ts` (pure TS, node-free), and `layout.test.ts` asserts the `@media` rules
   match it — so a drifted breakpoint fails the unit suite instead of silently breaking the e2e
   smoke. When a magic number couples CSS to TS to config, name it once and test the coupling.
 
