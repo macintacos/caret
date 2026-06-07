@@ -3,10 +3,11 @@ description: Gather a redacted diagnostics snapshot of this caret install and pr
 ---
 
 caret's `discovery` subcommand prints a one-shot, read-only snapshot of the local install — running
-caret processes, daemon identity, lock/port state, effective settings, review counts, hook/plugin
-install state, log sizes and error counts, install/runtime info, and system basics. The report is
-**always redacted** (home paths become `~`, usernames in foreign home paths are censored) and never
-contains plan, prompt, or feedback bodies, nor any log contents — it exists to be shared.
+caret processes, daemon identity, lock/port state, effective settings, review counts, the agent
+adapter's install-state probe (plugin version, enabled state, and whether a manual hook sits in the
+agent's user settings), log sizes and error counts, install/runtime info, and system basics. The
+report is **always redacted** (home paths become `~`, usernames in foreign home paths are censored)
+and never contains plan, prompt, or feedback bodies, nor any log contents — it exists to be shared.
 
 First ask the user (via `AskUserQuestion`) which format they want:
 

@@ -50,7 +50,28 @@ claude plugin marketplace remove caret
 
 ## How it works
 
-caret ships one compiled binary (`bin/caret`) with four subcommands, wired to two plan-mode hooks:
+caret ships one compiled binary (`bin/caret`) with five subcommands (`daemon`, `prewarm`, `review`,
+`redact`, `discovery`).
+
+### Architecture: tool-agnostic core + agent adapter
+
+caret is built around one boundary. A **tool-agnostic core** (everything in `src/`) owns the daemon,
+the on-disk review store, the review/revision lifecycle, the settings service, leveled logging, and
+the browser UI — none of it knows which coding agent is on the other end. An **agent adapter**
+(`src/adapters/`) owns everything agent-specific: parsing the agent's hook input, emitting the
+agent's decision response, declaring the approve variants it offers, and probing the agent's local
+install for diagnostics. The core hands the adapter raw hook stdin and a core decision; the adapter
+hands back a normalized plan and a tool-specific stdout response. The dependency runs one way — an
+adapter imports core types, never the reverse.
+
+`src/adapters/claude/` is the first (today's only) implementation, for Claude Code. A future agent
+tool plugs in as a second adapter without touching core internals. The hooks table and decision-JSON
+block below, and the behavioral prose in `commands/*.md`, describe **Claude-adapter** surface — they
+are agent-specific, not core behavior.
+
+### The Claude Code adapter
+
+caret wires into Claude Code through two plan-mode hooks:
 
 | Hook                | Matcher         | Command         | Purpose                                                   |
 | ------------------- | --------------- | --------------- | --------------------------------------------------------- |
@@ -64,12 +85,17 @@ model, which revises and re-presents (captured as a new version). This was verif
 dialog.
 
 The reviewer's approve choice is an opaque variant id the core stores and the UI renders; the Claude
-adapter declares its variants (`default` / `acceptEdits` / `auto`) and maps the chosen one to a
-session `setMode` permission. The hook emits the resulting
+adapter declares its variants (`default` / `acceptEdits` / `auto`) and rides them to the UI over
+`GET /api/health`, so the approve split-button reflects the active adapter's capabilities rather than
+hard-coded mode names. On a decision the adapter maps the chosen variant to a session `setMode`
+permission and emits the resulting
 [PermissionRequest decision](https://code.claude.com/docs/en/hooks) on stdout:
 
 ```jsonc
-// approve (the acceptEdits / auto variants switch the Claude session into that mode)
+// approve (plain): no mode change
+{ "hookSpecificOutput": { "hookEventName": "PermissionRequest",
+  "decision": { "behavior": "allow" } } }
+// approve & accept edits / & auto mode: switch the Claude session into that mode
 { "hookSpecificOutput": { "hookEventName": "PermissionRequest",
   "decision": { "behavior": "allow",
     "updatedPermissions": [{ "type": "setMode", "mode": "acceptEdits", "destination": "session" }] } } }
@@ -193,8 +219,8 @@ To raise verbosity, set `level = "debug"` in `config.toml`'s `[logging]` table
   review-feedback bodies are never written to logs regardless of the toggle.
 - `caret discovery` — the binary's fifth subcommand: a one-shot, read-only diagnostics snapshot of
   the local install — running caret processes, daemon identity (version, build, startup commit),
-  lock/port state, effective settings, review counts, hook/plugin install state, log sizes and
-  error/warn counts, install/runtime info, and system basics. Human-readable by default;
+  lock/port state, effective settings, review counts, the agent adapter's install-state probe, log
+  sizes and error/warn counts, install/runtime info, and system basics. Human-readable by default;
   `caret discovery --json` prints the same report as one JSON document (schema marker
   `caret-discovery/1`). Unlike the logs, the report is **always redacted** — it exists to be pasted
   into bug reports — and it never contains plan/prompt/feedback bodies or log contents. Probes are
@@ -272,12 +298,18 @@ checklist in `.claude/rules/icon-rules.md` and adding a row to
 ## Layout
 
 ```text
-src/        cli.ts (subcommands) · daemon.ts (Bun.serve) · store.ts · decisions.ts · log.ts (leveled NDJSON)
-            reviews.ts (revision threading) · feedback.ts · paths.ts · types.ts · settings.ts (config.toml) · redact.ts
-ui/         Svelte 5 single-file SPA (Vite + vite-plugin-singlefile) · src/icons/ vendored Lucide SVGs
-hooks/      hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode)
-commands/   /caret:demo · /caret:debug
-scripts/    install.sh (build + register via the native plugin system)
+src/                tool-agnostic core (flat): cli.ts (Commander tree) · review.ts (review orchestration)
+                    daemon.ts (Bun.serve) · daemon-lifecycle.ts · daemon-client.ts · store.ts · reviews.ts (revision threading)
+                    decisions.ts · prefs.ts · log.ts (leveled NDJSON) · caller-location.ts · redact.ts · redact-core.ts (browser-safe)
+                    settings.ts (config.toml) · constants.ts · paths.ts · build-id.ts (VERSION/identity/lock) · types.ts (wire contract)
+                    json-file.ts · plan-format.ts · ui-asset.ts · ui-log-bridge.ts (/api/logs) · program.ts (shared CLI scaffolding)
+src/commands/       per-subcommand entrypoints (daemon, prewarm, review, redact, discovery, boot)
+src/adapters/       adapter.ts (AgentAdapter interface) · claude/ (the Claude Code adapter: hook parse, decision emission, approve variants, install probe)
+ui/                 Svelte 5 single-file SPA (Vite + vite-plugin-singlefile) · src/state/ runes state modules · src/icons/ vendored Lucide SVGs
+hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode) — Claude-adapter packaging
+commands/           /caret:demo · /caret:debug · /caret:discovery — Claude-adapter packaging (agent-specific behavioral prose)
+test/support/       shared test scaffolding (daemon boot, NDJSON parsing, redaction matchers)
+scripts/            install.sh (build + register via the native plugin system)
 ```
 
 The polished diff/compare viewer for plan versions is a planned fast-follow.
