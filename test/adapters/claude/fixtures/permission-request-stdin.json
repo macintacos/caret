@@ -1,0 +1,10 @@
+{
+  "session_id": "5f3c1a8e-0b27-4d91-9c64-7ea2f0b1d3a5",
+  "transcript_path": "/tmp/claude/transcripts/5f3c1a8e.jsonl",
+  "cwd": "/Users/dev/projects/widget",
+  "hook_event_name": "PermissionRequest",
+  "tool_name": "ExitPlanMode",
+  "tool_input": {
+    "plan": "# Add a health-check endpoint\n\n## Steps\n\n1. Add a `GET /healthz` route that returns `{ status: \"ok\" }`.\n2. Wire it into the router before the auth middleware.\n3. Add a unit test asserting a 200 and the JSON body.\n\n```ts\napp.get(\"/healthz\", () => Response.json({ status: \"ok\" }));\n```\n"
+  }
+}
