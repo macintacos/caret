@@ -7,6 +7,7 @@ import { renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
 import { type DaemonLock, IDENTITY } from "./build-id.ts";
+import { deriveIdleTimeoutSec } from "./constants.ts";
 import { createDecisions } from "./decisions.ts";
 import { type CaretLogger, noopLogger, shortId } from "./log.ts";
 import { ensureStateDir, prefsFile } from "./paths.ts";
@@ -668,8 +669,11 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   const server = Bun.serve({
     port: opts.port ?? 0,
     hostname: "127.0.0.1",
-    // Well above the heartbeat window so a long-poll never idles out mid-wait.
-    idleTimeout: 30,
+    // Derived from the heartbeat to sit strictly above it (and ≤ Bun's 255s
+    // cap), so a long-poll's 204 heartbeat always ships before the socket can
+    // idle out mid-wait — the invariant deriveIdleTimeoutSec holds by
+    // construction (EXC-533).
+    idleTimeout: deriveIdleTimeoutSec(heartbeat),
     fetch: handle,
   });
   log.info("listen", `listening on 127.0.0.1:${server.port}`, {

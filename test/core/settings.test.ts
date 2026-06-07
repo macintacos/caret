@@ -3,6 +3,7 @@ import { unlinkSync, utimesSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { MAX_HEARTBEAT_MS } from "../../src/constants.ts";
 import {
   createSettings,
   DEFAULT_PORT,
@@ -306,6 +307,40 @@ test("invalidEnvVars flags an out-of-budget CARET_TIMEOUT (in-schema 3900s bound
     });
   }
   withEnv({ ...NO_CARET, CARET_TIMEOUT: "3899" }, () => {
+    expect(invalidEnvVars()).toEqual([]);
+  });
+});
+
+// --- EXC-533: HeartbeatMs upper bound (keeps the derived idleTimeout valid) ---
+
+test("a file heartbeat_ms within the bound is accepted", async () => {
+  await Bun.write(file, `[daemon]\nheartbeat_ms = ${MAX_HEARTBEAT_MS - 1}\n`);
+  expect(loadSettings(file).daemon.heartbeat_ms).toBe(MAX_HEARTBEAT_MS - 1);
+});
+
+test("a file heartbeat_ms at or above the bound reverts the whole file", async () => {
+  await Bun.write(
+    file,
+    `[logging]\nlevel = "warn"\n\n[daemon]\nheartbeat_ms = ${MAX_HEARTBEAT_MS}\n`,
+  );
+  // Whole-file granularity: the valid logging.level reverts along with the bad key.
+  expect(loadSettings(file)).toEqual(DEFAULTS);
+});
+
+test("an out-of-bound CARET_HEARTBEAT_MS falls back to the file value, then the default", async () => {
+  await Bun.write(file, "[daemon]\nheartbeat_ms = 250\n");
+  const s = loadSettings(file);
+  withEnv({ ...NO_CARET, CARET_HEARTBEAT_MS: String(MAX_HEARTBEAT_MS) }, () => {
+    expect(heartbeatMs(s)).toBe(250); // → file
+    expect(heartbeatMs(DEFAULTS)).toBe(8_000); // → default when the file has no value
+  });
+});
+
+test("invalidEnvVars flags an out-of-bound CARET_HEARTBEAT_MS", () => {
+  withEnv({ ...NO_CARET, CARET_HEARTBEAT_MS: String(MAX_HEARTBEAT_MS) }, () => {
+    expect(invalidEnvVars()).toEqual(["CARET_HEARTBEAT_MS"]);
+  });
+  withEnv({ ...NO_CARET, CARET_HEARTBEAT_MS: String(MAX_HEARTBEAT_MS - 1) }, () => {
     expect(invalidEnvVars()).toEqual([]);
   });
 });
