@@ -2,8 +2,8 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type ApproveModeSet, readApproveMode, writeApproveMode } from "../src/prefs.ts";
-import { recordingLog } from "./support/recording-log.ts";
+import { type ApproveModeSet, readApproveMode, writeApproveMode } from "../../src/prefs.ts";
+import { recordingLog } from "../support/recording-log.ts";
 
 let dir: string;
 let file: string;

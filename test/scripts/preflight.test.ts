@@ -5,8 +5,8 @@
 // the summary surfaces failed output plus the `mise run format` hint.
 import { join } from "node:path";
 import { expect, test } from "bun:test";
-import { type SpawnOutcome, type SpawnTask, runPreflight } from "../scripts/preflight.ts";
-import { waitFor } from "./support/poll.ts";
+import { type SpawnOutcome, type SpawnTask, runPreflight } from "../../scripts/preflight.ts";
+import { waitFor } from "../support/poll.ts";
 
 const ALL_TASKS = ["build-bin", "build-ui", "lint", "test", "test-e2e"];
 
@@ -107,7 +107,7 @@ test("the mise task files declare exactly the DAG preflight hard-codes", async (
   // lockstep edit that keeps that hard-coding honest — if a preflight task's
   // `depends` ever changes, this fails so the DAG gets updated alongside it.
   const dependsOf = async (name: string): Promise<string[]> => {
-    const script = await Bun.file(join(import.meta.dir, "../.mise/tasks", name)).text();
+    const script = await Bun.file(join(import.meta.dir, "../../.mise/tasks", name)).text();
     const m = script.match(/^#MISE depends=(\[.*\])$/m);
     return m?.[1] ? (JSON.parse(m[1]) as string[]) : [];
   };

@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
-import { runReview } from "../src/review.ts";
-import { setLogLevel } from "../src/log.ts";
-import { hasUntaggedCodeBlock } from "../src/plan-format.ts";
+import { runReview } from "../../src/review.ts";
+import { setLogLevel } from "../../src/log.ts";
+import { hasUntaggedCodeBlock } from "../../src/plan-format.ts";
 import {
   assertDevEnv,
   devReviewDeps,
   runExtraReview,
   runExtraSeeder,
-} from "../scripts/dev/driver.ts";
+} from "../../scripts/dev/driver.ts";
 import {
   appendRevision,
   DEV_SESSION,
@@ -16,15 +16,15 @@ import {
   hookStdin,
   nextPlan,
   seederInterval,
-} from "../scripts/dev/protocol.ts";
-import { bootDaemon, type TestDaemon } from "./support/daemon.ts";
-import { setupTempStateDir } from "./support/env.ts";
-import { waitFor } from "./support/poll.ts";
-import { expectNeverLogsBody } from "./support/redaction.ts";
+} from "../../scripts/dev/protocol.ts";
+import { bootDaemon, type TestDaemon } from "../support/daemon.ts";
+import { setupTempStateDir } from "../support/env.ts";
+import { waitFor } from "../support/poll.ts";
+import { expectNeverLogsBody } from "../support/redaction.ts";
 
 // The v1 fixture the driver seeds — read independently here so the assertions
 // don't lean on the driver's own loader.
-const PLAN_V1 = await Bun.file(`${import.meta.dir}/../scripts/dev/fake-plan.md`).text();
+const PLAN_V1 = await Bun.file(`${import.meta.dir}/../../scripts/dev/fake-plan.md`).text();
 
 // Point the state dir at the per-test temp dir so the hook logging that
 // runReview performs lands in a disposable caret.log, not the real one — the

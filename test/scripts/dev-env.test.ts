@@ -5,7 +5,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_PORT } from "../src/constants.ts";
+import { DEFAULT_PORT } from "../../src/constants.ts";
 import {
   DAEMON_DIED,
   discoverPort,
@@ -13,7 +13,7 @@ import {
   PRODUCTION_DEFAULT_PORT,
   readDevLockPort,
   resolvePortMode,
-} from "../scripts/dev/dev-env.ts";
+} from "../../scripts/dev/dev-env.ts";
 
 // ---- resolvePortMode ----
 

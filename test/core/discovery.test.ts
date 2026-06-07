@@ -13,19 +13,19 @@ import {
   renderReport,
   type Report,
   tallyReviews,
-} from "../src/discovery.ts";
-import { reviewsDir } from "../src/paths.ts";
-import { scrubValue } from "../src/redact.ts";
-import { DEFAULTS } from "../src/settings.ts";
-import { setupTempStateDir } from "./support/env.ts";
-import { expectNeverLogsBody } from "./support/redaction.ts";
+} from "../../src/discovery.ts";
+import { reviewsDir } from "../../src/paths.ts";
+import { scrubValue } from "../../src/redact.ts";
+import { DEFAULTS } from "../../src/settings.ts";
+import { setupTempStateDir } from "../support/env.ts";
+import { expectNeverLogsBody } from "../support/redaction.ts";
 
 function boom(): never {
   throw new Error("probe boom");
 }
 
 // Happy-path fakes for every injected probe; each test overrides only what it
-// exercises (mirrors test/cli.test.ts's reviewDeps/ensureDeps factories).
+// exercises (mirrors review.test.ts's reviewDeps factory).
 function discoveryDeps(over: Partial<DiscoveryDeps> = {}): DiscoveryDeps {
   return {
     now: () => new Date("2026-06-04T12:00:00.000Z"),

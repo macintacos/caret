@@ -16,8 +16,8 @@ import {
   type Settings,
   settings,
   watchSettings,
-} from "../src/settings.ts";
-import { withEnv } from "./support/env.ts";
+} from "../../src/settings.ts";
+import { withEnv } from "../support/env.ts";
 
 let dir: string;
 let file: string;

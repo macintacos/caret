@@ -2,9 +2,9 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createStore, type Store } from "../src/store.ts";
-import type { Review } from "../src/types.ts";
-import { recordingLog } from "./support/recording-log.ts";
+import { createStore, type Store } from "../../src/store.ts";
+import type { Review } from "../../src/types.ts";
+import { recordingLog } from "../support/recording-log.ts";
 
 let dir: string;
 let store: Store;

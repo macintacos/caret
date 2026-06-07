@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { errorMessage } from "../src/types.ts";
+import { errorMessage } from "../../src/types.ts";
 
 test("errorMessage returns an Error's message", () => {
   expect(errorMessage(new Error("boom"))).toBe("boom");
