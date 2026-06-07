@@ -36,7 +36,14 @@ Every spec goes through `e2e/support/fixtures.ts`; never stand up a daemon by ha
 - **Per-test isolated daemon.** The fixture boots a fresh daemon on an OS-assigned port (port 0),
   serving the built `ui/dist/` tree (index plus its hashed assets), with an ephemeral
   `XDG_STATE_HOME` wiped at teardown and idle shutdown disabled. The user's real daemon (`:42718`)
-  and `~/.local/state/caret` are never touched.
+  and `~/.local/state/caret` are never touched. This boot lives in `e2e/support/daemon-entry.ts`,
+  a second daemon-boot path deliberately kept alongside the production `runDaemon`
+  (`src/commands/daemon.ts`): the e2e boot needs an OS-assigned port (the settings `Port` schema
+  rejects 0, so only a direct `createServer` can ask for one), config hermeticity (no `config.toml`
+  read), a never-idle daemon with a no-op shutdown (so it can't `process.exit` mid-test), and a
+  stdout port handshake. Collapsing the two behind a shared factory would parameterize it across
+  every one of those deltas — speculative abstraction for one extra call site — so the parallel boot
+  is documented current-state in `daemon-entry.ts`'s header rather than abstracted away (EXC-547).
 - **Seed through the public API.** Reviews are created by `POST /api/reviews`, the same surface a
   real hook uses — never by reaching into the store directly.
 - **No external daemon, no dev driver.** A spec must not reuse a running daemon, depend on
