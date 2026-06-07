@@ -1,12 +1,27 @@
 #!/usr/bin/env bun
 // e2e daemon launcher: boots an isolated caret daemon for one Playwright test.
 //
-// Why not `bun src/cli.ts daemon`: the CLI resolves its port through the
-// settings layer, where CARET_PORT must be a POSITIVE int — port 0 is invalid
-// and would silently fall back to the production default (42718, the user's
-// real daemon). OS-assigned ports therefore require calling createServer
-// directly, which is also hermetic (explicit opts, no config-file reads), so
-// the user's ~/.config/caret/config.toml can never leak into a test run.
+// This is a SECOND, deliberately-kept daemon-boot path alongside the production
+// `runDaemon` (src/commands/daemon.ts). The two call the same createServer, but
+// the e2e boot needs four things the production boot can't offer, and a shared
+// factory would have to be parameterized across every one of them — speculative
+// abstraction for a single extra call site (the no-speculative-abstraction rule
+// in typescript-rules.md), so the parallel boot stays explicit. The deltas:
+//
+//   1. OS-assigned port (port 0). `caret daemon --ephemeral` does bind port 0,
+//      but every other CLI path resolves the port through the settings layer,
+//      where it must be a POSITIVE int — so the schema can't carry 0 and direct
+//      createServer is the only way to ask for one. OS-assigned ports keep
+//      fullyParallel workers collision-free.
+//   2. Config hermeticity. createServer takes explicit opts and reads no
+//      config.toml, so the user's ~/.config/caret/config.toml can never leak
+//      into a test run; the production boot resolves settings (and hot-reloads).
+//   3. NEVER_IDLE_MS + a no-op onShutdown. The daemon must never idle-shut-down
+//      mid-test, and even an unexpected shutdown must not process.exit out from
+//      under the runner; the production boot's onShutdown exits the process.
+//   4. A stdout port handshake. The fixture parses the bound port from stdout;
+//      the production boot writes a lock file instead and installs the signal
+//      handlers + lock lifecycle this test boot deliberately omits.
 //
 // Protocol with the spawning fixture (e2e/support/fixtures.ts): stdout carries
 // EXACTLY ONE JSON line `{"port": N}`; all logs go to stderr so the port
