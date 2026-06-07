@@ -20,7 +20,7 @@ import { z } from "zod";
 // Re-exported so existing `from "./settings.ts"` import sites keep working; the
 // literal lives in the node-free constants module so ui/vite.config.ts can read
 // it without pulling in this module's node-only dependency chain (EXC-504).
-import { DEFAULT_PORT, HOOK_TIMEOUT_S } from "./constants.ts";
+import { DEFAULT_PORT, HOOK_TIMEOUT_S, MAX_HEARTBEAT_MS } from "./constants.ts";
 import { logError } from "./log.ts";
 import { configFile } from "./paths.ts";
 
@@ -34,7 +34,13 @@ export { DEFAULT_PORT };
 const Port = z.number().int().positive();
 const TimeoutS = z.number().positive().lt(HOOK_TIMEOUT_S); // seconds, strictly below the hooks.json hook budget
 const IdleMs = z.number().int().nonnegative();
-const HeartbeatMs = z.number().int().positive();
+// Upper-bounded (EXC-533): the Bun.serve idleTimeout is derived from the resolved
+// heartbeat (deriveIdleTimeoutSec), and this `.lt(MAX_HEARTBEAT_MS)` keeps that
+// derivation under Bun's 255s socket cap while preserving headroom — so the
+// `idleTimeout > heartbeat` invariant holds by construction. An out-of-range
+// CARET_HEARTBEAT_MS / [daemon].heartbeat_ms falls back like any other invalid
+// value (classifyEnv → null → file/default; safeParse → whole-file revert).
+const HeartbeatMs = z.number().int().positive().lt(MAX_HEARTBEAT_MS);
 
 const SettingsSchema = z.object({
   logging: z
@@ -295,9 +301,11 @@ export function reviewTimeoutMs(s: Settings = settings().current()): number {
 }
 
 /** Decision long-poll heartbeat (ms): CARET_HEARTBEAT_MS > [daemon].heartbeat_ms
- * > 8s, comfortably under the daemon's 30s Bun.serve idleTimeout — the daemon
- * returns a 204 "still pending" after this window so the client re-polls before
- * any socket idle timeout can close the connection. */
+ * > 8s. The daemon's Bun.serve idleTimeout is derived from this value
+ * (deriveIdleTimeoutSec) to sit strictly above it, so the daemon returns a 204
+ * "still pending" after this window and the client re-polls before any socket
+ * idle timeout can close the connection. Bounded above by HeartbeatMs's
+ * .lt(MAX_HEARTBEAT_MS) so the derived idleTimeout stays under Bun's 255s cap. */
 export function heartbeatMs(s: Settings = settings().current()): number {
   return envValue("CARET_HEARTBEAT_MS", HeartbeatMs) ?? s.daemon.heartbeat_ms;
 }

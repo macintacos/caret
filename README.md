@@ -158,7 +158,7 @@ cover (see below); precedence is **env var > config file > default**:
 | ---------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `daemon.port`          | `42718` | Daemon port.                                                                                                                                                  |
 | `daemon.idle_ms`       | `60000` | Idle delay (ms) before the daemon auto-shuts-down with no reviews.                                                                                            |
-| `daemon.heartbeat_ms`  | `8000`  | Decision long-poll heartbeat window (ms).                                                                                                                     |
+| `daemon.heartbeat_ms`  | `8000`  | Decision long-poll heartbeat window (ms). The daemon's socket `idleTimeout` is derived from this (heartbeat seconds + headroom), so it must stay below `250000`; values at or above that are rejected.    |
 | `review.timeout_s`     | `3600`  | Review window in seconds before the hook fail-safe-denies (default 1 hour). The schema rejects values at or above the 3900s hook budget in `hooks/hooks.json`. |
 
 Unlike the `[logging]` keys, which hot-reload live, the tunables are captured at startup: `port`,
@@ -190,7 +190,7 @@ logs, and resolution falls through to the config file, then the default.
 | `CARET_PORT`         | `daemon.port`         | `42718`          | Daemon port.                                                                                |
 | `CARET_TIMEOUT`      | `review.timeout_s`    | `3600` (s)       | Review window before the hook fail-safe-denies, in seconds. Values ≥ 3900 are invalid.      |
 | `CARET_IDLE_MS`      | `daemon.idle_ms`      | `60000`          | Idle delay before the daemon auto-shuts-down with no reviews.                               |
-| `CARET_HEARTBEAT_MS` | `daemon.heartbeat_ms` | `8000`           | Decision long-poll heartbeat window (ms).                                                   |
+| `CARET_HEARTBEAT_MS` | `daemon.heartbeat_ms` | `8000`           | Decision long-poll heartbeat window (ms). The socket `idleTimeout` derives from it, so values ≥ 250000 are invalid. |
 | `CARET_AGENT`        | —                     | `claude`         | Which coding-agent adapter to drive. `claude` (default) or `codex` (provisional, default-off — see below). |
 | `XDG_STATE_HOME`     | —                     | `~/.local/state` | Unresolved reviews persist under `$XDG_STATE_HOME/caret/reviews/` and rehydrate on restart. |
 
