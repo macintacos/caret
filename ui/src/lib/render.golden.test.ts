@@ -39,7 +39,9 @@ const goldenHtml = readFileSync(join(import.meta.dir, "fixtures/golden-plan.html
 // code, bold, and a link, so the golden covers the whole structural surface.
 describe("renderPlan golden render", () => {
   test("HTML matches the committed golden byte-for-byte", () => {
-    const { html } = renderPlan(goldenPlan);
+    // `html` is the branded SanitizedHtml; widen to string for the byte compare
+    // against the committed golden (read off disk as a plain string).
+    const html: string = renderPlan(goldenPlan).html;
     expect(html).toBe(goldenHtml);
   });
 

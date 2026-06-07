@@ -5,6 +5,12 @@
 // single `id` slot stays reserved for the structural anchor that annotations
 // reference. Annotation char offsets are measured against the block element's
 // post-sanitize `textContent`, so the ids must survive sanitization.
+//
+// Sanitize-last is a structural guarantee, not a comment: `sanitize()` is the
+// sole producer of the branded `SanitizedHtml`, and `RenderResult.html` requires
+// that brand. Any string operation on a SanitizedHtml (`.replace`, concatenation,
+// …) yields a plain `string` that is not assignable back to the branded field,
+// so a future edit that mutates the HTML after sanitize is a compile error.
 
 import createDOMPurify from "dompurify";
 import type { DOMPurify as DOMPurifyInstance, WindowLike } from "dompurify";
@@ -34,14 +40,76 @@ export function isShikiStyle(value: string): boolean {
 	return SHIKI_STYLE.test(value.trim());
 }
 
+// The exact set of tags the render pipeline emits, enumerated so the sanitizer
+// admits only this known-good allowlist rather than stripping a known-bad set —
+// the stronger posture given plan markdown is attacker-influenced. Three sources:
+//   - marked block elements (gfm): headings, paragraph, lists, code, blockquote,
+//     the table family, hr.
+//   - marked inline elements (gfm): links, emphasis, strikethrough, hard breaks,
+//     images.
+//   - shiki's dual-theme tree: <pre>/<code> wrap a <span> token tree.
+// A tag marked never emits (form, iframe, svg, object, …) is absent, so it is
+// dropped wholesale. Keep this in lockstep with what the golden fixture and the
+// render/highlight suites exercise — a missing tag breaks rendering AND the
+// annotation id-coverage that anchors against block elements.
+const ALLOWED_TAGS = [
+	"h1",
+	"h2",
+	"h3",
+	"h4",
+	"h5",
+	"h6",
+	"p",
+	"blockquote",
+	"ul",
+	"ol",
+	"li",
+	"pre",
+	"code",
+	"table",
+	"thead",
+	"tbody",
+	"tr",
+	"th",
+	"td",
+	"hr",
+	"a",
+	"em",
+	"strong",
+	"del",
+	"br",
+	"img",
+	"span",
+] as const;
+
+// The attributes the pipeline emits. `id`/`data-slug` are the structural anchors
+// stamped before sanitize; `href`/`src`/`alt`/`align` are marked's link, image,
+// and table-alignment attributes; `class`/`style`/`tabindex` ride shiki's <pre>
+// and token spans (`class="language-*"` also on marked's plain code fallback).
+// `style` is admitted by name but every value is still gated through the
+// uponSanitizeAttribute shiki-style hook below, so only shiki-shaped styles pass.
+// DOMPurify drops dangerous URI schemes (javascript:, data:html) from href/src
+// regardless of this list, so allowing the attribute name does not allow the
+// scheme.
+const ALLOWED_ATTR = [
+	"id",
+	"data-slug",
+	"href",
+	"src",
+	"alt",
+	"align",
+	"class",
+	"style",
+	"tabindex",
+] as const;
+
 // DOMPurify must bind to a `window` (happy-dom in tests, the real one in the
 // browser). Bind lazily at first use so module import never requires a DOM.
 let purifier: DOMPurifyInstance | null = null;
 function getPurifier(): DOMPurifyInstance {
 	if (purifier) return purifier;
 	const win =
-		(globalThis as { window?: WindowLike }).window ??
-		(globalThis as unknown as WindowLike);
+		(globalThis as { window?: WindowLike }).window ?? (globalThis as unknown as WindowLike);
 	purifier = createDOMPurify(win);
 	// Preserve shiki's token-color `style` through sanitization: keep a `style`
 	// only when its whole value is shiki-shaped (SHIKI_STYLE), drop it otherwise.
@@ -54,6 +122,22 @@ function getPurifier(): DOMPurifyInstance {
 		}
 	});
 	return purifier;
+}
+
+/**
+ * The terminal sanitize step and the SOLE producer of `SanitizedHtml`. Runs the
+ * id-stamped raw HTML through DOMPurify with the explicit ALLOWED_TAGS/
+ * ALLOWED_ATTR allowlist (a tag or attribute the pipeline never emits is
+ * dropped), keeping `id`/`data-slug` as the structural anchors. The brand cast
+ * is the one place it is applied, so any caller that mutates the result loses
+ * the brand and cannot satisfy `RenderResult.html` — this is what makes
+ * sanitize-last structural.
+ */
+function sanitize(rawHtml: string): SanitizedHtml {
+	return getPurifier().sanitize(rawHtml, {
+		ALLOWED_TAGS: ALLOWED_TAGS as unknown as string[],
+		ALLOWED_ATTR: ALLOWED_ATTR as unknown as string[],
+	}) as SanitizedHtml;
 }
 
 export interface HeadingEntry {
@@ -73,8 +157,18 @@ export function shouldShowRail(headings: HeadingEntry[]): boolean {
 	return headings.length >= 2;
 }
 
+/**
+ * HTML that has passed through the terminal DOMPurify `sanitize()` and nothing
+ * since. The brand is unforgeable outside `sanitize()`, so a value of this type
+ * is a proof that sanitize ran last on it. Mutating it (`.replace`, concat, …)
+ * produces a plain `string`, breaking the brand — which is why such a mutation
+ * can never satisfy `RenderResult.html` and the sanitize-last invariant holds
+ * structurally rather than by comment.
+ */
+export type SanitizedHtml = string & { readonly __sanitized: unique symbol };
+
 export interface RenderResult {
-	html: string;
+	html: SanitizedHtml;
 	headings: HeadingEntry[];
 }
 
@@ -100,23 +194,16 @@ const DefaultRenderer = new Renderer();
 // id onto it). The casts that bridge those couplings carry no compile-time
 // signal, so we assert both at runtime and throw loudly on drift rather than
 // emit ids-less HTML that breaks annotation anchoring.
-type RendererBlockMethod = (
-	this: { parser: unknown },
-	token: unknown,
-) => string;
+type RendererBlockMethod = (this: { parser: unknown }, token: unknown) => string;
 
 /**
  * The default renderer's method for `name`, or a loud throw if marked dropped
  * it. Exported for direct unit testing of the renderer-drift guard.
  */
-export function baseBlockMethod(
-	name: (typeof BLOCK_METHODS)[number],
-): RendererBlockMethod {
+export function baseBlockMethod(name: (typeof BLOCK_METHODS)[number]): RendererBlockMethod {
 	const method = (DefaultRenderer as unknown as Record<string, unknown>)[name];
 	if (typeof method !== "function") {
-		throw new Error(
-			`render: marked Renderer has no block method "${name}" (renderer drift)`,
-		);
+		throw new Error(`render: marked Renderer has no block method "${name}" (renderer drift)`);
 	}
 	return method as RendererBlockMethod;
 }
@@ -213,16 +300,15 @@ export function renderPlan(markdown: string): RenderResult {
 
 	marked.use({ renderer: overrides as never });
 
-	// INVARIANT: attributes are string-injected into the raw HTML ABOVE, then the
-	// whole document is sanitized HERE. Sanitize MUST remain the last step — never
-	// inject id/data-slug (or anything else) after this, or it becomes an XSS hole.
-	let html: string;
+	// All id/data-slug stamping happens in the renderer overrides ABOVE; sanitize()
+	// is the terminal step and the only producer of the `SanitizedHtml` brand that
+	// `html` (and RenderResult.html) carries. Mutating `html` after this point
+	// yields a plain `string` that no longer satisfies the brand, so the type
+	// system — not this comment — enforces that nothing runs after sanitize.
+	let html: SanitizedHtml;
 	try {
 		const rawHtml = marked.parse(markdown, { async: false }) as string;
-		html = getPurifier().sanitize(rawHtml, {
-			ADD_ATTR: ["data-slug", "id"],
-			USE_PROFILES: { html: true },
-		});
+		html = sanitize(rawHtml);
 	} catch (err) {
 		// Surface a render failure on the timeline, then rethrow unchanged so the
 		// caller still sees the same throw. Counts only — never the plan text.
