@@ -30,6 +30,13 @@ adapter.
   `parseHookInput` to `runReview` as a `ReviewDeps` field). Core modules like `review.ts` take the
   capability as an injected dependency, so they name no adapter. A `from "./adapters/` import in a
   non-composition core module is the smell.
+- **The emission seam lives at the composition layer, not the core.** `runReview` returns a
+  tool-agnostic `Decision` (its fail-safe denies are `Decision`s the core constructs); the wiring
+  point renders it to the agent's wire string with `adapter.emitDecision` at the moment it writes
+  stdout. So the only `emitDecision` call sites are `src/commands/review.ts` (the normal path and the
+  SIGINT/SIGTERM fail-safe) and `src/cli.ts`'s last-resort fatal handler — never the review core. The
+  fatal handler keeps a hard-coded minimal deny string as a fallback for the one case the adapter
+  itself failed to load, so the truly-fatal path still fails safe.
 - **`ui/` never imports `src/adapters/*`.** Adapter capabilities reach the browser **over the wire**,
   not by import. The pattern: the daemon publishes the active adapter's `approveVariants` in
   `GET /api/health`, and the UI renders its approve split-button from that wire field

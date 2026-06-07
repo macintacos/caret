@@ -64,7 +64,7 @@ export async function runExtraReview(
   let state: DriverState = { plan, revision: 0 };
   for (;;) {
     const out = await runReview(hookStdin(state.plan, sessionId), deps);
-    const next = nextPlan(state, out.hookSpecificOutput.decision, plan);
+    const next = nextPlan(state, out, plan);
     if (next.action === "reseed") return; // approved: this thread is done
     if (next.action === "revise") {
       log(`extra review: changes requested → appending Revision ${next.revision}`);
@@ -155,7 +155,7 @@ export async function run(): Promise<void> {
   for (;;) {
     // Never throws: every abnormal path inside runReview becomes a deny.
     const out = await runReview(hookStdin(state.plan), deps);
-    const next = nextPlan(state, out.hookSpecificOutput.decision, v1);
+    const next = nextPlan(state, out, v1);
     if (next.action === "revise") {
       log(`changes requested → appending Revision ${next.revision} and resubmitting`);
     } else if (next.action === "reseed") {

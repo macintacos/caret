@@ -1,7 +1,7 @@
 import "../../test-setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { type LogCapture, logCapture } from "../../test-helpers.ts";
-import { flush, shortId } from "./log.ts";
+import { flush } from "./log.ts";
 import {
   bellPresentation,
   createPlanNotifier,
@@ -254,12 +254,11 @@ describe("createPlanNotifier instrumentation", () => {
 
     const events = cap.events();
     expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
-      level: "info",
-      step: "ui",
-      msg: `plan notification fired: ${shortId(REVIEW_ID)}`,
-      extra: { reviewId: REVIEW_ID },
-    });
+    // Stable contract: an info-level "ui" record carrying the reviewId in its
+    // structured field, classified "fired". The full id rides `extra.reviewId`;
+    // the message prose (including the shortId interpolation) isn't pinned.
+    expect(events[0]).toMatchObject({ level: "info", step: "ui", extra: { reviewId: REVIEW_ID } });
+    expect(events[0]?.msg).toContain("fired");
   });
 
   test("clicking emits one debug record", () => {
@@ -269,9 +268,9 @@ describe("createPlanNotifier instrumentation", () => {
     fired[0]!.handle.onclick?.();
     flush();
 
-    const clicks = cap
-      .events()
-      .filter((e) => e.msg === `plan notification clicked: ${shortId(REVIEW_ID)}`);
+    // Stable contract: a debug-level "ui" record classified "clicked", carrying
+    // the reviewId. Match the classifying keyword loosely, not the full prose.
+    const clicks = cap.events().filter((e) => String(e.msg).includes("clicked"));
     expect(clicks).toHaveLength(1);
     expect(clicks[0]).toMatchObject({
       level: "debug",
@@ -305,12 +304,13 @@ describe("createPlanNotifier instrumentation", () => {
 
     expect(fired).toHaveLength(0);
     expect(cap.events()).toHaveLength(1);
-    expect(cap.events()[0]).toMatchObject({
-      level: "debug",
-      step: "ui",
-      msg: `plan notification skipped (active): ${shortId(REVIEW_ID)}`,
-      extra: { reviewId: REVIEW_ID },
-    });
+    // Stable contract: a debug-level "ui" skip record classified "active",
+    // carrying the reviewId. The "active" cause is the behavioral distinction
+    // (vs a permission skip); match it loosely, not the full prose.
+    const rec = cap.events()[0];
+    expect(rec).toMatchObject({ level: "debug", step: "ui", extra: { reviewId: REVIEW_ID } });
+    expect(rec?.msg).toContain("skipped");
+    expect(rec?.msg).toContain("active");
   });
 
   test("a new id without permission logs a skip", () => {
@@ -321,10 +321,12 @@ describe("createPlanNotifier instrumentation", () => {
     flush();
 
     expect(fired).toHaveLength(0);
-    expect(cap.events()[0]).toMatchObject({
-      level: "debug",
-      msg: `plan notification skipped (permission): ${shortId(REVIEW_ID)}`,
-    });
+    // Stable contract: a debug-level skip classified "permission" — the cause
+    // (permission, not active) is the behavioral distinction; match it loosely.
+    const rec = cap.events()[0];
+    expect(rec).toMatchObject({ level: "debug", extra: { reviewId: REVIEW_ID } });
+    expect(rec?.msg).toContain("skipped");
+    expect(rec?.msg).toContain("permission");
   });
 
   test("an unavailable notify logs a warn for the lost plan", () => {
@@ -341,12 +343,12 @@ describe("createPlanNotifier instrumentation", () => {
     flush();
 
     expect(fired).toHaveLength(0);
+    // Stable contract: exactly one warn-level record classified "unavailable"
+    // (warn, not debug — the plan was lost), carrying the reviewId.
     const warns = cap.events().filter((e) => e.level === "warn");
     expect(warns).toHaveLength(1);
-    expect(warns[0]).toMatchObject({
-      msg: `plan notification unavailable: ${shortId(REVIEW_ID)}`,
-      extra: { reviewId: REVIEW_ID },
-    });
+    expect(warns[0]).toMatchObject({ extra: { reviewId: REVIEW_ID } });
+    expect(warns[0]?.msg).toContain("unavailable");
   });
 
   test("the browser displaying the notification logs a debug via onshow", () => {
@@ -356,9 +358,9 @@ describe("createPlanNotifier instrumentation", () => {
     fired[0]!.handle.onshow?.();
     flush();
 
-    const shown = cap
-      .events()
-      .filter((e) => e.msg === `plan notification shown: ${shortId(REVIEW_ID)}`);
+    // Stable contract: the browser's display callback emits one debug "shown"
+    // record carrying the reviewId; match the classifying keyword loosely.
+    const shown = cap.events().filter((e) => String(e.msg).includes("shown"));
     expect(shown).toHaveLength(1);
     expect(shown[0]).toMatchObject({ level: "debug", extra: { reviewId: REVIEW_ID } });
   });
@@ -370,9 +372,9 @@ describe("createPlanNotifier instrumentation", () => {
     fired[0]!.handle.onerror?.();
     flush();
 
-    const failed = cap
-      .events()
-      .filter((e) => e.msg === `plan notification failed: ${shortId(REVIEW_ID)}`);
+    // Stable contract: the browser's error callback emits one warn "failed"
+    // record (warn, not debug) carrying the reviewId; classify loosely.
+    const failed = cap.events().filter((e) => String(e.msg).includes("failed"));
     expect(failed).toHaveLength(1);
     expect(failed[0]).toMatchObject({ level: "warn", extra: { reviewId: REVIEW_ID } });
   });

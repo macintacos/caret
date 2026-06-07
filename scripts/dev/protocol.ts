@@ -5,7 +5,7 @@
 // is a plain unit test. The long-running supervision loops that drive these
 // live in scripts/dev/driver.ts.
 
-import type { PermissionDecision } from "../../src/adapters/claude/feedback.ts";
+import type { Decision } from "../../src/types.ts";
 
 /** Session id for the single dev review; stable for the process lifetime so a
  * revision threads into the same review instead of forking a new one, but
@@ -53,20 +53,20 @@ export interface DriverState {
 
 /** Pure step: from the hook's decision, compute the next submission. Approve
  * re-seeds a fresh v1 (the daemon ended the thread; reset the counter). A deny
- * whose message starts with "caret: " is one of the hook's own fail-safe /
+ * whose feedback starts with "caret: " is one of the hook's own fail-safe /
  * format denies, not reviewer feedback — resubmit unchanged rather than append
- * a bogus revision. Any other deny is reviewer feedback (possibly the "Plan
- * changes requested." default for empty input): append a Revision N section. */
+ * a bogus revision. Any other deny is reviewer feedback: append a Revision N
+ * section. */
 export function nextPlan(
   state: DriverState,
-  decision: PermissionDecision,
+  decision: Decision,
   freshPlan: string,
 ): DriverState & { action: "reseed" | "revise" | "resubmit" } {
   if (decision.behavior === "allow") return { plan: freshPlan, revision: 0, action: "reseed" };
-  const message = decision.message ?? "";
-  if (message.startsWith("caret: ")) return { ...state, action: "resubmit" };
+  const feedback = decision.feedback ?? "";
+  if (feedback.startsWith("caret: ")) return { ...state, action: "resubmit" };
   const revision = state.revision + 1;
-  return { plan: appendRevision(state.plan, message, revision), revision, action: "revise" };
+  return { plan: appendRevision(state.plan, feedback, revision), revision, action: "revise" };
 }
 
 /** Retitle the fake plan's h1 so an extra review is distinguishable from the

@@ -130,7 +130,7 @@ test("appendRevision never introduces untagged code blocks, even for hostile fee
 test("nextPlan on a reviewer deny appends a revision and bumps the counter", () => {
   const next = nextPlan(
     { plan: PLAN_V1, revision: 0 },
-    { behavior: "deny", message: "tighten scope" },
+    { behavior: "deny", feedback: "tighten scope", decidedAt: 1 },
     PLAN_V1,
   );
   expect(next.action).toBe("revise");
@@ -139,12 +139,12 @@ test("nextPlan on a reviewer deny appends a revision and bumps the counter", () 
   expect(next.plan).toContain("tighten scope");
 });
 
-test("nextPlan treats the empty-feedback default message as a real revision", () => {
-  // toHookOutput maps empty feedback to this fixed message; it is still a
-  // reviewer decision, not a fail-safe.
+test("nextPlan treats a non-fail-safe reviewer deny as a real revision", () => {
+  // Any deny whose feedback isn't a "caret: " fail-safe is reviewer feedback,
+  // not a fail-safe — even the empty-feedback case the daemon may surface.
   const next = nextPlan(
     { plan: PLAN_V1, revision: 2 },
-    { behavior: "deny", message: "Plan changes requested." },
+    { behavior: "deny", feedback: "Plan changes requested.", decidedAt: 1 },
     PLAN_V1,
   );
   expect(next.action).toBe("revise");
@@ -157,7 +157,8 @@ test("nextPlan resubmits unchanged on the hook's own fail-safe deny shapes", () 
     { plan: PLAN_V1, revision: 1 },
     {
       behavior: "deny",
-      message: "caret: review timed out — denying so no unreviewed plan ships. See /x.",
+      feedback: "caret: review timed out — denying so no unreviewed plan ships. See /x.",
+      decidedAt: 1,
     },
     PLAN_V1,
   );
@@ -168,7 +169,11 @@ test("nextPlan resubmits unchanged on the hook's own fail-safe deny shapes", () 
 
 test("nextPlan on approve re-seeds a fresh v1 and resets the counter", () => {
   const revised = appendRevision(PLAN_V1, "feedback", 1);
-  const next = nextPlan({ plan: revised, revision: 1 }, { behavior: "allow" }, PLAN_V1);
+  const next = nextPlan(
+    { plan: revised, revision: 1 },
+    { behavior: "allow", decidedAt: 1 },
+    PLAN_V1,
+  );
   expect(next.action).toBe("reseed");
   expect(next.plan).toBe(PLAN_V1);
   expect(next.revision).toBe(0);
@@ -187,10 +192,10 @@ test("a revision round-trips through the real runReview hook path and logs to ca
   });
   await resolve(id, "deny", "needs a rollout plan");
   const out = await first;
-  expect(out.hookSpecificOutput.decision.behavior).toBe("deny");
-  expect(out.hookSpecificOutput.decision.message).toBe("needs a rollout plan");
+  expect(out.behavior).toBe("deny");
+  expect(out.feedback).toBe("needs a rollout plan");
   // The driver's step: append Revision 1 and resubmit through the same path.
-  const next = nextPlan({ plan: PLAN_V1, revision: 0 }, out.hookSpecificOutput.decision, PLAN_V1);
+  const next = nextPlan({ plan: PLAN_V1, revision: 0 }, out, PLAN_V1);
   const second = runReview(hookStdin(next.plan), deps);
   const threaded = await waitFor(async () => {
     const r = await clientReview(id);
@@ -202,7 +207,7 @@ test("a revision round-trips through the real runReview hook path and logs to ca
   expect(threaded.currentPlan).toContain("needs a rollout plan");
   await resolve(id, "allow");
   const out2 = await second;
-  expect(out2.hookSpecificOutput.decision.behavior).toBe("allow");
+  expect(out2.behavior).toBe("allow");
   // Real hook records landed in the dev state dir's caret.log.
   const log = await Bun.file(join(dir, "caret", "caret.log")).text();
   expect(log).toContain('"step":"decision"');

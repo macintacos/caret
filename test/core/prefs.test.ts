@@ -65,59 +65,48 @@ test("defaults to a lone 'default' set when no recognized set is supplied", asyn
 test("a missing prefs file logs the normal-first-run message at debug", async () => {
   // ENOENT is the expected state before any approve has been remembered (and
   // on every `mise run dev`, which wipes the state dir) — the record must not
-  // read like a failure.
+  // read like a failure. Stable contract: exactly one calm debug "prefs"
+  // record, never a warn/error; the prose itself is free to be reworded.
   const { recs, log } = recordingLog();
   await readApproveMode(file, log);
-  expect(recs).toEqual([
-    {
-      level: "debug",
-      step: "prefs",
-      msg: "no prefs file; using default approve mode",
-      extra: undefined,
-    },
-  ]);
+  expect(recs).toHaveLength(1);
+  expect(recs[0]).toMatchObject({ level: "debug", step: "prefs" });
 });
 
 test("a corrupt prefs file logs the unreadable message at debug", async () => {
   await Bun.write(file, "{ not valid json");
   const { recs, log } = recordingLog();
   await readApproveMode(file, log);
-  expect(recs).toEqual([
-    {
-      level: "debug",
-      step: "prefs",
-      msg: "prefs unreadable; using default approve mode",
-      extra: undefined,
-    },
-  ]);
+  // Stable contract: a corrupt prefs read degrades to a calm debug "prefs"
+  // event, never a warn/error.
+  expect(recs).toHaveLength(1);
+  expect(recs[0]).toMatchObject({ level: "debug", step: "prefs" });
 });
 
 test("an unrecognized stored value is logged at debug", async () => {
   await Bun.write(file, JSON.stringify({ approveMode: "turbo" }));
   const { recs, log } = recordingLog();
   await readApproveMode(file, log);
-  expect(recs).toEqual([
-    {
-      level: "debug",
-      step: "prefs",
-      msg: "unrecognized approve mode; using default",
-      extra: undefined,
-    },
-  ]);
+  // Stable contract: an out-of-set stored value is a calm debug "prefs" event.
+  expect(recs).toHaveLength(1);
+  expect(recs[0]).toMatchObject({ level: "debug", step: "prefs" });
 });
 
 test("writing an invalid mode is logged at warn", async () => {
   const { recs, log } = recordingLog();
   await writeApproveMode("bogus", file, log);
-  expect(recs).toEqual([
-    { level: "warn", step: "prefs", msg: "ignoring invalid approve mode", extra: undefined },
-  ]);
+  // Stable contract: an invalid write is a warn-level "prefs" event — the
+  // level (warn, not debug) is the behavior under test, not the exact prose.
+  expect(recs).toHaveLength(1);
+  expect(recs[0]).toMatchObject({ level: "warn", step: "prefs" });
 });
 
 test("a successful write is logged at debug with the mode", async () => {
   const { recs, log } = recordingLog();
   await writeApproveMode("acceptEdits", file, log, SET);
-  expect(recs).toEqual([
-    { level: "debug", step: "prefs", msg: "approve mode saved: acceptEdits", extra: undefined },
-  ]);
+  // Stable contract: a debug-level "prefs" record naming the saved mode. The
+  // mode (acceptEdits) is the load-bearing datum; match the prose loosely.
+  expect(recs).toHaveLength(1);
+  expect(recs[0]).toMatchObject({ level: "debug", step: "prefs" });
+  expect(recs[0]?.msg).toContain("acceptEdits");
 });

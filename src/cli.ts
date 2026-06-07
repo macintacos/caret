@@ -13,7 +13,7 @@
 // daemon death) emits a deny — never an allow.
 
 import type { Command } from "@commander-js/extra-typings";
-import { denyOutput } from "./adapters/claude/feedback.ts";
+import { claudeAdapter } from "./adapters/claude/index.ts";
 import { VERSION } from "./build-id.ts";
 import { runDaemon } from "./commands/daemon.ts";
 import { runDiscoverySubcommand } from "./commands/discovery.ts";
@@ -70,11 +70,28 @@ if (import.meta.main) {
   // is the entrypoint, never on import (it would parse the test runner's argv and
   // exit 1, killing tests).
   runProgram(buildProgram(), (err) => {
-    // Last-resort fail-safe for the review path; harmless noise elsewhere.
+    // Last-resort fail-safe for the review path; harmless noise elsewhere. The
+    // selected adapter renders the deny Decision to its wire string. If the
+    // adapter itself is what failed to load, fall back to a hard-coded minimal
+    // deny so a truly-fatal path still fails safe rather than emitting nothing.
     logError("fatal", err);
-    process.stdout.write(
-      `${JSON.stringify(denyOutput(`caret: fatal ${err} — denying to fail safe. See ${logFile()}.`))}\n`,
-    );
+    const reason = `caret: fatal ${err} — denying to fail safe. See ${logFile()}.`;
+    let line: string;
+    try {
+      line = claudeAdapter.emitDecision({
+        behavior: "deny",
+        feedback: reason,
+        decidedAt: Date.now(),
+      });
+    } catch {
+      line = JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PermissionRequest",
+          decision: { behavior: "deny", message: reason },
+        },
+      });
+    }
+    process.stdout.write(`${line}\n`);
     process.exit(0);
   });
 }

@@ -1,10 +1,11 @@
 // `caret review`: review a plan piped on stdin (the ExitPlanMode hook). Wires
 // the production review dependencies — the Claude adapter's stdin parser, the
 // daemon HTTP client, takeover, and the local browser opener — then runs one
-// review to a single decision line on stdout. The signal handlers below deny to
-// fail safe if the process is killed before a decision is written.
+// review to a single decision line on stdout. This is the emission boundary: the
+// core returns a tool-agnostic Decision, and the selected adapter renders it to
+// the agent's wire string here. The signal handlers below deny to fail safe if
+// the process is killed before a decision is written.
 
-import { denyOutput } from "../adapters/claude/feedback.ts";
 import { claudeAdapter } from "../adapters/claude/index.ts";
 import { expireReview, longPoll, postReview } from "../daemon-client.ts";
 import { ensureDaemon, prodEnsureDeps } from "../daemon-lifecycle.ts";
@@ -12,6 +13,7 @@ import { logError, logWarn, setLogLevel, setRedact } from "../log.ts";
 import { logFile } from "../paths.ts";
 import { type ReviewDeps, runReview } from "../review.ts";
 import { loadSettings, reviewTimeoutMs, type Settings } from "../settings.ts";
+import type { Decision } from "../types.ts";
 import { warnInvalidEnvVars } from "./boot.ts";
 
 function openBrowser(url: string): void {
@@ -53,18 +55,19 @@ export async function runReviewSubcommand(): Promise<void> {
   // silently falls through to the config file, then the default.
   warnInvalidEnvVars((msg) => logWarn("env", msg));
   // Emit exactly one decision line. A signal arriving after the normal decision
-  // was written must not append a second (deny) line.
+  // was written must not append a second (deny) line. The adapter renders the
+  // core Decision to the agent's wire string — the single emission boundary.
   let responded = false;
-  const respond = (output: unknown) => {
+  const respond = (decision: Decision) => {
     if (responded) return;
     responded = true;
-    process.stdout.write(`${JSON.stringify(output)}\n`);
+    process.stdout.write(`${claudeAdapter.emitDecision(decision)}\n`);
   };
   const denyAndExit = (reason: string) => {
     // Only log when this signal is what actually denies the review (a signal
     // arriving after a normal decision is already a no-op below).
     if (!responded) logError("signal", new Error(reason));
-    respond(denyOutput(`${reason} See ${logFile()}.`));
+    respond({ behavior: "deny", feedback: `${reason} See ${logFile()}.`, decidedAt: Date.now() });
     process.exit(0);
   };
   process.once("SIGINT", () => denyAndExit("caret: interrupted (SIGINT) — denying to fail safe."));

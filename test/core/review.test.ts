@@ -41,10 +41,15 @@ function logRecords(): Array<Record<string, unknown>> {
 }
 
 // ---- runReview ----
+//
+// runReview returns a tool-agnostic core Decision; the command layer renders it
+// to the agent's wire string via the adapter. These core assertions stay on the
+// Decision shape — the Claude PermissionRequest wire mapping is pinned in
+// test/adapters/claude/.
 
-test("happy path returns an allow hook output", async () => {
+test("happy path returns an allow decision", async () => {
   const out = await runReview(stdin, reviewDeps());
-  expect(out.hookSpecificOutput.decision.behavior).toBe("allow");
+  expect(out.behavior).toBe("allow");
 });
 
 test("browser opens under the caret.localhost vanity origin (EXC-426)", async () => {
@@ -61,32 +66,29 @@ test("browser opens under the caret.localhost vanity origin (EXC-426)", async ()
   expect(opened).toBe("http://caret.localhost:4242/?review=rid");
 });
 
-test("deny decision passes the feedback through to message", async () => {
+test("deny decision passes the feedback through", async () => {
   const out = await runReview(
     stdin,
     reviewDeps({
       longPoll: async () => ({ behavior: "deny", feedback: "tweak X", decidedAt: 1 }),
     }),
   );
-  expect(out.hookSpecificOutput.decision).toMatchObject({
-    behavior: "deny",
-    message: "tweak X",
-  });
+  expect(out).toMatchObject({ behavior: "deny", feedback: "tweak X" });
 });
 
-test("acceptMode passes through to updatedPermissions", async () => {
+test("acceptMode passes through on the decision", async () => {
   const out = await runReview(
     stdin,
     reviewDeps({
       longPoll: async () => ({ behavior: "allow", acceptMode: "acceptEdits", decidedAt: 1 }),
     }),
   );
-  expect(out.hookSpecificOutput.decision.updatedPermissions?.[0]?.mode).toBe("acceptEdits");
+  expect(out).toMatchObject({ behavior: "allow", acceptMode: "acceptEdits" });
 });
 
 test("invalid stdin JSON fails safe to deny (never allow)", async () => {
   const out = await runReview("not json", reviewDeps());
-  expect(out.hookSpecificOutput.decision.behavior).toBe("deny");
+  expect(out.behavior).toBe("deny");
 });
 
 test("ensureDaemon failure fails safe to deny", async () => {
@@ -98,7 +100,7 @@ test("ensureDaemon failure fails safe to deny", async () => {
       },
     }),
   );
-  expect(out.hookSpecificOutput.decision.behavior).toBe("deny");
+  expect(out.behavior).toBe("deny");
 });
 
 test("a never-resolving long-poll times out to deny", async () => {
@@ -109,8 +111,8 @@ test("a never-resolving long-poll times out to deny", async () => {
       timeoutMs: 20,
     }),
   );
-  expect(out.hookSpecificOutput.decision.behavior).toBe("deny");
-  expect(out.hookSpecificOutput.decision.message).toContain("timed out");
+  expect(out.behavior).toBe("deny");
+  expect(out.feedback).toContain("timed out");
 });
 
 test("a timeout notifies the daemon to expire the review before denying", async () => {
@@ -125,7 +127,7 @@ test("a timeout notifies the daemon to expire the review before denying", async 
       },
     }),
   );
-  expect(out.hookSpecificOutput.decision.behavior).toBe("deny");
+  expect(out.behavior).toBe("deny");
   expect(expired).toEqual([["http://x", "rid"]]);
 });
 
@@ -140,8 +142,8 @@ test("an expire failure never changes the fail-safe deny", async () => {
       },
     }),
   );
-  expect(out.hookSpecificOutput.decision.behavior).toBe("deny");
-  expect(out.hookSpecificOutput.decision.message).toContain("timed out");
+  expect(out.behavior).toBe("deny");
+  expect(out.feedback).toContain("timed out");
 });
 
 test("no expire call when the review was never created", async () => {
@@ -173,7 +175,7 @@ test("a dropped long-poll reconnects once then succeeds", async () => {
     }),
   );
   expect(calls).toBe(2);
-  expect(out.hookSpecificOutput.decision.behavior).toBe("allow");
+  expect(out.behavior).toBe("allow");
 });
 
 test("a 204 heartbeat re-polls until a decision arrives", async () => {
@@ -188,7 +190,7 @@ test("a 204 heartbeat re-polls until a decision arrives", async () => {
     }),
   );
   expect(calls).toBe(3);
-  expect(out.hookSpecificOutput.decision.behavior).toBe("allow");
+  expect(out.behavior).toBe("allow");
 });
 
 test("a transient drop reconnects and keeps polling (no premature deny)", async () => {
@@ -209,7 +211,7 @@ test("a transient drop reconnects and keeps polling (no premature deny)", async 
     }),
   );
   expect(reconnects).toBe(2); // 1 at startup + 1 reconnect after the drop
-  expect(out.hookSpecificOutput.decision.behavior).toBe("allow");
+  expect(out.behavior).toBe("allow");
 });
 
 test("the poll loop is bounded by timeoutMs (endless heartbeats → deny)", async () => {
@@ -223,8 +225,8 @@ test("the poll loop is bounded by timeoutMs (endless heartbeats → deny)", asyn
       timeoutMs: 30,
     }),
   );
-  expect(out.hookSpecificOutput.decision.behavior).toBe("deny");
-  expect(out.hookSpecificOutput.decision.message).toContain("timed out");
+  expect(out.behavior).toBe("deny");
+  expect(out.feedback).toContain("timed out");
 });
 
 test("an unreachable daemon mid-poll fails safe to deny", async () => {
@@ -244,7 +246,7 @@ test("an unreachable daemon mid-poll fails safe to deny", async () => {
       },
     }),
   );
-  expect(out.hookSpecificOutput.decision.behavior).toBe("deny");
+  expect(out.behavior).toBe("deny");
 });
 
 test("a failure logs the step + context to caret.log and surfaces the path", async () => {
@@ -257,7 +259,7 @@ test("a failure logs the step + context to caret.log and surfaces the path", asy
     }),
   );
   // The deny reason points the user at the log.
-  expect(out.hookSpecificOutput.decision.message).toContain(logFile());
+  expect(out.feedback).toContain(logFile());
   // The log captures which step failed, the message, and stdin context.
   const rec = logRecords().find((r) => r.step === "ensureDaemon");
   expect(rec).toMatchObject({ level: 50, msg: "daemon down", sessionId: "S", cwd: "/p" });
@@ -307,9 +309,9 @@ test("a bare-fence plan is denied for format before any daemon work", async () =
       },
     }),
   );
-  expect(out.hookSpecificOutput.decision).toMatchObject({
+  expect(out).toMatchObject({
     behavior: "deny",
-    message: PLAN_FORMAT_DENY_MESSAGE,
+    feedback: PLAN_FORMAT_DENY_MESSAGE,
   });
   // The format-deny short-circuits: no daemon spin-up, no review created.
   expect(ensureCalls).toBe(0);
@@ -327,7 +329,7 @@ test("a fully-tagged plan is posted for review as before", async () => {
       },
     }),
   );
-  expect(out.hookSpecificOutput.decision.behavior).toBe("allow");
+  expect(out.behavior).toBe("allow");
   expect(postCalls).toBe(1);
 });
 
@@ -342,7 +344,7 @@ test("a plan with no code blocks is posted for review", async () => {
       },
     }),
   );
-  expect(out.hookSpecificOutput.decision.behavior).toBe("allow");
+  expect(out.behavior).toBe("allow");
   expect(postCalls).toBe(1);
 });
 
@@ -357,7 +359,7 @@ test("an absent plan is posted for review (no spurious format-deny)", async () =
       },
     }),
   );
-  expect(out.hookSpecificOutput.decision.behavior).toBe("allow");
+  expect(out.behavior).toBe("allow");
   expect(postCalls).toBe(1);
 });
 
