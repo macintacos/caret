@@ -5,5 +5,12 @@
 # so it is safe to register globally here. The companion `--conditions browser`
 # flag (on the test command) selects svelte's client runtime entry; the backend
 # suite passes unchanged under it.
+#
+# The flag cannot live here: export conditions are a module-resolution input
+# Bun reads from the CLI (`--conditions`), not a [test] config key — so the
+# canonical entry points carry it (.mise/tasks/test, package.json `test`). Bare
+# `bun test` therefore resolves svelte's server runtime, which ui/test-mount.ts
+# detects and rejects with an actionable error rather than the cryptic mount()
+# crash (EXC-537).
 [test]
 preload = ["./ui/test-svelte-preload.ts"]

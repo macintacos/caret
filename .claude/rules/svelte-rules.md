@@ -62,6 +62,25 @@ What does *not* go in a component unit: real-browser behavior (text selection, f
 popover positioning, timing windows). That is e2e. The unit-vs-e2e split is governed by
 `browser-testing.md` — defer to it, don't restate it here.
 
+## One runner: bun-test, and the `--conditions browser` requirement (EXC-537)
+
+caret runs **one** test runner — `bun test` — for both the backend and the UI component suites.
+Svelte's official testing story is Vitest (runes-native, no preload needed), but adopting it would
+add a *second* runner and a second config surface; the bun-test harness already works, so keeping a
+single runner is the deliberate choice against that cost. The price of one runner is the bespoke
+`ui/test-svelte-preload.ts` plus the mandatory `--conditions browser` flag — accepted, not
+accidental.
+
+The flag is load-bearing: svelte's `.` export map gates the client runtime (the real `mount`) behind
+the `browser` condition and falls back to the server runtime (a `mount` stub that throws) otherwise.
+So the canonical entry points — the `mise run test` task and `package.json`'s `test` script — both
+pass `--conditions browser`; it can't move into `bunfig.toml`'s `[test]` table because export
+conditions are a CLI resolution input, not a config key. Bare `bun test` resolves the server runtime
+and would crash component mounts cryptically, so `ui/test-mount.ts` probes the resolved svelte module
+at import and throws an actionable error (run via `mise run test` / `bun test --conditions browser`)
+instead. The guard lives only in the mount harness, so the backend suite — which never imports it —
+stays green under any invocation.
+
 ## CSS-token discipline
 
 - **App.css owns the design tokens** as CSS custom properties (`--paper`, `--ink`, `--accent`,
