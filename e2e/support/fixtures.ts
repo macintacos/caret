@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type ChildProcess, spawn } from "node:child_process";
 import { expect, type Page, test as base } from "@playwright/test";
+import { waitForHealth } from "../../src/daemon-client.ts";
 import type { ClientReview, PlanInput, RouteResult } from "../../src/types.ts";
 import { FIXTURE_PLAN } from "./fixture-plan.ts";
 
@@ -95,20 +96,9 @@ function awaitPortLine(child: ChildProcess, stderr: () => string): Promise<numbe
   });
 }
 
-/** Poll /api/health until the daemon answers with the caret identity. */
-async function waitForHealth(url: string): Promise<void> {
-  const deadline = Date.now() + BOOT_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`${url}/api/health`);
-      if (res.ok && ((await res.json()) as { service?: string }).service === "caret") return;
-    } catch {
-      // not up yet — retry below
-    }
-    await new Promise((r) => setTimeout(r, 50));
-  }
-  throw new Error("caret e2e daemon did not become healthy in time");
-}
+// node-runner sleep: the Playwright fixture runs under node, so reach for
+// setTimeout rather than Bun.sleep (the src probe defaults to Bun.sleep).
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export const test = base.extend<{ daemon: Daemon }>({
   // biome-ignore lint/correctness/noEmptyPattern: Playwright's fixture signature requires the destructuring slot; {} declares "no fixture dependencies"
@@ -129,7 +119,8 @@ export const test = base.extend<{ daemon: Daemon }>({
     try {
       const port = await awaitPortLine(child, stderr);
       const url = `http://127.0.0.1:${port}`;
-      await waitForHealth(url);
+      // ~15s budget at 50ms intervals (BOOT_TIMEOUT_MS / 50), node-runner sleep.
+      await waitForHealth(url, { attempts: BOOT_TIMEOUT_MS / 50, intervalMs: 50, sleep });
 
       await use({
         url,

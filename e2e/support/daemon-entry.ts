@@ -13,6 +13,7 @@
 // handshake can't be corrupted. The fixture owns the ephemeral XDG_STATE_HOME
 // and tears it down after the test.
 
+import { NEVER_IDLE_MS } from "../../src/constants.ts";
 import { createServer } from "../../src/daemon.ts";
 import { createDaemonLogger } from "../../src/log.ts";
 import { prefsFile, reviewsDir } from "../../src/paths.ts";
@@ -43,9 +44,8 @@ await store.rehydrate();
 const server = createServer({
   store,
   port: 0, // OS-assigned: parallel workers can never collide
-  // Max setTimeout delay (2^31-1 ms; larger overflows to ~1ms) — the daemon
-  // must never idle-shut-down mid-test. Same value .mise/tasks/dev uses.
-  idleMs: 2147483647,
+  // The daemon must never idle-shut-down mid-test.
+  idleMs: NEVER_IDLE_MS,
   // Belt and braces: even an unexpected idle fire must not process.exit.
   onShutdown: () => {},
   prefsPath: prefsFile(), // under the ephemeral state dir

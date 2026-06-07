@@ -3,22 +3,32 @@
 
 set -euo pipefail
 
-# Port mode (EXC-461): by default the daemon binds an OS-assigned ephemeral port
-# (`caret daemon --ephemeral`) and this task discovers the real port from the
-# daemon's lock file — so any number of `mise run dev` sessions coexist without
-# clobbering each other. Set CARET_DEV_PORT to pin a fixed port instead.
+# Thin process-supervision glue: this task boots and reaps the three dev
+# processes (daemon + driver + Vite) and isolates their state. Every
+# non-supervisory decision — port mode, lock-based port discovery, the typed
+# constants — lives in scripts/dev/dev-env.ts (the bash side can't import TS),
+# so "valid lock" and the magic numbers are each defined in exactly one place.
+
+# Read the never-idle sentinel from src once (the only typed constant this
+# task itself sets; DEFAULT_PORT stays fully owned by the helper).
+never_idle_ms="$(bun scripts/dev/dev-env.ts never-idle-ms)"
+
+# --- Port mode (EXC-461) ---------------------------------------------------
+# By default the daemon binds an OS-assigned ephemeral port (`caret daemon
+# --ephemeral`) and this task discovers the real port from the daemon's lock
+# file — so any number of `mise run dev` sessions coexist without clobbering
+# each other. Set CARET_DEV_PORT to pin a fixed port instead (never the
+# production default — the helper rejects it so a dev session can't squat an
+# installed caret).
 daemon_cmd=(bun src/cli.ts daemon)
-if [ -n "${CARET_DEV_PORT:-}" ]; then
-  # Never bind the production default: a CARET_DEV_PORT of 42718 would squat on
-  # an installed caret (AC5).
-  if [ "$CARET_DEV_PORT" = "42718" ]; then
-    echo "caret dev: CARET_DEV_PORT must differ from the production default (42718)" >&2
-    exit 1
-  fi
-  export CARET_PORT="$CARET_DEV_PORT"
+read -r port_kind fixed_port < <(bun scripts/dev/dev-env.ts port-mode "${CARET_DEV_PORT:-}")
+if [ "$port_kind" = "fixed" ]; then
+  export CARET_PORT="$fixed_port"
 else
   daemon_cmd+=(--ephemeral)
 fi
+
+# --- State-dir lifecycle ---------------------------------------------------
 # State dir: ephemeral by default (isolated + wiped on exit, AC1/AC5/AC6). Set
 # CARET_DEV_STATE_DIR to a persistent path to keep state across dev restarts —
 # e.g. to exercise the daemon's on-disk persistence (remembered approve mode,
@@ -35,9 +45,9 @@ else
   persist_state=0
 fi
 export XDG_STATE_HOME="$state_dir"
-# Keep the dev daemon from idle-auto-shutting-down mid-session (AC4). This is the
-# max setTimeout delay (2^31-1 ms); a larger value overflows and clamps to 1ms.
-export CARET_IDLE_MS=2147483647
+# Keep the dev daemon from idle-auto-shutting-down mid-session (AC4): the
+# never-idle sentinel, read above from src.
+export CARET_IDLE_MS="$never_idle_ms"
 
 daemon_pid=""
 driver_pid=""
@@ -59,11 +69,12 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 # A persistent CARET_DEV_STATE_DIR may hold a stale lock from a crashed run;
-# the boot about to happen writes its own. (The lock-wait below would otherwise
-# read the stale port and attach the session to nothing.)
+# the boot about to happen writes its own. (The port discovery below would
+# otherwise read the stale port and attach the session to nothing.)
 lock_file="$state_dir/caret/daemon.lock"
 rm -f "$lock_file"
 
+# --- Daemon ----------------------------------------------------------------
 # Stock daemon, run from source so daemon edits are live without a rebuild.
 # Local-dev only: the daemon emits NDJSON on stderr (EXC-398), so render it
 # human-readable through pino-pretty (a devDependency — production caret always
@@ -75,38 +86,15 @@ daemon_pid=$!
 
 # Discover the daemon's bound port from its lock (written after a successful
 # bind), then hand it to the driver and the Vite proxy via CARET_PORT. The
-# parser also requires the lock's stateDir to be OUR state dir, so a session
-# can never silently attach to a foreign daemon's lock (e.g. two sessions
-# pointed at one persistent CARET_DEV_STATE_DIR). Bounded wait, loud failure
-# — including for a daemon that died on boot (EXC-461).
-port=""
-for _ in $(seq 1 100); do
-  if [ -f "$lock_file" ]; then
-    # Explicit exit codes (no uncaught throw): 0 + port on a usable own-world
-    # lock, 1 on anything else (unreadable, foreign stateDir, bad port).
-    port="$(bun -e 'try { const l = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); const ok = l.stateDir === process.argv[2] && Number.isInteger(l.port) && l.port > 0; if (!ok) process.exit(1); console.log(l.port); } catch { process.exit(1); }' "$lock_file" "$state_dir/caret" 2>/dev/null)" || port=""
-    if [ -n "$port" ]; then break; fi
-  fi
-  if ! kill -0 "$daemon_pid" 2>/dev/null; then
-    echo "caret dev: daemon exited before writing its lock — see output above" >&2
-    exit 1
-  fi
-  sleep 0.1
-done
-if [ -z "$port" ]; then
-  echo "caret dev: no usable lock at $lock_file (missing, foreign, or bad port) — aborting" >&2
-  exit 1
-fi
-# An OS-assigned ephemeral port can be 42718 on Linux (its ephemeral range
-# includes it): never let a dev daemon squat the production default — abort
-# loudly; the EXIT trap reaps the daemon.
-if [ "$port" = "42718" ]; then
-  echo "caret dev: OS assigned the production default port (42718) — rerun" >&2
-  exit 1
-fi
+# helper requires the lock's stateDir to be OUR state dir (so a session can
+# never silently attach to a foreign daemon's lock), aborts if the daemon died
+# on boot, and refuses an OS-assigned production-default port. Bounded wait,
+# loud failure.
+port="$(bun scripts/dev/dev-env.ts discover-port "$lock_file" "$state_dir/caret" "$daemon_pid")"
 export CARET_PORT="$port"
 echo "caret dev: port=$CARET_PORT state=$state_dir persistent=$persist_state"
 
+# --- Driver + Vite ---------------------------------------------------------
 # Seed the fake plan and play the agent's protocol side (waits for health first).
 # It also seeds a genuinely-new review (fresh session/id) every 15s by default —
 # the manual test path for the EXC-427 notification. CARET_DEV_NEW_REVIEW_MS
