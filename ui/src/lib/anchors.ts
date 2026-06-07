@@ -11,6 +11,29 @@ export interface Offsets {
 }
 
 /**
+ * Context window length, in chars, captured on each side of a quote — the W3C
+ * TextQuoteSelector convention Hypothesis uses. Enough to disambiguate a quote
+ * that recurs within a block without bloating the stored annotation.
+ */
+export const CONTEXT_LEN = 32;
+
+/**
+ * The up-to-CONTEXT_LEN chars of `text` immediately before [start) and after
+ * [end), clamped at the block boundaries. Pure: operates on textContent, so it
+ * is unit-testable without a DOM.
+ */
+export function contextAround(
+	text: string,
+	start: number,
+	end: number,
+): { prefix: string; suffix: string } {
+	return {
+		prefix: text.slice(Math.max(0, start - CONTEXT_LEN), start),
+		suffix: text.slice(end, end + CONTEXT_LEN),
+	};
+}
+
+/**
  * Walks the text nodes of `root` to find the node + local offset where the
  * cumulative character `target` falls. `prefer` controls boundary behavior:
  * "start" binds to the start of the next node, "end" to the end of the prev.
@@ -183,10 +206,74 @@ export interface Resolution {
 	endOffset: number;
 }
 
+/** Every start offset at which `quote` occurs in `text` (overlapping allowed). */
+function allOccurrences(text: string, quote: string): number[] {
+	const out: number[] = [];
+	for (let i = text.indexOf(quote); i !== -1; i = text.indexOf(quote, i + 1)) {
+		out.push(i);
+	}
+	return out;
+}
+
+/** Length of the longest common suffix of two strings (how far they agree
+ * reading right-to-left). Used to score a candidate's left context against the
+ * stored prefix — the chars nearest the quote matter most. */
+function commonSuffixLen(a: string, b: string): number {
+	let n = 0;
+	while (n < a.length && n < b.length && a[a.length - 1 - n] === b[b.length - 1 - n]) n++;
+	return n;
+}
+
+/** Length of the longest common prefix of two strings. Scores a candidate's
+ * right context against the stored suffix. */
+function commonPrefixLen(a: string, b: string): number {
+	let n = 0;
+	while (n < a.length && n < b.length && a[n] === b[n]) n++;
+	return n;
+}
+
+/**
+ * Of `occurrences` of the quote in `text`, the offset whose surrounding context
+ * best matches the stored prefix/suffix — or null when nothing disambiguates
+ * (no context stored, or two occurrences tie for the best score). A tie returns
+ * null rather than guessing, so an undisambiguable quote orphans instead of
+ * anchoring to the wrong occurrence.
+ */
+function pickByContext(
+	text: string,
+	occurrences: number[],
+	quoteLen: number,
+	prefix: string | undefined,
+	suffix: string | undefined,
+): number | null {
+	if (!prefix && !suffix) return null;
+	let best = -1;
+	let bestScore = -1;
+	let tied = false;
+	for (const start of occurrences) {
+		const ctx = contextAround(text, start, start + quoteLen);
+		const score =
+			(prefix ? commonSuffixLen(ctx.prefix, prefix) : 0) +
+			(suffix ? commonPrefixLen(ctx.suffix, suffix) : 0);
+		if (score > bestScore) {
+			bestScore = score;
+			best = start;
+			tied = false;
+		} else if (score === bestScore) {
+			tied = true;
+		}
+	}
+	if (tied || bestScore <= 0) return null;
+	return best;
+}
+
 /**
  * Re-resolves an annotation against the current DOM:
  *  1. offsets→Range whose text equals the stored quote (exact hit),
- *  2. else search for the quote as a unique substring and rebuild offsets,
+ *  2. else locate the quote by text and rebuild offsets — a unique match
+ *     repairs directly, and a recurring match is disambiguated by the stored
+ *     prefix/suffix context (W3C TextQuoteSelector); without context a
+ *     recurring quote stays ambiguous,
  *  3. else orphan — never silently dropped.
  */
 export function resolveAnnotation(
@@ -214,14 +301,17 @@ export function resolveAnnotation(
 		};
 	}
 
-	// Tier 2: unique substring search for the quote.
+	// Tier 2: locate the quote by text. A unique match repairs directly; a
+	// recurring match is resolved by context, else stays ambiguous (orphan).
 	const text = root.textContent ?? "";
 	if (ann.quote.length > 0) {
-		const first = text.indexOf(ann.quote);
-		const second = first === -1 ? -1 : text.indexOf(ann.quote, first + 1);
-		if (first !== -1 && second === -1) {
-			const start = first;
-			const end = first + ann.quote.length;
+		const occurrences = allOccurrences(text, ann.quote);
+		const start =
+			occurrences.length === 1
+				? occurrences[0]!
+				: pickByContext(text, occurrences, ann.quote.length, ann.prefix, ann.suffix);
+		if (start != null) {
+			const end = start + ann.quote.length;
 			const range = offsetsToRange(root, start, end);
 			if (range) {
 				return { tier: 2, range, startOffset: start, endOffset: end };

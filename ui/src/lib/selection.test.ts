@@ -109,6 +109,46 @@ describe("captureSelection", () => {
   });
 });
 
+// The W3C TextQuoteSelector context (EXC-543): up to 32 chars of the block's
+// textContent on each side of the quote, clamped at the block boundaries.
+describe("captureSelection prefix/suffix context", () => {
+  test("captures the text immediately before and after the quote", () => {
+    const root = container('<p id="b0">alpha beta gamma</p>');
+    const block = root.querySelector("#b0") as HTMLElement;
+    selectRange(block, 6, 10); // "beta"
+    const cap = captureSelection(root);
+    expect(cap!.prefix).toBe("alpha ");
+    expect(cap!.suffix).toBe(" gamma");
+  });
+
+  test("clamps to empty at the start and end of the block", () => {
+    const root = container('<p id="b0">Deploy now</p>');
+    const block = root.querySelector("#b0") as HTMLElement;
+    selectRange(block, 0, 6); // "Deploy" — nothing precedes it
+    const cap = captureSelection(root);
+    expect(cap!.prefix).toBe("");
+    expect(cap!.suffix).toBe(" now");
+
+    selectRange(block, 7, 10); // "now" — nothing follows it
+    const cap2 = captureSelection(root);
+    expect(cap2!.prefix).toBe("Deploy ");
+    expect(cap2!.suffix).toBe("");
+  });
+
+  test("caps each side at 32 chars", () => {
+    // 40 'x' before and 40 'y' after the quote "Q".
+    const before = "x".repeat(40);
+    const after = "y".repeat(40);
+    const root = container(`<p id="b0">${before}Q${after}</p>`);
+    const block = root.querySelector("#b0") as HTMLElement;
+    selectRange(block, 40, 41); // the lone "Q"
+    const cap = captureSelection(root);
+    expect(cap!.quote).toBe("Q");
+    expect(cap!.prefix).toBe("x".repeat(32));
+    expect(cap!.suffix).toBe("y".repeat(32));
+  });
+});
+
 // nearestBlock is module-private; it is exercised through its only caller,
 // captureSelection. These cases pin its block-resolution branches: the /^b\d+$/
 // id match, the climb up through nested markup, the innermost-block tiebreak,

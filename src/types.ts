@@ -49,7 +49,15 @@ export function isUnresolved(status: ReviewStatus): boolean {
   return status === "pending" || status === "rejected";
 }
 
-/** A single inline annotation, anchored within a specific plan version. */
+/**
+ * A single inline annotation, anchored within a specific plan version.
+ *
+ * The durable anchor is the W3C TextQuoteSelector hybrid: `quote` plus its
+ * surrounding `prefix`/`suffix` context. The offsets are only the fast path —
+ * they re-resolve exactly when the block text is unchanged but drift on a
+ * re-render. When they drift, `quote`+context locate the text again, and the
+ * context disambiguates a quote that now occurs more than once.
+ */
 export interface Annotation {
   id: string;
   /** Structural (token-index) id of the block element, e.g. "b12". */
@@ -59,6 +67,13 @@ export interface Annotation {
   endOffset: number;
   /** The selected text, used as a re-resolve fallback when offsets drift. */
   quote: string;
+  /** Up to ~32 chars of textContent immediately before the quote within the
+   * block, used to disambiguate a non-unique quote on re-resolve. Optional:
+   * on-disk annotations predating the hybrid anchor omit it and resolve via the
+   * offset and unique-quote tiers unchanged. */
+  prefix?: string;
+  /** Up to ~32 chars of textContent immediately after the quote (see prefix). */
+  suffix?: string;
   comment: string;
 }
 
