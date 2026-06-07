@@ -1,6 +1,6 @@
 // Core domain types shared by the daemon, store, CLI, and the UI (imported
 // directly through the @core/* alias). The single wire contract — pure TS with
-// no node imports, so the browser singlefile build stays clean.
+// no node imports, so the browser bundle stays clean.
 
 /** A thrown value as a string: an Error's message, or String() of anything else.
  * The one coercion used wherever a caught value is rendered into a log line,
