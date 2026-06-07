@@ -76,7 +76,7 @@ export interface BuildIdDeps {
   isCompiled: boolean;
   /** Hash of the compiled binary's content, or null if it can't be read. */
   hashBinary: () => Promise<string | null>;
-  /** Hash of the served UI HTML (the dev / fallback fingerprint). */
+  /** Hash of the served UI asset set (the dev / fallback fingerprint). */
   uiHash: () => Promise<string>;
 }
 

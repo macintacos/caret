@@ -54,7 +54,23 @@ test("assetsFromDist returns undefined for a path that isn't in the dist (exact 
   try {
     const assets = assetsFromDist(dist);
     expect(assets?.file("/assets/missing.js")).toBeUndefined();
-    // Traversal-shaped requests are just unknown keys — never resolved against fs.
+  } finally {
+    rmSync(dist, { recursive: true, force: true });
+  }
+});
+
+// Traversal safety is load-bearing at this layer: file() is a raw map lookup, no
+// URL normalization runs first (unlike the daemon, where new URL() collapses
+// "..", masking the guard). "/assets/../index.html" is the falsifiable case — it
+// names a real fixture file by an escaping path. Exact-match returns undefined;
+// a filesystem-joining implementation (Bun.file(join(dist, urlPath))) would
+// resolve it to dist/index.html and serve it. So this test fails if anyone
+// replaces the exact-match map lookup with a path join.
+test("assetsFromDist never resolves a traversal path against the filesystem", () => {
+  const dist = fakeDist({ "index.html": "secret", "assets/index-AB12.js": "x" });
+  try {
+    const assets = assetsFromDist(dist);
+    expect(assets?.file("/assets/../index.html")).toBeUndefined();
     expect(assets?.file("/../src/cli.ts")).toBeUndefined();
   } finally {
     rmSync(dist, { recursive: true, force: true });

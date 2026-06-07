@@ -15,3 +15,12 @@ declare module "*.js" {
   const path: string;
   export default path;
 }
+
+// The generated manifest module itself (src/ui-manifest.generated.ts) is
+// gitignored and only emitted by the build task, so it's absent on a clean
+// checkout where the type gate (`tsc --noEmit`) still runs. This ambient
+// declaration lets loadUiAssets' dynamic import resolve without it; when the
+// real module is present, TypeScript types against it instead.
+declare module "*/ui-manifest.generated.ts" {
+  export const UI_MANIFEST: Record<string, string>;
+}

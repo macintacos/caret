@@ -546,6 +546,21 @@ describe("UI serving", () => {
     expect(await res.text()).toBe(CSS);
   });
 
+  test("a non-/assets root asset (not content-hashed) is served with no-cache", async () => {
+    // A public/-copied file (e.g. favicon.ico) lands as a root manifest key, not
+    // under /assets/, and is NOT content-addressed. Only /assets/* names earn the
+    // immutable year-long cache; this one must stay re-fetchable across redeploys.
+    await boot({
+      assets: fakeAssets({
+        "/index.html": INDEX,
+        "/favicon.ico": "icon-bytes",
+      }),
+    });
+    const res = await fetch(`${base}/favicon.ico`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-cache");
+  });
+
   test("GET an asset path that isn't a manifest key is a clean 404", async () => {
     await bootUi();
     const res = await fetch(`${base}/assets/missing-ZZ99.js`);
@@ -559,10 +574,14 @@ describe("UI serving", () => {
     expect(res.status).toBe(404);
   });
 
-  // Traversal safety is by construction: request paths are matched exactly
-  // against the manifest keys, never resolved against the filesystem. These
-  // attempts must never escape the asset set — each is just an unknown path.
-  test("traversal attempts are rejected (exact-match allowlist, no filesystem resolution)", async () => {
+  // Traversal-shaped requests over HTTP are a uniform 404. By the time a path
+  // reaches handleAsset, new URL().pathname has already collapsed every ".." and
+  // "%2e%2e" segment, so the allowlist only ever sees a normalized path (e.g.
+  // "/src/cli.ts") — just another unknown key. This pins the runtime's
+  // normalization + the dispatcher's fall-through, not caret's allowlist guard
+  // itself; the falsifiable exact-match-vs-filesystem-join assertion lives at the
+  // resolver layer (ui-assets.test.ts), where no URL normalization runs first.
+  test("traversal-shaped requests are a clean 404", async () => {
     await bootUi();
     for (const path of [
       "/../src/cli.ts",

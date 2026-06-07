@@ -57,7 +57,7 @@ export interface CreateServerOptions {
    * captured at boot. The pure defaults keep createServer free of config-file
    * reads, so tests stay hermetic. */
   heartbeatMs?: number;
-  /** The resolved UI asset set (build-id.ts loadUiAssets): its URL paths form the
+  /** The resolved UI asset set (ui-assets.ts loadUiAssets): its URL paths form the
    * exact-match allowlist the daemon serves, and each path reads through Bun.file
    * (carrying its MIME). Omitted (default) means no UI — `GET /` serves the
    * built-in placeholder and every other UI path 404s, the posture existing tests
@@ -362,15 +362,17 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // GET <path> for a non-index manifest key — a hashed sibling asset (JS/CSS/
   // fonts). The path must be an exact manifest key (the allowlist), never
   // resolved against the filesystem, so traversal is impossible by construction.
-  // Bun.file carries the asset's MIME; the content-addressed name earns a long
-  // immutable cache. Returns null for an unknown path so dispatch falls through
-  // to its uniform 404.
+  // Bun.file carries the asset's MIME. Only content-addressed /assets/* names
+  // earn the long immutable cache; any other served file (e.g. a public/-copied
+  // favicon, not content-hashed) gets no-cache so a redeploy is re-fetched.
+  // Returns null for an unknown path so dispatch falls through to its uniform 404.
   function handleAsset(path: string): Response | null {
     if (!assets) return null;
     const file = assets.file(path);
     if (!file) return null;
+    const cache = path.startsWith("/assets/") ? ASSET_CACHE_CONTROL : INDEX_CACHE_CONTROL;
     return new Response(file, {
-      headers: { "Cache-Control": ASSET_CACHE_CONTROL },
+      headers: { "Cache-Control": cache },
     });
   }
 
