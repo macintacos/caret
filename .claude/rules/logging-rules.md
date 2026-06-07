@@ -110,6 +110,16 @@ Concretely:
   shareable `*.redacted.log` copies after the fact, and `redact = true` scrubs (home paths → `~`,
   usernames in foreign home paths censored) at write time. Write every message and `extra` assuming
   it may be shared.
+- **The review `cwd` is raw locally, scrubbed on share.** `review.ts` logs the review's working
+  directory verbatim in the `review requested` record (and every `ctx`-spreading record) under the
+  default `redact = false`, because which project a review came from is genuine diagnostic context.
+  It is an absolute path carrying a username, so it is identifying — but it is deliberately
+  **not** a `DENY_KEY` (that would censor it unconditionally, even in local debug logs,
+  contradicting the scrub-on-share model). The home-path scrub covers it instead: `redact = true`
+  / `caret redact` turns the current user's home into `~` and censors a foreign home's username
+  segment, so a shared log leaks no identifying path. That is the scrub-on-share treatment any
+  path-valued field gets; content keys (`plan`/`prompt`/`feedback`) are the `DENY_KEYS` exception
+  precisely because their bodies must never appear at any toggle.
 
 ## Where logs live
 
