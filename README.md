@@ -130,6 +130,15 @@ minute; an unfocused-but-visible window polls at full rate.
 
 ## Configuration
 
+### Platform support
+
+caret is **macOS-first**. It runs on Linux and Windows, but those paths are best-effort: the
+review-URL opener (`openBrowser` in `src/commands/review.ts`) ships `xdg-open` (Linux) and
+`cmd /c start` (Windows) branches alongside macOS's `open`, and the process-discovery probe used by
+`caret discovery` (`src/discovery.ts`) shells out to the BSD-flavored `ps -axo pid=,comm=`. These
+non-darwin branches are exercised primarily on macOS; if the browser doesn't open or discovery shows
+no processes on Linux/Windows, the review URL printed to stderr is the fallback.
+
 ### Config file
 
 caret reads optional settings from `$XDG_CONFIG_HOME/caret/config.toml` when `XDG_CONFIG_HOME` is
