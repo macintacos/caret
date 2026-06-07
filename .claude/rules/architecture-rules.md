@@ -62,17 +62,25 @@ parameterized for hypothetical future tools.
 
 ## Browser-safe shared modules
 
-Some modules are imported by **both** runtimes — the compiled bun binary and the singlefile UI
-bundle (the UI reaches them through the `@core/*` alias: `src/types.ts`, `constants.ts`,
-`redact-core.ts`, `ui-log-bridge.ts`). Every such module is **pure TS with zero node imports**.
+Some modules are imported by **both** runtimes — the compiled bun binary and the browser UI bundle
+(the UI reaches them through the `@core/*` alias: `src/types.ts`, `constants.ts`, `redact-core.ts`,
+`ui-log-bridge.ts`). Every such module is **pure TS with zero node imports**.
 
-The reason is the build: `ui/vite.config.ts` uses `vite-plugin-singlefile` to inline all JS+CSS into
-one `index.html` with no sibling assets and no dynamic `import()`. A `node:*` import in a
-`@core`-shared module would either break that bundle or drag the daemon's node dependency chain into
-the browser. So the split is deliberate: the shared algorithm/constants/types stay pure (e.g.
+The reason is the browser bundle: a `node:*` import in a `@core`-shared module either breaks the Vite
+build (node builtins have no browser equivalent) or drags the daemon's node dependency chain into the
+browser. So the split is deliberate: the shared algorithm/constants/types stay pure (e.g.
 `redact-core.ts` holds the `DENY_KEYS` walk), and node-only concerns layer on top in a
 non-shared module (e.g. `redact.ts` adds the home-path file scrub). Before importing a `src/` module
 from `ui/`, confirm it is node-free — or extract the node-free part.
+
+The UI is a standard multi-asset Vite build: `vite build` emits `ui/dist/index.html` plus
+content-hashed `dist/assets/*` (JS + CSS), which the build embeds into the binary through a
+generated manifest. `scripts/generate-ui-manifest.ts` enumerates `ui/dist/` into a gitignored
+module of `with { type: "file" }` imports (`src/ui-manifest.generated.ts`) that `bun build
+--compile` inlines, mapping each request URL path to its embedded file; `src/ui-assets.ts` resolves
+that asset set and the daemon serves each asset by URL path with per-path MIME and cache headers.
+Dynamic `import()` in the browser bundle is fine — the node-free invariant above is the only
+constraint a shared `@core` module owes.
 
 ## Related rules
 
