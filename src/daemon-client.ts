@@ -24,6 +24,34 @@ export async function httpHealth(baseUrl: string): Promise<HealthBody | null> {
   }
 }
 
+export interface WaitForHealthOptions {
+  /** Max number of health probes before giving up. */
+  attempts?: number;
+  /** Delay between probes (ms). */
+  intervalMs?: number;
+  /** Sleep primitive; injectable so tests drive the loop without real waits. */
+  sleep?: (ms: number) => Promise<void>;
+}
+
+/** Poll /api/health until the daemon answers with the caret identity, or throw
+ * once the attempt budget is exhausted. The single bounded health-wait the
+ * out-of-process callers share (the dev driver and the e2e fixture, which boot
+ * a daemon and then wait for it to listen); the in-process takeover loop in
+ * daemon-lifecycle.ts drives httpHealth on its own schedule. */
+export async function waitForHealth(
+  baseUrl: string,
+  opts: WaitForHealthOptions = {},
+): Promise<void> {
+  const attempts = opts.attempts ?? 100;
+  const intervalMs = opts.intervalMs ?? 100;
+  const sleep = opts.sleep ?? Bun.sleep;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if ((await httpHealth(baseUrl))?.service === "caret") return;
+    await sleep(intervalMs);
+  }
+  throw new Error("caret daemon did not become healthy in time");
+}
+
 export async function postReview(baseUrl: string, input: PlanInput): Promise<{ id: string }> {
   const res = await fetch(`${baseUrl}/api/reviews`, {
     method: "POST",

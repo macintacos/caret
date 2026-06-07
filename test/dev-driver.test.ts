@@ -4,17 +4,19 @@ import { runReview } from "../src/review.ts";
 import { setLogLevel } from "../src/log.ts";
 import { hasUntaggedCodeBlock } from "../src/plan-format.ts";
 import {
-  appendRevision,
   assertDevEnv,
-  DEV_SESSION,
   devReviewDeps,
+  runExtraReview,
+  runExtraSeeder,
+} from "../scripts/dev/driver.ts";
+import {
+  appendRevision,
+  DEV_SESSION,
   extraPlan,
   hookStdin,
   nextPlan,
-  runExtraReview,
-  runExtraSeeder,
   seederInterval,
-} from "../scripts/dev/driver.ts";
+} from "../scripts/dev/protocol.ts";
 import { bootDaemon, type TestDaemon } from "./support/daemon.ts";
 import { setupTempStateDir } from "./support/env.ts";
 import { waitFor } from "./support/poll.ts";

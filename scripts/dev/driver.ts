@@ -8,93 +8,34 @@
 // request-changes it appends a "Revision N" section quoting the reviewer's
 // feedback and resubmits; on approve it re-seeds a fresh v1. The
 // revision-threading contract lives in src/reviews.ts.
+//
+// This module owns the dev wiring (devReviewDeps) and the long-running
+// supervision loops; the pure protocol state machine it drives lives in
+// scripts/dev/protocol.ts.
 
-import type { PermissionDecision } from "../../src/adapters/claude/feedback.ts";
-import { claudeAdapter } from "../../src/adapters/claude/index.ts";
-import { expireReview, httpHealth, longPoll, postReview } from "../../src/daemon-client.ts";
+import { expireReview, longPoll, postReview, waitForHealth } from "../../src/daemon-client.ts";
 import { type ReviewDeps, runReview } from "../../src/review.ts";
+import { claudeAdapter } from "../../src/adapters/claude/index.ts";
+import { NEVER_IDLE_MS } from "../../src/constants.ts";
 import { DEFAULT_PORT } from "../../src/settings.ts";
-
-/** Session id for the single dev review; stable for the process lifetime so a
- * revision threads into the same review instead of forking a new one, but
- * unique per driver instance (pid suffix) so two dev sessions deliberately
- * sharing one daemon don't collide on session identity (EXC-461). */
-export const DEV_SESSION = `caret-dev-${process.pid}`;
+import {
+  DEV_SESSION,
+  type DriverState,
+  extraPlan,
+  hookStdin,
+  nextPlan,
+  seederInterval,
+} from "./protocol.ts";
 
 const log = (msg: string) => process.stderr.write(`[caret dev driver] ${msg}\n`);
-
-/** Poll the daemon's health endpoint until it reports the caret identity. */
-async function waitForHealth(base: string, maxAttempts = 100): Promise<void> {
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    if ((await httpHealth(base))?.service === "caret") return;
-    await Bun.sleep(100);
-  }
-  throw new Error("caret dev daemon did not become healthy in time");
-}
-
-/** The hook stdin a real PermissionRequest session would pipe to `caret
- * review` — the fixed dev session by default, or an explicit session id for
- * the extra-review seeder. */
-export function hookStdin(plan: string, sessionId = DEV_SESSION): string {
-  return JSON.stringify({ session_id: sessionId, cwd: process.cwd(), tool_input: { plan } });
-}
-
-/** Append a "Revision N" section quoting the reviewer's feedback. The feedback
- * is fenced as `text` with a fence longer than any backtick run it contains, so
- * hostile feedback (untagged fences, indented code) can neither break out nor
- * introduce an untagged block — the plan-format gate would insta-reject the
- * revision (src/plan-format.ts). */
-export function appendRevision(plan: string, feedback: string, n: number): string {
-  const runs = feedback.match(/`+/g) ?? [];
-  const fence = "`".repeat(Math.max(3, ...runs.map((r) => r.length + 1)));
-  return [
-    plan.trimEnd(),
-    "",
-    `## Revision ${n}`,
-    "",
-    "Addressing the reviewer's feedback:",
-    "",
-    `${fence}text`,
-    feedback,
-    fence,
-    "",
-    "Adjusted the approach accordingly; resubmitting for another look.",
-    "",
-  ].join("\n");
-}
-
-/** Driver-side submission state: the plan to (re)submit and how many revision
- * sections it carries. */
-export interface DriverState {
-  plan: string;
-  revision: number;
-}
-
-/** Pure step: from the hook's decision, compute the next submission. Approve
- * re-seeds a fresh v1 (the daemon ended the thread; reset the counter). A deny
- * whose message starts with "caret: " is one of the hook's own fail-safe /
- * format denies, not reviewer feedback — resubmit unchanged rather than append
- * a bogus revision. Any other deny is reviewer feedback (possibly the "Plan
- * changes requested." default for empty input): append a Revision N section. */
-export function nextPlan(
-  state: DriverState,
-  decision: PermissionDecision,
-  freshPlan: string,
-): DriverState & { action: "reseed" | "revise" | "resubmit" } {
-  if (decision.behavior === "allow") return { plan: freshPlan, revision: 0, action: "reseed" };
-  const message = decision.message ?? "";
-  if (message.startsWith("caret: ")) return { ...state, action: "resubmit" };
-  const revision = state.revision + 1;
-  return { plan: appendRevision(state.plan, message, revision), revision, action: "revise" };
-}
 
 /** ReviewDeps for dev — the analog of prodReviewDeps (src/commands/review.ts) with the
  * daemon owned by the mise task: ensureDaemon just waits for health on the
  * fixed dev URL (no spawn/takeover; a throw after the health budget bubbles to
  * runReview's fail-safe deny), the browser never opens (Vite on 5173 is the
- * dev surface), and timeoutMs is the max setTimeout delay (a larger value
- * overflows and clamps to ~1ms — the same trap .mise/tasks/dev documents for
- * CARET_IDLE_MS) so an idle session never churns fail-safe denies. */
+ * dev surface), and timeoutMs is NEVER_IDLE_MS (the max setTimeout delay — a
+ * larger value overflows and clamps to ~1ms) so an idle session never churns
+ * fail-safe denies. */
 export function devReviewDeps(base: string): ReviewDeps {
   return {
     parseHookInput: (stdin) => claudeAdapter.parseHookInput(stdin),
@@ -105,16 +46,9 @@ export function devReviewDeps(base: string): ReviewDeps {
     postReview,
     longPoll,
     openBrowser: () => {},
-    timeoutMs: 2147483647,
+    timeoutMs: NEVER_IDLE_MS,
     expire: expireReview,
   };
-}
-
-/** Retitle the fake plan's h1 so an extra review is distinguishable from the
- * primary one in the switcher and in the notification body (review titles
- * derive from the plan's first heading, src/reviews.ts). */
-export function extraPlan(plan: string, n: number): string {
-  return plan.replace(/^# .*$/m, (title) => `${title} — extra ${n}`);
 }
 
 /** Run ONE review thread to resolution under its own session id: seed, append
@@ -140,22 +74,6 @@ export async function runExtraReview(
     }
     state = next;
   }
-}
-
-/** Default extra-review cadence; on unless explicitly disabled. */
-const SEEDER_DEFAULT_MS = 15_000;
-
-/** Resolve CARET_DEV_NEW_REVIEW_MS into a seeder interval. Unset → the
- * default (the seeder is on out of the box); a positive integer → that
- * cadence; 0 or negative → explicitly off (ms: null); anything else →
- * default with `invalid` flagged so the caller warns (settings house style:
- * set-but-invalid falls through, never silently disables). */
-export function seederInterval(raw: string | undefined): { ms: number | null; invalid: boolean } {
-  if (raw === undefined) return { ms: SEEDER_DEFAULT_MS, invalid: false };
-  const n = Number(raw);
-  if (raw === "" || !Number.isInteger(n)) return { ms: SEEDER_DEFAULT_MS, invalid: true };
-  if (n <= 0) return { ms: null, invalid: false };
-  return { ms: n, invalid: false };
 }
 
 export interface ExtraSeederDeps {

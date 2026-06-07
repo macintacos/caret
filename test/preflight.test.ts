@@ -99,13 +99,25 @@ test("lint failure doesn't stop the others, exits 1, surfaces output and the for
   expect(r.summary).toContain("mise run format");
 });
 
-test("mise task files still declare the build-ui dependency the orchestrator skips", async () => {
-  // Pins the MISE_TASK_SKIP contract: the orchestrator hard-codes build-ui as
-  // the dependents' shared dependency. If a task file's depends ever changes,
-  // this fails so preflight's DAG gets updated alongside it.
-  for (const name of ["test-e2e", "build-bin"]) {
+test("the mise task files declare exactly the DAG preflight hard-codes", async () => {
+  // Pins the MISE_TASK_SKIP contract AND guards against DAG growth: the
+  // orchestrator hard-codes build-ui as the dependents' only shared dependency
+  // (scripts/preflight.ts), rather than deriving the DAG from `mise tasks
+  // --json` (decision recorded in EXC-506's PR). These assertions are the
+  // lockstep edit that keeps that hard-coding honest — if a preflight task's
+  // `depends` ever changes, this fails so the DAG gets updated alongside it.
+  const dependsOf = async (name: string): Promise<string[]> => {
     const script = await Bun.file(join(import.meta.dir, "../.mise/tasks", name)).text();
-    expect(script).toContain('#MISE depends=["build-ui"]');
+    const m = script.match(/^#MISE depends=(\[.*\])$/m);
+    return m?.[1] ? (JSON.parse(m[1]) as string[]) : [];
+  };
+  // The two dependents depend on exactly build-ui (the edge preflight skips).
+  expect(await dependsOf("test-e2e")).toEqual(["build-ui"]);
+  expect(await dependsOf("build-bin")).toEqual(["build-ui"]);
+  // The three immediate tasks declare no dependencies — any new edge here (a
+  // task preflight runs concurrently growing a dependency) must trip this.
+  for (const name of ["lint", "test", "build-ui"]) {
+    expect(await dependsOf(name)).toEqual([]);
   }
 });
 
