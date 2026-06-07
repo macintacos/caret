@@ -1,12 +1,13 @@
 // `caret review`: review a plan piped on stdin (the ExitPlanMode hook). Wires
-// the production review dependencies — the Claude adapter's stdin parser, the
+// the production review dependencies — the active adapter's stdin parser, the
 // daemon HTTP client, takeover, and the local browser opener — then runs one
 // review to a single decision line on stdout. This is the emission boundary: the
 // core returns a tool-agnostic Decision, and the selected adapter renders it to
 // the agent's wire string here. The signal handlers below deny to fail safe if
 // the process is killed before a decision is written.
 
-import { claudeAdapter } from "../adapters/claude/index.ts";
+import type { AgentAdapter } from "../adapters/adapter.ts";
+import { selectAdapter } from "../adapters/index.ts";
 import { expireReview, longPoll, postReview } from "../daemon-client.ts";
 import { ensureDaemon, prodEnsureDeps } from "../daemon-lifecycle.ts";
 import { logError, logWarn, setLogLevel, setRedact } from "../log.ts";
@@ -30,9 +31,9 @@ function openBrowser(url: string): void {
   }
 }
 
-export function prodReviewDeps(s: Settings): ReviewDeps {
+export function prodReviewDeps(s: Settings, adapter: AgentAdapter): ReviewDeps {
   return {
-    parseHookInput: (stdin) => claudeAdapter.parseHookInput(stdin),
+    parseHookInput: (stdin) => adapter.parseHookInput(stdin),
     ensureDaemon: async () => ensureDaemon(await prodEnsureDeps(s)),
     postReview,
     longPoll,
@@ -54,6 +55,11 @@ export async function runReviewSubcommand(): Promise<void> {
   // Same boot-time surfacing as the daemon's — a typo'd CARET_* var otherwise
   // silently falls through to the config file, then the default.
   warnInvalidEnvVars((msg) => logWarn("env", msg));
+  // Resolve the active adapter once (selected by CARET_AGENT, default claude); a
+  // bogus selector throws here and propagates to the CLI's fatal handler, which
+  // denies to fail safe. The same adapter parses the hook stdin and renders the
+  // decision, so a review can't parse one tool's input and emit another's.
+  const adapter = selectAdapter();
   // Emit exactly one decision line. A signal arriving after the normal decision
   // was written must not append a second (deny) line. The adapter renders the
   // core Decision to the agent's wire string — the single emission boundary.
@@ -61,7 +67,7 @@ export async function runReviewSubcommand(): Promise<void> {
   const respond = (decision: Decision) => {
     if (responded) return;
     responded = true;
-    process.stdout.write(`${claudeAdapter.emitDecision(decision)}\n`);
+    process.stdout.write(`${adapter.emitDecision(decision)}\n`);
   };
   const denyAndExit = (reason: string) => {
     // Only log when this signal is what actually denies the review (a signal
@@ -74,7 +80,7 @@ export async function runReviewSubcommand(): Promise<void> {
   process.once("SIGTERM", () => denyAndExit("caret: terminated (SIGTERM) — denying to fail safe."));
 
   const stdin = await Bun.stdin.text();
-  const out = await runReview(stdin, prodReviewDeps(loaded));
+  const out = await runReview(stdin, prodReviewDeps(loaded, adapter));
   respond(out);
   process.exit(0);
 }

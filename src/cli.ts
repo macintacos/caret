@@ -13,8 +13,7 @@
 // daemon death) emits a deny — never an allow.
 
 import type { Command } from "@commander-js/extra-typings";
-import { fatalDenyLine } from "./adapters/claude/feedback.ts";
-import { claudeAdapter } from "./adapters/claude/index.ts";
+import { fatalDeny } from "./adapters/index.ts";
 import { VERSION } from "./build-id.ts";
 import { runDaemon } from "./commands/daemon.ts";
 import { runDiscoverySubcommand } from "./commands/discovery.ts";
@@ -71,23 +70,13 @@ if (import.meta.main) {
   // is the entrypoint, never on import (it would parse the test runner's argv and
   // exit 1, killing tests).
   runProgram(buildProgram(), (err) => {
-    // Last-resort fail-safe for the review path; harmless noise elsewhere. The
-    // selected adapter renders the deny Decision to its wire string; if that
-    // rendering itself throws, the adapter's dependency-free fatalDenyLine
-    // still fails safe rather than emitting nothing.
+    // Last-resort fail-safe for the review path; harmless noise elsewhere.
+    // fatalDeny resolves the active adapter and renders its deny, degrading to a
+    // dependency-free deny line if selection or rendering throws — so the
+    // truly-fatal path always ships a deny rather than emitting nothing.
     logError("fatal", err);
     const reason = `caret: fatal ${err} — denying to fail safe. See ${logFile()}.`;
-    let line: string;
-    try {
-      line = claudeAdapter.emitDecision({
-        behavior: "deny",
-        feedback: reason,
-        decidedAt: Date.now(),
-      });
-    } catch {
-      line = fatalDenyLine(reason);
-    }
-    process.stdout.write(`${line}\n`);
+    process.stdout.write(`${fatalDeny(reason)}\n`);
     process.exit(0);
   });
 }

@@ -27,10 +27,11 @@ export interface InstallProbe {
 }
 
 /**
- * The interface a coding-agent adapter implements. The Claude adapter is the
- * first implementation; the members are declared as far as the core needs them,
- * with the parsing, install-probe, and approve-variant surfaces stable so they
- * can be filled in without reshaping the boundary.
+ * The interface a coding-agent adapter implements. Adapters are registered by
+ * tool id in `src/adapters/index.ts` and the composition layer selects the active
+ * one; each adapter owns its tool's hook-stdin parsing, decision wire format,
+ * approve-variant vocabulary, install probe, and a dependency-free fatal-deny
+ * renderer.
  */
 export interface AgentAdapter {
   /** The approve variants this adapter offers, in display order. */
@@ -47,6 +48,13 @@ export interface AgentAdapter {
    * reads. The returned string is opaque to the core (a serialized wire shape).
    */
   emitDecision(decision: Decision): string;
+
+  /**
+   * Render a last-resort deny wire line for the CLI's fatal handler. Must be
+   * dependency-free (literals + serialization only) so a bug elsewhere in the
+   * adapter cannot take the fail-safe down with it.
+   */
+  fatalDenyLine(reason: string): string;
 
   /** Probe the agent tool's local install for the discovery report. */
   readInstallState(): InstallProbe;

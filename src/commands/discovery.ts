@@ -7,7 +7,7 @@
 
 import { existsSync } from "node:fs";
 import { release } from "node:os";
-import { claudeAdapter } from "../adapters/claude/index.ts";
+import { selectAdapter } from "../adapters/index.ts";
 import { isCompiledBinary, VERSION } from "../build-id.ts";
 import { httpHealth } from "../daemon-client.ts";
 import { isPidAlive, readDaemonLock } from "../daemon-lifecycle.ts";
@@ -62,7 +62,7 @@ function prodDiscoveryDeps(s: Settings): DiscoveryDeps {
     isPidAlive,
     listProcesses,
     listReviewFiles,
-    readAgentInstallState: () => claudeAdapter.readInstallState(),
+    readAgentInstallState: () => selectAdapter().readInstallState(),
     logStats,
     logPaths: { caret: logFile(), daemon: daemonLogFile() },
   };
