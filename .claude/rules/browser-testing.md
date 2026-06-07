@@ -14,7 +14,10 @@ up as an e2e spec is slow and flaky. Decide by what you are actually testing (EX
   window and 2s suppression) → a **committed Playwright spec** in `e2e/*.e2e.ts`. Run:
   `mise run test-e2e`.
 - **Pure logic** — parsing, anchoring math, formatting, state machines → a **`bun test` unit**
-  (happy-dom when a DOM API is needed, wired by `ui/test-setup.ts`).
+  (happy-dom when a DOM API is needed, wired by `ui/test-setup.ts`). One runner covers both backend
+  and UI suites; the component suite additionally needs the `--conditions browser` flag (carried by
+  `mise run test` / `package.json`'s `test`), and bare `bun test` fails component mounts with an
+  actionable error. The keep-one-runner decision and the flag's mechanics live in `svelte-rules.md`.
 - **Throwaway exploration** — "what does this page actually do?" → the ad-hoc `playwright-cli`
   skill. Its scripts and output are **never committed**; reach for it to learn, then write the real
   test in one of the two layers above.

@@ -6,6 +6,14 @@
 import "./test-setup.ts";
 import { afterEach } from "bun:test";
 import { type Component, flushSync, mount, unmount } from "svelte";
+import { assertSvelteClientRuntime } from "./svelte-runtime-guard.ts";
+
+// Guard the bare-invocation footgun before any component mounts: only this
+// module imports the harness, and the backend suite never touches it, so the
+// check stays inert there under any invocation. `import.meta.resolve` reports
+// the exact svelte module the active export conditions picked — see
+// svelte-runtime-guard.ts for why a missing `browser` condition crashes mounts.
+assertSvelteClientRuntime(import.meta.resolve("svelte"));
 
 interface Mounted {
   /** The container the component was mounted into. */
