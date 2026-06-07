@@ -1,0 +1,23 @@
+{
+  "id": "pre-epic-review-0001",
+  "sessionId": "fixture-session",
+  "cwd": "/tmp/fixture",
+  "title": "Fixture plan",
+  "status": "approved",
+  "planEpoch": 0,
+  "versions": [
+    {
+      "version": 1,
+      "plan": "# Fixture plan\n\nSynthetic body for the back-compat test.",
+      "annotations": [],
+      "createdAt": 1700000000000
+    }
+  ],
+  "createdAt": 1700000000000,
+  "updatedAt": 1700000001000,
+  "decision": {
+    "behavior": "allow",
+    "acceptMode": "auto",
+    "decidedAt": 1700000001000
+  }
+}
