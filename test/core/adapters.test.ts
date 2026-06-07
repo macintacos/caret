@@ -8,6 +8,11 @@ import { afterEach, expect, test } from "bun:test";
 import type { AgentAdapter } from "../../src/adapters/adapter.ts";
 import { agentIds, DEFAULT_AGENT, fatalDeny, selectAdapter } from "../../src/adapters/index.ts";
 
+// A second registered id proves selection resolves more than one adapter. The id
+// is a registry key, not agent wire vocabulary, so it stays clear of the
+// test-layout boundary (Codex's wire shape is pinned in test/adapters/codex/).
+const SECOND_AGENT = "codex";
+
 const ORIGINAL = process.env.CARET_AGENT;
 afterEach(() => {
   if (ORIGINAL === undefined) delete process.env.CARET_AGENT;
@@ -24,6 +29,34 @@ function expectAdapterShape(a: AgentAdapter): void {
 
 test("the default agent is registered and selectable", () => {
   expect(agentIds()).toContain(DEFAULT_AGENT);
+});
+
+test("a second adapter is registered alongside the default", () => {
+  // Proves the registry holds more than one adapter (EXC-532) without naming the
+  // default — claude stays the default, the second id is just another entry.
+  expect(agentIds()).toContain(SECOND_AGENT);
+  expect(DEFAULT_AGENT).not.toBe(SECOND_AGENT);
+});
+
+test("selectAdapter resolves each registered id to a distinct adapter", () => {
+  delete process.env.CARET_AGENT;
+  const def = selectAdapter(DEFAULT_AGENT);
+  const second = selectAdapter(SECOND_AGENT);
+  expectAdapterShape(def);
+  expectAdapterShape(second);
+  // Selection picks the right instance, not a shared/default fallback.
+  expect(second).not.toBe(def);
+  // The no-id default is the default adapter, not the second one.
+  expect(selectAdapter()).toBe(def);
+});
+
+test("CARET_AGENT selects the second adapter end-to-end", () => {
+  // The acceptance criterion: CARET_AGENT=codex resolves the codex adapter through
+  // the env path, distinct from the claude default.
+  process.env.CARET_AGENT = SECOND_AGENT;
+  const viaEnv = selectAdapter();
+  expect(viaEnv).toBe(selectAdapter(SECOND_AGENT));
+  expect(viaEnv).not.toBe(selectAdapter(DEFAULT_AGENT));
 });
 
 test("selectAdapter() with no id returns the default adapter", () => {

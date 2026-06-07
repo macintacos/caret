@@ -15,10 +15,14 @@ touching core internals; blur it and agent vocabulary leaks everywhere.
   prefs, plan-format, types — all at the top level, no `src/core/` directory. The core knows
   reviews, plans, and decisions; it does **not** know any agent's wire protocol.
 - **`src/adapters/<tool>/` implements one agent tool.** `src/adapters/adapter.ts` declares the
-  `AgentAdapter` interface; `src/adapters/claude/` is the reference implementation. An adapter owns
-  four surfaces: `parseHookInput` (raw hook stdin → core `PlanInput`), `emitDecision` (core
-  `Decision` → the tool's stdout wire shape), `approveVariants` (the post-approval options it
-  offers), and `readInstallState` (the discovery install probe).
+  `AgentAdapter` interface; `src/adapters/index.ts` is the registry that maps a tool id to its
+  adapter and resolves the active one (by explicit id, then `CARET_AGENT`, then the default).
+  `src/adapters/claude/` is the reference implementation and the default; `src/adapters/codex/` is a
+  second (default-off, provisional) adapter that proves the seam. An adapter owns five surfaces:
+  `parseHookInput` (raw hook stdin → core `PlanInput`), `emitDecision` (core `Decision` → the tool's
+  stdout wire shape), `fatalDenyLine` (a dependency-free last-resort deny line for the CLI's fatal
+  handler), `approveVariants` (the post-approval options it offers), and `readInstallState` (the
+  discovery install probe).
 
 ## The dependency law (grep-enforceable)
 
@@ -51,14 +55,32 @@ transports without interpreting); only the adapter maps a token to a tool permis
 (`setModeFor` in `src/adapters/claude/approve.ts`).
 
 **Adding a new agent tool:** create `src/adapters/<tool>/`, implement `AgentAdapter` (declare its own
-approve variants with their ids/labels, parse its hook shape, render its decision wire format, probe
-its install), and wire it at the composition points. You touch `src/adapters/` and the composition
-modules — never core internals, store records, or the daemon's routing.
+approve variants with their ids/labels, parse its hook shape, render its decision wire format and its
+`fatalDenyLine`, probe its install), add one `REGISTRY` entry in `src/adapters/index.ts` keyed by the
+tool id, and add its `test/adapters/<tool>/` suite. You touch `src/adapters/` and the registry —
+never core internals, store records, the daemon's routing, or `test/core/`.
+
+`src/adapters/codex/` is the worked second example: the OpenAI Codex CLI's PermissionRequest hook is
+~1:1 with Claude's (one JSON object on stdin, a `hookSpecificOutput.decision.behavior =
+"allow" | "deny"` envelope plus an optional `message` deny channel on stdout), so it reuses the same
+command-hook shape with its own provisional wire details — registered, default-off, selectable via
+`CARET_AGENT=codex`, and not yet live-verified (the live-contract check is a manual follow-up, the
+same pattern as Claude's EXC-549). It adds **no** packaging: a registry entry plus its module and
+tests are the whole change, which is exactly what the boundary is meant to make possible.
+
+**OpenCode is the next candidate, and it is shaped differently.** OpenCode integrates as a **JS
+plugin**, not a command hook: it exposes a `tool.execute.before` hook (throwing to block a tool) and
+`permission.asked` events, loaded in-process — with a known subagent bypass. So it does not fit the
+command-hook `AgentAdapter` shape the Claude and Codex adapters share (stdin → parse → stdout deny
+line); it needs a different integration surface. Note it as plugin-shaped before assuming a new tool
+slots into the command-hook mold.
 
 **What does NOT move to the adapter directory:** the Claude plugin packaging — `hooks/hooks.json`,
 `.claude-plugin/*`, `commands/*.md` — sits where Claude Code's plugin system requires it on disk.
 It is adapter-owned *surface* (Claude-contractual file locations), documented as such, but not
-parameterized for hypothetical future tools.
+parameterized for hypothetical future tools. The Codex adapter likewise ships no packaging today;
+Codex hook installation (`~/.codex/hooks.json` / `config.toml [hooks]` behind `[features]
+codex_hooks`) is a documented future ship step, not built here.
 
 ## Browser-safe shared modules
 

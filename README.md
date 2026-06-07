@@ -64,10 +64,14 @@ install for diagnostics. The core hands the adapter raw hook stdin and a core de
 hands back a normalized plan and a tool-specific stdout response. The dependency runs one way — an
 adapter imports core types, never the reverse.
 
-`src/adapters/claude/` is the first (today's only) implementation, for Claude Code. A future agent
-tool plugs in as a second adapter without touching core internals. The hooks table and decision-JSON
-block below, and the behavioral prose in `commands/*.md`, describe **Claude-adapter** surface — they
-are agent-specific, not core behavior.
+`src/adapters/claude/` is the reference implementation, for Claude Code, and the default adapter.
+`src/adapters/codex/` is a second adapter for the OpenAI Codex CLI that proves the boundary is real:
+it is **default-off and provisional** — its PermissionRequest wire contract is modeled from Codex
+docs and not yet verified against a live Codex session, and it ships no Codex packaging (no installer
+or hook manifests). Select it with `CARET_AGENT=codex`; with no selector caret uses Claude, so the
+shipped Claude plugin keeps working unchanged. The hooks table and decision-JSON block below, and the
+behavioral prose in `commands/*.md`, describe **Claude-adapter** surface — they are agent-specific,
+not core behavior.
 
 ### The Claude Code adapter
 
@@ -187,6 +191,7 @@ logs, and resolution falls through to the config file, then the default.
 | `CARET_TIMEOUT`      | `review.timeout_s`    | `3600` (s)       | Review window before the hook fail-safe-denies, in seconds. Values ≥ 3900 are invalid.      |
 | `CARET_IDLE_MS`      | `daemon.idle_ms`      | `60000`          | Idle delay before the daemon auto-shuts-down with no reviews.                               |
 | `CARET_HEARTBEAT_MS` | `daemon.heartbeat_ms` | `8000`           | Decision long-poll heartbeat window (ms).                                                   |
+| `CARET_AGENT`        | —                     | `claude`         | Which coding-agent adapter to drive. `claude` (default) or `codex` (provisional, default-off — see below). |
 | `XDG_STATE_HOME`     | —                     | `~/.local/state` | Unresolved reviews persist under `$XDG_STATE_HOME/caret/reviews/` and rehydrate on restart. |
 
 ## Logging & Debugging
@@ -304,11 +309,11 @@ src/                tool-agnostic core (flat): cli.ts (Commander tree) · review
                     settings.ts (config.toml) · constants.ts · paths.ts · build-id.ts (VERSION/identity/lock) · types.ts (wire contract)
                     json-file.ts · plan-format.ts · ui-assets.ts (resolves the embedded UI for the daemon to serve) · ui-log-bridge.ts (/api/logs) · program.ts (shared CLI scaffolding)
 src/commands/       per-subcommand entrypoints (daemon, prewarm, review, redact, discovery, boot)
-src/adapters/       adapter.ts (AgentAdapter interface) · claude/ (the Claude Code adapter: hook parse, decision emission, approve variants, install probe)
+src/adapters/       adapter.ts (AgentAdapter interface) · index.ts (registry + CARET_AGENT selection) · claude/ (Claude Code adapter, default) · codex/ (OpenAI Codex CLI adapter, default-off + provisional)
 ui/                 Svelte 5 multi-asset SPA (Vite) embedded into the binary via the build-generated asset manifest, served by the daemon by URL path · src/state/ runes state modules · src/icons/ vendored Lucide SVGs
 hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode) — Claude-adapter packaging
 commands/           /caret:demo · /caret:debug · /caret:discovery — Claude-adapter packaging (agent-specific behavioral prose)
-test/               core/ (tool-agnostic suites) · adapters/claude/ (Claude-adapter suites + fixtures) · scripts/ (release + dev tooling) · support/ (shared scaffolding)
+test/               core/ (tool-agnostic suites) · adapters/claude/ + adapters/codex/ (per-adapter suites + fixtures) · scripts/ (release + dev tooling) · support/ (shared scaffolding)
 scripts/            install.sh (build + register via the native plugin system)
 ```
 
