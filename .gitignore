@@ -4,12 +4,18 @@ node_modules/
 # Build artifacts
 bin/
 ui/dist/
+# Build-generated embed manifest (scripts/generate-ui-manifest.ts, run by
+# .mise/tasks/build-bin) — emitted from ui/dist/, never hand-edited.
+src/ui-manifest.generated.ts
 
 # rumdl cache (rumdl also self-ignores this via a nested .gitignore)
 .rumdl_cache/
 
 # Throwaway Phase-0 contract spike (never committed)
 spike/
+
+# Ad-hoc architecture write-up (informal, never committed)
+.archdiag/
 
 # Playwright artifacts (failure traces/screenshots can capture rendered plan
 # text — they stay local, never committed)

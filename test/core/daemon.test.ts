@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,9 +7,32 @@ import { APPROVE_VARIANTS } from "../../src/adapters/claude/approve.ts";
 import { VERSION } from "../../src/build-id.ts";
 import { createDaemonLogger } from "../../src/log.ts";
 import type { Store } from "../../src/store.ts";
+import type { UiAssets } from "../../src/ui-assets.ts";
 import { type BootOptions, bootDaemon, type TestDaemon } from "../support/daemon.ts";
 import { recordingLog } from "../support/recording-log.ts";
 import { expectNeverLogsBody } from "../support/redaction.ts";
+
+// A UiAssets handle over real temp files, so the daemon serves bytes through
+// Bun.file (and its MIME) exactly as in production. Resolver injected as a dep —
+// the core daemon stays tool-agnostic and never reaches into ui-assets.ts.
+const assetDirs: string[] = [];
+function fakeAssets(files: Record<string, string>): UiAssets {
+  const root = mkdtempSync(join(tmpdir(), "caret-ui-assets-"));
+  assetDirs.push(root);
+  const map: Record<string, string> = {};
+  let i = 0;
+  for (const [urlPath, content] of Object.entries(files)) {
+    // Keep the URL path's basename (extension included) so Bun.file derives the
+    // same MIME the embedded path would; an index prefix avoids name collisions.
+    const safe = join(root, `${i++}-${urlPath.split("/").pop()}`);
+    writeFileSync(safe, content);
+    map[urlPath] = safe;
+  }
+  return {
+    paths: Object.keys(map).sort(),
+    file: (urlPath) => (map[urlPath] ? Bun.file(map[urlPath]) : undefined),
+  };
+}
 
 let dir: string;
 let d: TestDaemon;
@@ -91,6 +114,7 @@ beforeEach(async () => {
 afterEach(async () => {
   srv?.stop();
   await rm(dir, { recursive: true, force: true });
+  for (const d of assetDirs.splice(0)) await rm(d, { recursive: true, force: true });
 });
 
 test("GET /api/health returns the caret identity signature", async () => {
@@ -455,10 +479,101 @@ test("caret.localhost vanity origin is allowed; other *.localhost hosts are not 
   expect(sibling.status).toBe(403);
 });
 
-test("GET / serves HTML containing the app root", async () => {
-  await boot();
-  const html = await (await fetch(`${base}/`)).text();
-  expect(html).toContain('<div id="app">');
+// ---- UI serving (index document + hashed sibling assets) ----
+//
+// The daemon serves the injected UiAssets by exact URL-path match: the index
+// document with no-cache (so a redeploy never references stale hashed names),
+// hashed siblings with Bun.file's MIME and a long immutable cache. With no
+// assets injected (the bare daemon) it serves only the built-in placeholder at /
+// and 404s every other UI path — the posture existing tests pin.
+describe("UI serving", () => {
+  // A representative built UI: an index that references its hashed siblings, a JS
+  // chunk, and a CSS chunk under /assets/.
+  const INDEX = '<!doctype html><html><body><div id="app"></div></body></html>';
+  const JS = "export const x = 1;\n";
+  const CSS = ":root{--paper:#fff}\n";
+  function bootUi() {
+    return boot({
+      assets: fakeAssets({
+        "/index.html": INDEX,
+        "/assets/index-AB12.js": JS,
+        "/assets/index-CD34.css": CSS,
+      }),
+    });
+  }
+
+  test("GET / serves the placeholder with no-cache when no UI is built", async () => {
+    await boot();
+    const res = await fetch(`${base}/`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    expect(res.headers.get("cache-control")).toBe("no-cache");
+    expect(await res.text()).toContain('<div id="app">');
+  });
+
+  test("GET / serves the built index document with no-cache", async () => {
+    await bootUi();
+    const res = await fetch(`${base}/`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    expect(res.headers.get("cache-control")).toBe("no-cache");
+    expect(await res.text()).toBe(INDEX);
+  });
+
+  test("GET /index.html serves the same index document as GET /", async () => {
+    await bootUi();
+    const res = await fetch(`${base}/index.html`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-cache");
+    expect(await res.text()).toBe(INDEX);
+  });
+
+  test("GET a hashed JS asset returns 200 with the JS MIME and an immutable cache", async () => {
+    await bootUi();
+    const res = await fetch(`${base}/assets/index-AB12.js`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("javascript");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+    expect(await res.text()).toBe(JS);
+  });
+
+  test("GET a hashed CSS asset returns 200 with the CSS MIME and an immutable cache", async () => {
+    await bootUi();
+    const res = await fetch(`${base}/assets/index-CD34.css`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/css");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+    expect(await res.text()).toBe(CSS);
+  });
+
+  test("GET an asset path that isn't a manifest key is a clean 404", async () => {
+    await bootUi();
+    const res = await fetch(`${base}/assets/missing-ZZ99.js`);
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("not found");
+  });
+
+  test("a bare daemon 404s asset paths (only the placeholder index is served)", async () => {
+    await boot();
+    const res = await fetch(`${base}/assets/index-AB12.js`);
+    expect(res.status).toBe(404);
+  });
+
+  // Traversal safety is by construction: request paths are matched exactly
+  // against the manifest keys, never resolved against the filesystem. These
+  // attempts must never escape the asset set — each is just an unknown path.
+  test("traversal attempts are rejected (exact-match allowlist, no filesystem resolution)", async () => {
+    await bootUi();
+    for (const path of [
+      "/../src/cli.ts",
+      "/assets/../../src/cli.ts",
+      "/assets/%2e%2e/%2e%2e/src/cli.ts",
+      "/etc/passwd",
+    ]) {
+      const res = await fetch(`${base}${path}`);
+      expect(res.status).toBe(404);
+    }
+  });
 });
 
 // ---- routing fallthrough (the dispatcher's default response) ----

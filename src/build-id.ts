@@ -1,11 +1,10 @@
 // Build + commit fingerprinting and daemon identity: the signature a freshly
 // built or installed caret uses to supersede an older running daemon, the
-// version it reports, the UI content hash, the shape of the single-instance
+// version it reports, the UI asset-set digest, the shape of the single-instance
 // lock, and the commit the daemon reports at startup. The build/commit resolvers
 // wrap dependency-injected primitives (so the decision logic is unit-testable)
 // and memoize the resolved value per process — neither can change while a process
-// runs. Also home to loadUiHtml, the embedded-UI resolver the build fingerprint
-// and the daemon both read.
+// runs.
 //
 // Phase-0 spike outcome (the contract the rest of the code relies on): plan
 // approval is gated via a `PermissionRequest` hook matching `ExitPlanMode` — NOT
@@ -13,8 +12,8 @@
 // shows). See src/adapters/claude/ for the decision JSON this produces.
 
 import { createHash } from "node:crypto";
-import { dirname } from "node:path";
 import pkg from "../package.json" with { type: "json" };
+import { loadUiAssets, type UiAssets } from "./ui-assets.ts";
 
 /** The shipped version, read from package.json (one of the release-synced
  * manifests) at build time so it stays honest across releases. Hardcoding it was
@@ -34,14 +33,25 @@ export function isCompiledBinary(): boolean {
   return !process.argv[1]?.endsWith(".ts");
 }
 
-/** Short content fingerprint of the served UI HTML — the daemon's staleness
- * signal. It changes whenever the embedded UI changes, so an upgraded binary's
- * build differs from a still-running older daemon's. Returns "no-ui" when no UI
- * is embedded (dev / fresh checkout), which compares equal across binaries in
- * that same UI-less state. */
-export function buildHash(html: string | undefined): string {
-  if (!html) return "no-ui";
-  return createHash("sha256").update(html).digest("hex").slice(0, 12);
+/** Short content fingerprint of the served UI asset set — the daemon's staleness
+ * signal. It folds every asset's URL path and bytes (in sorted-path order, so
+ * the digest is order-independent and deterministic across re-invocations of the
+ * same build), so an upgraded binary's build differs from a still-running older
+ * daemon's. Returns "no-ui" when no UI is available (dev / fresh checkout),
+ * which compares equal across binaries in that same UI-less state. */
+export async function buildHash(assets: UiAssets | undefined): Promise<string> {
+  if (!assets || assets.paths.length === 0) return "no-ui";
+  const h = createHash("sha256");
+  // assets.paths is already sorted; hash path + bytes per asset so a moved,
+  // added, removed, or rewritten file shifts the digest. The length-prefix on
+  // each segment keeps the boundaries unambiguous (no path/bytes concatenation
+  // collision).
+  for (const urlPath of assets.paths) {
+    const bytes = (await assets.file(urlPath)?.bytes()) ?? new Uint8Array();
+    h.update(`${urlPath}\0${bytes.length}\0`);
+    h.update(bytes);
+  }
+  return h.digest("hex").slice(0, 12);
 }
 
 /** Contents of the daemon lock file. Written by the daemon on bind; read by a
@@ -58,27 +68,6 @@ export interface DaemonLock {
   startedAt?: number;
   stateDir?: string;
   instanceId?: string;
-}
-
-/** Resolve the UI HTML: embedded asset → file beside the binary → undefined
- * (daemon then serves its built-in placeholder). */
-export async function loadUiHtml(): Promise<string | undefined> {
-  try {
-    const mod = await import("./ui-asset.ts");
-    if (typeof mod.default === "string" && mod.default.length > 0) {
-      return mod.default;
-    }
-  } catch {
-    // UI not built / not embedded — fall through.
-  }
-  try {
-    const beside = `${dirname(process.execPath)}/index.html`;
-    const file = Bun.file(beside);
-    if (await file.exists()) return await file.text();
-  } catch {
-    // ignore
-  }
-  return undefined;
 }
 
 export interface BuildIdDeps {
@@ -121,7 +110,7 @@ export async function currentBuildId(): Promise<string> {
         return null; // unreadable binary — fall back to the UI hash.
       }
     },
-    uiHash: async () => buildHash(await loadUiHtml()),
+    uiHash: async () => buildHash(await loadUiAssets()),
   });
   return cachedBuildId;
 }

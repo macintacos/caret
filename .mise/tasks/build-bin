@@ -5,8 +5,13 @@
 set -euo pipefail
 
 mkdir -p bin
-# Compiles src/cli.ts (which imports ui/dist/index.html as a text asset) into a
-# standalone binary. build-ui must run first so the HTML exists at compile time.
+# Generate the embed manifest from ui/dist (build-ui ran first), so the compile
+# below embeds each UI asset by its `with { type: "file" }` import. Run inline,
+# NOT as a #MISE depends: scripts/install.sh executes this task as bare
+# `bash .mise/tasks/build-bin`, which does not resolve mise dependencies.
+bun scripts/generate-ui-manifest.ts
+# Compiles src/cli.ts into a standalone binary, embedding the UI assets the
+# manifest imports. build-ui must run first so ui/dist exists at compile time.
 # --sourcemap embeds the map so stack frames keep their src/*.ts paths — the
 # log records' caller field (EXC-451) and err.stack stay readable in the
 # compiled binary instead of collapsing into /$bunfs/root bundle positions.
@@ -15,6 +20,7 @@ mkdir -p bin
 # build under `set -e` instead of baking an empty string.
 CARET_BUILD_COMMIT="$(git rev-parse HEAD)"
 bun build --compile --sourcemap --define="process.env.CARET_BUILD_COMMIT=\"$CARET_BUILD_COMMIT\"" --outfile bin/caret src/cli.ts
-# Fallback safety net: keep a copy of the UI beside the binary in case the
-# embedded text asset is ever unavailable at runtime.
-cp ui/dist/index.html bin/index.html
+# Fallback safety net: keep the built UI tree beside the binary in case the
+# embedded assets are ever unavailable at runtime (the asset resolver's
+# beside-the-binary source).
+cp -R ui/dist bin/ui

@@ -272,11 +272,12 @@ section "Build"
 run_long "Installing build dependencies" bun install
 run_long "Building the UI" bash -c 'cd ui && bunx vite build'
 # Compile through the one build task so the flags can't drift from a local
-# `mise run build`: it embeds the sourcemap (readable src/*.ts stack frames),
-# bakes the commit (EXC-452), and copies the UI fallback beside the binary. Run
-# as a plain bash script so the installer needs only bun, not mise; in dry-run
-# run_long records it without executing, so its `git rev-parse` never fires in a
-# non-checkout. build-ui above leaves ui/dist/index.html in place for it.
+# `mise run build`: it generates the embed manifest from ui/dist, embeds the
+# sourcemap (readable src/*.ts stack frames), bakes the commit (EXC-452), and
+# copies the UI tree beside the binary as a fallback. Run as a plain bash script
+# so the installer needs only bun, not mise; in dry-run run_long records it
+# without executing, so its `git rev-parse` never fires in a non-checkout.
+# build-ui above leaves ui/dist in place for it.
 run_long "Compiling the caret binary" bash .mise/tasks/build-bin
 
 if [ "$DRY_RUN" -eq 0 ] && [ ! -x bin/caret ]; then

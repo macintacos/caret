@@ -21,7 +21,10 @@
       "!bin",
       "!**/*.svelte",
       "!**/*.css",
-      "!**/*.html"
+      "!**/*.html",
+      // Build-generated embed manifest (EXC-522): emitted under src/, which
+      // biome lints — exclude the generated artifact from the lint/format gate.
+      "!src/ui-manifest.generated.ts"
     ]
   },
   "formatter": {

@@ -1,16 +1,15 @@
 import { fileURLToPath } from "node:url";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { defineConfig } from "vite";
-import { viteSingleFile } from "vite-plugin-singlefile";
 import { DEFAULT_PORT } from "../src/constants.ts";
 
-// The daemon serves the built SPA from memory as a single HTML document, so the
-// build MUST inline all JS + CSS into one ui/dist/index.html with no siblings.
-// No dynamic import() anywhere — singlefile cannot inline async chunks.
+// A standard multi-asset build: Vite emits dist/index.html plus content-hashed
+// dist/assets/* (JS + CSS). The binary embeds each asset by URL path via a
+// build-generated manifest, and the daemon serves them with per-path MIME and
+// cache headers (EXC-522).
 export default defineConfig({
   plugins: [
     svelte(),
-    viteSingleFile(),
     {
       // EXC-426: print the vanity origin in the dev banner. Cosmetic — the bind
       // stays localhost (binding caret.localhost needs the OS resolver; browsers
@@ -37,13 +36,6 @@ export default defineConfig({
     // build, keeping the singlefile bundle free of node-only code; the matching
     // tsconfig `paths` mappings keep svelte-check and bun test in step (EXC-507).
     alias: { "@core": fileURLToPath(new URL("../src", import.meta.url)) },
-  },
-  build: {
-    cssCodeSplit: false,
-    assetsInlineLimit: 100_000_000,
-    rollupOptions: {
-      output: { inlineDynamicImports: true },
-    },
   },
   server: {
     // `mise run dev` proxies the JSON API to its isolated dev daemon. The dev
