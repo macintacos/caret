@@ -61,3 +61,15 @@ export function toHookOutput(input: DecisionInput): HookOutput {
 export function denyOutput(reason: string): HookOutput {
   return toHookOutput({ behavior: "deny", feedback: reason });
 }
+
+/** Last-resort deny wire line for the CLI's fatal handler. Deliberately
+ * dependency-free (literals + JSON.stringify only), so a bug anywhere else in
+ * the adapter cannot take the fail-safe down with it. */
+export function fatalDenyLine(reason: string): string {
+  return JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: "PermissionRequest",
+      decision: { behavior: "deny", message: reason },
+    },
+  });
+}
