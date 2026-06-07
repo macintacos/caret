@@ -169,6 +169,10 @@ const AnnotationSchema = z.object({
   startOffset: z.number(),
   endOffset: z.number(),
   quote: z.string(),
+  // The W3C TextQuoteSelector context is optional — an annotation persisted
+  // before the hybrid anchor omits these and round-trips unchanged.
+  prefix: z.string().optional(),
+  suffix: z.string().optional(),
   comment: z.string(),
 });
 const nullToUndefined = <T>(v: T | null | undefined): T | undefined => v ?? undefined;

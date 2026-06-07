@@ -17,6 +17,8 @@
       startOffset: number;
       endOffset: number;
       quote: string;
+      prefix: string;
+      suffix: string;
       comment: string;
     }) => void;
     onFocusAnnotation: (id: string) => void;
@@ -39,6 +41,8 @@
     startOffset: number;
     endOffset: number;
     quote: string;
+    prefix: string;
+    suffix: string;
     x: number;
     y: number;
   } | null>(null);
@@ -95,6 +99,8 @@
       startOffset: cap.startOffset,
       endOffset: cap.endOffset,
       quote: cap.quote,
+      prefix: cap.prefix,
+      suffix: cap.suffix,
       x: cap.rect.left + cap.rect.width / 2,
       y: cap.rect.bottom,
     };
@@ -115,6 +121,8 @@
       startOffset: pending.startOffset,
       endOffset: pending.endOffset,
       quote: pending.quote,
+      prefix: pending.prefix,
+      suffix: pending.suffix,
       comment,
     });
     pending = null;

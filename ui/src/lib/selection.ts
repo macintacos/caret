@@ -2,13 +2,17 @@
 // id is taken from the nearest ancestor element that carries a structural
 // `id="b{n}"`; offsets are measured against that block's textContent.
 
-import { rangeToOffsets } from "./anchors.ts";
+import { contextAround, rangeToOffsets } from "./anchors.ts";
 
 export interface CapturedSelection {
   blockId: string;
   startOffset: number;
   endOffset: number;
   quote: string;
+  /** Up to CONTEXT_LEN chars of the block's textContent before the quote. */
+  prefix: string;
+  /** Up to CONTEXT_LEN chars of the block's textContent after the quote. */
+  suffix: string;
   /** Bounding rect of the selection, for positioning the comment popover. */
   rect: DOMRect;
 }
@@ -47,11 +51,14 @@ export function captureSelection(root: HTMLElement): CapturedSelection | null {
   const { start, end } = rangeToOffsets(block, range);
   if (start === end) return null;
 
+  const { prefix, suffix } = contextAround(block.textContent ?? "", start, end);
   return {
     blockId: block.id,
     startOffset: start,
     endOffset: end,
     quote,
+    prefix,
+    suffix,
     rect: range.getBoundingClientRect(),
   };
 }

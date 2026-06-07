@@ -96,3 +96,54 @@ describe("cross-version re-anchor", () => {
     expect(res.range).toBeNull();
   });
 });
+
+// EXC-543: with the W3C prefix/suffix context captured at annotation time, a
+// re-render that BOTH shifts the offsets AND duplicates the quote — the exact
+// case that orphaned above — now re-resolves to the correct occurrence (tier 2).
+describe("cross-version re-anchor with prefix/suffix context", () => {
+  // Annotated against v1: "brown fox" at [10,19), with the surrounding context.
+  const CTX_QUOTE = "brown fox";
+  const ctxAnn: Annotation = {
+    id: "a2",
+    blockId: "b0",
+    startOffset: 10,
+    endOffset: 19,
+    quote: CTX_QUOTE,
+    prefix: "The quick ",
+    suffix: " jumps over the lazy dog.",
+    comment: "note",
+  };
+
+  test("duplicated quote in v2 resolves to the context-matching occurrence", () => {
+    // v2 adds a SECOND "brown fox" sentence whose context differs. The stored
+    // offsets [10,19) no longer select the quote, and the quote now appears
+    // twice — the bare unique-substring repair would orphan. Context picks the
+    // original occurrence (the one preceded by "The quick ").
+    const V2 = "A brown fox waits. The quick brown fox jumps over the lazy dog.\n";
+    const res = resolveAnnotation(ctxAnn, mount(V2));
+    expect(res.tier).toBe(2);
+    expect(res.range!.toString()).toBe(CTX_QUOTE);
+    const expected = V2.indexOf("The quick brown fox") + "The quick ".length;
+    expect(res.startOffset).toBe(expected);
+    expect(res.endOffset).toBe(expected + CTX_QUOTE.length);
+  });
+
+  test("context picks the SECOND occurrence when its surroundings match", () => {
+    // Same duplicated text, but the stored context matches the LATER sentence —
+    // confirms the pick follows the context, not a fixed position.
+    const lateAnn: Annotation = {
+      ...ctxAnn,
+      // Offsets deliberately stale so tier 1 misses and tier 2 must choose.
+      startOffset: 99,
+      endOffset: 108,
+      prefix: "Later a ",
+      suffix: " appeared too.",
+    };
+    const V2 = "The quick brown fox runs. Later a brown fox appeared too.\n";
+    const res = resolveAnnotation(lateAnn, mount(V2));
+    expect(res.tier).toBe(2);
+    expect(res.range!.toString()).toBe(CTX_QUOTE);
+    const expected = V2.indexOf("Later a brown fox") + "Later a ".length;
+    expect(res.startOffset).toBe(expected);
+  });
+});

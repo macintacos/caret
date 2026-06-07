@@ -373,7 +373,19 @@ test("PUT draft updates the current version's annotations", async () => {
   const { id } = await newReview();
   await putDraft(id, { annotations: ANNS });
   const one = await (await fetch(`${base}/api/reviews/${id}`)).json();
+  // ANNS carries no prefix/suffix — the old on-disk shape round-trips unchanged.
   expect(one.annotations).toEqual(ANNS);
+});
+
+test("PUT draft round-trips the optional prefix/suffix anchor context", async () => {
+  await boot();
+  const { id } = await newReview();
+  const withContext = [
+    { ...ANNS[0], id: "an2", prefix: "before ", suffix: " after" },
+  ];
+  await putDraft(id, { annotations: withContext });
+  const one = await (await fetch(`${base}/api/reviews/${id}`)).json();
+  expect(one.annotations).toEqual(withContext);
 });
 
 test("PUT draft persists and restores the general comment draft", async () => {

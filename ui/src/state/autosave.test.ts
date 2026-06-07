@@ -92,6 +92,8 @@ describe("debounced autosave", () => {
       startOffset: 0,
       endOffset: 1,
       quote: "q",
+      prefix: "",
+      suffix: "",
       comment: "c",
     });
     expect(timer.armed()).toBe(true);

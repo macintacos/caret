@@ -49,6 +49,8 @@ export interface Autosave {
     startOffset: number;
     endOffset: number;
     quote: string;
+    prefix: string;
+    suffix: string;
     comment: string;
   }) => void;
   editAnnotation: (id: string, comment: string) => void;

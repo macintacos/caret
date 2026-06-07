@@ -1,7 +1,13 @@
 import "../../test-setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Annotation } from "@core/types";
-import { offsetsToRange, rangeToOffsets, resolveAnnotation, wrapTextRange } from "./anchors.ts";
+import {
+  contextAround,
+  offsetsToRange,
+  rangeToOffsets,
+  resolveAnnotation,
+  wrapTextRange,
+} from "./anchors.ts";
 
 /** Build a detached block element with id and inner HTML. */
 function block(id: string, html: string): HTMLElement {
@@ -108,6 +114,82 @@ describe("resolveAnnotation tiers", () => {
     const res = resolveAnnotation(ann({}), () => null);
     expect(res.tier).toBe(3);
     expect(res.range).toBeNull();
+  });
+
+  // EXC-543: a recurring quote is disambiguated by the W3C prefix/suffix context
+  // instead of orphaning. Old annotations (no context) keep the prior behavior.
+  test("tier 2: ambiguous quote disambiguated by prefix context", () => {
+    const root = block("b0", "the cat sat and the cat ran");
+    // "cat" occurs twice; the stored context points at the second occurrence.
+    const res = resolveAnnotation(
+      ann({ quote: "cat", prefix: "and the ", suffix: " ran", startOffset: 99, endOffset: 102 }),
+      () => root,
+    );
+    expect(res.tier).toBe(2);
+    expect(res.range!.toString()).toBe("cat");
+    // second "cat" begins at offset 20 in "the cat sat and the cat ran"
+    expect(res.startOffset).toBe(20);
+    expect(res.endOffset).toBe(23);
+  });
+
+  test("tier 2: prefix alone disambiguates when suffix is empty", () => {
+    const root = block("b0", "red dup blue dup");
+    const res = resolveAnnotation(
+      ann({ quote: "dup", prefix: "red ", suffix: "", startOffset: 99, endOffset: 102 }),
+      () => root,
+    );
+    expect(res.tier).toBe(2);
+    expect(res.startOffset).toBe(4); // first "dup", preceded by "red "
+    expect(res.endOffset).toBe(7);
+  });
+
+  test("tier 3 (back-compat): ambiguous quote with NO context still orphans", () => {
+    const root = block("b0", "dup and dup again");
+    const res = resolveAnnotation(
+      // No prefix/suffix — the old on-disk shape.
+      ann({ quote: "dup", startOffset: 99, endOffset: 102 }),
+      () => root,
+    );
+    expect(res.tier).toBe(3);
+    expect(res.range).toBeNull();
+  });
+
+  test("tier 3: context ties between identical surroundings -> orphan", () => {
+    // Both occurrences have the same neighboring chars, so context can't choose.
+    const root = block("b0", "x dup y x dup y");
+    const res = resolveAnnotation(
+      ann({ quote: "dup", prefix: "x ", suffix: " y", startOffset: 99, endOffset: 102 }),
+      () => root,
+    );
+    expect(res.tier).toBe(3);
+    expect(res.range).toBeNull();
+  });
+
+  test("tier 2 (back-compat): unique quote with context resolves as before", () => {
+    const root = block("b0", "XX Hello world");
+    const res = resolveAnnotation(
+      ann({ quote: "Hello", prefix: "XX ", suffix: " world", startOffset: 0, endOffset: 5 }),
+      () => root,
+    );
+    expect(res.tier).toBe(2);
+    expect(res.range!.toString()).toBe("Hello");
+    expect(res.startOffset).toBe(3);
+  });
+});
+
+describe("contextAround", () => {
+  test("captures up to 32 chars on each side, clamped at boundaries", () => {
+    const text = "alpha beta gamma";
+    expect(contextAround(text, 6, 10)).toEqual({ prefix: "alpha ", suffix: " gamma" });
+    expect(contextAround(text, 0, 5)).toEqual({ prefix: "", suffix: " beta gamma" });
+    expect(contextAround(text, 11, 16)).toEqual({ prefix: "alpha beta ", suffix: "" });
+  });
+
+  test("caps each window at 32 chars", () => {
+    const text = `${"x".repeat(40)}Q${"y".repeat(40)}`;
+    const { prefix, suffix } = contextAround(text, 40, 41);
+    expect(prefix).toBe("x".repeat(32));
+    expect(suffix).toBe("y".repeat(32));
   });
 });
 
