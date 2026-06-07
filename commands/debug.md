@@ -19,9 +19,11 @@ caret writes to its state dir — `$XDG_STATE_HOME/caret` when that variable is 
 - `caret.log` — NDJSON records from the short-lived `caret review` hook process, one JSON object
   per line: `level` (pino numeric: 20 debug, 30 info, 40 warn, 50 error), `time` (ISO 8601 UTC),
   `step`, `source` (the emitting process), `caller` (the emitting `file:line`, when resolvable),
-  `msg`, optional `sessionId`/`cwd`/`feedback`, and — on errors — `err` with `message`,
-  `stack`, and a nested `cause` chain. Normal operation (a review decision, a format reject) logs
-  at info; only genuine failures sit at level ≥ 50.
+  `msg`, review-scoped extras (`sessionId`/`cwd`/`reviewId`, plus `feedbackChars`/`acceptMode` on a
+  decision record), and — on errors — `err` with `message`, `stack`, and a nested `cause` chain.
+  Feedback and plan bodies are never logged — only counts like `feedbackChars` (EXC-444). Normal
+  operation (a review decision, a format reject) logs at info; only genuine failures sit at
+  level ≥ 50.
 - `daemon.log` — the detached daemon's stdout/stderr: the same NDJSON shape (tagged with `pid`)
   for lifecycle and request errors, possibly interleaved with raw non-JSON lines (crash traces,
   port messages).
@@ -93,7 +95,7 @@ sid=$(jq -rs 'sort_by(.updatedAt) | last | .sessionId // empty' "$dir"/reviews/*
   directly — each line is a self-contained JSON record.
 
 A "socket connection closed" on the hook side often has its real cause on the daemon side, so check
-both. The surrounding info records (review created/resolved, plan rejected with its `feedback`)
+both. The surrounding info records (review created/resolved, plan rejected with its `feedbackChars`)
 give the timeline leading up to a failure:
 
 ```bash
