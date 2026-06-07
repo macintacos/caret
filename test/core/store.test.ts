@@ -1,10 +1,13 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { chmodSync, mkdirSync, statSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { reviewsDir, stateDir } from "../../src/paths.ts";
 import { createStore, type Store } from "../../src/store.ts";
 import type { Review } from "../../src/types.ts";
 import { recordingLog } from "../support/recording-log.ts";
+import { setupTempStateDir } from "../support/env.ts";
 
 let dir: string;
 let store: Store;
@@ -244,4 +247,35 @@ test("each persist is logged at debug with the review id", async () => {
       r.level === "debug" && r.step === "store" && (r.extra as { reviewId?: string })?.reviewId,
   );
   expect(rec?.extra).toEqual({ reviewId: "abc" });
+});
+
+// ---- at-rest permissions (EXC-539) ----
+
+// These mirror the production wiring — createStore(reviewsDir()) under a temp
+// state dir — so the on-disk modes are asserted on the real persistence path.
+describe("at-rest permissions", () => {
+  // Mask off file-type/sticky bits; a dir-umask quirk can't perturb the assert.
+  function perms(path: string): number {
+    return statSync(path).mode & 0o777;
+  }
+  setupTempStateDir("caret-store-perm-");
+
+  test("reviewsDir is 0700 and each <id>.json is 0600", async () => {
+    const s = createStore(reviewsDir());
+    await s.create(makeReview({ id: "perm-1" }));
+    expect(perms(reviewsDir())).toBe(0o700);
+    expect(perms(join(reviewsDir(), "perm-1.json"))).toBe(0o600);
+  });
+
+  test("a persist tightens a pre-existing 0755 state dir (create-order race)", async () => {
+    // A no-mode caller (prefs/lock/spawn) created the root first; force it to
+    // 0755 so the precondition is deterministic regardless of umask.
+    mkdirSync(stateDir(), { recursive: true });
+    chmodSync(stateDir(), 0o755);
+    expect(perms(stateDir())).toBe(0o755);
+    // Persisting routes through ensureStateDir(reviewsDir()), which chmods the
+    // root back to 0700 — FAILS if the helper omits the chmod-if-exists step.
+    await createStore(reviewsDir()).create(makeReview({ id: "race-1" }));
+    expect(perms(stateDir())).toBe(0o700);
+  });
 });

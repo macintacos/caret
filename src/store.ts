@@ -3,9 +3,10 @@
 // startup, rehydrate() reloads only unresolved (pending/rejected) reviews —
 // approved ones stay on disk as history but are not re-tracked.
 
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readJsonFile } from "./json-file.ts";
+import { ensureStateDir } from "./paths.ts";
 import { type CaretLogger, noopLogger, shortId } from "./log.ts";
 import { isUnresolved, type Review } from "./types.ts";
 
@@ -50,8 +51,11 @@ export function createStore(dir: string, log: CaretLogger = noopLogger): Store {
     const next = prev
       .catch(() => {})
       .then(async () => {
-        await mkdir(dir, { recursive: true });
-        await writeFile(join(dir, `${review.id}.json`), JSON.stringify(review, null, 2));
+        ensureStateDir(dir);
+        // 0600: the file holds the full unredacted plan body — never world-readable.
+        await writeFile(join(dir, `${review.id}.json`), JSON.stringify(review, null, 2), {
+          mode: 0o600,
+        });
         log.debug("store", `review persisted: ${shortId(review.id)}`, { reviewId: review.id });
       });
     writeChains.set(review.id, next);

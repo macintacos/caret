@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { statSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -49,6 +50,13 @@ test("writing an id outside the declared set is a no-op (no file created)", asyn
   expect(await readApproveMode(file, undefined, SET)).toBe("default");
   // The guard short-circuits before any write, so the file never appears.
   await expect(readFile(file, "utf-8")).rejects.toThrow();
+});
+
+test("a written prefs file and its dir carry private modes (0600 / 0700)", async () => {
+  // EXC-539: prefs.json shares the state dir with plan bodies; both stay private.
+  await writeApproveMode("acceptEdits", file, undefined, SET);
+  expect(statSync(file).mode & 0o777).toBe(0o600);
+  expect(statSync(dir).mode & 0o777).toBe(0o700);
 });
 
 test("defaults to a lone 'default' set when no recognized set is supplied", async () => {

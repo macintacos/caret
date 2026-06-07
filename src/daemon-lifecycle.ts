@@ -5,13 +5,13 @@
 // read/write/liveness primitives the takeover loop and the discovery command
 // share.
 
-import { mkdirSync, openSync, unlinkSync } from "node:fs";
+import { openSync, unlinkSync } from "node:fs";
 import { normalize } from "node:path";
 import { currentBuildId, type DaemonLock, isCompiledBinary, VERSION } from "./build-id.ts";
 import { type HealthBody, httpHealth } from "./daemon-client.ts";
 import { readJsonFileSync } from "./json-file.ts";
 import { logDebug, logWarn } from "./log.ts";
-import { daemonLock, daemonLogFile, stateDir } from "./paths.ts";
+import { daemonLock, daemonLogFile, ensureStateDir, stateDir } from "./paths.ts";
 import { getPort, type Settings } from "./settings.ts";
 
 export interface EnsureDeps {
@@ -208,7 +208,7 @@ export function spawnDaemon(): void {
   // diagnosable after the fact. Best-effort: fall back to discarding output.
   let out: number | "ignore" = "ignore";
   try {
-    mkdirSync(stateDir(), { recursive: true });
+    ensureStateDir();
     out = openSync(daemonLogFile(), "a");
   } catch {
     // The daemon still spawns; only its crash output is lost. Best-effort warn
