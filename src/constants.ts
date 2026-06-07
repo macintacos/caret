@@ -9,8 +9,9 @@ export const DEFAULT_PORT = 42718;
  * `hooks/hooks.json` (EXC-531). The review-timeout ceiling (`TimeoutS` in
  * settings.ts) is a strict `.lt(...)` of this, so caret's own fail-safe deny
  * always emits before Claude Code can kill the hook. Named once here — the
- * single source the schema bound and the coupling test (test/core/hooks-timeout)
- * both reference — so the two numbers can't drift into the dangerous direction
+ * single source the schema bound and the coupling test
+ * (test/adapters/claude/hooks-timeout) both reference — so the two numbers can't
+ * drift into the dangerous direction
  * (hook killed before the deny ships). */
 export const HOOK_TIMEOUT_S = 3900;
 
