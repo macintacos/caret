@@ -22,6 +22,18 @@ import { uiLog } from "./log.ts";
 const SHIKI_STYLE =
 	/^(?:(?:--shiki[\w-]*|color|background-color)\s*:\s*(?:#[0-9a-fA-F]{3,8}|rgba?\([\d.,\s%]+\)|var\(--shiki[\w-]*\)|italic|oblique|normal|bold|bolder|lighter|\d{1,3})\s*;?\s*)+$/;
 
+/**
+ * Whether a `style` attribute value is exclusively shiki's dual-theme token
+ * output (the SHIKI_STYLE shape). This is the security boundary for inline
+ * styles: the sanitizer keeps a `style` attribute only when this returns true,
+ * and drops it otherwise. Exported as the unit-testable surface for that gate
+ * (EXC-535); the sanitize hook is its sole production caller, so there is one
+ * source of truth. The value is trimmed before matching, as the hook requires.
+ */
+export function isShikiStyle(value: string): boolean {
+	return SHIKI_STYLE.test(value.trim());
+}
+
 // DOMPurify must bind to a `window` (happy-dom in tests, the real one in the
 // browser). Bind lazily at first use so module import never requires a DOM.
 let purifier: DOMPurifyInstance | null = null;
@@ -37,7 +49,7 @@ function getPurifier(): DOMPurifyInstance {
 	// narrows — never widens — the XSS surface. Sanitize stays the terminal step.
 	purifier.addHook("uponSanitizeAttribute", (_node, data) => {
 		if (data.attrName === "style") {
-			if (SHIKI_STYLE.test(data.attrValue.trim())) data.forceKeepAttr = true;
+			if (isShikiStyle(data.attrValue)) data.forceKeepAttr = true;
 			else data.keepAttr = false;
 		}
 	});
