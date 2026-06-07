@@ -69,6 +69,8 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decisi
   try {
     const input = deps.parseHookInput(stdin);
     ctx.sessionId = input.sessionId;
+    // cwd is logged raw (diagnostic: which project this review came from); the
+    // redact path home-scrubs it on share, so it is not a DENY_KEY (EXC-545).
     ctx.cwd = input.cwd;
     // The review's start-of-timeline anchor: even a format-deny or a crashed
     // run leaves a record of the request and its session.

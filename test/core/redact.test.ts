@@ -44,6 +44,22 @@ test("scrubValue passes strings through when redaction is off", () => {
   expect(scrubValue(v, false)).toEqual(v);
 });
 
+test("scrubValue home-scrubs a cwd path under redaction: current home to ~, foreign username censored", () => {
+  // cwd is logged raw (it's diagnostic: which project a review came from) and is
+  // deliberately NOT a DENY_KEY — the redact toggle is what makes it shareable.
+  // This pins that the redact path covers cwd: the current user's home becomes ~,
+  // and a foreign home's username is censored, so a shared log leaks neither. It
+  // is falsifiable two ways — drop the home scrub and `${home}` survives; add cwd
+  // to DENY_KEYS and the value collapses to "<redacted>" instead of scrubbing.
+  const out = scrubValue({ cwd: `${home}/GitLocal/proj`, alien: "/Users/alice/x" }, true) as {
+    cwd: string;
+    alien: string;
+  };
+  expect(out.cwd).toBe("~/GitLocal/proj");
+  expect(out.cwd).not.toContain(home);
+  expect(out.alien).toBe("/Users/<redacted>/x");
+});
+
 test("scrubValue censors plan, prompt, and feedback keys even when redaction is off", () => {
   const out = scrubValue(
     { plan: "SECRET PLAN BODY", nested: { prompt: "SECRET PROMPT" }, feedback: "too vague" },
