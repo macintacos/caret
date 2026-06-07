@@ -1,0 +1,8 @@
+{
+  "session_id": "c0de1a8e-1b27-4d91-9c64-7ea2f0b1d3a5",
+  "cwd": "/Users/dev/projects/gadget",
+  "hook_event_name": "PermissionRequest",
+  "tool_input": {
+    "plan": "# Add a status endpoint\n\n## Steps\n\n1. Add a `GET /status` route returning `{ ok: true }`.\n2. Register it before the rate limiter.\n3. Add a unit test asserting 200 and the JSON body.\n"
+  }
+}
