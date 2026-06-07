@@ -1,7 +1,7 @@
 // Falsifiable back-compat (EXC-516): prefs and on-disk review records written in
 // the pre-epic `acceptMode` format must still parse and resolve to the correct
-// approve variant after the daemon/prefs decoupling. The fixtures under
-// test/fixtures/ are checked-in artifacts in that pre-epic shape; the assertions
+// approve variant after the daemon/prefs decoupling. The fixtures in the sibling
+// fixtures/ dir are checked-in artifacts in that pre-epic shape; the assertions
 // run through the REAL read paths (readApproveMode for prefs; the daemon's
 // persisted-decision serve for a review record), not a hand-rolled parser. If a
 // future change strands those files, these tests fail.
@@ -10,9 +10,9 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { APPROVE_VARIANTS } from "../src/adapters/claude/approve.ts";
-import { type ApproveModeSet, readApproveMode } from "../src/prefs.ts";
-import { bootDaemon, type TestDaemon } from "./support/daemon.ts";
+import { APPROVE_VARIANTS } from "../../../src/adapters/claude/approve.ts";
+import { type ApproveModeSet, readApproveMode } from "../../../src/prefs.ts";
+import { bootDaemon, type TestDaemon } from "../../support/daemon.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures");
 

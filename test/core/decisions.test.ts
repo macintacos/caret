@@ -1,7 +1,7 @@
 import { beforeEach, expect, test } from "bun:test";
-import { createDecisions, type DecisionRegistry } from "../src/decisions.ts";
-import type { Decision } from "../src/types.ts";
-import { recordingLog } from "./support/recording-log.ts";
+import { createDecisions, type DecisionRegistry } from "../../src/decisions.ts";
+import type { Decision } from "../../src/types.ts";
+import { recordingLog } from "../support/recording-log.ts";
 
 const decision = (behavior: "allow" | "deny"): Decision => ({
   behavior,

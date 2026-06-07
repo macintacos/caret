@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import { homedir } from "node:os";
-import { configDir, configFile, daemonLock, stateDir } from "../src/paths.ts";
-import { withEnv } from "./support/env.ts";
+import { configDir, configFile, daemonLock, stateDir } from "../../src/paths.ts";
+import { withEnv } from "../support/env.ts";
 
-// The CARET_* accessor and invalidEnvVars tests moved to test/settings.test.ts
-// with the EXC-430 accessors themselves. The VERSION/buildHash identity tests
-// live in test/build-id.test.ts alongside those symbols.
+// The CARET_* accessor and invalidEnvVars tests live in settings.test.ts with
+// the EXC-430 accessors themselves. The VERSION/buildHash identity tests live in
+// build-id.test.ts alongside those symbols.
 
 test("stateDir honors XDG_STATE_HOME and falls back to ~/.local/state/caret", () => {
   withEnv({ XDG_STATE_HOME: "/tmp/caret-xdg-state-test" }, () => {

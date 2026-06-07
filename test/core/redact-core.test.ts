@@ -5,7 +5,7 @@ import {
 	MAX_DEPTH,
 	scrubGraph,
 	shortId,
-} from "../src/redact-core.ts";
+} from "../../src/redact-core.ts";
 
 // The shared browser-safe core: DENY_KEYS, the parameterized scrub walk, and
 // shortId. Both runtimes route through these — src/redact.ts (with the home-path

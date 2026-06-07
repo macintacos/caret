@@ -7,15 +7,15 @@ import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { VERSION } from "../src/build-id.ts";
-import { httpHealth } from "../src/daemon-client.ts";
-import { ensureDaemon } from "../src/daemon-lifecycle.ts";
-import { createServer } from "../src/daemon.ts";
-import { createStore } from "../src/store.ts";
-import { ndjsonRecords } from "./support/ndjson.ts";
-import { freePort } from "./support/net.ts";
-import { until } from "./support/poll.ts";
-import { expectNeverLogsBody } from "./support/redaction.ts";
+import { VERSION } from "../../src/build-id.ts";
+import { httpHealth } from "../../src/daemon-client.ts";
+import { ensureDaemon } from "../../src/daemon-lifecycle.ts";
+import { createServer } from "../../src/daemon.ts";
+import { createStore } from "../../src/store.ts";
+import { ndjsonRecords } from "../support/ndjson.ts";
+import { freePort } from "../support/net.ts";
+import { until } from "../support/poll.ts";
+import { expectNeverLogsBody } from "../support/redaction.ts";
 
 // In-process health/discovery probe servers (a bare createServer + fixed-path
 // store, distinct from bootDaemon's full boot+client). Stopped after each test.

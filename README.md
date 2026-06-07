@@ -308,7 +308,7 @@ src/adapters/       adapter.ts (AgentAdapter interface) · claude/ (the Claude C
 ui/                 Svelte 5 single-file SPA (Vite + vite-plugin-singlefile) · src/state/ runes state modules · src/icons/ vendored Lucide SVGs
 hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode) — Claude-adapter packaging
 commands/           /caret:demo · /caret:debug · /caret:discovery — Claude-adapter packaging (agent-specific behavioral prose)
-test/support/       shared test scaffolding (daemon boot, NDJSON parsing, redaction matchers)
+test/               core/ (tool-agnostic suites) · adapters/claude/ (Claude-adapter suites + fixtures) · scripts/ (release + dev tooling) · support/ (shared scaffolding)
 scripts/            install.sh (build + register via the native plugin system)
 ```
 
