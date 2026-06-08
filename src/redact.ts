@@ -27,8 +27,8 @@ const FOREIGN_HOME = /(\/Users\/|\/home\/)[^/\s"']+/g;
  * everywhere), then any remaining /Users/<x> or /home/<x> loses its username
  * segment. `home` is injectable for tests only. */
 export function scrubString(s: string, home = homedir()): string {
-	const dehomed = home.length > 1 ? s.replaceAll(home, "~") : s;
-	return dehomed.replace(FOREIGN_HOME, `$1${CENSOR}`);
+  const dehomed = home.length > 1 ? s.replaceAll(home, "~") : s;
+  return dehomed.replace(FOREIGN_HOME, `$1${CENSOR}`);
 }
 
 /** Walk a record's value graph, scrubbing strings when `redact` is on and
@@ -36,26 +36,26 @@ export function scrubString(s: string, home = homedir()): string {
  * runtime's home-path string scrub wired in when the toggle is on (off, only
  * DENY_KEYS censoring applies). */
 export function scrubValue(v: unknown, redact: boolean): unknown {
-	return scrubGraph(v, redact ? scrubString : undefined);
+  return scrubGraph(v, redact ? scrubString : undefined);
 }
 
 /** After-the-fact scrub of NDJSON log text: parseable `{`-lines round-trip
  * through scrubValue (full redaction on), everything else — raw crash traces,
  * truncated/malformed records — is scrubbed as plain text. Never throws. */
 export function redactLogText(text: string): string {
-	return text
-		.split("\n")
-		.map((line) => {
-			if (line.startsWith("{")) {
-				try {
-					return JSON.stringify(scrubValue(JSON.parse(line), true));
-				} catch {
-					// Malformed (e.g. a mid-write truncation): fall through to text scrub.
-				}
-			}
-			return scrubString(line);
-		})
-		.join("\n");
+  return text
+    .split("\n")
+    .map((line) => {
+      if (line.startsWith("{")) {
+        try {
+          return JSON.stringify(scrubValue(JSON.parse(line), true));
+        } catch {
+          // Malformed (e.g. a mid-write truncation): fall through to text scrub.
+        }
+      }
+      return scrubString(line);
+    })
+    .join("\n");
 }
 
 /** Scrub each existing log into a shareable sibling (caret.log →
@@ -63,20 +63,18 @@ export function redactLogText(text: string): string {
  * Absent files are skipped; write failures propagate to the caller (the
  * `caret redact` subcommand reports them — silently skipping a failed write
  * would look like success). */
-export function redactLogFiles(
-	files: string[] = [logFile(), daemonLogFile()],
-): string[] {
-	const written: string[] = [];
-	for (const file of files) {
-		let text: string;
-		try {
-			text = readFileSync(file, "utf-8");
-		} catch {
-			continue; // absent or unreadable — nothing to share
-		}
-		const sibling = `${file.replace(/\.log$/, "")}.redacted.log`;
-		writeFileSync(sibling, redactLogText(text), { mode: 0o600 });
-		written.push(sibling);
-	}
-	return written;
+export function redactLogFiles(files: string[] = [logFile(), daemonLogFile()]): string[] {
+  const written: string[] = [];
+  for (const file of files) {
+    let text: string;
+    try {
+      text = readFileSync(file, "utf-8");
+    } catch {
+      continue; // absent or unreadable — nothing to share
+    }
+    const sibling = `${file.replace(/\.log$/, "")}.redacted.log`;
+    writeFileSync(sibling, redactLogText(text), { mode: 0o600 });
+    written.push(sibling);
+  }
+  return written;
 }

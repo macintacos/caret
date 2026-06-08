@@ -18,8 +18,8 @@ startLogBridge();
 // markHighlightReady() then flips the reactive signal App watches to repaint
 // the active plan with highlighting. A failed init degrades to plain <pre>.
 void initHighlighter()
-	.then(markHighlightReady)
-	.catch(() => {});
+  .then(markHighlightReady)
+  .catch(() => {});
 
 const app = mount(App, { target });
 

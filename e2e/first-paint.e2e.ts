@@ -9,33 +9,30 @@
 
 import { expect, test } from "./support/fixtures.ts";
 
-test("plan paints before shiki highlighting is ready", async ({
-	daemon,
-	page,
-}) => {
-	await daemon.seed();
-	await page.goto("/");
+test("plan paints before shiki highlighting is ready", async ({ daemon, page }) => {
+  await daemon.seed();
+  await page.goto("/");
 
-	const article = page.locator("article.plan");
+  const article = page.locator("article.plan");
 
-	// First paint: the plan heading and body are on screen.
-	await expect(
-		article.getByRole("heading", { name: "Widget Cache Refactor", level: 1 }),
-	).toBeVisible();
-	await expect(article.getByText("warm copy of each manifest")).toBeVisible();
+  // First paint: the plan heading and body are on screen.
+  await expect(
+    article.getByRole("heading", { name: "Widget Cache Refactor", level: 1 }),
+  ).toBeVisible();
+  await expect(article.getByText("warm copy of each manifest")).toBeVisible();
 
-	// The fixture's language-tagged code block is present from the first paint
-	// (as a plain <pre>, since the highlighter is still building).
-	await expect(article.locator("pre")).toBeVisible();
+  // The fixture's language-tagged code block is present from the first paint
+  // (as a plain <pre>, since the highlighter is still building).
+  await expect(article.locator("pre")).toBeVisible();
 
-	// After the off-critical-path init resolves, the code block repaints with
-	// shiki's dual-theme highlighting (`pre.shiki` with per-token CSS variables).
-	// Its arrival AFTER the heading/body proves it did not gate first paint.
-	const shiki = article.locator("pre.shiki");
-	await expect(shiki).toBeVisible();
-	// A repaint with real highlighting emits the per-token --shiki-light variable
-	// on at least one token span.
-	await expect
-		.poll(() => shiki.evaluate((el) => el.innerHTML.includes("--shiki-light:")))
-		.toBe(true);
+  // After the off-critical-path init resolves, the code block repaints with
+  // shiki's dual-theme highlighting (`pre.shiki` with per-token CSS variables).
+  // Its arrival AFTER the heading/body proves it did not gate first paint.
+  const shiki = article.locator("pre.shiki");
+  await expect(shiki).toBeVisible();
+  // A repaint with real highlighting emits the per-token --shiki-light variable
+  // on at least one token span.
+  await expect
+    .poll(() => shiki.evaluate((el) => el.innerHTML.includes("--shiki-light:")))
+    .toBe(true);
 });
