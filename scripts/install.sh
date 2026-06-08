@@ -16,10 +16,12 @@
 #
 # Pass --from-local for the dev loop (what `mise run build --install` calls):
 # it forces local-checkout mode and REUSES the already-built bin/caret + bin/ui
-# instead of rebuilding, reinstalls the plugin, then cycles the daemon to the
-# fresh build via `caret prewarm`. Dev only — it mutates your Claude plugin
-# state and daemon, so it is not for the piped curl install. CARET_DRY_RUN=1
-# previews it like any other run.
+# instead of rebuilding, reinstalls the plugin, then prewarms so the fresh build
+# takes over the daemon via `caret prewarm`. The takeover retires a current-build
+# daemon; a long-running legacy daemon (no /api/retire, no lock) can't be retired
+# and keeps serving until it idle-exits — restart it manually (kill its pid) once
+# to migrate. Dev only — it mutates your Claude plugin state and daemon, so it is
+# not for the piped curl install. CARET_DRY_RUN=1 previews it like any other run.
 
 set -euo pipefail
 
@@ -189,7 +191,7 @@ print_plan() {
   if [ "$SRC_KIND" = "local" ]; then
     printf '%s│%s  Source   local checkout at %s\n' "$C_DIM" "$C_RESET" "$REPO_DIR"
     if [ "$FROM_LOCAL" -eq 1 ]; then
-      printf '%s│%s           reuse the freshly-built bin/caret + bin/ui (%s) — no rebuild, then cycle the daemon\n' \
+      printf '%s│%s           reuse the freshly-built bin/caret + bin/ui (%s) — no rebuild, then prewarm the daemon\n' \
         "$C_DIM" "$C_RESET" "$REF_DESC"
     else
       printf '%s│%s           build the current ref (%s) in place — no tag lookup, no clone\n' \
@@ -356,16 +358,19 @@ run claude plugin enable "${PLUGIN}@${MARKETPLACE}" >/dev/null 2>&1 || true
 ok
 
 # --- daemon cycle (--from-local only) ---------------------------------------
-# Cycle the running daemon to the freshly-built binary (EXC-555). The just-built
+# Prewarm so the fresh build takes over the daemon (EXC-555). The just-built
 # `caret prewarm` runs ensureDaemon, whose build fingerprint differs from the
-# stale-build daemon's, so its same-world/state-dir-gated takeover retires the
-# old daemon and spawns this build — there is no explicit "kill the daemon" step.
-# Best-effort (`|| true`): a daemon hiccup must not abort an otherwise-clean
-# install. Routed through run(), so CARET_DRY_RUN previews it and never performs
-# a real retire/spawn.
+# running daemon's, so its same-world/state-dir-gated takeover retires the old
+# daemon and spawns this build — no explicit "kill the daemon" step. The handoff
+# is best-effort in two ways: `|| true` keeps a hiccup from aborting the install,
+# and ensureDaemon REUSES (does not retire) a daemon it can't step down — a
+# legacy build with no /api/retire endpoint and no lock file — which then keeps
+# serving until it idle-exits. prewarm can't report which path it took, so this
+# step does NOT claim the swap is done; it reports only that prewarm ran. Routed
+# through run(), so CARET_DRY_RUN previews it and never performs a real handoff.
 if [ "$FROM_LOCAL" -eq 1 ]; then
   section "Daemon"
-  step "Cycling the daemon to the fresh build"
+  step "Prewarming the fresh build's daemon"
   run ./bin/caret prewarm >/dev/null 2>&1 || true
   ok
 fi

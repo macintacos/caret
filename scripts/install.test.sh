@@ -308,7 +308,7 @@ read -r ROOT STUBS HOME_DIR LOG < <(make_success_fixture)
 write_claude_stub "$STUBS" "$LOG"
 seed_local_artifacts "$ROOT" "$LOG"
 rc=0
-PATH="$STUBS:$PATH" HOME="$HOME_DIR" NO_COLOR=1 "$bash_bin" "$ROOT/scripts/install.sh" --from-local >/dev/null 2>&1 || rc=$?
+fl_real="$(PATH="$STUBS:$PATH" HOME="$HOME_DIR" NO_COLOR=1 "$bash_bin" "$ROOT/scripts/install.sh" --from-local 2>&1)" || rc=$?
 calls="$(cat "$LOG")"
 if [ "$rc" -eq 0 ]; then
   ok "--from-local real run exits 0"
@@ -317,7 +317,13 @@ else
 fi
 assert_contains "$calls" "claude plugin install caret@caret --scope user" "--from-local installs the plugin"
 assert_contains "$calls" "claude plugin enable" "--from-local enables the plugin"
-assert_contains "$calls" "caret prewarm" "--from-local cycles the daemon via caret prewarm"
+assert_contains "$calls" "caret prewarm" "--from-local prewarms via caret prewarm"
+# The daemon step is best-effort: prewarm hands off to the fresh build by
+# retiring a retireable daemon, but REUSES an un-retireable legacy daemon (no
+# /api/retire, no lock) — and can't report which happened. So the step must not
+# claim the swap is done. Regression: the old "Cycling the daemon to the fresh
+# build" wording reported success even when prewarm reused a stale daemon.
+assert_absent "$fl_real" "Cycling the daemon" "--from-local daemon step does not over-claim the swap"
 assert_absent "$calls" "bun install" "--from-local does not reinstall build deps"
 assert_absent "$calls" "vite build" "--from-local does not rebuild the UI"
 assert_absent "$calls" "build --compile" "--from-local does not recompile the binary"

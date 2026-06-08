@@ -268,10 +268,13 @@ type checking is folded into linting via `hk.pkl`.
 `mise run build --install` goes one step further than `mise run build`: after building, it
 hands the fresh `bin/caret` + `bin/ui` to `scripts/install.sh --from-local`, which reuses those
 artifacts (no rebuild), reinstalls the caret plugin through Claude Code's native plugin system,
-and cycles the daemon to the just-built binary — so after a `/reload-plugins` (or a Claude Code
-restart) `/caret:*` resolves to your local build. It mutates your Claude plugin state and daemon,
-so it is for local development only, not CI; run `CARET_DRY_RUN=1 mise run build --install` to
-preview the install steps without performing them.
+and prewarms so the just-built binary takes over the daemon — so after a `/reload-plugins` (or a
+Claude Code restart) `/caret:*` resolves to your local build. The handoff retires a current-build
+daemon automatically; a long-running daemon from an older build (no retire endpoint, no lock file)
+can't be retired and keeps serving until you restart it once — `kill` its pid, then any review
+respawns the fresh build. It mutates your Claude plugin state and daemon, so it is for local
+development only, not CI; run `CARET_DRY_RUN=1 mise run build --install` to preview the install
+steps without performing them.
 
 `mise run dev` is self-contained — no separate `bin/caret daemon` needed. It starts an isolated
 caret daemon as `caret daemon --ephemeral`, which binds an OS-assigned port; the dev task discovers
