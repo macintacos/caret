@@ -102,7 +102,7 @@ echo "caret dev: port=$CARET_PORT state=$state_dir persistent=$persist_state"
 # --notify to arm it at the default cadence; CARET_DEV_NEW_REVIEW_MS tunes the
 # cadence (positive ms) and 0 disables, and an explicit value always wins over
 # --notify, which only fills the env from the named default when it is unset.
-if [ "${usage_notify:-false}" = true ] && [ -z "${CARET_DEV_NEW_REVIEW_MS:-}" ]; then
+if [ "${usage_notify:-}" = "true" ] && [ -z "${CARET_DEV_NEW_REVIEW_MS:-}" ]; then
   CARET_DEV_NEW_REVIEW_MS="$(bun scripts/dev/dev-env.ts seeder-default-ms)"
   export CARET_DEV_NEW_REVIEW_MS
 fi
