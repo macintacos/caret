@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Run the dev UI with an isolated, fake-plan-seeded caret daemon"
+#USAGE flag "--notify" help="Arm the recurring extra-review seeder (EXC-427 notification path); off by default"
 
 set -euo pipefail
 
@@ -96,9 +97,15 @@ echo "caret dev: port=$CARET_PORT state=$state_dir persistent=$persist_state"
 
 # --- Driver + Vite ---------------------------------------------------------
 # Seed the fake plan and play the agent's protocol side (waits for health first).
-# It also seeds a genuinely-new review (fresh session/id) every 15s by default —
-# the manual test path for the EXC-427 notification. CARET_DEV_NEW_REVIEW_MS
-# tunes the cadence; 0 disables.
+# The recurring extra-review seeder (a genuinely-new review every tick — the
+# manual test path for the EXC-427 notification) is OFF by default. Pass
+# --notify to arm it at the default cadence; CARET_DEV_NEW_REVIEW_MS tunes the
+# cadence (positive ms) and 0 disables, and an explicit value always wins over
+# --notify, which only fills the env from the named default when it is unset.
+if [ "${usage_notify:-false}" = true ] && [ -z "${CARET_DEV_NEW_REVIEW_MS:-}" ]; then
+  CARET_DEV_NEW_REVIEW_MS="$(bun scripts/dev/dev-env.ts seeder-default-ms)"
+  export CARET_DEV_NEW_REVIEW_MS
+fi
 bun scripts/dev/driver.ts &
 driver_pid=$!
 
