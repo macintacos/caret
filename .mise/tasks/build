@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
 #MISE description="Build the UI then the binary (build-ui -> build-bin)"
 #MISE depends=["build-bin"]
+#USAGE flag "--install" help="After building, install the local checkout + cycle the daemon (dev only)"
 
 set -euo pipefail
 
 # build-bin depends on build-ui, so this umbrella task runs both in order.
 echo "caret build complete: bin/caret"
+
+# --install (EXC-555): hand the freshly-built checkout to install.sh's
+# --from-local mode, which reuses these artifacts (no rebuild), reinstalls the
+# plugin, and cycles the daemon to this build. Local-dev only — never CI. mise
+# sets usage_install=true when --install is passed; the install lives in
+# install.sh so there is one install path to iterate on.
+if [ "${usage_install:-}" = "true" ]; then
+  scripts/install.sh --from-local
+fi

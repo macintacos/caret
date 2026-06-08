@@ -363,6 +363,37 @@ else
 fi
 assert_contains "$bad_arg" "unknown argument" "unknown argument names the gap"
 
+# --- mise-task glue: `mise run build --install` forwards to install.sh --from-local ---
+# mise sets usage_install=true when --install is passed (verified). Run the real
+# build-task body directly — bash ignores the #MISE/#USAGE directives, so no mise
+# or build-bin depends fire — with a stubbed scripts/install.sh that logs argv.
+glue_root="$(mktemp -d)"
+mkdir -p "$glue_root/scripts" "$glue_root/.mise/tasks"
+cp "$test_dir/../.mise/tasks/build" "$glue_root/.mise/tasks/build"
+glue_log="$glue_root/install-calls.log"
+cat >"$glue_root/scripts/install.sh" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "install.sh \$*" >>"$glue_log"
+exit 0
+STUB
+chmod +x "$glue_root/scripts/install.sh"
+
+# With the flag set, the task forwards to install.sh --from-local.
+rc=0
+(cd "$glue_root" && usage_install=true "$bash_bin" .mise/tasks/build) >/dev/null 2>&1 || rc=$?
+if [ "$rc" -eq 0 ]; then
+  ok "build --install task exits 0"
+else
+  fail "build --install task exited $rc"
+fi
+assert_contains "$(cat "$glue_log" 2>/dev/null)" "install.sh --from-local" "build --install forwards to install.sh --from-local"
+
+# Without the flag, the build task is build-only and never calls install.sh.
+: >"$glue_log"
+(cd "$glue_root" && "$bash_bin" .mise/tasks/build) >/dev/null 2>&1
+assert_absent "$(cat "$glue_log" 2>/dev/null)" "install.sh" "plain build never calls install.sh"
+rm -rf "$glue_root"
+
 if [ "$fails" -eq 0 ]; then
   printf '\nAll install.sh dry-run tests passed.\n'
 else
