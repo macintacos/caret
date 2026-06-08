@@ -257,13 +257,15 @@ mise run build      # build:ui (Vite multi-asset) then build:bin (bun build --co
 mise run dev        # isolated daemon + fake plan + Vite UI (ephemeral port)
 mise run test       # bun test
 mise run test-e2e   # Playwright browser e2e (isolated daemon, Chromium)
-mise run lint       # Biome + tsc + svelte-check (read-only); the CI/pre-commit gate
+mise run lint       # read-only gate: formatting + Biome lint + tsc + svelte-check
 mise run format     # Biome (write)
 mise run preflight  # check-only pre-push gate: lint + tests (unit ∥ e2e) + build, concurrent
 ```
 
-`mise run lint` (and the pre-commit hook) runs Biome lint, `tsc --noEmit`, and `svelte-check` —
-type checking is folded into linting via `hk.pkl`.
+`mise run lint` (and the pre-commit hook) runs every formatter in read-only check mode alongside
+Biome lint, `tsc --noEmit`, and `svelte-check` — formatting, linting, and type checking are all
+folded into `hk.pkl`'s `check` hook, so an unformatted or tab-indented file fails the gate instead
+of being silently reflowed at commit time.
 
 `mise run build --install` goes one step further than `mise run build`: after building, it
 hands the fresh `bin/caret` + `bin/ui` to `scripts/install.sh --from-local`, which reuses those

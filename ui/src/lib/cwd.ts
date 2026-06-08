@@ -6,6 +6,6 @@
  * full; a deeper path collapses to `…/<parent>/<leaf>` (its last two segments).
  */
 export function shortCwd(cwd: string): string {
-	const parts = cwd.split("/").filter(Boolean);
-	return parts.length <= 2 ? cwd : `…/${parts.slice(-2).join("/")}`;
+  const parts = cwd.split("/").filter(Boolean);
+  return parts.length <= 2 ? cwd : `…/${parts.slice(-2).join("/")}`;
 }

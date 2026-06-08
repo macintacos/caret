@@ -112,6 +112,23 @@ describe("TopBar approve split-button", () => {
   });
 });
 
+describe("TopBar dev badge", () => {
+  test("hides the local-build badge by default", () => {
+    const { target } = render(TopBar, baseProps);
+    expect(target.querySelector(".dev-badge")).toBeNull();
+  });
+
+  test("shows the local-build badge when isDev is set", () => {
+    const { target } = render(TopBar, { ...baseProps, isDev: true });
+    expect(target.querySelector(".dev-badge")).not.toBeNull();
+  });
+
+  test("shows the local-build badge even with no active review", () => {
+    const { target } = render(TopBar, { ...baseProps, active: null, isDev: true });
+    expect(target.querySelector(".dev-badge")).not.toBeNull();
+  });
+});
+
 describe("TopBar request changes", () => {
   test("the request button fires onRequestChanges", () => {
     let requested = false;

@@ -11,3 +11,10 @@ indent_size = 2
 [.mise/tasks/*]
 indent_style = space
 indent_size = 2
+
+# Biome formats the JS/TS/JSON family to 2-space (indentStyle "space" in
+# biome.jsonc); .svelte rides the same convention. Mirror it here so editors
+# default to spaces and don't reintroduce tab indentation (EXC-553).
+[*.{ts,tsx,js,jsx,mjs,cjs,svelte,json,jsonc}]
+indent_style = space
+indent_size = 2

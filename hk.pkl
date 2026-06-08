@@ -9,11 +9,14 @@ import "package://github.com/jdx/hk/releases/download/v1.45.0/hk@1.45.0#/Builtin
 // read-only linter steps, so `mise run lint` and the pre-commit hook enforce
 // types as well as style.
 //
-// Two mappings keep the mise tasks single-purpose:
+// Two mappings, three hooks:
 //   mise run format -> the `fix` hook   -> `formatters` (write mode)
-//   mise run lint   -> the `check` hook -> `linters` (read-only rule + type checks)
-// The `pre-commit` hook runs BOTH, so every commit stays formatted, clean, and
-// type-checked.
+//   mise run lint   -> the `check` hook -> `formatters` + `linters`, read-only
+//                      (formatter diff checks + rule/type checks), so an
+//                      unformatted or tab-indented file fails the gate instead of
+//                      being silently reflowed at commit time (EXC-553).
+// The `pre-commit` hook runs BOTH in fix mode, so every commit stays formatted,
+// clean, and type-checked.
 //
 // Beyond the web stack, the mappings also cover the rest of the repo: rumdl
 // (Markdown format + lint), yamlfmt (YAML), taplo (TOML), shfmt + shellcheck
@@ -106,8 +109,15 @@ hooks {
     steps = formatters
   }
 
-  // `mise run lint` — linters only (rule checks); read-only.
+  // `mise run lint` — formatters + linters, read-only. The hook sets no `fix`,
+  // so each formatter runs its `check` command (e.g. `biome format`, never
+  // --write) alongside the rule/type checks. This makes `check` agree with `fix`
+  // on formatting: a tab-indented or otherwise unformatted file fails the gate
+  // here instead of being silently reflowed by the pre-commit fix. (EXC-553)
   ["check"] {
-    steps = linters
+    steps = new Mapping<String, Step> {
+      ...formatters
+      ...linters
+    }
   }
 }

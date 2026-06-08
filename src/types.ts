@@ -188,6 +188,11 @@ export interface HealthIdentity {
   commit?: string;
   stateDir?: string;
   instanceId?: string;
+  /** True when the daemon runs from source rather than a compiled binary
+   * (EXC-556). The UI shows a "local build" badge when set. Derived from
+   * isCompiledBinary(): a real installed binary reports false; `mise run dev`,
+   * the e2e harness, and a manual `bun src/cli.ts` report true. */
+  isDev?: boolean;
   /** The active adapter's declared approve variants, in display order — the wire
    * channel that lets the UI render its approve split-button from the adapter's
    * capability instead of hard-coding tool mode names. Optional: a daemon that

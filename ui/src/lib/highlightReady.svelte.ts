@@ -13,10 +13,10 @@ let ready = $state(false);
 
 /** Whether the shiki highlighter has finished its async build. */
 export function highlightReady(): boolean {
-	return ready;
+  return ready;
 }
 
 /** Mark the highlighter ready; idempotent. Called once when init resolves. */
 export function markHighlightReady(): void {
-	ready = true;
+  ready = true;
 }
