@@ -2,6 +2,7 @@
   import { approveLabel } from "../lib/approve.ts";
   import { shortCwd } from "../lib/cwd.ts";
   import type { ApproveVariant, ApproveVariantId, ClientReview } from "@core/types";
+  import DevBadge from "./DevBadge.svelte";
   import Icon from "./Icon.svelte";
   import NotifyBell from "./NotifyBell.svelte";
   import ReviewSwitcher from "./ReviewSwitcher.svelte";
@@ -15,6 +16,8 @@
     approveMode: ApproveVariantId;
     /** The adapter-declared approve variants to render (labels/order/default). */
     variants: ApproveVariant[];
+    /** True when the daemon runs from source; shows the "local build" badge. */
+    isDev?: boolean;
     onSelect: (id: string) => void;
     onApprove: (mode: ApproveVariantId) => void;
     onRequestChanges: () => void;
@@ -25,6 +28,7 @@
     busy,
     approveMode,
     variants,
+    isDev = false,
     onSelect,
     onApprove,
     onRequestChanges,
@@ -43,6 +47,7 @@
     <span class="brand" title="caret">
       <span class="brand-caret" aria-hidden="true">^</span>caret
     </span>
+    <DevBadge {isDev} />
     <span class="divider" aria-hidden="true"></span>
     {#if active}
       <ReviewSwitcher {reviews} activeId={active.id} {onSelect} />

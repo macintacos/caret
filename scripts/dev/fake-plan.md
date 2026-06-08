@@ -1,63 +1,323 @@
-# Add a `/health` endpoint to the API
+# caret dev — markdown rendering stress test
 
-## Context
+> **This is a local `mise run dev` fixture, not a real plan.** It exists to exercise every
+> markdown rendering path in the review webview — headings, lists, tables, code highlighting,
+> sanitization, and overflow — so visual regressions show up at a glance. Look for the
+> **`local build`** badge in the top bar; if you see it, you're looking at this seed.
 
-Operations needs a cheap, dependency-free way to check that the service is up. There is no
-liveness endpoint today, so the uptime monitor falls back to hitting `/` — which renders the
-full home page and skews the latency graphs.
+The renderer is `marked` (GFM on, `breaks` off) → DOMPurify (strict allowlist) → Shiki
+(dual-theme). The sections below each target a slice of that pipeline. Edit this file and the
+dev driver reseeds it, so it doubles as a live scratchpad for renderer work.
 
-## Approach
+## Contents
 
-Add a single `GET /health` route that returns `200 OK` with a small JSON body. It touches no
-database and holds no locks, so it stays fast even when the rest of the app is under load. The
-route mirrors the existing router registration pattern, so nothing new is introduced beyond the
-handler itself.
+1. [Headings](#headings)
+2. [Inline formatting](#inline-formatting)
+3. [Lists](#lists)
+4. [Blockquotes](#blockquotes)
+5. [Tables](#tables)
+6. [Code blocks](#code-blocks)
+7. [Horizontal rules](#horizontal-rules)
+8. [Overflow and edge cases](#overflow-and-edge-cases)
+9. [Sanitizer probes](#sanitizer-probes)
 
-The handler reads the process uptime, serializes it, and returns:
+---
+
+## Headings
+
+The first heading in the document is normalized to an `h1` regardless of its authored level; every
+heading below keeps its level so the table-of-contents rail and scrollspy have a full ladder.
+
+### Heading level three
+
+Body copy under an `h3`. Headings should keep comfortable vertical rhythm and not collide with the
+paragraph that follows them.
+
+#### Heading level four
+
+Body copy under an `h4`.
+
+##### Heading level five
+
+Body copy under an `h5`.
+
+###### Heading level six
+
+Body copy under an `h6` — the deepest level, often rendered close to body size.
+
+## Inline formatting
+
+A paragraph with **bold**, *italic*, ***bold italic***, `inline code`, and ~~strikethrough~~ text,
+plus a [relative link](#tables), an [external link](https://example.com/docs/markdown), and a bare
+autolink https://example.com/autolinked?q=1&lang=en that GFM should turn into an anchor.
+
+Inline code can hold awkward characters: `const re = /^\s*#{1,6}\s+/g;` and `rm -rf "$dir"/*.tmp`.
+
+A footnote-style reference[^1] and an inline image:
+
+![A 1×1 transparent pixel placeholder](https://example.com/img/placeholder.png "Hover title")
+
+[^1]: Footnotes are not GFM core, so this likely renders inline as literal text — a useful negative
+case to confirm nothing crashes on an unsupported construct.
+
+## Lists
+
+Unordered, nested four levels deep:
+
+- Top level item with **emphasis**
+  - Second level
+    - Third level with `code`
+      - Fourth level — the deepest rung
+- Back to the top level
+  - A sibling with a [jump to the code blocks section](#code-blocks)
+
+Ordered, with a nested unordered list and a restart:
+
+1. First step
+2. Second step
+   - a sub-point
+   - another sub-point
+3. Third step
+   1. nested ordered
+   2. nested ordered two
+
+Task list (GFM). Note: the `<input type="checkbox">` markup is **stripped by DOMPurify** (it is not
+on the tag allowlist), so these render as plain items — an intentional sanitizer demonstration:
+
+- [x] Build the daemon
+- [x] Serve the UI
+- [ ] Ship the badge
+- [ ] Write the stress test
+
+## Blockquotes
+
+> A single-level blockquote with **bold** and a `code span`.
+
+Nested, three levels deep:
+
+> Outer quote.
+>
+> > Nested quote, second level.
+> >
+> > > Third level, with a list inside:
+> > >
+> > > - quoted item one
+> > > - quoted item two
+
+## Tables
+
+Column alignment — left, center, right:
+
+| Feature        | Status      |   Coverage |
+| :------------- | :---------: | ---------: |
+| Headings       |   shipped   |       100% |
+| Code highlight |   shipped   |        92% |
+| Footnotes      | unsupported |         0% |
+| Task lists     |   partial   |        50% |
+
+A deliberately **wide** table to exercise horizontal scrolling / overflow handling:
+
+| id  | name              | language | lines |  added | removed | owner | reviewed | merged | tags                      |
+| --- | ----------------- | -------- | ----: | -----: | ------: | ----- | -------- | ------ | ------------------------- |
+| 1   | parser refactor   | ts       |  1284 |    902 |     382 | avery | yes      | yes    | core, parser, perf        |
+| 2   | shiki integration | ts       |   640 |    640 |       0 | blair | yes      | no     | ui, highlight, deps       |
+| 3   | redaction core    | ts       |   311 |    280 |      31 | casey | yes      | yes    | security, logging, shared |
+| 4   | daemon lifecycle  | ts       |   998 |    540 |     458 | devon | no       | no     | core, daemon, lock        |
+
+## Code blocks
+
+Inline first: call `renderPlan(markdown)` then `sanitize(html)`.
+
+TypeScript:
 
 ```ts
-// routes/health.ts — liveness only, no dependency probing
-import type { Request, Response } from "express";
+export interface HealthIdentity {
+  service?: string;
+  version?: string;
+  isDev?: boolean; // EXC-556 — drives the "local build" badge
+}
 
-const startedAt = Date.now();
-
-export function health(_req: Request, res: Response): void {
-  const uptime = Math.floor((Date.now() - startedAt) / 1000);
-  res.json({ status: "ok", uptime });
+export function isCompiledBinary(): boolean {
+  return !process.argv[1]?.endsWith(".ts");
 }
 ```
 
-The response body the monitor parses:
+JavaScript:
+
+```js
+const sum = (xs) => xs.reduce((a, b) => a + b, 0);
+console.log(sum([1, 2, 3, 4]));
+```
+
+Bash:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+for f in "$@"; do
+  printf 'processing %s\n' "$f"
+done
+```
+
+JSON:
 
 ```json
 {
-  "status": "ok",
-  "uptime": 1287
+  "service": "caret",
+  "version": "1.2.3",
+  "isDev": true,
+  "approveVariants": [{ "id": "default", "label": "Approve" }]
 }
 ```
 
-## Steps
+Python:
 
-- Register `GET /health` in the router alongside the existing routes:
+```python
+def fib(n: int) -> int:
+    a, b = 0, 1
+    for _ in range(n):
+        a, b = b, a + b
+    return a
+```
+
+Rust:
+
+```rust
+fn main() {
+    let total: i32 = (1..=10).filter(|n| n % 2 == 0).sum();
+    println!("sum of evens = {total}");
+}
+```
+
+A unified diff:
 
 ```diff
    router.get("/", home);
    router.get("/login", login);
-+  router.get("/health", health);
++  router.get("/api/health", health);
+-  router.get("/api/legacy", legacy);
 ```
 
-- Return `{ "status": "ok", "uptime": <seconds> }` with `Content-Type: application/json`.
-- Exclude `/health` from request logging so the monitor's once-a-second poll doesn't drown the logs.
-- Add a test asserting a `200` and the `status: "ok"` field.
+SQL:
 
-Smoke-test it locally once the route is wired up:
-
-```sh
-# expect a 200 and {"status":"ok",...}
-curl -s localhost:3000/health | jq .status
+```sql
+SELECT id, title, status
+FROM reviews
+WHERE status = 'pending'
+ORDER BY created_at DESC
+LIMIT 20;
 ```
+
+YAML:
+
+```yaml
+logging:
+  level: info
+  redact: false
+daemon:
+  port: 42718
+```
+
+CSS:
+
+```css
+.dev-badge {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-radius: 99px;
+}
+```
+
+A `text` fence — non-code content (a directory tree). Per the plan-format rule, non-code blocks are
+tagged `text` so they never count as untagged:
+
+```text
+caret/
+├── src/
+│   ├── daemon.ts
+│   └── build-id.ts
+└── ui/
+    └── src/
+        └── components/
+            └── DevBadge.svelte
+```
+
+Console output, also `text`:
+
+```text
+$ mise run dev
+==> daemon listening on 127.0.0.1:42719
+==> seeded review: caret dev — markdown rendering stress test
+==> vite ready on http://localhost:5173
+```
+
+An **unknown / unloaded language** — Shiki can't highlight it, so it must fall back to a plain
+`<pre><code>` without crashing:
+
+```mermaid
+graph TD
+  A[hook] --> B[daemon]
+  B --> C[browser]
+```
+
+## Horizontal rules
+
+Text above the rule.
+
+---
+
+Text between two rules.
+
+---
+
+Text below the rule.
+
+## Overflow and edge cases
+
+A very long unbroken token that must wrap or scroll rather than blow out the layout:
+`supercalifragilisticexpialidocious_pneumonoultramicroscopicsilicovolcanoconiosis_antidisestablishmentarianism_floccinaucinihilipilification`
+
+A long URL in a link: [a very long query string](https://example.com/search?q=markdown+rendering+stress+test&category=ui&sort=relevance&page=1&per_page=100&include=headings,tables,code,quotes&debug=true).
+
+A long inline-code run:
+`const ALL_THE_THINGS = ["alpha","bravo","charlie","delta","echo","foxtrot","golf","hotel","india","juliett","kilo","lima","mike"];`
+
+Unicode and emoji: café, naïve, Ω≈ç√∫, 你好, مرحبا, 🚀 ✅ ⚠️ — confirming the font stack and
+direction handling don't break.
+
+A paragraph that is simply long, to check measure and line-height across a wide column: the quick
+brown fox jumps over the lazy dog, and then the quick brown fox jumps over the lazy dog again, and
+once more for good measure, until the paragraph is comfortably longer than a single visual line on
+most viewports and wrapping behavior becomes observable.
+
+## Sanitizer probes
+
+The block below is shown **as source** (inside a tagged `html` fence) so you can read what is being
+attempted — it is highlighted, not executed:
+
+```html
+<script>alert("xss")</script>
+<iframe src="https://evil.example.com"></iframe>
+<a href="#" onclick="steal()">click me</a>
+<div style="position: fixed; inset: 0; z-index: 9999">overlay</div>
+```
+
+Below, the same markup appears **raw** so DOMPurify actually processes it live. Expected: the
+`<script>` and `<iframe>` are removed entirely, the `onclick` handler and the `position: fixed`
+style are stripped (only Shiki dual-theme styles survive the style hook), while the anchor text and
+plain content remain.
+
+<script>alert("xss")</script>
+<iframe src="https://evil.example.com"></iframe>
+<a href="#" onclick="steal()">a sanitized link</a>
+<div style="position: fixed; inset: 0; z-index: 9999">this should not pin to the viewport</div>
+
+If anything in the paragraph above escapes the sanitizer — an alert fires, an iframe loads, or the
+overlay covers the page — that is a real security regression in `ui/src/lib/render.ts`.
+
+---
 
 ## Out of scope
 
-Readiness checks (dependency probing for the database and cache) are a follow-up — this change
-is liveness only.
+This fixture renders only; there is nothing to approve here. Use **Request changes** to watch the
+dev driver thread a revision onto this plan, or **Approve** to have it reseed a fresh copy.

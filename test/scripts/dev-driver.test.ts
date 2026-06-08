@@ -89,6 +89,16 @@ test("hookStdin takes an explicit session id for extra reviews", () => {
   expect(parsed.session_id).toBe("caret-dev-extra-1");
 });
 
+// ---- seed fixture invariant (EXC-556) ----
+
+test("the seeded fixture has no untagged code blocks", () => {
+  // The stress-test seed (scripts/dev/fake-plan.md) deliberately exercises many
+  // code languages; every fence must carry a language tag or the hook's
+  // plan-format gate would deny it. This is also why appendRevision over the
+  // fixture stays untagged-free below.
+  expect(hasUntaggedCodeBlock(PLAN_V1)).toBe(false);
+});
+
 // ---- extraPlan ----
 
 test("extraPlan retitles the h1 so the extra review is distinguishable", () => {
