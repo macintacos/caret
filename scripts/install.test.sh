@@ -265,6 +265,104 @@ else
 fi
 rm -rf "$ROOT" "$STUBS" "$HOME_DIR"
 
+# --- --from-local: reuse the just-built artifacts, register, cycle the daemon ---
+# (EXC-555) `mise run build --install` calls `install.sh --from-local`, which
+# forces local mode, REUSES bin/caret + bin/ui (no rebuild), reinstalls the
+# plugin, and cycles the daemon via the just-built `caret prewarm`.
+
+# Pre-create the build artifacts --from-local reuses, in an existing fixture
+# ROOT. The bin/caret stub logs its argv to $LOG so we can assert the daemon
+# cycle ran `caret prewarm`; $exit_code lets a test make prewarm "fail".
+seed_local_artifacts() {
+  local root="$1" log="$2" exit_code="${3:-0}"
+  mkdir -p "$root/bin/ui"
+  cat >"$root/bin/caret" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "caret \$*" >>"$log"
+exit $exit_code
+STUB
+  chmod +x "$root/bin/caret"
+}
+
+# Dry run --from-local: reuses artifacts, plans the daemon cycle, never rebuilds.
+# Runs against this real checkout (it has .claude-plugin/marketplace.json, so
+# local mode is detected); dry-run skips the artifact guard, so no seeding needed.
+rc=0
+fl_dry="$(CARET_DRY_RUN=1 "$bash_bin" "$script" --from-local 2>&1)" || rc=$?
+if [ "$rc" -eq 0 ]; then
+  ok "--from-local dry run exits 0"
+else
+  fail "--from-local dry run exited $rc"
+fi
+assert_contains "$fl_dry" "DRY RUN" "--from-local announces dry-run mode"
+assert_contains "$fl_dry" "no rebuild" "--from-local reports artifact reuse (no rebuild)"
+assert_contains "$fl_dry" "prewarm" "--from-local plan cycles the daemon via prewarm"
+assert_contains "$fl_dry" "claude plugin install" "--from-local plan still installs the plugin"
+assert_absent "$fl_dry" "bun install" "--from-local plan does not reinstall build deps"
+assert_absent "$fl_dry" "build --compile" "--from-local plan does not recompile the binary"
+
+# Real run --from-local (synthetic checkout, seeded artifacts, stubbed tools):
+# the register sequence runs, the daemon cycle invokes `caret prewarm`, and no
+# rebuild command fires.
+read -r ROOT STUBS HOME_DIR LOG < <(make_success_fixture)
+write_claude_stub "$STUBS" "$LOG"
+seed_local_artifacts "$ROOT" "$LOG"
+rc=0
+PATH="$STUBS:$PATH" HOME="$HOME_DIR" NO_COLOR=1 "$bash_bin" "$ROOT/scripts/install.sh" --from-local >/dev/null 2>&1 || rc=$?
+calls="$(cat "$LOG")"
+if [ "$rc" -eq 0 ]; then
+  ok "--from-local real run exits 0"
+else
+  fail "--from-local real run exited $rc"
+fi
+assert_contains "$calls" "claude plugin install caret@caret --scope user" "--from-local installs the plugin"
+assert_contains "$calls" "claude plugin enable" "--from-local enables the plugin"
+assert_contains "$calls" "caret prewarm" "--from-local cycles the daemon via caret prewarm"
+assert_absent "$calls" "bun install" "--from-local does not reinstall build deps"
+assert_absent "$calls" "vite build" "--from-local does not rebuild the UI"
+assert_absent "$calls" "build --compile" "--from-local does not recompile the binary"
+rm -rf "$ROOT" "$STUBS" "$HOME_DIR"
+
+# Best-effort guards: a clean machine (uninstall fails, nothing to remove) and a
+# daemon hiccup (prewarm exits 1) must not abort an otherwise-clean install.
+read -r ROOT STUBS HOME_DIR LOG < <(make_success_fixture)
+write_claude_stub "$STUBS" "$LOG" "uninstall enable"
+seed_local_artifacts "$ROOT" "$LOG" 1
+rc=0
+PATH="$STUBS:$PATH" HOME="$HOME_DIR" NO_COLOR=1 "$bash_bin" "$ROOT/scripts/install.sh" --from-local >/dev/null 2>&1 || rc=$?
+if [ "$rc" -eq 0 ]; then
+  ok "--from-local best-effort uninstall + daemon-cycle failures do not fail the install"
+else
+  fail "--from-local best-effort failures should not fail the install (rc=$rc)"
+fi
+assert_contains "$(cat "$LOG")" "caret prewarm" "--from-local still attempted the daemon cycle"
+rm -rf "$ROOT" "$STUBS" "$HOME_DIR"
+
+# Missing artifacts: --from-local fails with a clear message instead of silently
+# rebuilding (no bin/caret + bin/ui seeded).
+read -r ROOT STUBS HOME_DIR LOG < <(make_success_fixture)
+write_claude_stub "$STUBS" "$LOG"
+rc=0
+fl_miss="$(PATH="$STUBS:$PATH" HOME="$HOME_DIR" NO_COLOR=1 "$bash_bin" "$ROOT/scripts/install.sh" --from-local 2>&1)" || rc=$?
+if [ "$rc" -ne 0 ]; then
+  ok "--from-local with missing artifacts exits non-zero ($rc)"
+else
+  fail "--from-local with missing artifacts should fail"
+fi
+assert_contains "$fl_miss" "mise run build" "--from-local missing-artifact error points at the build"
+assert_absent "$(cat "$LOG")" "bun install" "--from-local does not silently rebuild on missing artifacts"
+rm -rf "$ROOT" "$STUBS" "$HOME_DIR"
+
+# An unrecognized argument is a hard error (the only supported flag is --from-local).
+rc=0
+bad_arg="$(CARET_DRY_RUN=1 "$bash_bin" "$script" --nope 2>&1)" || rc=$?
+if [ "$rc" -ne 0 ]; then
+  ok "unknown argument exits non-zero ($rc)"
+else
+  fail "unknown argument should exit non-zero"
+fi
+assert_contains "$bad_arg" "unknown argument" "unknown argument names the gap"
+
 if [ "$fails" -eq 0 ]; then
   printf '\nAll install.sh dry-run tests passed.\n'
 else
