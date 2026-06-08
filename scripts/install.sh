@@ -32,10 +32,9 @@ PLUGIN="caret"
 DRY_RUN=0
 if [ "${CARET_DRY_RUN:-0}" = "1" ]; then DRY_RUN=1; fi
 
-# --from-local (EXC-555) is the dev-loop mode `mise run build --install` calls:
-# it forces local-checkout mode and REUSES the just-built bin/caret + bin/ui
-# instead of rebuilding, then cycles the daemon to the fresh build (see the
-# Daemon section). The only supported flag; anything else is a hard error.
+# Parse --from-local (EXC-555; the header comment documents what it does). It is
+# the only supported flag, so anything else is a hard error. err() isn't defined
+# yet at this point, so this uses a raw stderr printf.
 FROM_LOCAL=0
 for arg in "$@"; do
   case "$arg" in
@@ -219,7 +218,11 @@ print_plan() {
 # --- preflight (read-only) --------------------------------------------------
 # Runs in dry-run too: a missing tool hard-fails here exactly as in a real run.
 require git "install git, then re-run"
-require bun "install Bun from https://bun.sh, then re-run"
+# bun is only needed to build; --from-local reuses the artifacts and never
+# invokes bun, so it must not require it (EXC-555).
+if [ "$FROM_LOCAL" -eq 0 ]; then
+  require bun "install Bun from https://bun.sh, then re-run"
+fi
 require claude "install Claude Code (https://claude.com/claude-code), then re-run"
 
 # Latest published release tag (vX.Y.Z), newest first — mirrors the sort used by

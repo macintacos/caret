@@ -363,6 +363,25 @@ else
 fi
 assert_contains "$bad_arg" "unknown argument" "unknown argument names the gap"
 
+# --from-local must NOT require bun: it reuses artifacts and never builds. Run
+# the dry run with bun deliberately absent from PATH — real git + dirname (the
+# only externals the from-local dry-run path needs) plus a claude stub, but no
+# bun. Without the FROM_LOCAL gate on `require bun`, this hard-fails on missing
+# bun; with it, the run succeeds.
+nobun_dir="$(mktemp -d)"
+ln -s "$(command -v git)" "$nobun_dir/git"
+ln -s "$(command -v dirname)" "$nobun_dir/dirname"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$nobun_dir/claude"
+chmod +x "$nobun_dir/claude"
+rc=0
+nobun_out="$(PATH="$nobun_dir" CARET_DRY_RUN=1 "$bash_bin" "$script" --from-local 2>&1)" || rc=$?
+rm -rf "$nobun_dir"
+if [ "$rc" -eq 0 ]; then
+  ok "--from-local does not require bun"
+else
+  fail "--from-local should not require bun (rc=$rc): $nobun_out"
+fi
+
 # --- mise-task glue: `mise run build --install` forwards to install.sh --from-local ---
 # mise sets usage_install=true when --install is passed (verified). Run the real
 # build-task body directly — bash ignores the #MISE/#USAGE directives, so no mise
@@ -388,9 +407,17 @@ else
 fi
 assert_contains "$(cat "$glue_log" 2>/dev/null)" "install.sh --from-local" "build --install forwards to install.sh --from-local"
 
-# Without the flag, the build task is build-only and never calls install.sh.
+# Without the flag, the build task is build-only: it exits 0 and never calls
+# install.sh. The exit-0 check keeps a crashing build body from passing the
+# never-called assertion vacuously.
 : >"$glue_log"
-(cd "$glue_root" && "$bash_bin" .mise/tasks/build) >/dev/null 2>&1
+rc=0
+(cd "$glue_root" && "$bash_bin" .mise/tasks/build) >/dev/null 2>&1 || rc=$?
+if [ "$rc" -eq 0 ]; then
+  ok "plain build task exits 0"
+else
+  fail "plain build task exited $rc"
+fi
 assert_absent "$(cat "$glue_log" 2>/dev/null)" "install.sh" "plain build never calls install.sh"
 rm -rf "$glue_root"
 
