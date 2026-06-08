@@ -5,10 +5,10 @@
 
 /** Cmd+Enter (macOS) or Ctrl+Enter (elsewhere): the "submit this editor" chord. */
 export function isSubmitChord(e: KeyboardEvent): boolean {
-	return e.key === "Enter" && (e.metaKey || e.ctrlKey);
+  return e.key === "Enter" && (e.metaKey || e.ctrlKey);
 }
 
 /** Escape: the "cancel/dismiss this editor" key. */
 export function isCancelKey(e: KeyboardEvent): boolean {
-	return e.key === "Escape";
+  return e.key === "Escape";
 }

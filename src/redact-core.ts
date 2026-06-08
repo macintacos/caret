@@ -29,41 +29,38 @@ export const MAX_DEPTH = 6;
  * (never mutates), caps depth, and tolerates cycles — `seen` tracks the current
  * path only, so repeated (shared) references are walked normally while true
  * cycles cut off. */
-export function scrubGraph(
-	v: unknown,
-	scrubStr?: (s: string) => string,
-): unknown {
-	return walk(v, scrubStr, 0, new WeakSet());
+export function scrubGraph(v: unknown, scrubStr?: (s: string) => string): unknown {
+  return walk(v, scrubStr, 0, new WeakSet());
 }
 
 function walk(
-	v: unknown,
-	scrubStr: ((s: string) => string) | undefined,
-	depth: number,
-	seen: WeakSet<object>,
+  v: unknown,
+  scrubStr: ((s: string) => string) | undefined,
+  depth: number,
+  seen: WeakSet<object>,
 ): unknown {
-	if (typeof v === "string") return scrubStr ? scrubStr(v) : v;
-	if (v === null || typeof v !== "object") return v;
-	if (seen.has(v)) return "<cyclic>";
-	if (depth >= MAX_DEPTH) return "<depth-capped>";
-	seen.add(v);
-	let out: unknown;
-	if (Array.isArray(v)) {
-		out = v.map((el) => walk(el, scrubStr, depth + 1, seen));
-	} else {
-		const obj: Record<string, unknown> = {};
-		for (const [k, val] of Object.entries(v)) {
-			obj[k] = DENY_KEYS.has(k) ? CENSOR : walk(val, scrubStr, depth + 1, seen);
-		}
-		out = obj;
-	}
-	seen.delete(v);
-	return out;
+  if (typeof v === "string") return scrubStr ? scrubStr(v) : v;
+  if (v === null || typeof v !== "object") return v;
+  if (seen.has(v)) return "<cyclic>";
+  if (depth >= MAX_DEPTH) return "<depth-capped>";
+  seen.add(v);
+  let out: unknown;
+  if (Array.isArray(v)) {
+    out = v.map((el) => walk(el, scrubStr, depth + 1, seen));
+  } else {
+    const obj: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(v)) {
+      obj[k] = DENY_KEYS.has(k) ? CENSOR : walk(val, scrubStr, depth + 1, seen);
+    }
+    out = obj;
+  }
+  seen.delete(v);
+  return out;
 }
 
 /** Review-id prefix (the first UUID segment) for log MESSAGES: keeps lines
  * scannable without restating the full id, which rides in the structured
  * `reviewId` extra field for stitching/queries (EXC-444). */
 export function shortId(id: string): string {
-	return id.slice(0, 8);
+  return id.slice(0, 8);
 }

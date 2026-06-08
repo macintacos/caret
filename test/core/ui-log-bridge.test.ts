@@ -106,9 +106,11 @@ test("structurally invalid batches report 400", () => {
   expect(parseUiLogBatch({ events: [{ level: "info", step: "ui", msg: 1 }] })).toEqual({
     status: 400,
   });
-  expect(parseUiLogBatch({ events: [{ level: "info", step: "ui", msg: "x", extra: [] }] })).toEqual({
-    status: 400,
-  });
+  expect(parseUiLogBatch({ events: [{ level: "info", step: "ui", msg: "x", extra: [] }] })).toEqual(
+    {
+      status: 400,
+    },
+  );
 });
 
 test("over-MAX_EVENTS batches report 413", () => {
