@@ -40,6 +40,10 @@
   // approveVariants() falls back to the built-in set so the split-button always
   // has options.
   let declaredVariants = $state<ApproveVariant[] | undefined>(undefined);
+  // True when the daemon runs from source (EXC-556); read once from the health
+  // probe to show the "local build" badge. A daemon predating the field omits
+  // it, so this stays false.
+  let isDev = $state(false);
   let work = $state<{
     annotations: Annotation[];
     generalCommentDraft: string;
@@ -95,11 +99,12 @@
     // An immediate health probe sets the connection flag before the first
     // reviews tick resolves; the poll keeps it current thereafter. The same
     // probe carries the adapter's declared approve variants, captured once for
-    // the split-button.
+    // the split-button, and the dev-build flag for the "local build" badge.
     void getHealth()
       .then((h) => {
         selection.setConnected(true);
         declaredVariants = h.approveVariants;
+        isDev = h.isDev ?? false;
       })
       .catch(() => selection.setConnected(false));
 
@@ -189,6 +194,7 @@
     busy={resolve.busy}
     approveMode={resolve.approveMode}
     {variants}
+    {isDev}
     onSelect={selection.selectReview}
     {onApprove}
     onRequestChanges={() => (showDialog = true)}

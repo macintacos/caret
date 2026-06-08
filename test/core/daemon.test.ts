@@ -144,6 +144,18 @@ test("health omits commit when the daemon has none", async () => {
   expect(body.commit).toBeUndefined();
 });
 
+// ---- dev-build signal in health (EXC-556) ----
+
+test("GET /api/health reports isDev as a boolean", async () => {
+  // The UI's "local build" badge keys on this flag. It derives from
+  // isCompiledBinary() (a process-constant), so assert it's present and a
+  // boolean rather than a fixed value — the true/false truth table is proven
+  // in test/core/build-id.test.ts.
+  await boot();
+  const body = (await (await fetch(`${base}/api/health`)).json()) as { isDev?: unknown };
+  expect(typeof body.isDev).toBe("boolean");
+});
+
 test("the lock file is written on bind with pid/port/build/version", async () => {
   const lockPath = join(dir, "daemon.lock");
   await boot({ lockPath, buildId: "build-abc" });

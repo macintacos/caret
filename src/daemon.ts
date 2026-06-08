@@ -6,7 +6,7 @@
 import { renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
-import { type DaemonLock, IDENTITY } from "./build-id.ts";
+import { type DaemonLock, IDENTITY, isCompiledBinary } from "./build-id.ts";
 import { deriveIdleTimeoutSec } from "./constants.ts";
 import { createDecisions } from "./decisions.ts";
 import { type CaretLogger, noopLogger, shortId } from "./log.ts";
@@ -349,12 +349,15 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     // that let a hook and the UI tell daemons apart. `approveVariants` is the
     // active adapter's declared approve set, which the UI renders its split-
     // button from (an absent field means the UI uses its built-in fallback).
+    // `isDev` (EXC-556) drives the UI's "local build" badge — always a boolean
+    // (a process-constant), so it's emitted unconditionally rather than dropped.
     const body: HealthIdentity = {
       ...IDENTITY,
       build: buildId,
       commit,
       stateDir,
       instanceId,
+      isDev: !isCompiledBinary(),
       ...(approveVariants ? { approveVariants: [...approveVariants] } : {}),
     };
     return Response.json(body);
