@@ -13,6 +13,13 @@
 # Set CARET_DRY_RUN=1 to preview without changing anything: it runs the same
 # read-only detection, then prints the exact commands it would run. As an env
 # var it survives the piped `curl … | CARET_DRY_RUN=1 bash`.
+#
+# Pass --from-local for the dev loop (what `mise run build --install` calls):
+# it forces local-checkout mode and REUSES the already-built bin/caret + bin/ui
+# instead of rebuilding, reinstalls the plugin, then cycles the daemon to the
+# fresh build via `caret prewarm`. Dev only — it mutates your Claude plugin
+# state and daemon, so it is not for the piped curl install. CARET_DRY_RUN=1
+# previews it like any other run.
 
 set -euo pipefail
 
