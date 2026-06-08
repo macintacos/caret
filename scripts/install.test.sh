@@ -265,6 +265,168 @@ else
 fi
 rm -rf "$ROOT" "$STUBS" "$HOME_DIR"
 
+# --- --from-local: reuse the just-built artifacts, register, cycle the daemon ---
+# (EXC-555) `mise run build --install` calls `install.sh --from-local`, which
+# forces local mode, REUSES bin/caret + bin/ui (no rebuild), reinstalls the
+# plugin, and cycles the daemon via the just-built `caret prewarm`.
+
+# Pre-create the build artifacts --from-local reuses, in an existing fixture
+# ROOT. The bin/caret stub logs its argv to $LOG so we can assert the daemon
+# cycle ran `caret prewarm`; $exit_code lets a test make prewarm "fail".
+seed_local_artifacts() {
+  local root="$1" log="$2" exit_code="${3:-0}"
+  mkdir -p "$root/bin/ui"
+  cat >"$root/bin/caret" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "caret \$*" >>"$log"
+exit $exit_code
+STUB
+  chmod +x "$root/bin/caret"
+}
+
+# Dry run --from-local: reuses artifacts, plans the daemon cycle, never rebuilds.
+# Runs against this real checkout (it has .claude-plugin/marketplace.json, so
+# local mode is detected); dry-run skips the artifact guard, so no seeding needed.
+rc=0
+fl_dry="$(CARET_DRY_RUN=1 "$bash_bin" "$script" --from-local 2>&1)" || rc=$?
+if [ "$rc" -eq 0 ]; then
+  ok "--from-local dry run exits 0"
+else
+  fail "--from-local dry run exited $rc"
+fi
+assert_contains "$fl_dry" "DRY RUN" "--from-local announces dry-run mode"
+assert_contains "$fl_dry" "no rebuild" "--from-local reports artifact reuse (no rebuild)"
+assert_contains "$fl_dry" "prewarm" "--from-local plan cycles the daemon via prewarm"
+assert_contains "$fl_dry" "claude plugin install" "--from-local plan still installs the plugin"
+assert_absent "$fl_dry" "bun install" "--from-local plan does not reinstall build deps"
+assert_absent "$fl_dry" "build --compile" "--from-local plan does not recompile the binary"
+
+# Real run --from-local (synthetic checkout, seeded artifacts, stubbed tools):
+# the register sequence runs, the daemon cycle invokes `caret prewarm`, and no
+# rebuild command fires.
+read -r ROOT STUBS HOME_DIR LOG < <(make_success_fixture)
+write_claude_stub "$STUBS" "$LOG"
+seed_local_artifacts "$ROOT" "$LOG"
+rc=0
+fl_real="$(PATH="$STUBS:$PATH" HOME="$HOME_DIR" NO_COLOR=1 "$bash_bin" "$ROOT/scripts/install.sh" --from-local 2>&1)" || rc=$?
+calls="$(cat "$LOG")"
+if [ "$rc" -eq 0 ]; then
+  ok "--from-local real run exits 0"
+else
+  fail "--from-local real run exited $rc"
+fi
+assert_contains "$calls" "claude plugin install caret@caret --scope user" "--from-local installs the plugin"
+assert_contains "$calls" "claude plugin enable" "--from-local enables the plugin"
+assert_contains "$calls" "caret prewarm" "--from-local prewarms via caret prewarm"
+# The daemon step is best-effort: prewarm hands off to the fresh build by
+# retiring a retireable daemon, but REUSES an un-retireable legacy daemon (no
+# /api/retire, no lock) — and can't report which happened. So the step must not
+# claim the swap is done. Regression: the old "Cycling the daemon to the fresh
+# build" wording reported success even when prewarm reused a stale daemon.
+assert_absent "$fl_real" "Cycling the daemon" "--from-local daemon step does not over-claim the swap"
+assert_absent "$calls" "bun install" "--from-local does not reinstall build deps"
+assert_absent "$calls" "vite build" "--from-local does not rebuild the UI"
+assert_absent "$calls" "build --compile" "--from-local does not recompile the binary"
+rm -rf "$ROOT" "$STUBS" "$HOME_DIR"
+
+# Best-effort guards: a clean machine (uninstall fails, nothing to remove) and a
+# daemon hiccup (prewarm exits 1) must not abort an otherwise-clean install.
+read -r ROOT STUBS HOME_DIR LOG < <(make_success_fixture)
+write_claude_stub "$STUBS" "$LOG" "uninstall enable"
+seed_local_artifacts "$ROOT" "$LOG" 1
+rc=0
+PATH="$STUBS:$PATH" HOME="$HOME_DIR" NO_COLOR=1 "$bash_bin" "$ROOT/scripts/install.sh" --from-local >/dev/null 2>&1 || rc=$?
+if [ "$rc" -eq 0 ]; then
+  ok "--from-local best-effort uninstall + daemon-cycle failures do not fail the install"
+else
+  fail "--from-local best-effort failures should not fail the install (rc=$rc)"
+fi
+assert_contains "$(cat "$LOG")" "caret prewarm" "--from-local still attempted the daemon cycle"
+rm -rf "$ROOT" "$STUBS" "$HOME_DIR"
+
+# Missing artifacts: --from-local fails with a clear message instead of silently
+# rebuilding (no bin/caret + bin/ui seeded).
+read -r ROOT STUBS HOME_DIR LOG < <(make_success_fixture)
+write_claude_stub "$STUBS" "$LOG"
+rc=0
+fl_miss="$(PATH="$STUBS:$PATH" HOME="$HOME_DIR" NO_COLOR=1 "$bash_bin" "$ROOT/scripts/install.sh" --from-local 2>&1)" || rc=$?
+if [ "$rc" -ne 0 ]; then
+  ok "--from-local with missing artifacts exits non-zero ($rc)"
+else
+  fail "--from-local with missing artifacts should fail"
+fi
+assert_contains "$fl_miss" "mise run build" "--from-local missing-artifact error points at the build"
+assert_absent "$(cat "$LOG")" "bun install" "--from-local does not silently rebuild on missing artifacts"
+rm -rf "$ROOT" "$STUBS" "$HOME_DIR"
+
+# An unrecognized argument is a hard error (the only supported flag is --from-local).
+rc=0
+bad_arg="$(CARET_DRY_RUN=1 "$bash_bin" "$script" --nope 2>&1)" || rc=$?
+if [ "$rc" -ne 0 ]; then
+  ok "unknown argument exits non-zero ($rc)"
+else
+  fail "unknown argument should exit non-zero"
+fi
+assert_contains "$bad_arg" "unknown argument" "unknown argument names the gap"
+
+# --from-local must NOT require bun: it reuses artifacts and never builds. Run
+# the dry run with bun deliberately absent from PATH — real git + dirname (the
+# only externals the from-local dry-run path needs) plus a claude stub, but no
+# bun. Without the FROM_LOCAL gate on `require bun`, this hard-fails on missing
+# bun; with it, the run succeeds.
+nobun_dir="$(mktemp -d)"
+ln -s "$(command -v git)" "$nobun_dir/git"
+ln -s "$(command -v dirname)" "$nobun_dir/dirname"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$nobun_dir/claude"
+chmod +x "$nobun_dir/claude"
+rc=0
+nobun_out="$(PATH="$nobun_dir" CARET_DRY_RUN=1 "$bash_bin" "$script" --from-local 2>&1)" || rc=$?
+rm -rf "$nobun_dir"
+if [ "$rc" -eq 0 ]; then
+  ok "--from-local does not require bun"
+else
+  fail "--from-local should not require bun (rc=$rc): $nobun_out"
+fi
+
+# --- mise-task glue: `mise run build --install` forwards to install.sh --from-local ---
+# mise sets usage_install=true when --install is passed (verified). Run the real
+# build-task body directly — bash ignores the #MISE/#USAGE directives, so no mise
+# or build-bin depends fire — with a stubbed scripts/install.sh that logs argv.
+glue_root="$(mktemp -d)"
+mkdir -p "$glue_root/scripts" "$glue_root/.mise/tasks"
+cp "$test_dir/../.mise/tasks/build" "$glue_root/.mise/tasks/build"
+glue_log="$glue_root/install-calls.log"
+cat >"$glue_root/scripts/install.sh" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "install.sh \$*" >>"$glue_log"
+exit 0
+STUB
+chmod +x "$glue_root/scripts/install.sh"
+
+# With the flag set, the task forwards to install.sh --from-local.
+rc=0
+(cd "$glue_root" && usage_install=true "$bash_bin" .mise/tasks/build) >/dev/null 2>&1 || rc=$?
+if [ "$rc" -eq 0 ]; then
+  ok "build --install task exits 0"
+else
+  fail "build --install task exited $rc"
+fi
+assert_contains "$(cat "$glue_log" 2>/dev/null)" "install.sh --from-local" "build --install forwards to install.sh --from-local"
+
+# Without the flag, the build task is build-only: it exits 0 and never calls
+# install.sh. The exit-0 check keeps a crashing build body from passing the
+# never-called assertion vacuously.
+: >"$glue_log"
+rc=0
+(cd "$glue_root" && "$bash_bin" .mise/tasks/build) >/dev/null 2>&1 || rc=$?
+if [ "$rc" -eq 0 ]; then
+  ok "plain build task exits 0"
+else
+  fail "plain build task exited $rc"
+fi
+assert_absent "$(cat "$glue_log" 2>/dev/null)" "install.sh" "plain build never calls install.sh"
+rm -rf "$glue_root"
+
 if [ "$fails" -eq 0 ]; then
   printf '\nAll install.sh dry-run tests passed.\n'
 else

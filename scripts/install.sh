@@ -13,6 +13,15 @@
 # Set CARET_DRY_RUN=1 to preview without changing anything: it runs the same
 # read-only detection, then prints the exact commands it would run. As an env
 # var it survives the piped `curl … | CARET_DRY_RUN=1 bash`.
+#
+# Pass --from-local for the dev loop (what `mise run build --install` calls):
+# it forces local-checkout mode and REUSES the already-built bin/caret + bin/ui
+# instead of rebuilding, reinstalls the plugin, then prewarms so the fresh build
+# takes over the daemon via `caret prewarm`. The takeover retires a current-build
+# daemon; a long-running legacy daemon (no /api/retire, no lock) can't be retired
+# and keeps serving until it idle-exits — restart it manually (kill its pid) once
+# to migrate. Dev only — it mutates your Claude plugin state and daemon, so it is
+# not for the piped curl install. CARET_DRY_RUN=1 previews it like any other run.
 
 set -euo pipefail
 
@@ -24,6 +33,20 @@ PLUGIN="caret"
 # `curl … | CARET_DRY_RUN=1 bash` (no `bash -s --` needed).
 DRY_RUN=0
 if [ "${CARET_DRY_RUN:-0}" = "1" ]; then DRY_RUN=1; fi
+
+# Parse --from-local (EXC-555; the header comment documents what it does). It is
+# the only supported flag, so anything else is a hard error. err() isn't defined
+# yet at this point, so this uses a raw stderr printf.
+FROM_LOCAL=0
+for arg in "$@"; do
+  case "$arg" in
+  --from-local) FROM_LOCAL=1 ;;
+  *)
+    printf 'error: unknown argument: %s (the only supported flag is --from-local)\n' "$arg" >&2
+    exit 1
+    ;;
+  esac
+done
 
 # --- presentation -----------------------------------------------------------
 # Color and glyphs only on an interactive terminal with NO_COLOR unset. Anywhere
@@ -167,8 +190,13 @@ print_plan() {
   printf '%s│%s\n' "$C_DIM" "$C_RESET"
   if [ "$SRC_KIND" = "local" ]; then
     printf '%s│%s  Source   local checkout at %s\n' "$C_DIM" "$C_RESET" "$REPO_DIR"
-    printf '%s│%s           build the current ref (%s) in place — no tag lookup, no clone\n' \
-      "$C_DIM" "$C_RESET" "$REF_DESC"
+    if [ "$FROM_LOCAL" -eq 1 ]; then
+      printf '%s│%s           reuse the freshly-built bin/caret + bin/ui (%s) — no rebuild, then prewarm the daemon\n' \
+        "$C_DIM" "$C_RESET" "$REF_DESC"
+    else
+      printf '%s│%s           build the current ref (%s) in place — no tag lookup, no clone\n' \
+        "$C_DIM" "$C_RESET" "$REF_DESC"
+    fi
   else
     printf '%s│%s  Source   caret release %s\n' "$C_DIM" "$C_RESET" "$TAG"
     if [ "$SRC_ACTION" = "update" ]; then
@@ -192,7 +220,11 @@ print_plan() {
 # --- preflight (read-only) --------------------------------------------------
 # Runs in dry-run too: a missing tool hard-fails here exactly as in a real run.
 require git "install git, then re-run"
-require bun "install Bun from https://bun.sh, then re-run"
+# bun is only needed to build; --from-local reuses the artifacts and never
+# invokes bun, so it must not require it (EXC-555).
+if [ "$FROM_LOCAL" -eq 0 ]; then
+  require bun "install Bun from https://bun.sh, then re-run"
+fi
 require claude "install Claude Code (https://claude.com/claude-code), then re-run"
 
 # Latest published release tag (vX.Y.Z), newest first — mirrors the sort used by
@@ -228,7 +260,14 @@ if [ -n "$src" ] && [ -f "$src" ]; then
     REF_DESC="$(git -C "$REPO_DIR" describe --tags --always --dirty 2>/dev/null || echo 'unknown ref')"
   fi
 fi
-if [ -z "$REPO_DIR" ]; then
+if [ "$FROM_LOCAL" -eq 1 ]; then
+  # --from-local never fetches or clones: it builds nothing and reuses the
+  # checkout it is run from. Require that local detection above succeeded.
+  if [ "$SRC_KIND" != "local" ]; then
+    err "--from-local must run from inside a caret checkout (no .claude-plugin/marketplace.json found)"
+    exit 1
+  fi
+elif [ -z "$REPO_DIR" ]; then
   SRC_KIND="release"
   REPO_DIR="${CARET_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/caret}"
   TAG="$(latest_release_tag)"
@@ -249,7 +288,11 @@ fi
 # shown only on failure — a clean fetch collapses to a quiet ✓, like the builds.
 if [ "$SRC_KIND" = "local" ]; then
   section "Source"
-  step "Building the local checkout at $REPO_DIR ($REF_DESC) in place"
+  if [ "$FROM_LOCAL" -eq 1 ]; then
+    step "Reusing the freshly built checkout at $REPO_DIR ($REF_DESC) — no rebuild"
+  else
+    step "Building the local checkout at $REPO_DIR ($REF_DESC) in place"
+  fi
   ok
 else
   section "Fetch"
@@ -268,21 +311,31 @@ fi
 # --- build ------------------------------------------------------------------
 run cd "$REPO_DIR"
 
-section "Build"
-run_long "Installing build dependencies" bun install
-run_long "Building the UI" bash -c 'cd ui && bunx vite build'
-# Compile through the one build task so the flags can't drift from a local
-# `mise run build`: it generates the embed manifest from ui/dist, embeds the
-# sourcemap (readable src/*.ts stack frames), bakes the commit (EXC-452), and
-# copies the UI tree beside the binary as a fallback. Run as a plain bash script
-# so the installer needs only bun, not mise; in dry-run run_long records it
-# without executing, so its `git rev-parse` never fires in a non-checkout.
-# build-ui above leaves ui/dist in place for it.
-run_long "Compiling the caret binary" bash .mise/tasks/build-bin
+if [ "$FROM_LOCAL" -eq 1 ]; then
+  # Reuse mode (EXC-555): `mise run build` (build-bin) already produced the
+  # artifacts; --from-local does NOT rebuild. Assert they exist rather than
+  # silently rebuilding — a missing artifact is a misuse, not a fallback.
+  if [ "$DRY_RUN" -eq 0 ] && { [ ! -x bin/caret ] || [ ! -d bin/ui ]; }; then
+    err "--from-local needs the build artifacts bin/caret + bin/ui — run \`mise run build\` first"
+    exit 1
+  fi
+else
+  section "Build"
+  run_long "Installing build dependencies" bun install
+  run_long "Building the UI" bash -c 'cd ui && bunx vite build'
+  # Compile through the one build task so the flags can't drift from a local
+  # `mise run build`: it generates the embed manifest from ui/dist, embeds the
+  # sourcemap (readable src/*.ts stack frames), bakes the commit (EXC-452), and
+  # copies the UI tree beside the binary as a fallback. Run as a plain bash script
+  # so the installer needs only bun, not mise; in dry-run run_long records it
+  # without executing, so its `git rev-parse` never fires in a non-checkout.
+  # build-ui above leaves ui/dist in place for it.
+  run_long "Compiling the caret binary" bash .mise/tasks/build-bin
 
-if [ "$DRY_RUN" -eq 0 ] && [ ! -x bin/caret ]; then
-  err "build did not produce bin/caret"
-  exit 1
+  if [ "$DRY_RUN" -eq 0 ] && [ ! -x bin/caret ]; then
+    err "build did not produce bin/caret"
+    exit 1
+  fi
 fi
 
 # --- register ---------------------------------------------------------------
@@ -303,6 +356,24 @@ run claude plugin uninstall "${PLUGIN}@${MARKETPLACE}" >/dev/null 2>&1 || true
 run claude plugin install "${PLUGIN}@${MARKETPLACE}" --scope user >/dev/null
 run claude plugin enable "${PLUGIN}@${MARKETPLACE}" >/dev/null 2>&1 || true
 ok
+
+# --- daemon cycle (--from-local only) ---------------------------------------
+# Prewarm so the fresh build takes over the daemon (EXC-555). The just-built
+# `caret prewarm` runs ensureDaemon, whose build fingerprint differs from the
+# running daemon's, so its same-world/state-dir-gated takeover retires the old
+# daemon and spawns this build — no explicit "kill the daemon" step. The handoff
+# is best-effort in two ways: `|| true` keeps a hiccup from aborting the install,
+# and ensureDaemon REUSES (does not retire) a daemon it can't step down — a
+# legacy build with no /api/retire endpoint and no lock file — which then keeps
+# serving until it idle-exits. prewarm can't report which path it took, so this
+# step does NOT claim the swap is done; it reports only that prewarm ran. Routed
+# through run(), so CARET_DRY_RUN previews it and never performs a real handoff.
+if [ "$FROM_LOCAL" -eq 1 ]; then
+  section "Daemon"
+  step "Prewarming the fresh build's daemon"
+  run ./bin/caret prewarm >/dev/null 2>&1 || true
+  ok
+fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
   print_plan

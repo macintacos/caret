@@ -267,6 +267,17 @@ Biome lint, `tsc --noEmit`, and `svelte-check` — formatting, linting, and type
 folded into `hk.pkl`'s `check` hook, so an unformatted or tab-indented file fails the gate instead
 of being silently reflowed at commit time.
 
+`mise run build --install` goes one step further than `mise run build`: after building, it
+hands the fresh `bin/caret` + `bin/ui` to `scripts/install.sh --from-local`, which reuses those
+artifacts (no rebuild), reinstalls the caret plugin through Claude Code's native plugin system,
+and prewarms so the just-built binary takes over the daemon — so after a `/reload-plugins` (or a
+Claude Code restart) `/caret:*` resolves to your local build. The handoff retires a current-build
+daemon automatically; a long-running daemon from an older build (no retire endpoint, no lock file)
+can't be retired and keeps serving until you restart it once — `kill` its pid, then any review
+respawns the fresh build. It mutates your Claude plugin state and daemon, so it is for local
+development only, not CI; run `CARET_DRY_RUN=1 mise run build --install` to preview the install
+steps without performing them.
+
 `mise run dev` is self-contained — no separate `bin/caret daemon` needed. It starts an isolated
 caret daemon as `caret daemon --ephemeral`, which binds an OS-assigned port; the dev task discovers
 the real port from the daemon's lock file (`$XDG_STATE_HOME/caret/daemon.lock`, written after the
