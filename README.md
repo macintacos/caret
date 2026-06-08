@@ -275,11 +275,13 @@ ephemeral `XDG_STATE_HOME`, so any number of `mise run dev` sessions coexist —
 port and state dir, and Vite auto-increments its UI port per session. The daemon is seeded with one
 fake pending plan, and a driver plays the agent's side through the real review hook path: each
 request-changes appends a revision section quoting your feedback and resubmits, and approve re-seeds
-a fresh plan, with real hook records landing in the dev state dir's `caret.log`. The driver also
-seeds a genuinely-new review (fresh session, fresh review id) every 15 seconds by default, capped at
-three unresolved extras at a time — grant notifications, background the tab, and the next seed fires
-a clickable desktop notification. Set `CARET_DEV_NEW_REVIEW_MS` to tune the cadence in milliseconds
-(`0` disables); the driver logs the seeder's armed/disabled state at boot either way. One
+a fresh plan, with real hook records landing in the dev state dir's `caret.log`. The recurring
+extra-review seeder is off by default — pass `mise run dev --notify` to arm it. When armed, it
+seeds a genuinely-new review (fresh session, fresh review id) every 15 seconds, capped at three
+unresolved extras at a time — grant notifications, background the tab, and the next seed fires a
+clickable desktop notification. Set `CARET_DEV_NEW_REVIEW_MS` to a positive interval in
+milliseconds to tune the cadence (`0` disables); an explicit value overrides `--notify`, and the
+driver logs the seeder's armed/off state at boot either way. One
 notification gotcha: browser notification grants are per-origin **including the port**, so when an
 orphaned dev server squats Vite's port and a new session auto-increments to the next one, the UI
 lands on a fresh origin whose permission is back to "default" — the bell shows the muted "?" again
