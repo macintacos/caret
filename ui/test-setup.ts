@@ -14,14 +14,15 @@
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 
 if (!(globalThis as { document?: unknown }).document) {
-  const native = {
-    fetch: globalThis.fetch,
-    Response: globalThis.Response,
-    Request: globalThis.Request,
-    Headers: globalThis.Headers,
-  };
+  // Capture the natives as full descriptors before register so the restore is
+  // faithful — Bun's globals are enumerable, and a value-only redefine would
+  // leave them non-enumerable (happy-dom's value).
+  const keys = ["fetch", "Response", "Request", "Headers"] as const;
+  const native = keys.map(
+    (key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const,
+  );
   GlobalRegistrator.register();
-  for (const [key, value] of Object.entries(native)) {
-    Object.defineProperty(globalThis, key, { value, writable: true, configurable: true });
+  for (const [key, descriptor] of native) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
   }
 }
