@@ -6,6 +6,7 @@
 //
 // CLI surface the task drives (one line of stdout per success):
 //   dev-env.ts never-idle-ms              → "<NEVER_IDLE_MS>"
+//   dev-env.ts seeder-default-ms          → "<SEEDER_DEFAULT_MS>"
 //   dev-env.ts port-mode <CARET_DEV_PORT> → "ephemeral" | "fixed <port>"
 //   dev-env.ts discover-port <lock> <world> <daemonPid> → "<port>"
 // Any error exits non-zero with a message on stderr; the task aborts loudly.
@@ -14,6 +15,7 @@ import type { DaemonLock } from "../../src/build-id.ts";
 import { DEFAULT_PORT, NEVER_IDLE_MS } from "../../src/constants.ts";
 import { isPidAlive } from "../../src/daemon-lifecycle.ts";
 import { readJsonFileSync } from "../../src/json-file.ts";
+import { SEEDER_DEFAULT_MS } from "./protocol.ts";
 
 /** Decide how the dev daemon binds its port from CARET_DEV_PORT. Unset →
  * ephemeral (an OS-assigned port, discovered from the lock). Set → that fixed
@@ -88,6 +90,10 @@ async function main(argv: string[]): Promise<void> {
   const [cmd, ...rest] = argv;
   if (cmd === "never-idle-ms") {
     process.stdout.write(`${NEVER_IDLE_MS}\n`);
+    return;
+  }
+  if (cmd === "seeder-default-ms") {
+    process.stdout.write(`${SEEDER_DEFAULT_MS}\n`);
     return;
   }
   if (cmd === "port-mode") {
