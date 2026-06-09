@@ -31,13 +31,7 @@ playwright/.cache/
 # Nested worktrees (parity with the repo root)
 .claude/worktrees/
 
-# Project CLAUDE.md files are intentionally NOT contributed. In practice they
-# tend to be overly broad and not helpful to everyone else. Before adding one,
-# ask yourself two things:
-#   1. Should this be a rule instead? Scoped, discoverable guidance belongs in
-#      .claude/rules/ — see https://code.claude.com/docs/en/memory (the
-#      "Organize rules with .claude/rules/" section).
-#   2. Is it a net benefit to everyone working on the project, or just your own
-#      preference? Personal preferences belong in your global ~/.claude/CLAUDE.md
-#      or in .claude/settings.local.json, not in the repo.
-/CLAUDE.md
+# caret's CLAUDE.md is intentionally checked in — it is the routing index for
+# docs/agents/. Force-track it even when a global core.excludesFile ignores
+# CLAUDE.md (a common personal-dotfiles default).
+!/CLAUDE.md

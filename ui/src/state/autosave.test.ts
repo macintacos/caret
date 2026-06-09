@@ -13,7 +13,7 @@ interface SaveCall {
 
 // A manual timer: createAutosave's debounce is driven by `setTimer`/`clearTimer`
 // so tests fire the flush deterministically instead of sleeping (cf.
-// browser-testing.md's "inject the clock" rule).
+// docs/agents/browser-testing.md's "inject the clock" rule).
 function makeTimer() {
   let pending: (() => void) | null = null;
   let nextHandle = 1;

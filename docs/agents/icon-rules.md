@@ -1,8 +1,3 @@
----
-name: icon-rules
-description: Conventions for caret's vendored Lucide icons — verbatim SVGs, the Icon.svelte render path, and the checklist for adding one.
----
-
 # Icon Rules
 
 caret's icons are [Lucide](https://lucide.dev) SVGs vendored verbatim into `ui/src/icons/`, one file

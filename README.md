@@ -244,7 +244,7 @@ To raise verbosity, set `level = "debug"` in `config.toml`'s `[logging]` table
   paste into a bug report. Complements `/caret:debug` (the session timeline): discovery is the
   point-in-time snapshot of the installation.
 
-Contributors should see `.claude/rules/logging-rules.md` for the logging conventions — when to log,
+Contributors should see `docs/agents/logging-rules.md` for the logging conventions — when to log,
 levels, and message style.
 
 ## Development
@@ -305,7 +305,7 @@ at a time.
 built `ui/dist/` artifact on an OS-assigned port with ephemeral state, so the suite never touches your
 real daemon or `~/.local/state/caret`. `mise run setup` installs the Chromium browser the specs
 drive. For when to write an e2e spec versus a `bun test` unit versus throwaway exploration, see
-`.claude/rules/browser-testing.md`.
+`docs/agents/browser-testing.md`.
 
 For a quick local trial without installing, load the plugin from a checkout:
 
@@ -319,7 +319,7 @@ claude --plugin-dir ./    # load caret's hooks for this session only
 
 caret's icons are [Lucide](https://lucide.dev) SVGs vendored verbatim at a pinned release under
 `ui/src/icons/`, rendered by `ui/src/components/Icon.svelte`. Adding one means following the
-checklist in `.claude/rules/icon-rules.md` and adding a row to
+checklist in `docs/agents/icon-rules.md` and adding a row to
 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 
 ## Layout

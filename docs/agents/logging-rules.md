@@ -1,8 +1,3 @@
----
-name: logging-rules
-description: Contributor conventions for caret's pino NDJSON logging — when to log, levels, message style, redaction, and where logs live.
----
-
 # Logging Rules
 
 caret logs as leveled NDJSON via pino, across two sinks — plus a browser bridge that writes through
