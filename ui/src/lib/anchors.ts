@@ -300,7 +300,7 @@ export function resolveAnnotation(
     const occurrences = allOccurrences(text, ann.quote);
     const start =
       occurrences.length === 1
-        ? occurrences[0]!
+        ? occurrences[0]
         : pickByContext(text, occurrences, ann.quote.length, ann.prefix, ann.suffix);
     if (start != null) {
       const end = start + ann.quote.length;
