@@ -1,6 +1,6 @@
 // The vendored Lucide icon registry. Each name maps 1:1 to a verbatim SVG at
 // ui/src/icons/<name>.svg (EXC-395); icons.test.ts enforces the bijection and
-// per-file invariants. Adding an icon: see .claude/rules/icon-rules.md.
+// per-file invariants. Adding an icon: see docs/agents/icon-rules.md.
 export const ICON_NAMES = [
   "bell",
   "bell-off",

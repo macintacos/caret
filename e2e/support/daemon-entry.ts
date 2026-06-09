@@ -6,7 +6,7 @@
 // the e2e boot needs four things the production boot can't offer, and a shared
 // factory would have to be parameterized across every one of them — speculative
 // abstraction for a single extra call site (the no-speculative-abstraction rule
-// in typescript-rules.md), so the parallel boot stays explicit. The deltas:
+// in docs/agents/typescript-rules.md), so the parallel boot stays explicit. The deltas:
 //
 //   1. OS-assigned port (port 0). `caret daemon --ephemeral` does bind port 0,
 //      but every other CLI path resolves the port through the settings layer,

@@ -7,7 +7,7 @@
 //
 // A .svelte.ts module so the flag is a rune ($state) App can react to. Not
 // imported by any bun test — the first-paint ordering it drives is real-browser
-// behavior, verified by e2e (per browser-testing.md).
+// behavior, verified by e2e (per docs/agents/browser-testing.md).
 
 let ready = $state(false);
 

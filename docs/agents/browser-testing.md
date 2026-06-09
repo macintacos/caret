@@ -1,8 +1,3 @@
----
-name: browser-testing
-description: How to choose where browser behavior gets tested — committed Playwright e2e, bun-test units, or throwaway exploration — plus the e2e harness contract and timing discipline.
----
-
 # Browser Testing Rules
 
 caret has two committed test layers plus an ad-hoc exploration path. Picking the wrong one is the

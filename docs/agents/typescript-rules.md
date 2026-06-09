@@ -1,8 +1,3 @@
----
-name: typescript-rules
-description: caret's TypeScript and module idioms — dependency injection for testability, file-split seams, the shared-helper policy, zod boundary validation, and test-assertion discipline.
----
-
 # TypeScript Rules
 
 These are the module-shaping habits that keep caret's core testable and legible. They bias toward

@@ -1,8 +1,3 @@
----
-name: settings-rules
-description: A new user setting must land with its README documentation in the same change.
----
-
 # Settings Rules
 
 When you introduce a new user setting — a `config.toml` key or a `CARET_*` environment variable — it
