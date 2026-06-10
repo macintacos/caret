@@ -109,8 +109,15 @@ export function createPlanNotifier(opts: PlanNotifierOptions): PlanNotifier {
       // never per-tick.
       const skip = !isAway() ? "active" : permission() !== "granted" ? "permission" : null;
       if (skip) {
+        // A skipped notification is otherwise invisible. The permission skip in
+        // the *undecided* (default) state is the one that masquerades as a
+        // broken feature on a fresh per-origin install (EXC-559): log it at info
+        // so it's discoverable without debug logging. `denied` already shows a
+        // prominent danger bell, and `active` means the user is on the tab and
+        // sees the review render — both stay at debug.
+        const level = skip === "permission" && permission() === "default" ? "info" : "debug";
         for (const r of fresh) {
-          uiLog.debug("ui", `plan notification skipped (${skip}): ${shortId(r.id)}`, {
+          uiLog[level]("ui", `plan notification skipped (${skip}): ${shortId(r.id)}`, {
             reviewId: r.id,
           });
         }

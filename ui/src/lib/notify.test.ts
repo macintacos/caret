@@ -313,7 +313,7 @@ describe("createPlanNotifier instrumentation", () => {
     expect(rec?.msg).toContain("active");
   });
 
-  test("a new id without permission logs a skip", () => {
+  test("a new id while permission is denied logs a debug skip", () => {
     const { notifier, fired } = makeNotifier();
     notifier.observe([]);
     permission = "denied";
@@ -321,10 +321,28 @@ describe("createPlanNotifier instrumentation", () => {
     flush();
 
     expect(fired).toHaveLength(0);
-    // Stable contract: a debug-level skip classified "permission" — the cause
-    // (permission, not active) is the behavioral distinction; match it loosely.
+    // Stable contract: a debug-level skip classified "permission". Denied stays
+    // at debug — the bell already shows a prominent danger state, so the skip
+    // doesn't masquerade as broken (unlike the undecided case below, EXC-559).
     const rec = cap.events()[0];
     expect(rec).toMatchObject({ level: "debug", extra: { reviewId: REVIEW_ID } });
+    expect(rec?.msg).toContain("skipped");
+    expect(rec?.msg).toContain("permission");
+  });
+
+  test("a new id while permission is undecided logs an info skip (EXC-559)", () => {
+    const { notifier, fired } = makeNotifier();
+    notifier.observe([]);
+    permission = "default";
+    notifier.observe([review(REVIEW_ID)]);
+    flush();
+
+    expect(fired).toHaveLength(0);
+    // Stable contract: the undecided (default) permission skip logs at INFO, so a
+    // fresh per-origin install's silent skip is discoverable without debug
+    // logging (EXC-559). Match the cause loosely, pin the level.
+    const rec = cap.events()[0];
+    expect(rec).toMatchObject({ level: "info", step: "ui", extra: { reviewId: REVIEW_ID } });
     expect(rec?.msg).toContain("skipped");
     expect(rec?.msg).toContain("permission");
   });
