@@ -260,8 +260,8 @@ test("runExtraReview runs one fresh-session review to resolution and stops", asy
 
 // ---- seederInterval ----
 
-test("seederInterval defaults on when unset", () => {
-  expect(seederInterval(undefined)).toEqual({ ms: 15_000, invalid: false });
+test("seederInterval is off when unset (the seeder is opt-in via --notify)", () => {
+  expect(seederInterval(undefined)).toEqual({ ms: null, invalid: false });
 });
 
 test("seederInterval honors an explicit positive interval", () => {

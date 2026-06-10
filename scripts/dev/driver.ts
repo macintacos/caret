@@ -130,26 +130,25 @@ export async function run(): Promise<void> {
   const base = `http://127.0.0.1:${process.env.CARET_PORT}`;
   const v1 = await Bun.file(`${import.meta.dir}/fake-plan.md`).text();
   const deps = devReviewDeps(base);
-  // Extra-review seeder (EXC-427), ON by default: seed a genuinely-new review
-  // — fresh session, fresh review id — every interval tick, so backgrounding
-  // the tab demos a real "new plan" desktop notification with no setup.
-  // CARET_DEV_NEW_REVIEW_MS tunes the cadence; 0 disables. Loud at boot in
-  // every case — a silent no-op here is indistinguishable from a broken
-  // notification.
+  // Extra-review seeder (EXC-427), OFF by default: when armed it seeds a
+  // genuinely-new review — fresh session, fresh review id — every interval
+  // tick, so backgrounding the tab demos a real "new plan" desktop
+  // notification with no setup. `mise run dev --notify` arms it at the default
+  // cadence; CARET_DEV_NEW_REVIEW_MS tunes the cadence (0 disables). Loud at
+  // boot in every case — a silent no-op here is indistinguishable from a
+  // broken notification.
   const rawNewReviewMs = process.env.CARET_DEV_NEW_REVIEW_MS;
   const { ms: intervalMs, invalid } = seederInterval(rawNewReviewMs);
   if (invalid) {
     log(`CARET_DEV_NEW_REVIEW_MS invalid (want integer ms; 0 disables): ${rawNewReviewMs}`);
   }
   if (intervalMs !== null) {
-    log(
-      `extra-review seeder armed: a new review every ${intervalMs}ms (CARET_DEV_NEW_REVIEW_MS=0 disables)`,
-    );
+    log(`extra-review seeder armed: a new review every ${intervalMs}ms`);
     void runExtraSeeder(intervalMs, {
       seed: (n) => runExtraReview(`${DEV_SESSION}-extra-${n}`, extraPlan(v1, n), deps),
     }).catch((err) => log(`extra-review seeder stopped: ${err}`));
   } else {
-    log("extra-review seeder disabled (CARET_DEV_NEW_REVIEW_MS=0)");
+    log("extra-review seeder off (pass --notify to arm; CARET_DEV_NEW_REVIEW_MS tunes)");
   }
   let state: DriverState = { plan: v1, revision: 0 };
   for (;;) {
