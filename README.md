@@ -124,8 +124,9 @@ Grants are **per-origin** (scheme + host + port). The installed build opens the 
 vanity origin `http://caret.localhost:42718`, which is a different origin from `mise run dev`'s Vite
 server (`localhost:5173`) — so a grant made in dev does **not** carry over. On the installed build,
 grant notifications once on `caret.localhost:42718` via the bell (it shows the undecided "?" state
-until you do). Until granted, a new plan logs `plan notification skipped (permission)` at info in the
-daemon log, so a missing grant is visible without enabling debug logging.
+until you do). While the grant stays undecided, a new plan logs `plan notification skipped
+(permission)` at info in the daemon log, so a missing grant is visible without enabling debug
+logging.
 
 If the test click produces no toast, the page's side worked (the daemon log shows the fired/shown
 records) and the OS is suppressing it — a granted notification the OS blocks fails silently, with no

@@ -108,10 +108,14 @@ export interface CaretServer {
 export const VANITY_HOST = "caret.localhost";
 
 /** Liveness window for a UI client (EXC-559). The UI polls GET /api/reviews
- * every ~2s; a small multiple tolerates a missed tick or slow network without
- * treating a just-closed tab as still live. The hook reads the resulting
- * hasLiveClient flag (on the create response) to decide whether to foreground
- * the browser — see isClientLive. */
+ * every ~2s; a small multiple tolerates a missed tick or slow network. Kept
+ * small on purpose: a window long enough to also cover a heavily-throttled
+ * background tab (browsers slow hidden-tab timers after minutes) would treat a
+ * just-closed tab as still live and never foreground its review. So a
+ * deeply-backgrounded tab instead reads as not-live and falls back to
+ * foregrounding — the prior behavior, which still surfaces the review. The hook
+ * reads the resulting hasLiveClient flag (on the create response) to decide
+ * whether to foreground the browser — see isClientLive. */
 const LIVE_CLIENT_WINDOW_MS = 6000;
 
 /** Whether a UI client polled the reviews list recently enough to count as live
