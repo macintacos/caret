@@ -22,6 +22,7 @@
   import RequestChangesDialog from "./components/RequestChangesDialog.svelte";
   import Toc from "./components/Toc.svelte";
   import TopBar from "./components/TopBar.svelte";
+  import VersionBadge from "./components/VersionBadge.svelte";
 
   // ----- Reactive backing state -----
   // `daemonChanged`: set when the daemon behind the port is replaced (its
@@ -44,6 +45,12 @@
   // probe to show the "local build" badge. A daemon predating the field omits
   // it, so this stays false.
   let isDev = $state(false);
+  // The running build's version + commit (EXC-561), read once from the same
+  // health probe to feed the bottom-left VersionBadge. Undefined until the probe
+  // lands (or for a daemon predating the fields); the badge self-gates on
+  // `version` and degrades when `commit` is absent.
+  let version = $state<string | undefined>(undefined);
+  let commit = $state<string | undefined>(undefined);
   let work = $state<{
     annotations: Annotation[];
     generalCommentDraft: string;
@@ -105,6 +112,8 @@
         selection.setConnected(true);
         declaredVariants = h.approveVariants;
         isDev = h.isDev ?? false;
+        version = h.version;
+        commit = h.commit;
       })
       .catch(() => selection.setConnected(false));
 
@@ -253,6 +262,11 @@
     <EmptyState connected={selection.connected} />
   {/if}
 </div>
+
+<!-- Viewport-pinned build badge (EXC-561). A root sibling of .shell, not inside
+     the grid, so it's always visible regardless of review state; self-gates on
+     `version` until the health probe lands. -->
+<VersionBadge {version} {commit} />
 
 {#if showDialog && active}
   <RequestChangesDialog
