@@ -244,7 +244,7 @@ To raise verbosity, set `level = "debug"` in `config.toml`'s `[logging]` table
   paste into a bug report. Complements `/caret:debug` (the session timeline): discovery is the
   point-in-time snapshot of the installation.
 
-Contributors should see `.claude/rules/logging-rules.md` for the logging conventions — when to log,
+Contributors should see `docs/agents/logging-rules.md` for the logging conventions — when to log,
 levels, and message style.
 
 ## Development
@@ -266,6 +266,17 @@ mise run preflight  # check-only pre-push gate: lint + tests (unit ∥ e2e) + bu
 Biome lint, `tsc --noEmit`, and `svelte-check` — formatting, linting, and type checking are all
 folded into `hk.pkl`'s `check` hook, so an unformatted or tab-indented file fails the gate instead
 of being silently reflowed at commit time.
+
+`mise run build --install` goes one step further than `mise run build`: after building, it
+hands the fresh `bin/caret` + `bin/ui` to `scripts/install.sh --from-local`, which reuses those
+artifacts (no rebuild), reinstalls the caret plugin through Claude Code's native plugin system,
+and prewarms so the just-built binary takes over the daemon — so after a `/reload-plugins` (or a
+Claude Code restart) `/caret:*` resolves to your local build. The handoff retires a current-build
+daemon automatically; a long-running daemon from an older build (no retire endpoint, no lock file)
+can't be retired and keeps serving until you restart it once — `kill` its pid, then any review
+respawns the fresh build. It mutates your Claude plugin state and daemon, so it is for local
+development only, not CI; run `CARET_DRY_RUN=1 mise run build --install` to preview the install
+steps without performing them.
 
 `mise run dev` is self-contained — no separate `bin/caret daemon` needed. It starts an isolated
 caret daemon as `caret daemon --ephemeral`, which binds an OS-assigned port; the dev task discovers
@@ -296,7 +307,7 @@ at a time.
 built `ui/dist/` artifact on an OS-assigned port with ephemeral state, so the suite never touches your
 real daemon or `~/.local/state/caret`. `mise run setup` installs the Chromium browser the specs
 drive. For when to write an e2e spec versus a `bun test` unit versus throwaway exploration, see
-`.claude/rules/browser-testing.md`.
+`docs/agents/browser-testing.md`.
 
 For a quick local trial without installing, load the plugin from a checkout:
 
@@ -310,7 +321,7 @@ claude --plugin-dir ./    # load caret's hooks for this session only
 
 caret's icons are [Lucide](https://lucide.dev) SVGs vendored verbatim at a pinned release under
 `ui/src/icons/`, rendered by `ui/src/components/Icon.svelte`. Adding one means following the
-checklist in `.claude/rules/icon-rules.md` and adding a row to
+checklist in `docs/agents/icon-rules.md` and adding a row to
 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 
 ## Layout

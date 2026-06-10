@@ -5,7 +5,7 @@ import { createScrollSpy } from "./scrollspy.ts";
 // happy-dom registers an inert IntersectionObserver (it never fires its
 // callback), so a controllable mock is installed onto globalThis: it captures
 // the constructor callback + options and lets a test drive synthetic entries
-// deterministically, mirroring "units inject, never wait" from browser-testing.md.
+// deterministically, mirroring "units inject, never wait" from docs/agents/browser-testing.md.
 
 interface MockEntryInit {
   target: Element;

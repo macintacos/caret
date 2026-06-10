@@ -7,10 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-06-09 - The Adapter Release
+
 ### Added
 
+- **Codex support.** caret now drives OpenAI Codex alongside Claude Code, selected through a
+  pluggable adapter registry — the core/adapter seam proven with a real second agent (#58,
+  #71, #87, #89).
+- **Desktop notifications** for new plans, with a permission bell badge in the UI (#49).
+- **Multiple concurrent daemons**, so separate projects can each run their own review session
+  at the same time (#45).
+- **Configuration file.** A `config.toml` and settings service unify every `CARET_*`
+  environment variable under one place (#27, #39).
+- **Leveled logging.** Info-level-by-default logs with redaction of identifiable data so logs
+  are shareable, caller location on every record, the runtime commit logged at startup, and a
+  browser-UI → daemon log bridge (#28, #30, #35, #40, #41).
+- **Discovery diagnostics.** A `caret` diagnostics command surfaces how caret detected — or
+  failed to detect — your agent and install (#47).
+- **Vanity origin.** The review UI opens under `caret.localhost` instead of a bare localhost
+  port (#48).
+- **Persistent draft.** The "Request Changes" general-comment draft is now saved per review
+  (#22).
 - Logging and configuration docs: a README "Logging & Debugging" section, `config.toml`
   documentation, and checked-in contributor rules for logging conventions and settings (#31).
+- A `--install` flag for `mise run build` (#105).
+
+### Changed
+
+- **Tool-agnostic core.** The daemon and core were decoupled from Claude-specific concepts: an
+  `AgentAdapter` interface owns decision emission, approval variants became adapter
+  capabilities, and the daemon's resolve/prefs no longer hard-code Claude mode names (#71, #73,
+  #80, #81, #88).
+- **UI overhaul.** All iconography is now vendored Lucide SVGs, the typeface stack prefers
+  Inter Display, monospace is reserved for code and intentional accents, and the plan
+  table-of-contents was redesigned as a hover-expanding tick rail (#24, #29, #36, #42, #43).
+- **Faster, leaner UI build.** Shiki grammars load as lazy dynamic-import chunks, and the UI
+  is embedded as a multi-asset build via a generated manifest (#82, #83).
+- Agent rules are now routed through a checked-in `CLAUDE.md` (#107).
+- Local dev builds are flagged in the UI so they're distinguishable from released builds
+  (#103).
+- Preflight runs in parallel behind a live task display (#46).
+
+### Fixed
+
+- Stale pending reviews now expire on hook timeout and resubmit, instead of hanging (#37).
+- `install.sh` build drift and duplicated UI-fallback copy are corrected (#52).
+
+### Security
+
+- Plan HTML is sanitized last with an explicit DOMPurify allowlist, hardened by an adversarial
+  XSS test suite (#90, #92).
+- A safe-method CSRF guard and a no-CORS posture protect the daemon's HTTP surface (#95).
+- State directories are created `0700` and plan JSON `0600`, unified through `ensureStateDir`
+  (#94).
 
 ## [0.0.3] - 2026-06-02 - The Hardening Release
 
@@ -70,6 +119,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Review decisions are delivered via a bounded poll, fixing missed or delayed
   decision delivery.
 
-[Unreleased]: https://github.com/macintacos/caret/compare/v0.0.3...HEAD
+[Unreleased]: https://github.com/macintacos/caret/compare/v0.0.4...HEAD
+[0.0.4]: https://github.com/macintacos/caret/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/macintacos/caret/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/macintacos/caret/compare/v0.0.1...v0.0.2

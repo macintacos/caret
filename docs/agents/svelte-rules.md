@@ -1,8 +1,3 @@
----
-name: svelte-rules
-description: Svelte 5 conventions for caret's UI — runes in components, orchestration state as plain factories over injected stores, component-logic extraction, the component-test harness, and CSS-token discipline.
----
-
 # Svelte Rules
 
 caret's UI is Svelte 5 (runes). The one shaping decision: reactive *components* hold runes, but the

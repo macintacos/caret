@@ -143,7 +143,7 @@ export function currentCommit(): string {
     // Replaced with a string literal by `--define` in the build scripts
     // (.mise/tasks/build-bin, scripts/install.sh), so prod binaries can't be
     // overridden by runtime env. Deliberately NOT a user setting — it's a
-    // build-time substitution token, exempt from the settings-rules.md
+    // build-time substitution token, exempt from the docs/agents/settings-rules.md
     // README-documentation requirement.
     baked: process.env.CARET_BUILD_COMMIT,
     gitHead: () => {

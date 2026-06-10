@@ -1,8 +1,3 @@
----
-name: architecture-rules
-description: The core/adapter boundary — a flat tool-agnostic core, the single agent-tool adapter axis, the one-way dependency law, and the browser-safe shared-module constraint.
----
-
 # Architecture Rules
 
 caret is a tool-agnostic core plus one adapter axis: the coding agent it speaks to. The boundary is

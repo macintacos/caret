@@ -50,7 +50,7 @@ describe("vendored icon set", () => {
   });
 
   // The licenses table is the one add-an-icon step nothing else gates
-  // (icon-rules.md step 4): keep its rows in bijection with the registry.
+  // (docs/agents/icon-rules.md step 4): keep its rows in bijection with the registry.
   test("THIRD_PARTY_LICENSES.md itemizes every vendored icon", () => {
     const doc = readFileSync(join(import.meta.dir, "../../../THIRD_PARTY_LICENSES.md"), "utf8");
     const rows = [...doc.matchAll(/^\| `([a-z0-9-]+)`\s+\|/gm)].map((m) => m[1]);
