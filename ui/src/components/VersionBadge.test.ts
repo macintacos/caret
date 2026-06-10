@@ -11,6 +11,8 @@ describe("VersionBadge", () => {
     const badge = target.querySelector(".version-badge");
     expect(badge).not.toBeNull();
     expect(badge!.textContent?.trim()).toBe("v0.0.4-222222");
+    // the hover tooltip spells out the version and the same 6-char commit
+    expect(badge!.getAttribute("title")).toContain("commit 222222");
   });
 
   test("degrades to version-only when the commit is the 'unknown' sentinel", () => {

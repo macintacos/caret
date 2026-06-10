@@ -36,8 +36,10 @@
     left: 0.7rem;
     bottom: 0.6rem;
     z-index: 40;
+    display: inline-flex;
+    align-items: center;
     font-family: var(--font-mono);
-    font-size: 0.66rem;
+    font-size: 0.65rem;
     letter-spacing: 0.02em;
     line-height: 1;
     color: var(--ink-soft);
