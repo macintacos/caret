@@ -27,7 +27,13 @@ export interface ReviewDeps {
   parseHookInput: (stdin: string) => PlanInput;
   /** Ensure a daemon is up and return its base URL. */
   ensureDaemon: () => Promise<string>;
-  postReview: (baseUrl: string, input: PlanInput) => Promise<{ id: string }>;
+  /** Create the review. `hasLiveClient` (EXC-559) reports whether a UI tab is
+   * already polling the daemon; when true the hook skips opening the browser so
+   * an open backgrounded tab's away-gated notification isn't pre-empted. */
+  postReview: (
+    baseUrl: string,
+    input: PlanInput,
+  ) => Promise<{ id: string; hasLiveClient?: boolean }>;
   /** One bounded poll: a Decision, or null on a heartbeat (re-poll). Throws on
    * a transient drop so the caller can reconnect. */
   longPoll: (baseUrl: string, id: string) => Promise<Decision | null>;
@@ -90,7 +96,7 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decisi
     step = "ensureDaemon";
     baseUrl = await deps.ensureDaemon();
     step = "postReview";
-    const { id } = await deps.postReview(baseUrl, input);
+    const { id, hasLiveClient } = await deps.postReview(baseUrl, input);
     // From here every record — decision and error alike — carries the reviewId,
     // stitching this stream against the daemon's review/resolve records.
     ctx.reviewId = id;
@@ -99,7 +105,11 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decisi
     const open = new URL(baseUrl);
     open.hostname = VANITY_HOST;
     const url = `${open.origin}/?review=${id}`;
-    deps.openBrowser(url);
+    // EXC-559: a live UI tab already surfaces the review and runs the notifier;
+    // foregrounding the browser would make the tab focused at the poll instant,
+    // pre-empting the away-gated desktop notification. Only open when no tab is
+    // listening (or an older daemon didn't report one — fail-safe to opening).
+    if (!hasLiveClient) deps.openBrowser(url);
     // Also print the URL to stderr — clickable in the transcript if the browser
     // fails to open.
     process.stderr.write(`caret: review this plan at ${url}\n`);

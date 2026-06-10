@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { APPROVE_VARIANTS } from "../../src/adapters/claude/approve.ts";
 import { VERSION } from "../../src/build-id.ts";
+import { isClientLive } from "../../src/daemon.ts";
 import { createDaemonLogger } from "../../src/log.ts";
 import type { Store } from "../../src/store.ts";
 import type { UiAssets } from "../../src/ui-assets.ts";
@@ -285,6 +286,39 @@ test("POST then GET reviews exposes a pending ClientReview", async () => {
   expect(one.version).toBe(1);
   expect(one.title).toBe("My Plan");
   expect(one.status).toBe("pending");
+});
+
+// EXC-559: the hook foregrounds the browser only when no live UI client is
+// already listening. The daemon tracks the last reviews-poll and reports
+// hasLiveClient on the create response; the hook uses it to skip openBrowser so
+// an open, backgrounded tab's away-gated notification isn't pre-empted.
+async function postReviewRaw(body: Record<string, unknown> = {}) {
+  const res = await fetch(`${base}/api/reviews`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ plan: "# P", ...body }),
+  });
+  return (await res.json()) as { id: string; hasLiveClient?: boolean };
+}
+
+test("isClientLive: never-polled, fresh, and stale windows (EXC-559)", () => {
+  expect(isClientLive(0, 1_000_000, 6000)).toBe(false); // never polled
+  expect(isClientLive(1_000_000, 1_000_000, 6000)).toBe(true); // just polled
+  expect(isClientLive(1_000_000, 1_005_999, 6000)).toBe(true); // 5999ms < window
+  expect(isClientLive(1_000_000, 1_006_000, 6000)).toBe(false); // 6000ms not < window
+});
+
+test("POST /api/reviews reports hasLiveClient=false when no UI has polled (EXC-559)", async () => {
+  await boot();
+  const r = await postReviewRaw();
+  expect(r.hasLiveClient).toBe(false);
+});
+
+test("POST /api/reviews reports hasLiveClient=true right after a reviews poll (EXC-559)", async () => {
+  await boot();
+  await fetch(`${base}/api/reviews`); // a live UI client polling the pending list
+  const r = await postReviewRaw();
+  expect(r.hasLiveClient).toBe(true);
 });
 
 test("resolve's 200 flushes BEFORE the long-poll resolves (one-tick defer)", async () => {

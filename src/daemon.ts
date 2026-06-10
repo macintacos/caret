@@ -107,6 +107,20 @@ export interface CaretServer {
  * it internally), so the 127.0.0.1 bind needs no change. */
 export const VANITY_HOST = "caret.localhost";
 
+/** Liveness window for a UI client (EXC-559). The UI polls GET /api/reviews
+ * every ~2s; a small multiple tolerates a missed tick or slow network without
+ * treating a just-closed tab as still live. The hook reads the resulting
+ * hasLiveClient flag (on the create response) to decide whether to foreground
+ * the browser — see isClientLive. */
+const LIVE_CLIENT_WINDOW_MS = 6000;
+
+/** Whether a UI client polled the reviews list recently enough to count as live
+ * (EXC-559). Pure so the load-bearing window is unit-testable by passing the
+ * clock in. `lastPollAt === 0` means no client has ever polled this daemon. */
+export function isClientLive(lastPollAt: number, now: number, windowMs: number): boolean {
+  return lastPollAt !== 0 && now - lastPollAt < windowMs;
+}
+
 // Threat model (EXC-540). The daemon binds loopback only and runs with no auth,
 // for a single-user laptop: any local process can already reach it, so the only
 // adversary the daemon defends against is a *browser* on another origin that the
@@ -305,6 +319,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   let inFlight = 0;
   let stopped = false;
+  // Last time a UI client polled GET /api/reviews — the live-client signal the
+  // hook reads to skip foregrounding the browser (EXC-559). 0 = never polled.
+  let lastReviewsPollAt = 0;
 
   function cancelIdle() {
     if (idleTimer) {
@@ -420,7 +437,11 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     // hook re-creates its entry per heartbeat, but that's bounded by its
     // timeout, whose /expire clears it for good.
     for (const staleId of routed.expired) clearDecision(staleId);
-    return Response.json(routed);
+    // Tell the hook whether a UI tab is already listening (polled recently): if
+    // so it skips foregrounding the browser, so an open backgrounded tab's
+    // away-gated desktop notification isn't pre-empted (EXC-559).
+    const hasLiveClient = isClientLive(lastReviewsPollAt, Date.now(), LIVE_CLIENT_WINDOW_MS);
+    return Response.json({ ...routed, hasLiveClient });
   }
 
   // POST /api/logs — the UI log bridge (EXC-445): the browser ships log events
@@ -457,8 +478,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return new Response(null, { status: 204 });
   }
 
-  // GET /api/reviews — the pending list as client-facing shapes.
+  // GET /api/reviews — the pending list as client-facing shapes. Doubles as the
+  // live-client heartbeat: a UI polls this every ~2s, so stamping the time here
+  // lets handleCreateReview tell the hook whether a tab is already listening
+  // (EXC-559).
   function handleListReviews(): Response {
+    lastReviewsPollAt = Date.now();
     return Response.json(store.list().map(toClientReview));
   }
 
