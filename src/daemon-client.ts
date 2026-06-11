@@ -52,14 +52,20 @@ export async function waitForHealth(
   throw new Error("caret daemon did not become healthy in time");
 }
 
-export async function postReview(baseUrl: string, input: PlanInput): Promise<{ id: string }> {
+export async function postReview(
+  baseUrl: string,
+  input: PlanInput,
+): Promise<{ id: string; hasLiveClient?: boolean }> {
   const res = await fetch(`${baseUrl}/api/reviews`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
   if (!res.ok) throw new Error(`POST /api/reviews failed: ${res.status}`);
-  return (await res.json()) as { id: string };
+  // hasLiveClient is optional: an older daemon (mid-upgrade version skew) omits
+  // it, and the hook treats its absence as "no live client" — i.e. open the
+  // browser, today's behavior (EXC-559).
+  return (await res.json()) as { id: string; hasLiveClient?: boolean };
 }
 
 /** Best-effort expire: short-fused so a dying hook never hangs on it. The

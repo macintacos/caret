@@ -78,6 +78,34 @@ test("browser opens under the caret.localhost vanity origin (EXC-426)", async ()
   expect(opened).toBe("http://caret.localhost:4242/?review=rid");
 });
 
+test("does not open the browser when a live UI client is already polling (EXC-559)", async () => {
+  let opened = false;
+  await runReview(
+    stdin,
+    reviewDeps({
+      postReview: async () => ({ id: "rid", hasLiveClient: true }),
+      openBrowser: () => {
+        opened = true;
+      },
+    }),
+  );
+  expect(opened).toBe(false);
+});
+
+test("opens the browser when no live UI client is polling (EXC-559)", async () => {
+  let opened = false;
+  await runReview(
+    stdin,
+    reviewDeps({
+      postReview: async () => ({ id: "rid", hasLiveClient: false }),
+      openBrowser: () => {
+        opened = true;
+      },
+    }),
+  );
+  expect(opened).toBe(true);
+});
+
 test("deny decision passes the feedback through", async () => {
   const out = await runReview(
     stdin,
