@@ -8,8 +8,14 @@
   import { createLinkHandlers, type LinkHandlers } from "./linkInteractions.ts";
   import { type LinkSpanMap, openLinkInNewTab } from "./links.ts";
   import { type SourceViewLibOptions, toFileOptions } from "./options.ts";
+  import { scrollToLine } from "./scroll.ts";
   import { registerCaretDiffThemes } from "./theme.ts";
-  import type { SourceDocument, SourceLineAnnotation, SourceViewOptions } from "./types.ts";
+  import type {
+    SourceDocument,
+    SourceLineAnnotation,
+    SourceViewApi,
+    SourceViewOptions,
+  } from "./types.ts";
 
   // Teach the library's highlighter caret's themes before the first render
   // selects them. Idempotent, so calling it from each wrapper is safe.
@@ -31,6 +37,10 @@
     /** Opens a clicked link. Defaults to a new tab with noopener,noreferrer;
      * overridable for testing. */
     openUrl?: (href: string) => void;
+    /** Fires once the view's container is bound, handing the parent an
+     * imperative API (currently scroll-to-line) that closes over the container.
+     * Lets callers jump the view without reaching into the library's DOM. */
+    onReady?: (api: SourceViewApi) => void;
   }
 
   let {
@@ -40,6 +50,7 @@
     annotations,
     links,
     openUrl = openLinkInNewTab,
+    onReady,
   }: Props = $props();
 
   // The container div is component markup, so the instance must not remove
@@ -51,6 +62,14 @@
   >({ create: (libOptions) => new File(libOptions, undefined, true) });
 
   let container: HTMLElement | undefined = $state();
+
+  // Hand the parent the scroll-to-line API once the container exists. The
+  // container is stable for the component's life, so this fires once.
+  $effect(() => {
+    if (container == null) return;
+    const el = container;
+    onReady?.({ scrollToLine: (line) => scrollToLine(el, line) });
+  });
 
   // The handlers close over the span map and opener, so they only change when
   // the link layer does — a stable `links` reference keeps them referentially

@@ -21,6 +21,13 @@ export type SourceLineAnnotation = LineAnnotation;
 /** Line annotation on a diff view (carries the side it anchors to). */
 export type SourceDiffLineAnnotation = DiffLineAnnotation;
 
+/** Imperative handle a SourceView hands its parent once mounted. */
+export interface SourceViewApi {
+  /** Scrolls the view so the 1-based source line is at the top of the
+   * viewport. No-op when the line is outside the rendered range. */
+  scrollToLine(line: number): void;
+}
+
 /** Display options caret exposes for the single-document view. */
 export interface SourceViewOptions {
   /** Line overflow behavior (library default: scroll). */
