@@ -65,6 +65,15 @@
     },
   });
 
+  // Discard an open composer when the rendered content changes (a new version
+  // arrives, or the review switches): its line anchor belongs to the prior text,
+  // so submitting it onto the new version would mis-anchor. contentKey is the
+  // reactive trigger.
+  $effect(() => {
+    void contentKey;
+    commenting.cancel();
+  });
+
   // Offset of `lineNumber` (1-based) within the scroll container: the line row's
   // top relative to the container, plus the current scroll. Falls back to 0 when
   // the row isn't found (e.g. virtualized out), keeping the composer in view.
