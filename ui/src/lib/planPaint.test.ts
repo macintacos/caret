@@ -109,6 +109,15 @@ describe("paintAnnotations", () => {
     expect(resolved[0]!.orphaned).toBe(true);
   });
 
+  test("treats a line-anchored annotation as unanchored on this surface (no mark)", () => {
+    const root = article('<p id="b0">Hello world</p>');
+    const lineAnn: Annotation = { id: "l1", startLine: 1, endLine: 2, comment: "c" };
+    const resolved = paintAnnotations(root, [lineAnn], null);
+
+    expect(resolved).toEqual([{ annotation: lineAnn, orphaned: true, top: null }]);
+    expect(root.querySelector("mark[data-annotation]")).toBeNull();
+  });
+
   test("repaints idempotently: a second paint does not accumulate marks", () => {
     const root = article('<p id="b0">Hello world</p>');
     paintAnnotations(root, [ann({})], null);

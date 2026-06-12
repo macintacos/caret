@@ -11,7 +11,7 @@
 
 import "../../test-setup.ts";
 import { describe, expect, test } from "bun:test";
-import type { Annotation } from "@core/types";
+import type { LegacyAnnotation } from "@core/types";
 import { resolveAnnotation } from "./anchors.ts";
 import { renderPlan } from "./render.ts";
 
@@ -28,7 +28,7 @@ function mount(plan: string): (blockId: string) => HTMLElement | null {
 const V1 = "The quick brown fox jumps over the lazy dog.\n";
 
 const QUOTE = "brown fox";
-const baseAnn: Annotation = {
+const baseAnn: LegacyAnnotation = {
   id: "a1",
   blockId: "b0",
   startOffset: 10,
@@ -103,7 +103,7 @@ describe("cross-version re-anchor", () => {
 describe("cross-version re-anchor with prefix/suffix context", () => {
   // Annotated against v1: "brown fox" at [10,19), with the surrounding context.
   const CTX_QUOTE = "brown fox";
-  const ctxAnn: Annotation = {
+  const ctxAnn: LegacyAnnotation = {
     id: "a2",
     blockId: "b0",
     startOffset: 10,
@@ -131,7 +131,7 @@ describe("cross-version re-anchor with prefix/suffix context", () => {
   test("context picks the SECOND occurrence when its surroundings match", () => {
     // Same duplicated text, but the stored context matches the LATER sentence —
     // confirms the pick follows the context, not a fixed position.
-    const lateAnn: Annotation = {
+    const lateAnn: LegacyAnnotation = {
       ...ctxAnn,
       // Offsets deliberately stale so tier 1 misses and tier 2 must choose.
       startOffset: 99,

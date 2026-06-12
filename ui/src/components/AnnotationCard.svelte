@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Annotation } from "@core/types";
+  import { type Annotation, isLegacyAnnotation } from "@core/types";
   import { isCancelKey, isSubmitChord } from "../lib/keys.ts";
 
   interface Props {
@@ -66,7 +66,16 @@
         >detached</span
       >
     {/if}
-    <blockquote class="quote">{annotation.quote}</blockquote>
+    {#if isLegacyAnnotation(annotation)}
+      <blockquote class="quote">{annotation.quote}</blockquote>
+    {:else}
+      <!-- Line-anchored: no quoted text on this surface, cite the line range. -->
+      <blockquote class="quote"
+        >{annotation.startLine === annotation.endLine
+          ? `Line ${annotation.startLine}`
+          : `Lines ${annotation.startLine}-${annotation.endLine}`}</blockquote
+      >
+    {/if}
   </header>
 
   {#if editing}

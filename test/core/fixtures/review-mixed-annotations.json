@@ -1,0 +1,36 @@
+{
+  "id": "mixed-annotations-review-0001",
+  "sessionId": "fixture-session",
+  "cwd": "/tmp/fixture",
+  "title": "Mixed-annotation fixture plan",
+  "status": "pending",
+  "planEpoch": 0,
+  "versions": [
+    {
+      "version": 1,
+      "plan": "# Fixture plan\n\nFirst paragraph under review.\n\nSecond paragraph under review.",
+      "annotations": [
+        {
+          "id": "legacy-1",
+          "blockId": "b1",
+          "startOffset": 0,
+          "endOffset": 15,
+          "quote": "First paragraph",
+          "prefix": "",
+          "suffix": " under review.",
+          "comment": "selection-anchored comment"
+        },
+        {
+          "id": "line-1",
+          "startLine": 3,
+          "endLine": 3,
+          "comment": "line-anchored comment"
+        }
+      ],
+      "createdAt": 1700000000000
+    }
+  ],
+  "generalCommentDraft": "overall: promising",
+  "createdAt": 1700000000000,
+  "updatedAt": 1700000001000
+}

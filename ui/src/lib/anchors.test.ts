@@ -1,6 +1,6 @@
 import "../../test-setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
-import type { Annotation } from "@core/types";
+import type { LegacyAnnotation } from "@core/types";
 import {
   contextAround,
   offsetsToRange,
@@ -63,7 +63,7 @@ describe("offsetsToRange / rangeToOffsets round-trip", () => {
 });
 
 describe("resolveAnnotation tiers", () => {
-  const ann = (over: Partial<Annotation>): Annotation => ({
+  const ann = (over: Partial<LegacyAnnotation>): LegacyAnnotation => ({
     id: "a1",
     blockId: "b0",
     startOffset: 0,

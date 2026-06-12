@@ -208,7 +208,16 @@ const ResolveBodySchema: z.ZodType<ResolveBody> = z
 // leaves an absent field untouched (`!= null`), so a draft-only write never
 // wipes annotations and vice versa. An explicit null normalizes to undefined so
 // a malformed null payload is treated as absent, not a clobber.
-const AnnotationSchema = z.object({
+const LineAnnotationSchema = z
+  .object({
+    id: z.string(),
+    // 1-based, inclusive line range into the stored plan version's text.
+    startLine: z.number().int().min(1),
+    endLine: z.number().int().min(1),
+    comment: z.string(),
+  })
+  .refine((a) => a.endLine >= a.startLine, { message: "endLine must be >= startLine" });
+const LegacyAnnotationSchema = z.object({
   id: z.string(),
   blockId: z.string(),
   startOffset: z.number(),
@@ -220,6 +229,25 @@ const AnnotationSchema = z.object({
   suffix: z.string().optional(),
   comment: z.string(),
 });
+const AnnotationSchema = z.union([LineAnnotationSchema, LegacyAnnotationSchema]);
+
+/** Finds the first annotations entry that claims the line-anchored shape
+ * (carries `startLine` or `endLine`) but fails LineAnnotationSchema. A
+ * malformed line anchor is a client bug and rejects with 400; everything else
+ * keeps the body-level degrade tolerance. Returns the validation message, or
+ * null when no entry claims the shape badly. */
+function malformedLineAnchor(raw: unknown): string | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const anns = (raw as { annotations?: unknown }).annotations;
+  if (!Array.isArray(anns)) return null;
+  for (const a of anns) {
+    if (typeof a !== "object" || a === null) continue;
+    if (!("startLine" in a || "endLine" in a)) continue;
+    const res = LineAnnotationSchema.safeParse(a);
+    if (!res.success) return res.error.issues[0]?.message ?? "invalid line anchor";
+  }
+  return null;
+}
 const nullToUndefined = <T>(v: T | null | undefined): T | undefined => v ?? undefined;
 const DraftBodySchema: z.ZodType<DraftBody> = z
   .object({
@@ -565,7 +593,10 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // draft. Each field is independently optional so a draft-only write never
   // wipes annotations (and vice versa) — an omitted field is left alone.
   async function handleDraft(req: Request, id: string): Promise<Response> {
-    const body: DraftBody = await parseBody(req, DraftBodySchema);
+    const raw: unknown = await req.json().catch(() => ({}));
+    const invalid = malformedLineAnchor(raw);
+    if (invalid) return Response.json({ error: invalid }, { status: 400 });
+    const body: DraftBody = DraftBodySchema.parse(raw);
     const updated = await store.update(id, (r) => {
       // `!= null` so an absent OR null field is left alone — guarding null keeps
       // the old `?? []` null-safety (a stray null annotations would otherwise
