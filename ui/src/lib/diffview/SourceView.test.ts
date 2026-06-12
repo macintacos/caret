@@ -1,8 +1,8 @@
 import "../../../test-mount.ts";
 import { describe, expect, test } from "bun:test";
+import { until } from "../../../../test/support/poll.ts";
 import { render } from "../../../test-mount.ts";
 import { reactiveProps } from "../../../test-props.svelte.ts";
-import { until } from "../../../test-wait.ts";
 import SourceView from "./SourceView.svelte";
 import type { SourceDocument, SourceViewOptions } from "./types.ts";
 

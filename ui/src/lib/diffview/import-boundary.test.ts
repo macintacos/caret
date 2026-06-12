@@ -20,6 +20,7 @@ const importsPierreDiffs = (source: string): boolean => IMPORT_PATTERN.test(sour
 // Every tree that holds TypeScript or Svelte source (ui/dist and node_modules
 // are outside these globs by construction).
 const SOURCE_GLOBS = [
+  "*.ts",
   "src/**/*.ts",
   "scripts/**/*.ts",
   "test/**/*.ts",

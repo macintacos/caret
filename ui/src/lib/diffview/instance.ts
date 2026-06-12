@@ -36,7 +36,9 @@ export interface DiffViewSyncProps<TOptions, TAnnotation, TContent> {
 
 export interface DiffViewLifecycle<TOptions, TAnnotation, TContent> {
   /** Reconciles the instance with the given props. Change detection is by
-   * reference, matching how Svelte's $derived memoizes the inputs. */
+   * reference, matching how Svelte's $derived memoizes the inputs. The
+   * container must be stable for the lifecycle's lifetime — recreation is
+   * keyed solely by contentKey (the components bind one div per mount). */
   sync(props: DiffViewSyncProps<TOptions, TAnnotation, TContent>): void;
   /** Tears the instance down. Idempotent. */
   destroy(): void;
