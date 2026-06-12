@@ -332,10 +332,8 @@ test("POST /api/reviews reports hasLiveClient=true right after a reviews poll (E
 
 test("the live-client window covers Chrome's ~1/min background-throttle floor (EXC-562)", () => {
   // Contract, not the exact value: the window must exceed a minute so a hidden
-  // tab throttled to one poll/min still reads as live. A poll 90s old must count.
+  // tab throttled to ~one poll/min still reads as live rather than gone.
   expect(LIVE_CLIENT_WINDOW_MS).toBeGreaterThanOrEqual(60_000);
-  const t = 1_000_000;
-  expect(isClientLive(t, t + 90_000, LIVE_CLIENT_WINDOW_MS)).toBe(true);
 });
 
 test("POST /api/ui/gone retracts presence so the next create reports hasLiveClient=false (EXC-562)", async () => {

@@ -107,17 +107,16 @@ export interface CaretServer {
  * it internally), so the 127.0.0.1 bind needs no change. */
 export const VANITY_HOST = "caret.localhost";
 
-/** Liveness window for a UI client (EXC-559; widened in EXC-562). The UI polls
- * GET /api/reviews every ~2s, but a backgrounded tab's timers are throttled by
- * the browser — Chrome caps a hidden tab to roughly one run per minute after a
- * few minutes — so the window must comfortably exceed that floor, or a
- * backgrounded-but-open tab reads as gone and the hook opens a redundant tab,
- * which is exactly the bug EXC-562 reports. A long window is made safe by the
- * explicit close beacon (POST /api/ui/gone, handleUiGone): a *closed* tab
- * retracts its presence at once, so the window only ever has to outlast a
- * *throttled* poll, never a closed tab. The hook reads the resulting
- * hasLiveClient flag (on the create response) to decide whether to foreground
- * the browser — see isClientLive. */
+/** How recently a UI tab must have polled GET /api/reviews to count as a live
+ * client (EXC-559, EXC-562). It must comfortably exceed the browser's
+ * background-tab throttle floor — Chrome caps a hidden tab's timers to roughly
+ * one run per minute — because a backgrounded-but-open tab polls that slowly; a
+ * shorter window would read such a tab as gone and let the hook open a redundant
+ * browser tab. The long window is safe because a closed tab retracts its
+ * presence at once via the close beacon (POST /api/ui/gone, handleUiGone), so
+ * the window only ever has to outlast a throttled poll, never a closed tab. The
+ * hook reads the resulting hasLiveClient flag (on the create response) to decide
+ * whether to foreground the browser — see isClientLive. */
 export const LIVE_CLIENT_WINDOW_MS = 120_000;
 
 /** Whether a UI client polled the reviews list recently enough to count as live
