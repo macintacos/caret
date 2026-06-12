@@ -72,6 +72,7 @@
   const resolve = createResolve(resStore, {
     activeId: () => selection.activeId,
     annotations: () => work.annotations,
+    planText: () => active?.currentPlan ?? "",
     flushPending: () => autosave.flushPending(),
     afterResolve: (id) => selection.afterResolve(id),
     onOffline: () => selection.setConnected(false),
@@ -280,6 +281,7 @@
   <RequestChangesDialog
     annotations={autosave.annotations}
     generalComment={autosave.generalCommentDraft}
+    planText={active.currentPlan}
     onGeneralCommentInput={autosave.editGeneralComment}
     onSubmit={onRequestChanges}
     onCancel={() => {
