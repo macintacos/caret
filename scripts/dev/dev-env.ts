@@ -5,9 +5,9 @@
 // and never embed a TS constant or a hand-rolled lock parser.
 //
 // CLI surface the task drives (one line of stdout per success):
-//   dev-env.ts never-idle-ms              → "<NEVER_IDLE_MS>"
-//   dev-env.ts seeder-default-ms          → "<SEEDER_DEFAULT_MS>"
-//   dev-env.ts port-mode <CARET_DEV_PORT> → "ephemeral" | "fixed <port>"
+//   dev-env.ts never-idle-ms → "<NEVER_IDLE_MS>"
+//   dev-env.ts port-mode     → "ephemeral" | "fixed <port>"  (CARET_DEV_PORT > [dev].port)
+//   dev-env.ts state-dir     → "<dir>" | ""                  (CARET_DEV_STATE_DIR > [dev].state_dir)
 //   dev-env.ts discover-port <lock> <world> <daemonPid> → "<port>"
 // Any error exits non-zero with a message on stderr; the task aborts loudly.
 
@@ -15,18 +15,23 @@ import type { DaemonLock } from "../../src/build-id.ts";
 import { DEFAULT_PORT, NEVER_IDLE_MS } from "../../src/constants.ts";
 import { isPidAlive } from "../../src/daemon-lifecycle.ts";
 import { readJsonFileSync } from "../../src/json-file.ts";
-import { SEEDER_DEFAULT_MS } from "./protocol.ts";
+// EXC-558: dev port/state-dir resolve through settings (CARET_DEV_* > [dev] key
+// > default); the bash task passes no port arg — port-mode/state-dir read here.
+import { devPort, devStateDir, loadSettings } from "../../src/settings.ts";
 
-/** Decide how the dev daemon binds its port from CARET_DEV_PORT. Unset →
- * ephemeral (an OS-assigned port, discovered from the lock). Set → that fixed
- * port, but never the production default: a CARET_DEV_PORT of 42718 would squat
- * an installed caret. */
+/** Decide how the dev daemon binds its port from the already-resolved dev port
+ * (CARET_DEV_PORT > [dev].port, via devPort). Unset → ephemeral (an OS-assigned
+ * port, discovered from the lock). Set → that fixed port, but never the
+ * production default: a dev port of 42718 would squat an installed caret. Pure
+ * string→mode mapping so the caller owns where the value comes from. */
 export type PortMode = { kind: "ephemeral" } | { kind: "fixed"; port: number };
 
 export function resolvePortMode(raw: string | undefined): PortMode {
   if (raw === undefined || raw === "") return { kind: "ephemeral" };
   if (raw === String(DEFAULT_PORT)) {
-    throw new Error(`CARET_DEV_PORT must differ from the production default (${DEFAULT_PORT})`);
+    throw new Error(
+      `dev port (CARET_DEV_PORT / [dev].port) must differ from the production default (${DEFAULT_PORT})`,
+    );
   }
   return { kind: "fixed", port: Number(raw) };
 }
@@ -92,13 +97,18 @@ async function main(argv: string[]): Promise<void> {
     process.stdout.write(`${NEVER_IDLE_MS}\n`);
     return;
   }
-  if (cmd === "seeder-default-ms") {
-    process.stdout.write(`${SEEDER_DEFAULT_MS}\n`);
+  if (cmd === "port-mode") {
+    // EXC-558: source the dev port from settings (CARET_DEV_PORT > [dev].port),
+    // not a bash-passed arg; resolvePortMode stays a pure string→mode mapping.
+    const port = devPort(loadSettings());
+    const mode = resolvePortMode(port === undefined ? undefined : String(port));
+    process.stdout.write(mode.kind === "ephemeral" ? "ephemeral\n" : `fixed ${mode.port}\n`);
     return;
   }
-  if (cmd === "port-mode") {
-    const mode = resolvePortMode(rest[0]);
-    process.stdout.write(mode.kind === "ephemeral" ? "ephemeral\n" : `fixed ${mode.port}\n`);
+  if (cmd === "state-dir") {
+    // EXC-558: CARET_DEV_STATE_DIR > [dev].state_dir; an empty line tells the
+    // task to use an ephemeral mktemp dir.
+    process.stdout.write(`${devStateDir(loadSettings()) ?? ""}\n`);
     return;
   }
   if (cmd === "discover-port") {

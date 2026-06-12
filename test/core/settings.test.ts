@@ -8,6 +8,9 @@ import {
   createSettings,
   DEFAULT_PORT,
   DEFAULTS,
+  devPort,
+  devSeeder,
+  devStateDir,
   getPort,
   heartbeatMs,
   idleMs,
@@ -49,6 +52,7 @@ test("an absent file yields all defaults with no error", () => {
     logging: { level: "info", redact: false },
     daemon: { port: 42718, idle_ms: 60_000, heartbeat_ms: 8_000 },
     review: { timeout_s: 3600 },
+    dev: { notify: { enabled: false, interval_ms: 15_000, max_pending: 3 } },
   });
 });
 
@@ -410,4 +414,140 @@ test("watchSettings tolerates a re-entrant current() from inside onChange", asyn
   await Bun.write(file, "[logging]\nredact = true\n");
   svc.current();
   expect(fires).toBe(1); // the re-entrant read sees no further change
+});
+
+// --- EXC-558: [dev] table, dev accessors, and the prod-build gate ---
+
+/** Baseline for the dev accessors: no CARET_DEV_* var set, whatever the host exports. */
+const NO_DEV: Record<string, string | undefined> = {
+  CARET_DEV_PORT: undefined,
+  CARET_DEV_STATE_DIR: undefined,
+  CARET_DEV_NEW_REVIEW_MS: undefined,
+};
+
+test("a [dev] config parses through the existing settings service", async () => {
+  await Bun.write(
+    file,
+    '[dev]\nport = 4000\nstate_dir = "/tmp/caret-dev"\n\n[dev.notify]\nenabled = true\ninterval_ms = 3000\nmax_pending = 5\n',
+  );
+  expect(loadSettings(file, /* isCompiled */ false).dev).toEqual({
+    port: 4000,
+    state_dir: "/tmp/caret-dev",
+    notify: { enabled: true, interval_ms: 3000, max_pending: 5 },
+  });
+});
+
+test("an absent [dev] table yields the inert dev defaults", () => {
+  expect(loadSettings(file, false).dev).toEqual(DEFAULTS.dev);
+});
+
+test("a malformed [dev] value reverts the whole file to defaults", async () => {
+  // port must be a positive integer; -1 fails the schema → whole-file revert.
+  await Bun.write(file, '[logging]\nlevel = "warn"\n\n[dev]\nport = -1\n');
+  expect(loadSettings(file, false)).toEqual(DEFAULTS);
+});
+
+test("devPort resolves CARET_DEV_PORT > [dev].port > unset", async () => {
+  await Bun.write(file, "[dev]\nport = 4000\n");
+  const s = loadSettings(file, false);
+  withEnv({ ...NO_DEV, CARET_DEV_PORT: "5050" }, () => expect(devPort(s)).toBe(5050));
+  withEnv({ ...NO_DEV, CARET_DEV_PORT: "   " }, () => expect(devPort(s)).toBe(4000)); // blank → unset
+  withEnv(NO_DEV, () => expect(devPort(s)).toBe(4000));
+  withEnv(NO_DEV, () => expect(devPort(DEFAULTS)).toBeUndefined());
+});
+
+test("devPort falls through a set-but-invalid CARET_DEV_PORT to the config value", async () => {
+  await Bun.write(file, "[dev]\nport = 4000\n");
+  const s = loadSettings(file, false);
+  withEnv({ ...NO_DEV, CARET_DEV_PORT: "nope" }, () => expect(devPort(s)).toBe(4000));
+});
+
+test("devStateDir resolves env > [dev].state_dir > unset, treating blank as unset", async () => {
+  await Bun.write(file, '[dev]\nstate_dir = "/cfg/state"\n');
+  const s = loadSettings(file, false);
+  withEnv({ ...NO_DEV, CARET_DEV_STATE_DIR: "/env/state" }, () =>
+    expect(devStateDir(s)).toBe("/env/state"),
+  );
+  withEnv({ ...NO_DEV, CARET_DEV_STATE_DIR: "   " }, () =>
+    expect(devStateDir(s)).toBe("/cfg/state"),
+  );
+  withEnv(NO_DEV, () => expect(devStateDir(s)).toBe("/cfg/state"));
+  withEnv(NO_DEV, () => expect(devStateDir(DEFAULTS)).toBeUndefined());
+});
+
+test("devSeeder arms on --notify, on [dev.notify].enabled, or on a positive env interval", async () => {
+  await Bun.write(file, "[dev.notify]\nenabled = true\n");
+  const enabledCfg = loadSettings(file, false);
+  withEnv(NO_DEV, () => {
+    expect(devSeeder(true, DEFAULTS).enabled).toBe(true); // --notify alone
+    expect(devSeeder(false, enabledCfg).enabled).toBe(true); // config flag alone
+    expect(devSeeder(false, DEFAULTS).enabled).toBe(false); // neither
+  });
+  withEnv({ ...NO_DEV, CARET_DEV_NEW_REVIEW_MS: "3000" }, () =>
+    expect(devSeeder(false, DEFAULTS).enabled).toBe(true),
+  );
+});
+
+test("devSeeder cadence resolves CARET_DEV_NEW_REVIEW_MS > [dev.notify].interval_ms > 15000", async () => {
+  await Bun.write(file, "[dev.notify]\ninterval_ms = 20000\n");
+  const s = loadSettings(file, false);
+  withEnv({ ...NO_DEV, CARET_DEV_NEW_REVIEW_MS: "3000" }, () =>
+    expect(devSeeder(true, s).intervalMs).toBe(3000),
+  );
+  withEnv(NO_DEV, () => expect(devSeeder(true, s).intervalMs).toBe(20_000));
+  withEnv(NO_DEV, () => expect(devSeeder(true, DEFAULTS).intervalMs).toBe(15_000));
+});
+
+test("devSeeder carries [dev.notify].max_pending, defaulting to 3", async () => {
+  await Bun.write(file, "[dev.notify]\nmax_pending = 5\n");
+  const s = loadSettings(file, false);
+  withEnv(NO_DEV, () => {
+    expect(devSeeder(true, s).maxPending).toBe(5);
+    expect(devSeeder(true, DEFAULTS).maxPending).toBe(3);
+  });
+});
+
+test("a non-positive CARET_DEV_NEW_REVIEW_MS neither arms the seeder nor overrides cadence", async () => {
+  await Bun.write(file, "[dev.notify]\ninterval_ms = 20000\n");
+  const s = loadSettings(file, false);
+  withEnv({ ...NO_DEV, CARET_DEV_NEW_REVIEW_MS: "0" }, () => {
+    const r = devSeeder(false, s);
+    expect(r.enabled).toBe(false); // 0 is not a positive arming value
+    expect(r.intervalMs).toBe(20_000); // falls through to the config cadence
+  });
+});
+
+test("a garbage CARET_DEV_NEW_REVIEW_MS falls through to config and is flagged invalid", async () => {
+  await Bun.write(file, "[dev.notify]\ninterval_ms = 20000\n");
+  const s = loadSettings(file, false);
+  for (const bad of ["abc", "1.5"]) {
+    withEnv({ ...NO_DEV, CARET_DEV_NEW_REVIEW_MS: bad }, () => {
+      const r = devSeeder(false, s);
+      expect(r.enabled).toBe(false); // garbage does not arm the seeder
+      expect(r.intervalMs).toBe(20_000); // falls through to the config cadence
+      expect(r.intervalInvalid).toBe(true); // set-but-invalid stays visible (the driver warns)
+    });
+  }
+});
+
+test("a valid or unset CARET_DEV_NEW_REVIEW_MS is not flagged invalid", () => {
+  withEnv({ ...NO_DEV, CARET_DEV_NEW_REVIEW_MS: "3000" }, () =>
+    expect(devSeeder(false, DEFAULTS).intervalInvalid).toBe(false),
+  );
+  withEnv(NO_DEV, () => expect(devSeeder(false, DEFAULTS).intervalInvalid).toBe(false));
+});
+
+test("a prod build resolves [dev] to inert defaults regardless of config.toml", async () => {
+  await Bun.write(
+    file,
+    '[dev]\nport = 4000\nstate_dir = "/tmp/x"\n\n[dev.notify]\nenabled = true\ninterval_ms = 3000\n',
+  );
+  expect(loadSettings(file, /* isCompiled */ true).dev).toEqual(DEFAULTS.dev);
+  expect(loadSettings(file, false).dev.notify.enabled).toBe(true); // the dev path reads real values
+});
+
+test("createSettings honors the prod-build gate on every current() read", async () => {
+  await Bun.write(file, "[dev.notify]\nenabled = true\n");
+  expect(createSettings(file, /* isCompiled */ true).current().dev).toEqual(DEFAULTS.dev);
+  expect(createSettings(file, false).current().dev.notify.enabled).toBe(true);
 });

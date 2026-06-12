@@ -18,11 +18,12 @@ never_idle_ms="$(bun scripts/dev/dev-env.ts never-idle-ms)"
 # By default the daemon binds an OS-assigned ephemeral port (`caret daemon
 # --ephemeral`) and this task discovers the real port from the daemon's lock
 # file — so any number of `mise run dev` sessions coexist without clobbering
-# each other. Set CARET_DEV_PORT to pin a fixed port instead (never the
-# production default — the helper rejects it so a dev session can't squat an
-# installed caret).
+# each other. Pin a fixed port via CARET_DEV_PORT or [dev].port in config.toml
+# (never the production default — dev-env.ts rejects it so a dev session can't
+# squat an installed caret). dev-env.ts resolves it from settings
+# (CARET_DEV_PORT > [dev].port), so the bash side passes no arg (EXC-558).
 daemon_cmd=(bun src/cli.ts daemon)
-read -r port_kind fixed_port < <(bun scripts/dev/dev-env.ts port-mode "${CARET_DEV_PORT:-}")
+read -r port_kind fixed_port < <(bun scripts/dev/dev-env.ts port-mode)
 if [ "$port_kind" = "fixed" ]; then
   export CARET_PORT="$fixed_port"
 else
@@ -30,15 +31,17 @@ else
 fi
 
 # --- State-dir lifecycle ---------------------------------------------------
-# State dir: ephemeral by default (isolated + wiped on exit, AC1/AC5/AC6). Set
-# CARET_DEV_STATE_DIR to a persistent path to keep state across dev restarts —
-# e.g. to exercise the daemon's on-disk persistence (remembered approve mode,
-# rehydrated reviews). A persistent dir is reused and is NOT deleted on exit.
-# NB: one live dev session per CARET_DEV_STATE_DIR — two sessions sharing a
-# persistent dir would overwrite each other's daemon.lock (the ephemeral mktemp
-# default is the supported concurrent path).
-if [ -n "${CARET_DEV_STATE_DIR:-}" ]; then
-  state_dir="$CARET_DEV_STATE_DIR"
+# State dir: ephemeral by default (isolated + wiped on exit, AC1/AC5/AC6). Pin a
+# persistent path — via CARET_DEV_STATE_DIR or [dev].state_dir in config.toml —
+# to keep state across dev restarts (e.g. to exercise the daemon's on-disk
+# persistence: remembered approve mode, rehydrated reviews). A persistent dir is
+# reused and is NOT deleted on exit. dev-env.ts resolves it from settings
+# (CARET_DEV_STATE_DIR > [dev].state_dir); an empty line means "ephemeral"
+# (EXC-558). NB: one live dev session per persistent dir — two sessions sharing
+# one would overwrite each other's daemon.lock (the ephemeral mktemp default is
+# the supported concurrent path).
+state_dir="$(bun scripts/dev/dev-env.ts state-dir)"
+if [ -n "$state_dir" ]; then
   mkdir -p "$state_dir"
   persist_state=1
 else
@@ -98,15 +101,17 @@ echo "caret dev: port=$CARET_PORT state=$state_dir persistent=$persist_state"
 # --- Driver + Vite ---------------------------------------------------------
 # Seed the fake plan and play the agent's protocol side (waits for health first).
 # The recurring extra-review seeder (a genuinely-new review every tick — the
-# manual test path for the EXC-427 notification) is OFF by default. Pass
-# --notify to arm it at the default cadence; CARET_DEV_NEW_REVIEW_MS tunes the
-# cadence (positive ms) and 0 disables, and an explicit value always wins over
-# --notify, which only fills the env from the named default when it is unset.
-if [ "${usage_notify:-}" = "true" ] && [ -z "${CARET_DEV_NEW_REVIEW_MS:-}" ]; then
-  CARET_DEV_NEW_REVIEW_MS="$(bun scripts/dev/dev-env.ts seeder-default-ms)"
-  export CARET_DEV_NEW_REVIEW_MS
+# manual test path for the EXC-427 notification) is OFF by default. The driver
+# arms it when --notify is passed, when [dev.notify].enabled = true in
+# config.toml (persists across runs), or when CARET_DEV_NEW_REVIEW_MS is a
+# positive interval; the cadence and pending cap come from [dev.notify], with
+# CARET_DEV_NEW_REVIEW_MS overriding the cadence. Forward the flag straight
+# through to the driver, which owns the resolution (EXC-558).
+if [ "${usage_notify:-}" = "true" ]; then
+  bun scripts/dev/driver.ts --notify &
+else
+  bun scripts/dev/driver.ts &
 fi
-bun scripts/dev/driver.ts &
 driver_pid=$!
 
 # Vite is backgrounded (not foreground/`exec`) and waited on, so a teardown

@@ -15,7 +15,6 @@ import {
   extraPlan,
   hookStdin,
   nextPlan,
-  seederInterval,
 } from "../../scripts/dev/protocol.ts";
 import { bootDaemon, type TestDaemon } from "../support/daemon.ts";
 import { setupTempStateDir } from "../support/env.ts";
@@ -256,29 +255,6 @@ test("runExtraReview runs one fresh-session review to resolution and stops", asy
   await done;
   const remaining = (await (await fetch(`${base}/api/reviews`)).json()) as Array<unknown>;
   expect(remaining).toHaveLength(0);
-});
-
-// ---- seederInterval ----
-
-test("seederInterval is off when unset (the seeder is opt-in via --notify)", () => {
-  expect(seederInterval(undefined)).toEqual({ ms: null, invalid: false });
-});
-
-test("seederInterval honors an explicit positive interval", () => {
-  expect(seederInterval("3000")).toEqual({ ms: 3000, invalid: false });
-});
-
-test("seederInterval treats 0 (and negatives) as an explicit off switch", () => {
-  expect(seederInterval("0")).toEqual({ ms: null, invalid: false });
-  expect(seederInterval("-5")).toEqual({ ms: null, invalid: false });
-});
-
-test("seederInterval falls back to the default on garbage, flagged invalid", () => {
-  // Mirrors the settings house style: set-but-invalid warns and falls through
-  // to the default rather than silently disabling.
-  expect(seederInterval("abc")).toEqual({ ms: 15_000, invalid: true });
-  expect(seederInterval("1.5")).toEqual({ ms: 15_000, invalid: true });
-  expect(seederInterval("")).toEqual({ ms: 15_000, invalid: true });
 });
 
 // ---- runExtraSeeder ----

@@ -475,6 +475,9 @@ test("the daemon logs the parsed settings at startup", async () => {
       logging: { level: "info", redact: true },
       daemon: { port: 42718, idle_ms: 60_000, heartbeat_ms: 8_000 },
       review: { timeout_s: 3600 },
+      // EXC-558: the [dev] table rides the boot record too; here it is the
+      // schema default (no [dev] in this config). A prod binary gates it inert.
+      dev: { notify: { enabled: false, interval_ms: 15_000, max_pending: 3 } },
     });
   } finally {
     proc.kill("SIGKILL");

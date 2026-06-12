@@ -132,7 +132,7 @@ If the test click produces no toast, the page's side worked (the daemon log show
 records) and the OS is suppressing it — a granted notification the OS blocks fails silently, with no
 error the page can catch. On macOS check, in order: System Settings → Notifications → your browser
 ("Allow notifications" on, alert style not "None"), Focus / Do Not Disturb, and the
-"when mirroring or sharing" toggle if a display is shared. Note also that a *hidden* tab's poll is
+"when mirroring or sharing" toggle if a display is shared. Note also that a _hidden_ tab's poll is
 throttled by Chrome after ~5 minutes in the background, which can delay a notification by up to a
 minute; an unfocused-but-visible window polls at full rate.
 
@@ -196,6 +196,33 @@ heartbeat_ms = 8000
 timeout_s = 3600
 ```
 
+The `[dev]` table holds **dev-only** settings for `mise run dev`: a fixed daemon port, a
+persistent state dir, and the recurring extra-review notification seeder. It is **ignored in a
+production build** — its only consumers are the dev tooling (`mise run dev`, `scripts/dev/*`),
+which never ship in the compiled binary, and the settings layer build-gates it so `[dev]`
+resolves to inert defaults in a prod build regardless of `config.toml`. These keys are **captured
+at startup** when `mise run dev` boots (not hot-reloaded); the matching `CARET_DEV_*` environment
+variables override them.
+
+| Key                      | Default | Purpose                                                                                   |
+| ------------------------ | ------- | ----------------------------------------------------------------------------------------- |
+| `dev.port`               | _unset_ | Fixed dev daemon port; unset → an OS-assigned ephemeral port. Must differ from `42718`.   |
+| `dev.state_dir`          | _unset_ | Persistent dev state dir; unset → an ephemeral dir wiped on exit.                          |
+| `dev.notify.enabled`     | `false` | When `true`, the extra-review seeder runs without `mise run dev --notify` (persist it on). |
+| `dev.notify.interval_ms` | `15000` | Seeder cadence in milliseconds — a genuinely-new review every interval.                   |
+| `dev.notify.max_pending` | `3`     | Cap on unresolved extra reviews; the seeder pauses while at the cap.                       |
+
+```toml
+[dev]
+port = 4000
+state_dir = "/path/to/persistent/dev-state"
+
+[dev.notify]
+enabled = true
+interval_ms = 15000
+max_pending = 3
+```
+
 ### Environment variables
 
 Each `CARET_*` var shadows its config-file key (precedence **env var > config file > default**). A
@@ -210,6 +237,9 @@ logs, and resolution falls through to the config file, then the default.
 | `CARET_HEARTBEAT_MS` | `daemon.heartbeat_ms` | `8000`           | Decision long-poll heartbeat window (ms). The socket `idleTimeout` derives from it, so values ≥ 250000 are invalid. |
 | `CARET_AGENT`        | —                     | `claude`         | Which coding-agent adapter to drive. `claude` (default) or `codex` (provisional, default-off — see below). |
 | `XDG_STATE_HOME`     | —                     | `~/.local/state` | Unresolved reviews persist under `$XDG_STATE_HOME/caret/reviews/` and rehydrate on restart. |
+| `CARET_DEV_PORT`         | `dev.port`            | —                | **Dev-only.** Fixed `mise run dev` daemon port; unset → ephemeral. Must differ from `42718`. |
+| `CARET_DEV_STATE_DIR`    | `dev.state_dir`       | —                | **Dev-only.** Persistent `mise run dev` state dir; unset → ephemeral. |
+| `CARET_DEV_NEW_REVIEW_MS` | `dev.notify.interval_ms` | —             | **Dev-only.** Extra-review seeder cadence override (ms); a positive value also arms the seeder. Unset → cadence falls to `[dev.notify].interval_ms` (`15000`), and arming is governed by `--notify` / `[dev.notify].enabled`. |
 
 ## Logging & Debugging
 
@@ -295,27 +325,30 @@ port and state dir, and Vite auto-increments its UI port per session. The daemon
 fake pending plan, and a driver plays the agent's side through the real review hook path: each
 request-changes appends a revision section quoting your feedback and resubmits, and approve re-seeds
 a fresh plan, with real hook records landing in the dev state dir's `caret.log`. The recurring
-extra-review seeder is off by default — pass `mise run dev --notify` to arm it. When armed, it
-seeds a genuinely-new review (fresh session, fresh review id) every 15 seconds, capped at three
-unresolved extras at a time — grant notifications, background the tab, and the next seed fires a
-clickable desktop notification. Set `CARET_DEV_NEW_REVIEW_MS` to a positive interval in
-milliseconds to tune the cadence (`0` disables); an explicit value overrides `--notify`, and the
-driver logs the seeder's armed/off state at boot either way. One
+extra-review seeder is off by default. Arm it three ways: pass `mise run dev --notify`, set
+`enabled = true` under `[dev.notify]` in `config.toml` to persist it on across runs, or set a
+positive `CARET_DEV_NEW_REVIEW_MS`. When armed, it seeds a genuinely-new review (fresh session,
+fresh review id) every 15 seconds by default, capped at three unresolved extras at a time — grant
+notifications, background the tab, and the next seed fires a clickable desktop notification. The
+cadence and the pending cap come from `[dev.notify]` (`interval_ms` / `max_pending`), and
+`CARET_DEV_NEW_REVIEW_MS` overrides the cadence; the driver logs the seeder's armed/off state at
+boot either way. One
 notification gotcha: browser notification grants are per-origin **including the port**, so when an
 orphaned dev server squats Vite's port and a new session auto-increments to the next one, the UI
 lands on a fresh origin whose permission is back to "default" — the bell shows the muted "?" again
 and new plans log `plan notification skipped (permission)`. Re-grant via the bell, or kill the
 straggler holding the port (`lsof -nP -iTCP:5173 -sTCP:LISTEN`). Everything is
 reaped on Ctrl-C, and the dev daemon never reads or writes a globally-installed caret's reviews. To
-pin a fixed dev port instead, set `CARET_DEV_PORT` to any free port other than `42718` (the
-production default); this skips `--ephemeral` and binds that port, so only one such session can run
-at a time.
+pin a fixed dev port instead, set `CARET_DEV_PORT` (or `[dev].port` in `config.toml`) to any free
+port other than `42718` (the production default); this skips `--ephemeral` and binds that port, so
+only one such session can run at a time. Likewise, set `CARET_DEV_STATE_DIR` (or `[dev].state_dir`)
+to keep dev state across restarts instead of the ephemeral default.
 
-`mise run test-e2e` runs the Playwright specs in `e2e/` against an isolated daemon that serves the
-built `ui/dist/` artifact on an OS-assigned port with ephemeral state, so the suite never touches your
-real daemon or `~/.local/state/caret`. `mise run setup` installs the Chromium browser the specs
-drive. For when to write an e2e spec versus a `bun test` unit versus throwaway exploration, see
-`docs/agents/browser-testing.md`.
+`mise run test-e2e` runs the Playwright specs in `test/e2e/` against an isolated daemon that serves
+the built `ui/dist/` artifact on an OS-assigned port with ephemeral state, so the suite never
+touches your real daemon or `~/.local/state/caret`. `mise run setup` installs the Chromium browser
+the specs drive. For when to write an e2e spec versus a `bun test` unit versus throwaway
+exploration, see `docs/agents/browser-testing.md`.
 
 For a quick local trial without installing, load the plugin from a checkout:
 
