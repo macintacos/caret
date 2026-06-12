@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { formatPlanMarkdown } from "../../src/plan-markdown.ts";
 import { routeIncomingPlan } from "../../src/reviews.ts";
 import { createStore, type Store } from "../../src/store.ts";
 import type { PlanInput, Review } from "../../src/types.ts";
@@ -55,7 +56,7 @@ test("a plan after a rejection appends version 2 to the same review", async () =
   const rev = store.get(a.id);
   expect(rev?.status).toBe("pending");
   expect(rev?.versions.map((v) => v.version)).toEqual([1, 2]);
-  expect(rev?.versions[1]?.plan).toBe("# v2\n\nrevised");
+  expect(rev?.versions[1]?.plan).toBe("# v2\n\nrevised\n");
 });
 
 test("reject/append/reject/append chains on one review", async () => {
@@ -194,4 +195,39 @@ test("property: appends only follow a rejection, never crossing an approval", as
       lastId = null;
     }
   }
+});
+
+// ---- ingest-time canonicalization (EXC-574) --------------------------------
+
+const UNWRAPPED =
+  "# Wrap\n\nthis paragraph is one long unwrapped line that the ingest pass rewraps via prettier into the canonical stored representation of the plan text";
+
+test("a new thread stores prettier-formatted plan text", async () => {
+  const r = await routeIncomingPlan(input({ plan: UNWRAPPED }), store);
+  const stored = store.get(r.id)?.versions[0]?.plan ?? "";
+  expect(stored).toBe(await formatPlanMarkdown(UNWRAPPED));
+  expect(stored).not.toBe(UNWRAPPED);
+});
+
+test("a revision stores prettier-formatted plan text", async () => {
+  const a = await routeIncomingPlan(input(), store);
+  await reject(a.id);
+  const b = await routeIncomingPlan(input({ plan: UNWRAPPED }), store);
+  expect(b).toMatchObject({ id: a.id, action: "append", version: 2 });
+  const stored = store.get(a.id)?.versions[1]?.plan ?? "";
+  expect(stored).toBe(await formatPlanMarkdown(UNWRAPPED));
+  expect(stored).not.toBe(UNWRAPPED);
+});
+
+test("already-stored versions are never reformatted by a later ingest", async () => {
+  const a = await routeIncomingPlan(input(), store);
+  // A stored version that bypassed canonicalization (the raw fallback path).
+  await store.update(a.id, (r) => {
+    const v1 = r.versions[0];
+    if (v1) v1.plan = UNWRAPPED;
+    r.status = "rejected";
+  });
+  const b = await routeIncomingPlan(input({ plan: "# v2\n\nx" }), store);
+  expect(b).toMatchObject({ id: a.id, action: "append", version: 2 });
+  expect(store.get(a.id)?.versions[0]?.plan).toBe(UNWRAPPED);
 });
