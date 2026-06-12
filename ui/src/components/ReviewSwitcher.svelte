@@ -27,7 +27,7 @@
     aria-haspopup="listbox"
     aria-expanded={open}
   >
-    <span class="title">{active ? stripTitleLinks(active.title) : "—"}</span>
+    <span class="title">{stripTitleLinks(active?.title ?? "—")}</span>
     {#if reviews.length > 1}
       <span class="badge">{reviews.length}</span>
       <span class="chev" class:open aria-hidden="true">
