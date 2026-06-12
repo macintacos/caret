@@ -239,7 +239,7 @@ logs, and resolution falls through to the config file, then the default.
 | `XDG_STATE_HOME`     | —                     | `~/.local/state` | Unresolved reviews persist under `$XDG_STATE_HOME/caret/reviews/` and rehydrate on restart. |
 | `CARET_DEV_PORT`         | `dev.port`            | —                | **Dev-only.** Fixed `mise run dev` daemon port; unset → ephemeral. Must differ from `42718`. |
 | `CARET_DEV_STATE_DIR`    | `dev.state_dir`       | —                | **Dev-only.** Persistent `mise run dev` state dir; unset → ephemeral. |
-| `CARET_DEV_NEW_REVIEW_MS` | `dev.notify.interval_ms` | `15000`       | **Dev-only.** Extra-review seeder cadence (ms); a positive value also arms the seeder. |
+| `CARET_DEV_NEW_REVIEW_MS` | `dev.notify.interval_ms` | —             | **Dev-only.** Extra-review seeder cadence override (ms); a positive value also arms the seeder. Unset → cadence falls to `[dev.notify].interval_ms` (`15000`), and arming is governed by `--notify` / `[dev.notify].enabled`. |
 
 ## Logging & Debugging
 

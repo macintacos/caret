@@ -372,17 +372,23 @@ export interface DevSeeder {
   enabled: boolean;
   intervalMs: number;
   maxPending: number;
+  /** CARET_DEV_NEW_REVIEW_MS was set but is not a positive integer, so the
+   * cadence fell through to config. The driver warns so a typo'd value stays
+   * visible — same set-but-invalid visibility the EXC-430 invalidEnvVars gives. */
+  intervalInvalid: boolean;
 }
 
 /** Resolve the seeder knobs. Armed when `--notify` (notify), [dev.notify].enabled,
  * OR a positive CARET_DEV_NEW_REVIEW_MS. Cadence: CARET_DEV_NEW_REVIEW_MS >
  * [dev.notify].interval_ms > 15000 — a non-positive/garbage env value falls
- * through to the config cadence (house style: set-but-invalid falls through). */
+ * through to the config cadence (house style: set-but-invalid falls through, but
+ * is surfaced via intervalInvalid so the driver can warn at boot). */
 export function devSeeder(notify: boolean, s: Settings = settings().current()): DevSeeder {
   const envInterval = envValue("CARET_DEV_NEW_REVIEW_MS", DevIntervalMs);
   return {
     enabled: notify || s.dev.notify.enabled || typeof envInterval === "number",
     intervalMs: envInterval ?? s.dev.notify.interval_ms,
     maxPending: s.dev.notify.max_pending,
+    intervalInvalid: envInterval === null, // classifyEnv: null ⟺ set-but-invalid
   };
 }

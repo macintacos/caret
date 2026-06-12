@@ -451,6 +451,7 @@ test("devPort resolves CARET_DEV_PORT > [dev].port > unset", async () => {
   await Bun.write(file, "[dev]\nport = 4000\n");
   const s = loadSettings(file, false);
   withEnv({ ...NO_DEV, CARET_DEV_PORT: "5050" }, () => expect(devPort(s)).toBe(5050));
+  withEnv({ ...NO_DEV, CARET_DEV_PORT: "   " }, () => expect(devPort(s)).toBe(4000)); // blank → unset
   withEnv(NO_DEV, () => expect(devPort(s)).toBe(4000));
   withEnv(NO_DEV, () => expect(devPort(DEFAULTS)).toBeUndefined());
 });
@@ -514,6 +515,26 @@ test("a non-positive CARET_DEV_NEW_REVIEW_MS neither arms the seeder nor overrid
     expect(r.enabled).toBe(false); // 0 is not a positive arming value
     expect(r.intervalMs).toBe(20_000); // falls through to the config cadence
   });
+});
+
+test("a garbage CARET_DEV_NEW_REVIEW_MS falls through to config and is flagged invalid", async () => {
+  await Bun.write(file, "[dev.notify]\ninterval_ms = 20000\n");
+  const s = loadSettings(file, false);
+  for (const bad of ["abc", "1.5"]) {
+    withEnv({ ...NO_DEV, CARET_DEV_NEW_REVIEW_MS: bad }, () => {
+      const r = devSeeder(false, s);
+      expect(r.enabled).toBe(false); // garbage does not arm the seeder
+      expect(r.intervalMs).toBe(20_000); // falls through to the config cadence
+      expect(r.intervalInvalid).toBe(true); // set-but-invalid stays visible (the driver warns)
+    });
+  }
+});
+
+test("a valid or unset CARET_DEV_NEW_REVIEW_MS is not flagged invalid", () => {
+  withEnv({ ...NO_DEV, CARET_DEV_NEW_REVIEW_MS: "3000" }, () =>
+    expect(devSeeder(false, DEFAULTS).intervalInvalid).toBe(false),
+  );
+  withEnv(NO_DEV, () => expect(devSeeder(false, DEFAULTS).intervalInvalid).toBe(false));
 });
 
 test("a prod build resolves [dev] to inert defaults regardless of config.toml", async () => {

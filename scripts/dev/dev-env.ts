@@ -15,8 +15,8 @@ import type { DaemonLock } from "../../src/build-id.ts";
 import { DEFAULT_PORT, NEVER_IDLE_MS } from "../../src/constants.ts";
 import { isPidAlive } from "../../src/daemon-lifecycle.ts";
 import { readJsonFileSync } from "../../src/json-file.ts";
-// EXC-558: dev port/state-dir now resolve through settings (CARET_DEV_* > [dev]
-// key > default), so the bash task no longer passes CARET_DEV_PORT as an arg.
+// EXC-558: dev port/state-dir resolve through settings (CARET_DEV_* > [dev] key
+// > default); the bash task passes no port arg — port-mode/state-dir read here.
 import { devPort, devStateDir, loadSettings } from "../../src/settings.ts";
 
 /** Decide how the dev daemon binds its port from the already-resolved dev port

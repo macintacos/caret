@@ -132,6 +132,11 @@ export async function run(): Promise<void> {
   // [dev.notify] (CARET_DEV_NEW_REVIEW_MS overrides the cadence). Loud at boot
   // either way — a silent no-op is indistinguishable from a broken notification.
   const seeder = devSeeder(Bun.argv.includes("--notify"), loadSettings());
+  if (seeder.intervalInvalid) {
+    log(
+      `CARET_DEV_NEW_REVIEW_MS invalid (want a positive integer ms): ${process.env.CARET_DEV_NEW_REVIEW_MS}`,
+    );
+  }
   if (seeder.enabled) {
     log(`extra-review seeder armed: a new review every ${seeder.intervalMs}ms`);
     void runExtraSeeder(seeder.intervalMs, {
