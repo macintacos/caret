@@ -3,6 +3,7 @@
 // each mapper emits every key it owns — passing the result to setOptions is
 // always a faithful full replacement.
 import type { FileDiffOptions, FileOptions } from "@pierre/diffs";
+import type { LinkHandlers } from "./linkInteractions.ts";
 import { caretDiffTheme } from "./theme.ts";
 import type { SourceDiffViewOptions, SourceViewOptions } from "./types.ts";
 
@@ -28,8 +29,15 @@ function sharedOptions(
   };
 }
 
-export function toFileOptions(options: SourceViewOptions): SourceViewLibOptions {
-  return sharedOptions(options);
+export function toFileOptions(
+  options: SourceViewOptions,
+  linkHandlers?: LinkHandlers,
+): SourceViewLibOptions {
+  // Link handlers are stable for the instance's life (they close over the span
+  // map), so they belong only in the initial options — a content-key change
+  // recreates the instance with a fresh map. When absent, the option object is
+  // unchanged, so views without the link layer behave exactly as before.
+  return { ...sharedOptions(options), ...linkHandlers };
 }
 
 export function toFileDiffOptions(options: SourceDiffViewOptions): SourceDiffViewLibOptions {

@@ -138,6 +138,12 @@ function transformLine(source: string, inCode: boolean): { display: string; span
   return { display, spans };
 }
 
+/** Production link opener: a new tab with noopener,noreferrer so the opened
+ * page can neither reach back through window.opener nor leak the referrer. */
+export function openLinkInNewTab(href: string): void {
+  window.open(href, "_blank", "noopener,noreferrer");
+}
+
 /** Transforms plan source text into display text plus per-line link spans.
  * Line count is invariant. */
 export function buildLinkLayer(text: string): LinkLayer {

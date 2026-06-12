@@ -159,7 +159,7 @@ describe("buildLinkLayer bare URLs and autolinks", () => {
 describe("buildLinkLayer code passthrough", () => {
   test("links inside a fenced code block are left untouched", () => {
     const input = "```\nconst u = [x](https://nope.test);\n```";
-    const { text, spans } = buildLinkLayer(input);
+    const { text } = buildLinkLayer(input);
     expect(text).toBe(input);
     // No spans anywhere — the fenced region is source-faithful.
     expect(spansOnLine(input, 2)).toHaveLength(0);

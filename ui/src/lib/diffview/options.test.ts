@@ -27,6 +27,25 @@ describe("toFileOptions", () => {
       themeType: "system",
     });
   });
+
+  test("spreads link handlers into the library options when provided", () => {
+    const onTokenClick = () => {};
+    const onTokenEnter = () => {};
+    const onTokenLeave = () => {};
+    const result = toFileOptions(
+      { overflow: "wrap" },
+      { onTokenClick, onTokenEnter, onTokenLeave },
+    );
+    expect(result.onTokenClick).toBe(onTokenClick);
+    expect(result.onTokenEnter).toBe(onTokenEnter);
+    expect(result.onTokenLeave).toBe(onTokenLeave);
+    expect(result.overflow).toBe("wrap");
+  });
+
+  test("omitting link handlers leaves the option object handler-free", () => {
+    const result = toFileOptions({ overflow: "wrap" });
+    expect("onTokenClick" in result).toBe(false);
+  });
 });
 
 describe("toFileDiffOptions", () => {
