@@ -21,7 +21,7 @@ function makeStore(over: Partial<ResolveStore> = {}): ResolveStore {
 
 function build(
   store: ResolveStore,
-  opts: { activeId?: string | null; annotations?: Annotation[] } = {},
+  opts: { activeId?: string | null; annotations?: Annotation[]; planText?: string } = {},
 ) {
   const activeId = "activeId" in opts ? (opts.activeId ?? null) : "r1";
   const resolve = createResolve(store, {
@@ -31,6 +31,7 @@ function build(
     },
     activeId: () => activeId,
     annotations: () => opts.annotations ?? [],
+    planText: () => opts.planText ?? "",
     flushPending: async () => {
       flushOrder.push("flush");
     },
@@ -137,6 +138,18 @@ describe("requestChanges", () => {
     expect(advanced).toEqual(["r1"]);
   });
 
+  test("quotes a line-anchored annotation's source line from the plan text", async () => {
+    const store = makeStore();
+    const annotations: Annotation[] = [{ id: "l1", startLine: 2, endLine: 2, comment: "tighten" }];
+    const planText = ["# Heading", "warm the cache on boot", "more text"].join("\n");
+    const resolve = build(store, { annotations, planText });
+    await resolve.requestChanges("");
+    expect(submits).toHaveLength(1);
+    // The plan text reaches the formatter: the quoted source line is present.
+    expect(submits[0]!.body.feedback).toContain("Line 2:");
+    expect(submits[0]!.body.feedback).toContain("> warm the cache on boot");
+  });
+
   test("flushes the pending draft before formatting + submitting", async () => {
     const store = makeStore();
     const resolve = build(store);
@@ -179,6 +192,7 @@ describe("loadApproveMode", () => {
       getApproveMode: async () => "auto" as ApproveVariantId,
       activeId: () => null,
       annotations: () => [],
+      planText: () => "",
       flushPending: async () => {},
       afterResolve: () => {},
       onOffline: () => {},
@@ -198,6 +212,7 @@ describe("loadApproveMode", () => {
       },
       activeId: () => null,
       annotations: () => [],
+      planText: () => "",
       flushPending: async () => {},
       afterResolve: () => {},
       onOffline: () => {},

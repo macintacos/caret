@@ -27,6 +27,9 @@ export interface ResolveDeps {
   activeId: () => string | null;
   /** The working-copy annotations to format into deny feedback. */
   annotations: () => Annotation[];
+  /** The active review's current plan text, used to quote a line-anchored
+   * annotation's source lines into the deny feedback. */
+  planText: () => string;
   /** Flush any pending draft before submitting (snapshot-before-await). */
   flushPending: () => Promise<void>;
   /** Drop the resolved review and auto-advance. */
@@ -97,7 +100,7 @@ export function createResolve(store: ResolveStore, deps: ResolveDeps): Resolve {
       if (!id) return;
       store.busy = true;
       await deps.flushPending();
-      const feedback = formatFeedback(deps.annotations(), generalComment);
+      const feedback = formatFeedback(deps.annotations(), generalComment, deps.planText());
       try {
         await submit(id, { behavior: "deny", feedback });
         // The daemon cleared the stored draft on resolve; clear the local mirror

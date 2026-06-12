@@ -10,17 +10,20 @@
     // it survives the dialog unmounting on Cancel/Escape/scrim. The dialog is a
     // controlled view over the parent's value.
     generalComment: string;
+    // The active review's current plan text, so the preview quotes a
+    // line-anchored annotation's source lines exactly as the agent will see them.
+    planText: string;
     onGeneralCommentInput: (value: string) => void;
     onSubmit: (generalComment: string) => void;
     onCancel: () => void;
   }
-  let { annotations, generalComment, onGeneralCommentInput, onSubmit, onCancel }: Props =
+  let { annotations, generalComment, planText, onGeneralCommentInput, onSubmit, onCancel }: Props =
     $props();
 
   let textarea = $state<HTMLTextAreaElement | undefined>();
 
   // Live preview of exactly what the agent will receive.
-  let preview = $derived(formatFeedback(annotations, generalComment));
+  let preview = $derived(formatFeedback(annotations, generalComment, planText));
   let inlineCount = $derived(
     annotations.filter((a) => a.comment.trim().length > 0).length,
   );

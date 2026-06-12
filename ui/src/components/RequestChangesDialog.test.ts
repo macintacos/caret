@@ -13,9 +13,17 @@ const ann = (id: string, comment: string): Annotation => ({
   comment,
 });
 
+const lineAnn = (id: string, startLine: number, endLine: number, comment: string): Annotation => ({
+  id,
+  startLine,
+  endLine,
+  comment,
+});
+
 const baseProps = {
   annotations: [] as Annotation[],
   generalComment: "",
+  planText: "",
   onGeneralCommentInput: () => {},
   onSubmit: () => {},
   onCancel: () => {},
@@ -54,6 +62,17 @@ describe("RequestChangesDialog render", () => {
     expect(target.querySelector(".preview")).not.toBeNull();
     expect(target.querySelector(".preview pre")!.textContent).toContain("please revise");
     expect((target.querySelector(".deny") as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  test("the preview quotes a line-anchored annotation's source line from planText", () => {
+    const { target } = render(RequestChangesDialog, {
+      ...baseProps,
+      annotations: [lineAnn("l1", 2, 2, "tighten")],
+      planText: ["# Heading", "warm the cache on boot", "more"].join("\n"),
+    });
+    const preview = target.querySelector(".preview pre")!.textContent ?? "";
+    expect(preview).toContain("Line 2:");
+    expect(preview).toContain("> warm the cache on boot");
   });
 });
 
