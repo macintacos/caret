@@ -1,8 +1,8 @@
 // Dev-flagged source-view surface (EXC-583). With the flag on, the plan renders
 // as line-numbered markdown source through the @pierre/diffs wrapper instead of
-// the legacy plan view + contents rail. Read-only milestone: no annotation
-// gutter, no ToC — but approve and request-changes still round-trip. The view
-// instance must survive the 2s poll with no scroll reset.
+// the legacy plan view. A left-hand filterable contents pane jumps to headings;
+// approve and request-changes still round-trip. The view instance must survive
+// the 2s poll with no scroll reset.
 
 import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
 
@@ -24,9 +24,9 @@ test("renders the plan as markdown source, with no legacy plan view or contents 
   await expect(page.locator(".diff-plan")).toBeVisible();
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
 
-  // The legacy surface is absent: no rendered-HTML article, no contents rail.
+  // The legacy surface is absent: no rendered-HTML article, no legacy rail.
   await expect(page.locator("article.plan")).toHaveCount(0);
-  await expect(page.getByRole("navigation", { name: "Plan contents" })).toHaveCount(0);
+  await expect(page.locator("nav.toc")).toHaveCount(0);
 });
 
 test("scroll position survives the 2-second poll tick", async ({ daemon, page }) => {
@@ -86,4 +86,39 @@ test("request-changes with a general comment round-trips on the source-view surf
   const review = (await daemon.getReview(id)).body;
   expect(review?.status).toBe("rejected");
   expect(review?.decision?.feedback).toContain(feedback);
+});
+
+// A multi-heading plan with tall sections so a jump produces a visible scroll.
+const padding = Array.from({ length: 40 }, (_, i) => `Filler line ${i + 1}.`).join("\n\n");
+const TOC_PLAN = `# Overview\n\n${padding}\n\n## Approach\n\n${padding}\n\n## Verification\n\n${padding}\n`;
+
+test("shows a filterable contents pane and jumps to a heading's line", async ({ daemon, page }) => {
+  await daemon.seed({ plan: TOC_PLAN });
+  await page.goto("/");
+
+  const view = page.locator(".diff-plan");
+  await expect(view).toBeVisible();
+
+  // The pane lists every heading.
+  const pane = page.getByRole("navigation", { name: "Plan contents" });
+  await expect(pane).toBeVisible();
+  await expect(pane.locator(".toc-row")).toHaveCount(3);
+
+  // Filtering hides non-matching rows (hide-non-matches default).
+  await pane.getByRole("textbox", { name: "Filter headings" }).fill("veri");
+  await expect(pane.locator(".toc-row")).toHaveCount(1);
+  await expect(pane.locator(".toc-row")).toHaveText("Verification");
+
+  // Clicking the filtered heading jumps the source view down to its line.
+  await pane.locator(".toc-row").click();
+  await expect.poll(async () => view.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+});
+
+test("suppresses the contents pane for a single-heading plan", async ({ daemon, page }) => {
+  await daemon.seed({ plan: "# Only Heading\n\nNo other sections to navigate.\n" });
+  await page.goto("/");
+
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("No other sections to navigate")).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Plan contents" })).toHaveCount(0);
 });
