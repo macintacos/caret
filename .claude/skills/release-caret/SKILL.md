@@ -1,6 +1,7 @@
 ---
 name: release-caret
 description: Cut a caret release. Computes the next version with the deterministic release script, confirms it, authors the keepachangelog CHANGELOG entry under a themed release name, then drives the two-phase script flow — phase 1 opens a PR with the version bump + changelog; after merge, phase 2 tags trunk and publishes the GitHub Release. Triggers on "/release-caret", "release caret", "cut a caret release", "ship a caret version".
+argument-hint: "[patch|minor|major] [dry run]"
 ---
 
 # Release caret
