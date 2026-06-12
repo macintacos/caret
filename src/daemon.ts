@@ -107,16 +107,18 @@ export interface CaretServer {
  * it internally), so the 127.0.0.1 bind needs no change. */
 export const VANITY_HOST = "caret.localhost";
 
-/** Liveness window for a UI client (EXC-559). The UI polls GET /api/reviews
- * every ~2s; a small multiple tolerates a missed tick or slow network. Kept
- * small on purpose: a window long enough to also cover a heavily-throttled
- * background tab (browsers slow hidden-tab timers after minutes) would treat a
- * just-closed tab as still live and never foreground its review. So a
- * deeply-backgrounded tab instead reads as not-live and falls back to
- * foregrounding — the prior behavior, which still surfaces the review. The hook
- * reads the resulting hasLiveClient flag (on the create response) to decide
- * whether to foreground the browser — see isClientLive. */
-const LIVE_CLIENT_WINDOW_MS = 6000;
+/** Liveness window for a UI client (EXC-559; widened in EXC-562). The UI polls
+ * GET /api/reviews every ~2s, but a backgrounded tab's timers are throttled by
+ * the browser — Chrome caps a hidden tab to roughly one run per minute after a
+ * few minutes — so the window must comfortably exceed that floor, or a
+ * backgrounded-but-open tab reads as gone and the hook opens a redundant tab,
+ * which is exactly the bug EXC-562 reports. A long window is made safe by the
+ * explicit close beacon (POST /api/ui/gone, handleUiGone): a *closed* tab
+ * retracts its presence at once, so the window only ever has to outlast a
+ * *throttled* poll, never a closed tab. The hook reads the resulting
+ * hasLiveClient flag (on the create response) to decide whether to foreground
+ * the browser — see isClientLive. */
+export const LIVE_CLIENT_WINDOW_MS = 120_000;
 
 /** Whether a UI client polled the reviews list recently enough to count as live
  * (EXC-559). Pure so the load-bearing window is unit-testable by passing the
@@ -324,8 +326,14 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   let inFlight = 0;
   let stopped = false;
   // Last time a UI client polled GET /api/reviews — the live-client signal the
-  // hook reads to skip foregrounding the browser (EXC-559). 0 = never polled.
+  // hook reads to skip foregrounding the browser (EXC-559). 0 = never polled
+  // (or retracted by a tab-close beacon, see handleUiGone).
   let lastReviewsPollAt = 0;
+  // A UI tab counts as present while its last poll is within the live-client
+  // window. Gates idle shutdown (EXC-562): a throttled-but-open tab must not get
+  // the daemon shut from under it, since a respawn forgets the tab and the next
+  // plan would open a redundant browser tab.
+  const uiPresent = () => isClientLive(lastReviewsPollAt, Date.now(), LIVE_CLIENT_WINDOW_MS);
 
   function cancelIdle() {
     if (idleTimer) {
@@ -347,8 +355,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   function maybeShutdown() {
     idleTimer = null;
     // Re-check liveness atomically (single-threaded loop): never exit while a
-    // review is pending, a hook is mid-long-poll, or a request is in flight.
-    if (store.pendingCount() === 0 && openDecisionCount() === 0 && inFlight === 0) {
+    // review is pending, a hook is mid-long-poll, a request is in flight, or a
+    // UI tab is still present (EXC-562) — an open tab is the daemon's reason to
+    // stay up. When only a UI holds it open the else-branch re-arms, so the
+    // daemon shuts down once the tab goes away (its close beacon, or a poll that
+    // ages past the live-client window).
+    if (store.pendingCount() === 0 && openDecisionCount() === 0 && inFlight === 0 && !uiPresent()) {
       log.info("idle", "idle shutdown");
       stop();
       onShutdown();
@@ -489,6 +501,17 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   function handleListReviews(): Response {
     lastReviewsPollAt = Date.now();
     return Response.json(store.list().map(toClientReview));
+  }
+
+  // POST /api/ui/gone — a UI tab announces it is closing (sent via
+  // navigator.sendBeacon on pagehide). Retract its presence immediately so the
+  // next plan foregrounds a fresh tab instead of assuming the closed one will
+  // surface it (EXC-562). Clearing to 0 makes isClientLive read not-live at
+  // once, which is what lets LIVE_CLIENT_WINDOW_MS stay long enough to outlast a
+  // throttled background poll without a just-closed tab lingering as "live".
+  function handleUiGone(): Response {
+    lastReviewsPollAt = 0;
+    return new Response(null, { status: 204 });
   }
 
   // GET /api/prefs — machine-global UI prefs, read once on UI load (deliberately
@@ -633,6 +656,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (method === "GET" && (path === "/" || path === INDEX_PATH)) return handleIndex();
     if (method === "POST" && path === "/api/reviews") return handleCreateReview(req);
     if (method === "POST" && path === "/api/logs") return handleLogs(req);
+    if (method === "POST" && path === "/api/ui/gone") return handleUiGone();
     if (method === "GET" && path === "/api/reviews") return handleListReviews();
     if (method === "GET" && path === "/api/prefs") return handlePrefs();
 
