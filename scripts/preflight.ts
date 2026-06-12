@@ -43,9 +43,11 @@ export interface PreflightOutcome {
 
 // --json reports (EXC-471): the documents an LLM/agent consumer reads instead
 // of the human display — one before the run (planned tasks + the filters in
-// effect), one after (per-task results). The default is lean: each task
-// reports its status, and a failed task reports only how many output lines it
-// produced. The consumer opts in to actual text via -v/-vv, --grep, or --task.
+// effect), one after (per-task results). Failures show their output by default
+// (abbreviated to a tail when large, with `totalLines` + `truncated` so the
+// consumer knows there's more); passing tasks stay status-only. Verbosity turns
+// that up: -v makes failures full and surfaces a snippet of passing tasks, -vv
+// shows everything. --grep / --task narrow or scope further.
 export interface PreflightStartReport {
   event: "start";
   schemaVersion: number;
@@ -63,6 +65,8 @@ export interface PreflightTaskReport {
   totalLines?: number;
   /** Lines matching --grep, included only when a pattern was supplied. */
   matchedLines?: number;
+  /** True when `output` is a truncated tail of a larger capture (run with -v for the full text). */
+  truncated?: boolean;
 }
 
 export interface PreflightResultReport {
@@ -97,6 +101,10 @@ const SCHEMA_VERSION = 1;
 // Shared by the human summary and the --json output so the remediation text
 // can't drift between the two surfaces.
 const LINT_FORMAT_HINT = "hint: run `mise run format` to fix formatting failures";
+
+// At the default verbosity a large failed output is abbreviated to its last N
+// lines — errors and summaries cluster at the end; `-v` shows the full capture.
+const DEFAULT_OUTPUT_TAIL_LINES = 20;
 
 export async function runPreflight(deps: {
   spawnTask: SpawnTask;
@@ -221,6 +229,22 @@ function withLintHint(name: string, status: TaskStatus, text: string): string {
   return name === "lint" && status === "failed" ? `${text}\n${LINT_FORMAT_HINT}` : text;
 }
 
+// How much of a task's output to inline, given its status, the verbosity level,
+// and whether --task named it. Failures lead passing tasks by one notch: a
+// failure shows a tail at level 0 and full output at -v; a passing task shows
+// nothing at level 0, a tail at -v, and full at -vv. A --task-named task is
+// always shown in full.
+function outputDetail(
+  status: TaskStatus,
+  verbosity: number,
+  scoped: boolean,
+): "none" | "tail" | "full" {
+  if (scoped) return "full";
+  if (status === "failed") return verbosity >= 1 ? "full" : "tail";
+  if (status === "passed") return verbosity >= 2 ? "full" : verbosity >= 1 ? "tail" : "none";
+  return "none"; // skipped — nothing ran
+}
+
 /** Planned task set + the filters in effect, emitted to stdout before the run in --json mode. */
 export function buildStartReport(
   args: JsonArgs = { json: true, verbosity: 0, tasks: [] },
@@ -238,12 +262,13 @@ export function buildStartReport(
 }
 
 /**
- * Per-task results, emitted to stdout after the run in --json mode. Output text
- * is included selectively (EXC-471): by default a failed task reports only
- * `totalLines`; `--grep` narrows to matching lines (with `matchedLines`); `-v`
- * adds full failed output and `-vv` adds passing output; `--task` scopes output
- * to the named task(s), showing their full output (or, when `--grep` is also
- * set, the matching lines within that scope).
+ * Per-task results, emitted to stdout after the run in --json mode (EXC-471).
+ * Failures show output by default — in full when small, or a truncated tail
+ * (with `totalLines` + `truncated`) when large. Passing tasks are status-only
+ * by default. Verbosity turns it up: `-v` makes failures full and adds a
+ * snippet of passing tasks, `-vv` shows every task in full. `--grep` narrows
+ * output to matching lines (with `matchedLines`); `--task` scopes to the named
+ * task(s) and shows them in full (or, with `--grep`, the matching lines).
  */
 export function buildResultReport(
   results: Map<string, TaskResult>,
@@ -267,12 +292,20 @@ export function buildResultReport(
         if (matched.length > 0)
           entry.output = withLintHint(name, result.status, matched.join("\n"));
       } else {
-        // In scope under --task → full output (the inScope guard above already
-        // matched the name); otherwise the verbosity ladder decides.
-        const showFull =
-          scope !== null || (result.status === "failed" && verbosity >= 1) || verbosity >= 2;
-        if (showFull) entry.output = withLintHint(name, result.status, result.output.trimEnd());
-        else if (result.status === "failed") entry.totalLines = lines.length;
+        const detail = outputDetail(result.status, verbosity, scope !== null);
+        if (detail === "full") {
+          entry.output = withLintHint(name, result.status, result.output.trimEnd());
+        } else if (detail === "tail") {
+          if (lines.length > DEFAULT_OUTPUT_TAIL_LINES) {
+            const tail = lines.slice(-DEFAULT_OUTPUT_TAIL_LINES).join("\n");
+            entry.output = withLintHint(name, result.status, tail);
+            entry.totalLines = lines.length;
+            entry.truncated = true;
+          } else {
+            entry.output = withLintHint(name, result.status, result.output.trimEnd());
+          }
+        }
+        // detail === "none" → status only
       }
     }
     tasks.push(entry);

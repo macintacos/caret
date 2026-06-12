@@ -90,16 +90,21 @@ display with two compact JSON documents on stdout, one per line: a `start` docum
 tasks plus the filters in effect) and a `result` document carrying each task's status and an
 overall `ok` boolean. The exit code is unchanged (`0` pass, `1` fail).
 
-By default the output is **lean** — a failed task reports only `totalLines` (no text), so the
-result stays small. Opt in to the output you need (these compose, and only apply with `--json`):
+`mise run preflight --json` is the call you want almost every time. **Failures show their output
+by default**, so you can act immediately — and if a task's output is large it's abbreviated to its
+last 20 lines with `totalLines` and `"truncated": true` so you know there's more. Passing tasks
+stay status-only to keep the result small. The flags below turn that up; they compose and only
+apply with `--json`:
 
-- `-v` adds the full `output` for failed tasks; `-vv` also includes passing tasks' output.
-- `--grep <regex>` replaces `output` with only the lines matching the pattern, plus
-  `matchedLines`; it scans every in-scope task, passing ones included.
-- `--task <name>` (repeatable) scopes output to the named task(s) — they show full output
-  (or, with `--grep`, the matching lines); other tasks report status only, even at `-vv`.
+- `-v` / `-vv` — turn up verbosity. `-v` makes any **truncated** failure full and adds a snippet
+  of each passing task; `-vv` shows every task's full output. Reach for `-v` when a failure's tail
+  was truncated and you need the whole log, or when you want to inspect a passing task.
+- `--grep <regex>` — replace `output` with only the lines matching the pattern (plus
+  `matchedLines`), scanning every in-scope task. Reach for it to pull specific lines (an error
+  code, a file path) out of a large log without `-v`.
+- `--task <name>` (repeatable) — scope output to the named task(s); they show full output (or,
+  with `--grep`, the matching lines) and other tasks report status only. Reach for it when you
+  know which task you're debugging.
 
-So `mise run preflight --json -v` is the usual "did it pass, and if not why" call;
-`mise run preflight --json --grep 'error|FAIL'` pulls just the interesting lines. An invalid
-`--grep` pattern emits an `{"event":"error"}` document and exits `2` without running. Plain
-`mise run preflight`, the human-readable form, is the one documented in the README.
+An invalid `--grep` pattern emits an `{"event":"error"}` document and exits `2` without running.
+Plain `mise run preflight`, the human-readable form, is the one documented in the README.

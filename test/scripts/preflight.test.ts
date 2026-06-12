@@ -213,12 +213,13 @@ test("buildResultReport level 0: passing tasks carry status only", async () => {
     expect(t.status).toBe("passed");
     expect(t.output).toBeUndefined();
     expect(t.totalLines).toBeUndefined();
+    expect(t.truncated).toBeUndefined();
   }
 });
 
-test("buildResultReport level 0: failed task carries totalLines but no output text", async () => {
+test("buildResultReport level 0: a small failed output is shown in full (with lint hint)", async () => {
   const { spawnTask } = fakeSpawner({
-    lint: { exitCode: 1, output: "line a\nline b\nline c" },
+    lint: { exitCode: 1, output: "boom: bad format" },
   });
   const r = await runPreflight({ spawnTask, renderer: "silent" });
   const report = buildResultReport(r.results);
@@ -226,23 +227,47 @@ test("buildResultReport level 0: failed task carries totalLines but no output te
   expect(report.ok).toBe(false);
   const lint = report.tasks.find((t) => t.name === "lint");
   expect(lint?.status).toBe("failed");
-  expect(lint?.output).toBeUndefined();
-  expect(lint?.totalLines).toBe(3);
+  // Failures show their output by default — small ones in full, untruncated.
+  expect(lint?.output).toContain("boom: bad format");
+  expect(lint?.output).toContain("mise run format");
+  expect(lint?.truncated).toBeUndefined();
+  expect(lint?.totalLines).toBeUndefined();
 });
 
-test("buildResultReport -v: failed task carries full output + lint hint; passing stays compact", async () => {
+test("buildResultReport level 0: a large failed output is truncated to a tail", async () => {
+  const big = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`).join("\n");
+  const { spawnTask } = fakeSpawner({ test: { exitCode: 1, output: big } });
+  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const report = buildResultReport(r.results);
+
+  const test = report.tasks.find((t) => t.name === "test");
+  expect(test?.status).toBe("failed");
+  expect(test?.truncated).toBe(true);
+  expect(test?.totalLines).toBe(30);
+  const outLines = (test?.output ?? "").split("\n");
+  expect(outLines).toHaveLength(20); // bounded tail
+  expect(outLines[0]).toBe("line 11"); // last 20 of 30 → lines 11..30
+  expect(outLines[19]).toBe("line 30");
+});
+
+test("buildResultReport -v: failures become full output, passing tasks gain a snippet", async () => {
+  const big = Array.from({ length: 30 }, (_, i) => `fail ${i + 1}`).join("\n");
   const { spawnTask } = fakeSpawner({
-    lint: { exitCode: 1, output: "biome: src/x.ts needs formatting" },
+    lint: { exitCode: 1, output: big },
+    test: { exitCode: 0, output: "test detail" },
   });
   const r = await runPreflight({ spawnTask, renderer: "silent" });
   const report = buildResultReport(r.results, { verbosity: 1 });
 
   const lint = report.tasks.find((t) => t.name === "lint");
-  expect(lint?.output).toContain("biome: src/x.ts needs formatting");
-  expect(lint?.output).toContain("mise run format");
   const test = report.tasks.find((t) => t.name === "test");
+  // -v turns the failure up to full, untruncated.
+  expect(lint?.output).toContain("fail 1");
+  expect(lint?.output).toContain("fail 30");
+  expect(lint?.truncated).toBeUndefined();
+  // -v also surfaces passing tasks (short → shown in full).
   expect(test?.status).toBe("passed");
-  expect(test?.output).toBeUndefined();
+  expect(test?.output).toContain("test detail");
 });
 
 test("buildResultReport -vv: passing tasks carry their output too", async () => {
