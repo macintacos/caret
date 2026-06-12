@@ -171,6 +171,18 @@ describe("diff-view lifecycle recreation and teardown", () => {
     ]);
   });
 
+  test("a content-key change clears the old instance's shadow DOM remnants", () => {
+    const factory = makeFactory();
+    const lifecycle = createDiffViewLifecycle({ create: factory.create });
+    const host = container();
+    const shadow = host.attachShadow({ mode: "open" });
+    shadow.appendChild(document.createElement("pre"));
+    const p = props({ container: host });
+    lifecycle.sync(p);
+    lifecycle.sync({ ...p, contentKey: "review-1:v2" });
+    expect(shadow.childNodes).toHaveLength(0);
+  });
+
   test("destroy cleans up the instance and is idempotent", () => {
     const factory = makeFactory();
     const lifecycle = createDiffViewLifecycle({ create: factory.create });

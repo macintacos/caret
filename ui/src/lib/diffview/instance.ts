@@ -57,6 +57,10 @@ export function createDiffViewLifecycle<TOptions extends object, TAnnotation, TC
     sync(props) {
       if (instance == null || props.contentKey !== contentKey) {
         instance?.cleanUp();
+        // cleanUp leaves the old header/pre/style nodes in the container's
+        // shadow root (it only detaches the instance's managers); clear them
+        // so the fresh instance doesn't render alongside stale content.
+        props.container.shadowRoot?.replaceChildren();
         instance = deps.create(props.options);
         instance.render({
           ...props.content,
