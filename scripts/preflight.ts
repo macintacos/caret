@@ -73,6 +73,10 @@ const TASK_ORDER = [...IMMEDIATE, ...DEPENDENT];
 // mirroring scripts/release/contract.ts.
 const SCHEMA_VERSION = 1;
 
+// Shared by the human summary and the --json output so the remediation text
+// can't drift between the two surfaces.
+const LINT_FORMAT_HINT = "hint: run `mise run format` to fix formatting failures";
+
 export async function runPreflight(deps: {
   spawnTask: SpawnTask;
   renderer?: "default" | "silent";
@@ -150,7 +154,7 @@ function buildSummary(results: Map<string, TaskResult>): string {
     const result = results.get(name);
     if (result?.status !== "failed") continue;
     lines.push("", `--- ${name} output ---`, result.output.trimEnd());
-    if (name === "lint") lines.push("hint: run `mise run format` to fix formatting failures");
+    if (name === "lint") lines.push(LINT_FORMAT_HINT);
   }
   return lines.join("\n");
 }
@@ -169,8 +173,8 @@ export function buildResultReport(results: Map<string, TaskResult>): PreflightRe
     const entry: PreflightTaskReport = { name, status: result.status };
     if (result.status === "failed") {
       let output = result.output.trimEnd();
-      // Same actionable hint buildSummary appends, folded into the lint output.
-      if (name === "lint") output += "\nhint: run `mise run format` to fix formatting failures";
+      // Fold the shared lint hint in so the JSON output and the summary agree.
+      if (name === "lint") output += `\n${LINT_FORMAT_HINT}`;
       entry.output = output;
     }
     tasks.push(entry);
