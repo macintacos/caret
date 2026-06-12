@@ -39,10 +39,7 @@ describe("formatFeedback", () => {
   });
 
   test("line-anchored annotations cite their line range", () => {
-    const out = formatFeedback(
-      [lineAnn(3, 3, "tighten"), lineAnn(4, 7, "split this up")],
-      "",
-    );
+    const out = formatFeedback([lineAnn(3, 3, "tighten"), lineAnn(4, 7, "split this up")], "");
     expect(out).toBe(
       ["Inline comments:", "", "1. On line 3: tighten", "2. On lines 4-7: split this up"].join(
         "\n",
