@@ -3,15 +3,14 @@ import { describe, expect, test } from "bun:test";
 import { until } from "../../../test/support/poll.ts";
 import { render } from "../../test-mount.ts";
 import { reactiveProps } from "../../test-props.svelte.ts";
-import type { Annotation, ClientReview } from "@core/types";
+import type { ClientReview } from "@core/types";
 import DiffPlanView from "./DiffPlanView.svelte";
 
-// Default props: a no-op create handler and an empty annotation list, so the
-// rendering tests below need only override `review`.
+// Default props: a no-op create handler, so the rendering tests below need only
+// override `review`.
 function props(over: Record<string, unknown> = {}) {
   return {
     review: reviewFixture(),
-    annotations: [] as Annotation[],
     onCreateLineAnnotation: () => {},
     ...over,
   };
@@ -67,22 +66,15 @@ describe("DiffPlanView rendering", () => {
   });
 });
 
-describe("DiffPlanView annotation/gutter wiring", () => {
-  // The library only invokes renderAnnotation under real layout, so the inline
-  // composer/card rendering and the gutter `+` create flow are covered by the
-  // Playwright e2e (diff-surface.e2e.ts). Here we assert only that mounting with
-  // line-anchored and legacy annotations paints the plan and does not throw —
-  // the annotation list maps without disturbing the source render.
-  test("mounts with line-anchored and legacy annotations and still paints the plan", async () => {
-    const annotations: Annotation[] = [
-      { id: "a1", startLine: 3, endLine: 3, comment: "tighten this" },
-      { id: "L1", blockId: "b0", startOffset: 0, endOffset: 1, quote: "q", comment: "legacy" },
-    ];
-    const { target } = render(DiffPlanView, props({ annotations }));
-    const painted = await until(
-      () => shadow(target)?.textContent?.includes("hello world") ?? false,
-    );
-    expect(painted).toBe(true);
+describe("DiffPlanView gutter composer", () => {
+  // The gutter `+` reveal, line-offset positioning, and the persisted create are
+  // real-browser behavior covered by the Playwright e2e (diff-surface.e2e.ts).
+  // Here we assert the composer is mounted only when the gutter callback opens
+  // it — the closed/open render branch, which is component-unit territory.
+  test("renders no composer until the gutter opens one", async () => {
+    const { target } = render(DiffPlanView, props());
+    await until(() => shadow(target)?.textContent?.includes("hello world") ?? false);
+    expect(target.querySelector('[role="dialog"]')).toBeNull();
   });
 });
 
