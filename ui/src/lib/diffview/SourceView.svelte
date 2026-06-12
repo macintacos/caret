@@ -21,12 +21,12 @@
 
   let { doc, contentKey, options = {}, annotations }: Props = $props();
 
+  // The container div is component markup, so the instance must not remove
+  // it on cleanUp — construct container-managed (third constructor arg).
   const lifecycle = createDiffViewLifecycle<
     SourceViewLibOptions,
     SourceLineAnnotation,
     { file: FileContents }
-    // The container div is component markup, so the instance must not remove
-    // it on cleanUp — construct container-managed (third constructor arg).
   >({ create: (libOptions) => new File(libOptions, undefined, true) });
 
   let container: HTMLElement | undefined = $state();
