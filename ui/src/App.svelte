@@ -248,10 +248,14 @@
 
   {#if active}
     {#if diffSurface}
-      <!-- Read-only source-view surface (EXC-583): the plan rendered as
-           line-numbered markdown source. No contents rail or annotation gutter
-           yet — those land on later milestones. -->
-      <DiffPlanView review={active} />
+      <!-- Source-view surface (EXC-583): the plan rendered as line-numbered
+           markdown source, with a line gutter for creating comments. The
+           contents rail lands on a later milestone. -->
+      <DiffPlanView
+        review={active}
+        annotations={autosave.annotations}
+        onCreateLineAnnotation={autosave.createLineAnnotation}
+      />
     {:else}
       <!-- Fixed, viewport-pinned contents rail — a sibling of (not inside) the
            grid so it escapes .columns' overflow:hidden and pins to the viewport. -->

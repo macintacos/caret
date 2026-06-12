@@ -70,7 +70,7 @@ export function createSourceCommenting(deps: SourceCommentingDeps): SourceCommen
     close();
   }
 
-  function buildComposer(): HTMLElement {
+  function buildComposer(state: OpenState): HTMLElement {
     const root = document.createElement("div");
     root.className = "caret-composer";
     root.setAttribute("role", "dialog");
@@ -83,9 +83,9 @@ export function createSourceCommenting(deps: SourceCommentingDeps): SourceCommen
     const label = document.createElement("p");
     label.className = "cc-label";
     label.textContent =
-      open!.startLine === open!.endLine
-        ? `Line ${open!.startLine}`
-        : `Lines ${open!.startLine}–${open!.endLine}`;
+      state.startLine === state.endLine
+        ? `Line ${state.startLine}`
+        : `Lines ${state.startLine}–${state.endLine}`;
     root.append(label);
 
     const textarea = document.createElement("textarea");
@@ -149,7 +149,7 @@ export function createSourceCommenting(deps: SourceCommentingDeps): SourceCommen
     },
     renderComposer(lineNumber) {
       if (open == null || lineNumber !== open.startLine) return undefined;
-      return buildComposer();
+      return buildComposer(open);
     },
   };
 }

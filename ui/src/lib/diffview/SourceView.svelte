@@ -7,7 +7,7 @@
   import { createDiffViewLifecycle } from "./instance.ts";
   import { createLinkHandlers, type LinkHandlers } from "./linkInteractions.ts";
   import { type LinkSpanMap, openLinkInNewTab } from "./links.ts";
-  import { type SourceViewLibOptions, toFileOptions } from "./options.ts";
+  import { type SourceViewGutter, type SourceViewLibOptions, toFileOptions } from "./options.ts";
   import { registerCaretDiffThemes } from "./theme.ts";
   import type { SourceDocument, SourceLineAnnotation, SourceViewOptions } from "./types.ts";
 
@@ -31,6 +31,10 @@
     /** Opens a clicked link. Defaults to a new tab with noopener,noreferrer;
      * overridable for testing. */
     openUrl?: (href: string) => void;
+    /** Opt-in line-comment gutter: enables the built-in hover `+`, reports the
+     * selected range, and renders inline annotation/composer DOM per line.
+     * Omit it for a read-only view (no gutter affordance). */
+    gutter?: SourceViewGutter;
   }
 
   let {
@@ -40,6 +44,7 @@
     annotations,
     links,
     openUrl = openLinkInNewTab,
+    gutter,
   }: Props = $props();
 
   // The container div is component markup, so the instance must not remove
@@ -59,7 +64,7 @@
     links == null ? undefined : createLinkHandlers(links, { openUrl }),
   );
 
-  const libOptions = $derived(toFileOptions(options, linkHandlers));
+  const libOptions = $derived(toFileOptions(options, linkHandlers, gutter));
 
   // Mount-once effect: reads no reactive state, returns the teardown.
   $effect(() => () => lifecycle.destroy());
