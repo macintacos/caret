@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #MISE description="Build the Svelte UI (Vite -> ui/dist: index.html + hashed assets)"
+#USAGE arg "[args]" var=#true help="Extra args forwarded to vite build"
 
 set -euo pipefail
 
 cd ui
-bunx vite build
+bunx vite build "$@"

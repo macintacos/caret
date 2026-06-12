@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 #MISE description="Run the test suite (bun test)"
+#USAGE arg "[args]" var=#true help="Extra args forwarded to bun test (e.g. a path or --test-name-pattern)"
 
 set -euo pipefail
 
 # `--conditions browser` selects svelte's client runtime entry so the UI
 # component suite can mount components under happy-dom (see bunfig.toml and
 # ui/test-svelte-preload.ts); the backend suite passes unchanged under it.
-bun test --conditions browser
+bun test --conditions browser "$@"

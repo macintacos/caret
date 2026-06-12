@@ -217,6 +217,32 @@ export function parseJsonArgs(argv: string[]): JsonArgs {
   return args;
 }
 
+/**
+ * Parse the same flags from mise's `usage_*` env vars (EXC-471). When preflight
+ * runs under its mise usage spec, mise consumes the flags and exposes them as
+ * env vars rather than argv: `usage_json` ("true"), `usage_verbose` (a count),
+ * `usage_grep` (the pattern), `usage_task` (space-joined names — mise task names
+ * never contain spaces, so a whitespace split is exact).
+ */
+export function parseJsonEnv(env: Record<string, string | undefined>): JsonArgs {
+  const args: JsonArgs = {
+    json: env.usage_json === "true",
+    verbosity: env.usage_verbose ? Number.parseInt(env.usage_verbose, 10) || 0 : 0,
+    tasks: env.usage_task ? env.usage_task.trim().split(/\s+/).filter(Boolean) : [],
+  };
+  if (env.usage_grep) args.grep = env.usage_grep;
+  return args;
+}
+
+/**
+ * Resolve the --json-mode flags from whichever channel delivered them: mise's
+ * `usage_*` env vars when running under the usage spec (`usage_json` is set only
+ * then), or `process.argv` for a direct `bun scripts/preflight.ts …` / test run.
+ */
+export function resolveJsonArgs(argv: string[], env: Record<string, string | undefined>): JsonArgs {
+  return env.usage_json === "true" ? parseJsonEnv(env) : parseJsonArgs(argv);
+}
+
 // Trailing-trimmed output split into lines; "" → [] so an empty capture is 0 lines.
 function splitLines(output: string): string[] {
   const trimmed = output.trimEnd();
@@ -364,8 +390,8 @@ async function spawnMiseTask(
 // --json (EXC-471): suppress the human display and emit machine-readable
 // documents on stdout instead. parseJsonArgs matches whether mise forwards the
 // flags as `... --json` or `... -- --json`.
-async function runCli(argv: string[]): Promise<void> {
-  const args = parseJsonArgs(argv);
+async function runCli(argv: string[], env: Record<string, string | undefined>): Promise<void> {
+  const args = resolveJsonArgs(argv, env);
 
   if (!args.json) {
     if (args.verbosity > 0 || args.grep !== undefined || args.tasks.length > 0) {
@@ -410,5 +436,5 @@ async function runCli(argv: string[]): Promise<void> {
 }
 
 if (import.meta.main) {
-  await runCli(process.argv);
+  await runCli(process.argv, process.env);
 }

@@ -15,6 +15,8 @@ import {
   buildResultReport,
   buildStartReport,
   parseJsonArgs,
+  parseJsonEnv,
+  resolveJsonArgs,
   runPreflight,
 } from "../../scripts/preflight.ts";
 import { waitFor } from "../support/poll.ts";
@@ -177,6 +179,48 @@ test("parseJsonArgs: --task is repeatable and accepts the = form", () => {
 test("parseJsonArgs: an empty or missing --grep value is treated as no filter", () => {
   expect(parseJsonArgs(["bun", "p", "--json", "--grep="]).grep).toBeUndefined();
   expect(parseJsonArgs(["bun", "p", "--json", "--grep"]).grep).toBeUndefined();
+});
+
+test("parseJsonEnv: reads mise's usage_* vars (count, repeatable --task)", () => {
+  const env = {
+    usage_json: "true",
+    usage_verbose: "2",
+    usage_grep: "err",
+    usage_task: "lint test",
+  };
+  expect(parseJsonEnv(env)).toEqual({
+    json: true,
+    verbosity: 2,
+    grep: "err",
+    tasks: ["lint", "test"],
+  });
+});
+
+test("parseJsonEnv: unset vars default sensibly", () => {
+  expect(parseJsonEnv({})).toEqual({ json: false, verbosity: 0, tasks: [] });
+  expect(parseJsonEnv({ usage_json: "true", usage_task: "test" })).toEqual({
+    json: true,
+    verbosity: 0,
+    tasks: ["test"],
+  });
+});
+
+test("resolveJsonArgs: uses env when usage_json is set (mise spec path)", () => {
+  // Under the mise usage spec the flags arrive as env vars and argv is empty.
+  expect(resolveJsonArgs([], { usage_json: "true", usage_verbose: "1", usage_grep: "x" })).toEqual({
+    json: true,
+    verbosity: 1,
+    grep: "x",
+    tasks: [],
+  });
+});
+
+test("resolveJsonArgs: parses argv when usage_json is absent (direct invocation)", () => {
+  expect(resolveJsonArgs(["bun", "p", "--json", "-v"], {})).toEqual({
+    json: true,
+    verbosity: 1,
+    tasks: [],
+  });
 });
 
 // --json report builders (EXC-471) ------------------------------------------

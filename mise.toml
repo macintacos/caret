@@ -26,6 +26,14 @@ postinstall = "hk install --mise"
 
 # The other tasks are file tasks in .mise/tasks/; preflight is a TOML task so
 # the gate runs the TS orchestrator (concurrent DAG + live display — EXC-462).
+# The usage spec declares the --json output flags (EXC-471); mise consumes them
+# into usage_* env vars, which scripts/preflight.ts reads via resolveJsonArgs.
 [tasks.preflight]
 description = "Pre-push gate (check-only): lint, unit + e2e tests, and build, run concurrently"
-run         = "bun scripts/preflight.ts"
+usage = '''
+flag "--json" help="Emit machine-readable JSON (two NDJSON docs on stdout) instead of the live display"
+flag "-v --verbose" count=#true help="Raise --json detail: -v full failure output + passing snippets, -vv all full"
+flag "--grep <pattern>" help="In --json mode, keep only output lines matching this regex"
+flag "--task <name>" var=#true help="In --json mode, scope output to the named task(s); repeatable"
+'''
+run = "bun scripts/preflight.ts"
