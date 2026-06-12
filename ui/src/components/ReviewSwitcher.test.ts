@@ -110,3 +110,28 @@ describe("ReviewSwitcher multiple reviews", () => {
     expect(target.querySelector(".m-meta")!.textContent).toBe("…/proj/r1");
   });
 });
+
+describe("ReviewSwitcher strips markdown links from titles", () => {
+  const linked = "Triage analysis to post — [EXC-562](https://linear.app/macintacos/issue/EXC-562)";
+  const stripped = "Triage analysis to post — EXC-562";
+
+  test("shows the active title's link text in the pill", () => {
+    const { target } = render(ReviewSwitcher, {
+      reviews: [review("r1", linked)],
+      activeId: "r1",
+      onSelect: () => {},
+    });
+    expect(target.querySelector(".title")!.textContent).toBe(stripped);
+  });
+
+  test("shows each option's link text in the dropdown", () => {
+    const { target, flush } = render(ReviewSwitcher, {
+      reviews: [review("r1", linked), review("r2", "Second")],
+      activeId: "r1",
+      onSelect: () => {},
+    });
+    (target.querySelector(".current") as HTMLElement).click();
+    flush();
+    expect(target.querySelector(".m-title")!.textContent).toBe(stripped);
+  });
+});

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { shortCwd } from "../lib/cwd.ts";
+  import { stripTitleLinks } from "../lib/title.ts";
   import type { ClientReview } from "@core/types";
   import Icon from "./Icon.svelte";
 
@@ -26,7 +27,7 @@
     aria-haspopup="listbox"
     aria-expanded={open}
   >
-    <span class="title">{active?.title ?? "—"}</span>
+    <span class="title">{stripTitleLinks(active?.title ?? "—")}</span>
     {#if reviews.length > 1}
       <span class="badge">{reviews.length}</span>
       <span class="chev" class:open aria-hidden="true">
@@ -45,7 +46,7 @@
             aria-selected={r.id === activeId}
             onclick={() => pick(r.id)}
           >
-            <span class="m-title">{r.title}</span>
+            <span class="m-title">{stripTitleLinks(r.title)}</span>
             <span class="m-meta mono">{shortCwd(r.cwd)}</span>
           </button>
         </li>
