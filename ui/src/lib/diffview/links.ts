@@ -49,16 +49,37 @@ const FENCE = /^\s*(`{3,}|~{3,})/;
 // the same count. Used to mask code so links inside it are not rewritten.
 const INLINE_CODE = /(`+)(?:.*?)\1/g;
 
-// `[label](url)` — label has no unescaped `]`; url is the run up to the first
-// `)` with no whitespace (CommonMark's simplest inline-link shape).
-const INLINE_LINK = /\[([^\]]*)\]\((\S+?)\)/g;
+// `[label](url)` — label has no unescaped `]`; url is the run inside the
+// parens. The url body allows one level of balanced parens (Wikipedia-style
+// paths like `Foo_(bar)`) so the link's own closing `)` is not mistaken for the
+// URL's, then the final `)` closes the link.
+const INLINE_LINK = /\[([^\]]*)\]\(((?:[^\s()]|\([^\s()]*\))+)\)/g;
 
 // `<url>` autolink — angle-bracketed, no spaces inside.
 const AUTOLINK = /<([^>\s]+)>/g;
 
-// A bare URL run, ended by whitespace or a few trailing punctuation chars that
-// are unlikely to be part of the URL.
-const BARE_URL = /https?:\/\/[^\s<>()]+/g;
+// A bare URL run: http(s):// followed by non-space, non-bracket chars, with one
+// level of balanced parens allowed inside (Wikipedia-style paths). Trailing
+// sentence punctuation is trimmed separately (trimUrlTrailing).
+const BARE_URL = /https?:\/\/(?:[^\s<>()]|\([^\s<>()]*\))+/g;
+
+// Punctuation that commonly trails a URL in prose but is not part of it.
+const TRAILING_PUNCT = /[.,;:!?'"]+$/;
+
+// Trims trailing sentence punctuation and one unbalanced closing paren from a
+// bare URL captured in prose (e.g. "see https://x.test/page." → drop the dot;
+// "(see https://x.test)" → drop the ")"). Balanced parens inside the URL are
+// preserved by BARE_URL itself, so only an *excess* ")" is removed here.
+function trimUrlTrailing(url: string): string {
+  let trimmed = url.replace(TRAILING_PUNCT, "");
+  while (
+    trimmed.endsWith(")") &&
+    (trimmed.match(/\(/g)?.length ?? 0) < (trimmed.match(/\)/g)?.length ?? 0)
+  ) {
+    trimmed = trimmed.slice(0, -1);
+  }
+  return trimmed;
+}
 
 /** Marks the [start, end) ranges already consumed on a source line so later
  * passes (bare-URL detection) don't re-scan rewritten regions. */
@@ -109,11 +130,14 @@ function transformLine(source: string, inCode: boolean): { display: string; span
   }
 
   // Bare URLs are display-identical (no rewrite of text) but still get a span.
+  // Trailing prose punctuation is excluded from the span so the href is clean.
   for (const m of source.matchAll(BARE_URL)) {
+    const url = trimUrlTrailing(m[0]);
+    if (url.length === 0) continue;
     const start = m.index;
-    const end = start + m[0].length;
+    const end = start + url.length;
     if (inMaskedCode(start, end) || overlaps(consumed, start, end)) continue;
-    rewrites.push({ start, end, display: m[0], href: m[0] });
+    rewrites.push({ start, end, display: url, href: url });
     consumed.push({ start, end });
   }
 

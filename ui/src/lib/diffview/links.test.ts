@@ -94,6 +94,14 @@ describe("buildLinkLayer inline-link simplification", () => {
     expect(spans.get(2) ?? []).toHaveLength(0);
     expect((spans.get(3) ?? [])[0]?.label).toBe("b");
   });
+
+  test("a URL with a balanced trailing paren keeps the whole URL", () => {
+    // Wikipedia-style links carry a `)` in the path; the closing `)` of the
+    // link must not be mistaken for the URL's own paren.
+    const { text, spans } = buildLinkLayer("[wiki](https://en.wikipedia.org/wiki/Foo_(bar)) ok");
+    expect(text).toBe("wiki ok");
+    expect((spans.get(1) ?? [])[0]?.href).toBe("https://en.wikipedia.org/wiki/Foo_(bar)");
+  });
 });
 
 describe("buildLinkLayer scheme filtering", () => {
@@ -137,6 +145,22 @@ describe("buildLinkLayer bare URLs and autolinks", () => {
     expect(line).toHaveLength(1);
     expect(text.slice(line[0]!.startCol, line[0]!.endCol)).toBe("https://bare.test/path");
     expect(line[0]!.href).toBe("https://bare.test/path");
+  });
+
+  test("trailing sentence punctuation is not captured into a bare URL", () => {
+    const { text, spans } = buildLinkLayer("see https://x.test/page. end");
+    // Display text is unchanged — only the span boundary excludes the period.
+    expect(text).toBe("see https://x.test/page. end");
+    const line = spans.get(1) ?? [];
+    expect(line).toHaveLength(1);
+    expect(line[0]!.href).toBe("https://x.test/page");
+    expect(text.slice(line[0]!.startCol, line[0]!.endCol)).toBe("https://x.test/page");
+  });
+
+  test("a balanced paren inside a bare URL is kept", () => {
+    const { text, spans } = buildLinkLayer("ref https://en.wikipedia.org/wiki/Foo_(bar) here");
+    expect(text).toBe("ref https://en.wikipedia.org/wiki/Foo_(bar) here");
+    expect((spans.get(1) ?? [])[0]?.href).toBe("https://en.wikipedia.org/wiki/Foo_(bar)");
   });
 
   test("an autolink <url> displays the inner URL and is clickable", () => {
