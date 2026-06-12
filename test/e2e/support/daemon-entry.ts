@@ -23,17 +23,17 @@
 //      the production boot writes a lock file instead and installs the signal
 //      handlers + lock lifecycle this test boot deliberately omits.
 //
-// Protocol with the spawning fixture (e2e/support/fixtures.ts): stdout carries
+// Protocol with the spawning fixture (test/e2e/support/fixtures.ts): stdout carries
 // EXACTLY ONE JSON line `{"port": N}`; all logs go to stderr so the port
 // handshake can't be corrupted. The fixture owns the ephemeral XDG_STATE_HOME
 // and tears it down after the test.
 
-import { NEVER_IDLE_MS } from "../../src/constants.ts";
-import { createServer } from "../../src/daemon.ts";
-import { createDaemonLogger } from "../../src/log.ts";
-import { prefsFile, reviewsDir } from "../../src/paths.ts";
-import { createStore } from "../../src/store.ts";
-import { loadUiAssets } from "../../src/ui-assets.ts";
+import { NEVER_IDLE_MS } from "../../../src/constants.ts";
+import { createServer } from "../../../src/daemon.ts";
+import { createDaemonLogger } from "../../../src/log.ts";
+import { prefsFile, reviewsDir } from "../../../src/paths.ts";
+import { createStore } from "../../../src/store.ts";
+import { loadUiAssets } from "../../../src/ui-assets.ts";
 
 // Refuse to run without an isolated state dir — never fall back to the real
 // ~/.local/state/caret (same posture as assertDevEnv in scripts/dev/driver.ts).
