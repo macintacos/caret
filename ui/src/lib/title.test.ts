@@ -22,6 +22,12 @@ describe("stripTitleLinks", () => {
     expect(stripTitleLinks("[A](https://a.test) then [B](https://b.test)")).toBe("A then B");
   });
 
+  test("strips a link whose URL contains balanced parentheses", () => {
+    expect(stripTitleLinks("See [Foo](https://example.com/wiki/Foo_(bar)) now")).toBe(
+      "See Foo now",
+    );
+  });
+
   test("handles an empty string", () => {
     expect(stripTitleLinks("")).toBe("");
   });
