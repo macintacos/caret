@@ -11,16 +11,25 @@ export type SourceViewLibOptions = FileOptions<undefined>;
 /** Library options for the diff view (module-internal). */
 export type SourceDiffViewLibOptions = FileDiffOptions<undefined>;
 
-export function toFileOptions(options: SourceViewOptions): SourceViewLibOptions {
+// The keys both views share (from the library's BaseCodeOptions); typed as a
+// Pick so the diff mapper can spread it without dragging in File-only option
+// types that conflict with FileDiff's.
+function sharedOptions(
+  options: SourceViewOptions,
+): Pick<SourceViewLibOptions, "overflow" | "disableLineNumbers"> {
   return {
     overflow: options.overflow,
     disableLineNumbers: options.disableLineNumbers,
   };
 }
 
+export function toFileOptions(options: SourceViewOptions): SourceViewLibOptions {
+  return sharedOptions(options);
+}
+
 export function toFileDiffOptions(options: SourceDiffViewOptions): SourceDiffViewLibOptions {
   return {
-    ...toFileOptions(options),
+    ...sharedOptions(options),
     diffStyle: options.diffStyle,
   };
 }

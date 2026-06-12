@@ -33,6 +33,11 @@ interface FakeInstance extends DiffViewInstance<FakeOptions, FakeAnnotation, Fak
   calls: Call[];
 }
 
+// Explicit type arguments: inferring TContent from the fake's render() param
+// (an intersection type) would widen it to the whole intersection.
+const makeLifecycle = (factory: { create: (options: FakeOptions) => FakeInstance }) =>
+  createDiffViewLifecycle<FakeOptions, FakeAnnotation, FakeContent>({ create: factory.create });
+
 function makeFactory() {
   const instances: FakeInstance[] = [];
   const create = (options: FakeOptions): FakeInstance => {
@@ -73,7 +78,7 @@ function props(
 describe("diff-view lifecycle mount", () => {
   test("first sync creates one instance and renders content into the container", () => {
     const factory = makeFactory();
-    const lifecycle = createDiffViewLifecycle({ create: factory.create });
+    const lifecycle = makeLifecycle(factory);
     const p = props({ annotations: [{ lineNumber: 3 }] });
     lifecycle.sync(p);
     expect(factory.instances).toHaveLength(1);
@@ -89,7 +94,7 @@ describe("diff-view lifecycle mount", () => {
 
   test("a no-op sync issues no instance calls", () => {
     const factory = makeFactory();
-    const lifecycle = createDiffViewLifecycle({ create: factory.create });
+    const lifecycle = makeLifecycle(factory);
     const p = props();
     lifecycle.sync(p);
     const callsAfterMount = factory.instances[0]!.calls.length;
@@ -102,7 +107,7 @@ describe("diff-view lifecycle mount", () => {
 describe("diff-view lifecycle updates preserve the instance", () => {
   test("an option change replaces options wholesale (previous spread in) and repaints", () => {
     const factory = makeFactory();
-    const lifecycle = createDiffViewLifecycle({ create: factory.create });
+    const lifecycle = makeLifecycle(factory);
     const p = props({ options: { overflow: "scroll", diffStyle: "split" } });
     lifecycle.sync(p);
     lifecycle.sync({ ...p, options: { overflow: "wrap" } });
@@ -117,7 +122,7 @@ describe("diff-view lifecycle updates preserve the instance", () => {
 
   test("an annotation change goes through setLineAnnotations and repaints", () => {
     const factory = makeFactory();
-    const lifecycle = createDiffViewLifecycle({ create: factory.create });
+    const lifecycle = makeLifecycle(factory);
     const p = props({ annotations: [{ lineNumber: 1 }] });
     lifecycle.sync(p);
     const next = [{ lineNumber: 2 }];
@@ -131,7 +136,7 @@ describe("diff-view lifecycle updates preserve the instance", () => {
 
   test("clearing annotations passes an empty list", () => {
     const factory = makeFactory();
-    const lifecycle = createDiffViewLifecycle({ create: factory.create });
+    const lifecycle = makeLifecycle(factory);
     const p = props({ annotations: [{ lineNumber: 1 }] });
     lifecycle.sync(p);
     lifecycle.sync({ ...p, annotations: undefined });
@@ -143,7 +148,7 @@ describe("diff-view lifecycle updates preserve the instance", () => {
 
   test("options and annotations changing together repaint once", () => {
     const factory = makeFactory();
-    const lifecycle = createDiffViewLifecycle({ create: factory.create });
+    const lifecycle = makeLifecycle(factory);
     const p = props({ annotations: [{ lineNumber: 1 }] });
     lifecycle.sync(p);
     lifecycle.sync({ ...p, options: { overflow: "wrap" }, annotations: [{ lineNumber: 2 }] });
@@ -156,7 +161,7 @@ describe("diff-view lifecycle updates preserve the instance", () => {
 describe("diff-view lifecycle recreation and teardown", () => {
   test("a content-key change tears down the old instance and renders a fresh one", () => {
     const factory = makeFactory();
-    const lifecycle = createDiffViewLifecycle({ create: factory.create });
+    const lifecycle = makeLifecycle(factory);
     const p = props();
     lifecycle.sync(p);
     const nextContent = { file: { name: "plan-v2.md" } };
@@ -173,7 +178,7 @@ describe("diff-view lifecycle recreation and teardown", () => {
 
   test("a content-key change clears the old instance's shadow DOM remnants", () => {
     const factory = makeFactory();
-    const lifecycle = createDiffViewLifecycle({ create: factory.create });
+    const lifecycle = makeLifecycle(factory);
     const host = container();
     const shadow = host.attachShadow({ mode: "open" });
     shadow.appendChild(document.createElement("pre"));
@@ -185,7 +190,7 @@ describe("diff-view lifecycle recreation and teardown", () => {
 
   test("destroy cleans up the instance and is idempotent", () => {
     const factory = makeFactory();
-    const lifecycle = createDiffViewLifecycle({ create: factory.create });
+    const lifecycle = makeLifecycle(factory);
     lifecycle.sync(props());
     lifecycle.destroy();
     lifecycle.destroy();
@@ -195,7 +200,7 @@ describe("diff-view lifecycle recreation and teardown", () => {
 
   test("destroy before any sync is a no-op", () => {
     const factory = makeFactory();
-    const lifecycle = createDiffViewLifecycle({ create: factory.create });
+    const lifecycle = makeLifecycle(factory);
     lifecycle.destroy();
     expect(factory.instances).toHaveLength(0);
   });
