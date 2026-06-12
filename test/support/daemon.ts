@@ -4,7 +4,7 @@
 // tool-agnostic: it speaks the daemon's wire protocol, never Claude's hook
 // stdin shaping (that lives in scripts/dev/driver.ts).
 //
-// The e2e suite has its own daemon launcher (e2e/support/daemon-entry.ts): it
+// The e2e suite has its own daemon launcher (test/e2e/support/daemon-entry.ts): it
 // runs under the Playwright/node runner, binds an OS-assigned port for parallel
 // workers, and serves the built ui/dist/ tree (index plus its hashed assets) —
 // a hermetic createServer-with-explicit-opts posture this module does not replace.

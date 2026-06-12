@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { APPROVE_VARIANTS } from "../../src/adapters/claude/approve.ts";
 import { VERSION } from "../../src/build-id.ts";
-import { isClientLive } from "../../src/daemon.ts";
+import { isClientLive, LIVE_CLIENT_WINDOW_MS } from "../../src/daemon.ts";
 import { createDaemonLogger } from "../../src/log.ts";
 import type { Store } from "../../src/store.ts";
 import type { UiAssets } from "../../src/ui-assets.ts";
@@ -319,6 +319,44 @@ test("POST /api/reviews reports hasLiveClient=true right after a reviews poll (E
   await fetch(`${base}/api/reviews`); // a live UI client polling the pending list
   const r = await postReviewRaw();
   expect(r.hasLiveClient).toBe(true);
+});
+
+// EXC-562: the EXC-559 liveness window keyed on the 2s reviews poll is defeated
+// by browser background-tab timer throttling — a hidden tab's poll is slowed to
+// ~1/min, so a backgrounded-but-open tab read as not-live and the hook opened a
+// redundant tab anyway. Three changes harden it: the window must comfortably
+// exceed the throttle floor; an explicit close beacon (POST /api/ui/gone)
+// retracts presence so a *closed* tab stops counting at once (which is what lets
+// the window be long); and idle shutdown is gated on presence so the daemon
+// doesn't die between throttled polls and forget the tab on respawn.
+
+test("the live-client window covers Chrome's ~1/min background-throttle floor (EXC-562)", () => {
+  // Contract, not the exact value: the window must exceed a minute so a hidden
+  // tab throttled to ~one poll/min still reads as live rather than gone.
+  expect(LIVE_CLIENT_WINDOW_MS).toBeGreaterThanOrEqual(60_000);
+});
+
+test("POST /api/ui/gone retracts presence so the next create reports hasLiveClient=false (EXC-562)", async () => {
+  await boot();
+  await fetch(`${base}/api/reviews`); // a tab polled → would otherwise read live
+  const gone = await fetch(`${base}/api/ui/gone`, { method: "POST" });
+  expect(gone.status).toBe(204);
+  // The tab announced it is closing, so the hook must foreground the next plan.
+  const r = await postReviewRaw();
+  expect(r.hasLiveClient).toBe(false);
+});
+
+test("a present UI tab keeps the daemon alive past idle; /api/ui/gone lets it shut down (EXC-562)", async () => {
+  const sig = shutdownSignal();
+  await boot({ idleMs: 30, onShutdown: sig.onShutdown });
+  await fetch(`${base}/api/reviews`); // a live tab is present
+  // A present tab must hold the daemon open even though it can poll slower than
+  // idle (throttled) — otherwise the daemon dies and forgets the tab on respawn.
+  await Bun.sleep(80);
+  expect(sig.fired()).toBe(false);
+  // Once the tab announces it closed, presence is gone and idle may fire.
+  await fetch(`${base}/api/ui/gone`, { method: "POST" });
+  await sig.shutdown;
 });
 
 test("resolve's 200 flushes BEFORE the long-poll resolves (one-tick defer)", async () => {

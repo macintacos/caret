@@ -34,6 +34,7 @@ adapter directory the single home for tool-specific vocabulary.
 
 ## Where else tests live
 
-- **Browser/UI** — `ui/src/**/*.test.ts` (happy-dom units) and `e2e/*.e2e.ts` (Playwright). The
-  unit-vs-e2e split is governed by `browser-testing.md`; this file governs only the backend `test/`
-  tree.
+- **Browser/UI** — `ui/src/**/*.test.ts` (happy-dom units) and `test/e2e/*.e2e.ts` (Playwright; the
+  `.e2e.ts` suffix keeps them out of `bun test`'s collection even though they sit under `test/`).
+  The unit-vs-e2e split is governed by `browser-testing.md`; this file governs only the backend
+  `test/` subtrees (`core`, `adapters`, `scripts`, `support`).

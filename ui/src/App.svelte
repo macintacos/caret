@@ -3,6 +3,7 @@
   import { approveVariants } from "./lib/approve.ts";
   import { highlightReady } from "./lib/highlightReady.svelte.ts";
   import { createPlanNotifier } from "./lib/notify.ts";
+  import { installUiGoneBeacon } from "./lib/presence.ts";
   import { createSafeModeGuard } from "./lib/safeMode.ts";
   import { createScrollSpy } from "./lib/scrollspy.ts";
   import { createAutosave } from "./state/autosave.svelte.ts";
@@ -166,6 +167,13 @@
       guard.destroy();
     };
   });
+
+  // ----- Tab-close presence retraction (EXC-562) -----
+  // Tell the daemon when this tab is closing so it stops counting us as a live
+  // client. Without it the daemon leans on the throttled 2s reviews poll, and a
+  // backgrounded-but-open tab would still get a redundant new tab on the next
+  // plan. Mount-once: reads no reactive state, returns its teardown.
+  $effect(() => installUiGoneBeacon({ target: window }));
 
   // ----- Scrollspy -----
   $effect(() => {

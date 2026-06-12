@@ -6,7 +6,7 @@ up as an e2e spec is slow and flaky. Decide by what you are actually testing (EX
 
 - **Real browser behavior** — text selection, focus/keyboard handling, scroll, popover positioning,
   and timing-driven UI (the 2s decision poll, the 500ms autosave debounce, safe mode's 300ms grace
-  window and 2s suppression) → a **committed Playwright spec** in `e2e/*.e2e.ts`. Run:
+  window and 2s suppression) → a **committed Playwright spec** in `test/e2e/*.e2e.ts`. Run:
   `mise run test-e2e`.
 - **Pure logic** — parsing, anchoring math, formatting, state machines → a **`bun test` unit**
   (happy-dom when a DOM API is needed, wired by `ui/test-setup.ts`). One runner covers both backend
@@ -22,17 +22,19 @@ up as an e2e spec is slow and flaky. Decide by what you are actually testing (EX
 Specs are named `*.e2e.ts`, deliberately distinct from the unit suffixes. `bun test` collects
 `*.test.ts` **and** `*.spec.ts` repo-wide, so a Playwright spec under either of those names would be
 swept into the unit runner and crash it. `.e2e.ts` keeps the two runners disjoint — Playwright owns
-`e2e/`, `bun test` owns the rest.
+`test/e2e/`, `bun test` owns the rest.
 
 ## The harness contract
 
-Every spec goes through `e2e/support/fixtures.ts`; never stand up a daemon by hand inside a spec.
+Every spec goes through `test/e2e/support/fixtures.ts`; never stand up a daemon by hand inside a
+spec.
 
 - **Per-test isolated daemon.** The fixture boots a fresh daemon on an OS-assigned port (port 0),
   serving the built `ui/dist/` tree (index plus its hashed assets), with an ephemeral
   `XDG_STATE_HOME` wiped at teardown and idle shutdown disabled. The user's real daemon (`:42718`)
-  and `~/.local/state/caret` are never touched. This boot lives in `e2e/support/daemon-entry.ts`,
-  a second daemon-boot path deliberately kept alongside the production `runDaemon`
+  and `~/.local/state/caret` are never touched. This boot lives in
+  `test/e2e/support/daemon-entry.ts`, a second daemon-boot path deliberately kept alongside the
+  production `runDaemon`
   (`src/commands/daemon.ts`): the e2e boot needs an OS-assigned port (the settings `Port` schema
   rejects 0, so only a direct `createServer` can ask for one), config hermeticity (no `config.toml`
   read), a never-idle daemon with a no-op shutdown (so it can't `process.exit` mid-test), and a

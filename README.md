@@ -344,11 +344,11 @@ port other than `42718` (the production default); this skips `--ephemeral` and b
 only one such session can run at a time. Likewise, set `CARET_DEV_STATE_DIR` (or `[dev].state_dir`)
 to keep dev state across restarts instead of the ephemeral default.
 
-`mise run test-e2e` runs the Playwright specs in `e2e/` against an isolated daemon that serves the
-built `ui/dist/` artifact on an OS-assigned port with ephemeral state, so the suite never touches your
-real daemon or `~/.local/state/caret`. `mise run setup` installs the Chromium browser the specs
-drive. For when to write an e2e spec versus a `bun test` unit versus throwaway exploration, see
-`docs/agents/browser-testing.md`.
+`mise run test-e2e` runs the Playwright specs in `test/e2e/` against an isolated daemon that serves
+the built `ui/dist/` artifact on an OS-assigned port with ephemeral state, so the suite never
+touches your real daemon or `~/.local/state/caret`. `mise run setup` installs the Chromium browser
+the specs drive. For when to write an e2e spec versus a `bun test` unit versus throwaway
+exploration, see `docs/agents/browser-testing.md`.
 
 For a quick local trial without installing, load the plugin from a checkout:
 
