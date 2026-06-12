@@ -423,17 +423,27 @@ test("buildErrorReport: shape for an invalid --grep pattern", () => {
 
 // runCli entrypoint (EXC-471) — exercised as a subprocess, like release-cli.test.ts.
 
-test("runCli: an invalid --grep pattern emits an error doc on stdout and exits 2", async () => {
-  const proc = Bun.spawn([process.execPath, "scripts/preflight.ts", "--json", "--grep", "["], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [stdout, exit] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+// A cold `bun` subprocess spawn (process start + the script's import graph)
+// can take several seconds when the full suite runs its files concurrently on
+// a busy machine, so this test gets a generous timeout rather than bun's 5s
+// default — well clear of the spawn's worst case without masking a real hang.
+const SUBPROCESS_SPAWN_TIMEOUT_MS = 30_000;
 
-  expect(exit).toBe(2);
-  expect(JSON.parse(stdout.trim())).toEqual({
-    event: "error",
-    schemaVersion: 1,
-    message: "invalid --grep pattern: [",
-  });
-});
+test(
+  "runCli: an invalid --grep pattern emits an error doc on stdout and exits 2",
+  async () => {
+    const proc = Bun.spawn([process.execPath, "scripts/preflight.ts", "--json", "--grep", "["], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, exit] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+
+    expect(exit).toBe(2);
+    expect(JSON.parse(stdout.trim())).toEqual({
+      event: "error",
+      schemaVersion: 1,
+      message: "invalid --grep pattern: [",
+    });
+  },
+  SUBPROCESS_SPAWN_TIMEOUT_MS,
+);

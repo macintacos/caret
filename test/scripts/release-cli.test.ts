@@ -20,31 +20,52 @@ async function runCli(args: string[]): Promise<{ exit: number; stdout: string; s
   return { exit, stdout, stderr };
 }
 
-test("--help routes help to stderr, leaving stdout empty", async () => {
-  const { exit, stdout, stderr } = await runCli(["--help"]);
-  expect(exit).toBe(0);
-  expect(stdout).toBe("");
-  expect(stderr).toContain("Usage:");
-});
+// Each case spawns a cold `bun` subprocess; that start-up plus the CLI's import
+// graph can run several seconds when the suite's files execute concurrently on
+// a busy machine, so these get a generous timeout instead of bun's 5s default.
+const SUBPROCESS_SPAWN_TIMEOUT_MS = 30_000;
 
-test("an unknown command leaves stdout empty (usage on stderr)", async () => {
-  const { exit, stdout, stderr } = await runCli(["bogus"]);
-  expect(exit).not.toBe(0);
-  expect(stdout).toBe("");
-  expect(stderr).toContain("Usage:");
-});
+test(
+  "--help routes help to stderr, leaving stdout empty",
+  async () => {
+    const { exit, stdout, stderr } = await runCli(["--help"]);
+    expect(exit).toBe(0);
+    expect(stdout).toBe("");
+    expect(stderr).toContain("Usage:");
+  },
+  SUBPROCESS_SPAWN_TIMEOUT_MS,
+);
 
-test("a bare invocation with no subcommand leaves stdout empty", async () => {
-  const { exit, stdout, stderr } = await runCli([]);
-  expect(exit).not.toBe(0);
-  expect(stdout).toBe("");
-  expect(stderr).toContain("Usage:");
-});
+test(
+  "an unknown command leaves stdout empty (usage on stderr)",
+  async () => {
+    const { exit, stdout, stderr } = await runCli(["bogus"]);
+    expect(exit).not.toBe(0);
+    expect(stdout).toBe("");
+    expect(stderr).toContain("Usage:");
+  },
+  SUBPROCESS_SPAWN_TIMEOUT_MS,
+);
 
-test("an invalid bump still emits a BAD_BUMP JSON object on stdout", async () => {
-  const { exit, stdout } = await runCli(["compute", "notabump"]);
-  expect(exit).not.toBe(0);
-  const parsed = JSON.parse(stdout);
-  expect(parsed.ok).toBe(false);
-  expect(parsed.errorCode).toBe("BAD_BUMP");
-});
+test(
+  "a bare invocation with no subcommand leaves stdout empty",
+  async () => {
+    const { exit, stdout, stderr } = await runCli([]);
+    expect(exit).not.toBe(0);
+    expect(stdout).toBe("");
+    expect(stderr).toContain("Usage:");
+  },
+  SUBPROCESS_SPAWN_TIMEOUT_MS,
+);
+
+test(
+  "an invalid bump still emits a BAD_BUMP JSON object on stdout",
+  async () => {
+    const { exit, stdout } = await runCli(["compute", "notabump"]);
+    expect(exit).not.toBe(0);
+    const parsed = JSON.parse(stdout);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.errorCode).toBe("BAD_BUMP");
+  },
+  SUBPROCESS_SPAWN_TIMEOUT_MS,
+);
