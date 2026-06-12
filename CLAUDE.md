@@ -86,8 +86,20 @@ editing a file in the same turn — give it a beat, or trust your edit.
 
 `mise run preflight` is the pre-push gate — lint, unit + e2e tests, and build, run concurrently.
 When **you** (an agent) run it, pass `--json`. `mise run preflight --json` replaces the live human
-display with two compact JSON documents on stdout, one per line: a `start` document listing the
-tasks it will run, then a `result` document carrying each task's status and an overall `ok`
-boolean. On failure `ok` is `false` and every failed task carries its captured `output` — that's
-the one field worth reading. The exit code is unchanged (`0` pass, `1` fail). Plain
+display with two compact JSON documents on stdout, one per line: a `start` document (the planned
+tasks plus the filters in effect) and a `result` document carrying each task's status and an
+overall `ok` boolean. The exit code is unchanged (`0` pass, `1` fail).
+
+By default the output is **lean** — a failed task reports only `totalLines` (no text), so the
+result stays small. Opt in to the output you need (these compose, and only apply with `--json`):
+
+- `-v` adds the full `output` for failed tasks; `-vv` also includes passing tasks' output.
+- `--grep <regex>` replaces `output` with only the lines matching the pattern, plus
+  `matchedLines`; it scans every in-scope task, passing ones included.
+- `--task <name>` (repeatable) scopes output to the named task(s) — they show full output
+  (or, with `--grep`, the matching lines); other tasks report status only, even at `-vv`.
+
+So `mise run preflight --json -v` is the usual "did it pass, and if not why" call;
+`mise run preflight --json --grep 'error|FAIL'` pulls just the interesting lines. An invalid
+`--grep` pattern emits an `{"event":"error"}` document and exits `2` without running. Plain
 `mise run preflight`, the human-readable form, is the one documented in the README.
