@@ -8,7 +8,8 @@ import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
 const FEEDBACK = "Please tighten the verification section.";
 
 // Line 7 of FIXTURE_PLAN, quoted by the line-anchored deny round-trip below.
-const FIXTURE_LINE_7 = "The cache layer keeps a warm copy of each manifest in memory today. Restarts";
+const FIXTURE_LINE_7 =
+  "The cache layer keeps a warm copy of each manifest in memory today. Restarts";
 
 test("dialog opens, Escape closes, Cmd/Ctrl+Enter submits a rejection with feedback", async ({
   daemon,
