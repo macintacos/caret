@@ -205,3 +205,29 @@ a:focus-visible,
   outline: 2px solid var(--accent-bright);
   outline-offset: 2px;
 }
+
+/* The theme/font bridge for @pierre/diffs (EXC-578). This is the single place
+   caret's design tokens reach the diff view's --diffs-* custom properties. The
+   diffview wrapper renders the library into a shadow root on .diffview. The
+   library defines its defaults for these vars on :host inside @layer base;
+   custom properties inherit through the shadow boundary, and this rule is
+   unlayered, so it wins over the layered :host defaults. Colors flow from the
+   paper/ink tokens above and inherit dark mode through their
+   prefers-color-scheme variants, so no second rule is needed. Only host-level
+   vars are set here — vars the library re-declares on inner elements (e.g.
+   --diffs-annotation-bg) can't be reached from the host and are left to the
+   surfaces that own them. No file outside this rule (and the diffview module)
+   references --diffs-*.
+
+   Berkeley Mono is referenced by name only — no font files ship (commercial
+   license); the stack falls back gracefully when it is not installed. */
+.diffview {
+  --diffs-font-family: 'Berkeley Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --diffs-font-size: 0.78rem;
+  --diffs-line-height: 1.55;
+  --diffs-tab-size: 2;
+
+  --diffs-bg: var(--paper-sunk);
+  --diffs-fg: var(--ink);
+  --diffs-fg-number: var(--ink-faint);
+}

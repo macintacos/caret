@@ -25,6 +25,23 @@ describe("SourceView rendering", () => {
     );
     expect(painted).toBe(true);
   });
+
+  test("highlights with caret's registered Shiki theme", async () => {
+    // The theme/font bridge registers caret's caret-light/caret-dark themes and
+    // selects them through the view options, so the library highlights with
+    // caret's palette rather than its own. A keyword token must carry caret's
+    // accent color in both color schemes (light #c2410c / dark #fb923c from
+    // ui/src/lib/caret-theme.ts) — proof the registration reached the renderer.
+    const code: SourceDocument = { name: "code.ts", text: "const x = 1\n" };
+    const { target } = render(SourceView, { doc: code, contentKey: "c1:v1" });
+    await until(() => shadow(target)?.textContent?.includes("const") ?? false);
+    const tokenStyles = [...(shadow(target)?.querySelectorAll("[style*='--diffs-token']") ?? [])]
+      .map((el) => el.getAttribute("style") ?? "")
+      .join(" ")
+      .toLowerCase();
+    expect(tokenStyles).toContain("--diffs-token-light:#c2410c");
+    expect(tokenStyles).toContain("--diffs-token-dark:#fb923c");
+  });
 });
 
 describe("SourceView instance preservation", () => {
