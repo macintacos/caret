@@ -41,9 +41,37 @@ export interface PreflightOutcome {
   summary: string;
 }
 
+// --json reports (EXC-471): the two documents an LLM/agent consumer reads
+// instead of the human display — one before the run (planned tasks), one after
+// (per-task results). Failed tasks embed their output; passing tasks carry
+// status alone to keep the success payload small.
+export interface PreflightStartReport {
+  event: "start";
+  schemaVersion: number;
+  tasks: string[];
+}
+
+export interface PreflightTaskReport {
+  name: string;
+  status: TaskStatus;
+  /** Present only for failed tasks: their captured output, for the consumer to act on. */
+  output?: string;
+}
+
+export interface PreflightResultReport {
+  event: "result";
+  schemaVersion: number;
+  ok: boolean;
+  tasks: PreflightTaskReport[];
+}
+
 const IMMEDIATE = ["lint", "test", "build-ui"] as const;
 const DEPENDENT = ["test-e2e", "build-bin"] as const;
 const TASK_ORDER = [...IMMEDIATE, ...DEPENDENT];
+
+// Bumpable integer so machine consumers detect a breaking shape change,
+// mirroring scripts/release/contract.ts.
+const SCHEMA_VERSION = 1;
 
 export async function runPreflight(deps: {
   spawnTask: SpawnTask;
@@ -127,6 +155,34 @@ function buildSummary(results: Map<string, TaskResult>): string {
   return lines.join("\n");
 }
 
+/** Planned task set, emitted to stdout before the run in --json mode. */
+export function buildStartReport(): PreflightStartReport {
+  return { event: "start", schemaVersion: SCHEMA_VERSION, tasks: [...TASK_ORDER] };
+}
+
+/** Per-task results, emitted to stdout after the run in --json mode. */
+export function buildResultReport(results: Map<string, TaskResult>): PreflightResultReport {
+  const tasks: PreflightTaskReport[] = [];
+  for (const name of TASK_ORDER) {
+    const result = results.get(name);
+    if (!result) continue;
+    const entry: PreflightTaskReport = { name, status: result.status };
+    if (result.status === "failed") {
+      let output = result.output.trimEnd();
+      // Same actionable hint buildSummary appends, folded into the lint output.
+      if (name === "lint") output += "\nhint: run `mise run format` to fix formatting failures";
+      entry.output = output;
+    }
+    tasks.push(entry);
+  }
+  return {
+    event: "result",
+    schemaVersion: SCHEMA_VERSION,
+    ok: !tasks.some((t) => t.status === "failed"),
+    tasks,
+  };
+}
+
 // ANSI escape sequences (color, cursor control). Children can emit them even
 // when piped — e.g. vite's clear-line progress — and a leaked cursor-control
 // code would break the plain line-per-event contract of the non-TTY fallback,
@@ -166,8 +222,20 @@ async function spawnMiseTask(
 }
 
 if (import.meta.main) {
-  const { exitCode, summary } = await runPreflight({ spawnTask: spawnMiseTask });
-  process.stdout.write(`\n${summary}\n`);
+  // --json (EXC-471): suppress the human display and emit two machine-readable
+  // documents on stdout instead. The check matches whether mise forwards the
+  // flag as `... --json` or `... -- --json`.
+  const json = process.argv.includes("--json");
+  if (json) process.stdout.write(`${JSON.stringify(buildStartReport())}\n`);
+  const { results, exitCode, summary } = await runPreflight({
+    spawnTask: spawnMiseTask,
+    renderer: json ? "silent" : "default",
+  });
+  if (json) {
+    process.stdout.write(`${JSON.stringify(buildResultReport(results))}\n`);
+  } else {
+    process.stdout.write(`\n${summary}\n`);
+  }
   // exitCode (not process.exit) so stdout drains: a piped consumer — CI, the
   // release gate's .quiet() — would otherwise see the summary truncated at the
   // pipe buffer (verified: exit() after a 1MB write delivers only 64KB).

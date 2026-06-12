@@ -2,10 +2,18 @@
 // spawner — no real mise tasks run. Asserts the scheduling contract from
 // EXC-462: lint/test/build-ui start immediately, dependents wait on build-ui
 // and dedupe it via MISE_TASK_SKIP, failures don't hide other results, and
-// the summary surfaces failed output plus the `mise run format` hint.
+// the summary surfaces failed output plus the `mise run format` hint. Also
+// covers the `--json` report builders (EXC-471): buildStartReport/
+// buildResultReport shape and the embedding of failed tasks' output.
 import { join } from "node:path";
 import { expect, test } from "bun:test";
-import { type SpawnOutcome, type SpawnTask, runPreflight } from "../../scripts/preflight.ts";
+import {
+  type SpawnOutcome,
+  type SpawnTask,
+  buildResultReport,
+  buildStartReport,
+  runPreflight,
+} from "../../scripts/preflight.ts";
 import { waitFor } from "../support/poll.ts";
 
 const ALL_TASKS = ["build-bin", "build-ui", "lint", "test", "test-e2e"];
@@ -135,4 +143,70 @@ test("build-ui failure skips its dependents and reports them as skipped", async 
   expect(r.results.get("test-e2e")?.status).toBe("skipped");
   expect(r.results.get("build-bin")?.status).toBe("skipped");
   expect(r.summary).toContain("vite exploded");
+});
+
+// --json report builders (EXC-471) ------------------------------------------
+
+test("buildStartReport lists the planned tasks in DAG order", () => {
+  const start = buildStartReport();
+  expect(start.event).toBe("start");
+  expect(start.schemaVersion).toBe(1);
+  expect(start.tasks).toEqual(["lint", "test", "build-ui", "test-e2e", "build-bin"]);
+});
+
+test("buildResultReport: all pass → ok true, statuses only, no output fields", async () => {
+  const { spawnTask } = fakeSpawner();
+  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const report = buildResultReport(r.results);
+
+  expect(report.event).toBe("result");
+  expect(report.schemaVersion).toBe(1);
+  expect(report.ok).toBe(true);
+  expect(report.tasks.map((t) => t.name)).toEqual([
+    "lint",
+    "test",
+    "build-ui",
+    "test-e2e",
+    "build-bin",
+  ]);
+  for (const t of report.tasks) {
+    expect(t.status).toBe("passed");
+    expect(t.output).toBeUndefined();
+  }
+});
+
+test("buildResultReport: lint failure → ok false, failed lint carries output + format hint", async () => {
+  const { spawnTask } = fakeSpawner({
+    lint: { exitCode: 1, output: "biome: src/x.ts needs formatting" },
+  });
+  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const report = buildResultReport(r.results);
+
+  expect(report.ok).toBe(false);
+  const lint = report.tasks.find((t) => t.name === "lint");
+  expect(lint?.status).toBe("failed");
+  expect(lint?.output).toContain("biome: src/x.ts needs formatting");
+  expect(lint?.output).toContain("mise run format");
+  // Passing tasks stay compact — no output field.
+  const test = report.tasks.find((t) => t.name === "test");
+  expect(test?.status).toBe("passed");
+  expect(test?.output).toBeUndefined();
+});
+
+test("buildResultReport: build-ui failure → dependents skipped with no output", async () => {
+  const { spawnTask } = fakeSpawner({
+    "build-ui": { exitCode: 1, output: "vite exploded" },
+  });
+  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const report = buildResultReport(r.results);
+
+  expect(report.ok).toBe(false);
+  const buildUi = report.tasks.find((t) => t.name === "build-ui");
+  expect(buildUi?.status).toBe("failed");
+  expect(buildUi?.output).toContain("vite exploded");
+  for (const name of ["test-e2e", "build-bin"]) {
+    const t = report.tasks.find((x) => x.name === name);
+    expect(t?.status).toBe("skipped");
+    expect(t?.output).toBeUndefined();
+  }
 });

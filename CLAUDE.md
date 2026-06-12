@@ -81,3 +81,13 @@ User: *"How does auth work in this repo?"*
 
 The file watcher debounces ~500ms behind writes. Don't re-query codegraph immediately after
 editing a file in the same turn — give it a beat, or trust your edit.
+
+## Verifying changes
+
+`mise run preflight` is the pre-push gate — lint, unit + e2e tests, and build, run concurrently.
+When **you** (an agent) run it, pass `--json`. `mise run preflight --json` replaces the live human
+display with two compact JSON documents on stdout, one per line: a `start` document listing the
+tasks it will run, then a `result` document carrying each task's status and an overall `ok`
+boolean. On failure `ok` is `false` and every failed task carries its captured `output` — that's
+the one field worth reading. The exit code is unchanged (`0` pass, `1` fail). Plain
+`mise run preflight`, the human-readable form, is the one documented in the README.
