@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Cut a caret release: baseline|compute|prepare|finalize (drive via /release-caret)"
+#USAGE arg "[args]" var=#true help="Subcommand + args forwarded to scripts/release/cli.ts"
 
 set -euo pipefail
 

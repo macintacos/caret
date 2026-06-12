@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Format all files (Biome, write mode)"
+#USAGE arg "[args]" var=#true help="Extra args forwarded to hk fix (e.g. specific paths)"
 
 set -euo pipefail
 
-hk fix --all --no-stage
+hk fix --all --no-stage "$@"

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Run the Playwright e2e suite against an isolated daemon"
 #MISE depends=["build-ui"]
+#USAGE arg "[args]" var=#true help="Extra args forwarded to playwright test (e.g. a spec path or --grep)"
 
 set -euo pipefail
 
@@ -11,4 +12,4 @@ if ! bun -e 'import { chromium } from "@playwright/test"; import { existsSync } 
   exit 1
 fi
 
-bunx playwright test
+bunx playwright test "$@"

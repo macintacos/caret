@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Check formatting and lint rules (Biome, read-only)"
+#USAGE arg "[args]" var=#true help="Extra args forwarded to hk check (e.g. specific paths)"
 
 set -euo pipefail
 
-hk check --all
+hk check --all "$@"

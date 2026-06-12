@@ -81,3 +81,30 @@ User: *"How does auth work in this repo?"*
 
 The file watcher debounces ~500ms behind writes. Don't re-query codegraph immediately after
 editing a file in the same turn — give it a beat, or trust your edit.
+
+## Verifying changes
+
+`mise run preflight` is the pre-push gate — lint, unit + e2e tests, and build, run concurrently.
+When **you** (an agent) run it, pass `--json`. `mise run preflight --json` replaces the live human
+display with two compact JSON documents on stdout, one per line: a `start` document (the planned
+tasks plus the filters in effect) and a `result` document carrying each task's status and an
+overall `ok` boolean. The exit code is unchanged (`0` pass, `1` fail).
+
+`mise run preflight --json` is the call you want almost every time. **Failures show their output
+by default**, so you can act immediately — and if a task's output is large it's abbreviated to its
+last 20 lines with `totalLines` and `"truncated": true` so you know there's more. Passing tasks
+stay status-only to keep the result small. The flags below turn that up; they compose and only
+apply with `--json`:
+
+- `-v` / `-vv` — turn up verbosity. `-v` makes any **truncated** failure full and adds a snippet
+  of each passing task; `-vv` shows every task's full output. Reach for `-v` when a failure's tail
+  was truncated and you need the whole log, or when you want to inspect a passing task.
+- `--grep <regex>` — replace `output` with only the lines matching the pattern (plus
+  `matchedLines`), scanning every in-scope task. Reach for it to pull specific lines (an error
+  code, a file path) out of a large log without `-v`.
+- `--task <name>` (repeatable) — scope output to the named task(s); they show full output (or,
+  with `--grep`, the matching lines) and other tasks report status only. Reach for it when you
+  know which task you're debugging.
+
+An invalid `--grep` pattern emits an `{"event":"error"}` document and exits `2` without running.
+Plain `mise run preflight`, the human-readable form, is the one documented in the README.
