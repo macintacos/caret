@@ -4,10 +4,10 @@ import { TOC_BREAKPOINT_PX } from "./ui/src/lib/layout.ts";
 // Real-browser e2e for the review UI (EXC-453). Specs are named *.e2e.ts so
 // `bun test` (which collects *.test.ts AND *.spec.ts repo-wide) never picks
 // them up — the two runners stay disjoint. Each test boots its own isolated
-// daemon via e2e/support/fixtures.ts (OS-assigned port, ephemeral state), so
-// there is no static baseURL or webServer here.
+// daemon via test/e2e/support/fixtures.ts (OS-assigned port, ephemeral state),
+// so there is no static baseURL or webServer here.
 export default defineConfig({
-  testDir: "e2e",
+  testDir: "test/e2e",
   testMatch: "**/*.e2e.ts",
   fullyParallel: true,
   retries: 0,

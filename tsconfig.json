@@ -1,10 +1,11 @@
 {
   // The root (node/bun) program: the daemon core (src), the dev/release scripts
-  // (scripts), the unit suite (test), and the Playwright e2e suite (e2e, which
-  // imports from src to boot a real daemon in-process). Browser-DOM types ride
-  // in via the shared base for e2e's page.evaluate callbacks; @playwright/test
-  // types arrive through explicit imports, never as ambient globals, so daemon
-  // code stays clear of them. Shared options live in tsconfig.base.json.
+  // (scripts), and the unit suite (test) — which now also houses the Playwright
+  // e2e suite under test/e2e/, importing from src to boot a real daemon
+  // in-process. Browser-DOM types ride in via the shared base for e2e's
+  // page.evaluate callbacks; @playwright/test types arrive through explicit
+  // imports, never as ambient globals, so daemon code stays clear of them.
+  // Shared options live in tsconfig.base.json.
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "resolveJsonModule": true,
@@ -15,6 +16,6 @@
     // ui unit suite's imports identically (EXC-507).
     "paths": { "@core/*": ["./src/*"] }
   },
-  "include": ["src/**/*.ts", "scripts/**/*.ts", "e2e/**/*.ts", "test/**/*.ts", "*.ts"],
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "test/**/*.ts", "*.ts"],
   "exclude": ["node_modules", "bin", "ui", "spike"]
 }
