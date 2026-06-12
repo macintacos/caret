@@ -65,7 +65,9 @@ describe("DiffPlanView contents pane", () => {
     const pane = await until(() => target.querySelector(".source-toc") != null);
     expect(pane).toBe(true);
     expect(target.querySelectorAll(".source-toc .toc-row")).toHaveLength(3);
-    const labels = [...target.querySelectorAll(".source-toc .toc-row")].map((r) => r.textContent?.trim());
+    const labels = [...target.querySelectorAll(".source-toc .toc-row")].map((r) =>
+      r.textContent?.trim(),
+    );
     expect(labels).toEqual(["Context", "Approach", "Verification"]);
   });
 

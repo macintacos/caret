@@ -154,12 +154,15 @@ describe("SourceToc keyboard navigation", () => {
   test("scrolls the cursored row into view so keyboard focus stays visible", () => {
     const { target } = render(SourceToc, { headings, activeLine: null, onJump: () => {} });
     const r = rows(target);
-    let scrolledRow: HTMLElement | null = null;
-    // happy-dom has no layout, so record which row scrollIntoView ran on.
-    for (const row of r) row.scrollIntoView = () => (scrolledRow = row);
+    const scrolled: number[] = [];
+    // happy-dom has no layout, so record which row index scrollIntoView ran on.
+    r.forEach((row, i) => {
+      row.scrollIntoView = () => scrolled.push(i);
+    });
     const input = filterInput(target);
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-    expect(scrolledRow).toBe(r[1]!);
+    // Two ArrowDowns land the cursor on row index 1.
+    expect(scrolled.at(-1)).toBe(1);
   });
 });

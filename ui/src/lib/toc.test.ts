@@ -34,9 +34,7 @@ describe("extractHeadings", () => {
   });
 
   test("strips trailing closing hashes", () => {
-    expect(extractHeadings("## Section ##\n")).toEqual([
-      { level: 2, text: "Section", line: 1 },
-    ]);
+    expect(extractHeadings("## Section ##\n")).toEqual([{ level: 2, text: "Section", line: 1 }]);
   });
 
   test("ignores hash lines inside a fenced code block", () => {
@@ -61,9 +59,7 @@ describe("extractHeadings", () => {
   });
 
   test("allows indented headings (leading spaces before the hash)", () => {
-    expect(extractHeadings("   ## Indented\n")).toEqual([
-      { level: 2, text: "Indented", line: 1 },
-    ]);
+    expect(extractHeadings("   ## Indented\n")).toEqual([{ level: 2, text: "Indented", line: 1 }]);
   });
 
   test("returns an empty list for text with no headings", () => {
@@ -131,12 +127,8 @@ describe("filterHeadings", () => {
   });
 
   test("matches a case-insensitive substring of the text", () => {
-    expect(filterHeadings(headings, "app")).toEqual([
-      { level: 2, text: "Approach", line: 5 },
-    ]);
-    expect(filterHeadings(headings, "ION")).toEqual([
-      { level: 2, text: "Verification", line: 9 },
-    ]);
+    expect(filterHeadings(headings, "app")).toEqual([{ level: 2, text: "Approach", line: 5 }]);
+    expect(filterHeadings(headings, "ION")).toEqual([{ level: 2, text: "Verification", line: 9 }]);
   });
 
   test("returns an empty list when nothing matches", () => {
