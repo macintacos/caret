@@ -104,16 +104,25 @@ function awaitPortLine(child: ChildProcess, stderr: () => string): Promise<numbe
 // setTimeout rather than Bun.sleep (the src probe defaults to Bun.sleep).
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-export const test = base.extend<{ daemon: Daemon }>({
-  // biome-ignore lint/correctness/noEmptyPattern: Playwright's fixture signature requires the destructuring slot; {} declares "no fixture dependencies"
-  daemon: async ({}, use) => {
+export const test = base.extend<{ daemon: Daemon; diffSurface: boolean }>({
+  // Opt-in source-view surface (EXC-583). A spec sets it per-test via
+  // test.use({ diffSurface: true }); the daemon fixture turns it into the env the
+  // e2e launcher reads. Default false keeps every existing spec on the legacy
+  // surface unchanged.
+  diffSurface: [false, { option: true }],
+
+  daemon: async ({ diffSurface }, use) => {
     // Ephemeral, isolated state: the daemon's reviews/prefs/logs all live under
     // this dir and are wiped at teardown. The user's real state is never touched.
     const stateDir = await mkdtemp(join(tmpdir(), "caret-e2e."));
     // stdin is a live pipe on purpose: the daemon self-reaps when it closes,
     // so a SIGKILL'd runner can't leave an orphan daemon behind.
     const child = spawn("bun", [DAEMON_ENTRY], {
-      env: { ...process.env, XDG_STATE_HOME: stateDir },
+      env: {
+        ...process.env,
+        XDG_STATE_HOME: stateDir,
+        ...(diffSurface ? { CARET_E2E_DIFF_SURFACE: "1" } : {}),
+      },
       stdio: ["pipe", "pipe", "pipe"],
     });
     const stderrChunks: Buffer[] = [];

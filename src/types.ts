@@ -223,6 +223,11 @@ export interface HealthIdentity {
    * isCompiledBinary(): a real installed binary reports false; `mise run dev`,
    * the e2e harness, and a manual `bun src/cli.ts` report true. */
   isDev?: boolean;
+  /** When set, the UI mounts the @pierre/diffs source-view surface instead of the
+   * legacy plan view (EXC-583). Resolved from the build-gated [dev].diff_surface
+   * config key, so a compiled binary always reports false. Optional: a daemon
+   * that predates this field omits it, and the UI treats absent as off. */
+  diffSurface?: boolean;
   /** The active adapter's declared approve variants, in display order — the wire
    * channel that lets the UI render its approve split-button from the adapter's
    * capability instead of hard-coding tool mode names. Optional: a daemon that

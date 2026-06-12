@@ -158,6 +158,23 @@ test("GET /api/health reports isDev as a boolean", async () => {
   expect(typeof body.isDev).toBe("boolean");
 });
 
+// ---- source-view surface flag in health (EXC-583) ----
+
+test("GET /api/health reports diffSurface as a boolean, false by default", async () => {
+  // The UI mounts the source-view surface when this flag is on. It's always a
+  // boolean (a process/config-constant) so the UI can read it without a presence
+  // check; absent on the option means off.
+  await boot();
+  const body = (await (await fetch(`${base}/api/health`)).json()) as { diffSurface?: unknown };
+  expect(body.diffSurface).toBe(false);
+});
+
+test("GET /api/health reflects diffSurface when the daemon enables it", async () => {
+  await boot({ diffSurface: true });
+  const body = (await (await fetch(`${base}/api/health`)).json()) as { diffSurface?: unknown };
+  expect(body.diffSurface).toBe(true);
+});
+
 test("the lock file is written on bind with pid/port/build/version", async () => {
   const lockPath = join(dir, "daemon.lock");
   await boot({ lockPath, buildId: "build-abc" });

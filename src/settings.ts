@@ -59,6 +59,7 @@ const Dev = z
   .object({
     port: Port.optional(), // EXC-558: CARET_DEV_PORT — fixed dev port; unset → OS-assigned
     state_dir: z.string().min(1).optional(), // EXC-558: CARET_DEV_STATE_DIR — persistent dev state dir; unset → ephemeral
+    diff_surface: z.boolean().default(false), // EXC-583: mount the @pierre/diffs source-view surface instead of the legacy plan view
     notify: z
       .object({
         enabled: z.boolean().default(false), // EXC-558: arm the seeder without --notify

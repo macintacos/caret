@@ -18,6 +18,7 @@
   import type { ApproveVariant, ApproveVariantId, Annotation } from "@core/types";
 
   import AnnotationGutter from "./components/AnnotationGutter.svelte";
+  import DiffPlanView from "./components/DiffPlanView.svelte";
   import EmptyState from "./components/EmptyState.svelte";
   import PlanView from "./components/PlanView.svelte";
   import RequestChangesDialog from "./components/RequestChangesDialog.svelte";
@@ -46,6 +47,11 @@
   // probe to show the "local build" badge. A daemon predating the field omits
   // it, so this stays false.
   let isDev = $state(false);
+  // When on (EXC-583), the plan renders through the @pierre/diffs source-view
+  // surface instead of the legacy plan view + contents rail. Build-gated: the
+  // daemon resolves it from [dev].diff_surface, which is inert in a prod build,
+  // so this stays false there and the legacy surface is byte-identical.
+  let diffSurface = $state(false);
   // The running build's version + commit (EXC-561), read once from the same
   // health probe to feed the bottom-left VersionBadge. Undefined until the probe
   // lands (or for a daemon predating the fields); the badge self-gates on
@@ -114,6 +120,7 @@
         selection.setConnected(true);
         declaredVariants = h.approveVariants;
         isDev = h.isDev ?? false;
+        diffSurface = h.diffSurface ?? false;
         version = h.version;
         commit = h.commit;
       })
@@ -240,33 +247,40 @@
   {/if}
 
   {#if active}
-    <!-- Fixed, viewport-pinned contents rail — a sibling of (not inside) the
-         grid so it escapes .columns' overflow:hidden and pins to the viewport. -->
-    <Toc headings={rendered.headings} {activeSlug} onJump={jumpTo} />
+    {#if diffSurface}
+      <!-- Read-only source-view surface (EXC-583): the plan rendered as
+           line-numbered markdown source. No contents rail or annotation gutter
+           yet — those land on later milestones. -->
+      <DiffPlanView review={active} />
+    {:else}
+      <!-- Fixed, viewport-pinned contents rail — a sibling of (not inside) the
+           grid so it escapes .columns' overflow:hidden and pins to the viewport. -->
+      <Toc headings={rendered.headings} {activeSlug} onJump={jumpTo} />
 
-    <div class="columns">
-      {#key active.id}
-        <PlanView
-          html={rendered.html}
-          annotations={autosave.annotations}
-          activeId={autosave.focusedAnnotation}
-          bind:scrollEl
-          onResolved={(r) => (resolvedAnnotations = r)}
-          onCreate={autosave.createAnnotation}
-          onFocusAnnotation={autosave.focusAnnotation}
-        />
-      {/key}
+      <div class="columns">
+        {#key active.id}
+          <PlanView
+            html={rendered.html}
+            annotations={autosave.annotations}
+            activeId={autosave.focusedAnnotation}
+            bind:scrollEl
+            onResolved={(r) => (resolvedAnnotations = r)}
+            onCreate={autosave.createAnnotation}
+            onFocusAnnotation={autosave.focusAnnotation}
+          />
+        {/key}
 
-      <aside class="col col-gutter">
-        <AnnotationGutter
-          resolved={resolvedAnnotations}
-          activeId={autosave.focusedAnnotation}
-          onFocus={autosave.focusAnnotation}
-          onEdit={autosave.editAnnotation}
-          onDelete={autosave.deleteAnnotation}
-        />
-      </aside>
-    </div>
+        <aside class="col col-gutter">
+          <AnnotationGutter
+            resolved={resolvedAnnotations}
+            activeId={autosave.focusedAnnotation}
+            onFocus={autosave.focusAnnotation}
+            onEdit={autosave.editAnnotation}
+            onDelete={autosave.deleteAnnotation}
+          />
+        </aside>
+      </div>
+    {/if}
   {:else}
     <EmptyState connected={selection.connected} />
   {/if}
@@ -314,6 +328,7 @@
     grid-row: 1;
   }
   .shell > :global(.columns),
+  .shell > :global(.diff-plan),
   .shell > :global(.empty) {
     grid-row: 3;
   }

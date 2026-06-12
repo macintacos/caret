@@ -66,6 +66,9 @@ const server = createServer({
   onShutdown: () => {},
   prefsPath: prefsFile(), // under the ephemeral state dir
   assets,
+  // EXC-583: the harness reads no config.toml, so a spec opts the source-view
+  // surface on via this env (set by the fixture) rather than a [dev] key.
+  diffSurface: process.env.CARET_E2E_DIFF_SURFACE === "1",
   log,
 });
 
