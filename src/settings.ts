@@ -17,6 +17,10 @@
 import { readFileSync, statSync } from "node:fs";
 import { parse as parseToml } from "smol-toml";
 import { z } from "zod";
+// EXC-558: the one dev-vs-compiled signal, reused to gate the [dev] table inert
+// in a prod build. Cycle-free: build-id imports only ui-assets/crypto/pkg, and
+// paths.ts (already imported below) itself imports build-id.
+import { isCompiledBinary } from "./build-id.ts";
 // Re-exported so existing `from "./settings.ts"` import sites keep working; the
 // literal lives in the node-free constants module so ui/vite.config.ts can read
 // it without pulling in this module's node-only dependency chain (EXC-504).
@@ -42,6 +46,29 @@ const IdleMs = z.number().int().nonnegative();
 // value (classifyEnv → null → file/default; safeParse → whole-file revert).
 const HeartbeatMs = z.number().int().positive().lt(MAX_HEARTBEAT_MS);
 
+// EXC-558: dev-only settings ([dev]). Consumed ONLY by dev tooling
+// (scripts/dev/*, .mise/tasks/dev), which runs from source under bun;
+// production code never reads [dev], and a prod build resolves it to inert
+// defaults regardless of config.toml (the gate in parseAndValidate). The
+// CARET_DEV_* env vars fold in as overrides via the devPort/devStateDir/
+// devSeeder accessors below — same env > config > default shape as the EXC-430
+// accessors, but kept out of ENV_VARS/invalidEnvVars so a prod boot never warns
+// about dev vars.
+const DevIntervalMs = z.number().int().positive();
+const Dev = z
+  .object({
+    port: Port.optional(), // EXC-558: CARET_DEV_PORT — fixed dev port; unset → OS-assigned
+    state_dir: z.string().min(1).optional(), // EXC-558: CARET_DEV_STATE_DIR — persistent dev state dir; unset → ephemeral
+    notify: z
+      .object({
+        enabled: z.boolean().default(false), // EXC-558: arm the seeder without --notify
+        interval_ms: DevIntervalMs.default(15_000), // EXC-558: CARET_DEV_NEW_REVIEW_MS — seeder cadence
+        max_pending: z.number().int().positive().default(3), // EXC-558: cap on unresolved extras
+      })
+      .prefault({}),
+  })
+  .prefault({});
+
 const SettingsSchema = z.object({
   logging: z
     .object({
@@ -64,6 +91,7 @@ const SettingsSchema = z.object({
       timeout_s: TimeoutS.default(3600), // EXC-430: seconds — reviewTimeoutMs converts to ms, once
     })
     .prefault({}),
+  dev: Dev, // EXC-558: build-gated dev-only settings (see Dev above)
 });
 
 export type Settings = z.infer<typeof SettingsSchema>;
@@ -74,6 +102,8 @@ function freeze(s: Settings): Settings {
   Object.freeze(s.logging);
   Object.freeze(s.daemon);
   Object.freeze(s.review);
+  Object.freeze(s.dev.notify); // EXC-558
+  Object.freeze(s.dev); // EXC-558
   return Object.freeze(s);
 }
 
@@ -94,7 +124,7 @@ function logValidationFailure(err: z.ZodError): void {
 /** Parse + validate TOML text; null means "unusable" (malformed or invalid)
  * and the caller decides the fallback. Invalid values fall back at whole-file
  * granularity: one bad key reverts the entire file until it is fixed. */
-function parseAndValidate(text: string): Settings | null {
+function parseAndValidate(text: string, isCompiled: boolean): Settings | null {
   let raw: unknown;
   try {
     raw = parseToml(text);
@@ -106,19 +136,22 @@ function parseAndValidate(text: string): Settings | null {
     logValidationFailure(res.error);
     return null;
   }
+  // EXC-558: [dev] is inert in a prod build regardless of config.toml — res.data
+  // is not yet frozen, so swapping in the inert default (DEFAULTS.dev) here is safe.
+  if (isCompiled) res.data.dev = DEFAULTS.dev;
   return freeze(res.data);
 }
 
 /** One-shot synchronous load for the short-lived hook process. Never throws:
  * an absent/unreadable file or unusable content yields DEFAULTS. */
-export function loadSettings(file = configFile()): Settings {
+export function loadSettings(file = configFile(), isCompiled = isCompiledBinary()): Settings {
   let text: string;
   try {
     text = readFileSync(file, "utf-8");
   } catch {
-    return DEFAULTS; // absent or unreadable file
+    return DEFAULTS; // absent or unreadable file (DEFAULTS.dev is already inert)
   }
-  return parseAndValidate(text) ?? DEFAULTS;
+  return parseAndValidate(text, isCompiled) ?? DEFAULTS;
 }
 
 export interface SettingsService {
@@ -131,7 +164,10 @@ export interface SettingsService {
  * effect without a restart. mtime granularity can be ~1s on some filesystems,
  * so size disambiguates; two same-size edits within the same second may not be
  * detected until the next change (accepted). */
-export function createSettings(file = configFile()): SettingsService {
+export function createSettings(
+  file = configFile(),
+  isCompiled = isCompiledBinary(),
+): SettingsService {
   let lastGood = DEFAULTS;
   let lastSig: { mtimeMs: number; size: number } | null = null;
   return {
@@ -154,7 +190,7 @@ export function createSettings(file = configFile()): SettingsService {
       } catch {
         return lastGood; // any read error: raced delete, EACCES, slow FS
       }
-      const next = parseAndValidate(text);
+      const next = parseAndValidate(text, isCompiled);
       // Advance the signature even on failure so a static bad file isn't
       // re-parsed (and re-logged) on every get; a later edit re-triggers.
       lastSig = { mtimeMs: st.mtimeMs, size: st.size };
@@ -165,7 +201,9 @@ export function createSettings(file = configFile()): SettingsService {
 }
 
 /** The settings tables, typed so the diff walk stays a checked traversal of
- * `Settings` rather than an unsafe cast to a string-indexed record. */
+ * `Settings` rather than an unsafe cast to a string-indexed record. `dev`
+ * (EXC-558) is deliberately omitted: it is captured at startup by dev tooling,
+ * never consumed or hot-reloaded by the daemon, so it has no change to log. */
 const SETTINGS_TABLES = ["logging", "daemon", "review"] as const;
 
 /** Describe value changes between two settings snapshots as
@@ -308,4 +346,49 @@ export function reviewTimeoutMs(s: Settings = settings().current()): number {
  * .lt(MAX_HEARTBEAT_MS) so the derived idleTimeout stays under Bun's 255s cap. */
 export function heartbeatMs(s: Settings = settings().current()): number {
   return envValue("CARET_HEARTBEAT_MS", HeartbeatMs) ?? s.daemon.heartbeat_ms;
+}
+
+// --- EXC-558: dev-only accessors ([dev]). Resolve CARET_DEV_* > [dev] key >
+// default — the same env > config > default shape as the EXC-430 accessors
+// above — but consumed ONLY by dev tooling and kept out of ENV_VARS /
+// invalidEnvVars so a prod boot never warns about a dev var. The [dev] table is
+// inert in a prod build (the gate in parseAndValidate), so these resolve to the
+// inert defaults there regardless of config.toml.
+
+/** Fixed dev daemon port: CARET_DEV_PORT > [dev].port > unset (OS-assigned). */
+export function devPort(s: Settings = settings().current()): number | undefined {
+  return envValue("CARET_DEV_PORT", Port) ?? s.dev.port;
+}
+
+/** Persistent dev state dir: CARET_DEV_STATE_DIR > [dev].state_dir > unset
+ * (ephemeral). A blank env value counts as unset, matching the EXC-430 layer. */
+export function devStateDir(s: Settings = settings().current()): string | undefined {
+  const env = process.env.CARET_DEV_STATE_DIR;
+  return env !== undefined && env.trim() !== "" ? env : s.dev.state_dir;
+}
+
+/** The resolved extra-review seeder knobs the dev driver consumes. */
+export interface DevSeeder {
+  enabled: boolean;
+  intervalMs: number;
+  maxPending: number;
+  /** CARET_DEV_NEW_REVIEW_MS was set but is not a positive integer, so the
+   * cadence fell through to config. The driver warns so a typo'd value stays
+   * visible — same set-but-invalid visibility the EXC-430 invalidEnvVars gives. */
+  intervalInvalid: boolean;
+}
+
+/** Resolve the seeder knobs. Armed when `--notify` (notify), [dev.notify].enabled,
+ * OR a positive CARET_DEV_NEW_REVIEW_MS. Cadence: CARET_DEV_NEW_REVIEW_MS >
+ * [dev.notify].interval_ms > 15000 — a non-positive/garbage env value falls
+ * through to the config cadence (house style: set-but-invalid falls through, but
+ * is surfaced via intervalInvalid so the driver can warn at boot). */
+export function devSeeder(notify: boolean, s: Settings = settings().current()): DevSeeder {
+  const envInterval = envValue("CARET_DEV_NEW_REVIEW_MS", DevIntervalMs);
+  return {
+    enabled: notify || s.dev.notify.enabled || typeof envInterval === "number",
+    intervalMs: envInterval ?? s.dev.notify.interval_ms,
+    maxPending: s.dev.notify.max_pending,
+    intervalInvalid: envInterval === null, // classifyEnv: null ⟺ set-but-invalid
+  };
 }

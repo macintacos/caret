@@ -75,22 +75,3 @@ export function nextPlan(
 export function extraPlan(plan: string, n: number): string {
   return plan.replace(/^# .*$/m, (title) => `${title} — extra ${n}`);
 }
-
-/** Default extra-review cadence, used when the seeder is armed without an
- * explicit interval (`mise run dev --notify`). The bash task reads it through
- * dev-env.ts; the seeder is off out of the box, so an unset env arms nothing. */
-export const SEEDER_DEFAULT_MS = 15_000;
-
-/** Resolve CARET_DEV_NEW_REVIEW_MS into a seeder interval. Unset → off
- * (ms: null): the seeder is opt-in, and `mise run dev --notify` exports the
- * default cadence when no explicit value is set. A positive integer → that
- * cadence; 0 or negative → explicitly off (ms: null); anything else → the
- * default cadence with `invalid` flagged so the caller warns (settings house
- * style: set-but-invalid falls through, never silently disables). */
-export function seederInterval(raw: string | undefined): { ms: number | null; invalid: boolean } {
-  if (raw === undefined) return { ms: null, invalid: false };
-  const n = Number(raw);
-  if (raw === "" || !Number.isInteger(n)) return { ms: SEEDER_DEFAULT_MS, invalid: true };
-  if (n <= 0) return { ms: null, invalid: false };
-  return { ms: n, invalid: false };
-}

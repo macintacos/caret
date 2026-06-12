@@ -2,7 +2,7 @@
 // port-mode resolution, the dev lock reader's guards, and the bounded
 // port-discovery loop — the seams the bash task now delegates to.
 import { expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_PORT } from "../../src/constants.ts";
@@ -132,4 +132,81 @@ test("discoverPort throws after exhausting the attempt budget", async () => {
     }),
   ).rejects.toThrow(NO_USABLE_LOCK);
   expect(calls).toBe(4);
+});
+
+// ---- CLI consumption of the [dev] settings (EXC-558) ----
+// The task delegates port/state-dir resolution to dev-env.ts, which now sources
+// them from src/settings.ts (CARET_DEV_* > [dev] key > default). Drive the real
+// CLI as a subprocess with an isolated XDG_CONFIG_HOME so config and env both
+// exercise the consumption the bash task relies on.
+
+const repoRoot = join(import.meta.dir, "..", "..");
+
+async function withConfig(
+  toml: string | null,
+  fn: (env: Record<string, string>) => void | Promise<void>,
+): Promise<void> {
+  const cfgHome = await mkdtemp(join(tmpdir(), "caret-devenv-cfg-"));
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-devenv-state-"));
+  if (toml !== null) {
+    await mkdir(join(cfgHome, "caret"), { recursive: true });
+    await writeFile(join(cfgHome, "caret", "config.toml"), toml);
+  }
+  // Blank CARET_DEV_* so a host export can't leak in; "" reads as unset.
+  const env = {
+    ...process.env,
+    XDG_CONFIG_HOME: cfgHome,
+    XDG_STATE_HOME: stateHome,
+    CARET_DEV_PORT: "",
+    CARET_DEV_STATE_DIR: "",
+    CARET_DEV_NEW_REVIEW_MS: "",
+  } as Record<string, string>;
+  try {
+    await fn(env);
+  } finally {
+    await rm(cfgHome, { recursive: true, force: true });
+    await rm(stateHome, { recursive: true, force: true });
+  }
+}
+
+function devEnv(env: Record<string, string>, ...args: string[]): string {
+  const r = Bun.spawnSync(["bun", "scripts/dev/dev-env.ts", ...args], { cwd: repoRoot, env });
+  if (r.exitCode !== 0) throw new Error(`dev-env ${args.join(" ")} failed: ${r.stderr.toString()}`);
+  return r.stdout.toString().trim();
+}
+
+test("state-dir prints the CARET_DEV_STATE_DIR override", async () => {
+  await withConfig(null, (env) => {
+    expect(devEnv({ ...env, CARET_DEV_STATE_DIR: "/tmp/dev-x" }, "state-dir")).toBe("/tmp/dev-x");
+  });
+});
+
+test("state-dir prints [dev].state_dir from config when no env is set", async () => {
+  await withConfig('[dev]\nstate_dir = "/cfg/state"\n', (env) => {
+    expect(devEnv(env, "state-dir")).toBe("/cfg/state");
+  });
+});
+
+test("state-dir prints empty when neither env nor config sets it", async () => {
+  await withConfig(null, (env) => {
+    expect(devEnv(env, "state-dir")).toBe("");
+  });
+});
+
+test("port-mode pins [dev].port from config when no env is set", async () => {
+  await withConfig("[dev]\nport = 5050\n", (env) => {
+    expect(devEnv(env, "port-mode")).toBe("fixed 5050");
+  });
+});
+
+test("port-mode prefers CARET_DEV_PORT over the config [dev].port", async () => {
+  await withConfig("[dev]\nport = 5050\n", (env) => {
+    expect(devEnv({ ...env, CARET_DEV_PORT: "6060" }, "port-mode")).toBe("fixed 6060");
+  });
+});
+
+test("port-mode is ephemeral when neither env nor config sets a port", async () => {
+  await withConfig(null, (env) => {
+    expect(devEnv(env, "port-mode")).toBe("ephemeral");
+  });
 });

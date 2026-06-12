@@ -17,15 +17,8 @@ import { expireReview, longPoll, postReview, waitForHealth } from "../../src/dae
 import { type ReviewDeps, runReview } from "../../src/review.ts";
 import { claudeAdapter } from "../../src/adapters/claude/index.ts";
 import { NEVER_IDLE_MS } from "../../src/constants.ts";
-import { DEFAULT_PORT } from "../../src/settings.ts";
-import {
-  DEV_SESSION,
-  type DriverState,
-  extraPlan,
-  hookStdin,
-  nextPlan,
-  seederInterval,
-} from "./protocol.ts";
+import { DEFAULT_PORT, devSeeder, loadSettings } from "../../src/settings.ts";
+import { DEV_SESSION, type DriverState, extraPlan, hookStdin, nextPlan } from "./protocol.ts";
 
 const log = (msg: string) => process.stderr.write(`[caret dev driver] ${msg}\n`);
 
@@ -133,22 +126,27 @@ export async function run(): Promise<void> {
   // Extra-review seeder (EXC-427), OFF by default: when armed it seeds a
   // genuinely-new review — fresh session, fresh review id — every interval
   // tick, so backgrounding the tab demos a real "new plan" desktop
-  // notification with no setup. `mise run dev --notify` arms it at the default
-  // cadence; CARET_DEV_NEW_REVIEW_MS tunes the cadence (0 disables). Loud at
-  // boot in every case — a silent no-op here is indistinguishable from a
-  // broken notification.
-  const rawNewReviewMs = process.env.CARET_DEV_NEW_REVIEW_MS;
-  const { ms: intervalMs, invalid } = seederInterval(rawNewReviewMs);
-  if (invalid) {
-    log(`CARET_DEV_NEW_REVIEW_MS invalid (want integer ms; 0 disables): ${rawNewReviewMs}`);
+  // notification with no setup. EXC-558: armed by `--notify`, by
+  // [dev.notify].enabled in config.toml (persists across runs), or by a
+  // positive CARET_DEV_NEW_REVIEW_MS; the cadence and pending cap come from
+  // [dev.notify] (CARET_DEV_NEW_REVIEW_MS overrides the cadence). Loud at boot
+  // either way — a silent no-op is indistinguishable from a broken notification.
+  const seeder = devSeeder(Bun.argv.includes("--notify"), loadSettings());
+  if (seeder.intervalInvalid) {
+    log(
+      `CARET_DEV_NEW_REVIEW_MS invalid (want a positive integer ms): ${process.env.CARET_DEV_NEW_REVIEW_MS}`,
+    );
   }
-  if (intervalMs !== null) {
-    log(`extra-review seeder armed: a new review every ${intervalMs}ms`);
-    void runExtraSeeder(intervalMs, {
+  if (seeder.enabled) {
+    log(`extra-review seeder armed: a new review every ${seeder.intervalMs}ms`);
+    void runExtraSeeder(seeder.intervalMs, {
       seed: (n) => runExtraReview(`${DEV_SESSION}-extra-${n}`, extraPlan(v1, n), deps),
+      maxPending: seeder.maxPending,
     }).catch((err) => log(`extra-review seeder stopped: ${err}`));
   } else {
-    log("extra-review seeder off (pass --notify to arm; CARET_DEV_NEW_REVIEW_MS tunes)");
+    log(
+      "extra-review seeder off (pass --notify, set [dev.notify].enabled = true, or set CARET_DEV_NEW_REVIEW_MS)",
+    );
   }
   let state: DriverState = { plan: v1, revision: 0 };
   for (;;) {
