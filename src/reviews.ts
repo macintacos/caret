@@ -9,6 +9,7 @@
 
 import { randomUUID } from "node:crypto";
 import { type CaretLogger, noopLogger, shortId } from "./log.ts";
+import { formatPlanMarkdown } from "./plan-markdown.ts";
 import type { Store } from "./store.ts";
 import type { PlanInput, Review, RouteResult } from "./types.ts";
 
@@ -28,7 +29,9 @@ export async function routeIncomingPlan(
   log: CaretLogger = noopLogger,
 ): Promise<RouteResult> {
   const sessionId = input.sessionId ?? `anon-${Date.now()}`;
-  const plan = input.plan ?? "";
+  // Canonicalize once, at ingest: both version-creation sites below store this
+  // value, and versions already on the review are never reformatted.
+  const plan = await formatPlanMarkdown(input.plan ?? "", log);
   const now = Date.now();
 
   // A pending review here is an orphan: a session has at most one outstanding

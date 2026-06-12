@@ -7,6 +7,7 @@ import { APPROVE_VARIANTS } from "../../src/adapters/claude/approve.ts";
 import { VERSION } from "../../src/build-id.ts";
 import { isClientLive, LIVE_CLIENT_WINDOW_MS } from "../../src/daemon.ts";
 import { createDaemonLogger } from "../../src/log.ts";
+import { formatPlanMarkdown } from "../../src/plan-markdown.ts";
 import type { Store } from "../../src/store.ts";
 import type { UiAssets } from "../../src/ui-assets.ts";
 import { type BootOptions, bootDaemon, type TestDaemon } from "../support/daemon.ts";
@@ -282,10 +283,22 @@ test("POST then GET reviews exposes a pending ClientReview", async () => {
   expect(list.map((r) => r.id)).toContain(id);
 
   const one = await (await fetch(`${base}/api/reviews/${id}`)).json();
-  expect(one.currentPlan).toBe("# My Plan\n\ndetails");
+  expect(one.currentPlan).toBe("# My Plan\n\ndetails\n");
   expect(one.version).toBe(1);
   expect(one.title).toBe("My Plan");
   expect(one.status).toBe("pending");
+});
+
+test("POST /api/reviews stores prettier-formatted plan text (EXC-574)", async () => {
+  await boot();
+  const raw =
+    "# Wrap\n\nthis paragraph is one long unwrapped line that the daemon's ingest pass rewraps into the canonical stored representation before persisting the version";
+  const { id } = await newReview({ plan: raw });
+  const one = (await (await fetch(`${base}/api/reviews/${id}`)).json()) as {
+    currentPlan: string;
+  };
+  expect(one.currentPlan).toBe(await formatPlanMarkdown(raw));
+  expect(one.currentPlan).not.toBe(raw);
 });
 
 // EXC-559: the hook foregrounds the browser only when no live UI client is
@@ -516,7 +529,7 @@ test("resolve clears the draft on the deny/rejected path", async () => {
   // and the plan text survives for the revision.
   expect(store.get(id)?.status).toBe("rejected");
   expect(store.get(id)?.generalCommentDraft).toBe("");
-  expect(store.get(id)?.versions.at(-1)?.plan).toBe("# Title\n\nbody");
+  expect(store.get(id)?.versions.at(-1)?.plan).toBe("# Title\n\nbody\n");
 });
 
 test("resolve clears the draft on the approve path", async () => {
