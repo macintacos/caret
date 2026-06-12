@@ -32,6 +32,16 @@
     cursor = -1;
   });
 
+  // Keep the keyboard cursor visible: scroll its row into view when it moves
+  // past the pane's fold. block: "nearest" only scrolls when off-screen. The
+  // nav is reached from the keystroke's input rather than a binding so the
+  // lookup reads the live DOM at the moment the cursor changes.
+  function revealCursor(input: EventTarget | null) {
+    if (cursor < 0) return;
+    const nav = (input as HTMLElement | null)?.closest(".source-toc");
+    nav?.querySelectorAll<HTMLElement>(".toc-row")[cursor]?.scrollIntoView({ block: "nearest" });
+  }
+
   function jump(line: number) {
     onJump(line);
   }
@@ -41,9 +51,11 @@
     if (e.key === "ArrowDown") {
       e.preventDefault();
       cursor = Math.min(cursor + 1, visible.length - 1);
+      revealCursor(e.currentTarget);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       cursor = Math.max(cursor - 1, 0);
+      revealCursor(e.currentTarget);
     } else if (e.key === "Enter") {
       e.preventDefault();
       const row = visible[cursor === -1 ? 0 : cursor];
