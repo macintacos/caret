@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-06-12 - The Build Awareness Release
+
+### Added
+
+- **Build version badge.** The running build's version now shows in a bottom-left UI badge, so
+  you can tell at a glance which build you're reviewing against (#109).
+- **Machine-readable preflight.** `mise run preflight` accepts a `--json` flag that emits compact
+  `start` and `result` documents for tooling and agents instead of the live human display (#113).
+
+### Changed
+
+- **Build-gated dev settings.** Development-only settings are consolidated into a single `[dev]`
+  config section gated to non-release builds, so dev-only behavior can't leak into a released
+  build (#115).
+- **Gated dev seeder.** The `mise run dev` extra-review seeder is now off by default, fired only
+  behind an explicit `--notify` flag (#106).
+- The end-to-end test suite moved into `test/e2e` (#112).
+
+### Fixed
+
+- **Notifications on the installed build.** New-plan desktop notifications now fire on the
+  installed build, not just during local development (#110).
+- **Reliable tab presence.** UI tab-presence detection is now robust to browser background
+  throttling, so presence isn't lost when the tab is backgrounded (#114).
+- Markdown links are stripped from the titlebar post title, so it renders as clean text (#111).
+
 ## [0.0.4] - 2026-06-09 - The Adapter Release
 
 ### Added
@@ -119,7 +145,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Review decisions are delivered via a bounded poll, fixing missed or delayed
   decision delivery.
 
-[Unreleased]: https://github.com/macintacos/caret/compare/v0.0.4...HEAD
+[Unreleased]: https://github.com/macintacos/caret/compare/v0.0.5...HEAD
+[0.0.5]: https://github.com/macintacos/caret/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/macintacos/caret/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/macintacos/caret/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/macintacos/caret/compare/v0.0.1...v0.0.2
