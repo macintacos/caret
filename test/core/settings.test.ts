@@ -52,7 +52,7 @@ test("an absent file yields all defaults with no error", () => {
     logging: { level: "info", redact: false },
     daemon: { port: 42718, idle_ms: 60_000, heartbeat_ms: 8_000 },
     review: { timeout_s: 3600 },
-    dev: { notify: { enabled: false, interval_ms: 15_000, max_pending: 3 } },
+    dev: { diff_surface: false, notify: { enabled: false, interval_ms: 15_000, max_pending: 3 } },
   });
 });
 
@@ -428,13 +428,23 @@ const NO_DEV: Record<string, string | undefined> = {
 test("a [dev] config parses through the existing settings service", async () => {
   await Bun.write(
     file,
-    '[dev]\nport = 4000\nstate_dir = "/tmp/caret-dev"\n\n[dev.notify]\nenabled = true\ninterval_ms = 3000\nmax_pending = 5\n',
+    '[dev]\nport = 4000\nstate_dir = "/tmp/caret-dev"\ndiff_surface = true\n\n[dev.notify]\nenabled = true\ninterval_ms = 3000\nmax_pending = 5\n',
   );
   expect(loadSettings(file, /* isCompiled */ false).dev).toEqual({
     port: 4000,
     state_dir: "/tmp/caret-dev",
+    diff_surface: true,
     notify: { enabled: true, interval_ms: 3000, max_pending: 5 },
   });
+});
+
+test("dev.diff_surface defaults off and parses on from [dev]", async () => {
+  // EXC-583: the build-gated source-view flag. Default off; readable on from config.
+  expect(DEFAULTS.dev.diff_surface).toBe(false);
+  await Bun.write(file, "[dev]\ndiff_surface = true\n");
+  expect(loadSettings(file, /* isCompiled */ false).dev.diff_surface).toBe(true);
+  // Inert in a prod build like the rest of [dev].
+  expect(loadSettings(file, /* isCompiled */ true).dev.diff_surface).toBe(false);
 });
 
 test("an absent [dev] table yields the inert dev defaults", () => {
