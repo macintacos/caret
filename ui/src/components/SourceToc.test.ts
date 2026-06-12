@@ -151,8 +151,8 @@ describe("SourceToc keyboard navigation", () => {
     expect(jumped.last()).toBe(5);
   });
 
-  test("scrolls the cursored row into view so keyboard focus stays visible", async () => {
-    const { target, flush } = render(SourceToc, { headings, activeLine: null, onJump: () => {} });
+  test("scrolls the cursored row into view so keyboard focus stays visible", () => {
+    const { target } = render(SourceToc, { headings, activeLine: null, onJump: () => {} });
     const r = rows(target);
     let scrolledRow: HTMLElement | null = null;
     // happy-dom has no layout, so record which row scrollIntoView ran on.
@@ -160,8 +160,6 @@ describe("SourceToc keyboard navigation", () => {
     const input = filterInput(target);
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-    flush();
-    await Promise.resolve();
     expect(scrolledRow).toBe(r[1]!);
   });
 });
