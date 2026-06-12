@@ -301,6 +301,23 @@ test("POST /api/reviews stores prettier-formatted plan text (EXC-574)", async ()
   expect(one.currentPlan).not.toBe(raw);
 });
 
+test("a revision posted after a deny stores prettier-formatted text (EXC-574)", async () => {
+  await boot();
+  const { id } = await newReview({ sessionId: "fmt-s", plan: "# v1\n\nfirst" });
+  await resolve(id, { behavior: "deny", feedback: "rework" });
+  const raw =
+    "# v2\n\nthe revised plan body is one long unwrapped line that the ingest pass rewraps before appending it as the review's second stored version";
+  const { id: appended } = await newReview({ sessionId: "fmt-s", plan: raw });
+  expect(appended).toBe(id);
+  const one = (await (await fetch(`${base}/api/reviews/${id}`)).json()) as {
+    version: number;
+    currentPlan: string;
+  };
+  expect(one.version).toBe(2);
+  expect(one.currentPlan).toBe(await formatPlanMarkdown(raw));
+  expect(one.currentPlan).not.toBe(raw);
+});
+
 // EXC-559: the hook foregrounds the browser only when no live UI client is
 // already listening. The daemon tracks the last reviews-poll and reports
 // hasLiveClient on the create response; the hook uses it to skip openBrowser so
