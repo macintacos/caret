@@ -5,7 +5,7 @@
 // mutation: unwrap stale marks, re-resolve each annotation, wrap its range in
 // <mark>s, and measure each card's top relative to the article.
 
-import type { Annotation } from "@core/types";
+import { type Annotation, isLegacyAnnotation } from "@core/types";
 import { resolveAnnotation, wrapTextRange } from "./anchors.ts";
 
 /** A re-resolved annotation: orphaned when its anchor was lost, else its card's
@@ -63,6 +63,12 @@ export function paintAnnotations(
   const rootTop = root.getBoundingClientRect().top;
 
   for (const annotation of annotations) {
+    // Line-anchored annotations have no selection anchor on this surface:
+    // they land in the unanchored bucket rather than the resolve tiers.
+    if (!isLegacyAnnotation(annotation)) {
+      resolved.push({ annotation, orphaned: true, top: null });
+      continue;
+    }
     const res = resolveAnnotation(annotation, getBlock);
     if (res.tier === 3 || !res.range) {
       resolved.push({ annotation, orphaned: true, top: null });

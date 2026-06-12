@@ -50,15 +50,28 @@ export function isUnresolved(status: ReviewStatus): boolean {
 }
 
 /**
- * A single inline annotation, anchored within a specific plan version.
- *
- * The durable anchor is the W3C TextQuoteSelector hybrid: `quote` plus its
- * surrounding `prefix`/`suffix` context. The offsets are only the fast path —
- * they re-resolve exactly when the block text is unchanged but drift on a
- * re-render. When they drift, `quote`+context locate the text again, and the
- * context disambiguates a quote that now occurs more than once.
+ * A line-anchored inline annotation: the anchor is a 1-based, inclusive line
+ * range into the stored plan text of the version that contains it. Line
+ * numbers reference the plan version's text verbatim, so the anchor is stable
+ * for as long as that version exists (annotations are version-scoped and never
+ * re-anchored across versions).
  */
-export interface Annotation {
+export interface LineAnnotation {
+  id: string;
+  /** First annotated line (1-based, inclusive). */
+  startLine: number;
+  /** Last annotated line (1-based, inclusive; >= startLine). */
+  endLine: number;
+  comment: string;
+}
+
+/**
+ * A selection-anchored annotation as persisted by earlier reviews. The anchor
+ * is the W3C TextQuoteSelector hybrid: `quote` plus its surrounding
+ * `prefix`/`suffix` context, with the char offsets as the fast path. On-disk
+ * records in this shape load forever — they are never migrated or dropped.
+ */
+export interface LegacyAnnotation {
   id: string;
   /** Structural (token-index) id of the block element, e.g. "b12". */
   blockId: string;
@@ -75,6 +88,23 @@ export interface Annotation {
   /** Up to ~32 chars of textContent immediately after the quote (see prefix). */
   suffix?: string;
   comment: string;
+}
+
+/**
+ * A single inline annotation within a specific plan version. The union is
+ * permanent: both shapes co-exist on disk and over the wire, and every
+ * consumer narrows via the guards below.
+ */
+export type Annotation = LineAnnotation | LegacyAnnotation;
+
+/** Narrows to the line-anchored shape. */
+export function isLineAnnotation(a: Annotation): a is LineAnnotation {
+  return "startLine" in a;
+}
+
+/** Narrows to the selection-anchored legacy shape. */
+export function isLegacyAnnotation(a: Annotation): a is LegacyAnnotation {
+  return "blockId" in a;
 }
 
 /** One revision of a plan within a review thread. Annotations are version-scoped. */

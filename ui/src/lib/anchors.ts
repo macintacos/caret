@@ -3,7 +3,7 @@
 // strategy. Offsets are measured against the *concatenated text nodes* of the
 // block element (== element.textContent), walked with a TreeWalker.
 
-import type { Annotation } from "@core/types";
+import type { LegacyAnnotation } from "@core/types";
 
 export interface Offsets {
   start: number;
@@ -269,7 +269,7 @@ function pickByContext(
  *  3. else orphan — never silently dropped.
  */
 export function resolveAnnotation(
-  ann: Annotation,
+  ann: LegacyAnnotation,
   getBlock: (blockId: string) => HTMLElement | null,
 ): Resolution {
   const root = getBlock(ann.blockId);

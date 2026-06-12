@@ -537,6 +537,61 @@ test("PUT draft treats an explicit null field as absent (not a clobber)", async 
   expect(one.generalCommentDraft).toBe("keep me");
 });
 
+const LINE_ANNS = [{ id: "ln1", startLine: 3, endLine: 5, comment: "tighten this range" }];
+
+test("PUT draft persists a line-anchored annotation", async () => {
+  await boot();
+  const { id } = await newReview();
+  const res = await putDraft(id, { annotations: LINE_ANNS });
+  expect(res.status).toBe(200);
+  const one = await (await fetch(`${base}/api/reviews/${id}`)).json();
+  expect(one.annotations).toEqual(LINE_ANNS);
+});
+
+test("PUT draft persists a mixed legacy + line array, preserving both shapes", async () => {
+  await boot();
+  const { id } = await newReview();
+  const mixed = [...ANNS, ...LINE_ANNS];
+  await putDraft(id, { annotations: mixed });
+  const one = await (await fetch(`${base}/api/reviews/${id}`)).json();
+  expect(one.annotations).toEqual(mixed);
+});
+
+test("PUT draft rejects a line anchor with startLine < 1 (400, nothing persisted)", async () => {
+  await boot();
+  const { id } = await newReview();
+  await putDraft(id, { annotations: ANNS });
+  const res = await putDraft(id, {
+    annotations: [{ id: "bad", startLine: 0, endLine: 2, comment: "x" }],
+  });
+  expect(res.status).toBe(400);
+  const one = await (await fetch(`${base}/api/reviews/${id}`)).json();
+  expect(one.annotations).toEqual(ANNS);
+});
+
+test("PUT draft rejects a line anchor with endLine < startLine (400, nothing persisted)", async () => {
+  await boot();
+  const { id } = await newReview();
+  const res = await putDraft(id, {
+    annotations: [{ id: "bad", startLine: 5, endLine: 3, comment: "x" }],
+  });
+  expect(res.status).toBe(400);
+  const one = await (await fetch(`${base}/api/reviews/${id}`)).json();
+  expect(one.annotations).toEqual([]);
+});
+
+test("PUT draft keeps the degrade tolerance for non-line-shaped junk", async () => {
+  await boot();
+  const { id } = await newReview();
+  await putDraft(id, { annotations: ANNS });
+  // A junk body that claims neither shape degrades to a no-op, exactly as a
+  // malformed legacy body always has — never a 400, never a clobber.
+  const res = await putDraft(id, { annotations: [{ nonsense: true }] });
+  expect(res.status).toBe(200);
+  const one = await (await fetch(`${base}/api/reviews/${id}`)).json();
+  expect(one.annotations).toEqual(ANNS);
+});
+
 test("resolve clears the draft on the deny/rejected path", async () => {
   await boot();
   const { id } = await newReview();

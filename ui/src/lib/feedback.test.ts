@@ -12,6 +12,13 @@ const ann = (over: Partial<Annotation>): Annotation => ({
   ...over,
 });
 
+const lineAnn = (startLine: number, endLine: number, comment: string): Annotation => ({
+  id: "l",
+  startLine,
+  endLine,
+  comment,
+});
+
 describe("formatFeedback", () => {
   test("general comment only", () => {
     const out = formatFeedback([], "Please rethink the rollout.");
@@ -29,6 +36,20 @@ describe("formatFeedback", () => {
       "",
     );
     expect(out).toBe(["Inline comments:", "", '1. On "first": a', '2. On "second": b'].join("\n"));
+  });
+
+  test("line-anchored annotations cite their line range", () => {
+    const out = formatFeedback([lineAnn(3, 3, "tighten"), lineAnn(4, 7, "split this up")], "");
+    expect(out).toBe(
+      ["Inline comments:", "", "1. On line 3: tighten", "2. On lines 4-7: split this up"].join(
+        "\n",
+      ),
+    );
+  });
+
+  test("legacy and line annotations mix in array order", () => {
+    const out = formatFeedback([ann({ quote: "q", comment: "a" }), lineAnn(2, 2, "b")], "");
+    expect(out).toBe(["Inline comments:", "", '1. On "q": a', "2. On line 2: b"].join("\n"));
   });
 
   test("general comment precedes inline comments", () => {

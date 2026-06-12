@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, statSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { reviewsDir, stateDir } from "../../src/paths.ts";
 import { createStore, type Store } from "../../src/store.ts";
-import type { Review } from "../../src/types.ts";
+import type { Annotation, Review } from "../../src/types.ts";
 import { recordingLog } from "../support/recording-log.ts";
 import { setupTempStateDir } from "../support/env.ts";
 
@@ -181,6 +181,41 @@ test("rehydrate skips expired reviews", async () => {
   await fresh.rehydrate();
   expect(fresh.size()).toBe(0);
   expect(fresh.get("drop-e")).toBeUndefined();
+});
+
+// ---- annotation-shape back-compat (EXC-573) ----
+
+test("rehydrate loads a committed mixed-shape review fixture with no loss", async () => {
+  // Falsifiable back-compat: the checked-in fixture carries one legacy
+  // (selection-anchored) and one line-anchored annotation, run through the
+  // real read path. A schema change that strands either shape fails here.
+  const src = join(import.meta.dir, "fixtures", "review-mixed-annotations.json");
+  const fixture = JSON.parse(await readFile(src, "utf-8"));
+  await copyFile(src, join(dir, `${fixture.id}.json`));
+
+  const fresh = createStore(dir);
+  await fresh.rehydrate();
+  expect(fresh.get(fixture.id)).toEqual(fixture);
+});
+
+test("store round-trips a freshly written mixed annotation array", async () => {
+  const mixed: Annotation[] = [
+    {
+      id: "legacy-new",
+      blockId: "b0",
+      startOffset: 2,
+      endOffset: 6,
+      quote: "Plan",
+      comment: "legacy shape",
+    },
+    { id: "line-new", startLine: 1, endLine: 2, comment: "line shape" },
+  ];
+  await store.create(makeReview({ id: "rt-1" }));
+  await store.update("rt-1", (r) => {
+    r.versions[0]!.annotations = mixed;
+  });
+  const fromDisk = await store.persisted("rt-1");
+  expect(fromDisk?.versions[0]?.annotations).toEqual(mixed);
 });
 
 // ---- instrumentation (EXC-444) ----

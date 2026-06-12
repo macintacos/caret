@@ -31,6 +31,29 @@ describe("AnnotationCard render", () => {
     expect(target.querySelector(".badge")).toBeNull();
   });
 
+  test("renders a line-anchored annotation with a line label instead of a quote", () => {
+    const lineAnn: Annotation = { id: "l1", startLine: 3, endLine: 5, comment: "scope creep" };
+    const { target } = render(AnnotationCard, {
+      annotation: lineAnn,
+      onFocus: () => {},
+      onEdit: () => {},
+      onDelete: () => {},
+    });
+    expect(target.querySelector(".quote")!.textContent).toBe("Lines 3-5");
+    expect(target.querySelector(".comment")!.textContent).toBe("scope creep");
+  });
+
+  test("labels a single-line annotation with the singular form", () => {
+    const lineAnn: Annotation = { id: "l2", startLine: 4, endLine: 4, comment: "here" };
+    const { target } = render(AnnotationCard, {
+      annotation: lineAnn,
+      onFocus: () => {},
+      onEdit: () => {},
+      onDelete: () => {},
+    });
+    expect(target.querySelector(".quote")!.textContent).toBe("Line 4");
+  });
+
   test("renders the detached badge for an orphaned annotation", () => {
     const { target } = render(AnnotationCard, {
       annotation,
