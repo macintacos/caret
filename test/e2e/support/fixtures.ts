@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import { type ChildProcess, spawn } from "node:child_process";
 import { expect, type Page, test as base } from "@playwright/test";
 import { waitForHealth } from "../../../src/daemon-client.ts";
-import type { ClientReview, PlanInput, RouteResult } from "../../../src/types.ts";
+import type { ClientReview, DraftBody, PlanInput, RouteResult } from "../../../src/types.ts";
 import { FIXTURE_PLAN } from "./fixture-plan.ts";
 
 export interface Daemon {
@@ -32,6 +32,10 @@ export interface Daemon {
    * that threading behavior.
    */
   seed(input?: PlanInput): Promise<string>;
+  /** PUT /api/reviews/:id/draft — autosave the reviewer's working draft
+   * (version-scoped annotations and/or the general-comment draft), the same
+   * surface the UI's autosave uses. Lets a spec seed annotations harness-side. */
+  putDraft(id: string, body: DraftBody): Promise<void>;
   /** GET /api/reviews/:id — status + parsed body (body undefined on 404). */
   getReview(id: string): Promise<{ status: number; body?: ClientReview }>;
   /** GET /api/reviews — the pending list. */
@@ -137,6 +141,14 @@ export const test = base.extend<{ daemon: Daemon }>({
           });
           if (!res.ok) throw new Error(`seed failed: POST /api/reviews → ${res.status}`);
           return ((await res.json()) as RouteResult).id;
+        },
+        async putDraft(id: string, body: DraftBody) {
+          const res = await fetch(`${url}/api/reviews/${encodeURIComponent(id)}/draft`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          if (!res.ok) throw new Error(`putDraft failed: PUT /draft → ${res.status}`);
         },
         async getReview(id: string) {
           const res = await fetch(`${url}/api/reviews/${encodeURIComponent(id)}`);
