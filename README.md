@@ -311,11 +311,11 @@ pin a fixed dev port instead, set `CARET_DEV_PORT` to any free port other than `
 production default); this skips `--ephemeral` and binds that port, so only one such session can run
 at a time.
 
-`mise run test-e2e` runs the Playwright specs in `e2e/` against an isolated daemon that serves the
-built `ui/dist/` artifact on an OS-assigned port with ephemeral state, so the suite never touches your
-real daemon or `~/.local/state/caret`. `mise run setup` installs the Chromium browser the specs
-drive. For when to write an e2e spec versus a `bun test` unit versus throwaway exploration, see
-`docs/agents/browser-testing.md`.
+`mise run test-e2e` runs the Playwright specs in `test/e2e/` against an isolated daemon that serves
+the built `ui/dist/` artifact on an OS-assigned port with ephemeral state, so the suite never
+touches your real daemon or `~/.local/state/caret`. `mise run setup` installs the Chromium browser
+the specs drive. For when to write an e2e spec versus a `bun test` unit versus throwaway
+exploration, see `docs/agents/browser-testing.md`.
 
 For a quick local trial without installing, load the plugin from a checkout:
 
