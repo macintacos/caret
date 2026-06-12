@@ -5,6 +5,8 @@
   // changes through sync().
   import { File, type FileContents } from "@pierre/diffs";
   import { createDiffViewLifecycle } from "./instance.ts";
+  import { createLinkHandlers, type LinkHandlers } from "./linkInteractions.ts";
+  import { type LinkSpanMap, openLinkInNewTab } from "./links.ts";
   import { type SourceViewLibOptions, toFileOptions } from "./options.ts";
   import { registerCaretDiffThemes } from "./theme.ts";
   import type { SourceDocument, SourceLineAnnotation, SourceViewOptions } from "./types.ts";
@@ -22,9 +24,23 @@
     contentKey: string;
     options?: SourceViewOptions;
     annotations?: SourceLineAnnotation[];
+    /** Opt-in link layer: per-line clickable spans for the rendered display
+     * text (from buildLinkLayer). When present, a click on a link token opens
+     * its URL and hovering reveals the full URL. Omit it to render plain. */
+    links?: LinkSpanMap;
+    /** Opens a clicked link. Defaults to a new tab with noopener,noreferrer;
+     * overridable for testing. */
+    openUrl?: (href: string) => void;
   }
 
-  let { doc, contentKey, options = {}, annotations }: Props = $props();
+  let {
+    doc,
+    contentKey,
+    options = {},
+    annotations,
+    links,
+    openUrl = openLinkInNewTab,
+  }: Props = $props();
 
   // The container div is component markup, so the instance must not remove
   // it on cleanUp — construct container-managed (third constructor arg).
@@ -36,7 +52,14 @@
 
   let container: HTMLElement | undefined = $state();
 
-  const libOptions = $derived(toFileOptions(options));
+  // The handlers close over the span map and opener, so they only change when
+  // the link layer does — a stable `links` reference keeps them referentially
+  // stable, so libOptions stays change-detectable by the lifecycle.
+  const linkHandlers = $derived<LinkHandlers | undefined>(
+    links == null ? undefined : createLinkHandlers(links, { openUrl }),
+  );
+
+  const libOptions = $derived(toFileOptions(options, linkHandlers));
 
   // Mount-once effect: reads no reactive state, returns the teardown.
   $effect(() => () => lifecycle.destroy());
