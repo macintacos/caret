@@ -6,7 +6,12 @@
   import { File, type FileContents } from "@pierre/diffs";
   import { createDiffViewLifecycle } from "./instance.ts";
   import { type SourceViewLibOptions, toFileOptions } from "./options.ts";
+  import { registerCaretDiffThemes } from "./theme.ts";
   import type { SourceDocument, SourceLineAnnotation, SourceViewOptions } from "./types.ts";
+
+  // Teach the library's highlighter caret's themes before the first render
+  // selects them. Idempotent, so calling it from each wrapper is safe.
+  registerCaretDiffThemes();
 
   interface Props {
     /** The document to render. */
