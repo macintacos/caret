@@ -508,8 +508,13 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // surface it (EXC-562). Clearing to 0 makes isClientLive read not-live at
   // once, which is what lets LIVE_CLIENT_WINDOW_MS stay long enough to outlast a
   // throttled background poll without a just-closed tab lingering as "live".
+  // Presence is one shared timestamp, not per-tab: closing one of several open
+  // tabs retracts the shared signal until a surviving tab's next poll re-stamps
+  // it (≤2s foregrounded). Accepted for a single-user laptop — per-tab presence
+  // tracking isn't worth its complexity for the rare two-tabs-open case.
   function handleUiGone(): Response {
     lastReviewsPollAt = 0;
+    log.debug("ui", "ui presence retracted");
     return new Response(null, { status: 204 });
   }
 
