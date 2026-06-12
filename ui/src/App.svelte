@@ -248,9 +248,9 @@
 
   {#if active}
     {#if diffSurface}
-      <!-- Read-only source-view surface (EXC-583): the plan rendered as
-           line-numbered markdown source. No contents rail or annotation gutter
-           yet — those land on later milestones. -->
+      <!-- Source-view surface (EXC-583): the plan rendered as line-numbered
+           markdown source with a left-hand filterable contents pane. The
+           annotation gutter lands on a later milestone. -->
       <DiffPlanView review={active} />
     {:else}
       <!-- Fixed, viewport-pinned contents rail — a sibling of (not inside) the

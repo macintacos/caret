@@ -56,6 +56,28 @@ describe("DiffPlanView rendering", () => {
   });
 });
 
+describe("DiffPlanView contents pane", () => {
+  test("shows the ToC pane with a row per heading for a multi-heading plan", async () => {
+    const review = reviewFixture({
+      currentPlan: "# Context\n\nintro\n\n## Approach\n\nbody\n\n## Verification\n\nv\n",
+    });
+    const { target } = render(DiffPlanView, { review });
+    const pane = await until(() => target.querySelector(".source-toc") != null);
+    expect(pane).toBe(true);
+    expect(target.querySelectorAll(".source-toc .toc-row")).toHaveLength(3);
+    const labels = [...target.querySelectorAll(".source-toc .toc-row")].map((r) => r.textContent?.trim());
+    expect(labels).toEqual(["Context", "Approach", "Verification"]);
+  });
+
+  test("suppresses the ToC pane for a single-heading plan", async () => {
+    const review = reviewFixture({ currentPlan: "# Only\n\njust one heading\n" });
+    const { target } = render(DiffPlanView, { review });
+    // Wait for the source view to paint, then assert the pane is absent.
+    await until(() => shadow(target)?.textContent?.includes("just one heading") ?? false);
+    expect(target.querySelector(".source-toc")).toBeNull();
+  });
+});
+
 describe("DiffPlanView instance preservation across the poll", () => {
   test("a same-version prop tick keeps the same rendered pre — no remount", async () => {
     // The 2s poll re-delivers the active review object; an unchanged id:version
