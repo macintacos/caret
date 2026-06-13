@@ -53,6 +53,9 @@ export interface Autosave {
     suffix: string;
     comment: string;
   }) => void;
+  /** Create a line-anchored annotation from the source-view gutter: a 1-based,
+   * inclusive {startLine, endLine} range into the active version's plan text. */
+  createLineAnnotation: (anchor: { startLine: number; endLine: number; comment: string }) => void;
   editAnnotation: (id: string, comment: string) => void;
   deleteAnnotation: (id: string) => void;
   focusAnnotation: (id: string) => void;
@@ -157,6 +160,12 @@ export function createAutosave(
     createAnnotation(sel) {
       const id = crypto.randomUUID();
       store.annotations = [...store.annotations, { id, ...sel }];
+      store.focusedAnnotation = id;
+      scheduleSave();
+    },
+    createLineAnnotation(anchor) {
+      const id = crypto.randomUUID();
+      store.annotations = [...store.annotations, { id, ...anchor }];
       store.focusedAnnotation = id;
       scheduleSave();
     },

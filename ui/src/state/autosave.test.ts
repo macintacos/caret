@@ -263,6 +263,38 @@ describe("flush-before-switch ordering", () => {
   });
 });
 
+describe("line-anchored create", () => {
+  test("a single-line create pushes a line annotation and schedules a save", () => {
+    const store = makeStore();
+    const { autosave, timer } = build(store, () => "r1");
+    autosave.createLineAnnotation({ startLine: 4, endLine: 4, comment: "fix this line" });
+    expect(timer.armed()).toBe(true);
+    const created = store.annotations[0]!;
+    expect(created).toMatchObject({ startLine: 4, endLine: 4, comment: "fix this line" });
+    expect(typeof created.id).toBe("string");
+    expect(created.id.length).toBeGreaterThan(0);
+    expect(store.focusedAnnotation).toBe(created.id);
+    timer.fire();
+    expect(saves).toHaveLength(1);
+    expect(saves[0]!.annotations).toHaveLength(1);
+  });
+
+  test("a range create persists the correct startLine and endLine", () => {
+    const store = makeStore();
+    const { autosave } = build(store, () => "r1");
+    autosave.createLineAnnotation({ startLine: 7, endLine: 12, comment: "this block" });
+    expect(store.annotations[0]).toMatchObject({ startLine: 7, endLine: 12 });
+  });
+
+  test("a line-anchored create appends without disturbing existing annotations", () => {
+    const store = makeStore({ annotations: [ann("a1", "legacy")] });
+    const { autosave } = build(store, () => "r1");
+    autosave.createLineAnnotation({ startLine: 2, endLine: 2, comment: "second" });
+    expect(store.annotations.map((a) => a.id)[0]).toBe("a1");
+    expect(store.annotations).toHaveLength(2);
+  });
+});
+
 describe("annotation CRUD", () => {
   test("delete clears focus when the deleted annotation was focused", () => {
     const store = makeStore({ annotations: [ann("a1"), ann("a2")], focusedAnnotation: "a1" });
