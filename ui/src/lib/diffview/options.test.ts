@@ -80,6 +80,17 @@ describe("toFileOptions", () => {
     expect("onGutterUtilityClick" in result).toBe(false);
     expect("renderAnnotation" in result).toBe(false);
   });
+
+  test("spreads the line-click handler when provided", () => {
+    const onLineClick = () => {};
+    const result = toFileOptions({}, undefined, undefined, onLineClick);
+    expect(result.onLineClick).toBe(onLineClick);
+  });
+
+  test("omitting the line-click handler leaves the option object click-free", () => {
+    const result = toFileOptions({ overflow: "wrap" });
+    expect("onLineClick" in result).toBe(false);
+  });
 });
 
 describe("toFileDiffOptions", () => {

@@ -1,26 +1,23 @@
 <script lang="ts">
-  // A line-anchored annotation on the source-view surface, rendered as a
-  // consumer-managed positioned card (the container-managed @pierre/diffs File
-  // disables the library's renderAnnotation, so cards live host-side). Collapsed
-  // it is a compact chip with a clamped preview; expanded it shows the full
-  // comment with edit and delete. Collapse state is UI-only — owned here, seeded
-  // from focus, never written to disk. The card is positioned absolutely within
-  // the scroll container, so it scrolls with the source content.
+  // A line-anchored annotation on the source-view surface. It renders inline in
+  // the source view's per-line annotation row (the parent projects it into the
+  // library's slot — see annotationSlot.ts), so it sits between the code lines
+  // rather than over them. Collapsed it is a compact chip with a clamped preview;
+  // expanded it shows the full comment with edit and delete. Collapse state is
+  // UI-only — owned here, seeded from focus, never written to disk.
   import type { LineAnnotation } from "@core/types";
   import { isCancelKey, isSubmitChord } from "../lib/keys.ts";
   import Icon from "./Icon.svelte";
 
   interface Props {
     annotation: LineAnnotation;
-    /** Vertical offset (px) of the anchored line within the scroll container. */
-    top: number;
     /** Whether this is the single focused annotation; seeds the expanded state. */
     focused: boolean;
     onFocus: (id: string) => void;
     onEdit: (id: string, comment: string) => void;
     onDelete: (id: string) => void;
   }
-  let { annotation, top, focused, onFocus, onEdit, onDelete }: Props = $props();
+  let { annotation, focused, onFocus, onEdit, onDelete }: Props = $props();
 
   // UI-only collapse: a manual toggle overrides the focus-driven default until
   // focus changes again. `null` means "follow focus"; a boolean means the
@@ -81,12 +78,7 @@
   });
 </script>
 
-<div
-  class="card"
-  class:focused
-  data-annotation-card={annotation.id}
-  style="top: {top}px;"
->
+<div class="card" class:focused data-annotation-card={annotation.id}>
   {#if expanded}
     <div class="body">
       <header>
@@ -133,12 +125,12 @@
 </div>
 
 <style>
+  /* Inline within the library's annotation row — a contained card, left-aligned
+     and capped so a comment reads as a block under its line, not a full-bleed
+     band. Vertical margin gives it air between the surrounding code lines. */
   .card {
-    position: absolute;
-    left: 3.5rem;
-    z-index: 30;
-    width: 320px;
-    max-width: calc(100% - 4rem);
+    max-width: min(46rem, 100%);
+    margin: 0.4rem 0 0.55rem;
   }
   /* The chip: a compact, monospace line tag with a clamped one-line preview. */
   .chip {

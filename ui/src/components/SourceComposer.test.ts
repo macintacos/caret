@@ -14,7 +14,6 @@ function mount(over: Record<string, unknown> = {}) {
   const { target } = render(SourceComposer, {
     startLine: 3,
     endLine: 3,
-    top: 0,
     onSubmit: (c: string) => submitted.push(c),
     onCancel: () => cancelled++,
     ...over,

@@ -8,11 +8,15 @@ import { DIFFS_CORE_STYLES } from "./diffsCoreStyles.ts";
 
 // caret's adjustments layered over the vendored core stylesheet. The gutter and
 // content sit in adjacent grid columns with no gap, which reads cramped — line
-// numbers crowd the code, most visibly under a line's hover highlight. A little
-// inline-start padding on the content column opens that seam without shifting
-// the gutter.
+// numbers crowd the code, most visibly under a line's hover highlight. Inline-start
+// padding on the content column opens that seam without shifting the gutter, and
+// also gives the hover "+" comment button a lane to sit in. By default the library
+// pins that button to the number column's right edge and pulls it left with a
+// negative margin, so it overlaps the line number; widening that negative margin
+// nudges it past the digits into the gutter→content seam instead.
 const CARET_OVERRIDES = `
-  [data-content] { padding-inline-start: 16px; }
+  [data-content] { padding-inline-start: 24px; }
+  [data-utility-button] { margin-right: calc(1ch - 1lh - 0.85rem); }
 `;
 
 // Constructable sheets shared across every view's shadow root, the override
