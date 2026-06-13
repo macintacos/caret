@@ -46,6 +46,26 @@ describe("toFileOptions", () => {
     const result = toFileOptions({ overflow: "wrap" });
     expect("onTokenClick" in result).toBe(false);
   });
+
+  test("spreads the gutter utility opt-in and callbacks when provided", () => {
+    const onGutterUtilityClick = () => {};
+    const renderAnnotation = () => document.createElement("div");
+    const result = toFileOptions({}, undefined, {
+      enableGutterUtility: true,
+      onGutterUtilityClick,
+      renderAnnotation,
+    });
+    expect(result.enableGutterUtility).toBe(true);
+    expect(result.onGutterUtilityClick).toBe(onGutterUtilityClick);
+    expect(result.renderAnnotation).toBe(renderAnnotation);
+  });
+
+  test("omitting the gutter bag leaves the option object gutter-free", () => {
+    const result = toFileOptions({ overflow: "wrap" });
+    expect("enableGutterUtility" in result).toBe(false);
+    expect("onGutterUtilityClick" in result).toBe(false);
+    expect("renderAnnotation" in result).toBe(false);
+  });
 });
 
 describe("toFileDiffOptions", () => {

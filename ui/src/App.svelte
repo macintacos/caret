@@ -249,9 +249,9 @@
   {#if active}
     {#if diffSurface}
       <!-- Source-view surface (EXC-583): the plan rendered as line-numbered
-           markdown source with a left-hand filterable contents pane. The
-           annotation gutter lands on a later milestone. -->
-      <DiffPlanView review={active} />
+           markdown source with a left-hand filterable contents pane and a line
+           gutter for creating comments. -->
+      <DiffPlanView review={active} onCreateLineAnnotation={autosave.createLineAnnotation} />
     {:else}
       <!-- Fixed, viewport-pinned contents rail — a sibling of (not inside) the
            grid so it escapes .columns' overflow:hidden and pins to the viewport. -->

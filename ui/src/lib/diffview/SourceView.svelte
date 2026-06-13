@@ -7,7 +7,7 @@
   import { createDiffViewLifecycle } from "./instance.ts";
   import { createLinkHandlers, type LinkHandlers } from "./linkInteractions.ts";
   import { type LinkSpanMap, openLinkInNewTab } from "./links.ts";
-  import { type SourceViewLibOptions, toFileOptions } from "./options.ts";
+  import { type SourceViewGutter, type SourceViewLibOptions, toFileOptions } from "./options.ts";
   import { scrollToLine } from "./scroll.ts";
   import { registerCaretDiffThemes } from "./theme.ts";
   import type {
@@ -41,6 +41,10 @@
      * imperative API (currently scroll-to-line) that closes over the container.
      * Lets callers jump the view without reaching into the library's DOM. */
     onReady?: (api: SourceViewApi) => void;
+    /** Opt-in line-comment gutter: enables the built-in hover `+`, reports the
+     * selected range, and renders inline annotation/composer DOM per line.
+     * Omit it for a read-only view (no gutter affordance). */
+    gutter?: SourceViewGutter;
   }
 
   let {
@@ -51,6 +55,7 @@
     links,
     openUrl = openLinkInNewTab,
     onReady,
+    gutter,
   }: Props = $props();
 
   // The container div is component markup, so the instance must not remove
@@ -78,7 +83,7 @@
     links == null ? undefined : createLinkHandlers(links, { openUrl }),
   );
 
-  const libOptions = $derived(toFileOptions(options, linkHandlers));
+  const libOptions = $derived(toFileOptions(options, linkHandlers, gutter));
 
   // Mount-once effect: reads no reactive state, returns the teardown.
   $effect(() => () => lifecycle.destroy());

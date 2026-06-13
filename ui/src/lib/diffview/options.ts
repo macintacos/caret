@@ -2,10 +2,28 @@
 // The library's setOptions replaces its options wholesale (no merging), so
 // each mapper emits every key it owns — passing the result to setOptions is
 // always a faithful full replacement.
-import type { FileDiffOptions, FileOptions } from "@pierre/diffs";
+import type {
+  FileDiffOptions,
+  FileOptions,
+  LineAnnotation,
+  SelectedLineRange,
+} from "@pierre/diffs";
 import type { LinkHandlers } from "./linkInteractions.ts";
 import { caretDiffTheme } from "./theme.ts";
 import type { SourceDiffViewOptions, SourceViewOptions } from "./types.ts";
+
+/** The gutter-utility opt-in plus its callbacks, supplied by a view that lets
+ * the reviewer comment on a line. `renderAnnotation` builds the inline DOM for
+ * an annotated line (real annotation card or the pending composer). Kept a
+ * single bag so it spreads into the option object only when commenting is on —
+ * the read-only view passes nothing and stays byte-identical. The built-in
+ * gutter `+` is used (no custom renderGutterUtility), so the WebKit #308027
+ * combination with hunkSeparators:'line-info' cannot arise. */
+export interface SourceViewGutter {
+  enableGutterUtility: true;
+  onGutterUtilityClick(range: SelectedLineRange): void;
+  renderAnnotation(annotation: LineAnnotation): HTMLElement | undefined;
+}
 
 /** Library options for the single-document view (module-internal). */
 export type SourceViewLibOptions = FileOptions<undefined>;
@@ -32,12 +50,15 @@ function sharedOptions(
 export function toFileOptions(
   options: SourceViewOptions,
   linkHandlers?: LinkHandlers,
+  gutter?: SourceViewGutter,
 ): SourceViewLibOptions {
   // Link handlers are stable for the instance's life (they close over the span
   // map), so they belong only in the initial options — a content-key change
   // recreates the instance with a fresh map. When absent, the option object is
-  // unchanged, so views without the link layer behave exactly as before.
-  return { ...sharedOptions(options), ...linkHandlers };
+  // unchanged, so views without the link layer behave exactly as before. The
+  // gutter bag spreads the same way: present only when the view enables
+  // commenting, absent (and byte-identical) on the read-only view.
+  return { ...sharedOptions(options), ...linkHandlers, ...gutter };
 }
 
 export function toFileDiffOptions(options: SourceDiffViewOptions): SourceDiffViewLibOptions {
