@@ -1,7 +1,7 @@
 // Synthetic plan fixture for the e2e specs. Deliberately generic,
 // non-identifying content (no real paths, names, or project details): failure
 // traces/screenshots capture rendered plan text, so the fixture itself must be
-// shareable. Shape mirrors a real plan: several headings (TOC + scrollspy), a
+// shareable. Shape mirrors a real plan: several headings (the contents pane), a
 // language-tagged code block (shiki highlight path), and stable paragraph text
 // the annotation spec targets by content.
 

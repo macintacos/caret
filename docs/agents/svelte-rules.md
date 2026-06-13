@@ -25,24 +25,26 @@ connect them — no business logic.
 
 ## Extract component logic to a testable lib module
 
-Imperative DOM logic does not belong inside a component. `ui/src/lib/planPaint.ts` is the precedent:
-PlanView's mark-wrapping/measuring was lifted into a pure module that mutates a passed-in DOM root,
-so it is unit-testable against happy-dom without mounting PlanView. The component keeps the Svelte
-shell — the `$effect` scheduling, the ResizeObserver, the prop wiring — and calls the extracted
-function. When a component grows non-trivial DOM manipulation, extract it the same way.
+Imperative DOM logic does not belong inside a component. `ui/src/lib/diffview/links.ts` is the
+precedent: the source view's link layer (the per-line span transform plus the token-event handlers
+in `linkInteractions.ts`) is a pure module the component drives, so it is unit-testable against
+happy-dom without mounting the view. The component keeps the Svelte shell — the `$effect`
+scheduling, the prop wiring — and calls the extracted functions. When a component grows non-trivial
+DOM manipulation, extract it the same way.
 
 ## $derived / $effect discipline
 
-- **`$derived` for values** that follow from other reactive state (`active`, `rendered`, `variants`
-  in App.svelte). Reach for `$derived.by` only when the computation needs a body.
+- **`$derived` for values** that follow from other reactive state (`active`, `variants` in
+  App.svelte). Reach for `$derived.by` only when the computation needs a body.
 - **`$effect` for side effects**, one concern per effect. App.svelte deliberately splits its effects
-  — working-copy reload, polling, remembered-mode load, safe mode, scrollspy — rather than one
-  mega-effect, so each has a clear dependency set. A mount-once effect (polling) reads no reactive
-  state and returns its teardown; a reactive effect names its trigger explicitly (the working-copy
-  reload depends on the derived `active`).
+  — working-copy reload, polling, remembered-mode load, safe mode — rather than one mega-effect, so
+  each has a clear dependency set. A mount-once effect (polling) reads no reactive state and returns
+  its teardown; a reactive effect names its trigger explicitly (the working-copy reload depends on
+  the derived `active`).
 - **Callback props, not event dispatch.** Components take `on*` function props (`onApprove`,
-  `onSelect`, `onCreate`) and parents pass closures; this is how state-module methods reach the tree
-  (`onCreate={autosave.createAnnotation}`). Type each callback's argument precisely.
+  `onSelect`, `onCreateLineAnnotation`) and parents pass closures; this is how state-module methods
+  reach the tree (`onCreateLineAnnotation={autosave.createLineAnnotation}`). Type each callback's
+  argument precisely.
 
 ## Component tests
 
@@ -81,11 +83,11 @@ stays green under any invocation.
 - **App.css owns the design tokens** as CSS custom properties (`--paper`, `--ink`, `--accent`,
   `--mark`, …). Components reference `var(--token)`; they don't hardcode hex. A color used in two
   places is a token, declared once.
-- **A constant coupled across files gets one named source.** A breakpoint that a media query, a
-  component, and the Playwright viewport all depend on lives as `TOC_BREAKPOINT_PX` in
-  `ui/src/lib/layout.ts` (pure TS, node-free), and `layout.test.ts` asserts the `@media` rules
-  match it — so a drifted breakpoint fails the unit suite instead of silently breaking the e2e
-  smoke. When a magic number couples CSS to TS to config, name it once and test the coupling.
+- **A constant coupled across files gets one named source.** The reference layout width the
+  Playwright viewport depends on lives as `REFERENCE_WIDTH_PX` in `ui/src/lib/layout.ts` (pure TS,
+  node-free), and `layout.test.ts` asserts the e2e viewport derives from it — so a drift fails the
+  unit suite instead of silently breaking the e2e smoke. When a magic number couples TS to config,
+  name it once and test the coupling.
 
 ## Related rules
 
