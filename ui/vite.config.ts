@@ -35,7 +35,40 @@ export default defineConfig({
     // the wire contract (src/types.ts) directly. Type-only imports erase at
     // build, keeping the browser bundle free of node-only code; the matching
     // tsconfig `paths` mappings keep svelte-check and bun test in step (EXC-507).
-    alias: { "@core": fileURLToPath(new URL("../src", import.meta.url)) },
+    //
+    // The bare `shiki` specifier (imported by @pierre/diffs) resolves to the
+    // scoped bundle shim, not shiki's full barrel. shiki's `bundledLanguages`
+    // maps ~300 lazily-imported grammars; vite code-splits every one into the
+    // build, so the library's `import { bundledLanguages } from "shiki"` would
+    // otherwise pull every grammar into the embedded UI asset. The shim narrows
+    // the bundle to markdown plus the fenced-code grammars caret's highlight
+    // pipeline loads, and re-exports the rest of shiki's surface unchanged.
+    // The `/^shiki$/` regex anchors an exact match so deep specifiers
+    // (shiki/core, shiki/langs/*, shiki/engine/*) keep resolving to the real
+    // package — only the bare barrel is redirected.
+    alias: [
+      { find: "@core", replacement: fileURLToPath(new URL("../src", import.meta.url)) },
+      {
+        find: /^shiki$/,
+        replacement: fileURLToPath(new URL("./src/lib/diffview/shiki-bundle.ts", import.meta.url)),
+      },
+      // The library statically references shiki/wasm (Oniguruma engine) and the
+      // @pierre/theme/* bundles, but caret uses the JS regex engine and its own
+      // themes, so both are dead at runtime. Aliasing them to a throwing stub
+      // keeps ~600 KB of WASM and the pierre theme payloads out of the build.
+      {
+        find: /^shiki\/wasm$/,
+        replacement: fileURLToPath(
+          new URL("./src/lib/diffview/unused-shiki-extras.ts", import.meta.url),
+        ),
+      },
+      {
+        find: /^@pierre\/theme\/.*/,
+        replacement: fileURLToPath(
+          new URL("./src/lib/diffview/unused-shiki-extras.ts", import.meta.url),
+        ),
+      },
+    ],
   },
   server: {
     // `mise run dev` proxies the JSON API to its isolated dev daemon. The dev
