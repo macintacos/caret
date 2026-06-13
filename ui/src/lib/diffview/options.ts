@@ -21,6 +21,10 @@ import type { SourceDiffViewOptions, SourceViewOptions } from "./types.ts";
  * combination with hunkSeparators:'line-info' cannot arise. */
 export interface SourceViewGutter {
   enableGutterUtility: true;
+  // Lets the reviewer drag (or shift-click) the line-number column to select a
+  // span; the gutter `+` then reports that range, so a comment can cover several
+  // lines rather than only the one it hovers.
+  enableLineSelection: true;
   onGutterUtilityClick(range: SelectedLineRange): void;
   renderAnnotation(annotation: LineAnnotation): HTMLElement | undefined;
 }

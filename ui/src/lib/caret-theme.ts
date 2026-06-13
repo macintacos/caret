@@ -1,41 +1,40 @@
 import type { ThemeRegistrationRaw } from "shiki/core";
 
-// Custom shiki themes that mirror caret's paper/ink palette so highlighted code
+// Custom shiki themes that mirror caret's neutral palette so highlighted code
 // reads like a typeset listing rather than a generic editor theme: mostly ink,
-// the burnt-amber accent for keywords, one green for strings, faint italic
-// comments. Registered into the source view's highlighter (see
-// diffview/theme.ts) as dual-theme CSS variables so light/dark switches happen
-// via CSS only.
+// the amber accent for keywords, one green for strings, faint italic comments.
+// Registered into the source view's highlighter (see diffview/theme.ts) as
+// dual-theme CSS variables so light/dark switches happen via CSS only.
 //
-// The hex values below are duplicated from ui/src/app.css — see EXC-370. shiki
+// The values below are duplicated from ui/src/app.css — see EXC-370. shiki
 // resolves token colors at highlight time and can't read CSS custom properties,
-// so this palette drifts from app.css on purpose; keep the two in sync by hand
-// if the paper/ink tokens ever change.
+// so this palette is copied from app.css's tokens; keep the two in sync by hand
+// if the paper/ink tokens ever change (a unit test guards the match).
 interface Palette {
   bg: string; // --paper-sunk: code-block background
   fg: string; // --ink: default text, identifiers
   comment: string; // --ink-faint
   punctuation: string; // --ink-soft
-  keyword: string; // --accent (burnt amber)
+  keyword: string; // --accent (amber)
   entity: string; // --accent-bright: functions, types, numbers, keys
   string: string; // --ok (green)
 }
 
 const light: Palette = {
-  bg: "#efe8d8",
-  fg: "#211c18",
-  comment: "#9a9082",
-  punctuation: "#6a6157",
+  bg: "#f4f4f4",
+  fg: "#171717",
+  comment: "#868686",
+  punctuation: "#555555",
   keyword: "#c2410c",
   entity: "#ea580c",
   string: "#15803d",
 };
 
 const dark: Palette = {
-  bg: "#110e0a",
-  fg: "#ece4d6",
-  comment: "#6f6759",
-  punctuation: "#a89e8d",
+  bg: "#131313",
+  fg: "#fafafa",
+  comment: "#737373",
+  punctuation: "#a1a1a1",
   keyword: "#fb923c",
   entity: "#fdba74",
   string: "#4ade80",

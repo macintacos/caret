@@ -188,32 +188,32 @@ async function revealGutterPlus(page: Page, line: number): Promise<Locator> {
   return plus;
 }
 
-/**
- * Drag the gutter `+` from its current line down to `endLine`, producing a
- * multi-line SelectedLineRange. Driven with dispatched PointerEvents sharing one
- * pointerId — the library's document-level drag listener filters on pointerId,
- * which Playwright's CDP mouse drag does not carry consistently.
- */
-async function dragGutterToLine(page: Page, endLine: number): Promise<void> {
-  await page.evaluate((end) => {
+/** Viewport-px centre of a 1-based line's number cell in the gutter column. */
+async function gutterCellCenter(page: Page, line: number): Promise<{ x: number; y: number }> {
+  const pt = await page.evaluate((ln) => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    if (!sh) return;
-    const btn = sh.querySelector("[data-utility-button]") as HTMLElement;
-    const br = btn.getBoundingClientRect();
-    const x = br.x + br.width / 2;
-    const rowY = (line: number) => {
-      const span = Array.from(sh.querySelectorAll("[data-line-number-content]")).find(
-        (s) => (s.parentElement as HTMLElement)?.dataset.lineIndex === String(line - 1),
-      );
-      const r = (span?.parentElement as HTMLElement).getBoundingClientRect();
-      return r.y + r.height / 2;
-    };
-    const ev = (y: number) =>
-      ({ pointerId: 1, clientX: x, clientY: y, bubbles: true, composed: true, button: 0 }) as const;
-    btn.dispatchEvent(new PointerEvent("pointerdown", ev(br.y + br.height / 2)));
-    document.dispatchEvent(new PointerEvent("pointermove", ev(rowY(end))));
-    document.dispatchEvent(new PointerEvent("pointerup", ev(rowY(end))));
-  }, endLine);
+    const span = Array.from(sh?.querySelectorAll("[data-line-number-content]") ?? []).find(
+      (s) => (s.parentElement as HTMLElement)?.dataset.lineIndex === String(ln - 1),
+    );
+    const r = (span?.parentElement as HTMLElement)?.getBoundingClientRect();
+    return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null;
+  }, line);
+  if (!pt) throw new Error(`gutter cell for line ${line} not found`);
+  return pt;
+}
+
+/**
+ * Select a line span by dragging down the line-number column from `startLine` to
+ * `endLine` (the library's line-selection gesture). A stepped real-mouse drag
+ * grows the selection row by row; the gutter `+` then reports that range.
+ */
+async function selectGutterRange(page: Page, startLine: number, endLine: number): Promise<void> {
+  const start = await gutterCellCenter(page, startLine);
+  const end = await gutterCellCenter(page, endLine);
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(end.x, end.y, { steps: 12 });
+  await page.mouse.up();
 }
 
 test("creating a single-line annotation from the gutter persists it line-anchored", async ({
@@ -253,9 +253,12 @@ test("creating a range annotation from the gutter persists the correct line span
   await expect(page.locator(".diff-plan")).toBeVisible();
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();
 
-  // Reveal the + on line 5, then drag down to line 8 to select the range.
-  await revealGutterPlus(page, 5);
-  await dragGutterToLine(page, 8);
+  // Select lines 5–8 by dragging the number column, then open the composer from
+  // the gutter + that the selection reveals.
+  await selectGutterRange(page, 5, 8);
+  const plus = page.locator(".diffview [data-utility-button]");
+  await expect(plus).toBeVisible();
+  await plus.click();
 
   const composer = page.getByRole("dialog", { name: "Add a comment" });
   await expect(composer).toBeVisible();

@@ -24,7 +24,11 @@
       "!**/*.html",
       // Build-generated embed manifest (EXC-522): emitted under src/, which
       // biome lints — exclude the generated artifact from the lint/format gate.
-      "!src/ui-manifest.generated.ts"
+      "!src/ui-manifest.generated.ts",
+      // Vendored verbatim from the source-view library's core stylesheet: a
+      // single ~40 KB string literal that must stay byte-identical to upstream
+      // (a drift test guards it), so it is not biome's to reformat.
+      "!ui/src/lib/diffview/diffsCoreStyles.ts"
     ]
   },
   "formatter": {

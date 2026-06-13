@@ -64,10 +64,12 @@ describe("toFileOptions", () => {
     const renderAnnotation = () => document.createElement("div");
     const result = toFileOptions({}, undefined, {
       enableGutterUtility: true,
+      enableLineSelection: true,
       onGutterUtilityClick,
       renderAnnotation,
     });
     expect(result.enableGutterUtility).toBe(true);
+    expect(result.enableLineSelection).toBe(true);
     expect(result.onGutterUtilityClick).toBe(onGutterUtilityClick);
     expect(result.renderAnnotation).toBe(renderAnnotation);
   });
