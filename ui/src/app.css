@@ -14,29 +14,29 @@
   --font-mono: "Berkeley Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   /* Light: neutral grey paper + ink */
-  --paper: oklch(0.985 0 0);
-  --paper-raised: oklch(1 0 0);
-  --paper-sunk: oklch(0.967 0 0);
-  --ink: oklch(0.205 0 0);
-  --ink-soft: oklch(0.45 0 0);
-  --ink-faint: oklch(0.62 0 0);
-  --rule: oklch(0 0 0 / 0.1);
-  --rule-strong: oklch(0 0 0 / 0.16);
+  --paper: #fafafa;
+  --paper-raised: #ffffff;
+  --paper-sunk: #f4f4f4;
+  --ink: #171717;
+  --ink-soft: #555555;
+  --ink-faint: #868686;
+  --rule: #0000001a;
+  --rule-strong: #00000029;
 
   /* Caret amber accent */
   --accent: #c2410c;
   --accent-bright: #ea580c;
-  --accent-wash: oklch(0.7 0.16 47 / 0.12);
+  --accent-wash: #ec7c381f;
   --accent-ink: #fff7ed;
 
   /* Annotation highlight */
-  --mark: oklch(0.7 0.16 47 / 0.14);
-  --mark-active: oklch(0.7 0.16 47 / 0.28);
-  --mark-orphan: oklch(0.55 0 0 / 0.16);
+  --mark: #ec7c3824;
+  --mark-active: #ec7c3847;
+  --mark-orphan: #70707029;
 
   --ok: #15803d;
   --danger: #b91c1c;
-  --shadow-card: 0 1px 2px oklch(0 0 0 / 0.06), 0 8px 24px oklch(0 0 0 / 0.08);
+  --shadow-card: 0 1px 2px #0000000f, 0 8px 24px #00000014;
 
   /* Radius roles, shared by the shell chrome and the source-view surface so the
      two read as one system: --radius tags interactive controls (buttons,
@@ -51,27 +51,27 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --paper: oklch(0.145 0 0);
-    --paper-raised: oklch(0.205 0 0);
-    --paper-sunk: oklch(0.185 0 0);
-    --ink: oklch(0.985 0 0);
-    --ink-soft: oklch(0.708 0 0);
-    --ink-faint: oklch(0.556 0 0);
-    --rule: oklch(1 0 0 / 0.1);
-    --rule-strong: oklch(1 0 0 / 0.16);
+    --paper: #0a0a0a;
+    --paper-raised: #171717;
+    --paper-sunk: #131313;
+    --ink: #fafafa;
+    --ink-soft: #a1a1a1;
+    --ink-faint: #737373;
+    --rule: #ffffff1a;
+    --rule-strong: #ffffff29;
 
     --accent: #fb923c;
     --accent-bright: #fdba74;
-    --accent-wash: oklch(0.7 0.16 47 / 0.16);
-    --accent-ink: oklch(0.145 0 0);
+    --accent-wash: #ec7c3829;
+    --accent-ink: #0a0a0a;
 
-    --mark: oklch(0.75 0.15 60 / 0.18);
-    --mark-active: oklch(0.75 0.15 60 / 0.34);
-    --mark-orphan: oklch(0.7 0 0 / 0.16);
+    --mark: #f3953c2e;
+    --mark-active: #f3953c57;
+    --mark-orphan: #9b9b9b29;
 
     --ok: #4ade80;
     --danger: #f87171;
-    --shadow-card: 0 1px 2px oklch(0 0 0 / 0.4), 0 10px 30px oklch(0 0 0 / 0.5);
+    --shadow-card: 0 1px 2px #00000066, 0 10px 30px #00000080;
 
     color-scheme: dark;
   }

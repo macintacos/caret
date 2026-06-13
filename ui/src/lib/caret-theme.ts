@@ -21,20 +21,20 @@ interface Palette {
 }
 
 const light: Palette = {
-  bg: "oklch(0.967 0 0)",
-  fg: "oklch(0.205 0 0)",
-  comment: "oklch(0.62 0 0)",
-  punctuation: "oklch(0.45 0 0)",
+  bg: "#f4f4f4",
+  fg: "#171717",
+  comment: "#868686",
+  punctuation: "#555555",
   keyword: "#c2410c",
   entity: "#ea580c",
   string: "#15803d",
 };
 
 const dark: Palette = {
-  bg: "oklch(0.185 0 0)",
-  fg: "oklch(0.985 0 0)",
-  comment: "oklch(0.556 0 0)",
-  punctuation: "oklch(0.708 0 0)",
+  bg: "#131313",
+  fg: "#fafafa",
+  comment: "#737373",
+  punctuation: "#a1a1a1",
   keyword: "#fb923c",
   entity: "#fdba74",
   string: "#4ade80",
