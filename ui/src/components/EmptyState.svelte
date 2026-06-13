@@ -71,14 +71,21 @@
     vertical-align: -0.15em;
     margin-right: 0.15em;
   }
+  /* A quiet status chip carrying the live endpoint in the monospace technical
+     voice the source-view surface uses for paths and metadata; the bordered pill
+     echoes the build/version badges so the shell's status affordances cohere. */
   .hint {
     margin-top: 2rem;
-    /* Matches the .mono atom's size (0.78rem) but stays in the sans face — this
-       status line is prose, not code, so it takes the size without the mono font. */
-    font-size: 0.78rem;
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.02em;
     color: var(--ink-faint);
-    border-top: 1px solid var(--rule);
-    padding-top: 1rem;
+    background: var(--paper-raised);
+    border: 1px solid var(--rule);
+    border-radius: 99px;
+    padding: 0.22rem 0.7rem;
   }
   @media (prefers-reduced-motion: reduce) {
     .glyph {

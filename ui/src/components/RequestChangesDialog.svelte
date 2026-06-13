@@ -110,10 +110,14 @@
     padding: 2rem;
     animation: fade 0.15s ease-out;
   }
+  /* The accent left-bar is the source-view surface's signature for an actionable
+     card (composer, annotation); the request-changes dialog carries it too so the
+     modal reads as part of the same review vocabulary. */
   .dialog {
     width: min(560px, 100%);
     background: var(--paper-raised);
     border: 1px solid var(--rule-strong);
+    border-left: 3px solid var(--accent);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
     padding: 1.5rem;
@@ -150,9 +154,12 @@
     border-radius: var(--radius);
     padding: 0.6rem 0.7rem;
   }
+  /* The accent + accent-wash ring matches the source-view ToC filter's focus
+     affordance, so every text input in the app focuses the same way. */
   textarea:focus {
     outline: none;
     border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-wash);
   }
   .summary {
     /* Matches the .mono atom's size (0.78rem) but stays in the sans face — this

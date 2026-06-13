@@ -60,18 +60,27 @@
     position: relative;
     min-width: 0;
   }
+  /* A tagged control (--radius), matching the diff surface's input/select voice,
+     rather than a pill — pills are reserved for true badges (the count, below). */
   .current {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
     background: var(--paper-sunk);
     border: 1px solid var(--rule);
-    border-radius: 99px;
+    border-radius: var(--radius);
     padding: 0.3rem 0.75rem;
     max-width: 46vw;
+    transition: border-color 0.12s ease;
+  }
+  .current:hover {
+    border-color: var(--rule-strong);
   }
   .single .current {
     cursor: default;
+  }
+  .single .current:hover {
+    border-color: var(--rule);
   }
   .title {
     font-family: var(--font-sans);
@@ -123,12 +132,19 @@
     display: flex;
     flex-direction: column;
     gap: 0.1rem;
+    /* Inset accent bar marks the active review, echoing the source-view ToC's
+       active-row treatment; reserved as transparent until selected. */
+    box-shadow: inset 2px 0 0 transparent;
+    transition:
+      background 0.12s ease,
+      box-shadow 0.12s ease;
   }
   .menu button:hover {
     background: var(--paper-sunk);
   }
   .menu button.active {
     background: var(--accent-wash);
+    box-shadow: inset 2px 0 0 var(--accent);
   }
   .m-title {
     font-family: var(--font-sans);
