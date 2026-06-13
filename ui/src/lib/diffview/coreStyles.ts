@@ -6,10 +6,21 @@
 
 import { DIFFS_CORE_STYLES } from "./diffsCoreStyles.ts";
 
-// One constructable sheet, shared across every view's shadow root. Adopted
-// sheets are independent of a root's child nodes, so they survive the
-// replaceChildren() the lifecycle runs when it swaps content.
+// caret's adjustments layered over the vendored core stylesheet. The gutter and
+// content sit in adjacent grid columns with no gap, which reads cramped — line
+// numbers crowd the code, most visibly under a line's hover highlight. A little
+// inline-start padding on the content column opens that seam without shifting
+// the gutter.
+const CARET_OVERRIDES = `
+  [data-content] { padding-inline-start: 16px; }
+`;
+
+// Constructable sheets shared across every view's shadow root, the override
+// adopted after the core sheet so it wins. Adopted sheets are independent of a
+// root's child nodes, so they survive the replaceChildren() the lifecycle runs
+// when it swaps content.
 let sheet: CSSStyleSheet | undefined;
+let overrides: CSSStyleSheet | undefined;
 
 /**
  * Ensures the @pierre/diffs core stylesheet is present in `root`. Idempotent:
@@ -23,15 +34,24 @@ export function ensureCoreStyles(root: ShadowRoot): void {
       sheet = new CSSStyleSheet();
       sheet.replaceSync(DIFFS_CORE_STYLES);
     }
-    if (!root.adoptedStyleSheets.includes(sheet)) {
-      root.adoptedStyleSheets = [sheet, ...root.adoptedStyleSheets];
+    if (!overrides) {
+      overrides = new CSSStyleSheet();
+      overrides.replaceSync(CARET_OVERRIDES);
+    }
+    const want = [sheet, overrides];
+    if (!want.every((s) => root.adoptedStyleSheets.includes(s))) {
+      root.adoptedStyleSheets = [
+        sheet,
+        ...root.adoptedStyleSheets.filter((s) => s !== sheet && s !== overrides),
+        overrides,
+      ];
     }
     return;
   }
   if (!root.querySelector("style[data-caret-core-css]")) {
     const el = document.createElement("style");
     el.dataset.caretCoreCss = "";
-    el.textContent = DIFFS_CORE_STYLES;
+    el.textContent = `${DIFFS_CORE_STYLES}\n${CARET_OVERRIDES}`;
     root.prepend(el);
   }
 }
