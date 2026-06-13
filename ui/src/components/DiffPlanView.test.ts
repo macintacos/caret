@@ -66,6 +66,30 @@ describe("DiffPlanView rendering", () => {
   });
 });
 
+describe("DiffPlanView contents pane", () => {
+  test("shows the ToC pane with a row per heading for a multi-heading plan", async () => {
+    const review = reviewFixture({
+      currentPlan: "# Context\n\nintro\n\n## Approach\n\nbody\n\n## Verification\n\nv\n",
+    });
+    const { target } = render(DiffPlanView, props({ review }));
+    const pane = await until(() => target.querySelector(".source-toc") != null);
+    expect(pane).toBe(true);
+    expect(target.querySelectorAll(".source-toc .toc-row")).toHaveLength(3);
+    const labels = [...target.querySelectorAll(".source-toc .toc-row")].map((r) =>
+      r.textContent?.trim(),
+    );
+    expect(labels).toEqual(["Context", "Approach", "Verification"]);
+  });
+
+  test("suppresses the ToC pane for a single-heading plan", async () => {
+    const review = reviewFixture({ currentPlan: "# Only\n\njust one heading\n" });
+    const { target } = render(DiffPlanView, props({ review }));
+    // Wait for the source view to paint, then assert the pane is absent.
+    await until(() => shadow(target)?.textContent?.includes("just one heading") ?? false);
+    expect(target.querySelector(".source-toc")).toBeNull();
+  });
+});
+
 describe("DiffPlanView gutter composer", () => {
   // The gutter `+` reveal, line-offset positioning, and the persisted create are
   // real-browser behavior covered by the Playwright e2e (diff-surface.e2e.ts).
