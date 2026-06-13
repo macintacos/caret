@@ -251,7 +251,15 @@
       <!-- Source-view surface (EXC-583): the plan rendered as line-numbered
            markdown source with a left-hand filterable contents pane and a line
            gutter for creating comments. -->
-      <DiffPlanView review={active} onCreateLineAnnotation={autosave.createLineAnnotation} />
+      <DiffPlanView
+        review={active}
+        onCreateLineAnnotation={autosave.createLineAnnotation}
+        annotations={autosave.annotations}
+        focusedAnnotation={autosave.focusedAnnotation}
+        onEditAnnotation={autosave.editAnnotation}
+        onDeleteAnnotation={autosave.deleteAnnotation}
+        onFocusAnnotation={autosave.focusAnnotation}
+      />
     {:else}
       <!-- Fixed, viewport-pinned contents rail — a sibling of (not inside) the
            grid so it escapes .columns' overflow:hidden and pins to the viewport. -->

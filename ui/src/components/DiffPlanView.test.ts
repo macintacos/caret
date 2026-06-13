@@ -1,17 +1,22 @@
 import "../../test-mount.ts";
 import { afterEach, describe, expect, test } from "bun:test";
+import type { ClientReview, PlanVersion } from "@core/types";
 import { until } from "../../../test/support/poll.ts";
 import { render } from "../../test-mount.ts";
 import { reactiveProps } from "../../test-props.svelte.ts";
-import type { ClientReview, PlanVersion } from "@core/types";
 import DiffPlanView from "./DiffPlanView.svelte";
 
-// Default props: a no-op create handler, so the rendering tests below need only
-// override `review`.
+// Default props: no-op handlers and an empty annotation set, so the rendering
+// tests below need only override `review` (or `annotations`).
 function props(over: Record<string, unknown> = {}) {
   return {
     review: reviewFixture(),
     onCreateLineAnnotation: () => {},
+    annotations: [],
+    focusedAnnotation: null,
+    onEditAnnotation: () => {},
+    onDeleteAnnotation: () => {},
+    onFocusAnnotation: () => {},
     ...over,
   };
 }
@@ -187,5 +192,80 @@ describe("DiffPlanView version compare", () => {
       () => shadow(target)?.querySelector("pre")?.getAttribute("data-diff-type") === "single",
     );
     expect(applied).toBe(true);
+  });
+});
+
+describe("DiffPlanView annotation display", () => {
+  const lineAnn = (over: Record<string, unknown> = {}) => ({
+    id: "ln1",
+    startLine: 3,
+    endLine: 3,
+    comment: "fix this line",
+    ...over,
+  });
+
+  test("renders an inline card for a line annotation", async () => {
+    const { target } = render(DiffPlanView, props({ annotations: [lineAnn()] }));
+    const card = await until(() => target.querySelector('[data-annotation-card="ln1"]') != null);
+    expect(card).toBe(true);
+  });
+
+  test("renders an always-visible gutter marker for each annotated line", async () => {
+    const { target } = render(DiffPlanView, props({ annotations: [lineAnn()] }));
+    const marker = await until(
+      () => target.querySelector('[data-annotation-marker="ln1"]') != null,
+    );
+    expect(marker).toBe(true);
+  });
+
+  test("the focused annotation expands while others collapse", async () => {
+    const annotations = [
+      lineAnn({ id: "a", startLine: 2, endLine: 2, comment: "first" }),
+      lineAnn({ id: "b", startLine: 4, endLine: 4, comment: "second" }),
+    ];
+    const { target } = render(DiffPlanView, props({ annotations, focusedAnnotation: "a" }));
+    await until(() => target.querySelector('[data-annotation-card="a"]') != null);
+    const a = target.querySelector('[data-annotation-card="a"]')!;
+    const b = target.querySelector('[data-annotation-card="b"]')!;
+    expect(a.querySelector(".body")).not.toBeNull();
+    expect(b.querySelector(".body")).toBeNull();
+    expect(b.querySelector(".chip")).not.toBeNull();
+  });
+
+  test("clicking a gutter marker focuses its annotation", async () => {
+    let focused: string | undefined;
+    const { target } = render(
+      DiffPlanView,
+      props({ annotations: [lineAnn()], onFocusAnnotation: (id: string) => (focused = id) }),
+    );
+    await until(() => target.querySelector('[data-annotation-marker="ln1"]') != null);
+    target.querySelector<HTMLElement>('[data-annotation-marker="ln1"]')!.click();
+    expect(focused).toBe("ln1");
+  });
+
+  test("legacy annotations render in the read-only list, not as cards", async () => {
+    const legacy = {
+      id: "g1",
+      blockId: "b0",
+      startOffset: 0,
+      endOffset: 5,
+      quote: "Title",
+      comment: "legacy note",
+    };
+    const { target } = render(DiffPlanView, props({ annotations: [legacy] }));
+    const listed = await until(() => target.querySelector(".legacy-list") != null);
+    expect(listed).toBe(true);
+    expect(target.querySelector(".legacy-list")?.textContent).toContain("legacy note");
+    expect(target.querySelector('[data-annotation-card="g1"]')).toBeNull();
+  });
+
+  test("shows no annotation cards in compare mode", async () => {
+    const review = multiVersionFixture(3);
+    const { target } = render(DiffPlanView, props({ review, annotations: [lineAnn()] }));
+    await until(() => target.querySelector('[data-annotation-card="ln1"]') != null);
+    target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
+    await until(() => (shadow(target)?.textContent ?? "").includes("body revision 2"));
+    expect(target.querySelector('[data-annotation-card="ln1"]')).toBeNull();
+    expect(target.querySelector('[data-annotation-marker="ln1"]')).toBeNull();
   });
 });

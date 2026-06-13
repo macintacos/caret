@@ -28,8 +28,15 @@
   import type { SourceViewGutter } from "../lib/diffview/options.ts";
   import type { SourceViewApi } from "../lib/diffview/types.ts";
   import { activeHeadingLine, extractHeadings } from "../lib/toc.ts";
-  import type { ClientReview } from "@core/types";
+  import {
+    type Annotation,
+    type ClientReview,
+    isLegacyAnnotation,
+    isLineAnnotation,
+  } from "@core/types";
   import SourceComposer from "./SourceComposer.svelte";
+  import SourceAnnotationCard from "./SourceAnnotationCard.svelte";
+  import LegacyAnnotationList from "./LegacyAnnotationList.svelte";
   import SourceToc from "./SourceToc.svelte";
 
   interface Props {
@@ -41,9 +48,30 @@
       endLine: number;
       comment: string;
     }) => void;
+    /** The working-copy annotations to display over the source. */
+    annotations: Annotation[];
+    /** The single focused annotation id (drives expand + highlight), or null. */
+    focusedAnnotation: string | null;
+    onEditAnnotation: (id: string, comment: string) => void;
+    onDeleteAnnotation: (id: string) => void;
+    onFocusAnnotation: (id: string) => void;
   }
 
-  let { review, onCreateLineAnnotation }: Props = $props();
+  let {
+    review,
+    onCreateLineAnnotation,
+    annotations,
+    focusedAnnotation,
+    onEditAnnotation,
+    onDeleteAnnotation,
+    onFocusAnnotation,
+  }: Props = $props();
+
+  // Line-anchored annotations float over their source lines as positioned cards
+  // with gutter markers; legacy (selection-anchored) annotations have no line and
+  // list read-only below the view. Both narrow from the same on-disk union.
+  const lineAnnotations = $derived(annotations.filter(isLineAnnotation));
+  const legacyAnnotations = $derived(annotations.filter(isLegacyAnnotation));
 
   // Compare state: the component owns the reactive store (runes live here) and
   // the factory mutates it; the layout-preference read/write are injected so the
@@ -212,6 +240,43 @@
     // required by the bag's shape, so it returns nothing here.
     renderAnnotation: () => undefined,
   };
+
+  // Vertical offset (px) per line annotation, keyed by id. Cards and gutter
+  // markers are absolutely positioned at these offsets inside the scroll
+  // container, so they scroll with the source content. The map is recomputed
+  // whenever the rendered content or the annotation set changes; the source view
+  // paints asynchronously, so a short rAF settle loop retries until the rows
+  // exist (lineOffset returns the scrollTop as a placeholder until then).
+  let positions = $state<Record<string, number>>({});
+
+  function computePositions(): Record<string, number> {
+    const next: Record<string, number> = {};
+    for (const a of lineAnnotations) next[a.id] = lineOffset(a.startLine);
+    return next;
+  }
+
+  $effect(() => {
+    // Reactive deps: the rendered content identity and the line annotations.
+    void contentKey;
+    void lineAnnotations;
+    if (showDiff) {
+      positions = {};
+      return;
+    }
+    let raf = 0;
+    let tries = 0;
+    const settle = () => {
+      positions = computePositions();
+      // Rows may not have painted yet on the first tick after a content change;
+      // retry a few frames so cards land on their lines rather than at the top.
+      if (tries < 6) {
+        tries += 1;
+        raf = requestAnimationFrame(settle);
+      }
+    };
+    settle();
+    return () => cancelAnimationFrame(raf);
+  });
 </script>
 
 {#if canCompare}
@@ -266,9 +331,37 @@
           onCancel={() => commenting.cancel()}
         />
       {/if}
+      <!-- Always-visible gutter markers: discoverable when cards are collapsed.
+           Positioned in the gutter lane at the annotated line; clicking focuses
+           (which expands) the annotation. -->
+      {#each lineAnnotations as a (a.id)}
+        <button
+          class="annotation-marker"
+          class:focused={a.id === focusedAnnotation}
+          data-annotation-marker={a.id}
+          style="top: {positions[a.id] ?? 0}px;"
+          type="button"
+          aria-label={`Comment on line ${a.startLine}`}
+          onclick={() => onFocusAnnotation(a.id)}
+        ></button>
+      {/each}
+      {#each lineAnnotations as a (a.id)}
+        <SourceAnnotationCard
+          annotation={a}
+          top={positions[a.id] ?? 0}
+          focused={a.id === focusedAnnotation}
+          onFocus={onFocusAnnotation}
+          onEdit={onEditAnnotation}
+          onDelete={onDeleteAnnotation}
+        />
+      {/each}
     {/if}
   </div>
 </div>
+
+{#if legacyAnnotations.length > 0}
+  <LegacyAnnotationList annotations={legacyAnnotations} />
+{/if}
 
 <style>
   /* The contents pane and source view share one row; the pane is a fixed-width
@@ -289,5 +382,27 @@
     min-height: 0;
     overflow: auto;
     background: var(--paper);
+  }
+
+  /* Always-visible marker in the gutter lane for every annotated line. Sits to
+     the left of the card column so it stays visible when the card is collapsed;
+     scrolls with content because it is a child of the scroll container. */
+  .annotation-marker {
+    position: absolute;
+    left: 2.4rem;
+    z-index: 35;
+    width: 0.55rem;
+    height: 1.1rem;
+    padding: 0;
+    border: none;
+    border-radius: 2px;
+    background: var(--accent);
+    opacity: 0.55;
+    cursor: pointer;
+    transition: opacity 0.12s;
+  }
+  .annotation-marker:hover,
+  .annotation-marker.focused {
+    opacity: 1;
   }
 </style>
