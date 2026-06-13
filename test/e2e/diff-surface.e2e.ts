@@ -269,3 +269,75 @@ test("cancelling the composer with Escape leaves no residue", async ({ daemon, p
     .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
     .toBe(0);
 });
+
+// ----- Inline annotation cards: collapse/expand + delete (EXC-581) -----
+
+/** Create a single-line annotation on `line` via the gutter, returning once the
+ * card for it is on screen. */
+async function createAnnotation(page: Page, line: number, comment: string): Promise<void> {
+  const plus = await revealGutterPlus(page, line);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+  await composer.locator("textarea").fill(comment);
+  await composer.getByRole("button", { name: "Comment" }).click();
+  await expect(composer).toHaveCount(0);
+}
+
+test("a created annotation shows an inline card and a gutter marker", async ({ daemon, page }) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+
+  await createAnnotation(page, 3, "Quantify the cold cost.");
+
+  // The new annotation is focused on create, so its card renders expanded with
+  // the full comment, and an always-visible gutter marker anchors the line.
+  const card = page.locator("[data-annotation-card]");
+  await expect(card).toBeVisible();
+  await expect(card.getByText("Quantify the cold cost.")).toBeVisible();
+  await expect(page.locator("[data-annotation-marker]")).toBeVisible();
+});
+
+test("an inline card collapses to a chip and expands again", async ({ daemon, page }) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+
+  await createAnnotation(page, 3, "Tighten this paragraph.");
+  const card = page.locator("[data-annotation-card]");
+  await expect(card.locator(".body")).toBeVisible();
+
+  // Collapse: the body disappears, leaving the compact chip.
+  await card.getByRole("button", { name: "Collapse comment" }).click();
+  await expect(card.locator(".body")).toHaveCount(0);
+  await expect(card.locator(".chip")).toBeVisible();
+
+  // Expand again by clicking the chip; the full comment returns.
+  await card.locator(".chip").click();
+  await expect(card.locator(".body")).toBeVisible();
+  await expect(card.getByText("Tighten this paragraph.")).toBeVisible();
+});
+
+test("deleting an inline card removes the annotation and its marker", async ({ daemon, page }) => {
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+
+  await createAnnotation(page, 3, "Drop this section.");
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
+    .toBe(1);
+
+  await page.locator("[data-annotation-card]").getByRole("button", { name: "delete" }).click();
+
+  // The card and marker leave the DOM and the delete persists through /draft.
+  await expect(page.locator("[data-annotation-card]")).toHaveCount(0);
+  await expect(page.locator("[data-annotation-marker]")).toHaveCount(0);
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
+    .toBe(0);
+});
