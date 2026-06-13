@@ -58,7 +58,14 @@ export function toFileOptions(
   // unchanged, so views without the link layer behave exactly as before. The
   // gutter bag spreads the same way: present only when the view enables
   // commenting, absent (and byte-identical) on the read-only view.
-  return { ...sharedOptions(options), ...linkHandlers, ...gutter };
+  //
+  // useTokenTransformer must be set explicitly whenever the token handlers are
+  // present: the library only derives it from the handlers on the first render,
+  // and its renderer-options projection drops the handlers on every later
+  // render, so without the explicit flag the per-token `data-char` markers stop
+  // being emitted and token clicks/hovers no longer resolve to a link span.
+  const tokenInteractions = linkHandlers != null ? { useTokenTransformer: true } : undefined;
+  return { ...sharedOptions(options), ...tokenInteractions, ...linkHandlers, ...gutter };
 }
 
 export function toFileDiffOptions(options: SourceDiffViewOptions): SourceDiffViewLibOptions {
