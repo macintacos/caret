@@ -40,6 +40,14 @@ export interface Daemon {
   getReview(id: string): Promise<{ status: number; body?: ClientReview }>;
   /** GET /api/reviews — the pending list. */
   listReviews(): Promise<ClientReview[]>;
+  /** POST /api/reviews/:id/resolve — record a decision (the same surface the UI
+   * uses), so a spec can deny a review harness-side and thread a revision onto
+   * it with the next seed. */
+  resolve(id: string, behavior: "allow" | "deny", feedback?: string): Promise<void>;
+  /** Seed a review with `count` versions under one session: post v1, deny it,
+   * then post each revision (which threads onto the rejected review), leaving the
+   * review pending at v`count`. Returns the review id. */
+  seedVersions(count: number, plans: string[]): Promise<string>;
 }
 
 const DAEMON_ENTRY = fileURLToPath(new URL("./daemon-entry.ts", import.meta.url));
@@ -168,6 +176,33 @@ export const test = base.extend<{ daemon: Daemon; diffSurface: boolean }>({
           const res = await fetch(`${url}/api/reviews`);
           if (!res.ok) throw new Error(`GET /api/reviews → ${res.status}`);
           return (await res.json()) as ClientReview[];
+        },
+        async resolve(id: string, behavior: "allow" | "deny", feedback?: string) {
+          const res = await fetch(`${url}/api/reviews/${encodeURIComponent(id)}/resolve`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ behavior, ...(feedback === undefined ? {} : { feedback }) }),
+          });
+          if (!res.ok) throw new Error(`resolve failed: POST /resolve → ${res.status}`);
+        },
+        async seedVersions(count: number, plans: string[]) {
+          // One session threads the revisions: post v1, then for each later
+          // version deny the pending review (so the daemon will append) and post
+          // the next plan onto the same session. Leaves the review pending at the
+          // final version.
+          const sessionId = randomUUID();
+          let id = "";
+          for (let v = 0; v < count; v++) {
+            if (v > 0) await this.resolve(id, "deny", "next revision");
+            const res = await fetch(`${url}/api/reviews`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sessionId, cwd: "/tmp/caret-e2e", plan: plans[v] }),
+            });
+            if (!res.ok) throw new Error(`seedVersions failed: POST /api/reviews → ${res.status}`);
+            id = ((await res.json()) as RouteResult).id;
+          }
+          return id;
         },
       });
     } finally {
