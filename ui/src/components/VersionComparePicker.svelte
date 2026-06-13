@@ -14,9 +14,9 @@
     versions: PlanVersion[];
     /** Whether compare mode is active. */
     comparing: boolean;
-    /** Selected base ("before") version number. */
+    /** Selected reference version (the diff's "after" side). */
     baseVersion: number;
-    /** Selected target ("after") version number. */
+    /** Selected version compared against (the diff's "before" side). */
     targetVersion: number;
     /** Active diff layout. */
     diffStyle: DiffStyle;
