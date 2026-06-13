@@ -12,6 +12,15 @@ export default defineConfig({
   fullyParallel: true,
   retries: 0,
   forbidOnly: true,
+  // EXC-587: bound the fan-out. Each worker drives a Chromium tree plus a
+  // spawned daemon, so an uncapped count is the dominant driver of the orphan
+  // storm when several preflight runs stack; cap it at half the cores
+  // (CARET_E2E_WORKERS overrides for a constrained host).
+  workers: process.env.CARET_E2E_WORKERS ? Number(process.env.CARET_E2E_WORKERS) : "50%",
+  // EXC-587: a wedged suite self-aborts instead of needing an external SIGKILL
+  // (the path that orphans Chromium). Generous so it can't flake a slow or
+  // loaded host's normal pass.
+  globalTimeout: 15 * 60 * 1000,
   // Non-interactive reporter so the preflight gate can't hang on a TTY pager.
   reporter: "list",
   use: {

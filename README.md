@@ -241,6 +241,7 @@ logs, and resolution falls through to the config file, then the default.
 | `CARET_DEV_STATE_DIR`    | `dev.state_dir`       | —                | **Dev-only.** Persistent `mise run dev` state dir; unset → ephemeral. |
 | `CARET_DEV_NEW_REVIEW_MS` | `dev.notify.interval_ms` | —             | **Dev-only.** Extra-review seeder cadence override (ms); a positive value also arms the seeder. Unset → cadence falls to `[dev.notify].interval_ms` (`15000`), and arming is governed by `--notify` / `[dev.notify].enabled`. |
 | `CARET_PREFLIGHT_JOBS`   | —                     | CPU count        | **Preflight-only.** Max `mise run preflight` tasks in flight; a positive int. Lower it (e.g. `1`) to serialize the gate on a constrained or stacked host. Invalid/unset → the host's CPU count. |
+| `CARET_E2E_WORKERS`      | —                     | `50%` of cores   | **Preflight-only.** Playwright e2e worker count (each drives a Chromium tree + daemon); a positive int. Lower it to shrink the e2e footprint on a constrained or stacked host. Unset → half the cores. |
 
 ## Logging & Debugging
 
