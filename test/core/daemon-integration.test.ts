@@ -3,7 +3,7 @@
 // the manual end-to-end test (two Claude instances).
 
 import { afterEach, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,10 +11,12 @@ import { VERSION } from "../../src/build-id.ts";
 import { httpHealth } from "../../src/daemon-client.ts";
 import { ensureDaemon } from "../../src/daemon-lifecycle.ts";
 import { createServer } from "../../src/daemon.ts";
+import { formatPlanMarkdown } from "../../src/plan-markdown.ts";
 import { createStore } from "../../src/store.ts";
 import { ndjsonRecords } from "../support/ndjson.ts";
 import { freePort } from "../support/net.ts";
 import { until } from "../support/poll.ts";
+import { recordingLog } from "../support/recording-log.ts";
 import { expectNeverLogsBody } from "../support/redaction.ts";
 
 // In-process health/discovery probe servers (a bare createServer + fixed-path
@@ -22,6 +24,32 @@ import { expectNeverLogsBody } from "../support/redaction.ts";
 const servers: Array<{ stop(): void }> = [];
 afterEach(() => {
   for (const s of servers.splice(0)) s.stop();
+});
+
+test("POST /api/reviews canonicalizes the agent's on-disk plan file end to end", async () => {
+  // Guards the whole HTTP seam: the hook's planFilePath must survive the request
+  // body schema and reach routeIncomingPlan, which rewrites that file with the
+  // canonical text. A schema regression that dropped the field would silently
+  // leave the agent reading raw text the human never saw — this catches that.
+  const dir = await mkdtemp(join(tmpdir(), "caret-it-planfile-"));
+  const srv = createServer({ store: createStore(join(dir, "store")), port: 0 });
+  servers.push(srv);
+  const planFilePath = join(dir, "plan.md");
+  writeFileSync(planFilePath, "raw text the agent first wrote");
+  const raw = `# Title\n\n${"a sentence prettier will reflow ".repeat(6)}`;
+
+  const res = await fetch(`http://localhost:${srv.port}/api/reviews`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ sessionId: "S", plan: raw, planFilePath }),
+  });
+  expect(res.ok).toBe(true);
+
+  const canonical = await formatPlanMarkdown(raw, recordingLog().log);
+  expect(canonical).not.toBe(raw);
+  expect(readFileSync(planFilePath, "utf8")).toBe(canonical);
+
+  await rm(dir, { recursive: true, force: true });
 });
 
 test("httpHealth reports the caret identity from a live daemon", async () => {

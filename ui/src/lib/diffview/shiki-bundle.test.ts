@@ -8,16 +8,36 @@ import { bundledLanguages, bundledThemes } from "./shiki-bundle.ts";
 // dropped here changes the build's payload, so the drift fails the unit suite
 // instead of silently bloating the binary.
 
-// markdown is the plan source language; the rest are the fenced-code grammars.
+// markdown is the plan source language; the rest are the fenced-code grammars
+// caret scans for and attaches so embedded code blocks highlight (see
+// languages.ts). Keep this list in sync with bundledLanguages.
 const EXPECTED_LANGS = [
   "markdown",
   "typescript",
+  "tsx",
   "javascript",
+  "jsx",
   "json",
+  "jsonc",
   "yaml",
   "toml",
   "shellscript",
   "diff",
+  "python",
+  "rust",
+  "go",
+  "sql",
+  "css",
+  "scss",
+  "html",
+  "xml",
+  "java",
+  "c",
+  "cpp",
+  "ruby",
+  "php",
+  "dockerfile",
+  "graphql",
 ] as const;
 
 describe("the scoped shiki bundle", () => {

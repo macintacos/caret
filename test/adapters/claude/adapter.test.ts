@@ -63,6 +63,18 @@ test("parseHookInput maps Claude's hook stdin into a core PlanInput", () => {
   });
 });
 
+test("parseHookInput lifts the plan file path so caret can canonicalize it", () => {
+  const stdin = JSON.stringify({
+    session_id: "S",
+    cwd: "/proj",
+    tool_input: { plan: "# Plan", planFilePath: "/home/u/.claude/plans/widget.md" },
+  });
+  expect(claudeAdapter.parseHookInput(stdin)).toMatchObject({
+    plan: "# Plan",
+    planFilePath: "/home/u/.claude/plans/widget.md",
+  });
+});
+
 test("parseHookInput tolerates a payload missing every field", () => {
   expect(claudeAdapter.parseHookInput("{}")).toEqual({
     sessionId: undefined,

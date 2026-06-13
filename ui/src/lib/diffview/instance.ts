@@ -18,6 +18,11 @@ export interface DiffViewInstance<TOptions, TAnnotation, TContent> {
   rerender(): void;
   setOptions(options: TOptions): void;
   setLineAnnotations(annotations: TAnnotation[]): void;
+  /** Clears the render cache and re-renders, forcing a fresh tokenization pass.
+   * The real File/FileDiff expose this as their theme-change hook; caret reuses
+   * it to re-highlight after attaching fenced-code grammars. Optional so a test
+   * fake can omit it. */
+  onThemeChange?(): void;
   cleanUp(): void;
 }
 
@@ -42,6 +47,11 @@ export interface DiffViewLifecycle<TOptions, TAnnotation, TContent> {
    * container must be stable for the lifecycle's lifetime — recreation is
    * keyed solely by contentKey (the components bind one div per mount). */
   sync(props: DiffViewSyncProps<TOptions, TAnnotation, TContent>): void;
+  /** Forces a fresh tokenization pass on the current instance (no-op before the
+   * first sync). Used after fenced-code grammars are attached to the shared
+   * highlighter so already-rendered fences re-highlight. A plain rerender reuses
+   * the cached tokens, so this clears the render cache first. */
+  rehighlight(): void;
   /** Tears the instance down. Idempotent. */
   destroy(): void;
 }
@@ -93,6 +103,9 @@ export function createDiffViewLifecycle<TOptions extends object, TAnnotation, TC
       contentKey = props.contentKey;
       lastOptions = props.options;
       lastAnnotations = props.annotations;
+    },
+    rehighlight() {
+      instance?.onThemeChange?.();
     },
     destroy() {
       instance?.cleanUp();

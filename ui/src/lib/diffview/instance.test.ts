@@ -24,7 +24,7 @@ interface FakeContent {
 }
 
 interface Call {
-  method: "render" | "setOptions" | "setLineAnnotations" | "rerender" | "cleanUp";
+  method: "render" | "setOptions" | "setLineAnnotations" | "rerender" | "onThemeChange" | "cleanUp";
   args: unknown[];
 }
 
@@ -53,6 +53,7 @@ function makeFactory() {
       setLineAnnotations: (annotations) =>
         calls.push({ method: "setLineAnnotations", args: [annotations] }),
       rerender: () => calls.push({ method: "rerender", args: [] }),
+      onThemeChange: () => calls.push({ method: "onThemeChange", args: [] }),
       cleanUp: () => calls.push({ method: "cleanUp", args: [] }),
     };
     instances.push(instance);
@@ -202,6 +203,23 @@ describe("diff-view lifecycle recreation and teardown", () => {
     const factory = makeFactory();
     const lifecycle = makeLifecycle(factory);
     lifecycle.destroy();
+    expect(factory.instances).toHaveLength(0);
+  });
+});
+
+describe("diff-view lifecycle rehighlight", () => {
+  test("rehighlight forces a fresh tokenization via the instance's theme-change hook", () => {
+    const factory = makeFactory();
+    const lifecycle = makeLifecycle(factory);
+    lifecycle.sync(props());
+    lifecycle.rehighlight();
+    expect(factory.instances[0]!.calls.at(-1)).toEqual({ method: "onThemeChange", args: [] });
+  });
+
+  test("rehighlight before any sync is a no-op", () => {
+    const factory = makeFactory();
+    const lifecycle = makeLifecycle(factory);
+    lifecycle.rehighlight();
     expect(factory.instances).toHaveLength(0);
   });
 });

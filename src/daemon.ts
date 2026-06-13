@@ -185,6 +185,10 @@ const PlanInputSchema: z.ZodType<PlanInput> = z
     cwd: z.string().optional(),
     title: z.string().optional(),
     plan: z.string().optional(),
+    // The agent's on-disk plan file, rewritten with the canonical text so the
+    // agent's plan of record matches the review (see plan-file.ts). zod strips
+    // unknown keys, so it must be declared here to survive the POST body parse.
+    planFilePath: z.string().optional(),
   })
   .catch({});
 
