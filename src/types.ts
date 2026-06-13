@@ -175,6 +175,12 @@ export interface PlanInput {
   cwd?: string;
   title?: string;
   plan?: string;
+  /** Absolute path to the on-disk plan file the agent reads its plan from
+   * (Claude Code's `~/.claude/plans/<name>.md`, surfaced as `tool_input.planFilePath`).
+   * caret rewrites this file with the canonical formatted plan so the agent's
+   * plan of record matches the reviewed text. Absent for agents without a plan
+   * file (e.g. Codex). */
+  planFilePath?: string;
 }
 
 /** Result of routing an incoming plan through the threading state machine. */

@@ -10,6 +10,7 @@
   import { type LinkSpanMap, openLinkInNewTab } from "./links.ts";
   import { type SourceViewGutter, type SourceViewLibOptions, toFileOptions } from "./options.ts";
   import { scrollToLine } from "./scroll.ts";
+  import { preloadFenceLanguages, scanFenceLanguages } from "./languages.ts";
   import { registerCaretDiffThemes } from "./theme.ts";
   import type {
     SourceDocument,
@@ -143,6 +144,25 @@
       options: libOptions,
       annotations,
     });
+  });
+
+  // Fenced-code highlighting. The library highlights the doc as one "markdown"
+  // file and never attaches the grammars its fenced blocks reference, so code
+  // fences render as a single un-tokenized color. Scan the rendered text for the
+  // languages its fences use, attach those grammars to the shared highlighter,
+  // then force one re-highlight so the now-resolvable fences light up. Re-runs on
+  // content change; a no-op when the plan has no code or the grammars are already
+  // attached (preload reports nothing newly loaded). See languages.ts.
+  $effect(() => {
+    const langs = scanFenceLanguages(doc.text);
+    if (langs.length === 0) return;
+    let cancelled = false;
+    void preloadFenceLanguages(langs).then((loaded) => {
+      if (loaded && !cancelled) lifecycle.rehighlight();
+    });
+    return () => {
+      cancelled = true;
+    };
   });
 </script>
 

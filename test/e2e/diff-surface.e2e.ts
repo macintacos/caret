@@ -457,3 +457,62 @@ test("editing an inline card rewrites the comment and persists it", async ({ dae
     .poll(async () => (await daemon.getReview(id)).body?.annotations?.[0]?.comment)
     .toBe("Revised note with more detail.");
 });
+
+// ----- Interaction regressions -----
+
+test("clicking a line near the top opens its composer without jumping the scroll", async ({
+  daemon,
+  page,
+}) => {
+  // Regression (focus-scroll): the composer's autofocus used to fire the
+  // browser's native scroll-into-view against the mid-rerender annotation row
+  // and slam a tall view to its bottom — clicking a line "jumped the page".
+  // Opening must leave the scroll position put.
+  await daemon.seed({ plan: TALL_PLAN });
+  await page.goto("/");
+  const view = page.locator(".diff-plan");
+  await expect(view).toBeVisible();
+  await expect(page.getByText("Line 1 of the plan body")).toBeVisible();
+  await view.evaluate((el) => {
+    el.scrollTop = 0;
+  });
+
+  // A plain click on the first body line (near the very top) opens its composer.
+  await page.getByText("Line 1 of the plan body").click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+
+  // The view stayed at the top — no focus-driven jump toward the document bottom.
+  expect(await view.evaluate((el) => el.scrollTop)).toBeLessThan(50);
+});
+
+test("highlights fenced code blocks with per-language syntax colors", async ({ daemon, page }) => {
+  // The plan renders as one markdown document; shiki's markdown grammar only
+  // tokenizes a ```lang block when that grammar is attached, which the library
+  // never does on its own. caret scans the plan's fences and attaches them, so
+  // the fixture's ts fence must tokenize into several distinctly-colored spans
+  // rather than the single un-highlighted color it had before.
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("function warm")).toBeVisible();
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const sh = document.querySelector(".diffview")?.shadowRoot;
+        const rows = sh?.querySelectorAll("[data-line]") ?? [];
+        let row: Element | undefined;
+        for (const r of rows) {
+          if ((r.textContent ?? "").includes("function warm")) {
+            row = r;
+            break;
+          }
+        }
+        if (row == null) return 0;
+        const spans = row.querySelectorAll("span");
+        return new Set([...spans].map((s) => getComputedStyle(s as HTMLElement).color)).size;
+      }),
+    )
+    .toBeGreaterThanOrEqual(3);
+});

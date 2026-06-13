@@ -355,6 +355,31 @@ export function buildErrorReport(message: string): PreflightErrorReport {
 // so display lines are stripped (buffered failure output stays raw).
 const ANSI_ESCAPES = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, "g");
 
+/**
+ * Env for a nested `mise run <task>`: the parent env minus the `usage_*` flag
+ * vars, with `extra` merged on top (extra wins; undefined parent values drop).
+ *
+ * mise injects `usage_json` / `usage_grep` / `usage_verbose` / `usage_task` for
+ * THIS preflight's own flags and leaves them in the environment of any nested
+ * `mise run` it spawns (verified). Those vars describe preflight, not the child,
+ * and they are load-bearing: `resolveJsonArgs` treats `usage_json==="true"` as
+ * "flags arrived via mise env" and then ignores argv. So a child chain
+ * `mise run test` → `bun test` → preflight.test.ts's `preflight --grep [`
+ * subprocess would inherit `usage_json=true`, ignore its `--grep [` argv, skip
+ * the invalid-grep `exit(2)`, and recursively run the whole task graph — a fork
+ * bomb. Stripping the vars at every nested boundary closes that at the source.
+ */
+export function withoutMiseUsageVars(
+  parent: Record<string, string | undefined>,
+  extra?: Record<string, string>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(parent)) {
+    if (v !== undefined && !k.startsWith("usage_")) out[k] = v;
+  }
+  return extra ? { ...out, ...extra } : out;
+}
+
 // Real spawner: runs `mise run <task>` with merged env, buffering combined
 // stdout+stderr and reporting the last non-empty line for the live display.
 async function spawnMiseTask(
@@ -363,7 +388,7 @@ async function spawnMiseTask(
   onLine: (line: string) => void,
 ): Promise<SpawnOutcome> {
   const proc = Bun.spawn(["mise", "run", name], {
-    env: { ...process.env, ...env },
+    env: withoutMiseUsageVars(process.env, env),
     stdout: "pipe",
     stderr: "pipe",
   });

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -46,6 +47,31 @@ test("first plan for a session starts a new thread (v1, epoch 0)", async () => {
   const r = await routeIncomingPlan(input({ plan: "# Hello\n\nx" }), store);
   expect(r).toMatchObject({ action: "new", version: 1, planEpoch: 0 });
   expect(store.get(r.id)?.title).toBe("Hello");
+});
+
+test("rewrites the agent's on-disk plan file with the canonical formatted text", async () => {
+  // The plan file Claude reads from must match what the human reviews. Routing a
+  // plan whose prose prettier reflows should leave the canonical text on disk,
+  // not the raw text the agent first wrote.
+  const planFilePath = join(dir, "agent-plan.md");
+  writeFileSync(planFilePath, "raw, never read back");
+  const raw = `# Title\n\n${"a long sentence that prettier will reflow ".repeat(6)}`;
+  await routeIncomingPlan(input({ plan: raw, planFilePath }), store);
+  const canonical = await formatPlanMarkdown(raw, recordingLog().log);
+  expect(canonical).not.toBe(raw); // proseWrap actually changed the text
+  expect(readFileSync(planFilePath, "utf8")).toBe(canonical);
+});
+
+test("canonicalizes the plan file on a revision, not just the first version", async () => {
+  const first = await routeIncomingPlan(input({ plan: "# T\n\nv1" }), store);
+  await reject(first.id);
+  const planFilePath = join(dir, "revision.md");
+  writeFileSync(planFilePath, "raw revision");
+  const raw = `# T\n\n${"reflow me ".repeat(20)}`;
+  const r = await routeIncomingPlan(input({ plan: raw, planFilePath }), store);
+  expect(r.action).toBe("append");
+  const canonical = await formatPlanMarkdown(raw, recordingLog().log);
+  expect(readFileSync(planFilePath, "utf8")).toBe(canonical);
 });
 
 test("a plan after a rejection appends version 2 to the same review", async () => {

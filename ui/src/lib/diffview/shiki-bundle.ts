@@ -22,20 +22,44 @@ import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 // a faithful superset for everything except the bundled maps narrowed below.
 export * from "shiki/core";
 
-// The grammar scope: markdown (the plan source language) plus the grammars
-// caret's highlight pipeline loads for fenced code blocks. Each entry is a lazy
+// The grammar scope: markdown (the plan source language) plus the fenced-code
+// grammars an agent is likely to tag a code block with. Each entry is a lazy
 // `() => import("shiki/langs/*.mjs")` factory, so vite emits one chunk per
-// grammar and the highlighter fetches it on demand — keeping grammars out of
-// the initial payload while bounding the build to this set.
+// grammar and the highlighter fetches it on demand (driven by the languages
+// caret scans out of the plan — see languages.ts), keeping grammars out of the
+// initial payload while bounding the build to this set. These are canonical
+// shiki grammar names only; fence aliases (js, sh, py…) normalize to them in
+// languages.ts, and the markdown grammar's own fence rules route alias tags to
+// whichever scope is loaded. Widening this set costs one more on-demand chunk
+// per grammar; the set is pinned by shiki-bundle.test.ts so a change is a
+// deliberate, reviewed payload edit rather than silent grammar creep.
 export const bundledLanguages = {
   markdown: () => import("shiki/langs/markdown.mjs"),
   typescript: () => import("shiki/langs/typescript.mjs"),
+  tsx: () => import("shiki/langs/tsx.mjs"),
   javascript: () => import("shiki/langs/javascript.mjs"),
+  jsx: () => import("shiki/langs/jsx.mjs"),
   json: () => import("shiki/langs/json.mjs"),
+  jsonc: () => import("shiki/langs/jsonc.mjs"),
   yaml: () => import("shiki/langs/yaml.mjs"),
   toml: () => import("shiki/langs/toml.mjs"),
   shellscript: () => import("shiki/langs/shellscript.mjs"),
   diff: () => import("shiki/langs/diff.mjs"),
+  python: () => import("shiki/langs/python.mjs"),
+  rust: () => import("shiki/langs/rust.mjs"),
+  go: () => import("shiki/langs/go.mjs"),
+  sql: () => import("shiki/langs/sql.mjs"),
+  css: () => import("shiki/langs/css.mjs"),
+  scss: () => import("shiki/langs/scss.mjs"),
+  html: () => import("shiki/langs/html.mjs"),
+  xml: () => import("shiki/langs/xml.mjs"),
+  java: () => import("shiki/langs/java.mjs"),
+  c: () => import("shiki/langs/c.mjs"),
+  cpp: () => import("shiki/langs/cpp.mjs"),
+  ruby: () => import("shiki/langs/ruby.mjs"),
+  php: () => import("shiki/langs/php.mjs"),
+  dockerfile: () => import("shiki/langs/dockerfile.mjs"),
+  graphql: () => import("shiki/langs/graphql.mjs"),
 } as const;
 
 // caret registers caret-light / caret-dark as custom themes (diffview/theme.ts),

@@ -22,9 +22,15 @@
   let textarea = $state<HTMLTextAreaElement | undefined>();
 
   // Focus the input the moment the composer mounts so a keyboard-only reviewer
-  // can type immediately after triggering the gutter `+`.
+  // can type immediately after triggering the gutter `+`. preventScroll is
+  // essential: the composer opens inline at the line the reviewer just clicked
+  // (already in view), and the library reserves its annotation row in the same
+  // tick. A plain focus() fires the browser's native scroll-into-view against
+  // that mid-rerender layout and lands the scroll container at the document
+  // bottom — the "clicking a line jumps the page" bug. We never need focus to
+  // scroll here, so we suppress it.
   $effect(() => {
-    textarea?.focus();
+    textarea?.focus({ preventScroll: true });
   });
 
   const label = $derived(
