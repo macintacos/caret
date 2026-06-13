@@ -110,6 +110,16 @@ describe("TopBar approve split-button", () => {
     flush();
     expect(target.querySelector(".menu")).toBeNull();
   });
+
+  test("Escape closes an open menu", () => {
+    const { target, flush } = render(TopBar, baseProps);
+    (target.querySelector(".split-toggle") as HTMLElement).click();
+    flush();
+    expect(target.querySelector(".menu")).not.toBeNull();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    flush();
+    expect(target.querySelector(".menu")).toBeNull();
+  });
 });
 
 describe("TopBar dev badge", () => {

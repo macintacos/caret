@@ -210,14 +210,6 @@ describe("DiffPlanView annotation display", () => {
     expect(card).toBe(true);
   });
 
-  test("renders an always-visible gutter marker for each annotated line", async () => {
-    const { target } = render(DiffPlanView, props({ annotations: [lineAnn()] }));
-    const marker = await until(
-      () => target.querySelector('[data-annotation-marker="ln1"]') != null,
-    );
-    expect(marker).toBe(true);
-  });
-
   test("the focused annotation expands while others collapse", async () => {
     const annotations = [
       lineAnn({ id: "a", startLine: 2, endLine: 2, comment: "first" }),
@@ -232,14 +224,14 @@ describe("DiffPlanView annotation display", () => {
     expect(b.querySelector(".chip")).not.toBeNull();
   });
 
-  test("clicking a gutter marker focuses its annotation", async () => {
+  test("clicking a collapsed card focuses its annotation", async () => {
     let focused: string | undefined;
     const { target } = render(
       DiffPlanView,
       props({ annotations: [lineAnn()], onFocusAnnotation: (id: string) => (focused = id) }),
     );
-    await until(() => target.querySelector('[data-annotation-marker="ln1"]') != null);
-    target.querySelector<HTMLElement>('[data-annotation-marker="ln1"]')!.click();
+    await until(() => target.querySelector('[data-annotation-card="ln1"] .chip') != null);
+    target.querySelector<HTMLElement>('[data-annotation-card="ln1"] .chip')!.click();
     expect(focused).toBe("ln1");
   });
 
@@ -266,6 +258,5 @@ describe("DiffPlanView annotation display", () => {
     target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
     await until(() => (shadow(target)?.textContent ?? "").includes("body revision 2"));
     expect(target.querySelector('[data-annotation-card="ln1"]')).toBeNull();
-    expect(target.querySelector('[data-annotation-marker="ln1"]')).toBeNull();
   });
 });

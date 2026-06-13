@@ -5,13 +5,14 @@
   // The contents pane jumps the source view to a heading's line. Hovering a line
   // shows the built-in gutter `+`; clicking it opens an inline composer at the
   // selected line or range, and submitting creates a line-anchored
-  // {startLine, endLine} annotation in the autosave working copy. The composer is
-  // positioned at the chosen line's offset (the wrapper's File is
-  // container-managed, which disables the library's renderAnnotation, so the
-  // composer is rendered here rather than slotted by the library). The wrapper
-  // owns the @pierre/diffs lifecycle and preserves the view instance across
-  // re-renders when the contentKey is unchanged, so scroll survives the 2s poll
-  // re-delivering the same version.
+  // {startLine, endLine} annotation in the autosave working copy. Saved comments
+  // and the open composer render inline in the library's per-line annotation rows
+  // (see annotationSlot.ts): the wrapper is fed one line annotation per anchored
+  // line so the library reserves the row, and the card/composer DOM is projected
+  // into that row's slot, so a comment sits between the code lines instead of
+  // floating over them. The wrapper owns the @pierre/diffs lifecycle and preserves
+  // the view instance across re-renders when the contentKey is unchanged, so
+  // scroll survives the 2s poll re-delivering the same version.
   //
   // When the review has multiple stored versions, a compare control lets the
   // reviewer diff any two of them (base vs. target) through the SourceDiffView
@@ -20,6 +21,7 @@
   // is a clean read-only diff with none of them.
   import SourceView from "../lib/diffview/SourceView.svelte";
   import SourceDiffView from "../lib/diffview/SourceDiffView.svelte";
+  import { slotInto, toLineAnnotations } from "../lib/diffview/annotationSlot.ts";
   import { createSourceCommenting } from "../lib/diffview/commenting.ts";
   import { buildLinkLayer } from "../lib/diffview/links.ts";
   import { readDiffStyle, writeDiffStyle } from "../lib/diffStylePref.ts";
@@ -67,8 +69,8 @@
     onFocusAnnotation,
   }: Props = $props();
 
-  // Line-anchored annotations float over their source lines as positioned cards
-  // with gutter markers; legacy (selection-anchored) annotations have no line and
+  // Line-anchored annotations render inline in the source view's per-line
+  // annotation rows; legacy (selection-anchored) annotations have no line and
   // list read-only below the view. Both narrow from the same on-disk union.
   const lineAnnotations = $derived(annotations.filter(isLineAnnotation));
   const legacyAnnotations = $derived(annotations.filter(isLegacyAnnotation));
@@ -142,15 +144,17 @@
     return headingMemo.headings;
   });
 
-  // The imperative scroll API the SourceView hands us once mounted.
-  let api: SourceViewApi | undefined;
+  // The imperative API the SourceView hands us once mounted: scroll-to-line plus
+  // the host element whose annotation slots we project comments into.
+  let api = $state<SourceViewApi | undefined>();
+  const host = $derived(api?.host);
 
   // The source line of the heading currently in the reading zone. Tracked from
   // the scroll container's topmost rendered line so the pane highlights the
   // section being read.
   let activeLine = $state<number | null>(null);
-  // The scroll container (the .diff-plan element). Shared by the ToC tracking
-  // (topmost visible line) and the gutter composer's line-offset positioning.
+  // The scroll container (the .diff-plan element), used by the ToC tracking to
+  // read the topmost visible line.
   let scrollEl = $state<HTMLElement | undefined>();
 
   // Recompute the active heading from the view's topmost visible source line,
@@ -195,12 +199,9 @@
   });
 
   // Reactive mirror of the controller's pending target, so the composer renders
-  // and re-positions when it opens or closes. The controller owns the state
-  // machine; this is the view's read of it.
+  // when it opens or closes. The controller owns the state machine; this is the
+  // view's read of it.
   let pending = $state<{ startLine: number; endLine: number } | undefined>();
-  // Vertical offset (px) of the pending line within the scroll container, where
-  // the composer anchors.
-  let composerTop = $state(0);
 
   const commenting = createSourceCommenting({
     onCreate: (anchor) => onCreateLineAnnotation(anchor),
@@ -218,65 +219,32 @@
     commenting.cancel();
   });
 
-  // Offset of `lineNumber` (1-based) within the scroll container: the line row's
-  // top relative to the container, plus the current scroll. Falls back to 0 when
-  // the row isn't found (e.g. virtualized out), keeping the composer in view.
-  function lineOffset(lineNumber: number): number {
-    const shadow = scrollEl?.querySelector(".diffview")?.shadowRoot;
-    const row = shadow?.querySelector(`[data-line-index="${lineNumber - 1}"]`);
-    if (row == null || scrollEl == null) return scrollEl?.scrollTop ?? 0;
-    const rowRect = row.getBoundingClientRect();
-    const hostRect = scrollEl.getBoundingClientRect();
-    return rowRect.top - hostRect.top + scrollEl.scrollTop;
-  }
-
   const gutter: SourceViewGutter = {
     enableGutterUtility: true,
     enableLineSelection: true,
-    onGutterUtilityClick: (range) => {
-      composerTop = lineOffset(Math.min(range.start, range.end));
-      commenting.open({ start: range.start, end: range.end });
-    },
-    // Container-managed mode disables library annotation rendering; the option is
-    // required by the bag's shape, so it returns nothing here.
+    onGutterUtilityClick: (range) => commenting.open({ start: range.start, end: range.end }),
+    // caret fills the library's annotation slots itself (see annotationSlot.ts), so
+    // the library's own renderAnnotation callback — disabled in container-managed
+    // mode anyway — goes unused; the option is required by the bag's shape.
     renderAnnotation: () => undefined,
   };
 
-  // Vertical offset (px) per line annotation, keyed by id. Cards and gutter
-  // markers are absolutely positioned at these offsets inside the scroll
-  // container, so they scroll with the source content. The map is recomputed
-  // whenever the rendered content or the annotation set changes; the source view
-  // paints asynchronously, so a short rAF settle loop retries until the rows
-  // exist (lineOffset returns the scrollTop as a placeholder until then).
-  let positions = $state<Record<string, number>>({});
-
-  function computePositions(): Record<string, number> {
-    const next: Record<string, number> = {};
-    for (const a of lineAnnotations) next[a.id] = lineOffset(a.startLine);
-    return next;
-  }
-
-  $effect(() => {
-    // Reactive deps: the rendered content identity and the line annotations.
-    void contentKey;
-    void lineAnnotations;
-    if (showDiff) {
-      positions = {};
-      return;
+  // One library line annotation per anchored line — the saved comments plus the
+  // open composer — so the library reserves an inline annotation row whose slot we
+  // fill with the card/composer DOM (see annotationSlot.ts). Comments anchor to
+  // their last line, so a multi-line comment sits below its whole range. Memoized
+  // by the line set so an unchanged poll tick keeps the same array reference and
+  // the wrapper skips a redundant library re-render.
+  let annoKey: string | undefined;
+  let annoValue: ReturnType<typeof toLineAnnotations> = [];
+  const sourceAnnotations = $derived.by(() => {
+    const lines = [...lineAnnotations.map((a) => a.endLine), ...(pending ? [pending.endLine] : [])];
+    const key = [...new Set(lines)].sort((a, b) => a - b).join(",");
+    if (annoKey !== key) {
+      annoKey = key;
+      annoValue = toLineAnnotations(lines);
     }
-    let raf = 0;
-    let tries = 0;
-    const settle = () => {
-      positions = computePositions();
-      // Rows may not have painted yet on the first tick after a content change;
-      // retry a few frames so cards land on their lines rather than at the top.
-      if (tries < 6) {
-        tries += 1;
-        raf = requestAnimationFrame(settle);
-      }
-    };
-    settle();
-    return () => cancelAnimationFrame(raf);
+    return annoValue;
   });
 </script>
 
@@ -319,43 +287,36 @@
       <SourceView
         doc={{ name: "plan.md", text: linkLayer.text }}
         links={linkLayer.spans}
+        annotations={sourceAnnotations}
         {gutter}
         {contentKey}
         onReady={(a) => (api = a)}
+        onLineComment={(line) => commenting.open({ start: line, end: line })}
       />
+      <!-- Saved comments and the open composer are projected into the library's
+           per-line annotation rows (slotInto), so they render inline between the
+           code lines at their anchor line rather than floating over them. -->
+      {#each lineAnnotations as a (a.id)}
+        <div use:slotInto={{ host, line: a.endLine }}>
+          <SourceAnnotationCard
+            annotation={a}
+            focused={a.id === focusedAnnotation}
+            onFocus={onFocusAnnotation}
+            onEdit={onEditAnnotation}
+            onDelete={onDeleteAnnotation}
+          />
+        </div>
+      {/each}
       {#if pending}
-        <SourceComposer
-          startLine={pending.startLine}
-          endLine={pending.endLine}
-          top={composerTop}
-          onSubmit={(comment) => commenting.submit(comment)}
-          onCancel={() => commenting.cancel()}
-        />
+        <div use:slotInto={{ host, line: pending.endLine }}>
+          <SourceComposer
+            startLine={pending.startLine}
+            endLine={pending.endLine}
+            onSubmit={(comment) => commenting.submit(comment)}
+            onCancel={() => commenting.cancel()}
+          />
+        </div>
       {/if}
-      <!-- Always-visible gutter markers: discoverable when cards are collapsed.
-           Positioned in the gutter lane at the annotated line; clicking focuses
-           (which expands) the annotation. -->
-      {#each lineAnnotations as a (a.id)}
-        <button
-          class="annotation-marker"
-          class:focused={a.id === focusedAnnotation}
-          data-annotation-marker={a.id}
-          style="top: {positions[a.id] ?? 0}px;"
-          type="button"
-          aria-label={`Comment on line ${a.startLine}`}
-          onclick={() => onFocusAnnotation(a.id)}
-        ></button>
-      {/each}
-      {#each lineAnnotations as a (a.id)}
-        <SourceAnnotationCard
-          annotation={a}
-          top={positions[a.id] ?? 0}
-          focused={a.id === focusedAnnotation}
-          onFocus={onFocusAnnotation}
-          onEdit={onEditAnnotation}
-          onDelete={onDeleteAnnotation}
-        />
-      {/each}
     {/if}
   </div>
 </div>
@@ -373,37 +334,13 @@
     overflow: hidden;
   }
 
-  /* Fills the content row and scrolls on its own; the SourceView container
-     virtualizes its own lines inside. position: relative anchors the absolutely
-     positioned composer to this scroll container. */
+  /* Fills the content row and scrolls on its own; the SourceView renders its
+     line grid (and the inline annotation rows) inside. */
   .diff-plan {
     flex: 1 1 auto;
     min-width: 0;
-    position: relative;
     min-height: 0;
     overflow: auto;
     background: var(--paper);
-  }
-
-  /* Always-visible marker in the gutter lane for every annotated line. Sits to
-     the left of the card column so it stays visible when the card is collapsed;
-     scrolls with content because it is a child of the scroll container. */
-  .annotation-marker {
-    position: absolute;
-    left: 2.4rem;
-    z-index: 35;
-    width: 0.55rem;
-    height: 1.1rem;
-    padding: 0;
-    border: none;
-    border-radius: 2px;
-    background: var(--accent);
-    opacity: 0.55;
-    cursor: pointer;
-    transition: opacity 0.12s;
-  }
-  .annotation-marker:hover,
-  .annotation-marker.focused {
-    opacity: 1;
   }
 </style>

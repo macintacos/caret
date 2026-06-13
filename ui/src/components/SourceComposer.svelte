@@ -1,9 +1,10 @@
 <script lang="ts">
-  // Inline comment composer for the source-view surface, anchored at the line a
-  // reviewer chose from the gutter. Positioned absolutely at the line's vertical
-  // offset within the scroll container; submitting creates a line-anchored
-  // annotation, Esc cancels, Cmd/Ctrl+Enter submits. Keyboard-accessible: it
-  // grabs focus on open and traps Escape/submit chords on its own subtree.
+  // Inline comment composer for the source-view surface. It renders in the source
+  // view's per-line annotation row (the parent projects it into the library's slot
+  // — see annotationSlot.ts) at the line or range the reviewer chose from the
+  // gutter. Submitting creates a line-anchored annotation, Esc cancels,
+  // Cmd/Ctrl+Enter submits. Keyboard-accessible: it grabs focus on open and traps
+  // Escape/submit chords on its own subtree.
   import { isCancelKey, isSubmitChord } from "../lib/keys.ts";
   import Icon from "./Icon.svelte";
 
@@ -12,12 +13,10 @@
     startLine: number;
     /** Last annotated line (1-based, inclusive). */
     endLine: number;
-    /** Vertical offset (px) of the anchored line within the scroll container. */
-    top: number;
     onSubmit: (comment: string) => void;
     onCancel: () => void;
   }
-  let { startLine, endLine, top, onSubmit, onCancel }: Props = $props();
+  let { startLine, endLine, onSubmit, onCancel }: Props = $props();
 
   let comment = $state("");
   let textarea = $state<HTMLTextAreaElement | undefined>();
@@ -47,14 +46,7 @@
   }
 </script>
 
-<div
-  class="composer"
-  style="top: {top}px;"
-  role="dialog"
-  aria-label="Add a comment"
-  tabindex="-1"
-  onkeydown={onKey}
->
+<div class="composer" role="dialog" aria-label="Add a comment" tabindex="-1" onkeydown={onKey}>
   <p class="label">{label}</p>
   <textarea
     bind:this={textarea}
@@ -80,12 +72,10 @@
 </div>
 
 <style>
+  /* Inline within the library's annotation row — see SourceAnnotationCard's .card. */
   .composer {
-    position: absolute;
-    left: 3.5rem;
-    z-index: 40;
-    width: 320px;
-    max-width: calc(100% - 4rem);
+    max-width: min(46rem, 100%);
+    margin: 0.4rem 0 0.55rem;
     padding: 0.7rem 0.75rem 0.6rem;
     background: var(--paper-raised);
     border: 1px solid var(--rule-strong);

@@ -55,6 +55,7 @@ export function toFileOptions(
   options: SourceViewOptions,
   linkHandlers?: LinkHandlers,
   gutter?: SourceViewGutter,
+  onLineClick?: SourceViewLibOptions["onLineClick"],
 ): SourceViewLibOptions {
   // Link handlers are stable for the instance's life (they close over the span
   // map), so they belong only in the initial options — a content-key change
@@ -68,8 +69,18 @@ export function toFileOptions(
   // and its renderer-options projection drops the handlers on every later
   // render, so without the explicit flag the per-token `data-char` markers stop
   // being emitted and token clicks/hovers no longer resolve to a link span.
+  //
+  // onLineClick lets a plain click anywhere on a line open a comment composer; it
+  // spreads in only when the view wires it, so the read-only view stays unchanged.
   const tokenInteractions = linkHandlers != null ? { useTokenTransformer: true } : undefined;
-  return { ...sharedOptions(options), ...tokenInteractions, ...linkHandlers, ...gutter };
+  const lineClick = onLineClick != null ? { onLineClick } : undefined;
+  return {
+    ...sharedOptions(options),
+    ...tokenInteractions,
+    ...linkHandlers,
+    ...gutter,
+    ...lineClick,
+  };
 }
 
 export function toFileDiffOptions(options: SourceDiffViewOptions): SourceDiffViewLibOptions {

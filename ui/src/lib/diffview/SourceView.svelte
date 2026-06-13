@@ -5,7 +5,8 @@
   // changes through sync().
   import { File, type FileContents } from "@pierre/diffs";
   import { createDiffViewLifecycle } from "./instance.ts";
-  import { createLinkHandlers, type LinkHandlers } from "./linkInteractions.ts";
+  import { shouldCommentOnLineClick } from "./annotationSlot.ts";
+  import { createLinkHandlers, hitTestSpan, type LinkHandlers } from "./linkInteractions.ts";
   import { type LinkSpanMap, openLinkInNewTab } from "./links.ts";
   import { type SourceViewGutter, type SourceViewLibOptions, toFileOptions } from "./options.ts";
   import { scrollToLine } from "./scroll.ts";
@@ -45,6 +46,10 @@
      * selected range, and renders inline annotation/composer DOM per line.
      * Omit it for a read-only view (no gutter affordance). */
     gutter?: SourceViewGutter;
+    /** Opt-in row-click commenting: a plain click anywhere on a line opens a
+     * comment on it. Skipped when the click lands on a link or while the reviewer
+     * is selecting text. Omit it to leave lines non-interactive. */
+    onLineComment?: (line: number) => void;
   }
 
   let {
@@ -56,6 +61,7 @@
     openUrl = openLinkInNewTab,
     onReady,
     gutter,
+    onLineComment,
   }: Props = $props();
 
   // The container div is component markup, so the instance must not remove
@@ -68,22 +74,62 @@
 
   let container: HTMLElement | undefined = $state();
 
-  // Hand the parent the scroll-to-line API once the container exists. The
-  // container is stable for the component's life, so this fires once.
+  // Hand the parent the scroll-to-line API + host once the container exists. The
+  // container is stable for the component's life, and `notified` keeps this to a
+  // single hand-off even though `onReady`'s identity can change across parent
+  // re-renders (the parent passes an inline arrow).
+  let notified = false;
   $effect(() => {
-    if (container == null) return;
+    if (container == null || notified) return;
+    notified = true;
     const el = container;
-    onReady?.({ scrollToLine: (line) => scrollToLine(el, line) });
+    onReady?.({ scrollToLine: (line) => scrollToLine(el, line), host: el });
   });
 
   // The handlers close over the span map and opener, so they only change when
   // the link layer does — a stable `links` reference keeps them referentially
   // stable, so libOptions stays change-detectable by the lifecycle.
-  const linkHandlers = $derived<LinkHandlers | undefined>(
-    links == null ? undefined : createLinkHandlers(links, { openUrl }),
-  );
+  // Row-click commenting must stand down on link clicks: the library fires
+  // onTokenClick (the link layer) before onLineClick for the same event, so the
+  // wrapped link handler records a link's event here and the row-click handler
+  // below skips it. Plain text selection is handled separately (collapsed check).
+  let linkClickEvent: Event | undefined;
+  const linkHandlers = $derived.by<LinkHandlers | undefined>(() => {
+    if (links == null) return undefined;
+    const base = createLinkHandlers(links, { openUrl });
+    return {
+      onTokenEnter: base.onTokenEnter,
+      onTokenLeave: base.onTokenLeave,
+      onTokenClick: (props, event) => {
+        const spans = links.get(props.lineNumber);
+        if (spans != null && hitTestSpan(spans, props.lineCharStart, props.lineCharEnd) != null) {
+          linkClickEvent = event;
+        }
+        base.onTokenClick(props, event);
+      },
+    };
+  });
 
-  const libOptions = $derived(toFileOptions(options, linkHandlers, gutter));
+  const handleLineClick: NonNullable<SourceViewLibOptions["onLineClick"]> = (props) => {
+    // The code renders in an open shadow root; window.getSelection() can't observe
+    // a selection inside it, so prefer the shadow root's own getSelection() (a
+    // Chromium extension) and fall back to the document selection. In practice a
+    // drag-select also suppresses the click that drives this handler, so the guard
+    // is a backstop rather than the sole defense.
+    const root = container?.shadowRoot as
+      | (ShadowRoot & { getSelection?: () => Selection | null })
+      | undefined;
+    const selection = root?.getSelection?.() ?? (typeof getSelection === "function" ? getSelection() : null);
+    const open = shouldCommentOnLineClick({
+      numberColumn: props.numberColumn,
+      linkConsumed: props.event === linkClickEvent,
+      selectionCollapsed: selection == null || selection.isCollapsed,
+    });
+    if (open) onLineComment?.(props.lineNumber);
+  };
+  const lineClick = $derived(onLineComment == null ? undefined : handleLineClick);
+
+  const libOptions = $derived(toFileOptions(options, linkHandlers, gutter, lineClick));
 
   // Mount-once effect: reads no reactive state, returns the teardown.
   $effect(() => () => lifecycle.destroy());

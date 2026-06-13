@@ -26,6 +26,10 @@ export interface SourceViewApi {
   /** Scrolls the view so the 1-based source line is at the top of the
    * viewport. No-op when the line is outside the rendered range. */
   scrollToLine(line: number): void;
+  /** The view's host element (the shadow host). Light-DOM children projected
+   * into its annotation slots render inline within the library's reserved rows
+   * (see annotationSlot.ts). */
+  host: HTMLElement;
 }
 
 /** Display options caret exposes for the single-document view. */

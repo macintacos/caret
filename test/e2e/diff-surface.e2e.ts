@@ -155,6 +155,40 @@ test("suppresses the contents pane for a single-heading plan", async ({ daemon, 
   await expect(page.getByRole("navigation", { name: "Plan contents" })).toHaveCount(0);
 });
 
+/** Offset (px) of the heading line whose source text is `text` from the top of
+ * the scroll container, or +Infinity if that line isn't rendered. */
+async function headingTopOffset(page: Page, text: string): Promise<number> {
+  return page.evaluate((t) => {
+    const view = document.querySelector(".diff-plan");
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const row = Array.from(sh?.querySelectorAll("[data-line]") ?? []).find(
+      (r) => r.textContent?.trim() === t,
+    );
+    if (view == null || row == null) return Number.POSITIVE_INFINITY;
+    return Math.round(row.getBoundingClientRect().top - view.getBoundingClientRect().top);
+  }, text);
+}
+
+test("a heading jump lands the heading at the top of the view, however far it is", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: TOC_PLAN });
+  await page.goto("/");
+
+  const view = page.locator(".diff-plan");
+  await expect(view).toBeVisible();
+  const pane = page.getByRole("navigation", { name: "Plan contents" });
+  await expect(pane.locator(".toc-row")).toHaveCount(3);
+
+  // Jump to the farthest heading; the smooth scroll should settle it just below
+  // the top edge (a small breathing-room offset), not short of it or in the
+  // middle of the view. expect.poll rides out the animation.
+  await pane.getByRole("button", { name: "Verification" }).click();
+  await expect.poll(() => headingTopOffset(page, "## Verification")).toBeLessThanOrEqual(20);
+  expect(await headingTopOffset(page, "## Verification")).toBeGreaterThanOrEqual(0);
+});
+
 // ----- Annotation creation from the line gutter (EXC-584) -----
 
 // A plan with body text on several lines so a range spans real source lines.
@@ -315,7 +349,10 @@ async function createAnnotation(page: Page, line: number, comment: string): Prom
   await expect(composer).toHaveCount(0);
 }
 
-test("a created annotation shows an inline card and a gutter marker", async ({ daemon, page }) => {
+test("a created annotation shows an inline card that doesn't overlay the code", async ({
+  daemon,
+  page,
+}) => {
   await daemon.seed();
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
@@ -324,11 +361,32 @@ test("a created annotation shows an inline card and a gutter marker", async ({ d
   await createAnnotation(page, 3, "Quantify the cold cost.");
 
   // The new annotation is focused on create, so its card renders expanded with
-  // the full comment, and an always-visible gutter marker anchors the line.
+  // the full comment.
   const card = page.locator("[data-annotation-card]");
   await expect(card).toBeVisible();
   await expect(card.getByText("Quantify the cold cost.")).toBeVisible();
-  await expect(page.locator("[data-annotation-marker]")).toBeVisible();
+
+  // It renders inline in the library's annotation row — normal flow (not an
+  // absolutely-positioned overlay), projected into a slot wrapper — so it sits
+  // between the code lines rather than covering them.
+  expect(await card.evaluate((el) => getComputedStyle(el).position)).toBe("static");
+  expect(await card.evaluate((el) => el.closest("[data-annotation-slot]") != null)).toBe(true);
+});
+
+test("clicking a line's content opens a comment composer for that line", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  // A plain click on the line's prose (not the gutter, not a link) opens the
+  // composer anchored to that line — no need to hit the small hover `+`.
+  await page.getByText("This plan reorganizes the widget cache").click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+  await expect(composer.getByText("Line 3")).toBeVisible();
 });
 
 test("an inline card collapses to a chip and expands again", async ({ daemon, page }) => {
@@ -352,7 +410,7 @@ test("an inline card collapses to a chip and expands again", async ({ daemon, pa
   await expect(card.getByText("Tighten this paragraph.")).toBeVisible();
 });
 
-test("deleting an inline card removes the annotation and its marker", async ({ daemon, page }) => {
+test("deleting an inline card removes the annotation", async ({ daemon, page }) => {
   const id = await daemon.seed();
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
@@ -365,9 +423,8 @@ test("deleting an inline card removes the annotation and its marker", async ({ d
 
   await page.locator("[data-annotation-card]").getByRole("button", { name: "delete" }).click();
 
-  // The card and marker leave the DOM and the delete persists through /draft.
+  // The card leaves the DOM and the delete persists through /draft.
   await expect(page.locator("[data-annotation-card]")).toHaveCount(0);
-  await expect(page.locator("[data-annotation-marker]")).toHaveCount(0);
   await expect
     .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
     .toBe(0);

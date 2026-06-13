@@ -19,7 +19,6 @@ function click(root: ParentNode, selector: string): void {
 function base(over: Record<string, unknown> = {}) {
   return {
     annotation,
-    top: 0,
     focused: false,
     onFocus: () => {},
     onEdit: () => {},
@@ -90,9 +89,12 @@ describe("SourceAnnotationCard focus + position", () => {
     expect(target.querySelector(".card")?.classList.contains("focused")).toBe(true);
   });
 
-  test("top positions the card absolutely", () => {
-    const { target } = render(SourceAnnotationCard, base({ top: 88 }));
-    expect(target.querySelector(".card")?.getAttribute("style")).toContain("top: 88px");
+  test("renders inline (no absolute positioning hook)", () => {
+    // The card sits in the source view's annotation row, not as an overlay, so it
+    // carries no inline top/position style — the parent projects it into the slot.
+    const { target } = render(SourceAnnotationCard, base());
+    const style = target.querySelector(".card")?.getAttribute("style");
+    expect(style == null || !/top:|position\s*:/.test(style)).toBe(true);
   });
 
   test("carries the data-annotation-card hook for focus scroll", () => {
