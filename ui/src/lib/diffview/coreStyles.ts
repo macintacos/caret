@@ -13,7 +13,9 @@ import { DIFFS_CORE_STYLES } from "./diffsCoreStyles.ts";
 // also gives the hover "+" comment button a lane to sit in. By default the library
 // pins that button to the number column's right edge and pulls it left with a
 // negative margin, so it overlaps the line number; widening that negative margin
-// nudges it past the digits into the gutter→content seam instead.
+// nudges it past the digits into the gutter→content seam instead. That margin
+// value is empirical — tuned against the library's own `calc(1ch - 1lh)` offset,
+// so it may need revisiting if @pierre/diffs changes its gutter layout.
 const CARET_OVERRIDES = `
   [data-content] { padding-inline-start: 24px; }
   [data-utility-button] { margin-right: calc(1ch - 1lh - 0.85rem); }

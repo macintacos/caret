@@ -74,10 +74,14 @@
 
   let container: HTMLElement | undefined = $state();
 
-  // Hand the parent the scroll-to-line API once the container exists. The
-  // container is stable for the component's life, so this fires once.
+  // Hand the parent the scroll-to-line API + host once the container exists. The
+  // container is stable for the component's life, and `notified` keeps this to a
+  // single hand-off even though `onReady`'s identity can change across parent
+  // re-renders (the parent passes an inline arrow).
+  let notified = false;
   $effect(() => {
-    if (container == null) return;
+    if (container == null || notified) return;
+    notified = true;
     const el = container;
     onReady?.({ scrollToLine: (line) => scrollToLine(el, line), host: el });
   });
@@ -107,7 +111,15 @@
   });
 
   const handleLineClick: NonNullable<SourceViewLibOptions["onLineClick"]> = (props) => {
-    const selection = typeof getSelection === "function" ? getSelection() : null;
+    // The code renders in an open shadow root; window.getSelection() can't observe
+    // a selection inside it, so prefer the shadow root's own getSelection() (a
+    // Chromium extension) and fall back to the document selection. In practice a
+    // drag-select also suppresses the click that drives this handler, so the guard
+    // is a backstop rather than the sole defense.
+    const root = container?.shadowRoot as
+      | (ShadowRoot & { getSelection?: () => Selection | null })
+      | undefined;
+    const selection = root?.getSelection?.() ?? (typeof getSelection === "function" ? getSelection() : null);
     const open = shouldCommentOnLineClick({
       numberColumn: props.numberColumn,
       linkConsumed: props.event === linkClickEvent,
