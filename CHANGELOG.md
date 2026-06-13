@@ -2,8 +2,8 @@
 
 All notable changes to this project are documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
+project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
@@ -11,18 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Build version badge.** The running build's version now shows in a bottom-left UI badge, so
-  you can tell at a glance which build you're reviewing against (#109).
-- **Machine-readable preflight.** `mise run preflight` accepts a `--json` flag that emits compact
-  `start` and `result` documents for tooling and agents instead of the live human display (#113).
+- **Build version badge.** The running build's version now shows in a bottom-left UI
+  badge, so you can tell at a glance which build you're reviewing against (#109).
+- **Machine-readable preflight.** `mise run preflight` accepts a `--json` flag that emits
+  compact `start` and `result` documents for tooling and agents instead of the live human
+  display (#113).
 
 ### Changed
 
-- **Build-gated dev settings.** Development-only settings are consolidated into a single `[dev]`
-  config section gated to non-release builds, so dev-only behavior can't leak into a released
-  build (#115).
-- **Gated dev seeder.** The `mise run dev` extra-review seeder is now off by default, fired only
-  behind an explicit `--notify` flag (#106).
+- **Build-gated dev settings.** Development-only settings are consolidated into a single
+  `[dev]` config section gated to non-release builds, so dev-only behavior can't leak into
+  a released build (#115).
+- **Gated dev seeder.** The `mise run dev` extra-review seeder is now off by default,
+  fired only behind an explicit `--notify` flag (#106).
 - The end-to-end test suite moved into `test/e2e` (#112).
 
 ### Fixed
@@ -31,44 +32,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   installed build, not just during local development (#110).
 - **Reliable tab presence.** UI tab-presence detection is now robust to browser background
   throttling, so presence isn't lost when the tab is backgrounded (#114).
-- Markdown links are stripped from the titlebar post title, so it renders as clean text (#111).
+- Markdown links are stripped from the titlebar post title, so it renders as clean text
+  (#111).
 
 ## [0.0.4] - 2026-06-09 - The Adapter Release
 
 ### Added
 
-- **Codex support.** caret now drives OpenAI Codex alongside Claude Code, selected through a
-  pluggable adapter registry — the core/adapter seam proven with a real second agent (#58,
-  #71, #87, #89).
+- **Codex support.** caret now drives OpenAI Codex alongside Claude Code, selected through
+  a pluggable adapter registry — the core/adapter seam proven with a real second agent
+  (#58, #71, #87, #89).
 - **Desktop notifications** for new plans, with a permission bell badge in the UI (#49).
-- **Multiple concurrent daemons**, so separate projects can each run their own review session
-  at the same time (#45).
+- **Multiple concurrent daemons**, so separate projects can each run their own review
+  session at the same time (#45).
 - **Configuration file.** A `config.toml` and settings service unify every `CARET_*`
   environment variable under one place (#27, #39).
-- **Leveled logging.** Info-level-by-default logs with redaction of identifiable data so logs
-  are shareable, caller location on every record, the runtime commit logged at startup, and a
-  browser-UI → daemon log bridge (#28, #30, #35, #40, #41).
-- **Discovery diagnostics.** A `caret` diagnostics command surfaces how caret detected — or
-  failed to detect — your agent and install (#47).
-- **Vanity origin.** The review UI opens under `caret.localhost` instead of a bare localhost
-  port (#48).
-- **Persistent draft.** The "Request Changes" general-comment draft is now saved per review
-  (#22).
+- **Leveled logging.** Info-level-by-default logs with redaction of identifiable data so
+  logs are shareable, caller location on every record, the runtime commit logged at
+  startup, and a browser-UI → daemon log bridge (#28, #30, #35, #40, #41).
+- **Discovery diagnostics.** A `caret` diagnostics command surfaces how caret detected —
+  or failed to detect — your agent and install (#47).
+- **Vanity origin.** The review UI opens under `caret.localhost` instead of a bare
+  localhost port (#48).
+- **Persistent draft.** The "Request Changes" general-comment draft is now saved per
+  review (#22).
 - Logging and configuration docs: a README "Logging & Debugging" section, `config.toml`
-  documentation, and checked-in contributor rules for logging conventions and settings (#31).
+  documentation, and checked-in contributor rules for logging conventions and settings
+  (#31).
 - A `--install` flag for `mise run build` (#105).
 
 ### Changed
 
-- **Tool-agnostic core.** The daemon and core were decoupled from Claude-specific concepts: an
-  `AgentAdapter` interface owns decision emission, approval variants became adapter
-  capabilities, and the daemon's resolve/prefs no longer hard-code Claude mode names (#71, #73,
-  #80, #81, #88).
+- **Tool-agnostic core.** The daemon and core were decoupled from Claude-specific
+  concepts: an `AgentAdapter` interface owns decision emission, approval variants became
+  adapter capabilities, and the daemon's resolve/prefs no longer hard-code Claude mode
+  names (#71, #73, #80, #81, #88).
 - **UI overhaul.** All iconography is now vendored Lucide SVGs, the typeface stack prefers
   Inter Display, monospace is reserved for code and intentional accents, and the plan
-  table-of-contents was redesigned as a hover-expanding tick rail (#24, #29, #36, #42, #43).
-- **Faster, leaner UI build.** Shiki grammars load as lazy dynamic-import chunks, and the UI
-  is embedded as a multi-asset build via a generated manifest (#82, #83).
+  table-of-contents was redesigned as a hover-expanding tick rail (#24, #29, #36, #42,
+  #43).
+- **Faster, leaner UI build.** Shiki grammars load as lazy dynamic-import chunks, and the
+  UI is embedded as a multi-asset build via a generated manifest (#82, #83).
 - Agent rules are now routed through a checked-in `CLAUDE.md` (#107).
 - Local dev builds are flagged in the UI so they're distinguishable from released builds
   (#103).
@@ -81,22 +85,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- Plan HTML is sanitized last with an explicit DOMPurify allowlist, hardened by an adversarial
-  XSS test suite (#90, #92).
+- Plan HTML is sanitized last with an explicit DOMPurify allowlist, hardened by an
+  adversarial XSS test suite (#90, #92).
 - A safe-method CSRF guard and a no-CORS posture protect the daemon's HTTP surface (#95).
-- State directories are created `0700` and plan JSON `0600`, unified through `ensureStateDir`
-  (#94).
+- State directories are created `0700` and plan JSON `0600`, unified through
+  `ensureStateDir` (#94).
 
 ## [0.0.3] - 2026-06-02 - The Hardening Release
 
 ### Added
 
-- A dry-run mode for `install.sh` that previews every action without touching the
-  system (#18).
+- A dry-run mode for `install.sh` that previews every action without touching the system
+  (#18).
 
 ### Changed
 
-- The Approve button now remembers and defaults to the approval method you used last (#17).
+- The Approve button now remembers and defaults to the approval method you used last
+  (#17).
 - Plan code blocks must now carry an explicit language marker, so syntax highlighting is
   never left to guesswork (#19).
 - Markdown formatting and linting now run on rumdl instead of prettier — a single native
@@ -105,45 +110,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `install.sh` output is polished for clearer, more readable progress (#18).
 - The release preflight gate is hardened against silent working-tree drift, so a release
   can no longer slip through on an unexpectedly dirty tree (#15).
-- The `/release-caret` flow is hardened with fixes drawn from the v0.0.2 release run (#14).
+- The `/release-caret` flow is hardened with fixes drawn from the v0.0.2 release run
+  (#14).
 
 ### Fixed
 
-- `release prepare` no longer aborts with a false `DIRTY_TREE` on the changelog it is meant
-  to allow — the working-tree scan no longer mangles the first changed path's name (#20).
+- `release prepare` no longer aborts with a false `DIRTY_TREE` on the changelog it is
+  meant to allow — the working-tree scan no longer mangles the first changed path's name
+  (#20).
 
 ## [0.0.2] - 2026-06-02 - The Foundations Release
 
 ### Added
 
 - caret: a local web UI for reviewing and approving Claude Code plans (#1).
-- Safe Mode, which ignores accidental in-flight keystrokes so plans aren't
-  approved or rejected by stray input (#3).
-- Persistent exception logs plus a `/caret:debug` command for inspecting the
-  most recent failure (#2).
+- Safe Mode, which ignores accidental in-flight keystrokes so plans aren't approved or
+  rejected by stray input (#3).
+- Persistent exception logs plus a `/caret:debug` command for inspecting the most recent
+  failure (#2).
 - Syntax highlighting for code blocks inside plans, powered by shiki (#9).
 - A one-command release flow: a deterministic release script paired with the
   `/release-caret` skill (#10).
-- Markdown, YAML, TOML, shell, and pkl formatters and linters wired into
-  mise + hk (#4).
-- A seeded fake plan for `mise run dev` so the UI has content during local
-  development (#7).
+- Markdown, YAML, TOML, shell, and pkl formatters and linters wired into mise + hk (#4).
+- A seeded fake plan for `mise run dev` so the UI has content during local development
+  (#7).
 
 ### Changed
 
-- The UI now uses the platform sans-serif font, reserving serif for the caret
-  wordmark (#5).
-- A plan's first heading always renders as an H1, regardless of the level it
-  was authored at (#6).
-- The installer pulls caret from the latest release tag rather than the default
-  branch (#12).
+- The UI now uses the platform sans-serif font, reserving serif for the caret wordmark
+  (#5).
+- A plan's first heading always renders as an H1, regardless of the level it was authored
+  at (#6).
+- The installer pulls caret from the latest release tag rather than the default branch
+  (#12).
 - Preflight now runs its mise tasks directly (#11).
 - The README heading sports a carrot emoji (#8).
 
 ### Fixed
 
-- Review decisions are delivered via a bounded poll, fixing missed or delayed
-  decision delivery.
+- Review decisions are delivered via a bounded poll, fixing missed or delayed decision
+  delivery.
 
 [Unreleased]: https://github.com/macintacos/caret/compare/v0.0.5...HEAD
 [0.0.5]: https://github.com/macintacos/caret/compare/v0.0.4...v0.0.5

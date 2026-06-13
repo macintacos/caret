@@ -25,11 +25,14 @@ exclude = [
 ]
 
 [MD013]
-# Enforce a 100-char line length on prose; skip code blocks and tables, where long URLs,
-# commands, and wide columns shouldn't be reflowed.
-line-length = 100
+# Enforce a 90-char line length on prose and auto-reflow to it: reflow-mode "normalize"
+# rewraps paragraphs uniformly, stripping irregular line breaks. Skip code blocks and
+# tables, where long URLs, commands, and wide columns shouldn't be reflowed.
+line-length = 90
 code-blocks = false
 tables      = false
+reflow      = true
+reflow-mode = "normalize"
 
 [MD024]
 # Only flag duplicate headings that are siblings (share a parent), so the CHANGELOG's
