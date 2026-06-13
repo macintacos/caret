@@ -232,6 +232,7 @@
 
   const gutter: SourceViewGutter = {
     enableGutterUtility: true,
+    enableLineSelection: true,
     onGutterUtilityClick: (range) => {
       composerTop = lineOffset(Math.min(range.start, range.end));
       commenting.open({ start: range.start, end: range.end });
