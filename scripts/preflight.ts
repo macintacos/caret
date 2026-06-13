@@ -198,6 +198,11 @@ export async function runPreflight(deps: {
     // the default preserves today's effective parallelism on real hosts.
     concurrent: deps.concurrency ?? availableParallelism(),
     exitOnError: false,
+    // EXC-587: listr2's own SIGINT handler calls process.exit(127)
+    // synchronously, which would beat our async SIGINT teardown and orphan the
+    // task groups — the exact failure this work prevents. Disable it so our
+    // installSignalHandlers is the sole authority on interruption.
+    registerSignalListeners: false,
     renderer: deps.renderer ?? "default",
     // Non-TTY (CI, pipes) auto-falls back to verbose: line-per-event, no
     // cursor-control sequences — color codes may still appear; that's expected.
@@ -458,7 +463,10 @@ export function createProcessGroupController(graceMs = 2000): ProcessGroupContro
   };
   const reap = async (child: ChildProcess): Promise<void> => {
     if (child.exitCode !== null || child.signalCode !== null) return;
-    const exited = once(child, "close");
+    // `once` rejects if an 'error' (e.g. a failed spawn) precedes 'close'; we
+    // only need to wait for the child to be gone, so swallow that — reap must
+    // never reject (it's awaited via fire-and-forget on the abort path).
+    const exited = once(child, "close").catch(() => {});
     killGroup(child, "SIGTERM");
     const escalate = setTimeout(() => killGroup(child, "SIGKILL"), graceMs);
     await exited;
@@ -468,6 +476,12 @@ export function createProcessGroupController(graceMs = 2000): ProcessGroupContro
     spawn(cmd, args, opts) {
       const child = spawn(cmd, args, { ...opts, detached: true });
       live.add(child);
+      // A failed spawn emits 'error' asynchronously; with no listener node
+      // rethrows it as an uncaught exception. Absorb it here so the controller
+      // can't crash the process regardless of caller — callers still attach
+      // their own 'error'/'close' for the task outcome. 'close' fires after
+      // 'error', so the registry self-cleans either way.
+      child.on("error", () => {});
       child.once("close", () => live.delete(child));
       return child;
     },
@@ -494,6 +508,10 @@ function makeSpawnMiseTask(controller: ProcessGroupController): SpawnTask {
       });
       let aborted = false;
       const onAbort = () => {
+        // Only a task still running was actually torn down by fail-fast; one
+        // that already finished keeps its real pass/fail outcome rather than
+        // being relabeled `skipped` (EXC-587).
+        if (child.exitCode !== null || child.signalCode !== null) return;
         aborted = true;
         void controller.reap(child);
       };
@@ -522,10 +540,18 @@ function makeSpawnMiseTask(controller: ProcessGroupController): SpawnTask {
       pump(child.stdout);
       pump(child.stderr);
 
-      child.once("close", (code, sig) => {
+      const settle = (outcome: SpawnOutcome) => {
         signal.removeEventListener("abort", onAbort);
-        resolve({ exitCode: code ?? (sig ? 1 : 0), output: chunks.join(""), aborted });
-      });
+        resolve(outcome); // idempotent: first of 'error'/'close' wins
+      };
+      // A failed spawn (mise off PATH, EMFILE under the fan-out this gate
+      // bounds) surfaces as an async 'error' event, not a throw — without this
+      // listener node rethrows it as an uncaught exception and crashes the
+      // orchestrator. Record it as a failed task instead (EXC-587).
+      child.once("error", (err) => settle({ exitCode: 1, output: String(err), aborted }));
+      child.once("close", (code, sig) =>
+        settle({ exitCode: code ?? (sig ? 1 : 0), output: chunks.join(""), aborted }),
+      );
     });
 }
 

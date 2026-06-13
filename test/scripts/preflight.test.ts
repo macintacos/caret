@@ -187,6 +187,24 @@ test("createProcessGroupController.killAll reaps a child and its grandchildren",
   expect(controller.size).toBe(0);
 });
 
+// A failed spawn (binary off PATH, EMFILE) emits an async 'error' event, not a
+// throw. The controller must absorb it so an unhandled 'error' can't crash the
+// orchestrator, and the child must still self-clean from the registry. Without
+// the controller's 'error' handler this test crashes the whole runner.
+test("createProcessGroupController tolerates a failed spawn without crashing", async () => {
+  const controller = createProcessGroupController(200);
+  controller.spawn("caret-no-such-binary-xyz", ["x"], { stdio: ["ignore", "pipe", "pipe"] });
+  await Bun.sleep(50); // let the async 'error' + 'close' fire
+  expect(controller.size).toBe(0); // 'close' fired → registry self-cleaned, no crash
+
+  // reap on a child that already errored must resolve, never reject (it is
+  // awaited fire-and-forget on the abort path).
+  const child = controller.spawn("caret-no-such-binary-xyz", ["x"], {
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  await controller.reap(child); // would throw here if reap rejected
+});
+
 // Fail-fast: the first failing task aborts in-flight siblings, which are
 // recorded `skipped` (not `failed`) so genuine failures stay honest. Fakes
 // that complete normally never set `aborted`, which is why the report-all

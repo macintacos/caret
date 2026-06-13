@@ -1,6 +1,17 @@
 import { defineConfig, devices } from "@playwright/test";
 import { REFERENCE_WIDTH_PX } from "./ui/src/lib/layout.ts";
 
+// EXC-587: worker cap from CARET_E2E_WORKERS — a positive int, else the "50%"
+// default. Validated (not a bare Number()) so a typo like "auto" or "0" falls
+// back to the default rather than handing Playwright NaN/0, matching the
+// positive-int contract documented in the README and CARET_PREFLIGHT_JOBS.
+const e2eWorkers: number | string = (() => {
+  const raw = process.env.CARET_E2E_WORKERS;
+  if (!raw) return "50%";
+  const n = Number.parseInt(raw, 10);
+  return Number.isInteger(n) && n > 0 ? n : "50%";
+})();
+
 // Real-browser e2e for the review UI (EXC-453). Specs are named *.e2e.ts so
 // `bun test` (which collects *.test.ts AND *.spec.ts repo-wide) never picks
 // them up — the two runners stay disjoint. Each test boots its own isolated
@@ -16,7 +27,7 @@ export default defineConfig({
   // spawned daemon, so an uncapped count is the dominant driver of the orphan
   // storm when several preflight runs stack; cap it at half the cores
   // (CARET_E2E_WORKERS overrides for a constrained host).
-  workers: process.env.CARET_E2E_WORKERS ? Number(process.env.CARET_E2E_WORKERS) : "50%",
+  workers: e2eWorkers,
   // EXC-587: a wedged suite self-aborts instead of needing an external SIGKILL
   // (the path that orphans Chromium). Generous so it can't flake a slow or
   // loaded host's normal pass.
