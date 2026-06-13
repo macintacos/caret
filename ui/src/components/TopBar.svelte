@@ -1,6 +1,7 @@
 <script lang="ts">
   import { approveLabel } from "../lib/approve.ts";
   import { shortCwd } from "../lib/cwd.ts";
+  import { isCancelKey } from "../lib/keys.ts";
   import type { ApproveVariant, ApproveVariantId, ClientReview } from "@core/types";
   import DevBadge from "./DevBadge.svelte";
   import Icon from "./Icon.svelte";
@@ -41,6 +42,12 @@
     onApprove(mode);
   }
 </script>
+
+<svelte:window
+  onkeydown={(e) => {
+    if (menuOpen && isCancelKey(e)) menuOpen = false;
+  }}
+/>
 
 <header class="topbar">
   <div class="lead">
@@ -187,6 +194,9 @@
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
+    transition:
+      border-color 0.12s ease,
+      color 0.12s ease;
   }
   .request:hover:not(:disabled) {
     border-color: var(--accent);
@@ -208,6 +218,9 @@
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
+    transition:
+      background 0.12s ease,
+      border-color 0.12s ease;
   }
   .split-toggle {
     background: var(--accent);
@@ -216,6 +229,9 @@
     border-radius: 0 var(--radius) var(--radius) 0;
     padding: 0.5rem 0.55rem;
     border-left: 1px solid color-mix(in srgb, var(--accent-ink) 30%, var(--accent));
+    transition:
+      background 0.12s ease,
+      border-color 0.12s ease;
   }
   .approve:hover:not(:disabled),
   .split-toggle:hover:not(:disabled) {
