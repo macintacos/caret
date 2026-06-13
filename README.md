@@ -1,15 +1,15 @@
 # 🥕 caret
 
-> ⚠️ **Prototype.** caret is an early prototype and may change substantially over the next little
-> while — interfaces, hooks, storage, and the install flow are all still settling. Expect rough
-> edges and breaking changes.
+> ⚠️ **Prototype.** caret is an early prototype and may change substantially over the next
+> little while — interfaces, hooks, storage, and the install flow are all still settling.
+> Expect rough edges and breaking changes.
 
-A Claude Code plugin that replaces the terminal plan-approval prompt with a local web UI. When
-Claude presents a plan via `ExitPlanMode`, caret opens it in your browser so you can read it
-rendered as HTML, **annotate passages inline** (Google-Docs style), and **approve** or **request
-changes**. Your decision — and all annotation feedback — flows straight back to the agent. A single
-local daemon is shared across concurrent Claude sessions, so several in-flight plans are reviewed
-from one browser tab via a switcher.
+A Claude Code plugin that replaces the terminal plan-approval prompt with a local web UI.
+When Claude presents a plan via `ExitPlanMode`, caret opens it in your browser so you can
+read it rendered as HTML, **annotate passages inline** (Google-Docs style), and
+**approve** or **request changes**. Your decision — and all annotation feedback — flows
+straight back to the agent. A single local daemon is shared across concurrent Claude
+sessions, so several in-flight plans are reviewed from one browser tab via a switcher.
 
 ## Install
 
@@ -17,14 +17,15 @@ from one browser tab via a switcher.
 curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/install.sh | bash
 ```
 
-That one command clones caret at its latest release (the newest `vX.Y.Z` tag), builds the binary
-for your platform, and registers it with Claude Code through the native plugin system — no manual
-`git clone` and no `claude --plugin-dir`. It requires [`git`](https://git-scm.com),
-[`bun`](https://bun.sh), and the [`claude`](https://claude.com/claude-code) CLI on your `PATH`.
+That one command clones caret at its latest release (the newest `vX.Y.Z` tag), builds the
+binary for your platform, and registers it with Claude Code through the native plugin
+system — no manual `git clone` and no `claude --plugin-dir`. It requires
+[`git`](https://git-scm.com), [`bun`](https://bun.sh), and the
+[`claude`](https://claude.com/claude-code) CLI on your `PATH`.
 
 Not sure what it'll touch? Set `CARET_DRY_RUN=1` and the installer runs the same read-only
-detection — tool checks, release-tag lookup, clone-vs-update — then prints the exact commands it
-would run and changes nothing:
+detection — tool checks, release-tag lookup, clone-vs-update — then prints the exact
+commands it would run and changes nothing:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/install.sh | CARET_DRY_RUN=1 bash
@@ -36,12 +37,12 @@ Then restart Claude Code (or run `/reload-plugins`) and try it:
 /caret:demo    # presents a short fake plan to exercise the flow
 ```
 
-Enter plan mode, let Claude present a plan, and a browser tab opens at the deep-linked review.
-Select text to comment, then **Approve** (optionally "& accept edits" or "& auto mode") or
-**Request changes**.
+Enter plan mode, let Claude present a plan, and a browser tab opens at the deep-linked
+review. Select text to comment, then **Approve** (optionally "& accept edits" or "& auto
+mode") or **Request changes**.
 
-**Update** by re-running the same command — it fetches the latest release, rebuilds, and reinstalls.
-**Uninstall** with:
+**Update** by re-running the same command — it fetches the latest release, rebuilds, and
+reinstalls. **Uninstall** with:
 
 ```sh
 claude plugin uninstall caret@caret
@@ -50,27 +51,29 @@ claude plugin marketplace remove caret
 
 ## How it works
 
-caret ships one compiled binary (`bin/caret`) with five subcommands (`daemon`, `prewarm`, `review`,
-`redact`, `discovery`).
+caret ships one compiled binary (`bin/caret`) with five subcommands (`daemon`, `prewarm`,
+`review`, `redact`, `discovery`).
 
 ### Architecture: tool-agnostic core + agent adapter
 
-caret is built around one boundary. A **tool-agnostic core** (everything in `src/`) owns the daemon,
-the on-disk review store, the review/revision lifecycle, the settings service, leveled logging, and
-the browser UI — none of it knows which coding agent is on the other end. An **agent adapter**
-(`src/adapters/`) owns everything agent-specific: parsing the agent's hook input, emitting the
-agent's decision response, declaring the approve variants it offers, and probing the agent's local
-install for diagnostics. The core hands the adapter raw hook stdin and a core decision; the adapter
-hands back a normalized plan and a tool-specific stdout response. The dependency runs one way — an
-adapter imports core types, never the reverse.
+caret is built around one boundary. A **tool-agnostic core** (everything in `src/`) owns
+the daemon, the on-disk review store, the review/revision lifecycle, the settings service,
+leveled logging, and the browser UI — none of it knows which coding agent is on the other
+end. An **agent adapter** (`src/adapters/`) owns everything agent-specific: parsing the
+agent's hook input, emitting the agent's decision response, declaring the approve variants
+it offers, and probing the agent's local install for diagnostics. The core hands the
+adapter raw hook stdin and a core decision; the adapter hands back a normalized plan and a
+tool-specific stdout response. The dependency runs one way — an adapter imports core
+types, never the reverse.
 
-`src/adapters/claude/` is the reference implementation, for Claude Code, and the default adapter.
-`src/adapters/codex/` is a second adapter for the OpenAI Codex CLI that proves the boundary is real:
-it is **default-off and provisional** — its PermissionRequest wire contract is modeled from Codex
-docs and not yet verified against a live Codex session, and it ships no Codex packaging (no installer
-or hook manifests). Select it with `CARET_AGENT=codex`; with no selector caret uses Claude, so the
-shipped Claude plugin keeps working unchanged. The hooks table and decision-JSON block below, and the
-behavioral prose in `commands/*.md`, describe **Claude-adapter** surface — they are agent-specific,
+`src/adapters/claude/` is the reference implementation, for Claude Code, and the default
+adapter. `src/adapters/codex/` is a second adapter for the OpenAI Codex CLI that proves
+the boundary is real: it is **default-off and provisional** — its PermissionRequest wire
+contract is modeled from Codex docs and not yet verified against a live Codex session, and
+it ships no Codex packaging (no installer or hook manifests). Select it with
+`CARET_AGENT=codex`; with no selector caret uses Claude, so the shipped Claude plugin
+keeps working unchanged. The hooks table and decision-JSON block below, and the behavioral
+prose in `commands/*.md`, describe **Claude-adapter** surface — they are agent-specific,
 not core behavior.
 
 ### The Claude Code adapter
@@ -82,17 +85,17 @@ caret wires into Claude Code through two plan-mode hooks:
 | `PostToolUse`       | `EnterPlanMode` | `caret prewarm` | Warm-start the daemon when the model enters plan mode.    |
 | `PermissionRequest` | `ExitPlanMode`  | `caret review`  | Block, open the plan in the browser, return the decision. |
 
-The `PermissionRequest`/`ExitPlanMode` hook intercepts the plan-approval request itself, so an
-**approve** auto-answers it (no native dialog) and a **request changes** returns the feedback to the
-model, which revises and re-presents (captured as a new version). This was verified empirically —
-`PreToolUse` does **not** work for this, because allowing the tool to run still shows the native
-dialog.
+The `PermissionRequest`/`ExitPlanMode` hook intercepts the plan-approval request itself,
+so an **approve** auto-answers it (no native dialog) and a **request changes** returns the
+feedback to the model, which revises and re-presents (captured as a new version). This was
+verified empirically — `PreToolUse` does **not** work for this, because allowing the tool
+to run still shows the native dialog.
 
-The reviewer's approve choice is an opaque variant id the core stores and the UI renders; the Claude
-adapter declares its variants (`default` / `acceptEdits` / `auto`) and rides them to the UI over
-`GET /api/health`, so the approve split-button reflects the active adapter's capabilities rather than
-hard-coded mode names. On a decision the adapter maps the chosen variant to a session `setMode`
-permission and emits the resulting
+The reviewer's approve choice is an opaque variant id the core stores and the UI renders;
+the Claude adapter declares its variants (`default` / `acceptEdits` / `auto`) and rides
+them to the UI over `GET /api/health`, so the approve split-button reflects the active
+adapter's capabilities rather than hard-coded mode names. On a decision the adapter maps
+the chosen variant to a session `setMode` permission and emits the resulting
 [PermissionRequest decision](https://code.claude.com/docs/en/hooks) on stdout:
 
 ```jsonc
@@ -108,55 +111,60 @@ permission and emits the resulting
   "decision": { "behavior": "deny", "message": "<formatted annotations + comment>" } } }
 ```
 
-**Fail-safe = deny.** On a bad payload, an unreachable daemon, a timeout, a signal, or daemon death,
-caret emits `deny` with an explanation — it never auto-approves an unreviewed plan.
+**Fail-safe = deny.** On a bad payload, an unreachable daemon, a timeout, a signal, or
+daemon death, caret emits `deny` with an explanation — it never auto-approves an
+unreviewed plan.
 
 ### Desktop notifications
 
-When a new plan lands while caret is in the background — tab hidden or window unfocused — the page
-fires a desktop notification; clicking it focuses the tab and opens that review (a notification
-click is a user gesture, the one focus path browsers reliably allow). The bell badge in the top bar
-shows the current permission — granted, blocked, or undecided — requests it on click when undecided,
-and **sends a test notification on click when granted**. Page-context only, no service worker: the
-tab must be open.
+When a new plan lands while caret is in the background — tab hidden or window unfocused —
+the page fires a desktop notification; clicking it focuses the tab and opens that review
+(a notification click is a user gesture, the one focus path browsers reliably allow). The
+bell badge in the top bar shows the current permission — granted, blocked, or undecided —
+requests it on click when undecided, and
+**sends a test notification on click when granted**. Page-context only, no service worker:
+the tab must be open.
 
-Grants are **per-origin** (scheme + host + port). The installed build opens the review UI at the
-vanity origin `http://caret.localhost:42718`, which is a different origin from `mise run dev`'s Vite
-server (`localhost:5173`) — so a grant made in dev does **not** carry over. On the installed build,
-grant notifications once on `caret.localhost:42718` via the bell (it shows the undecided "?" state
-until you do). While the grant stays undecided, a new plan logs `plan notification skipped
-(permission)` at info in the daemon log, so a missing grant is visible without enabling debug
-logging.
+Grants are **per-origin** (scheme + host + port). The installed build opens the review UI
+at the vanity origin `http://caret.localhost:42718`, which is a different origin from
+`mise run dev`'s Vite server (`localhost:5173`) — so a grant made in dev does **not**
+carry over. On the installed build, grant notifications once on `caret.localhost:42718`
+via the bell (it shows the undecided "?" state until you do). While the grant stays
+undecided, a new plan logs `plan notification skipped (permission)` at info in the daemon
+log, so a missing grant is visible without enabling debug logging.
 
-If the test click produces no toast, the page's side worked (the daemon log shows the fired/shown
-records) and the OS is suppressing it — a granted notification the OS blocks fails silently, with no
-error the page can catch. On macOS check, in order: System Settings → Notifications → your browser
-("Allow notifications" on, alert style not "None"), Focus / Do Not Disturb, and the
-"when mirroring or sharing" toggle if a display is shared. Note also that a _hidden_ tab's poll is
-throttled by Chrome after ~5 minutes in the background, which can delay a notification by up to a
-minute; an unfocused-but-visible window polls at full rate.
+If the test click produces no toast, the page's side worked (the daemon log shows the
+fired/shown records) and the OS is suppressing it — a granted notification the OS blocks
+fails silently, with no error the page can catch. On macOS check, in order: System
+Settings → Notifications → your browser ("Allow notifications" on, alert style not
+"None"), Focus / Do Not Disturb, and the "when mirroring or sharing" toggle if a display
+is shared. Note also that a _hidden_ tab's poll is throttled by Chrome after ~5 minutes in
+the background, which can delay a notification by up to a minute; an unfocused-but-visible
+window polls at full rate.
 
 ## Configuration
 
 ### Platform support
 
-caret is **macOS-first**. It runs on Linux and Windows, but those paths are best-effort: the
-review-URL opener (`openBrowser` in `src/commands/review.ts`) ships `xdg-open` (Linux) and
-`cmd /c start` (Windows) branches alongside macOS's `open`, and the process-discovery probe used by
-`caret discovery` (`src/discovery.ts`) shells out to the BSD-flavored `ps -axo pid=,comm=`. These
-non-darwin branches are exercised primarily on macOS; if the browser doesn't open or discovery shows
-no processes on Linux/Windows, the review URL printed to stderr is the fallback.
+caret is **macOS-first**. It runs on Linux and Windows, but those paths are best-effort:
+the review-URL opener (`openBrowser` in `src/commands/review.ts`) ships `xdg-open` (Linux)
+and `cmd /c start` (Windows) branches alongside macOS's `open`, and the process-discovery
+probe used by `caret discovery` (`src/discovery.ts`) shells out to the BSD-flavored
+`ps -axo pid=,comm=`. These non-darwin branches are exercised primarily on macOS; if the
+browser doesn't open or discovery shows no processes on Linux/Windows, the review URL
+printed to stderr is the fallback.
 
 ### Config file
 
-caret reads optional settings from `$XDG_CONFIG_HOME/caret/config.toml` when `XDG_CONFIG_HOME` is
-set, otherwise `~/.config/caret/config.toml`. This lives deliberately apart from the state dir so
-your config survives `mise run dev`, which wipes `XDG_STATE_HOME`.
+caret reads optional settings from `$XDG_CONFIG_HOME/caret/config.toml` when
+`XDG_CONFIG_HOME` is set, otherwise `~/.config/caret/config.toml`. This lives deliberately
+apart from the state dir so your config survives `mise run dev`, which wipes
+`XDG_STATE_HOME`.
 
-The file is TOML, and both it and every key are optional — a missing file or a missing key falls
-back to defaults. An invalid file never crashes caret: it keeps the last valid parse, or the
-defaults if there has never been one. Settings hot-reload, so the file is re-read on change with no
-daemon restart needed.
+The file is TOML, and both it and every key are optional — a missing file or a missing key
+falls back to defaults. An invalid file never crashes caret: it keeps the last valid
+parse, or the defaults if there has never been one. Settings hot-reload, so the file is
+re-read on change with no daemon restart needed.
 
 The `[logging]` table accepts two keys:
 
@@ -165,11 +173,11 @@ The `[logging]` table accepts two keys:
 | `level`  | `"info"` | Minimum level written to the logs — one of `"debug"`, `"info"`, `"warn"`, `"error"`. Set `level = "debug"` to turn on debug logging. |
 | `redact` | `false`  | When `true`, identifiable data (home-directory paths, usernames in paths) is scrubbed from log records as they are written.         |
 
-Logs are raw by default; `caret redact` (see [Logging & Debugging](#logging--debugging)) produces
-shareable copies after the fact.
+Logs are raw by default; `caret redact` (see [Logging & Debugging](#logging--debugging))
+produces shareable copies after the fact.
 
-The `[daemon]` and `[review]` tables hold the tunables the `CARET_*` environment variables also
-cover (see below); precedence is **env var > config file > default**:
+The `[daemon]` and `[review]` tables hold the tunables the `CARET_*` environment variables
+also cover (see below); precedence is **env var > config file > default**:
 
 | Key                    | Default | Purpose                                                                                                                                                       |
 | ---------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -178,9 +186,9 @@ cover (see below); precedence is **env var > config file > default**:
 | `daemon.heartbeat_ms`  | `8000`  | Decision long-poll heartbeat window (ms). The daemon's socket `idleTimeout` is derived from this (heartbeat seconds + headroom), so it must stay below `250000`; values at or above that are rejected.    |
 | `review.timeout_s`     | `3600`  | Review window in seconds before the hook fail-safe-denies (default 1 hour). The schema rejects values at or above the 3900s hook budget in `hooks/hooks.json`. |
 
-Unlike the `[logging]` keys, which hot-reload live, the tunables are captured at startup: `port`,
-`idle_ms`, and `heartbeat_ms` take effect on the next daemon start, and `timeout_s` on the next
-review.
+Unlike the `[logging]` keys, which hot-reload live, the tunables are captured at startup:
+`port`, `idle_ms`, and `heartbeat_ms` take effect on the next daemon start, and
+`timeout_s` on the next review.
 
 ```toml
 [logging]
@@ -197,12 +205,12 @@ timeout_s = 3600
 ```
 
 The `[dev]` table holds **dev-only** settings for `mise run dev`: a fixed daemon port, a
-persistent state dir, and the recurring extra-review notification seeder. It is **ignored in a
-production build** — its only consumers are the dev tooling (`mise run dev`, `scripts/dev/*`),
-which never ship in the compiled binary, and the settings layer build-gates it so `[dev]`
-resolves to inert defaults in a prod build regardless of `config.toml`. These keys are **captured
-at startup** when `mise run dev` boots (not hot-reloaded); the matching `CARET_DEV_*` environment
-variables override them.
+persistent state dir, and the recurring extra-review notification seeder. It is
+**ignored in a production build** — its only consumers are the dev tooling
+(`mise run dev`, `scripts/dev/*`), which never ship in the compiled binary, and the
+settings layer build-gates it so `[dev]` resolves to inert defaults in a prod build
+regardless of `config.toml`. These keys are **captured at startup** when `mise run dev`
+boots (not hot-reloaded); the matching `CARET_DEV_*` environment variables override them.
 
 | Key                      | Default | Purpose                                                                                   |
 | ------------------------ | ------- | ----------------------------------------------------------------------------------------- |
@@ -225,9 +233,10 @@ max_pending = 3
 
 ### Environment variables
 
-Each `CARET_*` var shadows its config-file key (precedence **env var > config file > default**). A
-set-but-invalid value — wrong shape or out of bounds — is ignored with one boot-time warning in the
-logs, and resolution falls through to the config file, then the default.
+Each `CARET_*` var shadows its config-file key (precedence
+**env var > config file > default**). A set-but-invalid value — wrong shape or out of
+bounds — is ignored with one boot-time warning in the logs, and resolution falls through
+to the config file, then the default.
 
 | Env var              | Config key            | Default          | Purpose                                                                                     |
 | -------------------- | --------------------- | ---------------- | --------------------------------------------------------------------------------------------- |
@@ -246,44 +255,47 @@ logs, and resolution falls through to the config file, then the default.
 Logs live under `$XDG_STATE_HOME/caret` when set, otherwise `~/.local/state/caret`:
 
 - `caret.log` — NDJSON records from the short-lived `caret review` hook process.
-- `daemon.log` — the detached daemon's stdout/stderr: the same NDJSON shape (tagged with `pid`),
-  possibly interleaved with raw non-JSON crash output.
+- `daemon.log` — the detached daemon's stdout/stderr: the same NDJSON shape (tagged with
+  `pid`), possibly interleaved with raw non-JSON crash output.
 
-Browser-UI events ship to the daemon in batches (`POST /api/logs`) and land in `daemon.log` tagged
-`source: "ui"`, subject to the same `[logging]` level and redact settings as everything else.
+Browser-UI events ship to the daemon in batches (`POST /api/logs`) and land in
+`daemon.log` tagged `source: "ui"`, subject to the same `[logging]` level and redact
+settings as everything else.
 
-Each record is one JSON object per line (pino): `level` (numeric — 20 debug, 30 info, 40 warn,
-50 error), `time` (ISO 8601 UTC, e.g. `2026-06-04T21:25:40.038Z`), `step` (a short fixed token),
-`source` (the emitting process —
-`"hook"`, `"daemon"`, or `"ui"`), `caller` (the `file:line` of the emitting call site — on hook and
-daemon records; bridged UI records omit it), `msg`, plus structured extras. Normal operation logs at
-info; only genuine failures sit at error.
+Each record is one JSON object per line (pino): `level` (numeric — 20 debug, 30 info, 40
+warn, 50 error), `time` (ISO 8601 UTC, e.g. `2026-06-04T21:25:40.038Z`), `step` (a short
+fixed token), `source` (the emitting process — `"hook"`, `"daemon"`, or `"ui"`), `caller`
+(the `file:line` of the emitting call site — on hook and daemon records; bridged UI
+records omit it), `msg`, plus structured extras. Normal operation logs at info; only
+genuine failures sit at error.
 
-To raise verbosity, set `level = "debug"` in `config.toml`'s `[logging]` table
-(see [Configuration](#config-file)). It hot-reloads — no restart needed.
+To raise verbosity, set `level = "debug"` in `config.toml`'s `[logging]` table (see
+[Configuration](#config-file)). It hot-reloads — no restart needed.
 
 - `/caret:debug` — the slash command that reviews the current session —
-  pending/approved/rejected/expired plans (from the on-disk review records) plus recent errors
-  from both logs — and helps debug failures.
-- `caret redact` — the binary's fourth subcommand: scrubs the two state-dir logs into shareable
-  `*.redacted.log` siblings (home paths become `~`, usernames in foreign home paths are censored).
-  For always-on scrubbing at write time, set `redact = true` in `[logging]`. Plan, prompt, and
-  review-feedback bodies are never written to logs regardless of the toggle.
-- `caret discovery` — the binary's fifth subcommand: a one-shot, read-only diagnostics snapshot of
-  the local install — running caret processes, daemon identity (version, build, startup commit),
-  lock/port state, effective settings, review counts, the agent adapter's install-state probe, log
-  sizes and error/warn counts, install/runtime info, and system basics. Human-readable by default;
-  `caret discovery --json` prints the same report as one JSON document (schema marker
-  `caret-discovery/1`). Unlike the logs, the report is **always redacted** — it exists to be pasted
-  into bug reports — and it never contains plan/prompt/feedback bodies or log contents. Probes are
-  individually bounded and degrade per-section, so the command exits 0 even when the daemon is down.
+  pending/approved/rejected/expired plans (from the on-disk review records) plus recent
+  errors from both logs — and helps debug failures.
+- `caret redact` — the binary's fourth subcommand: scrubs the two state-dir logs into
+  shareable `*.redacted.log` siblings (home paths become `~`, usernames in foreign home
+  paths are censored). For always-on scrubbing at write time, set `redact = true` in
+  `[logging]`. Plan, prompt, and review-feedback bodies are never written to logs
+  regardless of the toggle.
+- `caret discovery` — the binary's fifth subcommand: a one-shot, read-only diagnostics
+  snapshot of the local install — running caret processes, daemon identity (version,
+  build, startup commit), lock/port state, effective settings, review counts, the agent
+  adapter's install-state probe, log sizes and error/warn counts, install/runtime info,
+  and system basics. Human-readable by default; `caret discovery --json` prints the same
+  report as one JSON document (schema marker `caret-discovery/1`). Unlike the logs, the
+  report is **always redacted** — it exists to be pasted into bug reports — and it never
+  contains plan/prompt/feedback bodies or log contents. Probes are individually bounded
+  and degrade per-section, so the command exits 0 even when the daemon is down.
 - `/caret:discovery` — the slash command that wraps it: asks whether you want JSON or
-  human-readable output, runs the subcommand, and ends with the report in a code block ready to
-  paste into a bug report. Complements `/caret:debug` (the session timeline): discovery is the
-  point-in-time snapshot of the installation.
+  human-readable output, runs the subcommand, and ends with the report in a code block
+  ready to paste into a bug report. Complements `/caret:debug` (the session timeline):
+  discovery is the point-in-time snapshot of the installation.
 
-Contributors should see `docs/agents/logging-rules.md` for the logging conventions — when to log,
-levels, and message style.
+Contributors should see `docs/agents/logging-rules.md` for the logging conventions — when
+to log, levels, and message style.
 
 ## Development
 
@@ -300,55 +312,58 @@ mise run format     # Biome (write)
 mise run preflight  # check-only pre-push gate: lint + tests (unit ∥ e2e) + build, concurrent
 ```
 
-`mise run lint` (and the pre-commit hook) runs every formatter in read-only check mode alongside
-Biome lint, `tsc --noEmit`, and `svelte-check` — formatting, linting, and type checking are all
-folded into `hk.pkl`'s `check` hook, so an unformatted or tab-indented file fails the gate instead
-of being silently reflowed at commit time.
+`mise run lint` (and the pre-commit hook) runs every formatter in read-only check mode
+alongside Biome lint, `tsc --noEmit`, and `svelte-check` — formatting, linting, and type
+checking are all folded into `hk.pkl`'s `check` hook, so an unformatted or tab-indented
+file fails the gate instead of being silently reflowed at commit time.
 
 `mise run build --install` goes one step further than `mise run build`: after building, it
-hands the fresh `bin/caret` + `bin/ui` to `scripts/install.sh --from-local`, which reuses those
-artifacts (no rebuild), reinstalls the caret plugin through Claude Code's native plugin system,
-and prewarms so the just-built binary takes over the daemon — so after a `/reload-plugins` (or a
-Claude Code restart) `/caret:*` resolves to your local build. The handoff retires a current-build
-daemon automatically; a long-running daemon from an older build (no retire endpoint, no lock file)
-can't be retired and keeps serving until you restart it once — `kill` its pid, then any review
-respawns the fresh build. It mutates your Claude plugin state and daemon, so it is for local
-development only, not CI; run `CARET_DRY_RUN=1 mise run build --install` to preview the install
-steps without performing them.
+hands the fresh `bin/caret` + `bin/ui` to `scripts/install.sh --from-local`, which reuses
+those artifacts (no rebuild), reinstalls the caret plugin through Claude Code's native
+plugin system, and prewarms so the just-built binary takes over the daemon — so after a
+`/reload-plugins` (or a Claude Code restart) `/caret:*` resolves to your local build. The
+handoff retires a current-build daemon automatically; a long-running daemon from an older
+build (no retire endpoint, no lock file) can't be retired and keeps serving until you
+restart it once — `kill` its pid, then any review respawns the fresh build. It mutates
+your Claude plugin state and daemon, so it is for local development only, not CI; run
+`CARET_DRY_RUN=1 mise run build --install` to preview the install steps without performing
+them.
 
-`mise run dev` is self-contained — no separate `bin/caret daemon` needed. It starts an isolated
-caret daemon as `caret daemon --ephemeral`, which binds an OS-assigned port; the dev task discovers
-the real port from the daemon's lock file (`$XDG_STATE_HOME/caret/daemon.lock`, written after the
-bind) and exports it as `CARET_PORT` before starting the driver and Vite. The state dir is an
-ephemeral `XDG_STATE_HOME`, so any number of `mise run dev` sessions coexist — each claims its own
-port and state dir, and Vite auto-increments its UI port per session. The daemon is seeded with one
-fake pending plan, and a driver plays the agent's side through the real review hook path: each
-request-changes appends a revision section quoting your feedback and resubmits, and approve re-seeds
-a fresh plan, with real hook records landing in the dev state dir's `caret.log`. The recurring
-extra-review seeder is off by default. Arm it three ways: pass `mise run dev --notify`, set
-`enabled = true` under `[dev.notify]` in `config.toml` to persist it on across runs, or set a
-positive `CARET_DEV_NEW_REVIEW_MS`. When armed, it seeds a genuinely-new review (fresh session,
-fresh review id) every 15 seconds by default, capped at three unresolved extras at a time — grant
-notifications, background the tab, and the next seed fires a clickable desktop notification. The
-cadence and the pending cap come from `[dev.notify]` (`interval_ms` / `max_pending`), and
-`CARET_DEV_NEW_REVIEW_MS` overrides the cadence; the driver logs the seeder's armed/off state at
-boot either way. One
-notification gotcha: browser notification grants are per-origin **including the port**, so when an
-orphaned dev server squats Vite's port and a new session auto-increments to the next one, the UI
-lands on a fresh origin whose permission is back to "default" — the bell shows the muted "?" again
-and new plans log `plan notification skipped (permission)`. Re-grant via the bell, or kill the
-straggler holding the port (`lsof -nP -iTCP:5173 -sTCP:LISTEN`). Everything is
-reaped on Ctrl-C, and the dev daemon never reads or writes a globally-installed caret's reviews. To
-pin a fixed dev port instead, set `CARET_DEV_PORT` (or `[dev].port` in `config.toml`) to any free
-port other than `42718` (the production default); this skips `--ephemeral` and binds that port, so
-only one such session can run at a time. Likewise, set `CARET_DEV_STATE_DIR` (or `[dev].state_dir`)
-to keep dev state across restarts instead of the ephemeral default.
+`mise run dev` is self-contained — no separate `bin/caret daemon` needed. It starts an
+isolated caret daemon as `caret daemon --ephemeral`, which binds an OS-assigned port; the
+dev task discovers the real port from the daemon's lock file
+(`$XDG_STATE_HOME/caret/daemon.lock`, written after the bind) and exports it as
+`CARET_PORT` before starting the driver and Vite. The state dir is an ephemeral
+`XDG_STATE_HOME`, so any number of `mise run dev` sessions coexist — each claims its own
+port and state dir, and Vite auto-increments its UI port per session. The daemon is seeded
+with one fake pending plan, and a driver plays the agent's side through the real review
+hook path: each request-changes appends a revision section quoting your feedback and
+resubmits, and approve re-seeds a fresh plan, with real hook records landing in the dev
+state dir's `caret.log`. The recurring extra-review seeder is off by default. Arm it three
+ways: pass `mise run dev --notify`, set `enabled = true` under `[dev.notify]` in
+`config.toml` to persist it on across runs, or set a positive `CARET_DEV_NEW_REVIEW_MS`.
+When armed, it seeds a genuinely-new review (fresh session, fresh review id) every 15
+seconds by default, capped at three unresolved extras at a time — grant notifications,
+background the tab, and the next seed fires a clickable desktop notification. The cadence
+and the pending cap come from `[dev.notify]` (`interval_ms` / `max_pending`), and
+`CARET_DEV_NEW_REVIEW_MS` overrides the cadence; the driver logs the seeder's armed/off
+state at boot either way. One notification gotcha: browser notification grants are
+per-origin **including the port**, so when an orphaned dev server squats Vite's port and a
+new session auto-increments to the next one, the UI lands on a fresh origin whose
+permission is back to "default" — the bell shows the muted "?" again and new plans log
+`plan notification skipped (permission)`. Re-grant via the bell, or kill the straggler
+holding the port (`lsof -nP -iTCP:5173 -sTCP:LISTEN`). Everything is reaped on Ctrl-C, and
+the dev daemon never reads or writes a globally-installed caret's reviews. To pin a fixed
+dev port instead, set `CARET_DEV_PORT` (or `[dev].port` in `config.toml`) to any free port
+other than `42718` (the production default); this skips `--ephemeral` and binds that port,
+so only one such session can run at a time. Likewise, set `CARET_DEV_STATE_DIR` (or
+`[dev].state_dir`) to keep dev state across restarts instead of the ephemeral default.
 
-`mise run test-e2e` runs the Playwright specs in `test/e2e/` against an isolated daemon that serves
-the built `ui/dist/` artifact on an OS-assigned port with ephemeral state, so the suite never
-touches your real daemon or `~/.local/state/caret`. `mise run setup` installs the Chromium browser
-the specs drive. For when to write an e2e spec versus a `bun test` unit versus throwaway
-exploration, see `docs/agents/browser-testing.md`.
+`mise run test-e2e` runs the Playwright specs in `test/e2e/` against an isolated daemon
+that serves the built `ui/dist/` artifact on an OS-assigned port with ephemeral state, so
+the suite never touches your real daemon or `~/.local/state/caret`. `mise run setup`
+installs the Chromium browser the specs drive. For when to write an e2e spec versus a
+`bun test` unit versus throwaway exploration, see `docs/agents/browser-testing.md`.
 
 For a quick local trial without installing, load the plugin from a checkout:
 
@@ -360,9 +375,9 @@ claude --plugin-dir ./    # load caret's hooks for this session only
 
 ### Icons
 
-caret's icons are [Lucide](https://lucide.dev) SVGs vendored verbatim at a pinned release under
-`ui/src/icons/`, rendered by `ui/src/components/Icon.svelte`. Adding one means following the
-checklist in `docs/agents/icon-rules.md` and adding a row to
+caret's icons are [Lucide](https://lucide.dev) SVGs vendored verbatim at a pinned release
+under `ui/src/icons/`, rendered by `ui/src/components/Icon.svelte`. Adding one means
+following the checklist in `docs/agents/icon-rules.md` and adding a row to
 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 
 ## Layout
@@ -386,5 +401,5 @@ The polished diff/compare viewer for plan versions is a planned fast-follow.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Vendored third-party assets (the Lucide icons) are itemized in
-[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) (ISC).
+MIT — see [LICENSE](LICENSE). Vendored third-party assets (the Lucide icons) are itemized
+in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) (ISC).
