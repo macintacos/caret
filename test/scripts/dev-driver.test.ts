@@ -5,12 +5,14 @@ import { setLogLevel } from "../../src/log.ts";
 import { hasUntaggedCodeBlock } from "../../src/plan-format.ts";
 import {
   assertDevEnv,
+  bootstrapReview,
   devReviewDeps,
   runExtraReview,
   runExtraSeeder,
 } from "../../scripts/dev/driver.ts";
 import {
   appendRevision,
+  bootstrapPlans,
   DEV_SESSION,
   extraPlan,
   hookStdin,
@@ -134,6 +136,34 @@ test("appendRevision never introduces untagged code blocks, even for hostile fee
   expect(out).toContain("an even longer fence");
 });
 
+// ---- bootstrapPlans ----
+
+test("bootstrapPlans returns the v1 plan plus one entry per requested revision", () => {
+  const plans = bootstrapPlans(PLAN_V1, 2);
+  expect(plans).toHaveLength(3);
+  expect(plans[0]).toBe(PLAN_V1);
+});
+
+test("bootstrapPlans threads each revision onto the previous, so versions grow", () => {
+  const plans = bootstrapPlans(PLAN_V1, 2);
+  // Each step keeps the prior text and adds the next Revision heading.
+  expect(plans[1]).toStartWith(PLAN_V1.trimEnd());
+  expect(plans[1]).toContain("## Revision 1");
+  expect(plans[2]).toStartWith(plans[1]!.trimEnd());
+  expect(plans[2]).toContain("## Revision 1");
+  expect(plans[2]).toContain("## Revision 2");
+});
+
+test("bootstrapPlans with zero revisions is just the v1 plan", () => {
+  expect(bootstrapPlans(PLAN_V1, 0)).toEqual([PLAN_V1]);
+});
+
+test("bootstrapPlans never introduces untagged code blocks", () => {
+  for (const plan of bootstrapPlans(PLAN_V1, 2)) {
+    expect(hasUntaggedCodeBlock(plan)).toBe(false);
+  }
+});
+
 // ---- nextPlan ----
 
 test("nextPlan on a reviewer deny appends a revision and bumps the counter", () => {
@@ -225,6 +255,21 @@ test("a revision round-trips through the real runReview hook path and logs to ca
   expectNeverLogsBody(log, "needs a rollout plan");
   expect(log).toContain('"feedbackChars":20');
   expect(log).toContain(DEV_SESSION);
+});
+
+test("bootstrapReview grows the primary review to several versions before the loop", async () => {
+  await boot();
+  const deps = devReviewDeps(base);
+  const state = await bootstrapReview(base, PLAN_V1, deps);
+  const review = d.store.bySession(DEV_SESSION)[0];
+  expect(review).toBeDefined();
+  // Two bootstrap revisions threaded onto v1 → three versions, enough for the
+  // version-compare picker to offer a non-default pair.
+  expect(review!.versions).toHaveLength(3);
+  // The review is left rejected; the interactive loop re-pends it by appending
+  // its own next revision, resuming from this state.
+  expect(review!.status).toBe("rejected");
+  expect(state.revision).toBe(2);
 });
 
 test("runExtraReview runs one fresh-session review to resolution and stops", async () => {
