@@ -42,9 +42,21 @@ describe("toFileOptions", () => {
     expect(result.overflow).toBe("wrap");
   });
 
+  test("enables the token transformer when link handlers are present", () => {
+    // The library only emits per-token data-char markers (which the click/hover
+    // hit-test needs) when useTokenTransformer is explicitly set, so the option
+    // must accompany the handlers.
+    const result = toFileOptions(
+      {},
+      { onTokenClick: () => {}, onTokenEnter: () => {}, onTokenLeave: () => {} },
+    );
+    expect(result.useTokenTransformer).toBe(true);
+  });
+
   test("omitting link handlers leaves the option object handler-free", () => {
     const result = toFileOptions({ overflow: "wrap" });
     expect("onTokenClick" in result).toBe(false);
+    expect("useTokenTransformer" in result).toBe(false);
   });
 
   test("spreads the gutter utility opt-in and callbacks when provided", () => {

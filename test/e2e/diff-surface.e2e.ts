@@ -115,6 +115,37 @@ test("shows a filterable contents pane and jumps to a heading's line", async ({ 
   await expect.poll(async () => view.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
 });
 
+test("keyboard navigation in the contents pane jumps to the cursored heading", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: TOC_PLAN });
+  await page.goto("/");
+
+  const view = page.locator(".diff-plan");
+  await expect(view).toBeVisible();
+  const pane = page.getByRole("navigation", { name: "Plan contents" });
+  await expect(pane.locator(".toc-row")).toHaveCount(3);
+  // The window-level safe-mode guard swallows keystrokes inside the grace window
+  // it arms at mount; wait it out so the arrow keys reach the filter input.
+  await waitPastSafeModeGrace(page);
+
+  // Focus the filter input (which owns the keyboard cursor) and walk down to the
+  // third heading: ArrowDown moves the cursor from -1 → 0 → 1 → 2.
+  const filter = pane.getByRole("textbox", { name: "Filter headings" });
+  await filter.click();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+
+  // The third row (Verification) is the cursored one.
+  await expect(pane.locator(".toc-row.cursor")).toHaveText("Verification");
+
+  // Enter jumps the source view down to that heading's line.
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => view.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+});
+
 test("suppresses the contents pane for a single-heading plan", async ({ daemon, page }) => {
   await daemon.seed({ plan: "# Only Heading\n\nNo other sections to navigate.\n" });
   await page.goto("/");
@@ -337,4 +368,32 @@ test("deleting an inline card removes the annotation and its marker", async ({ d
   await expect
     .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
     .toBe(0);
+});
+
+test("editing an inline card rewrites the comment and persists it", async ({ daemon, page }) => {
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+
+  await createAnnotation(page, 3, "Original note.");
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.[0]?.comment)
+    .toBe("Original note.");
+
+  // Enter edit mode; the textarea seeds with the current comment, then rewrite it
+  // and submit with the keyboard chord.
+  const card = page.locator("[data-annotation-card]");
+  await card.getByRole("button", { name: "edit" }).click();
+  const textarea = card.getByRole("textbox", { name: "Edit comment" });
+  await expect(textarea).toHaveValue("Original note.");
+  await textarea.fill("Revised note with more detail.");
+  await page.keyboard.press("ControlOrMeta+Enter");
+
+  // The card returns to its read view showing the new text, and /draft carries it.
+  await expect(card.getByText("Revised note with more detail.")).toBeVisible();
+  await expect(card.getByRole("textbox", { name: "Edit comment" })).toHaveCount(0);
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.[0]?.comment)
+    .toBe("Revised note with more detail.");
 });

@@ -60,6 +60,31 @@ test("toggling split↔unified switches layout in place without a remount", asyn
   await expect(pre).toHaveAttribute("data-diff-type", "split");
 });
 
+test("toggling layout preserves the diff scroll position", async ({ daemon, page }) => {
+  // Tall versions so the diff overflows the viewport and a scroll offset sticks.
+  const body = (tag: string) =>
+    Array.from({ length: 80 }, (_, i) => `${tag} line ${i + 1} of the plan body.`).join("\n\n");
+  await daemon.seedVersions(2, [`# Plan\n\n${body("alpha")}\n`, `# Plan\n\n${body("beta")}\n`]);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Compare versions" }).click();
+
+  const view = page.locator(".diff-plan");
+  await expect(view).toBeVisible();
+  await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "split");
+
+  // Scroll the diff down and let the offset settle.
+  await view.evaluate((el) => {
+    el.scrollTop = 400;
+  });
+  await expect.poll(async () => view.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  const before = await view.evaluate((el) => el.scrollTop);
+
+  // Switch layout in place (setOptions, not a remount); the scroll offset holds.
+  await page.getByRole("button", { name: "Unified" }).click();
+  await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "single");
+  expect(await view.evaluate((el) => el.scrollTop)).toBe(before);
+});
+
 test("the chosen layout persists across a reload", async ({ daemon, page }) => {
   await daemon.seedVersions(3, [V1, V2, V3]);
   await page.goto("/");
