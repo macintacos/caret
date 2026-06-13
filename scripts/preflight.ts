@@ -11,21 +11,41 @@
 // with MISE_TASK_SKIP=build-ui to keep build-ui at exactly one run per gate.
 //
 // DI mirrors scripts/release/cli.ts: the spawn collaborator is injected so
-// test/preflight.test.ts can drive the DAG without running real tasks;
-// import.meta.main wires Bun.spawn and process.exit.
+// test/scripts/preflight.test.ts can drive the DAG without running real tasks;
+// import.meta.main wires the real spawner and process.exit.
+//
+// Interruption safety (EXC-587): the real spawner runs each task as a detached
+// process group; SIGINT/SIGTERM tear every group down before exit, and the
+// first failure aborts in-flight siblings, so an interrupted gate can't orphan
+// the mise → bun/vite/tsc/playwright → chromium+daemon subtree.
 
+import { type ChildProcess, type SpawnOptions, spawn } from "node:child_process";
+import { once } from "node:events";
+import { availableParallelism } from "node:os";
+import type { Readable } from "node:stream";
 import { Listr, type ListrTask } from "listr2";
 
 export interface SpawnOutcome {
   exitCode: number;
   output: string;
+  /**
+   * True when this task's process group was killed by fail-fast after a sibling
+   * failed (EXC-587). Such a task is recorded `skipped`, not `failed`, so a
+   * genuine failure isn't drowned out by the siblings it tore down.
+   */
+  aborted?: boolean;
 }
 
-/** Runs one mise task to completion, reporting output lines for live display. */
+/**
+ * Runs one mise task to completion, reporting output lines for live display.
+ * `signal` aborts when a sibling fails (EXC-587); a spawner that honors it
+ * tears its process group down and resolves with `aborted: true`.
+ */
 export type SpawnTask = (
   name: string,
   env: Record<string, string> | undefined,
   onLine: (line: string) => void,
+  signal: AbortSignal,
 ) => Promise<SpawnOutcome>;
 
 export type TaskStatus = "passed" | "failed" | "skipped";
@@ -109,36 +129,49 @@ const DEFAULT_OUTPUT_TAIL_LINES = 20;
 export async function runPreflight(deps: {
   spawnTask: SpawnTask;
   renderer?: "default" | "silent";
+  /** Max tasks in flight (EXC-587); defaults to the host's CPU count. */
+  concurrency?: number;
 }): Promise<PreflightOutcome> {
   const results = new Map<string, TaskResult>();
   const { promise: buildUiDone, resolve: releaseBuildUi } = Promise.withResolvers<boolean>();
+  // EXC-587: the first task to fail aborts every in-flight sibling. A spawner
+  // that honors the signal tears its process group down and resolves
+  // `aborted` — recorded `skipped` so the doomed gate stops burning CPU on
+  // work it will discard, while the real failure stays the only `failed` row.
+  const failFast = new AbortController();
 
-  // Spawn one task, record its result, and report whether it passed. A spawn
-  // rejection (e.g. the binary itself failing to start) counts as a failure.
+  // Spawn one task and record its result. A spawn rejection (e.g. the binary
+  // failing to start) counts as a failure; a fail-fast abort counts as skipped.
   const runTask = async (
     name: string,
     env: Record<string, string> | undefined,
     onLine: (line: string) => void,
-  ): Promise<boolean> => {
+  ): Promise<TaskStatus> => {
     let outcome: SpawnOutcome;
     try {
-      outcome = await deps.spawnTask(name, env, onLine);
+      outcome = await deps.spawnTask(name, env, onLine, failFast.signal);
     } catch (err) {
       outcome = { exitCode: 1, output: String(err) };
     }
-    const status = outcome.exitCode === 0 ? "passed" : "failed";
+    if (outcome.aborted) {
+      results.set(name, { status: "skipped", output: outcome.output });
+      return "skipped";
+    }
+    const status: TaskStatus = outcome.exitCode === 0 ? "passed" : "failed";
     results.set(name, { status, output: outcome.output });
-    return status === "passed";
+    if (status === "failed") failFast.abort();
+    return status;
   };
 
   const immediate = (name: string): ListrTask => ({
     title: name,
     task: async (_ctx, task) => {
-      const passed = await runTask(name, undefined, (line) => {
+      const status = await runTask(name, undefined, (line) => {
         task.output = line;
       });
-      if (name === "build-ui") releaseBuildUi(passed);
-      if (!passed) throw new Error(`${name} failed`);
+      if (name === "build-ui") releaseBuildUi(status === "passed");
+      if (status === "skipped") return task.skip(`${name} (aborted: a sibling failed)`);
+      if (status === "failed") throw new Error(`${name} failed`);
     },
   });
 
@@ -150,16 +183,26 @@ export async function runPreflight(deps: {
         results.set(name, { status: "skipped", output: "" });
         return task.skip(`${name} (skipped: build-ui failed)`);
       }
-      const passed = await runTask(name, { MISE_TASK_SKIP: "build-ui" }, (line) => {
+      const status = await runTask(name, { MISE_TASK_SKIP: "build-ui" }, (line) => {
         task.output = line;
       });
-      if (!passed) throw new Error(`${name} failed`);
+      if (status === "skipped") return task.skip(`${name} (aborted: a sibling failed)`);
+      if (status === "failed") throw new Error(`${name} failed`);
     },
   });
 
   const listr = new Listr([...IMMEDIATE.map(immediate), ...DEPENDENT.map(dependent)], {
-    concurrent: true,
+    // EXC-587: a finite cap (host CPU count by default) instead of the prior
+    // `true` (→ Infinity), so a constrained or stacked host can't oversubscribe;
+    // CARET_PREFLIGHT_JOBS lowers it further. ≥ the 5-task count is a no-op, so
+    // the default preserves today's effective parallelism on real hosts.
+    concurrent: deps.concurrency ?? availableParallelism(),
     exitOnError: false,
+    // EXC-587: listr2's own SIGINT handler calls process.exit(127)
+    // synchronously, which would beat our async SIGINT teardown and orphan the
+    // task groups — the exact failure this work prevents. Disable it so our
+    // installSignalHandlers is the sole authority on interruption.
+    registerSignalListeners: false,
     renderer: deps.renderer ?? "default",
     // Non-TTY (CI, pipes) auto-falls back to verbose: line-per-event, no
     // cursor-control sequences — color codes may still appear; that's expected.
@@ -380,36 +423,166 @@ export function withoutMiseUsageVars(
   return extra ? { ...out, ...extra } : out;
 }
 
-// Real spawner: runs `mise run <task>` with merged env, buffering combined
-// stdout+stderr and reporting the last non-empty line for the live display.
-async function spawnMiseTask(
-  name: string,
-  env: Record<string, string> | undefined,
-  onLine: (line: string) => void,
-): Promise<SpawnOutcome> {
-  const proc = Bun.spawn(["mise", "run", name], {
-    env: withoutMiseUsageVars(process.env, env),
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const chunks: string[] = [];
-  const pump = async (stream: ReadableStream<Uint8Array>) => {
-    const decoder = new TextDecoder();
-    for await (const chunk of stream) {
-      const text = decoder.decode(chunk, { stream: true });
-      chunks.push(text);
-      const last = text
-        .split("\n")
-        .map((line) => line.replace(ANSI_ESCAPES, "").trim())
-        .filter(Boolean)
-        .at(-1);
-      if (last) onLine(last);
+/** A registry of detached child process groups, killable as whole subtrees. */
+export interface ProcessGroupController {
+  /** Spawn `cmd` as its own process-group leader and track it. */
+  spawn(cmd: string, args: string[], opts: SpawnOptions): ChildProcess;
+  /** Tear down one child's group: SIGTERM, then SIGKILL after the grace. */
+  reap(child: ChildProcess): Promise<void>;
+  /** Tear down every still-live child group (signal-handler path). */
+  killAll(): Promise<void>;
+  /** Count of children that have not yet exited. */
+  readonly size: number;
+}
+
+/**
+ * A registry of detached child process groups (EXC-587). Each child is spawned
+ * with `detached: true`, so it leads its own process group and the whole
+ * `mise → bash → bun/vite/tsc/playwright → chromium+daemon` subtree shares that
+ * group — killable in one shot via `process.kill(-pid, …)`. (`Bun.spawn` keeps
+ * children in the orchestrator's own group, so node's `spawn` is used here
+ * specifically for the per-child group isolation `Bun.spawn` can't give.)
+ *
+ * `reap`/`killAll` escalate SIGTERM → SIGKILL after a grace, mirroring the
+ * daemon reap in test/e2e/support/fixtures.ts. This reaps only on a CATCHABLE
+ * death — the SIGINT/SIGTERM handlers, or a fail-fast abort. A SIGKILL of the
+ * orchestrator runs no handler, and an orphaned process group is NOT
+ * auto-reaped by the OS; bounding the fan-out (CARET_PREFLIGHT_JOBS, plus the
+ * Playwright `workers` cap + `globalTimeout`) is what keeps that case from
+ * arising rather than relying on a teardown that can't run.
+ */
+export function createProcessGroupController(graceMs = 2000): ProcessGroupController {
+  const live = new Set<ChildProcess>();
+  const killGroup = (child: ChildProcess, sig: NodeJS.Signals) => {
+    try {
+      if (child.pid) process.kill(-child.pid, sig);
+    } catch {
+      // ESRCH: the group already exited between the liveness check and the
+      // signal — nothing left to kill.
     }
-    const tail = decoder.decode(); // flush a partial multibyte sequence, if any
-    if (tail) chunks.push(tail);
   };
-  const [exitCode] = await Promise.all([proc.exited, pump(proc.stdout), pump(proc.stderr)]);
-  return { exitCode, output: chunks.join("") };
+  const reap = async (child: ChildProcess): Promise<void> => {
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    // `once` rejects if an 'error' (e.g. a failed spawn) precedes 'close'; we
+    // only need to wait for the child to be gone, so swallow that — reap must
+    // never reject (it's awaited via fire-and-forget on the abort path).
+    const exited = once(child, "close").catch(() => {});
+    killGroup(child, "SIGTERM");
+    const escalate = setTimeout(() => killGroup(child, "SIGKILL"), graceMs);
+    await exited;
+    clearTimeout(escalate);
+  };
+  return {
+    spawn(cmd, args, opts) {
+      const child = spawn(cmd, args, { ...opts, detached: true });
+      live.add(child);
+      // A failed spawn emits 'error' asynchronously; with no listener node
+      // rethrows it as an uncaught exception. Absorb it here so the controller
+      // can't crash the process regardless of caller — callers still attach
+      // their own 'error'/'close' for the task outcome. 'close' fires after
+      // 'error', so the registry self-cleans either way.
+      child.on("error", () => {});
+      child.once("close", () => live.delete(child));
+      return child;
+    },
+    reap,
+    async killAll() {
+      await Promise.all([...live].map((child) => reap(child)));
+    },
+    get size() {
+      return live.size;
+    },
+  };
+}
+
+// Real spawner: runs `mise run <task>` as a tracked process group, buffering
+// combined stdout+stderr and reporting the last non-empty line for the live
+// display. On a fail-fast `signal` abort it reaps its own group and resolves
+// `aborted` so runPreflight records it `skipped`, not `failed` (EXC-587).
+function makeSpawnMiseTask(controller: ProcessGroupController): SpawnTask {
+  return (name, env, onLine, signal) =>
+    new Promise<SpawnOutcome>((resolve) => {
+      const child = controller.spawn("mise", ["run", name], {
+        env: withoutMiseUsageVars(process.env, env),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let aborted = false;
+      const onAbort = () => {
+        // Only a task still running was actually torn down by fail-fast; one
+        // that already finished keeps its real pass/fail outcome rather than
+        // being relabeled `skipped` (EXC-587).
+        if (child.exitCode !== null || child.signalCode !== null) return;
+        aborted = true;
+        void controller.reap(child);
+      };
+      if (signal.aborted) onAbort();
+      else signal.addEventListener("abort", onAbort, { once: true });
+
+      const chunks: string[] = [];
+      const pump = (stream: Readable | null) => {
+        if (!stream) return;
+        const decoder = new TextDecoder();
+        stream.on("data", (chunk: Buffer) => {
+          const text = decoder.decode(chunk, { stream: true });
+          chunks.push(text);
+          const last = text
+            .split("\n")
+            .map((line) => line.replace(ANSI_ESCAPES, "").trim())
+            .filter(Boolean)
+            .at(-1);
+          if (last) onLine(last);
+        });
+        stream.on("end", () => {
+          const tail = decoder.decode(); // flush a partial multibyte sequence, if any
+          if (tail) chunks.push(tail);
+        });
+      };
+      pump(child.stdout);
+      pump(child.stderr);
+
+      const settle = (outcome: SpawnOutcome) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(outcome); // idempotent: first of 'error'/'close' wins
+      };
+      // A failed spawn (mise off PATH, EMFILE under the fan-out this gate
+      // bounds) surfaces as an async 'error' event, not a throw — without this
+      // listener node rethrows it as an uncaught exception and crashes the
+      // orchestrator. Record it as a failed task instead (EXC-587).
+      child.once("error", (err) => settle({ exitCode: 1, output: String(err), aborted }));
+      child.once("close", (code, sig) =>
+        settle({ exitCode: code ?? (sig ? 1 : 0), output: chunks.join(""), aborted }),
+      );
+    });
+}
+
+/**
+ * Parse CARET_PREFLIGHT_JOBS into a positive-int concurrency cap (EXC-587).
+ * Missing or invalid → undefined, so runPreflight falls back to its host
+ * default rather than throttling on a typo.
+ */
+function parseJobs(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const n = Number.parseInt(raw, 10);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
+}
+
+/**
+ * On a catchable signal, tear every live task's process group down (SIGTERM →
+ * SIGKILL grace) before exiting, so no mise/bun/vite/playwright/chromium/daemon
+ * descendant is orphaned (EXC-587). A SIGKILL of THIS process can't run a
+ * handler — see createProcessGroupController for why that case is bounded by
+ * the fan-out caps rather than caught here.
+ */
+function installSignalHandlers(controller: ProcessGroupController): void {
+  let tearingDown = false;
+  for (const sig of ["SIGINT", "SIGTERM"] as const) {
+    process.on(sig, () => {
+      if (tearingDown) return;
+      tearingDown = true;
+      const code = sig === "SIGINT" ? 130 : 143;
+      void controller.killAll().finally(() => process.exit(code));
+    });
+  }
 }
 
 // --json (EXC-471): suppress the human display and emit machine-readable
@@ -418,6 +591,13 @@ async function spawnMiseTask(
 async function runCli(argv: string[], env: Record<string, string | undefined>): Promise<void> {
   const args = resolveJsonArgs(argv, env);
 
+  // EXC-587: own a killable process group for every task, and tear it down on a
+  // catchable signal, so an interrupted gate can't orphan its descendants.
+  const controller = createProcessGroupController();
+  installSignalHandlers(controller);
+  const spawnTask = makeSpawnMiseTask(controller);
+  const concurrency = parseJobs(env.CARET_PREFLIGHT_JOBS);
+
   if (!args.json) {
     if (args.verbosity > 0 || args.grep !== undefined || args.tasks.length > 0) {
       process.stderr.write(
@@ -425,8 +605,9 @@ async function runCli(argv: string[], env: Record<string, string | undefined>): 
       );
     }
     const { exitCode, summary } = await runPreflight({
-      spawnTask: spawnMiseTask,
+      spawnTask,
       renderer: "default",
+      concurrency,
     });
     process.stdout.write(`\n${summary}\n`);
     process.exitCode = exitCode;
@@ -448,8 +629,9 @@ async function runCli(argv: string[], env: Record<string, string | undefined>): 
 
   process.stdout.write(`${JSON.stringify(buildStartReport(args))}\n`);
   const { results, exitCode } = await runPreflight({
-    spawnTask: spawnMiseTask,
+    spawnTask,
     renderer: "silent",
+    concurrency,
   });
   process.stdout.write(
     `${JSON.stringify(buildResultReport(results, { verbosity: args.verbosity, grep, tasks: args.tasks }))}\n`,

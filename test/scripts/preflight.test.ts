@@ -13,6 +13,7 @@ import {
   buildErrorReport,
   buildResultReport,
   buildStartReport,
+  createProcessGroupController,
   parseJsonArgs,
   parseJsonEnv,
   resolveJsonArgs,
@@ -150,6 +151,80 @@ test("build-ui failure skips its dependents and reports them as skipped", async 
   expect(r.results.get("test-e2e")?.status).toBe("skipped");
   expect(r.results.get("build-bin")?.status).toBe("skipped");
   expect(r.summary).toContain("vite exploded");
+});
+
+// Process-group teardown + fail-fast (EXC-587) ------------------------------
+
+// The falsifiable orphan test: a child spawned through the controller is its
+// own process-group leader, so killAll reaps the WHOLE subtree — the child AND
+// the `sleep` grandchild it forks — leaving nothing parented to launchd. This
+// exercises the real teardown path without running the heavy task graph (the
+// very thing that orphans processes), so it is fast and deterministic.
+test("createProcessGroupController.killAll reaps a child and its grandchildren", async () => {
+  const controller = createProcessGroupController(500);
+  // bash forks a `sleep` grandchild, prints its PID, then waits — so the group
+  // has two live members when we tear it down.
+  const child = controller.spawn("bash", ["-c", "sleep 30 & echo $!; wait"], {
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const grandPid = await new Promise<string>((resolve) => {
+    let buf = "";
+    child.stdout?.on("data", (c: Buffer) => {
+      buf += c.toString();
+      const nl = buf.indexOf("\n");
+      if (nl !== -1) resolve(buf.slice(0, nl).trim());
+    });
+  });
+
+  const alive = (pid: string | number) => Bun.spawnSync(["ps", "-p", String(pid)]).exitCode === 0;
+  expect(alive(child.pid as number)).toBe(true);
+  expect(alive(grandPid)).toBe(true);
+
+  await controller.killAll();
+
+  expect(alive(child.pid as number)).toBe(false);
+  expect(alive(grandPid)).toBe(false);
+  expect(controller.size).toBe(0);
+});
+
+// A failed spawn (binary off PATH, EMFILE) emits an async 'error' event, not a
+// throw. The controller must absorb it so an unhandled 'error' can't crash the
+// orchestrator, and the child must still self-clean from the registry. Without
+// the controller's 'error' handler this test crashes the whole runner.
+test("createProcessGroupController tolerates a failed spawn without crashing", async () => {
+  const controller = createProcessGroupController(200);
+  controller.spawn("caret-no-such-binary-xyz", ["x"], { stdio: ["ignore", "pipe", "pipe"] });
+  await Bun.sleep(50); // let the async 'error' + 'close' fire
+  expect(controller.size).toBe(0); // 'close' fired → registry self-cleaned, no crash
+
+  // reap on a child that already errored must resolve, never reject (it is
+  // awaited fire-and-forget on the abort path).
+  const child = controller.spawn("caret-no-such-binary-xyz", ["x"], {
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  await controller.reap(child); // would throw here if reap rejected
+});
+
+// Fail-fast: the first failing task aborts in-flight siblings, which are
+// recorded `skipped` (not `failed`) so genuine failures stay honest. Fakes
+// that complete normally never set `aborted`, which is why the report-all
+// tests above stay green; this fake honors the abort signal to prove the path.
+test("a failed task aborts in-flight siblings that honor the signal (recorded skipped)", async () => {
+  const spawnTask: SpawnTask = (name, _env, _onLine, signal) =>
+    new Promise<SpawnOutcome>((resolve) => {
+      if (name === "lint") return resolve({ exitCode: 1, output: "lint boom" });
+      if (name === "build-ui") return resolve({ exitCode: 0, output: "" });
+      // test, test-e2e, build-bin: stay in-flight until fail-fast aborts them.
+      const abort = () => resolve({ exitCode: 143, output: "", aborted: true });
+      if (signal.aborted) abort();
+      else signal.addEventListener("abort", abort, { once: true });
+    });
+  const r = await runPreflight({ spawnTask, renderer: "silent" });
+
+  expect(r.exitCode).toBe(1);
+  expect(r.results.get("lint")?.status).toBe("failed");
+  expect(r.results.get("test")?.status).toBe("skipped");
+  expect(r.results.get("test-e2e")?.status).toBe("skipped");
 });
 
 // --json arg parsing (EXC-471) ----------------------------------------------
