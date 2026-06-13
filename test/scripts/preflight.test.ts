@@ -6,11 +6,10 @@
 // covers the `--json` mode (EXC-471): arg parsing (parseJsonArgs) and the
 // report builders — the lean default (status + line counts), the -v/-vv
 // verbosity ladder, --grep line filtering, --task scoping, and the error doc.
-import { join } from "node:path";
+
 import { expect, test } from "bun:test";
+import { join } from "node:path";
 import {
-  type SpawnOutcome,
-  type SpawnTask,
   buildErrorReport,
   buildResultReport,
   buildStartReport,
@@ -18,6 +17,9 @@ import {
   parseJsonEnv,
   resolveJsonArgs,
   runPreflight,
+  type SpawnOutcome,
+  type SpawnTask,
+  withoutMiseUsageVars,
 } from "../../scripts/preflight.ts";
 import { waitFor } from "../support/poll.ts";
 
@@ -220,6 +222,34 @@ test("resolveJsonArgs: parses argv when usage_json is absent (direct invocation)
     json: true,
     verbosity: 1,
     tasks: [],
+  });
+});
+
+// Nested-task env sanitizing — the fork-bomb guard (see withoutMiseUsageVars).
+// mise leaks the parent invocation's usage_* flag vars into nested `mise run`
+// children (verified), so without stripping them a `mise run preflight --json`
+// → `mise run test` → `bun test` → this file's `preflight --grep [` subprocess
+// would read the leaked usage_json, ignore its argv, skip the invalid-grep
+// exit(2), and recursively run the whole task graph.
+test("withoutMiseUsageVars: drops every usage_* key, keeps the rest, applies extra", () => {
+  expect(
+    withoutMiseUsageVars(
+      {
+        PATH: "/bin",
+        HOME: "/h",
+        usage_json: "true",
+        usage_verbose: "2",
+        usage_grep: "[",
+        usage_task: "test",
+      },
+      { MISE_TASK_SKIP: "build-ui" },
+    ),
+  ).toEqual({ PATH: "/bin", HOME: "/h", MISE_TASK_SKIP: "build-ui" });
+});
+
+test("withoutMiseUsageVars: extra wins over a kept key; undefined values are dropped", () => {
+  expect(withoutMiseUsageVars({ FOO: "old", BAR: undefined }, { FOO: "new" })).toEqual({
+    FOO: "new",
   });
 });
 
@@ -432,7 +462,13 @@ const SUBPROCESS_SPAWN_TIMEOUT_MS = 30_000;
 test(
   "runCli: an invalid --grep pattern emits an error doc on stdout and exits 2",
   async () => {
+    // Hermetic env: strip any ambient usage_* so the spawned preflight parses
+    // OUR `--grep [` argv, not a usage_json leaked from an outer `mise run
+    // preflight --json`. Belt-and-suspenders with the spawnMiseTask fix — if
+    // either were missing and this ran under that umbrella, the spawned preflight
+    // would ignore the argv, run the real task graph, and fork-bomb the box.
     const proc = Bun.spawn([process.execPath, "scripts/preflight.ts", "--json", "--grep", "["], {
+      env: withoutMiseUsageVars(process.env),
       stdout: "pipe",
       stderr: "pipe",
     });
