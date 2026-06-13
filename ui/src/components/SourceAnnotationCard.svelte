@@ -24,14 +24,16 @@
 
   // UI-only collapse: a manual toggle overrides the focus-driven default until
   // focus changes again. `null` means "follow focus"; a boolean means the
-  // reviewer chose. Resets whenever the focused identity flips.
+  // reviewer chose. The override resets whenever the focused state flips, so a
+  // newly-focused card always opens and a blurred card always closes.
   let override = $state<boolean | null>(null);
-  let lastFocused = focused;
+  let lastFocused = $state<boolean | undefined>(undefined);
   $effect(() => {
-    if (focused !== lastFocused) {
-      lastFocused = focused;
-      override = null;
-    }
+    if (focused === lastFocused) return;
+    // Seed silently on the first run; only a genuine focus *change* resets a
+    // reviewer's manual collapse choice.
+    if (lastFocused !== undefined) override = null;
+    lastFocused = focused;
   });
   const expanded = $derived(override ?? focused);
 

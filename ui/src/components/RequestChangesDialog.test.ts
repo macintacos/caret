@@ -48,6 +48,24 @@ describe("RequestChangesDialog render", () => {
     expect(target.querySelector(".summary")!.textContent).toContain("1 inline comment");
   });
 
+  test("counts line-anchored annotations toward the inline-comment summary", () => {
+    const { target } = render(RequestChangesDialog, {
+      ...baseProps,
+      annotations: [lineAnn("l1", 2, 2, "tighten")],
+      planText: ["a", "b", "c"].join("\n"),
+    });
+    expect(target.querySelector(".summary")!.textContent).toContain("1 inline comment");
+  });
+
+  test("counts mixed line and legacy annotations together", () => {
+    const { target } = render(RequestChangesDialog, {
+      ...baseProps,
+      annotations: [lineAnn("l1", 1, 1, "fix"), ann("a1", "also fix")],
+      planText: ["a", "b"].join("\n"),
+    });
+    expect(target.querySelector(".summary")!.textContent).toContain("2 inline comments");
+  });
+
   test("hides the preview and disables submit when there is nothing to send", () => {
     const { target } = render(RequestChangesDialog, baseProps);
     expect(target.querySelector(".preview")).toBeNull();
