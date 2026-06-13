@@ -5,8 +5,8 @@ This file itemizes the third-party assets vendored into the repo.
 ## Lucide
 
 The icons under `ui/src/icons/` are copied verbatim from the Lucide release
-[`1.17.0`](https://github.com/lucide-icons/lucide/releases/tag/1.17.0). Lucide is licensed under
-the ISC license.
+[`1.17.0`](https://github.com/lucide-icons/lucide/releases/tag/1.17.0). Lucide is licensed
+under the ISC license.
 
 | Icon | Vendored path | Upstream |
 | --- | --- | --- |

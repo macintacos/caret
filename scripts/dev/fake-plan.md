@@ -1,13 +1,14 @@
 # caret dev — markdown rendering stress test
 
 > **This is a local `mise run dev` fixture, not a real plan.** It exists to exercise every
-> markdown rendering path in the review webview — headings, lists, tables, code highlighting,
-> sanitization, and overflow — so visual regressions show up at a glance. Look for the
-> **`local build`** badge in the top bar; if you see it, you're looking at this seed.
+> markdown rendering path in the review webview — headings, lists, tables, code
+> highlighting, sanitization, and overflow — so visual regressions show up at a glance.
+> Look for the **`local build`** badge in the top bar; if you see it, you're looking at
+> this seed.
 
 The renderer is `marked` (GFM on, `breaks` off) → DOMPurify (strict allowlist) → Shiki
-(dual-theme). The sections below each target a slice of that pipeline. Edit this file and the
-dev driver reseeds it, so it doubles as a live scratchpad for renderer work.
+(dual-theme). The sections below each target a slice of that pipeline. Edit this file and
+the dev driver reseeds it, so it doubles as a live scratchpad for renderer work.
 
 ## Contents
 
@@ -25,13 +26,14 @@ dev driver reseeds it, so it doubles as a live scratchpad for renderer work.
 
 ## Headings
 
-The first heading in the document is normalized to an `h1` regardless of its authored level; every
-heading below keeps its level so the table-of-contents rail and scrollspy have a full ladder.
+The first heading in the document is normalized to an `h1` regardless of its authored
+level; every heading below keeps its level so the table-of-contents rail and scrollspy
+have a full ladder.
 
 ### Heading level three
 
-Body copy under an `h3`. Headings should keep comfortable vertical rhythm and not collide with the
-paragraph that follows them.
+Body copy under an `h3`. Headings should keep comfortable vertical rhythm and not collide
+with the paragraph that follows them.
 
 #### Heading level four
 
@@ -47,17 +49,20 @@ Body copy under an `h6` — the deepest level, often rendered close to body size
 
 ## Inline formatting
 
-A paragraph with **bold**, *italic*, ***bold italic***, `inline code`, and ~~strikethrough~~ text,
-plus a [relative link](#tables), an [external link](https://example.com/docs/markdown), and a bare
-autolink https://example.com/autolinked?q=1&lang=en that GFM should turn into an anchor.
+A paragraph with **bold**, *italic*, ***bold italic***, `inline code`, and
+~~strikethrough~~ text, plus a [relative link](#tables), an
+[external link](https://example.com/docs/markdown), and a bare autolink
+https://example.com/autolinked?q=1&lang=en that GFM should turn into an anchor.
 
-Inline code can hold awkward characters: `const re = /^\s*#{1,6}\s+/g;` and `rm -rf "$dir"/*.tmp`.
+Inline code can hold awkward characters: `const re = /^\s*#{1,6}\s+/g;` and
+`rm -rf "$dir"/*.tmp`.
 
 A footnote-style reference[^1] and an inline image:
 
 ![A 1×1 transparent pixel placeholder](https://example.com/img/placeholder.png "Hover title")
 
-[^1]: Footnotes are not GFM core, so this likely renders inline as literal text — a useful negative
+[^1]: Footnotes are not GFM core, so this likely renders inline as literal text — a useful
+    negative
 case to confirm nothing crashes on an unsupported construct.
 
 ## Lists
@@ -81,8 +86,9 @@ Ordered, with a nested unordered list and a restart:
    1. nested ordered
    2. nested ordered two
 
-Task list (GFM). Note: the `<input type="checkbox">` markup is **stripped by DOMPurify** (it is not
-on the tag allowlist), so these render as plain items — an intentional sanitizer demonstration:
+Task list (GFM). Note: the `<input type="checkbox">` markup is **stripped by DOMPurify**
+(it is not on the tag allowlist), so these render as plain items — an intentional
+sanitizer demonstration:
 
 - [x] Build the daemon
 - [x] Serve the UI
@@ -228,8 +234,8 @@ CSS:
 }
 ```
 
-A `text` fence — non-code content (a directory tree). Per the plan-format rule, non-code blocks are
-tagged `text` so they never count as untagged:
+A `text` fence — non-code content (a directory tree). Per the plan-format rule, non-code
+blocks are tagged `text` so they never count as untagged:
 
 ```text
 caret/
@@ -251,8 +257,8 @@ $ mise run dev
 ==> vite ready on http://localhost:5173
 ```
 
-An **unknown / unloaded language** — Shiki can't highlight it, so it must fall back to a plain
-`<pre><code>` without crashing:
+An **unknown / unloaded language** — Shiki can't highlight it, so it must fall back to a
+plain `<pre><code>` without crashing:
 
 ```mermaid
 graph TD
@@ -277,23 +283,24 @@ Text below the rule.
 A very long unbroken token that must wrap or scroll rather than blow out the layout:
 `supercalifragilisticexpialidocious_pneumonoultramicroscopicsilicovolcanoconiosis_antidisestablishmentarianism_floccinaucinihilipilification`
 
-A long URL in a link: [a very long query string](https://example.com/search?q=markdown+rendering+stress+test&category=ui&sort=relevance&page=1&per_page=100&include=headings,tables,code,quotes&debug=true).
+A long URL in a link:
+[a very long query string](https://example.com/search?q=markdown+rendering+stress+test&category=ui&sort=relevance&page=1&per_page=100&include=headings,tables,code,quotes&debug=true).
 
 A long inline-code run:
 `const ALL_THE_THINGS = ["alpha","bravo","charlie","delta","echo","foxtrot","golf","hotel","india","juliett","kilo","lima","mike"];`
 
-Unicode and emoji: café, naïve, Ω≈ç√∫, 你好, مرحبا, 🚀 ✅ ⚠️ — confirming the font stack and
-direction handling don't break.
+Unicode and emoji: café, naïve, Ω≈ç√∫, 你好, مرحبا, 🚀 ✅ ⚠️ — confirming the font stack
+and direction handling don't break.
 
-A paragraph that is simply long, to check measure and line-height across a wide column: the quick
-brown fox jumps over the lazy dog, and then the quick brown fox jumps over the lazy dog again, and
-once more for good measure, until the paragraph is comfortably longer than a single visual line on
-most viewports and wrapping behavior becomes observable.
+A paragraph that is simply long, to check measure and line-height across a wide column:
+the quick brown fox jumps over the lazy dog, and then the quick brown fox jumps over the
+lazy dog again, and once more for good measure, until the paragraph is comfortably longer
+than a single visual line on most viewports and wrapping behavior becomes observable.
 
 ## Sanitizer probes
 
-The block below is shown **as source** (inside a tagged `html` fence) so you can read what is being
-attempted — it is highlighted, not executed:
+The block below is shown **as source** (inside a tagged `html` fence) so you can read what
+is being attempted — it is highlighted, not executed:
 
 ```html
 <script>alert("xss")</script>
@@ -302,22 +309,24 @@ attempted — it is highlighted, not executed:
 <div style="position: fixed; inset: 0; z-index: 9999">overlay</div>
 ```
 
-Below, the same markup appears **raw** so DOMPurify actually processes it live. Expected: the
-`<script>` and `<iframe>` are removed entirely, the `onclick` handler and the `position: fixed`
-style are stripped (only Shiki dual-theme styles survive the style hook), while the anchor text and
-plain content remain.
+Below, the same markup appears **raw** so DOMPurify actually processes it live. Expected:
+the `<script>` and `<iframe>` are removed entirely, the `onclick` handler and the
+`position: fixed` style are stripped (only Shiki dual-theme styles survive the style
+hook), while the anchor text and plain content remain.
 
 <script>alert("xss")</script>
 <iframe src="https://evil.example.com"></iframe>
 <a href="#" onclick="steal()">a sanitized link</a>
 <div style="position: fixed; inset: 0; z-index: 9999">this should not pin to the viewport</div>
 
-If anything in the paragraph above escapes the sanitizer — an alert fires, an iframe loads, or the
-overlay covers the page — that is a real security regression in `ui/src/lib/render.ts`.
+If anything in the paragraph above escapes the sanitizer — an alert fires, an iframe
+loads, or the overlay covers the page — that is a real security regression in
+`ui/src/lib/render.ts`.
 
 ---
 
 ## Out of scope
 
-This fixture renders only; there is nothing to approve here. Use **Request changes** to watch the
-dev driver thread a revision onto this plan, or **Approve** to have it reseed a fresh copy.
+This fixture renders only; there is nothing to approve here. Use **Request changes** to
+watch the dev driver thread a revision onto this plan, or **Approve** to have it reseed a
+fresh copy.
