@@ -12,13 +12,17 @@
 import type { PlanVersion } from "@core/types";
 import type { DiffStyle } from "../lib/diffview/types.ts";
 
-/** Reactive fields App.svelte owns and the factory mutates through getters. */
+/** Reactive fields the host component owns and the factory mutates through
+ * getters. Base is the reference version (default: the current version) and
+ * target is what it's compared against (default: the previous version); the view
+ * renders base on the diff's "after" side and target on the "before" side, so
+ * the default pair reads as the changes that produced the current version. */
 export interface CompareStore {
   /** Whether the reviewer is in compare mode (vs. the single-version view). */
   comparing: boolean;
-  /** 1-based version number on the "before" (base) side of the diff. */
+  /** 1-based reference version (the diff's "after" side). */
   baseVersion: number;
-  /** 1-based version number on the "after" (target) side of the diff. */
+  /** 1-based version compared against (the diff's "before" side). */
   targetVersion: number;
   /** Diff layout: split (side-by-side) or unified (stacked). */
   diffStyle: DiffStyle;

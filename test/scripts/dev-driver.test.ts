@@ -267,9 +267,11 @@ test("bootstrapReview grows the primary review to several versions before the lo
   // version-compare picker to offer a non-default pair.
   expect(review!.versions).toHaveLength(3);
   // The review is left rejected; the interactive loop re-pends it by appending
-  // its own next revision, resuming from this state.
+  // its own next revision from the returned state. The returned plan carries that
+  // next revision so the loop's first post is a fresh version, not a duplicate.
   expect(review!.status).toBe("rejected");
-  expect(state.revision).toBe(2);
+  expect(state.revision).toBe(3);
+  expect(state.plan).toContain("## Revision 3");
 });
 
 test("runExtraReview runs one fresh-session review to resolution and stops", async () => {

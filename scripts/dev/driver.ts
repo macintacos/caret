@@ -20,6 +20,7 @@ import { NEVER_IDLE_MS } from "../../src/constants.ts";
 import { DEFAULT_PORT, devSeeder, loadSettings } from "../../src/settings.ts";
 import type { ClientReview } from "../../src/types.ts";
 import {
+  appendRevision,
   bootstrapPlans,
   DEV_SESSION,
   type DriverState,
@@ -161,9 +162,10 @@ async function denyPendingReview(base: string, feedback: string): Promise<void> 
  * so `mise run dev` always shows a multi-version review (the version-compare
  * picker is hidden below two versions). Each bootstrap plan is submitted through
  * the real hook (runReview) and denied, so the next threads on as a new version;
- * the review ends rejected at the final bootstrap version, which the interactive
- * loop re-pends as it appends its own first revision. Returns the driver state
- * the loop resumes from. */
+ * the review ends rejected at the final bootstrap version. The returned state
+ * already carries the *next* revision, so the interactive loop's first post
+ * appends a fresh version (re-pending the review) rather than re-submitting the
+ * last bootstrap plan as a duplicate. */
 export async function bootstrapReview(
   base: string,
   v1: string,
@@ -177,7 +179,14 @@ export async function bootstrapReview(
     await reviewing;
   }
   log(`bootstrapped the dev review to ${plans.length} versions`);
-  return { plan: plans[plans.length - 1] as string, revision: BOOTSTRAP_REVISIONS };
+  // The loop resumes by appending its first interactive revision onto the last
+  // bootstrap plan; revision counts continue from the bootstrap total.
+  const nextRevision = BOOTSTRAP_REVISIONS + 1;
+  const last = plans[plans.length - 1] as string;
+  return {
+    plan: appendRevision(last, "Continuing from the bootstrapped dev review.", nextRevision),
+    revision: nextRevision,
+  };
 }
 
 /** Submit plans through the real hook forever: seed v1, then per decision
