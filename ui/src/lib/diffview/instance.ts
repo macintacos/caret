@@ -7,6 +7,8 @@
 // is injected: components supply the real File/FileDiff constructors, tests a
 // recording fake.
 
+import { ensureCoreStyles } from "./coreStyles.ts";
+
 /** The slice of a @pierre/diffs File/FileDiff instance the controller uses.
  * The real classes satisfy it structurally. */
 export interface DiffViewInstance<TOptions, TAnnotation, TContent> {
@@ -69,6 +71,11 @@ export function createDiffViewLifecycle<TOptions extends object, TAnnotation, TC
           fileContainer: props.container,
           lineAnnotations: props.annotations,
         });
+        // render() attaches the shadow root and emits the theme + content nodes,
+        // but in container-managed mode the library leaves the structural grid
+        // stylesheet to the container. Adopt it now (idempotent; the shared
+        // sheet outlives the replaceChildren above).
+        if (props.container.shadowRoot) ensureCoreStyles(props.container.shadowRoot);
         libOptions = props.options;
       } else {
         let dirty = false;
