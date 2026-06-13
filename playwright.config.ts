@@ -1,5 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
-import { TOC_BREAKPOINT_PX } from "./ui/src/lib/layout.ts";
+import { REFERENCE_WIDTH_PX } from "./ui/src/lib/layout.ts";
 
 // Real-browser e2e for the review UI (EXC-453). Specs are named *.e2e.ts so
 // `bun test` (which collects *.test.ts AND *.spec.ts repo-wide) never picks
@@ -25,11 +25,11 @@ export default defineConfig({
       name: "chromium",
       use: {
         ...devices["Desktop Chrome"],
-        // After the device spread (which pins 1280x720): the contents rail
-        // (Toc.svelte) is display:none below the shared breakpoint, so the
-        // viewport is derived from it with headroom — a breakpoint change moves
-        // the viewport in lockstep instead of leaving it coupled by prose.
-        viewport: { width: TOC_BREAKPOINT_PX + 200, height: 900 },
+        // After the device spread (which pins 1280x720): widen to the reference
+        // layout width plus headroom so the source view and its contents pane
+        // both have room — derived from the constant so the e2e viewport tracks
+        // the reference width instead of being coupled to it by prose.
+        viewport: { width: REFERENCE_WIDTH_PX + 200, height: 900 },
       },
     },
   ],

@@ -44,15 +44,6 @@ export interface Autosave {
   /** Flush a pending save now (snapshotting synchronously). */
   flushPending: () => Promise<void>;
 
-  createAnnotation: (sel: {
-    blockId: string;
-    startOffset: number;
-    endOffset: number;
-    quote: string;
-    prefix: string;
-    suffix: string;
-    comment: string;
-  }) => void;
   /** Create a line-anchored annotation from the source-view gutter: a 1-based,
    * inclusive {startLine, endLine} range into the active version's plan text. */
   createLineAnnotation: (anchor: { startLine: number; endLine: number; comment: string }) => void;
@@ -157,12 +148,6 @@ export function createAutosave(
 
     flushPending,
 
-    createAnnotation(sel) {
-      const id = crypto.randomUUID();
-      store.annotations = [...store.annotations, { id, ...sel }];
-      store.focusedAnnotation = id;
-      scheduleSave();
-    },
     createLineAnnotation(anchor) {
       const id = crypto.randomUUID();
       store.annotations = [...store.annotations, { id, ...anchor }];

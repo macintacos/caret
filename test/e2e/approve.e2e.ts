@@ -6,7 +6,7 @@ import { expect, test } from "./support/fixtures.ts";
 test("approving resolves the review in UI and API", async ({ daemon, page }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator("article.plan h1")).toBeVisible();
+  await expect(page.locator(".diff-plan")).toBeVisible();
 
   // Primary approve button ("Approve" in the remembered default mode); exact
   // match so the split-toggle's "Approve options" doesn't collide.

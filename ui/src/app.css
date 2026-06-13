@@ -116,61 +116,6 @@ body {
   height: 100%;
 }
 
-.columns {
-  display: grid;
-  /* Two tracks: plan | roomier annotation gutter. The left TOC track is gone —
-     the contents nav is a viewport-fixed rail (Toc.svelte) that escapes this
-     grid (and its `overflow: hidden`) entirely. */
-  grid-template-columns: minmax(0, 1fr) minmax(340px, 460px);
-  overflow: hidden;
-  min-height: 0;
-}
-
-@media (width < 1400px) {
-  /* Single breakpoint (1400px): below it the rail hides (Toc.svelte), the plan
-     re-centers, and the gutter narrows — today's behaviour. The threshold is set
-     where the plan track can hold the panel lane + the full 72ch column + a
-     roomier gutter, so above it the expanded panel never covers the plan body
-     and the 72ch column never rewraps. Range syntax (width < 1400px paired with
-     PlanView's width >= 1400px) is exhaustive — no sub-pixel band at fractional
-     zoom where the rail shows but the plan is still centered. */
-  .columns {
-    grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
-  }
-}
-
-.col {
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.col-plan {
-  /* The off-center bias and the lane the fixed Contents panel expands into both
-     live on `.prose` (PlanView.svelte) via its left margin; this column keeps
-     symmetric padding. Keep it un-transformed so it never becomes the fixed
-     rail's containing block. */
-  padding: 2.5rem clamp(1.5rem, 4vw, 4rem) 6rem;
-  background: var(--paper-raised);
-  position: relative;
-}
-
-.col-gutter {
-  border-left: 1px solid var(--rule);
-  padding: 2rem clamp(1.25rem, 2.5vw, 2.5rem) 6rem;
-  background: var(--paper);
-}
-
-/* Scrollbars: thin, ink-toned */
-.col::-webkit-scrollbar {
-  width: 9px;
-}
-.col::-webkit-scrollbar-thumb {
-  background: var(--rule-strong);
-  border-radius: 99px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-
 /* ----- Shared atoms ----- */
 .mono {
   font-family: var(--font-mono);

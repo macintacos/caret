@@ -58,10 +58,9 @@ test("daemon serves the hashed-asset build with zero failed same-origin requests
 
   // The plan painting confirms the entry bundle executed; web-first assertion
   // absorbs hydration timing.
-  const article = page.locator("article.plan");
-  await expect(
-    article.getByRole("heading", { name: "Widget Cache Refactor", level: 1 }),
-  ).toBeVisible();
+  const plan = page.locator(".diff-plan");
+  await expect(plan).toBeVisible();
+  await expect(plan.getByText("Widget Cache Refactor")).toBeVisible();
 
   // A hashed JS bundle and a hashed CSS file were served from /assets/ — the
   // standard multi-asset build, not a single inlined document.
@@ -80,10 +79,10 @@ test("a code-split shiki grammar chunk is served over the wire and applies", asy
   const origin = daemon.url;
 
   // The entry bundle is index-*.js; the grammars are separate code-split chunks
-  // (typescript-*.js, json-*.js, …) the build carves out of the initial payload.
-  // The highlighter fetches them as hashed /assets/*.js distinct from index-*,
-  // and the fixture plan's ```ts block drives the visible shiki repaint that
-  // confirms the typescript grammar chunk loaded and applied.
+  // (markdown-*.js, typescript-*.js, …) the build carves out of the initial
+  // payload. The source view's highlighter fetches them as hashed /assets/*.js
+  // distinct from index-*, and painting the plan source confirms a grammar chunk
+  // loaded and applied.
   const grammarChunks: string[] = [];
   page.on("response", (res) => {
     if (res.status() !== 200) return;
@@ -114,18 +113,23 @@ test("a code-split shiki grammar chunk is served over the wire and applies", asy
   await daemon.seed();
   await page.goto("/");
 
-  // The off-critical-path highlighter resolves and repaints the fenced ts block
-  // as shiki dual-theme HTML. Waiting on `pre.shiki` with the per-token light
-  // variable is the web-first signal that the grammar chunk loaded and applied —
-  // it absorbs the async import + init without a fixed sleep.
-  const shiki = page.locator("article.plan pre.shiki");
-  await expect(shiki).toBeVisible();
+  // The source view's Shiki highlighter resolves and paints the markdown source
+  // (and the fixture's fenced ts block) with caret's theme. A token carrying the
+  // per-token light variable inside the library's shadow root is the web-first
+  // signal that the grammar chunk loaded and applied — it absorbs the async
+  // import + init without a fixed sleep.
+  await expect(page.locator(".diff-plan")).toBeVisible();
   await expect
-    .poll(() => shiki.evaluate((el) => el.innerHTML.includes("--shiki-light:")))
+    .poll(() =>
+      page.evaluate(() => {
+        const shadow = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+        return shadow?.querySelector("[style*='--diffs-token-light']") != null;
+      }),
+    )
     .toBe(true);
 
   // A code-split grammar chunk distinct from the entry bundle was fetched 200
-  // over the wire during the highlighter build, and the repaint above confirms
+  // over the wire during the highlighter build, and the paint above confirms
   // it applied.
   expect(grammarChunks.length).toBeGreaterThan(0);
 

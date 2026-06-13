@@ -92,10 +92,6 @@ export interface CreateServerOptions {
    * (default) means the field is absent from the health body and the UI uses its
    * built-in fallback set. */
   approveVariants?: readonly ApproveVariant[];
-  /** When set, /api/health tells the UI to mount the source-view surface instead
-   * of the legacy plan view (EXC-583). Resolved by the daemon from the build-gated
-   * [dev].diff_surface config key; omitted (default) reports false. */
-  diffSurface?: boolean;
   /** Leveled lifecycle logger (see log.ts CaretLogger); defaults to a no-op so
    * tests stay quiet. Lifecycle events log at info, handler failures at error. */
   log?: CaretLogger;
@@ -285,7 +281,6 @@ interface ResolvedOptions {
   stateDir: string | undefined;
   instanceId: string | undefined;
   approveVariants: readonly ApproveVariant[] | undefined;
-  diffSurface: boolean;
   log: CaretLogger;
 }
 
@@ -304,7 +299,6 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     stateDir: opts.stateDir,
     instanceId: opts.instanceId,
     approveVariants: opts.approveVariants,
-    diffSurface: opts.diffSurface ?? false,
     log: opts.log ?? noopLogger,
   };
 }
@@ -328,7 +322,7 @@ function matchIdRoute(path: string): IdRoute | null {
 export function createServer(opts: CreateServerOptions): CaretServer {
   const cfg = resolveOptions(opts);
   const { store, idle, heartbeat, assets, onShutdown, routePlan, prefsPath, log } = cfg;
-  const { buildId, commit, stateDir, instanceId, approveVariants, diffSurface, lockPath } = cfg;
+  const { buildId, commit, stateDir, instanceId, approveVariants, lockPath } = cfg;
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount } = createDecisions(log);
 
   // The set of approve-variant ids the resolve route and prefs persistence gate
@@ -424,9 +418,6 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       stateDir,
       instanceId,
       isDev: !isCompiledBinary(),
-      // EXC-583: always a boolean (a config/process-constant), so it's emitted
-      // unconditionally — the UI reads it without a presence check.
-      diffSurface,
       ...(approveVariants ? { approveVariants: [...approveVariants] } : {}),
     };
     return Response.json(body);

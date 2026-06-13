@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { buildLinkLayer } from "./links.ts";
+import { afterEach, describe, expect, test } from "bun:test";
+import { buildLinkLayer, openLinkInNewTab } from "./links.ts";
 
 // buildLinkLayer is the pure transform: plan source text -> display text +
 // a per-line span map of clickable link ranges. It is strictly per-line — it
@@ -247,5 +247,38 @@ describe("buildLinkLayer degenerate inputs", () => {
     expect(line[0]!.startCol).toBe(2);
     expect(line[0]!.endCol).toBe(2);
     expect(line[0]!.href).toBe("https://x.test");
+  });
+});
+
+// The opener is the only window-touching effect of the link layer. Together
+// with the scheme filtering above (only http/https hrefs ever reach a span, so
+// only those can be opened) it is the link layer's navigation-safety contract:
+// every opened tab is severed from the opener (no window.opener handle back)
+// and sends no Referer. These are the guarantees the source view relies on for
+// safe outbound links.
+describe("openLinkInNewTab", () => {
+  const realOpen = globalThis.window?.open;
+  afterEach(() => {
+    if (globalThis.window) globalThis.window.open = realOpen!;
+  });
+
+  test("opens in a new tab with noopener,noreferrer", () => {
+    const calls: { url?: string | URL; target?: string; features?: string }[] = [];
+    // happy-dom is not loaded in this suite; stub a minimal window for the call.
+    globalThis.window ??= {} as Window & typeof globalThis;
+    globalThis.window.open = ((url?: string | URL, target?: string, features?: string) => {
+      calls.push({ url, target, features });
+      return null;
+    }) as typeof window.open;
+
+    openLinkInNewTab("https://example.test/page");
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe("https://example.test/page");
+    expect(calls[0]!.target).toBe("_blank");
+    // Both flags must be present so the opened page can neither reach back
+    // through window.opener nor leak the referrer.
+    expect(calls[0]!.features).toContain("noopener");
+    expect(calls[0]!.features).toContain("noreferrer");
   });
 });

@@ -1,10 +1,9 @@
 // Plan-format validation for the review hook.
 //
-// A code block only syntax-highlights in the review webview when its opening
-// fence carries a language marker (the info string `marked` turns into
-// `class="language-X"`, which Shiki then styles — see ui/src/lib/render.ts).
-// We detect untagged blocks here, host-side, before a plan is posted, so the
-// human never sees an unhighlightable plan.
+// The review UI renders the plan as markdown source and Shiki-highlights each
+// fenced code block by the language in its opening info string; a fence with no
+// language marker renders plain. We detect untagged blocks here, host-side,
+// before a plan is posted, so the human never sees an unhighlightable block.
 
 import { Marked } from "marked";
 
@@ -17,12 +16,12 @@ export const PLAN_FORMAT_DENY_MESSAGE =
 /**
  * True when the plan markdown contains a code block with no language marker.
  *
- * Pure. Lexes with the same options the webview renderer uses
- * (ui/src/lib/render.ts) so "code block" means exactly what gets rendered, and
- * walks the full token tree via marked's own walker — descending into code
- * blocks nested in lists and blockquotes. Indented (4-space) blocks have no info
- * string and render unhighlighted, so they count as untagged. An absent, empty,
- * or whitespace-only plan has no code blocks and passes.
+ * Pure. Lexes the markdown so "code block" means exactly what the source view
+ * renders as a fenced block, and walks the full token tree via marked's own
+ * walker — descending into code blocks nested in lists and blockquotes. Indented
+ * (4-space) blocks have no info string and render unhighlighted, so they count
+ * as untagged. An absent, empty, or whitespace-only plan has no code blocks and
+ * passes.
  */
 export function hasUntaggedCodeBlock(plan: string | undefined): boolean {
   if (!plan?.trim()) return false;

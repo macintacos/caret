@@ -6,7 +6,7 @@
 // shortcut fires and nothing is typed, until the duration elapses.
 //
 // Framework-agnostic and unit-tested in isolation; App.svelte wires it to a
-// `window` target and reflects `onChange` into reactive state (cf. scrollspy.ts).
+// `window` target and reflects `onChange` into reactive state.
 
 import { uiLog } from "./log.ts";
 

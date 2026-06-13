@@ -14,16 +14,17 @@ test("switching between two pending reviews shows the right plan", async ({ daem
   await daemon.seed({ plan: SECOND_PLAN });
   await page.goto("/");
 
-  // Oldest-first: the first seed is active.
-  const h1 = page.locator("article.plan h1");
-  await expect(h1).toHaveText("Widget Cache Refactor");
+  // Oldest-first: the first seed is active. The heading shows as source text in
+  // the source view; scope to the view so the switcher's copy doesn't collide.
+  const plan = page.locator(".diff-plan");
+  await expect(plan.getByText("Widget Cache Refactor")).toBeVisible();
 
   // The switcher carries both ("2" badge); pick the other review.
   const switcher = page.locator(".switcher");
   await expect(switcher.getByText("2", { exact: true })).toBeVisible();
   await switcher.getByRole("button", { name: /Widget Cache Refactor/ }).click();
   await page.getByRole("option", { name: /Gadget Renderer Cleanup/ }).click();
-  await expect(h1).toHaveText("Gadget Renderer Cleanup");
+  await expect(plan.getByText("Gadget Renderer Cleanup")).toBeVisible();
 });
 
 test("?review=<id> deep-links directly to that review", async ({ daemon, page }) => {
@@ -32,7 +33,7 @@ test("?review=<id> deep-links directly to that review", async ({ daemon, page })
   await page.goto(`/?review=${encodeURIComponent(second)}`);
 
   // Without the deep link the oldest review would win; the param overrides.
-  await expect(page.locator("article.plan h1")).toHaveText("Gadget Renderer Cleanup");
+  await expect(page.locator(".diff-plan").getByText("Gadget Renderer Cleanup")).toBeVisible();
 });
 
 test("a review posted while the page is open appears without a reload", async ({
@@ -41,7 +42,7 @@ test("a review posted while the page is open appears without a reload", async ({
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator("article.plan h1")).toHaveText("Widget Cache Refactor");
+  await expect(page.locator(".diff-plan").getByText("Widget Cache Refactor")).toBeVisible();
 
   // Seed through the API while the page is open: the 2s poll must pick it up.
   await daemon.seed({ plan: SECOND_PLAN });

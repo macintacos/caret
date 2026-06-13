@@ -1,28 +1,21 @@
 <script lang="ts">
   import { getHealth } from "./lib/api.ts";
   import { approveVariants } from "./lib/approve.ts";
-  import { highlightReady } from "./lib/highlightReady.svelte.ts";
   import { createPlanNotifier } from "./lib/notify.ts";
   import { installUiGoneBeacon } from "./lib/presence.ts";
   import { createSafeModeGuard } from "./lib/safeMode.ts";
-  import { createScrollSpy } from "./lib/scrollspy.ts";
   import { createAutosave } from "./state/autosave.svelte.ts";
   import {
     createReviewSelection,
     startPolling,
     type SelectionStore,
   } from "./state/polling.svelte.ts";
-  import { createRenderMemo } from "./state/render.svelte.ts";
   import { createResolve, type ResolveStore } from "./state/resolve.svelte.ts";
-  import type { ResolvedAnnotation } from "./lib/planPaint.ts";
   import type { ApproveVariant, ApproveVariantId, Annotation } from "@core/types";
 
-  import AnnotationGutter from "./components/AnnotationGutter.svelte";
   import DiffPlanView from "./components/DiffPlanView.svelte";
   import EmptyState from "./components/EmptyState.svelte";
-  import PlanView from "./components/PlanView.svelte";
   import RequestChangesDialog from "./components/RequestChangesDialog.svelte";
-  import Toc from "./components/Toc.svelte";
   import TopBar from "./components/TopBar.svelte";
   import VersionBadge from "./components/VersionBadge.svelte";
 
@@ -47,11 +40,6 @@
   // probe to show the "local build" badge. A daemon predating the field omits
   // it, so this stays false.
   let isDev = $state(false);
-  // When on (EXC-583), the plan renders through the @pierre/diffs source-view
-  // surface instead of the legacy plan view + contents rail. Build-gated: the
-  // daemon resolves it from [dev].diff_surface, which is inert in a prod build,
-  // so this stays false there and the legacy surface is byte-identical.
-  let diffSurface = $state(false);
   // The running build's version + commit (EXC-561), read once from the same
   // health probe to feed the bottom-left VersionBadge. Undefined until the probe
   // lands (or for a daemon predating the fields); the badge self-gates on
@@ -64,11 +52,8 @@
     focusedAnnotation: string | null;
   }>({ annotations: [], generalCommentDraft: "", focusedAnnotation: null });
 
-  let resolvedAnnotations = $state<ResolvedAnnotation[]>([]);
-  let activeSlug = $state<string | null>(null);
   let showDialog = $state(false);
   let safeMode = $state(false);
-  let scrollEl = $state<HTMLElement | undefined>();
 
   // ----- State modules -----
   const selection = createReviewSelection(selStore);
@@ -84,18 +69,7 @@
     onOffline: () => selection.setConnected(false),
     clearGeneralComment: () => autosave.clearGeneralComment(),
   });
-  // The render memo caches per id:version to skip re-parsing on each 2s poll.
-  // The highlighter builds off the critical path (main.ts), so the first render
-  // of a plan can land before shiki is ready and produce plain <pre>. Recreating
-  // the memo when highlightReady() flips busts that cache once, so the active
-  // plan re-renders with syntax highlighting the moment the highlighter arrives.
-  let renderMemo = $derived.by(() => {
-    void highlightReady();
-    return createRenderMemo();
-  });
-
   let active = $derived(selection.active);
-  let rendered = $derived(renderMemo.render(active));
   // The variants the split-button renders: the declared set when present, else
   // the built-in fallback.
   let variants = $derived(approveVariants(declaredVariants));
@@ -120,7 +94,6 @@
         selection.setConnected(true);
         declaredVariants = h.approveVariants;
         isDev = h.isDev ?? false;
-        diffSurface = h.diffSurface ?? false;
         version = h.version;
         commit = h.commit;
       })
@@ -183,26 +156,6 @@
   // plan. Mount-once: reads no reactive state, returns its teardown.
   $effect(() => installUiGoneBeacon({ target: window }));
 
-  // ----- Scrollspy -----
-  $effect(() => {
-    if (!scrollEl) return;
-    // depend on rendered html so spy re-attaches after a re-render
-    void rendered.html;
-    const headingEls = rendered.headings
-      .map((h) => scrollEl!.querySelector<HTMLElement>(`#${CSS.escape(h.blockId)}`))
-      .filter((el): el is HTMLElement => el != null);
-    return createScrollSpy({
-      root: scrollEl,
-      headings: headingEls,
-      onActive: (slug) => (activeSlug = slug),
-    });
-  });
-
-  function jumpTo(slug: string) {
-    const el = scrollEl?.querySelector<HTMLElement>(`[data-slug="${CSS.escape(slug)}"]`);
-    el?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
   function onApprove(mode: ApproveVariantId) {
     void resolve.approve(mode);
   }
@@ -247,48 +200,17 @@
   {/if}
 
   {#if active}
-    {#if diffSurface}
-      <!-- Source-view surface (EXC-583): the plan rendered as line-numbered
-           markdown source with a left-hand filterable contents pane and a line
-           gutter for creating comments. -->
-      <DiffPlanView
-        review={active}
-        onCreateLineAnnotation={autosave.createLineAnnotation}
-        annotations={autosave.annotations}
-        focusedAnnotation={autosave.focusedAnnotation}
-        onEditAnnotation={autosave.editAnnotation}
-        onDeleteAnnotation={autosave.deleteAnnotation}
-        onFocusAnnotation={autosave.focusAnnotation}
-      />
-    {:else}
-      <!-- Fixed, viewport-pinned contents rail — a sibling of (not inside) the
-           grid so it escapes .columns' overflow:hidden and pins to the viewport. -->
-      <Toc headings={rendered.headings} {activeSlug} onJump={jumpTo} />
-
-      <div class="columns">
-        {#key active.id}
-          <PlanView
-            html={rendered.html}
-            annotations={autosave.annotations}
-            activeId={autosave.focusedAnnotation}
-            bind:scrollEl
-            onResolved={(r) => (resolvedAnnotations = r)}
-            onCreate={autosave.createAnnotation}
-            onFocusAnnotation={autosave.focusAnnotation}
-          />
-        {/key}
-
-        <aside class="col col-gutter">
-          <AnnotationGutter
-            resolved={resolvedAnnotations}
-            activeId={autosave.focusedAnnotation}
-            onFocus={autosave.focusAnnotation}
-            onEdit={autosave.editAnnotation}
-            onDelete={autosave.deleteAnnotation}
-          />
-        </aside>
-      </div>
-    {/if}
+    <!-- The plan rendered as line-numbered markdown source with a left-hand
+         filterable contents pane and a line gutter for creating comments. -->
+    <DiffPlanView
+      review={active}
+      onCreateLineAnnotation={autosave.createLineAnnotation}
+      annotations={autosave.annotations}
+      focusedAnnotation={autosave.focusedAnnotation}
+      onEditAnnotation={autosave.editAnnotation}
+      onDeleteAnnotation={autosave.deleteAnnotation}
+      onFocusAnnotation={autosave.focusAnnotation}
+    />
   {:else}
     <EmptyState connected={selection.connected} />
   {/if}
@@ -335,7 +257,6 @@
   .shell > :global(.topbar) {
     grid-row: 1;
   }
-  .shell > :global(.columns),
   .shell > :global(.diff-plan),
   .shell > :global(.empty) {
     grid-row: 3;

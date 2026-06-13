@@ -3,8 +3,9 @@ import type { ThemeRegistrationRaw } from "shiki/core";
 // Custom shiki themes that mirror caret's paper/ink palette so highlighted code
 // reads like a typeset listing rather than a generic editor theme: mostly ink,
 // the burnt-amber accent for keywords, one green for strings, faint italic
-// comments. Emitted as dual-theme CSS variables (see highlight.ts) so light/dark
-// switches happen via CSS only.
+// comments. Registered into the source view's highlighter (see
+// diffview/theme.ts) as dual-theme CSS variables so light/dark switches happen
+// via CSS only.
 //
 // The hex values below are duplicated from ui/src/app.css — see EXC-370. shiki
 // resolves token colors at highlight time and can't read CSS custom properties,

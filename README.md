@@ -208,7 +208,6 @@ variables override them.
 | ------------------------ | ------- | ----------------------------------------------------------------------------------------- |
 | `dev.port`               | _unset_ | Fixed dev daemon port; unset → an OS-assigned ephemeral port. Must differ from `42718`.   |
 | `dev.state_dir`          | _unset_ | Persistent dev state dir; unset → an ephemeral dir wiped on exit.                          |
-| `dev.diff_surface`       | `false` | When `true`, the review UI renders plans through the source-view surface instead of the legacy plan view. Captured at daemon startup. |
 | `dev.notify.enabled`     | `false` | When `true`, the extra-review seeder runs without `mise run dev --notify` (persist it on). |
 | `dev.notify.interval_ms` | `15000` | Seeder cadence in milliseconds — a genuinely-new review every interval.                   |
 | `dev.notify.max_pending` | `3`     | Cap on unresolved extra reviews; the seeder pauses while at the cap.                       |
@@ -217,7 +216,6 @@ variables override them.
 [dev]
 port = 4000
 state_dir = "/path/to/persistent/dev-state"
-diff_surface = true
 
 [dev.notify]
 enabled = true
