@@ -115,13 +115,16 @@
 {/if}
 
 <style>
+  /* The header row sits on the raised paper surface with a hairline rule, so it
+     stacks seamlessly with the compare bar (VersionComparePicker) directly below
+     it — the two read as one layered header system over the source view. */
   .topbar {
     display: flex;
     align-items: center;
     gap: 1rem;
     padding: 0.7rem clamp(1rem, 3vw, 2rem);
-    border-bottom: 1px solid var(--rule-strong);
-    background: var(--paper);
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper-raised);
     position: relative;
     z-index: 30;
   }
@@ -243,9 +246,16 @@
     display: flex;
     flex-direction: column;
     gap: 0.1rem;
+    /* The accent bar (inset, so it doesn't shift layout) is the source-view
+       surface's signature for an active row; it appears on hover here. */
+    box-shadow: inset 2px 0 0 transparent;
+    transition:
+      background 0.12s ease,
+      box-shadow 0.12s ease;
   }
   .menu button:hover {
     background: var(--accent-wash);
+    box-shadow: inset 2px 0 0 var(--accent);
   }
   .v-label {
     font-size: 0.82rem;
