@@ -447,6 +447,37 @@ test("GET /decision serves a persisted allow decision after approve removed it f
   expect(await res.json()).toMatchObject({ behavior: "allow" });
 });
 
+// EXC-590: a revision resubmit must NOT receive the prior decision. After a
+// request-changes deny, handleResolve's one-tick-deferred resolveDecision settles
+// a registry entry; with no hook long-polling it settles a fresh entry nobody is
+// awaiting — an orphan. When the agent resubmits, routeIncomingPlan appends a
+// version onto the same id, re-pends the review, and clears the STORE decision —
+// but the in-memory registry orphan must be cleared too, or the revision's
+// long-poll reads it and re-serves the stale deny before any human decides.
+test("a revision append clears the orphaned registry decision so /decision heartbeats instead of serving the stale deny (EXC-590)", async () => {
+  await boot({ heartbeatMs: 30 });
+  const { id } = await newReview({ sessionId: "stale-decision-s", plan: "# v1\n\nfirst" });
+  await resolve(id, { behavior: "deny", feedback: "needs a rollout plan" });
+  // Let the deferred resolveDecision fire and form the orphan registry entry.
+  await Bun.sleep(20);
+  // Same session + the review is now rejected → this APPENDS v2 onto the same id.
+  const { id: appended } = await newReview({
+    sessionId: "stale-decision-s",
+    plan: "# v2\n\nrevised",
+  });
+  expect(appended).toBe(id);
+  const review = (await (await fetch(`${base}/api/reviews/${id}`)).json()) as {
+    version: number;
+    status: string;
+  };
+  expect(review.version).toBe(2);
+  expect(review.status).toBe("pending");
+  // The re-pended revision has no decision yet, so the long-poll must block to the
+  // heartbeat (204) — never 200 carrying the prior deny from a stale registry entry.
+  const res = await fetch(`${base}/api/reviews/${id}/decision`);
+  expect(res.status).toBe(204);
+});
+
 test("approve removes the review from the active set; deny keeps it as rejected", async () => {
   await boot();
 
