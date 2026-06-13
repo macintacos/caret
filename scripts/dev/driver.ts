@@ -18,9 +18,24 @@ import { type ReviewDeps, runReview } from "../../src/review.ts";
 import { claudeAdapter } from "../../src/adapters/claude/index.ts";
 import { NEVER_IDLE_MS } from "../../src/constants.ts";
 import { DEFAULT_PORT, devSeeder, loadSettings } from "../../src/settings.ts";
-import { DEV_SESSION, type DriverState, extraPlan, hookStdin, nextPlan } from "./protocol.ts";
+import type { ClientReview } from "../../src/types.ts";
+import {
+  appendRevision,
+  bootstrapPlans,
+  DEV_SESSION,
+  type DriverState,
+  extraPlan,
+  hookStdin,
+  nextPlan,
+} from "./protocol.ts";
 
 const log = (msg: string) => process.stderr.write(`[caret dev driver] ${msg}\n`);
+
+/** How many synthetic revisions the bootstrap threads before the interactive
+ * loop, so the primary dev review opens with several comparable versions (the
+ * version-compare picker needs at least two; three makes a non-default pair
+ * selectable). */
+const BOOTSTRAP_REVISIONS = 2;
 
 /** ReviewDeps for dev — the analog of prodReviewDeps (src/commands/review.ts) with the
  * daemon owned by the mise task: ensureDaemon just waits for health on the
@@ -115,6 +130,65 @@ export function assertDevEnv(): void {
   }
 }
 
+/** Record a reviewer-style deny on the primary session's pending review, so the
+ * next bootstrap submission threads onto it as a new version. Returns once the
+ * deny is recorded; the concurrently-running runReview then observes the
+ * decision and returns. */
+async function denyPendingReview(base: string, feedback: string): Promise<void> {
+  // The bootstrap is the only writer this early, so the session has exactly one
+  // pending review; poll briefly for runReview's POST to land before resolving.
+  for (let i = 0; i < 100; i++) {
+    const res = await fetch(`${base}/api/reviews`);
+    if (res.ok) {
+      const pending = ((await res.json()) as ClientReview[]).find(
+        (r) => r.sessionId === DEV_SESSION && r.status === "pending",
+      );
+      if (pending) {
+        const out = await fetch(`${base}/api/reviews/${pending.id}/resolve`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ behavior: "deny", feedback }),
+        });
+        if (!out.ok) throw new Error(`bootstrap deny failed: ${out.status}`);
+        return;
+      }
+    }
+    await Bun.sleep(20);
+  }
+  throw new Error("bootstrap deny: no pending review appeared");
+}
+
+/** Grow the primary dev review to several versions before the interactive loop,
+ * so `mise run dev` always shows a multi-version review (the version-compare
+ * picker is hidden below two versions). Each bootstrap plan is submitted through
+ * the real hook (runReview) and denied, so the next threads on as a new version;
+ * the review ends rejected at the final bootstrap version. The returned state
+ * already carries the *next* revision, so the interactive loop's first post
+ * appends a fresh version (re-pending the review) rather than re-submitting the
+ * last bootstrap plan as a duplicate. */
+export async function bootstrapReview(
+  base: string,
+  v1: string,
+  deps: ReviewDeps,
+): Promise<DriverState> {
+  const plans = bootstrapPlans(v1, BOOTSTRAP_REVISIONS);
+  for (let i = 0; i < plans.length; i++) {
+    // runReview blocks on the decision long-poll; the deny is what unblocks it.
+    const reviewing = runReview(hookStdin(plans[i] as string), deps);
+    await denyPendingReview(base, `Bootstrap revision ${i + 1} for the dev review.`);
+    await reviewing;
+  }
+  log(`bootstrapped the dev review to ${plans.length} versions`);
+  // The loop resumes by appending its first interactive revision onto the last
+  // bootstrap plan; revision counts continue from the bootstrap total.
+  const nextRevision = BOOTSTRAP_REVISIONS + 1;
+  const last = plans[plans.length - 1] as string;
+  return {
+    plan: appendRevision(last, "Continuing from the bootstrapped dev review.", nextRevision),
+    revision: nextRevision,
+  };
+}
+
 /** Submit plans through the real hook forever: seed v1, then per decision
  * append a feedback-quoting revision (request-changes), re-seed a fresh v1
  * (approve), or resubmit unchanged (the hook's own fail-safe denies). */
@@ -148,7 +222,10 @@ export async function run(): Promise<void> {
       "extra-review seeder off (pass --notify, set [dev.notify].enabled = true, or set CARET_DEV_NEW_REVIEW_MS)",
     );
   }
-  let state: DriverState = { plan: v1, revision: 0 };
+  // Grow the primary review to several versions up front so the version-compare
+  // picker has something to compare the moment the UI opens; the loop resumes
+  // from the bootstrapped (rejected) review, appending its next revision.
+  let state: DriverState = await bootstrapReview(base, v1, deps);
   for (;;) {
     // Never throws: every abnormal path inside runReview becomes a deny.
     const out = await runReview(hookStdin(state.plan), deps);

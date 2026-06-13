@@ -1,9 +1,9 @@
 import "../../test-mount.ts";
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { until } from "../../../test/support/poll.ts";
 import { render } from "../../test-mount.ts";
 import { reactiveProps } from "../../test-props.svelte.ts";
-import type { ClientReview } from "@core/types";
+import type { ClientReview, PlanVersion } from "@core/types";
 import DiffPlanView from "./DiffPlanView.svelte";
 
 // Default props: a no-op create handler, so the rendering tests below need only
@@ -40,9 +40,26 @@ function reviewFixture(over: Partial<ClientReview> = {}): ClientReview {
   };
 }
 
+/** A review carrying n versions; the current plan is the last version's text. */
+function multiVersionFixture(n: number): ClientReview {
+  const versions: PlanVersion[] = Array.from({ length: n }, (_, i) => ({
+    version: i + 1,
+    plan: `# Title\n\nbody revision ${i + 1}\n`,
+    annotations: [],
+    createdAt: i,
+  }));
+  return reviewFixture({
+    version: n,
+    currentPlan: versions[n - 1]!.plan,
+    versions,
+  });
+}
+
 function shadow(target: HTMLElement): ShadowRoot | null {
   return target.querySelector(".diffview")?.shadowRoot ?? null;
 }
+
+afterEach(() => localStorage.clear());
 
 describe("DiffPlanView rendering", () => {
   test("renders the plan source text into the source view", async () => {
@@ -133,5 +150,42 @@ describe("DiffPlanView instance preservation across the poll", () => {
     expect(repainted).toBe(true);
     expect(shadow(target)?.querySelector("pre")).not.toBe(pre as HTMLPreElement);
     expect(shadow(target)?.textContent).not.toContain("hello world");
+  });
+});
+
+describe("DiffPlanView version compare", () => {
+  test("shows no compare control for a single-version review", () => {
+    const { target } = render(DiffPlanView, props({ review: reviewFixture() }));
+    expect(target.querySelector(".compare-picker")).toBeNull();
+  });
+
+  test("offers the compare control when the review has multiple versions", () => {
+    const { target } = render(DiffPlanView, props({ review: multiVersionFixture(3) }));
+    expect(target.querySelector(".compare-picker")).not.toBeNull();
+    // The mode is off by default, so the single-version source view shows.
+    expect(target.querySelector(".pair")).toBeNull();
+  });
+
+  test("entering compare mode renders a diff between the default version pair", async () => {
+    const { target } = render(DiffPlanView, props({ review: multiVersionFixture(3) }));
+    target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
+    // Default pair is base=v3 (current), target=v2 (previous): both bodies show.
+    const painted = await until(() => {
+      const text = shadow(target)?.textContent ?? "";
+      return text.includes("body revision 3") && text.includes("body revision 2");
+    });
+    expect(painted).toBe(true);
+  });
+
+  test("the persisted layout preference drives the initial diff style", async () => {
+    localStorage.setItem("caret.diffStyle", "unified");
+    const { target } = render(DiffPlanView, props({ review: multiVersionFixture(3) }));
+    target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
+    await until(() => shadow(target)?.querySelector("pre") != null);
+    // The library renders unified layout as data-diff-type="single".
+    const applied = await until(
+      () => shadow(target)?.querySelector("pre")?.getAttribute("data-diff-type") === "single",
+    );
+    expect(applied).toBe(true);
   });
 });

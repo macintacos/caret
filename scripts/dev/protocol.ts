@@ -44,6 +44,24 @@ export function appendRevision(plan: string, feedback: string, n: number): strin
   ].join("\n");
 }
 
+/** The sequence of plans the dev bootstrap submits to grow the primary review to
+ * several versions before the interactive loop, so `mise run dev` always shows a
+ * multi-version review (the version-compare picker needs one). The first entry is
+ * v1; each subsequent entry threads one more synthetic revision onto the prior,
+ * mirroring what a reviewer deny + resubmit would produce. With `revisions` of n
+ * the result has n+1 entries (versions v1..v(n+1)). The synthetic feedback is
+ * fenced exactly as appendRevision fences real feedback, so the plan-format gate
+ * accepts each step. */
+export function bootstrapPlans(v1: string, revisions: number): string[] {
+  const plans = [v1];
+  for (let n = 1; n <= revisions; n++) {
+    plans.push(
+      appendRevision(plans[n - 1] as string, `Bootstrap revision ${n} for the dev review.`, n),
+    );
+  }
+  return plans;
+}
+
 /** Driver-side submission state: the plan to (re)submit and how many revision
  * sections it carries. */
 export interface DriverState {
