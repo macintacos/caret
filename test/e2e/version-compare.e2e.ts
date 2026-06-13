@@ -6,9 +6,6 @@
 
 import { expect, test } from "./support/fixtures.ts";
 
-// Every spec in this file boots a flag-on daemon.
-test.use({ diffSurface: true });
-
 // Three versions whose bodies each carry a unique, greppable line so a diff
 // between a chosen pair is verifiable by visible text.
 const V1 = "# Plan\n\nalpha line one\n";

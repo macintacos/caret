@@ -1,34 +1,23 @@
 import { describe, expect, test } from "bun:test";
-import { TOC_BREAKPOINT_PX } from "./layout.ts";
+import { REFERENCE_WIDTH_PX } from "./layout.ts";
 
-// The responsive breakpoint can't live in a CSS custom property (media-query
-// conditions can't read them), so it is hand-written into three `@media (width
-// ... 1400px)` rules. This test parses each rule's px value straight out of its
-// source and asserts it matches TOC_BREAKPOINT_PX — a CSS edit that drifts from
-// the constant (or from playwright.config.ts, which derives its viewport from
-// the same constant) fails here.
+// playwright.config.ts derives its e2e viewport width from REFERENCE_WIDTH_PX
+// (with headroom) so the e2e layout tracks the reference width instead of being
+// coupled to it by prose alone. This test parses the viewport width straight out
+// of the config source and asserts it sits above the reference width — a config
+// edit that drops the viewport below the reference (or decouples it from the
+// constant) fails here.
 
-// Each source whose `@media (width ... <N>px)` rule must match the constant.
-const SOURCES: Array<[label: string, path: string]> = [
-  ["app.css", "../app.css"],
-  ["Toc.svelte", "../components/Toc.svelte"],
-  ["PlanView.svelte", "../components/PlanView.svelte"],
-];
+const CONFIG_PATH = new URL("../../../playwright.config.ts", import.meta.url).pathname;
 
-/** Every breakpoint px value declared in `@media (width <op> Npx)` rules. */
-function mediaBreakpoints(css: string): number[] {
-  return [...css.matchAll(/@media\s*\(\s*width\s*[<>]=?\s*(\d+)px\s*\)/g)].map((m) => Number(m[1]));
-}
-
-describe("Toc breakpoint ↔ CSS sources sync", () => {
-  for (const [label, relPath] of SOURCES) {
-    test(`${label} @media width rules use TOC_BREAKPOINT_PX`, async () => {
-      const css = await Bun.file(new URL(relPath, import.meta.url).pathname).text();
-      const values = mediaBreakpoints(css);
-      // Each source must declare exactly one width breakpoint, and it must be
-      // the shared constant. A new/changed value here means the rail's
-      // show/hide threshold drifted from the single source of truth.
-      expect(values).toEqual([TOC_BREAKPOINT_PX]);
-    });
-  }
+describe("reference width ↔ playwright viewport", () => {
+  test("the e2e viewport is derived from REFERENCE_WIDTH_PX with headroom", async () => {
+    const config = await Bun.file(CONFIG_PATH).text();
+    // The config sets `viewport: { width: REFERENCE_WIDTH_PX + N, ... }`.
+    const match = config.match(/width:\s*REFERENCE_WIDTH_PX\s*\+\s*(\d+)/);
+    expect(match).not.toBeNull();
+    const headroom = Number(match![1]);
+    expect(headroom).toBeGreaterThan(0);
+    expect(REFERENCE_WIDTH_PX + headroom).toBeGreaterThan(REFERENCE_WIDTH_PX);
+  });
 });

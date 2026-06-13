@@ -17,7 +17,7 @@ test("dialog opens, Escape closes, Cmd/Ctrl+Enter submits a rejection with feedb
 }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator("article.plan h1")).toBeVisible();
+  await expect(page.locator(".diff-plan")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
   const dialog = page.getByRole("dialog", { name: "Request changes" });
@@ -58,7 +58,7 @@ test("a line-anchored annotation reaches Decision.feedback as a line reference p
   });
 
   await page.goto("/");
-  await expect(page.locator("article.plan h1")).toBeVisible();
+  await expect(page.locator(".diff-plan")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
   // Open the dialog and submit with no general comment — the seeded annotation

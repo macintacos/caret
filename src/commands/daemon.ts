@@ -79,10 +79,6 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
       stateDir: stateDir(),
       instanceId: randomUUID().slice(0, 8),
       approveVariants: adapter.approveVariants,
-      // EXC-583: the build-gated source-view flag, captured from the boot
-      // snapshot. [dev] is inert in a compiled binary, so this is always false
-      // in production regardless of config.toml.
-      diffSurface: boot.dev.diff_surface,
       log,
     });
   } catch (e) {

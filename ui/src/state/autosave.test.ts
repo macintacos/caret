@@ -87,15 +87,7 @@ describe("debounced autosave", () => {
   test("an edit schedules a save that fires on the debounce", () => {
     const store = makeStore();
     const { autosave, timer } = build(store, () => "r1");
-    autosave.createAnnotation({
-      blockId: "b0",
-      startOffset: 0,
-      endOffset: 1,
-      quote: "q",
-      prefix: "",
-      suffix: "",
-      comment: "c",
-    });
+    autosave.createLineAnnotation({ startLine: 1, endLine: 1, comment: "c" });
     expect(timer.armed()).toBe(true);
     expect(saves).toHaveLength(0);
     timer.fire();
