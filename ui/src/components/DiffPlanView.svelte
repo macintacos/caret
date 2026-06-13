@@ -27,11 +27,13 @@
 
   // Compare state: the component owns the reactive store (runes live here) and
   // the factory mutates it; the layout-preference read/write are injected so the
-  // factory stays pure. Annotation display is never wired here.
+  // factory stays pure. Annotation display is never wired here. The version/style
+  // fields are placeholders — the init effect below sets the real default pair
+  // and persisted layout as soon as the active review is established.
   let compareStore = $state<CompareStore>({
     comparing: false,
-    baseVersion: review.version,
-    targetVersion: review.version,
+    baseVersion: 0,
+    targetVersion: 0,
     diffStyle: "split",
   });
   const compare = createCompare(compareStore, {

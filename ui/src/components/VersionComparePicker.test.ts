@@ -55,7 +55,10 @@ describe("VersionComparePicker pair selection", () => {
 
   test("selecting a base version reports the chosen number", () => {
     const onSelectBase = capture<number>();
-    const { target } = render(VersionComparePicker, { ...baseProps, onSelectBase: onSelectBase.cb });
+    const { target } = render(VersionComparePicker, {
+      ...baseProps,
+      onSelectBase: onSelectBase.cb,
+    });
     const base = target.querySelector<HTMLSelectElement>(".base-select")!;
     base.value = "1";
     base.dispatchEvent(new Event("change", { bubbles: true }));
