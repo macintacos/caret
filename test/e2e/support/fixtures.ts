@@ -113,7 +113,10 @@ function awaitPortLine(child: ChildProcess, stderr: () => string): Promise<numbe
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export const test = base.extend<{ daemon: Daemon }>({
-  daemon: async (_, use) => {
+  // Playwright requires the first fixture argument to be an object-destructuring
+  // pattern even when no upstream fixtures are consumed.
+  // biome-ignore lint/correctness/noEmptyPattern: Playwright fixture signature
+  daemon: async ({}, use) => {
     // Ephemeral, isolated state: the daemon's reviews/prefs/logs all live under
     // this dir and are wiped at teardown. The user's real state is never touched.
     const stateDir = await mkdtemp(join(tmpdir(), "caret-e2e."));

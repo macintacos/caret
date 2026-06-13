@@ -22,7 +22,7 @@ test("approve under caret.localhost resolves the review", async ({ daemon, page 
   const id = await daemon.seed();
   // The deep-link shape the hook actually opens, under the vanity origin.
   await page.goto(`${vanityOrigin(daemon.url)}/?review=${id}`);
-  await expect(page.locator("article.plan h1")).toBeVisible();
+  await expect(page.locator(".diff-plan")).toBeVisible();
 
   // The mutating POST /api/reviews/:id/resolve carries the browser-computed
   // caret.localhost origin; no 403 means the guard allowed it.
@@ -35,7 +35,7 @@ test("approve under caret.localhost resolves the review", async ({ daemon, page 
 test("request changes under caret.localhost rejects with feedback", async ({ daemon, page }) => {
   const id = await daemon.seed();
   await page.goto(`${vanityOrigin(daemon.url)}/?review=${id}`);
-  await expect(page.locator("article.plan h1")).toBeVisible();
+  await expect(page.locator(".diff-plan")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
   const dialog = page.getByRole("dialog", { name: "Request changes" });

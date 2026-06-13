@@ -16,7 +16,7 @@ test("a keystroke right after refocus triggers safe mode, which then releases", 
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator("article.plan h1")).toBeVisible();
+  await expect(page.locator(".diff-plan")).toBeVisible();
 
   // Re-open the grace window, then type inside it.
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
