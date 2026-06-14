@@ -176,6 +176,10 @@
     border-radius: var(--radius);
     cursor: pointer;
     transition: border-color var(--dur-fast) var(--ease-out);
+    /* Collapse (body -> chip) fades the newly-mounted chip in. See @keyframes
+       reveal: opacity only, so the swap reads as a considered reveal and the
+       annotation row's height is never driven by a transform. */
+    animation: reveal var(--dur-fast) var(--ease-out);
   }
   .chip:hover {
     border-color: var(--rule-strong);
@@ -196,6 +200,10 @@
     border-left: 3px solid var(--rule-strong);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
+    /* Expand (chip -> body) fades the newly-mounted body in. Matches the chip's
+       reveal so expand and collapse share one motion, and matches the inline
+       composer's open. */
+    animation: reveal var(--dur-fast) var(--ease-out);
   }
   .card.focused .body {
     border-left-color: var(--state-accent);
@@ -293,5 +301,20 @@
   }
   .link.danger:hover {
     color: var(--accent);
+  }
+  /* One motion for the chip<->body swap. Because expand/collapse is an {#if}
+     swap between two different subtrees, a bare transition can't bridge them;
+     the entering subtree fades in instead. Opacity only — never a transform —
+     so the card never changes the library-reserved annotation row's measured
+     height and never jumps the scroll container. The single global
+     reduced-motion rule in app.css collapses it to a static frame when the OS
+     asks. */
+  @keyframes reveal {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 </style>

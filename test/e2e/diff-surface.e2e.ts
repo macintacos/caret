@@ -629,6 +629,53 @@ test("an inline card collapses to a chip and expands again", async ({ daemon, pa
   await expect(card.getByText("Tighten this paragraph.")).toBeVisible();
 });
 
+test("the composer reveal and the card swap share one opacity-only token transition", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+
+  // Reads the computed reveal: the scoped animation-name (Svelte hashes it, so it
+  // ends in "-reveal"), the resolved duration, and the transform applied while the
+  // keyframe runs. transform must stay "none" — the composer and card open inside
+  // the library-reserved annotation row, so a transform that changed the row's
+  // measured height would shift sibling code lines and fight the preventScroll
+  // guard. The shared token-driven reveal is what makes both opens feel considered
+  // rather than a pop.
+  const motionOf = (el: Element) => {
+    const cs = getComputedStyle(el);
+    return {
+      name: cs.animationName,
+      duration: cs.animationDuration,
+      transform: cs.transform,
+    };
+  };
+
+  const plus = await revealGutterPlus(page, 3);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+  const composerMotion = await composer.evaluate(motionOf);
+  expect(composerMotion.name).toMatch(/reveal$/);
+  // --dur-fast is 120ms.
+  expect(composerMotion.duration).toBe("0.12s");
+  // Opacity only — no scale bounce, no translate.
+  expect(composerMotion.transform).toBe("none");
+
+  // The card's expanded body reveals on the same contract.
+  await composer.locator("textarea").fill("Same considered reveal.");
+  await composer.getByRole("button", { name: "Comment" }).click();
+  await expect(composer).toHaveCount(0);
+  const body = page.locator("[data-annotation-card] .body");
+  await expect(body).toBeVisible();
+  const bodyMotion = await body.evaluate(motionOf);
+  expect(bodyMotion.name).toMatch(/reveal$/);
+  expect(bodyMotion.transform).toBe("none");
+});
+
 test("deleting an inline card removes the annotation", async ({ daemon, page }) => {
   const id = await daemon.seed();
   await page.goto("/");

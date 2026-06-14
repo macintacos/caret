@@ -89,9 +89,14 @@
     border-left: 3px solid var(--accent);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
-    /* One-shot reveal on the fast tier; the global reduced-motion rule in
-       app.css collapses it to a static frame when the OS asks. */
-    animation: pop var(--dur-fast) var(--ease-out);
+    /* One-shot reveal on the fast tier. Opacity only: the composer opens inside
+       the library-reserved annotation row, so a transform that grew or shifted
+       its box would change the row's measured height mid-reveal and fight the
+       preventScroll guard. Fading in keeps the row's height static and reads as
+       the same considered reveal as the annotation card's expand. The global
+       reduced-motion rule in app.css collapses it to a static frame when the OS
+       asks. */
+    animation: reveal var(--dur-fast) var(--ease-out);
   }
   .label {
     margin: 0 0 0.4rem;
@@ -154,14 +159,12 @@
     gap: 0.15rem;
     opacity: 0.8;
   }
-  @keyframes pop {
+  @keyframes reveal {
     from {
       opacity: 0;
-      transform: scale(0.97) translateY(2px);
     }
     to {
       opacity: 1;
-      transform: scale(1) translateY(0);
     }
   }
 </style>
