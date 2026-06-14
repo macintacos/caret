@@ -16,4 +16,11 @@ describe("DevBadge", () => {
     expect(badge!.textContent).toContain("local build");
     expect(badge!.getAttribute("title")).toContain("local");
   });
+
+  // Carries the .metric atom so it shares the numeric-chrome type policy with
+  // its sibling badges (the pill row reads as one tabular system). Locks it.
+  test("carries the .metric atom", () => {
+    const { target } = render(DevBadge, { isDev: true });
+    expect(target.querySelector(".dev-badge")!.classList.contains("metric")).toBe(true);
+  });
 });

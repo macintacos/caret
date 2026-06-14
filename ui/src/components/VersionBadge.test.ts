@@ -29,4 +29,11 @@ describe("VersionBadge", () => {
     const { target } = render(VersionBadge, { version: undefined, commit: "111111222222" });
     expect(target.querySelector(".version-badge")).toBeNull();
   });
+
+  // The build string is mono + tabular via the .metric atom, so the pill width
+  // is stable as the version/commit digits change. Locks the treatment.
+  test("carries the tabular .metric atom", () => {
+    const { target } = render(VersionBadge, { version: "0.0.4", commit: "111111222222" });
+    expect(target.querySelector(".version-badge")!.classList.contains("metric")).toBe(true);
+  });
 });

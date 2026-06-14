@@ -54,6 +54,23 @@ describe("ReviewSwitcher multiple reviews", () => {
     expect(target.querySelector(".chev")).not.toBeNull();
   });
 
+  // The count pill carries the .metric atom (mono + tabular figures), so a
+  // 9 → 11 jump in review count does not reflow its width. happy-dom does no
+  // real layout, so the falsifiable proxy is the atom's presence on both counts.
+  test("count badge carries the tabular .metric atom across digit counts", () => {
+    for (const n of [9, 11]) {
+      const many = Array.from({ length: n }, (_, i) => review(`r${i}`, `Plan ${i}`));
+      const { target } = render(ReviewSwitcher, {
+        reviews: many,
+        activeId: "r0",
+        onSelect: () => {},
+      });
+      const badge = target.querySelector(".badge")!;
+      expect(badge.classList.contains("metric")).toBe(true);
+      expect(badge.textContent).toBe(String(n));
+    }
+  });
+
   test("toggles the listbox open and closed", () => {
     const { target, flush } = render(ReviewSwitcher, {
       reviews,
