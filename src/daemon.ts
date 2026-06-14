@@ -26,6 +26,7 @@ import {
   type HealthIdentity,
   type PlanInput,
   type ResolveBody,
+  type RouteResult,
   toClientReview,
 } from "./types.ts";
 
@@ -41,11 +42,7 @@ const INDEX_PATH = "/index.html";
 /** Decides whether an incoming plan starts a new review or appends a version.
  * The router owns the review record (created vs appended), so it receives the
  * daemon's logger. */
-export type RoutePlan = (
-  input: PlanInput,
-  store: Store,
-  log?: CaretLogger,
-) => Promise<{ id: string; expired: string[] }>;
+export type RoutePlan = (input: PlanInput, store: Store, log?: CaretLogger) => Promise<RouteResult>;
 
 export interface CreateServerOptions {
   store: Store;
@@ -484,6 +481,11 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     // hook re-creates its entry per heartbeat, but that's bounded by its
     // timeout, whose /expire clears it for good.
     for (const staleId of routed.expired) clearDecision(staleId);
+    // A revision append re-pends a settled review; drop any orphaned registry
+    // entry so the revision's long-poll awaits a fresh decision instead of
+    // re-serving the prior one (EXC-590). routeIncomingPlan already cleared the
+    // store decision (r.decision = undefined); this is its in-memory analog.
+    if (routed.action === "append") clearDecision(routed.id);
     // Tell the hook whether a UI tab is already listening (polled recently): if
     // so it skips foregrounding the browser, so an open backgrounded tab's
     // away-gated desktop notification isn't pre-empted (EXC-559).
