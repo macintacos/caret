@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { Annotation } from "@core/types";
-import { formatFeedback, pendingInlineCount, pendingLineCount } from "./feedback.ts";
+import {
+  coveredLineCount,
+  formatFeedback,
+  pendingInlineCount,
+  pendingLineCount,
+} from "./feedback.ts";
 
 // A synthetic plan whose lines are individually identifiable, so a quoted block
 // is unambiguous. Line numbers are 1-based: line 1 is "# Title", line 3 is the
@@ -227,5 +232,41 @@ describe("pendingLineCount", () => {
   test("never exceeds the inline count", () => {
     const anns = [lineAnn(3, 3, "a"), lineAnn(3, 3, "b"), ann({ comment: "c" })];
     expect(pendingLineCount(anns)).toBeLessThanOrEqual(pendingInlineCount(anns));
+  });
+});
+
+describe("coveredLineCount", () => {
+  test("two overlapping line-annotations count their shared lines once", () => {
+    // On a 10-line plan, [2-6] and [4-8] together touch lines 2..8 = 7 lines.
+    // The naive sum of range lengths is 5 + 5 = 10, so a line in both comments
+    // would be double-counted; the union counts it once.
+    const overlapping = [lineAnn(2, 6, "a"), lineAnn(4, 8, "b")];
+    const sumOfLengths = 5 + 5;
+    expect(coveredLineCount(overlapping)).toBe(7);
+    expect(coveredLineCount(overlapping)).toBeLessThan(sumOfLengths);
+  });
+
+  test("disjoint ranges sum their lengths", () => {
+    expect(coveredLineCount([lineAnn(1, 2, "a"), lineAnn(5, 7, "b")])).toBe(2 + 3);
+  });
+
+  test("a single line counts as one covered line", () => {
+    expect(coveredLineCount([lineAnn(3, 3, "a")])).toBe(1);
+  });
+
+  test("legacy annotations contribute to the comment count but not to coverage", () => {
+    const mixed = [lineAnn(3, 4, "line"), ann({ comment: "legacy" })];
+    // Two pending comments, but only the line annotation covers source lines.
+    expect(pendingInlineCount(mixed)).toBe(2);
+    expect(coveredLineCount(mixed)).toBe(2);
+  });
+
+  test("ignores blank-comment line annotations", () => {
+    expect(coveredLineCount([lineAnn(3, 5, "real"), lineAnn(7, 9, "   ")])).toBe(3);
+  });
+
+  test("is zero with no line annotations", () => {
+    expect(coveredLineCount([])).toBe(0);
+    expect(coveredLineCount([ann({ comment: "legacy only" })])).toBe(0);
   });
 });
