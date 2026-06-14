@@ -4,14 +4,13 @@
 </script>
 
 {#if version > 1}
-  <span class="version" title="Revision {version} of this plan">
+  <span class="version metric" title="Revision {version} of this plan">
     <span class="caret">^</span>v{version}
   </span>
 {/if}
 
 <style>
   .version {
-    font-family: var(--font-mono);
     font-size: var(--text-xs);
     font-weight: 600;
     letter-spacing: 0.04em;

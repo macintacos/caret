@@ -60,7 +60,7 @@
         <label class="field">
           <span class="lbl">Base</span>
           <select
-            class="base-select mono"
+            class="base-select metric"
             value={String(baseVersion)}
             onchange={(e) => onSelectBase(Number(e.currentTarget.value))}
           >
@@ -75,7 +75,7 @@
         <label class="field">
           <span class="lbl">Target</span>
           <select
-            class="target-select mono"
+            class="target-select metric"
             value={String(targetVersion)}
             onchange={(e) => onSelectTarget(Number(e.currentTarget.value))}
           >
@@ -169,9 +169,6 @@
   }
   .field select:hover {
     border-color: var(--accent);
-  }
-  .mono {
-    font-family: var(--font-mono);
   }
   .arrow {
     color: var(--ink-faint);

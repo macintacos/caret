@@ -8,7 +8,7 @@
 
 {#if isDev}
   <span
-    class="dev-badge"
+    class="dev-badge metric"
     title="Running from a local source build (mise run dev) — not an installed release"
   >
     local build
@@ -17,7 +17,6 @@
 
 <style>
   .dev-badge {
-    font-family: var(--font-mono);
     font-size: var(--text-2xs);
     font-weight: 700;
     letter-spacing: 0.04em;

@@ -32,6 +32,17 @@ describe("the .diffview → --diffs-* bridge", () => {
     expect(rule).toContain(`--diffs-font-family: ${FONT_STACK};`);
   });
 
+  test("turns on tabular figures via --diffs-font-features", () => {
+    // The library passes --diffs-font-features straight into font-feature-settings
+    // on its :host, so the value is the OpenType 'tnum' tag — not the
+    // font-variant-numeric keyword. The bridge owns this host passthrough; the
+    // library never sets the feature anywhere else, so this rule is the only
+    // injection point.
+    expect(rule).toMatch(/--diffs-font-features:\s*'tnum';/);
+    // Tabular only — no ligature/alternates/slashed-zero scope creep.
+    expect(rule).not.toMatch(/--diffs-font-features:[^;]*\b(liga|calt|dlig|zero)\b/);
+  });
+
   test("maps every color/spacing --diffs-* var from a caret token, never a literal hex", () => {
     // Each required mapping points at a var(--caret-token), so the values flow
     // from app.css's token system and inherit dark mode through the cascade.
