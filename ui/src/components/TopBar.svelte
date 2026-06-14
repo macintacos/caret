@@ -19,6 +19,10 @@
     variants: ApproveVariant[];
     /** True when the daemon runs from source; shows the "local build" badge. */
     isDev?: boolean;
+    /** Non-blank inline comments the reviewer has queued. Surfaced as a count on
+     * the Request-changes button so the pending work is visible before they open
+     * the dialog; hidden at zero. */
+    pendingCount: number;
     onSelect: (id: string) => void;
     onApprove: (mode: ApproveVariantId) => void;
     onRequestChanges: () => void;
@@ -30,6 +34,7 @@
     approveMode,
     variants,
     isDev = false,
+    pendingCount,
     onSelect,
     onApprove,
     onRequestChanges,
@@ -69,6 +74,14 @@
       <button class="request" onclick={onRequestChanges} disabled={busy}>
         <Icon name="corner-up-left" size={14} />
         Request changes
+        {#if pendingCount > 0}
+          <span
+            class="count metric"
+            aria-label="{pendingCount} pending comment{pendingCount === 1 ? '' : 's'}"
+          >
+            {pendingCount}
+          </span>
+        {/if}
       </button>
 
       <div class="split">
@@ -201,6 +214,21 @@
   .request:hover:not(:disabled) {
     border-color: var(--accent);
     color: var(--accent);
+  }
+  /* Neutral count pill: the pending work is review state, not the primary action,
+     so it stays off the brand-reserved amber even while `.request` warms to accent
+     on hover. Inherits no color from the button — pinned to a sunk surface so it
+     reads as a tally rather than a second affordance. */
+  .count {
+    background: var(--paper-sunk);
+    color: var(--ink-soft);
+    border: 1px solid var(--rule);
+    border-radius: 99px;
+    font-size: var(--text-2xs);
+    font-weight: 700;
+    line-height: 1;
+    padding: 0.1rem 0.4rem;
+    margin-left: 0.1rem;
   }
   .split {
     position: relative;

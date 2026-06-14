@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Annotation } from "@core/types";
-  import { formatFeedback, pendingInlineCount } from "../lib/feedback.ts";
+  import { formatFeedback, pendingInlineCount, pendingLineCount } from "../lib/feedback.ts";
   import { isCancelKey, isSubmitChord } from "../lib/keys.ts";
   import Icon from "./Icon.svelte";
 
@@ -25,6 +25,20 @@
   // Live preview of exactly what the agent will receive.
   let preview = $derived(formatFeedback(annotations, generalComment, planText));
   let inlineCount = $derived(pendingInlineCount(annotations));
+  // Distinct source locations the pending comments anchor to; only worth showing
+  // when it's smaller than the comment count (several comments share a line),
+  // otherwise "N comments on N lines" just restates the count.
+  let lineCount = $derived(pendingLineCount(annotations));
+  // The dialog has nothing to send: no inline comments and a blank general note.
+  // Shows a nudge instead of a hollow "0 comments" tally.
+  let empty = $derived(inlineCount === 0 && generalComment.trim().length === 0);
+  // The inline-comment tally, collapsing the redundant "on M lines" when each
+  // comment sits on its own location.
+  let countSummary = $derived(
+    lineCount > 0 && lineCount < inlineCount
+      ? `${inlineCount} comments on ${lineCount} line${lineCount === 1 ? "" : "s"} will be included.`
+      : `${inlineCount} comment${inlineCount === 1 ? "" : "s"} will be included.`,
+  );
 
   $effect(() => {
     textarea?.focus();
@@ -68,8 +82,12 @@
       ></textarea>
     </label>
 
-    <div class="summary">
-      {inlineCount} inline comment{inlineCount === 1 ? "" : "s"} will be included.
+    <div class="summary" class:empty>
+      {#if empty}
+        No comments yet — add inline comments or a general note to send.
+      {:else}
+        {countSummary}
+      {/if}
     </div>
 
     {#if preview}
@@ -166,6 +184,12 @@
     font-size: var(--text-sm);
     color: var(--ink-faint);
     margin-top: 0.6rem;
+  }
+  /* The empty-state nudge reads as guidance, not a tally — italic to set it apart
+     from the count summary without spending a stronger ink or the accent. */
+  .summary.empty {
+    font-style: italic;
+    color: var(--ink-soft);
   }
   .preview {
     margin-top: 1rem;

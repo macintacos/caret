@@ -34,9 +34,21 @@ function dialog(target: HTMLElement) {
 }
 
 describe("RequestChangesDialog render", () => {
-  test("pluralizes the inline-comment summary (0 → comments)", () => {
+  test("shows the empty-state when nothing is pending", () => {
     const { target } = render(RequestChangesDialog, baseProps);
-    expect(target.querySelector(".summary")!.textContent).toContain("0 inline comments");
+    const summary = target.querySelector(".summary")!;
+    expect(summary.classList.contains("empty")).toBe(true);
+    // No phantom "0 comments" — the empty-state nudges the reviewer instead.
+    expect(summary.textContent).not.toContain("0 comment");
+    expect(summary.textContent!.toLowerCase()).toContain("no comments");
+  });
+
+  test("a general comment alone clears the empty-state even with no inline comments", () => {
+    const { target } = render(RequestChangesDialog, {
+      ...baseProps,
+      generalComment: "please revise",
+    });
+    expect(target.querySelector(".summary")!.classList.contains("empty")).toBe(false);
   });
 
   test("singularizes the summary for exactly one commented annotation", () => {
@@ -45,16 +57,18 @@ describe("RequestChangesDialog render", () => {
       annotations: [ann("a1", "fix this"), ann("a2", "   ")],
     });
     // Only the non-blank comment counts toward the inline count.
-    expect(target.querySelector(".summary")!.textContent).toContain("1 inline comment");
+    const summary = target.querySelector(".summary")!;
+    expect(summary.classList.contains("empty")).toBe(false);
+    expect(summary.textContent).toContain("1 comment");
   });
 
-  test("counts line-anchored annotations toward the inline-comment summary", () => {
+  test("counts line-anchored annotations toward the summary", () => {
     const { target } = render(RequestChangesDialog, {
       ...baseProps,
       annotations: [lineAnn("l1", 2, 2, "tighten")],
       planText: ["a", "b", "c"].join("\n"),
     });
-    expect(target.querySelector(".summary")!.textContent).toContain("1 inline comment");
+    expect(target.querySelector(".summary")!.textContent).toContain("1 comment");
   });
 
   test("counts mixed line and legacy annotations together", () => {
@@ -63,7 +77,29 @@ describe("RequestChangesDialog render", () => {
       annotations: [lineAnn("l1", 1, 1, "fix"), ann("a1", "also fix")],
       planText: ["a", "b"].join("\n"),
     });
-    expect(target.querySelector(".summary")!.textContent).toContain("2 inline comments");
+    expect(target.querySelector(".summary")!.textContent).toContain("2 comments");
+  });
+
+  test("reports the distinct-line count only when comments share a line", () => {
+    const { target } = render(RequestChangesDialog, {
+      ...baseProps,
+      annotations: [lineAnn("l1", 2, 2, "first"), lineAnn("l2", 2, 2, "second")],
+      planText: ["a", "b", "c"].join("\n"),
+    });
+    // Two comments collapse onto one line: surface both numbers.
+    expect(target.querySelector(".summary")!.textContent).toContain("2 comments on 1 line");
+  });
+
+  test("omits the line count when every comment sits on its own line", () => {
+    const { target } = render(RequestChangesDialog, {
+      ...baseProps,
+      annotations: [lineAnn("l1", 1, 1, "a"), lineAnn("l2", 2, 2, "b")],
+      planText: ["a", "b"].join("\n"),
+    });
+    // 2 comments on 2 lines is redundant — collapse to just the comment count.
+    const text = target.querySelector(".summary")!.textContent ?? "";
+    expect(text).toContain("2 comments");
+    expect(text).not.toContain("on 2 lines");
   });
 
   test("hides the preview and disables submit when there is nothing to send", () => {

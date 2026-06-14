@@ -19,6 +19,7 @@ const baseProps = {
   busy: false,
   approveMode: "default" as const,
   variants,
+  pendingCount: 0,
   onSelect: () => {},
   onApprove: () => {},
   onRequestChanges: () => {},
@@ -148,5 +149,27 @@ describe("TopBar request changes", () => {
     });
     (target.querySelector(".request") as HTMLElement).click();
     expect(requested).toBe(true);
+  });
+
+  test("hides the pending-comment count when none are pending", () => {
+    const { target } = render(TopBar, { ...baseProps, pendingCount: 0 });
+    expect(target.querySelector(".request .count")).toBeNull();
+  });
+
+  test("shows the pending-comment count on the request button when comments are pending", () => {
+    const { target } = render(TopBar, { ...baseProps, pendingCount: 3 });
+    const count = target.querySelector(".request .count");
+    expect(count).not.toBeNull();
+    expect(count!.textContent).toContain("3");
+  });
+
+  test("the count carries the metric atom for tabular figures", () => {
+    const { target } = render(TopBar, { ...baseProps, pendingCount: 2 });
+    expect(target.querySelector(".request .count")!.classList.contains("metric")).toBe(true);
+  });
+
+  test("the count is hidden when no review is active", () => {
+    const { target } = render(TopBar, { ...baseProps, active: null, pendingCount: 4 });
+    expect(target.querySelector(".count")).toBeNull();
   });
 });

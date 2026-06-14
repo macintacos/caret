@@ -48,7 +48,7 @@ test("a pending inline comment guards approve and routes to request-changes inta
   await guard.getByRole("button", { name: "Request changes" }).click();
   const dialog = page.getByRole("dialog", { name: "Request changes" });
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator(".summary")).toContainText("1 inline comment");
+  await expect(dialog.locator(".summary")).toContainText("1 comment");
   await expect(dialog.locator(".preview pre")).toContainText("explain the cold cost");
 
   // And sending it through reaches the agent as a deny carrying that comment —

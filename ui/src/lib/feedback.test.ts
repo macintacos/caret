@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Annotation } from "@core/types";
-import { formatFeedback, pendingInlineCount } from "./feedback.ts";
+import { formatFeedback, pendingInlineCount, pendingLineCount } from "./feedback.ts";
 
 // A synthetic plan whose lines are individually identifiable, so a quoted block
 // is unambiguous. Line numbers are 1-based: line 1 is "# Title", line 3 is the
@@ -191,5 +191,41 @@ describe("pendingInlineCount", () => {
     const anns = [ann({ comment: "kept" }), ann({ comment: "  " }), lineAnn(4, 4, "kept2")];
     expect(pendingInlineCount(anns)).toBe(2);
     expect(formatFeedback(anns, "", PLAN)).toContain("2. ");
+  });
+});
+
+describe("pendingLineCount", () => {
+  test("counts each pending comment on its own line as a distinct location", () => {
+    expect(pendingLineCount([lineAnn(3, 3, "a"), lineAnn(4, 5, "b")])).toBe(2);
+  });
+
+  test("collapses several comments on the same line to one location", () => {
+    expect(pendingLineCount([lineAnn(3, 3, "a"), lineAnn(3, 3, "b")])).toBe(1);
+  });
+
+  test("collapses comments sharing a multi-line range to one location", () => {
+    expect(pendingLineCount([lineAnn(4, 6, "a"), lineAnn(4, 6, "b")])).toBe(2 - 1);
+  });
+
+  test("treats distinct ranges that overlap on a line as distinct locations", () => {
+    expect(pendingLineCount([lineAnn(3, 3, "a"), lineAnn(3, 4, "b")])).toBe(2);
+  });
+
+  test("ignores blank-comment annotations", () => {
+    expect(pendingLineCount([lineAnn(3, 3, "a"), lineAnn(4, 4, "   ")])).toBe(1);
+  });
+
+  test("counts each legacy annotation as its own location", () => {
+    expect(pendingLineCount([ann({ comment: "a" }), ann({ comment: "b" })])).toBe(2);
+  });
+
+  test("is zero for no pending comments", () => {
+    expect(pendingLineCount([])).toBe(0);
+    expect(pendingLineCount([lineAnn(3, 3, "  ")])).toBe(0);
+  });
+
+  test("never exceeds the inline count", () => {
+    const anns = [lineAnn(3, 3, "a"), lineAnn(3, 3, "b"), ann({ comment: "c" })];
+    expect(pendingLineCount(anns)).toBeLessThanOrEqual(pendingInlineCount(anns));
   });
 });
