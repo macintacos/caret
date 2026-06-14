@@ -128,6 +128,7 @@
   }
   h2 {
     font-weight: 500;
+    /* Display one-off: the dialog title sits above the chrome type scale. */
     font-size: 1.35rem;
     margin: 0.25rem 0 0;
     color: var(--ink);
@@ -137,7 +138,7 @@
   }
   .lbl {
     display: block;
-    font-size: 0.7rem;
+    font-size: var(--text-xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--ink-soft);
@@ -146,8 +147,8 @@
   textarea {
     width: 100%;
     resize: vertical;
-    font-size: 1rem;
-    line-height: 1.5;
+    font-size: var(--text-lg);
+    line-height: var(--leading-snug);
     color: var(--ink);
     background: var(--paper);
     border: 1px solid var(--rule);
@@ -162,9 +163,9 @@
     box-shadow: 0 0 0 2px var(--accent-wash);
   }
   .summary {
-    /* Matches the .mono atom's size (0.78rem) but stays in the sans face — this
+    /* Matches the .mono atom's size (--text-sm) but stays in the sans face — this
        is a count summary, not code, so it takes the size without the mono font. */
-    font-size: 0.78rem;
+    font-size: var(--text-sm);
     color: var(--ink-faint);
     margin-top: 0.6rem;
   }
@@ -177,15 +178,15 @@
   .preview summary {
     cursor: pointer;
     padding: 0.5rem 0.7rem;
-    font-size: 0.74rem;
+    font-size: var(--text-xs);
     color: var(--ink-soft);
   }
   .preview pre {
     margin: 0;
     padding: 0.5rem 0.8rem 0.8rem;
     font-family: var(--font-mono);
-    font-size: 0.76rem;
-    line-height: 1.5;
+    font-size: var(--text-sm);
+    line-height: var(--leading-snug);
     white-space: pre-wrap;
     color: var(--ink);
     border-top: 1px solid var(--rule);
@@ -199,7 +200,7 @@
   .ghost,
   .deny {
     border-radius: var(--radius);
-    font-size: 0.82rem;
+    font-size: var(--text-base);
     font-weight: 600;
     padding: 0.5rem 1rem;
   }

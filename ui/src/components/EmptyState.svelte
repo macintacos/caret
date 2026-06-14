@@ -36,8 +36,9 @@
   }
   .glyph {
     font-family: var(--font-mono);
+    /* Display one-off: the hero unplug glyph sits well above the type scale. */
     font-size: 6rem;
-    line-height: 1;
+    line-height: var(--leading-none);
     color: var(--accent);
     opacity: 0.85;
     text-shadow: 0 8px 30px var(--accent-wash);
@@ -54,6 +55,7 @@
   }
   h2 {
     font-weight: 500;
+    /* Display one-off: the empty-state title is larger than any chrome step. */
     font-size: 1.7rem;
     margin: 1.5rem 0 0.5rem;
     color: var(--ink);
@@ -79,7 +81,7 @@
     display: inline-flex;
     align-items: center;
     font-family: var(--font-mono);
-    font-size: 0.7rem;
+    font-size: var(--text-xs);
     letter-spacing: 0.02em;
     color: var(--ink-faint);
     background: var(--paper-raised);

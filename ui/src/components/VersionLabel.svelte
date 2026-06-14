@@ -12,7 +12,7 @@
 <style>
   .version {
     font-family: var(--font-mono);
-    font-size: 0.7rem;
+    font-size: var(--text-xs);
     font-weight: 600;
     letter-spacing: 0.04em;
     color: var(--accent);

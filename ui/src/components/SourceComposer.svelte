@@ -92,7 +92,7 @@
   }
   .label {
     margin: 0 0 0.4rem;
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
     font-weight: 600;
     letter-spacing: 0.02em;
     color: var(--ink-soft);
@@ -101,7 +101,7 @@
     width: 100%;
     box-sizing: border-box;
     resize: vertical;
-    font-size: 0.88rem;
+    font-size: var(--text-md);
     color: var(--ink);
     background: var(--paper);
     border: 1px solid var(--rule);
@@ -121,7 +121,7 @@
   .ghost,
   .solid {
     border-radius: var(--radius);
-    font-size: 0.76rem;
+    font-size: var(--text-sm);
     font-weight: 600;
     padding: 0.35rem 0.75rem;
   }

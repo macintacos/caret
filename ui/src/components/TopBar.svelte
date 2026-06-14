@@ -144,7 +144,7 @@
   .brand {
     font-family: var(--font-display);
     font-weight: 600;
-    font-size: 1.15rem;
+    font-size: var(--text-xl);
     letter-spacing: -0.01em;
     color: var(--ink);
     white-space: nowrap;
@@ -189,7 +189,7 @@
     border: 1px solid var(--rule-strong);
     border-radius: var(--radius);
     padding: 0.5rem 0.9rem;
-    font-size: 0.82rem;
+    font-size: var(--text-base);
     font-weight: 600;
     display: inline-flex;
     align-items: center;
@@ -213,7 +213,7 @@
     border-right: none;
     border-radius: var(--radius) 0 0 var(--radius);
     padding: 0.5rem 1rem;
-    font-size: 0.82rem;
+    font-size: var(--text-base);
     font-weight: 700;
     display: inline-flex;
     align-items: center;
@@ -274,13 +274,13 @@
     box-shadow: inset 2px 0 0 var(--accent);
   }
   .v-label {
-    font-size: 0.82rem;
+    font-size: var(--text-base);
     font-weight: 600;
     color: var(--ink);
   }
   .v-note {
     color: var(--ink-faint);
-    font-size: 0.68rem;
+    font-size: var(--text-xs);
   }
   .scrim-invisible {
     position: fixed;

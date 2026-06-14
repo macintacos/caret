@@ -41,21 +41,21 @@
     margin-bottom: 0.35rem;
   }
   .eyebrow {
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--ink-soft);
   }
   .count {
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
     color: var(--ink-faint);
   }
   .note {
     margin: 0 0 0.85rem;
-    font-size: 0.78rem;
+    font-size: var(--text-sm);
     color: var(--ink-faint);
-    line-height: 1.45;
+    line-height: var(--leading-snug);
   }
   .item {
     margin-bottom: 0.85rem;
@@ -67,13 +67,13 @@
     margin: 0 0 0.3rem;
     padding-left: 0.55rem;
     border-left: 2px solid var(--rule-strong);
-    font-size: 0.82rem;
+    font-size: var(--text-base);
     color: var(--ink-soft);
-    line-height: 1.4;
+    line-height: var(--leading-tight);
   }
   .comment {
     margin: 0;
-    font-size: 0.92rem;
+    font-size: var(--text-md);
     color: var(--ink);
     white-space: pre-wrap;
   }

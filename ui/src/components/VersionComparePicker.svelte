@@ -118,7 +118,7 @@
     padding: 0.5rem clamp(1rem, 3vw, 2rem);
     border-bottom: 1px solid var(--rule);
     background: var(--paper-raised);
-    font-size: 0.8rem;
+    font-size: var(--text-base);
   }
 
   /* The mode toggle echoes the topbar's accent treatment: a quiet bordered
@@ -129,7 +129,7 @@
     border: 1px solid var(--rule-strong);
     border-radius: var(--radius);
     padding: 0.35rem 0.75rem;
-    font-size: 0.78rem;
+    font-size: var(--text-sm);
     font-weight: 600;
     white-space: nowrap;
   }
@@ -155,7 +155,7 @@
   }
   .lbl {
     color: var(--ink-faint);
-    font-size: 0.7rem;
+    font-size: var(--text-xs);
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
@@ -165,7 +165,7 @@
     border: 1px solid var(--rule-strong);
     border-radius: var(--radius);
     padding: 0.25rem 0.4rem;
-    font-size: 0.78rem;
+    font-size: var(--text-sm);
   }
   .field select:hover {
     border-color: var(--accent);
@@ -191,7 +191,7 @@
     color: var(--ink-soft);
     border: none;
     padding: 0.3rem 0.7rem;
-    font-size: 0.76rem;
+    font-size: var(--text-sm);
     font-weight: 600;
   }
   .layout button + button {
