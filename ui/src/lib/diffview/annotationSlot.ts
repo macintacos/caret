@@ -17,10 +17,43 @@ export function annotationSlotName(line: number): string {
 }
 
 /** Library line annotations (one per line) that reserve the slot rows. Deduped
- * and ordered: several comments on one line share a single row and stack within
- * it, so passing the line more than once would emit duplicate, unfillable slots. */
+ * and ordered: every comment on a line shares that line's single row, where caret
+ * stacks them as one ordered thread (see groupAnnotationsByLine), so passing the
+ * line more than once would emit duplicate, unfillable slots. */
 export function toLineAnnotations(lines: Iterable<number>): SourceLineAnnotation[] {
   return [...new Set(lines)].sort((a, b) => a - b).map((lineNumber) => ({ lineNumber }));
+}
+
+/** One anchor line's annotations, in the order they should thread. */
+export interface LineAnnotationGroup<A> {
+  /** The 1-based source line this group's single annotation row anchors to. */
+  line: number;
+  /** The annotations stacked in this line's row, in display order. */
+  annotations: A[];
+}
+
+/**
+ * Groups annotations by the line their row anchors to, so each anchor line maps
+ * to exactly one projected node — the single library slot per line. The library
+ * reserves one annotation row per line, so several comments on a line belong in
+ * one caret-owned thread within that row, not as separate nodes fighting for the
+ * same slot name. Groups are ordered by line ascending; within a group,
+ * annotations keep their input order.
+ */
+export function groupAnnotationsByLine<A>(
+  annotations: Iterable<A>,
+  lineOf: (a: A) => number,
+): LineAnnotationGroup<A>[] {
+  const byLine = new Map<number, A[]>();
+  for (const a of annotations) {
+    const line = lineOf(a);
+    const bucket = byLine.get(line);
+    if (bucket) bucket.push(a);
+    else byLine.set(line, [a]);
+  }
+  return [...byLine.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([line, group]) => ({ line, annotations: group }));
 }
 
 /**

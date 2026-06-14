@@ -572,6 +572,26 @@ test("a created annotation shows an inline card that doesn't overlay the code", 
   expect(await card.evaluate((el) => el.closest("[data-annotation-slot]") != null)).toBe(true);
 });
 
+test("two comments on the same line render as one ordered thread", async ({ daemon, page }) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+
+  // Two comments anchored to the same line. The library reserves one annotation
+  // row per line, so both land in that single row — caret frames them as one
+  // ordered thread (shared container, count, order cue) rather than two
+  // disconnected chips.
+  await createAnnotation(page, 3, "Quantify the cold cost.");
+  await createAnnotation(page, 3, "And the warm path too.");
+
+  const thread = page.locator(".thread");
+  await expect(thread).toHaveCount(1);
+  await expect(thread.locator("[data-annotation-card]")).toHaveCount(2);
+  await expect(thread.locator(".thread-count")).toHaveText(/2/);
+  await expect(thread.locator(".thread-ordinal")).toHaveText(["1", "2"]);
+});
+
 test("clicking a line's content opens a comment composer for that line", async ({
   daemon,
   page,
