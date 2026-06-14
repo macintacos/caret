@@ -90,3 +90,29 @@ describe("SourceDiffView instance preservation", () => {
     expect(shadow(target)?.querySelectorAll("pre")).toHaveLength(1);
   });
 });
+
+describe("SourceDiffView compare header", () => {
+  // The compare surface feeds the two sides version names ("v3" / "v5"), so the
+  // library's default header surfaces the pair, pins it (stickyHeader), and shows
+  // the +N/-N change tallies. These render in the library's shadow root; caret
+  // tightens nothing here beyond the mapper's stickyHeader and the version names.
+  const v3: SourceDocument = { name: "v3", text: "line one\nline two\nline extra\n" };
+  const v5: SourceDocument = { name: "v5", text: "line one\nline three\n" };
+
+  test("renders the version pair, pins it sticky, and surfaces the change counts", async () => {
+    const { target } = render(SourceDiffView, { oldDoc: v3, newDoc: v5, contentKey: "r1:v5:v3" });
+    await until(() => shadow(target)?.textContent?.includes("line three") ?? false);
+
+    const header = shadow(target)?.querySelector("[data-diffs-header]");
+    expect(header).not.toBeNull();
+    // The before side (v3) is the rename "from", the after side (v5) the title.
+    expect(header?.querySelector("[data-prev-name]")?.textContent).toBe("v3");
+    expect(header?.querySelector("[data-title]")?.textContent).toBe("v5");
+    // Pinned to the top of the scroll viewport so the pair and counts stay in view.
+    expect(header?.hasAttribute("data-sticky")).toBe(true);
+    // The library-computed change tallies: v5 adds "line three", drops "line two"
+    // and "line extra".
+    expect(header?.querySelector("[data-additions-count]")?.textContent).toBe("+1");
+    expect(header?.querySelector("[data-deletions-count]")?.textContent).toBe("-2");
+  });
+});

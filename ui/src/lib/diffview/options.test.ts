@@ -126,6 +126,7 @@ describe("toFileDiffOptions", () => {
       diffIndicators: "classic",
       hunkSeparators: "line-info",
       expandUnchanged: false,
+      stickyHeader: true,
     });
   });
 
@@ -139,6 +140,7 @@ describe("toFileDiffOptions", () => {
       diffIndicators: undefined,
       hunkSeparators: "line-info",
       expandUnchanged: false,
+      stickyHeader: true,
     });
   });
 
@@ -152,5 +154,13 @@ describe("toFileDiffOptions", () => {
     const result = toFileDiffOptions({});
     expect(result.hunkSeparators).toBe("line-info");
     expect(result.expandUnchanged).toBe(false);
+  });
+
+  test("pins the compare header sticky so the version pair and counts stay in view", () => {
+    // The library scrolls its default header away on a long diff; sticky keeps the
+    // version-pair name and the +N/-N counts pinned to the top of the viewport. The
+    // pinned header fills over code on caret's --paper-sunk (the [data-sticky] rule
+    // reads --diffs-bg, which the .diffview bridge maps).
+    expect(toFileDiffOptions({}).stickyHeader).toBe(true);
   });
 });

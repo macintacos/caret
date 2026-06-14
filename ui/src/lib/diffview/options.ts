@@ -96,6 +96,14 @@ export function toFileDiffOptions(options: SourceDiffViewOptions): SourceDiffVie
     ...sharedOptions(options),
     diffStyle: options.diffStyle,
     diffIndicators: options.diffIndicators,
+    // Pin the compare header to the top of the scroll viewport. The library
+    // renders a default file header for every diff; left to scroll, the version
+    // pair and the +N/-N counts leave view the moment the reviewer scrolls a long
+    // diff. Sticky keeps that context — the pair name and the change tallies —
+    // anchored while reading. The pinned header fills over the code on its own
+    // surface: [data-diffs-header][data-sticky] paints var(--diffs-bg), which the
+    // .diffview bridge maps to caret's --paper-sunk.
+    stickyHeader: true,
     // Collapsed context renders as the library's line-info separator: a band on
     // caret's separator surface (--diffs-bg-separator-override, owned by the
     // .diffview bridge in app.css) carrying the 'N unmodified lines' label and the

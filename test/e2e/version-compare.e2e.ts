@@ -85,6 +85,50 @@ test("toggling layout preserves the diff scroll position", async ({ daemon, page
   expect(await view.evaluate((el) => el.scrollTop)).toBe(before);
 });
 
+test("the compare header stays pinned to the top and reads the version pair", async ({
+  daemon,
+  page,
+}) => {
+  // A diff tall enough to overflow the viewport, so a scroll would carry a
+  // non-sticky header out of view.
+  const body = (tag: string) =>
+    Array.from({ length: 80 }, (_, i) => `${tag} line ${i + 1} of the plan body.`).join("\n\n");
+  await daemon.seedVersions(2, [`# Plan\n\n${body("alpha")}\n`, `# Plan\n\n${body("beta")}\n`]);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Compare versions" }).click();
+
+  const view = page.locator(".diff-plan");
+  await expect(view).toBeVisible();
+  // The header reads the default pair: target=v1 on the before side (the rename
+  // "from"), base=v2 as the title — surfacing what is compared, not a filename.
+  const header = page.locator(".diffview [data-diffs-header]").first();
+  await expect(header.locator("[data-prev-name]")).toHaveText("v1");
+  await expect(header.locator("[data-title]")).toHaveText("v2");
+  // The change tallies are surfaced (every body line differs between the pair).
+  await expect(header.locator("[data-additions-count]")).toBeVisible();
+  await expect(header.locator("[data-deletions-count]")).toBeVisible();
+
+  // Scroll the diff down; the sticky header must hold at the container's top edge
+  // rather than scrolling away with the code.
+  await view.evaluate((el) => {
+    el.scrollTop = 600;
+  });
+  await expect.poll(async () => view.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+
+  // The header's top sits within a couple of pixels of the scroll container's top
+  // after scrolling — it is pinned, not carried off with the content.
+  const gap = await page.evaluate(() => {
+    const plan = document.querySelector(".diff-plan");
+    const head = document
+      .querySelector(".diffview")
+      ?.shadowRoot?.querySelector("[data-diffs-header][data-sticky]");
+    if (plan == null || head == null) return Number.NaN;
+    return head.getBoundingClientRect().top - plan.getBoundingClientRect().top;
+  });
+  expect(Number.isNaN(gap)).toBe(false);
+  expect(Math.abs(gap)).toBeLessThanOrEqual(2);
+});
+
 test("the chosen layout persists across a reload", async ({ daemon, page }) => {
   await daemon.seedVersions(3, [V1, V2, V3]);
   await page.goto("/");
