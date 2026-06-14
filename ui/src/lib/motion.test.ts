@@ -111,14 +111,21 @@ describe("the global prefers-reduced-motion rule", () => {
 });
 
 describe("the two formerly-unguarded animations reference the tokens", () => {
-  test("SourceComposer's pop reveal uses a duration + easing token", () => {
+  test("SourceComposer's reveal uses a duration + easing token and is opacity-only", () => {
     // The `animation:` shorthand on the composer carries a var(--dur-*) and a
-    // var(--ease-*), not a raw 0.14s/ease-out literal.
-    const decl = composer.match(/animation:\s*pop\s+([^;]+);/)?.[1] ?? "";
+    // var(--ease-*), not a raw seconds/ease-out literal.
+    const decl = composer.match(/animation:\s*reveal\s+([^;]+);/)?.[1] ?? "";
     expect(decl).toContain("var(--dur-");
     expect(decl).toContain("var(--ease-");
     // No bare seconds literal left on the shorthand.
     expect(decl).not.toMatch(/\d+(\.\d+)?s\b/);
+    // The composer opens inside the library-reserved annotation row, so its
+    // reveal animates opacity only — a transform in the keyframes would change
+    // the row's measured height mid-reveal. Pin the keyframe to opacity, with
+    // no transform, so the scale bounce can't creep back.
+    const keyframes = composer.match(/@keyframes reveal\s*\{([\s\S]*?)\n  \}/)?.[1] ?? "";
+    expect(keyframes).toContain("opacity");
+    expect(keyframes).not.toContain("transform");
   });
 
   test("RequestChangesDialog's fade + rise use a duration + easing token", () => {
