@@ -1,7 +1,7 @@
 // Registers happy-dom globals (MouseEvent / PointerEvent / element style) so the
 // handlers can be driven with real DOM event objects and a real token element.
 import "../../../test-setup.ts";
-import { describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { createLinkHandlers, hitTestSpan } from "./linkInteractions.ts";
 import type { LinkSpan, LinkSpanMap } from "./links.ts";
 
@@ -17,17 +17,19 @@ const span = (startCol: number, endCol: number, href: string): LinkSpan => ({
   label: href,
 });
 
-// A minimal stand-in for the library's TokenEventBase token element: just the
-// attribute + style surface the hover effect touches.
-function fakeTokenElement() {
-  const attrs = new Map<string, string>();
-  const style: Record<string, string> = {};
-  return {
-    style,
-    setAttribute: (k: string, v: string) => attrs.set(k, v),
-    removeAttribute: (k: string) => attrs.delete(k),
-    getAttribute: (k: string) => attrs.get(k) ?? null,
-  } as unknown as HTMLElement & { style: Record<string, string> };
+// A real (happy-dom) token element attached to the document so the hover effect
+// can read its root, owner document, and bounding box and mount the tooltip. An
+// unattached unit token has no shadow root, so the effect mounts the tooltip on
+// the document body — which is where we read it back.
+function fakeTokenElement(): HTMLElement {
+  const el = document.createElement("span");
+  document.body.appendChild(el);
+  return el;
+}
+
+/** The href text of the hover tooltip currently mounted on the body, or null. */
+function tooltipText(): string | null {
+  return document.body.querySelector("[data-link-tooltip]")?.textContent ?? null;
 }
 
 describe("hitTestSpan", () => {
@@ -101,7 +103,13 @@ describe("createLinkHandlers onTokenClick", () => {
 });
 
 describe("createLinkHandlers hover effects", () => {
-  test("enter sets the full URL as title and a pointer cursor on the token", () => {
+  // The tooltip mounts on document.body for unattached unit tokens; clear it
+  // between cases so a tooltip from a prior hover can't leak into the next.
+  beforeEach(() => {
+    document.body.replaceChildren();
+  });
+
+  test("enter reveals a caret tooltip carrying the full URL and a pointer cursor", () => {
     const handlers = createLinkHandlers(new Map([[1, [span(4, 12, "https://a.test/full")]]]), {
       openUrl: () => {},
     });
@@ -110,11 +118,13 @@ describe("createLinkHandlers hover effects", () => {
       { lineNumber: 1, lineCharStart: 4, lineCharEnd: 12, tokenText: "the docs", tokenElement: el },
       new PointerEvent("pointerenter"),
     );
-    expect(el.getAttribute("title")).toBe("https://a.test/full");
+    // The hover reveal is a caret-owned tooltip element, not the native title.
+    expect(tooltipText()).toBe("https://a.test/full");
+    expect(el.getAttribute("title")).toBeNull();
     expect(el.style.cursor).toBe("pointer");
   });
 
-  test("enter on a non-link token does not touch the element", () => {
+  test("enter on a non-link token reveals no tooltip and leaves the cursor", () => {
     const handlers = createLinkHandlers(new Map([[1, [span(4, 12, "https://a.test")]]]), {
       openUrl: () => {},
     });
@@ -123,11 +133,11 @@ describe("createLinkHandlers hover effects", () => {
       { lineNumber: 1, lineCharStart: 0, lineCharEnd: 3, tokenText: "See", tokenElement: el },
       new PointerEvent("pointerenter"),
     );
-    expect(el.getAttribute("title")).toBeNull();
+    expect(tooltipText()).toBeNull();
     expect(el.style.cursor ?? "").toBe("");
   });
 
-  test("leave clears the title and cursor it set", () => {
+  test("leave removes the tooltip and clears the cursor it set", () => {
     const handlers = createLinkHandlers(new Map([[1, [span(4, 12, "https://a.test")]]]), {
       openUrl: () => {},
     });
@@ -140,8 +150,9 @@ describe("createLinkHandlers hover effects", () => {
       tokenElement: el,
     };
     handlers.onTokenEnter(props, new PointerEvent("pointerenter"));
+    expect(tooltipText()).toBe("https://a.test");
     handlers.onTokenLeave(props, new PointerEvent("pointerleave"));
-    expect(el.getAttribute("title")).toBeNull();
+    expect(tooltipText()).toBeNull();
     expect(el.style.cursor ?? "").toBe("");
   });
 });
