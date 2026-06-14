@@ -5,12 +5,13 @@
 // so the factory stays unit-testable without a DOM global.
 //
 // The factory owns the selected version pair (base = current, target = previous
-// by default), whether compare mode is active, and the diff layout. It does NOT
-// render anything and never reads annotations — compare mode is annotation-free
-// by contract (annotations belong to the single-version view).
+// by default), whether compare mode is active, the diff layout, and the gutter
+// indicators. It does NOT render anything and never reads annotations — compare
+// mode is annotation-free by contract (annotations belong to the single-version
+// view).
 
 import type { PlanVersion } from "@core/types";
-import type { DiffStyle } from "../lib/diffview/types.ts";
+import type { DiffIndicators, DiffStyle } from "../lib/diffview/types.ts";
 
 /** Reactive fields the host component owns and the factory mutates through
  * getters. Base is the reference version (default: the current version) and
@@ -26,6 +27,8 @@ export interface CompareStore {
   targetVersion: number;
   /** Diff layout: split (side-by-side) or unified (stacked). */
   diffStyle: DiffStyle;
+  /** Gutter change markers: bars (vertical) or classic (+/- glyphs). */
+  diffIndicators: DiffIndicators;
 }
 
 export interface CompareDeps {
@@ -33,6 +36,10 @@ export interface CompareDeps {
   readPref: () => DiffStyle;
   /** Persist the chosen layout preference. */
   writePref: (style: DiffStyle) => void;
+  /** Read the persisted gutter-indicators preference (defaults to "bars"). */
+  readIndicatorsPref: () => DiffIndicators;
+  /** Persist the chosen gutter-indicators preference. */
+  writeIndicatorsPref: (indicators: DiffIndicators) => void;
 }
 
 export interface Compare {
@@ -41,7 +48,8 @@ export interface Compare {
   /** The plan text of a given 1-based version number (empty string if absent). */
   planFor(versions: PlanVersion[], version: number): string;
   /** Seed the default pair (base = current, target = previous) and load the
-   * persisted layout. Call when the active review is first established. */
+   * persisted layout and gutter indicators. Call when the active review is first
+   * established. */
   init(versions: PlanVersion[]): void;
   /** Reconcile the selected pair against a (possibly new) version set: keep the
    * pair if both ends still exist, otherwise reset to the default pair; leave
@@ -51,6 +59,7 @@ export interface Compare {
   setTarget(version: number): void;
   setComparing(comparing: boolean): void;
   setDiffStyle(style: DiffStyle): void;
+  setDiffIndicators(indicators: DiffIndicators): void;
 }
 
 /** The default pair for a version set: base = current (last), target = the one
@@ -79,6 +88,7 @@ export function createCompare(store: CompareStore, deps: CompareDeps): Compare {
 
     init(versions) {
       store.diffStyle = deps.readPref();
+      store.diffIndicators = deps.readIndicatorsPref();
       applyDefaultPair(versions);
     },
 
@@ -107,6 +117,11 @@ export function createCompare(store: CompareStore, deps: CompareDeps): Compare {
     setDiffStyle(style) {
       store.diffStyle = style;
       deps.writePref(style);
+    },
+
+    setDiffIndicators(indicators) {
+      store.diffIndicators = indicators;
+      deps.writeIndicatorsPref(indicators);
     },
   };
 }

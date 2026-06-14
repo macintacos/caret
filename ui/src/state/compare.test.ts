@@ -1,20 +1,31 @@
 import "../../test-setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { PlanVersion } from "@core/types";
-import type { DiffStyle } from "../lib/diffview/types.ts";
+import type { DiffIndicators, DiffStyle } from "../lib/diffview/types.ts";
 import { type CompareStore, createCompare } from "./compare.svelte.ts";
 
 let written: DiffStyle[];
 let prefValue: DiffStyle;
+let writtenIndicators: DiffIndicators[];
+let indicatorsPrefValue: DiffIndicators;
 
 function makeStore(over: Partial<CompareStore> = {}): CompareStore {
-  return { comparing: false, baseVersion: 0, targetVersion: 0, diffStyle: "split", ...over };
+  return {
+    comparing: false,
+    baseVersion: 0,
+    targetVersion: 0,
+    diffStyle: "split",
+    diffIndicators: "bars",
+    ...over,
+  };
 }
 
 function build(store: CompareStore) {
   return createCompare(store, {
     readPref: () => prefValue,
     writePref: (s) => written.push(s),
+    readIndicatorsPref: () => indicatorsPrefValue,
+    writeIndicatorsPref: (i) => writtenIndicators.push(i),
   });
 }
 
@@ -31,6 +42,8 @@ function versions(n: number): PlanVersion[] {
 beforeEach(() => {
   written = [];
   prefValue = "split";
+  writtenIndicators = [];
+  indicatorsPrefValue = "bars";
 });
 
 describe("init", () => {
@@ -48,6 +61,14 @@ describe("init", () => {
     const compare = build(store);
     compare.init(versions(3));
     expect(store.diffStyle).toBe("unified");
+  });
+
+  test("loads the persisted gutter indicators", () => {
+    indicatorsPrefValue = "classic";
+    const store = makeStore();
+    const compare = build(store);
+    compare.init(versions(3));
+    expect(store.diffIndicators).toBe("classic");
   });
 
   test("canCompare is false with a single version", () => {
@@ -95,6 +116,17 @@ describe("diff style", () => {
     compare.setDiffStyle("unified");
     expect(store.diffStyle).toBe("unified");
     expect(written).toEqual(["unified"]);
+  });
+});
+
+describe("diff indicators", () => {
+  test("toggling persists the new value", () => {
+    const store = makeStore();
+    const compare = build(store);
+    compare.init(versions(3));
+    compare.setDiffIndicators("classic");
+    expect(store.diffIndicators).toBe("classic");
+    expect(writtenIndicators).toEqual(["classic"]);
   });
 });
 

@@ -48,6 +48,27 @@ describe("SourceDiffView instance preservation", () => {
     expect(shadow(target)?.querySelector("pre")).toBe(pre as HTMLPreElement);
   });
 
+  test("the classic indicators flip applies in place via data-indicators", async () => {
+    const props = reactiveProps({
+      oldDoc,
+      newDoc,
+      contentKey: "r1:v1:v2",
+      options: {} as SourceDiffViewOptions,
+    });
+    const { target, flush } = render(SourceDiffView, props);
+    await until(() => shadow(target)?.textContent?.includes("line three") ?? false);
+    const pre = shadow(target)?.querySelector("pre");
+    // Default (no indicators set) is the library's "bars".
+    expect(pre?.getAttribute("data-indicators")).toBe("bars");
+
+    props.options = { diffIndicators: "classic" };
+    flush();
+    // The library marks the pre so its CSS renders the +/- glyphs.
+    const applied = await until(() => pre?.getAttribute("data-indicators") === "classic");
+    expect(applied).toBe(true);
+    expect(shadow(target)?.querySelector("pre")).toBe(pre as HTMLPreElement);
+  });
+
   test("a content-key change recreates the view", async () => {
     const props = reactiveProps({ oldDoc, newDoc, contentKey: "r1:v1:v2" });
     const { target, flush } = render(SourceDiffView, props);

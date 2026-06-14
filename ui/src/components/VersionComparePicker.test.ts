@@ -20,10 +20,12 @@ const baseProps = {
   baseVersion: 3,
   targetVersion: 2,
   diffStyle: "split" as const,
+  diffIndicators: "bars" as const,
   onSetComparing: () => {},
   onSelectBase: () => {},
   onSelectTarget: () => {},
   onSetDiffStyle: () => {},
+  onSetDiffIndicators: () => {},
 };
 
 describe("VersionComparePicker visibility", () => {
@@ -95,6 +97,26 @@ describe("VersionComparePicker layout toggle", () => {
     });
     target.querySelector<HTMLButtonElement>('[data-style="unified"]')!.click();
     expect(onSetDiffStyle.last()).toBe("unified");
+  });
+});
+
+describe("VersionComparePicker indicators toggle", () => {
+  test("marks the active gutter indicators", () => {
+    const { target } = render(VersionComparePicker, baseProps);
+    const bars = target.querySelector<HTMLButtonElement>('[data-indicators="bars"]')!;
+    const classic = target.querySelector<HTMLButtonElement>('[data-indicators="classic"]')!;
+    expect(bars.getAttribute("aria-pressed")).toBe("true");
+    expect(classic.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  test("clicking an indicators option reports it", () => {
+    const onSetDiffIndicators = capture<"bars" | "classic">();
+    const { target } = render(VersionComparePicker, {
+      ...baseProps,
+      onSetDiffIndicators: onSetDiffIndicators.cb,
+    });
+    target.querySelector<HTMLButtonElement>('[data-indicators="classic"]')!.click();
+    expect(onSetDiffIndicators.last()).toBe("classic");
   });
 });
 

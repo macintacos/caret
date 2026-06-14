@@ -95,5 +95,6 @@ export function toFileDiffOptions(options: SourceDiffViewOptions): SourceDiffVie
   return {
     ...sharedOptions(options),
     diffStyle: options.diffStyle,
+    diffIndicators: options.diffIndicators,
   };
 }

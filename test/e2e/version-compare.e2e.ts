@@ -99,6 +99,41 @@ test("the chosen layout persists across a reload", async ({ daemon, page }) => {
   await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "single");
 });
 
+test("toggling bars↔classic switches gutter indicators in place without a remount", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seedVersions(3, [V1, V2, V3]);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Compare versions" }).click();
+  await expect(page.getByText("gamma line three")).toBeVisible();
+
+  // The library marks the pre with data-indicators; the default is "bars".
+  const pre = page.locator(".diffview pre").first();
+  await expect(pre).toHaveAttribute("data-indicators", "bars");
+
+  await page.getByRole("button", { name: "+/−" }).click();
+  // Same element, new indicators — switched via setOptions, not recreated.
+  await expect(pre).toHaveAttribute("data-indicators", "classic");
+
+  await page.getByRole("button", { name: "Bars" }).click();
+  await expect(pre).toHaveAttribute("data-indicators", "bars");
+});
+
+test("the chosen gutter indicators persist across a reload", async ({ daemon, page }) => {
+  await daemon.seedVersions(3, [V1, V2, V3]);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Compare versions" }).click();
+  await expect(page.getByText("gamma line three")).toBeVisible();
+  await page.getByRole("button", { name: "+/−" }).click();
+  await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-indicators", "classic");
+
+  await page.reload();
+  await page.getByRole("button", { name: "Compare versions" }).click();
+  // The remembered indicators drive the initial diff markers after reload.
+  await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-indicators", "classic");
+});
+
 // Semantic +/- color (EXC-604). The bridge ties --diffs-addition-color-override
 // / --diffs-deletion-color-override to caret's --ok / --danger, and the library
 // cascades that one base into the full-line tint and the per-token emphasis wash

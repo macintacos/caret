@@ -15,6 +15,11 @@ export interface SourceDocument {
 /** Layout for a two-document diff: side-by-side or stacked. */
 export type DiffStyle = "split" | "unified";
 
+/** Gutter change markers for a diff: the inherited vertical bars, or the classic
+ * +/- glyphs many reviewers prefer. (The library also offers "none"; caret has no
+ * use for hiding the markers, so it isn't surfaced.) */
+export type DiffIndicators = "bars" | "classic";
+
 /** Line annotation on a single-document view. */
 export type SourceLineAnnotation = LineAnnotation;
 
@@ -44,4 +49,7 @@ export interface SourceViewOptions {
 export interface SourceDiffViewOptions extends SourceViewOptions {
   /** Diff layout (library default: split). */
   diffStyle?: DiffStyle;
+  /** Gutter change markers (library default: bars). Diff-only — the library exposes
+   * this on FileDiff alone, so it lives here rather than on the shared base. */
+  diffIndicators?: DiffIndicators;
 }

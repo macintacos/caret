@@ -31,6 +31,7 @@
   import { dismissDragHint, isDragHintDismissed } from "../lib/diffview/dragHint.ts";
   import { buildLinkLayer } from "../lib/diffview/links.ts";
   import { readDiffStyle, writeDiffStyle } from "../lib/diffStylePref.ts";
+  import { readDiffIndicators, writeDiffIndicators } from "../lib/diffIndicatorsPref.ts";
   import {
     type Overflow,
     readDisableLineNumbers,
@@ -106,10 +107,13 @@
     baseVersion: 0,
     targetVersion: 0,
     diffStyle: "split",
+    diffIndicators: "bars",
   });
   const compare = createCompare(compareStore, {
     readPref: readDiffStyle,
     writePref: writeDiffStyle,
+    readIndicatorsPref: readDiffIndicators,
+    writeIndicatorsPref: writeDiffIndicators,
   });
 
   // Seed the default pair + persisted layout when the active review changes, and
@@ -361,10 +365,12 @@
       baseVersion={compareStore.baseVersion}
       targetVersion={compareStore.targetVersion}
       diffStyle={compareStore.diffStyle}
+      diffIndicators={compareStore.diffIndicators}
       onSetComparing={compare.setComparing}
       onSelectBase={compare.setBase}
       onSelectTarget={compare.setTarget}
       onSetDiffStyle={compare.setDiffStyle}
+      onSetDiffIndicators={compare.setDiffIndicators}
     />
   {/if}
 </div>
@@ -388,7 +394,11 @@
         oldDoc={{ name: "plan.md", text: targetText }}
         newDoc={{ name: "plan.md", text: baseText }}
         contentKey={diffContentKey}
-        options={{ ...readerOptions, diffStyle: compareStore.diffStyle }}
+        options={{
+          ...readerOptions,
+          diffStyle: compareStore.diffStyle,
+          diffIndicators: compareStore.diffIndicators,
+        }}
       />
     {:else}
       <!-- Live drag readout: a zero-height sticky rail rendered first so it pins to
