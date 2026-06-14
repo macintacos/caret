@@ -6,6 +6,7 @@
   // expanded it shows the full comment with edit and delete. Collapse state is
   // UI-only — owned here, seeded from focus, never written to disk.
   import type { LineAnnotation } from "@core/types";
+  import { commentState } from "../lib/commentState.ts";
   import { isCancelKey, isSubmitChord } from "../lib/keys.ts";
   import Icon from "./Icon.svelte";
 
@@ -44,6 +45,11 @@
       : `Lines ${annotation.startLine}–${annotation.endLine}`,
   );
 
+  // The comment's lifecycle affordance, read from its ReviewStatus-keyed state
+  // (absent → a pending working draft). The same dot+label shows collapsed and
+  // expanded, so the reviewer reads draft-vs-resolved without opening the card.
+  const stateView = $derived(commentState(annotation.state));
+
   function focusCard() {
     onFocus(annotation.id);
     // Expand immediately so the click reads as responsive even before the parent
@@ -78,11 +84,21 @@
   });
 </script>
 
-<div class="card" class:focused data-annotation-card={annotation.id}>
+<div
+  class="card"
+  class:focused
+  data-annotation-card={annotation.id}
+  data-state={stateView.status}
+>
   {#if expanded}
     <div class="body">
       <header>
-        <span class="ref">{label}</span>
+        <span class="head">
+          <span class="ref">{label}</span>
+          <span class="state state-{stateView.tone}">
+            <span class="dot" aria-hidden="true"></span>{stateView.label}
+          </span>
+        </span>
         <button
           class="collapse"
           type="button"
@@ -119,6 +135,9 @@
   {:else}
     <button class="chip" type="button" onclick={focusCard}>
       <span class="ref">{label}</span>
+      <span class="state state-{stateView.tone}">
+        <span class="dot" aria-hidden="true"></span>{stateView.label}
+      </span>
       <span class="preview">{annotation.comment}</span>
     </button>
   {/if}
@@ -131,6 +150,17 @@
   .card {
     max-width: min(46rem, 100%);
     margin: 0.4rem 0 0.55rem;
+    /* The state hue drives the left rail and the status dot. Unresolved comments
+       (pending/rejected) stay caret amber so an in-progress comment reads brand-
+       active; the terminal states drop to a quieter settled hue (--ok green for
+       accepted, neutral ink for expired) so a resolved comment recedes. */
+    --state-accent: var(--accent);
+  }
+  .card[data-state="approved"] {
+    --state-accent: var(--ok);
+  }
+  .card[data-state="expired"] {
+    --state-accent: var(--ink-faint);
   }
   /* The chip: a compact, monospace line tag with a clamped one-line preview. */
   .chip {
@@ -142,7 +172,7 @@
     padding: 0.3rem 0.55rem;
     background: var(--paper-raised);
     border: 1px solid var(--rule);
-    border-left: 3px solid var(--accent);
+    border-left: 3px solid var(--state-accent);
     border-radius: var(--radius);
     cursor: pointer;
     transition: border-color 0.12s;
@@ -168,7 +198,7 @@
     box-shadow: var(--shadow-card);
   }
   .card.focused .body {
-    border-left-color: var(--accent);
+    border-left-color: var(--state-accent);
   }
   header {
     display: flex;
@@ -176,12 +206,41 @@
     justify-content: space-between;
     margin-bottom: 0.4rem;
   }
+  /* The expanded header's left cluster: the line ref and the state chip side by
+     side, so state reads at the top of an open card without crowding the collapse
+     control on the right. */
+  .head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+  }
   .ref {
     font-size: var(--text-xs);
     font-weight: 600;
     letter-spacing: 0.02em;
     color: var(--ink-soft);
     flex: none;
+  }
+  /* The per-comment state affordance: a small colored dot plus a quiet label. The
+     dot carries the hue (state-driven); the label stays neutral so the indicator
+     reads as chrome, not a second accent. Shown collapsed and expanded alike. */
+  .state {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    flex: none;
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--ink-faint);
+    line-height: var(--leading-none);
+  }
+  .dot {
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 50%;
+    background: var(--state-accent);
   }
   .collapse {
     display: inline-flex;

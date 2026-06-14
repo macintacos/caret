@@ -63,6 +63,12 @@ export interface LineAnnotation {
   /** Last annotated line (1-based, inclusive; >= startLine). */
   endLine: number;
   comment: string;
+  /** Per-comment lifecycle, drawn from the review's ReviewStatus vocabulary rather
+   * than a parallel one: "pending"/"rejected" are the unresolved working states and
+   * "approved"/"expired" are terminal. Optional — absent on a freshly-created working
+   * draft and on every on-disk record that predates the field, and read as "pending"
+   * by every consumer (see commentState). */
+  state?: ReviewStatus;
 }
 
 /**
