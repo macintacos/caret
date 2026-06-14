@@ -17,7 +17,7 @@
 
 {#if version}
   <span
-    class="version-badge"
+    class="version-badge metric"
     title={sha ? `Running caret build · v${version} · commit ${sha}` : `Running caret build · v${version}`}
   >
     {label}
@@ -25,12 +25,13 @@
 {/if}
 
 <style>
-  /* Quiet, viewport-pinned build tag. Monospace per the technical-metadata type
-     policy (EXC-376); pill language matches DevBadge / VersionLabel. Muted at
-     rest, brightening on hover so it stays out of the way until looked at.
-     position: fixed makes DOM placement irrelevant — App renders it as a root
-     sibling. z-index sits above the Toc rail (30) and below the modal scrim
-     (100) and safe-mode toast (200). */
+  /* Quiet, viewport-pinned build tag. The mono family and tabular figures come
+     from the .metric atom (technical-metadata type policy, EXC-376); pill
+     language matches DevBadge / VersionLabel. Muted at rest, brightening on
+     hover so it stays out of the way until looked at. position: fixed makes DOM
+     placement irrelevant — App renders it as a root sibling. z-index sits above
+     the Toc rail (30) and below the modal scrim (100) and safe-mode toast
+     (200). */
   .version-badge {
     position: fixed;
     left: 0.7rem;
@@ -38,7 +39,6 @@
     z-index: 40;
     display: inline-flex;
     align-items: center;
-    font-family: var(--font-mono);
     font-size: var(--text-2xs);
     letter-spacing: 0.02em;
     line-height: var(--leading-none);

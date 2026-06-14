@@ -53,7 +53,7 @@
 </script>
 
 <div class="composer" role="dialog" aria-label="Add a comment" tabindex="-1" onkeydown={onKey}>
-  <p class="label">{label}</p>
+  <p class="label metric">{label}</p>
   <textarea
     bind:this={textarea}
     bind:value={comment}

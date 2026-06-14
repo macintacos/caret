@@ -353,6 +353,40 @@ test("a drag selection renders the selected lines in caret amber, not library-bl
   expect(axes.number as number).toBeGreaterThan(2);
 });
 
+test("numeric chrome renders with tabular figures end to end", async ({ daemon, page }) => {
+  // Tabular figures keep columns of digits aligned. The bridge sets
+  // --diffs-font-features to the 'tnum' tag, which the library feeds into
+  // font-feature-settings on its :host, so it inherits down to the line-number
+  // column; caret's own numeric chrome gets the same via the .metric atom's
+  // font-variant-numeric. Both are computed-style facts in the real Chromium
+  // build, not just static stylesheet text.
+  await daemon.seed({ plan: RANGE_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+
+  // A diff line-number cell resolves font-feature-settings to the tabular tag.
+  const lineNumberFeatures = await page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+    const cell = sh?.querySelector("[data-line-number-content]") ?? null;
+    return cell ? getComputedStyle(cell as HTMLElement).fontFeatureSettings : null;
+  });
+  expect(lineNumberFeatures).toContain('"tnum"');
+
+  // The composer's 'Lines N–M' label is a caret numeric chrome surface; through
+  // the .metric atom it resolves font-variant-numeric to tabular-nums.
+  await selectGutterRange(page, 5, 8);
+  const plus = page.locator(".diffview [data-utility-button]");
+  await expect(plus).toBeVisible();
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer.getByText("Lines 5–8")).toBeVisible();
+  const labelVariant = await composer
+    .locator(".label")
+    .evaluate((el) => getComputedStyle(el).fontVariantNumeric);
+  expect(labelVariant).toContain("tabular-nums");
+});
+
 test("cancelling the composer with Escape leaves no residue", async ({ daemon, page }) => {
   const id = await daemon.seed();
   await page.goto("/");

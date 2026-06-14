@@ -144,6 +144,17 @@ body {
   letter-spacing: 0.01em;
 }
 
+/* Numeric chrome. Carries the mono family and tabular figures together so a
+   surface showing counts or version numbers (the composer's line range, the
+   version pills, the compare picker) gets fixed-width digits that line up in a
+   column — a '1' as wide as a '0'. No size of its own: each surface keeps its
+   own scale and only borrows the family and figure shape. Degrades to
+   proportional when the mono font lacks the feature. */
+.metric {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
 .eyebrow {
   font-family: var(--font-sans);
   font-size: var(--text-2xs);
@@ -200,6 +211,12 @@ a:focus-visible,
   --diffs-font-size: var(--text-sm);
   --diffs-line-height: var(--leading-normal);
   --diffs-tab-size: 2;
+  /* Tabular figures for the line-number column and the +N/-N header counts. The
+     library passes this straight into font-feature-settings on its :host, so the
+     value is the OpenType 'tnum' tag, not the font-variant-numeric keyword.
+     Tabular only — no ligatures or alternates. Degrades to proportional when the
+     mono font lacks the feature. */
+  --diffs-font-features: 'tnum';
 
   --diffs-bg: var(--paper-sunk);
   --diffs-fg: var(--ink);
