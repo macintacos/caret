@@ -105,9 +105,14 @@ stays green under any invocation.
   its blue skin. Only the comment SELECTION is recolored to caret amber (via
   `--diffs-bg-selection-override`); `--diffs-modified` stays library-blue, so the gutter
   `+`, change-type icons, and merge-conflict incoming read blue for free, and amber stays
-  scarce and brand-reserved (the wordmark, the primary action, the `^`). Mix `in lab` only
-  — `oklch` is mangled in the embedding Chrome build, and a pinned library hex fails the
-  no-hex bridge test. `css-bridge.test.ts` pins these invariants.
+  scarce and brand-reserved (the wordmark, the primary action, the `^`). The `+`/`-`
+  SEMANTICS are caret's, though: `--diffs-addition-color-override`/
+  `--diffs-deletion-color-override` tie to `--ok`/`--danger`, and the library cascades
+  that one base into the line tint, the gutter bar, and the per-token emphasis wash, so
+  all three share one hue. Set only the `*-color-override` base — never a derived
+  `-base`/line-bg/emphasis var. Mix `in lab` only — `oklch` is mangled in the embedding
+  Chrome build, and a pinned library hex fails the no-hex bridge test.
+  `css-bridge.test.ts` pins these invariants.
 
 ## Related rules
 
