@@ -216,6 +216,10 @@ const LineAnnotationSchema = z
     startLine: z.number().int().min(1),
     endLine: z.number().int().min(1),
     comment: z.string(),
+    // Per-comment lifecycle from the ReviewStatus vocabulary. Optional so a draft
+    // that predates the field round-trips; preserved here (rather than stripped as
+    // an unknown key) so a client that sets it persists it.
+    state: z.enum(["pending", "approved", "rejected", "expired"]).optional(),
   })
   .refine((a) => a.endLine >= a.startLine, { message: "endLine must be >= startLine" });
 const LegacyAnnotationSchema = z.object({

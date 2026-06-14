@@ -579,6 +579,17 @@ test("PUT draft persists a line-anchored annotation", async () => {
   expect(one.annotations).toEqual(LINE_ANNS);
 });
 
+test("PUT draft round-trips a line annotation's optional ReviewStatus state", async () => {
+  await boot();
+  const { id } = await newReview();
+  // The per-comment state rides the line-anchored shape; the schema preserves it
+  // (rather than stripping it as an unknown key) so a stated comment persists.
+  const stated = [{ id: "s1", startLine: 2, endLine: 2, comment: "ok now", state: "approved" }];
+  await putDraft(id, { annotations: stated });
+  const one = await (await fetch(`${base}/api/reviews/${id}`)).json();
+  expect(one.annotations).toEqual(stated);
+});
+
 test("PUT draft persists a mixed legacy + line array, preserving both shapes", async () => {
   await boot();
   const { id } = await newReview();

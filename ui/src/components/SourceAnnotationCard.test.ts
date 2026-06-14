@@ -83,6 +83,62 @@ describe("SourceAnnotationCard label", () => {
   });
 });
 
+describe("SourceAnnotationCard state indicator", () => {
+  // The per-comment state affordance is driven by the annotation's optional `state`
+  // (a ReviewStatus). The card maps it to a labeled dot shown in both the collapsed
+  // chip and the expanded header; an absent state reads as a pending working draft.
+
+  function stated(state: LineAnnotation["state"], over: Record<string, unknown> = {}) {
+    return base({ annotation: { ...annotation, state }, ...over });
+  }
+
+  test("an annotation with no state shows the pending Draft affordance", () => {
+    const { target } = render(SourceAnnotationCard, stated(undefined));
+    expect(target.querySelector(".card")?.getAttribute("data-state")).toBe("pending");
+    const chip = target.querySelector(".chip .state");
+    expect(chip?.classList.contains("state-draft")).toBe(true);
+    expect(chip?.textContent?.trim()).toBe("Draft");
+  });
+
+  test("a pending comment reads as a Draft", () => {
+    const { target } = render(SourceAnnotationCard, stated("pending"));
+    const chip = target.querySelector(".chip .state");
+    expect(chip?.classList.contains("state-draft")).toBe(true);
+    expect(chip?.textContent?.trim()).toBe("Draft");
+  });
+
+  test("a rejected comment reads as a still-active Requested", () => {
+    const { target } = render(SourceAnnotationCard, stated("rejected"));
+    expect(target.querySelector(".card")?.getAttribute("data-state")).toBe("rejected");
+    const chip = target.querySelector(".chip .state");
+    expect(chip?.classList.contains("state-draft")).toBe(true);
+    expect(chip?.textContent?.trim()).toBe("Requested");
+  });
+
+  test("an approved comment reads as an Accepted terminal", () => {
+    const { target } = render(SourceAnnotationCard, stated("approved"));
+    expect(target.querySelector(".card")?.getAttribute("data-state")).toBe("approved");
+    const chip = target.querySelector(".chip .state");
+    expect(chip?.classList.contains("state-accepted")).toBe(true);
+    expect(chip?.textContent?.trim()).toBe("Accepted");
+  });
+
+  test("an expired comment reads as a quiet Expired terminal", () => {
+    const { target } = render(SourceAnnotationCard, stated("expired"));
+    expect(target.querySelector(".card")?.getAttribute("data-state")).toBe("expired");
+    const chip = target.querySelector(".chip .state");
+    expect(chip?.classList.contains("state-expired")).toBe(true);
+    expect(chip?.textContent?.trim()).toBe("Expired");
+  });
+
+  test("the same state affordance shows in the expanded header", () => {
+    const { target } = render(SourceAnnotationCard, stated("approved", { focused: true }));
+    const headState = target.querySelector(".body header .state");
+    expect(headState?.classList.contains("state-accepted")).toBe(true);
+    expect(headState?.textContent?.trim()).toBe("Accepted");
+  });
+});
+
 describe("SourceAnnotationCard focus + position", () => {
   test("the focused card carries the focused class", () => {
     const { target } = render(SourceAnnotationCard, base({ focused: true }));
