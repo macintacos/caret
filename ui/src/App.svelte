@@ -197,6 +197,7 @@
     approveMode={resolve.approveMode}
     {variants}
     {isDev}
+    {pendingCount}
     onSelect={selection.selectReview}
     {onApprove}
     onRequestChanges={() => (showDialog = true)}

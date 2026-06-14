@@ -6,7 +6,7 @@
 // source lines from the stored plan version, so the agent can locate the
 // feedback by content even when its own line numbering differs.
 
-import { type Annotation, isLegacyAnnotation } from "@core/types";
+import { type Annotation, isLegacyAnnotation, isLineAnnotation } from "@core/types";
 
 /** Collapses any run of whitespace (incl. newlines) to a single space. */
 function flatten(text: string): string {
@@ -54,6 +54,20 @@ export function pendingInline(annotations: Annotation[]): Annotation[] {
  * the count without formatting the feedback. */
 export function pendingInlineCount(annotations: Annotation[]): number {
   return pendingInline(annotations).length;
+}
+
+/** How many distinct source locations the pending inline comments anchor to. A
+ * line-anchored annotation's location is its `startLine-endLine` span, so several
+ * comments on the same line (or the same range) collapse to one location; a
+ * legacy annotation has no line anchor, so each counts as its own location. Lets
+ * the dialog say "N comments on M lines" honestly — M < N only when comments
+ * share a location. */
+export function pendingLineCount(annotations: Annotation[]): number {
+  const locations = new Set<string>();
+  pendingInline(annotations).forEach((a, i) => {
+    locations.add(isLineAnnotation(a) ? `line:${a.startLine}-${a.endLine}` : `legacy:${i}`);
+  });
+  return locations.size;
 }
 
 /**
