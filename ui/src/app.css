@@ -182,6 +182,23 @@ a:focus-visible,
   --diffs-fg: var(--ink);
   --diffs-fg-number: var(--ink-faint);
 
+  /* Semantic +/- color. The library themes its add/delete semantics through a
+     single-knob override layer: --diffs-addition-base reads
+     --diffs-addition-color-override, and the full-line tint
+     (--diffs-bg-addition, an ~80–88% mix toward the line bg), the gutter bar,
+     the +/- indicators, the header counts, the new/deleted change-icons, and
+     the per-token emphasis wash (--diffs-bg-addition-emphasis, an rgb(from base
+     / .15–.2) on the exact changed characters) all cascade from that one base.
+     Tying each override to caret's --ok/--danger retints the whole semantic
+     system in lockstep, so the bar and its line always share one hue; setting a
+     derived base, line-bg, or emphasis var directly would risk desyncing them.
+     Both tokens carry their own light/dark variants (green/red darker on paper,
+     brighter on dark), so a bare var() resolves correctly in both schemes.
+     --diffs-modified is deliberately left library-blue (no override) per the
+     amber-selection-only accent strategy. */
+  --diffs-addition-color-override: var(--ok);
+  --diffs-deletion-color-override: var(--danger);
+
   /* Layered surface. The library derives buffer/context/context-gutter/
      separator and the per-line hover from light-dark() greys mixed off
      --diffs-bg toward --diffs-mixer (light-dark(#000,#fff)). Binding each

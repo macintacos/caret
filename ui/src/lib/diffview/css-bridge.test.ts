@@ -77,4 +77,39 @@ describe("the .diffview → --diffs-* bridge", () => {
     // from the caret operands (--paper-sunk, --ink) flipping across schemes.
     expect(declarations(appCss)).not.toContain("@media");
   });
+
+  // Semantic add/delete color (EXC-604). The library themes its +/- semantics
+  // through a single-knob override layer: --diffs-addition-base reads
+  // --diffs-addition-color-override, and the line tint, the gutter bar, and the
+  // per-token emphasis wash (--diffs-bg-addition-emphasis = rgb(from base …))
+  // all cascade from that one base. Tying each override to caret's --ok/--danger
+  // retints the whole semantic system in lockstep; both tokens flip across
+  // schemes, so a bare var() carries correct hue in light and dark. We never set
+  // a derived -base/-bg-*/-emphasis var directly — that would risk desyncing the
+  // bar from its line. Per the tree's amber-selection-only accent strategy,
+  // --diffs-modified stays library-blue (no modified override).
+  const SEMANTIC_OVERRIDES = [
+    "--diffs-addition-color-override",
+    "--diffs-deletion-color-override",
+  ] as const;
+
+  for (const name of SEMANTIC_OVERRIDES) {
+    test(`sets ${name} from a caret token via var() or color-mix(in lab)`, () => {
+      const decl = rule.match(new RegExp(`${name}:\\s*([^;]+);`));
+      expect(decl).not.toBeNull();
+      const value = decl?.[1]?.trim() ?? "";
+      // A caret token reference or a lab mix — never a raw color literal.
+      expect(value).toMatch(/^(var\(--|color-mix\(in lab,)/);
+      // oklch is mangled in the embedding Chrome build.
+      expect(value).not.toContain("oklch");
+    });
+  }
+
+  test("keeps --diffs-modified library-blue — no modified override (amber-selection-only)", () => {
+    // The accent strategy reserves caret amber for the comment selection only;
+    // change-type semantics other than add/delete (the gutter +, change-type
+    // icons, merge-conflict incoming) read the library's blue for free, so the
+    // bridge deliberately sets no --diffs-modified-color-override.
+    expect(rule).not.toContain("--diffs-modified-color-override");
+  });
 });
