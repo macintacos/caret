@@ -342,14 +342,29 @@ a:focus-visible,
   --diffs-bg-selection-override: var(--accent);
   --diffs-bg-selection-number-override: var(--accent);
 
-  /* The comment-span bracket rail color, the only --diffs-* var caret adds beyond
-     the bridge above. caret's bracket overlay (lib/diffview/bracket.ts) reads it
-     to paint the rails; the action copies this resolved value onto the overlay
-     since that layer is a sibling of the host, not a descendant. A softened amber
-     keeps the rail a span MARKER distinct from the solid amber selection-drag
-     band, brand-tied yet quieter; the accent token's light/dark variants carry it
-     correctly in both schemes. */
+  /* The comment-span bracket rail color, one of the caret-owned --diffs-* vars
+     beyond the bridge above. caret's bracket overlay (lib/diffview/bracket.ts)
+     reads it to paint the rails; the action copies this resolved value onto the
+     overlay since that layer is a sibling of the host, not a descendant. A
+     softened amber keeps the rail a span MARKER distinct from the solid amber
+     selection-drag band, brand-tied yet quieter; the accent token's light/dark
+     variants carry it correctly in both schemes. */
   --diffs-decoration-bar-color: color-mix(in lab, var(--accent) 75%, transparent);
+
+  /* The link-hover tooltip surface (lib/diffview/linkInteractions.ts). Hovering a
+     link token reveals a bubble carrying the full href, mounted INSIDE the diff
+     shadow root so the native title bubble is gone. The tooltip is a shadow
+     descendant and custom properties inherit through the shadow boundary, so it
+     reads these three vars directly — the rest of its surface (radius, shadow,
+     font) borrows the FND/type tokens, which inherit the same way. A floating
+     panel reads on raised paper, not the sunk diff surface: bg is --paper-raised,
+     fg --ink, and a hairline border a faint ink mix off the raised paper. Both
+     paper/ink tokens carry their own light/dark variants, so the color-mix
+     resolves correctly in both schemes. amber is deliberately absent — the
+     tooltip is neutral chrome, not a brand surface. */
+  --diffs-link-tooltip-bg: var(--paper-raised);
+  --diffs-link-tooltip-fg: var(--ink);
+  --diffs-link-tooltip-border: color-mix(in lab, var(--paper-raised), var(--ink) 14%);
 }
 
 /* The comment-span bracket overlay: a host-side layer of rounded rails marking
