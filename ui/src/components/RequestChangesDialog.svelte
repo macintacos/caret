@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Annotation } from "@core/types";
-  import { formatFeedback } from "../lib/feedback.ts";
+  import { formatFeedback, pendingInlineCount } from "../lib/feedback.ts";
   import { isCancelKey, isSubmitChord } from "../lib/keys.ts";
   import Icon from "./Icon.svelte";
 
@@ -24,9 +24,7 @@
 
   // Live preview of exactly what the agent will receive.
   let preview = $derived(formatFeedback(annotations, generalComment, planText));
-  let inlineCount = $derived(
-    annotations.filter((a) => a.comment.trim().length > 0).length,
-  );
+  let inlineCount = $derived(pendingInlineCount(annotations));
 
   $effect(() => {
     textarea?.focus();

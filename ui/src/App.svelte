@@ -11,8 +11,10 @@
     type SelectionStore,
   } from "./state/polling.svelte.ts";
   import { createResolve, type ResolveStore } from "./state/resolve.svelte.ts";
+  import { pendingInlineCount } from "./lib/feedback.ts";
   import type { ApproveVariant, ApproveVariantId, Annotation } from "@core/types";
 
+  import ApproveConfirmDialog from "./components/ApproveConfirmDialog.svelte";
   import DiffPlanView from "./components/DiffPlanView.svelte";
   import EmptyState from "./components/EmptyState.svelte";
   import RequestChangesDialog from "./components/RequestChangesDialog.svelte";
@@ -53,6 +55,9 @@
   }>({ annotations: [], generalCommentDraft: "", focusedAnnotation: null });
 
   let showDialog = $state(false);
+  // The approve variant a pending-comment guard is holding: the mode the reviewer
+  // chose, parked until they confirm or divert. Null = no guard open.
+  let pendingApproveMode = $state<ApproveVariantId | null>(null);
   let safeMode = $state(false);
 
   // ----- State modules -----
@@ -73,6 +78,10 @@
   // The variants the split-button renders: the declared set when present, else
   // the built-in fallback.
   let variants = $derived(approveVariants(declaredVariants));
+  // Non-blank inline comments the working copy holds — the count the approve
+  // guard and the request-changes dialog both read, so they never disagree about
+  // what's pending.
+  let pendingCount = $derived(pendingInlineCount(work.annotations));
 
   // ----- Working-copy reload -----
   // When the active review (or its version) changes — whether from a selection
@@ -157,7 +166,22 @@
   $effect(() => installUiGoneBeacon({ target: window }));
 
   function onApprove(mode: ApproveVariantId) {
-    void resolve.approve(mode);
+    // Approving never sends inline comments, so pending ones would be silently
+    // lost. Guard the approve with a confirmation when any are non-blank; with
+    // none, approve fires straight through as before.
+    if (pendingCount > 0) pendingApproveMode = mode;
+    else void resolve.approve(mode);
+  }
+  function approveAnyway() {
+    const mode = pendingApproveMode;
+    pendingApproveMode = null;
+    if (mode) void resolve.approve(mode);
+  }
+  function divertToRequestChanges() {
+    // The annotations + general-comment draft are App.svelte's autosaved state,
+    // so they survive the hand-off to the request-changes dialog untouched.
+    pendingApproveMode = null;
+    showDialog = true;
   }
   function onRequestChanges(generalComment: string) {
     showDialog = false;
@@ -220,6 +244,15 @@
      the grid, so it's always visible regardless of review state; self-gates on
      `version` until the health probe lands. -->
 <VersionBadge {version} {commit} />
+
+{#if pendingApproveMode !== null && active}
+  <ApproveConfirmDialog
+    count={pendingCount}
+    onApproveAnyway={approveAnyway}
+    onRequestChanges={divertToRequestChanges}
+    onCancel={() => (pendingApproveMode = null)}
+  />
+{/if}
 
 {#if showDialog && active}
   <RequestChangesDialog

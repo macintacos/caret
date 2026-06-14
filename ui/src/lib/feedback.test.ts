@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Annotation } from "@core/types";
-import { formatFeedback } from "./feedback.ts";
+import { formatFeedback, pendingInlineCount } from "./feedback.ts";
 
 // A synthetic plan whose lines are individually identifiable, so a quoted block
 // is unambiguous. Line numbers are 1-based: line 1 is "# Title", line 3 is the
@@ -163,5 +163,33 @@ describe("formatFeedback", () => {
   test("is deterministic for identical input", () => {
     const anns = [ann({ quote: "a", comment: "1" }), lineAnn(3, 3, "2")];
     expect(formatFeedback(anns, "x", PLAN)).toBe(formatFeedback(anns, "x", PLAN));
+  });
+});
+
+describe("pendingInlineCount", () => {
+  test("counts only non-blank comments", () => {
+    expect(
+      pendingInlineCount([
+        ann({ comment: "real" }),
+        lineAnn(3, 3, "also real"),
+        ann({ comment: "   " }),
+      ]),
+    ).toBe(2);
+  });
+
+  test("treats whitespace-only comments as blank", () => {
+    expect(pendingInlineCount([ann({ comment: "   " }), lineAnn(3, 3, "\n\t ")])).toBe(0);
+  });
+
+  test("is zero for no annotations", () => {
+    expect(pendingInlineCount([])).toBe(0);
+  });
+
+  test("agrees with formatFeedback's inline numbering", () => {
+    // The count is the same predicate formatFeedback numbers by, so the two never
+    // disagree about which comments are "pending".
+    const anns = [ann({ comment: "kept" }), ann({ comment: "  " }), lineAnn(4, 4, "kept2")];
+    expect(pendingInlineCount(anns)).toBe(2);
+    expect(formatFeedback(anns, "", PLAN)).toContain("2. ");
   });
 });
