@@ -18,7 +18,7 @@
 <style>
   .dev-badge {
     font-family: var(--font-mono);
-    font-size: 0.65rem;
+    font-size: var(--text-2xs);
     font-weight: 700;
     letter-spacing: 0.04em;
     color: var(--accent-ink);

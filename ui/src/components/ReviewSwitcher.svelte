@@ -85,7 +85,7 @@
   .title {
     font-family: var(--font-sans);
     font-weight: 500;
-    font-size: 0.95rem;
+    font-size: var(--text-md);
     color: var(--ink);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -95,7 +95,7 @@
     background: var(--accent);
     color: var(--accent-ink);
     border-radius: 99px;
-    font-size: 0.65rem;
+    font-size: var(--text-2xs);
     font-weight: 700;
     padding: 0.05rem 0.4rem;
   }
@@ -148,11 +148,11 @@
   }
   .m-title {
     font-family: var(--font-sans);
-    font-size: 0.92rem;
+    font-size: var(--text-md);
     color: var(--ink);
   }
   .m-meta {
     color: var(--ink-faint);
-    font-size: 0.7rem;
+    font-size: var(--text-xs);
   }
 </style>

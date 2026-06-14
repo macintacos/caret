@@ -115,7 +115,7 @@
   .toc-filter {
     flex: 0 0 auto;
     font-family: var(--font-sans);
-    font-size: 0.78rem;
+    font-size: var(--text-sm);
     color: var(--ink);
     background: var(--paper);
     border: 1px solid var(--rule);
@@ -150,8 +150,8 @@
     width: 100%;
     text-align: left;
     font-family: "Berkeley Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    font-size: 0.76rem;
-    line-height: 1.4;
+    font-size: var(--text-sm);
+    line-height: var(--leading-tight);
     color: var(--ink-soft);
     background: none;
     border: none;
@@ -204,7 +204,7 @@
   .toc-empty {
     list-style: none;
     font-family: var(--font-sans);
-    font-size: 0.74rem;
+    font-size: var(--text-xs);
     color: var(--ink-faint);
     padding: 0.26rem 0.45rem;
   }

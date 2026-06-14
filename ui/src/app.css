@@ -13,6 +13,29 @@
   --font-sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
   --font-mono: "Berkeley Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
+  /* Type scale. One named ramp the chrome sizes against, so density tunes from a
+     single lever instead of scattered literals. Steps are rem (1rem = the 15px
+     body base) and sit ~one step apart; --text-sm is the .mono/diff-view size,
+     --text-2xs the .eyebrow size, --text-lg the comfortable reading size. A
+     chrome font-size picks the nearest step; genuine display/glyph one-offs
+     (EmptyState's hero glyph, a dialog title) stay literal with a justification.
+     The --leading-* tokens are role-keyed (not one-per-step): --none for
+     single-line badges/glyphs, --tight for dense multi-line labels, --snug for
+     comment/annotation body copy, --normal for base reading text (it matches the
+     body line-height below, so the body and the diff view share it). */
+  --text-2xs: 0.65rem;
+  --text-xs: 0.7rem;
+  --text-sm: 0.78rem;
+  --text-base: 0.82rem;
+  --text-md: 0.9rem;
+  --text-lg: 1rem;
+  --text-xl: 1.15rem;
+
+  --leading-none: 1;
+  --leading-tight: 1.3;
+  --leading-snug: 1.45;
+  --leading-normal: 1.55;
+
   /* Light: neutral grey paper + ink */
   --paper: #fafafa;
   --paper-raised: #ffffff;
@@ -92,7 +115,7 @@ body {
   background: var(--paper);
   color: var(--ink);
   font-size: 15px;
-  line-height: 1.55;
+  line-height: var(--leading-normal);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -117,13 +140,13 @@ body {
 /* ----- Shared atoms ----- */
 .mono {
   font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-size: var(--text-sm);
   letter-spacing: 0.01em;
 }
 
 .eyebrow {
   font-family: var(--font-sans);
-  font-size: 0.66rem;
+  font-size: var(--text-2xs);
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--ink-faint);
@@ -174,8 +197,8 @@ a:focus-visible,
      primary action, the ^). The same decision is recorded for contributors in
      docs/agents/svelte-rules.md. */
   --diffs-font-family: 'Berkeley Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  --diffs-font-size: 0.78rem;
-  --diffs-line-height: 1.55;
+  --diffs-font-size: var(--text-sm);
+  --diffs-line-height: var(--leading-normal);
   --diffs-tab-size: 2;
 
   --diffs-bg: var(--paper-sunk);

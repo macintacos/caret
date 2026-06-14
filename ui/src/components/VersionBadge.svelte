@@ -39,9 +39,9 @@
     display: inline-flex;
     align-items: center;
     font-family: var(--font-mono);
-    font-size: 0.65rem;
+    font-size: var(--text-2xs);
     letter-spacing: 0.02em;
-    line-height: 1;
+    line-height: var(--leading-none);
     color: var(--ink-soft);
     background: var(--paper-raised);
     border: 1px solid var(--rule);

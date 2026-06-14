@@ -156,7 +156,7 @@
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
-    font-size: 0.82rem;
+    font-size: var(--text-base);
     color: var(--ink-soft);
   }
   .body {
@@ -177,7 +177,7 @@
     margin-bottom: 0.4rem;
   }
   .ref {
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
     font-weight: 600;
     letter-spacing: 0.02em;
     color: var(--ink-soft);
@@ -196,7 +196,7 @@
     color: var(--ink);
   }
   .comment {
-    font-size: 0.92rem;
+    font-size: var(--text-md);
     margin: 0;
     color: var(--ink);
     white-space: pre-wrap;
@@ -205,7 +205,7 @@
     width: 100%;
     box-sizing: border-box;
     resize: vertical;
-    font-size: 0.9rem;
+    font-size: var(--text-md);
     color: var(--ink);
     background: var(--paper);
     border: 1px solid var(--accent);
@@ -224,7 +224,7 @@
     background: none;
     border: none;
     padding: 0;
-    font-size: 0.78rem;
+    font-size: var(--text-sm);
     color: var(--ink-soft);
     cursor: pointer;
     transition: color 0.15s;

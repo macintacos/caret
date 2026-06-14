@@ -279,13 +279,13 @@
     color: var(--ink);
     border-bottom: 1px solid var(--rule-strong);
     border-left: 3px solid var(--accent);
-    font-size: 0.82rem;
+    font-size: var(--text-base);
     animation: daemon-banner-in 160ms ease-out;
   }
   .db-text {
     margin: 0;
     min-width: 0;
-    line-height: 1.35;
+    line-height: var(--leading-tight);
   }
   .db-actions {
     display: flex;
@@ -296,7 +296,7 @@
   .db-reload,
   .db-dismiss {
     font: inherit;
-    font-size: 0.78rem;
+    font-size: var(--text-sm);
     cursor: pointer;
     border-radius: var(--radius);
     padding: 0.3rem 0.7rem;
@@ -354,7 +354,7 @@
     border: 1px solid var(--rule-strong);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
-    font-size: 0.8rem;
+    font-size: var(--text-base);
     animation: safe-mode-in 160ms ease-out;
   }
   .sm-dot {
@@ -368,7 +368,7 @@
   .sm-text {
     display: flex;
     flex-direction: column;
-    line-height: 1.3;
+    line-height: var(--leading-tight);
   }
   .sm-text strong {
     font-weight: 600;
@@ -376,7 +376,7 @@
   }
   .sm-text span {
     color: var(--ink-soft);
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
   }
   @keyframes safe-mode-in {
     from {
