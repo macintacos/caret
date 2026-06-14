@@ -98,6 +98,16 @@ stays green under any invocation.
   viewport derives from it — so a drift fails the unit suite instead of silently breaking
   the e2e smoke. When a magic number couples TS to config, name it once and test the
   coupling.
+- **The diff-view bridge is amber-selection-only.** The single `.diffview` rule in
+  `app.css` maps caret's tokens onto `@pierre/diffs`'s `--diffs-*` properties. caret
+  adopts the library's surface STRUCTURE — the layered buffer/context/separator depth
+  system, derived per surface with `color-mix(in lab, …)` off caret's paper/ink ramp — not
+  its blue skin. Only the comment SELECTION is recolored to caret amber (via
+  `--diffs-bg-selection-override`); `--diffs-modified` stays library-blue, so the gutter
+  `+`, change-type icons, and merge-conflict incoming read blue for free, and amber stays
+  scarce and brand-reserved (the wordmark, the primary action, the `^`). Mix `in lab` only
+  — `oklch` is mangled in the embedding Chrome build, and a pinned library hex fails the
+  no-hex bridge test. `css-bridge.test.ts` pins these invariants.
 
 ## Related rules
 

@@ -165,6 +165,14 @@ a:focus-visible,
    Berkeley Mono is referenced by name only — no font files ship (commercial
    license); the stack falls back gracefully when it is not installed. */
 .diffview {
+  /* Accent strategy: amber-selection-only. caret adopts @pierre/diffs's
+     surface STRUCTURE — the layered buffer/context/separator depth system —
+     not its blue skin. The comment SELECTION is caret amber (set via
+     --diffs-bg-selection-override); --diffs-modified stays library-blue, so the
+     gutter +, change-type icons, and merge-conflict incoming read blue for
+     free. caret amber stays scarce and brand-reserved (the wordmark, the
+     primary action, the ^). The same decision is recorded for contributors in
+     docs/agents/svelte-rules.md. */
   --diffs-font-family: 'Berkeley Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   --diffs-font-size: 0.78rem;
   --diffs-line-height: 1.55;
@@ -173,4 +181,23 @@ a:focus-visible,
   --diffs-bg: var(--paper-sunk);
   --diffs-fg: var(--ink);
   --diffs-fg-number: var(--ink-faint);
+
+  /* Layered surface. The library derives buffer/context/context-gutter/
+     separator and the per-line hover from light-dark() greys mixed off
+     --diffs-bg toward --diffs-mixer (light-dark(#000,#fff)). Binding each
+     override to caret's paper/ink ramp ties the whole structural surface to
+     caret's grey system — and the -45° hatch buffer fill paints
+     var(--diffs-bg-buffer), so it inherits the caret color for free. caret's
+     --ink flips like --diffs-mixer (dark on light paper, light on dark), so a
+     single color-mix(in lab, --paper-sunk, --ink <pct>) carries correct depth
+     in BOTH schemes without a nested @media — the operands do the flipping.
+     Percentages follow the library's surface ordering: buffer deepest, then
+     separator and context-gutter, context faintest. */
+  --diffs-bg-buffer-override: color-mix(in lab, var(--paper-sunk), var(--ink) 8%);
+  --diffs-bg-context-override: color-mix(in lab, var(--paper-sunk), var(--ink) 2%);
+  --diffs-bg-context-gutter-override: color-mix(in lab, var(--paper-sunk), var(--ink) 5%);
+  --diffs-bg-separator-override: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
+  /* The per-line hover blends 97%/91% toward this operand (light/dark), so a
+     bare --ink keeps the highlight a subtle, scheme-correct caret grey. */
+  --diffs-bg-hover-override: var(--ink);
 }
