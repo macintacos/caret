@@ -21,4 +21,17 @@ describe("VersionLabel", () => {
     const { target } = render(VersionLabel, { version: 2 });
     expect(target.querySelector(".caret")!.textContent).toBe("^");
   });
+
+  // The revision number is fixed-width via the .metric atom (mono + tabular
+  // figures), so the pill holds the same width whether the digit count grows
+  // (v9 → v11). happy-dom does no real layout, so the falsifiable proxy for
+  // that width-stability is the atom's presence on both digit counts.
+  test("carries the tabular .metric atom across digit counts", () => {
+    for (const version of [9, 11]) {
+      const { target } = render(VersionLabel, { version });
+      const badge = target.querySelector(".version")!;
+      expect(badge.classList.contains("metric")).toBe(true);
+      expect(badge.textContent).toContain(`v${version}`);
+    }
+  });
 });

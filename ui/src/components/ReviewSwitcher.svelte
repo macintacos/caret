@@ -29,7 +29,7 @@
   >
     <span class="title">{stripTitleLinks(active?.title ?? "—")}</span>
     {#if reviews.length > 1}
-      <span class="badge">{reviews.length}</span>
+      <span class="badge metric">{reviews.length}</span>
       <span class="chev" class:open aria-hidden="true">
         <Icon name="chevron-down" size={14} />
       </span>
