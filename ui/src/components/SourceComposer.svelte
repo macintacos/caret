@@ -5,6 +5,7 @@
   // gutter. Submitting creates a line-anchored annotation, Esc cancels,
   // Cmd/Ctrl+Enter submits. Keyboard-accessible: it grabs focus on open and traps
   // Escape/submit chords on its own subtree.
+  import { rangeLabel } from "../lib/diffview/commenting.ts";
   import { isCancelKey, isSubmitChord } from "../lib/keys.ts";
   import Icon from "./Icon.svelte";
 
@@ -33,9 +34,9 @@
     textarea?.focus({ preventScroll: true });
   });
 
-  const label = $derived(
-    startLine === endLine ? `Line ${startLine}` : `Lines ${startLine}–${endLine}`,
-  );
+  // Shared with the live drag readout (see DiffPlanView) so the preview while
+  // dragging and this post-release label always read the same range.
+  const label = $derived(rangeLabel(startLine, endLine));
 
   function submit() {
     onSubmit(comment);

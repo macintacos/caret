@@ -74,6 +74,26 @@ describe("toFileOptions", () => {
     expect(result.renderAnnotation).toBe(renderAnnotation);
   });
 
+  test("spreads the live line-selection callbacks when provided", () => {
+    // The library fires these during a drag; bridging them through the gutter bag
+    // is what feeds the host's live "Lines X–Y" readout before release.
+    const onLineSelectionStart = () => {};
+    const onLineSelectionChange = () => {};
+    const onLineSelectionEnd = () => {};
+    const result = toFileOptions({}, undefined, {
+      enableGutterUtility: true,
+      enableLineSelection: true,
+      onGutterUtilityClick: () => {},
+      renderAnnotation: () => undefined,
+      onLineSelectionStart,
+      onLineSelectionChange,
+      onLineSelectionEnd,
+    });
+    expect(result.onLineSelectionStart).toBe(onLineSelectionStart);
+    expect(result.onLineSelectionChange).toBe(onLineSelectionChange);
+    expect(result.onLineSelectionEnd).toBe(onLineSelectionEnd);
+  });
+
   test("omitting the gutter bag leaves the option object gutter-free", () => {
     const result = toFileOptions({ overflow: "wrap" });
     expect("enableGutterUtility" in result).toBe(false);

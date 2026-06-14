@@ -26,6 +26,14 @@ export interface SourceViewGutter {
   // lines rather than only the one it hovers.
   enableLineSelection: true;
   onGutterUtilityClick(range: SelectedLineRange): void;
+  // Live during a drag: the library fires these as the line selection grows or
+  // shrinks (start when the gesture begins, change on every row crossed, end on
+  // release/cancel with a null range). A view bridges them to preview the range
+  // before release; `range` is null when the selection clears. Optional — the
+  // gutter `+` works without them, so a view that wants no live readout omits them.
+  onLineSelectionStart?(range: SelectedLineRange | null): void;
+  onLineSelectionChange?(range: SelectedLineRange | null): void;
+  onLineSelectionEnd?(range: SelectedLineRange | null): void;
   renderAnnotation(annotation: LineAnnotation): HTMLElement | undefined;
 }
 
