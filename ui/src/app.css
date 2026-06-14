@@ -14,8 +14,11 @@
   --font-mono: "Berkeley Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   /* Type scale. One named ramp the chrome sizes against, so density tunes from a
-     single lever instead of scattered literals. Steps are rem (1rem = the 15px
-     body base) and sit ~one step apart; --text-sm is the .mono/diff-view size,
+     single lever instead of scattered literals. Steps are rem, so they resolve
+     against the root (no html font-size override → 1rem = 16px); the 15px set on
+     <body> below is an absolute-px reading base, NOT the rem origin. Steps sit
+     ~one step apart; --text-sm (≈12.48px) is the .mono inline-chrome size,
+     --text-base (≈13.12px) the diff-view size (a crisper step above .mono),
      --text-2xs the .eyebrow size, --text-lg the comfortable reading size. A
      chrome font-size picks the nearest step; genuine display/glyph one-offs
      (EmptyState's hero glyph, a dialog title) stay literal with a justification.
@@ -208,7 +211,15 @@ a:focus-visible,
      primary action, the ^). The same decision is recorded for contributors in
      docs/agents/svelte-rules.md. */
   --diffs-font-family: 'Berkeley Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  --diffs-font-size: var(--text-sm);
+  /* The diff mono sits one scale step above the .mono inline-chrome size: it
+     draws --text-base (≈13.12px at the 16px root) where .mono draws --text-sm
+     (≈12.48px). The two are different surfaces — the diff is a dense reading
+     grid where the larger step reads crisper and matches @pierre/diffs's ~13px
+     host reference, so it earns its own step rather than sharing .mono's. Line-
+     height stays --leading-normal (1.55), so the diff shares the body's reading
+     rhythm; at this size that resolves to ≈20.34px, near the library's 20px
+     reference. Both stay well above the ~11.5px legibility floor. */
+  --diffs-font-size: var(--text-base);
   --diffs-line-height: var(--leading-normal);
   --diffs-tab-size: 2;
   /* Tabular figures for the line-number column and the +N/-N header counts. The
