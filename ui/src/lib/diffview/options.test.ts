@@ -124,6 +124,8 @@ describe("toFileDiffOptions", () => {
       themeType: "system",
       diffStyle: "split",
       diffIndicators: "classic",
+      hunkSeparators: "line-info",
+      expandUnchanged: false,
     });
   });
 
@@ -135,6 +137,20 @@ describe("toFileDiffOptions", () => {
       themeType: "system",
       diffStyle: undefined,
       diffIndicators: undefined,
+      hunkSeparators: "line-info",
+      expandUnchanged: false,
     });
+  });
+
+  test("pins hunkSeparators and expandUnchanged so a library default flip can't drift them", () => {
+    // The collapsed-context band IS the line-info separator: caret themes its
+    // surface through the FND --diffs-bg-separator-override bridge in app.css, so
+    // the mapper pins the separator kind rather than inheriting it. expandUnchanged
+    // stays false so context keeps collapsing — the band and its expand pills only
+    // exist while context is hidden. Both currently equal the library defaults;
+    // emitting them explicitly keeps the rethemed surface stable across a bump.
+    const result = toFileDiffOptions({});
+    expect(result.hunkSeparators).toBe("line-info");
+    expect(result.expandUnchanged).toBe(false);
   });
 });

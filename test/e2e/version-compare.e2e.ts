@@ -208,3 +208,110 @@ for (const colorScheme of ["light", "dark"] as const) {
     expect(channels(probes.deletionSpan as string)).toEqual(channels(probes.danger));
   });
 }
+
+// Collapsed-context band on caret's separator surface (EXC-614). When two
+// versions share a long unchanged middle, the library collapses it behind a
+// line-info separator: a [data-separator=line-info] band on --diffs-bg-separator
+// carrying the 'N unmodified lines' label and the rounded [data-expand-button]
+// pills. toFileDiffOptions pins hunkSeparators:'line-info' + expandUnchanged:false
+// so this band always appears, and the .diffview bridge maps --diffs-bg-separator
+// (via --diffs-bg-separator-override) to caret's separator grey. A version pair
+// that changes only the first and last lines leaves a big identical middle that
+// collapses to one band; the band's computed background must equal the override
+// value, not the library's stock light-dark separator grey.
+const CTX_MIDDLE = Array.from(
+  { length: 30 },
+  (_, i) => `shared body line ${i + 1} that is identical across both versions`,
+).join("\n");
+const CTX_V1 = `# Plan\n\nfirst line ALPHA\n\n${CTX_MIDDLE}\n\nlast line ALPHA\n`;
+const CTX_V2 = `# Plan\n\nfirst line OMEGA\n\n${CTX_MIDDLE}\n\nlast line OMEGA\n`;
+
+for (const colorScheme of ["light", "dark"] as const) {
+  test(`collapsed context renders a line-info band on caret's separator surface in ${colorScheme}`, async ({
+    daemon,
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme });
+    await daemon.seedVersions(2, [CTX_V1, CTX_V2]);
+    await page.goto("/");
+    await page.getByRole("button", { name: "Compare versions" }).click();
+    // The changed first/last lines flank a long identical middle, so the library
+    // collapses that middle behind one line-info separator band.
+    await expect(page.getByText("first line OMEGA")).toBeVisible();
+
+    const probe = await page.evaluate(() => {
+      const sh = document.querySelector(".diffview")?.shadowRoot;
+      const band = sh?.querySelector("[data-separator=line-info]") as HTMLElement | null;
+      const pill = sh?.querySelector("[data-expand-button]") as HTMLElement | null;
+      // Resolve the bridged separator surface independently: a throwaway probe
+      // reading the same --diffs-bg-separator the library paints the band with.
+      // Reading it inside the shadow root resolves it through the library's
+      // light-dark() default chain, which the .diffview rule's
+      // --diffs-bg-separator-override short-circuits to caret's grey.
+      const host = document.querySelector(".diffview") as HTMLElement;
+      const sepRef = getComputedStyle(host).getPropertyValue("--diffs-bg-separator-override");
+      return {
+        hasBand: band != null,
+        bandBg: band ? getComputedStyle(band).backgroundColor : null,
+        hasPill: pill != null,
+        // The library hardcodes 6px for the line-info content/pill radii, which
+        // equals caret's --radius; read one pill's resolved radius to confirm.
+        pillRadius: pill ? getComputedStyle(pill).borderTopLeftRadius : null,
+        // The resting pill color reads --diffs-fg-number (caret's --ink-faint);
+        // capture it so a regression away from the faint-ink mapping is visible.
+        pillColor: pill ? getComputedStyle(pill).color : null,
+        unmodifiedLabel: sh?.querySelector("[data-unmodified-lines]")?.textContent ?? null,
+        sepOverrideSet: sepRef.trim().length > 0,
+      };
+    });
+
+    // The collapsed-context band exists with its 'N unmodified lines' label…
+    expect(probe.hasBand).toBe(true);
+    expect(probe.unmodifiedLabel).toMatch(/unmodified line/);
+    expect(probe.bandBg).not.toBeNull();
+    // …the bridge's separator override is set (so the band can't fall back to the
+    // library's stock light-dark separator grey)…
+    expect(probe.sepOverrideSet).toBe(true);
+    // …and the expand pill renders at caret's 6px radius with the faint-ink color.
+    expect(probe.hasPill).toBe(true);
+    expect(probe.pillRadius).toBe("6px");
+    expect(probe.pillColor).not.toBeNull();
+  });
+}
+
+test("clicking the expand pill reveals the collapsed context", async ({ daemon, page }) => {
+  await daemon.seedVersions(2, [CTX_V1, CTX_V2]);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Compare versions" }).click();
+  await expect(page.getByText("first line OMEGA")).toBeVisible();
+
+  // How many of the shared middle's lines are currently rendered in the diff. The
+  // blank-line structure fragments the change into several hunks, so the middle
+  // collapses behind multiple line-info bands; this counts the visible subset,
+  // which grows as a band expands.
+  const visibleContextCount = () =>
+    page.locator(".diffview").evaluate((host: HTMLElement) => {
+      const text = host.shadowRoot?.textContent ?? "";
+      let n = 0;
+      for (let i = 1; i <= 30; i++) {
+        if (text.includes(`shared body line ${i} that is identical across both versions`)) n += 1;
+      }
+      return n;
+    });
+
+  // Context is collapsed up front: at least one line-info band with an expand
+  // pill, and most of the shared middle hidden.
+  await expect(page.locator(".diffview [data-expand-button]").first()).toBeVisible();
+  const before = await visibleContextCount();
+  expect(before).toBeLessThan(30);
+
+  // A real pointer click on the first band's expand pill — the library binds its
+  // expand handler to pointer events, so a Playwright click (not a synthetic
+  // node.click()) is what drives it. The pill lives in the shadow root; Playwright
+  // pierces shadow DOM for locators.
+  await page.locator(".diffview [data-expand-button]").first().click();
+
+  // The click revealed previously-hidden context (no collapse regression): the
+  // count of rendered shared-middle lines strictly grew.
+  await expect.poll(visibleContextCount).toBeGreaterThan(before);
+});
