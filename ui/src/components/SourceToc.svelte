@@ -144,8 +144,10 @@
   }
 
   /* Each row is a monospace outline entry; level drives the left indent so the
-     heading hierarchy reads at a glance. */
+     heading hierarchy reads at a glance. position: relative anchors the per-level
+     indent guide (the ::before below) to the row box. */
   .toc-row {
+    position: relative;
     display: block;
     width: 100%;
     text-align: left;
@@ -165,6 +167,28 @@
       background var(--dur-fast) var(--ease-out),
       color var(--dur-fast) var(--ease-out);
   }
+
+  /* The indent guide: a quiet 1px hairline standing in the indent gutter of every
+     nested row, so depth reads as structure (the Trees idiom) rather than as bare
+     whitespace. Drawn with --rule, the same hairline that rules the rest of the
+     chrome. Each level's guide sits 0.4rem left of where its text begins, so the
+     ramp of guides steps right with depth into a visible ladder. The guide spans
+     the row's full height (inset 0) and is click-through; lvl-1 is a top-level row
+     and draws none. The padding ramp below is unchanged, so left-to-right indent
+     ordering is preserved — the guide augments the padding, it doesn't replace it. */
+  .toc-row.lvl-2::before,
+  .toc-row.lvl-3::before,
+  .toc-row.lvl-4::before,
+  .toc-row.lvl-5::before,
+  .toc-row.lvl-6::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--rule);
+    pointer-events: none;
+  }
   .toc-row.lvl-1 {
     padding-left: 0.45rem;
     color: var(--ink);
@@ -173,27 +197,50 @@
   .toc-row.lvl-2 {
     padding-left: 1.1rem;
   }
+  .toc-row.lvl-2::before {
+    left: 0.7rem;
+  }
   .toc-row.lvl-3 {
     padding-left: 1.75rem;
   }
+  .toc-row.lvl-3::before {
+    left: 1.35rem;
+  }
   .toc-row.lvl-4 {
     padding-left: 2.4rem;
+  }
+  .toc-row.lvl-4::before {
+    left: 2rem;
   }
   .toc-row.lvl-5,
   .toc-row.lvl-6 {
     padding-left: 3.05rem;
     color: var(--ink-faint);
   }
+  .toc-row.lvl-5::before,
+  .toc-row.lvl-6::before {
+    left: 2.65rem;
+  }
 
+  /* The three interaction states bind to the chrome's interaction tokens: hover
+     lifts the row onto the sunk surface, the keyboard cursor is a quiet
+     --rule-strong ring, and the scroll-tracked active heading takes the accent
+     wash + a left bar. The cursor (ring) and active (wash + bar) are deliberately
+     kept visually distinct so the "where my keyboard focus is" and "where I am in
+     the document" signals never collapse into one state. */
   .toc-row:hover {
     background: var(--paper-sunk);
     color: var(--ink);
   }
-  /* The keyboard cursor is a quiet ring; the active (scroll-tracked) heading
-     gets the accent wash + a left bar so the two states never read the same. */
   .toc-row.cursor {
     box-shadow: inset 0 0 0 1px var(--rule-strong);
   }
+  /* The active row is the "you are here" moment, and it is caret amber on purpose:
+     --accent-wash and --accent both resolve to the brand amber the tool is named
+     for, so this row stays brand-tied even if the generic interaction tokens above
+     are ever neutralized to a hue-less grey. The amber tie is load-bearing, not
+     incidental — keep this row pointed at the accent/brand token, never at a
+     neutral interaction token. */
   .toc-row.active {
     background: var(--accent-wash);
     color: var(--accent);

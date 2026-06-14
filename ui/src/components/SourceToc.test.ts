@@ -56,6 +56,24 @@ describe("SourceToc content", () => {
     expect(r[1]!.getAttribute("aria-current")).toBe("location");
     expect(r[0]!.classList.contains("active")).toBe(false);
   });
+
+  // The per-level lvl-{n} class is the only positioning hook the indent-guide
+  // rules key off (each nested level paints its own vertical guide via a ::before
+  // rule selected by this class). Guard that every row carries its level class so
+  // a future markup change can't silently strip the guides' anchor; happy-dom has
+  // no layout, so the guide's paint itself is an e2e/browser concern, not this.
+  test("every nested row carries its level class so the indent guides anchor", () => {
+    const nested: TocHeading[] = [
+      { level: 1, text: "Top", line: 1 },
+      { level: 2, text: "Mid", line: 3 },
+      { level: 3, text: "Deep", line: 5 },
+    ];
+    const { target } = render(SourceToc, { headings: nested, activeLine: null, onJump: () => {} });
+    const r = rows(target);
+    expect(r[0]!.classList.contains("lvl-1")).toBe(true);
+    expect(r[1]!.classList.contains("lvl-2")).toBe(true);
+    expect(r[2]!.classList.contains("lvl-3")).toBe(true);
+  });
 });
 
 describe("SourceToc filtering (hide non-matches)", () => {
