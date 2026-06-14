@@ -28,13 +28,17 @@ describe("toFileOptions", () => {
     });
   });
 
-  test("spreads link handlers into the library options when provided", () => {
+  test("spreads the composed token handlers into the library options when provided", () => {
     const onTokenClick = () => {};
     const onTokenEnter = () => {};
     const onTokenLeave = () => {};
     const result = toFileOptions(
       { overflow: "wrap" },
-      { onTokenClick, onTokenEnter, onTokenLeave },
+      {
+        handlers: { onTokenClick, onTokenEnter, onTokenLeave },
+        libOptions: { useTokenTransformer: true },
+        wasLinkClick: () => false,
+      },
     );
     expect(result.onTokenClick).toBe(onTokenClick);
     expect(result.onTokenEnter).toBe(onTokenEnter);
@@ -42,18 +46,23 @@ describe("toFileOptions", () => {
     expect(result.overflow).toBe("wrap");
   });
 
-  test("enables the token transformer when link handlers are present", () => {
+  test("carries the composed token transformer flag through", () => {
     // The library only emits per-token data-char markers (which the click/hover
-    // hit-test needs) when useTokenTransformer is explicitly set, so the option
-    // must accompany the handlers.
+    // hit-test needs) when useTokenTransformer is explicitly set. composeTokenHandlers
+    // owns that flag and ships it in libOptions; toFileOptions only relays it, so the
+    // flag can never drift apart from the handlers it accompanies.
     const result = toFileOptions(
       {},
-      { onTokenClick: () => {}, onTokenEnter: () => {}, onTokenLeave: () => {} },
+      {
+        handlers: { onTokenClick: () => {}, onTokenEnter: () => {}, onTokenLeave: () => {} },
+        libOptions: { useTokenTransformer: true },
+        wasLinkClick: () => false,
+      },
     );
     expect(result.useTokenTransformer).toBe(true);
   });
 
-  test("omitting link handlers leaves the option object handler-free", () => {
+  test("omitting the composed token bag leaves the option object handler-free", () => {
     const result = toFileOptions({ overflow: "wrap" });
     expect("onTokenClick" in result).toBe(false);
     expect("useTokenTransformer" in result).toBe(false);
