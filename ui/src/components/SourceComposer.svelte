@@ -89,7 +89,9 @@
     border-left: 3px solid var(--accent);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
-    animation: pop 0.14s ease-out;
+    /* One-shot reveal on the fast tier; the global reduced-motion rule in
+       app.css collapses it to a static frame when the OS asks. */
+    animation: pop var(--dur-fast) var(--ease-out);
   }
   .label {
     margin: 0 0 0.4rem;

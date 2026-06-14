@@ -26,6 +26,10 @@ function nearestScrollParent(el: HTMLElement): HTMLElement | undefined {
   return undefined;
 }
 
+// The JS-side mirror of app.css's global reduced-motion rule. The CSS guard
+// neutralizes animations and transitions, but scroll behavior is a JS option
+// (ScrollBehavior) that no stylesheet can gate from here, so the smooth-scroll
+// jump reads this directly to fall back to an instant jump under reduced motion.
 function prefersReducedMotion(): boolean {
   return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 }

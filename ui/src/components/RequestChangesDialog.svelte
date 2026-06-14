@@ -124,7 +124,10 @@
     display: grid;
     place-items: center;
     padding: 2rem;
-    animation: fade 0.15s ease-out;
+    /* Scrim fade on the fast tier; the dialog rises a step slower (--dur-base).
+       The global reduced-motion rule in app.css collapses both to a static
+       frame when the OS asks. */
+    animation: fade var(--dur-fast) var(--ease-out);
   }
   /* The accent left-bar is the source-view surface's signature for an actionable
      card (composer, annotation); the request-changes dialog carries it too so the
@@ -137,7 +140,7 @@
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
     padding: 1.5rem;
-    animation: rise 0.18s ease-out;
+    animation: rise var(--dur-base) var(--ease-out);
   }
   header {
     margin-bottom: 1.25rem;
