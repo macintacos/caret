@@ -260,3 +260,50 @@ describe("DiffPlanView annotation display", () => {
     expect(target.querySelector('[data-annotation-card="ln1"]')).toBeNull();
   });
 });
+
+describe("DiffPlanView comment-span brackets", () => {
+  const lineAnn = (over: Record<string, unknown> = {}) => ({
+    id: "ln1",
+    startLine: 3,
+    endLine: 6,
+    comment: "fix this range",
+    ...over,
+  });
+
+  // The bracket's pixel geometry (rail top/height, scroll/resize re-measure) is
+  // real layout, owned by bracketBox's unit tests and the Playwright e2e — happy-
+  // dom has no layout. Here we assert the host-side wiring: the overlay mounts in
+  // the .diff-plan scroll container and reconciles one rail per drawn span (saved
+  // comments plus the open composer), so a multi-line comment gets its bracket.
+
+  function layer(target: HTMLElement): Element | null {
+    return target.querySelector(".diff-plan [data-comment-bracket-layer]");
+  }
+
+  test("mounts the bracket overlay in the scroll container", async () => {
+    const { target } = render(DiffPlanView, props({ annotations: [lineAnn()] }));
+    const placed = await until(() => layer(target) != null);
+    expect(placed).toBe(true);
+  });
+
+  test("draws one rail per saved comment span", async () => {
+    const annotations = [
+      lineAnn({ id: "a", startLine: 2, endLine: 5 }),
+      lineAnn({ id: "b", startLine: 8, endLine: 8 }),
+    ];
+    const { target } = render(DiffPlanView, props({ annotations }));
+    await until(
+      () => (layer(target)?.querySelectorAll("[data-comment-bracket]").length ?? 0) === 2,
+    );
+    expect(layer(target)?.querySelectorAll("[data-comment-bracket]")).toHaveLength(2);
+  });
+
+  test("the bracket layer is absent in compare mode", async () => {
+    const review = multiVersionFixture(3);
+    const { target } = render(DiffPlanView, props({ review, annotations: [lineAnn()] }));
+    await until(() => target.querySelector('[data-annotation-card="ln1"]') != null);
+    target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
+    await until(() => (shadow(target)?.textContent ?? "").includes("body revision 2"));
+    expect(layer(target)).toBeNull();
+  });
+});
