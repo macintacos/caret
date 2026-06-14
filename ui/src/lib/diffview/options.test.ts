@@ -114,13 +114,16 @@ describe("toFileOptions", () => {
 });
 
 describe("toFileDiffOptions", () => {
-  test("maps the diff options including the layout style", () => {
-    expect(toFileDiffOptions({ diffStyle: "split", overflow: "scroll" })).toEqual({
+  test("maps the diff options including the layout style and indicators", () => {
+    expect(
+      toFileDiffOptions({ diffStyle: "split", overflow: "scroll", diffIndicators: "classic" }),
+    ).toEqual({
       overflow: "scroll",
       disableLineNumbers: undefined,
       theme: caretTheme,
       themeType: "system",
       diffStyle: "split",
+      diffIndicators: "classic",
     });
   });
 
@@ -131,6 +134,7 @@ describe("toFileDiffOptions", () => {
       theme: caretTheme,
       themeType: "system",
       diffStyle: undefined,
+      diffIndicators: undefined,
     });
   });
 });
