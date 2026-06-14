@@ -96,5 +96,18 @@ export function toFileDiffOptions(options: SourceDiffViewOptions): SourceDiffVie
     ...sharedOptions(options),
     diffStyle: options.diffStyle,
     diffIndicators: options.diffIndicators,
+    // Collapsed context renders as the library's line-info separator: a band on
+    // caret's separator surface (--diffs-bg-separator-override, owned by the
+    // .diffview bridge in app.css) carrying the 'N unmodified lines' label and the
+    // rounded expand pills. Both values match the library defaults today and are
+    // pinned here so a library default flip can't silently change the rethemed
+    // surface — hunkSeparators stays 'line-info' so the band keeps its caret skin,
+    // and expandUnchanged stays false so context keeps collapsing (the band and
+    // its pills only exist while context is hidden). Compare mode (SourceDiffView →
+    // FileDiff, constructed with no enableGutterUtility) has no gutter, so the
+    // WebKit gutter-`+`/line-info interaction the read-write view guards against
+    // cannot arise here.
+    hunkSeparators: "line-info",
+    expandUnchanged: false,
   };
 }
