@@ -631,3 +631,162 @@ for (const colorScheme of ["light", "dark"] as const) {
     expect(surface).toBe(sunk);
   });
 }
+
+// ----- Comment-span bracket (EXC-608) -----
+
+// Tall enough that a 12+ line comment span and the rows above/below it all
+// render in one viewport (so the bracket's full extent is measurable).
+const BRACKET_PLAN = `# Bracket Plan\n\n${Array.from(
+  { length: 24 },
+  (_, i) => `Body line ${i + 1} content here.`,
+).join("\n\n")}\n`;
+
+/** The viewport rect of a 1-based source line's row in the view. */
+async function lineRowRect(page: Page, line: number): Promise<{ top: number; bottom: number }> {
+  return page.evaluate((ln) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const span = Array.from(sh?.querySelectorAll("[data-line-number-content]") ?? []).find(
+      (s) => (s.parentElement as HTMLElement)?.dataset.lineIndex === String(ln - 1),
+    );
+    const r = (span?.parentElement as HTMLElement)?.getBoundingClientRect();
+    return r ? { top: r.top, bottom: r.bottom } : { top: 0, bottom: 0 };
+  }, line);
+}
+
+/** The single comment-bracket rail's viewport rect, or null if none is drawn. */
+async function bracketRailRect(
+  page: Page,
+): Promise<{ top: number; bottom: number; width: number } | null> {
+  return page.evaluate(() => {
+    const rail = document.querySelector(".diff-plan [data-comment-bracket]") as HTMLElement | null;
+    if (rail == null || getComputedStyle(rail).display === "none") return null;
+    const r = rail.getBoundingClientRect();
+    return { top: r.top, bottom: r.bottom, width: r.width };
+  });
+}
+
+/** Drag-select lines `start`–`end` in the gutter and submit a comment, returning
+ * once the inline card for the range is on screen. */
+async function createRangeAnnotation(
+  page: Page,
+  start: number,
+  end: number,
+  comment: string,
+): Promise<void> {
+  await selectGutterRange(page, start, end);
+  const plus = page.locator(".diffview [data-utility-button]");
+  await expect(plus).toBeVisible();
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+  const textarea = composer.locator("textarea");
+  await textarea.fill(comment);
+  await textarea.click();
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await expect(composer).toHaveCount(0);
+}
+
+test("a multi-line comment paints a gutter bracket spanning its whole range", async ({
+  daemon,
+  page,
+}) => {
+  // The comment anchors its card to endLine, but the bracket must mark every line
+  // from startLine to endLine — a 13-line span (4–16) on the body text.
+  await daemon.seed({ plan: BRACKET_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+
+  // Source lines: line 1 is the heading, line 2 blank, then "Body line N" lands on
+  // source line 2N+1. Select source lines 5–17 (Body line 2 → Body line 8), a
+  // 13-line span anchored on content rows at both ends.
+  const startLine = 5;
+  const endLine = 17;
+  await createRangeAnnotation(page, startLine, endLine, "This whole block needs a rewrite.");
+
+  // The rail is drawn and its 6px-ish width matches the decoration-bar rail shape.
+  await expect.poll(async () => bracketRailRect(page)).not.toBeNull();
+  const rail = await bracketRailRect(page);
+  expect(rail).not.toBeNull();
+  expect(rail!.width).toBeGreaterThan(3);
+  expect(rail!.width).toBeLessThan(12);
+
+  // Its top aligns to the start row's top and its bottom to the end row's bottom
+  // (within a few px of measurement slack) — so it covers the full 13-line span,
+  // not just the endLine the card anchors to.
+  const startRow = await lineRowRect(page, startLine);
+  const endRow = await lineRowRect(page, endLine);
+  expect(Math.abs(rail!.top - startRow.top)).toBeLessThan(4);
+  expect(Math.abs(rail!.bottom - endRow.bottom)).toBeLessThan(4);
+  // A 13-line span is much taller than one row — proof it isn't endLine-only.
+  expect(rail!.bottom - rail!.top).toBeGreaterThan((endRow.bottom - startRow.top) * 0.8);
+
+  // The bracket is decorative: it never intercepts gutter `+`/line clicks.
+  expect(
+    await page.evaluate(() => {
+      const rl = document.querySelector(".diff-plan [data-comment-bracket]") as HTMLElement;
+      const layer = rl.parentElement as HTMLElement;
+      return [getComputedStyle(rl).pointerEvents, getComputedStyle(layer).pointerEvents];
+    }),
+  ).toEqual(["none", "none"]);
+});
+
+test("the comment bracket tracks its lines through a scroll", async ({ daemon, page }) => {
+  await daemon.seed({ plan: BRACKET_PLAN });
+  await page.goto("/");
+  const view = page.locator(".diff-plan");
+  await expect(view).toBeVisible();
+  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+
+  await createRangeAnnotation(page, 5, 13, "Track me through scroll.");
+  await expect.poll(async () => bracketRailRect(page)).not.toBeNull();
+
+  // The rail stays glued to its start row after a scroll: it is a host-relative
+  // child of the view, so it translates with the rows rather than detaching.
+  await view.evaluate((el) => {
+    el.scrollTop = 120;
+  });
+  await expect
+    .poll(async () => {
+      const rail = await bracketRailRect(page);
+      const startRow = await lineRowRect(page, 5);
+      return rail == null ? 999 : Math.abs(rail.top - startRow.top);
+    })
+    .toBeLessThan(4);
+});
+
+for (const colorScheme of ["light", "dark"] as const) {
+  test(`the comment bracket rail is an opaque amber in ${colorScheme}`, async ({
+    daemon,
+    page,
+  }) => {
+    // --diffs-decoration-bar-color is set on .diffview as a softened --accent and
+    // inherits to the host-side rail; it must paint a visible (non-transparent)
+    // color in both schemes, distinct from the page background.
+    await page.emulateMedia({ colorScheme });
+    await daemon.seed({ plan: BRACKET_PLAN });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+    await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+
+    await createRangeAnnotation(page, 5, 17, "Color me amber.");
+    await expect.poll(async () => bracketRailRect(page)).not.toBeNull();
+
+    const fill = await page.evaluate(() => {
+      const rail = document.querySelector(".diff-plan [data-comment-bracket]") as HTMLElement;
+      return getComputedStyle(rail).backgroundColor;
+    });
+    // color-mix(in lab, --accent 75%, transparent) resolves to a partially-
+    // transparent amber. This Chrome reports it in lab() form — assert it is a
+    // visible (non-transparent), warm color: lab a* and b* are both positive for
+    // amber in either scheme, and the 75% mix carries a ~0.75 alpha.
+    expect(fill).not.toBe("rgba(0, 0, 0, 0)");
+    const lab = fill.match(/^lab\(([-\d.]+) ([-\d.]+) ([-\d.]+)\s*\/\s*([\d.]+)\)/);
+    expect(lab).not.toBeNull();
+    const [, , a, b, alpha] = lab!.map(Number);
+    expect(a).toBeGreaterThan(0); // red-axis: warm
+    expect(b).toBeGreaterThan(0); // yellow-axis: amber
+    expect(alpha).toBeGreaterThan(0.5);
+    expect(alpha).toBeLessThan(1);
+  });
+}

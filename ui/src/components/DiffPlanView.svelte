@@ -22,6 +22,7 @@
   import SourceView from "../lib/diffview/SourceView.svelte";
   import SourceDiffView from "../lib/diffview/SourceDiffView.svelte";
   import { slotInto, toLineAnnotations } from "../lib/diffview/annotationSlot.ts";
+  import { type BracketSpan, bracketLayer } from "../lib/diffview/bracket.ts";
   import { createSourceCommenting } from "../lib/diffview/commenting.ts";
   import { buildLinkLayer } from "../lib/diffview/links.ts";
   import { readDiffStyle, writeDiffStyle } from "../lib/diffStylePref.ts";
@@ -246,6 +247,17 @@
     }
     return annoValue;
   });
+
+  // The covered-line range of every saved comment plus the open composer, drawn
+  // as a host-side bracket rail in the gutter (bracketLayer) so a multi-line
+  // comment shows which lines belong to it — the card anchors to endLine only.
+  // Both saved and pending spans appear; a version switch swaps `host` (the
+  // SourceView recreates on contentKey), and the action re-observes the new host
+  // and re-measures so no stale rail survives.
+  const bracketSpans = $derived<BracketSpan[]>([
+    ...lineAnnotations.map((a) => ({ startLine: a.startLine, endLine: a.endLine })),
+    ...(pending ? [{ startLine: pending.startLine, endLine: pending.endLine }] : []),
+  ]);
 </script>
 
 {#if canCompare}
@@ -293,6 +305,12 @@
         onReady={(a) => (api = a)}
         onLineComment={(line) => commenting.open({ start: line, end: line })}
       />
+      <!-- The comment-span bracket overlay: rounded gutter rails marking each
+           comment's covered lines. It layers over the .diff-plan scroll content
+           (a child of it, positioned by the action against the host's shadow
+           [data-line] rows) so the rails scroll with the rows; it is decorative
+           (pointer-events: none). -->
+      <div use:bracketLayer={{ host, spans: bracketSpans }}></div>
       <!-- Saved comments and the open composer are projected into the library's
            per-line annotation rows (slotInto), so they render inline between the
            code lines at their anchor line rather than floating over them. -->
@@ -335,8 +353,11 @@
   }
 
   /* Fills the content row and scrolls on its own; the SourceView renders its
-     line grid (and the inline annotation rows) inside. */
+     line grid (and the inline annotation rows) inside. `position: relative` makes
+     it the containing block for the comment-span bracket overlay, whose rails are
+     positioned against the scroll content (see lib/diffview/bracket.ts). */
   .diff-plan {
+    position: relative;
     flex: 1 1 auto;
     min-width: 0;
     min-height: 0;

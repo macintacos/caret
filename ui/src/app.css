@@ -280,4 +280,35 @@ a:focus-visible,
      stays unoverridden, so change semantics keep the library blue. */
   --diffs-bg-selection-override: var(--accent);
   --diffs-bg-selection-number-override: var(--accent);
+
+  /* The comment-span bracket rail color, the only --diffs-* var caret adds beyond
+     the bridge above. caret's bracket overlay (lib/diffview/bracket.ts) reads it
+     to paint the rails; the action copies this resolved value onto the overlay
+     since that layer is a sibling of the host, not a descendant. A softened amber
+     keeps the rail a span MARKER distinct from the solid amber selection-drag
+     band, brand-tied yet quieter; the accent token's light/dark variants carry it
+     correctly in both schemes. */
+  --diffs-decoration-bar-color: color-mix(in lab, var(--accent) 75%, transparent);
+}
+
+/* The comment-span bracket overlay: a host-side layer of rounded rails marking
+   each comment's covered lines, reproducing @pierre/diffs's [data-decoration-bar-
+   stack] SHAPE (a 6px rail with ~5px rounded start/end caps) host-side because
+   the library never emits its decoration-bar attributes at runtime. The layer
+   sits over the .diff-plan scroll content and is click-through; each rail is
+   absolutely positioned by bracket.ts to its line range. A single tier is
+   shipped — depth-tiering nested overlapping comments is a deliberate follow-up
+   (EXC-608). */
+[data-comment-bracket-layer] {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+[data-comment-bracket] {
+  position: absolute;
+  left: 2px;
+  width: 6px;
+  border-radius: 5px;
+  background-color: var(--diffs-decoration-bar-color, transparent);
 }
