@@ -112,4 +112,28 @@ describe("the .diffview → --diffs-* bridge", () => {
     // bridge deliberately sets no --diffs-modified-color-override.
     expect(rule).not.toContain("--diffs-modified-color-override");
   });
+
+  // The amber selection (EXC-605). This is the one place caret amber reaches the
+  // diff surface. The library mixes --diffs-selection-base (which falls back to
+  // --diffs-modified-base, i.e. library-blue) over each selected line's own grey
+  // via --diffs-bg-selection-override; the line-number column reads the same mix
+  // through --diffs-bg-selection-number-override. Pointing both at caret's amber
+  // accent recolors the drag-to-comment selection to amber-on-caret-grey while
+  // --diffs-modified itself stays blue, so the change semantics are untouched.
+  const SELECTION_OVERRIDES = [
+    "--diffs-bg-selection-override",
+    "--diffs-bg-selection-number-override",
+  ] as const;
+
+  for (const name of SELECTION_OVERRIDES) {
+    test(`sets ${name} to caret's amber accent via a token, never a literal`, () => {
+      const decl = rule.match(new RegExp(`${name}:\\s*([^;]+);`));
+      expect(decl).not.toBeNull();
+      const value = decl?.[1]?.trim() ?? "";
+      // The amber accent token (carries its own light/dark variant), or a lab
+      // mix of it — never a raw color literal, never oklch.
+      expect(value).toMatch(/^(var\(--accent|color-mix\(in lab,)/);
+      expect(value).not.toContain("oklch");
+    });
+  }
 });

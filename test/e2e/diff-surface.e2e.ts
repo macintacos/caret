@@ -311,6 +311,48 @@ test("creating a range annotation from the gutter persists the correct line span
   expect(ann).toMatchObject({ startLine: 5, endLine: 8 });
 });
 
+test("a drag selection renders the selected lines in caret amber, not library-blue", async ({
+  daemon,
+  page,
+}) => {
+  // The accent strategy recolors only the comment SELECTION to caret amber (via
+  // --diffs-bg-selection-override / --diffs-bg-selection-number-override), while
+  // --diffs-modified stays library-blue. The library mixes that override over each
+  // selected line's own grey, so this asserts the resolved background reads as
+  // amber — warm, not cool — proving the override took effect end to end in the
+  // real Chromium build, not just in the static stylesheet.
+  await daemon.seed({ plan: RANGE_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+
+  await selectGutterRange(page, 5, 8);
+
+  // Read the computed background of a selected line body and the line-number
+  // column from inside the shadow root. Chromium resolves the library's
+  // color-mix(in lab, …) to a lab(L a b) triple; the b* axis is the blue↔yellow
+  // channel, so amber-over-grey lands b* positive (warm) and library-blue would
+  // land b* negative (cool). That sign flip is the falsifiable proof the
+  // override resolved to amber, not the library default.
+  const axes = await page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+    const labB = (el: Element | null): number | null => {
+      if (!el) return null;
+      const m = getComputedStyle(el as HTMLElement).backgroundColor.match(/-?\d+(?:\.\d+)?/g);
+      return m && m.length >= 3 ? Number(m[2]) : null;
+    };
+    return {
+      line: labB(sh?.querySelector("[data-selected-line][data-line]") ?? null),
+      number: labB(sh?.querySelector("[data-selected-line][data-column-number]") ?? null),
+    };
+  });
+  // Both the line body and its number column read warm (amber), not cool (blue).
+  expect(axes.line).not.toBeNull();
+  expect(axes.line as number).toBeGreaterThan(2);
+  expect(axes.number).not.toBeNull();
+  expect(axes.number as number).toBeGreaterThan(2);
+});
+
 test("cancelling the composer with Escape leaves no residue", async ({ daemon, page }) => {
   const id = await daemon.seed();
   await page.goto("/");

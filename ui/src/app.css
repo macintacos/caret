@@ -217,4 +217,16 @@ a:focus-visible,
   /* The per-line hover blends 97%/91% toward this operand (light/dark), so a
      bare --ink keeps the highlight a subtle, scheme-correct caret grey. */
   --diffs-bg-hover-override: var(--ink);
+
+  /* The amber selection — the one place caret amber reaches the diff surface.
+     The library mixes --diffs-selection-base over each selected line's own grey;
+     that base falls back to --diffs-modified-base (library-blue), and these two
+     overrides retarget the mix to caret's amber accent. --diffs-bg-selection-
+     override colors the selected line body (gutter buffer, content, annotation,
+     merge-conflict rows); --diffs-bg-selection-number-override colors the line-
+     number column to match. The accent token carries its own light/dark variant,
+     so a bare var() reads amber-on-caret-grey in both schemes. --diffs-modified
+     stays unoverridden, so change semantics keep the library blue. */
+  --diffs-bg-selection-override: var(--accent);
+  --diffs-bg-selection-number-override: var(--accent);
 }
