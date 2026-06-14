@@ -2,6 +2,7 @@ import "../../../test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 import {
   annotationSlotName,
+  groupAnnotationsByLine,
   shouldCommentOnLineClick,
   slotInto,
   toLineAnnotations,
@@ -28,6 +29,34 @@ describe("toLineAnnotations", () => {
 
   test("is empty for no lines", () => {
     expect(toLineAnnotations([])).toEqual([]);
+  });
+});
+
+describe("groupAnnotationsByLine", () => {
+  const at = (id: string, line: number) => ({ id, endLine: line });
+  const line = (a: { endLine: number }) => a.endLine;
+
+  test("buckets annotations sharing a line into one ordered group", () => {
+    const groups = groupAnnotationsByLine([at("a", 7), at("b", 7)], line);
+    expect(groups).toEqual([{ line: 7, annotations: [at("a", 7), at("b", 7)] }]);
+  });
+
+  test("orders groups by line ascending, preserving input order within a line", () => {
+    const groups = groupAnnotationsByLine([at("a", 9), at("b", 3), at("c", 9), at("d", 3)], line);
+    expect(groups).toEqual([
+      { line: 3, annotations: [at("b", 3), at("d", 3)] },
+      { line: 9, annotations: [at("a", 9), at("c", 9)] },
+    ]);
+  });
+
+  test("a single annotation yields one group of one", () => {
+    expect(groupAnnotationsByLine([at("solo", 4)], line)).toEqual([
+      { line: 4, annotations: [at("solo", 4)] },
+    ]);
+  });
+
+  test("is empty for no annotations", () => {
+    expect(groupAnnotationsByLine([], line)).toEqual([]);
   });
 });
 

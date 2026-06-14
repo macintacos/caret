@@ -21,7 +21,11 @@
   // is a clean read-only diff with none of them.
   import SourceView from "../lib/diffview/SourceView.svelte";
   import SourceDiffView from "../lib/diffview/SourceDiffView.svelte";
-  import { slotInto, toLineAnnotations } from "../lib/diffview/annotationSlot.ts";
+  import {
+    groupAnnotationsByLine,
+    slotInto,
+    toLineAnnotations,
+  } from "../lib/diffview/annotationSlot.ts";
   import { type BracketSpan, bracketLayer } from "../lib/diffview/bracket.ts";
   import { createSourceCommenting, normalizeRange, rangeLabel } from "../lib/diffview/commenting.ts";
   import { dismissDragHint, isDragHintDismissed } from "../lib/diffview/dragHint.ts";
@@ -39,7 +43,7 @@
     isLineAnnotation,
   } from "@core/types";
   import SourceComposer from "./SourceComposer.svelte";
-  import SourceAnnotationCard from "./SourceAnnotationCard.svelte";
+  import SourceAnnotationThread from "./SourceAnnotationThread.svelte";
   import LegacyAnnotationList from "./LegacyAnnotationList.svelte";
   import SourceToc from "./SourceToc.svelte";
 
@@ -76,6 +80,13 @@
   // list read-only below the view. Both narrow from the same on-disk union.
   const lineAnnotations = $derived(annotations.filter(isLineAnnotation));
   const legacyAnnotations = $derived(annotations.filter(isLegacyAnnotation));
+
+  // The comments on each anchor line, grouped into one thread per line. The
+  // library reserves a single annotation row per line, so several comments on a
+  // line render as one ordered thread within that row (see SourceAnnotationThread)
+  // rather than as separate nodes contending for the same slot. Ordered by line;
+  // each thread keeps its comments in working-copy order.
+  const lineThreads = $derived(groupAnnotationsByLine(lineAnnotations, (a) => a.endLine));
 
   // Compare state: the component owns the reactive store (runes live here) and
   // the factory mutates it; the layout-preference read/write are injected so the
@@ -371,12 +382,14 @@
       <div use:bracketLayer={{ host, spans: bracketSpans }}></div>
       <!-- Saved comments and the open composer are projected into the library's
            per-line annotation rows (slotInto), so they render inline between the
-           code lines at their anchor line rather than floating over them. -->
-      {#each lineAnnotations as a (a.id)}
-        <div use:slotInto={{ host, line: a.endLine }}>
-          <SourceAnnotationCard
-            annotation={a}
-            focused={a.id === focusedAnnotation}
+           code lines at their anchor line rather than floating over them. One node
+           per line carries that line's slot; multiple comments on a line stack
+           inside it as a single ordered thread. -->
+      {#each lineThreads as thread (thread.line)}
+        <div use:slotInto={{ host, line: thread.line }}>
+          <SourceAnnotationThread
+            annotations={thread.annotations}
+            {focusedAnnotation}
             onFocus={onFocusAnnotation}
             onEdit={onEditAnnotation}
             onDelete={onDeleteAnnotation}

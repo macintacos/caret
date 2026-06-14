@@ -235,6 +235,36 @@ describe("DiffPlanView annotation display", () => {
     expect(focused).toBe("ln1");
   });
 
+  test("two comments on one line render as a single ordered thread", async () => {
+    const annotations = [
+      lineAnn({ id: "first", startLine: 3, endLine: 3, comment: "earlier note" }),
+      lineAnn({ id: "second", startLine: 3, endLine: 3, comment: "later note" }),
+    ];
+    const { target } = render(DiffPlanView, props({ annotations }));
+    await until(() => target.querySelector(".thread") != null);
+    // One shared container, not two disconnected chips.
+    expect(target.querySelectorAll(".thread")).toHaveLength(1);
+    const thread = target.querySelector(".thread")!;
+    expect(thread.querySelectorAll("[data-annotation-card]")).toHaveLength(2);
+    // It carries a count and an order cue per card.
+    expect(thread.querySelector(".thread-count")?.textContent).toContain("2");
+    expect(
+      [...thread.querySelectorAll(".thread-ordinal")].map((o) => o.textContent?.trim()),
+    ).toEqual(["1", "2"]);
+  });
+
+  test("comments on different lines each get their own (unthreaded) card", async () => {
+    const annotations = [
+      lineAnn({ id: "a", startLine: 2, endLine: 2, comment: "first" }),
+      lineAnn({ id: "b", startLine: 4, endLine: 4, comment: "second" }),
+    ];
+    const { target } = render(DiffPlanView, props({ annotations }));
+    await until(() => target.querySelector('[data-annotation-card="a"]') != null);
+    // Distinct lines: no thread container, two standalone cards.
+    expect(target.querySelector(".thread")).toBeNull();
+    expect(target.querySelectorAll("[data-annotation-card]")).toHaveLength(2);
+  });
+
   test("legacy annotations render in the read-only list, not as cards", async () => {
     const legacy = {
       id: "g1",
