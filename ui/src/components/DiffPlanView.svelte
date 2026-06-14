@@ -31,10 +31,18 @@
   import { dismissDragHint, isDragHintDismissed } from "../lib/diffview/dragHint.ts";
   import { buildLinkLayer } from "../lib/diffview/links.ts";
   import { readDiffStyle, writeDiffStyle } from "../lib/diffStylePref.ts";
+  import {
+    type Overflow,
+    readDisableLineNumbers,
+    readOverflow,
+    writeDisableLineNumbers,
+    writeOverflow,
+  } from "../lib/diffReaderPref.ts";
   import { type CompareStore, createCompare } from "../state/compare.svelte.ts";
   import VersionComparePicker from "./VersionComparePicker.svelte";
+  import ReaderAffordances from "./ReaderAffordances.svelte";
   import type { SourceViewGutter } from "../lib/diffview/options.ts";
-  import type { SourceViewApi } from "../lib/diffview/types.ts";
+  import type { SourceViewApi, SourceViewOptions } from "../lib/diffview/types.ts";
   import { activeHeadingLine, extractHeadings } from "../lib/toc.ts";
   import {
     type Annotation,
@@ -119,6 +127,24 @@
 
   const canCompare = $derived(compare.canCompare(review.versions));
   const showDiff = $derived(canCompare && compareStore.comparing);
+
+  // Reader affordances applied to both the single-version source view and the
+  // compare diff: wrap long lines instead of scrolling them, and hide the
+  // line-number gutter. Seeded from the persisted preference and written through
+  // on toggle so the choice survives a reload. They are independent of contentKey,
+  // so a change updates the view in place (the lifecycle's setOptions path) rather
+  // than recreating it — scroll is preserved.
+  let overflow = $state<Overflow>(readOverflow());
+  let disableLineNumbers = $state(readDisableLineNumbers());
+  function setOverflow(value: Overflow): void {
+    overflow = value;
+    writeOverflow(value);
+  }
+  function setDisableLineNumbers(value: boolean): void {
+    disableLineNumbers = value;
+    writeDisableLineNumbers(value);
+  }
+  const readerOptions = $derived<SourceViewOptions>({ overflow, disableLineNumbers });
 
   // Identity of the rendered content: the wrapper recreates its instance only
   // when this changes, so a poll tick that re-delivers the same version updates
@@ -317,19 +343,31 @@
   ]);
 </script>
 
-{#if canCompare}
-  <VersionComparePicker
-    versions={review.versions}
-    comparing={compareStore.comparing}
-    baseVersion={compareStore.baseVersion}
-    targetVersion={compareStore.targetVersion}
-    diffStyle={compareStore.diffStyle}
-    onSetComparing={compare.setComparing}
-    onSelectBase={compare.setBase}
-    onSelectTarget={compare.setTarget}
-    onSetDiffStyle={compare.setDiffStyle}
+<!-- Control row above the surface. Reader affordances (wrap, line numbers) apply
+     to both the single-version view and the compare diff, so they show in either
+     mode; the version-compare picker appears only when there are versions to
+     compare. -->
+<div class="control-row">
+  <ReaderAffordances
+    {overflow}
+    {disableLineNumbers}
+    onSetOverflow={setOverflow}
+    onSetDisableLineNumbers={setDisableLineNumbers}
   />
-{/if}
+  {#if canCompare}
+    <VersionComparePicker
+      versions={review.versions}
+      comparing={compareStore.comparing}
+      baseVersion={compareStore.baseVersion}
+      targetVersion={compareStore.targetVersion}
+      diffStyle={compareStore.diffStyle}
+      onSetComparing={compare.setComparing}
+      onSelectBase={compare.setBase}
+      onSelectTarget={compare.setTarget}
+      onSetDiffStyle={compare.setDiffStyle}
+    />
+  {/if}
+</div>
 
 <div class="diff-surface">
   <!-- The contents pane and gutter composer are the single-version surface only.
@@ -350,7 +388,7 @@
         oldDoc={{ name: "plan.md", text: targetText }}
         newDoc={{ name: "plan.md", text: baseText }}
         contentKey={diffContentKey}
-        options={{ diffStyle: compareStore.diffStyle }}
+        options={{ ...readerOptions, diffStyle: compareStore.diffStyle }}
       />
     {:else}
       <!-- Live drag readout: a zero-height sticky rail rendered first so it pins to
@@ -369,6 +407,7 @@
         doc={{ name: "plan.md", text: linkLayer.text }}
         links={linkLayer.spans}
         annotations={sourceAnnotations}
+        options={readerOptions}
         {gutter}
         {contentKey}
         onReady={(a) => (api = a)}
@@ -421,6 +460,24 @@
 {/if}
 
 <style>
+  /* The control bar above the surface. Carries the bar chrome (raised paper,
+     hairline rule) so its children — the reader affordances and the compare
+     picker — read as one toolbar: reader options on the left, the version picker
+     on the right when present. */
+  .control-row {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.5rem clamp(1rem, 3vw, 2rem);
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper-raised);
+  }
+  /* The compare picker is the trailing group; it pushes to the right edge so the
+     reader affordances hold the left. */
+  .control-row :global(.compare-picker) {
+    margin-left: auto;
+  }
+
   /* The contents pane and source view share one row; the pane is a fixed-width
      left lane, the source view takes the rest and scrolls on its own. */
   .diff-surface {

@@ -111,13 +111,12 @@
 {/if}
 
 <style>
+  /* A group within the surface's control bar (DiffPlanView owns the bar chrome):
+     a transparent inline cluster so the toolbar reads as one row. */
   .compare-picker {
     display: flex;
     align-items: center;
     gap: 0.85rem;
-    padding: 0.5rem clamp(1rem, 3vw, 2rem);
-    border-bottom: 1px solid var(--rule);
-    background: var(--paper-raised);
     font-size: var(--text-base);
   }
 
