@@ -114,6 +114,34 @@ stays green under any invocation.
   Chrome build, and a pinned library hex fails the no-hex bridge test.
   `css-bridge.test.ts` pins these invariants.
 
+## Motion principles
+
+The chrome's motion is restraint over flourish: functional one-shot transitions stay
+≤200ms and draw their duration/easing from the `--dur-*`/`--ease-*` tokens in `app.css`
+(one enter easing, one exit easing — a caret design call, not ported); ambient/infinite
+animations (the safe-mode pulse, the EmptyState float) are exempt and keep their own
+bespoke durations. `prefers-reduced-motion: reduce` is a global kill-switch for the
+light-DOM chrome — a single rule in `app.css` collapses every animation and transition
+under `#app` to one static frame, so no chrome component honors the preference on its own.
+
+The `@pierre/diffs` render surface is motionless by design. Line hover,
+line/range-selection highlight, the decoration bars, gutter affordances, and hunk-expand
+all change state with instant `color-mix` swaps and carry NO transition or keyframe — the
+library's vendored `style.css` has zero `@keyframes` and zero transitions on the diff
+surface, and selection rendering is rAF-batched in `InteractionManager.ts` for throughput,
+not animation. The multi-line drag-selection highlight is rendered INSTANTLY on purpose:
+motion is deliberately not the lever for making drag-select discoverable — that affordance
+work belongs to the comment surface (CMT), not to a transition on the highlight.
+
+The diff surface is shadow-encapsulated, so the global reduced-motion rule above cannot
+reach it AND a stray light-DOM transition cannot leak in. The one thing a host CAN do is
+add a transition or animation to the `.diffview` light-DOM container or to a bridged
+`--diffs-*` property in the single `.diffview` rule — those are the only diff styling
+reachable from the host, and neither may carry a transition or animation.
+`css-bridge.test.ts` asserts the bridge rule body names no `transition`/`animation`
+property, so a future regression fails the unit suite rather than only showing as motion
+in the diff view.
+
 ## Related rules
 
 - `browser-testing.md` — the unit-vs-e2e decision and the e2e harness contract.

@@ -242,6 +242,15 @@ a:focus-visible,
    surfaces that own them. No file outside this rule (and the diffview module)
    references --diffs-*.
 
+   Motionless by design: the diff render surface — line hover, line/range-
+   selection, decoration bars, gutter affordances, hunk-expand — changes state
+   with instant color-mix swaps and carries no transition or keyframe. The shadow
+   boundary keeps the global reduced-motion rule above from reaching it and keeps
+   a light-DOM transition from leaking in, but the host could still add a
+   transition/animation to .diffview or a bridged --diffs-* property here — so
+   this rule deliberately sets neither, and css-bridge.test.ts pins that it stays
+   that way. The rationale lives in docs/agents/svelte-rules.md.
+
    Berkeley Mono is referenced by name only — no font files ship (commercial
    license); the stack falls back gracefully when it is not installed. */
 .diffview {
