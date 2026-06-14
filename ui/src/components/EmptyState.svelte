@@ -20,7 +20,7 @@
       update automatically.
     </p>
   {/if}
-  <div class="hint">listening &middot; polling /api/reviews</div>
+  <div class="hint metric">listening &middot; polling /api/reviews</div>
 </div>
 
 <style>
@@ -73,15 +73,18 @@
     vertical-align: -0.15em;
     margin-right: 0.15em;
   }
-  /* A quiet status chip carrying the live endpoint in the monospace technical
-     voice the source-view surface uses for paths and metadata; the bordered pill
-     echoes the build/version badges so the shell's status affordances cohere. */
+  /* A quiet status chip carrying the live endpoint in the technical voice the
+     source-view surface uses for paths and metadata. It shares the build/version
+     badges' vocabulary so the empty and populated states read as one system: the
+     same --paper-raised surface on a --rule hairline pill, and the mono family +
+     tabular figures from the shared .metric atom (so any digits line up exactly
+     as they do in the badges). */
   .hint {
     margin-top: 2rem;
     display: inline-flex;
     align-items: center;
-    font-family: var(--font-mono);
     font-size: var(--text-xs);
+    line-height: var(--leading-none);
     letter-spacing: 0.02em;
     color: var(--ink-faint);
     background: var(--paper-raised);
