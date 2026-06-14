@@ -33,6 +33,35 @@ export interface LinkHandlers {
   onTokenLeave(props: TokenHoverProps, event: PointerEvent): void;
 }
 
+/** Library options the token layer owns. Carried alongside the handlers so the
+ * flag that keeps token interactions wired travels with them — a view spreads
+ * this bag into its File options rather than re-deriving the flag itself. */
+export interface TokenLibOptions {
+  /** The library only infers token-event wiring from the handlers on the first
+   * render; its renderer-options projection drops the handlers on every later
+   * render, so the per-token `data-char` markers stop being emitted and token
+   * clicks/hovers no longer resolve to a link span. Pinning it true keeps token
+   * interactions live across re-renders. */
+  useTokenTransformer: true;
+}
+
+/** The single token-handler object a view hands @pierre/diffs, bundled with the
+ * race state and library flag that belong with it. The library accepts exactly
+ * one onTokenEnter/onTokenLeave/onTokenClick, so every per-token affordance
+ * composes here: a new affordance contributes its enter/leave/click inside
+ * composeTokenHandlers, never in the view. */
+export interface ComposedTokenHandlers {
+  /** The one handler object passed straight to the library. */
+  handlers: LinkHandlers;
+  /** Library options the handlers require (the token-transformer flag). */
+  libOptions: TokenLibOptions;
+  /** Whether `event` is the most recent click that landed on a link span. The
+   * library fires onTokenClick (this layer) before onLineClick for the same
+   * event, so a view's row-click handler asks this to stand down on a link
+   * click — the link opens and the line does not also open a comment. */
+  wasLinkClick(event: Event): boolean;
+}
+
 /** Marks the hover tooltip so a stray instance can be cleared before a new one
  * is shown and so e2e can find it. */
 const TOOLTIP_ATTR = "data-link-tooltip";
@@ -136,5 +165,46 @@ export function createLinkHandlers(spanMap: LinkSpanMap, deps: LinkHandlerDeps):
       hideTooltip(props.tokenElement);
       props.tokenElement.style.cursor = "";
     },
+  };
+}
+
+/**
+ * Builds the single token-handler object a source view hands @pierre/diffs.
+ * This is the one home for token-affordance composition: the library wires
+ * exactly one onTokenEnter/onTokenLeave/onTokenClick, so a future per-token
+ * affordance adds its enter/leave/click here, not in the view.
+ *
+ * Today the only affordance is the link layer, so the handlers come straight
+ * from createLinkHandlers — with onTokenClick wrapped to record the event when
+ * a click lands on a link span. That recorded event drives wasLinkClick, which a
+ * view's row-click handler reads to stand down: the library fires this layer's
+ * onTokenClick before onLineClick for the same event, so a clicked link opens
+ * and the line it sits on does not also open a comment composer.
+ *
+ * Returns undefined when there is no link layer (`spanMap` null) — a read-only
+ * view wires no token handlers at all and the library renders plain.
+ */
+export function composeTokenHandlers(
+  spanMap: LinkSpanMap | undefined,
+  deps: LinkHandlerDeps,
+): ComposedTokenHandlers | undefined {
+  if (spanMap == null) return undefined;
+  const link = createLinkHandlers(spanMap, deps);
+
+  let linkClickEvent: Event | undefined;
+  return {
+    handlers: {
+      onTokenEnter: link.onTokenEnter,
+      onTokenLeave: link.onTokenLeave,
+      onTokenClick(props, event) {
+        const spans = spanMap.get(props.lineNumber);
+        if (spans != null && hitTestSpan(spans, props.lineCharStart, props.lineCharEnd) != null) {
+          linkClickEvent = event;
+        }
+        link.onTokenClick(props, event);
+      },
+    },
+    libOptions: { useTokenTransformer: true },
+    wasLinkClick: (event) => event === linkClickEvent,
   };
 }

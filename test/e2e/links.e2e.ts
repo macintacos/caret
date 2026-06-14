@@ -55,6 +55,37 @@ test("clicking a link token opens its http URL in a new tab", async ({ daemon, p
     .toEqual([SAFE_URL, "_blank", "noopener,noreferrer"]);
 });
 
+test("clicking a link token does not also open the line's comment composer", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: LINK_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  // The read-write source view wires BOTH the link layer and row-click
+  // commenting, so a single event reaches the token-click handler (which opens
+  // the link) and then the line-click handler (which would open a composer). The
+  // composition's link-click/row-click race coordination makes the line stand
+  // down: the library fires the token click first, the composed handler records
+  // that event, and the row-click handler sees it was consumed and does nothing.
+  await expect(page.getByText("the cache docs")).toBeVisible();
+  await stubWindowOpen(page);
+  await page.getByText("the cache docs").click();
+
+  // The link opened in a new tab…
+  await expect
+    .poll(async () => (await openCalls(page))[0])
+    .toEqual([SAFE_URL, "_blank", "noopener,noreferrer"]);
+
+  // …and the line it sits on did NOT also open a comment composer. Give any
+  // (incorrect) composer a beat to appear, then assert it never did.
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  const t0 = await page.evaluate(() => performance.now());
+  await page.waitForFunction((t) => performance.now() > t + 300, t0);
+  await expect(composer).toHaveCount(0);
+});
+
 /** The full href text of the caret hover tooltip mounted in the diff shadow
  * root, or null when none is shown. */
 function tooltipHref(page: import("@playwright/test").Page): Promise<string | null> {

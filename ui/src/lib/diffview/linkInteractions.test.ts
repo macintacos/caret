@@ -2,7 +2,8 @@
 // handlers can be driven with real DOM event objects and a real token element.
 import "../../../test-setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
-import { createLinkHandlers, hitTestSpan } from "./linkInteractions.ts";
+import { join } from "node:path";
+import { composeTokenHandlers, createLinkHandlers, hitTestSpan } from "./linkInteractions.ts";
 import type { LinkSpan, LinkSpanMap } from "./links.ts";
 
 // linkInteractions turns a per-line link span map into the token-event handlers
@@ -154,5 +155,117 @@ describe("createLinkHandlers hover effects", () => {
     handlers.onTokenLeave(props, new PointerEvent("pointerleave"));
     expect(tooltipText()).toBeNull();
     expect(el.style.cursor ?? "").toBe("");
+  });
+});
+
+// composeTokenHandlers is the single home for token-handler composition: it
+// builds the one enter/leave/click object the library accepts, owns the
+// useTokenTransformer flag those handlers require, and carries the link-click /
+// row-click race coordination a view's row-click handler reads (wasLinkClick).
+// A future per-token affordance plugs in here, not in the view — these tests pin
+// that contract so the seam can't quietly move back into the component.
+describe("composeTokenHandlers", () => {
+  beforeEach(() => {
+    document.body.replaceChildren();
+  });
+
+  const clickProps = (lineNumber: number, lineCharStart: number, lineCharEnd: number) => ({
+    lineNumber,
+    lineCharStart,
+    lineCharEnd,
+    tokenText: "x",
+  });
+
+  test("exposes one handler object with all three token handlers", () => {
+    const composed = composeTokenHandlers(new Map([[1, [span(4, 12, "https://a.test")]]]), {
+      openUrl: () => {},
+    });
+    // A second affordance contributes enter/leave/click HERE, so the composed
+    // object must surface exactly those three for the library's single slots.
+    expect(typeof composed?.handlers.onTokenClick).toBe("function");
+    expect(typeof composed?.handlers.onTokenEnter).toBe("function");
+    expect(typeof composed?.handlers.onTokenLeave).toBe("function");
+  });
+
+  test("carries useTokenTransformer:true so the flag can't drift from the handlers", () => {
+    const composed = composeTokenHandlers(new Map([[1, [span(4, 12, "https://a.test")]]]), {
+      openUrl: () => {},
+    });
+    expect(composed?.libOptions.useTokenTransformer).toBe(true);
+  });
+
+  test("returns undefined when there is no link layer", () => {
+    expect(composeTokenHandlers(undefined, { openUrl: () => {} })).toBeUndefined();
+  });
+
+  test("opens a clicked link and marks the event as a consumed link click", () => {
+    const opened: string[] = [];
+    const composed = composeTokenHandlers(new Map([[1, [span(4, 12, "https://a.test")]]]), {
+      openUrl: (href) => opened.push(href),
+    });
+    const event = new MouseEvent("click");
+    composed?.handlers.onTokenClick(clickProps(1, 4, 12), event);
+    // The link opened, and the same event is now flagged so the row-click
+    // handler stands down — the link's line does not also open a comment.
+    expect(opened).toEqual(["https://a.test"]);
+    expect(composed?.wasLinkClick(event)).toBe(true);
+  });
+
+  test("a click outside any span opens nothing and is not a link click", () => {
+    const opened: string[] = [];
+    const composed = composeTokenHandlers(new Map([[1, [span(4, 12, "https://a.test")]]]), {
+      openUrl: (href) => opened.push(href),
+    });
+    const event = new MouseEvent("click");
+    composed?.handlers.onTokenClick(clickProps(1, 0, 3), event);
+    // No link consumed the click, so the row-click handler is free to act.
+    expect(opened).toEqual([]);
+    expect(composed?.wasLinkClick(event)).toBe(false);
+  });
+
+  test("wasLinkClick tracks only the most recent link-click event", () => {
+    const composed = composeTokenHandlers(new Map([[1, [span(4, 12, "https://a.test")]]]), {
+      openUrl: () => {},
+    });
+    const first = new MouseEvent("click");
+    const second = new MouseEvent("click");
+    composed?.handlers.onTokenClick(clickProps(1, 4, 12), first);
+    composed?.handlers.onTokenClick(clickProps(1, 4, 12), second);
+    // A new link click supersedes the prior one, so a stale event no longer
+    // suppresses its row click.
+    expect(composed?.wasLinkClick(first)).toBe(false);
+    expect(composed?.wasLinkClick(second)).toBe(true);
+  });
+
+  test("delegates hover to the link handlers — enter reveals the tooltip, leave hides it", () => {
+    const composed = composeTokenHandlers(new Map([[1, [span(4, 12, "https://a.test/full")]]]), {
+      openUrl: () => {},
+    });
+    const el = fakeTokenElement();
+    const props = {
+      lineNumber: 1,
+      lineCharStart: 4,
+      lineCharEnd: 12,
+      tokenText: "the docs",
+      tokenElement: el,
+    };
+    composed?.handlers.onTokenEnter(props, new PointerEvent("pointerenter"));
+    expect(tooltipText()).toBe("https://a.test/full");
+    expect(el.style.cursor).toBe("pointer");
+    composed?.handlers.onTokenLeave(props, new PointerEvent("pointerleave"));
+    expect(tooltipText()).toBeNull();
+    expect(el.style.cursor ?? "").toBe("");
+  });
+
+  test("SourceView wires no token handlers of its own — the seam stays single-owner", async () => {
+    // The contract this whole module exists to keep: a new per-token affordance
+    // is added inside composeTokenHandlers, never in the view. SourceView must
+    // therefore declare no onTokenEnter/onTokenLeave/onTokenClick of its own — it
+    // consumes the one composed object and hands it straight to the library. This
+    // assertion fails loudly if a future change reintroduces inline wrapping.
+    const source = await Bun.file(join(import.meta.dir, "SourceView.svelte")).text();
+    for (const handler of ["onTokenEnter", "onTokenLeave", "onTokenClick"]) {
+      expect(source).not.toContain(handler);
+    }
   });
 });

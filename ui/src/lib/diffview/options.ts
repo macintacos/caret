@@ -8,7 +8,7 @@ import type {
   LineAnnotation,
   SelectedLineRange,
 } from "@pierre/diffs";
-import type { LinkHandlers } from "./linkInteractions.ts";
+import type { ComposedTokenHandlers } from "./linkInteractions.ts";
 import { caretDiffTheme } from "./theme.ts";
 import type { SourceDiffViewOptions, SourceViewOptions } from "./types.ts";
 
@@ -61,31 +61,27 @@ function sharedOptions(
 
 export function toFileOptions(
   options: SourceViewOptions,
-  linkHandlers?: LinkHandlers,
+  token?: ComposedTokenHandlers,
   gutter?: SourceViewGutter,
   onLineClick?: SourceViewLibOptions["onLineClick"],
 ): SourceViewLibOptions {
-  // Link handlers are stable for the instance's life (they close over the span
+  // The token layer composes its single handler object (and the
+  // useTokenTransformer flag those handlers require) in composeTokenHandlers;
+  // here both spread in together so the flag can never drift apart from the
+  // handlers. They are stable for the instance's life (they close over the span
   // map), so they belong only in the initial options — a content-key change
   // recreates the instance with a fresh map. When absent, the option object is
   // unchanged, so views without the link layer behave exactly as before. The
   // gutter bag spreads the same way: present only when the view enables
   // commenting, absent (and byte-identical) on the read-only view.
   //
-  // useTokenTransformer must be set explicitly whenever the token handlers are
-  // present: the library only derives it from the handlers on the first render,
-  // and its renderer-options projection drops the handlers on every later
-  // render, so without the explicit flag the per-token `data-char` markers stop
-  // being emitted and token clicks/hovers no longer resolve to a link span.
-  //
   // onLineClick lets a plain click anywhere on a line open a comment composer; it
   // spreads in only when the view wires it, so the read-only view stays unchanged.
-  const tokenInteractions = linkHandlers != null ? { useTokenTransformer: true } : undefined;
   const lineClick = onLineClick != null ? { onLineClick } : undefined;
   return {
     ...sharedOptions(options),
-    ...tokenInteractions,
-    ...linkHandlers,
+    ...token?.libOptions,
+    ...token?.handlers,
     ...gutter,
     ...lineClick,
   };

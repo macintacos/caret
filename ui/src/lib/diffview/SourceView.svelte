@@ -6,7 +6,7 @@
   import { File, type FileContents } from "@pierre/diffs";
   import { createDiffViewLifecycle } from "./instance.ts";
   import { shouldCommentOnLineClick } from "./annotationSlot.ts";
-  import { createLinkHandlers, hitTestSpan, type LinkHandlers } from "./linkInteractions.ts";
+  import { type ComposedTokenHandlers, composeTokenHandlers } from "./linkInteractions.ts";
   import { type LinkSpanMap, openLinkInNewTab } from "./links.ts";
   import { type SourceViewGutter, type SourceViewLibOptions, toFileOptions } from "./options.ts";
   import { scrollToLine } from "./scroll.ts";
@@ -87,29 +87,16 @@
     onReady?.({ scrollToLine: (line) => scrollToLine(el, line), host: el });
   });
 
-  // The handlers close over the span map and opener, so they only change when
-  // the link layer does — a stable `links` reference keeps them referentially
-  // stable, so libOptions stays change-detectable by the lifecycle.
-  // Row-click commenting must stand down on link clicks: the library fires
-  // onTokenClick (the link layer) before onLineClick for the same event, so the
-  // wrapped link handler records a link's event here and the row-click handler
-  // below skips it. Plain text selection is handled separately (collapsed check).
-  let linkClickEvent: Event | undefined;
-  const linkHandlers = $derived.by<LinkHandlers | undefined>(() => {
-    if (links == null) return undefined;
-    const base = createLinkHandlers(links, { openUrl });
-    return {
-      onTokenEnter: base.onTokenEnter,
-      onTokenLeave: base.onTokenLeave,
-      onTokenClick: (props, event) => {
-        const spans = links.get(props.lineNumber);
-        if (spans != null && hitTestSpan(spans, props.lineCharStart, props.lineCharEnd) != null) {
-          linkClickEvent = event;
-        }
-        base.onTokenClick(props, event);
-      },
-    };
-  });
+  // All token-handler composition lives in composeTokenHandlers — the single
+  // owner of the library's one enter/leave/click slot, the useTokenTransformer
+  // flag those handlers need, and the link-click/row-click race coordination
+  // (its wasLinkClick is read in handleLineClick below). The composed object
+  // closes over the span map and opener, so it only changes when the link layer
+  // does — a stable `links` reference keeps it referentially stable, so
+  // libOptions stays change-detectable by the lifecycle.
+  const token = $derived<ComposedTokenHandlers | undefined>(
+    composeTokenHandlers(links, { openUrl }),
+  );
 
   const handleLineClick: NonNullable<SourceViewLibOptions["onLineClick"]> = (props) => {
     // The code renders in an open shadow root; window.getSelection() can't observe
@@ -123,14 +110,14 @@
     const selection = root?.getSelection?.() ?? (typeof getSelection === "function" ? getSelection() : null);
     const open = shouldCommentOnLineClick({
       numberColumn: props.numberColumn,
-      linkConsumed: props.event === linkClickEvent,
+      linkConsumed: token?.wasLinkClick(props.event) ?? false,
       selectionCollapsed: selection == null || selection.isCollapsed,
     });
     if (open) onLineComment?.(props.lineNumber);
   };
   const lineClick = $derived(onLineComment == null ? undefined : handleLineClick);
 
-  const libOptions = $derived(toFileOptions(options, linkHandlers, gutter, lineClick));
+  const libOptions = $derived(toFileOptions(options, token, gutter, lineClick));
 
   // Mount-once effect: reads no reactive state, returns the teardown.
   $effect(() => () => lifecycle.destroy());
