@@ -11,13 +11,14 @@
     type SelectionStore,
   } from "./state/polling.svelte.ts";
   import { createResolve, type ResolveStore } from "./state/resolve.svelte.ts";
-  import { pendingInlineCount } from "./lib/feedback.ts";
+  import { coveredLineCount, pendingInlineCount } from "./lib/feedback.ts";
   import type { ApproveVariant, ApproveVariantId, Annotation } from "@core/types";
 
   import ApproveConfirmDialog from "./components/ApproveConfirmDialog.svelte";
   import DiffPlanView from "./components/DiffPlanView.svelte";
   import EmptyState from "./components/EmptyState.svelte";
   import RequestChangesDialog from "./components/RequestChangesDialog.svelte";
+  import StatusStrip from "./components/StatusStrip.svelte";
   import TopBar from "./components/TopBar.svelte";
   import VersionBadge from "./components/VersionBadge.svelte";
 
@@ -82,6 +83,9 @@
   // guard and the request-changes dialog both read, so they never disagree about
   // what's pending.
   let pendingCount = $derived(pendingInlineCount(work.annotations));
+  // Distinct source lines the pending line-anchored comments cover (union of
+  // ranges), for the status strip's at-a-glance "N comments · M lines" readout.
+  let coveredLines = $derived(coveredLineCount(work.annotations));
 
   // ----- Working-copy reload -----
   // When the active review (or its version) changes — whether from a selection
@@ -245,6 +249,19 @@
      the grid, so it's always visible regardless of review state; self-gates on
      `version` until the health probe lands. -->
 <VersionBadge {version} {commit} />
+
+<!-- Persistent plan-review status strip. A root sibling of .shell (the
+     VersionBadge pattern), never a grid child, so the shell's grid-template-rows
+     and the fixed Toc rail's containing block stay untouched. Self-gates on an
+     active review; reports the same pending-comment state the request-changes
+     dialog and approve guard read. -->
+<StatusStrip
+  active={active !== null}
+  {pendingCount}
+  {coveredLines}
+  version={active?.version ?? 1}
+  connected={selection.connected}
+/>
 
 {#if pendingApproveMode !== null && active}
   <ApproveConfirmDialog

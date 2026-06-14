@@ -70,6 +70,21 @@ export function pendingLineCount(annotations: Annotation[]): number {
   return locations.size;
 }
 
+/** How many distinct source lines the pending line-anchored comments cover — the
+ * size of the UNION of their `[startLine, endLine]` ranges, so a line touched by
+ * two overlapping comments counts once (not the sum of range lengths). Only
+ * line-anchored annotations have a source-line anchor; legacy (selection-anchored)
+ * annotations carry no line range and so contribute to the comment count but not
+ * to coverage. */
+export function coveredLineCount(annotations: Annotation[]): number {
+  const covered = new Set<number>();
+  for (const a of pendingInline(annotations)) {
+    if (!isLineAnnotation(a)) continue;
+    for (let line = a.startLine; line <= a.endLine; line++) covered.add(line);
+  }
+  return covered.size;
+}
+
 /**
  * Formats annotations + a general comment into a single feedback string.
  * `planText` is the stored plan version the annotations anchor into, used to
