@@ -1,6 +1,11 @@
 import "../../../test-setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
-import { type CreatedAnchor, createSourceCommenting } from "./commenting.ts";
+import {
+  type CreatedAnchor,
+  createSourceCommenting,
+  normalizeRange,
+  rangeLabel,
+} from "./commenting.ts";
 
 // The source-view gutter commenting controller is a pure state machine over the
 // @pierre/diffs gutter utility: a SelectedLineRange opens it, submit/cancel
@@ -108,5 +113,31 @@ describe("notifies on state change", () => {
     c.open({ start: 2, end: 2 });
     c.cancel();
     expect(ticks).toBe(4);
+  });
+});
+
+// The shared normalization the live drag readout and the composer both read, so
+// a preview while dragging and the label after release can never disagree.
+describe("normalizeRange", () => {
+  test("ascending range passes through", () => {
+    expect(normalizeRange({ start: 3, end: 7 })).toEqual({ startLine: 3, endLine: 7 });
+  });
+
+  test("descending range (bottom-up drag) flips to ascending", () => {
+    expect(normalizeRange({ start: 9, end: 4 })).toEqual({ startLine: 4, endLine: 9 });
+  });
+
+  test("single line normalizes to startLine === endLine", () => {
+    expect(normalizeRange({ start: 5, end: 5 })).toEqual({ startLine: 5, endLine: 5 });
+  });
+});
+
+describe("rangeLabel", () => {
+  test("a single line reads 'Line N'", () => {
+    expect(rangeLabel(3, 3)).toBe("Line 3");
+  });
+
+  test("a span reads 'Lines X–Y' with an en dash", () => {
+    expect(rangeLabel(5, 8)).toBe("Lines 5–8");
   });
 });

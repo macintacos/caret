@@ -250,6 +250,30 @@ async function selectGutterRange(page: Page, startLine: number, endLine: number)
   await page.mouse.up();
 }
 
+/**
+ * Extend an existing selection with a shift-click on the number column (the
+ * library's keyboard-additive extend gesture): anchor a single line by clicking
+ * its number cell, then Shift-click `extendLine`'s cell. The result is a span from
+ * the anchor to the shift target — the alternate path to a multi-line range that
+ * the drag covers, preserved as additive rather than pointer-only.
+ */
+async function shiftExtendSelection(
+  page: Page,
+  anchorLine: number,
+  extendLine: number,
+): Promise<void> {
+  const anchor = await gutterCellCenter(page, anchorLine);
+  const extend = await gutterCellCenter(page, extendLine);
+  await page.mouse.move(anchor.x, anchor.y);
+  await page.mouse.down();
+  await page.mouse.up();
+  await page.keyboard.down("Shift");
+  await page.mouse.move(extend.x, extend.y);
+  await page.mouse.down();
+  await page.mouse.up();
+  await page.keyboard.up("Shift");
+}
+
 test("creating a single-line annotation from the gutter persists it line-anchored", async ({
   daemon,
   page,
@@ -309,6 +333,105 @@ test("creating a range annotation from the gutter persists the correct line span
     .toBe(1);
   const ann = (await daemon.getReview(id)).body?.annotations?.[0];
   expect(ann).toMatchObject({ startLine: 5, endLine: 8 });
+});
+
+test("a shift-extend selection reaches the composer with an ascending range", async ({
+  daemon,
+  page,
+}) => {
+  // The keyboard-additive path: anchor a line, Shift-click a later one to extend
+  // the span, then open the composer from the gutter +. It must land the same
+  // ascending Lines X–Y the drag does, so the keyboard path stays equivalent.
+  const id = await daemon.seed({ plan: RANGE_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+
+  await shiftExtendSelection(page, 4, 9);
+  const plus = page.locator(".diffview [data-utility-button]");
+  await expect(plus).toBeVisible();
+  await plus.click();
+
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+  await expect(composer.getByText("Lines 4–9")).toBeVisible();
+  await composer.locator("textarea").fill("Shift-extended this span.");
+  await composer.getByRole("button", { name: "Comment" }).click();
+
+  await expect(composer).toHaveCount(0);
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
+    .toBe(1);
+  expect((await daemon.getReview(id)).body?.annotations?.[0]).toMatchObject({
+    startLine: 4,
+    endLine: 9,
+  });
+});
+
+test("a bottom-up drag normalizes to an ascending span", async ({ daemon, page }) => {
+  // Dragging the number column upward (endLine < startLine) must still persist an
+  // ascending {startLine, endLine} — this locks commenting.ts's Math.min/max
+  // normalization against regression, the invariant the live readout shares.
+  const id = await daemon.seed({ plan: RANGE_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+
+  // Drag from line 9 up to line 5 — the gesture runs bottom-up.
+  await selectGutterRange(page, 9, 5);
+  const plus = page.locator(".diffview [data-utility-button]");
+  await expect(plus).toBeVisible();
+  await plus.click();
+
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+  // Ascending despite the upward drag.
+  await expect(composer.getByText("Lines 5–9")).toBeVisible();
+  await composer.locator("textarea").fill("Dragged upward.");
+  await composer.getByRole("button", { name: "Comment" }).click();
+
+  await expect(composer).toHaveCount(0);
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
+    .toBe(1);
+  expect((await daemon.getReview(id)).body?.annotations?.[0]).toMatchObject({
+    startLine: 5,
+    endLine: 9,
+  });
+});
+
+test("a live readout previews the range during the drag and clears on release", async ({
+  daemon,
+  page,
+}, testInfo) => {
+  // The headline interaction: as the drag grows the selection, a live "Lines X–Y"
+  // readout tracks it before release; on release it disappears with no residue.
+  await daemon.seed({ plan: RANGE_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+
+  const readout = page.locator(".drag-readout");
+  await expect(readout).toHaveCount(0);
+
+  // Press on line 4's number cell and drag down to line 8, holding the button so
+  // the selection is mid-gesture (not yet released).
+  const start = await gutterCellCenter(page, 4);
+  const end = await gutterCellCenter(page, 8);
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(end.x, end.y, { steps: 12 });
+
+  // The readout shows the ascending span while the button is still held.
+  await expect(readout).toBeVisible();
+  await expect(readout).toHaveText("Lines 4–8");
+
+  // Baseline screenshot of the active selection + live readout.
+  await page.screenshot({ path: testInfo.outputPath("active-selection.png") });
+
+  // Release: the readout disappears, leaving no residue.
+  await page.mouse.up();
+  await expect(readout).toHaveCount(0);
 });
 
 test("a drag selection renders the selected lines in caret amber, not library-blue", async ({

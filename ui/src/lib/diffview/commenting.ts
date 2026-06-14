@@ -26,6 +26,24 @@ export interface PendingComposer {
   endLine: number;
 }
 
+/** Normalizes a gutter range to an ascending {startLine, endLine} (1-based,
+ * inclusive). A drag in either direction — top-down or bottom-up — yields the
+ * same ascending pair, so the live drag readout, the composer label, and the
+ * created anchor never disagree on which way the range runs. */
+export function normalizeRange(range: GutterRange): PendingComposer {
+  return {
+    startLine: Math.min(range.start, range.end),
+    endLine: Math.max(range.start, range.end),
+  };
+}
+
+/** The human label for an ascending line range: "Line N" for a single line,
+ * "Lines X–Y" (en dash) for a span. Shared by the live drag readout and the
+ * post-release composer so the preview and the composer always read the same. */
+export function rangeLabel(startLine: number, endLine: number): string {
+  return startLine === endLine ? `Line ${startLine}` : `Lines ${startLine}–${endLine}`;
+}
+
 export interface SourceCommentingDeps {
   /** Persist a submitted line-anchored annotation. */
   onCreate(anchor: CreatedAnchor): void;
@@ -56,10 +74,7 @@ export function createSourceCommenting(deps: SourceCommentingDeps): SourceCommen
 
   return {
     open(range) {
-      open = {
-        startLine: Math.min(range.start, range.end),
-        endLine: Math.max(range.start, range.end),
-      };
+      open = normalizeRange(range);
       deps.onChange?.();
     },
     submit(text) {

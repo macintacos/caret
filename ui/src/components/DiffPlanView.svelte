@@ -23,7 +23,8 @@
   import SourceDiffView from "../lib/diffview/SourceDiffView.svelte";
   import { slotInto, toLineAnnotations } from "../lib/diffview/annotationSlot.ts";
   import { type BracketSpan, bracketLayer } from "../lib/diffview/bracket.ts";
-  import { createSourceCommenting } from "../lib/diffview/commenting.ts";
+  import { createSourceCommenting, normalizeRange, rangeLabel } from "../lib/diffview/commenting.ts";
+  import { dismissDragHint, isDragHintDismissed } from "../lib/diffview/dragHint.ts";
   import { buildLinkLayer } from "../lib/diffview/links.ts";
   import { readDiffStyle, writeDiffStyle } from "../lib/diffStylePref.ts";
   import { type CompareStore, createCompare } from "../state/compare.svelte.ts";
@@ -220,15 +221,60 @@
     commenting.cancel();
   });
 
+  // The live drag readout: while the reviewer drags down the line-number column,
+  // the library fires onLineSelectionChange on every row crossed. Mirroring the
+  // normalized range here renders a lightweight "Lines X–Y" preview before
+  // release, so the reviewer sees the span grow instead of learning it only when
+  // the composer opens. Cleared on release/cancel, leaving no residue. The
+  // readout is suppressed once the composer is open — the composer's own label
+  // takes over — so the two never show at once.
+  let dragRange = $state<{ startLine: number; endLine: number } | undefined>();
+
+  // The one-time discoverability hint for the drag gesture: shown the first time
+  // the reviewer hovers the gutter, dismissed (and remembered) the first time they
+  // actually drag, so it never nags. Seeded from persisted state at mount.
+  let hintDismissed = $state(isDragHintDismissed());
+  let hintVisible = $state(false);
+
+  function showDragHint(): void {
+    if (!hintDismissed) hintVisible = true;
+  }
+  function retireDragHint(): void {
+    hintVisible = false;
+    if (!hintDismissed) {
+      hintDismissed = true;
+      dismissDragHint();
+    }
+  }
+
   const gutter: SourceViewGutter = {
     enableGutterUtility: true,
     enableLineSelection: true,
     onGutterUtilityClick: (range) => commenting.open({ start: range.start, end: range.end }),
+    // Live during the drag: preview the growing range, and retire the hint once the
+    // reviewer has used the gesture. The range arrives in either order; normalize it
+    // so the preview reads ascending, exactly as the composer label will.
+    onLineSelectionStart: (range) => {
+      retireDragHint();
+      dragRange = range == null ? undefined : normalizeRange(range);
+    },
+    onLineSelectionChange: (range) => {
+      dragRange = range == null ? undefined : normalizeRange(range);
+    },
+    onLineSelectionEnd: () => {
+      dragRange = undefined;
+    },
     // caret fills the library's annotation slots itself (see annotationSlot.ts), so
     // the library's own renderAnnotation callback — disabled in container-managed
     // mode anyway — goes unused; the option is required by the bag's shape.
     renderAnnotation: () => undefined,
   };
+
+  // The live preview text, suppressed once the composer opens (its label takes
+  // over) so the readout and composer never disagree or stack.
+  const dragReadout = $derived(
+    dragRange && pending == null ? rangeLabel(dragRange.startLine, dragRange.endLine) : undefined,
+  );
 
   // One library line annotation per anchored line — the saved comments plus the
   // open composer — so the library reserves an inline annotation row whose slot we
@@ -280,7 +326,7 @@
   {#if !showDiff}
     <SourceToc {headings} {activeLine} onJump={(line) => api?.scrollToLine(line)} />
   {/if}
-  <div class="diff-plan" bind:this={scrollEl}>
+  <div class="diff-plan" bind:this={scrollEl} onmouseenter={showDragHint} role="presentation">
     {#if showDiff}
       <!-- Compare mode: a diff between the selected version pair. Base is the
            reference version (the default base is the current version) and renders
@@ -296,6 +342,18 @@
         options={{ diffStyle: compareStore.diffStyle }}
       />
     {:else}
+      <!-- Live drag readout: a zero-height sticky rail rendered first so it pins to
+           the top of the scroll viewport from scroll position 0 without reflowing
+           the line grid (the absolutely-positioned readout inside it takes no flow
+           space). It stays visible as the selection — and any auto-scroll — move
+           during the drag. Reads the same ascending range the composer label will,
+           and is gone the instant the drag releases or the composer opens. aria-live
+           so a reader hears the range grow. -->
+      <div class="drag-readout-rail" aria-hidden={dragReadout == null}>
+        {#if dragReadout}
+          <div class="drag-readout metric" role="status" aria-live="polite">{dragReadout}</div>
+        {/if}
+      </div>
       <SourceView
         doc={{ name: "plan.md", text: linkLayer.text }}
         links={linkLayer.spans}
@@ -335,6 +393,12 @@
           />
         </div>
       {/if}
+      <!-- One-time hint: rendered last so it sticks to the bottom of the scroll
+           viewport, reading as ambient guidance. Surfaces the drag-to-comment
+           gesture on first gutter hover, retired for good once the reviewer drags. -->
+      {#if hintVisible}
+        <div class="drag-hint" role="note">Drag the line numbers to comment on a range.</div>
+      {/if}
     {/if}
   </div>
 </div>
@@ -363,5 +427,78 @@
     min-height: 0;
     overflow: auto;
     background: var(--paper);
+  }
+
+  /* The zero-height sticky rail that carries the live readout. Sticky to the top
+     of the scroll viewport, but with no height so it never reflows the line grid
+     (the readout positions absolutely within it). */
+  .drag-readout-rail {
+    position: sticky;
+    top: 0;
+    left: 0;
+    z-index: 3;
+    height: 0;
+  }
+
+  /* The live drag readout. Pinned to the top-left of the scroll viewport via the
+     rail, offset so it sits over the gutter→content seam near the line numbers it
+     counts. Amber-accented to tie it to the selection band the reviewer is
+     dragging. The `.metric` atom (global) gives it tabular digits so the range
+     doesn't reflow as it grows. pointer-events:none keeps it out of the drag's
+     pointer capture. */
+  .drag-readout {
+    position: absolute;
+    top: 0.4rem;
+    left: 0.4rem;
+    width: fit-content;
+    padding: 0.2rem 0.5rem;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--accent-ink);
+    background: var(--accent);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+    pointer-events: none;
+    animation: readout-in var(--dur-fast, 0.12s) ease-out;
+  }
+
+  /* The one-time discoverability hint. Sticky at the bottom of the viewport so it
+     reads as ambient guidance rather than blocking the gutter it describes. Quiet
+     paper-raised chrome — it is a nudge, not the amber action affordance. */
+  .drag-hint {
+    position: sticky;
+    bottom: 0.5rem;
+    left: 0;
+    z-index: 3;
+    width: fit-content;
+    margin: 0 auto 0.5rem;
+    padding: 0.35rem 0.7rem;
+    font-size: var(--text-xs);
+    color: var(--ink-soft);
+    background: var(--paper-raised);
+    border: 1px solid var(--rule-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    animation: readout-in var(--dur-fast, 0.12s) ease-out;
+  }
+
+  @keyframes readout-in {
+    from {
+      opacity: 0;
+      transform: translateY(-2px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* prefers-reduced-motion: the entrance animation is non-essential, so suppress
+     it — the readout and hint still appear, just without the slide-in. */
+  @media (prefers-reduced-motion: reduce) {
+    .drag-readout,
+    .drag-hint {
+      animation: none;
+    }
   }
 </style>
