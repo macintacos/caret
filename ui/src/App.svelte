@@ -314,7 +314,7 @@
     border-bottom: 1px solid var(--rule-strong);
     border-left: 3px solid var(--accent);
     font-size: var(--text-base);
-    animation: daemon-banner-in 160ms ease-out;
+    animation: daemon-banner-in var(--dur-base) var(--ease-out);
   }
   .db-text {
     margin: 0;
@@ -334,7 +334,7 @@
     cursor: pointer;
     border-radius: var(--radius);
     padding: 0.3rem 0.7rem;
-    transition: background 120ms ease;
+    transition: background var(--dur-fast) var(--ease-out);
   }
   .db-reload {
     background: var(--accent);
@@ -365,11 +365,6 @@
       transform: translateY(0);
     }
   }
-  @media (prefers-reduced-motion: reduce) {
-    .daemon-banner {
-      animation: none;
-    }
-  }
 
   /* Transient bottom-right indicator shown only while Safe Mode swallows input.
      Sits above the modal scrim (z-index 100) so it's visible over any dialog. */
@@ -389,7 +384,7 @@
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
     font-size: var(--text-base);
-    animation: safe-mode-in 160ms ease-out;
+    animation: safe-mode-in var(--dur-base) var(--ease-out);
   }
   .sm-dot {
     flex: none;
@@ -429,12 +424,6 @@
     }
     50% {
       box-shadow: 0 0 0 4px transparent;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .safe-mode-toast,
-    .sm-dot {
-      animation: none;
     }
   }
 </style>

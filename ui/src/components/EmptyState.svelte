@@ -89,9 +89,4 @@
     border-radius: 99px;
     padding: 0.22rem 0.7rem;
   }
-  @media (prefers-reduced-motion: reduce) {
-    .glyph {
-      animation: none;
-    }
-  }
 </style>

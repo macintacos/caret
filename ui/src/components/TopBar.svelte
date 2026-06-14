@@ -208,8 +208,8 @@
     align-items: center;
     gap: 0.35rem;
     transition:
-      border-color 0.12s ease,
-      color 0.12s ease;
+      border-color var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out);
   }
   .request:hover:not(:disabled) {
     border-color: var(--accent);
@@ -247,8 +247,8 @@
     align-items: center;
     gap: 0.35rem;
     transition:
-      background 0.12s ease,
-      border-color 0.12s ease;
+      background var(--dur-fast) var(--ease-out),
+      border-color var(--dur-fast) var(--ease-out);
   }
   .split-toggle {
     background: var(--accent);
@@ -258,8 +258,8 @@
     padding: 0.5rem 0.55rem;
     border-left: 1px solid color-mix(in srgb, var(--accent-ink) 30%, var(--accent));
     transition:
-      background 0.12s ease,
-      border-color 0.12s ease;
+      background var(--dur-fast) var(--ease-out),
+      border-color var(--dur-fast) var(--ease-out);
   }
   .approve:hover:not(:disabled),
   .split-toggle:hover:not(:disabled) {
@@ -294,8 +294,8 @@
        surface's signature for an active row; it appears on hover here. */
     box-shadow: inset 2px 0 0 transparent;
     transition:
-      background 0.12s ease,
-      box-shadow 0.12s ease;
+      background var(--dur-fast) var(--ease-out),
+      box-shadow var(--dur-fast) var(--ease-out);
   }
   .menu button:hover {
     background: var(--accent-wash);

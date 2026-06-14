@@ -175,7 +175,7 @@
     border-left: 3px solid var(--state-accent);
     border-radius: var(--radius);
     cursor: pointer;
-    transition: border-color 0.12s;
+    transition: border-color var(--dur-fast) var(--ease-out);
   }
   .chip:hover {
     border-color: var(--rule-strong);
@@ -286,7 +286,7 @@
     font-size: var(--text-sm);
     color: var(--ink-soft);
     cursor: pointer;
-    transition: color 0.15s;
+    transition: color var(--dur-fast) var(--ease-out);
   }
   .link:hover {
     color: var(--ink);

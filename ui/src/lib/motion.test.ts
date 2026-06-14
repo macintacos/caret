@@ -12,6 +12,28 @@ const uiDir = join(import.meta.dir, "..");
 const appCss = await Bun.file(join(uiDir, "app.css")).text();
 const composer = await Bun.file(join(uiDir, "components/SourceComposer.svelte")).text();
 const dialog = await Bun.file(join(uiDir, "components/RequestChangesDialog.svelte")).text();
+const emptyState = await Bun.file(join(uiDir, "components/EmptyState.svelte")).text();
+
+// Every light-DOM chrome component whose CSS carries a one-shot reveal or a
+// hover/state transition, loaded once for the migration-coverage suite below.
+const chromeComponents = [
+  "App.svelte",
+  "components/RequestChangesDialog.svelte",
+  "components/EmptyState.svelte",
+  "components/TopBar.svelte",
+  "components/ReviewSwitcher.svelte",
+  "components/SourceToc.svelte",
+  "components/NotifyBell.svelte",
+  "components/VersionBadge.svelte",
+  "components/SourceAnnotationCard.svelte",
+  "components/DiffPlanView.svelte",
+  "components/ApproveConfirmDialog.svelte",
+];
+const chromeSources: Record<string, string> = Object.fromEntries(
+  await Promise.all(
+    chromeComponents.map(async (p) => [p, await Bun.file(join(uiDir, p)).text()] as const),
+  ),
+);
 
 // The :root block where the design tokens (including motion) are declared.
 function rootBlock(css: string): string {
@@ -106,6 +128,56 @@ describe("the two formerly-unguarded animations reference the tokens", () => {
       expect(decl).toContain("var(--dur-");
       expect(decl).toContain("var(--ease-");
       expect(decl).not.toMatch(/\d+(\.\d+)?s\b/);
+    }
+  });
+});
+
+describe("chrome motion declarations draw from the tokens, not bare literals", () => {
+  // Every light-DOM chrome component whose CSS carries a one-shot reveal or a
+  // hover/state transition. Each is scanned for `transition:`/`animation:`
+  // declarations; the one-shot ones must time off var(--dur-*) with no bare
+  // seconds/ms literal, so the chrome harmonizes on the shared vocabulary.
+  const chrome = chromeComponents;
+
+  // The ambient/infinite carve-out: these two animations breathe on their own
+  // bespoke durations and are deliberately EXEMPT from the one-shot tokens, so
+  // their literals are expected to remain. Matched by keyframe name.
+  const ambient = /\b(float|safe-mode-pulse)\b/;
+
+  // Pull every `transition:`/`animation:` declaration body (the text up to the
+  // terminating semicolon) from a stylesheet, multi-line shorthands included.
+  function motionDecls(css: string): string[] {
+    return [...css.matchAll(/(?:transition|animation):\s*([\s\S]*?);/g)].map((m) => m[1] ?? "");
+  }
+
+  for (const path of chrome) {
+    test(`${path} times every one-shot motion off var(--dur-*)`, () => {
+      for (const decl of motionDecls(chromeSources[path] ?? "")) {
+        if (ambient.test(decl)) continue; // ambient carve-out keeps its literal
+        // A one-shot reveal/transition references the duration token and leaves
+        // no bare seconds/ms literal behind.
+        expect(decl).toContain("var(--dur-");
+        expect(decl).not.toMatch(/\b\d+(\.\d+)?m?s\b/);
+      }
+    });
+  }
+
+  test("the ambient float + safe-mode pulse keep their bespoke durations", () => {
+    // The carve-out is real, not vacuous: each ambient animation still carries
+    // its own long literal (4s float, 1.2s pulse) — the sweep must not have
+    // pulled them onto the snappy one-shot tokens.
+    expect(emptyState).toMatch(/animation:\s*float\s+4s\b/);
+    expect(chromeSources["App.svelte"]).toMatch(/animation:\s*safe-mode-pulse\s+1\.2s\b/);
+  });
+
+  test("no chrome component keeps a reduced-motion block the global rule subsumes", () => {
+    // The single global guard in app.css neutralizes movement for the whole
+    // light-DOM root, so a per-component `@media (prefers-reduced-motion)`
+    // block in these files is dead CSS. (app.css itself hosts the one global
+    // rule and is excluded.)
+    for (const path of chrome) {
+      const css = chromeSources[path] ?? "";
+      expect(css).not.toMatch(/@media\s*\(prefers-reduced-motion/);
     }
   });
 });

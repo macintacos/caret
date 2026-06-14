@@ -544,7 +544,7 @@
     border-radius: var(--radius);
     box-shadow: var(--shadow-card);
     pointer-events: none;
-    animation: readout-in var(--dur-fast, 0.12s) ease-out;
+    animation: readout-in var(--dur-fast) var(--ease-out);
   }
 
   /* The one-time discoverability hint. Sticky at the bottom of the viewport so it
@@ -564,7 +564,7 @@
     border: 1px solid var(--rule-strong);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
-    animation: readout-in var(--dur-fast, 0.12s) ease-out;
+    animation: readout-in var(--dur-fast) var(--ease-out);
   }
 
   @keyframes readout-in {
@@ -575,15 +575,6 @@
     to {
       opacity: 1;
       transform: translateY(0);
-    }
-  }
-
-  /* prefers-reduced-motion: the entrance animation is non-essential, so suppress
-     it — the readout and hint still appear, just without the slide-in. */
-  @media (prefers-reduced-motion: reduce) {
-    .drag-readout,
-    .drag-hint {
-      animation: none;
     }
   }
 </style>

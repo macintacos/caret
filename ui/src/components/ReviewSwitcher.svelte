@@ -71,7 +71,7 @@
     border-radius: var(--radius);
     padding: 0.3rem 0.75rem;
     max-width: 46vw;
-    transition: border-color 0.12s ease;
+    transition: border-color var(--dur-fast) var(--ease-out);
   }
   .current:hover {
     border-color: var(--rule-strong);
@@ -102,7 +102,7 @@
   .chev {
     display: inline-flex;
     color: var(--ink-faint);
-    transition: transform 0.15s;
+    transition: transform var(--dur-fast) var(--ease-out);
   }
   .chev.open {
     transform: rotate(180deg);
@@ -136,8 +136,8 @@
        active-row treatment; reserved as transparent until selected. */
     box-shadow: inset 2px 0 0 transparent;
     transition:
-      background 0.12s ease,
-      box-shadow 0.12s ease;
+      background var(--dur-fast) var(--ease-out),
+      box-shadow var(--dur-fast) var(--ease-out);
   }
   .menu button:hover {
     background: var(--paper-sunk);

@@ -51,16 +51,11 @@
     user-select: all;
     opacity: 0.62;
     transition:
-      opacity 140ms ease,
-      border-color 140ms ease;
+      opacity var(--dur-fast) var(--ease-out),
+      border-color var(--dur-fast) var(--ease-out);
   }
   .version-badge:hover {
     opacity: 1;
     border-color: var(--rule-strong);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .version-badge {
-      transition: none;
-    }
   }
 </style>

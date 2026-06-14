@@ -73,7 +73,7 @@
     padding: 0.35rem;
     display: inline-flex;
     align-items: center;
-    transition: background 0.12s ease;
+    transition: background var(--dur-fast) var(--ease-out);
   }
   .bell:hover {
     background: var(--paper-sunk);

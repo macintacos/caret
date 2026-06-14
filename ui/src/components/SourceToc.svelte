@@ -123,8 +123,8 @@
     padding: 0.34rem 0.5rem;
     outline: none;
     transition:
-      border-color 0.15s ease,
-      box-shadow 0.15s ease;
+      border-color var(--dur-fast) var(--ease-out),
+      box-shadow var(--dur-fast) var(--ease-out);
   }
   .toc-filter::placeholder {
     color: var(--ink-faint);
@@ -162,8 +162,8 @@
     overflow: hidden;
     text-overflow: ellipsis;
     transition:
-      background 0.12s ease,
-      color 0.12s ease;
+      background var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out);
   }
   .toc-row.lvl-1 {
     padding-left: 0.45rem;

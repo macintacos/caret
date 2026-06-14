@@ -70,7 +70,7 @@
     display: grid;
     place-items: center;
     padding: 2rem;
-    animation: fade 0.15s ease-out;
+    animation: fade var(--dur-fast) var(--ease-out);
   }
   /* The accent left-bar is the source-view surface's signature for an actionable
      card; the approve-guard dialog carries it too so the modal reads as part of
@@ -83,7 +83,7 @@
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
     padding: 1.5rem;
-    animation: rise 0.18s ease-out;
+    animation: rise var(--dur-base) var(--ease-out);
   }
   .dialog:focus {
     outline: none;
