@@ -124,6 +124,18 @@ describe("the .diffview → --diffs-* bridge", () => {
     });
   }
 
+  test("carries no transition or animation — the diff surface is motionless by design", () => {
+    // The @pierre/diffs render surface (line hover, line/range-selection, the
+    // decoration bars, gutter affordances, hunk-expand) changes state with instant
+    // color-mix swaps and carries NO transition or keyframe. It is shadow-
+    // encapsulated, so the global reduced-motion rule in app.css cannot reach it and
+    // a light-DOM transition cannot leak in — but the host CAN add a transition or
+    // animation to the .diffview container or to a bridged --diffs-* property here,
+    // which would leak motion past the boundary. This pins that it does not: the
+    // bridge declarations name no transition/animation property.
+    expect(declarations(appCss)).not.toMatch(/\b(transition|animation)\b/);
+  });
+
   test("keeps --diffs-modified library-blue — no modified override (amber-selection-only)", () => {
     // The accent strategy reserves caret amber for the comment selection only;
     // change-type semantics other than add/delete (the gutter +, change-type
