@@ -42,6 +42,20 @@ function entry(a: Annotation, n: number, planLines: string[]): string {
   return lines.join("\n");
 }
 
+/** The annotations that carry a non-blank comment — the inline feedback that
+ * actually reaches the agent. The one predicate every surface counts pending
+ * inline comments by, so the approve guard, the request-changes summary, and the
+ * formatted feedback never disagree about which comments are "pending". */
+export function pendingInline(annotations: Annotation[]): Annotation[] {
+  return annotations.filter((a) => a.comment.trim().length > 0);
+}
+
+/** How many inline comments are pending (non-blank), for the surfaces that show
+ * the count without formatting the feedback. */
+export function pendingInlineCount(annotations: Annotation[]): number {
+  return pendingInline(annotations).length;
+}
+
 /**
  * Formats annotations + a general comment into a single feedback string.
  * `planText` is the stored plan version the annotations anchor into, used to
@@ -57,7 +71,7 @@ export function formatFeedback(
   const general = generalComment.trim();
   const planLines = planText.split("\n");
 
-  const inline = annotations.filter((a) => a.comment.trim().length > 0);
+  const inline = pendingInline(annotations);
 
   const sections: string[] = [];
   if (general) sections.push(general);
