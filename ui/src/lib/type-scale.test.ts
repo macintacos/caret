@@ -77,6 +77,29 @@ describe("the --text-*/--leading-* type scale in app.css", () => {
     expect(rule).toMatch(/--diffs-font-size:\s*var\(--text-/);
     expect(rule).toMatch(/--diffs-line-height:\s*var\(--leading-/);
   });
+
+  // EXC-621's committed per-surface decision. The diff mono is stepped UP to the
+  // --text-base step (0.82rem ≈ 13.12px at the 16px root) — the library's ~13px
+  // reference — for crispness, decoupled from the .mono inline-chrome step
+  // (--text-sm ≈ 12.48px). Diff line-height stays --leading-normal so the diff
+  // shares the chrome's reading rhythm. Pinning the exact step makes the
+  // size/line-height choice falsifiable, not just prose.
+  test("the .diffview bridge commits the diff-mono step-up to --text-base", () => {
+    const rule = appCss.match(/\.diffview\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+    expect(rule).toMatch(/--diffs-font-size:\s*var\(--text-base\);/);
+    expect(rule).toMatch(/--diffs-line-height:\s*var\(--leading-normal\);/);
+  });
+
+  // The chrome reading base is held at 15px (EXC-621). It is an absolute-px
+  // declaration on <body>, distinct from the 16px rem origin the scale resolves
+  // against; pinning it guards the legibility floor against a silent shrink.
+  test("the body reading base holds 15px", () => {
+    // The standalone `body { … }` rule (not the `html, body` reset that shares a
+    // selector) carries the reading base. Scan every body-bearing rule for the
+    // 15px declaration so the assertion doesn't hinge on rule ordering.
+    const bodyRules = [...appCss.matchAll(/(?:^|[,\s])body\s*\{([^}]*)\}/gm)].map((m) => m[1]);
+    expect(bodyRules.some((r) => /font-size:\s*15px;/.test(r ?? ""))).toBe(true);
+  });
 });
 
 // Genuine display/glyph one-offs are exempt from the scale but must carry an
