@@ -39,6 +39,24 @@
   --leading-snug: 1.45;
   --leading-normal: 1.55;
 
+  /* Motion. A small functional vocabulary for the chrome's ONE-SHOT reveals:
+     two durations and two easings, so a reveal tunes from a single lever instead
+     of scattered literals. --dur-fast (120ms) is for micro-reveals — the inline
+     composer pop, the drag readout/hint slide; --dur-base (180ms) is for an
+     entering surface a step larger, like a dialog rise. Both stay ≤200ms so the
+     chrome reads quick, never sluggish. --ease-out is the ENTER curve (a soft
+     decelerate-in — content settling into place); --ease-in is the EXIT curve
+     (an accelerate-out for content leaving), kept paired so scripted exits read
+     as the inverse of their entrance.
+     Ambient/infinite animations are deliberately EXEMPT: the safe-mode pulse
+     (1.2s) and EmptyState float (4s) breathe on their own bespoke durations and
+     must not borrow these one-shot tokens — a 120ms loop would strobe. They keep
+     their literals; only one-shot reveals draw from here. */
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+
   /* Light: neutral grey paper + ink */
   --paper: #fafafa;
   --paper-raised: #ffffff;
@@ -125,6 +143,31 @@ body {
 
 #app {
   height: 100%;
+}
+
+/* The single global reduced-motion guard for the chrome. When the OS asks for
+   reduced motion, every animation and transition under the light-DOM app root
+   collapses to a near-zero, single static frame — so no chrome component can
+   forget to honor the preference on its own. animation-iteration-count: 1
+   resolves an infinite ambient animation (the safe-mode pulse, EmptyState
+   float) to one frame instead of letting it loop invisibly. Authored unlayered
+   so it wins over any component @layer, and scoped to #app and its descendants
+   (the true light-DOM root) rather than a bare `*`.
+   Reach: light-DOM chrome ONLY. The @pierre/diffs diff view renders into a
+   Shadow DOM (.diffview's shadow root), a separate tree this selector cannot
+   pierce — its own reduced-motion handling stays the library's concern. The
+   JS-side mirror for scroll behavior (CSS cannot gate ScrollBehavior) lives in
+   lib/diffview/scroll.ts's prefersReducedMotion(). */
+@media (prefers-reduced-motion: reduce) {
+  #app,
+  #app *,
+  #app *::before,
+  #app *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ----- App shell: plan + annotation-gutter grid ----- */
