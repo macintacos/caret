@@ -40,6 +40,7 @@
     writeOverflow,
   } from "../lib/diffReaderPref.ts";
   import { type CompareStore, createCompare } from "../state/compare.svelte.ts";
+  import { setHeadingLine, takeHeadingLine } from "../state/headingLink.ts";
   import VersionComparePicker from "./VersionComparePicker.svelte";
   import ReaderAffordances from "./ReaderAffordances.svelte";
   import type { SourceViewGutter } from "../lib/diffview/options.ts";
@@ -192,6 +193,24 @@
   let api = $state<SourceViewApi | undefined>();
   const host = $derived(api?.host);
 
+  // Gates the live `?line=` mirror until the deep-link restore has consumed any
+  // incoming `?line=`. Without it, the mirror effect (activeLine starts null)
+  // could clear the param before onSourceReady reads it, depending on which
+  // post-mount effect runs first.
+  let restored = $state(false);
+
+  // Captures the imperative API and, on the first ready, restores a deep-linked
+  // heading (`?line=`) by scrolling to it once. takeHeadingLine() clears the
+  // param, so a later SourceView remount (a version switch) won't re-jump — the
+  // live `?line=` mirror takes over from there. The scroll waits a frame so the
+  // library's `data-line` rows are painted before the lookup runs.
+  function onSourceReady(a: SourceViewApi) {
+    api = a;
+    const line = takeHeadingLine();
+    if (line != null) requestAnimationFrame(() => a.scrollToLine(line));
+    restored = true;
+  }
+
   // The source line of the heading currently in the reading zone. Tracked from
   // the scroll container's topmost rendered line so the pane highlights the
   // section being read.
@@ -239,6 +258,15 @@
       cancelAnimationFrame(raf);
       el.removeEventListener("scroll", onScroll);
     };
+  });
+
+  // Mirror the active heading line into `?line=` so a copied URL reopens the
+  // review at the section being read (composing with deepLink.ts's `?review=`).
+  // Compare mode has no ToC and no tracked heading, so the param clears there.
+  // Held until restore consumes any incoming `?line=` (see `restored`).
+  $effect(() => {
+    if (!restored) return;
+    setHeadingLine(showDiff ? null : activeLine);
   });
 
   // Reactive mirror of the controller's pending target, so the composer renders
@@ -425,7 +453,7 @@
         options={readerOptions}
         {gutter}
         {contentKey}
-        onReady={(a) => (api = a)}
+        onReady={onSourceReady}
         onLineComment={(line) => commenting.open({ start: line, end: line })}
       />
       <!-- The comment-span bracket overlay: rounded gutter rails marking each
