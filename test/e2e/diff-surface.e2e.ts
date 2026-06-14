@@ -516,3 +516,42 @@ test("highlights fenced code blocks with per-language syntax colors", async ({ d
     )
     .toBeGreaterThanOrEqual(3);
 });
+
+// The layered-surface bridge (EXC-603). The single .diffview rule sets
+// --diffs-bg: var(--paper-sunk); the library paints :host's background from it,
+// so the rendered .diffview host resolves to caret's sunk-paper grey. A typo in
+// the bridged token would blank the surface (transparent or the wrong grey), so
+// this asserts the computed background is opaque and equal to --paper-sunk — in
+// both schemes, since the token flips through the cascade and the bridge sets no
+// nested @media of its own.
+for (const colorScheme of ["light", "dark"] as const) {
+  test(`the diff surface background resolves to caret's --paper-sunk in ${colorScheme}`, async ({
+    daemon,
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme });
+    await daemon.seed();
+    await page.goto("/");
+    await expect(page.locator(".diffview")).toBeVisible();
+
+    const { surface, sunk } = await page.evaluate(() => {
+      const view = document.querySelector(".diffview") as HTMLElement;
+      // The library paints :host{background-color:var(--diffs-bg)}, applied to
+      // the shadow host (the .diffview element itself), so its computed
+      // background-color is the resolved bridge color.
+      const surfaceColor = getComputedStyle(view).backgroundColor;
+      // Resolve --paper-sunk to the same rgb() form via a throwaway probe so the
+      // comparison is value-based, not string-formatting-based.
+      const probe = document.createElement("span");
+      probe.style.backgroundColor = "var(--paper-sunk)";
+      document.body.appendChild(probe);
+      const sunkColor = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return { surface: surfaceColor, sunk: sunkColor };
+    });
+
+    // Opaque (not the rgba(0,0,0,0) transparent default) and the bridged grey.
+    expect(surface).not.toBe("rgba(0, 0, 0, 0)");
+    expect(surface).toBe(sunk);
+  });
+}
