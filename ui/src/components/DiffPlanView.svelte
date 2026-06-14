@@ -389,10 +389,15 @@
            renders on the "before" side — so the default current-vs-previous pair
            reads as the changes that produced the current version. Annotations and
            the gutter are deliberately omitted. The layout switches at runtime via
-           the picker (no remount). -->
+           the picker (no remount).
+
+           The side names are the version numbers, so the sticky compare header
+           reads the pair as `v{target} → v{base}` (the rename arrow is the
+           library's, free when the two names differ) — naming what is being
+           compared instead of a placeholder filename. -->
       <SourceDiffView
-        oldDoc={{ name: "plan.md", text: targetText }}
-        newDoc={{ name: "plan.md", text: baseText }}
+        oldDoc={{ name: `v${compareStore.targetVersion}`, text: targetText }}
+        newDoc={{ name: `v${compareStore.baseVersion}`, text: baseText }}
         contentKey={diffContentKey}
         options={{
           ...readerOptions,

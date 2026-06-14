@@ -182,6 +182,20 @@ describe("DiffPlanView version compare", () => {
     expect(painted).toBe(true);
   });
 
+  test("the compare header surfaces the selected version pair", async () => {
+    const { target } = render(DiffPlanView, props({ review: multiVersionFixture(3) }));
+    target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
+    // Default pair is base=v3 (after), target=v2 (before), so the header reads the
+    // pair v2 → v3 — naming what is compared, not a placeholder filename.
+    await until(() => shadow(target)?.querySelector("[data-diffs-header]") != null);
+    const header = shadow(target)?.querySelector("[data-diffs-header]");
+    expect(header).not.toBeNull();
+    expect(header?.querySelector("[data-prev-name]")?.textContent).toBe("v2");
+    expect(header?.querySelector("[data-title]")?.textContent).toBe("v3");
+    // Pinned so the pair and the change counts stay in view on a long diff.
+    expect(header?.hasAttribute("data-sticky")).toBe(true);
+  });
+
   test("the persisted layout preference drives the initial diff style", async () => {
     localStorage.setItem("caret.diffStyle", "unified");
     const { target } = render(DiffPlanView, props({ review: multiVersionFixture(3) }));

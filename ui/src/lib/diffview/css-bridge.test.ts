@@ -56,6 +56,14 @@ describe("the .diffview → --diffs-* bridge", () => {
     expect(declarations(appCss)).not.toMatch(/#[0-9a-fA-F]{3,8}/);
   });
 
+  test("binds the unprefixed --bg/--fg (the [data-file-info] chip) to caret tokens", () => {
+    // The library's header info chip reads the bare --bg/--fg, not the --diffs-*
+    // pair, so without a host binding it falls back to its built-in defaults. The
+    // bridge binds both to a caret token so the chip resolves on caret's palette.
+    expect(rule).toMatch(/--bg:\s*var\(--/);
+    expect(rule).toMatch(/--fg:\s*var\(--/);
+  });
+
   // The layered surface system (EXC-603). The library derives buffer / context /
   // context-gutter / separator / per-line-hover from its own light-dark() greys
   // unless these override vars are set. Binding each to caret's paper/ink ramp

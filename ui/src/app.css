@@ -233,6 +233,15 @@ a:focus-visible,
   --diffs-fg: var(--ink);
   --diffs-fg-number: var(--ink-faint);
 
+  /* The library's [data-file-info] header chip reads the unprefixed --bg/--fg
+     (not the --diffs-* pair), so it falls back to its built-in defaults unless
+     the host defines them. Bind them to caret's surface/ink so the chip resolves
+     on caret's palette in the same place it would otherwise miss. The compare
+     header's pinned fill comes from [data-diffs-header][data-sticky] reading
+     --diffs-bg above; this pair covers the sibling info chip. */
+  --bg: var(--paper-sunk);
+  --fg: var(--ink);
+
   /* Semantic +/- color. The library themes its add/delete semantics through a
      single-knob override layer: --diffs-addition-base reads
      --diffs-addition-color-override, and the full-line tint
