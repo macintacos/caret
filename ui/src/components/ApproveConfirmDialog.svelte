@@ -72,14 +72,10 @@
     padding: 2rem;
     animation: fade var(--dur-fast) var(--ease-out);
   }
-  /* The accent left-bar is the source-view surface's signature for an actionable
-     card; the approve-guard dialog carries it too so the modal reads as part of
-     the same review vocabulary as RequestChangesDialog. */
   .dialog {
     width: min(460px, 100%);
     background: var(--paper-raised);
     border: 1px solid var(--rule-strong);
-    border-left: 3px solid var(--accent);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
     padding: 1.5rem;

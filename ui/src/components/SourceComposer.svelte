@@ -111,7 +111,6 @@
     padding: 0.7rem 0.75rem 0.6rem;
     background: var(--paper-raised);
     border: 1px solid var(--rule-strong);
-    border-left: 3px solid var(--accent);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
     /* One-shot reveal on the fast tier. Opacity only: the composer opens inside
