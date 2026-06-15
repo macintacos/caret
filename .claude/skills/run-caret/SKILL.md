@@ -45,11 +45,14 @@ reason this skill exists:
 ### 1. Launch `mise run dev` in the background
 
 Start it with the Bash tool using `run_in_background: true` so the dev server keeps
-running after the skill returns, and note the task's **output file path** (it captures
-combined stdout + stderr):
+running after the skill returns. The Bash tool writes the task's combined stdout + stderr
+to an output file and returns its path — call that `<dev-output-file>` in the steps below.
+Launch with `NO_COLOR=1` so Vite's banner stays plain text: under forced color (a CI
+environment, `FORCE_COLOR`, or a PTY-backed shell) Vite wraps the `Local:` label and the
+port digits in ANSI escapes, which would defeat the plain-text greps in steps 2–3.
 
 ```sh
-mise run dev
+NO_COLOR=1 mise run dev
 ```
 
 If a caret dev instance from an earlier `/run-caret` in this session is already up, reuse
@@ -72,7 +75,9 @@ done
 ```
 
 If the deadline passes — or `mise run dev` exits — before that line appears, surface the
-captured log: dev failed to boot. Do not declare success.
+captured log: dev failed to boot. Do not declare success. (A crash surfaces on its own —
+the Bash tool notifies you when the background task exits — so 90s is only the upper
+bound, not the wait you sit through on a failed boot.)
 
 ### 3. Resolve and surface the dev URL
 
