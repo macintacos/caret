@@ -3,12 +3,13 @@
   // view's per-line annotation row (the parent projects it into the library's slot
   // — see annotationSlot.ts) at the line or range the reviewer chose from the
   // gutter. Submitting creates a line-anchored annotation, Esc cancels,
-  // Cmd/Ctrl+Enter submits. Keyboard-accessible: it grabs focus on open and traps
-  // Escape/submit chords on its own subtree.
+  // Cmd/Ctrl+Enter submits. The editing surface is MarkdownEditor (the swappable
+  // CodeMirror boundary): it styles markdown as you type, auto-grows, owns the
+  // autofocus/preventScroll guard, and reports the chords back here.
   import { untrack } from "svelte";
   import { rangeLabel } from "../lib/diffview/commenting.ts";
-  import { isCancelKey, isSubmitChord } from "../lib/keys.ts";
   import Icon from "./Icon.svelte";
+  import MarkdownEditor from "./MarkdownEditor.svelte";
 
   interface Props {
     /** First annotated line (1-based, inclusive). */
@@ -32,27 +33,14 @@
   // Seed from `initial` once, at mount: a resumed scratch mounts a fresh composer
   // with the restored text, and the reviewer edits the local copy from there.
   // untrack makes the one-time seed explicit so a later `initial` change does not
-  // clobber in-progress edits.
+  // clobber in-progress edits. MarkdownEditor keeps this in sync via onInput.
   let comment = $state(untrack(() => initial));
-  let textarea = $state<HTMLTextAreaElement | undefined>();
 
   // Surface the seed and every edit to the host so it always holds the live text:
   // if the reviewer opens a different range without dismissing first, the host
   // retains this text as a scratch rather than losing it.
   $effect(() => {
     onInput?.(comment);
-  });
-
-  // Focus the input the moment the composer mounts so a keyboard-only reviewer
-  // can type immediately after triggering the gutter `+`. preventScroll is
-  // essential: the composer opens inline at the line the reviewer just clicked
-  // (already in view), and the library reserves its annotation row in the same
-  // tick. A plain focus() fires the browser's native scroll-into-view against
-  // that mid-rerender layout and lands the scroll container at the document
-  // bottom — the "clicking a line jumps the page" bug. We never need focus to
-  // scroll here, so we suppress it.
-  $effect(() => {
-    textarea?.focus({ preventScroll: true });
   });
 
   // Shared with the live drag readout (see DiffPlanView) so the preview while
@@ -66,27 +54,19 @@
   function cancel() {
     onCancel(comment);
   }
-
-  function onKey(e: KeyboardEvent) {
-    if (isCancelKey(e)) {
-      e.preventDefault();
-      cancel();
-    } else if (isSubmitChord(e)) {
-      e.preventDefault();
-      submit();
-    }
-  }
 </script>
 
-<div class="composer" role="dialog" aria-label="Add a comment" tabindex="-1" onkeydown={onKey}>
+<div class="composer" role="dialog" aria-label="Add a comment" tabindex="-1">
   <p class="label metric">{label}</p>
-  <textarea
-    bind:this={textarea}
-    bind:value={comment}
-    rows="3"
+  <MarkdownEditor
+    value={initial}
     placeholder="What should change here?"
-    aria-label="Comment"
-  ></textarea>
+    ariaLabel="Comment"
+    autofocus
+    onInput={(text) => (comment = text)}
+    onSubmitChord={submit}
+    onCancelChord={cancel}
+  />
   <div class="row">
     <button class="ghost" type="button" onclick={cancel}>Cancel</button>
     <button
@@ -128,21 +108,6 @@
     font-weight: 600;
     letter-spacing: 0.02em;
     color: var(--ink-soft);
-  }
-  textarea {
-    width: 100%;
-    box-sizing: border-box;
-    resize: vertical;
-    font-size: var(--text-md);
-    color: var(--ink);
-    background: var(--paper);
-    border: 1px solid var(--rule);
-    border-radius: var(--radius);
-    padding: 0.45rem 0.55rem;
-  }
-  textarea:focus {
-    outline: none;
-    border-color: var(--accent);
   }
   .row {
     display: flex;

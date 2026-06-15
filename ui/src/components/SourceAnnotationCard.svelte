@@ -3,12 +3,14 @@
   // the source view's per-line annotation row (the parent projects it into the
   // library's slot — see annotationSlot.ts), so it sits between the code lines
   // rather than over them. Collapsed it is a compact chip with a clamped preview;
-  // expanded it shows the full comment with edit and delete. Collapse state is
-  // UI-only — owned here, seeded from focus, never written to disk.
+  // expanded it shows the full comment (rendered markdown) with edit and delete.
+  // Editing uses MarkdownEditor (the swappable CodeMirror boundary). Collapse
+  // state is UI-only — owned here, seeded from focus, never written to disk.
   import type { LineAnnotation } from "@core/types";
   import { commentState } from "../lib/commentState.ts";
-  import { isCancelKey, isSubmitChord } from "../lib/keys.ts";
+  import { renderMarkdown } from "../lib/markdown.ts";
   import Icon from "./Icon.svelte";
+  import MarkdownEditor from "./MarkdownEditor.svelte";
 
   interface Props {
     annotation: LineAnnotation;
@@ -37,13 +39,16 @@
 
   let editing = $state(false);
   let draft = $state("");
-  let textarea = $state<HTMLTextAreaElement | undefined>();
 
   const label = $derived(
     annotation.startLine === annotation.endLine
       ? `Line ${annotation.startLine}`
       : `Lines ${annotation.startLine}–${annotation.endLine}`,
   );
+
+  // The saved comment, rendered from its markdown source to sanitized HTML for
+  // the expanded display (see lib/markdown.ts). Stored value stays literal text.
+  const renderedComment = $derived(renderMarkdown(annotation.comment));
 
   // The comment's lifecycle affordance, read from its ReviewStatus-keyed state
   // (absent → a pending working draft). The same dot+label shows collapsed and
@@ -63,25 +68,21 @@
   }
 
   function save() {
-    const trimmed = draft.trim();
+    // The editor commits on blur, and finishing an edit (save or cancel) unmounts
+    // it — firing one more blur. Guarding on `editing` makes that trailing blur a
+    // no-op so a chord-save never also fires a second onEdit.
+    if (!editing) return;
     editing = false;
+    const trimmed = draft.trim();
     if (trimmed !== "" && trimmed !== annotation.comment) onEdit(annotation.id, trimmed);
   }
 
-  function onKey(e: KeyboardEvent) {
-    if (isCancelKey(e)) {
-      e.preventDefault();
-      editing = false;
-      draft = annotation.comment;
-    } else if (isSubmitChord(e)) {
-      e.preventDefault();
-      save();
-    }
+  // Esc: abandon the edit. Clearing `editing` first makes the trailing
+  // commit-on-blur a no-op (see save), so the in-progress draft is discarded.
+  function cancelEdit() {
+    editing = false;
+    draft = annotation.comment;
   }
-
-  $effect(() => {
-    if (editing) textarea?.focus();
-  });
 </script>
 
 <div
@@ -109,16 +110,21 @@
         </button>
       </header>
       {#if editing}
-        <textarea
-          bind:this={textarea}
-          bind:value={draft}
-          rows="3"
-          aria-label="Edit comment"
-          onkeydown={onKey}
-          onblur={save}
-        ></textarea>
+        <MarkdownEditor
+          value={draft}
+          ariaLabel="Edit comment"
+          autofocus
+          onInput={(text) => (draft = text)}
+          onSubmitChord={save}
+          onCancelChord={cancelEdit}
+        />
+        <footer>
+          <button class="link save" type="button" onclick={save}>save</button>
+          <button class="link cancel" type="button" onclick={cancelEdit}>cancel</button>
+        </footer>
       {:else}
-        <p class="comment">{annotation.comment}</p>
+        <!-- renderedComment is sanitized HTML from renderMarkdown (see lib/markdown.ts). -->
+        <div class="comment">{@html renderedComment}</div>
         <footer>
           <button class="link edit" type="button" onclick={startEdit}>edit</button>
           <button
@@ -262,25 +268,83 @@
   .collapse:hover {
     color: var(--ink);
   }
+  /* The saved comment, rendered from markdown (renderMarkdown -> sanitized HTML).
+     The child element rules are :global because the markup is injected via
+     {@html} and Svelte's scoping can't see into it. Tokens only (hex/var). */
   .comment {
     font-size: var(--text-md);
     margin: 0;
     color: var(--ink);
-    white-space: pre-wrap;
+    line-height: var(--leading-snug);
   }
-  textarea {
-    width: 100%;
-    box-sizing: border-box;
-    resize: vertical;
-    font-size: var(--text-md);
-    color: var(--ink);
-    background: var(--paper);
-    border: 1px solid var(--accent);
+  .comment :global(> :first-child) {
+    margin-top: 0;
+  }
+  .comment :global(> :last-child) {
+    margin-bottom: 0;
+  }
+  .comment :global(p) {
+    margin: 0 0 0.5em;
+  }
+  .comment :global(a) {
+    color: var(--accent);
+    text-decoration: underline;
+  }
+  .comment :global(strong) {
+    font-weight: 700;
+  }
+  .comment :global(em) {
+    font-style: italic;
+  }
+  .comment :global(code) {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    background: var(--paper-sunk);
+    padding: 0.05em 0.3em;
+    border-radius: 3px;
+  }
+  .comment :global(pre) {
+    margin: 0 0 0.5em;
+    padding: 0.5rem 0.6rem;
+    background: var(--paper-sunk);
     border-radius: var(--radius);
-    padding: 0.4rem 0.5rem;
+    overflow-x: auto;
   }
-  textarea:focus {
-    outline: none;
+  .comment :global(pre code) {
+    padding: 0;
+    font-size: var(--text-sm);
+    background: none;
+  }
+  .comment :global(ul),
+  .comment :global(ol) {
+    margin: 0 0 0.5em;
+    padding-left: 1.3em;
+  }
+  .comment :global(li) {
+    margin: 0.1em 0;
+  }
+  .comment :global(blockquote) {
+    margin: 0 0 0.5em;
+    padding-left: 0.7em;
+    border-left: 2px solid var(--rule-strong);
+    color: var(--ink-soft);
+  }
+  /* Headings in a short comment lean on weight, not size, for hierarchy; h1 gets
+     the one step up the scale offers. Tokens only — the type-scale test forbids
+     raw font-size literals in component styles. */
+  .comment :global(h1),
+  .comment :global(h2),
+  .comment :global(h3),
+  .comment :global(h4),
+  .comment :global(h5),
+  .comment :global(h6) {
+    margin: 0.3em 0 0.4em;
+    font-size: var(--text-md);
+    font-weight: 700;
+    line-height: var(--leading-tight);
+  }
+  .comment :global(h1) {
+    font-size: var(--text-lg);
   }
   footer {
     display: flex;

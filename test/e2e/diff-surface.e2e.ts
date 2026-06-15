@@ -222,6 +222,14 @@ async function revealGutterPlus(page: Page, line: number): Promise<Locator> {
   return plus;
 }
 
+/** The inline composer's editing surface. The composer is a CodeMirror editor
+ * (MarkdownEditor.svelte), whose contenteditable exposes role="textbox" with the
+ * "Comment" aria-label — so fill/press/toHaveText work as they did on the old
+ * textarea, just targeted by role instead of tag. */
+function composerInput(composer: Locator): Locator {
+  return composer.getByRole("textbox", { name: "Comment" });
+}
+
 /** Viewport-px centre of a 1-based line's number cell in the gutter column. */
 async function gutterCellCenter(page: Page, line: number): Promise<{ x: number; y: number }> {
   const pt = await page.evaluate((ln) => {
@@ -316,7 +324,7 @@ test("creating a single-line annotation from the gutter persists it line-anchore
   const composer = page.getByRole("dialog", { name: "Add a comment" });
   await expect(composer).toBeVisible();
   await expect(composer.getByText("Line 3")).toBeVisible();
-  await composer.locator("textarea").fill("Quantify the cold cost here.");
+  await composerInput(composer).fill("Quantify the cold cost here.");
   await composer.getByRole("button", { name: "Comment" }).click();
 
   // The composer closes and the annotation persists line-anchored via /draft.
@@ -347,7 +355,7 @@ test("creating a range annotation from the gutter persists the correct line span
   const composer = page.getByRole("dialog", { name: "Add a comment" });
   await expect(composer).toBeVisible();
   await expect(composer.getByText("Lines 5–8")).toBeVisible();
-  const rangeInput = composer.locator("textarea");
+  const rangeInput = composerInput(composer);
   await rangeInput.fill("This whole block needs a rewrite.");
   // Submit via the keyboard chord; focus the input first so the chord lands on it.
   await rangeInput.click();
@@ -381,7 +389,7 @@ test("a shift-extend selection reaches the composer with an ascending range", as
   const composer = page.getByRole("dialog", { name: "Add a comment" });
   await expect(composer).toBeVisible();
   await expect(composer.getByText("Lines 4–9")).toBeVisible();
-  await composer.locator("textarea").fill("Shift-extended this span.");
+  await composerInput(composer).fill("Shift-extended this span.");
   await composer.getByRole("button", { name: "Comment" }).click();
 
   await expect(composer).toHaveCount(0);
@@ -413,7 +421,7 @@ test("a bottom-up drag normalizes to an ascending span", async ({ daemon, page }
   await expect(composer).toBeVisible();
   // Ascending despite the upward drag.
   await expect(composer.getByText("Lines 5–9")).toBeVisible();
-  await composer.locator("textarea").fill("Dragged upward.");
+  await composerInput(composer).fill("Dragged upward.");
   await composer.getByRole("button", { name: "Comment" }).click();
 
   await expect(composer).toHaveCount(0);
@@ -443,7 +451,7 @@ test("dragging across the code body opens the range composer on release", async 
   const composer = page.getByRole("dialog", { name: "Add a comment" });
   await expect(composer).toBeVisible();
   await expect(composer.getByText("Lines 4–8")).toBeVisible();
-  await composer.locator("textarea").fill("Range from a body drag.");
+  await composerInput(composer).fill("Range from a body drag.");
   await composer.getByRole("button", { name: "Comment" }).click();
 
   await expect(composer).toHaveCount(0);
@@ -567,7 +575,7 @@ test("dismissing the composer clears the line-selection highlight", async ({ dae
   await expect(composer).toBeVisible();
   expect(await selectedLineCount()).toBeGreaterThan(0);
 
-  await composer.locator("textarea").press("Escape");
+  await composerInput(composer).press("Escape");
   await expect(composer).toHaveCount(0);
 
   await expect.poll(selectedLineCount).toBe(0);
@@ -665,7 +673,7 @@ test("dismissing an empty composer with Escape leaves no residue", async ({ daem
 
   const composer = page.getByRole("dialog", { name: "Add a comment" });
   await expect(composer).toBeVisible();
-  await composer.locator("textarea").press("Escape");
+  await composerInput(composer).press("Escape");
 
   // The composer is gone, no scratch marker appears, and nothing was persisted.
   await expect(composer).toHaveCount(0);
@@ -698,7 +706,7 @@ test("dismissing the composer with typed text retains a returnable Resume marker
   await plus.click();
   const composer = page.getByRole("dialog", { name: "Add a comment" });
   await expect(composer).toBeVisible();
-  const textarea = composer.locator("textarea");
+  const textarea = composerInput(composer);
   await textarea.fill("half a thought to finish later");
   await textarea.click();
   await page.keyboard.press("Escape");
@@ -732,8 +740,8 @@ test("clicking the Resume marker reopens the composer with the text restored", a
   const plus = await revealGutterPlus(page, 3);
   await plus.click();
   const composer = page.getByRole("dialog", { name: "Add a comment" });
-  await composer.locator("textarea").fill("restore this exactly");
-  await composer.locator("textarea").click();
+  await composerInput(composer).fill("restore this exactly");
+  await composerInput(composer).click();
   await page.keyboard.press("Escape");
 
   const marker = scratchMarker(page);
@@ -743,7 +751,7 @@ test("clicking the Resume marker reopens the composer with the text restored", a
   // The composer reopens with the text restored, and the marker is consumed
   // (it moved back into the composer, not duplicated).
   await expect(composer).toBeVisible();
-  await expect(composer.locator("textarea")).toHaveValue("restore this exactly");
+  await expect(composerInput(composer)).toHaveText("restore this exactly");
   await expect(scratchMarker(page)).toHaveCount(0);
 });
 
@@ -757,13 +765,13 @@ test("a resumed scratch can be completed into a persisted annotation", async ({ 
   const plus = await revealGutterPlus(page, 3);
   await plus.click();
   const composer = page.getByRole("dialog", { name: "Add a comment" });
-  await composer.locator("textarea").fill("start it");
-  await composer.locator("textarea").click();
+  await composerInput(composer).fill("start it");
+  await composerInput(composer).click();
   await page.keyboard.press("Escape");
 
   await scratchMarker(page).click();
   await expect(composer).toBeVisible();
-  const textarea = composer.locator("textarea");
+  const textarea = composerInput(composer);
   await textarea.fill("start it, then finish it");
   await composer.getByRole("button", { name: "Comment" }).click();
 
@@ -798,7 +806,7 @@ test("opening a different range retains the in-progress text as a scratch", asyn
   const composer = page.getByRole("dialog", { name: "Add a comment" });
   await page.getByText("Body line 1 content here.").click();
   await expect(composer.getByText("Line 3")).toBeVisible();
-  await composer.locator("textarea").fill("started on line 3");
+  await composerInput(composer).fill("started on line 3");
 
   // Switch to line 7 ("Body line 3") without dismissing the line-3 composer.
   await page.getByText("Body line 3 content here.").click();
@@ -809,8 +817,10 @@ test("opening a different range retains the in-progress text as a scratch", asyn
   await expect(marker).toBeVisible();
   await expect(marker).toContainText("started on line 3");
   await marker.click();
-  await expect(composer.getByText("Line 3")).toBeVisible();
-  await expect(composer.locator("textarea")).toHaveValue("started on line 3");
+  // Scope to the range label: the resumed editor body also contains "line 3", so
+  // a bare getByText would match both it and the label.
+  await expect(composer.locator(".label")).toHaveText("Line 3");
+  await expect(composerInput(composer)).toHaveText("started on line 3");
 });
 
 test("scratch drafts clear when a new plan version arrives", async ({ daemon, page }) => {
@@ -826,8 +836,8 @@ test("scratch drafts clear when a new plan version arrives", async ({ daemon, pa
   const plus = await revealGutterPlus(page, 3);
   await plus.click();
   const composer = page.getByRole("dialog", { name: "Add a comment" });
-  await composer.locator("textarea").fill("anchored to v1");
-  await composer.locator("textarea").click();
+  await composerInput(composer).fill("anchored to v1");
+  await composerInput(composer).click();
   await page.keyboard.press("Escape");
   await expect(scratchMarker(page)).toBeVisible();
 
@@ -852,8 +862,8 @@ async function scratchThenOpenDialog(page: Page, line: number, text: string): Pr
   const plus = await revealGutterPlus(page, line);
   await plus.click();
   const composer = page.getByRole("dialog", { name: "Add a comment" });
-  await composer.locator("textarea").fill(text);
-  await composer.locator("textarea").click();
+  await composerInput(composer).fill(text);
+  await composerInput(composer).click();
   await page.keyboard.press("Escape");
   await expect(scratchMarker(page)).toBeVisible();
 
@@ -980,7 +990,11 @@ async function createAnnotation(page: Page, line: number, comment: string): Prom
   await plus.click();
   const composer = page.getByRole("dialog", { name: "Add a comment" });
   await expect(composer).toBeVisible();
-  await composer.locator("textarea").fill(comment);
+  const input = composerInput(composer);
+  await input.fill(comment);
+  // Wait for the editor to reflect the text before submitting: CodeMirror applies
+  // input asynchronously, so submitting immediately can race the fill under load.
+  await expect(input).toContainText(comment);
   await composer.getByRole("button", { name: "Comment" }).click();
   await expect(composer).toHaveCount(0);
 }
@@ -1204,7 +1218,7 @@ test("the composer reveal and the card swap share one opacity-only token transit
   expect(composerMotion.transform).toBe("none");
 
   // The card's expanded body reveals on the same contract.
-  await composer.locator("textarea").fill("Same considered reveal.");
+  await composerInput(composer).fill("Same considered reveal.");
   await composer.getByRole("button", { name: "Comment" }).click();
   await expect(composer).toHaveCount(0);
   const body = page.locator("[data-annotation-card] .body");
@@ -1250,7 +1264,7 @@ test("editing an inline card rewrites the comment and persists it", async ({ dae
   const card = page.locator("[data-annotation-card]");
   await card.getByRole("button", { name: "edit" }).click();
   const textarea = card.getByRole("textbox", { name: "Edit comment" });
-  await expect(textarea).toHaveValue("Original note.");
+  await expect(textarea).toHaveText("Original note.");
   await textarea.fill("Revised note with more detail.");
   await page.keyboard.press("ControlOrMeta+Enter");
 
@@ -1407,8 +1421,11 @@ async function createRangeAnnotation(
   await plus.click();
   const composer = page.getByRole("dialog", { name: "Add a comment" });
   await expect(composer).toBeVisible();
-  const textarea = composer.locator("textarea");
+  const textarea = composerInput(composer);
   await textarea.fill(comment);
+  // Confirm CodeMirror has applied the input before the submit chord (see
+  // createAnnotation): the async input would otherwise race the keypress.
+  await expect(textarea).toContainText(comment);
   await textarea.click();
   await page.keyboard.press("ControlOrMeta+Enter");
   await expect(composer).toHaveCount(0);
