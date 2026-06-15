@@ -60,14 +60,19 @@ persistent state dir clobber each other's `daemon.lock`.
 
 Readiness is the moment Vite prints its **`Local:`** banner line. Wait for it with a
 bounded background poll that exits the instant the line appears (the "tell me when it's
-ready" pattern — one completion notification, no fixed sleep):
+ready" pattern — one completion notification, no fixed delay) but gives up after a
+deadline so a wedged boot can't hang the skill:
 
 ```sh
-until grep -qE 'Local:.*localhost:[0-9]+' "<dev-output-file>"; do sleep 0.5; done
+deadline=$((SECONDS + 90))
+until grep -qE 'Local:.*localhost:[0-9]+' "<dev-output-file>"; do
+  [ "$SECONDS" -ge "$deadline" ] && { echo "caret dev not ready after 90s"; break; }
+  sleep 0.5
+done
 ```
 
-If `mise run dev` exits before that line appears, surface the captured log — it failed to
-boot; do not declare success.
+If the deadline passes — or `mise run dev` exits — before that line appears, surface the
+captured log: dev failed to boot. Do not declare success.
 
 ### 3. Resolve and surface the dev URL
 
@@ -87,7 +92,7 @@ Surface `$url` to the user.
 ### 4. Open the browser
 
 ```sh
-open "$url"
+open "$url"   # macOS; on Linux use `xdg-open "$url"`
 ```
 
 Leave `mise run dev` running. The skill is done — report the URL and that dev is still up.
@@ -111,4 +116,6 @@ action. Outside those cases the skill stops after opening the browser (step 4).
 - Always resolve the port from the launch output; never hardcode `5173`.
 - Open the dev Vite origin, never the installed build's `caret.localhost:42718`.
 - Leave dev running on success; tear it down only if you started it solely to verify
-  something and the user (or the agent that ran the skill) is done with it.
+  something and the user (or the agent that ran the skill) is done with it. To tear down,
+  stop the backgrounded launch (e.g. `TaskStop`, or `SIGTERM` the `mise run dev` process)
+  — the dev task traps the signal and reaps the daemon, driver, and Vite together.
