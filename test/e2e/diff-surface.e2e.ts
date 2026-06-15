@@ -608,6 +608,107 @@ test("clicking a line's content opens a comment composer for that line", async (
   await expect(composer.getByText("Line 3")).toBeVisible();
 });
 
+test("hovering a line body reveals the + and lifts that line's background, scoped to that line", async ({
+  daemon,
+  page,
+}) => {
+  // The whole line is the comment target, so the hover affordance must read on the
+  // line body — not only at the gutter edge. Hovering anywhere on a line reveals
+  // the gutter `+` and lifts that one line's background (the caret-grey
+  // --diffs-bg-hover-override). This proves the library applies the lift end to end
+  // in the real Chromium build — css-bridge.test.ts only pins the static
+  // declaration — and that the lift is scoped to the hovered line, not the view.
+  await daemon.seed({ plan: RANGE_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+
+  // At rest — mouse parked off any line — the gutter `+` is not shown.
+  await page.mouse.move(0, 0);
+  const plus = page.locator(".diffview [data-utility-button]");
+  await expect(plus).toBeHidden();
+
+  // Hover the body of line 3 ("Body line 1") at the view's horizontal centre, well
+  // clear of the gutter, to prove the whole line is the hover target.
+  const y = await lineCenterY(page, 3);
+  const cx = await page
+    .locator(".diff-plan")
+    .evaluate((el) => el.getBoundingClientRect().x + el.getBoundingClientRect().width / 2);
+  await page.mouse.move(cx, y);
+
+  // The `+` reveals on the hovered row…
+  await expect(plus).toBeVisible();
+
+  // …exactly one line carries the library's hover marker, and its resolved
+  // background differs from a resting sibling's — the lift took effect, scoped to
+  // that line.
+  const bg = await page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+    const hovered = Array.from(sh?.querySelectorAll("[data-line][data-hovered]") ?? []);
+    const resting = Array.from(sh?.querySelectorAll("[data-line]:not([data-hovered])") ?? []);
+    const colorOf = (el: Element | undefined) =>
+      el ? getComputedStyle(el as HTMLElement).backgroundColor : null;
+    return {
+      hoveredCount: hovered.length,
+      hoveredBg: colorOf(hovered[0]),
+      restingBg: colorOf(resting[0]),
+    };
+  });
+  expect(bg.hoveredCount).toBe(1);
+  expect(bg.hoveredBg).not.toBeNull();
+  expect(bg.restingBg).not.toBeNull();
+  expect(bg.hoveredBg).not.toBe(bg.restingBg);
+});
+
+test("text selected on a line is preserved and a click opens no composer", async ({
+  daemon,
+  page,
+}) => {
+  // Native drag-to-select-for-copy must survive: when text on a line is selected, a
+  // click is copy intent, not a comment-open. SourceView.handleLineClick reads the
+  // shadow root's own getSelection() (window.getSelection() can't see into the open
+  // shadow root) and the selectionCollapsed guard suppresses the composer. This
+  // drives that guard directly — selecting via the same shadow getSelection() the
+  // handler reads, then clicking via dispatchEvent so no native mousedown collapses
+  // the selection first. (A synthetic mouse drag is too flaky in headless Chromium
+  // to select text reliably.) It also pins that the handler reads the shadow
+  // selection, not the document one — the subtlety its own comment warns about.
+  await daemon.seed({ plan: RANGE_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+
+  // Select the line's prose inside the shadow root — proving it is selectable (copy
+  // works; user-select is not suppressed) and seeding the selection the click
+  // handler will read.
+  const selectedLength = await page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot as
+      | (ShadowRoot & { getSelection?: () => Selection | null })
+      | null;
+    if (sh == null) return 0;
+    const lineEl = Array.from(sh.querySelectorAll("[data-line]")).find((el) =>
+      (el.textContent ?? "").includes("Body line 1 content here."),
+    );
+    if (lineEl == null) return 0;
+    const range = document.createRange();
+    range.selectNodeContents(lineEl);
+    const sel = sh.getSelection?.() ?? (typeof getSelection === "function" ? getSelection() : null);
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    return (sel?.toString() ?? "").length;
+  });
+  expect(selectedLength).toBeGreaterThan(0);
+
+  // A click made while that selection is live opens no composer. dispatchEvent
+  // issues the click without a native mousedown, so the selection is still present
+  // when the handler reads it.
+  await page.getByText("Body line 1 content here.").dispatchEvent("click");
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  const t0 = await page.evaluate(() => performance.now());
+  await page.waitForFunction((t) => performance.now() > t + 300, t0);
+  await expect(composer).toHaveCount(0);
+});
+
 test("an inline card collapses to a chip and expands again", async ({ daemon, page }) => {
   await daemon.seed();
   await page.goto("/");

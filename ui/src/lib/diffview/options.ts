@@ -21,6 +21,12 @@ import type { SourceDiffViewOptions, SourceViewOptions } from "./types.ts";
  * combination with hunkSeparators:'line-info' cannot arise. */
 export interface SourceViewGutter {
   enableGutterUtility: true;
+  // Light the hovered line so the whole line — not just the gutter edge — reads as
+  // the comment target. The library sets `data-hovered` on the line element (and
+  // its number); caret's `--diffs-bg-hover-override` (app.css) resolves that into a
+  // subtle grey lift. "both" lifts the line and its number together so the row
+  // brightens as one rather than leaving the number column detached.
+  lineHoverHighlight: "both";
   // Lets the reviewer drag (or shift-click) the line-number column to select a
   // span; the gutter `+` then reports that range, so a comment can cover several
   // lines rather than only the one it hovers.

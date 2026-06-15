@@ -73,11 +73,16 @@ describe("toFileOptions", () => {
     const renderAnnotation = () => document.createElement("div");
     const result = toFileOptions({}, undefined, {
       enableGutterUtility: true,
+      lineHoverHighlight: "both",
       enableLineSelection: true,
       onGutterUtilityClick,
       renderAnnotation,
     });
     expect(result.enableGutterUtility).toBe(true);
+    // The hover highlight rides through the gutter bag so the library lights the
+    // hovered line (its --diffs-bg-hover-override lift) — without it the whole-line
+    // comment target reads only at the gutter edge.
+    expect(result.lineHoverHighlight).toBe("both");
     expect(result.enableLineSelection).toBe(true);
     expect(result.onGutterUtilityClick).toBe(onGutterUtilityClick);
     expect(result.renderAnnotation).toBe(renderAnnotation);
@@ -91,6 +96,7 @@ describe("toFileOptions", () => {
     const onLineSelectionEnd = () => {};
     const result = toFileOptions({}, undefined, {
       enableGutterUtility: true,
+      lineHoverHighlight: "both",
       enableLineSelection: true,
       onGutterUtilityClick: () => {},
       renderAnnotation: () => undefined,
