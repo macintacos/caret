@@ -48,6 +48,11 @@ export interface Daemon {
    * then post each revision (which threads onto the rejected review), leaving the
    * review pending at v`count`. Returns the review id. */
   seedVersions(count: number, plans: string[]): Promise<string>;
+  /** Push a new version onto an existing review while a page is open: deny the
+   * current review (so the daemon appends) and post `plan` onto its session. The
+   * open UI sees the new version arrive — the live counterpart to seedVersions,
+   * which posts every version before the page loads. */
+  addVersion(id: string, plan: string): Promise<void>;
 }
 
 const DAEMON_ENTRY = fileURLToPath(new URL("./daemon-entry.ts", import.meta.url));
@@ -199,6 +204,21 @@ export const test = base.extend<{ daemon: Daemon }>({
             id = ((await res.json()) as RouteResult).id;
           }
           return id;
+        },
+        async addVersion(id: string, plan: string) {
+          // Reuse the review's own session so the daemon threads the new plan onto
+          // it as a fresh version. Deny first so the pending review is resolved and
+          // the next POST appends rather than being deduped.
+          const current = await this.getReview(id);
+          const sessionId = current.body?.sessionId;
+          if (sessionId === undefined) throw new Error(`addVersion: review ${id} has no session`);
+          await this.resolve(id, "deny", "next revision");
+          const res = await fetch(`${url}/api/reviews`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId, cwd: "/tmp/caret-e2e", plan }),
+          });
+          if (!res.ok) throw new Error(`addVersion failed: POST /api/reviews → ${res.status}`);
         },
       });
     } finally {

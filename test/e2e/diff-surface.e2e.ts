@@ -510,28 +510,196 @@ test("numeric chrome renders with tabular figures end to end", async ({ daemon, 
   expect(labelVariant).toContain("tabular-nums");
 });
 
-test("cancelling the composer with Escape leaves no residue", async ({ daemon, page }) => {
+test("dismissing an empty composer with Escape leaves no residue", async ({ daemon, page }) => {
+  // An empty composer dismissed produces no draft — only typed text is retained
+  // as a scratch (see the scratch-draft tests below). This pins the empty case.
   const id = await daemon.seed();
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  // Past Safe Mode's grace/suppression window, which would otherwise swallow the
+  // first keystroke (the Escape) as an accidental interruption.
+  await waitPastSafeModeGrace(page);
 
   const plus = await revealGutterPlus(page, 3);
   await plus.click();
 
   const composer = page.getByRole("dialog", { name: "Add a comment" });
   await expect(composer).toBeVisible();
-  const textarea = composer.locator("textarea");
-  await textarea.fill("discard me");
-  await textarea.click();
-  await page.keyboard.press("Escape");
+  await composer.locator("textarea").press("Escape");
 
-  // The composer is gone from the DOM and nothing was persisted.
+  // The composer is gone, no scratch marker appears, and nothing was persisted.
   await expect(composer).toHaveCount(0);
-  // Wait out the autosave debounce window and confirm no annotation landed.
+  await expect(page.getByRole("button", { name: "Resume unsent comment" })).toHaveCount(0);
   await expect
     .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
     .toBe(0);
+});
+
+// ----- Scratch drafts: an unsubmitted composer dismissed with text is retained
+// as a returnable "Resume" marker (EXC-634). Distinct from a committed "Draft"
+// annotation: a scratch was never added to the working copy. -----
+
+/** The Resume marker the host renders for a retained scratch draft. */
+function scratchMarker(page: Page): Locator {
+  return page.getByRole("button", { name: "Resume unsent comment" });
+}
+
+test("dismissing the composer with typed text retains a returnable Resume marker", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const plus = await revealGutterPlus(page, 3);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+  const textarea = composer.locator("textarea");
+  await textarea.fill("half a thought to finish later");
+  await textarea.click();
+  await page.keyboard.press("Escape");
+
+  // The composer closes; a quiet Resume marker takes its place, previewing the
+  // text. It reads "Resume" (an action), never "Draft" (the committed-annotation
+  // state), so the two never look the same.
+  await expect(composer).toHaveCount(0);
+  const marker = scratchMarker(page);
+  await expect(marker).toBeVisible();
+  await expect(marker).toContainText("Resume");
+  await expect(marker).not.toContainText("Draft");
+  await expect(marker).toContainText("half a thought to finish later");
+
+  // Nothing is persisted — a scratch is in-memory only, not a created annotation.
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
+    .toBe(0);
+});
+
+test("clicking the Resume marker reopens the composer with the text restored", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const plus = await revealGutterPlus(page, 3);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await composer.locator("textarea").fill("restore this exactly");
+  await composer.locator("textarea").click();
+  await page.keyboard.press("Escape");
+
+  const marker = scratchMarker(page);
+  await expect(marker).toBeVisible();
+  await marker.click();
+
+  // The composer reopens with the text restored, and the marker is consumed
+  // (it moved back into the composer, not duplicated).
+  await expect(composer).toBeVisible();
+  await expect(composer.locator("textarea")).toHaveValue("restore this exactly");
+  await expect(scratchMarker(page)).toHaveCount(0);
+});
+
+test("a resumed scratch can be completed into a persisted annotation", async ({ daemon, page }) => {
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const plus = await revealGutterPlus(page, 3);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await composer.locator("textarea").fill("start it");
+  await composer.locator("textarea").click();
+  await page.keyboard.press("Escape");
+
+  await scratchMarker(page).click();
+  await expect(composer).toBeVisible();
+  const textarea = composer.locator("textarea");
+  await textarea.fill("start it, then finish it");
+  await composer.getByRole("button", { name: "Comment" }).click();
+
+  // Submitting graduates the scratch to a real annotation; no marker survives.
+  await expect(composer).toHaveCount(0);
+  await expect(scratchMarker(page)).toHaveCount(0);
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
+    .toBe(1);
+  expect((await daemon.getReview(id)).body?.annotations?.[0]).toMatchObject({
+    startLine: 3,
+    endLine: 3,
+    comment: "start it, then finish it",
+  });
+});
+
+test("opening a different range retains the in-progress text as a scratch", async ({
+  daemon,
+  page,
+}) => {
+  // The "never lose text" guarantee must hold when the reviewer changes their
+  // mind mid-comment: typing on line 3, then clicking line 7, must retain the
+  // line-3 text as a scratch rather than dropping it — the host retains before it
+  // opens the new range.
+  await daemon.seed({ plan: RANGE_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  // Open the composer on line 3 ("Body line 1") via a line-body click and type.
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await page.getByText("Body line 1 content here.").click();
+  await expect(composer.getByText("Line 3")).toBeVisible();
+  await composer.locator("textarea").fill("started on line 3");
+
+  // Switch to line 7 ("Body line 3") without dismissing the line-3 composer.
+  await page.getByText("Body line 3 content here.").click();
+  await expect(composer.getByText("Line 7")).toBeVisible();
+
+  // The line-3 text survives as a Resume marker; clicking it restores the text.
+  const marker = scratchMarker(page);
+  await expect(marker).toBeVisible();
+  await expect(marker).toContainText("started on line 3");
+  await marker.click();
+  await expect(composer.getByText("Line 3")).toBeVisible();
+  await expect(composer.locator("textarea")).toHaveValue("started on line 3");
+});
+
+test("scratch drafts clear when a new plan version arrives", async ({ daemon, page }) => {
+  // A scratch's anchor belongs to the version it was typed against; a new version
+  // must drop it so it never resumes onto text it was not written for. This
+  // mirrors the existing discard-on-content-change guard for the open composer.
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const plus = await revealGutterPlus(page, 3);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await composer.locator("textarea").fill("anchored to v1");
+  await composer.locator("textarea").click();
+  await page.keyboard.press("Escape");
+  await expect(scratchMarker(page)).toBeVisible();
+
+  // A new version supersedes the current plan text in place.
+  await daemon.addVersion(
+    id,
+    "# Widget Cache Refactor v2\n\nA wholly different second version body.\n",
+  );
+
+  await expect(page.getByText("A wholly different second version body.")).toBeVisible();
+  await expect(scratchMarker(page)).toHaveCount(0);
 });
 
 // ----- Inline annotation cards: collapse/expand + delete (EXC-581) -----
