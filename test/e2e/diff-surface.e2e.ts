@@ -274,6 +274,32 @@ async function shiftExtendSelection(
   await page.keyboard.up("Shift");
 }
 
+/**
+ * Select a line span by dragging across the code *body* (not the gutter) from
+ * `startLine` to `endLine`: the natural "drag across the lines" gesture. X stays
+ * at the horizontal centre of the content while Y sweeps between the two line
+ * rows. With `shift`, the modifier is held for the whole drag (the native
+ * text-selection escape-hatch), so the gesture must NOT open a composer.
+ */
+async function dragLineBody(
+  page: Page,
+  startLine: number,
+  endLine: number,
+  opts: { shift?: boolean } = {},
+): Promise<void> {
+  const startY = await lineCenterY(page, startLine);
+  const endY = await lineCenterY(page, endLine);
+  const x = await page
+    .locator(".diff-plan")
+    .evaluate((el) => el.getBoundingClientRect().x + el.getBoundingClientRect().width / 2);
+  if (opts.shift) await page.keyboard.down("Shift");
+  await page.mouse.move(x, startY);
+  await page.mouse.down();
+  await page.mouse.move(x, endY, { steps: 12 });
+  await page.mouse.up();
+  if (opts.shift) await page.keyboard.up("Shift");
+}
+
 test("creating a single-line annotation from the gutter persists it line-anchored", async ({
   daemon,
   page,
@@ -400,6 +426,90 @@ test("a bottom-up drag normalizes to an ascending span", async ({ daemon, page }
   });
 });
 
+test("dragging across the code body opens the range composer on release", async ({
+  daemon,
+  page,
+}) => {
+  // The headline gesture (EXC-639): click-drag across the code body — not the
+  // narrow gutter — selects the span and opens the composer on release, with no
+  // separate + click. Submitting persists the ascending {startLine, endLine}.
+  const id = await daemon.seed({ plan: RANGE_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+
+  await dragLineBody(page, 4, 8);
+
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+  await expect(composer.getByText("Lines 4–8")).toBeVisible();
+  await composer.locator("textarea").fill("Range from a body drag.");
+  await composer.getByRole("button", { name: "Comment" }).click();
+
+  await expect(composer).toHaveCount(0);
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
+    .toBe(1);
+  expect((await daemon.getReview(id)).body?.annotations?.[0]).toMatchObject({
+    startLine: 4,
+    endLine: 8,
+  });
+});
+
+test("holding Shift while dragging the code body opens no composer (text-select escape-hatch)", async ({
+  daemon,
+  page,
+}) => {
+  // The copy escape-hatch: a Shift+drag bows out of the comment gesture so the
+  // browser selects text natively. We assert the deterministic half — no composer
+  // opens — rather than that text got selected (a synthetic drag selecting text is
+  // too flaky in headless Chromium to assert on).
+  await daemon.seed({ plan: RANGE_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+
+  await dragLineBody(page, 4, 8, { shift: true });
+
+  await expect(page.getByRole("dialog", { name: "Add a comment" })).toHaveCount(0);
+});
+
+test("a plain code-body drag suppresses native text selection", async ({ daemon, page }) => {
+  // The flip side of the Shift escape-hatch: a plain drag must not paint native text
+  // selection over the span it is range-selecting. Suppression is user-select:none on
+  // the host (inherited into the shadow content) for the drag's lifetime, so while a
+  // drag is held the code lines compute as unselectable. (A synthetic mouse drag does
+  // not reliably create a selection in headless Chromium, so asserting the mechanism —
+  // the computed user-select — is what actually proves the fix.)
+  await daemon.seed({ plan: RANGE_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+
+  const x = await page
+    .locator(".diff-plan")
+    .evaluate((el) => el.getBoundingClientRect().x + el.getBoundingClientRect().width / 2);
+  const readUserSelect = () =>
+    page.evaluate(() => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+      const line = sh?.querySelector("[data-line]");
+      return line == null ? null : getComputedStyle(line).userSelect;
+    });
+
+  // Selectable at rest...
+  expect(await readUserSelect()).not.toBe("none");
+
+  // ...unselectable while a plain drag is held...
+  await page.mouse.move(x, await lineCenterY(page, 4));
+  await page.mouse.down();
+  await page.mouse.move(x, await lineCenterY(page, 8), { steps: 12 });
+  expect(await readUserSelect()).toBe("none");
+
+  // ...and selectable again once the drag releases.
+  await page.mouse.up();
+  expect(await readUserSelect()).not.toBe("none");
+});
+
 test("a live readout previews the range during the drag and clears on release", async ({
   daemon,
   page,
@@ -432,6 +542,35 @@ test("a live readout previews the range during the drag and clears on release", 
   // Release: the readout disappears, leaving no residue.
   await page.mouse.up();
   await expect(readout).toHaveCount(0);
+});
+
+test("dismissing the composer clears the line-selection highlight", async ({ daemon, page }) => {
+  // Opening the composer from the gutter + selects the line (the library highlights
+  // it amber). Dismissing the composer must clear that highlight — otherwise it
+  // lingers on the line after the reviewer moves on.
+  await daemon.seed({ plan: RANGE_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  await waitPastSafeModeGrace(page); // Escape is absorbed during the safe-mode grace
+
+  const selectedLineCount = () =>
+    page.evaluate(
+      () =>
+        document.querySelector(".diffview")?.shadowRoot?.querySelectorAll("[data-selected-line]")
+          .length ?? 0,
+    );
+
+  const plus = await revealGutterPlus(page, 5);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+  expect(await selectedLineCount()).toBeGreaterThan(0);
+
+  await composer.locator("textarea").press("Escape");
+  await expect(composer).toHaveCount(0);
+
+  await expect.poll(selectedLineCount).toBe(0);
 });
 
 test("a drag selection renders the selected lines in caret amber, not library-blue", async ({
@@ -962,7 +1101,7 @@ test("text selected on a line is preserved and a click opens no composer", async
   daemon,
   page,
 }) => {
-  // Native drag-to-select-for-copy must survive: when text on a line is selected, a
+  // With a selection present (here via Shift+drag, or programmatically as below), a
   // click is copy intent, not a comment-open. SourceView.handleLineClick reads the
   // shadow root's own getSelection() (window.getSelection() can't see into the open
   // shadow root) and the selectionCollapsed guard suppresses the composer. This

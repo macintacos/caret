@@ -5,6 +5,7 @@
   // changes through sync().
   import { File, type FileContents } from "@pierre/diffs";
   import { createDiffViewLifecycle } from "./instance.ts";
+  import { createLineDrag } from "./lineDrag.ts";
   import { shouldCommentOnLineClick } from "./annotationSlot.ts";
   import { type ComposedTokenHandlers, composeTokenHandlers } from "./linkInteractions.ts";
   import { type LinkSpanMap, openLinkInNewTab } from "./links.ts";
@@ -51,6 +52,21 @@
      * comment on it. Skipped when the click lands on a link or while the reviewer
      * is selecting text. Omit it to leave lines non-interactive. */
     onLineComment?: (line: number) => void;
+    /** Opt-in content-drag range commenting (EXC-639): a plain click-drag across
+     * the code body selects a line span and, on release, opens a range comment for
+     * it. While such a drag is active the competing native text-selection is
+     * suppressed; holding Shift bows out so the browser selects text natively (the
+     * copy escape-hatch). Omit it to leave content drags as plain text selection. */
+    onLineRangeComment?: (startLine: number, endLine: number) => void;
+    /** Reports the live drag range (ascending) on every change, or null when the
+     * gesture ends, so the host can mirror it in a readout. Optional. */
+    onLineRangePreview?: (range: { startLine: number; endLine: number } | null) => void;
+    /** The range to keep highlighted in the library's own selection (the amber
+     * selected-line bars) — typically the open composer's range. null clears it.
+     * The library highlights its gutter/+ selection on its own, but never clears it
+     * when caret's composer closes; mirroring the composer range here (and clearing
+     * on close) keeps the highlight tied to the composer's lifetime. */
+    selectedRange?: { startLine: number; endLine: number } | null;
   }
 
   let {
@@ -63,6 +79,9 @@
     onReady,
     gutter,
     onLineComment,
+    onLineRangeComment,
+    onLineRangePreview,
+    selectedRange = null,
   }: Props = $props();
 
   // The container div is component markup, so the instance must not remove
@@ -150,6 +169,108 @@
     return () => {
       cancelled = true;
     };
+  });
+
+  // Content-drag range commenting (EXC-639). The @pierre/diffs view only starts a
+  // line selection from the gutter and never opens the composer, so caret owns the
+  // drag across the code *body*: the pure lineDrag controller decides the range,
+  // this effect feeds it real pointer events, mirrors the live range into the
+  // library's own selection highlight (lifecycle.select) so it reads identically
+  // to a gutter drag, suppresses the competing native text-selection for a plain
+  // drag, and reports preview + commit up. Holding Shift bows out so the browser
+  // selects text natively (the copy escape-hatch).
+  // Range commenting is opt-in: a read-only view passes no onLineRangeComment. The
+  // derived (not the raw prop) keeps the effect below tracking a stable boolean, so
+  // it sets up once instead of re-running each time the parent re-renders and the
+  // inline onLineRangeComment arrow gets a fresh identity.
+  const rangeCommentingEnabled = $derived(onLineRangeComment != null);
+
+  function lineAtPoint(clientX: number, clientY: number): number | null {
+    const root = container?.shadowRoot;
+    if (root == null) return null;
+    const el = root.elementFromPoint(clientX, clientY);
+    if (!(el instanceof Element)) return null;
+    // The gutter number column is the library's own drag; the body initiates ours.
+    if (el.closest("[data-column-number],[data-gutter-utility-slot]")) return null;
+    const row = el.closest("[data-line]");
+    const n = row == null ? Number.NaN : Number.parseInt(row.getAttribute("data-line") ?? "", 10);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  $effect(() => {
+    const host = container;
+    if (host == null || !rangeCommentingEnabled) return;
+    const drag = createLineDrag({
+      lineFromPoint: lineAtPoint,
+      onPreview: (range) => {
+        lifecycle.select(range == null ? null : { start: range.startLine, end: range.endLine });
+        onLineRangePreview?.(range);
+      },
+      onCommit: (range) => {
+        // The controller already cleared the drag highlight via onPreview(null); the
+        // composer that opens here re-highlights the range through `selectedRange`.
+        onLineRangeComment?.(range.startLine, range.endLine);
+      },
+    });
+
+    // A plain body drag must not paint the browser's native text selection over the
+    // span it is range-selecting. selectstart is not a composed event, so a document
+    // listener never sees selections that begin inside the library's shadow root;
+    // instead user-select:none is set on the host for the drag's lifetime. user-select
+    // is inherited, so it reaches the shadow content (the library only sets it on its
+    // change-indicator pseudo, never the code body). Shift+drag never arms, so it
+    // still selects text natively (the copy escape-hatch); suppression is cleared on
+    // every terminator — pointerup, pointercancel, window blur (release outside the
+    // window) — so it can never wedge on. The controller owns the arm decision.
+    const onMove = (e: PointerEvent) => drag.pointermove(e);
+    function suppressNativeSelect(on: boolean): void {
+      for (const prop of ["user-select", "-webkit-user-select"]) {
+        if (on) host.style.setProperty(prop, "none");
+        else host.style.removeProperty(prop);
+      }
+    }
+    function endGesture(): void {
+      suppressNativeSelect(false);
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("pointercancel", onCancelGesture);
+      window.removeEventListener("blur", onCancelGesture);
+    }
+    function onUp(e: PointerEvent): void {
+      drag.pointerup(e);
+      endGesture();
+    }
+    function onCancelGesture(): void {
+      drag.cancel();
+      endGesture();
+    }
+    const onDown = (e: PointerEvent) => {
+      if (!drag.pointerdown(e)) return; // not a plain primary press on the code body
+      suppressNativeSelect(true);
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+      document.addEventListener("pointercancel", onCancelGesture);
+      window.addEventListener("blur", onCancelGesture);
+    };
+
+    host.addEventListener("pointerdown", onDown);
+    return () => {
+      host.removeEventListener("pointerdown", onDown);
+      drag.cancel(); // mid-drag teardown: clear the controller + the library highlight
+      endGesture();
+    };
+  });
+
+  // Keep the library's selection highlight tied to the open composer. The library
+  // highlights its own gutter/+ selection but never clears it when caret's composer
+  // closes, so reflect the composer's range (or null) into setSelectedLines here.
+  // This tracks only `selectedRange`, which stays a stable null throughout a gutter
+  // drag, so it never clobbers the library's own in-drag highlight — it acts only as
+  // a composer opens or closes.
+  $effect(() => {
+    lifecycle.select(
+      selectedRange == null ? null : { start: selectedRange.startLine, end: selectedRange.endLine },
+    );
   });
 </script>
 

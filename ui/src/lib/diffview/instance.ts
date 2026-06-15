@@ -23,6 +23,16 @@ export interface DiffViewInstance<TOptions, TAnnotation, TContent> {
    * it to re-highlight after attaching fenced-code grammars. Optional so a test
    * fake can omit it. */
   onThemeChange?(): void;
+  /** Drives the library's own line-selection highlight; null clears it. The
+   * content-drag commenting gesture (SourceView + lineDrag.ts) mirrors the gutter
+   * drag's amber highlight through this rather than re-painting one, so the two
+   * gestures look identical. `notify: false` keeps it a pure visual write — caret
+   * owns the live readout, so the library must not re-emit selection callbacks.
+   * Optional so a test fake can omit it; the real File exposes setSelectedLines. */
+  setSelectedLines?(
+    range: { start: number; end: number } | null,
+    options?: { notify?: boolean },
+  ): void;
   cleanUp(): void;
 }
 
@@ -52,6 +62,10 @@ export interface DiffViewLifecycle<TOptions, TAnnotation, TContent> {
    * highlighter so already-rendered fences re-highlight. A plain rerender reuses
    * the cached tokens, so this clears the render cache first. */
   rehighlight(): void;
+  /** Sets (or, with null, clears) the library's line-selection highlight on the
+   * current instance. No-op before the first sync. Used by the content-drag
+   * commenting gesture to render the selected span as it drags. */
+  select(range: { start: number; end: number } | null): void;
   /** Tears the instance down. Idempotent. */
   destroy(): void;
 }
@@ -106,6 +120,9 @@ export function createDiffViewLifecycle<TOptions extends object, TAnnotation, TC
     },
     rehighlight() {
       instance?.onThemeChange?.();
+    },
+    select(range) {
+      instance?.setSelectedLines?.(range, { notify: false });
     },
     destroy() {
       instance?.cleanUp();
