@@ -1,6 +1,7 @@
 import "../../test-mount.ts";
 import { describe, expect, test } from "bun:test";
 import type { Annotation } from "@core/types";
+import type { ComposerScratch } from "../lib/diffview/commenting.ts";
 import { capture, render } from "../../test-mount.ts";
 import RequestChangesDialog from "./RequestChangesDialog.svelte";
 
@@ -20,13 +21,23 @@ const lineAnn = (id: string, startLine: number, endLine: number, comment: string
   comment,
 });
 
+const scratch = (startLine: number, endLine: number, text: string): ComposerScratch => ({
+  key: `${startLine}:${endLine}`,
+  startLine,
+  endLine,
+  text,
+});
+
 const baseProps = {
   annotations: [] as Annotation[],
   generalComment: "",
   planText: "",
+  scratches: [] as ComposerScratch[],
   onGeneralCommentInput: () => {},
   onSubmit: () => {},
   onCancel: () => {},
+  onSaveScratch: () => {},
+  onDiscardScratch: () => {},
 };
 
 function dialog(target: HTMLElement) {
@@ -197,5 +208,90 @@ describe("RequestChangesDialog keyboard", () => {
       new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }),
     );
     expect(submitted.last()).toBe("send it");
+  });
+});
+
+// Unsaved composer drafts ("scratches", EXC-634) are surfaced so the reviewer
+// consciously Saves (graduates into the sent feedback) or Discards each. The
+// dialog reads "Resume"/"unsent" vocabulary, never "Draft" (a committed,
+// pending annotation in commentState.ts), and an unsaved scratch never counts
+// toward the committed-comment tally or the sent feedback (EXC-635).
+describe("RequestChangesDialog unsent scratches", () => {
+  test("no scratch section when there are no scratches", () => {
+    const { target } = render(RequestChangesDialog, baseProps);
+    expect(target.querySelector(".scratches")).toBeNull();
+  });
+
+  test("lists one collapsed row per scratch with its text preview", () => {
+    const { target } = render(RequestChangesDialog, {
+      ...baseProps,
+      scratches: [scratch(3, 3, "half a thought"), scratch(5, 8, "another one")],
+    });
+    const rows = target.querySelectorAll(".scratch-row");
+    expect(rows.length).toBe(2);
+    // Collapsed by default: each row is a <details> without the open attribute.
+    for (const row of rows) {
+      expect(row.tagName).toBe("DETAILS");
+      expect((row as HTMLDetailsElement).open).toBe(false);
+    }
+    const text = target.querySelector(".scratches")!.textContent ?? "";
+    expect(text).toContain("half a thought");
+    expect(text).toContain("another one");
+  });
+
+  test("uses unsent vocabulary, never the Draft state label", () => {
+    const { target } = render(RequestChangesDialog, {
+      ...baseProps,
+      scratches: [scratch(3, 3, "a scratch")],
+    });
+    const text = target.querySelector(".scratches")!.textContent ?? "";
+    expect(text.toLowerCase()).toContain("unsent");
+    expect(text).not.toContain("Draft");
+  });
+
+  test("the range label reads on each row's summary", () => {
+    const { target } = render(RequestChangesDialog, {
+      ...baseProps,
+      scratches: [scratch(3, 3, "single"), scratch(5, 8, "span")],
+    });
+    const text = target.querySelector(".scratches")!.textContent ?? "";
+    expect(text).toContain("Line 3");
+    expect(text).toContain("Lines 5–8");
+  });
+
+  test("Save fires onSaveScratch with the scratch key", () => {
+    const saved = capture<string>();
+    const { target } = render(RequestChangesDialog, {
+      ...baseProps,
+      scratches: [scratch(5, 8, "graduate me")],
+      onSaveScratch: saved.cb,
+    });
+    (target.querySelector(".scratch-row .save") as HTMLElement).click();
+    expect(saved.last()).toBe("5:8");
+  });
+
+  test("Discard fires onDiscardScratch with the scratch key", () => {
+    const discarded = capture<string>();
+    const { target } = render(RequestChangesDialog, {
+      ...baseProps,
+      scratches: [scratch(3, 3, "drop me")],
+      onDiscardScratch: discarded.cb,
+    });
+    (target.querySelector(".scratch-row .discard") as HTMLElement).click();
+    expect(discarded.last()).toBe("3:3");
+  });
+
+  test("scratches do not count toward the committed tally or clear the empty-state", () => {
+    const { target } = render(RequestChangesDialog, {
+      ...baseProps,
+      scratches: [scratch(3, 3, "unsent"), scratch(5, 5, "also unsent")],
+    });
+    // The committed-comment summary still reads empty: an unsaved scratch is not
+    // a comment that will be sent.
+    const summary = target.querySelector(".summary")!;
+    expect(summary.classList.contains("empty")).toBe(true);
+    // And there is nothing to send, so submit stays disabled and no preview shows.
+    expect((target.querySelector(".deny") as HTMLButtonElement).disabled).toBe(true);
+    expect(target.querySelector(".preview")).toBeNull();
   });
 });

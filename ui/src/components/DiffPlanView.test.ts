@@ -351,3 +351,17 @@ describe("DiffPlanView comment-span brackets", () => {
     expect(layer(target)).toBeNull();
   });
 });
+
+// The Request Changes dialog (a sibling) surfaces the source view's retained
+// scratches with per-scratch Save/Discard. DiffPlanView owns the controller and
+// hands its Save/Discard actions up once on mount, so the dialog can act on a
+// scratch without owning the controller (EXC-635).
+describe("DiffPlanView scratch hand-off to the host", () => {
+  test("exposes the controller's save and discard actions on mount", async () => {
+    let actions: { save: (key: string) => void; discard: (key: string) => void } | undefined;
+    render(DiffPlanView, props({ onExposeScratchActions: (a: typeof actions) => (actions = a) }));
+    await until(() => actions != null);
+    expect(typeof actions?.save).toBe("function");
+    expect(typeof actions?.discard).toBe("function");
+  });
+});

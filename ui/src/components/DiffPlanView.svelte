@@ -79,6 +79,17 @@
     onEditAnnotation: (id: string, comment: string) => void;
     onDeleteAnnotation: (id: string) => void;
     onFocusAnnotation: (id: string) => void;
+    /** Report the current retained scratches up to the host so a sibling (the
+     * Request Changes dialog) can surface them. Receives the controller's stable
+     * snapshot verbatim — the host must forward it as-is (no copy/map) to keep the
+     * reference-stability that avoids redundant re-renders. */
+    onScratchesChange?: (scratches: ComposerScratch[]) => void;
+    /** Hand the host the controller's per-scratch Save/Discard actions, once, so
+     * the dialog can graduate or drop a scratch without owning the controller. */
+    onExposeScratchActions?: (actions: {
+      save: (key: string) => void;
+      discard: (key: string) => void;
+    }) => void;
   }
 
   let {
@@ -89,6 +100,8 @@
     onEditAnnotation,
     onDeleteAnnotation,
     onFocusAnnotation,
+    onScratchesChange,
+    onExposeScratchActions,
   }: Props = $props();
 
   // Line-anchored annotations render inline in the source view's per-line
@@ -292,7 +305,19 @@
       pending = commenting.pending();
       pendingText = commenting.pendingText();
       scratches = commenting.scratches();
+      // Forward the controller's stable snapshot verbatim — not a copy — so the
+      // host's projection keeps the same reference between mutations and its
+      // derivations don't re-run on open/close transitions.
+      onScratchesChange?.(scratches);
     },
+  });
+
+  // Expose the per-scratch Save/Discard actions to the host once. The controller
+  // returns one object whose methods are stable for its lifetime, so a single
+  // hand-off captures live references — no per-render rewrapping. This effect
+  // reads no reactive state, so it runs once on mount.
+  $effect(() => {
+    onExposeScratchActions?.({ save: commenting.save, discard: commenting.discard });
   });
 
   // The open composer's live text, reported by SourceComposer.onInput. Held here

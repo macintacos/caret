@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Annotation } from "@core/types";
+  import { type ComposerScratch, rangeLabel } from "../lib/diffview/commenting.ts";
   import { formatFeedback, pendingInlineCount, pendingLineCount } from "../lib/feedback.ts";
   import { isCancelKey, isSubmitChord } from "../lib/keys.ts";
   import Icon from "./Icon.svelte";
@@ -13,12 +14,28 @@
     // The active review's current plan text, so the preview quotes a
     // line-anchored annotation's source lines exactly as the agent will see them.
     planText: string;
+    // Retained, unsubmitted composer drafts ("scratches", EXC-634). They are not
+    // committed comments and are not sent unless the reviewer Saves one here.
+    scratches: ComposerScratch[];
     onGeneralCommentInput: (value: string) => void;
     onSubmit: (generalComment: string) => void;
     onCancel: () => void;
+    // Save graduates a scratch into a committed comment included in the feedback;
+    // discard drops it for this review. Both act on the source-view controller.
+    onSaveScratch: (key: string) => void;
+    onDiscardScratch: (key: string) => void;
   }
-  let { annotations, generalComment, planText, onGeneralCommentInput, onSubmit, onCancel }: Props =
-    $props();
+  let {
+    annotations,
+    generalComment,
+    planText,
+    scratches,
+    onGeneralCommentInput,
+    onSubmit,
+    onCancel,
+    onSaveScratch,
+    onDiscardScratch,
+  }: Props = $props();
 
   let textarea = $state<HTMLTextAreaElement | undefined>();
 
@@ -89,6 +106,43 @@
         {countSummary}
       {/if}
     </div>
+
+    <!-- Unsent composer drafts ("scratches"): text typed into a line composer but
+         never submitted. They are not committed comments — the count, empty-state,
+         and preview above ignore them — so they are surfaced here for a conscious
+         Save (graduate into the sent feedback) or Discard. Each row is collapsed
+         by default and reads "unsent", never "Draft" (a created, pending
+         annotation), so it never looks like a comment that was actually added. -->
+    {#if scratches.length > 0}
+      <section class="scratches" aria-label="Unsent comments">
+        <span class="lbl">
+          Unsent comments
+          <span class="tally">{scratches.length}</span>
+        </span>
+        <p class="scratches-note">
+          Comments you started but never sent. Save one to include it, or discard it.
+        </p>
+        {#each scratches as s (s.key)}
+          <details class="scratch-row">
+            <summary>
+              <span class="anchor metric">{rangeLabel(s.startLine, s.endLine)}</span>
+              <span class="snippet">{s.text}</span>
+            </summary>
+            <div class="scratch-body">
+              <pre class="scratch-text">{s.text}</pre>
+              <div class="scratch-actions">
+                <button class="save" type="button" onclick={() => onSaveScratch(s.key)}>
+                  Save
+                </button>
+                <button class="discard" type="button" onclick={() => onDiscardScratch(s.key)}>
+                  Discard
+                </button>
+              </div>
+            </div>
+          </details>
+        {/each}
+      </section>
+    {/if}
 
     {#if preview}
       <details class="preview">
@@ -194,6 +248,110 @@
     font-style: italic;
     color: var(--ink-soft);
   }
+
+  /* Unsent-scratch section: a quieter block than the committed-feedback preview,
+     reading as "started, not sent". It borrows the source view's Resume-marker
+     idiom — dashed neutral rails, transparent ground, no accent — so an unsent
+     draft never carries the actionable accent the dialog reserves for real
+     feedback. */
+  .scratches {
+    margin-top: 1rem;
+    padding: 0.7rem 0.8rem;
+    border: 1px dashed var(--rule);
+    border-radius: var(--radius);
+    background: var(--paper-sunk);
+  }
+  .scratches .lbl {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0;
+  }
+  /* The count chip beside the section label, matching the tabular metric face. */
+  .tally {
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-faint);
+    padding: 0.05rem 0.3rem;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-sm);
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .scratches-note {
+    margin: 0.35rem 0 0.6rem;
+    font-size: var(--text-sm);
+    color: var(--ink-faint);
+  }
+  /* One collapsed draft. Dashed neutral left rail echoes SourceScratchMarker, so
+     the dialog and the in-source affordance read as the same kind of thing. */
+  .scratch-row {
+    border-left: 3px dashed var(--ink-faint);
+    border-radius: var(--radius);
+    background: var(--paper);
+    margin-top: 0.4rem;
+  }
+  .scratch-row summary {
+    cursor: pointer;
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.4rem 0.55rem;
+  }
+  /* The line-anchor label: a numeric chrome surface, so it takes the tabular
+     metric face the rest of the review's line references use. */
+  .scratch-row .anchor {
+    flex: none;
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    color: var(--ink-soft);
+  }
+  .scratch-row .snippet {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: var(--text-base);
+    color: var(--ink-soft);
+  }
+  .scratch-body {
+    padding: 0 0.55rem 0.55rem;
+  }
+  .scratch-text {
+    margin: 0 0 0.5rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    line-height: var(--leading-snug);
+    white-space: pre-wrap;
+    color: var(--ink);
+  }
+  .scratch-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .scratch-actions button {
+    border-radius: var(--radius);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    padding: 0.3rem 0.7rem;
+    border: 1px solid var(--rule);
+    background: transparent;
+    color: var(--ink-soft);
+  }
+  /* Save is the affirmative action — it graduates the draft into the sent
+     feedback — so it earns the accent on hover, matching the dialog's primary
+     button. Discard stays neutral. */
+  .scratch-actions .save:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .scratch-actions .discard:hover {
+    color: var(--ink);
+    border-color: var(--rule-strong);
+  }
+
   .preview {
     margin-top: 1rem;
     border: 1px solid var(--rule);
