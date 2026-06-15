@@ -44,7 +44,7 @@ describe("MarkdownEditor mount", () => {
 });
 
 describe("MarkdownEditor code styling", () => {
-  test("marks inline code for the monospace decoration", () => {
+  test("marks inline code with the monospace pill decoration", () => {
     const { target, flush } = render(MarkdownEditor, { value: "a `code` b", onInput: () => {} });
     flush();
     const code = target.querySelector(".cm-md-code");
@@ -52,14 +52,44 @@ describe("MarkdownEditor code styling", () => {
     expect(code?.textContent).toContain("`code`");
   });
 
-  test("marks fenced code for the monospace decoration", () => {
+  test("renders a fenced block as a full-width code block (line decorations)", () => {
     const { target, flush } = render(MarkdownEditor, {
       value: "```\nconst x = 1\n```",
       onInput: () => {},
     });
     flush();
-    const marked = Array.from(target.querySelectorAll(".cm-md-code")).map((n) => n.textContent);
-    expect(marked.join(" ")).toContain("const x = 1");
+    const lines = Array.from(target.querySelectorAll(".cm-md-codeblock"));
+    // ``` open, the content line, and ``` close all carry the block class.
+    expect(lines.length).toBeGreaterThanOrEqual(3);
+    expect(lines.map((l) => l.textContent).join(" ")).toContain("const x = 1");
+    expect(target.querySelector(".cm-md-codeblock-open")).not.toBeNull();
+    expect(target.querySelector(".cm-md-codeblock-close")).not.toBeNull();
+  });
+
+  function contentLine(target: HTMLElement) {
+    return Array.from(target.querySelectorAll(".cm-md-codeblock")).find((l) =>
+      l.textContent?.includes("const x = 1"),
+    );
+  }
+
+  test("highlights fenced code for a known language", () => {
+    const { target, flush } = render(MarkdownEditor, {
+      value: "```javascript\nconst x = 1\n```",
+      onInput: () => {},
+    });
+    flush();
+    // The language parser tokenizes the body into spans — `const` becomes a
+    // highlighted keyword span (a no-language fence leaves it as plain text).
+    expect(contentLine(target)?.querySelector("span")).not.toBeNull();
+  });
+
+  test("leaves a fence with no language as plain (untokenized) text", () => {
+    const { target, flush } = render(MarkdownEditor, {
+      value: "```\nconst x = 1\n```",
+      onInput: () => {},
+    });
+    flush();
+    expect(contentLine(target)?.querySelector("span")).toBeNull();
   });
 });
 

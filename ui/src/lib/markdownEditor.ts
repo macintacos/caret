@@ -5,11 +5,32 @@
 // the editor engine means replacing this file and the component together; the
 // composer, the annotation-card edit field, and the saved-comment render path
 // stay untouched.
-import { history, defaultKeymap, historyKeymap } from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { css } from "@codemirror/lang-css";
+import { go } from "@codemirror/lang-go";
+import { html } from "@codemirror/lang-html";
+import { javascript } from "@codemirror/lang-javascript";
+import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
-import { HighlightStyle, syntaxHighlighting, syntaxTree } from "@codemirror/language";
-import { type Extension, Prec, RangeSetBuilder } from "@codemirror/state";
-import { Decoration, EditorView, ViewPlugin, keymap, placeholder } from "@codemirror/view";
+import { python } from "@codemirror/lang-python";
+import { rust } from "@codemirror/lang-rust";
+import { sql } from "@codemirror/lang-sql";
+import { yaml } from "@codemirror/lang-yaml";
+import {
+  HighlightStyle,
+  type Language,
+  syntaxHighlighting,
+  syntaxTree,
+} from "@codemirror/language";
+import { type Extension, Prec, type Range } from "@codemirror/state";
+import {
+  Decoration,
+  type DecorationSet,
+  EditorView,
+  ViewPlugin,
+  keymap,
+  placeholder,
+} from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { isCancelKey, isSubmitChord } from "./keys.ts";
 
@@ -24,11 +45,46 @@ export interface MarkdownEditorOptions {
   onCancelChord?: () => void;
 }
 
-// The markdown grammar tags strong/emphasis/heading/link/url and the syntax
-// markers (meta), but NOT inline- or fenced-code CONTENT — so code monospace
-// comes from a decoration over the InlineCode/FencedCode nodes (below), and the
-// rest from this tag→style map. Colours are caret tokens (hex/var, never oklch).
+// A curated set of languages for fenced-code highlighting, matching the common
+// languages the diff view already supports via shiki. Built eagerly (no lazy
+// chunk loading) and cached by canonical name; the editor passes the resolver to
+// markdown() so fenced blocks parse their info-string language. Add a language by
+// installing its @codemirror/lang-* package and listing it here.
+const codeLanguageByName: Record<string, Language> = {
+  javascript: javascript({ jsx: true }).language,
+  jsx: javascript({ jsx: true }).language,
+  typescript: javascript({ typescript: true }).language,
+  tsx: javascript({ typescript: true, jsx: true }).language,
+  python: python().language,
+  json: json().language,
+  css: css().language,
+  html: html().language,
+  rust: rust().language,
+  go: go().language,
+  yaml: yaml().language,
+  sql: sql().language,
+};
+const codeLanguageAlias: Record<string, string> = {
+  js: "javascript",
+  ts: "typescript",
+  py: "python",
+  rs: "rust",
+  golang: "go",
+  yml: "yaml",
+  jsonc: "json",
+};
+function resolveCodeLanguage(info: string): Language | null {
+  const key = info.trim().toLowerCase();
+  return codeLanguageByName[codeLanguageAlias[key] ?? key] ?? null;
+}
+
+// The markdown grammar tags structure (strong/emphasis/heading/link) and the
+// syntax markers (meta); the code-* tags below colour fenced-block content once a
+// language parses it (see resolveCodeLanguage). Colours are caret tokens
+// (hex/var, never oklch) and mirror the diff view's shiki palette: keyword =
+// accent, string = ok/green, comment = faint, names/types/numbers = accent-bright.
 const highlightStyle = HighlightStyle.define([
+  // Markdown structure.
   { tag: tags.strong, fontWeight: "700" },
   { tag: tags.emphasis, fontStyle: "italic" },
   { tag: tags.strikethrough, textDecoration: "line-through" },
@@ -37,24 +93,85 @@ const highlightStyle = HighlightStyle.define([
   { tag: tags.quote, color: "var(--ink-soft)" },
   // The literal markdown markers (**, `, #, >, -, ```): kept visible but receded.
   { tag: tags.meta, color: "var(--ink-faint)" },
+  // Fenced-code syntax.
+  {
+    tag: [
+      tags.keyword,
+      tags.modifier,
+      tags.controlKeyword,
+      tags.operatorKeyword,
+      tags.definitionKeyword,
+      tags.moduleKeyword,
+    ],
+    color: "var(--accent)",
+  },
+  { tag: [tags.string, tags.special(tags.string), tags.regexp], color: "var(--ok)" },
+  {
+    tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment],
+    color: "var(--ink-faint)",
+    fontStyle: "italic",
+  },
+  {
+    tag: [tags.function(tags.variableName), tags.function(tags.propertyName), tags.labelName],
+    color: "var(--accent-bright)",
+  },
+  {
+    tag: [tags.typeName, tags.className, tags.namespace, tags.tagName],
+    color: "var(--accent-bright)",
+  },
+  { tag: [tags.number, tags.bool, tags.atom], color: "var(--accent-bright)" },
+  {
+    tag: [
+      tags.operator,
+      tags.punctuation,
+      tags.separator,
+      tags.bracket,
+      tags.angleBracket,
+      tags.squareBracket,
+      tags.paren,
+      tags.brace,
+    ],
+    color: "var(--ink-soft)",
+  },
+  { tag: [tags.propertyName, tags.attributeName], color: "var(--ink)" },
+  { tag: [tags.variableName, tags.attributeValue], color: "var(--ink)" },
+  { tag: tags.escape, color: "var(--accent-bright)" },
 ]);
 
-// Mark inline + fenced code so CSS can give it the monospace font and a tint.
-const codeDeco = Decoration.mark({ class: "cm-md-code" });
-function buildCodeDecorations(view: EditorView) {
-  const builder = new RangeSetBuilder<Decoration>();
+// Inline code stays an inline pill; a fenced block is a full-width band (one line
+// decoration per line, rounded at top and bottom) so it reads as one cohesive
+// code block rather than a stack of per-line pills.
+const inlineCodeDeco = Decoration.mark({ class: "cm-md-code" });
+const codeBlockLine = Decoration.line({ class: "cm-md-codeblock" });
+const codeBlockOpen = Decoration.line({ class: "cm-md-codeblock cm-md-codeblock-open" });
+const codeBlockClose = Decoration.line({ class: "cm-md-codeblock cm-md-codeblock-close" });
+
+function buildCodeDecorations(view: EditorView): DecorationSet {
+  const decos: Range<Decoration>[] = [];
   for (const { from, to } of view.visibleRanges) {
     syntaxTree(view.state).iterate({
       from,
       to,
       enter: (node) => {
-        if (node.name === "InlineCode" || node.name === "FencedCode") {
-          builder.add(node.from, node.to, codeDeco);
+        if (node.name === "InlineCode") {
+          decos.push(inlineCodeDeco.range(node.from, node.to));
+          return false;
         }
+        if (node.name === "FencedCode") {
+          const firstLine = view.state.doc.lineAt(node.from).number;
+          const lastLine = view.state.doc.lineAt(node.to).number;
+          for (let n = firstLine; n <= lastLine; n++) {
+            const deco =
+              n === firstLine ? codeBlockOpen : n === lastLine ? codeBlockClose : codeBlockLine;
+            decos.push(deco.range(view.state.doc.line(n).from));
+          }
+          return false;
+        }
+        return undefined;
       },
     });
   }
-  return builder.finish();
+  return Decoration.set(decos, true);
 }
 const codeHighlighter = ViewPlugin.fromClass(
   class {
@@ -101,13 +218,27 @@ const theme = EditorView.theme({
     borderRadius: "3px",
     padding: "0.05em 0.15em",
   },
+  ".cm-md-codeblock": {
+    fontFamily: "var(--font-mono)",
+    backgroundColor: "var(--paper-sunk)",
+  },
+  ".cm-md-codeblock-open": {
+    borderTopLeftRadius: "var(--radius)",
+    borderTopRightRadius: "var(--radius)",
+    paddingTop: "0.2em",
+  },
+  ".cm-md-codeblock-close": {
+    borderBottomLeftRadius: "var(--radius)",
+    borderBottomRightRadius: "var(--radius)",
+    paddingBottom: "0.2em",
+  },
 });
 
 /** The extension stack for a comment-composer markdown editor. */
 export function markdownExtensions(opts: MarkdownEditorOptions): Extension[] {
   return [
     history(),
-    markdown(),
+    markdown({ codeLanguages: resolveCodeLanguage }),
     syntaxHighlighting(highlightStyle),
     codeHighlighter,
     EditorView.lineWrapping,
