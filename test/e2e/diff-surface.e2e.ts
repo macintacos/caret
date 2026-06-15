@@ -544,6 +544,35 @@ test("a live readout previews the range during the drag and clears on release", 
   await expect(readout).toHaveCount(0);
 });
 
+test("dismissing the composer clears the line-selection highlight", async ({ daemon, page }) => {
+  // Opening the composer from the gutter + selects the line (the library highlights
+  // it amber). Dismissing the composer must clear that highlight — otherwise it
+  // lingers on the line after the reviewer moves on.
+  await daemon.seed({ plan: RANGE_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  await waitPastSafeModeGrace(page); // Escape is absorbed during the safe-mode grace
+
+  const selectedLineCount = () =>
+    page.evaluate(
+      () =>
+        document.querySelector(".diffview")?.shadowRoot?.querySelectorAll("[data-selected-line]")
+          .length ?? 0,
+    );
+
+  const plus = await revealGutterPlus(page, 5);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+  expect(await selectedLineCount()).toBeGreaterThan(0);
+
+  await composer.locator("textarea").press("Escape");
+  await expect(composer).toHaveCount(0);
+
+  await expect.poll(selectedLineCount).toBe(0);
+});
+
 test("a drag selection renders the selected lines in caret amber, not library-blue", async ({
   daemon,
   page,

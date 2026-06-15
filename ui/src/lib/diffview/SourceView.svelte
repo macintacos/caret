@@ -61,6 +61,12 @@
     /** Reports the live drag range (ascending) on every change, or null when the
      * gesture ends, so the host can mirror it in a readout. Optional. */
     onLineRangePreview?: (range: { startLine: number; endLine: number } | null) => void;
+    /** The range to keep highlighted in the library's own selection (the amber
+     * selected-line bars) — typically the open composer's range. null clears it.
+     * The library highlights its gutter/+ selection on its own, but never clears it
+     * when caret's composer closes; mirroring the composer range here (and clearing
+     * on close) keeps the highlight tied to the composer's lifetime. */
+    selectedRange?: { startLine: number; endLine: number } | null;
   }
 
   let {
@@ -75,6 +81,7 @@
     onLineComment,
     onLineRangeComment,
     onLineRangePreview,
+    selectedRange = null,
   }: Props = $props();
 
   // The container div is component markup, so the instance must not remove
@@ -200,7 +207,8 @@
         onLineRangePreview?.(range);
       },
       onCommit: (range) => {
-        lifecycle.select(null);
+        // The controller already cleared the drag highlight via onPreview(null); the
+        // composer that opens here re-highlights the range through `selectedRange`.
         onLineRangeComment?.(range.startLine, range.endLine);
       },
     });
@@ -251,6 +259,18 @@
       drag.cancel(); // mid-drag teardown: clear the controller + the library highlight
       endGesture();
     };
+  });
+
+  // Keep the library's selection highlight tied to the open composer. The library
+  // highlights its own gutter/+ selection but never clears it when caret's composer
+  // closes, so reflect the composer's range (or null) into setSelectedLines here.
+  // This tracks only `selectedRange`, which stays a stable null throughout a gutter
+  // drag, so it never clobbers the library's own in-drag highlight — it acts only as
+  // a composer opens or closes.
+  $effect(() => {
+    lifecycle.select(
+      selectedRange == null ? null : { start: selectedRange.startLine, end: selectedRange.endLine },
+    );
   });
 </script>
 

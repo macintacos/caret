@@ -532,6 +532,7 @@
           if (range != null) retireDragHint();
           dragRange = range ?? undefined;
         }}
+        selectedRange={pending ?? null}
       />
       <!-- The comment-span bracket overlay: rounded gutter rails marking each
            comment's covered lines. It layers over the .diff-plan scroll content
