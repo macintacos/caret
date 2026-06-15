@@ -236,6 +236,16 @@ const LegacyAnnotationSchema = z.object({
 });
 const AnnotationSchema = z.union([LineAnnotationSchema, LegacyAnnotationSchema]);
 
+// A persisted, unsent composer scratch: the line-range anchor plus the retained
+// text. The UI type's derivable `key` is not persisted (see PersistedScratch).
+const PersistedScratchSchema = z
+  .object({
+    startLine: z.number().int().min(1),
+    endLine: z.number().int().min(1),
+    text: z.string(),
+  })
+  .refine((s) => s.endLine >= s.startLine, { message: "endLine must be >= startLine" });
+
 /** Finds the first annotations entry that claims the line-anchored shape
  * (carries `startLine` or `endLine`) but fails LineAnnotationSchema. A
  * malformed line anchor is a client bug and rejects with 400; everything else
@@ -258,8 +268,19 @@ const DraftBodySchema: z.ZodType<DraftBody> = z
   .object({
     annotations: z.array(AnnotationSchema).nullish().transform(nullToUndefined),
     generalCommentDraft: z.string().nullish().transform(nullToUndefined),
+    // Per-field catch so one malformed scratch degrades this field to absent
+    // without clobbering a valid sibling field in the same body.
+    composerScratches: z
+      .array(PersistedScratchSchema)
+      .nullish()
+      .transform(nullToUndefined)
+      .catch(undefined),
   })
-  .catch({ annotations: undefined, generalCommentDraft: undefined });
+  .catch({
+    annotations: undefined,
+    generalCommentDraft: undefined,
+    composerScratches: undefined,
+  });
 
 /** Parse a request body that may be malformed JSON. A JSON parse failure
  * degrades to `{}`; a body that fails the schema degrades to the schema's
@@ -617,6 +638,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       if (body.generalCommentDraft != null) {
         r.generalCommentDraft = body.generalCommentDraft;
       }
+      // Persist the unsent composer scratches. Available-but-unused seam: the
+      // value round-trips to disk and is served back on GET, but nothing
+      // rehydrates it into the source view yet (deferred follow-up).
+      if (body.composerScratches != null) {
+        r.composerScratches = body.composerScratches;
+      }
     });
     // Id only — draft/annotation text is reviewer prose and never logged.
     if (updated) log.debug("draft", `draft saved: ${shortId(id)}`, { reviewId: id });
@@ -644,6 +671,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // the review on disk as rejected and must not retain stale text; an
       // approve removes it (store.remove flushes "" first).
       r.generalCommentDraft = "";
+      // Same invariant for the persisted composer scratches.
+      r.composerScratches = [];
     });
     // Approval is terminal: bump the session epoch (so a later plan is a fresh
     // thread) and drop it from the active set so idle can fire.

@@ -135,6 +135,23 @@ export interface Decision {
 }
 
 /**
+ * The on-disk form of an unsent composer "scratch" — the in-memory
+ * `ComposerScratch` (ui/src/lib/diffview/commenting.ts) reduced to its persistable
+ * fields: the 1-based, inclusive line range it anchors to plus the retained text.
+ * The UI type's `key` ("startLine:endLine") is intentionally omitted — it is
+ * derivable from the range, so persisting it would only invite the stored key and
+ * its own range to drift apart.
+ */
+export interface PersistedScratch {
+  /** First anchored line (1-based, inclusive). */
+  startLine: number;
+  /** Last anchored line (1-based, inclusive; >= startLine). */
+  endLine: number;
+  /** The retained, unsubmitted composer text. */
+  text: string;
+}
+
+/**
  * Canonical review record. `versions` is the source of truth; the "current"
  * plan/annotations are always the last entry (see currentVersion()).
  */
@@ -151,6 +168,12 @@ export interface Review {
    * (not version-scoped like annotations): it has no anchor in a specific plan
    * text. Optional because pre-existing on-disk reviews predate the field. */
   generalCommentDraft?: string;
+  /** Persisted, unsent composer scratches — the line-anchored drafts the reviewer
+   * typed but did not submit. This is an available-but-unused persistence seam: the
+   * field is written and round-tripped through the draft endpoint and storage, but
+   * nothing rehydrates it into the source view yet (deferred follow-up). Optional
+   * because pre-existing on-disk reviews predate the field. */
+  composerScratches?: PersistedScratch[];
   createdAt: number;
   updatedAt: number;
   decision?: Decision;
@@ -170,6 +193,10 @@ export interface ClientReview {
   versions: PlanVersion[];
   /** Always a string (coerced from the optional Review field in toClientReview). */
   generalCommentDraft: string;
+  /** Always present (coerced from the optional Review field in toClientReview). The
+   * read half of the persisted-scratch seam: a GET serves it so a future load can
+   * rehydrate it; no UI consumes it yet. */
+  composerScratches: PersistedScratch[];
   createdAt: number;
   updatedAt: number;
   decision?: Decision;
@@ -213,6 +240,7 @@ export interface ResolveBody {
 export interface DraftBody {
   annotations?: Annotation[];
   generalCommentDraft?: string;
+  composerScratches?: PersistedScratch[];
 }
 
 /**
@@ -264,6 +292,7 @@ export function toClientReview(review: Review): ClientReview {
     annotations: cur.annotations,
     versions: review.versions,
     generalCommentDraft: review.generalCommentDraft ?? "",
+    composerScratches: review.composerScratches ?? [],
     createdAt: review.createdAt,
     updatedAt: review.updatedAt,
     decision: review.decision,
