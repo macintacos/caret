@@ -4,6 +4,18 @@
 
 set -euo pipefail
 
+# Self-heal missing JS deps so a fresh clone or git worktree can `mise run dev`
+# without a separate install step first. A new worktree starts with no (or a
+# partial) node_modules, yet every process below (daemon, driver, Vite) needs
+# them. This runs `bun install` — the dev-relevant slice of `mise run setup`,
+# skipping setup's tool install and e2e Chromium download, which dev doesn't
+# use. The Vite bin is the sentinel, so the common path (deps present) is a
+# cheap stat, not a full install on every boot.
+if [ ! -x node_modules/.bin/vite ]; then
+  echo "caret dev: JS deps not installed — running bun install" >&2
+  bun install
+fi
+
 # Thin process-supervision glue: this task boots and reaps the three dev
 # processes (daemon + driver + Vite) and isolates their state. Every
 # non-supervisory decision — port mode, lock-based port discovery, the typed
