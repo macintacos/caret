@@ -318,6 +318,7 @@
 
   const gutter: SourceViewGutter = {
     enableGutterUtility: true,
+    lineHoverHighlight: "both",
     enableLineSelection: true,
     onGutterUtilityClick: (range) => commenting.open({ start: range.start, end: range.end }),
     // Live during the drag: preview the growing range, and retire the hint once the
