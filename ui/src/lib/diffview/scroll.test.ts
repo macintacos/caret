@@ -102,6 +102,16 @@ describe("lineAtReadingZone", () => {
     expect(lineAtReadingZone(rows, TOP)).toBe(6);
   });
 
+  test("excludes a prior row whose bottom sits one slop-width past the park line", () => {
+    // The boundary case: a row ending exactly on the reading-zone line (park + slop)
+    // is within the margin, so the heading below it still wins.
+    const rows = [
+      { line: 5, bottom: PARK + 1 },
+      { line: 6, bottom: PARK + ROW },
+    ];
+    expect(lineAtReadingZone(rows, TOP)).toBe(6);
+  });
+
   test("returns the row straddling the reading-zone line while scrolling", () => {
     const rows = [
       { line: 20, bottom: PARK - 4 }, // ends above the reading zone

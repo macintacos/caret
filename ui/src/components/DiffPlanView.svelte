@@ -262,13 +262,19 @@
       "[data-line]",
     );
     if (rows == null || rows.length === 0) return null;
+    // Capture the narrowed value: the generator closure below doesn't inherit TS's
+    // non-null narrowing of `rows`.
+    const measured = rows;
     const top = scrollEl!.getBoundingClientRect().top;
-    const geom: { line: number; bottom: number }[] = [];
-    for (const row of rows) {
-      const line = Number(row.getAttribute("data-line"));
-      if (Number.isFinite(line)) geom.push({ line, bottom: row.getBoundingClientRect().bottom });
+    // Measure rows lazily: lineAtReadingZone stops at the first row in the zone, so
+    // only those rows pay for a getBoundingClientRect read rather than every line.
+    function* geom() {
+      for (const row of measured) {
+        const line = Number(row.getAttribute("data-line"));
+        if (Number.isFinite(line)) yield { line, bottom: row.getBoundingClientRect().bottom };
+      }
     }
-    return lineAtReadingZone(geom, top);
+    return lineAtReadingZone(geom(), top);
   }
 
   $effect(() => {

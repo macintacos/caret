@@ -76,12 +76,13 @@ export function scrollToLine(container: HTMLElement, line: number): boolean {
  * document order) whose bottom edge clears `containerTop + SCROLL_OFFSET_TOP` by
  * more than READING_ZONE_SLOP. Probing at that offset (rather than the container's
  * top edge) mirrors where scrollToLine parks a jumped heading, so the section the
- * reader lands on is the one reported as active. `rows` carry each rendered line's
- * viewport `bottom`, in document order; returns null when none qualify (empty
- * range, or everything scrolled above the zone).
+ * reader lands on is the one reported as active. `rows` yield each rendered line's
+ * viewport `bottom`, in document order, and are consumed lazily — iteration stops
+ * at the first match, so the caller can defer per-row measurement. Returns null
+ * when none qualify (empty range, or everything scrolled above the zone).
  */
 export function lineAtReadingZone(
-  rows: readonly { line: number; bottom: number }[],
+  rows: Iterable<{ line: number; bottom: number }>,
   containerTop: number,
 ): number | null {
   const readingZone = containerTop + SCROLL_OFFSET_TOP + READING_ZONE_SLOP;
