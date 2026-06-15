@@ -24,7 +24,14 @@ interface FakeContent {
 }
 
 interface Call {
-  method: "render" | "setOptions" | "setLineAnnotations" | "rerender" | "onThemeChange" | "cleanUp";
+  method:
+    | "render"
+    | "setOptions"
+    | "setLineAnnotations"
+    | "rerender"
+    | "onThemeChange"
+    | "setSelectedLines"
+    | "cleanUp";
   args: unknown[];
 }
 
@@ -54,6 +61,8 @@ function makeFactory() {
         calls.push({ method: "setLineAnnotations", args: [annotations] }),
       rerender: () => calls.push({ method: "rerender", args: [] }),
       onThemeChange: () => calls.push({ method: "onThemeChange", args: [] }),
+      setSelectedLines: (range, options) =>
+        calls.push({ method: "setSelectedLines", args: [range, options] }),
       cleanUp: () => calls.push({ method: "cleanUp", args: [] }),
     };
     instances.push(instance);
@@ -220,6 +229,39 @@ describe("diff-view lifecycle rehighlight", () => {
     const factory = makeFactory();
     const lifecycle = makeLifecycle(factory);
     lifecycle.rehighlight();
+    expect(factory.instances).toHaveLength(0);
+  });
+});
+
+describe("diff-view lifecycle selection", () => {
+  test("select forwards an ascending range to setSelectedLines as a quiet write", () => {
+    const factory = makeFactory();
+    const lifecycle = makeLifecycle(factory);
+    lifecycle.sync(props());
+    lifecycle.select({ start: 4, end: 8 });
+    // notify:false keeps it a pure visual write — caret owns the readout, so the
+    // library must not re-emit selection callbacks for caret's own write.
+    expect(factory.instances[0]!.calls.at(-1)).toEqual({
+      method: "setSelectedLines",
+      args: [{ start: 4, end: 8 }, { notify: false }],
+    });
+  });
+
+  test("select(null) clears the library selection", () => {
+    const factory = makeFactory();
+    const lifecycle = makeLifecycle(factory);
+    lifecycle.sync(props());
+    lifecycle.select(null);
+    expect(factory.instances[0]!.calls.at(-1)).toEqual({
+      method: "setSelectedLines",
+      args: [null, { notify: false }],
+    });
+  });
+
+  test("select before any sync is a no-op", () => {
+    const factory = makeFactory();
+    const lifecycle = makeLifecycle(factory);
+    lifecycle.select({ start: 1, end: 2 });
     expect(factory.instances).toHaveLength(0);
   });
 });

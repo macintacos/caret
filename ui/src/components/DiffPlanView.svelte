@@ -525,6 +525,13 @@
         {contentKey}
         onReady={onSourceReady}
         onLineComment={(line) => openRange(line, line)}
+        onLineRangeComment={(start, end) => openRange(start, end)}
+        onLineRangePreview={(range) => {
+          // Starting a body drag retires the discoverability hint — it is the gesture
+          // the hint advertises (the gutter drag retires it via onLineSelectionStart).
+          if (range != null) retireDragHint();
+          dragRange = range ?? undefined;
+        }}
       />
       <!-- The comment-span bracket overlay: rounded gutter rails marking each
            comment's covered lines. It layers over the .diff-plan scroll content
@@ -579,7 +586,7 @@
            viewport, reading as ambient guidance. Surfaces the drag-to-comment
            gesture on first gutter hover, retired for good once the reviewer drags. -->
       {#if hintVisible}
-        <div class="drag-hint" role="note">Drag the line numbers to comment on a range.</div>
+        <div class="drag-hint" role="note">Drag across lines to comment on a range — hold Shift to select text.</div>
       {/if}
     {/if}
   </div>
