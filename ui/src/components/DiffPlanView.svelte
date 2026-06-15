@@ -295,6 +295,19 @@
     },
   });
 
+  // The open composer's live text, reported by SourceComposer.onInput. Held here
+  // so opening a different range (gutter +, a line click, a Resume marker) first
+  // retains the in-progress text as a scratch instead of dropping it on the floor.
+  let liveText = "";
+  function openRange(start: number, end: number): void {
+    commenting.cancel(liveText); // retain any in-progress text; no-op when closed
+    commenting.open({ start, end });
+  }
+  function resumeScratch(key: string): void {
+    commenting.cancel(liveText); // retain the open composer's text before switching
+    commenting.resume(key);
+  }
+
   // Clear the open composer and every scratch when the rendered content changes
   // (a new version arrives, or the review switches): a scratch's line anchor
   // belongs to the prior text, so resuming it onto the new version would
@@ -335,7 +348,7 @@
     enableGutterUtility: true,
     lineHoverHighlight: "both",
     enableLineSelection: true,
-    onGutterUtilityClick: (range) => commenting.open({ start: range.start, end: range.end }),
+    onGutterUtilityClick: (range) => openRange(range.start, range.end),
     // Live during the drag: preview the growing range, and retire the hint once the
     // reviewer has used the gesture. The range arrives in either order; normalize it
     // so the preview reads ascending, exactly as the composer label will.
@@ -477,7 +490,7 @@
         {gutter}
         {contentKey}
         onReady={onSourceReady}
-        onLineComment={(line) => commenting.open({ start: line, end: line })}
+        onLineComment={(line) => openRange(line, line)}
       />
       <!-- The comment-span bracket overlay: rounded gutter rails marking each
            comment's covered lines. It layers over the .diff-plan scroll content
@@ -507,6 +520,7 @@
             startLine={pending.startLine}
             endLine={pending.endLine}
             initial={pendingText}
+            onInput={(text) => (liveText = text)}
             onSubmit={(comment) => commenting.submit(comment)}
             onCancel={(text) => commenting.cancel(text)}
           />
@@ -517,10 +531,13 @@
            the composer with the text restored. The open composer supersedes the
            marker for its own range (the reviewer is editing it now), so skip a
            scratch sharing the pending line. -->
+      <!-- Markers anchor to endLine (matching the composer/card), so two scratches
+           that end on the same line share one library row and stack within it —
+           an uncommon overlap, harmless: each stays clickable and resumable. -->
       {#each scratches as scratch (scratch.key)}
         {#if pending?.endLine !== scratch.endLine}
           <div use:slotInto={{ host, line: scratch.endLine }}>
-            <SourceScratchMarker text={scratch.text} onResume={() => commenting.resume(scratch.key)} />
+            <SourceScratchMarker text={scratch.text} onResume={() => resumeScratch(scratch.key)} />
           </div>
         {/if}
       {/each}

@@ -641,6 +641,39 @@ test("a resumed scratch can be completed into a persisted annotation", async ({ 
   });
 });
 
+test("opening a different range retains the in-progress text as a scratch", async ({
+  daemon,
+  page,
+}) => {
+  // The "never lose text" guarantee must hold when the reviewer changes their
+  // mind mid-comment: typing on line 3, then clicking line 7, must retain the
+  // line-3 text as a scratch rather than dropping it — the host retains before it
+  // opens the new range.
+  await daemon.seed({ plan: RANGE_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  // Open the composer on line 3 ("Body line 1") via a line-body click and type.
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await page.getByText("Body line 1 content here.").click();
+  await expect(composer.getByText("Line 3")).toBeVisible();
+  await composer.locator("textarea").fill("started on line 3");
+
+  // Switch to line 7 ("Body line 3") without dismissing the line-3 composer.
+  await page.getByText("Body line 3 content here.").click();
+  await expect(composer.getByText("Line 7")).toBeVisible();
+
+  // The line-3 text survives as a Resume marker; clicking it restores the text.
+  const marker = scratchMarker(page);
+  await expect(marker).toBeVisible();
+  await expect(marker).toContainText("started on line 3");
+  await marker.click();
+  await expect(composer.getByText("Line 3")).toBeVisible();
+  await expect(composer.locator("textarea")).toHaveValue("started on line 3");
+});
+
 test("scratch drafts clear when a new plan version arrives", async ({ daemon, page }) => {
   // A scratch's anchor belongs to the version it was typed against; a new version
   // must drop it so it never resumes onto text it was not written for. This

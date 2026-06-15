@@ -22,8 +22,12 @@
     /** Dismiss the composer, handing back the current text so the host can retain
      * it as a scratch draft (non-empty) or discard it (empty). */
     onCancel: (text: string) => void;
+    /** Report the live text on every edit, so the host can retain it as a scratch
+     * if the composer is replaced (a new range opened) without an explicit cancel.
+     * Optional. */
+    onInput?: (text: string) => void;
   }
-  let { startLine, endLine, initial = "", onSubmit, onCancel }: Props = $props();
+  let { startLine, endLine, initial = "", onSubmit, onCancel, onInput }: Props = $props();
 
   // Seed from `initial` once, at mount: a resumed scratch mounts a fresh composer
   // with the restored text, and the reviewer edits the local copy from there.
@@ -31,6 +35,13 @@
   // clobber in-progress edits.
   let comment = $state(untrack(() => initial));
   let textarea = $state<HTMLTextAreaElement | undefined>();
+
+  // Surface the seed and every edit to the host so it always holds the live text:
+  // if the reviewer opens a different range without dismissing first, the host
+  // retains this text as a scratch rather than losing it.
+  $effect(() => {
+    onInput?.(comment);
+  });
 
   // Focus the input the moment the composer mounts so a keyboard-only reviewer
   // can type immediately after triggering the gutter `+`. preventScroll is

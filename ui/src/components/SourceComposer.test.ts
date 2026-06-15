@@ -62,6 +62,27 @@ describe("SourceComposer submit/cancel", () => {
   });
 });
 
+describe("SourceComposer onInput", () => {
+  test("reports the seed and every edit so the host can retain in-progress text", () => {
+    const seen: string[] = [];
+    const { target, flush } = render(SourceComposer, {
+      startLine: 3,
+      endLine: 3,
+      initial: "seed",
+      onSubmit: () => {},
+      onCancel: () => {},
+      onInput: (t: string) => seen.push(t),
+    });
+    flush(); // run the mount $effect that reports the seed
+    expect(seen[0]).toBe("seed");
+    const textarea = target.querySelector("textarea") as HTMLTextAreaElement;
+    textarea.value = "seed edited";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    flush();
+    expect(seen.at(-1)).toBe("seed edited");
+  });
+});
+
 describe("SourceComposer initial value", () => {
   test("an initial value pre-fills the textarea so a resumed scratch is restored", () => {
     const { textarea } = mount({ initial: "resume me" });

@@ -123,9 +123,9 @@ export function createSourceCommenting(deps: SourceCommentingDeps): SourceCommen
   // Retained scratches, keyed by range so dismissing the same range replaces.
   const store = new Map<string, ComposerScratch>();
   // The store rendered ascending, rebuilt only when the store actually mutates.
-  // The host mirrors scratches() on every onChange (which also fires on each
-  // keystroke, via pending changes), so a stable reference between mutations
-  // keeps the host's annotation/bracket derivations from re-running per keystroke.
+  // The host mirrors scratches() on every onChange, so returning a stable
+  // reference between mutations keeps the host's annotation/bracket derivations
+  // from re-running when a transition (open/close) leaves the store unchanged.
   let snapshot: ComposerScratch[] = [];
   function rebuildSnapshot(): void {
     snapshot = [...store.values()].sort(
