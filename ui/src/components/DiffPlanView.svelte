@@ -518,7 +518,7 @@
            marker for its own range (the reviewer is editing it now), so skip a
            scratch sharing the pending line. -->
       {#each scratches as scratch (scratch.key)}
-        {#if pending == null || scratch.endLine !== pending.endLine}
+        {#if pending?.endLine !== scratch.endLine}
           <div use:slotInto={{ host, line: scratch.endLine }}>
             <SourceScratchMarker text={scratch.text} onResume={() => commenting.resume(scratch.key)} />
           </div>

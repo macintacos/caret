@@ -121,7 +121,17 @@ export function createSourceCommenting(deps: SourceCommentingDeps): SourceCommen
   // scratch. "" whenever the composer opens on a fresh range or is closed.
   let openText = "";
   // Retained scratches, keyed by range so dismissing the same range replaces.
-  const scratches = new Map<string, ComposerScratch>();
+  const store = new Map<string, ComposerScratch>();
+  // The store rendered ascending, rebuilt only when the store actually mutates.
+  // The host mirrors scratches() on every onChange (which also fires on each
+  // keystroke, via pending changes), so a stable reference between mutations
+  // keeps the host's annotation/bracket derivations from re-running per keystroke.
+  let snapshot: ComposerScratch[] = [];
+  function rebuildSnapshot(): void {
+    snapshot = [...store.values()].sort(
+      (a, b) => a.startLine - b.startLine || a.endLine - b.endLine,
+    );
+  }
 
   function close(): void {
     open = null;
@@ -134,8 +144,12 @@ export function createSourceCommenting(deps: SourceCommentingDeps): SourceCommen
   function openAt(range: PendingComposer): void {
     open = range;
     const key = scratchKey(range.startLine, range.endLine);
-    openText = scratches.get(key)?.text ?? "";
-    scratches.delete(key);
+    const scratch = store.get(key);
+    openText = scratch?.text ?? "";
+    if (scratch !== undefined) {
+      store.delete(key);
+      rebuildSnapshot();
+    }
     deps.onChange?.();
   }
 
@@ -148,7 +162,7 @@ export function createSourceCommenting(deps: SourceCommentingDeps): SourceCommen
       const comment = text.trim();
       // Either outcome drops the scratch: a successful submit graduates it to an
       // annotation, and an empty submit means the reviewer cleared the box.
-      scratches.delete(scratchKey(open.startLine, open.endLine));
+      if (store.delete(scratchKey(open.startLine, open.endLine))) rebuildSnapshot();
       // Empty submit is a cancel — never persist a blank annotation.
       if (comment === "") {
         close();
@@ -163,7 +177,8 @@ export function createSourceCommenting(deps: SourceCommentingDeps): SourceCommen
       if (retained !== "") {
         const { startLine, endLine } = open;
         const key = scratchKey(startLine, endLine);
-        scratches.set(key, { key, startLine, endLine, text: retained });
+        store.set(key, { key, startLine, endLine, text: retained });
+        rebuildSnapshot();
       }
       close();
     },
@@ -174,17 +189,18 @@ export function createSourceCommenting(deps: SourceCommentingDeps): SourceCommen
       return openText;
     },
     scratches() {
-      return [...scratches.values()].sort(
-        (a, b) => a.startLine - b.startLine || a.endLine - b.endLine,
-      );
+      return snapshot;
     },
     resume(key) {
-      const scratch = scratches.get(key);
+      const scratch = store.get(key);
       if (scratch == null) return;
       openAt({ startLine: scratch.startLine, endLine: scratch.endLine });
     },
     clear() {
-      scratches.clear();
+      if (store.size > 0) {
+        store.clear();
+        rebuildSnapshot();
+      }
       close();
     },
   };
