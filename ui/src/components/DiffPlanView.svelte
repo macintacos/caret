@@ -19,6 +19,7 @@
   // wrapper, switching the split/unified layout at runtime. The contents pane,
   // gutter, and annotations belong to the single-version view only — compare mode
   // is a clean read-only diff with none of them.
+  import { untrack } from "svelte";
   import SourceView from "../lib/diffview/SourceView.svelte";
   import SourceDiffView from "../lib/diffview/SourceDiffView.svelte";
   import {
@@ -79,6 +80,17 @@
     onEditAnnotation: (id: string, comment: string) => void;
     onDeleteAnnotation: (id: string) => void;
     onFocusAnnotation: (id: string) => void;
+    /** Report the current retained scratches up to the host so a sibling (the
+     * Request Changes dialog) can surface them. Receives the controller's stable
+     * snapshot verbatim — the host must forward it as-is (no copy/map) to keep the
+     * reference-stability that avoids redundant re-renders. */
+    onScratchesChange?: (scratches: ComposerScratch[]) => void;
+    /** Hand the host the controller's per-scratch Save/Discard actions, once, so
+     * the dialog can graduate or drop a scratch without owning the controller. */
+    onExposeScratchActions?: (actions: {
+      save: (key: string) => void;
+      discard: (key: string) => void;
+    }) => void;
   }
 
   let {
@@ -89,6 +101,8 @@
     onEditAnnotation,
     onDeleteAnnotation,
     onFocusAnnotation,
+    onScratchesChange,
+    onExposeScratchActions,
   }: Props = $props();
 
   // Line-anchored annotations render inline in the source view's per-line
@@ -293,6 +307,26 @@
       pendingText = commenting.pendingText();
       scratches = commenting.scratches();
     },
+  });
+
+  // Mirror the scratches up to the host (the Request Changes dialog reads them).
+  // Done in an $effect on the local `scratches` state — not synchronously inside
+  // onChange — so the cross-component write is scheduled, never re-entrant with
+  // the controller callback that produced it (e.g. the clear() on a version
+  // change, whose onChange would otherwise write host state mid-flush). The value
+  // is the controller's stable snapshot, forwarded verbatim, so the host's
+  // projection keeps the same reference between mutations.
+  $effect(() => {
+    onScratchesChange?.(scratches);
+  });
+
+  // Hand the host the controller's per-scratch Save/Discard actions once, on
+  // mount. The controller returns one object whose methods are stable for its
+  // lifetime, so a single hand-off captures live references. `untrack` keeps the
+  // `onExposeScratchActions` prop from becoming a reactive dependency — the host
+  // re-creating that callback on every render must not re-run this.
+  $effect(() => {
+    untrack(() => onExposeScratchActions)?.({ save: commenting.save, discard: commenting.discard });
   });
 
   // The open composer's live text, reported by SourceComposer.onInput. Held here

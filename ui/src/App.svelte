@@ -12,6 +12,7 @@
   } from "./state/polling.svelte.ts";
   import { createResolve, type ResolveStore } from "./state/resolve.svelte.ts";
   import { coveredLineCount, pendingInlineCount } from "./lib/feedback.ts";
+  import type { ComposerScratch } from "./lib/diffview/commenting.ts";
   import type { ApproveVariant, ApproveVariantId, Annotation } from "@core/types";
 
   import ApproveConfirmDialog from "./components/ApproveConfirmDialog.svelte";
@@ -60,6 +61,17 @@
   // chose, parked until they confirm or divert. Null = no guard open.
   let pendingApproveMode = $state<ApproveVariantId | null>(null);
   let safeMode = $state(false);
+
+  // The source view's retained-but-unsent composer drafts ("scratches"), mirrored
+  // up from DiffPlanView so the Request Changes dialog can surface them with
+  // per-scratch Save/Discard. DiffPlanView owns the controller; this is a
+  // read-only projection (the controller's stable snapshot, forwarded verbatim)
+  // plus the two actions that act back on it. `scratchActions` is set on
+  // DiffPlanView mount, which always precedes the dialog opening.
+  let scratches = $state<ComposerScratch[]>([]);
+  let scratchActions = $state<
+    { save: (key: string) => void; discard: (key: string) => void } | undefined
+  >();
 
   // ----- State modules -----
   const selection = createReviewSelection(selStore);
@@ -239,6 +251,8 @@
       onEditAnnotation={autosave.editAnnotation}
       onDeleteAnnotation={autosave.deleteAnnotation}
       onFocusAnnotation={autosave.focusAnnotation}
+      onScratchesChange={(s) => (scratches = s)}
+      onExposeScratchActions={(a) => (scratchActions = a)}
     />
   {:else}
     <EmptyState connected={selection.connected} />
@@ -277,8 +291,11 @@
     annotations={autosave.annotations}
     generalComment={autosave.generalCommentDraft}
     planText={active.currentPlan}
+    {scratches}
     onGeneralCommentInput={autosave.editGeneralComment}
     onSubmit={onRequestChanges}
+    onSaveScratch={(key) => scratchActions?.save(key)}
+    onDiscardScratch={(key) => scratchActions?.discard(key)}
     onCancel={() => {
       showDialog = false;
       // Flush now so a draft typed within the last 500ms debounce window is

@@ -109,6 +109,15 @@ export interface SourceCommenting {
   /** Reopen the composer at the scratch identified by `key`, restoring its text
    * and consuming the scratch. No-op if no scratch matches. */
   resume(key: string): void;
+  /** Graduate the scratch at `key` to a committed annotation through the same
+   * onCreate path a submit uses, then drop it. No-op if no scratch matches. This
+   * is a direct graduate, not a resume+submit: it never sets the pending composer,
+   * so the Request Changes dialog can Save a scratch without opening the composer
+   * behind its modal. */
+  save(key: string): void;
+  /** Drop the scratch at `key` without creating anything. No-op if no scratch
+   * matches. The per-scratch counterpart to clear(), for the dialog's Discard. */
+  discard(key: string): void;
   /** Drop every scratch and close any open composer. The host calls this when the
    * rendered content changes (a new plan version) so a scratch never mis-anchors
    * onto text it was not written against. */
@@ -195,6 +204,23 @@ export function createSourceCommenting(deps: SourceCommentingDeps): SourceCommen
       const scratch = store.get(key);
       if (scratch == null) return;
       openAt({ startLine: scratch.startLine, endLine: scratch.endLine });
+    },
+    save(key) {
+      const scratch = store.get(key);
+      if (scratch == null) return;
+      store.delete(key);
+      rebuildSnapshot();
+      deps.onCreate({
+        startLine: scratch.startLine,
+        endLine: scratch.endLine,
+        comment: scratch.text,
+      });
+      deps.onChange?.();
+    },
+    discard(key) {
+      if (!store.delete(key)) return;
+      rebuildSnapshot();
+      deps.onChange?.();
     },
     clear() {
       if (store.size > 0) {

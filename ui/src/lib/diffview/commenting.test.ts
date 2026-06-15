@@ -231,6 +231,90 @@ describe("scratch drafts", () => {
   });
 });
 
+// The Request Changes dialog surfaces retained scratches with per-scratch Save
+// and Discard. Save graduates a scratch to a committed annotation through the
+// same onCreate path a submit uses, without opening the composer; Discard drops
+// it with no annotation created.
+describe("save and discard a scratch", () => {
+  test("save graduates the scratch to an annotation via onCreate and drops it", () => {
+    const c = build();
+    c.open({ start: 3, end: 5 });
+    c.cancel("commit me into the review");
+    c.save(scratchKey(3, 5));
+    expect(created).toEqual([{ startLine: 3, endLine: 5, comment: "commit me into the review" }]);
+    expect(c.scratches()).toHaveLength(0);
+  });
+
+  test("save does not open the composer (a direct graduate, not a resume+submit)", () => {
+    const c = build();
+    c.open({ start: 2, end: 2 });
+    c.cancel("finish this");
+    c.save(scratchKey(2, 2));
+    expect(c.pending()).toBeUndefined();
+    expect(c.pendingText()).toBe("");
+  });
+
+  test("save leaves other scratches untouched", () => {
+    const c = build();
+    c.open({ start: 1, end: 1 });
+    c.cancel("keep me");
+    c.open({ start: 5, end: 8 });
+    c.cancel("graduate me");
+    c.save(scratchKey(5, 8));
+    expect(created).toEqual([{ startLine: 5, endLine: 8, comment: "graduate me" }]);
+    expect(c.scratches()).toEqual([
+      { key: scratchKey(1, 1), startLine: 1, endLine: 1, text: "keep me" },
+    ]);
+  });
+
+  test("save with an unknown key creates nothing and is a no-op", () => {
+    const c = build();
+    expect(() => c.save(scratchKey(9, 9))).not.toThrow();
+    expect(created).toHaveLength(0);
+  });
+
+  test("discard drops only the named scratch and creates nothing", () => {
+    const c = build();
+    c.open({ start: 1, end: 1 });
+    c.cancel("drop me");
+    c.open({ start: 4, end: 4 });
+    c.cancel("keep me");
+    c.discard(scratchKey(1, 1));
+    expect(created).toHaveLength(0);
+    expect(c.scratches()).toEqual([
+      { key: scratchKey(4, 4), startLine: 4, endLine: 4, text: "keep me" },
+    ]);
+  });
+
+  test("discard with an unknown key is a no-op", () => {
+    const c = build();
+    c.open({ start: 2, end: 2 });
+    c.cancel("still here");
+    c.discard(scratchKey(7, 7));
+    expect(c.scratches()).toHaveLength(1);
+  });
+
+  test("discard does not open the composer", () => {
+    const c = build();
+    c.open({ start: 2, end: 2 });
+    c.cancel("drop this");
+    c.discard(scratchKey(2, 2));
+    expect(c.pending()).toBeUndefined();
+  });
+
+  test("save and discard each fire onChange once on a real mutation", () => {
+    let ticks = 0;
+    const c = createSourceCommenting({ onCreate: () => {}, onChange: () => ticks++ });
+    c.open({ start: 1, end: 1 }); // 1
+    c.cancel("a"); // 2
+    c.open({ start: 3, end: 3 }); // 3
+    c.cancel("b"); // 4
+    c.save(scratchKey(1, 1)); // 5
+    c.discard(scratchKey(3, 3)); // 6
+    expect(ticks).toBe(6);
+  });
+});
+
 describe("notifies on state change", () => {
   test("open, submit, and cancel fire the onChange callback", () => {
     let ticks = 0;
