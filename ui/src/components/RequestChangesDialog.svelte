@@ -114,8 +114,8 @@
          by default and reads "unsent", never "Draft" (a created, pending
          annotation), so it never looks like a comment that was actually added. -->
     {#if scratches.length > 0}
-      <section class="scratches" aria-label="Unsent comments">
-        <span class="lbl">
+      <section class="scratches" aria-labelledby="scratches-label">
+        <span class="lbl" id="scratches-label">
           Unsent comments
           <span class="tally">{scratches.length}</span>
         </span>
