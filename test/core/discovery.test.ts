@@ -469,14 +469,16 @@ test("listReviewFiles plucks only id+status and skips corrupt files and non-json
       status: "pending",
       plan: "SECRET PLAN",
       generalCommentDraft: "SECRET DRAFT",
+      composerScratches: [{ startLine: 1, endLine: 1, text: "SECRET SCRATCH" }],
     }),
   );
   await writeFile(join(dir, "corrupt.json"), "{ not valid json");
   await writeFile(join(dir, "notes.txt"), "ignored, not json");
   const out = listReviewFiles();
   expect(out).toEqual([{ id: "rid-1", status: "pending" }]);
-  // The plan/draft bodies are never read into the return value.
-  expectNeverLogsBody(out, ["SECRET PLAN", "SECRET DRAFT"]);
+  // The plan/draft bodies — including the persisted composer scratches — are
+  // never read into the return value.
+  expectNeverLogsBody(out, ["SECRET PLAN", "SECRET DRAFT", "SECRET SCRATCH"]);
 });
 
 test("logStats reports a missing file as not-existing with zeroed counts", async () => {

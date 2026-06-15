@@ -1405,14 +1405,18 @@ test("a draft autosave is logged at debug with the review id only", async () => 
   await fetch(`${base}/api/reviews/${id}/draft`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ generalCommentDraft: "secret draft text" }),
+    body: JSON.stringify({
+      generalCommentDraft: "secret draft text",
+      composerScratches: [{ startLine: 1, endLine: 1, text: "secret scratch text" }],
+    }),
   });
   // Level + step + reviewId are the contract; the message is mutable prose,
   // matched loosely on the id prefix.
   const saved = recs.find((r) => r.step === "draft" && r.msg.includes(id.slice(0, 8)));
   expect(saved).toMatchObject({ level: "debug", step: "draft", extra: { reviewId: id } });
-  // Draft text is reviewer prose — it must never appear in any record.
-  expectNeverLogsBody(recs, "secret draft text");
+  // Draft text — the general comment and the composer scratches alike — is
+  // reviewer prose; it must never appear in any record.
+  expectNeverLogsBody(recs, ["secret draft text", "secret scratch text"]);
 });
 
 test("a decision served from disk after a memory miss is logged at debug", async () => {
