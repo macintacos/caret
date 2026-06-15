@@ -475,25 +475,39 @@ test("holding Shift while dragging the code body opens no composer (text-select 
 });
 
 test("a plain code-body drag suppresses native text selection", async ({ daemon, page }) => {
-  // The flip side of the Shift escape-hatch: a plain drag must NOT leave a native
-  // text selection behind (it would fight the gesture and read as copy intent on the
-  // next click). The selectstart guard prevents it, so the shadow root's selection
-  // stays empty even though the same drag opened the composer.
+  // The flip side of the Shift escape-hatch: a plain drag must not paint native text
+  // selection over the span it is range-selecting. Suppression is user-select:none on
+  // the host (inherited into the shadow content) for the drag's lifetime, so while a
+  // drag is held the code lines compute as unselectable. (A synthetic mouse drag does
+  // not reliably create a selection in headless Chromium, so asserting the mechanism —
+  // the computed user-select — is what actually proves the fix.)
   await daemon.seed({ plan: RANGE_PLAN });
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();
 
-  await dragLineBody(page, 4, 8);
-  await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
+  const x = await page
+    .locator(".diff-plan")
+    .evaluate((el) => el.getBoundingClientRect().x + el.getBoundingClientRect().width / 2);
+  const readUserSelect = () =>
+    page.evaluate(() => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+      const line = sh?.querySelector("[data-line]");
+      return line == null ? null : getComputedStyle(line).userSelect;
+    });
 
-  const selectedLength = await page.evaluate(() => {
-    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot as
-      | (ShadowRoot & { getSelection?: () => Selection | null })
-      | null;
-    return (sh?.getSelection?.()?.toString() ?? "").length;
-  });
-  expect(selectedLength).toBe(0);
+  // Selectable at rest...
+  expect(await readUserSelect()).not.toBe("none");
+
+  // ...unselectable while a plain drag is held...
+  await page.mouse.move(x, await lineCenterY(page, 4));
+  await page.mouse.down();
+  await page.mouse.move(x, await lineCenterY(page, 8), { steps: 12 });
+  expect(await readUserSelect()).toBe("none");
+
+  // ...and selectable again once the drag releases.
+  await page.mouse.up();
+  expect(await readUserSelect()).not.toBe("none");
 });
 
 test("a live readout previews the range during the drag and clears on release", async ({

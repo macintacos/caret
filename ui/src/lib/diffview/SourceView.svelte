@@ -205,19 +205,27 @@
       },
     });
 
-    // Native text selection competes with a plain body drag, so it is suppressed for
-    // exactly the gesture's lifetime: the selectstart blocker is attached only while
-    // a drag is live (Shift+drag, the composer, and idle hover all select freely),
-    // and every terminator tears the whole set down — pointerup, pointercancel, and
-    // window blur (the release-outside-the-window case) — so suppression can never
-    // wedge on. The controller owns the arm decision; onDown just acts on it.
+    // A plain body drag must not paint the browser's native text selection over the
+    // span it is range-selecting. selectstart is not a composed event, so a document
+    // listener never sees selections that begin inside the library's shadow root;
+    // instead user-select:none is set on the host for the drag's lifetime. user-select
+    // is inherited, so it reaches the shadow content (the library only sets it on its
+    // change-indicator pseudo, never the code body). Shift+drag never arms, so it
+    // still selects text natively (the copy escape-hatch); suppression is cleared on
+    // every terminator — pointerup, pointercancel, window blur (release outside the
+    // window) — so it can never wedge on. The controller owns the arm decision.
     const onMove = (e: PointerEvent) => drag.pointermove(e);
-    const onSelectStart = (e: Event) => e.preventDefault();
+    function suppressNativeSelect(on: boolean): void {
+      for (const prop of ["user-select", "-webkit-user-select"]) {
+        if (on) host.style.setProperty(prop, "none");
+        else host.style.removeProperty(prop);
+      }
+    }
     function endGesture(): void {
+      suppressNativeSelect(false);
       document.removeEventListener("pointermove", onMove);
       document.removeEventListener("pointerup", onUp);
       document.removeEventListener("pointercancel", onCancelGesture);
-      document.removeEventListener("selectstart", onSelectStart);
       window.removeEventListener("blur", onCancelGesture);
     }
     function onUp(e: PointerEvent): void {
@@ -230,10 +238,10 @@
     }
     const onDown = (e: PointerEvent) => {
       if (!drag.pointerdown(e)) return; // not a plain primary press on the code body
+      suppressNativeSelect(true);
       document.addEventListener("pointermove", onMove);
       document.addEventListener("pointerup", onUp);
       document.addEventListener("pointercancel", onCancelGesture);
-      document.addEventListener("selectstart", onSelectStart);
       window.addEventListener("blur", onCancelGesture);
     };
 
