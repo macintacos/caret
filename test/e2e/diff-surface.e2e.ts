@@ -702,6 +702,136 @@ test("scratch drafts clear when a new plan version arrives", async ({ daemon, pa
   await expect(scratchMarker(page)).toHaveCount(0);
 });
 
+// ----- Unsent scratches surfaced in the Request Changes dialog (EXC-635) -----
+// The dialog lists unsent composer drafts so the reviewer consciously Saves
+// (graduates into the sent feedback) or Discards each. An unsaved scratch is
+// never silently sent.
+
+/** Create a scratch on `line` by typing into the composer and dismissing it,
+ * then open the Request Changes dialog. Returns the dialog locator. */
+async function scratchThenOpenDialog(page: Page, line: number, text: string): Promise<Locator> {
+  const plus = await revealGutterPlus(page, line);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await composer.locator("textarea").fill(text);
+  await composer.locator("textarea").click();
+  await page.keyboard.press("Escape");
+  await expect(scratchMarker(page)).toBeVisible();
+
+  await page.getByRole("button", { name: "Request changes" }).click();
+  const dialog = page.getByRole("dialog", { name: "Request changes" });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+test("the Request Changes dialog lists an unsent scratch, collapsed and uncounted", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const dialog = await scratchThenOpenDialog(page, 3, "an unsent thought on line 3");
+
+  // The scratch is listed under "Unsent comments", collapsed (its text shows in
+  // the summary preview, the full body is in the closed <details>).
+  const section = dialog.locator(".scratches");
+  await expect(section).toBeVisible();
+  await expect(section).toContainText("Unsent comments");
+  await expect(dialog.locator(".scratch-row")).toHaveCount(1);
+  await expect(section).toContainText("an unsent thought on line 3");
+
+  // It does not count as a committed comment: the empty-state still shows and
+  // the Send button stays disabled (nothing is committed to send).
+  await expect(dialog.locator(".summary.empty")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Send for revision" })).toBeDisabled();
+
+  // And nothing is persisted while it sits unsent.
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
+    .toBe(0);
+});
+
+test("Saving a scratch graduates it into the sent feedback", async ({ daemon, page }) => {
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const dialog = await scratchThenOpenDialog(page, 3, "save me into the review");
+
+  // Expand the row and Save it. The scratch leaves the unsent list and becomes a
+  // committed comment: the count summary and the preview now include it.
+  await dialog.locator(".scratch-row summary").click();
+  await dialog.locator(".scratch-row .save").click();
+
+  await expect(dialog.locator(".scratch-row")).toHaveCount(0);
+  await expect(dialog.locator(".scratches")).toHaveCount(0);
+  await expect(dialog.locator(".summary")).toContainText("1 comment");
+  await expect(dialog.locator(".preview pre")).toContainText("save me into the review");
+
+  // Submitting now sends it. It reaches Decision.feedback as a line reference.
+  await dialog.getByRole("button", { name: "Send for revision" }).click();
+  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
+  await expect.poll(async () => (await daemon.getReview(id)).body?.decision?.behavior).toBe("deny");
+  const feedback = (await daemon.getReview(id)).body?.decision?.feedback ?? "";
+  expect(feedback).toContain("Line 3:");
+  expect(feedback).toContain("save me into the review");
+});
+
+test("Discarding a scratch removes it and never sends it", async ({ daemon, page }) => {
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const dialog = await scratchThenOpenDialog(page, 3, "discard this draft");
+
+  await dialog.locator(".scratch-row summary").click();
+  await dialog.locator(".scratch-row .discard").click();
+
+  // The scratch is gone from the dialog, and the underlying Resume marker is gone
+  // too — Discard drops it from the review entirely.
+  await expect(dialog.locator(".scratches")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(scratchMarker(page)).toHaveCount(0);
+
+  // Nothing was ever persisted.
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
+    .toBe(0);
+});
+
+test("submitting with an unsaved scratch sends only committed comments", async ({
+  daemon,
+  page,
+}) => {
+  // The default: an unsaved scratch is NOT silently included. A general comment
+  // makes the submit possible; the scratch left unsent must not reach feedback.
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const dialog = await scratchThenOpenDialog(page, 3, "must not be sent unsaved");
+
+  // Type a general comment and submit, leaving the scratch unsaved.
+  await dialog.locator("textarea").fill("Please revise the cache section.");
+  await dialog.getByRole("button", { name: "Send for revision" }).click();
+  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
+
+  await expect.poll(async () => (await daemon.getReview(id)).body?.decision?.behavior).toBe("deny");
+  const feedback = (await daemon.getReview(id)).body?.decision?.feedback ?? "";
+  expect(feedback).toContain("Please revise the cache section.");
+  expect(feedback).not.toContain("must not be sent unsaved");
+});
+
 // ----- Inline annotation cards: collapse/expand + delete (EXC-581) -----
 
 /** Create a single-line annotation on `line` via the gutter, returning once the

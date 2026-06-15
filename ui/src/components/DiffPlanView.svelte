@@ -19,6 +19,7 @@
   // wrapper, switching the split/unified layout at runtime. The contents pane,
   // gutter, and annotations belong to the single-version view only — compare mode
   // is a clean read-only diff with none of them.
+  import { untrack } from "svelte";
   import SourceView from "../lib/diffview/SourceView.svelte";
   import SourceDiffView from "../lib/diffview/SourceDiffView.svelte";
   import {
@@ -305,19 +306,27 @@
       pending = commenting.pending();
       pendingText = commenting.pendingText();
       scratches = commenting.scratches();
-      // Forward the controller's stable snapshot verbatim — not a copy — so the
-      // host's projection keeps the same reference between mutations and its
-      // derivations don't re-run on open/close transitions.
-      onScratchesChange?.(scratches);
     },
   });
 
-  // Expose the per-scratch Save/Discard actions to the host once. The controller
-  // returns one object whose methods are stable for its lifetime, so a single
-  // hand-off captures live references — no per-render rewrapping. This effect
-  // reads no reactive state, so it runs once on mount.
+  // Mirror the scratches up to the host (the Request Changes dialog reads them).
+  // Done in an $effect on the local `scratches` state — not synchronously inside
+  // onChange — so the cross-component write is scheduled, never re-entrant with
+  // the controller callback that produced it (e.g. the clear() on a version
+  // change, whose onChange would otherwise write host state mid-flush). The value
+  // is the controller's stable snapshot, forwarded verbatim, so the host's
+  // projection keeps the same reference between mutations.
   $effect(() => {
-    onExposeScratchActions?.({ save: commenting.save, discard: commenting.discard });
+    onScratchesChange?.(scratches);
+  });
+
+  // Hand the host the controller's per-scratch Save/Discard actions once, on
+  // mount. The controller returns one object whose methods are stable for its
+  // lifetime, so a single hand-off captures live references. `untrack` keeps the
+  // `onExposeScratchActions` prop from becoming a reactive dependency — the host
+  // re-creating that callback on every render must not re-run this.
+  $effect(() => {
+    untrack(() => onExposeScratchActions)?.({ save: commenting.save, discard: commenting.discard });
   });
 
   // The open composer's live text, reported by SourceComposer.onInput. Held here
