@@ -106,6 +106,7 @@ export function createStore(dir: string, log: CaretLogger = noopLogger): Store {
       review.status = "expired";
       // Same invariant as resolve: a terminal record keeps no unsent draft.
       review.generalCommentDraft = "";
+      review.composerScratches = [];
       review.updatedAt = Math.max(Date.now(), review.updatedAt + 1);
       reviews.delete(id);
       await persist(review);

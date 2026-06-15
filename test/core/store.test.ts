@@ -173,6 +173,28 @@ test("expire marks terminal, clears the draft, persists once, and drops from mem
   expect(await store.expire("missing")).toBeUndefined();
 });
 
+test("composer scratches round-trip to disk and rehydrate", async () => {
+  const scratches = [{ startLine: 4, endLine: 6, text: "narrow this" }];
+  await store.create({
+    ...makeReview({ id: "cs-1", status: "pending" }),
+    composerScratches: scratches,
+  });
+  const onDisk = JSON.parse(await readFile(join(dir, "cs-1.json"), "utf-8")) as Review;
+  expect(onDisk.composerScratches).toEqual(scratches);
+  // The persisted field survives a fresh store's rehydrate (unresolved record).
+  const fresh = createStore(dir);
+  await fresh.rehydrate();
+  expect(fresh.get("cs-1")?.composerScratches).toEqual(scratches);
+});
+
+test("expire clears persisted composer scratches", async () => {
+  const scratches = [{ startLine: 1, endLine: 1, text: "wip" }];
+  await store.create({ ...makeReview({ id: "cs-e1" }), composerScratches: scratches });
+  await store.expire("cs-e1");
+  const onDisk = JSON.parse(await readFile(join(dir, "cs-e1.json"), "utf-8")) as Review;
+  expect(onDisk.composerScratches).toEqual([]); // terminal records keep no unsent draft
+});
+
 test("rehydrate skips expired reviews", async () => {
   // The terminal-on-disk contract the EXC-454 expiry paths rely on: a record
   // persisted as "expired" must never reload as an approvable orphan.

@@ -539,6 +539,40 @@ test("PUT draft persists and restores the general comment draft", async () => {
   expect(one.generalCommentDraft).toBe("rethink the rollout");
 });
 
+const SCRATCHES = [
+  { startLine: 3, endLine: 5, text: "tighten this range" },
+  { startLine: 12, endLine: 12, text: "stray todo here?" },
+];
+
+test("PUT draft persists and restores composer scratches (round-trips through GET)", async () => {
+  await boot();
+  const { id } = await newReview();
+  await putDraft(id, { composerScratches: SCRATCHES });
+  // The seam's full public round-trip: PUT /draft -> store -> GET /reviews/:id.
+  const one = await (await fetch(`${base}/api/reviews/${id}`)).json();
+  expect(one.composerScratches).toEqual(SCRATCHES);
+});
+
+test("GET defaults composerScratches to [] when a record predates the field", async () => {
+  await boot();
+  const { id } = await newReview();
+  // A review that never received a scratch write still serves the total wire shape.
+  const one = await (await fetch(`${base}/api/reviews/${id}`)).json();
+  expect(one.composerScratches).toEqual([]);
+});
+
+test("PUT draft degrades a malformed composerScratches entry (no clobber, no 400)", async () => {
+  await boot();
+  const { id } = await newReview();
+  await putDraft(id, { composerScratches: SCRATCHES });
+  // A bad entry (text missing) trips the schema; like every other draft field it
+  // degrades to absent rather than rejecting, so the prior scratches survive.
+  const res = await putDraft(id, { composerScratches: [{ startLine: 1, endLine: 1 }] });
+  expect(res.status).toBe(200);
+  const one = await (await fetch(`${base}/api/reviews/${id}`)).json();
+  expect(one.composerScratches).toEqual(SCRATCHES);
+});
+
 test("PUT draft does not clobber the other field (either direction)", async () => {
   await boot();
   const { id } = await newReview();
@@ -644,6 +678,16 @@ test("resolve clears the draft on the deny/rejected path", async () => {
   expect(store.get(id)?.status).toBe("rejected");
   expect(store.get(id)?.generalCommentDraft).toBe("");
   expect(store.get(id)?.versions.at(-1)?.plan).toBe("# Title\n\nbody\n");
+});
+
+test("resolve clears composer scratches on the deny/rejected path", async () => {
+  await boot();
+  const { id } = await newReview();
+  await putDraft(id, { composerScratches: SCRATCHES });
+  await resolve(id, { behavior: "deny", feedback: "fix it" });
+  // Same terminal invariant as the general-comment draft: a resolved record keeps
+  // no unsent scratches.
+  expect(store.get(id)?.composerScratches).toEqual([]);
 });
 
 test("resolve clears the draft on the approve path", async () => {
@@ -1361,14 +1405,18 @@ test("a draft autosave is logged at debug with the review id only", async () => 
   await fetch(`${base}/api/reviews/${id}/draft`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ generalCommentDraft: "secret draft text" }),
+    body: JSON.stringify({
+      generalCommentDraft: "secret draft text",
+      composerScratches: [{ startLine: 1, endLine: 1, text: "secret scratch text" }],
+    }),
   });
   // Level + step + reviewId are the contract; the message is mutable prose,
   // matched loosely on the id prefix.
   const saved = recs.find((r) => r.step === "draft" && r.msg.includes(id.slice(0, 8)));
   expect(saved).toMatchObject({ level: "debug", step: "draft", extra: { reviewId: id } });
-  // Draft text is reviewer prose — it must never appear in any record.
-  expectNeverLogsBody(recs, "secret draft text");
+  // Draft text — the general comment and the composer scratches alike — is
+  // reviewer prose; it must never appear in any record.
+  expectNeverLogsBody(recs, ["secret draft text", "secret scratch text"]);
 });
 
 test("a decision served from disk after a memory miss is logged at debug", async () => {
