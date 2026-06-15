@@ -5,6 +5,7 @@
   // gutter. Submitting creates a line-anchored annotation, Esc cancels,
   // Cmd/Ctrl+Enter submits. Keyboard-accessible: it grabs focus on open and traps
   // Escape/submit chords on its own subtree.
+  import { untrack } from "svelte";
   import { rangeLabel } from "../lib/diffview/commenting.ts";
   import { isCancelKey, isSubmitChord } from "../lib/keys.ts";
   import Icon from "./Icon.svelte";
@@ -14,12 +15,21 @@
     startLine: number;
     /** Last annotated line (1-based, inclusive). */
     endLine: number;
+    /** Text to pre-fill, restoring a resumed scratch draft. Default "" opens an
+     * empty composer for a fresh comment. */
+    initial?: string;
     onSubmit: (comment: string) => void;
-    onCancel: () => void;
+    /** Dismiss the composer, handing back the current text so the host can retain
+     * it as a scratch draft (non-empty) or discard it (empty). */
+    onCancel: (text: string) => void;
   }
-  let { startLine, endLine, onSubmit, onCancel }: Props = $props();
+  let { startLine, endLine, initial = "", onSubmit, onCancel }: Props = $props();
 
-  let comment = $state("");
+  // Seed from `initial` once, at mount: a resumed scratch mounts a fresh composer
+  // with the restored text, and the reviewer edits the local copy from there.
+  // untrack makes the one-time seed explicit so a later `initial` change does not
+  // clobber in-progress edits.
+  let comment = $state(untrack(() => initial));
   let textarea = $state<HTMLTextAreaElement | undefined>();
 
   // Focus the input the moment the composer mounts so a keyboard-only reviewer
@@ -42,10 +52,14 @@
     onSubmit(comment);
   }
 
+  function cancel() {
+    onCancel(comment);
+  }
+
   function onKey(e: KeyboardEvent) {
     if (isCancelKey(e)) {
       e.preventDefault();
-      onCancel();
+      cancel();
     } else if (isSubmitChord(e)) {
       e.preventDefault();
       submit();
@@ -63,7 +77,7 @@
     aria-label="Comment"
   ></textarea>
   <div class="row">
-    <button class="ghost" type="button" onclick={onCancel}>Cancel</button>
+    <button class="ghost" type="button" onclick={cancel}>Cancel</button>
     <button
       class="solid"
       type="button"

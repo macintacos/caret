@@ -10,12 +10,12 @@ import SourceComposer from "./SourceComposer.svelte";
 
 function mount(over: Record<string, unknown> = {}) {
   const submitted: string[] = [];
-  let cancelled = 0;
+  const cancelledWith: string[] = [];
   const { target } = render(SourceComposer, {
     startLine: 3,
     endLine: 3,
     onSubmit: (c: string) => submitted.push(c),
-    onCancel: () => cancelled++,
+    onCancel: (c: string) => cancelledWith.push(c),
     ...over,
   });
   const textarea = target.querySelector("textarea") as HTMLTextAreaElement;
@@ -26,7 +26,8 @@ function mount(over: Record<string, unknown> = {}) {
     submitBtn: buttons.find((b) => b.textContent?.includes("Comment")) ?? null,
     cancelBtn: buttons.find((b) => b.textContent?.includes("Cancel")) ?? null,
     submitted,
-    cancelled: () => cancelled,
+    cancelledWith,
+    cancelled: () => cancelledWith.length,
   };
 }
 
@@ -51,10 +52,33 @@ describe("SourceComposer submit/cancel", () => {
     expect(submitted).toEqual(["fix this"]);
   });
 
-  test("the Cancel button fires onCancel", () => {
-    const { cancelBtn, cancelled } = mount();
+  test("the Cancel button fires onCancel with the current text", () => {
+    const { textarea, cancelBtn, cancelledWith } = mount();
+    textarea.value = "half a thought";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
     cancelBtn!.click();
-    expect(cancelled()).toBe(1);
+    // The host needs the typed text to retain it as a scratch draft.
+    expect(cancelledWith).toEqual(["half a thought"]);
+  });
+});
+
+describe("SourceComposer initial value", () => {
+  test("an initial value pre-fills the textarea so a resumed scratch is restored", () => {
+    const { textarea } = mount({ initial: "resume me" });
+    expect(textarea.value).toBe("resume me");
+  });
+
+  test("no initial value opens an empty composer", () => {
+    const { textarea } = mount();
+    expect(textarea.value).toBe("");
+  });
+
+  test("a pre-filled composer submits its (possibly edited) text", () => {
+    const { textarea, submitBtn, submitted } = mount({ initial: "resume me" });
+    textarea.value = "resume me, edited";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    submitBtn!.click();
+    expect(submitted).toEqual(["resume me, edited"]);
   });
 });
 

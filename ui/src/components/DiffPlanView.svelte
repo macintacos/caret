@@ -27,7 +27,12 @@
     toLineAnnotations,
   } from "../lib/diffview/annotationSlot.ts";
   import { type BracketSpan, bracketLayer } from "../lib/diffview/bracket.ts";
-  import { createSourceCommenting, normalizeRange, rangeLabel } from "../lib/diffview/commenting.ts";
+  import {
+    type ComposerScratch,
+    createSourceCommenting,
+    normalizeRange,
+    rangeLabel,
+  } from "../lib/diffview/commenting.ts";
   import { dismissDragHint, isDragHintDismissed } from "../lib/diffview/dragHint.ts";
   import { buildLinkLayer } from "../lib/diffview/links.ts";
   import { readDiffStyle, writeDiffStyle } from "../lib/diffStylePref.ts";
@@ -53,6 +58,7 @@
     isLineAnnotation,
   } from "@core/types";
   import SourceComposer from "./SourceComposer.svelte";
+  import SourceScratchMarker from "./SourceScratchMarker.svelte";
   import SourceAnnotationThread from "./SourceAnnotationThread.svelte";
   import LegacyAnnotationList from "./LegacyAnnotationList.svelte";
   import SourceToc from "./SourceToc.svelte";
@@ -273,21 +279,30 @@
   // when it opens or closes. The controller owns the state machine; this is the
   // view's read of it.
   let pending = $state<{ startLine: number; endLine: number } | undefined>();
+  // The text to seed the open composer with, restoring a resumed scratch draft.
+  let pendingText = $state("");
+  // The retained, unsubmitted composer drafts ("scratches"), one Resume marker
+  // per range. Mirrored from the controller so a dismissed-with-text composer
+  // leaves a returnable marker instead of vanishing.
+  let scratches = $state<ComposerScratch[]>([]);
 
   const commenting = createSourceCommenting({
     onCreate: (anchor) => onCreateLineAnnotation(anchor),
     onChange: () => {
       pending = commenting.pending();
+      pendingText = commenting.pendingText();
+      scratches = commenting.scratches();
     },
   });
 
-  // Discard an open composer when the rendered content changes (a new version
-  // arrives, or the review switches): its line anchor belongs to the prior text,
-  // so submitting it onto the new version would mis-anchor. contentKey is the
-  // reactive trigger.
+  // Clear the open composer and every scratch when the rendered content changes
+  // (a new version arrives, or the review switches): a scratch's line anchor
+  // belongs to the prior text, so resuming it onto the new version would
+  // mis-anchor. contentKey is the reactive trigger. (Scratches are in-memory, so
+  // a reload starts empty without any teardown here.)
   $effect(() => {
     void contentKey;
-    commenting.cancel();
+    commenting.clear();
   });
 
   // The live drag readout: while the reviewer drags down the line-number column,
@@ -346,16 +361,22 @@
     dragRange && pending == null ? rangeLabel(dragRange.startLine, dragRange.endLine) : undefined,
   );
 
-  // One library line annotation per anchored line — the saved comments plus the
-  // open composer — so the library reserves an inline annotation row whose slot we
-  // fill with the card/composer DOM (see annotationSlot.ts). Comments anchor to
-  // their last line, so a multi-line comment sits below its whole range. Memoized
-  // by the line set so an unchanged poll tick keeps the same array reference and
-  // the wrapper skips a redundant library re-render.
+  // One library line annotation per anchored line — the saved comments, the open
+  // composer, and every retained scratch draft — so the library reserves an
+  // inline annotation row whose slot we fill with the card/composer/marker DOM
+  // (see annotationSlot.ts). Comments anchor to their last line, so a multi-line
+  // comment sits below its whole range; a scratch reserves its own row even on a
+  // line with no saved comment. Memoized by the line set so an unchanged poll
+  // tick keeps the same array reference and the wrapper skips a redundant library
+  // re-render.
   let annoKey: string | undefined;
   let annoValue: ReturnType<typeof toLineAnnotations> = [];
   const sourceAnnotations = $derived.by(() => {
-    const lines = [...lineAnnotations.map((a) => a.endLine), ...(pending ? [pending.endLine] : [])];
+    const lines = [
+      ...lineAnnotations.map((a) => a.endLine),
+      ...(pending ? [pending.endLine] : []),
+      ...scratches.map((s) => s.endLine),
+    ];
     const key = [...new Set(lines)].sort((a, b) => a - b).join(",");
     if (annoKey !== key) {
       annoKey = key;
@@ -364,15 +385,16 @@
     return annoValue;
   });
 
-  // The covered-line range of every saved comment plus the open composer, drawn
-  // as a host-side bracket rail in the gutter (bracketLayer) so a multi-line
-  // comment shows which lines belong to it — the card anchors to endLine only.
-  // Both saved and pending spans appear; a version switch swaps `host` (the
-  // SourceView recreates on contentKey), and the action re-observes the new host
-  // and re-measures so no stale rail survives.
+  // The covered-line range of every saved comment, the open composer, and each
+  // retained scratch, drawn as a host-side bracket rail in the gutter
+  // (bracketLayer) so a multi-line span shows which lines belong to it — the
+  // card/composer/marker anchors to endLine only. A version switch swaps `host`
+  // (the SourceView recreates on contentKey), and the action re-observes the new
+  // host and re-measures so no stale rail survives.
   const bracketSpans = $derived<BracketSpan[]>([
     ...lineAnnotations.map((a) => ({ startLine: a.startLine, endLine: a.endLine })),
     ...(pending ? [{ startLine: pending.startLine, endLine: pending.endLine }] : []),
+    ...scratches.map((s) => ({ startLine: s.startLine, endLine: s.endLine })),
   ]);
 </script>
 
@@ -484,11 +506,24 @@
           <SourceComposer
             startLine={pending.startLine}
             endLine={pending.endLine}
+            initial={pendingText}
             onSubmit={(comment) => commenting.submit(comment)}
-            onCancel={() => commenting.cancel()}
+            onCancel={(text) => commenting.cancel(text)}
           />
         </div>
       {/if}
+      <!-- Retained scratch drafts: an unsubmitted composer dismissed with typed
+           text leaves a quiet "Resume" marker at its line, clicking which reopens
+           the composer with the text restored. The open composer supersedes the
+           marker for its own range (the reviewer is editing it now), so skip a
+           scratch sharing the pending line. -->
+      {#each scratches as scratch (scratch.key)}
+        {#if pending == null || scratch.endLine !== pending.endLine}
+          <div use:slotInto={{ host, line: scratch.endLine }}>
+            <SourceScratchMarker text={scratch.text} onResume={() => commenting.resume(scratch.key)} />
+          </div>
+        {/if}
+      {/each}
       <!-- One-time hint: rendered last so it sticks to the bottom of the scroll
            viewport, reading as ambient guidance. Surfaces the drag-to-comment
            gesture on first gutter hover, retired for good once the reviewer drags. -->
