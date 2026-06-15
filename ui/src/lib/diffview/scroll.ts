@@ -1,8 +1,9 @@
-// Scroll-to-line for the source view. @pierre/diffs renders each line as a
-// <div data-line="N"> inside the container's shadow root; jumping to a heading
-// finds that row and scrolls the surrounding scroll container so the row rests
-// near the top. Lives in the wrapper module so the library's DOM shape stays
-// behind the import boundary.
+// Scroll-to-line and active-line resolution for the source view. @pierre/diffs
+// renders each line as a <div data-line="N"> inside the container's shadow root;
+// jumping to a heading finds that row and scrolls the surrounding scroll container
+// so the row rests near the top, and the reverse — which line currently occupies
+// the top of the view — reads the same row geometry. Lives in the wrapper module
+// so the library's DOM shape stays behind the import boundary.
 //
 // The target offset is computed explicitly against the resolved scroll container
 // rather than delegating to row.scrollIntoView(): scrollIntoView picks the
@@ -13,7 +14,14 @@
 
 /** Breathing room (px) above a jumped-to row so the heading isn't flush against
  * the very top edge of the scroll container. */
-const SCROLL_OFFSET_TOP = 12;
+export const SCROLL_OFFSET_TOP = 12;
+
+/** Sub-pixel margin (px) below the reading-zone line. A jumped heading parks with
+ * its top on that line, and the row above ends its bottom exactly there; smooth
+ * scrollTo rounds scrollTop to device pixels, so without this margin the prior
+ * row's bottom can round a fraction past the line and steal the active slot — the
+ * off-by-one this guards against. Kept well under a source line's height. */
+const READING_ZONE_SLOP = 1;
 
 /** Nearest scrollable ancestor of `el` (the element that actually scrolls). */
 function nearestScrollParent(el: HTMLElement): HTMLElement | undefined {
@@ -61,4 +69,24 @@ export function scrollToLine(container: HTMLElement, line: number): boolean {
   const top = Math.max(0, scroller.scrollTop + (rowRect.top - hostRect.top) - SCROLL_OFFSET_TOP);
   scroller.scrollTo({ top, behavior });
   return true;
+}
+
+/**
+ * The 1-based line of the row occupying the reading zone — the first row (in
+ * document order) whose bottom edge clears `containerTop + SCROLL_OFFSET_TOP` by
+ * more than READING_ZONE_SLOP. Probing at that offset (rather than the container's
+ * top edge) mirrors where scrollToLine parks a jumped heading, so the section the
+ * reader lands on is the one reported as active. `rows` carry each rendered line's
+ * viewport `bottom`, in document order; returns null when none qualify (empty
+ * range, or everything scrolled above the zone).
+ */
+export function lineAtReadingZone(
+  rows: readonly { line: number; bottom: number }[],
+  containerTop: number,
+): number | null {
+  const readingZone = containerTop + SCROLL_OFFSET_TOP + READING_ZONE_SLOP;
+  for (const row of rows) {
+    if (row.bottom > readingZone) return row.line;
+  }
+  return null;
 }

@@ -1,6 +1,6 @@
 import "../../../test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
-import { scrollToLine } from "./scroll.ts";
+import { lineAtReadingZone, scrollToLine, SCROLL_OFFSET_TOP } from "./scroll.ts";
 
 // @pierre/diffs renders each source line as a <div data-line="N"> inside the
 // container's shadow root. scrollToLine finds that row and scrolls the nearest
@@ -66,5 +66,60 @@ describe("scrollToLine", () => {
     if (row != null) row.scrollIntoView = () => (scrolledIntoView = true);
     expect(scrollToLine(host, 5)).toBe(true);
     expect(scrolledIntoView).toBe(true);
+  });
+});
+
+// Geometry fixture: the scroll container's top edge sits at `TOP` in viewport
+// coordinates, and scrollToLine parks a jumped heading's top edge at
+// `TOP + SCROLL_OFFSET_TOP` — so the row immediately above a parked heading ends
+// with its bottom exactly on that park line. `bottom` values are in the same
+// viewport coordinate space the component reads from getBoundingClientRect().
+const TOP = 100;
+const PARK = TOP + SCROLL_OFFSET_TOP; // where a jumped heading's top edge rests
+const ROW = 18; // a representative source-line height
+
+describe("lineAtReadingZone", () => {
+  test("after a jump, returns the parked heading — not the row above it", () => {
+    // Heading (line 6) parked with its top at PARK, so line 5's bottom rests on the
+    // park line. Probing at the container's top edge (the old behavior) would pick
+    // line 5; the reading-zone probe must pick line 6.
+    const rows = [
+      { line: 5, bottom: PARK }, // prior row's bottom touches the park line
+      { line: 6, bottom: PARK + ROW }, // the jumped heading
+      { line: 7, bottom: PARK + ROW * 2 },
+    ];
+    expect(lineAtReadingZone(rows, TOP)).toBe(6);
+  });
+
+  test("excludes a prior row whose bottom rounds a sub-pixel past the park line", () => {
+    // Smooth scrollTo rounds scrollTop to device pixels, so a parked heading can rest
+    // a fraction low and the prior row's bottom lands just past PARK. The slop margin
+    // must still exclude it, or the off-by-one returns intermittently.
+    const rows = [
+      { line: 5, bottom: PARK + 0.5 },
+      { line: 6, bottom: PARK + ROW + 0.5 },
+    ];
+    expect(lineAtReadingZone(rows, TOP)).toBe(6);
+  });
+
+  test("returns the row straddling the reading-zone line while scrolling", () => {
+    const rows = [
+      { line: 20, bottom: PARK - 4 }, // ends above the reading zone
+      { line: 21, bottom: PARK + 14 }, // spans across the reading-zone line
+      { line: 22, bottom: PARK + 32 },
+    ];
+    expect(lineAtReadingZone(rows, TOP)).toBe(21);
+  });
+
+  test("returns null when no rows are present", () => {
+    expect(lineAtReadingZone([], TOP)).toBe(null);
+  });
+
+  test("returns null when every row ends above the reading zone", () => {
+    const rows = [
+      { line: 1, bottom: PARK - 20 },
+      { line: 2, bottom: PARK - 2 },
+    ];
+    expect(lineAtReadingZone(rows, TOP)).toBe(null);
   });
 });
