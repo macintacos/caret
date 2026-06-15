@@ -224,9 +224,11 @@
     // window) — so it can never wedge on. The controller owns the arm decision.
     const onMove = (e: PointerEvent) => drag.pointermove(e);
     function suppressNativeSelect(on: boolean): void {
+      // host is null-checked at the guard above and is const, but TS doesn't carry
+      // that narrowing into this nested closure, so assert it here.
       for (const prop of ["user-select", "-webkit-user-select"]) {
-        if (on) host.style.setProperty(prop, "none");
-        else host.style.removeProperty(prop);
+        if (on) host!.style.setProperty(prop, "none");
+        else host!.style.removeProperty(prop);
       }
     }
     function endGesture(): void {

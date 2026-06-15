@@ -225,9 +225,9 @@
   /* The three interaction states bind to the chrome's interaction tokens: hover
      lifts the row onto the sunk surface, the keyboard cursor is a quiet
      --rule-strong ring, and the scroll-tracked active heading takes the accent
-     wash + a left bar. The cursor (ring) and active (wash + bar) are deliberately
-     kept visually distinct so the "where my keyboard focus is" and "where I am in
-     the document" signals never collapse into one state. */
+     wash. The cursor (ring) and active (wash) are deliberately kept visually
+     distinct so the "where my keyboard focus is" and "where I am in the
+     document" signals never collapse into one state. */
   .toc-row:hover {
     background: var(--paper-sunk);
     color: var(--ink);
@@ -245,7 +245,6 @@
     background: var(--accent-wash);
     color: var(--accent);
     font-weight: 600;
-    box-shadow: inset 2px 0 0 var(--accent);
   }
 
   .toc-empty {

@@ -132,19 +132,13 @@
     display: flex;
     flex-direction: column;
     gap: 0.1rem;
-    /* Inset accent bar marks the active review, echoing the source-view ToC's
-       active-row treatment; reserved as transparent until selected. */
-    box-shadow: inset 2px 0 0 transparent;
-    transition:
-      background var(--dur-fast) var(--ease-out),
-      box-shadow var(--dur-fast) var(--ease-out);
+    transition: background var(--dur-fast) var(--ease-out);
   }
   .menu button:hover {
     background: var(--paper-sunk);
   }
   .menu button.active {
     background: var(--accent-wash);
-    box-shadow: inset 2px 0 0 var(--accent);
   }
   .m-title {
     font-family: var(--font-sans);
