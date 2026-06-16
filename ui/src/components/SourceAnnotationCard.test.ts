@@ -1,19 +1,35 @@
 import "../../test-mount.ts";
+import { EditorView } from "@codemirror/view";
 import { describe, expect, test } from "bun:test";
 import type { LineAnnotation } from "@core/types";
 import { capture, render } from "../../test-mount.ts";
 import SourceAnnotationCard from "./SourceAnnotationCard.svelte";
 
 // SourceAnnotationCard is the collapsible inline card for the source-view
-// surface. Component units cover its collapsed/expanded render, the focus/edit/
-// delete callback wiring, and the rule that the collapse state is UI-only (it
-// never reaches a callback). Positioning, scroll-sync, and the gutter marker are
-// exercised by DiffPlanView units + e2e.
+// surface. Component units cover its collapsed/expanded render, the saved comment
+// rendered as markdown, the focus/edit/delete callback wiring, and the rule that
+// the collapse state is UI-only (it never reaches a callback). Positioning,
+// scroll-sync, and the gutter marker are exercised by DiffPlanView units + e2e.
 
 const annotation: LineAnnotation = { id: "a1", startLine: 3, endLine: 5, comment: "needs work" };
 
 function click(root: ParentNode, selector: string): void {
   (root.querySelector(selector) as HTMLElement).click();
+}
+
+// Set the CodeMirror editor's text the way a keystroke would (real typing is
+// e2e). findFromDOM returns the live view; dispatching a change fires its update
+// listener, so the host's onInput — and thus the edit draft — updates exactly as
+// in the browser.
+function setEditorText(root: ParentNode, text: string): void {
+  const view = EditorView.findFromDOM(root.querySelector(".cm-editor") as HTMLElement);
+  view?.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
+}
+
+function chord(root: ParentNode, key: string, mods: Partial<KeyboardEventInit> = {}): void {
+  (root.querySelector(".cm-content") as HTMLElement).dispatchEvent(
+    new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...mods }),
+  );
 }
 
 function base(over: Record<string, unknown> = {}) {
@@ -37,7 +53,7 @@ describe("SourceAnnotationCard collapse", () => {
   test("renders expanded when focused", () => {
     const { target } = render(SourceAnnotationCard, base({ focused: true }));
     expect(target.querySelector(".body")).not.toBeNull();
-    expect(target.querySelector(".comment")?.textContent).toBe("needs work");
+    expect(target.querySelector(".comment")?.textContent?.trim()).toBe("needs work");
   });
 
   test("clicking the collapsed chip expands the card without persisting", () => {
@@ -49,8 +65,6 @@ describe("SourceAnnotationCard collapse", () => {
     );
     click(target, ".chip");
     flush();
-    // Clicking focuses (so the parent can drive the single-focus model) but never
-    // routes the collapse toggle through a persistence callback.
     expect(focused.last()).toBe("a1");
     expect(edited).toBe(false);
     expect(target.querySelector(".body")).not.toBeNull();
@@ -70,6 +84,32 @@ describe("SourceAnnotationCard collapse", () => {
   });
 });
 
+describe("SourceAnnotationCard rendered comment", () => {
+  test("renders the saved comment as formatted markdown", () => {
+    const md: LineAnnotation = {
+      id: "m",
+      startLine: 1,
+      endLine: 1,
+      comment: "use `please` and **stop**",
+    };
+    const { target } = render(SourceAnnotationCard, base({ annotation: md, focused: true }));
+    const comment = target.querySelector(".comment");
+    expect(comment?.querySelector("code")?.textContent).toBe("please");
+    expect(comment?.querySelector("strong")?.textContent).toBe("stop");
+  });
+
+  test("does not execute embedded HTML (sanitized)", () => {
+    const evil: LineAnnotation = {
+      id: "x",
+      startLine: 1,
+      endLine: 1,
+      comment: "hi <script>alert(1)</script>",
+    };
+    const { target } = render(SourceAnnotationCard, base({ annotation: evil, focused: true }));
+    expect(target.querySelector(".comment script")).toBeNull();
+  });
+});
+
 describe("SourceAnnotationCard label", () => {
   test("a single line shows 'Line N'", () => {
     const single: LineAnnotation = { id: "s", startLine: 7, endLine: 7, comment: "x" };
@@ -84,10 +124,6 @@ describe("SourceAnnotationCard label", () => {
 });
 
 describe("SourceAnnotationCard state indicator", () => {
-  // The per-comment state affordance is driven by the annotation's optional `state`
-  // (a ReviewStatus). The card maps it to a labeled dot shown in both the collapsed
-  // chip and the expanded header; an absent state reads as a pending working draft.
-
   function stated(state: LineAnnotation["state"], over: Record<string, unknown> = {}) {
     return base({ annotation: { ...annotation, state }, ...over });
   }
@@ -146,8 +182,6 @@ describe("SourceAnnotationCard focus + position", () => {
   });
 
   test("renders inline (no absolute positioning hook)", () => {
-    // The card sits in the source view's annotation row, not as an overlay, so it
-    // carries no inline top/position style — the parent projects it into the slot.
     const { target } = render(SourceAnnotationCard, base());
     const style = target.querySelector(".card")?.getAttribute("style");
     expect(style == null || !/top:|position\s*:/.test(style)).toBe(true);
@@ -172,11 +206,12 @@ describe("SourceAnnotationCard edit/delete", () => {
     expect(focused).toBe(false);
   });
 
-  test("edit opens a textarea seeded with the current comment", () => {
+  test("edit opens the editor seeded with the current comment", () => {
     const { target, flush } = render(SourceAnnotationCard, base({ focused: true }));
     click(target, ".edit");
     flush();
-    expect((target.querySelector("textarea") as HTMLTextAreaElement).value).toBe("needs work");
+    expect(target.querySelector("textarea")).toBeNull();
+    expect(target.querySelector(".cm-content")?.textContent).toContain("needs work");
   });
 
   test("saves a changed, non-empty comment on Cmd/Ctrl+Enter", () => {
@@ -187,12 +222,39 @@ describe("SourceAnnotationCard edit/delete", () => {
     );
     click(target, ".edit");
     flush();
-    const ta = target.querySelector("textarea") as HTMLTextAreaElement;
-    ta.value = "revised";
-    ta.dispatchEvent(new Event("input", { bubbles: true }));
-    ta.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }));
+    setEditorText(target, "revised");
+    chord(target, "Enter", { metaKey: true });
     flush();
     expect(edited.last()).toEqual({ id: "a1", comment: "revised" });
+  });
+
+  test("the save button commits a changed comment", () => {
+    const edited = capture<{ id: string; comment: string }>();
+    const { target, flush } = render(
+      SourceAnnotationCard,
+      base({ focused: true, onEdit: (id: string, comment: string) => edited.cb({ id, comment }) }),
+    );
+    click(target, ".edit");
+    flush();
+    setEditorText(target, "via button");
+    click(target, ".save");
+    flush();
+    expect(edited.last()).toEqual({ id: "a1", comment: "via button" });
+  });
+
+  test("the cancel button discards the edit without saving", () => {
+    let called = false;
+    const { target, flush } = render(
+      SourceAnnotationCard,
+      base({ focused: true, onEdit: () => (called = true) }),
+    );
+    click(target, ".edit");
+    flush();
+    setEditorText(target, "discard me");
+    click(target, ".cancel");
+    flush();
+    expect(called).toBe(false);
+    expect(target.querySelector(".cm-content")).toBeNull();
   });
 
   test("does NOT save an unchanged comment", () => {
@@ -203,10 +265,7 @@ describe("SourceAnnotationCard edit/delete", () => {
     );
     click(target, ".edit");
     flush();
-    const ta = target.querySelector("textarea") as HTMLTextAreaElement;
-    ta.value = "needs work";
-    ta.dispatchEvent(new Event("input", { bubbles: true }));
-    ta.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }));
+    chord(target, "Enter", { metaKey: true });
     flush();
     expect(called).toBe(false);
   });
@@ -219,12 +278,10 @@ describe("SourceAnnotationCard edit/delete", () => {
     );
     click(target, ".edit");
     flush();
-    const ta = target.querySelector("textarea") as HTMLTextAreaElement;
-    ta.value = "discarded";
-    ta.dispatchEvent(new Event("input", { bubbles: true }));
-    ta.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    setEditorText(target, "discarded");
+    chord(target, "Escape");
     flush();
     expect(called).toBe(false);
-    expect(target.querySelector("textarea")).toBeNull();
+    expect(target.querySelector(".cm-content")).toBeNull();
   });
 });
