@@ -16,6 +16,6 @@
     // ui unit suite's imports identically (EXC-507).
     "paths": { "@core/*": ["./src/*"] }
   },
-  "include": ["src/**/*.ts", "scripts/**/*.ts", "test/**/*.ts", "*.ts"],
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "test/**/*.ts", "opencode/**/*.ts", "*.ts"],
   "exclude": ["node_modules", "bin", "ui", "spike"]
 }
