@@ -41,27 +41,29 @@ const CARET_OVERRIDES = `
     outline-offset: 2px;
   }
 
-  /* EXC-645: round the drag-to-comment selection block's outer corners to match
-     the composer box (--radius-lg). The amber selection is the library's per-cell
-     [data-selected-line] highlight. The view is a two-column grid: line-number
-     cells stack inside [data-gutter] and content/annotation cells inside
-     [data-content], so the block's left corners are the first/last selected child
-     of the gutter column and its right corners are the first/last selected child
-     of the content column. :not(~) finds the first selected child, :not(:has(~))
-     the last — each scoped to its column and tolerant of any non-selected sibling
-     between. The fill is background-color, which clips to border-radius, so no
-     overflow is needed; the composer's annotation row is the last selected child
-     in both columns, so the bottom corners round below the open composer. */
-  [data-gutter] > [data-selected-line]:not([data-selected-line] ~ [data-selected-line]) {
-    border-top-left-radius: var(--radius-lg);
-  }
-  [data-gutter] > [data-selected-line]:not(:has(~ [data-selected-line])) {
-    border-bottom-left-radius: var(--radius-lg);
-  }
+  /* EXC-645: round the drag-to-comment selection's corners to match the composer
+     box (--radius-lg). The amber selection is the library's per-cell
+     [data-selected-line] highlight. The view is a two-column grid — line-number
+     cells stack inside [data-gutter], content/annotation cells inside
+     [data-content] — and [data-content]'s padding-inline-start leaves a gap
+     between the columns, so each column's selected run is its OWN standalone amber
+     rectangle (not one block spanning both). Each therefore rounds all four
+     corners: :not(~) selects a column's first selected child (top corners),
+     :not(:has(~)) its last (bottom corners), each scoped to its column and
+     tolerant of any non-selected sibling between. Both columns matter because with
+     line numbers off the gutter collapses to zero width, leaving the content block
+     as the only visible rectangle — so its left corners must round too. The fill
+     is background-color, which clips to border-radius (no overflow needed); the
+     composer's annotation row is the last selected child in both columns, so the
+     bottom corners round below the open composer. */
+  [data-gutter] > [data-selected-line]:not([data-selected-line] ~ [data-selected-line]),
   [data-content] > [data-selected-line]:not([data-selected-line] ~ [data-selected-line]) {
+    border-top-left-radius: var(--radius-lg);
     border-top-right-radius: var(--radius-lg);
   }
+  [data-gutter] > [data-selected-line]:not(:has(~ [data-selected-line])),
   [data-content] > [data-selected-line]:not(:has(~ [data-selected-line])) {
+    border-bottom-left-radius: var(--radius-lg);
     border-bottom-right-radius: var(--radius-lg);
   }
 `;
