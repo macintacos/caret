@@ -59,61 +59,64 @@ export async function finalize(deps: Deps, opts: { dryRun: boolean }): Promise<F
   const title = composeReleaseTitle(version, section?.heading.title ?? null);
   const notes = section?.notes ?? "";
 
-  // Resume: a release already exists.
+  // Resolve the GitHub release: reuse an existing one, preview it in a dry run,
+  // or tag + create it. Unlike before, an existing release no longer returns
+  // early — finalize falls through to the npm publish below, so a re-run after
+  // a release-created-but-npm-publish-failed partial failure still completes.
   const existing = await deps.github.releaseView(tag);
+  let releaseUrl: string | null;
   if (existing !== null) {
-    deps.io.log(`Release ${tag} already exists; nothing to do.`);
-    return {
-      phase: "finalize",
-      version,
-      tag,
-      title,
-      taggedSha: trunkSha,
-      releaseUrl: existing.url,
-      dryRun: opts.dryRun,
-    };
-  }
-
-  if (opts.dryRun) {
+    deps.io.log(`Release ${tag} already exists; reusing it.`);
+    releaseUrl = existing.url;
+  } else if (opts.dryRun) {
     deps.io.log(`Would tag ${trunkSha} as ${tag}, push it, and create "${title}".`);
-    return {
-      phase: "finalize",
-      version,
-      tag,
-      title,
-      taggedSha: trunkSha,
-      releaseUrl: null,
-      dryRun: true,
-    };
-  }
-
-  // Tag trunk's merged HEAD (resume-aware; never move an existing tag).
-  if (!(await deps.git.remoteTagExists(tag))) {
-    if (!(await deps.git.localTagExists(tag))) {
-      await deps.git.createAnnotatedTag(tag, trunkSha, title);
-    } else {
-      // Dereference to the commit: an annotated tag's own object SHA differs
-      // from the commit it points at.
-      const localTagSha = await deps.git.tryRevParse(`${tag}^{commit}`);
-      if (localTagSha !== null && localTagSha !== trunkSha) {
-        throw new GuardError(
-          "TAG_EXISTS",
-          `Local tag ${tag} points at ${localTagSha}, not ${trunkSha}.`,
-        );
+    releaseUrl = null;
+  } else {
+    // Tag trunk's merged HEAD (resume-aware; never move an existing tag).
+    if (!(await deps.git.remoteTagExists(tag))) {
+      if (!(await deps.git.localTagExists(tag))) {
+        await deps.git.createAnnotatedTag(tag, trunkSha, title);
+      } else {
+        // Dereference to the commit: an annotated tag's own object SHA differs
+        // from the commit it points at.
+        const localTagSha = await deps.git.tryRevParse(`${tag}^{commit}`);
+        if (localTagSha !== null && localTagSha !== trunkSha) {
+          throw new GuardError(
+            "TAG_EXISTS",
+            `Local tag ${tag} points at ${localTagSha}, not ${trunkSha}.`,
+          );
+        }
       }
+      await deps.git.pushTag(tag);
     }
-    await deps.git.pushTag(tag);
+    const release = await deps.github.releaseCreate({ tag, title, notes });
+    deps.io.log(`Created release ${tag}.`);
+    releaseUrl = release.url;
   }
 
-  const release = await deps.github.releaseCreate({ tag, title, notes });
-  deps.io.log(`Created release ${tag}.`);
+  // Publish the run-from-source bundle to npm so the marketplace's npm source
+  // (`/plugin marketplace add macintacos/caret`) resolves this version (EXC-643).
+  // Resume-aware: skip if already on the registry (npm rejects republishing a
+  // version); a dry run builds + validates the pack without uploading.
+  let npmPublished = false;
+  if (await deps.npm.isVersionPublished(version)) {
+    deps.io.log(`npm package ${tag} is already published; skipping publish.`);
+  } else if (opts.dryRun) {
+    deps.io.log(`Would build the bundle and npm publish ${version}.`);
+  } else {
+    await deps.npm.publish({ dryRun: false });
+    deps.io.log(`Published ${version} to npm.`);
+    npmPublished = true;
+  }
+
   return {
     phase: "finalize",
     version,
     tag,
     title,
     taggedSha: trunkSha,
-    releaseUrl: release.url,
-    dryRun: false,
+    releaseUrl,
+    npmPublished,
+    dryRun: opts.dryRun,
   };
 }

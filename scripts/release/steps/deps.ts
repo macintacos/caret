@@ -4,6 +4,7 @@
 
 import type { GitOps } from "../git.ts";
 import type { GitHubOps } from "../github.ts";
+import type { NpmOps } from "../npm.ts";
 
 /** Read/write/exists over the working tree; injected for testability. */
 export interface FsOps {
@@ -20,6 +21,7 @@ export interface Io {
 export interface Deps {
   git: GitOps;
   github: GitHubOps;
+  npm: NpmOps;
   fs: FsOps;
   io: Io;
   /** Clock seam: the current instant, injected so `compute`'s date is testable. */

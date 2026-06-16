@@ -7,6 +7,7 @@
 // and the per-step test files consume it.
 import type { GitOps, RawCommit } from "../../scripts/release/git.ts";
 import type { GitHubOps, PullRequestSummary } from "../../scripts/release/github.ts";
+import type { NpmOps } from "../../scripts/release/npm.ts";
 import type { Deps, FsOps } from "../../scripts/release/steps.ts";
 
 /** A package.json / plugin.json body carrying just the version field tests assert on. */
@@ -58,6 +59,11 @@ export interface GitHubOptions {
   available?: boolean;
 }
 
+/** Controls for the npm fake — which versions are already on the registry. */
+export interface NpmOptions {
+  npmPublishedVersions?: string[];
+}
+
 /** Controls for the working-tree, preflight, and clock seams. */
 export interface IoOptions {
   files?: Record<string, string>;
@@ -67,7 +73,7 @@ export interface IoOptions {
   now?: string;
 }
 
-export type HarnessOptions = GitOptions & GitHubOptions & IoOptions;
+export type HarnessOptions = GitOptions & GitHubOptions & NpmOptions & IoOptions;
 
 /** The fake git/fs mutable world a harness exposes for assertions. */
 interface HarnessState {
@@ -247,9 +253,21 @@ export function makeReleaseHarness(opts: HarnessOptions = {}): ReleaseHarness {
     },
   };
 
+  const npmPublishedVersions = new Set(opts.npmPublishedVersions ?? []);
+  const npm: NpmOps = {
+    async isVersionPublished(version) {
+      return npmPublishedVersions.has(version);
+    },
+    async publish({ dryRun }) {
+      calls.push(`npmPublish:${dryRun ? "dry" : "real"}`);
+      npmPublishedVersions.add("__published__");
+    },
+  };
+
   const deps: Deps = {
     git,
     github,
+    npm,
     fs,
     io: { log: () => {} },
     now: () => new Date(opts.now ?? "2026-06-02T00:00:00Z"),
