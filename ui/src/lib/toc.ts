@@ -82,3 +82,44 @@ export function filterHeadings(headings: TocHeading[], query: string): TocHeadin
   if (needle === "") return headings;
   return headings.filter((h) => h.text.toLowerCase().includes(needle));
 }
+
+// Lowercase the text and collapse runs of non-alphanumerics (unicode-aware) to a
+// single hyphen, trimming hyphens off the ends. A heading with no alphanumerics
+// (e.g. a rule of dashes) yields the empty string, which falls back to "section"
+// so the slug — and the URL it lands in — is never blank.
+function slugify(text: string): string {
+  const slug = text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug === "" ? "section" : slug;
+}
+
+// Slugs for every heading, in document order and aligned by index. Repeated text
+// (and symbol-only fallbacks) collide on the same base slug, so the Nth occurrence
+// after the first earns a `-N` suffix — GitHub-style — keeping every slug unique
+// and stable for a given heading set. The single owner of the slug↔heading mapping
+// the two resolvers below share.
+function headingSlugs(headings: TocHeading[]): string[] {
+  const seen = new Map<string, number>();
+  return headings.map((h) => {
+    const base = slugify(h.text);
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return n === 0 ? base : `${base}-${n}`;
+  });
+}
+
+/** The slug of the heading on 1-based source `line`, or null when no heading sits
+ * there. Used to mirror the active heading into the URL. */
+export function slugForLine(headings: TocHeading[], line: number): string | null {
+  const i = headings.findIndex((h) => h.line === line);
+  return i === -1 ? null : (headingSlugs(headings)[i] ?? null);
+}
+
+/** The 1-based source line of the heading whose slug is `slug`, or null when no
+ * heading matches (an unknown or stale deep-link). Inverse of slugForLine. */
+export function lineForSlug(headings: TocHeading[], slug: string): number | null {
+  const i = headingSlugs(headings).indexOf(slug);
+  return i === -1 ? null : (headings[i]?.line ?? null);
+}

@@ -46,12 +46,13 @@
     writeOverflow,
   } from "../lib/diffReaderPref.ts";
   import { type CompareStore, createCompare } from "../state/compare.svelte.ts";
-  import { setHeadingLine, takeHeadingLine } from "../state/headingLink.ts";
+  import { setHeadingSlug, takeHeadingSlug } from "../state/headingLink.ts";
   import VersionComparePicker from "./VersionComparePicker.svelte";
   import ReaderAffordances from "./ReaderAffordances.svelte";
   import type { SourceViewGutter } from "../lib/diffview/options.ts";
   import type { SourceViewApi, SourceViewOptions } from "../lib/diffview/types.ts";
-  import { activeHeadingLine, extractHeadings } from "../lib/toc.ts";
+  import { activeHeadingLine, extractHeadings, lineForSlug, slugForLine } from "../lib/toc.ts";
+  import { lineAtReadingZone } from "../lib/diffview/scroll.ts";
   import {
     type Annotation,
     type ClientReview,
@@ -213,21 +214,33 @@
   let api = $state<SourceViewApi | undefined>();
   const host = $derived(api?.host);
 
-  // Gates the live `?line=` mirror until the deep-link restore has consumed any
-  // incoming `?line=`. Without it, the mirror effect (activeLine starts null)
+  // Gates the live `?heading=` mirror until the deep-link restore has consumed any
+  // incoming `?heading=`. Without it, the mirror effect (activeLine starts null)
   // could clear the param before onSourceReady reads it, depending on which
   // post-mount effect runs first.
   let restored = $state(false);
 
   // Captures the imperative API and, on the first ready, restores a deep-linked
-  // heading (`?line=`) by scrolling to it once. takeHeadingLine() clears the
-  // param, so a later SourceView remount (a version switch) won't re-jump — the
-  // live `?line=` mirror takes over from there. The scroll waits a frame so the
-  // library's `data-line` rows are painted before the lookup runs.
+  // heading (`?heading=<slug>`) by resolving the slug to its source line and
+  // scrolling to it once. takeHeadingSlug() clears the param, so a later SourceView
+  // remount (a version switch) won't re-jump — the live `?heading=` mirror takes
+  // over from there. An unknown or stale slug resolves to null and is a no-op.
   function onSourceReady(a: SourceViewApi) {
     api = a;
-    const line = takeHeadingLine();
-    if (line != null) requestAnimationFrame(() => a.scrollToLine(line));
+    const slug = takeHeadingSlug();
+    const line = slug != null ? lineForSlug(headings, slug) : null;
+    if (line != null) {
+      // The library paints its data-line rows asynchronously after the container is
+      // ready, so the target row may not exist on the first frame. Retry across a
+      // bounded number of frames until scrollToLine finds the row (it returns true),
+      // so a deep link lands even on a long, highlight-heavy plan.
+      let tries = 0;
+      const restoreScroll = () => {
+        if (a.scrollToLine(line) || ++tries >= 30) return;
+        requestAnimationFrame(restoreScroll);
+      };
+      requestAnimationFrame(restoreScroll);
+    }
     restored = true;
   }
 
@@ -239,23 +252,29 @@
   // read the topmost visible line.
   let scrollEl = $state<HTMLElement | undefined>();
 
-  // Recompute the active heading from the view's topmost visible source line,
-  // throttled with rAF so a scroll burst settles into one read. The view paints
-  // each line as <div data-line="N"> in a shadow root; the first row whose
-  // bottom sits below the container's top edge is the top visible line.
+  // Recompute the active heading from the source line at the top of the reading
+  // zone, throttled with rAF so a scroll burst settles into one read. The view
+  // paints each line as <div data-line="N"> in a shadow root; lineAtReadingZone
+  // picks the line sitting at the same offset jumps park headings at, so the
+  // tracked section matches where a ToC click lands rather than the row above it.
   function topVisibleLine(): number | null {
     const rows = scrollEl?.querySelector(".diffview")?.shadowRoot?.querySelectorAll<HTMLElement>(
       "[data-line]",
     );
     if (rows == null || rows.length === 0) return null;
+    // Capture the narrowed value: the generator closure below doesn't inherit TS's
+    // non-null narrowing of `rows`.
+    const measured = rows;
     const top = scrollEl!.getBoundingClientRect().top;
-    for (const row of rows) {
-      if (row.getBoundingClientRect().bottom > top) {
-        const n = Number(row.getAttribute("data-line"));
-        return Number.isFinite(n) ? n : null;
+    // Measure rows lazily: lineAtReadingZone stops at the first row in the zone, so
+    // only those rows pay for a getBoundingClientRect read rather than every line.
+    function* geom() {
+      for (const row of measured) {
+        const line = Number(row.getAttribute("data-line"));
+        if (Number.isFinite(line)) yield { line, bottom: row.getBoundingClientRect().bottom };
       }
     }
-    return null;
+    return lineAtReadingZone(geom(), top);
   }
 
   $effect(() => {
@@ -280,13 +299,14 @@
     };
   });
 
-  // Mirror the active heading line into `?line=` so a copied URL reopens the
+  // Mirror the active heading's slug into `?heading=` so a copied URL reopens the
   // review at the section being read (composing with deepLink.ts's `?review=`).
   // Compare mode has no ToC and no tracked heading, so the param clears there.
-  // Held until restore consumes any incoming `?line=` (see `restored`).
+  // Held until restore consumes any incoming `?heading=` (see `restored`).
   $effect(() => {
     if (!restored) return;
-    setHeadingLine(showDiff ? null : activeLine);
+    const slug = activeLine != null ? slugForLine(headings, activeLine) : null;
+    setHeadingSlug(showDiff ? null : slug);
   });
 
   // Reactive mirror of the controller's pending target, so the composer renders

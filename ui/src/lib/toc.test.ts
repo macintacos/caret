@@ -3,7 +3,9 @@ import {
   activeHeadingLine,
   extractHeadings,
   filterHeadings,
+  lineForSlug,
   shouldShowToc,
+  slugForLine,
   type TocHeading,
 } from "./toc.ts";
 
@@ -133,5 +135,42 @@ describe("filterHeadings", () => {
 
   test("returns an empty list when nothing matches", () => {
     expect(filterHeadings(headings, "zzz")).toEqual([]);
+  });
+});
+
+describe("header slugs", () => {
+  test("slugForLine derives a readable slug from the heading text", () => {
+    const headings = extractHeadings("# Tables\n## Code blocks\n");
+    expect(slugForLine(headings, 1)).toBe("tables");
+    expect(slugForLine(headings, 2)).toBe("code-blocks");
+  });
+
+  test("de-duplicates repeated heading text with a numeric suffix", () => {
+    const headings = extractHeadings("# Revision\n# Revision\n# Revision\n");
+    expect(slugForLine(headings, 1)).toBe("revision");
+    expect(slugForLine(headings, 2)).toBe("revision-1");
+    expect(slugForLine(headings, 3)).toBe("revision-2");
+  });
+
+  test("collapses punctuation and falls back for symbol-only headings", () => {
+    const headings = extractHeadings("# Overflow & edge cases\n# ---\n# !!!\n");
+    expect(slugForLine(headings, 1)).toBe("overflow-edge-cases");
+    expect(slugForLine(headings, 2)).toBe("section");
+    expect(slugForLine(headings, 3)).toBe("section-1");
+  });
+
+  test("lineForSlug round-trips with slugForLine", () => {
+    const headings = extractHeadings("# Tables\n## Code blocks\n# Tables\n");
+    for (const h of headings) {
+      const slug = slugForLine(headings, h.line);
+      expect(slug).not.toBeNull();
+      expect(lineForSlug(headings, slug as string)).toBe(h.line);
+    }
+  });
+
+  test("returns null for an unknown line or slug", () => {
+    const headings = extractHeadings("# Tables\n## Code blocks\n");
+    expect(slugForLine(headings, 999)).toBeNull();
+    expect(lineForSlug(headings, "does-not-exist")).toBeNull();
   });
 });

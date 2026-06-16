@@ -1,10 +1,10 @@
 import "../../test-setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { headingLine, setHeadingLine, takeHeadingLine } from "./headingLink.ts";
+import { headingSlug, setHeadingSlug, takeHeadingSlug } from "./headingLink.ts";
 
 // Set the URL's query params directly. happy-dom's base is about:blank and
 // rejects a bare relative path, so build the href off the current location
-// (the same shape setHeadingLine writes).
+// (the same shape setHeadingSlug writes).
 function setParams(params: Record<string, string | null>) {
   const url = new URL(location.href);
   for (const [key, value] of Object.entries(params)) {
@@ -15,81 +15,76 @@ function setParams(params: Record<string, string | null>) {
 }
 
 function clearUrl() {
-  setParams({ review: null, line: null });
+  setParams({ review: null, heading: null });
 }
 
 beforeEach(clearUrl);
 afterEach(clearUrl);
 
-describe("headingLine", () => {
-  test("returns the 1-based line from the `line` param", () => {
-    setParams({ line: "42" });
-    expect(headingLine()).toBe(42);
+describe("headingSlug", () => {
+  test("returns the slug from the `heading` param", () => {
+    setParams({ heading: "tables" });
+    expect(headingSlug()).toBe("tables");
   });
 
-  test("returns null when no `line` param is set", () => {
-    expect(headingLine()).toBe(null);
+  test("returns null when no `heading` param is set", () => {
+    expect(headingSlug()).toBe(null);
   });
 
-  test("rejects non-finite, zero, and negative values", () => {
-    for (const bad of ["0", "-3", "abc", "1.5e", ""]) {
-      setParams({ line: bad });
-      expect(headingLine()).toBe(null);
+  test("treats an empty or whitespace-only value as absent", () => {
+    for (const blank of ["", "   "]) {
+      setParams({ heading: blank });
+      expect(headingSlug()).toBe(null);
     }
   });
-
-  test("floors a fractional value to a whole source line", () => {
-    setParams({ line: "12.9" });
-    expect(headingLine()).toBe(12);
-  });
 });
 
-describe("setHeadingLine", () => {
-  test("writes the line param", () => {
-    setHeadingLine(7);
-    expect(new URLSearchParams(location.search).get("line")).toBe("7");
+describe("setHeadingSlug", () => {
+  test("writes the heading param", () => {
+    setHeadingSlug("code-blocks");
+    expect(new URLSearchParams(location.search).get("heading")).toBe("code-blocks");
   });
 
-  test("deletes the line param on null", () => {
-    setParams({ line: "7" });
-    setHeadingLine(null);
-    expect(new URLSearchParams(location.search).get("line")).toBe(null);
+  test("deletes the heading param on null", () => {
+    setParams({ heading: "tables" });
+    setHeadingSlug(null);
+    expect(new URLSearchParams(location.search).get("heading")).toBe(null);
   });
 
-  test("preserves the review param alongside line", () => {
+  test("preserves the review param alongside heading", () => {
     setParams({ review: "abc" });
-    setHeadingLine(9);
+    setHeadingSlug("tables");
     const search = new URLSearchParams(location.search);
     expect(search.get("review")).toBe("abc");
-    expect(search.get("line")).toBe("9");
+    expect(search.get("heading")).toBe("tables");
   });
 
-  test("does not write a line for a non-positive value (treated as cleared)", () => {
-    setParams({ line: "5" });
-    setHeadingLine(0);
-    expect(new URLSearchParams(location.search).get("line")).toBe(null);
+  test("clears the param for a blank slug", () => {
+    setParams({ heading: "tables" });
+    setHeadingSlug("   ");
+    expect(new URLSearchParams(location.search).get("heading")).toBe(null);
   });
 });
 
-describe("takeHeadingLine", () => {
-  test("reads the line once and clears the param", () => {
-    setParams({ line: "15" });
-    expect(takeHeadingLine()).toBe(15);
-    expect(new URLSearchParams(location.search).get("line")).toBe(null);
+describe("takeHeadingSlug", () => {
+  test("reads the slug once and clears the param", () => {
+    setParams({ heading: "tables" });
+    expect(takeHeadingSlug()).toBe("tables");
+    expect(new URLSearchParams(location.search).get("heading")).toBe(null);
     // A second take after consumption yields null.
-    expect(takeHeadingLine()).toBe(null);
+    expect(takeHeadingSlug()).toBe(null);
   });
 
-  test("clearing the line preserves the review param", () => {
-    setParams({ review: "abc", line: "15" });
-    expect(takeHeadingLine()).toBe(15);
+  test("clearing the slug preserves the review param", () => {
+    setParams({ review: "abc", heading: "tables" });
+    expect(takeHeadingSlug()).toBe("tables");
     expect(new URLSearchParams(location.search).get("review")).toBe("abc");
-    expect(new URLSearchParams(location.search).get("line")).toBe(null);
+    expect(new URLSearchParams(location.search).get("heading")).toBe(null);
   });
 
-  test("returns null and is a no-op when no line is present", () => {
+  test("returns null and is a no-op when no slug is present", () => {
     setParams({ review: "abc" });
-    expect(takeHeadingLine()).toBe(null);
+    expect(takeHeadingSlug()).toBe(null);
     expect(new URLSearchParams(location.search).get("review")).toBe("abc");
   });
 });
