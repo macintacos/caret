@@ -1,6 +1,6 @@
 ---
 name: release-caret
-description: Cut a caret release. Computes the next version with the deterministic release script, confirms it, authors the keepachangelog CHANGELOG entry under a themed release name, then drives the two-phase script flow — phase 1 opens a PR with the version bump + changelog; after merge, phase 2 tags trunk and publishes the GitHub Release. Triggers on "/release-caret", "release caret", "cut a caret release", "ship a caret version".
+description: Cut a caret release. Computes the next version with the deterministic release script, confirms it, authors the keepachangelog CHANGELOG entry under a themed release name, then drives the two-phase script flow — phase 1 opens a PR with the version bump + changelog; after merge, phase 2 tags trunk, publishes the GitHub Release, and publishes the plugin to npm. Triggers on "/release-caret", "release caret", "cut a caret release", "ship a caret version".
 argument-hint: "[patch|minor|major] [dry run]"
 ---
 
@@ -182,12 +182,22 @@ finalizing from a **fresh session**.
 
 ---
 
-## Phase 2 — tag and publish
+## Phase 2 — tag, publish, and ship to npm
 
 `finalize` tags `origin/trunk`'s merged HEAD after an unconditional fetch, so it runs from
 **any** branch — including the `release/<tag>` branch Phase 1 leaves you on. You don't
 need to switch back to trunk first. The publish-safety gates are a clean working tree and
 the `NOT_MERGED` check that the bump is actually on trunk, not the working branch.
+
+After tagging and creating the GitHub Release, `finalize` builds the run-from-source
+bundle and **publishes the plugin to npm** (`@macintacos/caret`), because the
+marketplace's plugin source is an npm source — that publish is what makes
+`/plugin marketplace add macintacos/caret` resolve the new version (EXC-643). The npm step
+is resume-aware: it is skipped when the version is already on the registry, so a re-run
+after a partial failure completes cleanly. It needs the operator's existing `npm` auth
+(e.g. `~/.npmrc` with publish rights to the `@macintacos` scope); if publish fails on
+auth, set that up and re-run `finalize` — it reuses the existing tag/release and retries
+only the publish.
 
 ### 1. Preview the finalize
 
@@ -196,14 +206,16 @@ bun scripts/release/cli.ts finalize --dry-run
 ```
 
 This fetches `origin/trunk` and returns the concrete `version`, `tag`, `title`, and
-`taggedSha` (trunk's merged HEAD) without mutating anything. If it instead returns
-`ok: false` with `NOT_MERGED`, the bump isn't on `origin/trunk` yet — tell the user to
-merge the Phase 1 PR (and pull trunk) first, then stop.
+`taggedSha` (trunk's merged HEAD), and previews the npm publish, without mutating
+anything. If it instead returns `ok: false` with `NOT_MERGED`, the bump isn't on
+`origin/trunk` yet — tell the user to merge the Phase 1 PR (and pull trunk) first, then
+stop.
 
 ### 2. Confirm the remote mutation (AskUserQuestion)
 
 > **Tag and publish `<title>`?** This tags trunk's merged HEAD (`<taggedSha>`) as `<tag>`,
-> pushes the tag, and creates the GitHub Release from the `[<version>]` changelog section.
+> pushes the tag, creates the GitHub Release from the `[<version>]` changelog section, and
+> publishes `@macintacos/caret@<version>` to npm.
 >
 > - **Tag and publish** (Recommended)
 > - **Cancel**
@@ -215,7 +227,8 @@ bun scripts/release/cli.ts finalize --yes      # real
 bun scripts/release/cli.ts finalize --dry-run  # dry run
 ```
 
-Parse the result and report the `releaseUrl`. The release is live.
+Parse the result and report the `releaseUrl` and whether `npmPublished` is true. The
+release is live.
 
 ---
 

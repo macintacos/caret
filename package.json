@@ -1,10 +1,25 @@
 {
-  "name": "caret",
+  "name": "@macintacos/caret",
   "version": "0.0.5",
-  "private": true,
   "license": "MIT",
   "type": "module",
   "description": "A Claude Code plugin that replaces the terminal plan-approval prompt with a local web UI for inline review, annotation, and approval.",
+  "homepage": "https://github.com/macintacos/caret",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/macintacos/caret.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist/",
+    "ui/dist/",
+    "bin/caret",
+    "hooks/",
+    "commands/",
+    ".claude-plugin/plugin.json"
+  ],
   "scripts": {
     "test": "bun test --conditions browser",
     "lint": "mise run lint",

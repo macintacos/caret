@@ -5,6 +5,7 @@ import { join } from "node:path";
 import pkg from "../../package.json" with { type: "json" };
 import {
   buildHash,
+  buildKind,
   computeBuildId,
   IDENTITY,
   isCompiledBinary,
@@ -48,16 +49,28 @@ test("IDENTITY names the caret service at the current version", () => {
 
 // ---- isCompiledBinary: the one dev-vs-compiled signal ----
 
-test("isCompiledBinary reads the runtime kind off argv[1]'s extension", () => {
-  // The single heuristic daemonCommand / currentBuildId / discovery all key off:
-  // a `.ts` entry script means `bun run` dev; anything else is the compiled
-  // binary (process.execPath IS caret).
+test("buildKind classifies the runtime off argv[1]'s extension", () => {
+  // The signal daemonCommand / currentBuildId / isCompiledBinary key off: a
+  // `.ts` entry is `bun run` dev; a `.js` entry is the npm bundle (under bun);
+  // anything else is the self-contained compiled binary.
+  expect(buildKind("/some/path/src/cli.ts")).toBe("dev");
+  expect(buildKind("/cache/dist/cli.js")).toBe("bundle");
+  expect(buildKind("review")).toBe("binary"); // a subcommand, the compiled case
+  // (Passing undefined would trigger the process.argv[1] default, not a real
+  // undefined, so the "no argv" path is exercised via the compiled case above.)
+});
+
+test("isCompiledBinary is true for both compiled and bundle (production), false only in dev", () => {
+  // It gates production-vs-dev (dev settings, isDev, discovery label), so the
+  // npm bundle — production, though it runs under bun — must read as true.
   const saved = process.argv.slice();
   try {
     process.argv[1] = "/some/path/src/cli.ts";
-    expect(isCompiledBinary()).toBe(false);
+    expect(isCompiledBinary()).toBe(false); // dev
     process.argv[1] = "/usr/local/bin/caret";
-    expect(isCompiledBinary()).toBe(true);
+    expect(isCompiledBinary()).toBe(true); // compiled binary
+    process.argv[1] = "/cache/dist/cli.js";
+    expect(isCompiledBinary()).toBe(true); // npm bundle is production, not dev
   } finally {
     process.argv = saved;
   }
@@ -103,36 +116,45 @@ test("buildHash returns 'no-ui' when there is no UI (undefined or empty set)", a
 
 // ---- computeBuildId: any local rebuild supersedes a running daemon ----
 
-test("computeBuildId hashes the binary when running compiled (any rebuild wins)", async () => {
+test("computeBuildId hashes the file when running compiled (any rebuild wins)", async () => {
   const id = await computeBuildId({
-    isCompiled: true,
-    hashBinary: async () => "binhash123",
+    kind: "binary",
+    hashFile: async () => "binhash123",
     uiHash: async () => "uihash",
   });
   expect(id).toBe("binhash123");
 });
 
-test("computeBuildId falls back to the UI hash when the binary is unreadable", async () => {
+test("computeBuildId hashes the bundle script for the bun bundle (each release wins)", async () => {
   const id = await computeBuildId({
-    isCompiled: true,
-    hashBinary: async () => null,
+    kind: "bundle",
+    hashFile: async () => "bundlehash456",
+    uiHash: async () => "uihash",
+  });
+  expect(id).toBe("bundlehash456");
+});
+
+test("computeBuildId falls back to the UI hash when the build file is unreadable", async () => {
+  const id = await computeBuildId({
+    kind: "binary",
+    hashFile: async () => null,
     uiHash: async () => "uihash",
   });
   expect(id).toBe("uihash");
 });
 
-test("computeBuildId uses the UI hash in dev (not compiled, never reads the binary)", async () => {
-  let binaryReads = 0;
+test("computeBuildId uses the UI hash in dev (never reads the build file)", async () => {
+  let fileReads = 0;
   const id = await computeBuildId({
-    isCompiled: false,
-    hashBinary: async () => {
-      binaryReads++;
+    kind: "dev",
+    hashFile: async () => {
+      fileReads++;
       return "binhash";
     },
     uiHash: async () => "uihash",
   });
   expect(id).toBe("uihash");
-  expect(binaryReads).toBe(0);
+  expect(fileReads).toBe(0);
 });
 
 // ---- resolveCommit: the commit the daemon reports at startup ----

@@ -112,7 +112,7 @@ assert_absent "$fail_out" "Registering" "a failed build aborts before any regist
 #
 # build-bin is copied verbatim into the synthetic checkout so the real compile
 # flow runs (through stubs): the bun stub honors `build --compile … --outfile P`
-# by writing an executable P, so the post-build `[ -x bin/caret ]` guard passes.
+# by writing an executable P, so the post-build `[ -x bin/caret-native ]` guard passes.
 
 # Lay down a synthetic checkout + stub dir. Echoes "ROOT STUBS HOME LOG" so the
 # caller can capture the paths; the caller owns cleanup.
@@ -125,6 +125,7 @@ make_success_fixture() {
 
   mkdir -p "$root/scripts" "$root/.claude-plugin" "$root/.mise/tasks" "$root/ui/dist"
   cp "$script" "$root/scripts/install.sh"
+  cp "$test_dir/make-dev-marketplace.sh" "$root/scripts/make-dev-marketplace.sh"
   cp "$test_dir/../.mise/tasks/build-bin" "$root/.mise/tasks/build-bin"
   # marketplace.json's presence is the local-checkout signal; the ui/dist tree
   # is what build-bin's UI-fallback copy reads (`cp -R ui/dist bin/ui`).
@@ -184,7 +185,9 @@ STUB
 # Run the synthetic installer; echoes captured stdout+stderr, sets $? to its rc.
 run_success_installer() {
   local root="$1" stubs="$2" home="$3"
-  PATH="$stubs:$PATH" HOME="$home" NO_COLOR=1 "$bash_bin" "$root/scripts/install.sh" 2>&1
+  # Pin XDG_STATE_HOME under the stub HOME so the generated dev marketplace
+  # (make-dev-marketplace.sh) lands inside the fixture and is cleaned with it.
+  PATH="$stubs:$PATH" HOME="$home" XDG_STATE_HOME="$home/.local/state" NO_COLOR=1 "$bash_bin" "$root/scripts/install.sh" 2>&1
 }
 
 # Happy path: every tool succeeds.
@@ -205,8 +208,10 @@ assert_contains "$calls" "bun install" "success run installs build dependencies"
 assert_contains "$calls" "vite build" "success run builds the UI"
 assert_contains "$calls" "build --compile" "success run compiles the binary"
 
-# Register sequence. marketplace add succeeds, so the update fallback never runs.
-assert_contains "$calls" "claude plugin marketplace add $ROOT" "register adds the marketplace"
+# Register sequence. The local build registers the generated dev marketplace
+# (source symlinked to the checkout), not the checkout's own npm-sourced
+# manifest. marketplace add succeeds, so the update fallback never runs.
+assert_contains "$calls" "marketplace add $HOME_DIR/.local/state/caret/dev-marketplace" "register adds the generated dev marketplace"
 assert_absent "$calls" "marketplace update" "marketplace update is skipped when add succeeds"
 assert_contains "$calls" "claude plugin install caret@caret --scope user" "register installs the plugin"
 assert_contains "$calls" "claude plugin enable" "register enables the plugin"
@@ -267,21 +272,21 @@ rm -rf "$ROOT" "$STUBS" "$HOME_DIR"
 
 # --- --from-local: reuse the just-built artifacts, register, cycle the daemon ---
 # (EXC-555) `mise run build --install` calls `install.sh --from-local`, which
-# forces local mode, REUSES bin/caret + bin/ui (no rebuild), reinstalls the
-# plugin, and cycles the daemon via the just-built `caret prewarm`.
+# forces local mode, REUSES bin/caret-native + bin/ui (no rebuild), reinstalls
+# the plugin, and cycles the daemon via the just-built `caret prewarm`.
 
 # Pre-create the build artifacts --from-local reuses, in an existing fixture
-# ROOT. The bin/caret stub logs its argv to $LOG so we can assert the daemon
-# cycle ran `caret prewarm`; $exit_code lets a test make prewarm "fail".
+# ROOT. The bin/caret-native stub logs its argv to $LOG so we can assert the
+# daemon cycle ran `caret prewarm`; $exit_code lets a test make prewarm "fail".
 seed_local_artifacts() {
   local root="$1" log="$2" exit_code="${3:-0}"
   mkdir -p "$root/bin/ui"
-  cat >"$root/bin/caret" <<STUB
+  cat >"$root/bin/caret-native" <<STUB
 #!/usr/bin/env bash
 printf '%s\n' "caret \$*" >>"$log"
 exit $exit_code
 STUB
-  chmod +x "$root/bin/caret"
+  chmod +x "$root/bin/caret-native"
 }
 
 # Dry run --from-local: reuses artifacts, plans the daemon cycle, never rebuilds.
@@ -308,7 +313,7 @@ read -r ROOT STUBS HOME_DIR LOG < <(make_success_fixture)
 write_claude_stub "$STUBS" "$LOG"
 seed_local_artifacts "$ROOT" "$LOG"
 rc=0
-fl_real="$(PATH="$STUBS:$PATH" HOME="$HOME_DIR" NO_COLOR=1 "$bash_bin" "$ROOT/scripts/install.sh" --from-local 2>&1)" || rc=$?
+fl_real="$(PATH="$STUBS:$PATH" HOME="$HOME_DIR" XDG_STATE_HOME="$HOME_DIR/.local/state" NO_COLOR=1 "$bash_bin" "$ROOT/scripts/install.sh" --from-local 2>&1)" || rc=$?
 calls="$(cat "$LOG")"
 if [ "$rc" -eq 0 ]; then
   ok "--from-local real run exits 0"
@@ -335,7 +340,7 @@ read -r ROOT STUBS HOME_DIR LOG < <(make_success_fixture)
 write_claude_stub "$STUBS" "$LOG" "uninstall enable"
 seed_local_artifacts "$ROOT" "$LOG" 1
 rc=0
-PATH="$STUBS:$PATH" HOME="$HOME_DIR" NO_COLOR=1 "$bash_bin" "$ROOT/scripts/install.sh" --from-local >/dev/null 2>&1 || rc=$?
+PATH="$STUBS:$PATH" HOME="$HOME_DIR" XDG_STATE_HOME="$HOME_DIR/.local/state" NO_COLOR=1 "$bash_bin" "$ROOT/scripts/install.sh" --from-local >/dev/null 2>&1 || rc=$?
 if [ "$rc" -eq 0 ]; then
   ok "--from-local best-effort uninstall + daemon-cycle failures do not fail the install"
 else
@@ -345,7 +350,7 @@ assert_contains "$(cat "$LOG")" "caret prewarm" "--from-local still attempted th
 rm -rf "$ROOT" "$STUBS" "$HOME_DIR"
 
 # Missing artifacts: --from-local fails with a clear message instead of silently
-# rebuilding (no bin/caret + bin/ui seeded).
+# rebuilding (no bin/caret-native + bin/ui seeded).
 read -r ROOT STUBS HOME_DIR LOG < <(make_success_fixture)
 write_claude_stub "$STUBS" "$LOG"
 rc=0

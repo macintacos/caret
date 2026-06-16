@@ -15,9 +15,9 @@
 # var it survives the piped `curl … | CARET_DRY_RUN=1 bash`.
 #
 # Pass --from-local for the dev loop (what `mise run build --install` calls):
-# it forces local-checkout mode and REUSES the already-built bin/caret + bin/ui
-# instead of rebuilding, reinstalls the plugin, then prewarms so the fresh build
-# takes over the daemon via `caret prewarm`. The takeover retires a current-build
+# it forces local-checkout mode and REUSES the already-built bin/caret-native +
+# bin/ui instead of rebuilding, reinstalls the plugin, then prewarms so the fresh
+# build takes over the daemon via `caret prewarm`. The takeover retires a current-build
 # daemon; a long-running legacy daemon (no /api/retire, no lock) can't be retired
 # and keeps serving until it idle-exits — restart it manually (kill its pid) once
 # to migrate. Dev only — it mutates your Claude plugin state and daemon, so it is
@@ -191,7 +191,7 @@ print_plan() {
   if [ "$SRC_KIND" = "local" ]; then
     printf '%s│%s  Source   local checkout at %s\n' "$C_DIM" "$C_RESET" "$REPO_DIR"
     if [ "$FROM_LOCAL" -eq 1 ]; then
-      printf '%s│%s           reuse the freshly-built bin/caret + bin/ui (%s) — no rebuild, then prewarm the daemon\n' \
+      printf '%s│%s           reuse the freshly-built bin/caret-native + bin/ui (%s) — no rebuild, then prewarm the daemon\n' \
         "$C_DIM" "$C_RESET" "$REF_DESC"
     else
       printf '%s│%s           build the current ref (%s) in place — no tag lookup, no clone\n' \
@@ -315,8 +315,8 @@ if [ "$FROM_LOCAL" -eq 1 ]; then
   # Reuse mode (EXC-555): `mise run build` (build-bin) already produced the
   # artifacts; --from-local does NOT rebuild. Assert they exist rather than
   # silently rebuilding — a missing artifact is a misuse, not a fallback.
-  if [ "$DRY_RUN" -eq 0 ] && { [ ! -x bin/caret ] || [ ! -d bin/ui ]; }; then
-    err "--from-local needs the build artifacts bin/caret + bin/ui — run \`mise run build\` first"
+  if [ "$DRY_RUN" -eq 0 ] && { [ ! -x bin/caret-native ] || [ ! -d bin/ui ]; }; then
+    err "--from-local needs the build artifacts bin/caret-native + bin/ui — run \`mise run build\` first"
     exit 1
   fi
 else
@@ -332,20 +332,27 @@ else
   # build-ui above leaves ui/dist in place for it.
   run_long "Compiling the caret binary" bash .mise/tasks/build-bin
 
-  if [ "$DRY_RUN" -eq 0 ] && [ ! -x bin/caret ]; then
-    err "build did not produce bin/caret"
+  if [ "$DRY_RUN" -eq 0 ] && [ ! -x bin/caret-native ]; then
+    err "build did not produce bin/caret-native"
     exit 1
   fi
 fi
 
 # --- register ---------------------------------------------------------------
 section "Register"
-# Register caret's directory as a local marketplace (idempotent: add, else
-# update). The add's chatter — it prints an "already on disk" note to stdout
-# when the marketplace exists — is hidden so a re-run stays clean; a real
+# The committed .claude-plugin/marketplace.json now uses an npm source so the
+# public `/plugin marketplace add macintacos/caret` installs the published
+# package (EXC-643). A LOCAL build must install THIS checkout instead, so
+# generate a private dev marketplace whose plugin source symlinks to the
+# checkout (make-dev-marketplace.sh owns the generation so the whole step stays
+# one run()-tracked command in the dry-run plan), then register it (idempotent:
+# add, else update). The add's chatter — it prints an "already on disk" note to
+# stdout when the marketplace exists — is hidden so a re-run stays clean; a real
 # failure still aborts via the visible-stderr update fallback.
+DEV_MARKETPLACE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/caret/dev-marketplace"
 step "Registering the caret marketplace"
-run claude plugin marketplace add "$REPO_DIR" >/dev/null 2>&1 || run claude plugin marketplace update "$MARKETPLACE" >/dev/null
+run bash "$REPO_DIR/scripts/make-dev-marketplace.sh" "$REPO_DIR" "$DEV_MARKETPLACE_DIR"
+run claude plugin marketplace add "$DEV_MARKETPLACE_DIR" >/dev/null 2>&1 || run claude plugin marketplace update "$MARKETPLACE" >/dev/null
 ok
 
 # Reinstall so the freshly built binary always lands in the plugin cache, even
@@ -371,7 +378,7 @@ ok
 if [ "$FROM_LOCAL" -eq 1 ]; then
   section "Daemon"
   step "Prewarming the fresh build's daemon"
-  run ./bin/caret prewarm >/dev/null 2>&1 || true
+  run ./bin/caret-native prewarm >/dev/null 2>&1 || true
   ok
 fi
 

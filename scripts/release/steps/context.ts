@@ -50,6 +50,9 @@ export interface FinalizeResult {
   title: string;
   taggedSha: string;
   releaseUrl: string | null;
+  /** Whether this run published the package to npm (false on dry runs and when
+   * the version was already on the registry). */
+  npmPublished: boolean;
   dryRun: boolean;
 }
 

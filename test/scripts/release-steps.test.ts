@@ -329,7 +329,7 @@ const FINALIZE_OPTS: HarnessOptions = {
   },
 };
 
-test("finalize tags trunk's merged HEAD and creates the release", async () => {
+test("finalize tags trunk's merged HEAD, creates the release, and publishes to npm", async () => {
   const { deps, calls } = makeReleaseHarness(FINALIZE_OPTS);
   const r = await finalize(deps, { dryRun: false });
   expect(r.version).toBe("0.1.0");
@@ -338,6 +338,8 @@ test("finalize tags trunk's merged HEAD and creates the release", async () => {
   expect(calls).toContain("createTag:v0.1.0@mergedsha");
   expect(calls).toContain("pushTag:v0.1.0");
   expect(calls).toContain("releaseCreate:v0.1.0");
+  expect(calls).toContain("npmPublish");
+  expect(r.npmPublished).toBe(true);
   expect(r.releaseUrl).toBe("https://github.com/macintacos/caret/releases/tag/v0.1.0");
 });
 
@@ -360,6 +362,33 @@ test("finalize dry-run mutates nothing", async () => {
   expect(r.taggedSha).toBe("mergedsha");
   expect(calls).not.toContain("createTag:v0.1.0@mergedsha");
   expect(calls).not.toContain("releaseCreate:v0.1.0");
+  expect(calls).not.toContain("npmPublish");
+  expect(r.npmPublished).toBe(false);
+});
+
+test("finalize skips npm publish when the version is already on the registry", async () => {
+  const { deps, calls } = makeReleaseHarness({ ...FINALIZE_OPTS, npmPublishedVersions: ["0.1.0"] });
+  const r = await finalize(deps, { dryRun: false });
+  expect(calls).toContain("releaseCreate:v0.1.0"); // the GitHub release still happens
+  expect(calls).not.toContain("npmPublish"); // but npm publish is skipped
+  expect(r.npmPublished).toBe(false);
+});
+
+test("finalize still publishes to npm when the GitHub release already exists (resume)", async () => {
+  // A prior run created the release but its npm publish failed; the re-run must
+  // reuse the release AND complete the npm publish rather than no-op.
+  const { deps, calls } = makeReleaseHarness({
+    ...FINALIZE_OPTS,
+    tags: ["v0.0.1", "v0.1.0"],
+    remoteTags: ["v0.0.1", "v0.1.0"],
+    releases: {
+      "v0.1.0": { url: "https://github.com/macintacos/caret/releases/tag/v0.1.0" },
+    },
+  });
+  const r = await finalize(deps, { dryRun: false });
+  expect(calls).not.toContain("releaseCreate:v0.1.0"); // release reused
+  expect(calls).toContain("npmPublish"); // npm publish still runs
+  expect(r.npmPublished).toBe(true);
 });
 
 test("finalize rejects NOT_MERGED when trunk manifests lag the changelog", async () => {
