@@ -102,6 +102,42 @@ function shutdownSignal(): {
   };
 }
 
+// A controllable stand-in for the daemon's idle timer: captures the scheduled
+// callback so a test fires it on demand (`fire()`) instead of racing a real
+// `idleMs` delay. The idle timer is armed at boot with no request in flight, so
+// under load the real one can fire in the boot->first-request window and shut the
+// daemon down before the test's first request lands (EXC-647). Inject setTimer/
+// clearTimer into boot() and the daemon arms/cancels through them exactly as it
+// would the real timer — the arm/cancel/refresh logic stays real, only the delay
+// is deterministic.
+function manualTimer(): {
+  setTimer: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
+  clearTimer: (handle: ReturnType<typeof setTimeout>) => void;
+  fire: () => void;
+  pending: () => boolean;
+} {
+  let scheduled: (() => void) | null = null;
+  let handle = 0;
+  return {
+    setTimer: (fn) => {
+      scheduled = fn;
+      handle += 1;
+      return handle as unknown as ReturnType<typeof setTimeout>;
+    },
+    clearTimer: (h) => {
+      if ((h as unknown as number) === handle) scheduled = null;
+    },
+    // Run the armed callback (a no-op if nothing is scheduled). Cleared first so a
+    // re-arm inside the callback (maybeShutdown's else-branch) schedules afresh.
+    fire: () => {
+      const fn = scheduled;
+      scheduled = null;
+      fn?.();
+    },
+    pending: () => scheduled !== null,
+  };
+}
+
 async function resolve(id: string, body: Record<string, unknown>) {
   await d.resolve(id, body);
 }
@@ -378,14 +414,23 @@ test("POST /api/ui/gone retracts presence so the next create reports hasLiveClie
 
 test("a present UI tab keeps the daemon alive past idle; /api/ui/gone lets it shut down (EXC-562)", async () => {
   const sig = shutdownSignal();
-  await boot({ idleMs: 30, onShutdown: sig.onShutdown });
+  const timer = manualTimer();
+  await boot({
+    idleMs: 30,
+    onShutdown: sig.onShutdown,
+    setTimer: timer.setTimer,
+    clearTimer: timer.clearTimer,
+  });
   await fetch(`${base}/api/reviews`); // a live tab is present
-  // A present tab must hold the daemon open even though it can poll slower than
-  // idle (throttled) — otherwise the daemon dies and forgets the tab on respawn.
-  await Bun.sleep(80);
+  // A present tab must hold the daemon open even when idle fires while it's still
+  // around (it can poll slower than idle) — otherwise the daemon dies and forgets
+  // the tab on respawn. Firing the idle timer here must re-arm, not shut down.
+  timer.fire();
   expect(sig.fired()).toBe(false);
-  // Once the tab announces it closed, presence is gone and idle may fire.
+  expect(timer.pending()).toBe(true); // re-armed, still watching
+  // Once the tab announces it closed, presence is gone and the next idle fires.
   await fetch(`${base}/api/ui/gone`, { method: "POST" });
+  timer.fire();
   await sig.shutdown;
 });
 
@@ -1098,25 +1143,40 @@ describe("routing fallthrough", () => {
 
 test("idle shutdown fires when empty, not while a review is pending", async () => {
   const sig = shutdownSignal();
-  await boot({ idleMs: 30, onShutdown: sig.onShutdown });
+  const timer = manualTimer();
+  await boot({
+    idleMs: 30,
+    onShutdown: sig.onShutdown,
+    setTimer: timer.setTimer,
+    clearTimer: timer.clearTimer,
+  });
   // A review is created before the idle timer would fire — keeps it alive.
   const { id } = await newReview();
-  // Negative leg: a pending review must hold the daemon open. No event to await,
-  // so allow well past idleMs and assert no shutdown fired.
-  await Bun.sleep(80);
+  // Negative leg: a pending review must hold the daemon open. The invariant is
+  // that idle is not even armed while a review pends, so firing it could never
+  // shut the daemon down — assert that directly instead of sleeping past a delay.
+  expect(timer.pending()).toBe(false);
   expect(sig.fired()).toBe(false);
-  // Approve → removed → 1→0 transition arms idle → shutdown; await it.
+  // Approve → removed → 1→0 transition arms idle → shutdown; fire it.
   await fetch(`${base}/api/reviews/${id}/resolve`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ behavior: "allow" }),
   });
+  timer.fire();
   await sig.shutdown;
 });
 
 test("a superseded review's decision entry does not pin idle shutdown", async () => {
   const sig = shutdownSignal();
-  await boot({ idleMs: 30, heartbeatMs: 20, onShutdown: sig.onShutdown });
+  const timer = manualTimer();
+  await boot({
+    idleMs: 30,
+    heartbeatMs: 20,
+    onShutdown: sig.onShutdown,
+    setTimer: timer.setTimer,
+    clearTimer: timer.clearTimer,
+  });
   const { id: stale } = await newReview();
   // The (timed-out) hook long-polled once, leaving an unsettled decision entry.
   expect((await fetch(`${base}/api/reviews/${stale}/decision`)).status).toBe(204);
@@ -1124,7 +1184,9 @@ test("a superseded review's decision entry does not pin idle shutdown", async ()
   const { id: fresh } = await newReview();
   expect(fresh).not.toBe(stale);
   await resolve(fresh, { behavior: "allow" });
-  // The stale entry was cleared along with the supersede, so idle can fire — await it.
+  // The stale entry was cleared along with the supersede, so nothing pins
+  // openDecisionCount and the armed idle timer shuts the daemon down when it fires.
+  timer.fire();
   await sig.shutdown;
 });
 
@@ -1163,22 +1225,38 @@ test("POST /expire refuses a non-pending review", async () => {
 
 test("POST /expire clears the decision entry even when the review is gone", async () => {
   const sig = shutdownSignal();
-  await boot({ idleMs: 30, heartbeatMs: 20, onShutdown: sig.onShutdown });
+  const timer = manualTimer();
+  await boot({
+    idleMs: 30,
+    heartbeatMs: 20,
+    onShutdown: sig.onShutdown,
+    setTimer: timer.setTimer,
+    clearTimer: timer.clearTimer,
+  });
   // A zombie hook polls a review that no longer exists, re-creating an
   // unsettled entry that would pin openDecisionCount forever.
   expect((await fetch(`${base}/api/reviews/ghost/decision`)).status).toBe(204);
   const res = await fetch(`${base}/api/reviews/ghost/expire`, { method: "POST" });
   expect(res.status).toBe(404);
+  timer.fire();
   await sig.shutdown; // entry cleared → idle fired
 });
 
 test("idle shutdown fires after a pending review is expired", async () => {
   const sig = shutdownSignal();
-  await boot({ idleMs: 30, heartbeatMs: 20, onShutdown: sig.onShutdown });
+  const timer = manualTimer();
+  await boot({
+    idleMs: 30,
+    heartbeatMs: 20,
+    onShutdown: sig.onShutdown,
+    setTimer: timer.setTimer,
+    clearTimer: timer.clearTimer,
+  });
   const { id } = await newReview();
   // The hook long-polled once (unsettled entry), then timed out and expired.
   expect((await fetch(`${base}/api/reviews/${id}/decision`)).status).toBe(204);
   await fetch(`${base}/api/reviews/${id}/expire`, { method: "POST" });
+  timer.fire();
   await sig.shutdown;
 });
 
@@ -1250,7 +1328,13 @@ test("a throwing log sink during a handler error still returns the clean 500", a
 
 test("a rejected (changes-requested) review does NOT keep the daemon alive", async () => {
   const sig = shutdownSignal();
-  await boot({ idleMs: 30, onShutdown: sig.onShutdown });
+  const timer = manualTimer();
+  await boot({
+    idleMs: 30,
+    onShutdown: sig.onShutdown,
+    setTimer: timer.setTimer,
+    clearTimer: timer.clearTimer,
+  });
   const { id } = await newReview();
   await fetch(`${base}/api/reviews/${id}/resolve`, {
     method: "POST",
@@ -1258,6 +1342,7 @@ test("a rejected (changes-requested) review does NOT keep the daemon alive", asy
     body: JSON.stringify({ behavior: "deny", feedback: "redo" }),
   });
   expect(store.get(id)?.status).toBe("rejected"); // kept on disk for the revision
+  timer.fire();
   await sig.shutdown; // but idle still fires
 });
 
@@ -1602,11 +1687,18 @@ test("POST /api/logs from a foreign origin is blocked (403, nothing recorded)", 
 
 test("POST /api/logs does not permanently defer idle shutdown", async () => {
   const sig = shutdownSignal();
-  await boot({ idleMs: 30, onShutdown: sig.onShutdown });
+  const timer = manualTimer();
+  await boot({
+    idleMs: 30,
+    onShutdown: sig.onShutdown,
+    setTimer: timer.setTimer,
+    clearTimer: timer.clearTimer,
+  });
   // A log POST defers idle while in flight (like any request); once it returns
   // and no reviews are pending, the idle timer must re-arm and fire.
   const res = await postLogs([{ level: "info", step: "ui", msg: "heartbeat" }]);
   expect(res.status).toBe(204);
+  timer.fire();
   await sig.shutdown;
 });
 

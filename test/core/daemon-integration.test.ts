@@ -2,7 +2,7 @@
 // server (no mocked health). The real cross-process spawn race is covered by
 // the manual end-to-end test (two Claude instances).
 
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
@@ -18,6 +18,16 @@ import { freePort } from "../support/net.ts";
 import { until } from "../support/poll.ts";
 import { recordingLog } from "../support/recording-log.ts";
 import { expectNeverLogsBody } from "../support/redaction.ts";
+
+// Many tests here spawn a real `bun src/cli.ts daemon` subprocess (transpile +
+// boot the whole daemon module graph) and then run sequential `until(..., 5000)`
+// waits for the lock file. Bun's default 5000ms PER-TEST timeout is smaller than
+// that cumulative budget, so under `mise preflight`'s concurrent load (the unit
+// suite running alongside e2e + build-bin oversubscribes the box) a slow spawn
+// tips a passing test over its deadline (EXC-647). Give every test in this file
+// generous headroom; the `until` budgets still fail a genuinely-stuck condition
+// in ~5s, so this only widens the ceiling for slow-but-succeeding spawns.
+setDefaultTimeout(30_000);
 
 // In-process health/discovery probe servers (a bare createServer + fixed-path
 // store, distinct from bootDaemon's full boot+client). Stopped after each test.
