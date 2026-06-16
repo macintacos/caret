@@ -13,23 +13,19 @@ sessions, so several in-flight plans are reviewed from one browser tab via a swi
 
 ## Install
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/install.sh | bash
-```
-
-That one command clones caret at its latest release (the newest `vX.Y.Z` tag), builds the
-binary for your platform, and registers it with Claude Code through the native plugin
-system — no manual `git clone` and no `claude --plugin-dir`. It requires
-[`git`](https://git-scm.com), [`bun`](https://bun.sh), and the
-[`claude`](https://claude.com/claude-code) CLI on your `PATH`.
-
-Not sure what it'll touch? Set `CARET_DRY_RUN=1` and the installer runs the same read-only
-detection — tool checks, release-tag lookup, clone-vs-update — then prints the exact
-commands it would run and changes nothing:
+caret installs from its GitHub-based plugin marketplace. From inside Claude Code:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/install.sh | CARET_DRY_RUN=1 bash
+/plugin marketplace add macintacos/caret
+/plugin install caret@caret
 ```
+
+This fetches the published plugin — a self-contained [`bun`](https://bun.sh) bundle plus
+the prebuilt UI — into Claude Code's plugin cache. No `git clone`, no compile step, no
+`claude --plugin-dir`.
+**caret runs from that bundle on `bun`, so `bun` must be on your `PATH`** — that is the
+one requirement. (You'll also want the [`claude`](https://claude.com/claude-code) CLI,
+which you already have.)
 
 Then restart Claude Code (or run `/reload-plugins`) and try it:
 
@@ -41,18 +37,41 @@ Enter plan mode, let Claude present a plan, and a browser tab opens at the deep-
 review. Select text to comment, then **Approve** (optionally "& accept edits" or "& auto
 mode") or **Request changes**.
 
-**Update** by re-running the same command — it fetches the latest release, rebuilds, and
-reinstalls. **Uninstall** with:
+**Update** with `/plugin marketplace update caret` (then `/reload-plugins`). **Uninstall**
+with:
 
 ```sh
 claude plugin uninstall caret@caret
 claude plugin marketplace remove caret
 ```
 
+### Build from source (advanced)
+
+Prefer a platform-native compiled binary over the `bun` bundle? The build-from-source
+installer clones caret at its latest release (the newest `vX.Y.Z` tag), compiles the
+binary for your platform, and registers it as a local plugin — no `claude --plugin-dir`.
+It needs [`git`](https://git-scm.com), [`bun`](https://bun.sh), and the
+[`claude`](https://claude.com/claude-code) CLI on your `PATH`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/install.sh | bash
+```
+
+Set `CARET_DRY_RUN=1` and the installer runs the same read-only detection — tool checks,
+release-tag lookup, clone-vs-update — then prints the exact commands it would run and
+changes nothing:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/install.sh | CARET_DRY_RUN=1 bash
+```
+
 ## How it works
 
-caret ships one compiled binary (`bin/caret`) with five subcommands (`daemon`, `prewarm`,
-`review`, `redact`, `discovery`).
+Claude Code's hooks invoke `bin/caret`, a small entrypoint shim that runs caret with five
+subcommands (`daemon`, `prewarm`, `review`, `redact`, `discovery`). The shim execs the
+platform-native compiled binary (`bin/caret-native`) when a build-from-source install
+produced one, and otherwise runs the `bun` bundle (`dist/cli.js`) that the marketplace
+install ships.
 
 ### Architecture: tool-agnostic core + agent adapter
 
@@ -320,14 +339,15 @@ checking are all folded into `hk.pkl`'s `check` hook, so an unformatted or tab-i
 file fails the gate instead of being silently reflowed at commit time.
 
 `mise run build --install` goes one step further than `mise run build`: after building, it
-hands the fresh `bin/caret` + `bin/ui` to `scripts/install.sh --from-local`, which reuses
-those artifacts (no rebuild), reinstalls the caret plugin through Claude Code's native
-plugin system, and prewarms so the just-built binary takes over the daemon — so after a
-`/reload-plugins` (or a Claude Code restart) `/caret:*` resolves to your local build. The
-handoff retires a current-build daemon automatically; a long-running daemon from an older
-build (no retire endpoint, no lock file) can't be retired and keeps serving until you
-restart it once — `kill` its pid, then any review respawns the fresh build. It mutates
-your Claude plugin state and daemon, so it is for local development only, not CI; run
+hands the fresh `bin/caret-native` + `bin/ui` to `scripts/install.sh --from-local`, which
+reuses those artifacts (no rebuild), registers a local dev marketplace pointing at the
+checkout, reinstalls the caret plugin through Claude Code's native plugin system, and
+prewarms so the just-built binary takes over the daemon — so after a `/reload-plugins` (or
+a Claude Code restart) `/caret:*` resolves to your local build. The handoff retires a
+current-build daemon automatically; a long-running daemon from an older build (no retire
+endpoint, no lock file) can't be retired and keeps serving until you restart it once —
+`kill` its pid, then any review respawns the fresh build. It mutates your Claude plugin
+state and daemon, so it is for local development only, not CI; run
 `CARET_DRY_RUN=1 mise run build --install` to preview the install steps without performing
 them.
 
