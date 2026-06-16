@@ -19,7 +19,9 @@ bun scripts/generate-ui-manifest.ts
 # revision it runs from (EXC-452) — capture first so a git failure aborts the
 # build under `set -e` instead of baking an empty string.
 CARET_BUILD_COMMIT="$(git rev-parse HEAD)"
-bun build --compile --sourcemap --define="process.env.CARET_BUILD_COMMIT=\"$CARET_BUILD_COMMIT\"" --outfile bin/caret src/cli.ts
+# Output is bin/caret-native, NOT bin/caret: bin/caret is the committed
+# entrypoint shim (EXC-643) that execs this compiled binary when it is present.
+bun build --compile --sourcemap --define="process.env.CARET_BUILD_COMMIT=\"$CARET_BUILD_COMMIT\"" --outfile bin/caret-native src/cli.ts
 # Fallback safety net: keep the built UI tree beside the binary in case the
 # embedded assets are ever unavailable at runtime (the asset resolver's
 # beside-the-binary source).

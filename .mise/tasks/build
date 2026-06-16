@@ -6,7 +6,7 @@
 set -euo pipefail
 
 # build-bin depends on build-ui, so this umbrella task runs both in order.
-echo "caret build complete: bin/caret"
+echo "caret build complete: bin/caret-native (run via the bin/caret shim)"
 
 # --install (EXC-555): after building, delegate to install.sh's --from-local
 # mode, which reuses these artifacts (no rebuild), reinstalls the plugin, and

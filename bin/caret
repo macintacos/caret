@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+#
+# caret plugin entrypoint shim (EXC-643). This is the ONE file Claude Code's
+# hooks invoke — `${CLAUDE_PLUGIN_ROOT}/bin/caret <subcommand>` (see
+# hooks/hooks.json and commands/discovery.md). It is committed and shipped in
+# every install; it resolves the actual caret runtime from whatever the install
+# method placed beside it:
+#
+#   1. a compiled binary (bin/caret-native) — the build-from-source paths
+#      (`scripts/install.sh`, `mise run build --install`) compile this; running
+#      it needs no `bun` at hook time.
+#   2. the run-from-source bundle (dist/cli.js) — the GitHub/npm plugin install
+#      ships this plus a sibling ui/dist; it runs on `bun`. REQUIRES `bun` on
+#      PATH (documented in the README).
+#   3. raw source (src/cli.ts) — a dev checkout that built neither artifact.
+#
+# Resolution is by the shim's own on-disk location (resolved through symlinks,
+# since Claude Code's plugin cache may symlink), never the cwd.
+
+set -euo pipefail
+
+# Resolve this script's real directory, following symlinks.
+source="${BASH_SOURCE[0]}"
+while [ -h "$source" ]; do
+  dir="$(cd -P "$(dirname "$source")" >/dev/null 2>&1 && pwd)"
+  source="$(readlink "$source")"
+  case "$source" in
+  /*) ;;
+  *) source="$dir/$source" ;;
+  esac
+done
+root="$(cd -P "$(dirname "$source")/.." >/dev/null 2>&1 && pwd)"
+
+# 1. Compiled binary, if a build-from-source install produced one.
+if [ -x "$root/bin/caret-native" ]; then
+  exec "$root/bin/caret-native" "$@"
+fi
+
+# 2 & 3 both run through `bun`. Fail loudly with install guidance if it's absent,
+# rather than letting `exec bun` surface a bare "command not found".
+if ! command -v bun >/dev/null 2>&1; then
+  echo "caret: 'bun' is required to run caret from source but was not found on PATH." >&2
+  echo "       Install Bun (https://bun.sh) and retry." >&2
+  exit 127
+fi
+
+# 2. The shipped run-from-source bundle (npm/github plugin install).
+if [ -f "$root/dist/cli.js" ]; then
+  exec bun "$root/dist/cli.js" "$@"
+fi
+
+# 3. Raw source (dev checkout with neither artifact built).
+exec bun "$root/src/cli.ts" "$@"

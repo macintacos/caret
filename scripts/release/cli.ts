@@ -13,6 +13,7 @@ import { createProgram, runProgram } from "../../src/program.ts";
 import { errorResult, type ReleaseError } from "./contract.ts";
 import { createGit } from "./git.ts";
 import { createGitHub } from "./github.ts";
+import { createNpm } from "./npm.ts";
 import { baseline, compute, type Deps, finalize, GuardError, prepare } from "./steps.ts";
 import { isBumpLevel } from "./version.ts";
 
@@ -20,6 +21,7 @@ function realDeps(): Deps {
   return {
     git: createGit(),
     github: createGitHub(),
+    npm: createNpm(),
     fs: {
       read: (path) => Bun.file(path).text(),
       write: async (path, contents) => {

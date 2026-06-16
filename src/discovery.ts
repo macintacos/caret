@@ -33,8 +33,12 @@ import { errorMessage, type HealthIdentity } from "./types.ts";
 // ---------------------------------------------------------------------------
 
 /** The binary name the process probes match on: caret's `ps comm` basename and
- * the name tagged onto a daemon-lock pid. One source of truth for both sites. */
-const CARET_BIN = "caret";
+ * the name tagged onto a daemon-lock pid. One source of truth for both sites.
+ * The compiled daemon runs as `bin/caret-native` (the hook entrypoint is the
+ * bin/caret shim, EXC-643), so that is its `ps comm`. The npm bundle daemon runs
+ * as `bun`, which is too broad to match here — it is still surfaced via the
+ * daemon-lock pid fallback. */
+const CARET_BIN = "caret-native";
 
 /** A live process, identified by pid and its command name only. argv is NEVER
  * captured — it can embed identifying paths (privacy). */

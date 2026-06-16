@@ -21,6 +21,7 @@ export {
 } from "./steps/context.ts";
 export type { Deps, FsOps, Io } from "./steps/deps.ts";
 export { finalize } from "./steps/finalize.ts";
+export { createNpm, type NpmOps } from "./npm.ts";
 export {
   assertBranch,
   assertCleanTree,
