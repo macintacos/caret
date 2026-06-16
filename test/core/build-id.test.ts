@@ -5,6 +5,7 @@ import { join } from "node:path";
 import pkg from "../../package.json" with { type: "json" };
 import {
   buildHash,
+  buildHashTarget,
   computeBuildId,
   IDENTITY,
   isCompiledBinary,
@@ -61,6 +62,17 @@ test("isCompiledBinary reads the runtime kind off argv[1]'s extension", () => {
   } finally {
     process.argv = saved;
   }
+});
+
+test("buildHashTarget hashes the bundle script, not the shared bun, for the bun bundle", () => {
+  // Compiled binary: argv[1] is a subcommand, execPath IS caret → hash execPath.
+  expect(buildHashTarget("review", "/cache/bin/caret-native")).toBe("/cache/bin/caret-native");
+  // Run-from-source bundle (`bun dist/cli.js`): execPath is the shared bun, so
+  // hashing it would make every caret version look identical and never supersede
+  // a running daemon on upgrade — hash the version-bearing bundle (argv[1]).
+  expect(buildHashTarget("/cache/dist/cli.js", "/opt/bun/bin/bun")).toBe("/cache/dist/cli.js");
+  // No argv[1] (defensive): fall back to execPath.
+  expect(buildHashTarget(undefined, "/cache/bin/caret-native")).toBe("/cache/bin/caret-native");
 });
 
 // ---- buildHash: the UI asset-set digest (the daemon's staleness signal) ----

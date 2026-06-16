@@ -13,9 +13,10 @@ export interface NpmOps {
    * (npm rejects republishing a version, which would otherwise abort finalize). */
   isVersionPublished(version: string): Promise<boolean>;
   /** Build the run-from-source bundle (dist/ + ui/dist) and publish the package.
-   * A dry run packs and validates without uploading. Honors package.json's
-   * `publishConfig.access`, so no `--access` flag is needed. */
-  publish(opts: { dryRun: boolean }): Promise<void>;
+   * Honors package.json's `publishConfig.access`, so no `--access` flag is
+   * needed. finalize only calls this for a real publish — its dry run previews
+   * the publish without side effects, like the GitHub-release dry run. */
+  publish(): Promise<void>;
 }
 
 /** The package name from the working tree's package.json (the publish target). */
@@ -36,15 +37,11 @@ export function createNpm(): NpmOps {
       return r.exitCode === 0 && r.stdout.toString().trim() !== "";
     },
 
-    async publish({ dryRun }) {
+    async publish() {
       // Build the bundle and the UI it serves so the tarball ships fresh
       // artifacts matching this version, then publish.
       await $`mise run build-bundle`;
-      if (dryRun) {
-        await $`npm publish --dry-run`;
-      } else {
-        await $`npm publish`;
-      }
+      await $`npm publish`;
     },
   };
 }

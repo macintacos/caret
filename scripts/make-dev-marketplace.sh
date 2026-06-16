@@ -17,7 +17,9 @@
 
 set -euo pipefail
 
-repo_dir="$1"
+# Resolve repo_dir to an absolute path so the symlink below works regardless of
+# the caller's cwd (a relative symlink target would dangle from out_dir).
+repo_dir="$(cd "$1" && pwd)"
 out_dir="$2"
 
 rm -rf "$out_dir"

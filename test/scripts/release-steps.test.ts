@@ -338,7 +338,7 @@ test("finalize tags trunk's merged HEAD, creates the release, and publishes to n
   expect(calls).toContain("createTag:v0.1.0@mergedsha");
   expect(calls).toContain("pushTag:v0.1.0");
   expect(calls).toContain("releaseCreate:v0.1.0");
-  expect(calls).toContain("npmPublish:real");
+  expect(calls).toContain("npmPublish");
   expect(r.npmPublished).toBe(true);
   expect(r.releaseUrl).toBe("https://github.com/macintacos/caret/releases/tag/v0.1.0");
 });
@@ -362,7 +362,7 @@ test("finalize dry-run mutates nothing", async () => {
   expect(r.taggedSha).toBe("mergedsha");
   expect(calls).not.toContain("createTag:v0.1.0@mergedsha");
   expect(calls).not.toContain("releaseCreate:v0.1.0");
-  expect(calls).not.toContain("npmPublish:real");
+  expect(calls).not.toContain("npmPublish");
   expect(r.npmPublished).toBe(false);
 });
 
@@ -370,7 +370,7 @@ test("finalize skips npm publish when the version is already on the registry", a
   const { deps, calls } = makeReleaseHarness({ ...FINALIZE_OPTS, npmPublishedVersions: ["0.1.0"] });
   const r = await finalize(deps, { dryRun: false });
   expect(calls).toContain("releaseCreate:v0.1.0"); // the GitHub release still happens
-  expect(calls).not.toContain("npmPublish:real"); // but npm publish is skipped
+  expect(calls).not.toContain("npmPublish"); // but npm publish is skipped
   expect(r.npmPublished).toBe(false);
 });
 
@@ -387,7 +387,7 @@ test("finalize still publishes to npm when the GitHub release already exists (re
   });
   const r = await finalize(deps, { dryRun: false });
   expect(calls).not.toContain("releaseCreate:v0.1.0"); // release reused
-  expect(calls).toContain("npmPublish:real"); // npm publish still runs
+  expect(calls).toContain("npmPublish"); // npm publish still runs
   expect(r.npmPublished).toBe(true);
 });
 

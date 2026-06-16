@@ -104,7 +104,7 @@ export async function finalize(deps: Deps, opts: { dryRun: boolean }): Promise<F
   } else if (opts.dryRun) {
     deps.io.log(`Would build the bundle and npm publish ${version}.`);
   } else {
-    await deps.npm.publish({ dryRun: false });
+    await deps.npm.publish();
     deps.io.log(`Published ${version} to npm.`);
     npmPublished = true;
   }

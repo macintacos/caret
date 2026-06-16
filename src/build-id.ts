@@ -94,6 +94,18 @@ export async function computeBuildId(deps: BuildIdDeps): Promise<string> {
   return deps.uiHash();
 }
 
+/** The file whose bytes fingerprint the build. For a compiled binary that's its
+ * own `process.execPath` (execPath IS caret). For the run-from-source bundle
+ * (`bun dist/cli.js`) execPath is the shared `bun` executable — identical across
+ * caret versions, so hashing it would make every version look like the same
+ * build and an upgrade would never supersede the running daemon (EXC-643). In
+ * that case hash the bundle script (`argv[1]`) instead: it embeds the version
+ * and all server code, so each release changes its bytes. A compiled binary's
+ * `argv[1]` is a subcommand (never `.js`), so this only diverges for the bundle. */
+export function buildHashTarget(argv1: string | undefined, execPath: string): string {
+  return argv1?.endsWith(".js") ? argv1 : execPath;
+}
+
 let cachedBuildId: string | undefined;
 
 /** computeBuildId wired to the real binary/UI and memoized per process (the
@@ -104,7 +116,8 @@ export async function currentBuildId(): Promise<string> {
     isCompiled: isCompiledBinary(),
     hashBinary: async () => {
       try {
-        const bytes = await Bun.file(process.execPath).bytes();
+        const target = buildHashTarget(process.argv[1], process.execPath);
+        const bytes = await Bun.file(target).bytes();
         return createHash("sha256").update(bytes).digest("hex").slice(0, 12);
       } catch {
         return null; // unreadable binary — fall back to the UI hash.

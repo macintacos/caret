@@ -258,9 +258,8 @@ export function makeReleaseHarness(opts: HarnessOptions = {}): ReleaseHarness {
     async isVersionPublished(version) {
       return npmPublishedVersions.has(version);
     },
-    async publish({ dryRun }) {
-      calls.push(`npmPublish:${dryRun ? "dry" : "real"}`);
-      npmPublishedVersions.add("__published__");
+    async publish() {
+      calls.push("npmPublish");
     },
   };
 
