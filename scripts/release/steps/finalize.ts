@@ -97,7 +97,8 @@ export async function finalize(deps: Deps, opts: { dryRun: boolean }): Promise<F
   // Publish the run-from-source bundle to npm so the marketplace's npm source
   // (`/plugin marketplace add macintacos/caret`) resolves this version (EXC-643).
   // Resume-aware: skip if already on the registry (npm rejects republishing a
-  // version); a dry run builds + validates the pack without uploading.
+  // version). A dry run previews without side effects, like the release dry run
+  // above — it does not build or pack.
   let npmPublished = false;
   if (await deps.npm.isVersionPublished(version)) {
     deps.io.log(`npm package ${tag} is already published; skipping publish.`);

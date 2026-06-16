@@ -31,10 +31,12 @@ export function createNpm(): NpmOps {
   return {
     async isVersionPublished(version) {
       const name = await packageName();
-      // `npm view <pkg>@<version> version` exits non-zero (E404) when the
-      // package or that exact version does not exist on the registry.
+      // `npm view <pkg>@<version> version` prints the version on stdout when it
+      // exists and exits 0 with EMPTY stdout for an E404 (missing package or
+      // missing version), so the empty-output check — not the exit code — is
+      // what distinguishes published from not.
       const r = await $`npm view ${`${name}@${version}`} version`.nothrow().quiet();
-      return r.exitCode === 0 && r.stdout.toString().trim() !== "";
+      return r.stdout.toString().trim() !== "";
     },
 
     async publish() {

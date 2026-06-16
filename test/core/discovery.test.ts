@@ -45,7 +45,7 @@ function discoveryDeps(over: Partial<DiscoveryDeps> = {}): DiscoveryDeps {
     health: async () => ({ service: "caret", version: "1.2.3", build: "abc", commit: "def" }),
     readLock: () => ({ pid: 111, port: 42718, build: "abc", version: "1.2.3", startedAt: 9 }),
     isPidAlive: () => true,
-    listProcesses: () => [{ pid: 111, name: "caret" }],
+    listProcesses: () => [{ pid: 111, name: "caret-native" }],
     listReviewFiles: () => [{ id: "abcdef12-0000", status: "pending" }],
     readAgentInstallState: () => ({
       pluginVersion: "0.0.3",
@@ -209,7 +209,7 @@ test("with no lock, lockAndPort still reports portServesCaret", async () => {
 test("a live lock pid not already listed is merged in, tagged daemon.lock", async () => {
   const report = await collectReport(
     discoveryDeps({
-      listProcesses: () => [{ pid: 5, name: "caret" }],
+      listProcesses: () => [{ pid: 5, name: "caret-native" }],
       readLock: () => ({ pid: 99, port: 42718 }),
       isPidAlive: () => true,
     }),
@@ -217,8 +217,8 @@ test("a live lock pid not already listed is merged in, tagged daemon.lock", asyn
   expect(report.processes).toMatchObject({
     count: 2,
     items: [
-      { pid: 5, name: "caret", identifiedBy: "ps comm" },
-      { pid: 99, name: "caret", identifiedBy: "daemon.lock" },
+      { pid: 5, name: "caret-native", identifiedBy: "ps comm" },
+      { pid: 99, name: "caret-native", identifiedBy: "daemon.lock" },
     ],
   });
 });
@@ -226,7 +226,7 @@ test("a live lock pid not already listed is merged in, tagged daemon.lock", asyn
 test("a lock pid already in the ps list is not duplicated", async () => {
   const report = await collectReport(
     discoveryDeps({
-      listProcesses: () => [{ pid: 99, name: "caret" }],
+      listProcesses: () => [{ pid: 99, name: "caret-native" }],
       readLock: () => ({ pid: 99, port: 42718 }),
       isPidAlive: () => true,
     }),
@@ -326,7 +326,7 @@ test("home paths and foreign usernames are scrubbed in the finished report", asy
 test("the report is flat enough that scrubValue never depth-caps a leaf", async () => {
   const report = await collectReport(
     discoveryDeps({
-      listProcesses: () => [{ pid: 1, name: "caret" }],
+      listProcesses: () => [{ pid: 1, name: "caret-native" }],
       readLock: () => ({ pid: 2, port: 42718, build: "b", version: "v", startedAt: 9 }),
       isPidAlive: () => true,
       listReviewFiles: () => [{ id: "abcdef12-0000", status: "pending" }],
@@ -385,16 +385,17 @@ test("renderReport tolerates an all-degraded report without throwing", () => {
 
 test("parsePsLines extracts caret entries, basenames full-path comms, and ignores noise", () => {
   const text = [
-    "  101 /usr/local/bin/caret",
-    "202 caret",
+    "  101 /usr/local/bin/caret-native",
+    "202 caret-native",
     "303 node",
-    "404 /Applications/Some.app/Contents/MacOS/caretaker", // not "caret" basename
+    "505 /home/u/.local/share/caret/bin/caret", // the shim, not the daemon binary
+    "404 /Applications/Some.app/Contents/MacOS/caretaker", // not the "caret-native" basename
     "garbage line with no pid",
     "   ",
   ].join("\n");
   expect(parsePsLines(text)).toEqual([
-    { pid: 101, name: "caret" },
-    { pid: 202, name: "caret" },
+    { pid: 101, name: "caret-native" },
+    { pid: 202, name: "caret-native" },
   ]);
 });
 
@@ -516,6 +517,6 @@ test("listProcesses returns an array and never throws", () => {
   expect(Array.isArray(procs)).toBe(true);
   for (const p of procs) {
     expect(typeof p.pid).toBe("number");
-    expect(p.name).toBe("caret");
+    expect(p.name).toBe("caret-native");
   }
 });

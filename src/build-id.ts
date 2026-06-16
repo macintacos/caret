@@ -25,12 +25,29 @@ export const VERSION = pkg.version;
  * process squatting on the port. */
 export const IDENTITY = { service: "caret", version: VERSION } as const;
 
-/** True when running as a compiled binary (process.execPath IS caret), false
- * under `bun run` dev where argv[1] is the `.ts` entry script. The build
- * fingerprint, the daemon self-spawn vector, and the discovery report all key
- * off this one signal. */
+/** How this caret process is running, inferred from argv[1]'s extension:
+ *  - "dev":    `bun run src/cli.ts …` — argv[1] is the `.ts` source entry.
+ *  - "bundle": `bun dist/cli.js …` — the npm run-from-source install (EXC-643);
+ *              execPath is the shared `bun`, argv[1] is the bundled `.js`.
+ *  - "binary": a self-contained compiled binary — execPath IS caret and argv[1]
+ *              is a subcommand, never a script.
+ * The daemon self-spawn vector (does the script path need re-passing?) and the
+ * build fingerprint (which file identifies the build?) key off this; the
+ * production-vs-dev signal below collapses "bundle" and "binary" together. */
+export function buildKind(argv1: string | undefined = process.argv[1]): "binary" | "bundle" | "dev" {
+  if (argv1?.endsWith(".ts")) return "dev";
+  if (argv1?.endsWith(".js")) return "bundle";
+  return "binary";
+}
+
+/** True for a production install — a compiled binary OR the npm bundle — and
+ * false only under `bun run` dev. Gates dev-only settings, the health `isDev`
+ * flag, and the discovery prod/dev label. NOT the same as "runs from a script":
+ * the bundle is production yet runs under `bun` with a script arg, so the daemon
+ * spawn and the build fingerprint use buildKind() instead (the bundle must not
+ * be treated as a self-contained binary there — see daemonCommand). */
 export function isCompiledBinary(): boolean {
-  return !process.argv[1]?.endsWith(".ts");
+  return buildKind() !== "dev";
 }
 
 /** Short content fingerprint of the served UI asset set — the daemon's staleness
@@ -71,39 +88,28 @@ export interface DaemonLock {
 }
 
 export interface BuildIdDeps {
-  /** True when running as a compiled binary (process.execPath IS caret), false
-   * under `bun run` dev. */
-  isCompiled: boolean;
-  /** Hash of the compiled binary's content, or null if it can't be read. */
-  hashBinary: () => Promise<string | null>;
+  /** The runtime shape (see buildKind): "binary" and "bundle" both fingerprint a
+   * file via hashFile; "dev" falls back to the UI hash. */
+  kind: "binary" | "bundle" | "dev";
+  /** Hash of the build's defining file — the compiled binary or the bundle
+   * script — or null if it can't be read. */
+  hashFile: () => Promise<string | null>;
   /** Hash of the served UI asset set (the dev / fallback fingerprint). */
   uiHash: () => Promise<string>;
 }
 
 /** The build fingerprint used to decide daemon staleness. For a compiled binary
- * it's a hash of the binary itself, so ANY rebuild — UI or server code — yields a
- * new fingerprint and supersedes an older running daemon (a freshly built or
- * installed caret always wins); re-invoking the same binary still matches and
- * reuses. Dev (`bun run`, which is port-isolated and never uses takeover) falls
- * back to the UI hash. */
+ * it hashes the binary, and for the npm bundle the bundle script — so ANY
+ * rebuild or release yields a new fingerprint and supersedes an older running
+ * daemon (a freshly built or installed caret always wins); re-invoking the same
+ * build still matches and reuses. Dev (`bun run`, which is port-isolated and
+ * never uses takeover) falls back to the UI hash. */
 export async function computeBuildId(deps: BuildIdDeps): Promise<string> {
-  if (deps.isCompiled) {
-    const h = await deps.hashBinary();
+  if (deps.kind !== "dev") {
+    const h = await deps.hashFile();
     if (h) return h;
   }
   return deps.uiHash();
-}
-
-/** The file whose bytes fingerprint the build. For a compiled binary that's its
- * own `process.execPath` (execPath IS caret). For the run-from-source bundle
- * (`bun dist/cli.js`) execPath is the shared `bun` executable — identical across
- * caret versions, so hashing it would make every version look like the same
- * build and an upgrade would never supersede the running daemon (EXC-643). In
- * that case hash the bundle script (`argv[1]`) instead: it embeds the version
- * and all server code, so each release changes its bytes. A compiled binary's
- * `argv[1]` is a subcommand (never `.js`), so this only diverges for the bundle. */
-export function buildHashTarget(argv1: string | undefined, execPath: string): string {
-  return argv1?.endsWith(".js") ? argv1 : execPath;
 }
 
 let cachedBuildId: string | undefined;
@@ -112,11 +118,16 @@ let cachedBuildId: string | undefined;
  * build can't change while this process runs). */
 export async function currentBuildId(): Promise<string> {
   if (cachedBuildId !== undefined) return cachedBuildId;
+  const kind = buildKind();
   cachedBuildId = await computeBuildId({
-    isCompiled: isCompiledBinary(),
-    hashBinary: async () => {
+    kind,
+    hashFile: async () => {
       try {
-        const target = buildHashTarget(process.argv[1], process.execPath);
+        // "binary": execPath IS caret. "bundle": execPath is the shared `bun`
+        // (identical across caret versions), so hash the version-bearing bundle
+        // script (argv[1]) instead, or an upgrade would never supersede the
+        // running daemon (EXC-643). "dev" never reaches here.
+        const target = kind === "bundle" ? (process.argv[1] as string) : process.execPath;
         const bytes = await Bun.file(target).bytes();
         return createHash("sha256").update(bytes).digest("hex").slice(0, 12);
       } catch {

@@ -18,7 +18,6 @@
     "bin/caret",
     "hooks/",
     "commands/",
-    ".claude/skills/",
     ".claude-plugin/plugin.json"
   ],
   "scripts": {

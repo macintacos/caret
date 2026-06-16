@@ -1,21 +1,24 @@
 #!/usr/bin/env bash
-#MISE description="Smoke-test the run-from-source bundle: dist/cli.js + sibling ui/dist serve the UI in isolation"
+#MISE description="Smoke-test the run-from-source bundle: prewarm spawns a daemon that serves the UI"
 #MISE depends=["build-bundle"]
 
 set -euo pipefail
 
 # Release-confidence smoke for the GitHub-based plugin install (EXC-643). Proves
 # the distribution artifact — the non-compile `bun build` bundle plus the on-disk
-# ui/dist beside it — serves the multi-asset UI exactly as a user's npm-installed
-# plugin would. Kept OUT of preflight (parity with smoke-bin): it depends on a
-# full UI build + bundle, too slow for the per-push gate; this is final-validation.
+# ui/dist beside it — works exactly as a user's npm-installed plugin would.
 #
-# Isolation matters for the same reason smoke-bin documents. We assemble the
-# package layout (pkg/dist/cli.js + pkg/ui/dist) in a temp dir and run from there,
-# so the only UI source the resolver can reach is the sibling ui/dist we ship —
-# not the worktree's own ui/dist. (`bun dist/cli.js` keys src-relative resolution
-# off the bundle's location, and besideDist off the bun execPath, so neither
-# resolves into the repo from the temp dir.)
+# Crucially it drives the REAL hook flow: `caret prewarm` → ensureDaemon →
+# daemonCommand() spawns a DETACHED daemon child. Running the daemon in the
+# foreground (an earlier version of this test) never exercised daemonCommand and
+# missed that the bundle was mis-classified as a compiled binary, so the spawned
+# child was `[bun, "daemon"]` (no script) and never started. The prewarm path is
+# what catches that class of bug.
+#
+# Isolation: a temp package layout (pkg/dist/cli.js + pkg/ui/dist) the resolver
+# can only serve the shipped ui/dist from, a private XDG_STATE_HOME, and a
+# free CARET_PORT so the test daemon never collides with a real caret daemon on
+# the default port (a foreign-world collision makes prewarm a silent no-op).
 
 dist_dir="$PWD/dist"
 ui_dist="$PWD/ui/dist"
@@ -28,15 +31,18 @@ if [ ! -d "$ui_dist" ]; then
   exit 1
 fi
 
-# Temp package layout mirroring the npm tarball, and an isolated state dir.
 pkg_dir="$(mktemp -d "${TMPDIR:-/tmp}/caret-smoke-bundle.XXXXXX")"
 state_dir="$(mktemp -d "${TMPDIR:-/tmp}/caret-smoke-bundle-state.XXXXXX")"
 lock_file="$state_dir/caret/daemon.lock"
 daemon_pid=""
 
 cleanup() {
+  # Kill the detached daemon the prewarm spawned (it would otherwise idle-exit
+  # after ~60s); read its pid from the lock if we didn't capture it.
+  if [ -z "$daemon_pid" ] && [ -f "$lock_file" ]; then
+    daemon_pid="$(bun -e 'const f=Bun.file(process.argv[1]); if(await f.exists()){const l=await f.json(); if(l.pid){process.stdout.write(String(l.pid));}}' "$lock_file" 2>/dev/null || true)"
+  fi
   if [ -n "$daemon_pid" ]; then kill "$daemon_pid" 2>/dev/null || true; fi
-  wait 2>/dev/null || true
   rm -rf "$pkg_dir" "$state_dir"
 }
 trap cleanup EXIT
@@ -45,30 +51,29 @@ cp -R "$dist_dir" "$pkg_dir/dist"
 mkdir -p "$pkg_dir/ui"
 cp -R "$ui_dist" "$pkg_dir/ui/dist"
 
-# Boot the bundle via `bun` on an OS-assigned port with the isolated state dir.
-XDG_STATE_HOME="$state_dir" bun "$pkg_dir/dist/cli.js" daemon --ephemeral &
-daemon_pid=$!
-
-# Discover the bound port from the lock the daemon writes after bind (~5s poll).
-port=""
-for _ in $(seq 1 100); do
-  if [ -f "$lock_file" ]; then
-    port="$(bun -e 'const f=Bun.file(process.argv[1]); if(await f.exists()){const l=await f.json(); if(l.port){process.stdout.write(String(l.port));}}' "$lock_file" 2>/dev/null || true)"
-    if [ -n "$port" ]; then break; fi
-  fi
-  if ! kill -0 "$daemon_pid" 2>/dev/null; then
-    echo "smoke-bundle: daemon exited before writing its lock" >&2
-    exit 1
-  fi
-  sleep 0.05
-done
+# A free TCP port so the test daemon never collides with the real one on 42718.
+port="$(bun -e 'const s=Bun.serve({port:0,fetch(){return new Response("");}}); process.stdout.write(String(s.port)); s.stop(true);')"
 if [ -z "$port" ]; then
-  echo "smoke-bundle: daemon did not report a port within ~5s" >&2
+  echo "smoke-bundle: could not allocate a free port" >&2
   exit 1
 fi
 
+# Drive the real hook: prewarm → ensureDaemon → daemonCommand spawns the daemon.
+CARET_PORT="$port" XDG_STATE_HOME="$state_dir" bun "$pkg_dir/dist/cli.js" prewarm
+
+# The detached daemon writes its lock after binding (~poll a couple seconds).
+for _ in $(seq 1 100); do
+  [ -f "$lock_file" ] && break
+  sleep 0.05
+done
+if [ ! -f "$lock_file" ]; then
+  echo "smoke-bundle: prewarm did not spawn a daemon (no lock at $lock_file)" >&2
+  cat "$state_dir/caret/"*.log 2>/dev/null | tail -20 >&2 || true
+  exit 1
+fi
+daemon_pid="$(bun -e 'const l=await Bun.file(process.argv[1]).json(); process.stdout.write(String(l.pid??""));' "$lock_file" 2>/dev/null || true)"
 base="http://127.0.0.1:$port"
-echo "smoke-bundle: daemon up on $base (pid $daemon_pid, state $state_dir)"
+echo "smoke-bundle: prewarm spawned a daemon on $base (pid $daemon_pid)"
 
 # --- GET / : 200 text/html referencing hashed assets ----------------------
 index_headers="$(curl -sS -D - -o /dev/null "$base/")"
@@ -91,7 +96,6 @@ asset_paths=()
 while IFS= read -r line; do asset_paths+=("$line"); done < <(printf '%s' "$index_body" | grep -oE '/assets/[A-Za-z0-9._/-]+' | sort -u)
 if [ "${#asset_paths[@]}" -eq 0 ]; then
   echo "smoke-bundle: served index references no /assets/ URLs (placeholder served? ui/dist missing?)" >&2
-  echo "--- served index ---" >&2
   printf '%s\n' "$index_body" >&2
   exit 1
 fi
@@ -115,14 +119,18 @@ for path in "${asset_paths[@]}"; do
   echo "smoke-bundle: ok 200 $path ($ctype)"
 done
 
-# --- GET /api/health : identifies caret -----------------------------------
+# --- GET /api/health : identifies caret as a production (non-dev) install --
 health="$(curl -sS "$base/api/health")"
 service="$(printf '%s' "$health" | bun -e 'const t=await Bun.stdin.text(); try{process.stdout.write(String(JSON.parse(t).service??""));}catch{}')"
+is_dev="$(printf '%s' "$health" | bun -e 'const t=await Bun.stdin.text(); try{process.stdout.write(String(JSON.parse(t).isDev));}catch{}')"
 if [ "$service" != "caret" ]; then
   echo "smoke-bundle: /api/health service is '$service' (expected caret)" >&2
-  echo "--- health body ---" >&2
   printf '%s\n' "$health" >&2
   exit 1
 fi
+if [ "$is_dev" != "false" ]; then
+  echo "smoke-bundle: /api/health isDev is '$is_dev' (expected false — the bundle is a production install)" >&2
+  exit 1
+fi
 
-echo "smoke-bundle: PASS — the bun bundle + sibling ui/dist serve the multi-asset UI"
+echo "smoke-bundle: PASS — prewarm spawned a bundle daemon that serves the multi-asset UI"
