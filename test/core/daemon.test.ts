@@ -1143,19 +1143,27 @@ describe("routing fallthrough", () => {
 
 test("idle shutdown fires when empty, not while a review is pending", async () => {
   const sig = shutdownSignal();
-  await boot({ idleMs: 30, onShutdown: sig.onShutdown });
+  const timer = manualTimer();
+  await boot({
+    idleMs: 30,
+    onShutdown: sig.onShutdown,
+    setTimer: timer.setTimer,
+    clearTimer: timer.clearTimer,
+  });
   // A review is created before the idle timer would fire — keeps it alive.
   const { id } = await newReview();
-  // Negative leg: a pending review must hold the daemon open. No event to await,
-  // so allow well past idleMs and assert no shutdown fired.
-  await Bun.sleep(80);
+  // Negative leg: a pending review must hold the daemon open. The invariant is
+  // that idle is not even armed while a review pends, so firing it could never
+  // shut the daemon down — assert that directly instead of sleeping past a delay.
+  expect(timer.pending()).toBe(false);
   expect(sig.fired()).toBe(false);
-  // Approve → removed → 1→0 transition arms idle → shutdown; await it.
+  // Approve → removed → 1→0 transition arms idle → shutdown; fire it.
   await fetch(`${base}/api/reviews/${id}/resolve`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ behavior: "allow" }),
   });
+  timer.fire();
   await sig.shutdown;
 });
 
@@ -1320,7 +1328,13 @@ test("a throwing log sink during a handler error still returns the clean 500", a
 
 test("a rejected (changes-requested) review does NOT keep the daemon alive", async () => {
   const sig = shutdownSignal();
-  await boot({ idleMs: 30, onShutdown: sig.onShutdown });
+  const timer = manualTimer();
+  await boot({
+    idleMs: 30,
+    onShutdown: sig.onShutdown,
+    setTimer: timer.setTimer,
+    clearTimer: timer.clearTimer,
+  });
   const { id } = await newReview();
   await fetch(`${base}/api/reviews/${id}/resolve`, {
     method: "POST",
@@ -1328,6 +1342,7 @@ test("a rejected (changes-requested) review does NOT keep the daemon alive", asy
     body: JSON.stringify({ behavior: "deny", feedback: "redo" }),
   });
   expect(store.get(id)?.status).toBe("rejected"); // kept on disk for the revision
+  timer.fire();
   await sig.shutdown; // but idle still fires
 });
 
