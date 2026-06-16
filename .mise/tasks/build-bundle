@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+#MISE description="Bundle caret for the npm/github plugin install (dist/cli.js + ui/dist; runs on bun, no node_modules)"
+#MISE depends=["build-ui"]
+
+set -euo pipefail
+
+# Distribution bundle for the GitHub-based plugin install (EXC-643). Unlike
+# build-bin (a compiled standalone binary for the local/curl path), this is a
+# NON-compile `bun build`: a single dist/cli.js with every dependency inlined,
+# so it runs on `bun` alone with no node_modules. The hook shim (bin/caret)
+# execs `bun dist/cli.js` when no compiled binary is present.
+#
+# The UI is served from the on-disk ui/dist tree shipped BESIDE the bundle
+# (ui-assets.ts resolver source #2: `../ui/dist` relative to dist/cli.js), NOT
+# from an embedded manifest. A non-compile `bun build` rewrites the manifest's
+# `with { type: "file" }` imports to cwd-relative paths that 500 at runtime, so
+# we must NOT let the manifest get bundled — remove any copy a prior build-bin
+# left behind (build-bin regenerates it on its next run). build-ui produced
+# ui/dist; the npm `files` allowlist ships dist/ + ui/dist/ together.
+rm -f src/ui-manifest.generated.ts
+rm -rf dist
+bun build --target=bun --outdir dist src/cli.ts
+
+echo "caret bundle complete: dist/cli.js (serves UI from sibling ui/dist)"

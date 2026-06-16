@@ -49,7 +49,7 @@ test("commitsBetween rootCommit..HEAD yields populated commits", async () => {
 
 test("tryFileAtRef reads a committed file and null for an absent path", async () => {
   const pkg = await git.tryFileAtRef("HEAD", "package.json");
-  expect(pkg).toContain('"name": "caret"');
+  expect(pkg).toContain('"name": "@macintacos/caret"');
   expect(await git.tryFileAtRef("HEAD", "does/not/exist.txt")).toBeNull();
 });
 
