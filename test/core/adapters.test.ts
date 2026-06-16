@@ -59,6 +59,19 @@ test("CARET_AGENT selects the second adapter end-to-end", () => {
   expect(viaEnv).not.toBe(selectAdapter(DEFAULT_AGENT));
 });
 
+test("the opencode adapter is registered and selectable via its id and env", () => {
+  // EXC-339: a third registered adapter, resolvable both by explicit id and via
+  // CARET_AGENT, and distinct from the claude default. Its wire shape is pinned in
+  // test/adapters/opencode/, not here (test-layout: no agent vocabulary in core).
+  expect(agentIds()).toContain("opencode");
+  delete process.env.CARET_AGENT;
+  const oc = selectAdapter("opencode");
+  expectAdapterShape(oc);
+  expect(oc).not.toBe(selectAdapter(DEFAULT_AGENT));
+  process.env.CARET_AGENT = "opencode";
+  expect(selectAdapter()).toBe(oc);
+});
+
 test("selectAdapter() with no id returns the default adapter", () => {
   delete process.env.CARET_AGENT;
   expectAdapterShape(selectAdapter());
