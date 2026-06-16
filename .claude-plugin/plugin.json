@@ -1,5 +1,18 @@
 {
   "name": "caret",
   "version": "0.0.5",
-  "description": "Review, annotate, and approve Claude Code plans in a local web UI."
+  "description": "Review, annotate, and approve Claude Code plans in a local web UI.",
+  "author": { "name": "macintacos" },
+  "homepage": "https://github.com/macintacos/caret",
+  "repository": "https://github.com/macintacos/caret",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "claude-code-plugin",
+    "plan-review",
+    "code-review",
+    "hooks",
+    "approval",
+    "annotation"
+  ]
 }
