@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
-// caret hook CLI. Subcommands: daemon | prewarm | review | redact | discovery.
+// caret hook CLI. Subcommands: daemon | prewarm | review | redact | discovery |
+// install-opencode.
 //
 // This file is only the composition point: it assembles the Commander tree and
 // threads each subcommand's parsed options into its run function (the actions in
@@ -17,6 +18,7 @@ import { fatalDeny } from "./adapters/index.ts";
 import { VERSION } from "./build-id.ts";
 import { runDaemon } from "./commands/daemon.ts";
 import { runDiscoverySubcommand } from "./commands/discovery.ts";
+import { runInstallOpencodeSubcommand } from "./commands/install-opencode.ts";
 import { runPrewarm } from "./commands/prewarm.ts";
 import { runRedactSubcommand } from "./commands/redact.ts";
 import { runReviewSubcommand } from "./commands/review.ts";
@@ -31,7 +33,7 @@ import { createProgram, runProgram } from "./program.ts";
 function buildProgram(): Command {
   const program = createProgram(
     "caret",
-    "caret hook CLI: daemon | prewarm | review | redact | discovery",
+    "caret hook CLI: daemon | prewarm | review | redact | discovery | install-opencode",
   ).version(VERSION);
 
   program
@@ -60,6 +62,18 @@ function buildProgram(): Command {
     .description("print a diagnostics report")
     .option("--json", "emit the machine-readable JSON document")
     .action((opts) => runDiscoverySubcommand({ json: opts.json ?? false }));
+
+  program
+    .command("install-opencode")
+    .description("install (or with --uninstall, remove) caret's OpenCode plugin + commands")
+    .option("--uninstall", "remove caret's OpenCode files instead of installing them")
+    .option("--dry-run", "print what would change without writing")
+    .action((opts) =>
+      runInstallOpencodeSubcommand({
+        uninstall: opts.uninstall ?? false,
+        dryRun: opts.dryRun ?? false,
+      }),
+    );
 
   return program;
 }

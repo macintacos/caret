@@ -18,6 +18,7 @@
     "bin/caret",
     "hooks/",
     "commands/",
+    "opencode/",
     ".claude-plugin/plugin.json"
   ],
   "scripts": {
