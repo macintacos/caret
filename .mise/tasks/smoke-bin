@@ -15,12 +15,12 @@ set -euo pipefail
 # the cwd — a compiled binary's import.meta.url is file:///$bunfs/root/<bin>, so
 # srcDist (../ui/dist relative to it) never resolves to the repo, and besideDist
 # (dirname(execPath)/ui) is the real masking source: `mise run build-bin` copies
-# ui/dist to bin/ui as a safety net, so bin/caret always has a valid sibling UI.
-# We neutralize besideDist by running a COPY of the binary alone in a temp dir
+# ui/dist to bin/ui as a safety net, so bin/caret-native always has a valid
+# sibling UI. We neutralize besideDist by running a COPY of the binary alone in a temp dir
 # with no sibling ui/ — then neither disk fallback resolves and the embedded
 # manifest is the only possible asset source. (The cwd is irrelevant here.)
 
-src_bin="$PWD/bin/caret"
+src_bin="$PWD/bin/caret-native"
 if [ ! -x "$src_bin" ]; then
   echo "smoke-bin: $src_bin missing or not executable (run \`mise run build\`)" >&2
   exit 1

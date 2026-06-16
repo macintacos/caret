@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+#MISE description="Smoke-test the run-from-source bundle: dist/cli.js + sibling ui/dist serve the UI in isolation"
+#MISE depends=["build-bundle"]
+
+set -euo pipefail
+
+# Release-confidence smoke for the GitHub-based plugin install (EXC-643). Proves
+# the distribution artifact — the non-compile `bun build` bundle plus the on-disk
+# ui/dist beside it — serves the multi-asset UI exactly as a user's npm-installed
+# plugin would. Kept OUT of preflight (parity with smoke-bin): it depends on a
+# full UI build + bundle, too slow for the per-push gate; this is final-validation.
+#
+# Isolation matters for the same reason smoke-bin documents. We assemble the
+# package layout (pkg/dist/cli.js + pkg/ui/dist) in a temp dir and run from there,
+# so the only UI source the resolver can reach is the sibling ui/dist we ship —
+# not the worktree's own ui/dist. (`bun dist/cli.js` keys src-relative resolution
+# off the bundle's location, and besideDist off the bun execPath, so neither
+# resolves into the repo from the temp dir.)
+
+dist_dir="$PWD/dist"
+ui_dist="$PWD/ui/dist"
+if [ ! -f "$dist_dir/cli.js" ]; then
+  echo "smoke-bundle: $dist_dir/cli.js missing (run \`mise run build-bundle\`)" >&2
+  exit 1
+fi
+if [ ! -d "$ui_dist" ]; then
+  echo "smoke-bundle: $ui_dist missing (run \`mise run build-ui\`)" >&2
+  exit 1
+fi
+
+# Temp package layout mirroring the npm tarball, and an isolated state dir.
+pkg_dir="$(mktemp -d "${TMPDIR:-/tmp}/caret-smoke-bundle.XXXXXX")"
+state_dir="$(mktemp -d "${TMPDIR:-/tmp}/caret-smoke-bundle-state.XXXXXX")"
+lock_file="$state_dir/caret/daemon.lock"
+daemon_pid=""
+
+cleanup() {
+  if [ -n "$daemon_pid" ]; then kill "$daemon_pid" 2>/dev/null || true; fi
+  wait 2>/dev/null || true
+  rm -rf "$pkg_dir" "$state_dir"
+}
+trap cleanup EXIT
+
+cp -R "$dist_dir" "$pkg_dir/dist"
+mkdir -p "$pkg_dir/ui"
+cp -R "$ui_dist" "$pkg_dir/ui/dist"
+
+# Boot the bundle via `bun` on an OS-assigned port with the isolated state dir.
+XDG_STATE_HOME="$state_dir" bun "$pkg_dir/dist/cli.js" daemon --ephemeral &
+daemon_pid=$!
+
+# Discover the bound port from the lock the daemon writes after bind (~5s poll).
+port=""
+for _ in $(seq 1 100); do
+  if [ -f "$lock_file" ]; then
+    port="$(bun -e 'const f=Bun.file(process.argv[1]); if(await f.exists()){const l=await f.json(); if(l.port){process.stdout.write(String(l.port));}}' "$lock_file" 2>/dev/null || true)"
+    if [ -n "$port" ]; then break; fi
+  fi
+  if ! kill -0 "$daemon_pid" 2>/dev/null; then
+    echo "smoke-bundle: daemon exited before writing its lock" >&2
+    exit 1
+  fi
+  sleep 0.05
+done
+if [ -z "$port" ]; then
+  echo "smoke-bundle: daemon did not report a port within ~5s" >&2
+  exit 1
+fi
+
+base="http://127.0.0.1:$port"
+echo "smoke-bundle: daemon up on $base (pid $daemon_pid, state $state_dir)"
+
+# --- GET / : 200 text/html referencing hashed assets ----------------------
+index_headers="$(curl -sS -D - -o /dev/null "$base/")"
+index_status="$(printf '%s' "$index_headers" | awk 'NR==1{print $2}')"
+index_ctype="$(printf '%s' "$index_headers" | awk -F': ' 'tolower($1)=="content-type"{print tolower($2)}' | tr -d '\r')"
+if [ "$index_status" != "200" ]; then
+  echo "smoke-bundle: GET / returned $index_status (expected 200)" >&2
+  exit 1
+fi
+case "$index_ctype" in
+*text/html*) : ;;
+*)
+  echo "smoke-bundle: GET / Content-Type is '$index_ctype' (expected text/html)" >&2
+  exit 1
+  ;;
+esac
+
+index_body="$(curl -sS "$base/")"
+asset_paths=()
+while IFS= read -r line; do asset_paths+=("$line"); done < <(printf '%s' "$index_body" | grep -oE '/assets/[A-Za-z0-9._/-]+' | sort -u)
+if [ "${#asset_paths[@]}" -eq 0 ]; then
+  echo "smoke-bundle: served index references no /assets/ URLs (placeholder served? ui/dist missing?)" >&2
+  echo "--- served index ---" >&2
+  printf '%s\n' "$index_body" >&2
+  exit 1
+fi
+echo "smoke-bundle: index references ${#asset_paths[@]} hashed asset(s)"
+
+# --- every referenced asset: 200 with a sane Content-Type -----------------
+for path in "${asset_paths[@]}"; do
+  headers="$(curl -sS -D - -o /dev/null "$base$path")"
+  status="$(printf '%s' "$headers" | awk 'NR==1{print $2}')"
+  ctype="$(printf '%s' "$headers" | awk -F': ' 'tolower($1)=="content-type"{print tolower($2)}' | tr -d '\r')"
+  if [ "$status" != "200" ]; then
+    echo "smoke-bundle: asset $path returned $status (expected 200)" >&2
+    exit 1
+  fi
+  case "$ctype" in
+  "" | *application/octet-stream*)
+    echo "smoke-bundle: asset $path has unhelpful Content-Type '$ctype'" >&2
+    exit 1
+    ;;
+  esac
+  echo "smoke-bundle: ok 200 $path ($ctype)"
+done
+
+# --- GET /api/health : identifies caret -----------------------------------
+health="$(curl -sS "$base/api/health")"
+service="$(printf '%s' "$health" | bun -e 'const t=await Bun.stdin.text(); try{process.stdout.write(String(JSON.parse(t).service??""));}catch{}')"
+if [ "$service" != "caret" ]; then
+  echo "smoke-bundle: /api/health service is '$service' (expected caret)" >&2
+  echo "--- health body ---" >&2
+  printf '%s\n' "$health" >&2
+  exit 1
+fi
+
+echo "smoke-bundle: PASS — the bun bundle + sibling ui/dist serve the multi-asset UI"
