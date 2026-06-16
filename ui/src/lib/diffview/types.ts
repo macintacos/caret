@@ -28,9 +28,10 @@ export type SourceDiffLineAnnotation = DiffLineAnnotation;
 
 /** Imperative handle a SourceView hands its parent once mounted. */
 export interface SourceViewApi {
-  /** Scrolls the view so the 1-based source line is at the top of the
-   * viewport. No-op when the line is outside the rendered range. */
-  scrollToLine(line: number): void;
+  /** Scrolls the view so the 1-based source line is at the top of the viewport.
+   * Returns whether a matching row was found — false (a no-op) when the line is
+   * outside the rendered range or the view has not painted yet. */
+  scrollToLine(line: number): boolean;
   /** The view's host element (the shadow host). Light-DOM children projected
    * into its annotation slots render inline within the library's reserved rows
    * (see annotationSlot.ts). */
