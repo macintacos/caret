@@ -34,7 +34,9 @@ export const IDENTITY = { service: "caret", version: VERSION } as const;
  * The daemon self-spawn vector (does the script path need re-passing?) and the
  * build fingerprint (which file identifies the build?) key off this; the
  * production-vs-dev signal below collapses "bundle" and "binary" together. */
-export function buildKind(argv1: string | undefined = process.argv[1]): "binary" | "bundle" | "dev" {
+export function buildKind(
+  argv1: string | undefined = process.argv[1],
+): "binary" | "bundle" | "dev" {
   if (argv1?.endsWith(".ts")) return "dev";
   if (argv1?.endsWith(".js")) return "bundle";
   return "binary";
