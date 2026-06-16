@@ -6,22 +6,9 @@
 // composer, the annotation-card edit field, and the saved-comment render path
 // stay untouched.
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { css } from "@codemirror/lang-css";
-import { go } from "@codemirror/lang-go";
-import { html } from "@codemirror/lang-html";
-import { javascript } from "@codemirror/lang-javascript";
-import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
-import { python } from "@codemirror/lang-python";
-import { rust } from "@codemirror/lang-rust";
-import { sql } from "@codemirror/lang-sql";
-import { yaml } from "@codemirror/lang-yaml";
-import {
-  HighlightStyle,
-  type Language,
-  syntaxHighlighting,
-  syntaxTree,
-} from "@codemirror/language";
+import { HighlightStyle, syntaxHighlighting, syntaxTree } from "@codemirror/language";
+import { languages } from "@codemirror/language-data";
 import { type Extension, Prec, type Range } from "@codemirror/state";
 import {
   Decoration,
@@ -45,42 +32,9 @@ export interface MarkdownEditorOptions {
   onCancelChord?: () => void;
 }
 
-// A curated set of languages for fenced-code highlighting, matching the common
-// languages the diff view already supports via shiki. Built eagerly (no lazy
-// chunk loading) and cached by canonical name; the editor passes the resolver to
-// markdown() so fenced blocks parse their info-string language. Add a language by
-// installing its @codemirror/lang-* package and listing it here.
-const codeLanguageByName: Record<string, Language> = {
-  javascript: javascript({ jsx: true }).language,
-  jsx: javascript({ jsx: true }).language,
-  typescript: javascript({ typescript: true }).language,
-  tsx: javascript({ typescript: true, jsx: true }).language,
-  python: python().language,
-  json: json().language,
-  css: css().language,
-  html: html().language,
-  rust: rust().language,
-  go: go().language,
-  yaml: yaml().language,
-  sql: sql().language,
-};
-const codeLanguageAlias: Record<string, string> = {
-  js: "javascript",
-  ts: "typescript",
-  py: "python",
-  rs: "rust",
-  golang: "go",
-  yml: "yaml",
-  jsonc: "json",
-};
-function resolveCodeLanguage(info: string): Language | null {
-  const key = info.trim().toLowerCase();
-  return codeLanguageByName[codeLanguageAlias[key] ?? key] ?? null;
-}
-
 // The markdown grammar tags structure (strong/emphasis/heading/link) and the
 // syntax markers (meta); the code-* tags below colour fenced-block content once a
-// language parses it (see resolveCodeLanguage). Colours are caret tokens
+// language parses it (see codeLanguages in markdownExtensions). Colours are caret tokens
 // (hex/var, never oklch) and mirror the diff view's shiki palette: keyword =
 // accent, string = ok/green, comment = faint, names/types/numbers = accent-bright.
 const highlightStyle = HighlightStyle.define([
@@ -238,7 +192,10 @@ const theme = EditorView.theme({
 export function markdownExtensions(opts: MarkdownEditorOptions): Extension[] {
   return [
     history(),
-    markdown({ codeLanguages: resolveCodeLanguage }),
+    // codeLanguages: the full @codemirror/language-data set (~140 languages),
+    // each lazy-loaded on demand when a fenced block declares it — so the initial
+    // bundle stays lean and new languages need no code change here.
+    markdown({ codeLanguages: languages }),
     syntaxHighlighting(highlightStyle),
     codeHighlighter,
     EditorView.lineWrapping,

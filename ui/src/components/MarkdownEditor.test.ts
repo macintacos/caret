@@ -1,4 +1,5 @@
 import "../../test-mount.ts";
+import { languages } from "@codemirror/language-data";
 import { describe, expect, test } from "bun:test";
 import { render } from "../../test-mount.ts";
 import MarkdownEditor from "./MarkdownEditor.svelte";
@@ -72,7 +73,10 @@ describe("MarkdownEditor code styling", () => {
     );
   }
 
-  test("highlights fenced code for a known language", () => {
+  test("highlights fenced code for a known language", async () => {
+    // Languages load lazily in production (@codemirror/language-data); preload
+    // JavaScript so the highlight is applied on the first synchronous render here.
+    await languages.find((l) => l.alias.includes("javascript"))?.load();
     const { target, flush } = render(MarkdownEditor, {
       value: "```javascript\nconst x = 1\n```",
       onInput: () => {},
