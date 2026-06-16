@@ -92,6 +92,14 @@ export interface CreateServerOptions {
   /** Leveled lifecycle logger (see log.ts CaretLogger); defaults to a no-op so
    * tests stay quiet. Lifecycle events log at info, handler failures at error. */
   log?: CaretLogger;
+  /** Schedule the idle-shutdown timer; injectable so tests fire it deterministically
+   * instead of racing a real delay. Defaults to setTimeout. (The idle timer is the
+   * only one armed at boot with no request in flight, so it's the one a test must be
+   * able to control — the long-poll heartbeat timer is always awaited inside a
+   * request and never races test setup.) */
+  setTimer?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
+  /** Cancel a scheduled idle-shutdown timer. Defaults to clearTimeout. */
+  clearTimer?: (handle: ReturnType<typeof setTimeout>) => void;
 }
 
 export interface CaretServer {
@@ -375,6 +383,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     });
   }
 
+  // Idle-timer scheduling is injectable (default: real timers) so tests drive it
+  // deterministically — see CreateServerOptions.setTimer. Read from opts directly,
+  // like opts.port below, rather than threading through resolveOptions.
+  const setTimer = opts.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
+  const clearTimer = opts.clearTimer ?? ((h) => clearTimeout(h));
+
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   let inFlight = 0;
   let stopped = false;
@@ -390,13 +404,13 @@ export function createServer(opts: CreateServerOptions): CaretServer {
 
   function cancelIdle() {
     if (idleTimer) {
-      clearTimeout(idleTimer);
+      clearTimer(idleTimer);
       idleTimer = null;
     }
   }
   function armIdle() {
     if (idleTimer || stopped || store.pendingCount() !== 0) return;
-    idleTimer = setTimeout(maybeShutdown, idle);
+    idleTimer = setTimer(maybeShutdown, idle);
   }
   // Arm when no review is awaiting a decision; cancel while one is pending.
   // (A `rejected` review persists to disk and rehydrates when its revision
