@@ -187,7 +187,11 @@ run_success_installer() {
   local root="$1" stubs="$2" home="$3"
   # Pin XDG_STATE_HOME under the stub HOME so the generated dev marketplace
   # (make-dev-marketplace.sh) lands inside the fixture and is cleaned with it.
-  PATH="$stubs:$PATH" HOME="$home" XDG_STATE_HOME="$home/.local/state" NO_COLOR=1 "$bash_bin" "$root/scripts/install.sh" 2>&1
+  # Pin CARET_AGENTS=claude so agent detection is deterministic: the fixture stubs
+  # claude/git/bun/bunx but can't hide a host `opencode` binary, and a detected
+  # opencode would fire the OpenCode step looking for a bin/caret this fixture
+  # never builds. The OpenCode path has its own dry-run + real both-agents tests.
+  PATH="$stubs:$PATH" HOME="$home" XDG_STATE_HOME="$home/.local/state" NO_COLOR=1 CARET_AGENTS=claude "$bash_bin" "$root/scripts/install.sh" 2>&1
 }
 
 # Happy path: every tool succeeds.
@@ -313,7 +317,7 @@ read -r ROOT STUBS HOME_DIR LOG < <(make_success_fixture)
 write_claude_stub "$STUBS" "$LOG"
 seed_local_artifacts "$ROOT" "$LOG"
 rc=0
-fl_real="$(PATH="$STUBS:$PATH" HOME="$HOME_DIR" XDG_STATE_HOME="$HOME_DIR/.local/state" NO_COLOR=1 "$bash_bin" "$ROOT/scripts/install.sh" --from-local 2>&1)" || rc=$?
+fl_real="$(PATH="$STUBS:$PATH" HOME="$HOME_DIR" XDG_STATE_HOME="$HOME_DIR/.local/state" NO_COLOR=1 CARET_AGENTS=claude "$bash_bin" "$ROOT/scripts/install.sh" --from-local 2>&1)" || rc=$?
 calls="$(cat "$LOG")"
 if [ "$rc" -eq 0 ]; then
   ok "--from-local real run exits 0"
@@ -340,7 +344,7 @@ read -r ROOT STUBS HOME_DIR LOG < <(make_success_fixture)
 write_claude_stub "$STUBS" "$LOG" "uninstall enable"
 seed_local_artifacts "$ROOT" "$LOG" 1
 rc=0
-PATH="$STUBS:$PATH" HOME="$HOME_DIR" XDG_STATE_HOME="$HOME_DIR/.local/state" NO_COLOR=1 "$bash_bin" "$ROOT/scripts/install.sh" --from-local >/dev/null 2>&1 || rc=$?
+PATH="$STUBS:$PATH" HOME="$HOME_DIR" XDG_STATE_HOME="$HOME_DIR/.local/state" NO_COLOR=1 CARET_AGENTS=claude "$bash_bin" "$ROOT/scripts/install.sh" --from-local >/dev/null 2>&1 || rc=$?
 if [ "$rc" -eq 0 ]; then
   ok "--from-local best-effort uninstall + daemon-cycle failures do not fail the install"
 else
@@ -448,6 +452,35 @@ assert_absent "$cc_only" "install-opencode" "CARET_AGENTS=claude skips the OpenC
 both_agents="$(CARET_DRY_RUN=1 CARET_AGENTS=claude,opencode "$bash_bin" "$script" 2>&1)"
 assert_contains "$both_agents" "claude plugin install" "CARET_AGENTS=claude,opencode plans the Claude install"
 assert_contains "$both_agents" "install-opencode" "CARET_AGENTS=claude,opencode plans the OpenCode install"
+
+# --- consolidated section + correct OpenCode demo hint (EXC-661) --------------
+# The progress now renders under one "Installing caret" section, and the footer
+# points OpenCode users at /caret:demo (its namespaced command), not the stale
+# /demo. Both only surface on a real run — dry-run renders print_plan, not the
+# summary — so drive a synthetic --from-local install into BOTH agents. The
+# OpenCode register shells out to "$REPO_DIR/bin/caret install-opencode", so seed
+# a bin/caret stub alongside the daemon's bin/caret-native.
+read -r ROOT STUBS HOME_DIR LOG < <(make_success_fixture)
+write_claude_stub "$STUBS" "$LOG"
+seed_local_artifacts "$ROOT" "$LOG"
+cat >"$ROOT/bin/caret" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "caret \$*" >>"$LOG"
+exit 0
+STUB
+chmod +x "$ROOT/bin/caret"
+rc=0
+both_real="$(PATH="$STUBS:$PATH" HOME="$HOME_DIR" XDG_STATE_HOME="$HOME_DIR/.local/state" NO_COLOR=1 CARET_AGENTS=claude,opencode "$bash_bin" "$ROOT/scripts/install.sh" --from-local 2>&1)" || rc=$?
+if [ "$rc" -eq 0 ]; then
+  ok "both-agents --from-local real run exits 0"
+else
+  fail "both-agents --from-local real run exited $rc: $both_real"
+fi
+assert_contains "$both_real" "Installing caret" "progress renders under one consolidated 'Installing caret' section"
+assert_contains "$both_real" "/caret:demo" "summary points users at /caret:demo"
+assert_absent "$both_real" "/demo (OpenCode)" "summary drops the stale /demo (OpenCode) hint"
+assert_absent "$both_real" "/demo command" "summary drops the stale '/demo command' wording"
+rm -rf "$ROOT" "$STUBS" "$HOME_DIR"
 
 if [ "$fails" -eq 0 ]; then
   printf '\nAll install.sh dry-run tests passed.\n'
