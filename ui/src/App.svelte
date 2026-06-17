@@ -262,7 +262,7 @@
 <!-- Viewport-pinned build badge (EXC-561). A root sibling of .shell, not inside
      the grid, so it's always visible regardless of review state; self-gates on
      `version` until the health probe lands. -->
-<VersionBadge {version} {commit} />
+<VersionBadge {version} {commit} {isDev} />
 
 <!-- Persistent plan-review status strip. A root sibling of .shell (the
      VersionBadge pattern), never a grid child, so the shell's grid-template-rows
