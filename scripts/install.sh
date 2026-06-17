@@ -83,16 +83,15 @@ section() {
 
 # Per-step result glyphs: ✓ done, ✗ failed. The in-progress "→ …" line and the
 # spinner are owned by step() (below); ok()/fail_step() just render the settled
-# line. STEP_LABEL lets them restate the label without the caller repeating it.
-# All silent in dry-run — the plan summary speaks for that mode.
-STEP_LABEL=""
+# line for the label step() hands them. All silent in dry-run — the plan summary
+# speaks for that mode.
 ok() {
   if [ "$DRY_RUN" -eq 1 ]; then return 0; fi
-  printf '  %s✓%s %s\n' "$C_GREEN" "$C_RESET" "${1:-$STEP_LABEL}"
+  printf '  %s✓%s %s\n' "$C_GREEN" "$C_RESET" "$1"
 }
 fail_step() {
   if [ "$DRY_RUN" -eq 1 ]; then return 0; fi
-  printf '  %s✗%s %s\n' "$C_RED" "$C_RESET" "${1:-$STEP_LABEL}"
+  printf '  %s✗%s %s\n' "$C_RED" "$C_RESET" "$1"
 }
 
 require() {
@@ -169,7 +168,6 @@ step() {
     "$@"
     return 0
   fi
-  STEP_LABEL="$label"
   local log rc=0
   log="$(mktemp)"
   if [ "$FANCY" -eq 1 ]; then
@@ -434,8 +432,8 @@ fi
 # caret installs into OpenCode as auto-loaded files via its own tested subcommand
 # (the file/JSON logic lives in TS, not bash): it drops the plugin + command files
 # into OpenCode's config dir and never touches the user's `plugin` config array.
-# Routed through run(), so CARET_DRY_RUN previews the exact command; its stdout is
-# hushed so the step / ✓ line speaks for it.
+# Routed through run(), so CARET_DRY_RUN previews the exact command; step()
+# captures its output and shows it only on failure, so the ✓ line speaks for it.
 if [ "$WANT_OPENCODE" -eq 1 ]; then
   step "Installing the caret OpenCode plugin + commands" \
     run "$REPO_DIR/bin/caret" install-opencode

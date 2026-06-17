@@ -104,7 +104,7 @@ assert_contains "$fail_out" "✗" "failed long step prints a ✗ glyph"
 assert_absent "$fail_out" "Registering" "a failed build aborts before any registration step"
 
 # --- success path through the register phase (synthetic checkout, all tools stubbed) ---
-# A real run only ever exercised the register block and run_long's success branch
+# A real run only ever exercised the register block and step()'s success branch
 # interactively. We drive it hermetically: a synthetic local checkout (so source
 # resolution takes the in-place build path — no clone, no network) plus stub
 # git/bun/bunx/claude on PATH so nothing real builds or registers. Every tool
