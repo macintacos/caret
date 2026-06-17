@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
 #
-# caret installer — builds caret on your machine and registers it with Claude
-# Code through the native plugin system, so you never need `claude --plugin-dir`.
+# caret installer — builds caret on your machine and registers it with your
+# coding agent(s): Claude Code (the native plugin system, so you never need
+# `claude --plugin-dir`) and/or OpenCode (an auto-loaded plugin).
 #
 #   curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/install.sh | bash
 #
 # It clones caret at its latest release tag (vX.Y.Z) — no manual `git clone`
 # needed — builds the platform-specific binary, and installs it as a plugin.
 # Re-run any time to update — it fetches the latest release, rebuilds, and
-# reinstalls. Requires `git`, `bun` (https://bun.sh), and `claude`.
+# reinstalls. Requires `git` and `bun` (https://bun.sh); `claude` and/or
+# `opencode` for the agent(s) you install into.
+#
+# caret installs into Claude Code and/or OpenCode. It detects which you have and,
+# when both are present, prompts (on a TTY) or installs into both. Set
+# CARET_AGENTS=claude or CARET_AGENTS=claude,opencode to choose non-interactively.
 #
 # Set CARET_DRY_RUN=1 to preview without changing anything: it runs the same
 # read-only detection, then prints the exact commands it would run. As an env
@@ -225,7 +231,52 @@ require git "install git, then re-run"
 if [ "$FROM_LOCAL" -eq 0 ]; then
   require bun "install Bun from https://bun.sh, then re-run"
 fi
-require claude "install Claude Code (https://claude.com/claude-code), then re-run"
+
+# --- target selection (read-only) -------------------------------------------
+# caret installs into Claude Code and/or OpenCode. Detect which agent each
+# machine has, then choose targets: CARET_AGENTS (comma list, e.g. "claude" or
+# "claude,opencode") overrides; else with both present, prompt on a TTY and
+# otherwise install into both; with one present, use it; with neither, default to
+# Claude for back-compat. `claude` is required only when Claude is a target; the
+# OpenCode install needs no `opencode` binary (it just writes files).
+WANT_CLAUDE=0
+WANT_OPENCODE=0
+have_claude=0
+have_opencode=0
+command -v claude >/dev/null 2>&1 && have_claude=1
+if command -v opencode >/dev/null 2>&1 || [ -d "${XDG_CONFIG_HOME:-$HOME/.config}/opencode" ]; then
+  have_opencode=1
+fi
+if [ -n "${CARET_AGENTS:-}" ]; then
+  case ",$CARET_AGENTS," in *,claude,*) WANT_CLAUDE=1 ;; esac
+  case ",$CARET_AGENTS," in *,opencode,*) WANT_OPENCODE=1 ;; esac
+elif [ "$have_claude" -eq 1 ] && [ "$have_opencode" -eq 1 ]; then
+  if [ -t 0 ] && [ "$DRY_RUN" -eq 0 ]; then
+    printf 'Both Claude Code and OpenCode detected. Install caret into which? [both/claude/opencode] (both): '
+    read -r reply </dev/tty 2>/dev/null || reply=""
+    case "$reply" in
+    claude) WANT_CLAUDE=1 ;;
+    opencode) WANT_OPENCODE=1 ;;
+    *)
+      WANT_CLAUDE=1
+      WANT_OPENCODE=1
+      ;;
+    esac
+  else
+    WANT_CLAUDE=1
+    WANT_OPENCODE=1
+  fi
+else
+  WANT_CLAUDE="$have_claude"
+  WANT_OPENCODE="$have_opencode"
+fi
+# Neither detected (or CARET_AGENTS matched nothing): default to Claude.
+if [ "$WANT_CLAUDE" -eq 0 ] && [ "$WANT_OPENCODE" -eq 0 ]; then
+  WANT_CLAUDE=1
+fi
+if [ "$WANT_CLAUDE" -eq 1 ]; then
+  require claude "install Claude Code (https://claude.com/claude-code), then re-run"
+fi
 
 # Latest published release tag (vX.Y.Z), newest first — mirrors the sort used by
 # the release tooling in scripts/release/git.ts.
@@ -338,31 +389,46 @@ else
   fi
 fi
 
-# --- register ---------------------------------------------------------------
-section "Register"
-# The committed .claude-plugin/marketplace.json now uses an npm source so the
-# public `/plugin marketplace add macintacos/caret` installs the published
-# package (EXC-643). A LOCAL build must install THIS checkout instead, so
-# generate a private dev marketplace whose plugin source symlinks to the
-# checkout (make-dev-marketplace.sh owns the generation so the whole step stays
-# one run()-tracked command in the dry-run plan), then register it (idempotent:
-# add, else update). The add's chatter — it prints an "already on disk" note to
-# stdout when the marketplace exists — is hidden so a re-run stays clean; a real
-# failure still aborts via the visible-stderr update fallback.
-DEV_MARKETPLACE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/caret/dev-marketplace"
-step "Registering the caret marketplace"
-run bash "$REPO_DIR/scripts/make-dev-marketplace.sh" "$REPO_DIR" "$DEV_MARKETPLACE_DIR"
-run claude plugin marketplace add "$DEV_MARKETPLACE_DIR" >/dev/null 2>&1 || run claude plugin marketplace update "$MARKETPLACE" >/dev/null
-ok
+# --- register: Claude Code --------------------------------------------------
+if [ "$WANT_CLAUDE" -eq 1 ]; then
+  section "Register"
+  # The committed .claude-plugin/marketplace.json now uses an npm source so the
+  # public `/plugin marketplace add macintacos/caret` installs the published
+  # package (EXC-643). A LOCAL build must install THIS checkout instead, so
+  # generate a private dev marketplace whose plugin source symlinks to the
+  # checkout (make-dev-marketplace.sh owns the generation so the whole step stays
+  # one run()-tracked command in the dry-run plan), then register it (idempotent:
+  # add, else update). The add's chatter — it prints an "already on disk" note to
+  # stdout when the marketplace exists — is hidden so a re-run stays clean; a real
+  # failure still aborts via the visible-stderr update fallback.
+  DEV_MARKETPLACE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/caret/dev-marketplace"
+  step "Registering the caret marketplace"
+  run bash "$REPO_DIR/scripts/make-dev-marketplace.sh" "$REPO_DIR" "$DEV_MARKETPLACE_DIR"
+  run claude plugin marketplace add "$DEV_MARKETPLACE_DIR" >/dev/null 2>&1 || run claude plugin marketplace update "$MARKETPLACE" >/dev/null
+  ok
 
-# Reinstall so the freshly built binary always lands in the plugin cache, even
-# when the version is unchanged. uninstall/enable are best-effort (|| true);
-# their routine noise is hidden, matching the pre-polish installer.
-step "Installing the caret plugin"
-run claude plugin uninstall "${PLUGIN}@${MARKETPLACE}" >/dev/null 2>&1 || true
-run claude plugin install "${PLUGIN}@${MARKETPLACE}" --scope user >/dev/null
-run claude plugin enable "${PLUGIN}@${MARKETPLACE}" >/dev/null 2>&1 || true
-ok
+  # Reinstall so the freshly built binary always lands in the plugin cache, even
+  # when the version is unchanged. uninstall/enable are best-effort (|| true);
+  # their routine noise is hidden, matching the pre-polish installer.
+  step "Installing the caret plugin"
+  run claude plugin uninstall "${PLUGIN}@${MARKETPLACE}" >/dev/null 2>&1 || true
+  run claude plugin install "${PLUGIN}@${MARKETPLACE}" --scope user >/dev/null
+  run claude plugin enable "${PLUGIN}@${MARKETPLACE}" >/dev/null 2>&1 || true
+  ok
+fi
+
+# --- register: OpenCode ------------------------------------------------------
+# caret installs into OpenCode as auto-loaded files via its own tested subcommand
+# (the file/JSON logic lives in TS, not bash): it drops the plugin + command files
+# into OpenCode's config dir and never touches the user's `plugin` config array.
+# Routed through run(), so CARET_DRY_RUN previews the exact command; its stdout is
+# hushed so the step / ✓ line speaks for it.
+if [ "$WANT_OPENCODE" -eq 1 ]; then
+  section "OpenCode"
+  step "Installing the caret OpenCode plugin + commands"
+  run "$REPO_DIR/bin/caret" install-opencode >/dev/null
+  ok
+fi
 
 # --- daemon cycle (--from-local only) ---------------------------------------
 # Prewarm so the fresh build takes over the daemon (EXC-555). The just-built
@@ -386,5 +452,11 @@ if [ "$DRY_RUN" -eq 1 ]; then
   print_plan
 else
   echo
-  info "caret installed. Restart Claude Code (or run /reload-plugins), then try /caret:demo."
+  if [ "$WANT_CLAUDE" -eq 1 ] && [ "$WANT_OPENCODE" -eq 1 ]; then
+    info "caret installed for Claude Code + OpenCode. Restart each, then try /caret:demo (Claude) or /demo (OpenCode)."
+  elif [ "$WANT_OPENCODE" -eq 1 ]; then
+    info "caret installed for OpenCode. Restart OpenCode, then try the /demo command."
+  else
+    info "caret installed for Claude Code. Restart Claude Code (or run /reload-plugins), then try /caret:demo."
+  fi
 fi

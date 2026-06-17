@@ -12,6 +12,7 @@
 import { fatalDenyLine } from "./claude/feedback.ts";
 import { claudeAdapter } from "./claude/index.ts";
 import { codexAdapter } from "./codex/index.ts";
+import { opencodeAdapter } from "./opencode/index.ts";
 import type { AgentAdapter } from "./adapter.ts";
 
 /** The adapter selected when no id is given — the Claude adapter, so the existing
@@ -26,6 +27,13 @@ const REGISTRY: Record<string, AgentAdapter> = {
   // contract is modeled from docs and not yet live-verified, and it ships no Codex
   // packaging — registering it proves the second-adapter seam (EXC-532).
   codex: codexAdapter,
+  // The OpenCode adapter (EXC-339): caret's first plugin-shaped integration,
+  // selectable via CARET_AGENT=opencode. Unlike claude/codex, OpenCode is not a
+  // command-hook agent — it loads caret's in-process plugin (the opencode/
+  // packaging), which bridges to `caret review` so the whole daemon-side review
+  // pipeline is reused unchanged. Both ends of its wire are caret-owned. Claude
+  // stays the default.
+  opencode: opencodeAdapter,
 };
 
 /** The registered tool ids, in registration order. */

@@ -1,0 +1,47 @@
+// Maps a core Decision to the caret-defined OpenCode decision JSON the OpenCode
+// plugin reads on `caret review`'s stdout. Unlike the Claude/Codex adapters, both
+// ends of this wire are caret-owned: caret's OpenCode plugin builds the review
+// envelope, pipes it to `caret review`, and reads the decision this module emits.
+// There is no foreign agent's hook-output envelope to model, so the shape is a
+// clean flat decision — the least speculative of the three adapters:
+//
+//   approve         -> { behavior: "allow" }
+//   request changes -> { behavior: "deny", feedback: <text> }
+//
+// The plugin renders an allow into "proceed with the build agent" and a deny into
+// the tool-result string the model revises against (see the opencode/ packaging).
+
+import type { ApproveVariantId, Behavior } from "../../types.ts";
+
+export interface OpencodeDecision {
+  behavior: Behavior;
+  feedback?: string;
+}
+
+export interface DecisionInput {
+  behavior: Behavior;
+  feedback?: string;
+  acceptMode?: ApproveVariantId;
+}
+
+export function toWireDecision(input: DecisionInput): OpencodeDecision {
+  if (input.behavior === "allow") {
+    // OpenCode v1 exposes a single plain approve; an acceptMode escalates nothing
+    // (mirrors codex) — a plan-agent → build-agent switch variant is a documented
+    // future addition, so an approve renders a bare allow.
+    return { behavior: "allow" };
+  }
+  return { behavior: "deny", feedback: input.feedback?.trim() || "Plan changes requested." };
+}
+
+/** Fail-safe deny: shipping an unreviewed plan is the one outcome we never allow. */
+export function denyDecision(reason: string): OpencodeDecision {
+  return toWireDecision({ behavior: "deny", feedback: reason });
+}
+
+/** Last-resort deny wire line for the CLI's fatal handler. Deliberately
+ * dependency-free (literals + JSON.stringify only), so a bug anywhere else in the
+ * adapter cannot take the fail-safe down with it. */
+export function fatalDenyLine(reason: string): string {
+  return JSON.stringify({ behavior: "deny", feedback: reason });
+}

@@ -45,13 +45,38 @@ claude plugin uninstall caret@caret
 claude plugin marketplace remove caret
 ```
 
+### OpenCode
+
+caret also installs into [OpenCode](https://opencode.ai) — as an auto-loaded plugin rather
+than a marketplace entry. Use the script installer; it detects OpenCode (and, if you also
+have Claude Code, asks which to install into — or set `CARET_AGENTS`):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/install.sh | CARET_AGENTS=opencode bash
+```
+
+It builds caret and drops a plugin (`caret.ts`) plus the `/caret:demo`,
+`/caret:discovery`, and `/caret:debug` commands into your OpenCode config dir, along with
+a `package.json` declaring (and installing) the plugin's one dependency
+(`@opencode-ai/plugin`) — it **never** touches your existing `plugin` config array.
+**Restart OpenCode once** after installing (plugins load at startup), then `/caret:demo`
+works. Because OpenCode has no `ExitPlanMode` equivalent, the plugin registers a
+`caret_review_plan` tool and steers the Plan agent to call it; approving or requesting
+changes flows back exactly as in Claude Code. **Update** by re-running the installer;
+**uninstall** with `caret install-opencode --uninstall` (which also removes caret's
+`package.json` entry). See
+[`docs/agents/opencode-integration.md`](docs/agents/opencode-integration.md) for the
+design.
+
 ### Build from source (advanced)
 
 Prefer a platform-native compiled binary over the `bun` bundle? The build-from-source
 installer clones caret at its latest release (the newest `vX.Y.Z` tag), compiles the
-binary for your platform, and registers it as a local plugin — no `claude --plugin-dir`.
-It needs [`git`](https://git-scm.com), [`bun`](https://bun.sh), and the
-[`claude`](https://claude.com/claude-code) CLI on your `PATH`:
+binary for your platform, and registers it with your agent(s) — no `claude --plugin-dir`.
+It needs [`git`](https://git-scm.com) and [`bun`](https://bun.sh) on your `PATH`; it
+detects Claude Code and/or OpenCode and installs into the one(s) present (the
+[`claude`](https://claude.com/claude-code) CLI is required only for the Claude target —
+set `CARET_AGENTS=claude,opencode` to choose non-interactively):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/install.sh | bash
@@ -67,11 +92,11 @@ curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/inst
 
 ## How it works
 
-Claude Code's hooks invoke `bin/caret`, a small entrypoint shim that runs caret with five
-subcommands (`daemon`, `prewarm`, `review`, `redact`, `discovery`). The shim execs the
-platform-native compiled binary (`bin/caret-native`) when a build-from-source install
-produced one, and otherwise runs the `bun` bundle (`dist/cli.js`) that the marketplace
-install ships.
+Claude Code's hooks invoke `bin/caret`, a small entrypoint shim that runs caret with its
+subcommands (`daemon`, `prewarm`, `review`, `redact`, `discovery`, and
+`install-opencode`). The shim execs the platform-native compiled binary
+(`bin/caret-native`) when a build-from-source install produced one, and otherwise runs the
+`bun` bundle (`dist/cli.js`) that the marketplace install ships.
 
 ### Architecture: tool-agnostic core + agent adapter
 
@@ -89,11 +114,15 @@ types, never the reverse.
 adapter. `src/adapters/codex/` is a second adapter for the OpenAI Codex CLI that proves
 the boundary is real: it is **default-off and provisional** — its PermissionRequest wire
 contract is modeled from Codex docs and not yet verified against a live Codex session, and
-it ships no Codex packaging (no installer or hook manifests). Select it with
-`CARET_AGENT=codex`; with no selector caret uses Claude, so the shipped Claude plugin
-keeps working unchanged. The hooks table and decision-JSON block below, and the behavioral
-prose in `commands/*.md`, describe **Claude-adapter** surface — they are agent-specific,
-not core behavior.
+it ships no Codex packaging (no installer or hook manifests). `src/adapters/opencode/` is
+a third adapter, for OpenCode — and unlike codex it ships real packaging: an in-process
+plugin and its own installer. OpenCode is plugin-shaped, not command-hook-shaped, so caret
+registers a `caret_review_plan` tool that bridges to `caret review` rather than a hook
+(see [`docs/agents/opencode-integration.md`](docs/agents/opencode-integration.md)). Select
+an adapter with `CARET_AGENT=codex` or `CARET_AGENT=opencode`; with no selector caret uses
+Claude, so the shipped Claude plugin keeps working unchanged. The hooks table and
+decision-JSON block below, and the behavioral prose in `commands/*.md`, describe
+**Claude-adapter** surface — they are agent-specific, not core behavior.
 
 ### The Claude Code adapter
 
@@ -133,6 +162,30 @@ the chosen variant to a session `setMode` permission and emits the resulting
 **Fail-safe = deny.** On a bad payload, an unreachable daemon, a timeout, a signal, or
 daemon death, caret emits `deny` with an explanation — it never auto-approves an
 unreviewed plan.
+
+### The OpenCode adapter
+
+OpenCode has no `ExitPlanMode` hook to intercept, so caret wires in as an
+**in-process plugin** rather than a command hook. The plugin (deployed to your OpenCode
+plugin dir) registers a `caret_review_plan` tool and steers the Plan agent to call it; the
+tool's `execute()` spawns `caret review` (`CARET_AGENT=opencode`), blocks on your decision
+in the browser, and returns an approval or a line-numbered change request the agent
+revises and resubmits. The whole daemon/review pipeline is reused unchanged — the plugin
+is the OpenCode-side counterpart to Claude's `hooks.json`.
+
+OpenCode doesn't fire plugin hooks for subagent tool calls, so caret restricts the review
+tool to primary agents (`experimental.primary_tools` + per-agent `permission`) and
+re-checks the caller in the tool body — a planning agent can't slip an unreviewed plan
+past you through a subagent. The same **fail-safe = deny** rule holds: a spawn failure, an
+unparseable decision, or a timeout all return `deny`.
+
+caret installs into OpenCode (and updates) via the script installer, or directly with
+`caret install-opencode`; alongside the plugin it writes a config-dir `package.json` so
+OpenCode installs the plugin's `@opencode-ai/plugin` dependency on its next start (restart
+OpenCode once after installing). The `/caret:demo`, `/caret:discovery`, and `/caret:debug`
+commands work as they do in Claude Code. See
+[`docs/agents/opencode-integration.md`](docs/agents/opencode-integration.md) for the
+design and the dependency-manifest rationale.
 
 ### Desktop notifications
 
