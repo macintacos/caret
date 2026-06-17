@@ -1,8 +1,8 @@
 // caret's OpenCode plugin (EXC-339). OpenCode is plugin-shaped, not command-hook
 // shaped: it loads this in-process module and lets it register tools and mutate
 // config. caret has no native plan-approval gate to intercept here (OpenCode has
-// no ExitPlanMode equivalent), so — following plannotator's proven pattern — this
-// plugin REGISTERS its own plan-review tool, steers the Plan agent to call it, and
+// no ExitPlanMode equivalent), so this plugin REGISTERS its own plan-review tool,
+// steers the Plan agent to call it, and
 // runs the review synchronously inside the tool's execute(): it spawns
 // `caret review` (CARET_AGENT=opencode) with a caret-defined envelope on stdin,
 // blocks until the human decides in caret's browser UI, and returns the approval

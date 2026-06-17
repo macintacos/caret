@@ -20,12 +20,11 @@ Plan agent and an experimental, CLI-only `plan_exit` tool, but neither is a robu
 version-stable gate a plugin can sit in front of. So caret cannot reuse its "intercept the
 plan-approval event" trick here.
 
-## The model caret uses: register a plan-review tool (the plannotator pattern)
+## The model caret uses: register a plan-review tool
 
-[plannotator](https://github.com/backnotprop/plannotator) — a cross-agent plan-review tool
-with a working OpenCode plugin — solves the no-gate problem by
-**registering its own tool** and steering the Plan agent to call it. caret adopts the same
-shape:
+The robust, version-stable way to gate on a plan in OpenCode is to
+**register a dedicated plan-review tool** and steer the Plan agent to call it. caret does
+this:
 
 - The plugin registers a `caret_review_plan` tool
   (`tool({ description, args, execute })`).
@@ -133,4 +132,3 @@ and the upgrade story tracked in EXC-383.
 - OpenCode config: per-agent `permission`, `experimental.primary_tools`
   (`packages/core/src/v1/config/*`).
 - Subagent bypass: sst/opencode#5894.
-- plannotator's OpenCode plugin: `apps/opencode-plugin/` (the working precedent).
