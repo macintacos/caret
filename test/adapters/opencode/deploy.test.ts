@@ -15,6 +15,17 @@ test("renderPlugin substitutes the version and bin markers (all occurrences)", (
   expect(out).toBe(`v="1.2.3"; bin="/x/bin/caret"; again="/x/bin/caret"`);
 });
 
+test("renderPlugin substitutes values literally even when they contain $-sequences", () => {
+  // A filesystem path may legally contain `$&`, `$$`, `$\``; a plain string
+  // replacement would reinterpret those as String.replace substitution patterns
+  // and corrupt the deployed binary path.
+  const out = renderPlugin(`bin="__CARET_BIN__"; v="__CARET_VERSION__"`, {
+    version: "1.0$$beta",
+    binPath: "/home/a$&b/bin/caret",
+  });
+  expect(out).toBe(`bin="/home/a$&b/bin/caret"; v="1.0$$beta"`);
+});
+
 let dir: string;
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "caret-deploy-"));
@@ -41,15 +52,19 @@ test("deployFiles in dry-run reports paths but writes nothing", () => {
   expect(existsSync(path)).toBe(false);
 });
 
-test("removeFiles deletes targets; dry-run leaves them; a missing path is fine", async () => {
+test("removeFiles removes/reports only files that exist; dry-run leaves them", async () => {
   const path = join(dir, "plugin", "caret.ts");
   await mkdir(join(dir, "plugin"), { recursive: true });
   await writeFile(path, "A");
-  removeFiles([path], { dryRun: true });
+  const dry = removeFiles([path], { dryRun: true });
+  expect(dry.paths).toEqual([path]); // existing file previewed
   expect(existsSync(path)).toBe(true); // dry-run leaves it
-  removeFiles([path], { dryRun: false });
-  expect(existsSync(path)).toBe(false); // really removed
-  expect(() => removeFiles([join(dir, "nope")], { dryRun: false })).not.toThrow();
+  const real = removeFiles([path], { dryRun: false });
+  expect(real.paths).toEqual([path]); // actually removed
+  expect(existsSync(path)).toBe(false);
+  // A target that was never installed is reported as removed-nothing, not a lie.
+  const missing = removeFiles([join(dir, "nope")], { dryRun: false });
+  expect(missing.paths).toEqual([]);
 });
 
 test("a rendered plugin's version is read back by the install probe (render <-> probe agree)", () => {

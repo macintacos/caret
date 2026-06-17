@@ -19,9 +19,10 @@ export const PLUGIN_DIRNAME = "plugin";
  * caret uses the singular, canonical form. */
 export const COMMAND_DIRNAME = "command";
 
-/** Config filenames OpenCode may use in its config dir. Probed in order; the
- * first that parses is used for the manual-plugin-entry scan. `config.json` is the
- * global-dir form this machine uses; `opencode.json[c]` are the documented forms. */
+/** Config filenames OpenCode may use in its config dir. The install probe scans
+ * EVERY one for a manual caret plugin entry (see `install.ts`), so order doesn't
+ * mask a later file. `config.json` is the global-dir form seen in practice;
+ * `opencode.json[c]` are the documented forms. */
 export const CONFIG_FILENAMES = ["config.json", "opencode.json", "opencode.jsonc"] as const;
 
 /** The OpenCode config dir: OPENCODE_CONFIG_DIR override, else

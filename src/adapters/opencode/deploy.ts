@@ -6,16 +6,19 @@
 // dry-run aware. Pure of any path resolution (callers pass absolute paths via
 // paths.ts) so it is unit-testable against a temp dir.
 
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 /** Substitute a deployed template's install-time markers (`__CARET_VERSION__`,
  * `__CARET_BIN__`) with the resolved caret version and the caret binary path —
- * applied to the plugin source and to the command files. Pure. */
+ * applied to the plugin source and to the command files. Pure. The replacements
+ * use a function replacer so the substituted value is taken LITERALLY: a binary
+ * path or version containing `$&` / `$$` / `$\`` (legal in a filesystem path)
+ * must not be reinterpreted as a `String.replace` substitution pattern. */
 export function renderPlugin(source: string, opts: { version: string; binPath: string }): string {
   return source
-    .replaceAll("__CARET_VERSION__", opts.version)
-    .replaceAll("__CARET_BIN__", opts.binPath);
+    .replaceAll("__CARET_VERSION__", () => opts.version)
+    .replaceAll("__CARET_BIN__", () => opts.binPath);
 }
 
 export interface DeployFile {
@@ -45,11 +48,15 @@ export function deployFiles(files: DeployFile[], opts: { dryRun: boolean }): Dep
   return { paths, dryRun: opts.dryRun };
 }
 
-/** Remove each path (best-effort — a missing path is fine). In dry-run, touches
- * nothing and just collects the paths. */
+/** Remove each path that is actually present, and report only those — so an
+ * uninstall on a machine that never installed caret reports "removed 0", not a
+ * confident list of files that were never there. In dry-run, removes nothing but
+ * still reports only the paths that exist (an honest preview). A missing path is
+ * skipped silently. */
 export function removeFiles(targets: string[], opts: { dryRun: boolean }): DeployResult {
   const paths: string[] = [];
   for (const p of targets) {
+    if (!existsSync(p)) continue;
     if (!opts.dryRun) rmSync(p, { force: true });
     paths.push(p);
   }

@@ -71,6 +71,20 @@ test("a manual caret entry in the user's plugin array is surfaced", async () => 
   expect(readOpencodeInstallState().hookInUserSettings).toBe(true);
 });
 
+test("a manual caret entry in a later config file is not masked by an earlier one", async () => {
+  const dir = join(tmp, "opencode");
+  await mkdir(dir, { recursive: true });
+  // config.json parses but has a caret-less plugin array; opencode.json holds the
+  // real manual entry. The probe must scan both, not stop at the first parseable.
+  await writeFile(join(dir, "config.json"), JSON.stringify({ plugin: ["other@1.0.0"] }));
+  await writeFile(
+    join(dir, "opencode.json"),
+    JSON.stringify({ plugin: ["@macintacos/caret-opencode@1.0.0"] }),
+  );
+  process.env.OPENCODE_CONFIG_DIR = dir;
+  expect(readOpencodeInstallState().hookInUserSettings).toBe(true);
+});
+
 test("a plugin file without a version marker reports enabled but version unknown", async () => {
   const dir = join(tmp, "opencode");
   await mkdir(join(dir, "plugin"), { recursive: true });

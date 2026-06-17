@@ -51,18 +51,22 @@ function readPluginVersion(path: string): string | "unknown" {
   return text.match(VERSION_MARKER)?.[1] ?? "unknown";
 }
 
-/** Scan the user's OpenCode config `plugin` array for a MANUAL caret entry — the
- * normally-false probe, since caret installs as the auto-loaded plugin file rather
- * than an array entry. "unknown" only when no config file is present/readable;
- * false when one parses but holds no caret entry; true when a caret plugin is
- * listed. */
+/** Scan the user's OpenCode config `plugin` array(s) for a MANUAL caret entry —
+ * the normally-false probe, since caret installs as the auto-loaded plugin file
+ * rather than an array entry. Checks EVERY candidate config filename and returns
+ * true if any lists a caret plugin, so an entry in `opencode.json` isn't masked by
+ * an earlier, caret-less `config.json`. Returns false when at least one config file
+ * parses but none list caret; "unknown" only when no config file is readable. */
 function readManualPluginEntry(dir: string): boolean | "unknown" {
+  let sawConfig = false;
   for (const name of CONFIG_FILENAMES) {
     const json = readJsonFileSync(join(dir, name)) as { plugin?: unknown } | null;
     if (json === null) continue; // absent/unreadable/unparseable — try the next name
+    sawConfig = true;
     const arr = json.plugin;
-    if (!Array.isArray(arr)) return false; // parses but no plugin array → no manual entry
-    return arr.some((e) => typeof e === "string" && e.includes("caret"));
+    if (Array.isArray(arr) && arr.some((e) => typeof e === "string" && e.includes("caret"))) {
+      return true; // a manual caret entry in any config file the user keeps
+    }
   }
-  return "unknown";
+  return sawConfig ? false : "unknown";
 }
