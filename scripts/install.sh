@@ -81,21 +81,17 @@ section() {
   printf '\n%s%s%s\n' "$C_BOLD" "$1" "$C_RESET"
 }
 
-# Per-step glyphs: → starting, ✓ done. STEP_LABEL lets ok() restate the label
-# without the caller repeating it. Both are silent in dry-run.
-STEP_LABEL=""
-step() {
-  STEP_LABEL="$1"
-  if [ "$DRY_RUN" -eq 1 ]; then return 0; fi
-  printf '  %s→%s %s\n' "$C_BLUE" "$C_RESET" "$1"
-}
+# Per-step result glyphs: ✓ done, ✗ failed. The in-progress "→ …" line and the
+# spinner are owned by step() (below); ok()/fail_step() just render the settled
+# line for the label step() hands them. All silent in dry-run — the plan summary
+# speaks for that mode.
 ok() {
   if [ "$DRY_RUN" -eq 1 ]; then return 0; fi
-  printf '  %s✓%s %s\n' "$C_GREEN" "$C_RESET" "${1:-$STEP_LABEL}"
+  printf '  %s✓%s %s\n' "$C_GREEN" "$C_RESET" "$1"
 }
 fail_step() {
   if [ "$DRY_RUN" -eq 1 ]; then return 0; fi
-  printf '  %s✗%s %s\n' "$C_RED" "$C_RESET" "${1:-$STEP_LABEL}"
+  printf '  %s✗%s %s\n' "$C_RED" "$C_RESET" "$1"
 }
 
 require() {
@@ -123,11 +119,14 @@ run() {
   "$@"
 }
 
-# --- spinner-wrapped long steps ---------------------------------------------
-# Long steps (dependency install, the two builds) get a spinner on a TTY and a
-# plain "→ …" line otherwise. Their output is captured and shown only on
-# failure, so a success collapses to a quiet ✓ while a failure stays legible.
-# Safe under `set -euo pipefail`: the command runs inside an `if` (a failure is
+# --- step runner ------------------------------------------------------------
+# Every install step renders the same way: a braille spinner on a TTY (or a
+# plain "→ …" line otherwise) while its body runs, collapsing in place to a
+# green ✓ on success or a red ✗ + the captured output on failure. The body does
+# its work through run(), so in dry-run step() runs the body to record the plan
+# and draws nothing — print_plan speaks for that mode. Output is captured and
+# shown only on failure, so a clean run is a quiet column of checkmarks.
+# Safe under `set -euo pipefail`: the body runs inside an `if` (a failure is
 # caught, not aborted mid-helper), the real exit code is returned to the caller,
 # and the EXIT/INT trap restores the cursor and reaps the spinner on every path.
 SPIN_PID=""
@@ -144,23 +143,31 @@ trap cleanup EXIT
 trap 'cleanup; exit 130' INT
 
 spinner() {
-  local frames='\|/-' i=0
+  # Braille dots as an array so each frame is one whole glyph regardless of
+  # locale (a multibyte ${str:i:1} substring would slice bytes, not characters).
+  local frames=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏) i=0 n=10
   printf '\033[?25l' # hide cursor while we animate
   while :; do
-    i=$(((i + 1) % 4))
-    printf '\r  %s%s%s %s' "$C_BLUE" "${frames:i:1}" "$C_RESET" "$SPIN_LABEL"
-    sleep 0.1
+    # Bright spinner, dimmed label — so the bright ✓ of a settled step stands
+    # out against the steps still in flight.
+    printf '\r  %s%s%s %s%s%s' "$C_BLUE" "${frames[i]}" "$C_RESET" "$C_DIM" "$SPIN_LABEL" "$C_RESET"
+    i=$(((i + 1) % n))
+    sleep 0.08
   done
 }
 
-run_long() {
+# step LABEL BODY…  — render BODY as one animated step. BODY is a run()-wrapped
+# command, a small body function that chains its run() calls with && / || (so its
+# exit status is "failed iff a non-best-effort command failed" — set -e is
+# suppressed inside an if-tested function, so the chaining, not set -e, drives the
+# abort), or `:` for an informational step with no command of its own.
+step() {
   local label="$1"
   shift
   if [ "$DRY_RUN" -eq 1 ]; then
-    run "$@"
+    "$@"
     return 0
   fi
-  STEP_LABEL="$label"
   local log rc=0
   log="$(mktemp)"
   if [ "$FANCY" -eq 1 ]; then
@@ -334,28 +341,28 @@ elif [ -z "$REPO_DIR" ]; then
 fi
 
 # --- fetch / source ---------------------------------------------------------
-# The network steps go through run_long, so git's transfer chatter (the remote:
-# counting lines, "Unpacking objects", the ref-update summary) is captured and
-# shown only on failure — a clean fetch collapses to a quiet ✓, like the builds.
+# One "Installing caret" section header covers every step below; each step then
+# animates in place. The network steps go through step(), so git's transfer
+# chatter (the remote: counting lines, "Unpacking objects", the ref-update
+# summary) is captured and shown only on failure — a clean fetch collapses to a
+# quiet ✓, like the builds.
+section "Installing caret"
 if [ "$SRC_KIND" = "local" ]; then
-  section "Source"
   if [ "$FROM_LOCAL" -eq 1 ]; then
-    step "Reusing the freshly built checkout at $REPO_DIR ($REF_DESC) — no rebuild"
+    step "Reusing the freshly built checkout at $REPO_DIR ($REF_DESC) — no rebuild" :
   else
-    step "Building the local checkout at $REPO_DIR ($REF_DESC) in place"
+    step "Building the local checkout at $REPO_DIR ($REF_DESC) in place" :
   fi
-  ok
 else
-  section "Fetch"
   if [ "$SRC_ACTION" = "update" ]; then
     # fetch + checkout as one step so the ✓ prints only after both succeed. The
-    # checkout is already --quiet; the fetch is the noisy half run_long hushes.
+    # checkout is already --quiet; the fetch is the noisy half step() hushes.
     # shellcheck disable=SC2016  # $1/$2 are the inner `bash -c` positional args, expanded at runtime
-    run_long "Updating $REPO_DIR to release $TAG" \
-      bash -c 'git -C "$1" fetch --depth 1 --force origin "refs/tags/$2:refs/tags/$2" && git -C "$1" checkout --quiet --detach "$2"' _ "$REPO_DIR" "$TAG"
+    step "Updating $REPO_DIR to release $TAG" \
+      run bash -c 'git -C "$1" fetch --depth 1 --force origin "refs/tags/$2:refs/tags/$2" && git -C "$1" checkout --quiet --detach "$2"' _ "$REPO_DIR" "$TAG"
   else
-    run_long "Cloning release $TAG into $REPO_DIR" \
-      git clone --depth 1 --branch "$TAG" "$REPO_URL" "$REPO_DIR"
+    step "Cloning release $TAG into $REPO_DIR" \
+      run git clone --depth 1 --branch "$TAG" "$REPO_URL" "$REPO_DIR"
   fi
 fi
 
@@ -371,17 +378,16 @@ if [ "$FROM_LOCAL" -eq 1 ]; then
     exit 1
   fi
 else
-  section "Build"
-  run_long "Installing build dependencies" bun install
-  run_long "Building the UI" bash -c 'cd ui && bunx vite build'
+  step "Installing build dependencies" run bun install
+  step "Building the UI" run bash -c 'cd ui && bunx vite build'
   # Compile through the one build task so the flags can't drift from a local
   # `mise run build`: it generates the embed manifest from ui/dist, embeds the
   # sourcemap (readable src/*.ts stack frames), bakes the commit (EXC-452), and
   # copies the UI tree beside the binary as a fallback. Run as a plain bash script
-  # so the installer needs only bun, not mise; in dry-run run_long records it
+  # so the installer needs only bun, not mise; in dry-run step() records it
   # without executing, so its `git rev-parse` never fires in a non-checkout.
   # build-ui above leaves ui/dist in place for it.
-  run_long "Compiling the caret binary" bash .mise/tasks/build-bin
+  step "Compiling the caret binary" run bash .mise/tasks/build-bin
 
   if [ "$DRY_RUN" -eq 0 ] && [ ! -x bin/caret-native ]; then
     err "build did not produce bin/caret-native"
@@ -391,7 +397,6 @@ fi
 
 # --- register: Claude Code --------------------------------------------------
 if [ "$WANT_CLAUDE" -eq 1 ]; then
-  section "Register"
   # The committed .claude-plugin/marketplace.json now uses an npm source so the
   # public `/plugin marketplace add macintacos/caret` installs the published
   # package (EXC-643). A LOCAL build must install THIS checkout instead, so
@@ -402,32 +407,36 @@ if [ "$WANT_CLAUDE" -eq 1 ]; then
   # stdout when the marketplace exists — is hidden so a re-run stays clean; a real
   # failure still aborts via the visible-stderr update fallback.
   DEV_MARKETPLACE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/caret/dev-marketplace"
-  step "Registering the caret marketplace"
-  run bash "$REPO_DIR/scripts/make-dev-marketplace.sh" "$REPO_DIR" "$DEV_MARKETPLACE_DIR"
-  run claude plugin marketplace add "$DEV_MARKETPLACE_DIR" >/dev/null 2>&1 || run claude plugin marketplace update "$MARKETPLACE" >/dev/null
-  ok
+  # add succeeds → the update fallback is skipped; a failing add falls through to
+  # update, and a failing update (no `|| true`) aborts the step.
+  register_marketplace() {
+    run bash "$REPO_DIR/scripts/make-dev-marketplace.sh" "$REPO_DIR" "$DEV_MARKETPLACE_DIR" &&
+      { run claude plugin marketplace add "$DEV_MARKETPLACE_DIR" >/dev/null 2>&1 ||
+        run claude plugin marketplace update "$MARKETPLACE" >/dev/null; }
+  }
+  step "Registering the caret marketplace" register_marketplace
 
   # Reinstall so the freshly built binary always lands in the plugin cache, even
   # when the version is unchanged. uninstall/enable are best-effort (|| true);
-  # their routine noise is hidden, matching the pre-polish installer.
-  step "Installing the caret plugin"
-  run claude plugin uninstall "${PLUGIN}@${MARKETPLACE}" >/dev/null 2>&1 || true
-  run claude plugin install "${PLUGIN}@${MARKETPLACE}" --scope user >/dev/null
-  run claude plugin enable "${PLUGIN}@${MARKETPLACE}" >/dev/null 2>&1 || true
-  ok
+  # their routine noise is hidden, matching the pre-polish installer. install is
+  # the only fatal command, so the step fails iff install fails.
+  install_plugin() {
+    run claude plugin uninstall "${PLUGIN}@${MARKETPLACE}" >/dev/null 2>&1 || true
+    run claude plugin install "${PLUGIN}@${MARKETPLACE}" --scope user >/dev/null &&
+      { run claude plugin enable "${PLUGIN}@${MARKETPLACE}" >/dev/null 2>&1 || true; }
+  }
+  step "Installing the caret plugin" install_plugin
 fi
 
 # --- register: OpenCode ------------------------------------------------------
 # caret installs into OpenCode as auto-loaded files via its own tested subcommand
 # (the file/JSON logic lives in TS, not bash): it drops the plugin + command files
 # into OpenCode's config dir and never touches the user's `plugin` config array.
-# Routed through run(), so CARET_DRY_RUN previews the exact command; its stdout is
-# hushed so the step / ✓ line speaks for it.
+# Routed through run(), so CARET_DRY_RUN previews the exact command; step()
+# captures its output and shows it only on failure, so the ✓ line speaks for it.
 if [ "$WANT_OPENCODE" -eq 1 ]; then
-  section "OpenCode"
-  step "Installing the caret OpenCode plugin + commands"
-  run "$REPO_DIR/bin/caret" install-opencode >/dev/null
-  ok
+  step "Installing the caret OpenCode plugin + commands" \
+    run "$REPO_DIR/bin/caret" install-opencode
 fi
 
 # --- daemon cycle (--from-local only) ---------------------------------------
@@ -442,10 +451,8 @@ fi
 # step does NOT claim the swap is done; it reports only that prewarm ran. Routed
 # through run(), so CARET_DRY_RUN previews it and never performs a real handoff.
 if [ "$FROM_LOCAL" -eq 1 ]; then
-  section "Daemon"
-  step "Prewarming the fresh build's daemon"
-  run ./bin/caret-native prewarm >/dev/null 2>&1 || true
-  ok
+  prewarm_daemon() { run ./bin/caret-native prewarm >/dev/null 2>&1 || true; }
+  step "Prewarming the fresh build's daemon" prewarm_daemon
 fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
@@ -453,9 +460,9 @@ if [ "$DRY_RUN" -eq 1 ]; then
 else
   echo
   if [ "$WANT_CLAUDE" -eq 1 ] && [ "$WANT_OPENCODE" -eq 1 ]; then
-    info "caret installed for Claude Code + OpenCode. Restart each, then try /caret:demo (Claude) or /demo (OpenCode)."
+    info "caret installed for Claude Code + OpenCode. Restart each, then try /caret:demo."
   elif [ "$WANT_OPENCODE" -eq 1 ]; then
-    info "caret installed for OpenCode. Restart OpenCode, then try the /demo command."
+    info "caret installed for OpenCode. Restart OpenCode, then try /caret:demo."
   else
     info "caret installed for Claude Code. Restart Claude Code (or run /reload-plugins), then try /caret:demo."
   fi
