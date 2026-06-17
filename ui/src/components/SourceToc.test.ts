@@ -57,12 +57,13 @@ describe("SourceToc content", () => {
     expect(r[0]!.classList.contains("active")).toBe(false);
   });
 
-  // The per-level lvl-{n} class is the only positioning hook the indent-guide
-  // rules key off (each nested level paints its own vertical guide via a ::before
-  // rule selected by this class). Guard that every row carries its level class so
-  // a future markup change can't silently strip the guides' anchor; happy-dom has
-  // no layout, so the guide's paint itself is an e2e/browser concern, not this.
-  test("every nested row carries its level class so the indent guides anchor", () => {
+  // The per-level lvl-{n} class is the positioning hook the indent ramp keys off
+  // (each level's padding-left + colour is selected by this class — EXC-664
+  // dropped the old per-level ::before guides for clean indentation). Guard that
+  // every row carries its level class so a future markup change can't silently
+  // flatten the hierarchy; happy-dom has no layout, so the indent's paint itself
+  // is an e2e/browser concern, not this.
+  test("every nested row carries its level class so the indent ramp anchors", () => {
     const nested: TocHeading[] = [
       { level: 1, text: "Top", line: 1 },
       { level: 2, text: "Mid", line: 3 },
