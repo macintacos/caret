@@ -9,6 +9,7 @@ import {
   removeFiles,
   removePluginDependency,
   renderPlugin,
+  stripNonDefaultExports,
 } from "../../../src/adapters/opencode/deploy.ts";
 import { readOpencodeInstallState } from "../../../src/adapters/opencode/install.ts";
 import { pluginFilePath } from "../../../src/adapters/opencode/paths.ts";
@@ -30,6 +31,41 @@ test("renderPlugin substitutes values literally even when they contain $-sequenc
     binPath: "/home/a$&b/bin/caret",
   });
   expect(out).toBe(`bin="/home/a$&b/bin/caret"; v="1.0$$beta"`);
+});
+
+test("stripNonDefaultExports drops every export keyword except `export default`", () => {
+  const src = [
+    `export const A = "x";`,
+    `export interface I { a: number }`,
+    `export type T = string;`,
+    `export function f() {}`,
+    `  export async function g() {}`,
+    `const P = () => {};`,
+    `export default P;`,
+  ].join("\n");
+  expect(stripNonDefaultExports(src)).toBe(
+    [
+      `const A = "x";`,
+      `interface I { a: number }`,
+      `type T = string;`,
+      `function f() {}`,
+      `  async function g() {}`,
+      `const P = () => {};`,
+      `export default P;`,
+    ].join("\n"),
+  );
+});
+
+test("rendering+stripping the REAL plugin source leaves only `export default` (opencode ik invariant)", () => {
+  // OpenCode's loader iterates Object.values(module) and throws "Plugin export is not
+  // a function" on the first non-Plugin export, so the deployed file must export only
+  // its plugin function. Prove the real source, once rendered+stripped, does.
+  const src = readFileSync(join(import.meta.dir, "../../../opencode/caret.plugin.ts"), "utf-8");
+  const deployed = stripNonDefaultExports(
+    renderPlugin(src, { version: "1.2.3", binPath: "/b/caret" }),
+  );
+  const exportLines = deployed.split("\n").filter((l) => /^\s*export\b/.test(l));
+  expect(exportLines).toEqual(["export default CaretPlugin;"]);
 });
 
 const DEP = "@opencode-ai/plugin";

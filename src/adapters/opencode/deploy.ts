@@ -57,6 +57,24 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+/** Strip every `export` keyword except `export default` from the plugin source.
+ *
+ * OpenCode's plugin loader iterates a plugin module's exports (`Object.values`)
+ * and throws "Plugin export is not a function" on the FIRST export that is not a
+ * Plugin (a function, or a `{ server }` object) — one bad export rejects the whole
+ * module. caret's plugin SOURCE additionally exports constants (`CARET_PLUGIN_VERSION`,
+ * `REVIEW_TOOL`, `PLANNING_AGENTS`) and pure helpers so `test/opencode/` can unit-test
+ * them; deployed verbatim, those non-function exports make OpenCode reject the plugin.
+ *
+ * So the DEPLOYED artifact must export only its plugin function. This drops the
+ * `export ` keyword off every declaration except `export default`, leaving them as
+ * module-private locals — the default plugin's runtime behaviour is unchanged (it
+ * still references them by name). Applied only to the deployed plugin file, never to
+ * the repo source the tests import. */
+export function stripNonDefaultExports(source: string): string {
+  return source.replace(/^([ \t]*)export (?!default\b)/gm, "$1");
+}
+
 export interface DeployFile {
   /** Absolute path to write. */
   path: string;

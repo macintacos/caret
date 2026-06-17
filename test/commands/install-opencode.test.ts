@@ -12,23 +12,41 @@ import {
 } from "../../src/adapters/opencode/paths.ts";
 import { runInstallOpencodeSubcommand } from "../../src/commands/install-opencode.ts";
 
-// A stub packaging so the subcommand never resolves the real caret root.
+// A stub packaging so the subcommand never resolves the real caret root. The source
+// carries non-default exports (like the real plugin) so the strip step is exercised.
 const PACKAGING: OpencodePackaging = {
-  pluginSource: `const CARET_PLUGIN_VERSION = "__CARET_VERSION__";\nconst BIN = "__CARET_BIN__";\n`,
+  pluginSource: [
+    `export const CARET_PLUGIN_VERSION = "__CARET_VERSION__";`,
+    `export const BIN = "__CARET_BIN__";`,
+    `const CaretPlugin = () => ({});`,
+    `export default CaretPlugin;`,
+    ``,
+  ].join("\n"),
   binPath: "/opt/caret/bin/caret",
   commands: [{ name: "demo.md", contents: "run __CARET_BIN__" }],
 };
 
 let dir: string;
+let depInstallCalls: string[];
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "caret-install-oc-"));
+  depInstallCalls = [];
 });
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
+// Stub the dependency installer so tests never shell out to a real `bun install`.
+const stubInstall = (configDir: string) => {
+  depInstallCalls.push(configDir);
+  return { ok: true, detail: "" };
+};
+
 function install(uninstall = false, dryRun = false) {
-  runInstallOpencodeSubcommand({ uninstall, dryRun }, { configDir: dir, packaging: PACKAGING });
+  runInstallOpencodeSubcommand(
+    { uninstall, dryRun },
+    { configDir: dir, packaging: PACKAGING, installDeps: stubInstall },
+  );
 }
 
 test("install writes a package.json declaring caret's plugin dependency (the load fix)", () => {
@@ -78,4 +96,21 @@ test("dry-run install writes nothing", () => {
   install(false, true);
   expect(existsSync(packageJsonPath(dir))).toBe(false);
   expect(existsSync(pluginFilePath(dir))).toBe(false);
+});
+
+test("install runs the dependency installer once; dry-run and uninstall do not", () => {
+  install();
+  expect(depInstallCalls).toEqual([dir]); // installed the dep into the config dir
+  depInstallCalls = [];
+  install(false, true); // dry-run previews, installs nothing
+  expect(depInstallCalls).toEqual([]);
+  install(true); // uninstall removes, installs nothing
+  expect(depInstallCalls).toEqual([]);
+});
+
+test("the deployed plugin exports only `export default` (OpenCode loads only Plugin exports)", () => {
+  install();
+  const deployed = readFileSync(pluginFilePath(dir), "utf-8");
+  const exportLines = deployed.split("\n").filter((l) => /^\s*export\b/.test(l));
+  expect(exportLines).toEqual(["export default CaretPlugin;"]);
 });

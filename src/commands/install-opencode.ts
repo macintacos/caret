@@ -15,6 +15,7 @@ import {
   removeFiles,
   removePluginDependency,
   renderPlugin,
+  stripNonDefaultExports,
 } from "../adapters/opencode/deploy.ts";
 import { loadOpencodePackaging, type OpencodePackaging } from "../adapters/opencode/packaging.ts";
 import {
@@ -32,11 +33,17 @@ export interface InstallOpencodeOptions {
   dryRun: boolean;
 }
 
-/** Injection seam for tests: override the config dir and packaging so the whole
- * subcommand can run against a temp dir without resolving the real caret root. */
+/** Installs the config-dir package.json's dependency (`bun install` in that dir).
+ * Returns ok + a failure detail rather than throwing — install is best-effort. */
+export type DepInstaller = (configDir: string) => { ok: boolean; detail: string };
+
+/** Injection seam for tests: override the config dir, packaging, and the dependency
+ * installer so the whole subcommand can run against a temp dir without resolving the
+ * real caret root or shelling out to `bun`. */
 export interface InstallOpencodeDeps {
   configDir?: string;
   packaging?: OpencodePackaging;
+  installDeps?: DepInstaller;
 }
 
 /** Deploy or remove caret's OpenCode files. Resolves the config dir + caret
@@ -60,7 +67,11 @@ export function runInstallOpencodeSubcommand(
   const files: DeployFile[] = [
     {
       path: pluginPath,
-      contents: renderPlugin(pkg.pluginSource, { version: VERSION, binPath: pkg.binPath }),
+      // Strip non-default exports: OpenCode rejects a plugin module that exports
+      // any non-Plugin value (caret's source exports test helpers/constants).
+      contents: stripNonDefaultExports(
+        renderPlugin(pkg.pluginSource, { version: VERSION, binPath: pkg.binPath }),
+      ),
     },
     ...pkg.commands.map((c) => ({
       path: join(commandDir(dir), c.name),
@@ -69,13 +80,48 @@ export function runInstallOpencodeSubcommand(
   ];
   const result = deployFiles(files, { dryRun: opts.dryRun });
   const manifest = installManifest(dir, opts.dryRun);
+  if (!opts.dryRun) ensureDependencyInstalled(dir, deps.installDeps ?? bunInstall);
   printResult("installed", [...result.paths, ...manifest], opts.dryRun, dir);
 }
 
-/** Write (or merge into) the config dir's package.json so OpenCode installs the
- * deployed plugin's `@opencode-ai/plugin` dependency at startup — without it the
- * plugin's import is unresolvable and the review tool never registers. Returns the
- * manifest path (for the result) or `[]` when it was left untouched. */
+/** Install the plugin's npm dependency into the config dir ourselves rather than
+ * relying on OpenCode's startup installer — which pins `@opencode-ai/plugin` to its
+ * OWN version and fails against its date-capped registry snapshot. Best-effort: a
+ * missing `bun` or a failed install degrades to a clear instruction (the deployed
+ * `package.json` records the dep, so a later `bun install` finishes the job). */
+function ensureDependencyInstalled(dir: string, install: DepInstaller): void {
+  const r = install(dir);
+  if (r.ok) {
+    process.stdout.write(`caret: installed the plugin dependency (${OPENCODE_PLUGIN_DEP}).\n`);
+  } else {
+    process.stderr.write(
+      `caret: could not auto-install the plugin dependency (${r.detail}). Run \`bun install\` in ${dir} to finish, then restart OpenCode.\n`,
+    );
+  }
+}
+
+/** Production dependency installer: `bun install` in the config dir. Resolves `bun`
+ * from PATH; any failure (missing bun, network) is reported, not thrown. */
+const bunInstall: DepInstaller = (configDir) => {
+  try {
+    const res = Bun.spawnSync(["bun", "install"], {
+      cwd: configDir,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    if (res.exitCode === 0) return { ok: true, detail: "" };
+    const err = new TextDecoder().decode(res.stderr).trim();
+    return { ok: false, detail: err || `bun install exited ${res.exitCode}` };
+  } catch (e) {
+    return { ok: false, detail: e instanceof Error ? e.message : String(e) };
+  }
+};
+
+/** Write (or merge into) the config dir's package.json declaring the deployed
+ * plugin's `@opencode-ai/plugin` dependency — the manifest `bun install` reads to
+ * fetch it (both caret's own install below and OpenCode's startup install). Without
+ * the dependency the plugin's import is unresolvable and the review tool never
+ * registers. Returns the manifest path (for the result) or `[]` when left untouched. */
 function installManifest(dir: string, dryRun: boolean): string[] {
   const path = packageJsonPath(dir);
   const existing = existsSync(path) ? readFileSync(path, "utf-8") : null;

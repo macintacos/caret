@@ -101,10 +101,10 @@ string" shape before writing, so it can't corrupt a user's config.
 The plugin is shipped as a single self-contained `.ts` file (OpenCode loads `.ts`
 directly) that imports only `node:child_process` and `@opencode-ai/plugin`. `src/` never
 imports `@opencode-ai/plugin` (it is caret's only `devDependency`, for typecheck/tests
-only), so the compiled caret binary stays lean — the dependency is OpenCode's to provide
-at the plugin's load time (see § The dependency manifest). Using OpenCode's own
-`tool.schema` (zod) is deliberate: zod schemas are not cross-instance-compatible, so the
-tool's `plan` arg must be declared with OpenCode's zod, not a bundled copy.
+only), so the compiled caret binary stays lean — caret installs that dependency into
+OpenCode's config dir at install time (see § The dependency manifest). Using OpenCode's
+own `tool.schema` (zod) is deliberate: zod schemas are not cross-instance-compatible, so
+the tool's `plan` arg must be declared with OpenCode's zod, not a bundled copy.
 
 This was chosen over (a) a `permission.ask` per-edit gate (wrong semantic), (b)
 re-implementing the daemon round-trip in the plugin (duplication), and (c) publishing a
@@ -115,27 +115,44 @@ step).
 
 A local plugin file is not magically given its npm imports. OpenCode's contract for a
 plugin that imports an npm package is: declare it in a
-**`package.json` in the config dir**, which OpenCode `bun install`s at startup (the same
-mechanism it uses for `plugin`-array packages). So `caret install-opencode` writes that
-manifest alongside the plugin file, pinning `@opencode-ai/plugin` under `dependencies`.
+**`package.json` in the config dir**, which a `bun install` then fetches. So
+`caret install-opencode` writes that manifest (pinning `@opencode-ai/plugin`) and
+**runs `bun install` in the config dir itself** — best-effort, degrading to a printed
+instruction if `bun` is absent.
 
-**This was a live bug (EXC-339 follow-up), not a hypothetical.** The first cut shipped
-only the plugin file. With no manifest, OpenCode tried to auto-install
-`@opencode-ai/plugin` at **its own version** (e.g. `1.17.7`) and its date-capped resolver
-failed —
+**Why caret installs it rather than letting OpenCode.** OpenCode does run a startup
+"background dependency install", but in practice it pins `@opencode-ai/plugin` to its OWN
+version (e.g. `1.17.7`) and resolves against a **date-capped registry snapshot**, so that
+version can fail to resolve —
 `"No matching version found for @opencode-ai/plugin@1.17.7 with a date before <date>"` —
-so the import was unresolvable, the plugin module never loaded, and `caret_review_plan`
-never registered (the agent simply reported it had no such tool). The fix is the manifest,
-pinned to an **older, already-published exact version** (`OPENCODE_PLUGIN_DEP_VERSION` in
-`paths.ts`) so OpenCode's date-capped snapshot can always resolve it. A version skew
-between the pinned `@opencode-ai/plugin` and the running OpenCode is fine: `tool()` is an
-identity function, `tool.schema` is just zod, and the hook names caret uses are stable.
+leaving the import unresolvable and the plugin unloaded (the agent then reports it has no
+`caret_review_plan` tool). This was a live EXC-339 bug. caret's own `bun install` of the
+pinned manifest sidesteps the date-cap; the manifest pins an
+**older, already-published exact version** (`OPENCODE_PLUGIN_DEP_VERSION` in `paths.ts`).
+A version skew between the pinned `@opencode-ai/plugin` and the running OpenCode is fine:
+`tool()` is an identity function, `tool.schema` is just zod, and the hook names caret uses
+are stable.
 
-Note the install completes on the **next OpenCode start** (that is when OpenCode runs the
-`bun install`); a freshly-installed caret therefore needs one OpenCode restart before the
-review tool appears. The npm-package distribution (publish + add to the `plugin` array)
-remains the documented hardening path if the manifest approach ever proves insufficient on
-a target OpenCode version.
+A fresh install still needs **one OpenCode restart** (plugins load at startup). The
+npm-package distribution (publish + add to the `plugin` array) remains the documented
+hardening path if this approach ever proves insufficient on a target OpenCode version.
+
+## The export surface: a plugin module may export ONLY Plugin functions
+
+OpenCode's plugin loader iterates a module's exports (`Object.values(mod)`) and throws
+`TypeError("Plugin export is not a function")` on the FIRST export it cannot coerce to a
+Plugin (a function, or a `{ server }` object) — one bad export rejects the whole module.
+caret's plugin SOURCE exports constants (`CARET_PLUGIN_VERSION`, `REVIEW_TOOL`,
+`PLANNING_AGENTS`) and pure helpers so `test/opencode/` can unit-test them; deployed
+verbatim, the first string export made OpenCode reject the plugin and the tool never
+registered (a second live EXC-339 bug, surfaced by the OpenCode log line
+`failed to load plugin … "Plugin export is not a function"`).
+
+So the install step renders the source and then
+**strips every `export` keyword except `export default`** (`stripNonDefaultExports` in
+`deploy.ts`), leaving the helpers as module-private locals — the deployed artifact exports
+only its default Plugin function, its runtime behaviour unchanged. A test replicates
+OpenCode's loader invariant against the real rendered source.
 
 ## Verified vs. follow-up
 
