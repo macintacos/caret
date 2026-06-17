@@ -38,17 +38,9 @@
   import { buildLinkLayer } from "../lib/diffview/links.ts";
   import { readDiffStyle, writeDiffStyle } from "../lib/diffStylePref.ts";
   import { readDiffIndicators, writeDiffIndicators } from "../lib/diffIndicatorsPref.ts";
-  import {
-    type Overflow,
-    readDisableLineNumbers,
-    readOverflow,
-    writeDisableLineNumbers,
-    writeOverflow,
-  } from "../lib/diffReaderPref.ts";
   import { type CompareStore, createCompare } from "../state/compare.svelte.ts";
   import { setHeadingSlug, takeHeadingSlug } from "../state/headingLink.ts";
   import VersionComparePicker from "./VersionComparePicker.svelte";
-  import ReaderAffordances from "./ReaderAffordances.svelte";
   import type { SourceViewGutter } from "../lib/diffview/options.ts";
   import type { SourceViewApi, SourceViewOptions } from "../lib/diffview/types.ts";
   import { activeHeadingLine, extractHeadings, lineForSlug, slugForLine } from "../lib/toc.ts";
@@ -155,22 +147,11 @@
   const showDiff = $derived(canCompare && compareStore.comparing);
 
   // Reader affordances applied to both the single-version source view and the
-  // compare diff: wrap long lines instead of scrolling them, and hide the
-  // line-number gutter. Seeded from the persisted preference and written through
-  // on toggle so the choice survives a reload. They are independent of contentKey,
-  // so a change updates the view in place (the lifecycle's setOptions path) rather
-  // than recreating it — scroll is preserved.
-  let overflow = $state<Overflow>(readOverflow());
-  let disableLineNumbers = $state(readDisableLineNumbers());
-  function setOverflow(value: Overflow): void {
-    overflow = value;
-    writeOverflow(value);
-  }
-  function setDisableLineNumbers(value: boolean): void {
-    disableLineNumbers = value;
-    writeDisableLineNumbers(value);
-  }
-  const readerOptions = $derived<SourceViewOptions>({ overflow, disableLineNumbers });
+  // compare diff are fixed (EXC-664): long lines scroll (never wrap) and the
+  // line-number gutter is always shown. These were once user toggles (EXC-606),
+  // but that configurability was removed, so the former defaults are now the only
+  // behavior.
+  const readerOptions: SourceViewOptions = { overflow: "scroll", disableLineNumbers: false };
 
   // Identity of the rendered content: the wrapper recreates its instance only
   // when this changes, so a poll tick that re-delivers the same version updates
@@ -465,17 +446,9 @@
   ]);
 </script>
 
-<!-- Control row above the surface. Reader affordances (wrap, line numbers) apply
-     to both the single-version view and the compare diff, so they show in either
-     mode; the version-compare picker appears only when there are versions to
-     compare. -->
+<!-- Control row above the surface: the version-compare picker, shown only when
+     there are versions to compare. -->
 <div class="control-row">
-  <ReaderAffordances
-    {overflow}
-    {disableLineNumbers}
-    onSetOverflow={setOverflow}
-    onSetDisableLineNumbers={setDisableLineNumbers}
-  />
   {#if canCompare}
     <VersionComparePicker
       versions={review.versions}
