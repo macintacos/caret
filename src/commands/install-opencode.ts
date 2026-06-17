@@ -41,7 +41,10 @@ export function runInstallOpencodeSubcommand(opts: InstallOpencodeOptions): void
       path: pluginPath,
       contents: renderPlugin(pkg.pluginSource, { version: VERSION, binPath: pkg.binPath }),
     },
-    ...pkg.commands.map((c) => ({ path: join(commandDir(dir), c.name), contents: c.contents })),
+    ...pkg.commands.map((c) => ({
+      path: join(commandDir(dir), c.name),
+      contents: renderPlugin(c.contents, { version: VERSION, binPath: pkg.binPath }),
+    })),
   ];
   const result = deployFiles(files, { dryRun: opts.dryRun });
   printResult("installed", result.paths, opts.dryRun, dir);

@@ -9,8 +9,9 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-/** Substitute the plugin source's install-time markers with the resolved caret
- * version and the caret binary path the plugin spawns. Pure. */
+/** Substitute a deployed template's install-time markers (`__CARET_VERSION__`,
+ * `__CARET_BIN__`) with the resolved caret version and the caret binary path —
+ * applied to the plugin source and to the command files. Pure. */
 export function renderPlugin(source: string, opts: { version: string; binPath: string }): string {
   return source
     .replaceAll("__CARET_VERSION__", opts.version)
