@@ -76,8 +76,10 @@ are the whole change, which is exactly what the boundary is meant to make possib
 block a tool) and `permission.asked` events, loaded in-process — with a known subagent
 bypass. So it does not fit the command-hook `AgentAdapter` shape the Claude and Codex
 adapters share (stdin → parse → stdout deny line); it needs a different integration
-surface. Note it as plugin-shaped before assuming a new tool slots into the command-hook
-mold.
+surface. EXC-339 built that surface — a registered `caret_review_plan` tool that bridges
+to `caret review` rather than a command hook; see
+[`opencode-integration.md`](opencode-integration.md) for the spike and the design. Note it
+as plugin-shaped before assuming a new tool slots into the command-hook mold.
 
 **What does NOT move to the adapter directory:** the Claude plugin packaging —
 `hooks/hooks.json`, `.claude-plugin/*`, `commands/*.md` — sits where Claude Code's plugin

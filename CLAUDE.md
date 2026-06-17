@@ -25,6 +25,7 @@ digraph caret_rules_router {
     "Load docs/agents/logging-rules.md" [shape=box];
     "Load docs/agents/settings-rules.md" [shape=box];
     "Load docs/agents/icon-rules.md" [shape=box];
+    "Load docs/agents/opencode-integration.md" [shape=box];
 
     "Working on caret" -> "What does the change touch?";
     "What does the change touch?" -> "Load docs/agents/architecture-rules.md" [label="core/adapter boundary, daemon routing, @core shared modules"];
@@ -35,6 +36,7 @@ digraph caret_rules_router {
     "What does the change touch?" -> "Load docs/agents/logging-rules.md" [label="logging: levels, message style, redaction"];
     "What does the change touch?" -> "Load docs/agents/settings-rules.md" [label="adding a config.toml key or CARET_* env var"];
     "What does the change touch?" -> "Load docs/agents/icon-rules.md" [label="adding or working with vendored icons"];
+    "What does the change touch?" -> "Load docs/agents/opencode-integration.md" [label="OpenCode adapter, plugin, or install (caret install-opencode)"];
 }
 ```
 
