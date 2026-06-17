@@ -20,6 +20,7 @@ import {
 import { loadOpencodePackaging, type OpencodePackaging } from "../adapters/opencode/packaging.ts";
 import {
   commandDir,
+  namespacedCommandFilename,
   OPENCODE_PLUGIN_DEP,
   OPENCODE_PLUGIN_DEP_VERSION,
   opencodeConfigDir,
@@ -55,7 +56,9 @@ export function runInstallOpencodeSubcommand(
   const dir = deps.configDir ?? opencodeConfigDir();
   const pkg = deps.packaging ?? loadOpencodePackaging();
   const pluginPath = pluginFilePath(dir);
-  const commandPaths = pkg.commands.map((c) => join(commandDir(dir), c.name));
+  const commandPaths = pkg.commands.map((c) =>
+    join(commandDir(dir), namespacedCommandFilename(c.name)),
+  );
 
   if (opts.uninstall) {
     const result = removeFiles([pluginPath, ...commandPaths], { dryRun: opts.dryRun });
@@ -74,7 +77,9 @@ export function runInstallOpencodeSubcommand(
       ),
     },
     ...pkg.commands.map((c) => ({
-      path: join(commandDir(dir), c.name),
+      // Namespace the command file (`demo.md` -> `caret:demo.md`) so OpenCode exposes
+      // it as `/caret:demo`, not a built-in-looking `/demo`.
+      path: join(commandDir(dir), namespacedCommandFilename(c.name)),
       contents: renderPlugin(c.contents, { version: VERSION, binPath: pkg.binPath }),
     })),
   ];

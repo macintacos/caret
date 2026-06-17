@@ -55,16 +55,16 @@ have Claude Code, asks which to install into — or set `CARET_AGENTS`):
 curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/install.sh | CARET_AGENTS=opencode bash
 ```
 
-It builds caret and drops a plugin (`caret.ts`) plus the `/demo`, `/discovery`, and
-`/debug` commands into your OpenCode config dir, along with a `package.json` declaring the
-plugin's one dependency (`@opencode-ai/plugin`) — it **never** touches your existing
-`plugin` config array. **Restart OpenCode once** after installing: OpenCode installs that
-dependency on startup (without it the plugin can't load and the review tool won't appear),
-then `/demo` works. Because OpenCode has no `ExitPlanMode` equivalent, the plugin
-registers a `caret_review_plan` tool and steers the Plan agent to call it; approving or
-requesting changes flows back exactly as in Claude Code. **Update** by re-running the
-installer; **uninstall** with `caret install-opencode --uninstall` (which also removes
-caret's `package.json` entry). See
+It builds caret and drops a plugin (`caret.ts`) plus the `/caret:demo`,
+`/caret:discovery`, and `/caret:debug` commands into your OpenCode config dir, along with
+a `package.json` declaring (and installing) the plugin's one dependency
+(`@opencode-ai/plugin`) — it **never** touches your existing `plugin` config array.
+**Restart OpenCode once** after installing (plugins load at startup), then `/caret:demo`
+works. Because OpenCode has no `ExitPlanMode` equivalent, the plugin registers a
+`caret_review_plan` tool and steers the Plan agent to call it; approving or requesting
+changes flows back exactly as in Claude Code. **Update** by re-running the installer;
+**uninstall** with `caret install-opencode --uninstall` (which also removes caret's
+`package.json` entry). See
 [`docs/agents/opencode-integration.md`](docs/agents/opencode-integration.md) for the
 design.
 
@@ -182,8 +182,8 @@ unparseable decision, or a timeout all return `deny`.
 caret installs into OpenCode (and updates) via the script installer, or directly with
 `caret install-opencode`; alongside the plugin it writes a config-dir `package.json` so
 OpenCode installs the plugin's `@opencode-ai/plugin` dependency on its next start (restart
-OpenCode once after installing). The `/demo`, `/discovery`, and `/debug` commands work as
-they do in Claude Code. See
+OpenCode once after installing). The `/caret:demo`, `/caret:discovery`, and `/caret:debug`
+commands work as they do in Claude Code. See
 [`docs/agents/opencode-integration.md`](docs/agents/opencode-integration.md) for the
 design and the dependency-manifest rationale.
 

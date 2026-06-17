@@ -19,6 +19,18 @@ export const PLUGIN_DIRNAME = "plugin";
  * caret uses the singular, canonical form. */
 export const COMMAND_DIRNAME = "command";
 
+/** caret namespaces its OpenCode commands so they read as caret's, not built-ins.
+ * OpenCode names a command by its path under `command/` minus the `.md`, so a file
+ * deployed as `caret:demo.md` becomes the `/caret:demo` command — mirroring caret's
+ * Claude commands (`/caret:demo`). */
+export const COMMAND_NAMESPACE = "caret:";
+
+/** The deployed filename for a packaged command file (e.g. `demo.md` ->
+ * `caret:demo.md`), so OpenCode exposes it as `/caret:<name>`. */
+export function namespacedCommandFilename(sourceName: string): string {
+  return `${COMMAND_NAMESPACE}${sourceName}`;
+}
+
 /** Config filenames OpenCode may use in its config dir. The install probe scans
  * EVERY one for a manual caret plugin entry (see `install.ts`), so order doesn't
  * mask a later file. `config.json` is the global-dir form seen in practice;
