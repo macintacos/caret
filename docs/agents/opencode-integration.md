@@ -87,26 +87,55 @@ string" shape before writing, so it can't corrupt a user's config.
   files (`commands/*.md`), with `__CARET_VERSION__` / `__CARET_BIN__` markers substituted
   at install time.
 - **Install (`caret install-opencode` + `scripts/install.sh`)** — drops caret's plugin and
-  command files as auto-loaded **files** into OpenCode's config dir, and
-  **never mutates the user's `plugin` config array**, so a pre-existing array of
-  third-party plugins is untouched. `paths.ts` is the single source of truth both the
-  probe (reader) and the deploy (writer) resolve through.
+  command files as auto-loaded **files** into OpenCode's config dir,
+  **plus a `package.json`** declaring the plugin's one npm dependency (see § The
+  dependency manifest), and **never mutates the user's `plugin` config array**, so a
+  pre-existing array of third-party plugins is untouched. The `package.json` is
+  merge-safe: caret owns only its single `dependencies` entry and `--uninstall` removes
+  just that (deleting the file only when caret's dep was the only thing in it). `paths.ts`
+  is the single source of truth both the probe (reader) and the deploy (writer) resolve
+  through.
 
-## Distribution choice (and its one live-verification risk)
+## Distribution choice
 
 The plugin is shipped as a single self-contained `.ts` file (OpenCode loads `.ts`
-directly) that imports only `node:child_process` and `@opencode-ai/plugin`. The one
-runtime dependency, `@opencode-ai/plugin`, is resolved by **OpenCode** at load time (it is
-caret's only `devDependency` for typecheck/tests, and `src/` never imports it, so the
-compiled caret binary stays lean). Using OpenCode's own `tool.schema` (zod) is deliberate:
-zod schemas are not cross-instance-compatible, so the tool's `plan` arg must be declared
-with OpenCode's zod, not a bundled copy.
+directly) that imports only `node:child_process` and `@opencode-ai/plugin`. `src/` never
+imports `@opencode-ai/plugin` (it is caret's only `devDependency`, for typecheck/tests
+only), so the compiled caret binary stays lean — the dependency is OpenCode's to provide
+at the plugin's load time (see § The dependency manifest). Using OpenCode's own
+`tool.schema` (zod) is deliberate: zod schemas are not cross-instance-compatible, so the
+tool's `plan` arg must be declared with OpenCode's zod, not a bundled copy.
 
 This was chosen over (a) a `permission.ask` per-edit gate (wrong semantic), (b)
 re-implementing the daemon round-trip in the plugin (duplication), and (c) publishing a
 second npm package + mutating the user's `plugin` array (heavier, and publish is a release
-step). The npm-package distribution remains the documented hardening path if local-file
-resolution of `@opencode-ai/plugin` ever proves unreliable on a target OpenCode version.
+step).
+
+## The dependency manifest (how the plugin's import resolves)
+
+A local plugin file is not magically given its npm imports. OpenCode's contract for a
+plugin that imports an npm package is: declare it in a
+**`package.json` in the config dir**, which OpenCode `bun install`s at startup (the same
+mechanism it uses for `plugin`-array packages). So `caret install-opencode` writes that
+manifest alongside the plugin file, pinning `@opencode-ai/plugin` under `dependencies`.
+
+**This was a live bug (EXC-339 follow-up), not a hypothetical.** The first cut shipped
+only the plugin file. With no manifest, OpenCode tried to auto-install
+`@opencode-ai/plugin` at **its own version** (e.g. `1.17.7`) and its date-capped resolver
+failed —
+`"No matching version found for @opencode-ai/plugin@1.17.7 with a date before <date>"` —
+so the import was unresolvable, the plugin module never loaded, and `caret_review_plan`
+never registered (the agent simply reported it had no such tool). The fix is the manifest,
+pinned to an **older, already-published exact version** (`OPENCODE_PLUGIN_DEP_VERSION` in
+`paths.ts`) so OpenCode's date-capped snapshot can always resolve it. A version skew
+between the pinned `@opencode-ai/plugin` and the running OpenCode is fine: `tool()` is an
+identity function, `tool.schema` is just zod, and the hook names caret uses are stable.
+
+Note the install completes on the **next OpenCode start** (that is when OpenCode runs the
+`bun install`); a freshly-installed caret therefore needs one OpenCode restart before the
+review tool appears. The npm-package distribution (publish + add to the `plugin` array)
+remains the documented hardening path if the manifest approach ever proves insufficient on
+a target OpenCode version.
 
 ## Verified vs. follow-up
 
@@ -116,12 +145,17 @@ through a stubbed spawn runner (approve / deny / subagent-refusal), the config-h
 restriction, `renderPlugin` ↔ install-probe agreement, and the installer's per-target
 register selection (dry-run).
 
+**Confirmed against a live OpenCode (1.17.x):** that a local plugin file resolves
+`@opencode-ai/plugin` only when the config-dir `package.json` manifest is present (its
+absence was the load failure documented in § The dependency manifest), and that with the
+manifest in place the plugin loads, registers `caret_review_plan`, and applies its config
+hook.
+
 **Documented manual follow-up (needs a live OpenCode + a model provider):** a real
 in-OpenCode agentic round-trip — confirming the exact `ctx`/`tool`/`config` shapes against
-the installed OpenCode version, that a local plugin file resolves `@opencode-ai/plugin` at
-runtime, and that the planning steer actually routes the Plan agent to
-`caret_review_plan`. This mirrors the Codex adapter's live-contract follow-up (EXC-549)
-and the upgrade story tracked in EXC-383.
+the installed OpenCode version and that the planning steer actually routes the Plan agent
+to `caret_review_plan` end-to-end. This mirrors the Codex adapter's live-contract
+follow-up (EXC-549) and the upgrade story tracked in EXC-383.
 
 ## Sources
 

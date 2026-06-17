@@ -21,6 +21,42 @@ export function renderPlugin(source: string, opts: { version: string; binPath: s
     .replaceAll("__CARET_BIN__", () => opts.binPath);
 }
 
+/** Merge caret's plugin dependency into an existing config-dir package.json text
+ * (or create a fresh one when `existing` is null), returning the new file text.
+ * caret OWNS only its one `dependencies` key — every other key, and any other
+ * dependency the user declared, is preserved. Idempotent: re-running pins the same
+ * version. Throws if `existing` is non-null but not valid JSON (the caller skips
+ * the manifest and warns rather than clobbering a file it can't understand). */
+export function addPluginDependency(existing: string | null, pkg: string, version: string): string {
+  const obj = existing === null ? {} : (JSON.parse(existing) as Record<string, unknown>);
+  const deps = isObject(obj.dependencies) ? obj.dependencies : {};
+  obj.dependencies = { ...deps, [pkg]: version };
+  return `${JSON.stringify(obj, null, 2)}\n`;
+}
+
+/** Remove caret's plugin dependency from an existing config-dir package.json text,
+ * returning the new file text — or `null` to signal the caller should DELETE the
+ * file (caret's dependency was the only thing in it). Only caret's `dependencies`
+ * entry is touched; other dependencies and other top-level keys are preserved (and
+ * keep the file alive). Returns the text unchanged when caret's dep isn't present.
+ * `existing === null` (no file) returns null (nothing to remove). Throws on invalid
+ * JSON, like its counterpart. */
+export function removePluginDependency(existing: string | null, pkg: string): string | null {
+  if (existing === null) return null;
+  const obj = JSON.parse(existing) as Record<string, unknown>;
+  // Caret's dep isn't here — return the text VERBATIM so the caller sees a no-op
+  // (and the user's exact formatting is never disturbed).
+  if (!isObject(obj.dependencies) || !(pkg in obj.dependencies)) return existing;
+  delete obj.dependencies[pkg];
+  if (Object.keys(obj.dependencies).length === 0) delete obj.dependencies;
+  if (Object.keys(obj).length === 0) return null; // caret-owned-only — remove the file
+  return `${JSON.stringify(obj, null, 2)}\n`;
+}
+
+function isObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
 export interface DeployFile {
   /** Absolute path to write. */
   path: string;

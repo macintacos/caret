@@ -3,7 +3,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { deployFiles, removeFiles, renderPlugin } from "../../../src/adapters/opencode/deploy.ts";
+import {
+  addPluginDependency,
+  deployFiles,
+  removeFiles,
+  removePluginDependency,
+  renderPlugin,
+} from "../../../src/adapters/opencode/deploy.ts";
 import { readOpencodeInstallState } from "../../../src/adapters/opencode/install.ts";
 import { pluginFilePath } from "../../../src/adapters/opencode/paths.ts";
 
@@ -24,6 +30,59 @@ test("renderPlugin substitutes values literally even when they contain $-sequenc
     binPath: "/home/a$&b/bin/caret",
   });
   expect(out).toBe(`bin="/home/a$&b/bin/caret"; v="1.0$$beta"`);
+});
+
+const DEP = "@opencode-ai/plugin";
+const VER = "1.16.2";
+
+test("addPluginDependency creates a fresh manifest when none exists", () => {
+  expect(addPluginDependency(null, DEP, VER)).toBe(
+    `{\n  "dependencies": {\n    "${DEP}": "${VER}"\n  }\n}\n`,
+  );
+});
+
+test("addPluginDependency merges into existing deps and preserves other keys", () => {
+  const existing = JSON.stringify({ $schema: "x", dependencies: { shescape: "^2.1.0" } });
+  const out = JSON.parse(addPluginDependency(existing, DEP, VER));
+  expect(out).toEqual({ $schema: "x", dependencies: { shescape: "^2.1.0", [DEP]: VER } });
+});
+
+test("addPluginDependency is idempotent (re-pins the same version)", () => {
+  const once = addPluginDependency(null, DEP, VER);
+  expect(addPluginDependency(once, DEP, VER)).toBe(once);
+  // A stale version is overwritten to caret's pin.
+  const stale = JSON.stringify({ dependencies: { [DEP]: "0.0.1" } });
+  expect(JSON.parse(addPluginDependency(stale, DEP, VER)).dependencies[DEP]).toBe(VER);
+});
+
+test("addPluginDependency throws on invalid JSON (caller skips rather than clobbering)", () => {
+  expect(() => addPluginDependency("{ not json", DEP, VER)).toThrow();
+});
+
+test("removePluginDependency returns null to delete a caret-owned-only manifest", () => {
+  const owned = addPluginDependency(null, DEP, VER);
+  expect(removePluginDependency(owned, DEP)).toBeNull();
+  expect(removePluginDependency(null, DEP)).toBeNull();
+});
+
+test("removePluginDependency removes only caret's dep, preserving user content", () => {
+  const existing = JSON.stringify({
+    $schema: "x",
+    dependencies: { shescape: "^2.1.0", [DEP]: VER },
+  });
+  const out = JSON.parse(removePluginDependency(existing, DEP) as string);
+  expect(out).toEqual({ $schema: "x", dependencies: { shescape: "^2.1.0" } });
+});
+
+test("removePluginDependency keeps a file that has other top-level keys after pruning empty deps", () => {
+  const existing = JSON.stringify({ $schema: "x", dependencies: { [DEP]: VER } });
+  const out = JSON.parse(removePluginDependency(existing, DEP) as string);
+  expect(out).toEqual({ $schema: "x" }); // empty `dependencies` pruned, file kept
+});
+
+test("removePluginDependency returns the text verbatim when caret's dep is absent (no-op)", () => {
+  const existing = `{"dependencies":{"shescape":"^2.1.0"}}`;
+  expect(removePluginDependency(existing, DEP)).toBe(existing);
 });
 
 let dir: string;

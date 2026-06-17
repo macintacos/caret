@@ -25,6 +25,29 @@ export const COMMAND_DIRNAME = "command";
  * `opencode.json[c]` are the documented forms. */
 export const CONFIG_FILENAMES = ["config.json", "opencode.json", "opencode.jsonc"] as const;
 
+/** caret's deployed plugin imports `@opencode-ai/plugin` (for `tool.schema`'s zod;
+ * `tool()` itself is identity). OpenCode loads a local plugin file but does NOT
+ * bundle that import for it — for a local plugin using an npm package it expects a
+ * `package.json` in the config dir and runs `bun install` at startup to provide it.
+ * caret writes that manifest at install time (see `deploy.ts`). */
+export const OPENCODE_PLUGIN_DEP = "@opencode-ai/plugin";
+
+/** The version caret pins the deployed plugin's `@opencode-ai/plugin` dependency to.
+ * Pinned to an OLDER, already-published version on purpose: OpenCode's startup
+ * installer resolves against a date-capped snapshot, so its own current version
+ * (e.g. 1.17.x) can fail to resolve ("No matching version … with a date before …").
+ * An older exact pin sidesteps that. Keep ≈ the devDependency in package.json;
+ * `tool`/`tool.schema` and the hook names caret uses are stable across these. */
+export const OPENCODE_PLUGIN_DEP_VERSION = "1.16.2";
+
+/** The package.json OpenCode reads to install a local plugin's npm dependencies. */
+export const PACKAGE_JSON_FILENAME = "package.json";
+
+/** Absolute path to the config dir's package.json (caret's dependency manifest). */
+export function packageJsonPath(configDir: string): string {
+  return join(configDir, PACKAGE_JSON_FILENAME);
+}
+
 /** The OpenCode config dir: OPENCODE_CONFIG_DIR override, else
  * $XDG_CONFIG_HOME/opencode, else ~/.config/opencode. */
 export function opencodeConfigDir(): string {
