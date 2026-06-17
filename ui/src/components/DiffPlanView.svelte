@@ -446,24 +446,23 @@
   ]);
 </script>
 
-<!-- Control row above the surface: the version-compare picker, shown only when
-     there are versions to compare. -->
+<!-- Control row above the surface: the version-compare picker. The picker is
+     always shown; its toggle disables itself when there are no other versions to
+     compare (EXC-664). -->
 <div class="control-row">
-  {#if canCompare}
-    <VersionComparePicker
-      versions={review.versions}
-      comparing={compareStore.comparing}
-      baseVersion={compareStore.baseVersion}
-      targetVersion={compareStore.targetVersion}
-      diffStyle={compareStore.diffStyle}
-      diffIndicators={compareStore.diffIndicators}
-      onSetComparing={compare.setComparing}
-      onSelectBase={compare.setBase}
-      onSelectTarget={compare.setTarget}
-      onSetDiffStyle={compare.setDiffStyle}
-      onSetDiffIndicators={compare.setDiffIndicators}
-    />
-  {/if}
+  <VersionComparePicker
+    versions={review.versions}
+    comparing={compareStore.comparing}
+    baseVersion={compareStore.baseVersion}
+    targetVersion={compareStore.targetVersion}
+    diffStyle={compareStore.diffStyle}
+    diffIndicators={compareStore.diffIndicators}
+    onSetComparing={compare.setComparing}
+    onSelectBase={compare.setBase}
+    onSelectTarget={compare.setTarget}
+    onSetDiffStyle={compare.setDiffStyle}
+    onSetDiffIndicators={compare.setDiffIndicators}
+  />
 </div>
 
 <div class="diff-surface">

@@ -160,9 +160,14 @@ describe("DiffPlanView instance preservation across the poll", () => {
 });
 
 describe("DiffPlanView version compare", () => {
-  test("shows no compare control for a single-version review", () => {
+  test("shows a disabled compare control for a single-version review", () => {
     const { target } = render(DiffPlanView, props({ review: reviewFixture() }));
-    expect(target.querySelector(".compare-picker")).toBeNull();
+    // EXC-664: the control is always present; with nothing to compare its toggle
+    // is disabled (greyed out) rather than hidden, and the pickers stay closed.
+    const toggle = target.querySelector<HTMLButtonElement>(".compare-toggle");
+    expect(toggle).not.toBeNull();
+    expect(toggle!.disabled).toBe(true);
+    expect(target.querySelector(".pair")).toBeNull();
   });
 
   test("offers the compare control when the review has multiple versions", () => {

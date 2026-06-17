@@ -29,14 +29,38 @@ const baseProps = {
 };
 
 describe("VersionComparePicker visibility", () => {
-  test("renders the control with two or more versions", () => {
+  test("renders the toggle enabled with two or more versions", () => {
     const { target } = render(VersionComparePicker, baseProps);
-    expect(target.querySelector(".compare-picker")).not.toBeNull();
+    const toggle = target.querySelector<HTMLButtonElement>(".compare-toggle");
+    expect(toggle).not.toBeNull();
+    expect(toggle!.disabled).toBe(false);
   });
 
-  test("renders nothing with a single version", () => {
-    const { target } = render(VersionComparePicker, { ...baseProps, versions: versions(1) });
-    expect(target.querySelector(".compare-picker")).toBeNull();
+  // EXC-664: with nothing to compare the toggle is shown-but-disabled (greyed
+  // out) rather than hidden, so the affordance is discoverable.
+  test("always renders the toggle, disabled, with a single version", () => {
+    const { target } = render(VersionComparePicker, {
+      ...baseProps,
+      versions: versions(1),
+      comparing: false,
+    });
+    const toggle = target.querySelector<HTMLButtonElement>(".compare-toggle");
+    expect(toggle).not.toBeNull();
+    expect(toggle!.disabled).toBe(true);
+    // Nothing to compare yet, so the base/target pickers stay hidden.
+    expect(target.querySelector(".pair")).toBeNull();
+  });
+
+  test("a disabled toggle does not enter compare mode on click", () => {
+    const onSetComparing = capture<boolean>();
+    const { target } = render(VersionComparePicker, {
+      ...baseProps,
+      versions: versions(1),
+      comparing: false,
+      onSetComparing: onSetComparing.cb,
+    });
+    target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
+    expect(onSetComparing.last()).toBeUndefined();
   });
 });
 

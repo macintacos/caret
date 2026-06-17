@@ -3,10 +3,11 @@
   // plan view and lets a reviewer enter compare mode, pick any two stored
   // versions (base vs. target), switch the diff layout between split and unified,
   // and switch the gutter change markers between vertical bars and classic +/-
-  // glyphs. The whole control is hidden — not disabled — when fewer than two
-  // versions exist, since there is nothing to compare. All state is owned by the
-  // parent (the compare state factory); this component is presentational and
-  // reports changes through callback props.
+  // glyphs. The "Compare versions" toggle is always present, but disabled (greyed
+  // out) when fewer than two versions exist, since there is nothing to compare —
+  // shown-but-disabled keeps the affordance discoverable (EXC-664). All state is
+  // owned by the parent (the compare state factory); this component is
+  // presentational and reports changes through callback props.
   import type { PlanVersion } from "@core/types";
   import type { DiffIndicators, DiffStyle } from "../lib/diffview/types.ts";
 
@@ -47,101 +48,104 @@
   // Newest first reads most naturally in a picker — the current version is the
   // default base and sits at the top.
   const ordered = $derived([...versions].sort((a, b) => b.version - a.version));
+
+  // Nothing to compare against until a second version exists.
+  const canCompare = $derived(versions.length >= 2);
 </script>
 
-{#if versions.length >= 2}
-  <div class="compare-picker">
-    <button
-      type="button"
-      class="compare-toggle"
-      class:on={comparing}
-      aria-pressed={comparing}
-      onclick={() => onSetComparing(!comparing)}
-    >
-      Compare versions
-    </button>
+<div class="compare-picker">
+  <button
+    type="button"
+    class="compare-toggle"
+    class:on={comparing}
+    disabled={!canCompare}
+    aria-pressed={comparing}
+    title={canCompare ? undefined : "No other versions to compare yet"}
+    onclick={() => onSetComparing(!comparing)}
+  >
+    Compare versions
+  </button>
 
-    {#if comparing}
-      <div class="pair">
-        <label class="field">
-          <span class="lbl">Base</span>
-          <select
-            class="base-select metric"
-            value={String(baseVersion)}
-            onchange={(e) => onSelectBase(Number(e.currentTarget.value))}
-          >
-            {#each ordered as v (v.version)}
-              <option value={String(v.version)}>v{v.version}</option>
-            {/each}
-          </select>
-        </label>
+  {#if comparing}
+    <div class="pair">
+      <label class="field">
+        <span class="lbl">Base</span>
+        <select
+          class="base-select metric"
+          value={String(baseVersion)}
+          onchange={(e) => onSelectBase(Number(e.currentTarget.value))}
+        >
+          {#each ordered as v (v.version)}
+            <option value={String(v.version)}>v{v.version}</option>
+          {/each}
+        </select>
+      </label>
 
-        <span class="arrow" aria-hidden="true">→</span>
+      <span class="arrow" aria-hidden="true">→</span>
 
-        <label class="field">
-          <span class="lbl">Target</span>
-          <select
-            class="target-select metric"
-            value={String(targetVersion)}
-            onchange={(e) => onSelectTarget(Number(e.currentTarget.value))}
-          >
-            {#each ordered as v (v.version)}
-              <option value={String(v.version)}>v{v.version}</option>
-            {/each}
-          </select>
-        </label>
+      <label class="field">
+        <span class="lbl">Target</span>
+        <select
+          class="target-select metric"
+          value={String(targetVersion)}
+          onchange={(e) => onSelectTarget(Number(e.currentTarget.value))}
+        >
+          {#each ordered as v (v.version)}
+            <option value={String(v.version)}>v{v.version}</option>
+          {/each}
+        </select>
+      </label>
+    </div>
+
+    <div class="controls">
+      <div class="segmented" role="group" aria-label="Diff layout">
+        <button
+          type="button"
+          data-style="split"
+          class:active={diffStyle === "split"}
+          aria-pressed={diffStyle === "split"}
+          onclick={() => onSetDiffStyle("split")}
+        >
+          Split
+        </button>
+        <button
+          type="button"
+          data-style="unified"
+          class:active={diffStyle === "unified"}
+          aria-pressed={diffStyle === "unified"}
+          onclick={() => onSetDiffStyle("unified")}
+        >
+          Unified
+        </button>
       </div>
 
-      <div class="controls">
-        <div class="segmented" role="group" aria-label="Diff layout">
-          <button
-            type="button"
-            data-style="split"
-            class:active={diffStyle === "split"}
-            aria-pressed={diffStyle === "split"}
-            onclick={() => onSetDiffStyle("split")}
-          >
-            Split
-          </button>
-          <button
-            type="button"
-            data-style="unified"
-            class:active={diffStyle === "unified"}
-            aria-pressed={diffStyle === "unified"}
-            onclick={() => onSetDiffStyle("unified")}
-          >
-            Unified
-          </button>
-        </div>
-
-        <!-- Gutter change markers: vertical bars (the inherited default) or the
-             classic +/- glyphs many reviewers prefer. The glyphs inherit caret's
-             ok/danger hue through the diffview bridge, so this only chooses the
-             affordance, not the color. -->
-        <div class="segmented" role="group" aria-label="Diff indicators">
-          <button
-            type="button"
-            data-indicators="bars"
-            class:active={diffIndicators === "bars"}
-            aria-pressed={diffIndicators === "bars"}
-            onclick={() => onSetDiffIndicators("bars")}
-          >
-            Bars
-          </button>
-          <button
-            type="button"
-            data-indicators="classic"
-            class:active={diffIndicators === "classic"}
-            aria-pressed={diffIndicators === "classic"}
-            onclick={() => onSetDiffIndicators("classic")}
-          >
-            +/−
-          </button>
-        </div>
+      <!-- Gutter change markers: vertical bars (the inherited default) or the
+           classic +/- glyphs many reviewers prefer. The glyphs inherit caret's
+           ok/danger hue through the diffview bridge, so this only chooses the
+           affordance, not the color. -->
+      <div class="segmented" role="group" aria-label="Diff indicators">
+        <button
+          type="button"
+          data-indicators="bars"
+          class:active={diffIndicators === "bars"}
+          aria-pressed={diffIndicators === "bars"}
+          onclick={() => onSetDiffIndicators("bars")}
+        >
+          Bars
+        </button>
+        <button
+          type="button"
+          data-indicators="classic"
+          class:active={diffIndicators === "classic"}
+          aria-pressed={diffIndicators === "classic"}
+          onclick={() => onSetDiffIndicators("classic")}
+        >
+          +/−
+        </button>
       </div>
-    {/if}
-  </div>
-{/if}
+    </div>
+  {/if}
+</div>
 
 <style>
   /* A group within the surface's control bar (DiffPlanView owns the bar chrome):
@@ -165,7 +169,7 @@
     font-weight: 600;
     white-space: nowrap;
   }
-  .compare-toggle:hover {
+  .compare-toggle:hover:not(:disabled) {
     border-color: var(--accent);
     color: var(--accent);
   }
@@ -173,6 +177,14 @@
     background: var(--accent-wash);
     border-color: var(--accent);
     color: var(--accent);
+  }
+  /* Nothing to compare: greyed out and inert, but still visible so the
+     affordance is discoverable (EXC-664). */
+  .compare-toggle:disabled {
+    color: var(--ink-faint);
+    border-color: var(--rule);
+    opacity: 0.55;
+    cursor: not-allowed;
   }
 
   .pair {
@@ -213,6 +225,25 @@
     align-items: center;
     gap: 0.6rem;
     margin-left: auto;
+  }
+
+  /* Entering compare mode reveals the pickers + display toggles with a quick,
+     subtle slide-in (EXC-664), timed off the shared one-shot motion tokens. Both
+     revealed clusters animate together; the global #app reduced-motion rule
+     neutralizes the movement. */
+  .pair,
+  .controls {
+    animation: compare-reveal var(--dur-base) var(--ease-out);
+  }
+  @keyframes compare-reveal {
+    from {
+      opacity: 0;
+      transform: translateX(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
   }
 
   /* Segmented control. The active segment carries the accent fill, mirroring the
