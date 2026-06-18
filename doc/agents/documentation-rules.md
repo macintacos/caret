@@ -61,10 +61,10 @@ digraph caret_docs_router {
   `/release-caret` flow rather than hand-edited during a feature. How it is maintained:
   [`references/changelog.md`](references/changelog.md).
 
-## Audience, stated at the top of every doc
+## Audience, stated at the top of every new doc
 
-`CLAUDE.md`, the `doc/agents/*.md` rule files, and this file's `references/` pointers are
-**agent-facing** rules-of-the-road. `README.md` and `CONTRIBUTING.md` are
+`CLAUDE.md`, `doc/README.md`, the `doc/agents/*.md` rule files, and this file's
+`references/` pointers are **agent-facing**. `README.md` and `CONTRIBUTING.md` are
 **human-facing**. State the audience explicitly at the top of each new doc so a reader
 knows in one line whether it is written for them.
 

@@ -1,5 +1,7 @@
 # doc
 
+*Audience: contributors and agents navigating caret's `doc/` directory.*
+
 Project documentation that doesn't belong in the top-level [README](../README.md). Today
 that's the agent reference material under [`agents/`](agents/).
 
