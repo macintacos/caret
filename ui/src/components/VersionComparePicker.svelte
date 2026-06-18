@@ -16,6 +16,8 @@
     versions: PlanVersion[];
     /** Whether compare mode is active. */
     comparing: boolean;
+    /** Whether there are enough versions to compare (the parent owns the rule). */
+    canCompare: boolean;
     /** Selected reference version (the diff's "after" side). */
     baseVersion: number;
     /** Selected version compared against (the diff's "before" side). */
@@ -34,6 +36,7 @@
   let {
     versions,
     comparing,
+    canCompare,
     baseVersion,
     targetVersion,
     diffStyle,
@@ -48,9 +51,6 @@
   // Newest first reads most naturally in a picker — the current version is the
   // default base and sits at the top.
   const ordered = $derived([...versions].sort((a, b) => b.version - a.version));
-
-  // Nothing to compare against until a second version exists.
-  const canCompare = $derived(versions.length >= 2);
 </script>
 
 <div class="compare-picker">

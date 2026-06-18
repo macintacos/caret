@@ -86,10 +86,17 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
   }
 
   test("fills the gutter→content seam so the band is continuous", () => {
-    // Each selected content cell is pulled across the seam with a negative
-    // inline-start margin, the 24px inset re-added as padding so text doesn't move.
+    // The seam width is named once and reused — the content inset, the pull
+    // margin, and the re-inset padding all reference --caret-seam, so they cannot
+    // drift out of step (no repeated 24px literal).
+    expect(overrideDecls).toMatch(/--caret-seam:\s*24px/);
+    expect(overrideDecls).not.toMatch(/-24px/);
+    expect(overrideDecls).toMatch(/padding-inline-start:\s*var\(--caret-seam\)/);
+    // Each selected content code-line cell is pulled across the seam with a
+    // negative inline-start margin (the shared --caret-seam); scoped to [data-line]
+    // so an inline annotation/composer row caught in the selection is never shifted.
     expect(overrideDecls).toMatch(
-      /\[data-content\]\s*>\s*\[data-selected-line\]\s*\{[^}]*margin-inline-start:\s*-24px/,
+      /\[data-content\]\s*>\s*\[data-line\]\[data-selected-line\]\s*\{[^}]*margin-inline-start:\s*calc\(-1 \* var\(--caret-seam\)\)/,
     );
     // The gutter column's per-row divider is dropped for selected rows so the two
     // halves join with no 2px gap.

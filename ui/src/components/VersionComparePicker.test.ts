@@ -17,6 +17,7 @@ function versions(n: number): PlanVersion[] {
 const baseProps = {
   versions: versions(3),
   comparing: true,
+  canCompare: true,
   baseVersion: 3,
   targetVersion: 2,
   diffStyle: "split" as const,
@@ -43,6 +44,7 @@ describe("VersionComparePicker visibility", () => {
       ...baseProps,
       versions: versions(1),
       comparing: false,
+      canCompare: false,
     });
     const toggle = target.querySelector<HTMLButtonElement>(".compare-toggle");
     expect(toggle).not.toBeNull();
@@ -57,6 +59,7 @@ describe("VersionComparePicker visibility", () => {
       ...baseProps,
       versions: versions(1),
       comparing: false,
+      canCompare: false,
       onSetComparing: onSetComparing.cb,
     });
     target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();

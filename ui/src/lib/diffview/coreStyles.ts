@@ -28,7 +28,11 @@ import { DIFFS_CORE_STYLES } from "./diffsCoreStyles.ts";
 // brightens on hover/focus, matching the composer's solid action button; the
 // focus-visible ring keeps the keyboard path to the composer visible.
 const CARET_OVERRIDES = `
-  [data-content] { padding-inline-start: 24px; }
+  /* Single source for the gutter→content seam width (EXC-664). The content inset
+     that opens the seam and the selected-band pull that fills it must move
+     together, so they share one named value rather than coupled literals. */
+  :host { --caret-seam: 24px; }
+  [data-content] { padding-inline-start: var(--caret-seam); }
   [data-utility-button] {
     margin-right: calc(1ch - 1lh - 0.85rem);
     background-color: var(--accent);
@@ -47,19 +51,21 @@ const CARET_OVERRIDES = `
      [data-selected-line] highlight; the view is a two-column grid (line-number
      cells in [data-gutter], content/annotation cells in [data-content]), and
      [data-content]'s padding-inline-start (above) opens a seam between the
-     columns. To make the band continuous, each selected content cell is pulled
-     across that seam with a negative inline-start margin — the inset re-added as
-     padding so the text never moves — and the gutter column's per-row divider is
-     dropped for selected rows, so the two halves join with no unfilled gap.
+     columns. To make the band continuous, each selected content code-line cell is
+     pulled across that seam with a negative inline-start margin (the shared
+     --caret-seam), the inset re-added as padding so the text never moves. The pull
+     is scoped to [data-line] cells so an inline annotation/composer row caught in
+     the selection is never shifted. The gutter column's per-row divider is dropped
+     for selected rows, so the two halves join with no unfilled gap.
      Rounding therefore hangs only off the band's OUTER corners: the gutter's left
      (top + bottom) and the content's right; the inner corners stay square so the
      join is seamless. :not(~) selects a column's first selected child (top),
      :not(:has(~)) its last (bottom), each scoped to its column and tolerant of a
      non-selected sibling between. Line numbers are always shown (EXC-664), so the
      gutter never collapses and the content's left corners never need rounding. */
-  [data-content] > [data-selected-line] {
-    margin-inline-start: -24px;
-    padding-inline-start: calc(1ch + 24px);
+  [data-content] > [data-line][data-selected-line] {
+    margin-inline-start: calc(-1 * var(--caret-seam));
+    padding-inline-start: calc(1ch + var(--caret-seam));
   }
   [data-gutter] > [data-selected-line] {
     border-right-color: transparent;

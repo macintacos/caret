@@ -453,6 +453,7 @@
   <VersionComparePicker
     versions={review.versions}
     comparing={compareStore.comparing}
+    {canCompare}
     baseVersion={compareStore.baseVersion}
     targetVersion={compareStore.targetVersion}
     diffStyle={compareStore.diffStyle}
