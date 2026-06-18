@@ -30,9 +30,9 @@ mise run preflight  # the pre-push gate: lint + unit/e2e tests + build, run conc
 
 ## Where tests live
 
-- `test/` — backend suites: `core/` (tool-agnostic) and `adapters/` (per-agent), plus
-  `commands/`, `scripts/`, and `support/`. Where a new backend suite belongs is covered in
-  `doc/agents/test-layout.md`.
+- `test/` — backend suites: `core/` (tool-agnostic), `adapters/` and `opencode/`
+  (per-agent), plus `commands/`, `scripts/`, and `support/`. Where a new backend suite
+  belongs is covered in `doc/agents/test-layout.md`.
 - `ui/src/**/*.test.ts` — Svelte component and UI-logic tests, run with
   `bun test --conditions browser` from the repo root.
 - `test/e2e/` — Playwright browser end-to-end specs (`mise run test-e2e`). When to write

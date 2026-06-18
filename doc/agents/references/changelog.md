@@ -15,5 +15,8 @@ When to touch it:
   `### Added` / `### Changed` / `### Fixed` headings across version sections pass) — keep
   the keep-a-changelog structure intact.
 
+For substantial release-note prose — a release summary or a themed release name — use the
+`/doc-coauthoring` skill rather than ad-hoc drafting.
+
 Maintenance: this doc is a node on the documentation map. If its shape changes, update
 [`documentation-rules.md`](../documentation-rules.md) per its maintenance rule.
