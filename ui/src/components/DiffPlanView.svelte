@@ -38,17 +38,9 @@
   import { buildLinkLayer } from "../lib/diffview/links.ts";
   import { readDiffStyle, writeDiffStyle } from "../lib/diffStylePref.ts";
   import { readDiffIndicators, writeDiffIndicators } from "../lib/diffIndicatorsPref.ts";
-  import {
-    type Overflow,
-    readDisableLineNumbers,
-    readOverflow,
-    writeDisableLineNumbers,
-    writeOverflow,
-  } from "../lib/diffReaderPref.ts";
   import { type CompareStore, createCompare } from "../state/compare.svelte.ts";
   import { setHeadingSlug, takeHeadingSlug } from "../state/headingLink.ts";
   import VersionComparePicker from "./VersionComparePicker.svelte";
-  import ReaderAffordances from "./ReaderAffordances.svelte";
   import type { SourceViewGutter } from "../lib/diffview/options.ts";
   import type { SourceViewApi, SourceViewOptions } from "../lib/diffview/types.ts";
   import { activeHeadingLine, extractHeadings, lineForSlug, slugForLine } from "../lib/toc.ts";
@@ -155,22 +147,11 @@
   const showDiff = $derived(canCompare && compareStore.comparing);
 
   // Reader affordances applied to both the single-version source view and the
-  // compare diff: wrap long lines instead of scrolling them, and hide the
-  // line-number gutter. Seeded from the persisted preference and written through
-  // on toggle so the choice survives a reload. They are independent of contentKey,
-  // so a change updates the view in place (the lifecycle's setOptions path) rather
-  // than recreating it — scroll is preserved.
-  let overflow = $state<Overflow>(readOverflow());
-  let disableLineNumbers = $state(readDisableLineNumbers());
-  function setOverflow(value: Overflow): void {
-    overflow = value;
-    writeOverflow(value);
-  }
-  function setDisableLineNumbers(value: boolean): void {
-    disableLineNumbers = value;
-    writeDisableLineNumbers(value);
-  }
-  const readerOptions = $derived<SourceViewOptions>({ overflow, disableLineNumbers });
+  // compare diff are fixed (EXC-664): long lines scroll (never wrap) and the
+  // line-number gutter is always shown. These were once user toggles (EXC-606),
+  // but that configurability was removed, so the former defaults are now the only
+  // behavior.
+  const readerOptions: SourceViewOptions = { overflow: "scroll", disableLineNumbers: false };
 
   // Identity of the rendered content: the wrapper recreates its instance only
   // when this changes, so a poll tick that re-delivers the same version updates
@@ -452,45 +433,38 @@
     return annoValue;
   });
 
-  // The covered-line range of every saved comment, the open composer, and each
-  // retained scratch, drawn as a host-side bracket rail in the gutter
-  // (bracketLayer) so a multi-line span shows which lines belong to it — the
-  // card/composer/marker anchors to endLine only. A version switch swaps `host`
-  // (the SourceView recreates on contentKey), and the action re-observes the new
-  // host and re-measures so no stale rail survives.
+  // The covered-line range of every saved comment and each retained scratch,
+  // drawn as a host-side bracket rail in the gutter (bracketLayer) so a multi-line
+  // span shows which lines belong to it — the card/marker anchors to endLine only.
+  // The OPEN composer (`pending`) is deliberately omitted (EXC-664): while it's
+  // open the full-bleed selection band already marks its range, so a bracket there
+  // would just double the cue. A version switch swaps `host` (the SourceView
+  // recreates on contentKey), and the action re-observes the new host and
+  // re-measures so no stale rail survives.
   const bracketSpans = $derived<BracketSpan[]>([
     ...lineAnnotations.map((a) => ({ startLine: a.startLine, endLine: a.endLine })),
-    ...(pending ? [{ startLine: pending.startLine, endLine: pending.endLine }] : []),
     ...scratches.map((s) => ({ startLine: s.startLine, endLine: s.endLine })),
   ]);
 </script>
 
-<!-- Control row above the surface. Reader affordances (wrap, line numbers) apply
-     to both the single-version view and the compare diff, so they show in either
-     mode; the version-compare picker appears only when there are versions to
-     compare. -->
+<!-- Control row above the surface: the version-compare picker. The picker is
+     always shown; its toggle disables itself when there are no other versions to
+     compare (EXC-664). -->
 <div class="control-row">
-  <ReaderAffordances
-    {overflow}
-    {disableLineNumbers}
-    onSetOverflow={setOverflow}
-    onSetDisableLineNumbers={setDisableLineNumbers}
+  <VersionComparePicker
+    versions={review.versions}
+    comparing={compareStore.comparing}
+    {canCompare}
+    baseVersion={compareStore.baseVersion}
+    targetVersion={compareStore.targetVersion}
+    diffStyle={compareStore.diffStyle}
+    diffIndicators={compareStore.diffIndicators}
+    onSetComparing={compare.setComparing}
+    onSelectBase={compare.setBase}
+    onSelectTarget={compare.setTarget}
+    onSetDiffStyle={compare.setDiffStyle}
+    onSetDiffIndicators={compare.setDiffIndicators}
   />
-  {#if canCompare}
-    <VersionComparePicker
-      versions={review.versions}
-      comparing={compareStore.comparing}
-      baseVersion={compareStore.baseVersion}
-      targetVersion={compareStore.targetVersion}
-      diffStyle={compareStore.diffStyle}
-      diffIndicators={compareStore.diffIndicators}
-      onSetComparing={compare.setComparing}
-      onSelectBase={compare.setBase}
-      onSelectTarget={compare.setTarget}
-      onSetDiffStyle={compare.setDiffStyle}
-      onSetDiffIndicators={compare.setDiffIndicators}
-    />
-  {/if}
 </div>
 
 <div class="diff-surface">
@@ -619,9 +593,9 @@
 
 <style>
   /* The control bar above the surface. Carries the bar chrome (raised paper,
-     hairline rule) so its children — the reader affordances and the compare
-     picker — read as one toolbar: reader options on the left, the version picker
-     on the right when present. */
+     hairline rule) for the version-compare picker: the "Compare versions" toggle
+     sits at the left, and (in compare mode) the layout / indicator toggles are
+     pushed to the right edge. */
   .control-row {
     display: flex;
     align-items: center;
@@ -630,10 +604,11 @@
     border-bottom: 1px solid var(--rule);
     background: var(--paper-raised);
   }
-  /* The compare picker is the trailing group; it pushes to the right edge so the
-     reader affordances hold the left. */
+  /* The compare picker now owns the bar: it spans the row so the "Compare
+     versions" toggle sits at the left, and its display toggles (margin-left: auto,
+     in compare mode) reach the right edge. */
   .control-row :global(.compare-picker) {
-    margin-left: auto;
+    flex: 1;
   }
 
   /* The contents pane and source view share one row; the pane is a fixed-width

@@ -143,11 +143,10 @@
     gap: 0.05rem;
   }
 
-  /* Each row is a monospace outline entry; level drives the left indent so the
-     heading hierarchy reads at a glance. position: relative anchors the per-level
-     indent guide (the ::before below) to the row box. */
+  /* Each row is a monospace outline entry; the left-indent ramp (per level,
+     below) plus the weight/colour hierarchy carry the heading depth — clean
+     indentation, no per-level guide rules (EXC-664). */
   .toc-row {
-    position: relative;
     display: block;
     width: 100%;
     text-align: left;
@@ -168,27 +167,8 @@
       color var(--dur-fast) var(--ease-out);
   }
 
-  /* The indent guide: a quiet 1px hairline standing in the indent gutter of every
-     nested row, so depth reads as structure (the Trees idiom) rather than as bare
-     whitespace. Drawn with --rule, the same hairline that rules the rest of the
-     chrome. Each level's guide sits 0.4rem left of where its text begins, so the
-     ramp of guides steps right with depth into a visible ladder. The guide spans
-     the row's full height (inset 0) and is click-through; lvl-1 is a top-level row
-     and draws none. The padding ramp below is unchanged, so left-to-right indent
-     ordering is preserved — the guide augments the padding, it doesn't replace it. */
-  .toc-row.lvl-2::before,
-  .toc-row.lvl-3::before,
-  .toc-row.lvl-4::before,
-  .toc-row.lvl-5::before,
-  .toc-row.lvl-6::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 1px;
-    background: var(--rule);
-    pointer-events: none;
-  }
+  /* The indent ramp: each level steps further right so the heading hierarchy
+     reads at a glance; deeper levels also soften in colour. */
   .toc-row.lvl-1 {
     padding-left: 0.45rem;
     color: var(--ink);
@@ -197,29 +177,16 @@
   .toc-row.lvl-2 {
     padding-left: 1.1rem;
   }
-  .toc-row.lvl-2::before {
-    left: 0.7rem;
-  }
   .toc-row.lvl-3 {
     padding-left: 1.75rem;
   }
-  .toc-row.lvl-3::before {
-    left: 1.35rem;
-  }
   .toc-row.lvl-4 {
     padding-left: 2.4rem;
-  }
-  .toc-row.lvl-4::before {
-    left: 2rem;
   }
   .toc-row.lvl-5,
   .toc-row.lvl-6 {
     padding-left: 3.05rem;
     color: var(--ink-faint);
-  }
-  .toc-row.lvl-5::before,
-  .toc-row.lvl-6::before {
-    left: 2.65rem;
   }
 
   /* The three interaction states bind to the chrome's interaction tokens: hover

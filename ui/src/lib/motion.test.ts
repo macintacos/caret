@@ -27,6 +27,7 @@ const chromeComponents = [
   "components/VersionBadge.svelte",
   "components/SourceAnnotationCard.svelte",
   "components/DiffPlanView.svelte",
+  "components/VersionComparePicker.svelte",
   "components/ApproveConfirmDialog.svelte",
 ];
 const chromeSources: Record<string, string> = Object.fromEntries(

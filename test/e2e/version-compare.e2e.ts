@@ -1,8 +1,8 @@
 // Version compare on the source-view surface (EXC-576). With two or more stored
 // versions, a picker lets the reviewer diff any pair, side-by-side or stacked,
 // switching the layout at runtime without remounting the view or losing scroll.
-// The control is hidden for single-version reviews, and the chosen layout
-// persists across reloads.
+// The control is always shown but disabled for single-version reviews (EXC-664),
+// and the chosen layout persists across reloads.
 
 import { expect, test } from "./support/fixtures.ts";
 
@@ -12,11 +12,14 @@ const V1 = "# Plan\n\nalpha line one\n";
 const V2 = "# Plan\n\nbeta line two\n";
 const V3 = "# Plan\n\ngamma line three\n";
 
-test("the compare control is hidden for a single-version review", async ({ daemon, page }) => {
+test("the compare control is disabled for a single-version review", async ({ daemon, page }) => {
   await daemon.seed({ plan: V1 });
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
-  await expect(page.locator(".compare-picker")).toHaveCount(0);
+  // EXC-664: the picker is always present; with nothing to compare its toggle is
+  // disabled (greyed out) rather than hidden.
+  await expect(page.locator(".compare-picker")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Compare versions" })).toBeDisabled();
 });
 
 test("entering compare mode diffs a chosen non-default pair", async ({ daemon, page }) => {
