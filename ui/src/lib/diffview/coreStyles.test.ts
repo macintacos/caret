@@ -98,10 +98,28 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
     expect(overrideDecls).toMatch(
       /\[data-content\]\s*>\s*\[data-line\]\[data-selected-line\]\s*\{[^}]*margin-inline-start:\s*calc\(-1 \* var\(--caret-seam\)\)/,
     );
-    // The gutter column's per-row divider is dropped for selected rows so the two
-    // halves join with no 2px gap.
+    // The gutter column's per-row divider is dropped for selected line rows so the
+    // two halves join with no 2px gap.
     expect(overrideDecls).toMatch(
-      /\[data-gutter\]\s*>\s*\[data-selected-line\]\s*\{[^}]*border-right-color:\s*transparent/,
+      /\[data-gutter\]\s*>\s*\[data-column-number\]\[data-selected-line\]\s*\{[^}]*border-right-color:\s*transparent/,
+    );
+  });
+
+  test("excludes the composer/annotation row from the band", () => {
+    // The band styling is scoped to the line cells — the gutter's
+    // [data-column-number] and the content's [data-line] — not every selected cell.
+    expect(overrideDecls).toMatch(/\[data-content\]\s*>\s*\[data-line\]\[data-selected-line\]/);
+    expect(overrideDecls).toMatch(
+      /\[data-gutter\]\s*>\s*\[data-column-number\]\[data-selected-line\]/,
+    );
+    // The annotation/composer row the library also marks selected has its fill
+    // cleared in both columns, so the surface shows through beside the composer
+    // card rather than reading as more band (EXC-664).
+    expect(overrideDecls).toMatch(
+      /\[data-gutter\]\s*>\s*\[data-gutter-buffer\]\[data-selected-line\][^{]*\{[^}]*background-color:\s*transparent/,
+    );
+    expect(overrideDecls).toMatch(
+      /\[data-content\]\s*>\s*\[data-line-annotation\]\[data-selected-line\][^{]*\{[^}]*background-color:\s*transparent/,
     );
   });
 });

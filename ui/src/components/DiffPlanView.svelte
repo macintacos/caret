@@ -433,15 +433,16 @@
     return annoValue;
   });
 
-  // The covered-line range of every saved comment, the open composer, and each
-  // retained scratch, drawn as a host-side bracket rail in the gutter
-  // (bracketLayer) so a multi-line span shows which lines belong to it — the
-  // card/composer/marker anchors to endLine only. A version switch swaps `host`
-  // (the SourceView recreates on contentKey), and the action re-observes the new
-  // host and re-measures so no stale rail survives.
+  // The covered-line range of every saved comment and each retained scratch,
+  // drawn as a host-side bracket rail in the gutter (bracketLayer) so a multi-line
+  // span shows which lines belong to it — the card/marker anchors to endLine only.
+  // The OPEN composer (`pending`) is deliberately omitted (EXC-664): while it's
+  // open the full-bleed selection band already marks its range, so a bracket there
+  // would just double the cue. A version switch swaps `host` (the SourceView
+  // recreates on contentKey), and the action re-observes the new host and
+  // re-measures so no stale rail survives.
   const bracketSpans = $derived<BracketSpan[]>([
     ...lineAnnotations.map((a) => ({ startLine: a.startLine, endLine: a.endLine })),
-    ...(pending ? [{ startLine: pending.startLine, endLine: pending.endLine }] : []),
     ...scratches.map((s) => ({ startLine: s.startLine, endLine: s.endLine })),
   ]);
 </script>

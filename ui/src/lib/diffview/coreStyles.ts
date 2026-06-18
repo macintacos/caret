@@ -49,38 +49,56 @@ const CARET_OVERRIDES = `
      spanning the gutter and content columns, with a tighter corner than before
      (--radius, down from --radius-lg). The amber is the library's per-cell
      [data-selected-line] highlight; the view is a two-column grid (line-number
-     cells in [data-gutter], content/annotation cells in [data-content]), and
-     [data-content]'s padding-inline-start (above) opens a seam between the
-     columns. To make the band continuous, each selected content code-line cell is
-     pulled across that seam with a negative inline-start margin (the shared
-     --caret-seam), the inset re-added as padding so the text never moves. The pull
-     is scoped to [data-line] cells so an inline annotation/composer row caught in
-     the selection is never shifted. The gutter column's per-row divider is dropped
-     for selected rows, so the two halves join with no unfilled gap.
-     Rounding therefore hangs only off the band's OUTER corners: the gutter's left
-     (top + bottom) and the content's right; the inner corners stay square so the
-     join is seamless. :not(~) selects a column's first selected child (top),
-     :not(:has(~)) its last (bottom), each scoped to its column and tolerant of a
-     non-selected sibling between. Line numbers are always shown (EXC-664), so the
-     gutter never collapses and the content's left corners never need rounding. */
+     cells [data-column-number] in [data-gutter], content cells [data-line] in
+     [data-content]), and [data-content]'s padding-inline-start (above) opens a
+     seam between the columns. To make the band continuous, each selected content
+     line cell is pulled across that seam with a negative inline-start margin (the
+     shared --caret-seam), the inset re-added as padding so the text never moves;
+     the gutter column's per-row divider is dropped for selected rows so the two
+     halves join with no unfilled gap. Rounding hangs only off the band's OUTER
+     corners — the gutter's left (top + bottom) and the content's right; inner
+     corners stay square so the join is seamless. :not(~) selects a column's first
+     selected line (top), :not(:has(~)) its last (bottom). Everything is scoped to
+     the line cells ([data-column-number] / [data-line]), and the last-row detection
+     only counts trailing line cells — so an open composer's row (the
+     [data-gutter-buffer] / [data-line-annotation] pair the library also flags
+     selected) is excluded from the band: its fill is cleared so the surface shows
+     through, reading as a card over the background rather than as more band. Line
+     numbers are always shown, so the gutter never collapses and the content's left
+     corners never need rounding. */
   [data-content] > [data-line][data-selected-line] {
     margin-inline-start: calc(-1 * var(--caret-seam));
     padding-inline-start: calc(1ch + var(--caret-seam));
   }
-  [data-gutter] > [data-selected-line] {
+  [data-gutter] > [data-column-number][data-selected-line] {
     border-right-color: transparent;
   }
-  [data-gutter] > [data-selected-line]:not([data-selected-line] ~ [data-selected-line]) {
+  [data-gutter]
+    > [data-column-number][data-selected-line]:not(
+      [data-selected-line] ~ [data-column-number][data-selected-line]
+    ) {
     border-top-left-radius: var(--radius);
   }
-  [data-content] > [data-selected-line]:not([data-selected-line] ~ [data-selected-line]) {
+  [data-content]
+    > [data-line][data-selected-line]:not(
+      [data-selected-line] ~ [data-line][data-selected-line]
+    ) {
     border-top-right-radius: var(--radius);
   }
-  [data-gutter] > [data-selected-line]:not(:has(~ [data-selected-line])) {
+  [data-gutter]
+    > [data-column-number][data-selected-line]:not(:has(~ [data-column-number][data-selected-line])) {
     border-bottom-left-radius: var(--radius);
   }
-  [data-content] > [data-selected-line]:not(:has(~ [data-selected-line])) {
+  [data-content]
+    > [data-line][data-selected-line]:not(:has(~ [data-line][data-selected-line])) {
     border-bottom-right-radius: var(--radius);
+  }
+  /* The composer/annotation row the library also flags selected is NOT part of the
+     band: clear its selection fill (both columns) so the surface background shows
+     through to the left of the composer card. */
+  [data-gutter] > [data-gutter-buffer][data-selected-line],
+  [data-content] > [data-line-annotation][data-selected-line] {
+    background-color: transparent;
   }
 `;
 
