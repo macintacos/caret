@@ -37,15 +37,16 @@ export default defineConfig({
     // tsconfig `paths` mappings keep svelte-check and bun test in step (EXC-507).
     //
     // The bare `shiki` specifier (imported by @pierre/diffs) resolves to the
-    // scoped bundle shim, not shiki's full barrel. shiki's `bundledLanguages`
-    // maps ~300 lazily-imported grammars; vite code-splits every one into the
-    // build, so the library's `import { bundledLanguages } from "shiki"` would
-    // otherwise pull every grammar into the embedded UI asset. The shim narrows
-    // the bundle to markdown plus the fenced-code grammars caret's highlight
-    // pipeline loads, and re-exports the rest of shiki's surface unchanged.
-    // The `/^shiki$/` regex anchors an exact match so deep specifiers
-    // (shiki/core, shiki/langs/*, shiki/engine/*) keep resolving to the real
-    // package — only the bare barrel is redirected.
+    // bundle shim, not shiki's own bundle entry. The shim swaps the highlighter's
+    // engine (caret uses shiki's pure-JS regex engine, not the Oniguruma WASM
+    // binary) and themes (caret registers its own), and — per EXC-665 — exposes
+    // shiki's FULL language bundle so every grammar an agent can tag a fenced code
+    // block with highlights, not just a hand-picked subset. The grammars are lazy
+    // `() => import(...)` loaders, so vite code-splits one on-demand chunk per
+    // grammar; caret runs entirely locally, so the embedded asset's size is a
+    // non-concern. The `/^shiki$/` regex anchors an exact match so deep specifiers
+    // (shiki/core, shiki/langs/*, shiki/engine/*, shiki/bundle/full) keep
+    // resolving to the real package — only the bare barrel is redirected.
     alias: [
       { find: "@core", replacement: fileURLToPath(new URL("../src", import.meta.url)) },
       {

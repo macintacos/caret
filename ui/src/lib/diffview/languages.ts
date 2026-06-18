@@ -14,7 +14,7 @@ import { preloadHighlighter } from "@pierre/diffs";
 import { bundledLanguages } from "./shiki-bundle.ts";
 import { caretDiffTheme } from "./theme.ts";
 
-// The grammars the scoped bundle can resolve (canonical shiki names). markdown is
+// The grammars the shiki bundle can resolve (canonical shiki names). markdown is
 // the plan source language itself; the rest are the fenced-code grammars.
 const BUNDLED: ReadonlySet<string> = new Set(Object.keys(bundledLanguages));
 
@@ -60,7 +60,7 @@ const FENCE_RE = /^[ \t]{0,3}(?:`{3,}|~{3,})[ \t]*([A-Za-z0-9_+#.-]+)/gm;
 
 /**
  * Canonical grammar names for the fenced code blocks in `text`, limited to the
- * grammars the scoped bundle can resolve. Aliased tags (js, sh, py…) normalize
+ * grammars the shiki bundle can resolve. Aliased tags (js, sh, py…) normalize
  * to their canonical grammar; `markdown`, plain ```text, and any tag outside the
  * bundle are dropped so the highlighter is never asked to load a grammar it
  * doesn't have. Deduped and sorted for a stable preload key.

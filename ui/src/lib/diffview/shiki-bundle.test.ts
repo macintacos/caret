@@ -1,48 +1,32 @@
 import { describe, expect, test } from "bun:test";
+import { bundledLanguages as fullShikiBundle } from "shiki/bundle/full";
 import { bundledLanguages, bundledThemes } from "./shiki-bundle.ts";
 
-// The scoped shiki bundle is what keeps the UI build from pulling shiki's full
-// ~300-grammar barrel into the embedded asset (vite code-splits every loader in
-// bundledLanguages). This suite pins the grammar set to markdown plus the
-// grammars caret's highlight pipeline loads for fenced code; a grammar added or
-// dropped here changes the build's payload, so the drift fails the unit suite
-// instead of silently bloating the binary.
+// EXC-665: caret bundles shiki's FULL grammar set, so every language an agent can
+// tag a fenced code block with highlights in the plan review UI — not just a
+// hand-picked subset. (caret runs entirely locally, so the embedded asset's size
+// is a non-concern.) These assertions guard against silently re-narrowing the
+// bundle, which is what left `lua` — and every other unlisted language —
+// rendering plain instead of highlighted (the bug this fixed).
 
-// markdown is the plan source language; the rest are the fenced-code grammars
-// caret scans for and attaches so embedded code blocks highlight (see
-// languages.ts). Keep this list in sync with bundledLanguages.
-const EXPECTED_LANGS = [
-  "markdown",
-  "typescript",
-  "tsx",
-  "javascript",
-  "jsx",
-  "json",
-  "jsonc",
-  "yaml",
-  "toml",
-  "shellscript",
-  "diff",
-  "python",
-  "rust",
-  "go",
-  "sql",
-  "css",
-  "scss",
-  "html",
-  "xml",
-  "java",
-  "c",
-  "cpp",
-  "ruby",
-  "php",
-  "dockerfile",
-  "graphql",
-] as const;
+describe("the shiki bundle", () => {
+  test("exposes shiki's full bundled-language set", () => {
+    expect(Object.keys(bundledLanguages).sort()).toEqual(Object.keys(fullShikiBundle).sort());
+  });
 
-describe("the scoped shiki bundle", () => {
-  test("bundledLanguages is exactly the markdown + fenced-code grammar set", () => {
-    expect(Object.keys(bundledLanguages).sort()).toEqual([...EXPECTED_LANGS].sort());
+  test("includes markdown plus languages the old scoped set dropped (EXC-665)", () => {
+    const keys = Object.keys(bundledLanguages);
+    // markdown is the plan source language; lua/kotlin/swift were all absent from
+    // the old 26-grammar set and rendered plain — the EXC-665 regression markers.
+    for (const lang of ["markdown", "lua", "kotlin", "swift"]) {
+      expect(keys).toContain(lang);
+    }
+  });
+
+  test("is the full bundle, not a re-narrowed subset", () => {
+    // The old scoped set was 26 grammars; the full bundle is hundreds. A generous
+    // floor pins "full bundle" without coupling the test to shiki's exact count.
+    expect(Object.keys(bundledLanguages).length).toBeGreaterThan(100);
   });
 
   test("each grammar is a lazy loader, so vite emits one on-demand chunk per grammar", () => {
