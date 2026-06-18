@@ -2,14 +2,14 @@
 
 caret is a tool-agnostic core plus one adapter axis — the coding agent it speaks to. It
 routes that agent's plan to a human for review; a loopback daemon serves a Svelte UI.
-Detailed contributor rules live in [`docs/agents/`](docs/agents/) and load **on demand**.
+Detailed contributor rules live in [`doc/agents/`](doc/agents/) and load **on demand**.
 This file is the router that decides which ones a given change needs.
 
 ## Routing
 
 Read the digraph as a checklist, not a single path: start from the change you're about to
 make, and **load every reference whose edge matches** — a change that spans areas pulls in
-several. Read the matching `docs/agents/*.md` file into context *before* you edit that
+several. Read the matching `doc/agents/*.md` file into context *before* you edit that
 area, not after.
 
 ```graphviz
@@ -17,26 +17,28 @@ digraph caret_rules_router {
     "Working on caret" [shape=doublecircle];
     "What does the change touch?" [shape=diamond];
 
-    "Load docs/agents/architecture-rules.md" [shape=box];
-    "Load docs/agents/typescript-rules.md" [shape=box];
-    "Load docs/agents/svelte-rules.md" [shape=box];
-    "Load docs/agents/browser-testing.md" [shape=box];
-    "Load docs/agents/test-layout.md" [shape=box];
-    "Load docs/agents/logging-rules.md" [shape=box];
-    "Load docs/agents/settings-rules.md" [shape=box];
-    "Load docs/agents/icon-rules.md" [shape=box];
-    "Load docs/agents/opencode-integration.md" [shape=box];
+    "Load doc/agents/architecture-rules.md" [shape=box];
+    "Load doc/agents/typescript-rules.md" [shape=box];
+    "Load doc/agents/svelte-rules.md" [shape=box];
+    "Load doc/agents/browser-testing.md" [shape=box];
+    "Load doc/agents/test-layout.md" [shape=box];
+    "Load doc/agents/logging-rules.md" [shape=box];
+    "Load doc/agents/settings-rules.md" [shape=box];
+    "Load doc/agents/icon-rules.md" [shape=box];
+    "Load doc/agents/opencode-integration.md" [shape=box];
+    "Load doc/agents/documentation-rules.md" [shape=box];
 
     "Working on caret" -> "What does the change touch?";
-    "What does the change touch?" -> "Load docs/agents/architecture-rules.md" [label="core/adapter boundary, daemon routing, @core shared modules"];
-    "What does the change touch?" -> "Load docs/agents/typescript-rules.md" [label="TS module shape: DI, file-split seams, zod boundaries, helpers"];
-    "What does the change touch?" -> "Load docs/agents/svelte-rules.md" [label="Svelte UI in ui/: components, runes, state factories, CSS tokens"];
-    "What does the change touch?" -> "Load docs/agents/browser-testing.md" [label="testing browser behavior: e2e vs. unit, the e2e harness"];
-    "What does the change touch?" -> "Load docs/agents/test-layout.md" [label="where a backend test suite belongs under test/"];
-    "What does the change touch?" -> "Load docs/agents/logging-rules.md" [label="logging: levels, message style, redaction"];
-    "What does the change touch?" -> "Load docs/agents/settings-rules.md" [label="adding a config.toml key or CARET_* env var"];
-    "What does the change touch?" -> "Load docs/agents/icon-rules.md" [label="adding or working with vendored icons"];
-    "What does the change touch?" -> "Load docs/agents/opencode-integration.md" [label="OpenCode adapter, plugin, or install (caret install-opencode)"];
+    "What does the change touch?" -> "Load doc/agents/architecture-rules.md" [label="core/adapter boundary, daemon routing, @core shared modules"];
+    "What does the change touch?" -> "Load doc/agents/typescript-rules.md" [label="TS module shape: DI, file-split seams, zod boundaries, helpers"];
+    "What does the change touch?" -> "Load doc/agents/svelte-rules.md" [label="Svelte UI in ui/: components, runes, state factories, CSS tokens"];
+    "What does the change touch?" -> "Load doc/agents/browser-testing.md" [label="testing browser behavior: e2e vs. unit, the e2e harness"];
+    "What does the change touch?" -> "Load doc/agents/test-layout.md" [label="where a backend test suite belongs under test/"];
+    "What does the change touch?" -> "Load doc/agents/logging-rules.md" [label="logging: levels, message style, redaction"];
+    "What does the change touch?" -> "Load doc/agents/settings-rules.md" [label="adding a config.toml key or CARET_* env var"];
+    "What does the change touch?" -> "Load doc/agents/icon-rules.md" [label="adding or working with vendored icons"];
+    "What does the change touch?" -> "Load doc/agents/opencode-integration.md" [label="OpenCode adapter, plugin, or install (caret install-opencode)"];
+    "What does the change touch?" -> "Load doc/agents/documentation-rules.md" [label="documentation: which doc to update — README, CONTRIBUTING, CHANGELOG, the doc/ index, or the doc map itself"];
 }
 ```
 

@@ -37,6 +37,6 @@ playwright/.cache/
 .claude/worktrees/
 
 # caret's CLAUDE.md is intentionally checked in — it is the routing index for
-# docs/agents/. Force-track it even when a global core.excludesFile ignores
+# doc/agents/. Force-track it even when a global core.excludesFile ignores
 # CLAUDE.md (a common personal-dotfiles default).
 !/CLAUDE.md

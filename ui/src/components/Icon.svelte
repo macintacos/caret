@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Renders one vendored Lucide SVG (ui/src/icons/, see docs/agents/icon-rules.md). The
+  // Renders one vendored Lucide SVG (ui/src/icons/, see doc/agents/icon-rules.md). The
   // imports are static `?raw` strings so the markup ships inside the JS bundle —
   // no per-icon network round-trip, no emitted asset to manage, and the fixed
   // small registry means a dynamic import would buy nothing. The SVGs stay

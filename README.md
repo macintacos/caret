@@ -11,6 +11,16 @@ read it rendered as HTML, **annotate passages inline** (Google-Docs style), and
 straight back to the agent. A single local daemon is shared across concurrent Claude
 sessions, so several in-flight plans are reviewed from one browser tab via a switcher.
 
+Looking to develop caret rather than use it? Start with
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Screenshots
+
+<!-- TODO(EXC-666): add review-UI screenshots here — the plan view with inline annotation,
+the request-changes flow, and the multi-session switcher. -->
+
+_Review-UI screenshots are coming soon._
+
 ## Install
 
 caret installs from its GitHub-based plugin marketplace. From inside Claude Code:
@@ -65,8 +75,7 @@ works. Because OpenCode has no `ExitPlanMode` equivalent, the plugin registers a
 changes flows back exactly as in Claude Code. **Update** by re-running the installer;
 **uninstall** with `caret install-opencode --uninstall` (which also removes caret's
 `package.json` entry). See
-[`docs/agents/opencode-integration.md`](docs/agents/opencode-integration.md) for the
-design.
+[`doc/agents/opencode-integration.md`](doc/agents/opencode-integration.md) for the design.
 
 ### Build from source (advanced)
 
@@ -118,7 +127,7 @@ it ships no Codex packaging (no installer or hook manifests). `src/adapters/open
 a third adapter, for OpenCode — and unlike codex it ships real packaging: an in-process
 plugin and its own installer. OpenCode is plugin-shaped, not command-hook-shaped, so caret
 registers a `caret_review_plan` tool that bridges to `caret review` rather than a hook
-(see [`docs/agents/opencode-integration.md`](docs/agents/opencode-integration.md)). Select
+(see [`doc/agents/opencode-integration.md`](doc/agents/opencode-integration.md)). Select
 an adapter with `CARET_AGENT=codex` or `CARET_AGENT=opencode`; with no selector caret uses
 Claude, so the shipped Claude plugin keeps working unchanged. The hooks table and
 decision-JSON block below, and the behavioral prose in `commands/*.md`, describe
@@ -184,8 +193,8 @@ caret installs into OpenCode (and updates) via the script installer, or directly
 OpenCode installs the plugin's `@opencode-ai/plugin` dependency on its next start (restart
 OpenCode once after installing). The `/caret:demo`, `/caret:discovery`, and `/caret:debug`
 commands work as they do in Claude Code. See
-[`docs/agents/opencode-integration.md`](docs/agents/opencode-integration.md) for the
-design and the dependency-manifest rationale.
+[`doc/agents/opencode-integration.md`](doc/agents/opencode-integration.md) for the design
+and the dependency-manifest rationale.
 
 ### Desktop notifications
 
@@ -368,7 +377,7 @@ To raise verbosity, set `level = "debug"` in `config.toml`'s `[logging]` table (
   ready to paste into a bug report. Complements `/caret:debug` (the session timeline):
   discovery is the point-in-time snapshot of the installation.
 
-Contributors should see `docs/agents/logging-rules.md` for the logging conventions — when
+Contributors should see `doc/agents/logging-rules.md` for the logging conventions — when
 to log, levels, and message style.
 
 ## Development
@@ -438,7 +447,7 @@ so only one such session can run at a time. Likewise, set `CARET_DEV_STATE_DIR` 
 that serves the built `ui/dist/` artifact on an OS-assigned port with ephemeral state, so
 the suite never touches your real daemon or `~/.local/state/caret`. `mise run setup`
 installs the Chromium browser the specs drive. For when to write an e2e spec versus a
-`bun test` unit versus throwaway exploration, see `docs/agents/browser-testing.md`.
+`bun test` unit versus throwaway exploration, see `doc/agents/browser-testing.md`.
 
 For a quick local trial without installing, load the plugin from a checkout:
 
@@ -452,7 +461,7 @@ claude --plugin-dir ./    # load caret's hooks for this session only
 
 caret's icons are [Lucide](https://lucide.dev) SVGs vendored verbatim at a pinned release
 under `ui/src/icons/`, rendered by `ui/src/components/Icon.svelte`. Adding one means
-following the checklist in `docs/agents/icon-rules.md` and adding a row to
+following the checklist in `doc/agents/icon-rules.md` and adding a row to
 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 
 ## Layout
