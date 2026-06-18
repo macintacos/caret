@@ -22,15 +22,11 @@ import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 // a faithful superset for everything except the bundled-theme map narrowed below.
 export * from "shiki/core";
 
-// shiki's full grammar bundle (EXC-665): every language shiki ships, each entry a
-// lazy `() => import("shiki/langs/*.mjs")` factory, so vite emits one chunk per
-// grammar and the highlighter fetches it on demand — driven by the languages
-// caret scans out of the plan's fences (see languages.ts). Exposing the full set
-// means any fence tag an agent writes — lua, kotlin, swift, … — resolves and
-// highlights, rather than only the grammars an earlier scoped list happened to
-// name. shiki-bundle.test.ts pins this to shiki's own full bundle, so a
-// regression that re-narrows it (the bug EXC-665 fixed, where unlisted languages
-// rendered plain) fails the unit suite.
+// shiki's full grammar bundle (EXC-665): every language shiki ships, each a lazy
+// `() => import("shiki/langs/*.mjs")` factory the highlighter fetches on demand
+// (driven by the fences caret scans — see languages.ts). shiki-bundle.test.ts
+// pins this to shiki's own full bundle, so a regression that re-narrows it — the
+// bug EXC-665 fixed, where unlisted languages rendered plain — fails the suite.
 export const bundledLanguages = fullBundledLanguages;
 
 // caret registers caret-light / caret-dark as custom themes (diffview/theme.ts),
