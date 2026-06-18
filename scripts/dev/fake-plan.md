@@ -195,6 +195,22 @@ fn main() {
 }
 ```
 
+Lua — outside the old scoped bundle, so it rendered plain before EXC-665; it must now
+highlight like the rest:
+
+```lua
+-- iterative fibonacci
+local function fib(n)
+  local a, b = 0, 1
+  for _ = 1, n do
+    a, b = b, a + b
+  end
+  return a
+end
+
+print("fib(10) = " .. fib(10))
+```
+
 A unified diff:
 
 ```diff
@@ -257,13 +273,16 @@ $ mise run dev
 ==> vite ready on http://localhost:5173
 ```
 
-An **unknown / unloaded language** — Shiki can't highlight it, so it must fall back to a
-plain `<pre><code>` without crashing:
+An **unrecognized language** — caret now bundles shiki's full grammar set (EXC-665), so
+this plain-fallback path only fires for a tag shiki has no grammar for at all (here
+PlantUML — shiki ships no `plantuml` grammar). It must still fall back to a plain
+`<pre><code>` without crashing:
 
-```mermaid
-graph TD
-  A[hook] --> B[daemon]
-  B --> C[browser]
+```plantuml
+@startuml
+hook -> daemon : plan
+daemon -> browser : review
+@enduml
 ```
 
 ## Horizontal rules
