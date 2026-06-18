@@ -7,6 +7,64 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-06-18 - The Plan Review Release
+
+### Added
+
+- **Rebuilt plan-review surface.** Plans now render through a new source view built on
+  `@pierre/diffs`, with caret's theme, fonts, and color palette bridged into the diff view
+  (#119, #122, #125).
+- **Inline annotations.** Line-anchored comments, created from the line gutter or by
+  dragging across the code body, appear as scroll-synced inline cards framed as ordered
+  per-line threads, with a host-side bracket spanning each comment's line range (#121,
+  #126, #129, #146, #147, #150, #172).
+- **Markdown comment composer** with live styling, auto-grow, and rendered comments
+  (#174).
+- **Version compare.** A version picker, side-by-side diff, layout toggle, sticky compare
+  header with caret-tied counts, and classic `+`/`-` diff indicators (#128, #153, #155).
+- **Filterable table of contents** for the source view, with per-level indent guides and
+  per-heading deep-linking by header slug (#127, #160, #161).
+- **Clickable links** in the source view, with a caret-themed link-hover tooltip (#123,
+  #162).
+- **Returnable comment drafts.** An unsaved comment draft is kept as a Resume marker, and
+  unsaved scratches surface in Request Changes with Save or Discard (#169, #170).
+- **Pending-comment guardrails.** The pending-comment count is surfaced before submit, and
+  approve is guarded while inline comments are still pending (#148, #149).
+- **Reader affordances** — line-wrap and hide-line-numbers toggles (#152).
+- **Persistent plan-review status strip** pinned as a fixed root sibling (#165).
+- **OpenCode support.** caret now drives OpenCode through its adapter registry, alongside
+  Claude Code and Codex (#179).
+- **GitHub-based plugin installation.** The plugin now publishes to npm so
+  `/plugin marketplace add macintacos/caret` resolves the latest version (#178).
+- **Feedback cites line numbers** with quoted lines in submitted reviews (#124).
+- A `run-caret` skill that launches local dev and opens the review UI (#167).
+- Plans are formatted with prettier at version ingest (#118).
+
+### Changed
+
+- **Design-token system.** Motion tokens with a global reduced-motion rule, a named
+  numeric type scale with tabular figures, and the diff surface's add/delete colors and
+  layered styling tied to caret's palette (#140, #141, #142, #143, #144, #145, #156, #157,
+  #158, #159).
+- **Cut over to the new review surface and removed the legacy one** (#130).
+- **Restyled chrome.** The shell, EmptyState, and TopBar/badges were reseated onto the
+  shared chrome and foundation tokens in the diffs design language (#131, #164, #166).
+- Wide-ranging plan-review polish across selection, gutter, table of contents, status
+  pills, the compare header, collapsed-context bands, per-comment state, and hover
+  affordances (#151, #154, #168, #173, #176, #181).
+- All Shiki languages are now highlighted in plan review (#182).
+- The install output is consolidated into one animated section (#180).
+- **Leaner UI bundle** from a bundle-impact audit and Shiki slimming (#133).
+- Preflight is now interruption-safe and concurrency-bounded (#138).
+
+### Fixed
+
+- Plan-review rendering and interaction fixes — scroll jump, fenced highlighting,
+  plan-file sync, inline comments, and table-of-contents scroll accuracy (#134, #135,
+  #136).
+- The off-by-one table-of-contents active-heading highlight is corrected (#175).
+- An orphaned decision-registry entry is cleared on a revision resubmit (#139).
+
 ## [0.0.5] - 2026-06-12 - The Build Awareness Release
 
 ### Added
@@ -151,7 +209,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Review decisions are delivered via a bounded poll, fixing missed or delayed decision
   delivery.
 
-[Unreleased]: https://github.com/macintacos/caret/compare/v0.0.5...HEAD
+[Unreleased]: https://github.com/macintacos/caret/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/macintacos/caret/compare/v0.0.5...v0.1.0
 [0.0.5]: https://github.com/macintacos/caret/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/macintacos/caret/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/macintacos/caret/compare/v0.0.2...v0.0.3
