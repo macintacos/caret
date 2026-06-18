@@ -592,9 +592,9 @@
 
 <style>
   /* The control bar above the surface. Carries the bar chrome (raised paper,
-     hairline rule) so its children — the reader affordances and the compare
-     picker — read as one toolbar: reader options on the left, the version picker
-     on the right when present. */
+     hairline rule) for the version-compare picker: the "Compare versions" toggle
+     sits at the left, and (in compare mode) the layout / indicator toggles are
+     pushed to the right edge. */
   .control-row {
     display: flex;
     align-items: center;
@@ -603,10 +603,11 @@
     border-bottom: 1px solid var(--rule);
     background: var(--paper-raised);
   }
-  /* The compare picker is the trailing group; it pushes to the right edge so the
-     reader affordances hold the left. */
+  /* The compare picker now owns the bar: it spans the row so the "Compare
+     versions" toggle sits at the left, and its display toggles (margin-left: auto,
+     in compare mode) reach the right edge. */
   .control-row :global(.compare-picker) {
-    margin-left: auto;
+    flex: 1;
   }
 
   /* The contents pane and source view share one row; the pane is a fixed-width
