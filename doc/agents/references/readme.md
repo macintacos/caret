@@ -2,18 +2,20 @@
 
 *Audience: coding agents and contributors editing caret's top-level README.*
 
-`README.md` is the comprehensive, user-facing guide and the project's front page. It leads
-with the install/usage audience and stays the single source of truth for users — do
-**not** split user-facing content into a separate guide; add or revise sections in place.
+`README.md` is the lean, user-facing front door and the project's front page. It leads
+with the install/usage audience and stays focused — what caret is, install, basic usage,
+and pointers onward. The advanced and contributor-facing depth lives in
+[`doc/ADVANCED.md`](../../ADVANCED.md), which the README links to; when content gets deep,
+it lands there, not here.
 
 When to edit it:
 
-- A user-visible change: a new install path, a new command, a `config.toml` key or
-  `CARET_*` env var (settings land with their README row in the same change — see
-  [`settings-rules.md`](../settings-rules.md)), changed behavior, or a new how-it-works
-  detail.
-- Keep the development notes accurate, but route human-onboarding basics to
-  `CONTRIBUTING.md` rather than duplicating them here at length.
+- A user-visible change to the front door: a new or changed install path, a new top-level
+  command, basic-usage behavior, or a pointer that needs updating. Deep configuration,
+  architecture, and dev-workflow detail belong in [`doc/ADVANCED.md`](../../ADVANCED.md) —
+  and new `config.toml` / `CARET_*` rows land in its tables (see
+  [`settings-rules.md`](../settings-rules.md)).
+- Route human-onboarding basics to `CONTRIBUTING.md` rather than duplicating them here.
 
 Use the `/doc-coauthoring` skill for any substantive prose pass — it keeps the section
 on-audience and scannable.
