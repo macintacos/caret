@@ -21,6 +21,7 @@ digraph caret_docs_router {
     "Which doc does the change affect?" [shape=diamond];
 
     "Edit README.md" [shape=box];
+    "Edit doc/ADVANCED.md" [shape=box];
     "Edit CONTRIBUTING.md" [shape=box];
     "Edit CLAUDE.md" [shape=box];
     "Edit a doc/agents/*.md rule file" [shape=box];
@@ -28,7 +29,8 @@ digraph caret_docs_router {
     "Edit CHANGELOG.md (via /release-caret)" [shape=box];
 
     "Changing documentation" -> "Which doc does the change affect?";
-    "Which doc does the change affect?" -> "Edit README.md" [label="user-facing: install, usage, configuration, how-it-works — the comprehensive guide"];
+    "Which doc does the change affect?" -> "Edit README.md" [label="user-facing front door: what caret is, install, basic usage, pointers onward"];
+    "Which doc does the change affect?" -> "Edit doc/ADVANCED.md" [label="advanced/contributor reference: build-from-source, architecture, adapter internals, full config + CARET_* tables, dev workflow, logging"];
     "Which doc does the change affect?" -> "Edit CONTRIBUTING.md" [label="human contributor onboarding: local setup, the mise workflow, where tests live"];
     "Which doc does the change affect?" -> "Edit CLAUDE.md" [label="the code-change routing index, plus the CodeGraph / verifying-changes prose"];
     "Which doc does the change affect?" -> "Edit a doc/agents/*.md rule file" [label="a rule-of-the-road for a code area (architecture, logging, TS, Svelte, testing, icons, settings, OpenCode)"];
@@ -39,15 +41,19 @@ digraph caret_docs_router {
 
 ## The doc landscape
 
-- **`README.md`** (repo root) — the comprehensive, user-facing guide: install, usage,
-  configuration, how caret works, and contributor-relevant development notes. It leads
-  with the install audience and stays the single source of truth for users; user-facing
-  content is **not** split out into a separate guide. How to edit it:
+- **`README.md`** (repo root) — the lean, user-facing front door: what caret is, install,
+  basic usage, and pointers onward. It leads with the install audience; the advanced and
+  contributor-facing depth lives in `doc/ADVANCED.md`, which it links to. How to edit it:
   [`references/readme.md`](references/readme.md).
+- **`doc/ADVANCED.md`** — the deep, human-facing reference behind `README.md`:
+  build-from-source, the core/adapter architecture, the Claude Code and OpenCode adapter
+  internals, the full `config.toml` + `CARET_*` tables, and the development workflow. It
+  holds the advanced material the README points to. How to edit it:
+  [`references/advanced.md`](references/advanced.md).
 - **`CONTRIBUTING.md`** (repo root) — the short, human-facing front door for people who
   want to develop caret: `bun install`, the `mise` task workflow, and where tests live. It
-  stays minimal and points at `README.md` and `doc/agents/` for depth. How to edit it:
-  [`references/contributing.md`](references/contributing.md).
+  stays minimal and points at `README.md`, `doc/ADVANCED.md`, and `doc/agents/` for depth.
+  How to edit it: [`references/contributing.md`](references/contributing.md).
 - **`CLAUDE.md`** (repo root) — the agent-facing router for **code** changes, plus the
   CodeGraph and verifying-changes guidance. Adding or moving a `doc/agents/*.md` rule file
   means adding or updating its edge here. How to edit it:
@@ -64,9 +70,11 @@ digraph caret_docs_router {
 ## Audience, stated at the top of every new doc
 
 `CLAUDE.md`, `doc/README.md`, the `doc/agents/*.md` rule files, and this file's
-`references/` pointers are **agent-facing**. `README.md` and `CONTRIBUTING.md` are
-**human-facing**. State the audience explicitly at the top of each new doc so a reader
-knows in one line whether it is written for them.
+`references/` pointers are **agent-facing**. `README.md`, `CONTRIBUTING.md`, and
+`doc/ADVANCED.md` are **human-facing** — `doc/ADVANCED.md` is the one human-facing doc
+that lives under `doc/`, whose other contents are agent-facing. State the audience
+explicitly at the top of each new doc so a reader knows in one line whether it is written
+for them.
 
 ## Prose passes: use `/doc-coauthoring`
 

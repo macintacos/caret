@@ -4,8 +4,9 @@
 
 caret is a tool-agnostic core plus an adapter for the coding agent it speaks to; it routes
 that agent's plan to a human for review through a loopback daemon and a Svelte UI. This is
-the short developer front door — `README.md` is the comprehensive guide, and `doc/agents/`
-holds the rules-of-the-road for working in a given area.
+the short developer front door — `README.md` is the user-facing guide, `doc/ADVANCED.md`
+is the deep reference, and `doc/agents/` holds the rules-of-the-road for working in a
+given area.
 
 ## Setup
 
@@ -26,7 +27,8 @@ mise run preflight  # the pre-push gate: lint + unit/e2e tests + build, run conc
 ```
 
 `mise run preflight` is the gate to pass before pushing. The full task catalog (`build`,
-`test`, `test-e2e`, `lint`, `format`) is documented in the README's Development section.
+`test`, `test-e2e`, `lint`, `format`) is documented in
+[`doc/ADVANCED.md`](doc/ADVANCED.md#development).
 
 ## Where tests live
 
@@ -42,11 +44,13 @@ mise run preflight  # the pre-push gate: lint + unit/e2e tests + build, run conc
 
 caret reads a `config.toml` and `CARET_*` environment variables (for example `CARET_PORT`
 and `CARET_AGENT`). The full list of keys, their defaults, and what each one does lives in
-the README's Configuration section — set values there, and never commit secrets.
+[`doc/ADVANCED.md`](doc/ADVANCED.md#configuration) — set values there, and never commit
+secrets.
 
 ## Going deeper
 
-- `README.md` — the comprehensive guide: install, how it works, configuration, and the
-  full development reference.
+- `README.md` — the user-facing front door: what caret is, install, and basic usage.
+- `doc/ADVANCED.md` — the deep reference: build-from-source, architecture, the agent
+  adapters, the full configuration surface, and the development workflow.
 - `doc/agents/` — the rules-of-the-road for working in a given area of the code;
   `CLAUDE.md` routes you to the right one.
