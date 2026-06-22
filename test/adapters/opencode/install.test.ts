@@ -35,9 +35,9 @@ test("everything is unknown when the config dir is absent", () => {
 
 test("reports the installed plugin file, its version, and no manual array entry", async () => {
   const dir = join(tmp, "opencode");
-  await mkdir(join(dir, "plugin"), { recursive: true });
+  await mkdir(join(dir, "plugins"), { recursive: true });
   await writeFile(
-    join(dir, "plugin", "caret.ts"),
+    join(dir, "plugins", "caret.ts"),
     `const CARET_PLUGIN_VERSION = "1.2.3";\n// caret plugin\n`,
   );
   // A user config whose plugin array holds only third-party plugins → no MANUAL
@@ -87,8 +87,8 @@ test("a manual caret entry in a later config file is not masked by an earlier on
 
 test("a plugin file without a version marker reports enabled but version unknown", async () => {
   const dir = join(tmp, "opencode");
-  await mkdir(join(dir, "plugin"), { recursive: true });
-  await writeFile(join(dir, "plugin", "caret.ts"), `// caret plugin, no version marker\n`);
+  await mkdir(join(dir, "plugins"), { recursive: true });
+  await writeFile(join(dir, "plugins", "caret.ts"), `// caret plugin, no version marker\n`);
   process.env.OPENCODE_CONFIG_DIR = dir;
   const s = readOpencodeInstallState();
   expect(s.pluginEnabled).toBe(true);

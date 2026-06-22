@@ -11,9 +11,9 @@ import { join } from "node:path";
  * loads `.ts` plugins directly (its loader scans `{plugin,plugins}/*.{ts,js}`). */
 export const PLUGIN_FILENAME = "caret.ts";
 
-/** OpenCode's auto-loaded plugin dir name. OpenCode scans both `plugin/` and
- * `plugins/`; caret uses the singular, canonical form. */
-export const PLUGIN_DIRNAME = "plugin";
+/** OpenCode's auto-loaded plugin dir name. OpenCode scans both `plugins/` and
+ * (for backwards compatibility) `plugin/`; caret uses the canonical plural form. */
+export const PLUGIN_DIRNAME = "plugins";
 
 /** OpenCode's command dir name. OpenCode scans both `command/` and `commands/`;
  * caret uses the singular, canonical form. */
