@@ -58,8 +58,8 @@ test("install writes a package.json declaring caret's plugin dependency (the loa
   });
   // The plugin + command files also land; commands are namespaced (`/caret:demo`).
   expect(existsSync(pluginFilePath(dir))).toBe(true);
-  expect(existsSync(join(dir, "command", "caret:demo.md"))).toBe(true);
-  expect(existsSync(join(dir, "command", "demo.md"))).toBe(false);
+  expect(existsSync(join(dir, "commands", "caret:demo.md"))).toBe(true);
+  expect(existsSync(join(dir, "commands", "demo.md"))).toBe(false);
 });
 
 test("install is idempotent (re-running leaves the manifest unchanged)", () => {
