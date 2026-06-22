@@ -15,9 +15,9 @@ export const PLUGIN_FILENAME = "caret.ts";
  * (for backwards compatibility) `plugin/`; caret uses the canonical plural form. */
 export const PLUGIN_DIRNAME = "plugins";
 
-/** OpenCode's command dir name. OpenCode scans both `command/` and `commands/`;
- * caret uses the singular, canonical form. */
-export const COMMAND_DIRNAME = "command";
+/** OpenCode's command dir name. OpenCode scans both `commands/` and
+ * (for backwards compatibility) `command/`; caret uses the canonical plural form. */
+export const COMMAND_DIRNAME = "commands";
 
 /** caret namespaces its OpenCode commands so they read as caret's, not built-ins.
  * OpenCode names a command by its path under `command/` minus the `.md`, so a file
