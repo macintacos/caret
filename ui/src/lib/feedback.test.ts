@@ -63,18 +63,62 @@ describe("formatFeedback", () => {
     );
   });
 
-  test("multi-line range annotation cites the range and quotes every source line", () => {
+  test("multi-line range cites the range and abbreviates the quote to head … tail", () => {
+    // Lines 4-6 flatten to nine words (> head + tail), so the middle is elided.
     const out = formatFeedback([lineAnn(4, 6, "split this up")], "", PLAN);
     expect(out).toBe(
       [
         "Inline comments:",
         "",
         "1. Lines 4-6:",
-        "   > Second body line.",
-        "   > Third body line.",
-        "   > Fourth body line.",
+        "   > Second body line. … Fourth body line.",
         "   split this up",
       ].join("\n"),
+    );
+  });
+
+  test("a short multi-line range collapses onto a single quote line", () => {
+    // Lines 4-5 flatten to six words (== head + tail), kept whole but on one line.
+    const out = formatFeedback([lineAnn(4, 5, "merge these")], "", PLAN);
+    expect(out).toBe(
+      [
+        "Inline comments:",
+        "",
+        "1. Lines 4-5:",
+        "   > Second body line. Third body line.",
+        "   merge these",
+      ].join("\n"),
+    );
+  });
+
+  test("a long legacy quote is abbreviated to head … tail", () => {
+    const out = formatFeedback(
+      [ann({ quote: "deploy the new cache layer before the migration", comment: "risky" })],
+      "",
+      PLAN,
+    );
+    expect(out).toBe(
+      ["Inline comments:", "", '1. On "deploy the new … before the migration": risky'].join("\n"),
+    );
+  });
+
+  test("a quote of exactly six words is kept whole", () => {
+    const out = formatFeedback(
+      [ann({ quote: "one two three four five six", comment: "c" })],
+      "",
+      PLAN,
+    );
+    expect(out).toBe(["Inline comments:", "", '1. On "one two three four five six": c'].join("\n"));
+  });
+
+  test("a seven-word quote is abbreviated, dropping the middle word", () => {
+    const out = formatFeedback(
+      [ann({ quote: "one two three four five six seven", comment: "c" })],
+      "",
+      PLAN,
+    );
+    expect(out).toBe(
+      ["Inline comments:", "", '1. On "one two three … five six seven": c'].join("\n"),
     );
   });
 
@@ -100,8 +144,7 @@ describe("formatFeedback", () => {
         "Inline comments:",
         "",
         "1. Lines 4-5:",
-        "   > Second body line.",
-        "   > Third body line.",
+        "   > Second body line. Third body line.",
         "   fix range",
         '2. On "legacy quote": legacy note',
       ].join("\n"),

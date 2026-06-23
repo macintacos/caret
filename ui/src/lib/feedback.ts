@@ -1,10 +1,12 @@
 // Deterministic feedback formatting. The result is sent verbatim as the
 // `deny.message` the model reads when changes are requested, so the shape must
 // be stable and readable: an optional general comment, then a numbered list of
-// inline comments. A legacy annotation cites its quoted selection inline; a
-// line-anchored annotation cites its 1-based line reference and quotes the
-// source lines from the stored plan version, so the agent can locate the
-// feedback by content even when its own line numbering differs.
+// inline comments. Both shapes cite an abbreviated quote — the selection's first
+// and last few words around an ellipsis — so the agent can locate the feedback by
+// content without the full selection's token cost. A legacy annotation cites it
+// inline; a line-anchored annotation pairs it with the annotation's 1-based line
+// reference into the stored plan version, so the agent can find the feedback even
+// when its own line numbering differs.
 
 import { type Annotation, isLegacyAnnotation, isLineAnnotation } from "@core/types";
 
@@ -26,18 +28,36 @@ function quotedLines(startLine: number, endLine: number, planLines: string[]): s
   return planLines.slice(startLine - 1, endLine);
 }
 
+const QUOTE_HEAD_WORDS = 3;
+const QUOTE_TAIL_WORDS = 3;
+
+/** Abbreviates a quote to the line reference's companion: the first and last few
+ * words joined by an ellipsis, dropping the middle. The agent locates the text by
+ * its line numbers and confirms it by these anchor words; the elided middle is
+ * wasted tokens, since the agent re-reads the plan itself. A quote short enough
+ * that abbreviation would drop no words is returned whole (whitespace collapsed). */
+function abbreviate(text: string): string {
+  const flat = flatten(text);
+  if (flat === "") return "";
+  const words = flat.split(" ");
+  if (words.length <= QUOTE_HEAD_WORDS + QUOTE_TAIL_WORDS) return flat;
+  const head = words.slice(0, QUOTE_HEAD_WORDS).join(" ");
+  const tail = words.slice(-QUOTE_TAIL_WORDS).join(" ");
+  return `${head} … ${tail}`;
+}
+
 /** Renders one annotation (comment already trimmed and non-blank) as a numbered
  * entry. Legacy annotations stay on one line; line-anchored ones span a header,
- * a quoted block, and the comment, each continuation line indented under the
- * number. */
+ * a single abbreviated quote line, and the comment, each continuation line
+ * indented under the number. The quote line is omitted when the range is a stale
+ * anchor with nothing to quote. */
 function entry(a: Annotation, n: number, planLines: string[]): string {
   if (isLegacyAnnotation(a)) {
-    return `${n}. On "${flatten(a.quote)}": ${a.comment.trim()}`;
+    return `${n}. On "${abbreviate(a.quote)}": ${a.comment.trim()}`;
   }
   const lines = [`${n}. ${lineHeader(a.startLine, a.endLine)}`];
-  for (const quoted of quotedLines(a.startLine, a.endLine, planLines)) {
-    lines.push(`   > ${quoted}`);
-  }
+  const quote = abbreviate(quotedLines(a.startLine, a.endLine, planLines).join(" "));
+  if (quote) lines.push(`   > ${quote}`);
   lines.push(`   ${a.comment.trim()}`);
   return lines.join("\n");
 }
