@@ -1,6 +1,6 @@
 ---
 name: release-caret
-description: Cut a caret release. Computes the next version with the deterministic release script, confirms it, authors the keepachangelog CHANGELOG entry under a themed release name, then drives the two-phase script flow — phase 1 opens a PR with the version bump + changelog; after merge, phase 2 tags trunk, publishes the GitHub Release, and publishes the plugin to npm. Triggers on "/release-caret", "release caret", "cut a caret release", "ship a caret version".
+description: Cut a caret release. Computes the next version with the deterministic release script, confirms it once, authors the keepachangelog CHANGELOG entry under a themed release name, then drives the flow end-to-end — phase 1 opens a PR with the version bump + changelog, merges it, then phase 2 tags trunk, publishes the GitHub Release, and publishes the plugin to npm. Triggers on "/release-caret", "release caret", "cut a caret release", "ship a caret version".
 argument-hint: "[patch|minor|major] [dry run]"
 ---
 
@@ -9,8 +9,10 @@ argument-hint: "[patch|minor|major] [dry run]"
 Cut a caret release by orchestrating `scripts/release/cli.ts`. The script owns every
 judgment-free step — version math, version-file edits, the commit range, all `git`/`gh`
 operations — and is the **sole source of the version number**. Your only jobs are: (1)
-confirm the version the script computes, (2) author the `CHANGELOG.md` prose, and (3)
-orchestrate the two phases. **Never invent, compute, or alter the version yourself** —
+confirm the version the script computes — the single gate — (2) author the `CHANGELOG.md`
+prose, and (3) orchestrate the full flow end-to-end: open the release PR, merge it, then
+finalize (tag, GitHub Release, npm). Once the version is confirmed, everything after it
+runs without further prompts. **Never invent, compute, or alter the version yourself** —
 always take it from the script's JSON.
 
 The script is invoked directly so its stdout is pure JSON:
@@ -36,10 +38,12 @@ call.
 
 ## Which phase am I in?
 
-Releases run in two phases across two separate invocations, both started from a clean,
-**up-to-date** `trunk`. `compute` reads local state, so pull trunk before releasing — and
-again after the PR merges, before Phase 2. Detect the phase by running the version oracle
-once:
+Releases run in two phases, both started from a clean, **up-to-date** `trunk`. In the
+normal flow a **single invocation** runs both phases end-to-end — Phase 1 opens the PR,
+the skill merges it (Phase 1 step 5), then Phase 2 tags and publishes — so no second
+invocation is needed. Phase detection still matters for **resuming** an interrupted run:
+`compute` reads local state, so pull trunk before releasing. Detect the phase by running
+the version oracle once:
 
 ```sh
 bun scripts/release/cli.ts compute <bump>
@@ -67,10 +71,10 @@ it is. Use it to detect Phase-2 readiness without switching back to trunk first.
 
 ## Running under plan mode
 
-`/release-caret` mutates state and has two confirmation gates, so its flow has to map onto
-plan mode's single `ExitPlanMode` approval.
-**Outside plan mode this section does not apply** — both gates fire as the normal
-`AskUserQuestion`s written below. When you are invoked **under plan mode**, remap as
+`/release-caret` mutates state behind a single confirmation gate — the version — so its
+flow maps cleanly onto plan mode's single `ExitPlanMode` approval.
+**Outside plan mode this section does not apply** — the version gate fires as the normal
+`AskUserQuestion` written below. When you are invoked **under plan mode**, remap as
 follows:
 
 - **Version confirmation (Phase 1 step 2) folds into `ExitPlanMode`.** Don't raise a
@@ -80,9 +84,10 @@ follows:
 - **The changelog goes in the plan, not on disk yet.** Plan mode can't write
   `CHANGELOG.md`, so put the full proposed changelog (heading + entries) in the plan for
   review. Author it to disk for real **after** exiting plan mode, before `prepare`.
-- **The remote-mutation gate (Phase 1 step 4) still fires after exiting.** Plan approval
-  is not consent to push. Once you've exited and written the changelog, run the
-  remote-mutation `AskUserQuestion` as normal, and pass `--yes` only after it.
+- **Plan approval IS authorization for the whole release.** There is no separate
+  remote-mutation gate. Once you've exited plan mode and written the changelog to disk,
+  proceed straight through `prepare` → merge the PR → `finalize`, passing `--yes` to the
+  mutating calls — no further prompt. (Stop only on a script or `gh` error.)
 
 ---
 
@@ -92,7 +97,8 @@ follows:
 
 If phase detection returned `NO_BASELINE`, there are no release tags yet — the first
 release needs `v0.0.1` on the repository's initial commit so future releases have a range
-to bump from. Ask:
+to bump from. This first-release bootstrap is the **one** exception to the single-gate
+rule (there is no computed version to confirm yet), so it asks its own one-time question:
 
 > **No baseline tag exists yet.** The first release tags the repository's initial commit
 > as `v0.0.1` so future releases have a range to bump from.
@@ -109,18 +115,22 @@ keep: `currentVersion`, `version`, `tag`, `date`, `commits[]`, `compareUrl`,
 lists the version-bearing files the script mutates, so you never have to grep `steps.ts`
 for them.)
 
-### 2. Confirm the version (AskUserQuestion #1)
+### 2. Confirm the version — the single gate
 
-Surface the **script-computed** version for explicit confirmation. Show the concrete
-numbers — never paraphrase them:
+This is the **one** confirmation a real release asks for. Accepting the version authorizes
+the entire remainder of the flow — `prepare --yes`, merging the PR, and `finalize --yes` —
+with no further prompts. Surface the **script-computed** version for explicit
+confirmation. Show the concrete numbers — never paraphrase them:
 
 > **Release `<version>`?** Bumping `<currentVersion>` → `<version>` (`<bump>`), covering
-> `<N>` commits since `<previousTag>`.
+> `<N>` commits since `<previousTag>`. Accepting runs the whole release end-to-end: opens
+> the PR, merges it, tags trunk, and publishes the GitHub Release + npm.
 >
 > - **Release `<version>`** (Recommended)
 > - **Cancel the release**
 
-Use the version verbatim from the JSON. If the user cancels, stop.
+Use the version verbatim from the JSON. If the user cancels, stop. After this point the
+skill does not prompt again unless a step errors.
 
 ### 3. Author the changelog
 
@@ -153,32 +163,35 @@ title back out for the commit, PR, and GitHub Release:
 Author this **before** the next step — `prepare` aborts with `CHANGELOG_MISSING` if the
 `[<version>]` section is absent.
 
-### 4. Confirm the remote mutation (AskUserQuestion #2)
+### 4. Run prepare
 
-This is the second, separate gate the release contract requires — beyond the version
-confirmation:
-
-> **Open the release PR for `<title>`?** This bumps the three manifests, commits the bump
->
-> - changelog, pushes `release/<tag>`, and opens a PR against `trunk`.
-> - **Push and open the PR** (Recommended)
-> - **Cancel**
-
-(`<title>` is `v<version> - The <Theme> Release`.) Only after the user confirms do you
-pass `--yes`.
-
-### 5. Run prepare
+The version gate (step 2) already authorized this — no separate confirmation. With the
+changelog on disk, run:
 
 ```sh
 bun scripts/release/cli.ts prepare <bump> --yes      # real
 bun scripts/release/cli.ts prepare <bump> --dry-run  # dry run (no --yes)
 ```
 
-Parse the result and report the `prUrl`. The next step is Phase 2 (tag trunk + publish the
-GitHub Release) once the PR is reviewed and merged. **In the same session**, just continue
-to Phase 2 directly after the merge is confirmed — pull trunk (or run the
-`finalize --dry-run` probe) and proceed. Re-invoking `/release-caret` is only needed when
-finalizing from a **fresh session**.
+Parse the result and keep `prNumber` and `prUrl`. Report the `prUrl`, then continue to
+step 5 to merge it. (On a **dry run**, `prepare` opens no real PR — `prNumber` is null —
+so skip step 5 and stop here.)
+
+### 5. Merge the release PR
+
+The skill merges its own release PR; there is no human-merge handoff. caret has no CI to
+wait on and `prepare` already gated on `mise run preflight`, and the repo merges via
+squash, so merge immediately:
+
+```sh
+gh pr merge <prNumber> --squash --delete-branch
+```
+
+If GitHub reports the PR's mergeability is still computing, wait briefly and retry once.
+On a real merge failure (merge conflict, branch protection, not mergeable, auth),
+**abort**: surface the `gh` error and work with the operator to resolve — do not force or
+`--admin` around it. The squash lands the bump on `trunk`; Phase 2 picks it up from
+`origin/trunk`. Skip this step entirely on a dry run.
 
 ---
 
@@ -207,20 +220,15 @@ bun scripts/release/cli.ts finalize --dry-run
 
 This fetches `origin/trunk` and returns the concrete `version`, `tag`, `title`, and
 `taggedSha` (trunk's merged HEAD), and previews the npm publish, without mutating
-anything. If it instead returns `ok: false` with `NOT_MERGED`, the bump isn't on
-`origin/trunk` yet — tell the user to merge the Phase 1 PR (and pull trunk) first, then
-stop.
+anything. It confirms the squash-merge from Phase 1 step 5 actually landed: `ok: true`
+means proceed. If it returns `ok: false` with `NOT_MERGED`, the merge didn't reach
+`origin/trunk` (the `gh pr merge` failed or is still settling) — surface that and work
+with the operator before continuing; do not run `finalize --yes`.
 
-### 2. Confirm the remote mutation (AskUserQuestion)
+### 2. Run finalize
 
-> **Tag and publish `<title>`?** This tags trunk's merged HEAD (`<taggedSha>`) as `<tag>`,
-> pushes the tag, creates the GitHub Release from the `[<version>]` changelog section, and
-> publishes `@macintacos/caret@<version>` to npm.
->
-> - **Tag and publish** (Recommended)
-> - **Cancel**
-
-### 3. Run finalize
+The version gate (Phase 1 step 2) already authorized this — no separate confirmation.
+Provided the dry-run probe returned `ok: true`, run:
 
 ```sh
 bun scripts/release/cli.ts finalize --yes      # real
@@ -228,7 +236,11 @@ bun scripts/release/cli.ts finalize --dry-run  # dry run
 ```
 
 Parse the result and report the `releaseUrl` and whether `npmPublished` is true. The
-release is live.
+release is live. Finally, return the checkout to a clean, updated `trunk`:
+
+```sh
+git switch trunk && git pull --ff-only
+```
 
 ---
 
@@ -240,9 +252,10 @@ release is live.
 - Author the changelog heading in the exact
   `## [<version>] - <DATE> - The <Theme> Release` shape, or `prepare`/`finalize` cannot
   recover the themed title.
-- Two confirmations gate a real release — the version (Phase 1 step 2) and the remote
-  mutation (Phase 1 step 4 / Phase 2 step 2). Pass `--yes` only after the remote-mutation
-  confirmation. A dry run skips `--yes` entirely.
+- One confirmation gates a real release — the version (Phase 1 step 2). Accepting it
+  authorizes the entire remainder: `prepare --yes`, merging the PR
+  (`gh pr merge --squash`), and `finalize --yes`, with no further prompts. A dry run skips
+  `--yes` entirely and merges nothing. Stop only on a script or `gh` error.
 - The script is safe to re-run after a partial failure — it detects an existing branch,
   PR, tag, or release and resumes or no-ops. If a run is interrupted, just invoke
   `/release-caret` again.
