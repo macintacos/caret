@@ -236,7 +236,8 @@ bun scripts/release/cli.ts finalize --dry-run  # dry run
 ```
 
 Parse the result and report the `releaseUrl` and whether `npmPublished` is true. The
-release is live. Finally, return the checkout to a clean, updated `trunk`:
+release is live. After a real release (`--yes`), return the checkout to a clean, updated
+`trunk`:
 
 ```sh
 git switch trunk && git pull --ff-only
