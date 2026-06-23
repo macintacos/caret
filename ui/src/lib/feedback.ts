@@ -38,7 +38,6 @@ const QUOTE_TAIL_WORDS = 3;
  * that abbreviation would drop no words is returned whole (whitespace collapsed). */
 function abbreviate(text: string): string {
   const flat = flatten(text);
-  if (flat === "") return "";
   const words = flat.split(" ");
   if (words.length <= QUOTE_HEAD_WORDS + QUOTE_TAIL_WORDS) return flat;
   const head = words.slice(0, QUOTE_HEAD_WORDS).join(" ");
