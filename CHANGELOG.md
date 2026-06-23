@@ -7,6 +7,29 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-06-23 - The Tidying Release
+
+### Changed
+
+- **Leaner README.** The README is now a lean front door — what caret is, install, basic
+  usage, and pointers — with the deep material (architecture, adapters, the full
+  config/env tables, dev workflow, and logging) moved to `doc/ADVANCED.md` (#186).
+- **Documentation routing reference.** Docs are reorganized around a routing reference:
+  `docs/` is merged into `doc/`, a documentation map is added under `doc/agents/`, and a
+  minimal `CONTRIBUTING.md` is introduced (#184).
+- Comment quotes sent back to the agent as deny feedback are now abbreviated to the
+  selection's first and last few words around an ellipsis instead of the full text — the
+  agent already has the plan and line numbers, so the full quote wasted tokens (#188).
+
+### Fixed
+
+- **OpenCode plugin deployment.** caret now deploys its OpenCode plugin into the canonical
+  plural `plugins/` directory instead of the backwards-compatibility `plugin/` alias
+  (#185).
+- **OpenCode command deployment.** caret now deploys its OpenCode commands into the
+  canonical plural `commands/` directory instead of the backwards-compatibility `command/`
+  alias (#187).
+
 ## [0.1.0] - 2026-06-18 - The Plan Review Release
 
 ### Added
@@ -209,7 +232,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Review decisions are delivered via a bounded poll, fixing missed or delayed decision
   delivery.
 
-[Unreleased]: https://github.com/macintacos/caret/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/macintacos/caret/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/macintacos/caret/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/macintacos/caret/compare/v0.0.5...v0.1.0
 [0.0.5]: https://github.com/macintacos/caret/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/macintacos/caret/compare/v0.0.3...v0.0.4
