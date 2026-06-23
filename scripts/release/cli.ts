@@ -52,8 +52,8 @@ function fail(error: ReleaseError): never {
   process.exit(1);
 }
 
-// Mutating commands need an explicit --yes (the skill passes it only after its
-// remote-mutation confirmation) or --dry-run to preview.
+// Mutating commands need an explicit --yes (the skill passes it after its single
+// version-confirmation gate) or --dry-run to preview.
 function requireGo(command: string, opts: { dryRun?: boolean; yes?: boolean }): void {
   if (!opts.dryRun && !opts.yes) {
     fail(
