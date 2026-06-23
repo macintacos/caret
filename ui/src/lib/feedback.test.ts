@@ -122,6 +122,11 @@ describe("formatFeedback", () => {
     );
   });
 
+  test("a whitespace-only legacy quote renders an empty quote, never throwing", () => {
+    const out = formatFeedback([ann({ quote: "   ", comment: "c" })], "", PLAN);
+    expect(out).toBe(["Inline comments:", "", '1. On "": c'].join("\n"));
+  });
+
   test("legacy and line annotations mix in array order", () => {
     const out = formatFeedback([ann({ quote: "q", comment: "a" }), lineAnn(3, 3, "b")], "", PLAN);
     expect(out).toBe(
