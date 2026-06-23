@@ -7,6 +7,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-06-23 - The Single Gate Release
+
+### Changed
+
+- **Single-gate release flow.** The `/release-caret` skill now asks for exactly one
+  confirmation — the script-computed version — and accepting it authorizes the entire run
+  end-to-end: opening the release PR, merging it, tagging trunk, and publishing the GitHub
+  Release and npm. The previous separate remote-mutation prompt is gone (#190).
+
 ## [0.1.1] - 2026-06-23 - The Tidying Release
 
 ### Changed
@@ -232,7 +241,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Review decisions are delivered via a bounded poll, fixing missed or delayed decision
   delivery.
 
-[Unreleased]: https://github.com/macintacos/caret/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/macintacos/caret/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/macintacos/caret/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/macintacos/caret/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/macintacos/caret/compare/v0.0.5...v0.1.0
 [0.0.5]: https://github.com/macintacos/caret/compare/v0.0.4...v0.0.5
