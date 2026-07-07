@@ -70,9 +70,9 @@ export async function runReviewSubcommand(): Promise<void> {
   const adapter = selectAdapter();
   // The parsed hook input, captured once stdin is read, so `respond` can hand it to
   // emitDecision — the Claude adapter echoes its tool_input back as updatedInput on
-  // an allow, without which Claude Code >=2.1.199 drops the approve (EXC-683).
-  // Undefined on the signal path (fires before stdin), which only ever denies — and
-  // a deny needs no echo.
+  // an allow, without which Claude Code >=2.1.199 drops the approve (EXC-683). The
+  // signal path only ever denies, and a deny needs no echo, so its value here
+  // (undefined if the signal beats the parse, set if it doesn't) never matters.
   let hookInput: PlanInput | undefined;
   // Emit exactly one decision line. A signal arriving after the normal decision
   // was written must not append a second (deny) line. The adapter renders the
