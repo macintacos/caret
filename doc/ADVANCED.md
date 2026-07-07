@@ -125,9 +125,10 @@ OpenCode has no `ExitPlanMode` hook to intercept, so caret wires in as an
 **in-process plugin** rather than a command hook. The plugin (deployed to your OpenCode
 plugin dir) registers a `caret_review_plan` tool and steers the Plan agent to call it; the
 tool's `execute()` spawns `caret review` (`CARET_AGENT=opencode`), blocks on your decision
-in the browser, and returns an approval or a line-numbered change request the agent
-revises and resubmits. The whole daemon/review pipeline is reused unchanged — the plugin
-is the OpenCode-side counterpart to Claude's `hooks.json`.
+in the browser, and returns an approval or a change request (the reviewer feedback,
+without the plan echoed back) the agent revises and resubmits. The whole daemon/review
+pipeline is reused unchanged — the plugin is the OpenCode-side counterpart to Claude's
+`hooks.json`.
 
 OpenCode doesn't fire plugin hooks for subagent tool calls, so caret restricts the review
 tool to primary agents (`experimental.primary_tools` + per-agent `permission`) and

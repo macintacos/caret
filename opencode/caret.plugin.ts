@@ -112,11 +112,11 @@ export function approvedMessage(): string {
 }
 
 /** Tool result returned to the agent on a change request: the reviewer feedback
- * plus a line-numbered copy of the current plan so the agent can revise precisely
- * and resubmit via the same tool. */
-export function deniedMessage(feedback: string, plan: string): string {
-  const lines = plan.split("\n");
-  const numbered = lines.map((l, i) => `${i + 1}\t${l}`).join("\n");
+ * and a resubmit instruction. The plan itself is NOT echoed — the agent already
+ * has it in its own `caret_review_plan` tool-call args, and the feedback's line
+ * references + abbreviated quotes resolve against that copy (see `abbreviate` in
+ * ui/src/lib/feedback.ts), so re-pasting the full plan every round is redundant. */
+export function deniedMessage(feedback: string): string {
   return [
     "caret: the user requested CHANGES to this plan.",
     "",
@@ -124,12 +124,6 @@ export function deniedMessage(feedback: string, plan: string): string {
     feedback,
     "",
     `Revise the plan accordingly, then call \`${REVIEW_TOOL}\` again with the updated plan.`,
-    "",
-    `## Current plan (${lines.length} lines)`,
-    "",
-    "```",
-    numbered,
-    "```",
   ].join("\n");
 }
 
@@ -279,7 +273,7 @@ export function createCaretPlugin(opts: { bin?: string; run?: SpawnRunner } = {}
             const decision = await runReviewViaCaret(envelope, { bin, run });
             return decision.behavior === "allow"
               ? approvedMessage()
-              : deniedMessage(decision.feedback ?? "Plan changes requested.", args.plan);
+              : deniedMessage(decision.feedback ?? "Plan changes requested.");
           },
         }),
       },

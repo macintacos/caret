@@ -83,12 +83,12 @@ test("approvedMessage tells the agent to proceed", () => {
   expect(approvedMessage().toLowerCase()).toContain("approv");
 });
 
-test("deniedMessage carries the feedback and a line-numbered plan for revision", () => {
-  const msg = deniedMessage("narrow step 2", "line one\nline two");
-  expect(msg).toContain("narrow step 2");
-  expect(msg).toContain(REVIEW_TOOL); // tells the agent to resubmit
-  expect(msg).toContain("1"); // line numbers
-  expect(msg).toContain("line two");
+test("deniedMessage carries the feedback and resubmit instruction, without echoing the plan", () => {
+  const msg = deniedMessage("narrow step 2");
+  expect(msg).toContain("narrow step 2"); // reviewer feedback, verbatim
+  expect(msg).toContain("requested CHANGES"); // the change-request preamble
+  expect(msg).toContain(REVIEW_TOOL); // resubmit instruction
+  expect(msg).not.toContain("Current plan"); // the plan is no longer echoed
 });
 
 test("planningSteer names the review tool and steers away from plan_exit", () => {
@@ -203,10 +203,11 @@ test("the review tool approves: a plan-agent call returns the approved message",
   expect(String(out).toLowerCase()).toContain("approv");
 });
 
-test("the review tool denies: a plan-agent call returns the feedback + plan", async () => {
+test("the review tool denies: a plan-agent call returns the feedback without echoing the plan", async () => {
   const hooks = await buildHooks(stubRunner(`{"behavior":"deny","feedback":"narrow it"}`));
   const out = await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P\nbody" }, ctx("plan"));
   expect(String(out)).toContain("narrow it");
+  expect(String(out)).not.toContain("body"); // the submitted plan is not re-pasted
 });
 
 test("the review tool refuses a non-planning (subagent) caller without spawning caret", async () => {

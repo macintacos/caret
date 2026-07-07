@@ -32,10 +32,11 @@ this:
   agent to call `caret_review_plan` (and a `tool.definition` hook redirects the native
   `plan_exit` description toward it).
 - The tool's `execute()` runs the review **synchronously and blocks** until the human
-  decides, then returns an approval string or a change-request string (with a
-  line-numbered plan) as the tool result — the agent revises and resubmits on a change
-  request. Returning the string *is* the block; OpenCode has no separate "pause"
-  primitive.
+  decides, then returns an approval string or a change-request string (the reviewer
+  feedback plus a resubmit instruction; the plan itself is not echoed back — the agent
+  already has it in its own `caret_review_plan` args) as the tool result — the agent
+  revises and resubmits on a change request. Returning the string *is* the block; OpenCode
+  has no separate "pause" primitive.
 
 This matches caret's "review the whole plan" semantic far better than OpenCode's
 per-action `permission.ask` hook, which fires per edit/bash and would gate individual
