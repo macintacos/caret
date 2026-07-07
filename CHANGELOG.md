@@ -7,6 +7,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-07-07 - The Compatibility Release
+
+### Fixed
+
+- **Plan approval on Claude Code 2.1.199+.** Newer Claude Code (≥2.1.199) silently
+  discarded caret's plan-approval decision unless it echoed the plan tool's input back, so
+  clicking Approve did nothing while Request Changes still worked. caret now returns the
+  plan's tool input alongside its allow decision, restoring the Approve action on current
+  Claude Code (#192).
+
 ## [0.1.2] - 2026-06-23 - The Single Gate Release
 
 ### Changed
@@ -241,7 +251,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Review decisions are delivered via a bounded poll, fixing missed or delayed decision
   delivery.
 
-[Unreleased]: https://github.com/macintacos/caret/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/macintacos/caret/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/macintacos/caret/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/macintacos/caret/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/macintacos/caret/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/macintacos/caret/compare/v0.0.5...v0.1.0
