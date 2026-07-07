@@ -40,3 +40,5 @@ playwright/.cache/
 # doc/agents/. Force-track it even when a global core.excludesFile ignores
 # CLAUDE.md (a common personal-dotfiles default).
 !/CLAUDE.md
+
+.tokensave/
