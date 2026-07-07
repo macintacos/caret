@@ -18,13 +18,17 @@ test("emitDecision serializes a deny to the Claude PermissionRequest JSON", () =
   });
 });
 
-test("emitDecision carries an approve variant's setMode through to stdout", () => {
+test("emitDecision echoes the plan input as updatedInput and carries the setMode to stdout", () => {
+  // emitDecision receives the parsed hook input so it can echo tool_input back as
+  // updatedInput — without it Claude Code >=2.1.199 discards the allow (EXC-683).
   const decision: Decision = { behavior: "allow", acceptMode: "auto", decidedAt: 2 };
-  expect(JSON.parse(claudeAdapter.emitDecision(decision))).toEqual({
+  const input = { plan: "# Ship it", planFilePath: "/home/u/.claude/plans/x.md" };
+  expect(JSON.parse(claudeAdapter.emitDecision(decision, input))).toEqual({
     hookSpecificOutput: {
       hookEventName: "PermissionRequest",
       decision: {
         behavior: "allow",
+        updatedInput: { plan: "# Ship it", planFilePath: "/home/u/.claude/plans/x.md" },
         updatedPermissions: [{ type: "setMode", mode: "auto", destination: "session" }],
       },
     },

@@ -31,6 +31,30 @@ test("approve + default emits no updatedPermissions", () => {
   expect(out.hookSpecificOutput.decision).toEqual({ behavior: "allow" });
 });
 
+test("allow echoes the provided tool_input as decision.updatedInput", () => {
+  // Claude Code >=2.1.199 discards an ExitPlanMode allow that lacks updatedInput
+  // (EXC-683). Echoing the original tool_input keeps the allow alive.
+  const out = toHookOutput({ behavior: "allow" }, { plan: "# P", planFilePath: "/x.md" });
+  expect(out.hookSpecificOutput.decision).toEqual({
+    behavior: "allow",
+    updatedInput: { plan: "# P", planFilePath: "/x.md" },
+  });
+});
+
+test("allow + acceptEdits carries both updatedInput and updatedPermissions", () => {
+  const out = toHookOutput({ behavior: "allow", acceptMode: "acceptEdits" }, { plan: "# P" });
+  expect(out.hookSpecificOutput.decision).toEqual({
+    behavior: "allow",
+    updatedInput: { plan: "# P" },
+    updatedPermissions: [{ type: "setMode", mode: "acceptEdits", destination: "session" }],
+  });
+});
+
+test("deny ignores any tool_input echo", () => {
+  const out = toHookOutput({ behavior: "deny", feedback: "no" }, { plan: "# P" });
+  expect(out.hookSpecificOutput.decision).toEqual({ behavior: "deny", message: "no" });
+});
+
 test("deny carries the feedback in decision.message", () => {
   const out = toHookOutput({ behavior: "deny", feedback: "Fix the bug" });
   expect(out.hookSpecificOutput.decision).toEqual({

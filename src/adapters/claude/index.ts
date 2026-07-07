@@ -21,6 +21,18 @@ interface HookStdin {
   tool_input?: { plan?: string; planFilePath?: string };
 }
 
+/** Reconstruct Claude's ExitPlanMode `tool_input` from the parsed PlanInput, to
+ * echo back as `decision.updatedInput` on an allow (EXC-683 — see feedback.ts).
+ * Undefined fields are omitted; returns undefined when there is no plan payload to
+ * echo (the signal-path decision, which is a deny and needs no echo). */
+function toolInputEcho(input: PlanInput | undefined): Record<string, unknown> | undefined {
+  if (!input) return undefined;
+  const echo: Record<string, unknown> = {};
+  if (input.plan !== undefined) echo.plan = input.plan;
+  if (input.planFilePath !== undefined) echo.planFilePath = input.planFilePath;
+  return Object.keys(echo).length > 0 ? echo : undefined;
+}
+
 export const claudeAdapter: AgentAdapter = {
   approveVariants: APPROVE_VARIANTS,
 
@@ -40,8 +52,8 @@ export const claudeAdapter: AgentAdapter = {
     };
   },
 
-  emitDecision(decision: Decision): string {
-    return JSON.stringify(toHookOutput(decision));
+  emitDecision(decision: Decision, input?: PlanInput): string {
+    return JSON.stringify(toHookOutput(decision, toolInputEcho(input)));
   },
 
   fatalDenyLine(reason: string): string {

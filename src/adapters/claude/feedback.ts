@@ -1,10 +1,18 @@
 // Maps a browser decision to the PermissionRequest hook output Claude Code reads
 // on stdout. This is the spike-verified contract (matching EduardMaghakyan/ipe):
 //
-//   approve              -> { behavior: "allow" }
-//   approve + acceptEdits-> { behavior: "allow", updatedPermissions:[setMode] }
-//   approve + auto       -> { behavior: "allow", updatedPermissions:[setMode] }
+//   approve              -> { behavior: "allow", updatedInput }
+//   approve + acceptEdits-> { behavior: "allow", updatedInput, updatedPermissions:[setMode] }
+//   approve + auto       -> { behavior: "allow", updatedInput, updatedPermissions:[setMode] }
 //   request changes      -> { behavior: "deny", message: <feedback> }
+//
+// EXC-683: every `allow` MUST echo the agent's original ExitPlanMode `tool_input`
+// back as `decision.updatedInput`. Claude Code >=2.1.199 added a guard that
+// silently discards an `allow` (and the `updatedPermissions` riding with it) for a
+// non-MCP tool whose `requiresUserInteraction()` is true — ExitPlanMode qualifies —
+// unless the decision carries `updatedInput`. Echoing the same input is a no-op on
+// 2.1.198 and once the guard is fixed upstream, so caret emits it unconditionally
+// (no version sniffing). See anthropics/claude-code#74256 and backnotprop/plannotator#995.
 //
 // A `deny.message` is the documented, verified feedback channel — the model
 // receives it and revises the plan. test/adapters/claude/wire-contract.test.ts
@@ -29,6 +37,9 @@ import { type SetModeName, setModeFor } from "./approve.ts";
 export interface PermissionDecision {
   behavior: Behavior;
   message?: string;
+  /** The agent's original tool_input, echoed verbatim on an allow (EXC-683). Its
+   * presence is what keeps Claude Code >=2.1.199 from discarding the allow. */
+  updatedInput?: Record<string, unknown>;
   updatedPermissions?: Array<{
     type: "setMode";
     mode: SetModeName;
@@ -49,9 +60,16 @@ export interface DecisionInput {
   acceptMode?: ApproveVariantId;
 }
 
-export function toHookOutput(input: DecisionInput): HookOutput {
+export function toHookOutput(
+  input: DecisionInput,
+  updatedInput?: Record<string, unknown>,
+): HookOutput {
   if (input.behavior === "allow") {
     const decision: PermissionDecision = { behavior: "allow" };
+    // Echo tool_input first so the guard (see file header) never drops the allow.
+    if (updatedInput) {
+      decision.updatedInput = updatedInput;
+    }
     const mode = setModeFor(input.acceptMode);
     if (mode) {
       decision.updatedPermissions = [{ type: "setMode", mode, destination: "session" }];

@@ -14,7 +14,7 @@ import { logError, logWarn, setLogLevel, setRedact } from "../log.ts";
 import { logFile } from "../paths.ts";
 import { type ReviewDeps, runReview } from "../review.ts";
 import { loadSettings, reviewTimeoutMs, type Settings } from "../settings.ts";
-import type { Decision } from "../types.ts";
+import type { Decision, PlanInput } from "../types.ts";
 import { warnInvalidEnvVars } from "./boot.ts";
 
 /** Select the platform's URL-opening argv: darwin `open`, win32 `cmd /c start`,
@@ -68,6 +68,12 @@ export async function runReviewSubcommand(): Promise<void> {
   // denies to fail safe. The same adapter parses the hook stdin and renders the
   // decision, so a review can't parse one tool's input and emit another's.
   const adapter = selectAdapter();
+  // The parsed hook input, captured once stdin is read, so `respond` can hand it to
+  // emitDecision — the Claude adapter echoes its tool_input back as updatedInput on
+  // an allow, without which Claude Code >=2.1.199 drops the approve (EXC-683). The
+  // signal path only ever denies, and a deny needs no echo, so its value here
+  // (undefined if the signal beats the parse, set if it doesn't) never matters.
+  let hookInput: PlanInput | undefined;
   // Emit exactly one decision line. A signal arriving after the normal decision
   // was written must not append a second (deny) line. The adapter renders the
   // core Decision to the agent's wire string — the single emission boundary.
@@ -75,7 +81,7 @@ export async function runReviewSubcommand(): Promise<void> {
   const respond = (decision: Decision) => {
     if (responded) return;
     responded = true;
-    process.stdout.write(`${adapter.emitDecision(decision)}\n`);
+    process.stdout.write(`${adapter.emitDecision(decision, hookInput)}\n`);
   };
   const denyAndExit = (reason: string) => {
     // Only log when this signal is what actually denies the review (a signal
@@ -88,6 +94,14 @@ export async function runReviewSubcommand(): Promise<void> {
   process.once("SIGTERM", () => denyAndExit("caret: terminated (SIGTERM) — denying to fail safe."));
 
   const stdin = await Bun.stdin.text();
+  // Parse once for the updatedInput echo. runReview re-parses through its injected
+  // dep, so a malformed payload is handled there (it fail-safe denies, which needs
+  // no echo); the guard here just keeps a parse throw off the emit path.
+  try {
+    hookInput = adapter.parseHookInput(stdin);
+  } catch {
+    hookInput = undefined;
+  }
   const out = await runReview(stdin, prodReviewDeps(loaded, adapter));
   respond(out);
   process.exit(0);
