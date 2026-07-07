@@ -102,6 +102,17 @@ the chosen variant to a session `setMode` permission and emits the resulting
 daemon death, caret emits `deny` with an explanation — it never auto-approves an
 unreviewed plan.
 
+**Why the review has a timeout.** The `caret review` hook long-polls the daemon for the
+reviewer's decision, but Claude Code kills any hook that outruns its `timeout` budget —
+and a killed `PermissionRequest` hook fails _open_, letting the plan proceed unreviewed.
+So caret bounds its own wait with `review.timeout_s` (default 1 hour) and fail-safe-denies
+when it elapses — a controlled deny that lands before Claude Code would kill the hook. To
+guarantee that ordering, `review.timeout_s` is pinned strictly below the hook's `timeout`
+(`3900` s in `hooks/hooks.json`); the schema rejects any value at or above it, and a
+coupling test keeps the two numbers from drifting into the unsafe direction. The timeout
+is therefore a requirement of the hook model — not a limit on how long you may take — so
+raise `review.timeout_s` (up to just under 3900 s) if you want a longer window.
+
 ### The OpenCode adapter
 
 OpenCode has no `ExitPlanMode` hook to intercept, so caret wires in as an
