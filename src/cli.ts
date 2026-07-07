@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
-// caret hook CLI. Subcommands: daemon | prewarm | review | redact | discovery |
-// install-opencode.
+// caret hook CLI. Subcommands: daemon | prewarm | review | reconcile | redact |
+// discovery | install-opencode.
 //
 // This file is only the composition point: it assembles the Commander tree and
 // threads each subcommand's parsed options into its run function (the actions in
@@ -20,6 +20,7 @@ import { runDaemon } from "./commands/daemon.ts";
 import { runDiscoverySubcommand } from "./commands/discovery.ts";
 import { runInstallOpencodeSubcommand } from "./commands/install-opencode.ts";
 import { runPrewarm } from "./commands/prewarm.ts";
+import { runReconcileSubcommand } from "./commands/reconcile.ts";
 import { runRedactSubcommand } from "./commands/redact.ts";
 import { runReviewSubcommand } from "./commands/review.ts";
 import { logError } from "./log.ts";
@@ -33,7 +34,7 @@ import { createProgram, runProgram } from "./program.ts";
 function buildProgram(): Command {
   const program = createProgram(
     "caret",
-    "caret hook CLI: daemon | prewarm | review | redact | discovery | install-opencode",
+    "caret hook CLI: daemon | prewarm | review | reconcile | redact | discovery | install-opencode",
   ).version(VERSION);
 
   program
@@ -51,6 +52,13 @@ function buildProgram(): Command {
     .command("review")
     .description("review a plan from stdin (ExitPlanMode hook)")
     .action(() => runReviewSubcommand());
+
+  program
+    .command("reconcile")
+    .description(
+      "reconcile a terminal plan approval into the daemon (ExitPlanMode PostToolUse hook)",
+    )
+    .action(() => runReconcileSubcommand());
 
   program
     .command("redact")

@@ -31,11 +31,10 @@ curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/inst
 
 ## How it works
 
-Claude Code's hooks invoke `bin/caret`, a small entrypoint shim that runs caret with its
-subcommands (`daemon`, `prewarm`, `review`, `redact`, `discovery`, and
-`install-opencode`). The shim execs the platform-native compiled binary
-(`bin/caret-native`) when a build-from-source install produced one, and otherwise runs the
-`bun` bundle (`dist/cli.js`) that the marketplace install ships.
+Claude Code's hooks invoke `bin/caret`, a small entrypoint shim that runs caret's
+subcommands. The shim execs the platform-native compiled binary (`bin/caret-native`) when
+a build-from-source install produced one, and otherwise runs the `bun` bundle
+(`dist/cli.js`) that the marketplace install ships.
 
 ### Architecture: tool-agnostic core + agent adapter
 
@@ -65,18 +64,25 @@ decision-JSON block below, and the behavioral prose in `commands/*.md`, describe
 
 ### The Claude Code adapter
 
-caret wires into Claude Code through two plan-mode hooks:
+caret wires into Claude Code through three plan-mode hooks:
 
-| Hook                | Matcher         | Command         | Purpose                                                   |
-| ------------------- | --------------- | --------------- | --------------------------------------------------------- |
-| `PostToolUse`       | `EnterPlanMode` | `caret prewarm` | Warm-start the daemon when the model enters plan mode.    |
-| `PermissionRequest` | `ExitPlanMode`  | `caret review`  | Block, open the plan in the browser, return the decision. |
+| Hook                | Matcher         | Command           | Purpose                                                     |
+| ------------------- | --------------- | ----------------- | ----------------------------------------------------------- |
+| `PostToolUse`       | `EnterPlanMode` | `caret prewarm`   | Warm-start the daemon when the model enters plan mode.      |
+| `PermissionRequest` | `ExitPlanMode`  | `caret review`    | Block, open the plan in the browser, return the decision.   |
+| `PostToolUse`       | `ExitPlanMode`  | `caret reconcile` | Reconcile a plan decided in the terminal into the daemon.   |
 
 The `PermissionRequest`/`ExitPlanMode` hook intercepts the plan-approval request itself,
 so an **approve** auto-answers it (no native dialog) and a **request changes** returns the
 feedback to the model, which revises and re-presents (captured as a new version). This was
 verified empirically — `PreToolUse` does **not** work for this, because allowing the tool
 to run still shows the native dialog.
+
+The `PostToolUse`/`ExitPlanMode` hook (`caret reconcile`) fires when a plan is approved.
+If the approval happened in Claude's own interface rather than caret's UI — so the daemon
+still holds the review as pending — it resolves that review to keep the two surfaces in
+sync. When the UI already resolved the plan (the normal case) it is a no-op, and it never
+gates: any failure is silent, so a stalled reconcile can't block the agent.
 
 The reviewer's approve choice is an opaque variant id the core stores and the UI renders;
 the Claude adapter declares its variants (`default` / `acceptEdits` / `auto`) and rides
@@ -299,20 +305,19 @@ To raise verbosity, set `level = "debug"` in `config.toml`'s `[logging]` table (
 - `/caret:debug` — the slash command that reviews the current session —
   pending/approved/rejected/expired plans (from the on-disk review records) plus recent
   errors from both logs — and helps debug failures.
-- `caret redact` — the binary's fourth subcommand: scrubs the two state-dir logs into
-  shareable `*.redacted.log` siblings (home paths become `~`, usernames in foreign home
-  paths are censored). For always-on scrubbing at write time, set `redact = true` in
-  `[logging]`. Plan, prompt, and review-feedback bodies are never written to logs
-  regardless of the toggle.
-- `caret discovery` — the binary's fifth subcommand: a one-shot, read-only diagnostics
-  snapshot of the local install — running caret processes, daemon identity (version,
-  build, startup commit), lock/port state, effective settings, review counts, the agent
-  adapter's install-state probe, log sizes and error/warn counts, install/runtime info,
-  and system basics. Human-readable by default; `caret discovery --json` prints the same
-  report as one JSON document (schema marker `caret-discovery/1`). Unlike the logs, the
-  report is **always redacted** — it exists to be pasted into bug reports — and it never
-  contains plan/prompt/feedback bodies or log contents. Probes are individually bounded
-  and degrade per-section, so the command exits 0 even when the daemon is down.
+- `caret redact` — scrubs the two state-dir logs into shareable `*.redacted.log` siblings
+  (home paths become `~`, usernames in foreign home paths are censored). For always-on
+  scrubbing at write time, set `redact = true` in `[logging]`. Plan, prompt, and
+  review-feedback bodies are never written to logs regardless of the toggle.
+- `caret discovery` — a one-shot, read-only diagnostics snapshot of the local install —
+  running caret processes, daemon identity (version, build, startup commit), lock/port
+  state, effective settings, review counts, the agent adapter's install-state probe, log
+  sizes and error/warn counts, install/runtime info, and system basics. Human-readable by
+  default; `caret discovery --json` prints the same report as one JSON document (schema
+  marker `caret-discovery/1`). Unlike the logs, the report is **always redacted** — it
+  exists to be pasted into bug reports — and it never contains plan/prompt/feedback bodies
+  or log contents. Probes are individually bounded and degrade per-section, so the command
+  exits 0 even when the daemon is down.
 - `/caret:discovery` — the slash command that wraps it: asks whether you want JSON or
   human-readable output, runs the subcommand, and ends with the report in a code block
   ready to paste into a bug report. Complements `/caret:debug` (the session timeline):
@@ -413,10 +418,10 @@ src/                tool-agnostic core (flat): cli.ts (Commander tree) · review
                     decisions.ts · prefs.ts · log.ts (leveled NDJSON) · caller-location.ts · redact.ts · redact-core.ts (browser-safe)
                     settings.ts (config.toml) · constants.ts · paths.ts · build-id.ts (VERSION/identity/lock) · types.ts (wire contract)
                     json-file.ts · plan-format.ts · ui-assets.ts (resolves the embedded UI for the daemon to serve) · ui-log-bridge.ts (/api/logs) · program.ts (shared CLI scaffolding)
-src/commands/       per-subcommand entrypoints (daemon, prewarm, review, redact, discovery, boot)
+src/commands/       per-subcommand entrypoints (one file per subcommand)
 src/adapters/       adapter.ts (AgentAdapter interface) · index.ts (registry + CARET_AGENT selection) · claude/ (Claude Code adapter, default) · codex/ (OpenAI Codex CLI adapter, default-off + provisional)
 ui/                 Svelte 5 multi-asset SPA (Vite) embedded into the binary via the build-generated asset manifest, served by the daemon by URL path · src/state/ runes state modules · src/icons/ vendored Lucide SVGs
-hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode) — Claude-adapter packaging
+hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode + PostToolUse/ExitPlanMode) — Claude-adapter packaging
 commands/           /caret:demo · /caret:debug · /caret:discovery — Claude-adapter packaging (agent-specific behavioral prose)
 test/               core/ (tool-agnostic suites) · adapters/claude/ + adapters/codex/ (per-adapter suites + fixtures) · scripts/ (release + dev tooling) · support/ (shared scaffolding)
 scripts/            install.sh (build + register via the native plugin system)
