@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { runReview } from "../../src/review.ts";
+import { expireAbandoned, runReview } from "../../src/review.ts";
 import { setLogLevel } from "../../src/log.ts";
 import { logFile } from "../../src/paths.ts";
 import { PLAN_FORMAT_DENY_MESSAGE } from "../../src/plan-format.ts";
@@ -492,4 +492,69 @@ test("decision info records are suppressed when the level is error", async () =>
     }),
   );
   expect(logRecords()).toHaveLength(0);
+});
+
+// ---- onPosted seam + abandon expiry (EXC-482) ----
+//
+// The signal handlers in commands/review.ts fire outside runReview's control
+// flow, so they need the daemon base URL + review id runReview computed. onPosted
+// surfaces that handle the moment the review is created; expireAbandoned is the
+// best-effort expire the abandon path runs so caret's UI drops the pending review
+// instead of keeping a zombie.
+
+test("onPosted fires with the daemon base URL and review id once the review is created", async () => {
+  const posted: Array<[string, string]> = [];
+  await runReview(
+    stdin,
+    reviewDeps({
+      ensureDaemon: async () => "http://d",
+      postReview: async () => ({ id: "rid" }),
+      onPosted: (baseUrl: string, id: string) => posted.push([baseUrl, id]),
+    }),
+  );
+  expect(posted).toEqual([["http://d", "rid"]]);
+});
+
+test("onPosted does not fire when the review was never created", async () => {
+  const posted: string[] = [];
+  await runReview(
+    stdin,
+    reviewDeps({
+      ensureDaemon: async () => {
+        throw new Error("boom");
+      },
+      onPosted: (_baseUrl: string, id: string) => posted.push(id),
+    }),
+  );
+  expect(posted).toEqual([]);
+});
+
+test("expireAbandoned expires the posted review", async () => {
+  const expired: Array<[string, string]> = [];
+  await expireAbandoned(
+    async (baseUrl, id) => {
+      expired.push([baseUrl, id]);
+    },
+    { baseUrl: "http://d", id: "rid" },
+  );
+  expect(expired).toEqual([["http://d", "rid"]]);
+});
+
+test("expireAbandoned is a no-op when nothing was posted yet", async () => {
+  let calls = 0;
+  await expireAbandoned(async () => {
+    calls++;
+  }, undefined);
+  expect(calls).toBe(0);
+});
+
+test("expireAbandoned swallows an expire failure (best-effort, never throws)", async () => {
+  await expect(
+    expireAbandoned(
+      async () => {
+        throw new Error("daemon gone");
+      },
+      { baseUrl: "http://d", id: "rid" },
+    ),
+  ).resolves.toBeUndefined();
 });

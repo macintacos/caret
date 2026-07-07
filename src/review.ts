@@ -42,6 +42,12 @@ export interface ReviewDeps {
   /** Best-effort: tell the daemon the hook is abandoning this review, so it
    * doesn't hold a pending orphan (EXC-454). Failures are swallowed. */
   expire: (baseUrl: string, id: string) => Promise<void>;
+  /** Called once the review is created, with the daemon base URL and review id.
+   * Lets the command layer capture the handle so a SIGINT/SIGTERM abandon can
+   * expire the review (EXC-482) — the signal fires outside runReview's control
+   * flow, so it needs the id runReview computed. Optional: absent for the dev
+   * driver and tests that don't wire signal handling. */
+  onPosted?: (baseUrl: string, id: string) => void;
 }
 
 class TimeoutError extends Error {}
@@ -60,6 +66,24 @@ function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> 
       },
     );
   });
+}
+
+/** The abandon path's best-effort expire: tell the daemon an interrupted review
+ * is abandoned so its UI drops the pending review instead of keeping a zombie
+ * (EXC-482). The command's SIGINT/SIGTERM handlers call it with the handle
+ * `onPosted` surfaced. A no-op when the signal beat review creation (nothing to
+ * expire), and it swallows any failure — the resubmit/supersede path self-heals
+ * if the expire never lands (EXC-454). Never throws. */
+export async function expireAbandoned(
+  expire: (baseUrl: string, id: string) => Promise<void>,
+  handle: { baseUrl: string; id: string } | undefined,
+): Promise<void> {
+  if (!handle) return;
+  try {
+    await expire(handle.baseUrl, handle.id);
+  } catch {
+    // best-effort — the resubmit/supersede path self-heals.
+  }
 }
 
 /** Run a review end-to-end, returning the core `Decision`. Never throws — any
@@ -100,6 +124,10 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decisi
     // From here every record — decision and error alike — carries the reviewId,
     // stitching this stream against the daemon's review/resolve records.
     ctx.reviewId = id;
+    // Surface the handle so a SIGINT/SIGTERM abandon can expire this review
+    // (EXC-482): the signal fires outside this flow, so the command layer needs
+    // the base URL + id we just computed.
+    deps.onPosted?.(baseUrl, id);
     logDebug("review", `review created: ${shortId(id)}`, { ...ctx });
     // EXC-426: humans get the vanity origin; internal fetches keep using baseUrl.
     const open = new URL(baseUrl);

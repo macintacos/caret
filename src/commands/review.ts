@@ -12,7 +12,7 @@ import { expireReview, longPoll, postReview } from "../daemon-client.ts";
 import { ensureDaemon, prodEnsureDeps } from "../daemon-lifecycle.ts";
 import { logError, logWarn, setLogLevel, setRedact } from "../log.ts";
 import { logFile } from "../paths.ts";
-import { type ReviewDeps, runReview } from "../review.ts";
+import { expireAbandoned, type ReviewDeps, runReview } from "../review.ts";
 import { loadSettings, reviewTimeoutMs, type Settings } from "../settings.ts";
 import type { Decision, PlanInput } from "../types.ts";
 import { warnInvalidEnvVars } from "./boot.ts";
@@ -74,6 +74,9 @@ export async function runReviewSubcommand(): Promise<void> {
   // signal path only ever denies, and a deny needs no echo, so its value here
   // (undefined if the signal beats the parse, set if it doesn't) never matters.
   let hookInput: PlanInput | undefined;
+  // The review's daemon handle, captured via onPosted once the review is created,
+  // so a signal-path abandon can expire it (EXC-482). Undefined until then.
+  let posted: { baseUrl: string; id: string } | undefined;
   // Emit exactly one decision line. A signal arriving after the normal decision
   // was written must not append a second (deny) line. The adapter renders the
   // core Decision to the agent's wire string — the single emission boundary.
@@ -83,15 +86,25 @@ export async function runReviewSubcommand(): Promise<void> {
     responded = true;
     process.stdout.write(`${adapter.emitDecision(decision, hookInput)}\n`);
   };
-  const denyAndExit = (reason: string) => {
+  const denyAndExit = async (reason: string) => {
     // Only log when this signal is what actually denies the review (a signal
     // arriving after a normal decision is already a no-op below).
     if (!responded) logError("signal", new Error(reason));
+    // Emit the deny first (stdout flushes before Claude reads it), then a
+    // best-effort expire so caret's UI drops the abandoned pending review rather
+    // than keeping a zombie (EXC-482).
     respond({ behavior: "deny", feedback: `${reason} See ${logFile()}.`, decidedAt: Date.now() });
+    await expireAbandoned(expireReview, posted);
     process.exit(0);
   };
-  process.once("SIGINT", () => denyAndExit("caret: interrupted (SIGINT) — denying to fail safe."));
-  process.once("SIGTERM", () => denyAndExit("caret: terminated (SIGTERM) — denying to fail safe."));
+  process.once(
+    "SIGINT",
+    () => void denyAndExit("caret: interrupted (SIGINT) — denying to fail safe."),
+  );
+  process.once(
+    "SIGTERM",
+    () => void denyAndExit("caret: terminated (SIGTERM) — denying to fail safe."),
+  );
 
   const stdin = await Bun.stdin.text();
   // Parse once for the updatedInput echo. runReview re-parses through its injected
@@ -102,7 +115,13 @@ export async function runReviewSubcommand(): Promise<void> {
   } catch {
     hookInput = undefined;
   }
-  const out = await runReview(stdin, prodReviewDeps(loaded, adapter));
+  const deps = prodReviewDeps(loaded, adapter);
+  // Capture the daemon handle so the signal handlers above can expire the review
+  // on an abandon (EXC-482).
+  deps.onPosted = (baseUrl, id) => {
+    posted = { baseUrl, id };
+  };
+  const out = await runReview(stdin, deps);
   respond(out);
   process.exit(0);
 }
