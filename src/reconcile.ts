@@ -1,22 +1,25 @@
 // Reconcile a plan decision made in the agent interface rather than caret's UI.
-// Runs as the ExitPlanMode PostToolUse hook: the tool having succeeded means the
-// plan was approved. If caret's UI never resolved that review — it is still
-// `pending` on the daemon — then the approval happened in the terminal (a native
-// fallback prompt, after the review hook produced no honored decision), so mirror
-// it into the daemon by resolving the review as an allow. When no matching
-// pending review exists, the UI already handled it (an approve removes it) and
-// this is a no-op — the normal path, since this hook also fires on a UI approve.
+// Runs as the agent's post-plan-approval hook: an approval having fired means the
+// plan was accepted. If caret's UI never resolved that review — it is still
+// `pending` on the daemon — then the approval happened outside caret's UI (the
+// agent's own approval path, taken when the review hook produced no honored
+// decision), so mirror it into the daemon by resolving the review as an allow.
+// When no matching pending review exists, the UI already handled it (an approve
+// removes it) and this is a no-op — the normal path, since this hook also fires
+// on a UI approve.
 //
 // BEST-EFFORT: the plan is already approved, so this never gates anything. Every
 // abnormal path (unparseable stdin, no daemon, a resolve that races the UI) is a
-// silent no-op — runReconcile never throws and emits no decision.
+// silent no-op — runReconcile never throws and emits no decision. The specific
+// hook wiring (which agent event triggers it) lives in the command + adapter
+// layer, keeping this core agent-agnostic.
 
 import { type ErrorContext, logDebug, logInfo } from "./log.ts";
 import type { PlanInput, ClientReview } from "./types.ts";
 
 export interface ReconcileDeps {
-  /** Normalize the agent's raw PostToolUse stdin into a core PlanInput. Throws on
-   * input that can't be parsed — runReconcile swallows the throw (no-op). */
+  /** Normalize the agent's raw post-approval hook stdin into a core PlanInput.
+   * Throws on input that can't be parsed — runReconcile swallows the throw (no-op). */
   parseHookInput: (stdin: string) => PlanInput;
   /** The daemon's pending reviews. Rejects when no daemon is reachable — treated
    * as "nothing to reconcile". */
