@@ -46,8 +46,12 @@ export interface AgentAdapter {
   /**
    * Render a core `Decision` as the tool-specific stdout response the agent
    * reads. The returned string is opaque to the core (a serialized wire shape).
+   * `input` is the parsed `PlanInput` this decision resolves, passed so an adapter
+   * can echo the agent's original tool input back in its response (the Claude
+   * adapter echoes it as `updatedInput` on an allow — EXC-683). Optional: the
+   * signal-path deny renders without it, and adapters that don't need it ignore it.
    */
-  emitDecision(decision: Decision): string;
+  emitDecision(decision: Decision, input?: PlanInput): string;
 
   /**
    * Render a last-resort deny wire line for the CLI's fatal handler. Must be

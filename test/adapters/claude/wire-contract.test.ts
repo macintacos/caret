@@ -22,6 +22,11 @@ import { setupTempStateDir } from "../../support/env.ts";
 
 const FIXTURE = join(import.meta.dir, "fixtures", "permission-request-stdin.json");
 const stdin = readFileSync(FIXTURE, "utf-8");
+// The plan the fixture's ExitPlanMode call carried. Every allow envelope must
+// echo the original tool_input back as decision.updatedInput, or Claude Code
+// >=2.1.199 silently discards the allow (EXC-683). Read it from the fixture so
+// the assertion tracks the fixture rather than duplicating the plan text.
+const fixturePlan = (JSON.parse(stdin) as { tool_input: { plan: string } }).tool_input.plan;
 
 // runReview logs the review timeline to caret.log; route it at a throwaway state
 // dir so this suite never appends to the real ~/.local/state/caret.
@@ -46,7 +51,7 @@ function depsReturning(decision: Decision): Parameters<typeof runReview>[1] {
 // the parsed stdout wire object the hook would write.
 async function emitWire(decision: Decision): Promise<unknown> {
   const out = await runReview(stdin, depsReturning(decision));
-  return JSON.parse(claudeAdapter.emitDecision(out));
+  return JSON.parse(claudeAdapter.emitDecision(out, claudeAdapter.parseHookInput(stdin)));
 }
 
 test("the fixture parses to a PlanInput carrying the realistic payload", () => {
@@ -59,33 +64,38 @@ test("the fixture parses to a PlanInput carrying the realistic payload", () => {
   expect(input.plan).toContain("# Add a health-check endpoint");
 });
 
-test("plain approve over the fixture emits behavior=allow with no permission change", async () => {
+test("plain approve over the fixture echoes tool_input as updatedInput on the allow", async () => {
+  // The updatedInput echo is what stops Claude Code >=2.1.199 from discarding the
+  // allow (EXC-683). A plain approve carries no permission change, so updatedInput
+  // is the only thing keeping the allow alive.
   expect(await emitWire({ behavior: "allow", decidedAt: 1 })).toEqual({
     hookSpecificOutput: {
       hookEventName: "PermissionRequest",
-      decision: { behavior: "allow" },
+      decision: { behavior: "allow", updatedInput: { plan: fixturePlan } },
     },
   });
 });
 
-test("approve + acceptEdits over the fixture emits a setMode acceptEdits permission", async () => {
+test("approve + acceptEdits over the fixture carries updatedInput and a setMode acceptEdits permission", async () => {
   expect(await emitWire({ behavior: "allow", acceptMode: "acceptEdits", decidedAt: 1 })).toEqual({
     hookSpecificOutput: {
       hookEventName: "PermissionRequest",
       decision: {
         behavior: "allow",
+        updatedInput: { plan: fixturePlan },
         updatedPermissions: [{ type: "setMode", mode: "acceptEdits", destination: "session" }],
       },
     },
   });
 });
 
-test("approve + auto over the fixture emits a setMode auto permission", async () => {
+test("approve + auto over the fixture carries updatedInput and a setMode auto permission", async () => {
   expect(await emitWire({ behavior: "allow", acceptMode: "auto", decidedAt: 1 })).toEqual({
     hookSpecificOutput: {
       hookEventName: "PermissionRequest",
       decision: {
         behavior: "allow",
+        updatedInput: { plan: fixturePlan },
         updatedPermissions: [{ type: "setMode", mode: "auto", destination: "session" }],
       },
     },
