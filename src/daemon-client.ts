@@ -1,10 +1,10 @@
-// The daemon's loopback HTTP client: the four fetch wrappers the hook uses to
-// talk to a running daemon — health probe, post a review, expire it, and
-// long-poll for the decision. Each is a thin wrapper over the daemon's HTTP
-// surface, kept plain (no client abstraction) so the call sites read as the
-// requests they are.
+// The daemon's loopback HTTP client: the fetch wrappers the hooks use to talk to
+// a running daemon — health probe, post a review, expire it, long-poll for the
+// decision, and (for the post-approval reconcile hook) list pending reviews and
+// resolve one. Each is a thin wrapper over the daemon's HTTP surface, kept plain
+// (no client abstraction) so the call sites read as the requests they are.
 
-import type { Decision, HealthIdentity, PlanInput } from "./types.ts";
+import type { ClientReview, Decision, HealthIdentity, PlanInput, ResolveBody } from "./types.ts";
 
 /** Parsed /api/health body — the shared HealthIdentity shape (every field
  * absent on a pre-fix daemon). */
@@ -84,4 +84,26 @@ export async function longPoll(baseUrl: string, id: string): Promise<Decision | 
   if (res.status === 204) return null; // heartbeat: still pending — re-poll
   if (!res.ok) throw new Error(`decision long-poll failed: ${res.status}`);
   return (await res.json()) as Decision;
+}
+
+/** The daemon's pending reviews (GET /api/reviews). Short-fused so the
+ * post-approval reconcile hook never hangs; rejects when no daemon answers, which
+ * the caller treats as "nothing to reconcile". */
+export async function listReviews(baseUrl: string): Promise<ClientReview[]> {
+  const res = await fetch(`${baseUrl}/api/reviews`, { signal: AbortSignal.timeout(1000) });
+  if (!res.ok) throw new Error(`GET /api/reviews failed: ${res.status}`);
+  return (await res.json()) as ClientReview[];
+}
+
+/** Resolve a review (POST /:id/resolve) — the reconcile hook uses it to mirror a
+ * terminal approval into the daemon. Short-fused; a 404 (already resolved or
+ * superseded) throws like any non-ok status and the best-effort caller swallows it. */
+export async function resolveReview(baseUrl: string, id: string, body: ResolveBody): Promise<void> {
+  const res = await fetch(`${baseUrl}/api/reviews/${id}/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(1000),
+  });
+  if (!res.ok) throw new Error(`POST /resolve failed: ${res.status}`);
 }
