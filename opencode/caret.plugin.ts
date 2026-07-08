@@ -224,16 +224,17 @@ export async function runReviewViaCaret(
   try {
     // Accumulate stderr and report the URL once — the line may arrive split
     // across chunks, and only the first occurrence matters.
+    const { onUrl } = opts;
     let stderrBuf = "";
     let urlSent = false;
-    const onStderr = opts.onUrl
+    const onStderr = onUrl
       ? (chunk: string) => {
           if (urlSent) return;
           stderrBuf += chunk;
           const url = parseReviewUrl(stderrBuf);
           if (url) {
             urlSent = true;
-            opts.onUrl?.(url);
+            onUrl(url);
           }
         }
       : undefined;
