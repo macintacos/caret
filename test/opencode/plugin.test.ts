@@ -15,6 +15,7 @@ import {
   deniedMessage,
   isPlanningAgent,
   parseDecision,
+  parseReviewUrl,
   planningSteer,
   planTitle,
   REVIEW_TOOL,
@@ -95,6 +96,24 @@ test("planningSteer names the review tool and steers away from plan_exit", () =>
   const s = planningSteer();
   expect(s).toContain(REVIEW_TOOL);
   expect(s.toLowerCase()).toContain("plan_exit");
+});
+
+// --- parseReviewUrl / reviewPendingTitle (review-link surfacing, EXC-691) ---
+
+test("parseReviewUrl extracts the review URL from caret's stderr line", () => {
+  const url = "http://caret.localhost:42718/?review=abc123";
+  expect(parseReviewUrl(`caret: review this plan at ${url}\n`)).toBe(url);
+});
+
+test("parseReviewUrl returns undefined when the line is absent", () => {
+  expect(parseReviewUrl("some unrelated stderr\n")).toBeUndefined();
+  expect(parseReviewUrl("")).toBeUndefined();
+});
+
+test("parseReviewUrl waits for the whole line — a URL not yet newline-terminated does not match", () => {
+  // A mid-stream stderr chunk cut off before the trailing newline must not yield a
+  // truncated URL; the match requires the whitespace core always writes after it.
+  expect(parseReviewUrl("caret: review this plan at http://caret.localhost:4271")).toBeUndefined();
 });
 
 // --- applyCaretConfig (subagent-bypass mitigation) ---
@@ -182,17 +201,106 @@ test("runReviewViaCaret fails safe to a deny when the spawn throws", async () =>
   expect(decision.feedback).toContain("ENOENT");
 });
 
+// A runner that streams the given stderr chunks (as the real child does) before
+// resolving with the decision on stdout — exercises the review-link surfacing.
+function streamingRunner(stdout: string, stderrChunks: string[]): SpawnRunner {
+  return async (_bin, _env, _stdin, onStderr) => {
+    for (const chunk of stderrChunks) onStderr?.(chunk);
+    return { stdout, exitCode: 0 };
+  };
+}
+
+test("runReviewViaCaret surfaces the review URL via onUrl when the child streams it on stderr", async () => {
+  const url = "http://caret.localhost:42718/?review=xyz";
+  const seen: string[] = [];
+  const decision = await runReviewViaCaret("{}", {
+    bin: "caret",
+    run: streamingRunner(`{"behavior":"allow"}`, [`caret: review this plan at ${url}\n`]),
+    onUrl: (u) => seen.push(u),
+  });
+  expect(seen).toEqual([url]);
+  expect(decision).toEqual({ behavior: "allow" });
+});
+
+test("runReviewViaCaret fires onUrl once even when the URL line arrives split across chunks", async () => {
+  const url = "http://caret.localhost:42718/?review=split";
+  const seen: string[] = [];
+  await runReviewViaCaret("{}", {
+    bin: "caret",
+    run: streamingRunner(`{"behavior":"allow"}`, ["caret: review this ", `plan at ${url}\n`]),
+    onUrl: (u) => seen.push(u),
+  });
+  expect(seen).toEqual([url]);
+});
+
+test("runReviewViaCaret never calls onUrl when no review URL appears on stderr", async () => {
+  const seen: string[] = [];
+  await runReviewViaCaret("{}", {
+    bin: "caret",
+    run: streamingRunner(`{"behavior":"allow"}`, ["unrelated diagnostic noise\n"]),
+    onUrl: (u) => seen.push(u),
+  });
+  expect(seen).toEqual([]);
+});
+
+test("runReviewViaCaret reassembles a URL split mid-URL across stderr chunks", async () => {
+  const url = "http://caret.localhost:42718/?review=midsplit";
+  const seen: string[] = [];
+  await runReviewViaCaret("{}", {
+    bin: "caret",
+    run: streamingRunner(`{"behavior":"allow"}`, [
+      "caret: review this plan at http://caret.localhost:42718/?rev",
+      "iew=midsplit\n",
+    ]),
+    onUrl: (u) => seen.push(u),
+  });
+  expect(seen).toEqual([url]);
+});
+
+test("runReviewViaCaret still returns the decision when onUrl throws (never crashes the review)", async () => {
+  const decision = await runReviewViaCaret("{}", {
+    bin: "caret",
+    run: streamingRunner(`{"behavior":"allow"}`, [
+      "caret: review this plan at http://caret.localhost:42718/?review=boom\n",
+    ]),
+    onUrl: () => {
+      throw new Error("toast surface blew up");
+    },
+  });
+  expect(decision).toEqual({ behavior: "allow" });
+});
+
 // --- the assembled plugin: tool.execute end-to-end with a stubbed runner ---
 
-async function buildHooks(run: SpawnRunner) {
+async function buildHooks(run: SpawnRunner, client?: PluginInput["client"]) {
   const plugin = createCaretPlugin({ bin: "caret", run });
-  // caret's hooks never read the PluginInput; a minimal stub suffices.
-  return await plugin({} as unknown as PluginInput);
+  return await plugin({ client } as unknown as PluginInput);
 }
 
 // Minimal ToolContext stub — execute() only reads agent/sessionID/directory.
 function ctx(agent: string): ToolContext {
   return { agent, sessionID: "S", directory: "/p" } as unknown as ToolContext;
+}
+
+// A plugin client that records the toasts execute() shows via client.tui.showToast.
+function recordingClient(): {
+  client: PluginInput["client"];
+  toasts: Array<{ title?: string; message: string; variant: string }>;
+} {
+  const toasts: Array<{ title?: string; message: string; variant: string }> = [];
+  const client = {
+    tui: {
+      showToast: (opts: { body: { title?: string; message: string; variant: string } }) => {
+        toasts.push({
+          title: opts.body.title,
+          message: opts.body.message,
+          variant: opts.body.variant,
+        });
+        return Promise.resolve({});
+      },
+    },
+  } as unknown as PluginInput["client"];
+  return { client, toasts };
 }
 
 test("the review tool approves: a plan-agent call returns the approved message", async () => {
@@ -220,6 +328,58 @@ test("the review tool refuses a non-planning (subagent) caller without spawning 
   const out = await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, ctx("general"));
   expect(spawned).toBe(false);
   expect(String(out)).toContain(REVIEW_TOOL);
+});
+
+test("the review tool shows the pending review URL as a toast, then clears it on approval (EXC-691)", async () => {
+  const url = "http://caret.localhost:42718/?review=live";
+  const { client, toasts } = recordingClient();
+  const hooks = await buildHooks(
+    streamingRunner(`{"behavior":"allow"}`, [`caret: review this plan at ${url}\n`]),
+    client,
+  );
+  await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, ctx("plan"));
+  // First: the review-link toast while pending — the URL is the message ALONE
+  // (label in the title) so it lands on its own full-width line and word-wraps
+  // whole, staying terminal-clickable instead of breaking across the prefix.
+  // Then: a decision toast that supersedes it (single-slot surface, no hide API).
+  expect(toasts[0]?.title).toBe("caret: review this plan");
+  expect(toasts[0]?.message).toBe(url);
+  expect(toasts[0]?.variant).toBe("info");
+  expect(toasts).toHaveLength(2);
+  expect(toasts[1]?.message.toLowerCase()).toContain("approv");
+});
+
+test("the review tool clears the link with a changes-requested toast on deny (EXC-691)", async () => {
+  const url = "http://caret.localhost:42718/?review=deny";
+  const { client, toasts } = recordingClient();
+  const hooks = await buildHooks(
+    streamingRunner(`{"behavior":"deny","feedback":"narrow it"}`, [
+      `caret: review this plan at ${url}\n`,
+    ]),
+    client,
+  );
+  await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, ctx("plan"));
+  expect(toasts[0]?.message).toBe(url);
+  expect(toasts[1]?.message.toLowerCase()).toContain("change");
+});
+
+test("the review tool shows no toast when no review URL is surfaced", async () => {
+  const { client, toasts } = recordingClient();
+  // stubRunner emits no stderr, so onUrl never fires and no toast is shown.
+  const hooks = await buildHooks(stubRunner(`{"behavior":"allow"}`), client);
+  await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, ctx("plan"));
+  expect(toasts).toEqual([]);
+});
+
+test("the review tool does not crash when the client lacks tui.showToast (SDK skew)", async () => {
+  const url = "http://caret.localhost:42718/?review=noguard";
+  // A client with no `tui` — the guard must skip the toast, not throw.
+  const hooks = await buildHooks(
+    streamingRunner(`{"behavior":"allow"}`, [`caret: review this plan at ${url}\n`]),
+    {} as unknown as PluginInput["client"],
+  );
+  const out = await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, ctx("plan"));
+  expect(String(out).toLowerCase()).toContain("approv");
 });
 
 test("the config hook restricts the tool to primary agents", async () => {

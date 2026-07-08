@@ -127,6 +127,57 @@ export function deniedMessage(feedback: string): string {
   ].join("\n");
 }
 
+/** Extract caret's review URL from the child's stderr text. Core writes
+ * `caret: review this plan at <url>\n` (src/review.ts); both ends are caret-owned,
+ * so this regex is coupled to that one line by design. The trailing `\s` match
+ * means a stderr chunk cut off mid-URL (before the newline) yields nothing rather
+ * than a truncated URL — the match only fires once the whole line has arrived. */
+export function parseReviewUrl(stderr: string): string | undefined {
+  return stderr.match(/caret: review this plan at (\S+)\s/)?.[1];
+}
+
+/** The label caret puts in the review toast's TITLE. The review URL goes in the
+ * toast MESSAGE (on its own line), not concatenated after this — OpenCode's toast
+ * word-wraps, and a URL sharing a line with this prefix breaks across the wrap and
+ * stops being terminal-clickable. Title + message-alone keeps the (short) URL whole
+ * on its own full-width line (EXC-691). caret owns this toast surface because
+ * OpenCode renders `caret_review_plan` as a generic tool whose running state never
+ * shows the tool's `metadata` title. */
+const REVIEW_TOAST_TITLE = "caret: review this plan";
+
+/** OpenCode's plugin client, structurally narrowed to the one call caret makes.
+ * A structural type (rather than importing the SDK client) keeps this robust
+ * against version skew between the pinned plugin SDK and the running OpenCode. */
+type ToastBody = {
+  title?: string;
+  message: string;
+  variant: "info" | "success" | "warning" | "error";
+  duration?: number;
+};
+type ToastClient = { tui?: { showToast?: (opts: { body: ToastBody }) => unknown } } | undefined;
+
+/** How long the pending review-link toast stays up. Long enough to outlast a
+ * review; on a decision we supersede it with the short toast below, so this
+ * ceiling only bites if the review process dies without ever deciding. */
+const REVIEW_TOAST_MS = 10 * 60_000;
+/** The brief decision toast that supersedes (and thereby clears) the review-link
+ * toast, since OpenCode's single-slot toast surface has no hide API. */
+const DECISION_TOAST_MS = 4_000;
+
+/** Best-effort toast: surfacing or clearing the review link must never crash or
+ * delay the review. Swallows a missing method (SDK skew) and any sync throw or
+ * async rejection. Called as `tui.showToast(...)` so the SDK client keeps its
+ * `this` binding. */
+function showToast(client: ToastClient, body: ToastBody): void {
+  const tui = client?.tui;
+  if (!tui || typeof tui.showToast !== "function") return;
+  try {
+    Promise.resolve(tui.showToast({ body })).catch(() => {});
+  } catch {
+    // best-effort — the review decision is what matters.
+  }
+}
+
 /** The planning-prompt steer appended to the system array so the Plan agent
  * submits its plan to caret instead of calling the native plan_exit. */
 export function planningSteer(): string {
@@ -185,24 +236,54 @@ function setToolPermission(config: LooseConfig, agentName: string, action: "allo
 // --- the spawn bridge ----------------------------------------------------------
 
 /** Runs `caret review`, returning its captured stdout. Injected so execute() is
- * unit-testable without spawning a real process. */
+ * unit-testable without spawning a real process. `onStderr` streams the child's
+ * stderr chunks as they arrive, so the caller can surface the review URL the core
+ * prints there while the review is still pending. */
 export type SpawnRunner = (
   bin: string,
   env: Record<string, string | undefined>,
   stdin: string,
+  onStderr?: (chunk: string) => void,
 ) => Promise<{ stdout: string; exitCode: number }>;
 
 /** Spawn `caret review` with the review envelope on stdin and CARET_AGENT=opencode,
- * then parse its decision line. Any spawn failure fails safe to a deny. */
+ * then parse its decision line. Any spawn failure fails safe to a deny. `onUrl`, if
+ * given, fires once with the review URL the moment core prints it on stderr — the
+ * caller surfaces it inside the tool block so it clears on decision (EXC-691). */
 export async function runReviewViaCaret(
   envelope: string,
-  opts: { bin: string; run: SpawnRunner },
+  opts: { bin: string; run: SpawnRunner; onUrl?: (url: string) => void },
 ): Promise<CaretDecision> {
   try {
+    // Accumulate stderr and report the URL once — the line may arrive split
+    // across chunks, and only the first occurrence matters.
+    const { onUrl } = opts;
+    let stderrBuf = "";
+    let urlSent = false;
+    const onStderr = onUrl
+      ? (chunk: string) => {
+          if (urlSent) return;
+          stderrBuf += chunk;
+          const url = parseReviewUrl(stderrBuf);
+          if (url) {
+            urlSent = true;
+            // Best-effort: surfacing the URL must never crash or fail-safe-deny
+            // the review. This fires on the stderr `data` event while we're
+            // suspended at `await opts.run(...)`, so a throw here would escape the
+            // try/catch below as an uncaughtException rather than a deny.
+            try {
+              onUrl(url);
+            } catch {
+              // swallow — the review decision is what matters.
+            }
+          }
+        }
+      : undefined;
     const { stdout } = await opts.run(
       opts.bin,
       { ...process.env, CARET_AGENT: "opencode" },
       envelope,
+      onStderr,
     );
     return parseDecision(stdout);
   } catch (e) {
@@ -212,14 +293,19 @@ export async function runReviewViaCaret(
 }
 
 /** Production runner: spawn the caret binary's `review` subcommand. stderr is
- * inherited so caret's "review this plan at <url>" line reaches the user. */
-const nodeSpawnRunner: SpawnRunner = (bin, env, stdin) =>
+ * PIPED (not inherited) and streamed to `onStderr`: inheriting it leaked core's
+ * "review this plan at <url>" line straight into OpenCode's TUI scrollback, where
+ * the renderer never owns it and it lingered after the decision (EXC-691). We now
+ * parse that URL and surface it as a caret-owned toast instead; the child logs
+ * diagnostics to caret.log, so dropping the rest of stderr loses nothing. */
+const nodeSpawnRunner: SpawnRunner = (bin, env, stdin, onStderr) =>
   new Promise((resolve, reject) => {
-    const child = spawn(bin, ["review"], { env, stdio: ["pipe", "pipe", "inherit"] });
+    const child = spawn(bin, ["review"], { env, stdio: ["pipe", "pipe", "pipe"] });
     let stdout = "";
     child.stdout.on("data", (chunk) => {
       stdout += chunk.toString();
     });
+    child.stderr.on("data", (chunk) => onStderr?.(chunk.toString()));
     child.on("error", reject);
     child.on("close", (code) => resolve({ stdout, exitCode: code ?? 0 }));
     child.stdin.write(stdin);
@@ -236,7 +322,10 @@ export function createCaretPlugin(opts: { bin?: string; run?: SpawnRunner } = {}
   const bin = opts.bin ?? process.env.CARET_OPENCODE_BIN ?? CARET_BIN;
   const run = opts.run ?? nodeSpawnRunner;
 
-  return async () => {
+  return async (input) => {
+    // OpenCode gives every plugin its SDK client; caret uses it to surface the
+    // review link as a toast (EXC-691). Narrowed structurally for skew-safety.
+    const client = (input as { client?: ToastClient }).client;
     const hooks: Hooks = {
       // Restrict the review tool to primary agents + allow/deny per agent.
       config: async (config) => {
@@ -270,7 +359,42 @@ export function createCaretPlugin(opts: { bin?: string; run?: SpawnRunner } = {}
               sessionID: context.sessionID,
               directory: context.directory,
             });
-            const decision = await runReviewViaCaret(envelope, { bin, run });
+            let linkShown = false;
+            const decision = await runReviewViaCaret(envelope, {
+              bin,
+              run,
+              // Show the review URL as a toast while the plan is pending. The URL
+              // is the message ALONE (label in the title) so it renders on its own
+              // full-width line and word-wraps whole, staying clickable (EXC-691).
+              onUrl: (url) => {
+                linkShown = true;
+                showToast(client, {
+                  title: REVIEW_TOAST_TITLE,
+                  message: url,
+                  variant: "info",
+                  duration: REVIEW_TOAST_MS,
+                });
+              },
+            });
+            // Clear the pending review-link toast on decision by superseding it
+            // with a brief decision toast — OpenCode's toast surface is single-slot
+            // with no hide API, so a fresh toast replaces the link (EXC-691).
+            if (linkShown) {
+              showToast(
+                client,
+                decision.behavior === "allow"
+                  ? {
+                      message: "caret: plan approved",
+                      variant: "success",
+                      duration: DECISION_TOAST_MS,
+                    }
+                  : {
+                      message: "caret: changes requested",
+                      variant: "info",
+                      duration: DECISION_TOAST_MS,
+                    },
+              );
+            }
             return decision.behavior === "allow"
               ? approvedMessage()
               : deniedMessage(decision.feedback ?? "Plan changes requested.");
