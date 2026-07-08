@@ -44,6 +44,19 @@ export function codeBlockRanges(text: string): CodeBlockRange[] {
 }
 
 /**
+ * The code inside a fenced block, with the fence lines stripped — what a "copy"
+ * affordance should place on the clipboard. Interior blank lines and indentation
+ * are preserved. The opening fence (line `start`) is always dropped; the closing
+ * fence is dropped only when present (an unclosed block keeps its last line).
+ */
+export function codeBlockText(text: string, range: CodeBlockRange): string {
+  const lines = text.split("\n").slice(range.start - 1, range.end);
+  if (lines.length > 0 && FENCE.test(lines[0] ?? "")) lines.shift();
+  if (lines.length > 0 && FENCE.test(lines[lines.length - 1] ?? "")) lines.pop();
+  return lines.join("\n");
+}
+
+/**
  * Tags the source view's content-column rows so the code-block panel CSS
  * (CARET_OVERRIDES in coreStyles.ts) can style them: `data-code-line` on every
  * `[data-content] > [data-line]` cell inside a block, plus `data-code-start` /

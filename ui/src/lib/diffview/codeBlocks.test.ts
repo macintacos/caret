@@ -1,6 +1,6 @@
 import "../../../test-setup.ts";
 import { describe, expect, test } from "bun:test";
-import { codeBlockRanges, tagCodeBlockRows } from "./codeBlocks.ts";
+import { codeBlockRanges, codeBlockText, tagCodeBlockRows } from "./codeBlocks.ts";
 
 // codeBlockRanges classifies which lines of a rendered plan belong to a fenced
 // code block, so the source view can decorate those rows as a panel (EXC-692).
@@ -49,6 +49,33 @@ describe("codeBlockRanges", () => {
       { start: 1, end: 2 },
       { start: 3, end: 4 },
     ]);
+  });
+});
+
+describe("codeBlockText", () => {
+  test("returns the code between the fences, fences stripped", () => {
+    const text = ["intro", "```ts", "const x = 1;", "return x;", "```", "outro"].join("\n");
+    expect(codeBlockText(text, { start: 2, end: 5 })).toBe("const x = 1;\nreturn x;");
+  });
+
+  test("preserves interior blank lines and indentation", () => {
+    const text = ["```py", "def f():", "", "    return 1", "```"].join("\n");
+    expect(codeBlockText(text, { start: 1, end: 5 })).toBe("def f():\n\n    return 1");
+  });
+
+  test("handles a single code line", () => {
+    const text = ["```", "solo", "```"].join("\n");
+    expect(codeBlockText(text, { start: 1, end: 3 })).toBe("solo");
+  });
+
+  test("returns empty for an empty fenced block", () => {
+    const text = ["```ts", "```"].join("\n");
+    expect(codeBlockText(text, { start: 1, end: 2 })).toBe("");
+  });
+
+  test("keeps the last line when the fence is unclosed at EOF", () => {
+    const text = ["```ts", "still code"].join("\n");
+    expect(codeBlockText(text, { start: 1, end: 2 })).toBe("still code");
   });
 });
 

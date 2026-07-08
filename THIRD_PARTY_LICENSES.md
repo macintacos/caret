@@ -16,6 +16,7 @@ under the ISC license.
 | `chevron-down` | [ui/src/icons/chevron-down.svg](ui/src/icons/chevron-down.svg) | [chevron-down.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/chevron-down.svg) |
 | `circle-question-mark` | [ui/src/icons/circle-question-mark.svg](ui/src/icons/circle-question-mark.svg) | [circle-question-mark.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/circle-question-mark.svg) |
 | `command` | [ui/src/icons/command.svg](ui/src/icons/command.svg) | [command.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/command.svg) |
+| `copy` | [ui/src/icons/copy.svg](ui/src/icons/copy.svg) | [copy.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/copy.svg) |
 | `corner-down-left` | [ui/src/icons/corner-down-left.svg](ui/src/icons/corner-down-left.svg) | [corner-down-left.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/corner-down-left.svg) |
 | `corner-up-left` | [ui/src/icons/corner-up-left.svg](ui/src/icons/corner-up-left.svg) | [corner-up-left.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/corner-up-left.svg) |
 | `unplug` | [ui/src/icons/unplug.svg](ui/src/icons/unplug.svg) | [unplug.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/unplug.svg) |

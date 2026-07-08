@@ -698,6 +698,44 @@ test("renders a fenced code block as a tagged, darker panel on its own rows (EXC
   expect(panel.codeWidth as number).toBeLessThan(panel.proseWidth as number);
 });
 
+test("hovering a code block reveals a copy button that copies the code (EXC-692)", async ({
+  daemon,
+  page,
+}) => {
+  // The copy affordance: hovering a fenced block shows a button at its top-right;
+  // clicking it writes the block's code (fences stripped) to the clipboard and
+  // confirms with a checkmark that reverts. Proves the hover hit-test, the clipboard
+  // write, and the icon swap resolve end to end in the real browser.
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await daemon.seed({ plan: CODE_PLAN });
+  await page.goto("/");
+  await expect(page.getByText("Some intro prose here.")).toBeVisible();
+
+  const copy = page.getByRole("button", { name: "Copy code" });
+  // No button until the pointer is over the block.
+  await expect(copy).toHaveCount(0);
+
+  // Hover the center of an interior code line (line 6) to reveal the button.
+  const point = await page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+    const row = sh?.querySelector('[data-content] > [data-line="6"]') as HTMLElement | null;
+    const r = row?.getBoundingClientRect();
+    return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
+  });
+  expect(point).not.toBeNull();
+  await page.mouse.move((point as { x: number }).x, (point as { y: number }).y);
+  await expect(copy).toBeVisible();
+
+  await copy.click();
+  // Confirmation: the label/glyph swaps to the checkmark…
+  await expect(page.getByRole("button", { name: "Copied" })).toBeVisible();
+  // …the clipboard holds the block's code with the fence lines stripped…
+  const clip = await page.evaluate(() => navigator.clipboard.readText());
+  expect(clip).toBe("const x: number = compute();\nreturn x + 1;");
+  // …and it reverts to the copy glyph.
+  await expect(page.getByRole("button", { name: "Copy code" })).toBeVisible({ timeout: 3000 });
+});
+
 test("numeric chrome renders with tabular figures end to end", async ({ daemon, page }) => {
   // Tabular figures keep columns of digits aligned. The bridge sets
   // --diffs-font-features to the 'tnum' tag, which the library feeds into
