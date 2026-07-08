@@ -690,11 +690,11 @@ test("renders a fenced code block as a tagged, darker panel on its own rows (EXC
   expect(panel.codeBg).not.toBeNull();
   expect(panel.proseBg).not.toBeNull();
   expect(panel.codeBg).not.toBe(panel.proseBg);
-  // The panel is a contained card: its width is capped (~900px) and, on this wide
+  // The panel is a contained card: its width is capped (~720px) and, on this wide
   // viewport, measurably narrower than a full-width prose row.
   expect(panel.codeWidth).not.toBeNull();
   expect(panel.proseWidth).not.toBeNull();
-  expect(panel.codeWidth as number).toBeLessThanOrEqual(905);
+  expect(panel.codeWidth as number).toBeLessThanOrEqual(730);
   expect(panel.codeWidth as number).toBeLessThan(panel.proseWidth as number);
 });
 

@@ -157,12 +157,12 @@ describe("the fenced code-block panel (EXC-692)", () => {
     expect(body).toMatch(/padding-inline-start:\s*2ch\b/);
   });
 
-  test("adds block padding on the first/last lines so the fences clear the corners", () => {
+  test("gives the fence lines symmetric block padding (taller + vertically centered)", () => {
     expect(overrideDecls).toMatch(
-      /\[data-line\]\[data-code-start\]:not\(\[data-selected-line\]\)\s*\{[^}]*padding-block-start:/,
+      /\[data-line\]\[data-code-start\]:not\(\[data-selected-line\]\)\s*\{[^}]*padding-block:/,
     );
     expect(overrideDecls).toMatch(
-      /\[data-line\]\[data-code-end\]:not\(\[data-selected-line\]\)\s*\{[^}]*padding-block-end:/,
+      /\[data-line\]\[data-code-end\]:not\(\[data-selected-line\]\)\s*\{[^}]*padding-block:/,
     );
   });
 

@@ -58,10 +58,13 @@ const CARET_OVERRIDES = `
      capped at a comfortable reading width (max-width) so it never stretches full-
      bleed across a wide viewport — when the content column is narrower than the cap,
      the right margin still keeps it off the edge. The code keeps the library's
-     default 2ch inset within the card (no extra indent). The block's first/last
-     lines carry a little block padding so the fence lines don't hug the rounded
-     corners — this adds a touch of height at the top and bottom, which is intended.
-     The :not([data-selected-line]) guard yields a selected code line to the amber
+     default 2ch inset within the card (no extra indent). The block's first and last
+     lines carry SYMMETRIC block padding: it makes the top and bottom a little taller
+     AND centers the fence line vertically (equal space above and below the fence
+     markers), so the block reads balanced rather than top-weighted. (The line number
+     and the fence-marker glyph are inherently offset — a backtick glyph sits high in
+     its line box, a digit at the baseline — so this is not tied to the gutter, which
+     stays as-is.) The :not([data-selected-line]) guard yields a selected code line to the amber
      band below: CARET_OVERRIDES is adopted after the core sheet, so without it this
      fill would win over the library's selection highlight. Rounding hangs off the
      block's first line (top) and last line (bottom), tagged explicitly rather than
@@ -70,19 +73,19 @@ const CARET_OVERRIDES = `
     background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
     margin-inline-start: 0.75rem;
     margin-inline-end: 0.75rem;
-    max-width: 900px;
+    max-width: 720px;
     padding-inline-start: 2ch;
     padding-inline-end: 0.75rem;
   }
   [data-content] > [data-line][data-code-start]:not([data-selected-line]) {
     border-top-left-radius: var(--radius);
     border-top-right-radius: var(--radius);
-    padding-block-start: 0.4rem;
+    padding-block: 0.5rem;
   }
   [data-content] > [data-line][data-code-end]:not([data-selected-line]) {
     border-bottom-left-radius: var(--radius);
     border-bottom-right-radius: var(--radius);
-    padding-block-end: 0.4rem;
+    padding-block: 0.5rem;
   }
 
   /* EXC-664: the drag-to-comment selection reads as ONE continuous amber band
