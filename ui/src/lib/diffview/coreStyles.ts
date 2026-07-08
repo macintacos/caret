@@ -45,6 +45,38 @@ const CARET_OVERRIDES = `
     outline-offset: 2px;
   }
 
+  /* EXC-692: a fenced code block reads as a slightly-indented, darker, rounded
+     panel in the content column. The library paints no per-line code marker, so
+     caret tags each content line inside a fence with data-code-line, plus
+     data-code-start / -end on the block's first / last line (see codeBlocks.ts,
+     re-applied after every repaint by SourceView). Line numbers stay in the gutter
+     — the panel is the content column only. The fill mixes one step toward --ink
+     off the diff surface (--paper-sunk) with the same in-lab color-mix the layered
+     surfaces use, so it carries correct depth in both schemes (a sunk panel on
+     light paper, a raised one on dark). The code is indented past the default 2ch
+     inset and the panel is inset from the right edge so it reads as a rounded rect,
+     not a full-bleed band. Every fence and code line already has a row, so the
+     block's vertical footprint is unchanged. The :not([data-selected-line]) guard
+     yields a selected code line to the amber band below: CARET_OVERRIDES is adopted
+     after the core sheet, so without it this fill would win over the library's
+     selection highlight. Rounding hangs off the block's first line (top) and last
+     line (bottom), tagged explicitly rather than via :not(~) since a plan may hold
+     several blocks. */
+  [data-content] > [data-line][data-code-line]:not([data-selected-line]) {
+    background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
+    padding-inline-start: calc(2ch + 0.6rem);
+    padding-inline-end: 0.75rem;
+    margin-inline-end: 0.75rem;
+  }
+  [data-content] > [data-line][data-code-start]:not([data-selected-line]) {
+    border-top-left-radius: var(--radius);
+    border-top-right-radius: var(--radius);
+  }
+  [data-content] > [data-line][data-code-end]:not([data-selected-line]) {
+    border-bottom-left-radius: var(--radius);
+    border-bottom-right-radius: var(--radius);
+  }
+
   /* EXC-664: the drag-to-comment selection reads as ONE continuous amber band
      spanning the gutter and content columns, with a tighter corner than before
      (--radius, down from --radius-lg). The amber is the library's per-cell

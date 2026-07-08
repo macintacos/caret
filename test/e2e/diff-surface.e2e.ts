@@ -623,6 +623,72 @@ test("a drag selection renders the selected lines in caret amber, not library-bl
   expect(axes.number as number).toBeGreaterThan(2);
 });
 
+// A plan with a fenced code block: heading (1), blank (2), prose (3), blank (4),
+// opening fence (5), two code lines (6–7), closing fence (8), blank (9), prose (10).
+const CODE_PLAN = `# Code Plan
+
+Some intro prose here.
+
+\`\`\`ts
+const x: number = compute();
+return x + 1;
+\`\`\`
+
+Closing prose after the block.
+`;
+
+test("renders a fenced code block as a tagged, darker panel on its own rows (EXC-692)", async ({
+  daemon,
+  page,
+}) => {
+  // The block reads as its own element: caret tags the content rows inside the
+  // fence (data-code-line, plus -start/-end on the first/last) and the panel CSS
+  // fills them one step darker than the diff surface. This proves the shadow-DOM
+  // tagging + the fill resolve end to end in the real Chromium build, not just in
+  // the static stylesheet — and that the block's line span (5–8) is respected while
+  // prose rows are left alone.
+  await daemon.seed({ plan: CODE_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("Some intro prose here.")).toBeVisible();
+
+  const readPanel = () =>
+    page.evaluate(() => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+      const row = (n: number) =>
+        (sh?.querySelector(`[data-content] > [data-line="${n}"]`) as HTMLElement | null) ?? null;
+      const has = (n: number, a: string) => row(n)?.hasAttribute(a) ?? false;
+      const bg = (n: number) => {
+        const el = row(n);
+        return el ? getComputedStyle(el).backgroundColor : null;
+      };
+      return {
+        codeLines: [5, 6, 7, 8].map((n) => has(n, "data-code-line")),
+        start: has(5, "data-code-start"),
+        end: has(8, "data-code-end"),
+        interiorStartEnd: has(6, "data-code-start") || has(7, "data-code-end"),
+        proseIsCode: has(3, "data-code-line"),
+        codeBg: bg(6),
+        proseBg: bg(3),
+      };
+    });
+
+  // The decoration lands after the library paints and the fenced-code rehighlight
+  // repaints the rows, so poll until every code row is tagged.
+  await expect.poll(async () => (await readPanel()).codeLines.every(Boolean)).toBe(true);
+
+  const panel = await readPanel();
+  // Only the block's boundary rows carry the corner markers; prose is untouched.
+  expect(panel.start).toBe(true);
+  expect(panel.end).toBe(true);
+  expect(panel.interiorStartEnd).toBe(false);
+  expect(panel.proseIsCode).toBe(false);
+  // The panel fill resolved darker than a prose row's background, end to end.
+  expect(panel.codeBg).not.toBeNull();
+  expect(panel.proseBg).not.toBeNull();
+  expect(panel.codeBg).not.toBe(panel.proseBg);
+});
+
 test("numeric chrome renders with tabular figures end to end", async ({ daemon, page }) => {
   // Tabular figures keep columns of digits aligned. The bridge sets
   // --diffs-font-features to the 'tnum' tag, which the library feeds into

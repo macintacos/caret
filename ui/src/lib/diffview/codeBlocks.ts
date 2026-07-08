@@ -42,3 +42,25 @@ export function codeBlockRanges(text: string): CodeBlockRange[] {
   if (start != null) ranges.push({ start, end: lines.length });
   return ranges;
 }
+
+/**
+ * Tags the source view's content-column rows so the code-block panel CSS
+ * (CARET_OVERRIDES in coreStyles.ts) can style them: `data-code-line` on every
+ * `[data-content] > [data-line]` cell inside a block, plus `data-code-start` /
+ * `data-code-end` on each block's first / last line. The library owns these rows
+ * and repaints them, so this is re-run after every repaint (see SourceView.svelte);
+ * it is idempotent and clears rows no longer in a block. Only content rows are
+ * touched — the gutter number cells keep their default styling.
+ */
+export function tagCodeBlockRows(root: ParentNode, ranges: CodeBlockRange[]): void {
+  const startLines = new Set(ranges.map((r) => r.start));
+  const endLines = new Set(ranges.map((r) => r.end));
+  const inCode = (n: number) => ranges.some((r) => n >= r.start && n <= r.end);
+  for (const row of root.querySelectorAll<HTMLElement>("[data-content] > [data-line]")) {
+    const n = Number(row.getAttribute("data-line"));
+    const code = Number.isFinite(n) && inCode(n);
+    row.toggleAttribute("data-code-line", code);
+    row.toggleAttribute("data-code-start", code && startLines.has(n));
+    row.toggleAttribute("data-code-end", code && endLines.has(n));
+  }
+}
