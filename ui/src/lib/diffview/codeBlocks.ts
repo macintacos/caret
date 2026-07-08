@@ -56,24 +56,68 @@ export function codeBlockText(text: string, range: CodeBlockRange): string {
   return lines.join("\n");
 }
 
+// A token that is only fence markers and whitespace — never the language tag.
+const FENCE_ONLY = /^[`~\s]*$/;
+
+/**
+ * Tags the language token on a fence line's row so the panel CSS can nudge it to
+ * the row's vertical center. A highlighted fence line renders as separate shiki
+ * spans once the theme splits the marker and language colors, but shiki attaches
+ * no classes; the language is the first token whose text is neither blank nor all
+ * fence markers. No-op when the row carries no such token (a bare fence).
+ */
+function tagLanguageToken(row: Element): void {
+  for (const span of row.children) {
+    const text = span.textContent ?? "";
+    if (text.trim() !== "" && !FENCE_ONLY.test(text)) {
+      span.setAttribute("data-code-lang", "");
+      return;
+    }
+  }
+}
+
+/** Tags the fence-marker token on a fence line's row (the first span holding a
+ * backtick or tilde) so the panel CSS can nudge those glyphs down to center. */
+function tagFenceToken(row: Element): void {
+  for (const span of row.children) {
+    if (/[`~]/.test(span.textContent ?? "")) {
+      span.setAttribute("data-code-fence", "");
+      return;
+    }
+  }
+}
+
 /**
  * Tags the source view's content-column rows so the code-block panel CSS
  * (CARET_OVERRIDES in coreStyles.ts) can style them: `data-code-line` on every
  * `[data-content] > [data-line]` cell inside a block, plus `data-code-start` /
- * `data-code-end` on each block's first / last line. The library owns these rows
- * and repaints them, so this is re-run after every repaint (see SourceView.svelte);
- * it is idempotent and clears rows no longer in a block. Only content rows are
- * touched — the gutter number cells keep their default styling.
+ * `data-code-end` on each block's first / last line. Also tags two fence-line
+ * tokens the panel CSS shifts to the row's vertical center: `data-code-lang` on
+ * the opening line's language tag and `data-code-fence` on the closing line's
+ * markers. The library owns these rows and repaints them, so this is re-run after
+ * every repaint (see SourceView.svelte); it is idempotent and clears rows and
+ * tokens no longer in a block. Only content rows are touched — the gutter number
+ * cells keep their default styling.
  */
 export function tagCodeBlockRows(root: ParentNode, ranges: CodeBlockRange[]): void {
   const startLines = new Set(ranges.map((r) => r.start));
   const endLines = new Set(ranges.map((r) => r.end));
   const inCode = (n: number) => ranges.some((r) => n >= r.start && n <= r.end);
+  // Clear stale token tags before re-tagging: a repaint rebuilds the spans, and a
+  // content change can move which line is a fence, so any prior tag may be wrong.
+  for (const tagged of root.querySelectorAll(
+    "[data-content] [data-code-lang], [data-content] [data-code-fence]",
+  )) {
+    tagged.removeAttribute("data-code-lang");
+    tagged.removeAttribute("data-code-fence");
+  }
   for (const row of root.querySelectorAll<HTMLElement>("[data-content] > [data-line]")) {
     const n = Number(row.getAttribute("data-line"));
     const code = Number.isFinite(n) && inCode(n);
     row.toggleAttribute("data-code-line", code);
     row.toggleAttribute("data-code-start", code && startLines.has(n));
     row.toggleAttribute("data-code-end", code && endLines.has(n));
+    if (code && startLines.has(n)) tagLanguageToken(row);
+    if (code && endLines.has(n)) tagFenceToken(row);
   }
 }

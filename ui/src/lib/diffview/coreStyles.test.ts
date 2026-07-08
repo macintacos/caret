@@ -180,12 +180,29 @@ describe("the fenced code-block panel (EXC-692)", () => {
     );
   });
 
+  test("centers the closing fence markers and the language tag on their rows", () => {
+    // shiki emits no classes, so codeBlocks.ts tags the two fence-line tokens and
+    // this sheet shifts each with position: relative (moves the glyph, not the
+    // panel background). A fence marker glyph sits high, so the closing markers move
+    // DOWN (positive top); the language is a baseline word its row's top padding
+    // pushed low, so it moves UP (negative top).
+    const fenceRule =
+      overrideDecls.match(/\[data-code-end\][^{]*\[data-code-fence\]\s*\{[^}]*\}/)?.[0] ?? "";
+    const langRule =
+      overrideDecls.match(/\[data-code-start\][^{]*\[data-code-lang\]\s*\{[^}]*\}/)?.[0] ?? "";
+    expect(fenceRule).toContain("position: relative");
+    expect(fenceRule).toMatch(/top:\s*0?\.\d+em/); // positive → down
+    expect(langRule).toContain("position: relative");
+    expect(langRule).toMatch(/top:\s*-0?\.\d+em/); // negative → up
+  });
+
   test("yields a selected code line to the amber band (every rule guards on selection)", () => {
     // CARET_OVERRIDES is adopted after the core sheet, so without the
     // :not([data-selected-line]) guard the panel fill would win over the library's
-    // selection highlight. All three code-block rules must carry it.
+    // selection highlight. Every code-block rule — the three row rules plus the two
+    // token-centering rules — must carry it so the whole panel treatment yields.
     const codeRules = overrideDecls.match(/\[data-code-(?:line|start|end)\][^{]*\{/g) ?? [];
-    expect(codeRules.length).toBe(3);
+    expect(codeRules.length).toBe(5);
     for (const sel of codeRules) expect(sel).toContain(":not([data-selected-line])");
   });
 

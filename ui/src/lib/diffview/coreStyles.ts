@@ -89,6 +89,25 @@ const CARET_OVERRIDES = `
     border-bottom-right-radius: var(--radius);
     padding-block-end: 0.1rem;
   }
+  /* EXC-692 glyph centering. A fence marker glyph sits high in its line box, so it
+     reads as too high when the row is not top-padded. The opening markers already
+     look centered (their row carries padding-block-start), so they are left alone;
+     only the closing markers and the opening language tag are shifted to their row's
+     vertical center. shiki attaches no classes, so codeBlocks.ts tags the two tokens
+     (data-code-fence on the closing markers, data-code-lang on the language) and each
+     is shifted with position: relative, which moves the glyph without touching the
+     panel background or the row layout. The closing markers move down; the language,
+     a baseline word that its row's top padding has pushed low, moves up. Both offsets
+     are em-relative eyeball values — the two knobs to tune if either token looks off
+     center. */
+  [data-content] > [data-line][data-code-end]:not([data-selected-line]) [data-code-fence] {
+    position: relative;
+    top: 0.2em;
+  }
+  [data-content] > [data-line][data-code-start]:not([data-selected-line]) [data-code-lang] {
+    position: relative;
+    top: -0.12em;
+  }
 
   /* EXC-664: the drag-to-comment selection reads as ONE continuous amber band
      spanning the gutter and content columns, with a tighter corner than before

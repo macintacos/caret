@@ -663,6 +663,12 @@ test("renders a fenced code block as a tagged, darker panel on its own rows (EXC
         return el ? getComputedStyle(el).backgroundColor : null;
       };
       const width = (n: number) => row(n)?.getBoundingClientRect().width ?? null;
+      const tokenIn = (n: number, attr: string) =>
+        (sh?.querySelector(
+          `[data-content] > [data-line="${n}"] [${attr}]`,
+        ) as HTMLElement | null) ?? null;
+      const lang = tokenIn(5, "data-code-lang"); // opening fence "```ts" → language token
+      const fence = tokenIn(8, "data-code-fence"); // closing fence "```" → markers
       return {
         codeLines: [5, 6, 7, 8].map((n) => has(n, "data-code-line")),
         start: has(5, "data-code-start"),
@@ -673,12 +679,22 @@ test("renders a fenced code block as a tagged, darker panel on its own rows (EXC
         proseBg: bg(3),
         codeWidth: width(6),
         proseWidth: width(3),
+        langText: lang?.textContent ?? null,
+        langTop: lang ? getComputedStyle(lang).top : null,
+        fenceText: fence?.textContent ?? null,
+        fenceTop: fence ? getComputedStyle(fence).top : null,
       };
     });
 
   // The decoration lands after the library paints and the fenced-code rehighlight
-  // repaints the rows, so poll until every code row is tagged.
-  await expect.poll(async () => (await readPanel()).codeLines.every(Boolean)).toBe(true);
+  // repaints the rows, so poll until every code row is tagged and the fence line's
+  // language token has been split out (it only exists once the fence is tokenized).
+  await expect
+    .poll(async () => {
+      const p = await readPanel();
+      return p.codeLines.every(Boolean) && p.langText === "ts";
+    })
+    .toBe(true);
 
   const panel = await readPanel();
   // Only the block's boundary rows carry the corner markers; prose is untouched.
@@ -696,6 +712,14 @@ test("renders a fenced code block as a tagged, darker panel on its own rows (EXC
   expect(panel.proseWidth).not.toBeNull();
   expect(panel.codeWidth as number).toBeLessThanOrEqual(730);
   expect(panel.codeWidth as number).toBeLessThan(panel.proseWidth as number);
+  // The fence-line tokens are shifted toward their row's vertical center (EXC-692):
+  // the language tag ("ts") moves up (negative used `top`), the closing markers
+  // ("```") move down (positive used `top`). position: relative resolves `top` to a
+  // px length; a static glyph would report `auto`.
+  expect(panel.langText).toBe("ts");
+  expect(Number.parseFloat(panel.langTop as string)).toBeLessThan(0);
+  expect(panel.fenceText?.trim()).toBe("```");
+  expect(Number.parseFloat(panel.fenceTop as string)).toBeGreaterThan(0);
 });
 
 test("hovering a code block reveals a copy button that copies the code (EXC-692)", async ({

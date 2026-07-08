@@ -137,3 +137,79 @@ describe("tagCodeBlockRows", () => {
     expect(rowAttrs(root, 5)).toEqual({ code: true, start: false, end: true });
   });
 });
+
+// Fills a content row with shiki-shaped token spans (one <span> per token, no
+// classes — matching how @pierre/diffs renders a highlighted line). Used to
+// exercise the token-level tagging that lets the panel CSS nudge individual
+// glyphs to the row's vertical center.
+function setRowTokens(root: HTMLElement, line: number, tokens: string[]): void {
+  const row = root.querySelector(`[data-content] > [data-line="${line}"]`);
+  if (row == null) throw new Error(`no row ${line}`);
+  for (const t of tokens) {
+    const span = document.createElement("span");
+    span.textContent = t;
+    row.appendChild(span);
+  }
+}
+
+// The fence line carries two distinct tokens once the theme splits their colors:
+// the backtick/tilde markers and, on the opening line, the language tag. shiki
+// attaches no classes, so tagCodeBlockRows marks the language token (data-code-lang)
+// and the closing fence's markers (data-code-fence) imperatively, and the panel CSS
+// shifts each to the row's vertical center (EXC-692). The opening markers are left
+// untouched — they already sit right once the row is top-padded.
+describe("tagCodeBlockRows token tagging", () => {
+  const langOf = (root: HTMLElement, line: number) =>
+    root.querySelector(`[data-content] > [data-line="${line}"] [data-code-lang]`);
+  const fenceOf = (root: HTMLElement, line: number) =>
+    root.querySelector(`[data-content] > [data-line="${line}"] [data-code-fence]`);
+
+  test("tags the opening language token and the closing fence markers", () => {
+    const root = buildContent(3);
+    setRowTokens(root, 1, ["```", "ts"]);
+    setRowTokens(root, 2, ["const x = 1;"]);
+    setRowTokens(root, 3, ["```"]);
+    tagCodeBlockRows(root, [{ start: 1, end: 3 }]);
+
+    expect(langOf(root, 1)?.textContent).toBe("ts");
+    // The opening markers stay put; only the closing markers are tagged.
+    expect(fenceOf(root, 1)).toBeNull();
+    expect(fenceOf(root, 3)?.textContent).toBe("```");
+    // The code line's own token is never mistaken for a language or fence.
+    expect(langOf(root, 2)).toBeNull();
+    expect(fenceOf(root, 2)).toBeNull();
+  });
+
+  test("tags a tilde-fence language the same way", () => {
+    const root = buildContent(3);
+    setRowTokens(root, 1, ["~~~", "python"]);
+    setRowTokens(root, 2, ["x = 1"]);
+    setRowTokens(root, 3, ["~~~"]);
+    tagCodeBlockRows(root, [{ start: 1, end: 3 }]);
+    expect(langOf(root, 1)?.textContent).toBe("python");
+    expect(fenceOf(root, 3)?.textContent).toBe("~~~");
+  });
+
+  test("tags no language when the opening fence has none", () => {
+    const root = buildContent(2);
+    setRowTokens(root, 1, ["```"]);
+    setRowTokens(root, 2, ["```"]);
+    tagCodeBlockRows(root, [{ start: 1, end: 2 }]);
+    expect(root.querySelector("[data-code-lang]")).toBeNull();
+    // The closing markers are still tagged.
+    expect(fenceOf(root, 2)?.textContent).toBe("```");
+  });
+
+  test("clears stale token tags when the block goes away", () => {
+    const root = buildContent(3);
+    setRowTokens(root, 1, ["```", "ts"]);
+    setRowTokens(root, 3, ["```"]);
+    tagCodeBlockRows(root, [{ start: 1, end: 3 }]);
+    expect(root.querySelector("[data-code-lang]")).not.toBeNull();
+    expect(root.querySelector("[data-code-fence]")).not.toBeNull();
+
+    tagCodeBlockRows(root, []);
+    expect(root.querySelector("[data-code-lang]")).toBeNull();
+    expect(root.querySelector("[data-code-fence]")).toBeNull();
+  });
+});
