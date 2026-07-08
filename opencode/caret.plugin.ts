@@ -136,19 +136,20 @@ export function parseReviewUrl(stderr: string): string | undefined {
   return stderr.match(/caret: review this plan at (\S+)\s/)?.[1];
 }
 
-/** The toast message caret shows while a plan awaits review, carrying the review
- * URL. OpenCode renders `caret_review_plan` as a GENERIC tool, whose running state
- * only shows the tool name + input and never the tool's `metadata` title — so the
- * link is surfaced as a toast (a caret-owned, clearable surface) instead of leaking
- * it via inherited stderr or an invisible metadata title (EXC-691). */
-export function reviewToastMessage(url: string): string {
-  return `caret: review this plan at ${url}`;
-}
+/** The label caret puts in the review toast's TITLE. The review URL goes in the
+ * toast MESSAGE (on its own line), not concatenated after this — OpenCode's toast
+ * word-wraps, and a URL sharing a line with this prefix breaks across the wrap and
+ * stops being terminal-clickable. Title + message-alone keeps the (short) URL whole
+ * on its own full-width line (EXC-691). caret owns this toast surface because
+ * OpenCode renders `caret_review_plan` as a generic tool whose running state never
+ * shows the tool's `metadata` title. */
+const REVIEW_TOAST_TITLE = "caret: review this plan";
 
 /** OpenCode's plugin client, structurally narrowed to the one call caret makes.
  * A structural type (rather than importing the SDK client) keeps this robust
  * against version skew between the pinned plugin SDK and the running OpenCode. */
 type ToastBody = {
+  title?: string;
   message: string;
   variant: "info" | "success" | "warning" | "error";
   duration?: number;
@@ -362,11 +363,14 @@ export function createCaretPlugin(opts: { bin?: string; run?: SpawnRunner } = {}
             const decision = await runReviewViaCaret(envelope, {
               bin,
               run,
-              // Show the review URL as a toast while the plan is pending (EXC-691).
+              // Show the review URL as a toast while the plan is pending. The URL
+              // is the message ALONE (label in the title) so it renders on its own
+              // full-width line and word-wraps whole, staying clickable (EXC-691).
               onUrl: (url) => {
                 linkShown = true;
                 showToast(client, {
-                  message: reviewToastMessage(url),
+                  title: REVIEW_TOAST_TITLE,
+                  message: url,
                   variant: "info",
                   duration: REVIEW_TOAST_MS,
                 });

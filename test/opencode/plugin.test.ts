@@ -19,7 +19,6 @@ import {
   planningSteer,
   planTitle,
   REVIEW_TOOL,
-  reviewToastMessage,
   runReviewViaCaret,
   type SpawnRunner,
 } from "../../opencode/caret.plugin.ts";
@@ -115,11 +114,6 @@ test("parseReviewUrl waits for the whole line — a URL not yet newline-terminat
   // A mid-stream stderr chunk cut off before the trailing newline must not yield a
   // truncated URL; the match requires the whitespace core always writes after it.
   expect(parseReviewUrl("caret: review this plan at http://caret.localhost:4271")).toBeUndefined();
-});
-
-test("reviewToastMessage carries the URL in the toast message", () => {
-  const url = "http://caret.localhost:42718/?review=abc123";
-  expect(reviewToastMessage(url)).toBe(`caret: review this plan at ${url}`);
 });
 
 // --- applyCaretConfig (subagent-bypass mitigation) ---
@@ -291,13 +285,17 @@ function ctx(agent: string): ToolContext {
 // A plugin client that records the toasts execute() shows via client.tui.showToast.
 function recordingClient(): {
   client: PluginInput["client"];
-  toasts: Array<{ message: string; variant: string }>;
+  toasts: Array<{ title?: string; message: string; variant: string }>;
 } {
-  const toasts: Array<{ message: string; variant: string }> = [];
+  const toasts: Array<{ title?: string; message: string; variant: string }> = [];
   const client = {
     tui: {
-      showToast: (opts: { body: { message: string; variant: string } }) => {
-        toasts.push({ message: opts.body.message, variant: opts.body.variant });
+      showToast: (opts: { body: { title?: string; message: string; variant: string } }) => {
+        toasts.push({
+          title: opts.body.title,
+          message: opts.body.message,
+          variant: opts.body.variant,
+        });
         return Promise.resolve({});
       },
     },
@@ -340,9 +338,13 @@ test("the review tool shows the pending review URL as a toast, then clears it on
     client,
   );
   await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, ctx("plan"));
-  // First: the review-link toast while pending. Then: a decision toast that
-  // supersedes it (single-slot toast surface has no hide API), clearing the link.
-  expect(toasts[0]).toEqual({ message: `caret: review this plan at ${url}`, variant: "info" });
+  // First: the review-link toast while pending — the URL is the message ALONE
+  // (label in the title) so it lands on its own full-width line and word-wraps
+  // whole, staying terminal-clickable instead of breaking across the prefix.
+  // Then: a decision toast that supersedes it (single-slot surface, no hide API).
+  expect(toasts[0]?.title).toBe("caret: review this plan");
+  expect(toasts[0]?.message).toBe(url);
+  expect(toasts[0]?.variant).toBe("info");
   expect(toasts).toHaveLength(2);
   expect(toasts[1]?.message.toLowerCase()).toContain("approv");
 });
@@ -357,7 +359,7 @@ test("the review tool clears the link with a changes-requested toast on deny (EX
     client,
   );
   await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, ctx("plan"));
-  expect(toasts[0]?.message).toBe(`caret: review this plan at ${url}`);
+  expect(toasts[0]?.message).toBe(url);
   expect(toasts[1]?.message.toLowerCase()).toContain("change");
 });
 
