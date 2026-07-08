@@ -28,6 +28,8 @@
     toLineAnnotations,
   } from "../lib/diffview/annotationSlot.ts";
   import { type BracketSpan, bracketLayer } from "../lib/diffview/bracket.ts";
+  import { type CodeBlockRange, codeBlockRanges, codeBlockText } from "../lib/diffview/codeBlocks.ts";
+  import { codeBlockAtPoint, copyAnchor } from "../lib/diffview/codeCopy.ts";
   import {
     type ComposerScratch,
     createSourceCommenting,
@@ -56,6 +58,7 @@
   import SourceAnnotationThread from "./SourceAnnotationThread.svelte";
   import LegacyAnnotationList from "./LegacyAnnotationList.svelte";
   import SourceToc from "./SourceToc.svelte";
+  import CodeCopyButton from "./CodeCopyButton.svelte";
 
   interface Props {
     /** The review whose current plan version is rendered. */
@@ -190,10 +193,88 @@
     return headingMemo.headings;
   });
 
+  // The fenced code blocks in the rendered plan, each with its range (for hover
+  // hit-testing) and its fence-stripped code (for the clipboard). Backs the per-block
+  // copy affordance (EXC-692). Computed from the SAME text the view renders
+  // (linkLayer.text) so the ranges line up with the shadow rows' data-line numbers,
+  // and memoized on that text so an unchanged poll tick keeps a stable reference.
+  let codeBlocksMemo:
+    | { text: string; blocks: Array<{ range: CodeBlockRange; text: string }> }
+    | undefined;
+  const codeBlocks = $derived.by(() => {
+    const text = linkLayer.text;
+    if (codeBlocksMemo?.text !== text) {
+      codeBlocksMemo = {
+        text,
+        blocks: codeBlockRanges(text).map((range) => ({ range, text: codeBlockText(text, range) })),
+      };
+    }
+    return codeBlocksMemo.blocks;
+  });
+
   // The imperative API the SourceView hands us once mounted: scroll-to-line plus
   // the host element whose annotation slots we project comments into.
   let api = $state<SourceViewApi | undefined>();
   const host = $derived(api?.host);
+
+  // The code block the reviewer is hovering, with its top-right anchor in .diff-plan
+  // content coordinates — drives the copy button (EXC-692). Undefined when the pointer
+  // is over no block. The effect below tracks it from pointer moves over the scroller.
+  let hoveredCopy = $state<
+    { range: CodeBlockRange; text: string; top: number; left: number } | undefined
+  >();
+
+  // Track the hovered code block from pointer moves over the scroll container (the
+  // rows live in the SourceView's shadow root; codeCopy.ts does the hit-test + the
+  // content-coordinate anchor). rAF-throttled, and the anchor is recomputed only when
+  // the hovered block changes (it is the block's own top-right, independent of where
+  // in the block the pointer sits), so hovering does not thrash layout. The button is
+  // a light-DOM child of .diff-plan, so it scrolls with the rows for free.
+  $effect(() => {
+    const scroller = scrollEl;
+    const el = host;
+    const blocks = codeBlocks;
+    if (scroller == null || el == null || blocks.length === 0) {
+      hoveredCopy = undefined;
+      return;
+    }
+    const ranges = blocks.map((b) => b.range);
+    let raf = 0;
+    let lastX = 0;
+    let lastY = 0;
+    const update = () => {
+      raf = 0;
+      const range = codeBlockAtPoint(el, ranges, lastX, lastY);
+      if (range == null) {
+        hoveredCopy = undefined;
+        return;
+      }
+      if (hoveredCopy?.range.start === range.start) return; // same block — keep the anchor
+      const anchor = copyAnchor(el, scroller, range);
+      const block = blocks.find((b) => b.range.start === range.start);
+      hoveredCopy =
+        anchor == null || block == null
+          ? undefined
+          : { range, text: block.text, top: anchor.top, left: anchor.left };
+    };
+    const onMove = (event: PointerEvent) => {
+      lastX = event.clientX;
+      lastY = event.clientY;
+      if (raf === 0) raf = requestAnimationFrame(update);
+    };
+    const onLeave = () => {
+      cancelAnimationFrame(raf);
+      raf = 0;
+      hoveredCopy = undefined;
+    };
+    scroller.addEventListener("pointermove", onMove);
+    scroller.addEventListener("pointerleave", onLeave);
+    return () => {
+      cancelAnimationFrame(raf);
+      scroller.removeEventListener("pointermove", onMove);
+      scroller.removeEventListener("pointerleave", onLeave);
+    };
+  });
 
   // Gates the live `?heading=` mirror until the deep-link restore has consumed any
   // incoming `?heading=`. Without it, the mirror effect (activeLine starts null)
@@ -534,6 +615,16 @@
            [data-line] rows) so the rails scroll with the rows; it is decorative
            (pointer-events: none). -->
       <div use:bracketLayer={{ host, spans: bracketSpans }}></div>
+      <!-- The per-code-block copy button (EXC-692): shown at the top-right of the
+           fenced block the reviewer is hovering (tracked above). Keyed on the block
+           so moving to another block resets its copied/checkmark state. It layers over
+           the .diff-plan scroll content, so like the bracket rails it scrolls with the
+           rows. -->
+      {#if hoveredCopy}
+        {#key hoveredCopy.range.start}
+          <CodeCopyButton text={hoveredCopy.text} top={hoveredCopy.top} left={hoveredCopy.left} />
+        {/key}
+      {/if}
       <!-- Saved comments and the open composer are projected into the library's
            per-line annotation rows (slotInto), so they render inline between the
            code lines at their anchor line rather than floating over them. One node

@@ -1,0 +1,215 @@
+import "../../../test-setup.ts";
+import { describe, expect, test } from "bun:test";
+import { codeBlockRanges, codeBlockText, tagCodeBlockRows } from "./codeBlocks.ts";
+
+// codeBlockRanges classifies which lines of a rendered plan belong to a fenced
+// code block, so the source view can decorate those rows as a panel (EXC-692).
+// Ranges are 1-based and inclusive, spanning the opening fence line through the
+// closing fence line, matching the simple fence-toggle semantics buildLinkLayer
+// (links.ts) already uses so the two layers agree on what "code" is.
+describe("codeBlockRanges", () => {
+  test("returns no ranges when there is no fence", () => {
+    expect(codeBlockRanges("just prose\nmore prose\n")).toEqual([]);
+  });
+
+  test("spans one block from its opening fence to its closing fence", () => {
+    const text = ["intro", "```ts", "const x = 1;", "```", "outro"].join("\n");
+    // opening fence is line 2, closing fence is line 4 (both inclusive).
+    expect(codeBlockRanges(text)).toEqual([{ start: 2, end: 4 }]);
+  });
+
+  test("returns a separate range per block", () => {
+    const text = ["```ts", "a", "```", "prose", "```sh", "b", "```"].join("\n");
+    expect(codeBlockRanges(text)).toEqual([
+      { start: 1, end: 3 },
+      { start: 5, end: 7 },
+    ]);
+  });
+
+  test("treats tilde fences the same as backtick fences", () => {
+    const text = ["~~~python", "x = 1", "~~~"].join("\n");
+    expect(codeBlockRanges(text)).toEqual([{ start: 1, end: 3 }]);
+  });
+
+  test("runs an unclosed fence to the end of the document", () => {
+    const text = ["prose", "```ts", "still code", "and code"].join("\n");
+    expect(codeBlockRanges(text)).toEqual([{ start: 2, end: 4 }]);
+  });
+
+  test("detects a fence indented up to three spaces", () => {
+    const text = ["   ```ts", "code", "   ```"].join("\n");
+    expect(codeBlockRanges(text)).toEqual([{ start: 1, end: 3 }]);
+  });
+
+  test("toggles on every fence line (matching the link layer)", () => {
+    // A ``` inside a longer ```` fence still toggles, mirroring buildLinkLayer's
+    // stateless fence detection: each fence line flips the in-code state.
+    const text = ["````", "```", "````", "```"].join("\n");
+    expect(codeBlockRanges(text)).toEqual([
+      { start: 1, end: 2 },
+      { start: 3, end: 4 },
+    ]);
+  });
+});
+
+describe("codeBlockText", () => {
+  test("returns the code between the fences, fences stripped", () => {
+    const text = ["intro", "```ts", "const x = 1;", "return x;", "```", "outro"].join("\n");
+    expect(codeBlockText(text, { start: 2, end: 5 })).toBe("const x = 1;\nreturn x;");
+  });
+
+  test("preserves interior blank lines and indentation", () => {
+    const text = ["```py", "def f():", "", "    return 1", "```"].join("\n");
+    expect(codeBlockText(text, { start: 1, end: 5 })).toBe("def f():\n\n    return 1");
+  });
+
+  test("handles a single code line", () => {
+    const text = ["```", "solo", "```"].join("\n");
+    expect(codeBlockText(text, { start: 1, end: 3 })).toBe("solo");
+  });
+
+  test("returns empty for an empty fenced block", () => {
+    const text = ["```ts", "```"].join("\n");
+    expect(codeBlockText(text, { start: 1, end: 2 })).toBe("");
+  });
+
+  test("keeps the last line when the fence is unclosed at EOF", () => {
+    const text = ["```ts", "still code"].join("\n");
+    expect(codeBlockText(text, { start: 1, end: 2 })).toBe("still code");
+  });
+});
+
+// A fixture mirroring the @pierre/diffs shadow DOM: a gutter of [data-column-number]
+// cells and a content column of [data-line] rows, one per source line.
+function buildContent(lineCount: number): HTMLElement {
+  const root = document.createElement("div");
+  const gutter = document.createElement("div");
+  gutter.setAttribute("data-gutter", "");
+  const content = document.createElement("div");
+  content.setAttribute("data-content", "");
+  for (let n = 1; n <= lineCount; n++) {
+    const num = document.createElement("div");
+    num.setAttribute("data-column-number", String(n));
+    gutter.appendChild(num);
+    const row = document.createElement("div");
+    row.setAttribute("data-line", String(n));
+    content.appendChild(row);
+  }
+  root.append(gutter, content);
+  return root;
+}
+
+function rowAttrs(root: HTMLElement, line: number) {
+  const row = root.querySelector(`[data-content] > [data-line="${line}"]`);
+  return {
+    code: row?.hasAttribute("data-code-line") ?? false,
+    start: row?.hasAttribute("data-code-start") ?? false,
+    end: row?.hasAttribute("data-code-end") ?? false,
+  };
+}
+
+describe("tagCodeBlockRows", () => {
+  test("marks every content line in a block, and its first/last", () => {
+    const root = buildContent(5);
+    tagCodeBlockRows(root, [{ start: 2, end: 4 }]);
+    expect(rowAttrs(root, 1)).toEqual({ code: false, start: false, end: false });
+    expect(rowAttrs(root, 2)).toEqual({ code: true, start: true, end: false });
+    expect(rowAttrs(root, 3)).toEqual({ code: true, start: false, end: false });
+    expect(rowAttrs(root, 4)).toEqual({ code: true, start: false, end: true });
+    expect(rowAttrs(root, 5)).toEqual({ code: false, start: false, end: false });
+  });
+
+  test("never tags the gutter number cells", () => {
+    const root = buildContent(3);
+    tagCodeBlockRows(root, [{ start: 1, end: 3 }]);
+    const numbers = root.querySelectorAll("[data-column-number]");
+    for (const n of numbers) expect(n.hasAttribute("data-code-line")).toBe(false);
+  });
+
+  test("clears stale tags when the ranges change", () => {
+    const root = buildContent(5);
+    tagCodeBlockRows(root, [{ start: 1, end: 2 }]);
+    // Re-tag with a different block: lines 1-2 must be cleared, 4-5 marked.
+    tagCodeBlockRows(root, [{ start: 4, end: 5 }]);
+    expect(rowAttrs(root, 1)).toEqual({ code: false, start: false, end: false });
+    expect(rowAttrs(root, 2)).toEqual({ code: false, start: false, end: false });
+    expect(rowAttrs(root, 4)).toEqual({ code: true, start: true, end: false });
+    expect(rowAttrs(root, 5)).toEqual({ code: true, start: false, end: true });
+  });
+});
+
+// Fills a content row with shiki-shaped token spans (one <span> per token, no
+// classes — matching how @pierre/diffs renders a highlighted line). Used to
+// exercise the token-level tagging that lets the panel CSS nudge individual
+// glyphs to the row's vertical center.
+function setRowTokens(root: HTMLElement, line: number, tokens: string[]): void {
+  const row = root.querySelector(`[data-content] > [data-line="${line}"]`);
+  if (row == null) throw new Error(`no row ${line}`);
+  for (const t of tokens) {
+    const span = document.createElement("span");
+    span.textContent = t;
+    row.appendChild(span);
+  }
+}
+
+// The fence line carries two distinct tokens once the theme splits their colors:
+// the backtick/tilde markers and, on the opening line, the language tag. shiki
+// attaches no classes, so tagCodeBlockRows marks the language token (data-code-lang)
+// and the closing fence's markers (data-code-fence) imperatively, and the panel CSS
+// shifts each to the row's vertical center (EXC-692). The opening markers are left
+// untouched — they already sit right once the row is top-padded.
+describe("tagCodeBlockRows token tagging", () => {
+  const langOf = (root: HTMLElement, line: number) =>
+    root.querySelector(`[data-content] > [data-line="${line}"] [data-code-lang]`);
+  const fenceOf = (root: HTMLElement, line: number) =>
+    root.querySelector(`[data-content] > [data-line="${line}"] [data-code-fence]`);
+
+  test("tags the opening language token and the closing fence markers", () => {
+    const root = buildContent(3);
+    setRowTokens(root, 1, ["```", "ts"]);
+    setRowTokens(root, 2, ["const x = 1;"]);
+    setRowTokens(root, 3, ["```"]);
+    tagCodeBlockRows(root, [{ start: 1, end: 3 }]);
+
+    expect(langOf(root, 1)?.textContent).toBe("ts");
+    // The opening markers stay put; only the closing markers are tagged.
+    expect(fenceOf(root, 1)).toBeNull();
+    expect(fenceOf(root, 3)?.textContent).toBe("```");
+    // The code line's own token is never mistaken for a language or fence.
+    expect(langOf(root, 2)).toBeNull();
+    expect(fenceOf(root, 2)).toBeNull();
+  });
+
+  test("tags a tilde-fence language the same way", () => {
+    const root = buildContent(3);
+    setRowTokens(root, 1, ["~~~", "python"]);
+    setRowTokens(root, 2, ["x = 1"]);
+    setRowTokens(root, 3, ["~~~"]);
+    tagCodeBlockRows(root, [{ start: 1, end: 3 }]);
+    expect(langOf(root, 1)?.textContent).toBe("python");
+    expect(fenceOf(root, 3)?.textContent).toBe("~~~");
+  });
+
+  test("tags no language when the opening fence has none", () => {
+    const root = buildContent(2);
+    setRowTokens(root, 1, ["```"]);
+    setRowTokens(root, 2, ["```"]);
+    tagCodeBlockRows(root, [{ start: 1, end: 2 }]);
+    expect(root.querySelector("[data-code-lang]")).toBeNull();
+    // The closing markers are still tagged.
+    expect(fenceOf(root, 2)?.textContent).toBe("```");
+  });
+
+  test("clears stale token tags when the block goes away", () => {
+    const root = buildContent(3);
+    setRowTokens(root, 1, ["```", "ts"]);
+    setRowTokens(root, 3, ["```"]);
+    tagCodeBlockRows(root, [{ start: 1, end: 3 }]);
+    expect(root.querySelector("[data-code-lang]")).not.toBeNull();
+    expect(root.querySelector("[data-code-fence]")).not.toBeNull();
+
+    tagCodeBlockRows(root, []);
+    expect(root.querySelector("[data-code-lang]")).toBeNull();
+    expect(root.querySelector("[data-code-fence]")).toBeNull();
+  });
+});

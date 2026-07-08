@@ -11,6 +11,7 @@
   import chevronDown from "../icons/chevron-down.svg?raw";
   import circleQuestionMark from "../icons/circle-question-mark.svg?raw";
   import command from "../icons/command.svg?raw";
+  import copy from "../icons/copy.svg?raw";
   import cornerDownLeft from "../icons/corner-down-left.svg?raw";
   import cornerUpLeft from "../icons/corner-up-left.svg?raw";
   import unplug from "../icons/unplug.svg?raw";
@@ -23,6 +24,7 @@
     "chevron-down": chevronDown,
     "circle-question-mark": circleQuestionMark,
     command,
+    copy,
     "corner-down-left": cornerDownLeft,
     "corner-up-left": cornerUpLeft,
     unplug,

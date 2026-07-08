@@ -57,30 +57,38 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
 
   // The band is one continuous rectangle, so only its OUTER corners round: the
   // gutter column's left edge (top + bottom) and the content column's right edge.
+  // Each assertion is scoped to the band's own selected line cell ([data-column-
+  // number]/[data-line] + [data-selected-line]) so it pins the SELECTION band, not
+  // the separately-rounded fenced code-block panel (EXC-692) in the same sheet.
   const OUTER = [
-    { column: "data-gutter", corner: "border-top-left-radius" },
-    { column: "data-gutter", corner: "border-bottom-left-radius" },
-    { column: "data-content", corner: "border-top-right-radius" },
-    { column: "data-content", corner: "border-bottom-right-radius" },
+    { column: "data-gutter", cell: "data-column-number", corner: "border-top-left-radius" },
+    { column: "data-gutter", cell: "data-column-number", corner: "border-bottom-left-radius" },
+    { column: "data-content", cell: "data-line", corner: "border-top-right-radius" },
+    { column: "data-content", cell: "data-line", corner: "border-bottom-right-radius" },
   ] as const;
-  for (const { column, corner } of OUTER) {
+  for (const { column, cell, corner } of OUTER) {
     test(`rounds the ${column} column's ${corner} with var(--radius)`, () => {
-      const rule = new RegExp(`\\[${column}\\][^{]*\\{[^}]*${corner}:\\s*${RADIUS}`);
+      const rule = new RegExp(
+        `\\[${column}\\][^{]*\\[${cell}\\]\\[data-selected-line\\][^{]*\\{[^}]*${corner}:\\s*${RADIUS}`,
+      );
       expect(overrideDecls).toMatch(rule);
     });
   }
 
   // The inner corners — where the two columns meet — stay square so the band
-  // reads as one shape, not two abutting rectangles.
+  // reads as one shape, not two abutting rectangles. Scoped to the band's selected
+  // line cell so the code-block panel's own left-corner rounding does not count.
   const INNER = [
-    { column: "data-gutter", corner: "border-top-right-radius" },
-    { column: "data-gutter", corner: "border-bottom-right-radius" },
-    { column: "data-content", corner: "border-top-left-radius" },
-    { column: "data-content", corner: "border-bottom-left-radius" },
+    { column: "data-gutter", cell: "data-column-number", corner: "border-top-right-radius" },
+    { column: "data-gutter", cell: "data-column-number", corner: "border-bottom-right-radius" },
+    { column: "data-content", cell: "data-line", corner: "border-top-left-radius" },
+    { column: "data-content", cell: "data-line", corner: "border-bottom-left-radius" },
   ] as const;
-  for (const { column, corner } of INNER) {
+  for (const { column, cell, corner } of INNER) {
     test(`leaves the ${column} column's ${corner} square (the seamless join)`, () => {
-      const rule = new RegExp(`\\[${column}\\][^{]*\\{[^}]*${corner}`);
+      const rule = new RegExp(
+        `\\[${column}\\][^{]*\\[${cell}\\]\\[data-selected-line\\][^{]*\\{[^}]*${corner}`,
+      );
       expect(overrideDecls).not.toMatch(rule);
     });
   }
@@ -121,5 +129,87 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
     expect(overrideDecls).toMatch(
       /\[data-content\]\s*>\s*\[data-line-annotation\]\[data-selected-line\][^{]*\{[^}]*background-color:\s*transparent/,
     );
+  });
+});
+
+// EXC-692: fenced code blocks in the plan view read as a darker, rounded, slightly-
+// indented panel in the content column. caret tags the shadow-DOM rows (data-code-
+// line / -start / -end; see codeBlocks.ts) and this override sheet styles them. This
+// suite pins the panel contract structurally so a drift fails the unit suite.
+describe("the fenced code-block panel (EXC-692)", () => {
+  test("fills code-line rows one step darker than the diff surface, scheme-correct", () => {
+    // color-mix toward --ink carries correct depth in both schemes, matching the
+    // layered-surface idiom; --paper-sunk is the diff surface the rows sit on.
+    expect(overrideDecls).toMatch(
+      /\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]:not\(\[data-selected-line\]\)\s*\{[^}]*background-color:\s*color-mix\(in lab, var\(--paper-sunk\), var\(--ink\) \d+%\)/,
+    );
+  });
+
+  test("makes the panel a contained card — inset both sides and width-capped", () => {
+    const body =
+      overrideDecls.match(
+        /\[data-line\]\[data-code-line\]:not\(\[data-selected-line\]\)\s*\{[^}]*\}/,
+      )?.[0] ?? "";
+    expect(body).toContain("margin-inline-start:");
+    expect(body).toContain("margin-inline-end:");
+    expect(body).toContain("max-width:");
+    // The code keeps the library's default 2ch inset — no extra indent past it.
+    expect(body).toMatch(/padding-inline-start:\s*2ch\b/);
+  });
+
+  test("pads only the outer edges of the fence lines (they hug the code within)", () => {
+    const startBody =
+      overrideDecls.match(/\[data-code-start\]:not\(\[data-selected-line\]\)\s*\{[^}]*\}/)?.[0] ??
+      "";
+    const endBody =
+      overrideDecls.match(/\[data-code-end\]:not\(\[data-selected-line\]\)\s*\{[^}]*\}/)?.[0] ?? "";
+    // Opening fence: space above only; closing fence: space below only — so the
+    // fence lines hug the code and there's no inner gap.
+    expect(startBody).toContain("padding-block-start:");
+    expect(startBody).not.toMatch(/padding-block-end:|padding-block:/);
+    expect(endBody).toContain("padding-block-end:");
+    expect(endBody).not.toMatch(/padding-block-start:|padding-block:/);
+  });
+
+  test("rounds only the block's first (top) and last (bottom) lines with var(--radius)", () => {
+    expect(overrideDecls).toMatch(
+      /\[data-line\]\[data-code-start\]:not\(\[data-selected-line\]\)\s*\{[^}]*border-top-left-radius:\s*var\(--radius\)[^}]*border-top-right-radius:\s*var\(--radius\)/,
+    );
+    expect(overrideDecls).toMatch(
+      /\[data-line\]\[data-code-end\]:not\(\[data-selected-line\]\)\s*\{[^}]*border-bottom-left-radius:\s*var\(--radius\)[^}]*border-bottom-right-radius:\s*var\(--radius\)/,
+    );
+  });
+
+  test("centers the closing fence markers and the language tag on their rows", () => {
+    // shiki emits no classes, so codeBlocks.ts tags the two fence-line tokens and
+    // this sheet shifts each with position: relative (moves the glyph, not the
+    // panel background). A fence marker glyph sits high, so the closing markers move
+    // DOWN (positive top); the language is a baseline word its row's top padding
+    // pushed low, so it moves UP (negative top).
+    const fenceRule =
+      overrideDecls.match(/\[data-code-end\][^{]*\[data-code-fence\]\s*\{[^}]*\}/)?.[0] ?? "";
+    const langRule =
+      overrideDecls.match(/\[data-code-start\][^{]*\[data-code-lang\]\s*\{[^}]*\}/)?.[0] ?? "";
+    expect(fenceRule).toContain("position: relative");
+    expect(fenceRule).toMatch(/top:\s*0?\.\d+em/); // positive → down
+    expect(langRule).toContain("position: relative");
+    expect(langRule).toMatch(/top:\s*-0?\.\d+em/); // negative → up
+  });
+
+  test("yields a selected code line to the amber band (every rule guards on selection)", () => {
+    // CARET_OVERRIDES is adopted after the core sheet, so without the
+    // :not([data-selected-line]) guard the panel fill would win over the library's
+    // selection highlight. Every code-block rule — the three row rules plus the two
+    // token-centering rules — must carry it so the whole panel treatment yields.
+    const codeRules = overrideDecls.match(/\[data-code-(?:line|start|end)\][^{]*\{/g) ?? [];
+    expect(codeRules.length).toBe(5);
+    for (const sel of codeRules) expect(sel).toContain(":not([data-selected-line])");
+  });
+
+  test("declares the code-block rules before the selection band", () => {
+    const codeIdx = overrideDecls.indexOf("[data-code-line]");
+    const bandIdx = overrideDecls.indexOf("[data-line][data-selected-line]");
+    expect(codeIdx).toBeGreaterThan(-1);
+    expect(bandIdx).toBeGreaterThan(codeIdx);
   });
 });

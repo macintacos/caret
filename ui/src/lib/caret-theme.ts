@@ -127,6 +127,19 @@ function build(name: string, type: "light" | "dark", p: Palette): ThemeRegistrat
       { scope: ["markup.bold"], settings: { fontStyle: "bold" } },
       { scope: ["markup.italic"], settings: { fontStyle: "italic" } },
       { scope: ["markup.inline.raw", "markup.fenced_code"], settings: { foreground: p.entity } },
+      // EXC-692: inside a fenced block, subdue the ``` / ~~~ fence markers and make
+      // the language info-string prominent, so a code block reads as its own element
+      // in the plan view. Both selectors are more specific than the bare `punctuation`
+      // and `markup.fenced_code` rules above, so they win only on the fence line and
+      // leave the code body (and other markdown punctuation) untouched.
+      {
+        scope: ["markup.fenced_code.block.markdown punctuation.definition.markdown"],
+        settings: { foreground: p.comment },
+      },
+      {
+        scope: ["fenced_code.block.language"],
+        settings: { foreground: p.keyword, fontStyle: "bold" },
+      },
       // Diff (deleted lines reuse the burnt-amber accent — the palette has no red)
       {
         scope: ["markup.deleted", "meta.diff.header.from-file", "punctuation.definition.deleted"],

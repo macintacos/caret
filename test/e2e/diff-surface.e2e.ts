@@ -623,6 +623,143 @@ test("a drag selection renders the selected lines in caret amber, not library-bl
   expect(axes.number as number).toBeGreaterThan(2);
 });
 
+// A plan with a fenced code block: heading (1), blank (2), prose (3), blank (4),
+// opening fence (5), two code lines (6–7), closing fence (8), blank (9), prose (10).
+const CODE_PLAN = `# Code Plan
+
+Some intro prose here.
+
+\`\`\`ts
+const x: number = compute();
+return x + 1;
+\`\`\`
+
+Closing prose after the block.
+`;
+
+test("renders a fenced code block as a tagged, darker panel on its own rows (EXC-692)", async ({
+  daemon,
+  page,
+}) => {
+  // The block reads as its own element: caret tags the content rows inside the
+  // fence (data-code-line, plus -start/-end on the first/last) and the panel CSS
+  // fills them one step darker than the diff surface. This proves the shadow-DOM
+  // tagging + the fill resolve end to end in the real Chromium build, not just in
+  // the static stylesheet — and that the block's line span (5–8) is respected while
+  // prose rows are left alone.
+  await daemon.seed({ plan: CODE_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("Some intro prose here.")).toBeVisible();
+
+  const readPanel = () =>
+    page.evaluate(() => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+      const row = (n: number) =>
+        (sh?.querySelector(`[data-content] > [data-line="${n}"]`) as HTMLElement | null) ?? null;
+      const has = (n: number, a: string) => row(n)?.hasAttribute(a) ?? false;
+      const bg = (n: number) => {
+        const el = row(n);
+        return el ? getComputedStyle(el).backgroundColor : null;
+      };
+      const width = (n: number) => row(n)?.getBoundingClientRect().width ?? null;
+      const tokenIn = (n: number, attr: string) =>
+        (sh?.querySelector(
+          `[data-content] > [data-line="${n}"] [${attr}]`,
+        ) as HTMLElement | null) ?? null;
+      const lang = tokenIn(5, "data-code-lang"); // opening fence "```ts" → language token
+      const fence = tokenIn(8, "data-code-fence"); // closing fence "```" → markers
+      return {
+        codeLines: [5, 6, 7, 8].map((n) => has(n, "data-code-line")),
+        start: has(5, "data-code-start"),
+        end: has(8, "data-code-end"),
+        interiorStartEnd: has(6, "data-code-start") || has(7, "data-code-end"),
+        proseIsCode: has(3, "data-code-line"),
+        codeBg: bg(6),
+        proseBg: bg(3),
+        codeWidth: width(6),
+        proseWidth: width(3),
+        langText: lang?.textContent ?? null,
+        langTop: lang ? getComputedStyle(lang).top : null,
+        fenceText: fence?.textContent ?? null,
+        fenceTop: fence ? getComputedStyle(fence).top : null,
+      };
+    });
+
+  // The decoration lands after the library paints and the fenced-code rehighlight
+  // repaints the rows, so poll until every code row is tagged and the fence line's
+  // language token has been split out (it only exists once the fence is tokenized).
+  await expect
+    .poll(async () => {
+      const p = await readPanel();
+      return p.codeLines.every(Boolean) && p.langText === "ts";
+    })
+    .toBe(true);
+
+  const panel = await readPanel();
+  // Only the block's boundary rows carry the corner markers; prose is untouched.
+  expect(panel.start).toBe(true);
+  expect(panel.end).toBe(true);
+  expect(panel.interiorStartEnd).toBe(false);
+  expect(panel.proseIsCode).toBe(false);
+  // The panel fill resolved darker than a prose row's background, end to end.
+  expect(panel.codeBg).not.toBeNull();
+  expect(panel.proseBg).not.toBeNull();
+  expect(panel.codeBg).not.toBe(panel.proseBg);
+  // The panel is a contained card: its width is capped (~720px) and, on this wide
+  // viewport, measurably narrower than a full-width prose row.
+  expect(panel.codeWidth).not.toBeNull();
+  expect(panel.proseWidth).not.toBeNull();
+  expect(panel.codeWidth as number).toBeLessThanOrEqual(730);
+  expect(panel.codeWidth as number).toBeLessThan(panel.proseWidth as number);
+  // The fence-line tokens are shifted toward their row's vertical center (EXC-692):
+  // the language tag ("ts") moves up (negative used `top`), the closing markers
+  // ("```") move down (positive used `top`). position: relative resolves `top` to a
+  // px length; a static glyph would report `auto`.
+  expect(panel.langText).toBe("ts");
+  expect(Number.parseFloat(panel.langTop as string)).toBeLessThan(0);
+  expect(panel.fenceText?.trim()).toBe("```");
+  expect(Number.parseFloat(panel.fenceTop as string)).toBeGreaterThan(0);
+});
+
+test("hovering a code block reveals a copy button that copies the code (EXC-692)", async ({
+  daemon,
+  page,
+}) => {
+  // The copy affordance: hovering a fenced block shows a button at its top-right;
+  // clicking it writes the block's code (fences stripped) to the clipboard and
+  // confirms with a checkmark that reverts. Proves the hover hit-test, the clipboard
+  // write, and the icon swap resolve end to end in the real browser.
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await daemon.seed({ plan: CODE_PLAN });
+  await page.goto("/");
+  await expect(page.getByText("Some intro prose here.")).toBeVisible();
+
+  const copy = page.getByRole("button", { name: "Copy code" });
+  // No button until the pointer is over the block.
+  await expect(copy).toHaveCount(0);
+
+  // Hover the center of an interior code line (line 6) to reveal the button.
+  const point = await page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+    const row = sh?.querySelector('[data-content] > [data-line="6"]') as HTMLElement | null;
+    const r = row?.getBoundingClientRect();
+    return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
+  });
+  expect(point).not.toBeNull();
+  await page.mouse.move((point as { x: number }).x, (point as { y: number }).y);
+  await expect(copy).toBeVisible();
+
+  await copy.click();
+  // Confirmation: the label/glyph swaps to the checkmark…
+  await expect(page.getByRole("button", { name: "Copied" })).toBeVisible();
+  // …the clipboard holds the block's code with the fence lines stripped…
+  const clip = await page.evaluate(() => navigator.clipboard.readText());
+  expect(clip).toBe("const x: number = compute();\nreturn x + 1;");
+  // …and it reverts to the copy glyph.
+  await expect(page.getByRole("button", { name: "Copy code" })).toBeVisible({ timeout: 3000 });
+});
+
 test("numeric chrome renders with tabular figures end to end", async ({ daemon, page }) => {
   // Tabular figures keep columns of digits aligned. The bridge sets
   // --diffs-font-features to the 'tnum' tag, which the library feeds into

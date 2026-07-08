@@ -45,6 +45,70 @@ const CARET_OVERRIDES = `
     outline-offset: 2px;
   }
 
+  /* EXC-692: a fenced code block reads as a slightly-indented, darker, rounded
+     panel in the content column. The library paints no per-line code marker, so
+     caret tags each content line inside a fence with data-code-line, plus
+     data-code-start / -end on the block's first / last line (see codeBlocks.ts,
+     re-applied after every repaint by SourceView). Line numbers stay in the gutter
+     — the panel is the content column only. The fill mixes one step toward --ink
+     off the diff surface (--paper-sunk) with the same in-lab color-mix the layered
+     surfaces use, so it carries correct depth in both schemes (a sunk panel on
+     light paper, a raised one on dark). The panel is a contained card: inset from
+     the gutter (margin-inline-start) and from the right (margin-inline-end), and
+     capped at a comfortable reading width (max-width) so it never stretches full-
+     bleed across a wide viewport — when the content column is narrower than the cap,
+     the right margin still keeps it off the edge. The code keeps the library's
+     default 2ch inset within the card (no extra indent). Only the OUTER edges of the
+     block are padded — the opening fence's top and the closing fence's bottom — so
+     the fence lines hug the code (no gap below the opening markers or above the
+     closing markers). The closing fence's bottom pad is smaller than the opening
+     fence's top pad on purpose: a fence marker glyph sits high in its line box (a
+     digit at the baseline), so an equal pad would leave a visibly larger gap below
+     the closing markers; the smaller value evens the top and bottom margins by eye.
+     This is a glyph metric, not a gutter thing, so the gutter stays as-is. The
+     :not([data-selected-line]) guard yields a selected code line to the amber
+     band below: CARET_OVERRIDES is adopted after the core sheet, so without it this
+     fill would win over the library's selection highlight. Rounding hangs off the
+     block's first line (top) and last line (bottom), tagged explicitly rather than
+     via :not(~) since a plan may hold several blocks. */
+  [data-content] > [data-line][data-code-line]:not([data-selected-line]) {
+    background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
+    margin-inline-start: 0.75rem;
+    margin-inline-end: 0.75rem;
+    max-width: 720px;
+    padding-inline-start: 2ch;
+    padding-inline-end: 0.75rem;
+  }
+  [data-content] > [data-line][data-code-start]:not([data-selected-line]) {
+    border-top-left-radius: var(--radius);
+    border-top-right-radius: var(--radius);
+    padding-block-start: 0.5rem;
+  }
+  [data-content] > [data-line][data-code-end]:not([data-selected-line]) {
+    border-bottom-left-radius: var(--radius);
+    border-bottom-right-radius: var(--radius);
+    padding-block-end: 0.1rem;
+  }
+  /* EXC-692 glyph centering. A fence marker glyph sits high in its line box, so it
+     reads as too high when the row is not top-padded. The opening markers already
+     look centered (their row carries padding-block-start), so they are left alone;
+     only the closing markers and the opening language tag are shifted to their row's
+     vertical center. shiki attaches no classes, so codeBlocks.ts tags the two tokens
+     (data-code-fence on the closing markers, data-code-lang on the language) and each
+     is shifted with position: relative, which moves the glyph without touching the
+     panel background or the row layout. The closing markers move down; the language,
+     a baseline word that its row's top padding has pushed low, moves up. Both offsets
+     are em-relative eyeball values — the two knobs to tune if either token looks off
+     center. */
+  [data-content] > [data-line][data-code-end]:not([data-selected-line]) [data-code-fence] {
+    position: relative;
+    top: 0.2em;
+  }
+  [data-content] > [data-line][data-code-start]:not([data-selected-line]) [data-code-lang] {
+    position: relative;
+    top: -0.12em;
+  }
+
   /* EXC-664: the drag-to-comment selection reads as ONE continuous amber band
      spanning the gutter and content columns, with a tighter corner than before
      (--radius, down from --radius-lg). The amber is the library's per-cell

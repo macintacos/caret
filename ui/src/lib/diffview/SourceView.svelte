@@ -11,6 +11,7 @@
   import { type LinkSpanMap, openLinkInNewTab } from "./links.ts";
   import { type SourceViewGutter, type SourceViewLibOptions, toFileOptions } from "./options.ts";
   import { scrollToLine } from "./scroll.ts";
+  import { type CodeBlockRange, codeBlockRanges, tagCodeBlockRows } from "./codeBlocks.ts";
   import { preloadFenceLanguages, scanFenceLanguages } from "./languages.ts";
   import { registerCaretDiffThemes } from "./theme.ts";
   import type {
@@ -273,6 +274,43 @@
     lifecycle.select(
       selectedRange == null ? null : { start: selectedRange.startLine, end: selectedRange.endLine },
     );
+  });
+
+  // Fenced-code-block panel decoration (EXC-692). The library paints no per-line
+  // code marker, so caret tags the shadow-DOM content rows (data-code-line / -start
+  // / -end) that the panel CSS in coreStyles.ts styles. The rows are library-owned
+  // and repaint (async highlight, fenced-code rehighlight, content updates), so this
+  // mirrors bracket.ts's self-contained-observer shape: tag once, then re-tag on any
+  // shadow-content change, rAF-coalesced. Only childList is observed, and tagging
+  // writes attributes (not nodes), so it can never re-trigger itself. Re-runs when
+  // the ranges change (new content) or the container mounts.
+  // Memoize the ranges on the rendered text so an unchanged poll tick yields the
+  // SAME array reference — the parent passes a fresh `doc` literal each render, and
+  // without this the observer effect below would re-arm (disconnect + reconnect the
+  // MutationObserver) every tick. Mirrors DiffPlanView's linkLayer/headings memo.
+  let rangesMemo: { text: string; ranges: CodeBlockRange[] } | undefined;
+  const codeRanges = $derived.by(() => {
+    if (rangesMemo?.text !== doc.text) {
+      rangesMemo = { text: doc.text, ranges: codeBlockRanges(doc.text) };
+    }
+    return rangesMemo.ranges;
+  });
+  $effect(() => {
+    const root = container?.shadowRoot;
+    if (root == null) return;
+    const ranges = codeRanges;
+    let raf = 0;
+    const tag = () => tagCodeBlockRows(root, ranges);
+    tag();
+    const observer = new MutationObserver(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(tag);
+    });
+    observer.observe(root, { childList: true, subtree: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+    };
   });
 </script>
 
