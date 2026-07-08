@@ -81,13 +81,6 @@
   --ok: #15803d;
   --danger: #b91c1c;
 
-  /* Rendered-plan decoration: the color of text that carries markdown formatting
-     (bold/italic/headings/inline code/links/markers), so "rendered" text stands
-     out from neutral prose. A cool cyan, deliberately distinct from the reserved
-     warm --accent so decorated text never reads as a primary action. Prose stays
-     --ink. --md-code-bg is the inline-code chip's fill. */
-  --md-decoration: #0e7490;
-  --md-code-bg: #0e74901a;
   --shadow-card: 0 1px 2px #0000000f, 0 8px 24px #00000014;
 
   /* Radius roles, shared by the shell chrome and the source-view surface so the
@@ -124,8 +117,6 @@
     --ok: #4ade80;
     --danger: #f87171;
 
-    --md-decoration: #67e8f9;
-    --md-code-bg: #67e8f92e;
     --shadow-card: 0 1px 2px #00000066, 0 10px 30px #00000080;
 
     color-scheme: dark;

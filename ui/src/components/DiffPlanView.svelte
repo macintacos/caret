@@ -544,17 +544,22 @@
   ]);
 </script>
 
-<!-- Per-line comment content for the rendered view: the saved-comment thread, the
-     open composer, and any scratch markers anchored at `line`. RenderedPlanView
-     renders this inline right after the matching row — the light-DOM counterpart to
-     the source view's slotInto projection. Authored here so it shares DiffPlanView's
-     commenting state and scoped styles. -->
-{#snippet renderedBelow(line: number)}
-  {@const thread = lineThreads.find((t) => t.line === line)}
-  {@const lineScratches = scratches.filter((s) => s.endLine === line && pending?.endLine !== line)}
-  {#if thread || pending?.endLine === line || lineScratches.length > 0}
+<!-- Per-block comment content for the rendered view: the saved-comment threads,
+     the open composer, and any scratch markers whose anchor line falls within the
+     block's source range [startLine, endLine]. RenderedPlanView renders this inline
+     right after the matching block — the light-DOM counterpart to the source view's
+     slotInto projection. Because a rendered block can cover several source lines
+     (a joined paragraph, a list), it matches by range and renders every thread in
+     it. Authored here so it shares DiffPlanView's commenting state and scoped styles. -->
+{#snippet renderedBelow(startLine: number, endLine: number)}
+  {@const threadsHere = lineThreads.filter((t) => t.line >= startLine && t.line <= endLine)}
+  {@const composerHere = pending != null && pending.endLine >= startLine && pending.endLine <= endLine}
+  {@const scratchesHere = scratches.filter(
+    (s) => s.endLine >= startLine && s.endLine <= endLine && pending?.endLine !== s.endLine,
+  )}
+  {#if threadsHere.length > 0 || composerHere || scratchesHere.length > 0}
     <div class="rendered-below">
-      {#if thread}
+      {#each threadsHere as thread (thread.line)}
         <SourceAnnotationThread
           annotations={thread.annotations}
           {focusedAnnotation}
@@ -562,8 +567,8 @@
           onEdit={onEditAnnotation}
           onDelete={onDeleteAnnotation}
         />
-      {/if}
-      {#if pending?.endLine === line}
+      {/each}
+      {#if pending != null && pending.endLine >= startLine && pending.endLine <= endLine}
         <SourceComposer
           startLine={pending.startLine}
           endLine={pending.endLine}
@@ -573,7 +578,7 @@
           onCancel={(text) => commenting.cancel(text)}
         />
       {/if}
-      {#each lineScratches as scratch (scratch.key)}
+      {#each scratchesHere as scratch (scratch.key)}
         <SourceScratchMarker text={scratch.text} onResume={() => resumeScratch(scratch.key)} />
       {/each}
     </div>

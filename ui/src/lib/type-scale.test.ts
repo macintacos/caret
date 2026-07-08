@@ -112,9 +112,11 @@ const EXEMPT: Record<string, string[]> = {
   // as one vocabulary, so their <h2> sits at the same display step above the scale.
   "ApproveConfirmDialog.svelte": ["1.35rem"],
   // The rendered plan is a *document* surface (EXC-693), not chrome: its heading
-  // hierarchy and inline-code step are em-relative on purpose, so they scale with
-  // the reader's base rather than snapping to the chrome's absolute --text-* steps.
-  "RenderedPlanView.svelte": ["1.7em", "1.4em", "1.2em", "1.05em", "0.9em"],
+  // hierarchy, table, inline-code and footnote steps are em-relative on purpose,
+  // so they scale with the reader's base rather than snapping to the chrome's
+  // absolute --text-* steps. (RenderedCode.svelte, the fenced-code panel, draws
+  // its size from the scale via var(--text-sm) and needs no exemption.)
+  "RenderedPlanView.svelte": ["1.4em", "1.25em", "1.1em", "1em", "0.95em", "0.9em", "0.85em"],
 };
 
 describe("chrome components reference the scale, not raw font-size literals", () => {
