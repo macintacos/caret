@@ -234,7 +234,15 @@ export async function runReviewViaCaret(
           const url = parseReviewUrl(stderrBuf);
           if (url) {
             urlSent = true;
-            onUrl(url);
+            // Best-effort: surfacing the URL must never crash or fail-safe-deny
+            // the review. This fires on the stderr `data` event while we're
+            // suspended at `await opts.run(...)`, so a throw here would escape the
+            // try/catch below as an uncaughtException rather than a deny.
+            try {
+              onUrl(url);
+            } catch {
+              // swallow — the review decision is what matters.
+            }
           }
         }
       : undefined;

@@ -249,6 +249,33 @@ test("runReviewViaCaret never calls onUrl when no review URL appears on stderr",
   expect(seen).toEqual([]);
 });
 
+test("runReviewViaCaret reassembles a URL split mid-URL across stderr chunks", async () => {
+  const url = "http://caret.localhost:42718/?review=midsplit";
+  const seen: string[] = [];
+  await runReviewViaCaret("{}", {
+    bin: "caret",
+    run: streamingRunner(`{"behavior":"allow"}`, [
+      "caret: review this plan at http://caret.localhost:42718/?rev",
+      "iew=midsplit\n",
+    ]),
+    onUrl: (u) => seen.push(u),
+  });
+  expect(seen).toEqual([url]);
+});
+
+test("runReviewViaCaret still returns the decision when onUrl throws (never crashes the review)", async () => {
+  const decision = await runReviewViaCaret("{}", {
+    bin: "caret",
+    run: streamingRunner(`{"behavior":"allow"}`, [
+      "caret: review this plan at http://caret.localhost:42718/?review=boom\n",
+    ]),
+    onUrl: () => {
+      throw new Error("context.metadata blew up");
+    },
+  });
+  expect(decision).toEqual({ behavior: "allow" });
+});
+
 // --- the assembled plugin: tool.execute end-to-end with a stubbed runner ---
 
 async function buildHooks(run: SpawnRunner) {
@@ -311,6 +338,16 @@ test("the review tool surfaces the pending review URL via context.metadata (EXC-
   const { context, titles } = ctxWithMetadata("plan");
   await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, context);
   expect(titles).toEqual([`Review this plan at ${url}`]);
+});
+
+test("the review tool does not crash when context.metadata is absent (SDK skew)", async () => {
+  const url = "http://caret.localhost:42718/?review=noguard";
+  const hooks = await buildHooks(
+    streamingRunner(`{"behavior":"allow"}`, [`caret: review this plan at ${url}\n`]),
+  );
+  // ctx() has no metadata method — the guard must skip the call, not throw.
+  const out = await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, ctx("plan"));
+  expect(String(out).toLowerCase()).toContain("approv");
 });
 
 test("the config hook restricts the tool to primary agents", async () => {
