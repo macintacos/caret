@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { formatPlanMarkdown } from "../../src/plan-markdown.ts";
-import { routeIncomingPlan } from "../../src/reviews.ts";
+import { newReviewId, routeIncomingPlan } from "../../src/reviews.ts";
 import { createStore, type Store } from "../../src/store.ts";
 import type { PlanInput, Review } from "../../src/types.ts";
 import { recordingLog } from "../support/recording-log.ts";
@@ -17,6 +17,17 @@ const input = (over: Partial<PlanInput> = {}): PlanInput => ({
   cwd: "/p",
   plan: "# Title\n\nbody",
   ...over,
+});
+
+test("newReviewId is short, URL-safe, and unique (EXC-691: keeps the review URL on one toast line)", () => {
+  const id = newReviewId();
+  // The review URL is `http://caret.localhost:42718/?review=${id}` (37-char
+  // prefix). Keeping the id short keeps that URL under OpenCode's ~54-col toast
+  // width, so it word-wraps whole onto one line and stays terminal-clickable.
+  expect(id.length).toBeLessThanOrEqual(16);
+  // base64url charset only — no chars that would break a terminal's URL match.
+  expect(id).toMatch(/^[A-Za-z0-9_-]+$/);
+  expect(newReviewId()).not.toBe(id);
 });
 
 // Mirror what the daemon's resolve handler does on each decision.

@@ -7,12 +7,21 @@
 // thread. planEpoch is the session's approval count, stamped on each new thread,
 // so a plan after an approval is provably a fresh thread.
 
-import { randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { type CaretLogger, noopLogger, shortId } from "./log.ts";
 import { writeCanonicalPlanFile } from "./plan-file.ts";
 import { formatPlanMarkdown } from "./plan-markdown.ts";
 import type { Store } from "./store.ts";
 import type { PlanInput, Review, RouteResult } from "./types.ts";
+
+/** A fresh, opaque review id. Short and URL-safe (base64url of 8 random bytes,
+ * ~11 chars, 64 bits) so the `?review=<id>` URL stays within OpenCode's ~54-col
+ * toast width and word-wraps whole onto one terminal-clickable line (EXC-691).
+ * Reviews are ephemeral and few-at-a-time, so 64 bits is ample against collision;
+ * the id is an opaque handle (store key + URL param), never format-validated. */
+export function newReviewId(): string {
+  return randomBytes(8).toString("base64url");
+}
 
 /** Derive a human title from the plan's first heading / non-empty line. */
 export function deriveTitle(plan: string): string {
@@ -87,7 +96,7 @@ export async function routeIncomingPlan(
   }
 
   // Otherwise start a new thread, stamped with the session's current epoch.
-  const id = randomUUID();
+  const id = newReviewId();
   const planEpoch = store.epochOf(sessionId);
   const review: Review = {
     id,
