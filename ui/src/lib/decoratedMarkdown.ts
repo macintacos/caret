@@ -12,7 +12,7 @@
 // already HTML-escaped by the walker, so the only injection vector is a token's
 // own href, which filterXSS neutralizes).
 import { Lexer } from "marked";
-import xss, { filterXSS } from "xss";
+import { filterXSS, getDefaultWhiteList } from "xss";
 
 /** Block role of a rendered row, used by the view to pick the row's CSS class. */
 export type RowKind =
@@ -42,7 +42,7 @@ export interface DecoratedRow {
 // need their class hooks to carry color/weight. Extend the default whitelist to
 // allow class on the tags the walker emits (and href on links); everything else
 // stays at the safe defaults, so a javascript: href is still dropped.
-const whiteList: Record<string, string[]> = { ...xss.getDefaultWhiteList() };
+const whiteList: Record<string, string[] | undefined> = { ...getDefaultWhiteList() };
 for (const tag of ["strong", "em", "del", "code", "span"]) {
   whiteList[tag] = [...new Set([...(whiteList[tag] ?? []), "class"])];
 }
