@@ -11,7 +11,7 @@
   import { type LinkSpanMap, openLinkInNewTab } from "./links.ts";
   import { type SourceViewGutter, type SourceViewLibOptions, toFileOptions } from "./options.ts";
   import { scrollToLine } from "./scroll.ts";
-  import { codeBlockRanges, tagCodeBlockRows } from "./codeBlocks.ts";
+  import { type CodeBlockRange, codeBlockRanges, tagCodeBlockRows } from "./codeBlocks.ts";
   import { preloadFenceLanguages, scanFenceLanguages } from "./languages.ts";
   import { registerCaretDiffThemes } from "./theme.ts";
   import type {
@@ -284,7 +284,17 @@
   // shadow-content change, rAF-coalesced. Only childList is observed, and tagging
   // writes attributes (not nodes), so it can never re-trigger itself. Re-runs when
   // the ranges change (new content) or the container mounts.
-  const codeRanges = $derived(codeBlockRanges(doc.text));
+  // Memoize the ranges on the rendered text so an unchanged poll tick yields the
+  // SAME array reference — the parent passes a fresh `doc` literal each render, and
+  // without this the observer effect below would re-arm (disconnect + reconnect the
+  // MutationObserver) every tick. Mirrors DiffPlanView's linkLayer/headings memo.
+  let rangesMemo: { text: string; ranges: CodeBlockRange[] } | undefined;
+  const codeRanges = $derived.by(() => {
+    if (rangesMemo?.text !== doc.text) {
+      rangesMemo = { text: doc.text, ranges: codeBlockRanges(doc.text) };
+    }
+    return rangesMemo.ranges;
+  });
   $effect(() => {
     const root = container?.shadowRoot;
     if (root == null) return;
