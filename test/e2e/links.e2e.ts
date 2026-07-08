@@ -13,6 +13,12 @@
 import { expect, test } from "./support/fixtures.ts";
 
 const SAFE_URL = "https://docs.example.test/widget-cache";
+
+// Link tokens are a source-view affordance, now behind the "source" view mode
+// (rendered markdown is the default, EXC-693). Pin source mode before each load.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("caret.planViewMode", "source"));
+});
 // An http link (display collapses to its label) and, on a later line, a
 // javascript:-scheme inline link the layer must NOT make clickable.
 const LINK_PLAN = `# Link Plan

@@ -8,6 +8,13 @@
 import type { Locator, Page } from "@playwright/test";
 import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
 
+// This suite drives the source-view grid (gutter, brackets, inline cards, syntax
+// highlighting), which now lives behind the "source" view mode — the default is
+// the rendered markdown view (EXC-693). Pin source mode before each page load.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("caret.planViewMode", "source"));
+});
+
 // A plan tall enough to scroll the source view past one viewport.
 const TALL_PLAN = `# Tall Plan\n\n${Array.from({ length: 120 }, (_, i) => `Line ${i + 1} of the plan body, long enough to overflow the viewport.`).join("\n\n")}\n`;
 
