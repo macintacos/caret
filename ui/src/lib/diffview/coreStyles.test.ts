@@ -145,12 +145,24 @@ describe("the fenced code-block panel (EXC-692)", () => {
     );
   });
 
-  test("indents the code past the default 2ch inset and insets the panel's right edge", () => {
+  test("makes the panel a contained card — inset both sides and width-capped", () => {
+    const body =
+      overrideDecls.match(
+        /\[data-line\]\[data-code-line\]:not\(\[data-selected-line\]\)\s*\{[^}]*\}/,
+      )?.[0] ?? "";
+    expect(body).toContain("margin-inline-start:");
+    expect(body).toContain("margin-inline-end:");
+    expect(body).toContain("max-width:");
+    // The code keeps the library's default 2ch inset — no extra indent past it.
+    expect(body).toMatch(/padding-inline-start:\s*2ch\b/);
+  });
+
+  test("adds block padding on the first/last lines so the fences clear the corners", () => {
     expect(overrideDecls).toMatch(
-      /\[data-line\]\[data-code-line\]:not\(\[data-selected-line\]\)\s*\{[^}]*padding-inline-start:\s*calc\(2ch \+ [^)]+\)/,
+      /\[data-line\]\[data-code-start\]:not\(\[data-selected-line\]\)\s*\{[^}]*padding-block-start:/,
     );
     expect(overrideDecls).toMatch(
-      /\[data-line\]\[data-code-line\]:not\(\[data-selected-line\]\)\s*\{[^}]*margin-inline-end:/,
+      /\[data-line\]\[data-code-end\]:not\(\[data-selected-line\]\)\s*\{[^}]*padding-block-end:/,
     );
   });
 

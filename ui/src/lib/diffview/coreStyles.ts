@@ -53,28 +53,36 @@ const CARET_OVERRIDES = `
      — the panel is the content column only. The fill mixes one step toward --ink
      off the diff surface (--paper-sunk) with the same in-lab color-mix the layered
      surfaces use, so it carries correct depth in both schemes (a sunk panel on
-     light paper, a raised one on dark). The code is indented past the default 2ch
-     inset and the panel is inset from the right edge so it reads as a rounded rect,
-     not a full-bleed band. Every fence and code line already has a row, so the
-     block's vertical footprint is unchanged. The :not([data-selected-line]) guard
-     yields a selected code line to the amber band below: CARET_OVERRIDES is adopted
-     after the core sheet, so without it this fill would win over the library's
-     selection highlight. Rounding hangs off the block's first line (top) and last
-     line (bottom), tagged explicitly rather than via :not(~) since a plan may hold
-     several blocks. */
+     light paper, a raised one on dark). The panel is a contained card: inset from
+     the gutter (margin-inline-start) and from the right (margin-inline-end), and
+     capped at a comfortable reading width (max-width) so it never stretches full-
+     bleed across a wide viewport — when the content column is narrower than the cap,
+     the right margin still keeps it off the edge. The code keeps the library's
+     default 2ch inset within the card (no extra indent). The block's first/last
+     lines carry a little block padding so the fence lines don't hug the rounded
+     corners — this adds a touch of height at the top and bottom, which is intended.
+     The :not([data-selected-line]) guard yields a selected code line to the amber
+     band below: CARET_OVERRIDES is adopted after the core sheet, so without it this
+     fill would win over the library's selection highlight. Rounding hangs off the
+     block's first line (top) and last line (bottom), tagged explicitly rather than
+     via :not(~) since a plan may hold several blocks. */
   [data-content] > [data-line][data-code-line]:not([data-selected-line]) {
     background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
-    padding-inline-start: calc(2ch + 0.6rem);
-    padding-inline-end: 0.75rem;
+    margin-inline-start: 0.75rem;
     margin-inline-end: 0.75rem;
+    max-width: 900px;
+    padding-inline-start: 2ch;
+    padding-inline-end: 0.75rem;
   }
   [data-content] > [data-line][data-code-start]:not([data-selected-line]) {
     border-top-left-radius: var(--radius);
     border-top-right-radius: var(--radius);
+    padding-block-start: 0.4rem;
   }
   [data-content] > [data-line][data-code-end]:not([data-selected-line]) {
     border-bottom-left-radius: var(--radius);
     border-bottom-right-radius: var(--radius);
+    padding-block-end: 0.4rem;
   }
 
   /* EXC-664: the drag-to-comment selection reads as ONE continuous amber band
