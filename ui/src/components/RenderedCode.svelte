@@ -9,8 +9,11 @@
   interface Props {
     lang: string | null;
     text: string;
+    /** Source line of the first code line (the line after the opening fence), so
+     * each rendered line carries its true `data-line` for per-line commenting. */
+    firstLine: number;
   }
-  let { lang, text }: Props = $props();
+  let { lang, text, firstLine }: Props = $props();
 
   // Escaped plain code paints first (no flash of unstyled/blank); the async shiki
   // result replaces it when ready. `html` derives from the highlight when present
@@ -18,13 +21,14 @@
   // the highlight to null) immediately re-shows the new plain code while the grammar
   // reloads. The cancelled guard drops a late resolve after an unmount or swap.
   let highlighted = $state<string | null>(null);
-  const html = $derived(highlighted ?? plainCodeHtml(text));
+  const html = $derived(highlighted ?? plainCodeHtml(text, firstLine));
   $effect(() => {
     const code = text;
     const language = lang;
+    const first = firstLine;
     highlighted = null;
     let cancelled = false;
-    void highlightCode(code, language).then((result) => {
+    void highlightCode(code, language, first).then((result) => {
       if (!cancelled) highlighted = result;
     });
     return () => {

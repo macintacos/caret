@@ -2,38 +2,47 @@
 // styled markdown document built from blocks: prose is joined, lists/tables/
 // blockquotes and shiki code blocks render properly, emphasis keeps its markers
 // visible and colored from caret's palette, and there is no line-number gutter —
-// while the compare diff stays the source view. These specs cover the real-browser
-// behavior the unit tests can't: the rendered surface and its palette, real shiki
-// paint, the Rendered/Source toggle, block-range click/drag commenting, and that
-// compare is unchanged. The unit suites carry the exhaustive per-construct coverage.
+// while the compare diff stays the source view. Interaction is per SOURCE LINE
+// (hover highlights just the hovered line, a click comments on that exact line, a
+// drag comments the line span), mirroring the source view. These specs cover the
+// real-browser behavior the unit tests can't; the unit suites carry the exhaustive
+// per-construct coverage.
 
 import { expect, test } from "./support/fixtures.ts";
 
+// The daemon reflows the plan on ingest (formatPlanMarkdown: soft-wraps join and
+// long lines re-wrap to a print width), so a spec must NOT assume the raw line
+// numbers below survive — the long first paragraph re-wraps across two source
+// lines (the link lands on the second), the two short "wraps softly" lines join
+// into one, and everything after shifts. These specs therefore locate rows by
+// content, never by a hard-coded data-line, so they stay correct under reflow.
 const PLAN = [
-  "# Rendered Plan Title", // 1
-  "", // 2
-  "Prose with **bold text**, _italic bit_, `inline code`, and a [doc link](https://ex.test/doc).", // 3
-  "", // 4
-  "This sentence wraps softly", // 5
-  "onto a second source line.", // 6
-  "", // 7
-  "- first bullet", // 8
-  "- second bullet", // 9
-  "- [ ] a pending task", // 10
-  "- [x] a finished task", // 11
-  "", // 12
-  "> A quoted line here.", // 13
-  "> > A nested quote.", // 14
-  "", // 15
-  "| Col A | Col B |", // 16
-  "|:------|------:|", // 17
-  "| one | two |", // 18
-  "", // 19
-  "```ts", // 20
-  "const answer = 42;", // 21
-  "```", // 22
-  "", // 23
-  "A closing paragraph to comment on.", // 24
+  "# Rendered Plan Title",
+  "",
+  "Prose with **bold text**, _italic bit_, `inline code`, and a long trailing clause that pushes past the reflow width so this paragraph re-wraps, ending with a [doc link](https://ex.test/doc).",
+  "",
+  "This sentence wraps softly",
+  "onto a second source line.",
+  "",
+  "## Tasks", // a second heading so the contents pane (≥2 headings) renders
+  "",
+  "- first bullet",
+  "- second bullet",
+  "- [ ] a pending task",
+  "- [x] a finished task",
+  "",
+  "> A quoted line here.",
+  "> > A nested quote.",
+  "",
+  "| Col A | Col B |",
+  "|:------|------:|",
+  "| one | two |",
+  "",
+  "```ts",
+  "const answer = 42;",
+  "```",
+  "",
+  "A closing paragraph to comment on.",
   "",
 ].join("\n");
 
@@ -84,6 +93,28 @@ test("defaults to the rendered view: warm palette, visible markers, no gutter", 
   await expect(page.locator(".diffview")).toHaveCount(0);
 });
 
+test("the reading column is capped at 900px and the contents pane matches the source view", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: PLAN });
+  await page.goto("/");
+  const rendered = page.locator(".rendered-plan");
+  await expect(rendered).toBeVisible();
+
+  // The prose wraps rather than sprawling the full viewport width.
+  const renderedBox = await rendered.boundingBox();
+  expect(renderedBox?.width ?? 0).toBeLessThanOrEqual(900);
+
+  // The contents pane is the same width in both modes (a fixed lane, EXC-693).
+  const tocRendered = (await page.locator(".source-toc").boundingBox())?.width ?? 0;
+  await page.getByRole("button", { name: "Source", exact: true }).click();
+  await expect(page.locator(".diffview")).toBeVisible();
+  const tocSource = (await page.locator(".source-toc").boundingBox())?.width ?? 0;
+  expect(Math.round(tocRendered)).toBe(Math.round(tocSource));
+  expect(tocRendered).toBeGreaterThan(0);
+});
+
 test("renders lists, checkboxes, tables and nested blockquotes properly", async ({
   daemon,
   page,
@@ -126,6 +157,10 @@ test("code blocks render as real shiki panels with the fences hidden", async ({ 
   await expect(shiki).toContainText("const answer = 42;");
   // The ``` fences are dropped — this reads as a code block, not decorated source.
   expect(await shiki.innerText()).not.toContain("```");
+  // Each code line is its own per-source-line target (the fence line is dropped).
+  await expect(rendered.locator(".md-code-panel [data-line]").first()).toContainText(
+    "const answer = 42;",
+  );
 });
 
 test("links render as normal links, not markdown source", async ({ daemon, page }) => {
@@ -137,24 +172,41 @@ test("links render as normal links, not markdown source", async ({ daemon, page 
   const link = rendered.locator("a.md-link").first();
   await expect(link).toHaveText("doc link");
   await expect(link).toHaveAttribute("href", "https://ex.test/doc");
-  // No [..](..) syntax survives into the visible prose.
-  const proseText = await rendered.locator('[data-line="3"]').innerText();
-  expect(proseText).not.toContain("](");
-  expect(proseText).toContain("doc link");
+  // No [..](..) markdown syntax survives anywhere in the rendered prose.
+  expect(await rendered.innerText()).not.toContain("](");
 });
 
-test("a soft-wrapped paragraph is joined into a single block", async ({ daemon, page }) => {
+test("a reflow-wrapped paragraph joins into one block with a target per source line", async ({
+  daemon,
+  page,
+}) => {
   await daemon.seed({ plan: PLAN });
   await page.goto("/");
   const rendered = page.locator(".rendered-plan");
   await expect(rendered).toBeVisible();
 
-  // The two source lines "This sentence wraps softly" / "onto a second source line."
-  // are a single paragraph: one anchored block carries both, rather than the old
-  // one-row-per-line rendering that broke them apart.
-  const para = rendered.locator("[data-line]", { hasText: "This sentence wraps softly" });
-  await expect(para).toHaveCount(1);
-  await expect(para).toContainText("onto a second source line.");
+  // The daemon re-wraps the long first paragraph across two source lines; the
+  // rendered view joins them into one flowing block (both the bold marker and the
+  // trailing link read as one paragraph) yet keeps a [data-line] target per line.
+  const para = rendered.locator(".md-paragraph", { hasText: "Prose with" });
+  await expect(para).toContainText("doc link");
+  expect(await para.locator("[data-line]").count()).toBeGreaterThanOrEqual(2);
+});
+
+test("hovering a source line highlights only that line, not its whole block", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: PLAN });
+  await page.goto("/");
+  const rendered = page.locator(".rendered-plan");
+  await expect(rendered).toBeVisible();
+
+  // Hover the first list item; only it lights up — the other three items stay dark.
+  const item = rendered.locator("[data-line]", { hasText: "first bullet" });
+  await item.hover();
+  await expect(item).toHaveClass(/is-hovered/);
+  await expect(rendered.locator(".is-hovered")).toHaveCount(1);
 });
 
 test("the Rendered/Source toggle switches surfaces both ways", async ({ daemon, page }) => {
@@ -171,7 +223,7 @@ test("the Rendered/Source toggle switches surfaces both ways", async ({ daemon, 
   await expect(page.locator(".diffview")).toHaveCount(0);
 });
 
-test("clicking a block opens a composer and the saved comment renders inline", async ({
+test("clicking a source line opens a composer on that exact line and saves inline", async ({
   daemon,
   page,
 }) => {
@@ -180,32 +232,33 @@ test("clicking a block opens a composer and the saved comment renders inline", a
   const rendered = page.locator(".rendered-plan");
   await expect(rendered).toBeVisible();
 
+  // Click the closing paragraph's line; the composer anchors to that single line.
   await rendered.locator("[data-line]", { hasText: "A closing paragraph to comment on." }).click();
 
   const composer = page.getByRole("dialog", { name: "Add a comment" });
   await expect(composer).toBeVisible();
+  await expect(composer.locator("p.label")).toHaveText(/Line \d+/);
   await composer.getByRole("textbox", { name: "Comment" }).fill("Comment from the rendered view.");
   await composer.getByRole("button", { name: "Comment" }).click();
 
   await expect(rendered.getByText("Comment from the rendered view.")).toBeVisible();
 });
 
-test("dragging across two blocks opens a range composer", async ({ daemon, page }) => {
+test("dragging across source lines opens a range composer", async ({ daemon, page }) => {
   await daemon.seed({ plan: PLAN });
   await page.goto("/");
   const rendered = page.locator(".rendered-plan");
   await expect(rendered).toBeVisible();
 
-  // The list and the blockquote are two separate blocks; a drag from one to the
-  // other spans them (each block is a single anchor, so a within-list drag would
-  // not). Move straight down one column so the hit-test cleanly crosses the gap.
+  // Drag straight down a column from a list item to the blockquote; the hit-test
+  // crosses several source lines and opens a range composer for the span.
   const start = await rendered.locator("[data-line]", { hasText: "first bullet" }).boundingBox();
   const end = await rendered
-    .locator("[data-line]", { hasText: "A quoted line here." })
+    .locator("[data-line]", { hasText: "A quoted line here" })
     .boundingBox();
-  if (start == null || end == null) throw new Error("rendered blocks not found");
+  if (start == null || end == null) throw new Error("rendered lines not found");
 
-  const columnX = start.x + start.width / 2;
+  const columnX = start.x + 6;
   await page.mouse.move(columnX, start.y + start.height / 2);
   await page.mouse.down();
   await page.mouse.move(columnX, end.y + end.height / 2, { steps: 16 });

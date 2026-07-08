@@ -67,9 +67,15 @@ function escapeHtml(s: string): string {
 }
 
 /** The fallback code panel: escaped, inert monospace text, same wrapper shape as
- * shiki's output so the panel CSS applies either way. */
-export function plainCodeHtml(code: string): string {
-  return `<pre class="shiki md-code-plain"><code>${escapeHtml(code)}</code></pre>`;
+ * shiki's output so the panel CSS applies either way. Each line is tagged with its
+ * source line (from `firstLine`), matching the `data-line` shiki emits, so the
+ * rendered view can hover and comment per line whether or not the grammar loaded. */
+export function plainCodeHtml(code: string, firstLine = 1): string {
+  const lines = code
+    .split("\n")
+    .map((line, i) => `<span class="line" data-line="${firstLine + i}">${escapeHtml(line)}</span>`)
+    .join("\n");
+  return `<pre class="shiki md-code-plain"><code>${lines}</code></pre>`;
 }
 
 const createCaretHighlighter = createBundledHighlighter({
@@ -95,16 +101,19 @@ function getHighlighter(): Promise<CaretHighlighter> {
 }
 
 /**
- * Highlight `code` for `lang`, returning caret-themed dual-theme HTML. An unknown
- * or failed grammar falls back to escaped plain code — best-effort, never throws,
- * so a code block can't break the rendered view.
+ * Highlight `code` for `lang`, returning caret-themed dual-theme HTML. Each line is
+ * tagged with its source line, numbered from `firstLine` (the block's first code
+ * line), so the rendered view can hover and comment per line. An unknown or failed
+ * grammar falls back to escaped plain code — best-effort, never throws, so a code
+ * block can't break the rendered view.
  */
 export async function highlightCode(
   code: string,
   lang: string | null | undefined,
+  firstLine = 1,
 ): Promise<string> {
   const resolved = resolveLang(lang);
-  if (resolved == null) return plainCodeHtml(code);
+  if (resolved == null) return plainCodeHtml(code, firstLine);
   try {
     const highlighter = await getHighlighter();
     if (!highlighter.getLoadedLanguages().includes(resolved)) {
@@ -117,8 +126,17 @@ export async function highlightCode(
       lang: resolved,
       themes: { light: "caret-light", dark: "caret-dark" },
       defaultColor: false,
+      transformers: [
+        {
+          // Stamp each rendered line with its source line — shiki's `line` hook is
+          // 1-based within the block, so line 1 is `firstLine`.
+          line(node, line) {
+            node.properties["data-line"] = String(firstLine + line - 1);
+          },
+        },
+      ],
     });
   } catch {
-    return plainCodeHtml(code);
+    return plainCodeHtml(code, firstLine);
   }
 }

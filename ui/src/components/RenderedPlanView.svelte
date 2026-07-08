@@ -68,15 +68,6 @@
     return blocksMemo.blocks;
   });
 
-  // Each top-level block is one anchor: its start line → its full source range.
-  // The drag hit-test returns a block's start line; this expands a start↔start
-  // range back to whole-block coverage on commit.
-  const anchorByStart = $derived.by(() => {
-    const map = new Map<number, { startLine: number; endLine: number }>();
-    for (const b of blocks) map.set(b.startLine, { startLine: b.startLine, endLine: b.endLine });
-    return map;
-  });
-
   // The end line each block "owns" for its belowRow: its own end, extended over the
   // blank lines up to the next block (the last block reaches the end of the plan).
   // Blank-line "space" tokens emit no block, so without this a comment anchored to a
@@ -93,10 +84,6 @@
   // selectedRange for the highlight, so the selection band tracks the drag.
   let dragRange = $state<{ startLine: number; endLine: number } | undefined>();
   const highlight = $derived(dragRange ?? selectedRange ?? undefined);
-  function isSelected(b: PlanBlock): boolean {
-    const h = highlight;
-    return h != null && b.startLine <= h.endLine && b.endLine >= h.startLine;
-  }
 
   function alignOf(a: Align | undefined): "left" | "center" | "right" {
     return a === "center" || a === "right" ? a : "left";
@@ -152,21 +139,6 @@
     return Number.isFinite(n) ? n : null;
   }
 
-  // Expand a start↔start drag range to whole-block coverage (first block's start
-  // through the last block's end).
-  function expandRange(r: { startLine: number; endLine: number }): { startLine: number; endLine: number } {
-    const first = anchorByStart.get(r.startLine);
-    const last = anchorByStart.get(r.endLine);
-    return { startLine: first?.startLine ?? r.startLine, endLine: last?.endLine ?? r.endLine };
-  }
-
-  // Open a comment on a block's range — a single-line block goes through
-  // onLineComment, a multi-line block through onLineRangeComment.
-  function commentOn(a: { startLine: number; endLine: number }): void {
-    if (a.startLine === a.endLine) onLineComment?.(a.startLine);
-    else onLineRangeComment?.(a.startLine, a.endLine);
-  }
-
   // Set when a drag commits so the synthetic click that follows a drag-release
   // doesn't ALSO open a single-block comment. Cleared by that click / next frame.
   let dragOccurred = false;
@@ -182,9 +154,7 @@
     const selection = typeof getSelection === "function" ? getSelection() : null;
     if (selection != null && !selection.isCollapsed) return; // active selection, not a comment
     const line = lineAt(target);
-    if (line == null) return;
-    const anchor = anchorByStart.get(line);
-    if (anchor) commentOn(anchor);
+    if (line != null) onLineComment?.(line);
   }
 
   // Click-to-comment via addEventListener (not a template onclick) so the
@@ -207,9 +177,8 @@
     const drag = createLineDrag({
       lineFromPoint: (x, y) => lineAt(document.elementFromPoint(x, y)),
       onPreview: (range) => {
-        const expanded = range == null ? undefined : expandRange(range);
-        dragRange = expanded;
-        onLineRangePreview?.(expanded ?? null);
+        dragRange = range ?? undefined;
+        onLineRangePreview?.(range ?? null);
       },
       onCommit: (range) => {
         // Suppress the synthetic click after a drag-release; clear next frame so a
@@ -218,8 +187,7 @@
         requestAnimationFrame(() => {
           dragOccurred = false;
         });
-        const expanded = expandRange(range);
-        onLineRangeComment?.(expanded.startLine, expanded.endLine);
+        onLineRangeComment?.(range.startLine, range.endLine);
       },
     });
     const onMove = (e: PointerEvent) => drag.pointermove(e);
@@ -259,6 +227,63 @@
       endGesture();
     };
   });
+
+  // Per-line hover highlight (mirrors the source view's line hover). Tag only the
+  // INNERMOST [data-line] under the pointer with `is-hovered`, so a nested item or
+  // a line inside a joined paragraph lights up alone rather than its whole block.
+  // Imperative because the line elements live inside {@html} (prose, code) where a
+  // Svelte class binding can't reach; rAF-coalesced so a move burst is one probe.
+  $effect(() => {
+    const host = container;
+    if (host == null) return;
+    let hovered: Element | null = null;
+    let raf = 0;
+    let x = 0;
+    let y = 0;
+    const apply = (el: Element | null): void => {
+      if (el === hovered) return;
+      hovered?.classList.remove("is-hovered");
+      el?.classList.add("is-hovered");
+      hovered = el;
+    };
+    const probe = (): void => {
+      raf = 0;
+      const line = document.elementFromPoint(x, y)?.closest("[data-line]") ?? null;
+      apply(line != null && host.contains(line) ? line : null);
+    };
+    const onMove = (e: PointerEvent): void => {
+      x = e.clientX;
+      y = e.clientY;
+      if (raf === 0) raf = requestAnimationFrame(probe);
+    };
+    const onLeave = (): void => {
+      cancelAnimationFrame(raf);
+      raf = 0;
+      apply(null);
+    };
+    host.addEventListener("pointermove", onMove);
+    host.addEventListener("pointerleave", onLeave);
+    return () => {
+      cancelAnimationFrame(raf);
+      host.removeEventListener("pointermove", onMove);
+      host.removeEventListener("pointerleave", onLeave);
+      apply(null);
+    };
+  });
+
+  // Per-line selection band: mark every [data-line] whose line falls in the open
+  // composer's / live-drag range with `is-selected`. Re-runs on the range and on
+  // a block re-render (a poll tick paints fresh line elements that need re-marking).
+  $effect(() => {
+    const host = container;
+    if (host == null) return;
+    void blocks; // re-mark after a re-render swaps the line elements
+    const h = highlight;
+    for (const el of host.querySelectorAll<HTMLElement>("[data-line]")) {
+      const n = Number(el.getAttribute("data-line"));
+      el.classList.toggle("is-selected", h != null && n >= h.startLine && n <= h.endLine);
+    }
+  });
 </script>
 
 <!-- Recursive block renderer. blockContent renders a block's inner markup (used
@@ -266,11 +291,17 @@
      and list items); only top-level blocks are wrapped as anchors below. -->
 {#snippet blockContent(block: PlanBlock)}
   {#if block.kind === "paragraph"}
-    <p class="md-p">{@html block.html}</p>
+    <!-- One data-line span per source line: the view flows them into a paragraph
+         (a space rejoins the soft wraps), but each is its own hover/click target. -->
+    <p class="md-p">{#each block.lines as seg, i (seg.line)}{#if i > 0}{" "}{/if}<span
+          class="md-line"
+          data-line={seg.line}>{@html seg.html}</span>{/each}</p>
   {:else if block.kind === "heading"}
-    <div class="md-h" data-level={block.level}>{@html block.html}</div>
+    <div class="md-h md-line" data-line={block.startLine} data-level={block.level}>
+      {@html block.html}
+    </div>
   {:else if block.kind === "code"}
-    <RenderedCode lang={block.lang} text={block.text} />
+    <RenderedCode lang={block.lang} text={block.text} firstLine={block.startLine + 1} />
   {:else if block.kind === "blockquote"}
     <blockquote class="md-quote">
       {#each block.children as child, i (i)}{@render blockContent(child)}{/each}
@@ -289,7 +320,7 @@
     <div class="md-table-wrap">
       <table class="md-tbl">
         <thead>
-          <tr>
+          <tr class="md-line" data-line={block.headerLine}>
             {#each block.header as cell, i (i)}
               <th style:text-align={alignOf(block.align[i])}>{@html cell}</th>
             {/each}
@@ -297,7 +328,7 @@
         </thead>
         <tbody>
           {#each block.rows as row, r (r)}
-            <tr>
+            <tr class="md-line" data-line={block.rowLines[r] ?? block.startLine}>
               {#each row as cell, c (c)}
                 <td style:text-align={alignOf(block.align[c])}>{@html cell}</td>
               {/each}
@@ -307,29 +338,31 @@
       </table>
     </div>
   {:else if block.kind === "hr"}
-    <hr class="md-rule" />
+    <hr class="md-rule md-line" data-line={block.startLine} />
   {:else if block.kind === "footnote"}
-    <div class="md-fn-def-row"><sup class="md-fn-def">{block.label}</sup> {@html block.html}</div>
+    <div class="md-fn-def-row md-line" data-line={block.startLine}>
+      <sup class="md-fn-def">{block.label}</sup> {@html block.html}
+    </div>
   {/if}
 {/snippet}
 
 {#snippet listItem(item: import("../lib/planBlocks.ts").PlanListItem)}
   <li class="md-item" class:md-task={item.task}>
+    <!-- The item's leading text is one data-line target per source line (a wrapped
+         bullet's continuation is its own target); the checkbox precedes them and
+         nested children carry their own targets, so hovering never lights the whole
+         sub-list. -->
     {#if item.task}<input class="md-check" type="checkbox" checked={item.checked} disabled />{/if}
-    {#if item.html != null}<span class="md-li-text">{@html item.html}</span>{/if}
+    {#each item.lines as seg, i (seg.line)}{#if i > 0}{" "}{/if}<span
+        class="md-line"
+        data-line={seg.line}>{@html seg.html}</span>{/each}
     {#each item.children as child, i (i)}{@render blockContent(child)}{/each}
   </li>
 {/snippet}
 
 <div class="rendered-plan" bind:this={container}>
   {#each blocks as block, i (block.startLine)}
-    <div
-      class="md-block md-{block.kind}"
-      class:md-selected={isSelected(block)}
-      data-line={block.startLine}
-      data-line-end={block.endLine}
-    >
-      <span class="md-plus" aria-hidden="true"></span>
+    <div class="md-block md-{block.kind}">
       {@render blockContent(block)}
     </div>
     {@render belowRow?.(block.startLine, belowEnds[i] ?? block.endLine)}
@@ -342,49 +375,48 @@
     font-size: var(--text-lg);
     line-height: 1.7;
     color: var(--ink);
+    /* Cap the document to a readable measure and left-align it against the
+       contents pane. The source grid scrolls its long lines, but rendered prose
+       wraps, so without a cap it would sprawl the full viewport width; 900px
+       keeps line length comfortable. box-sizing is border-box (app.css reset),
+       so the cap includes the padding. */
+    max-width: 900px;
     padding: 1rem clamp(1.4rem, 3vw, 2.5rem) 40vh;
   }
 
-  /* Each top-level block is one comment anchor. A hover background + a left "+"
-     mirror the source view's line affordance so it's clear a click comments here;
-     the covered rows tint amber (the source view's selection band) while selected. */
+  /* Blocks are structural only: the per-source-line elements inside them are the
+     hover / click / drag targets (see [data-line] below), so the interaction is
+     line-level like the source view rather than one anchor per whole block. */
   .md-block {
     position: relative;
-    margin: 0.35rem -0.6rem;
-    padding: 0.15rem 0.6rem 0.15rem 1.5rem;
-    border-radius: var(--radius);
+    margin: 0.35rem 0;
+  }
+
+  /* Per-source-line hover + selection. The hover effect tags the innermost
+     [data-line] under the pointer with is-hovered; the selection effect tags the
+     open composer's / live drag's covered lines with is-selected (the amber band
+     the source view uses). Global because most line elements live inside {@html}
+     — prose spans, shiki code lines — beyond Svelte's scoping. */
+  :global(.rendered-plan [data-line]) {
+    border-radius: 4px;
     scroll-margin-top: 12px;
   }
-  .md-block:hover {
-    background: color-mix(in srgb, var(--ink) 6%, transparent);
+  :global(.rendered-plan [data-line].is-hovered) {
+    background: color-mix(in srgb, var(--ink) 7%, transparent);
   }
-  .md-selected,
-  .md-selected:hover {
+  :global(.rendered-plan [data-line].is-selected) {
     background: var(--mark);
   }
-  .md-plus {
-    position: absolute;
-    left: 0.35rem;
-    top: 0.2rem;
-    width: 1rem;
-    height: 1.2rem;
-    display: grid;
-    place-items: center;
-    color: var(--accent);
-    font-weight: 700;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity var(--dur-fast) var(--ease-out);
-  }
-  .md-plus::before {
-    content: "+";
-  }
-  .md-block:hover .md-plus {
-    opacity: 0.7;
+  /* Inline line spans (prose, code) clone the highlight box across a soft wrap so
+     a wrapped source line reads as rounded runs, not one ragged slab. */
+  :global(.rendered-plan span[data-line]) {
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
   }
 
   /* Prose: a single newline is a soft continuation — white-space:normal collapses
-     it so a soft-wrapped paragraph reads as one flowing line. */
+     it (and the space between segments) so a soft-wrapped paragraph reads as one
+     flowing line. */
   .md-p {
     margin: 0;
     white-space: normal;
@@ -437,17 +469,17 @@
   .md-item .md-ol {
     margin-top: 0.12rem;
   }
-  /* Task-list items drop the bullet for a real checkbox, aligned with the text. */
+  /* Task-list items drop the bullet for a real checkbox that precedes the text.
+     Kept inline (not flex) so a wrapped bullet's line segments flow and wrap as
+     normal text, each its own hover/click target. */
   .md-task {
     list-style: none;
     margin-left: -1.4rem;
     padding-left: 0;
-    display: flex;
-    gap: 0.45rem;
-    align-items: baseline;
   }
   .md-check {
-    margin: 0;
+    margin: 0 0.45rem 0 0;
+    vertical-align: baseline;
     accent-color: var(--accent);
   }
 

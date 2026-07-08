@@ -103,6 +103,12 @@
     display: flex;
     flex-direction: column;
     gap: 0.6rem;
+    /* A fixed lane: `flex: none` pins the 15rem basis so it never shrinks. As a
+       shrinkable flex item it would give up width to a wide sibling, and the
+       rendered-markdown surface pressures it narrower than the source grid does —
+       so the pane rendered a hair thinner in rendered mode than in source. Pin it
+       so the contents pane is identical in both. */
+    flex: none;
     width: 15rem;
     padding: 1rem 0.75rem;
     box-sizing: border-box;

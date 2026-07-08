@@ -85,13 +85,34 @@ function only<K extends PlanBlock["kind"]>(src: string, kind: K): Extract<PlanBl
   return block as Extract<PlanBlock, { kind: K }>;
 }
 
+/** The visible text of a list item's leading segments, joined as they render. */
+function itemText(item: { lines: { html: string }[] } | undefined): string {
+  return (item?.lines ?? []).map((l) => vis(l.html)).join(" ");
+}
+
 describe("parsePlan — paragraphs join soft-wrapped lines", () => {
-  test("a single newline is a continuation: one block carrying both lines", () => {
+  test("a single newline is a continuation: one block, one segment per source line", () => {
     const p = only("alpha line\nbeta line", "paragraph");
     expect(p.startLine).toBe(1);
     expect(p.endLine).toBe(2);
-    expect(vis(p.html)).toContain("alpha line");
-    expect(vis(p.html)).toContain("beta line");
+    // The block stays whole (the view flows it into one paragraph), but each
+    // source line is its own segment carrying its true line number — the per-line
+    // hover/click targets that mirror the source view.
+    expect(p.lines.map((l) => [l.line, vis(l.html)])).toEqual([
+      [1, "alpha line"],
+      [2, "beta line"],
+    ]);
+  });
+
+  test("segment line numbers are offset from the paragraph's start line", () => {
+    // A paragraph that starts partway down the document keeps absolute line numbers.
+    const p = only("intro\n\nfirst wrapped\nsecond wrapped", "paragraph");
+    // "intro" is its own paragraph (blocks[0]); the wrapped one is blocks[1].
+    const wrapped = parsePlan("intro\n\nfirst wrapped\nsecond wrapped").filter(
+      (b) => b.kind === "paragraph",
+    )[1];
+    expect(wrapped?.kind === "paragraph" ? wrapped.lines.map((l) => l.line) : []).toEqual([3, 4]);
+    expect(p.lines[0]?.line).toBe(1);
   });
 
   test("a blank line is a real break: two separate blocks", () => {
@@ -118,15 +139,34 @@ describe("parsePlan — lists and checkboxes", () => {
       [true, false],
       [true, true],
     ]);
-    expect(vis(list.items[0]?.html)).toContain("plain");
+    expect(itemText(list.items[0])).toContain("plain");
+  });
+
+  test("a soft-wrapped bullet splits into a segment per source line", () => {
+    // The bullet's text continues on line 2; each source line is its own target,
+    // so a click on the continuation reports line 2, not the item's start.
+    const list = only("- lead here\n  wrapped on", "list");
+    expect(list.items[0]?.lines.map((l) => [l.line, vis(l.html)])).toEqual([
+      [1, "lead here"],
+      [2, "wrapped on"],
+    ]);
   });
 
   test("a nested list lives in the parent item's children, not its own leading text", () => {
     const list = only("- outer\n  - inner", "list");
     const outer = list.items[0];
-    expect(vis(outer?.html)).toContain("outer");
-    expect(vis(outer?.html)).not.toContain("inner");
+    expect(itemText(outer)).toContain("outer");
+    expect(itemText(outer)).not.toContain("inner");
     expect(outer?.children.some((c) => c.kind === "list")).toBe(true);
+  });
+
+  test("a nested list's items carry their own source lines, not the parent's", () => {
+    // The nested item is on source line 2; its line must track through the nesting
+    // (not inherit the outer item's line 1) so a per-line click reports line 2.
+    const list = only("- outer\n  - inner", "list");
+    const nested = list.items[0]?.children.find((c) => c.kind === "list");
+    const innerItem = nested?.kind === "list" ? nested.items[0] : undefined;
+    expect(innerItem?.startLine).toBe(2);
   });
 
   test("ordered lists expose ordered + start number", () => {
@@ -149,11 +189,13 @@ describe("parsePlan — lists and checkboxes", () => {
     // loose item is a child block, rendered below — never glued onto the lead.
     const list = only("- lead line\n\n  second paragraph\n- next", "list");
     const item = list.items[0];
-    expect(vis(item?.html)).toBe("lead line");
-    expect(vis(item?.html)).not.toContain("second paragraph");
+    expect(itemText(item)).toBe("lead line");
+    expect(itemText(item)).not.toContain("second paragraph");
     const para = item?.children.find((c) => c.kind === "paragraph");
     expect(para).toBeDefined();
-    expect(para && para.kind === "paragraph" ? vis(para.html) : "").toContain("second paragraph");
+    expect(
+      para && para.kind === "paragraph" ? para.lines.map((l) => vis(l.html)).join(" ") : "",
+    ).toContain("second paragraph");
   });
 });
 
@@ -165,6 +207,14 @@ describe("parsePlan — tables", () => {
     expect(t.rows).toHaveLength(1);
     expect(vis(t.rows[0]?.[1])).toBe("**2**"); // emphasis markers stay visible in cells
   });
+
+  test("carries per-row source lines: header, then data rows after the divider", () => {
+    // Header on the start line, the |---| divider takes the next line (no rendered
+    // row), and each data row follows — so a per-row click reports the true line.
+    const t = only("| A | B |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |", "table");
+    expect(t.headerLine).toBe(1);
+    expect(t.rowLines).toEqual([3, 4]);
+  });
 });
 
 describe("parsePlan — blockquotes", () => {
@@ -173,9 +223,21 @@ describe("parsePlan — blockquotes", () => {
     const nested = bq.children.find((c) => c.kind === "blockquote");
     expect(nested).toBeDefined();
     // No literal '>' survives into the rendered inner text.
-    const text = bq.children.map((c) => (c.kind === "paragraph" ? vis(c.html) : "")).join(" ");
+    const text = bq.children
+      .map((c) => (c.kind === "paragraph" ? c.lines.map((l) => vis(l.html)).join(" ") : ""))
+      .join(" ");
     expect(text).toContain("outer quote");
     expect(text).not.toContain(">");
+  });
+
+  test("children carry accurate source lines through the > prefix", () => {
+    // Stripping the '> ' prefix preserves newline counts, so line tracking holds:
+    // the wrapped paragraph is lines 1–2, the nested quote line 3.
+    const bq = only("> line one\n> line two\n> > nested at three", "blockquote");
+    const para = bq.children.find((c) => c.kind === "paragraph");
+    expect(para && para.kind === "paragraph" ? para.lines.map((l) => l.line) : []).toEqual([1, 2]);
+    const nested = bq.children.find((c) => c.kind === "blockquote");
+    expect(nested?.startLine).toBe(3);
   });
 });
 

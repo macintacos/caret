@@ -21,25 +21,44 @@ export interface Pos {
 
 export type Align = "left" | "center" | "right" | null;
 
+/** One source line of a paragraph: its decorated inline HTML plus the 1-based
+ * source line it came from. A soft-wrapped paragraph is joined visually into one
+ * flowing block, but keeps a segment per source line so each is its own hover /
+ * click / drag target — the per-line interaction that mirrors the source view. */
+export interface PlanLine {
+  line: number;
+  html: string;
+}
+
 export interface PlanListItem extends Pos {
-  /** Decorated inline HTML of the item's own leading text, or null when the item
-   * is purely nested blocks. */
-  html: string | null;
+  /** The item's own leading text, one decorated segment per source line (empty
+   * when the item is purely nested blocks). A bullet that soft-wraps in the source
+   * spans several lines, each its own hover / click target — like a paragraph. */
+  lines: PlanLine[];
   /** A GFM task-list item (`- [ ]` / `- [x]`)? */
   task: boolean;
   checked: boolean;
-  /** Nested blocks inside the item (sub-lists, extra paragraphs). Rendered for
-   * structure; they inherit the item's anchor rather than carrying their own. */
+  /** Nested blocks inside the item (sub-lists, extra paragraphs), each carrying
+   * its own source lines. */
   children: PlanBlock[];
 }
 
 export type PlanBlock =
-  | (Pos & { kind: "paragraph"; html: string })
+  | (Pos & { kind: "paragraph"; lines: PlanLine[] })
   | (Pos & { kind: "heading"; level: number; html: string })
   | (Pos & { kind: "code"; lang: string | null; text: string })
   | (Pos & { kind: "blockquote"; children: PlanBlock[] })
   | (Pos & { kind: "list"; ordered: boolean; start: number | null; items: PlanListItem[] })
-  | (Pos & { kind: "table"; align: Align[]; header: string[]; rows: string[][] })
+  | (Pos & {
+      kind: "table";
+      align: Align[];
+      header: string[];
+      rows: string[][];
+      /** Source line of the header row. */
+      headerLine: number;
+      /** Source line of each data row (after the header + alignment divider). */
+      rowLines: number[];
+    })
   | (Pos & { kind: "hr" })
   | (Pos & { kind: "footnote"; label: string; html: string });
 
@@ -98,27 +117,43 @@ function headingHtml(tok: Token): string {
   return `<span class="md-marker">${escapeHtml(marker)}</span>${decorateInline(body)}`;
 }
 
+// Split a paragraph's source text into one decorated segment per source line,
+// numbered from the paragraph's start. A single '\n' is a soft wrap, so the view
+// flows the segments back together, but each keeps its true line number to anchor
+// a per-line comment. (An inline construct straddling a soft wrap decorates as
+// literal markers — a documented spike limitation; caret plans wrap rarely.)
+function paragraphLines(text: string, startLine: number): PlanLine[] {
+  return text.split("\n").map((line, i) => ({ line: startLine + i, html: decorateInline(line) }));
+}
+
 function parseListItem(item: Token, pos: Pos): PlanListItem {
-  let html: string | null = null;
+  let lines: PlanLine[] = [];
   const children: PlanBlock[] = [];
+  // A cursor down the item's own source lines, so a nested list / loose paragraph
+  // gets its true start line rather than inheriting the item's. Every child (even
+  // the skipped checkbox / blank-line space) advances it by its newline count —
+  // the item's tokens concatenate back over its source lines.
+  let line = pos.startLine;
   for (const child of item.tokens ?? []) {
+    const childPos = rangeOf(child.raw, line);
+    line += newlineCount(child.raw);
     if (child.type === "space" || child.type === "checkbox") {
       // The checkbox is captured by task/checked; blank lines carry nothing.
       continue;
     }
-    if (html == null && (child.type === "text" || child.type === "paragraph")) {
-      // The item's first line is its leading text, shown inline next to the
-      // bullet/checkbox.
-      html = decorateInline(child.text ?? "");
+    if (lines.length === 0 && (child.type === "text" || child.type === "paragraph")) {
+      // The item's leading text, shown inline next to the bullet/checkbox — split
+      // per source line so a soft-wrapped bullet's continuation is its own target.
+      lines = paragraphLines(child.text ?? "", childPos.startLine);
       continue;
     }
     // Everything after the leading text — a second paragraph in a loose item, a
     // nested list, a fenced block — renders as its own block below, in source
     // order (never concatenated onto the leading run).
-    const block = buildBlock(child, pos);
+    const block = buildBlock(child, childPos);
     if (block) children.push(block);
   }
-  return { ...pos, html, task: item.task === true, checked: item.checked === true, children };
+  return { ...pos, lines, task: item.task === true, checked: item.checked === true, children };
 }
 
 // Track each top-level item's real source range. The rendered view anchors
@@ -149,9 +184,16 @@ function buildBlock(tok: Token, pos: Pos): PlanBlock | null {
     case "hr":
       return { ...pos, kind: "hr" };
     case "blockquote": {
+      // Track a cursor down the quote's source lines. marked strips one '> '
+      // level from each child's raw but leaves the newlines intact, so the same
+      // newline-count advance keeps every child (and nested quote) on its true
+      // source line.
       const children: PlanBlock[] = [];
+      let line = pos.startLine;
       for (const child of tok.tokens ?? []) {
-        const block = buildBlock(child, pos);
+        const childPos = rangeOf(child.raw, line);
+        line += newlineCount(child.raw);
+        const block = buildBlock(child, childPos);
         if (block) children.push(block);
       }
       return { ...pos, kind: "blockquote", children };
@@ -166,14 +208,21 @@ function buildBlock(tok: Token, pos: Pos): PlanBlock | null {
         items: parseListItems(tok.items ?? [], pos.startLine),
       };
     }
-    case "table":
+    case "table": {
+      // The header sits on the block's start line, the |---| alignment divider
+      // takes the next (it renders no row), and the data rows follow — so each row
+      // maps to a real source line for per-row commenting.
+      const rows = tok.rows ?? [];
       return {
         ...pos,
         kind: "table",
         align: tok.align ?? [],
         header: (tok.header ?? []).map((c) => decorateInline(c.text)),
-        rows: (tok.rows ?? []).map((row) => row.map((c) => decorateInline(c.text))),
+        rows: rows.map((row) => row.map((c) => decorateInline(c.text))),
+        headerLine: pos.startLine,
+        rowLines: rows.map((_, i) => pos.startLine + 2 + i),
       };
+    }
     case "paragraph":
     case "text": {
       const source = tok.text ?? tok.raw;
@@ -181,12 +230,19 @@ function buildBlock(tok: Token, pos: Pos): PlanBlock | null {
       if (fn) {
         return { ...pos, kind: "footnote", label: fn[1] ?? "", html: decorateInline(fn[2] ?? "") };
       }
-      return { ...pos, kind: "paragraph", html: decorateInline(source) };
+      return { ...pos, kind: "paragraph", lines: paragraphLines(source, pos.startLine) };
     }
     default:
       // Block-level raw HTML and any unmodeled token: show its source as escaped,
       // inert text so nothing executes and nothing is silently dropped.
-      return { ...pos, kind: "paragraph", html: escapeHtml(tok.raw) };
+      return {
+        ...pos,
+        kind: "paragraph",
+        lines: (tok.raw ?? "").split("\n").map((s, i) => ({
+          line: pos.startLine + i,
+          html: escapeHtml(s),
+        })),
+      };
   }
 }
 

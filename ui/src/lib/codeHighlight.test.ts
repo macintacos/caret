@@ -25,6 +25,15 @@ describe("plainCodeHtml", () => {
     expect(html).not.toContain("<script>");
     expect(html).toContain("&lt;script&gt;");
   });
+
+  test("tags each line with its source line, numbered from firstLine", () => {
+    // The rendered plan hovers/comments per source line, so the plain fallback
+    // must carry a data-line on every line the same way shiki output does.
+    const html = plainCodeHtml("a\nb\nc", 36);
+    expect(html).toContain('data-line="36"');
+    expect(html).toContain('data-line="37"');
+    expect(html).toContain('data-line="38"');
+  });
 });
 
 describe("highlightCode", () => {
@@ -39,5 +48,16 @@ describe("highlightCode", () => {
     // defaultColor:false emits per-token CSS variables so light/dark switch via CSS.
     expect(html).toContain("--shiki-dark");
     expect(html).toContain("const");
+  });
+
+  test("tags each highlighted line with its source line, numbered from firstLine", async () => {
+    // The fenced block opens at its fence line; the first code line is firstLine.
+    const html = await highlightCode("const x = 1;\nconst y = 2;", "ts", 21);
+    expect(html).toContain('data-line="21"');
+    expect(html).toContain('data-line="22"');
+  });
+
+  test("the plain fallback keeps the firstLine offset", async () => {
+    expect(await highlightCode("a\nb", "not-a-real-language", 10)).toBe(plainCodeHtml("a\nb", 10));
   });
 });
