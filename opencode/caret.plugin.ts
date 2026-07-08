@@ -127,6 +127,24 @@ export function deniedMessage(feedback: string): string {
   ].join("\n");
 }
 
+/** Extract caret's review URL from the child's stderr text. Core writes
+ * `caret: review this plan at <url>\n` (src/review.ts); both ends are caret-owned,
+ * so this regex is coupled to that one line by design. The trailing `\s` match
+ * means a stderr chunk cut off mid-URL (before the newline) yields nothing rather
+ * than a truncated URL — the match only fires once the whole line has arrived. */
+export function parseReviewUrl(stderr: string): string | undefined {
+  return stderr.match(/caret: review this plan at (\S+)\s/)?.[1];
+}
+
+/** The tool-call title caret surfaces (via OpenCode's `context.metadata`) while a
+ * plan awaits review, carrying the clickable review URL. It lives inside the
+ * `caret_review_plan` tool block OpenCode manages, so the tool result supersedes
+ * it on decision — the link clears instead of lingering as stuck terminal text
+ * (EXC-691). */
+export function reviewPendingTitle(url: string): string {
+  return `Review this plan at ${url}`;
+}
+
 /** The planning-prompt steer appended to the system array so the Plan agent
  * submits its plan to caret instead of calling the native plan_exit. */
 export function planningSteer(): string {
@@ -185,24 +203,45 @@ function setToolPermission(config: LooseConfig, agentName: string, action: "allo
 // --- the spawn bridge ----------------------------------------------------------
 
 /** Runs `caret review`, returning its captured stdout. Injected so execute() is
- * unit-testable without spawning a real process. */
+ * unit-testable without spawning a real process. `onStderr` streams the child's
+ * stderr chunks as they arrive, so the caller can surface the review URL the core
+ * prints there while the review is still pending. */
 export type SpawnRunner = (
   bin: string,
   env: Record<string, string | undefined>,
   stdin: string,
+  onStderr?: (chunk: string) => void,
 ) => Promise<{ stdout: string; exitCode: number }>;
 
 /** Spawn `caret review` with the review envelope on stdin and CARET_AGENT=opencode,
- * then parse its decision line. Any spawn failure fails safe to a deny. */
+ * then parse its decision line. Any spawn failure fails safe to a deny. `onUrl`, if
+ * given, fires once with the review URL the moment core prints it on stderr — the
+ * caller surfaces it inside the tool block so it clears on decision (EXC-691). */
 export async function runReviewViaCaret(
   envelope: string,
-  opts: { bin: string; run: SpawnRunner },
+  opts: { bin: string; run: SpawnRunner; onUrl?: (url: string) => void },
 ): Promise<CaretDecision> {
   try {
+    // Accumulate stderr and report the URL once — the line may arrive split
+    // across chunks, and only the first occurrence matters.
+    let stderrBuf = "";
+    let urlSent = false;
+    const onStderr = opts.onUrl
+      ? (chunk: string) => {
+          if (urlSent) return;
+          stderrBuf += chunk;
+          const url = parseReviewUrl(stderrBuf);
+          if (url) {
+            urlSent = true;
+            opts.onUrl?.(url);
+          }
+        }
+      : undefined;
     const { stdout } = await opts.run(
       opts.bin,
       { ...process.env, CARET_AGENT: "opencode" },
       envelope,
+      onStderr,
     );
     return parseDecision(stdout);
   } catch (e) {
@@ -212,14 +251,19 @@ export async function runReviewViaCaret(
 }
 
 /** Production runner: spawn the caret binary's `review` subcommand. stderr is
- * inherited so caret's "review this plan at <url>" line reaches the user. */
-const nodeSpawnRunner: SpawnRunner = (bin, env, stdin) =>
+ * PIPED (not inherited) and streamed to `onStderr`: inheriting it leaked core's
+ * "review this plan at <url>" line straight into OpenCode's TUI scrollback, where
+ * the renderer never owns it and it lingered after the decision (EXC-691). We now
+ * surface that URL via context.metadata instead; the child logs diagnostics to
+ * caret.log, so dropping the rest of stderr loses nothing. */
+const nodeSpawnRunner: SpawnRunner = (bin, env, stdin, onStderr) =>
   new Promise((resolve, reject) => {
-    const child = spawn(bin, ["review"], { env, stdio: ["pipe", "pipe", "inherit"] });
+    const child = spawn(bin, ["review"], { env, stdio: ["pipe", "pipe", "pipe"] });
     let stdout = "";
     child.stdout.on("data", (chunk) => {
       stdout += chunk.toString();
     });
+    child.stderr.on("data", (chunk) => onStderr?.(chunk.toString()));
     child.on("error", reject);
     child.on("close", (code) => resolve({ stdout, exitCode: code ?? 0 }));
     child.stdin.write(stdin);
@@ -270,7 +314,19 @@ export function createCaretPlugin(opts: { bin?: string; run?: SpawnRunner } = {}
               sessionID: context.sessionID,
               directory: context.directory,
             });
-            const decision = await runReviewViaCaret(envelope, { bin, run });
+            const decision = await runReviewViaCaret(envelope, {
+              bin,
+              run,
+              // Surface the review URL inside this tool-call block while the plan
+              // is pending; OpenCode supersedes it with the tool result on
+              // decision, so it clears instead of lingering (EXC-691). Guarded
+              // because the running OpenCode may skew from the pinned plugin SDK.
+              onUrl: (url) => {
+                if (typeof context.metadata === "function") {
+                  context.metadata({ title: reviewPendingTitle(url) });
+                }
+              },
+            });
             return decision.behavior === "allow"
               ? approvedMessage()
               : deniedMessage(decision.feedback ?? "Plan changes requested.");

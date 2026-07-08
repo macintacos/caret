@@ -15,9 +15,11 @@ import {
   deniedMessage,
   isPlanningAgent,
   parseDecision,
+  parseReviewUrl,
   planningSteer,
   planTitle,
   REVIEW_TOOL,
+  reviewPendingTitle,
   runReviewViaCaret,
   type SpawnRunner,
 } from "../../opencode/caret.plugin.ts";
@@ -95,6 +97,29 @@ test("planningSteer names the review tool and steers away from plan_exit", () =>
   const s = planningSteer();
   expect(s).toContain(REVIEW_TOOL);
   expect(s.toLowerCase()).toContain("plan_exit");
+});
+
+// --- parseReviewUrl / reviewPendingTitle (review-link surfacing, EXC-691) ---
+
+test("parseReviewUrl extracts the review URL from caret's stderr line", () => {
+  const url = "http://caret.localhost:42718/?review=abc123";
+  expect(parseReviewUrl(`caret: review this plan at ${url}\n`)).toBe(url);
+});
+
+test("parseReviewUrl returns undefined when the line is absent", () => {
+  expect(parseReviewUrl("some unrelated stderr\n")).toBeUndefined();
+  expect(parseReviewUrl("")).toBeUndefined();
+});
+
+test("parseReviewUrl waits for the whole line — a URL not yet newline-terminated does not match", () => {
+  // A mid-stream stderr chunk cut off before the trailing newline must not yield a
+  // truncated URL; the match requires the whitespace core always writes after it.
+  expect(parseReviewUrl("caret: review this plan at http://caret.localhost:4271")).toBeUndefined();
+});
+
+test("reviewPendingTitle carries the URL in the tool-call title", () => {
+  const url = "http://caret.localhost:42718/?review=abc123";
+  expect(reviewPendingTitle(url)).toBe(`Review this plan at ${url}`);
 });
 
 // --- applyCaretConfig (subagent-bypass mitigation) ---
@@ -182,6 +207,48 @@ test("runReviewViaCaret fails safe to a deny when the spawn throws", async () =>
   expect(decision.feedback).toContain("ENOENT");
 });
 
+// A runner that streams the given stderr chunks (as the real child does) before
+// resolving with the decision on stdout — exercises the review-link surfacing.
+function streamingRunner(stdout: string, stderrChunks: string[]): SpawnRunner {
+  return async (_bin, _env, _stdin, onStderr) => {
+    for (const chunk of stderrChunks) onStderr?.(chunk);
+    return { stdout, exitCode: 0 };
+  };
+}
+
+test("runReviewViaCaret surfaces the review URL via onUrl when the child streams it on stderr", async () => {
+  const url = "http://caret.localhost:42718/?review=xyz";
+  const seen: string[] = [];
+  const decision = await runReviewViaCaret("{}", {
+    bin: "caret",
+    run: streamingRunner(`{"behavior":"allow"}`, [`caret: review this plan at ${url}\n`]),
+    onUrl: (u) => seen.push(u),
+  });
+  expect(seen).toEqual([url]);
+  expect(decision).toEqual({ behavior: "allow" });
+});
+
+test("runReviewViaCaret fires onUrl once even when the URL line arrives split across chunks", async () => {
+  const url = "http://caret.localhost:42718/?review=split";
+  const seen: string[] = [];
+  await runReviewViaCaret("{}", {
+    bin: "caret",
+    run: streamingRunner(`{"behavior":"allow"}`, ["caret: review this ", `plan at ${url}\n`]),
+    onUrl: (u) => seen.push(u),
+  });
+  expect(seen).toEqual([url]);
+});
+
+test("runReviewViaCaret never calls onUrl when no review URL appears on stderr", async () => {
+  const seen: string[] = [];
+  await runReviewViaCaret("{}", {
+    bin: "caret",
+    run: streamingRunner(`{"behavior":"allow"}`, ["unrelated diagnostic noise\n"]),
+    onUrl: (u) => seen.push(u),
+  });
+  expect(seen).toEqual([]);
+});
+
 // --- the assembled plugin: tool.execute end-to-end with a stubbed runner ---
 
 async function buildHooks(run: SpawnRunner) {
@@ -193,6 +260,20 @@ async function buildHooks(run: SpawnRunner) {
 // Minimal ToolContext stub — execute() only reads agent/sessionID/directory.
 function ctx(agent: string): ToolContext {
   return { agent, sessionID: "S", directory: "/p" } as unknown as ToolContext;
+}
+
+// A ToolContext stub that records the titles execute() surfaces via metadata().
+function ctxWithMetadata(agent: string): { context: ToolContext; titles: string[] } {
+  const titles: string[] = [];
+  const context = {
+    agent,
+    sessionID: "S",
+    directory: "/p",
+    metadata: (input: { title?: string }) => {
+      if (input.title) titles.push(input.title);
+    },
+  } as unknown as ToolContext;
+  return { context, titles };
 }
 
 test("the review tool approves: a plan-agent call returns the approved message", async () => {
@@ -220,6 +301,16 @@ test("the review tool refuses a non-planning (subagent) caller without spawning 
   const out = await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, ctx("general"));
   expect(spawned).toBe(false);
   expect(String(out)).toContain(REVIEW_TOOL);
+});
+
+test("the review tool surfaces the pending review URL via context.metadata (EXC-691)", async () => {
+  const url = "http://caret.localhost:42718/?review=live";
+  const hooks = await buildHooks(
+    streamingRunner(`{"behavior":"allow"}`, [`caret: review this plan at ${url}\n`]),
+  );
+  const { context, titles } = ctxWithMetadata("plan");
+  await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, context);
+  expect(titles).toEqual([`Review this plan at ${url}`]);
 });
 
 test("the config hook restricts the tool to primary agents", async () => {
