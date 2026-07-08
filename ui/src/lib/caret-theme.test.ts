@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { createHighlighterCore } from "shiki/core";
+import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 import { caretDark, caretLight } from "./caret-theme.ts";
 
 // caret-theme.ts hand-duplicates the app.css paper/ink hex palette because shiki
@@ -105,5 +107,50 @@ describe("caret-theme ↔ app.css palette sync", () => {
     expect(caretLight.colors?.["editor.background"]).not.toBe(
       caretDark.colors?.["editor.background"],
     );
+  });
+});
+
+// EXC-692: the plan view renders the plan as a markdown document, so a fenced
+// code block's opening line (```lang) is markdown-tokenized — the ``` / ~~~ fence
+// markers carry punctuation.definition.markdown and the language info-string
+// carries fenced_code.block.language. The theme subdues the markers to --ink-faint
+// and makes the language prominent (--accent, bold) while leaving the code body's
+// color untouched. Tokenizing a real fence with caret-light pins those outcomes;
+// the markers and language only render as separate spans once their colors differ.
+describe("caret-theme fenced-code fence line", () => {
+  const css = Bun.file(APP_CSS).text();
+
+  // The app.css palette values are lowercase hex; shiki emits some token colors
+  // uppercased, so normalize the received color (only) before comparing.
+  async function tokenizeFence() {
+    const hl = await createHighlighterCore({
+      themes: [caretLight],
+      langs: [import("shiki/langs/markdown.mjs")],
+      engine: createJavaScriptRegexEngine(),
+    });
+    const md = ["```ts", "code", "```"].join("\n");
+    return hl.codeToTokensBase(md, { lang: "markdown", theme: "caret-light" });
+  }
+
+  test("subdues the fence backticks to --ink-faint", async () => {
+    const expected = expectedPalette(readRootTokens(await css, 0));
+    const [line1] = await tokenizeFence();
+    const backticks = line1?.find((t) => t.content === "```");
+    expect(backticks?.color?.toLowerCase()).toBe(expected.comment);
+  });
+
+  test("renders the language tag in bold --accent", async () => {
+    const expected = expectedPalette(readRootTokens(await css, 0));
+    const [line1] = await tokenizeFence();
+    const lang = line1?.find((t) => t.content === "ts");
+    expect(lang?.color?.toLowerCase()).toBe(expected.keyword);
+    // shiki FontStyle bitmask: bit value 2 is bold.
+    expect((lang?.fontStyle ?? 0) & 2).toBe(2);
+  });
+
+  test("leaves the code body color unchanged (--accent-bright)", async () => {
+    const expected = expectedPalette(readRootTokens(await css, 0));
+    const code = (await tokenizeFence())[1]?.find((t) => t.content === "code");
+    expect(code?.color?.toLowerCase()).toBe(expected.entity);
   });
 });
