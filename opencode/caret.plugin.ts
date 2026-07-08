@@ -136,13 +136,45 @@ export function parseReviewUrl(stderr: string): string | undefined {
   return stderr.match(/caret: review this plan at (\S+)\s/)?.[1];
 }
 
-/** The tool-call title caret surfaces (via OpenCode's `context.metadata`) while a
- * plan awaits review, carrying the clickable review URL. It lives inside the
- * `caret_review_plan` tool block OpenCode manages, so the tool result supersedes
- * it on decision — the link clears instead of lingering as stuck terminal text
- * (EXC-691). */
-export function reviewPendingTitle(url: string): string {
-  return `Review this plan at ${url}`;
+/** The toast message caret shows while a plan awaits review, carrying the review
+ * URL. OpenCode renders `caret_review_plan` as a GENERIC tool, whose running state
+ * only shows the tool name + input and never the tool's `metadata` title — so the
+ * link is surfaced as a toast (a caret-owned, clearable surface) instead of leaking
+ * it via inherited stderr or an invisible metadata title (EXC-691). */
+export function reviewToastMessage(url: string): string {
+  return `caret: review this plan at ${url}`;
+}
+
+/** OpenCode's plugin client, structurally narrowed to the one call caret makes.
+ * A structural type (rather than importing the SDK client) keeps this robust
+ * against version skew between the pinned plugin SDK and the running OpenCode. */
+type ToastBody = {
+  message: string;
+  variant: "info" | "success" | "warning" | "error";
+  duration?: number;
+};
+type ToastClient = { tui?: { showToast?: (opts: { body: ToastBody }) => unknown } } | undefined;
+
+/** How long the pending review-link toast stays up. Long enough to outlast a
+ * review; on a decision we supersede it with the short toast below, so this
+ * ceiling only bites if the review process dies without ever deciding. */
+const REVIEW_TOAST_MS = 10 * 60_000;
+/** The brief decision toast that supersedes (and thereby clears) the review-link
+ * toast, since OpenCode's single-slot toast surface has no hide API. */
+const DECISION_TOAST_MS = 4_000;
+
+/** Best-effort toast: surfacing or clearing the review link must never crash or
+ * delay the review. Swallows a missing method (SDK skew) and any sync throw or
+ * async rejection. Called as `tui.showToast(...)` so the SDK client keeps its
+ * `this` binding. */
+function showToast(client: ToastClient, body: ToastBody): void {
+  const tui = client?.tui;
+  if (!tui || typeof tui.showToast !== "function") return;
+  try {
+    Promise.resolve(tui.showToast({ body })).catch(() => {});
+  } catch {
+    // best-effort — the review decision is what matters.
+  }
 }
 
 /** The planning-prompt steer appended to the system array so the Plan agent
@@ -263,8 +295,8 @@ export async function runReviewViaCaret(
  * PIPED (not inherited) and streamed to `onStderr`: inheriting it leaked core's
  * "review this plan at <url>" line straight into OpenCode's TUI scrollback, where
  * the renderer never owns it and it lingered after the decision (EXC-691). We now
- * surface that URL via context.metadata instead; the child logs diagnostics to
- * caret.log, so dropping the rest of stderr loses nothing. */
+ * parse that URL and surface it as a caret-owned toast instead; the child logs
+ * diagnostics to caret.log, so dropping the rest of stderr loses nothing. */
 const nodeSpawnRunner: SpawnRunner = (bin, env, stdin, onStderr) =>
   new Promise((resolve, reject) => {
     const child = spawn(bin, ["review"], { env, stdio: ["pipe", "pipe", "pipe"] });
@@ -289,7 +321,10 @@ export function createCaretPlugin(opts: { bin?: string; run?: SpawnRunner } = {}
   const bin = opts.bin ?? process.env.CARET_OPENCODE_BIN ?? CARET_BIN;
   const run = opts.run ?? nodeSpawnRunner;
 
-  return async () => {
+  return async (input) => {
+    // OpenCode gives every plugin its SDK client; caret uses it to surface the
+    // review link as a toast (EXC-691). Narrowed structurally for skew-safety.
+    const client = (input as { client?: ToastClient }).client;
     const hooks: Hooks = {
       // Restrict the review tool to primary agents + allow/deny per agent.
       config: async (config) => {
@@ -323,19 +358,39 @@ export function createCaretPlugin(opts: { bin?: string; run?: SpawnRunner } = {}
               sessionID: context.sessionID,
               directory: context.directory,
             });
+            let linkShown = false;
             const decision = await runReviewViaCaret(envelope, {
               bin,
               run,
-              // Surface the review URL inside this tool-call block while the plan
-              // is pending; OpenCode supersedes it with the tool result on
-              // decision, so it clears instead of lingering (EXC-691). Guarded
-              // because the running OpenCode may skew from the pinned plugin SDK.
+              // Show the review URL as a toast while the plan is pending (EXC-691).
               onUrl: (url) => {
-                if (typeof context.metadata === "function") {
-                  context.metadata({ title: reviewPendingTitle(url) });
-                }
+                linkShown = true;
+                showToast(client, {
+                  message: reviewToastMessage(url),
+                  variant: "info",
+                  duration: REVIEW_TOAST_MS,
+                });
               },
             });
+            // Clear the pending review-link toast on decision by superseding it
+            // with a brief decision toast — OpenCode's toast surface is single-slot
+            // with no hide API, so a fresh toast replaces the link (EXC-691).
+            if (linkShown) {
+              showToast(
+                client,
+                decision.behavior === "allow"
+                  ? {
+                      message: "caret: plan approved",
+                      variant: "success",
+                      duration: DECISION_TOAST_MS,
+                    }
+                  : {
+                      message: "caret: changes requested",
+                      variant: "info",
+                      duration: DECISION_TOAST_MS,
+                    },
+              );
+            }
             return decision.behavior === "allow"
               ? approvedMessage()
               : deniedMessage(decision.feedback ?? "Plan changes requested.");

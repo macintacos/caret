@@ -140,8 +140,8 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decisi
     if (!hasLiveClient) deps.openBrowser(url);
     // Also print the URL to stderr — clickable in the transcript if the browser
     // fails to open. NOTE: the OpenCode plugin (opencode/caret.plugin.ts,
-    // parseReviewUrl) regex-parses this exact line to surface the link in its
-    // tool UI, so keep the `caret: review this plan at <url>` wording stable.
+    // parseReviewUrl) regex-parses this exact line to surface the link as a toast,
+    // so keep the `caret: review this plan at <url>` wording stable.
     process.stderr.write(`caret: review this plan at ${url}\n`);
 
     step = "longPoll";

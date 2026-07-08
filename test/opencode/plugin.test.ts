@@ -19,7 +19,7 @@ import {
   planningSteer,
   planTitle,
   REVIEW_TOOL,
-  reviewPendingTitle,
+  reviewToastMessage,
   runReviewViaCaret,
   type SpawnRunner,
 } from "../../opencode/caret.plugin.ts";
@@ -117,9 +117,9 @@ test("parseReviewUrl waits for the whole line — a URL not yet newline-terminat
   expect(parseReviewUrl("caret: review this plan at http://caret.localhost:4271")).toBeUndefined();
 });
 
-test("reviewPendingTitle carries the URL in the tool-call title", () => {
+test("reviewToastMessage carries the URL in the toast message", () => {
   const url = "http://caret.localhost:42718/?review=abc123";
-  expect(reviewPendingTitle(url)).toBe(`Review this plan at ${url}`);
+  expect(reviewToastMessage(url)).toBe(`caret: review this plan at ${url}`);
 });
 
 // --- applyCaretConfig (subagent-bypass mitigation) ---
@@ -270,7 +270,7 @@ test("runReviewViaCaret still returns the decision when onUrl throws (never cras
       "caret: review this plan at http://caret.localhost:42718/?review=boom\n",
     ]),
     onUrl: () => {
-      throw new Error("context.metadata blew up");
+      throw new Error("toast surface blew up");
     },
   });
   expect(decision).toEqual({ behavior: "allow" });
@@ -278,10 +278,9 @@ test("runReviewViaCaret still returns the decision when onUrl throws (never cras
 
 // --- the assembled plugin: tool.execute end-to-end with a stubbed runner ---
 
-async function buildHooks(run: SpawnRunner) {
+async function buildHooks(run: SpawnRunner, client?: PluginInput["client"]) {
   const plugin = createCaretPlugin({ bin: "caret", run });
-  // caret's hooks never read the PluginInput; a minimal stub suffices.
-  return await plugin({} as unknown as PluginInput);
+  return await plugin({ client } as unknown as PluginInput);
 }
 
 // Minimal ToolContext stub — execute() only reads agent/sessionID/directory.
@@ -289,18 +288,21 @@ function ctx(agent: string): ToolContext {
   return { agent, sessionID: "S", directory: "/p" } as unknown as ToolContext;
 }
 
-// A ToolContext stub that records the titles execute() surfaces via metadata().
-function ctxWithMetadata(agent: string): { context: ToolContext; titles: string[] } {
-  const titles: string[] = [];
-  const context = {
-    agent,
-    sessionID: "S",
-    directory: "/p",
-    metadata: (input: { title?: string }) => {
-      if (input.title) titles.push(input.title);
+// A plugin client that records the toasts execute() shows via client.tui.showToast.
+function recordingClient(): {
+  client: PluginInput["client"];
+  toasts: Array<{ message: string; variant: string }>;
+} {
+  const toasts: Array<{ message: string; variant: string }> = [];
+  const client = {
+    tui: {
+      showToast: (opts: { body: { message: string; variant: string } }) => {
+        toasts.push({ message: opts.body.message, variant: opts.body.variant });
+        return Promise.resolve({});
+      },
     },
-  } as unknown as ToolContext;
-  return { context, titles };
+  } as unknown as PluginInput["client"];
+  return { client, toasts };
 }
 
 test("the review tool approves: a plan-agent call returns the approved message", async () => {
@@ -330,22 +332,50 @@ test("the review tool refuses a non-planning (subagent) caller without spawning 
   expect(String(out)).toContain(REVIEW_TOOL);
 });
 
-test("the review tool surfaces the pending review URL via context.metadata (EXC-691)", async () => {
+test("the review tool shows the pending review URL as a toast, then clears it on approval (EXC-691)", async () => {
   const url = "http://caret.localhost:42718/?review=live";
+  const { client, toasts } = recordingClient();
   const hooks = await buildHooks(
     streamingRunner(`{"behavior":"allow"}`, [`caret: review this plan at ${url}\n`]),
+    client,
   );
-  const { context, titles } = ctxWithMetadata("plan");
-  await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, context);
-  expect(titles).toEqual([`Review this plan at ${url}`]);
+  await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, ctx("plan"));
+  // First: the review-link toast while pending. Then: a decision toast that
+  // supersedes it (single-slot toast surface has no hide API), clearing the link.
+  expect(toasts[0]).toEqual({ message: `caret: review this plan at ${url}`, variant: "info" });
+  expect(toasts).toHaveLength(2);
+  expect(toasts[1]?.message.toLowerCase()).toContain("approv");
 });
 
-test("the review tool does not crash when context.metadata is absent (SDK skew)", async () => {
+test("the review tool clears the link with a changes-requested toast on deny (EXC-691)", async () => {
+  const url = "http://caret.localhost:42718/?review=deny";
+  const { client, toasts } = recordingClient();
+  const hooks = await buildHooks(
+    streamingRunner(`{"behavior":"deny","feedback":"narrow it"}`, [
+      `caret: review this plan at ${url}\n`,
+    ]),
+    client,
+  );
+  await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, ctx("plan"));
+  expect(toasts[0]?.message).toBe(`caret: review this plan at ${url}`);
+  expect(toasts[1]?.message.toLowerCase()).toContain("change");
+});
+
+test("the review tool shows no toast when no review URL is surfaced", async () => {
+  const { client, toasts } = recordingClient();
+  // stubRunner emits no stderr, so onUrl never fires and no toast is shown.
+  const hooks = await buildHooks(stubRunner(`{"behavior":"allow"}`), client);
+  await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, ctx("plan"));
+  expect(toasts).toEqual([]);
+});
+
+test("the review tool does not crash when the client lacks tui.showToast (SDK skew)", async () => {
   const url = "http://caret.localhost:42718/?review=noguard";
+  // A client with no `tui` — the guard must skip the toast, not throw.
   const hooks = await buildHooks(
     streamingRunner(`{"behavior":"allow"}`, [`caret: review this plan at ${url}\n`]),
+    {} as unknown as PluginInput["client"],
   );
-  // ctx() has no metadata method — the guard must skip the call, not throw.
   const out = await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, ctx("plan"));
   expect(String(out).toLowerCase()).toContain("approv");
 });
