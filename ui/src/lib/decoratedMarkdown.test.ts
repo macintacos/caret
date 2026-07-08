@@ -74,6 +74,14 @@ describe("decorateMarkdown inline decoration keeps delimiters", () => {
     expect(visibleText(row!.html)).toBe("**foo _bar_ baz**");
   });
 
+  test("adjacent nested emphasis does not duplicate delimiters", () => {
+    // The inner marker abuts the outer one, so a greedy delimiter peel would
+    // over-consume it (***foo*** -> *****foo*****). Each must stay verbatim.
+    for (const src of ["***foo***", "**_foo_**", "_**foo**_", "a ***b*** c", "~~x~~"]) {
+      expect(visibleText(decorateMarkdown(src)[0]!.html)).toBe(src);
+    }
+  });
+
   test("a link is an <a> whose visible text is the raw markdown", () => {
     const [row] = decorateMarkdown("see [docs](https://example.com/x)");
     expect(row!.html).toContain('href="https://example.com/x"');

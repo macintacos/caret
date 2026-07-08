@@ -52,6 +52,15 @@
     belowRow,
   }: Props = $props();
 
+  // Stable enablement flags so the interaction effects below wire up ONCE and
+  // survive re-renders. The parent passes fresh inline callback closures on every
+  // ~2s poll tick; an effect guard that read the raw prop would re-run each tick,
+  // and its cleanup would tear down the listeners tracking an in-progress drag
+  // (silently losing the range). Mirrors SourceView's rangeCommentingEnabled. The
+  // handlers still call the props by reference, so they see the latest closures.
+  const lineCommentEnabled = $derived(onLineComment != null);
+  const rangeCommentEnabled = $derived(onLineRangeComment != null);
+
   // Decorated rows, memoized on plan text so an unchanged poll tick (same text,
   // fresh doc literal) keeps the same array reference and skips a re-render.
   // contentKey is read so the memo re-derives when the identity changes even if
@@ -147,7 +156,7 @@
   // suppression. Gated on onLineComment so a read-only view stays inert.
   $effect(() => {
     const host = container;
-    if (host == null || onLineComment == null) return;
+    if (host == null || !lineCommentEnabled) return;
     host.addEventListener("click", handleClick);
     return () => host.removeEventListener("click", handleClick);
   });
@@ -159,7 +168,7 @@
   // escape-hatch). Mirrors SourceView's content-drag wiring, minus the shadow root.
   $effect(() => {
     const host = container;
-    if (host == null || onLineRangeComment == null) return;
+    if (host == null || !rangeCommentEnabled) return;
     const drag = createLineDrag({
       lineFromPoint: (x, y) => lineAt(document.elementFromPoint(x, y)),
       onPreview: (range) => {
@@ -167,7 +176,13 @@
         onLineRangePreview?.(range);
       },
       onCommit: (range) => {
+        // Suppress the synthetic click that follows a drag-release; clear on the
+        // next frame (after that click) so a drag that ends OUTSIDE the container,
+        // where no click follows, can't strand the flag and eat the next click.
         dragOccurred = true;
+        requestAnimationFrame(() => {
+          dragOccurred = false;
+        });
         onLineRangeComment?.(range.startLine, range.endLine);
       },
     });

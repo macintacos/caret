@@ -71,19 +71,16 @@ interface InlineToken {
   tokens?: InlineToken[];
 }
 
-// A symmetric-delimiter token's raw is `<marker><inner><marker>` (e.g. `**x**`).
-// Peel the leading/trailing runs of marker chars so we can re-emit them AROUND
-// the recursively-decorated inner, keeping the delimiters visible and styled.
-function splitDelims(raw: string, markers: string): { open: string; close: string } {
-  let i = 0;
-  while (i < raw.length && markers.includes(raw[i] ?? "")) i++;
-  let j = raw.length;
-  while (j > i && markers.includes(raw[j - 1] ?? "")) j--;
-  return { open: raw.slice(0, i), close: raw.slice(j) };
-}
-
-function wrapEmphasis(tag: string, cls: string, t: InlineToken, markers: string): string {
-  const { open, close } = splitDelims(t.raw, markers);
+// A symmetric-emphasis token's raw is `<marker><inner><marker>` (e.g. `**x**`).
+// Re-emit the delimiters AROUND the recursively-decorated inner, keeping them
+// visible and styled. The delimiter length is FIXED by token type — strong/del
+// are two chars (`**`/`__`/`~~`), em is one (`*`/`_`) — never a greedy run: a
+// greedy peel over-consumes an adjacent nested marker (in `***foo***` the em's
+// leading `*` would be counted into strong's `**`), duplicating it and breaking
+// the verbatim-source invariant.
+function wrapEmphasis(tag: string, cls: string, t: InlineToken, delimLen: number): string {
+  const open = t.raw.slice(0, delimLen);
+  const close = t.raw.slice(t.raw.length - delimLen);
   const inner = t.tokens ? decorateTokens(t.tokens) : esc(t.text ?? "");
   return `<${tag} class="${cls}">${esc(open)}${inner}${esc(close)}</${tag}>`;
 }
@@ -91,11 +88,11 @@ function wrapEmphasis(tag: string, cls: string, t: InlineToken, markers: string)
 function decorateToken(t: InlineToken): string {
   switch (t.type) {
     case "strong":
-      return wrapEmphasis("strong", "md-strong", t, "*_");
+      return wrapEmphasis("strong", "md-strong", t, 2);
     case "em":
-      return wrapEmphasis("em", "md-em", t, "*_");
+      return wrapEmphasis("em", "md-em", t, 1);
     case "del":
-      return wrapEmphasis("del", "md-del", t, "~");
+      return wrapEmphasis("del", "md-del", t, 2);
     case "codespan":
       // Inline code is literal (no child tokens); show the raw incl. backticks.
       return `<code class="md-code">${esc(t.raw)}</code>`;
