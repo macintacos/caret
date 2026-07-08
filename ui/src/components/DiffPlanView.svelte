@@ -59,6 +59,8 @@
   import LegacyAnnotationList from "./LegacyAnnotationList.svelte";
   import SourceToc from "./SourceToc.svelte";
   import CodeCopyButton from "./CodeCopyButton.svelte";
+  import RenderedPlanView from "./RenderedPlanView.svelte";
+  import { type RenderMode, readRenderMode, writeRenderMode } from "../lib/renderModePref.ts";
 
   interface Props {
     /** The review whose current plan version is rendered. */
@@ -149,6 +151,16 @@
   const canCompare = $derived(compare.canCompare(review.versions));
   const showDiff = $derived(canCompare && compareStore.comparing);
 
+  // Single-version render mode: the styled "rendered markdown" view (default) or
+  // the source-code grid. Persisted so a reviewer's choice survives reloads. The
+  // toggle shows only outside compare mode — the compare diff is always source.
+  let viewMode = $state<RenderMode>(readRenderMode());
+  function setViewMode(mode: RenderMode): void {
+    if (mode === viewMode) return;
+    viewMode = mode;
+    writeRenderMode(mode);
+  }
+
   // Reader affordances applied to both the single-version source view and the
   // compare diff are fixed (EXC-664): long lines scroll (never wrap) and the
   // line-number gutter is always shown. These were once user toggles (EXC-606),
@@ -234,7 +246,9 @@
     const scroller = scrollEl;
     const el = host;
     const blocks = codeBlocks;
-    if (scroller == null || el == null || blocks.length === 0) {
+    // The copy button hit-tests the source view's shadow rows, so it is a
+    // source-mode affordance; the rendered view has no per-block copy button.
+    if (viewMode !== "source" || scroller == null || el == null || blocks.length === 0) {
       hoveredCopy = undefined;
       return;
     }
@@ -320,9 +334,11 @@
   // picks the line sitting at the same offset jumps park headings at, so the
   // tracked section matches where a ToC click lands rather than the row above it.
   function topVisibleLine(): number | null {
-    const rows = scrollEl?.querySelector(".diffview")?.shadowRoot?.querySelectorAll<HTMLElement>(
-      "[data-line]",
-    );
+    // Source mode paints rows into the .diffview shadow root; rendered mode paints
+    // them as light-DOM children of .rendered-plan. Read whichever surface is live.
+    const rows =
+      scrollEl?.querySelector(".diffview")?.shadowRoot?.querySelectorAll<HTMLElement>("[data-line]") ??
+      scrollEl?.querySelector(".rendered-plan")?.querySelectorAll<HTMLElement>("[data-line]");
     if (rows == null || rows.length === 0) return null;
     // Capture the narrowed value: the generator closure below doesn't inherit TS's
     // non-null narrowing of `rows`.
@@ -528,10 +544,66 @@
   ]);
 </script>
 
+<!-- Per-line comment content for the rendered view: the saved-comment thread, the
+     open composer, and any scratch markers anchored at `line`. RenderedPlanView
+     renders this inline right after the matching row — the light-DOM counterpart to
+     the source view's slotInto projection. Authored here so it shares DiffPlanView's
+     commenting state and scoped styles. -->
+{#snippet renderedBelow(line: number)}
+  {@const thread = lineThreads.find((t) => t.line === line)}
+  {@const lineScratches = scratches.filter((s) => s.endLine === line && pending?.endLine !== line)}
+  {#if thread || pending?.endLine === line || lineScratches.length > 0}
+    <div class="rendered-below">
+      {#if thread}
+        <SourceAnnotationThread
+          annotations={thread.annotations}
+          {focusedAnnotation}
+          onFocus={onFocusAnnotation}
+          onEdit={onEditAnnotation}
+          onDelete={onDeleteAnnotation}
+        />
+      {/if}
+      {#if pending?.endLine === line}
+        <SourceComposer
+          startLine={pending.startLine}
+          endLine={pending.endLine}
+          initial={pendingText}
+          onInput={(text) => (liveText = text)}
+          onSubmit={(comment) => commenting.submit(comment)}
+          onCancel={(text) => commenting.cancel(text)}
+        />
+      {/if}
+      {#each lineScratches as scratch (scratch.key)}
+        <SourceScratchMarker text={scratch.text} onResume={() => resumeScratch(scratch.key)} />
+      {/each}
+    </div>
+  {/if}
+{/snippet}
+
 <!-- Control row above the surface: the version-compare picker. The picker is
      always shown; its toggle disables itself when there are no other versions to
      compare (EXC-664). -->
 <div class="control-row">
+  {#if !showDiff}
+    <!-- Single-version view-mode toggle: the styled "rendered markdown" view vs. the
+         source grid. Hidden in compare mode (the compare diff is always source). -->
+    <div class="view-toggle" role="group" aria-label="Plan view">
+      <button
+        type="button"
+        class="view-toggle-btn"
+        class:active={viewMode === "rendered"}
+        aria-pressed={viewMode === "rendered"}
+        onclick={() => setViewMode("rendered")}
+      >Rendered</button>
+      <button
+        type="button"
+        class="view-toggle-btn"
+        class:active={viewMode === "source"}
+        aria-pressed={viewMode === "source"}
+        onclick={() => setViewMode("source")}
+      >Source</button>
+    </div>
+  {/if}
   <VersionComparePicker
     versions={review.versions}
     comparing={compareStore.comparing}
@@ -591,6 +663,23 @@
           <div class="drag-readout metric" role="status" aria-live="polite">{dragReadout}</div>
         {/if}
       </div>
+      {#if viewMode === "rendered"}
+        <!-- Rendered markdown: styled decorated source, no gutter. Per-line comment
+             content renders inline after each row via the renderedBelow snippet. -->
+        <RenderedPlanView
+          doc={{ name: "plan.md", text: review.currentPlan }}
+          {contentKey}
+          onReady={onSourceReady}
+          onLineComment={(line) => openRange(line, line)}
+          onLineRangeComment={(start, end) => openRange(start, end)}
+          onLineRangePreview={(range) => {
+            if (range != null) retireDragHint();
+            dragRange = range ?? undefined;
+          }}
+          selectedRange={pending ?? null}
+          belowRow={renderedBelow}
+        />
+      {:else}
       <SourceView
         doc={{ name: "plan.md", text: linkLayer.text }}
         links={linkLayer.spans}
@@ -668,6 +757,7 @@
           </div>
         {/if}
       {/each}
+      {/if}
       <!-- One-time hint: rendered last so it sticks to the bottom of the scroll
            viewport, reading as ambient guidance. Surfaces the drag-to-comment
            gesture on first gutter hover, retired for good once the reviewer drags. -->
@@ -700,6 +790,52 @@
      in compare mode) reach the right edge. */
   .control-row :global(.compare-picker) {
     flex: 1;
+  }
+
+  /* Single-version view-mode toggle: a compact segmented control. The track is a
+     sunk lane; the active segment lifts to raised paper with accent text, so the
+     current mode reads at a glance without shouting. */
+  .view-toggle {
+    display: inline-flex;
+    flex: none;
+    gap: 2px;
+    padding: 2px;
+    background: var(--paper-sunk);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+  }
+  .view-toggle-btn {
+    appearance: none;
+    border: none;
+    background: none;
+    cursor: pointer;
+    padding: 0.2rem 0.6rem;
+    font-family: var(--font-sans);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--ink-soft);
+    border-radius: calc(var(--radius) - 2px);
+    transition:
+      color var(--dur-fast) var(--ease-out),
+      background var(--dur-fast) var(--ease-out);
+  }
+  .view-toggle-btn:hover {
+    color: var(--ink);
+  }
+  .view-toggle-btn.active {
+    color: var(--accent);
+    background: var(--paper-raised);
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Inline comment content projected under a rendered row (the renderedBelow
+     snippet). Reset the rendered view's large reading font/leading so the composer
+     and comment cards render at their own scale, with breathing room above/below. */
+  .rendered-below {
+    font-size: var(--text-base);
+    line-height: normal;
+    white-space: normal;
+    padding: 0.35rem 0 0.6rem;
   }
 
   /* The contents pane and source view share one row; the pane is a fixed-width

@@ -1,9 +1,10 @@
 import "../../test-mount.ts";
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { ClientReview, PlanVersion } from "@core/types";
 import { until } from "../../../test/support/poll.ts";
 import { render } from "../../test-mount.ts";
 import { reactiveProps } from "../../test-props.svelte.ts";
+import { RENDER_MODE_KEY } from "../lib/renderModePref.ts";
 import DiffPlanView from "./DiffPlanView.svelte";
 
 // Default props: no-op handlers and an empty annotation set, so the rendering
@@ -65,7 +66,38 @@ function shadow(target: HTMLElement): ShadowRoot | null {
   return target.querySelector(".diffview")?.shadowRoot ?? null;
 }
 
+// This suite exercises the source-view surface, which now lives behind the
+// "source" view mode (the default is the rendered markdown view). Pin source mode
+// so these assertions keep testing the grid they were written for; the rendered
+// default and the toggle are covered by the "view mode" describe below.
+beforeEach(() => localStorage.setItem(RENDER_MODE_KEY, "source"));
 afterEach(() => localStorage.clear());
+
+describe("DiffPlanView view mode", () => {
+  test("defaults to the rendered markdown view, not the source grid", async () => {
+    localStorage.clear(); // default = rendered
+    const { target } = render(DiffPlanView, props());
+    const rendered = await until(
+      () => target.querySelector(".rendered-plan")?.textContent?.includes("hello world") ?? false,
+    );
+    expect(rendered).toBe(true);
+    expect(shadow(target)).toBeNull();
+  });
+
+  test("the Source toggle switches to the source grid", async () => {
+    localStorage.clear(); // start on the rendered default
+    const { target } = render(DiffPlanView, props());
+    await until(() => target.querySelector(".rendered-plan") != null);
+    const sourceBtn = [...target.querySelectorAll("button")].find(
+      (b) => b.textContent?.trim() === "Source",
+    );
+    sourceBtn?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    const painted = await until(
+      () => shadow(target)?.textContent?.includes("hello world") ?? false,
+    );
+    expect(painted).toBe(true);
+  });
+});
 
 describe("DiffPlanView rendering", () => {
   test("renders the plan source text into the source view", async () => {

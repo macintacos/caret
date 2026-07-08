@@ -111,6 +111,10 @@ const EXEMPT: Record<string, string[]> = {
   // Shares the request-changes dialog's title size — the two review dialogs read
   // as one vocabulary, so their <h2> sits at the same display step above the scale.
   "ApproveConfirmDialog.svelte": ["1.35rem"],
+  // The rendered plan is a *document* surface (EXC-693), not chrome: its heading
+  // hierarchy and inline-code step are em-relative on purpose, so they scale with
+  // the reader's base rather than snapping to the chrome's absolute --text-* steps.
+  "RenderedPlanView.svelte": ["1.7em", "1.4em", "1.2em", "1.05em", "0.9em"],
 };
 
 describe("chrome components reference the scale, not raw font-size literals", () => {
