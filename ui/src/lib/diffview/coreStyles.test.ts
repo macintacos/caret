@@ -157,13 +157,18 @@ describe("the fenced code-block panel (EXC-692)", () => {
     expect(body).toMatch(/padding-inline-start:\s*2ch\b/);
   });
 
-  test("gives the fence lines symmetric block padding (taller + vertically centered)", () => {
-    expect(overrideDecls).toMatch(
-      /\[data-line\]\[data-code-start\]:not\(\[data-selected-line\]\)\s*\{[^}]*padding-block:/,
-    );
-    expect(overrideDecls).toMatch(
-      /\[data-line\]\[data-code-end\]:not\(\[data-selected-line\]\)\s*\{[^}]*padding-block:/,
-    );
+  test("pads only the outer edges of the fence lines (they hug the code within)", () => {
+    const startBody =
+      overrideDecls.match(/\[data-code-start\]:not\(\[data-selected-line\]\)\s*\{[^}]*\}/)?.[0] ??
+      "";
+    const endBody =
+      overrideDecls.match(/\[data-code-end\]:not\(\[data-selected-line\]\)\s*\{[^}]*\}/)?.[0] ?? "";
+    // Opening fence: space above only; closing fence: space below only — so the
+    // fence lines hug the code and there's no inner gap.
+    expect(startBody).toContain("padding-block-start:");
+    expect(startBody).not.toMatch(/padding-block-end:|padding-block:/);
+    expect(endBody).toContain("padding-block-end:");
+    expect(endBody).not.toMatch(/padding-block-start:|padding-block:/);
   });
 
   test("rounds only the block's first (top) and last (bottom) lines with var(--radius)", () => {
