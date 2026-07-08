@@ -5,14 +5,16 @@
   // tables, blockquotes and shiki code blocks render properly, while emphasis
   // keeps its markers visible (**bold** shows its asterisks, `x` its backticks).
   //
-  // Each top-level block is one comment anchor carrying its exact source range
-  // (data-line = start, data-line-end = end). Clicking a block opens a comment on
-  // its whole source range; dragging across blocks opens a range from the first
-  // block's start to the last block's end — so what's sent to the reviewer stays
-  // 1:1 with the source even though the view visually combines lines. A light-DOM
-  // peer of diffview/SourceView.svelte: caret owns the rows, no @pierre/diffs
-  // shadow grid, and the host renders comment threads / composer / scratch markers
-  // inline via the `belowRow` snippet, rendered right after each block. No gutter.
+  // Interaction is per SOURCE LINE, and each line is a contiguous full-width row
+  // like the source view: every source line is its own [data-line] element, so
+  // hovering highlights just that line, a click comments on it, and a drag comments
+  // the span — and because the hit-test resolves the whole horizontal band (see
+  // lineElementFromPoint), you can hover/click/drag anywhere on a row, not only over
+  // its text. The range sent to the reviewer stays 1:1 with the source even though
+  // the view visually joins lines. A light-DOM peer of diffview/SourceView.svelte:
+  // caret owns the rows, no @pierre/diffs shadow grid, and the host renders comment
+  // threads / composer / scratch markers inline via the `belowRow` snippet, rendered
+  // right after each block. No gutter.
   import type { Snippet } from "svelte";
   import { createLineDrag } from "../lib/diffview/lineDrag.ts";
   import { SCROLL_OFFSET_TOP } from "../lib/diffview/scroll.ts";
@@ -139,6 +141,35 @@
     return Number.isFinite(n) ? n : null;
   }
 
+  // Resolve the [data-line] element under a viewport point, treating each line as a
+  // contiguous full-width row (like the source view) rather than only its text.
+  // Fast path: a direct hit on a line element — which also disambiguates two source
+  // lines sharing one visual row, since elementFromPoint honors x. Fallback, for a
+  // point in a row's horizontal whitespace (the left padding, the ragged-right gap,
+  // anywhere past the text): pick the [data-line] whose box spans y, nearest in x —
+  // so trailing whitespace maps to the line it follows. Geometry-based, so this only
+  // does real work under a browser's layout (happy-dom has none); unit tests drive
+  // interaction through event.target and the e2e specs cover the band behavior.
+  function lineElementFromPoint(x: number, y: number): Element | null {
+    const host = container;
+    if (host == null) return null;
+    const direct = document.elementFromPoint(x, y)?.closest("[data-line]") ?? null;
+    if (direct != null && host.contains(direct)) return direct;
+    let best: Element | null = null;
+    let bestDx = Number.POSITIVE_INFINITY;
+    for (const el of host.querySelectorAll("[data-line]")) {
+      for (const r of el.getClientRects()) {
+        if (y < r.top || y > r.bottom) continue;
+        const dx = x < r.left ? r.left - x : x > r.right ? x - r.right : 0;
+        if (dx < bestDx) {
+          bestDx = dx;
+          best = el;
+        }
+      }
+    }
+    return best;
+  }
+
   // Set when a drag commits so the synthetic click that follows a drag-release
   // doesn't ALSO open a single-block comment. Cleared by that click / next frame.
   let dragOccurred = false;
@@ -153,7 +184,10 @@
     if (target?.closest("a, input, button, label, summary") != null) return;
     const selection = typeof getSelection === "function" ? getSelection() : null;
     if (selection != null && !selection.isCollapsed) return; // active selection, not a comment
-    const line = lineAt(target);
+    // Prefer the clicked element (a direct hit on a line, and what unit tests drive
+    // via dispatchEvent); fall back to the vertical band when the click landed in a
+    // row's horizontal whitespace, so clicking anywhere on the row comments its line.
+    const line = lineAt(target) ?? lineAt(lineElementFromPoint(event.clientX, event.clientY));
     if (line != null) onLineComment?.(line);
   }
 
@@ -175,7 +209,7 @@
     const host = container;
     if (host == null || !rangeCommentEnabled) return;
     const drag = createLineDrag({
-      lineFromPoint: (x, y) => lineAt(document.elementFromPoint(x, y)),
+      lineFromPoint: (x, y) => lineAt(lineElementFromPoint(x, y)),
       onPreview: (range) => {
         dragRange = range ?? undefined;
         onLineRangePreview?.(range ?? null);
@@ -248,8 +282,9 @@
     };
     const probe = (): void => {
       raf = 0;
-      const line = document.elementFromPoint(x, y)?.closest("[data-line]") ?? null;
-      apply(line != null && host.contains(line) ? line : null);
+      // Same band hit-test as click/drag, so hovering a row's whitespace still
+      // highlights that line — the row is a contiguous full-width affordance.
+      apply(lineElementFromPoint(x, y));
     };
     const onMove = (e: PointerEvent): void => {
       x = e.clientX;
@@ -390,6 +425,15 @@
   .md-block {
     position: relative;
     margin: 0.35rem 0;
+  }
+  /* Headings open a new section, so give them clear room above — more than the
+     default block gap — to space the document out. The first block sits flush
+     against the top padding, so it keeps no extra top margin. */
+  .rendered-plan > .md-heading {
+    margin-top: 1.6rem;
+  }
+  .rendered-plan > .md-block:first-child {
+    margin-top: 0;
   }
 
   /* Per-source-line hover + selection. The hover effect tags the innermost

@@ -209,6 +209,71 @@ test("hovering a source line highlights only that line, not its whole block", as
   await expect(rendered.locator(".is-hovered")).toHaveCount(1);
 });
 
+test("hovering a line's horizontal whitespace highlights that whole row", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: PLAN });
+  await page.goto("/");
+  const rendered = page.locator(".rendered-plan");
+  await expect(rendered).toBeVisible();
+
+  // A line is a contiguous full-width row: hovering the left padding — left of the
+  // bullet's text, not over any element — still lights up that one line, mirroring
+  // the source view where the whole row is the affordance.
+  const containerBox = await rendered.boundingBox();
+  const item = rendered.locator("[data-line]", { hasText: "first bullet" });
+  const lineBox = await item.boundingBox();
+  if (containerBox == null || lineBox == null) throw new Error("rendered layout missing");
+
+  await page.mouse.move(containerBox.x + 6, lineBox.y + lineBox.height / 2);
+  await expect(item).toHaveClass(/is-hovered/);
+  await expect(rendered.locator(".is-hovered")).toHaveCount(1);
+});
+
+test("clicking a line's horizontal whitespace opens a composer on that line", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: PLAN });
+  await page.goto("/");
+  const rendered = page.locator(".rendered-plan");
+  await expect(rendered).toBeVisible();
+
+  // Click in the left padding at the closing paragraph's vertical band — nowhere
+  // near the text — and the composer still anchors to that source line. This is the
+  // "click anywhere on the row" ergonomic the source view has.
+  const containerBox = await rendered.boundingBox();
+  const lineBox = await rendered
+    .locator("[data-line]", { hasText: "A closing paragraph to comment on." })
+    .boundingBox();
+  if (containerBox == null || lineBox == null) throw new Error("rendered layout missing");
+
+  await page.mouse.click(containerBox.x + 6, lineBox.y + lineBox.height / 2);
+
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+  await expect(composer.locator("p.label")).toHaveText(/Line \d+/);
+});
+
+test("headings sit below the prose with clear top spacing", async ({ daemon, page }) => {
+  await daemon.seed({ plan: PLAN });
+  await page.goto("/");
+  const rendered = page.locator(".rendered-plan");
+  await expect(rendered).toBeVisible();
+
+  // The "## Tasks" heading gets more room above it than a plain paragraph block, so
+  // sections breathe rather than crowding the prose that precedes them.
+  const headingTop = await rendered
+    .locator(".md-heading", { hasText: "Tasks" })
+    .evaluate((el) => Number.parseFloat(getComputedStyle(el).marginTop));
+  const paraTop = await rendered
+    .locator(".md-paragraph")
+    .first()
+    .evaluate((el) => Number.parseFloat(getComputedStyle(el).marginTop));
+  expect(headingTop).toBeGreaterThan(paraTop);
+});
+
 test("the Rendered/Source toggle switches surfaces both ways", async ({ daemon, page }) => {
   await daemon.seed({ plan: PLAN });
   await page.goto("/");
@@ -250,15 +315,19 @@ test("dragging across source lines opens a range composer", async ({ daemon, pag
   const rendered = page.locator(".rendered-plan");
   await expect(rendered).toBeVisible();
 
-  // Drag straight down a column from a list item to the blockquote; the hit-test
-  // crosses several source lines and opens a range composer for the span.
+  // Drag straight down the LEFT PADDING column (not over any text) from a list item
+  // to the blockquote; the band hit-test crosses several source lines and opens a
+  // range composer — proving you can drag anywhere on the rows, not only their text.
+  const containerBox = await rendered.boundingBox();
   const start = await rendered.locator("[data-line]", { hasText: "first bullet" }).boundingBox();
   const end = await rendered
     .locator("[data-line]", { hasText: "A quoted line here" })
     .boundingBox();
-  if (start == null || end == null) throw new Error("rendered lines not found");
+  if (containerBox == null || start == null || end == null) {
+    throw new Error("rendered lines not found");
+  }
 
-  const columnX = start.x + 6;
+  const columnX = containerBox.x + 6;
   await page.mouse.move(columnX, start.y + start.height / 2);
   await page.mouse.down();
   await page.mouse.move(columnX, end.y + end.height / 2, { steps: 16 });
