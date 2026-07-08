@@ -110,6 +110,10 @@ test("a code-split shiki grammar chunk is served over the wire and applies", asy
     }
   });
 
+  // Shiki highlighting is a source-view feature; the rendered markdown view (now
+  // the default, EXC-693) uses plain monospace fences and loads no grammar chunk.
+  // Pin source mode so the highlighter runs and a code-split chunk is fetched.
+  await page.addInitScript(() => localStorage.setItem("caret.planViewMode", "source"));
   await daemon.seed();
   await page.goto("/");
 
