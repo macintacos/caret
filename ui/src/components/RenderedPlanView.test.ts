@@ -176,10 +176,11 @@ describe("RenderedPlanView — line-level interaction wiring", () => {
     expect(onLineComment.last()).toBe(1);
   });
 
-  test("clicking the second line of a joined paragraph comments on that line, not the block", () => {
-    // The paragraph spans lines 3-4 but is one joined block; clicking line 4 must
-    // report line 4 — the per-line precision that mirrors the source view, rather
-    // than the whole 3-4 range.
+  test("a click resolving to a single source line comments on that line", () => {
+    // Under happy-dom there is no layout, so the click resolves to the [data-line]
+    // it was dispatched on (a single source line). Clicking line 4 reports line 4.
+    // The display-line mapping — where a click on a joined row can span two source
+    // lines — is geometry, covered by the visualRows unit tests and the e2e specs.
     const onLineComment = capture<number>();
     const { target, flush } = mountDoc({ onLineComment: onLineComment.cb });
     flush();
@@ -203,12 +204,15 @@ describe("RenderedPlanView — line-level interaction wiring", () => {
     expect(onLineComment.last()).toBeUndefined();
   });
 
-  test("marks the source lines in the selected range with is-selected", () => {
+  test("renders the selection + hover highlight overlay layers", () => {
+    // The highlight is a full-width overlay band, not a class on the line span, so a
+    // joined display row can be lit end-to-end. The bands are painted from geometry
+    // (an e2e concern); here we pin that both overlay layers exist to paint into and
+    // that supplying a selectedRange paints without throwing under happy-dom.
     const { target, flush } = mountDoc({ selectedRange: { startLine: 3, endLine: 4 } });
     flush();
-    expect(target.querySelector('[data-line="3"]')?.className).toContain("is-selected");
-    expect(target.querySelector('[data-line="4"]')?.className).toContain("is-selected");
-    expect(target.querySelector('[data-line="1"]')?.className).not.toContain("is-selected");
+    expect(target.querySelector(".md-hl-select")).not.toBeNull();
+    expect(target.querySelector(".md-hl-hover")).not.toBeNull();
   });
 
   test("hands the parent a scroll-to-line API and its host on mount", () => {

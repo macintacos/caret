@@ -5,13 +5,16 @@
   // tables, blockquotes and shiki code blocks render properly, while emphasis
   // keeps its markers visible (**bold** shows its asterisks, `x` its backticks).
   //
-  // Interaction is per SOURCE LINE, and each line is a contiguous full-width row
-  // like the source view: every source line is its own [data-line] element, so
-  // hovering highlights just that line, a click comments on it, and a drag comments
-  // the span — and because the hit-test resolves the whole horizontal band (see
-  // lineElementFromPoint), you can hover/click/drag anywhere on a row, not only over
-  // its text. The range sent to the reviewer stays 1:1 with the source even though
-  // the view visually joins lines. A light-DOM peer of diffview/SourceView.svelte:
+  // Interaction is by DISPLAY line — the line the reader actually sees. Because a
+  // joined paragraph packs soft-wrapped source lines into flowing prose, a display
+  // line can carry parts of two source lines (and a source line can wrap across two
+  // display lines). Hovering or clicking a display line lights up that whole row and
+  // maps it back to the source line(s) it covers (visualRows.ts groups the per-line
+  // [data-line] rects into display rows), so the highlight matches what the eye calls
+  // "the line" while the range handed to the reviewer stays correct — the user never
+  // has to hunt for the right slice of text. The highlight is a full-width overlay
+  // band painted behind the prose (spans can't express a whole-row band cleanly when
+  // a source line is a mid-paragraph slice). A light-DOM peer of SourceView.svelte:
   // caret owns the rows, no @pierre/diffs shadow grid, and the host renders comment
   // threads / composer / scratch markers inline via the `belowRow` snippet, rendered
   // right after each block. No gutter.
@@ -19,6 +22,14 @@
   import { createLineDrag } from "../lib/diffview/lineDrag.ts";
   import { SCROLL_OFFSET_TOP } from "../lib/diffview/scroll.ts";
   import type { SourceDocument, SourceViewApi } from "../lib/diffview/types.ts";
+  import {
+    closeRowGaps,
+    groupVisualRows,
+    type LineRect,
+    rowAtY,
+    rowsIntersecting,
+    type VisualRow,
+  } from "../lib/diffview/visualRows.ts";
   import { type Align, type PlanBlock, parsePlan } from "../lib/planBlocks.ts";
   import RenderedCode from "./RenderedCode.svelte";
 
@@ -92,6 +103,53 @@
   }
 
   let container = $state<HTMLElement | undefined>();
+  // Absolutely-positioned overlay layers holding the full-width highlight bands: one
+  // for the persistent selection, one for the transient hover. Bound to the template
+  // elements; the interaction effects paint band children into them imperatively.
+  let selectLayer = $state<HTMLElement | undefined>();
+  let hoverLayer = $state<HTMLElement | undefined>();
+
+  // The largest vertical gap (px) between two display rows we treat as still one
+  // continuous run of lines — closed so hovering never falls into the thin leading
+  // between wrapped lines. Block margins holding inline comment threads are larger
+  // and stay open, so those regions aren't attributed to a line.
+  const ROW_GAP_SNAP = 14;
+
+  // Read the plan's display rows from the live layout: gather each source line's
+  // rectangles, group them into display lines, and close the small inter-line gaps.
+  // Geometry-based, so it yields real rows only under a browser layout (happy-dom has
+  // none, and returns empty rows — the click path then falls back to the target).
+  function computeRows(host: HTMLElement): VisualRow[] {
+    const rects: LineRect[] = [];
+    for (const el of host.querySelectorAll("[data-line]")) {
+      const n = Number(el.getAttribute("data-line"));
+      if (!Number.isFinite(n)) continue;
+      for (const r of el.getClientRects()) {
+        if (r.width <= 0 && r.height <= 0) continue;
+        rects.push({ line: n, top: r.top, bottom: r.bottom });
+      }
+    }
+    return closeRowGaps(groupVisualRows(rects), ROW_GAP_SNAP);
+  }
+
+  // Lay `rows` out as full-width highlight bands inside `layer` (host-relative), so a
+  // hover move or selection change just repositions existing nodes rather than
+  // churning the DOM. Bands span the column width via CSS (left/right: 0).
+  function layoutBands(layer: HTMLElement, host: HTMLElement, rows: VisualRow[]): void {
+    const hostTop = host.getBoundingClientRect().top;
+    while (layer.childElementCount < rows.length) {
+      const band = document.createElement("div");
+      band.className = "md-row-hl";
+      layer.appendChild(band);
+    }
+    while (layer.childElementCount > rows.length) layer.lastElementChild?.remove();
+    rows.forEach((row, i) => {
+      const band = layer.children[i] as HTMLElement | undefined;
+      if (band == null) return;
+      band.style.top = `${row.top - hostTop}px`;
+      band.style.height = `${row.bottom - row.top}px`;
+    });
+  }
 
   // Hand the parent the scroll-to-line API + host once, on mount.
   let notified = false;
@@ -141,37 +199,17 @@
     return Number.isFinite(n) ? n : null;
   }
 
-  // Resolve the [data-line] element under a viewport point, treating each line as a
-  // contiguous full-width row (like the source view) rather than only its text.
-  // Fast path: a direct hit on a line element — which also disambiguates two source
-  // lines sharing one visual row, since elementFromPoint honors x. Fallback, for a
-  // point in a row's horizontal whitespace (the left padding, the ragged-right gap,
-  // anywhere past the text): pick the [data-line] whose box spans y, nearest in x —
-  // so trailing whitespace maps to the line it follows. Geometry-based, so this only
-  // does real work under a browser's layout (happy-dom has none); unit tests drive
-  // interaction through event.target and the e2e specs cover the band behavior.
-  function lineElementFromPoint(x: number, y: number): Element | null {
-    const host = container;
-    if (host == null) return null;
-    const direct = document.elementFromPoint(x, y)?.closest("[data-line]") ?? null;
-    if (direct != null && host.contains(direct)) return direct;
-    let best: Element | null = null;
-    let bestDx = Number.POSITIVE_INFINITY;
-    for (const el of host.querySelectorAll("[data-line]")) {
-      for (const r of el.getClientRects()) {
-        if (y < r.top || y > r.bottom) continue;
-        const dx = x < r.left ? r.left - x : x > r.right ? x - r.right : 0;
-        if (dx < bestDx) {
-          bestDx = dx;
-          best = el;
-        }
-      }
-    }
-    return best;
+  // Open a comment for an ascending source range, collapsing a single line to the
+  // single-line callback (both funnel to the same composer in the parent).
+  function emitRange(a: number, b: number): void {
+    const lo = Math.min(a, b);
+    const hi = Math.max(a, b);
+    if (lo === hi && onLineComment != null) onLineComment(lo);
+    else onLineRangeComment?.(lo, hi);
   }
 
   // Set when a drag commits so the synthetic click that follows a drag-release
-  // doesn't ALSO open a single-block comment. Cleared by that click / next frame.
+  // doesn't ALSO open a single-line comment. Cleared by that click / next frame.
   let dragOccurred = false;
 
   function handleClick(event: MouseEvent): void {
@@ -184,10 +222,19 @@
     if (target?.closest("a, input, button, label, summary") != null) return;
     const selection = typeof getSelection === "function" ? getSelection() : null;
     if (selection != null && !selection.isCollapsed) return; // active selection, not a comment
-    // Prefer the clicked element (a direct hit on a line, and what unit tests drive
-    // via dispatchEvent); fall back to the vertical band when the click landed in a
-    // row's horizontal whitespace, so clicking anywhere on the row comments its line.
-    const line = lineAt(target) ?? lineAt(lineElementFromPoint(event.clientX, event.clientY));
+    const host = container;
+    if (host == null) return;
+    // Comment on the DISPLAY line under the pointer: the whole visual row, mapped
+    // back to the source line(s) it covers — so clicking a joined row comments both.
+    const row = rowAtY(computeRows(host), event.clientY);
+    const first = row?.lines[0];
+    const last = row?.lines[row.lines.length - 1];
+    if (row != null && row.bottom > row.top && first != null && last != null) {
+      emitRange(first, last);
+      return;
+    }
+    // No browser layout (unit tests dispatch a click on a [data-line]) → single line.
+    const line = lineAt(target);
     if (line != null) onLineComment?.(line);
   }
 
@@ -201,18 +248,29 @@
     return () => host.removeEventListener("click", handleClick);
   });
 
-  // Drag-to-range-comment across blocks. The pure createLineDrag controller decides
-  // the range from a light-DOM hit-test; this feeds it pointer events, previews the
-  // live (block-expanded) range as a highlight, suppresses the competing native
+  // Drag-to-range-comment across display rows. The pure createLineDrag controller
+  // only needs a monotonic integer per point to form a range, so we feed it the
+  // DISPLAY-row index (rows snapshotted at press time — layout is stable through a
+  // drag) and map that index span back to the source line(s) those rows cover. This
+  // previews the live source range as a highlight, suppresses the competing native
   // text-selection for a plain drag, and reports commit up. Mirrors SourceView.
   $effect(() => {
     const host = container;
     if (host == null || !rangeCommentEnabled) return;
+    let rows: VisualRow[] = [];
+    const sourceRange = (idxA: number, idxB: number): { startLine: number; endLine: number } => {
+      const lines = rows.slice(Math.min(idxA, idxB), Math.max(idxA, idxB) + 1).flatMap((r) => r.lines);
+      return { startLine: Math.min(...lines), endLine: Math.max(...lines) };
+    };
     const drag = createLineDrag({
-      lineFromPoint: (x, y) => lineAt(lineElementFromPoint(x, y)),
+      lineFromPoint: (_x, y) => {
+        const i = rows.findIndex((r) => y >= r.top && y <= r.bottom);
+        return i >= 0 ? i : null;
+      },
       onPreview: (range) => {
-        dragRange = range ?? undefined;
-        onLineRangePreview?.(range ?? null);
+        const r = range == null ? undefined : sourceRange(range.startLine, range.endLine);
+        dragRange = r;
+        onLineRangePreview?.(r ?? null);
       },
       onCommit: (range) => {
         // Suppress the synthetic click after a drag-release; clear next frame so a
@@ -221,7 +279,8 @@
         requestAnimationFrame(() => {
           dragOccurred = false;
         });
-        onLineRangeComment?.(range.startLine, range.endLine);
+        const r = sourceRange(range.startLine, range.endLine);
+        onLineRangeComment?.(r.startLine, r.endLine);
       },
     });
     const onMove = (e: PointerEvent) => drag.pointermove(e);
@@ -247,6 +306,7 @@
       endGesture();
     }
     const onDown = (e: PointerEvent): void => {
+      rows = computeRows(host); // snapshot the display rows before arming the gesture
       if (!drag.pointerdown(e)) return;
       suppressSelect(true);
       document.addEventListener("pointermove", onMove);
@@ -262,39 +322,28 @@
     };
   });
 
-  // Per-line hover highlight (mirrors the source view's line hover). Tag only the
-  // INNERMOST [data-line] under the pointer with `is-hovered`, so a nested item or
-  // a line inside a joined paragraph lights up alone rather than its whole block.
-  // Imperative because the line elements live inside {@html} (prose, code) where a
-  // Svelte class binding can't reach; rAF-coalesced so a move burst is one probe.
+  // Hover highlight: paint a single full-width band over the DISPLAY row under the
+  // pointer, so the whole visual line lights up (not a slice), even where two source
+  // lines share a row. rAF-coalesced so a move burst is one probe.
   $effect(() => {
     const host = container;
-    if (host == null) return;
-    let hovered: Element | null = null;
+    const layer = hoverLayer;
+    if (host == null || layer == null) return;
     let raf = 0;
-    let x = 0;
     let y = 0;
-    const apply = (el: Element | null): void => {
-      if (el === hovered) return;
-      hovered?.classList.remove("is-hovered");
-      el?.classList.add("is-hovered");
-      hovered = el;
-    };
     const probe = (): void => {
       raf = 0;
-      // Same band hit-test as click/drag, so hovering a row's whitespace still
-      // highlights that line — the row is a contiguous full-width affordance.
-      apply(lineElementFromPoint(x, y));
+      const row = rowAtY(computeRows(host), y);
+      layoutBands(layer, host, row != null ? [row] : []);
     };
     const onMove = (e: PointerEvent): void => {
-      x = e.clientX;
       y = e.clientY;
       if (raf === 0) raf = requestAnimationFrame(probe);
     };
     const onLeave = (): void => {
       cancelAnimationFrame(raf);
       raf = 0;
-      apply(null);
+      layoutBands(layer, host, []);
     };
     host.addEventListener("pointermove", onMove);
     host.addEventListener("pointerleave", onLeave);
@@ -302,22 +351,31 @@
       cancelAnimationFrame(raf);
       host.removeEventListener("pointermove", onMove);
       host.removeEventListener("pointerleave", onLeave);
-      apply(null);
+      layoutBands(layer, host, []);
     };
   });
 
-  // Per-line selection band: mark every [data-line] whose line falls in the open
-  // composer's / live-drag range with `is-selected`. Re-runs on the range and on
-  // a block re-render (a poll tick paints fresh line elements that need re-marking).
+  // Selection band: paint full-width bands over every display row carrying a line in
+  // the open composer's / live-drag range. Re-runs on the range and on a block
+  // re-render (a poll tick repaints the line elements), and keeps itself in sync with
+  // reflow (a width change re-wraps the prose, moving the rows) via a ResizeObserver.
   $effect(() => {
     const host = container;
-    if (host == null) return;
-    void blocks; // re-mark after a re-render swaps the line elements
+    const layer = selectLayer;
+    if (host == null || layer == null) return;
+    void blocks; // repaint after a re-render swaps the line elements
     const h = highlight;
-    for (const el of host.querySelectorAll<HTMLElement>("[data-line]")) {
-      const n = Number(el.getAttribute("data-line"));
-      el.classList.toggle("is-selected", h != null && n >= h.startLine && n <= h.endLine);
-    }
+    const paint = (): void =>
+      layoutBands(layer, host, h == null ? [] : rowsIntersecting(computeRows(host), h.startLine, h.endLine));
+    paint();
+    if (h == null) return;
+    const ro = typeof ResizeObserver === "function" ? new ResizeObserver(paint) : null;
+    ro?.observe(host);
+    window.addEventListener("resize", paint);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", paint);
+    };
   });
 </script>
 
@@ -396,6 +454,10 @@
 {/snippet}
 
 <div class="rendered-plan" bind:this={container}>
+  <!-- Highlight overlays behind the prose: selection first, hover above it. Both are
+       pointer-transparent and their bands are painted imperatively (see layoutBands). -->
+  <div class="md-hl-layer md-hl-select" bind:this={selectLayer} aria-hidden="true"></div>
+  <div class="md-hl-layer md-hl-hover" bind:this={hoverLayer} aria-hidden="true"></div>
   {#each blocks as block, i (block.startLine)}
     <div class="md-block md-{block.kind}">
       {@render blockContent(block)}
@@ -406,6 +468,7 @@
 
 <style>
   .rendered-plan {
+    position: relative; /* containing block for the highlight overlay layers */
     font-family: var(--font-sans);
     font-size: var(--text-lg);
     line-height: 1.7;
@@ -415,13 +478,14 @@
        wraps, so without a cap it would sprawl the full viewport width; 900px
        keeps line length comfortable. box-sizing is border-box (app.css reset),
        so the cap includes the padding. */
+    --plan-pad-x: clamp(1.4rem, 3vw, 2.5rem);
     max-width: 900px;
-    padding: 1rem clamp(1.4rem, 3vw, 2.5rem) 40vh;
+    padding: 1rem var(--plan-pad-x) 40vh;
   }
 
-  /* Blocks are structural only: the per-source-line elements inside them are the
-     hover / click / drag targets (see [data-line] below), so the interaction is
-     line-level like the source view rather than one anchor per whole block. */
+  /* Blocks are structural only: the [data-line] elements inside them carry the
+     source-line geometry the display-row hit-test reads (see computeRows), and the
+     highlight is painted as an overlay band — not a background on the block. */
   .md-block {
     position: relative;
     margin: 0.35rem 0;
@@ -436,26 +500,38 @@
     margin-top: 0;
   }
 
-  /* Per-source-line hover + selection. The hover effect tags the innermost
-     [data-line] under the pointer with is-hovered; the selection effect tags the
-     open composer's / live drag's covered lines with is-selected (the amber band
-     the source view uses). Global because most line elements live inside {@html}
-     — prose spans, shiki code lines — beyond Svelte's scoping. */
+  /* Line elements are the hit/scroll targets; keep a little scroll margin so a
+     scrolled-to line clears the top edge. The highlight itself is the overlay band
+     below, not a background on the line. */
   :global(.rendered-plan [data-line]) {
-    border-radius: 4px;
     scroll-margin-top: 12px;
   }
-  :global(.rendered-plan [data-line].is-hovered) {
-    background: color-mix(in srgb, var(--ink) 7%, transparent);
+
+  /* Full-width highlight overlays behind the prose. Each layer fills the column; its
+     bands are absolutely positioned display-row rectangles painted by layoutBands.
+     Pointer-transparent so they never intercept a click, and placed before the block
+     content in the DOM so the positioned blocks paint their text above the bands. */
+  .md-hl-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
   }
-  :global(.rendered-plan [data-line].is-selected) {
+  :global(.rendered-plan .md-row-hl) {
+    position: absolute;
+    /* Match the content width (inset by the column padding) so the band aligns with
+       the block content and is fully covered by opaque panels (code, table headers)
+       — no highlight edges peeking out past them into the padding. */
+    left: var(--plan-pad-x);
+    right: var(--plan-pad-x);
+    border-radius: 6px;
+  }
+  /* Selection: the amber mark the source view uses. Hover: the stronger active mark,
+     so the hovered row reads clearly (not a faint tint) and stands apart. */
+  :global(.rendered-plan .md-hl-select .md-row-hl) {
     background: var(--mark);
   }
-  /* Inline line spans (prose, code) clone the highlight box across a soft wrap so
-     a wrapped source line reads as rounded runs, not one ragged slab. */
-  :global(.rendered-plan span[data-line]) {
-    box-decoration-break: clone;
-    -webkit-box-decoration-break: clone;
+  :global(.rendered-plan .md-hl-hover .md-row-hl) {
+    background: var(--mark-active);
   }
 
   /* Prose: a single newline is a soft continuation — white-space:normal collapses

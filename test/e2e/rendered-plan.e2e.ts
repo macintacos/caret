@@ -2,11 +2,11 @@
 // styled markdown document built from blocks: prose is joined, lists/tables/
 // blockquotes and shiki code blocks render properly, emphasis keeps its markers
 // visible and colored from caret's palette, and there is no line-number gutter —
-// while the compare diff stays the source view. Interaction is per SOURCE LINE
-// (hover highlights just the hovered line, a click comments on that exact line, a
-// drag comments the line span), mirroring the source view. These specs cover the
-// real-browser behavior the unit tests can't; the unit suites carry the exhaustive
-// per-construct coverage.
+// while the compare diff stays the source view. Interaction is by DISPLAY line: a
+// hover paints a full-width band over the whole visual row under the pointer, a
+// click comments the source line(s) that row covers, and a drag comments the span.
+// These specs cover the real-browser geometry the unit tests can't (happy-dom has no
+// layout); the unit suites carry the per-construct and per-row-grouping coverage.
 
 import { expect, test } from "./support/fixtures.ts";
 
@@ -193,7 +193,7 @@ test("a reflow-wrapped paragraph joins into one block with a target per source l
   expect(await para.locator("[data-line]").count()).toBeGreaterThanOrEqual(2);
 });
 
-test("hovering a source line highlights only that line, not its whole block", async ({
+test("hovering a display line paints one full-width, prominent highlight band", async ({
   daemon,
   page,
 }) => {
@@ -202,14 +202,27 @@ test("hovering a source line highlights only that line, not its whole block", as
   const rendered = page.locator(".rendered-plan");
   await expect(rendered).toBeVisible();
 
-  // Hover the first list item; only it lights up — the other three items stay dark.
+  // Hover the first list item: exactly one hover band appears (not the whole block),
+  // it spans the column width (a whole row, not a text slice), and its tint is a
+  // clearly-visible amber (alpha well above a faint wash) — the two feedback points.
   const item = rendered.locator("[data-line]", { hasText: "first bullet" });
   await item.hover();
-  await expect(item).toHaveClass(/is-hovered/);
-  await expect(rendered.locator(".is-hovered")).toHaveCount(1);
+  const band = rendered.locator(".md-hl-hover .md-row-hl");
+  await expect(band).toHaveCount(1);
+
+  const colBox = await rendered.boundingBox();
+  const bandBox = await band.boundingBox();
+  if (colBox == null || bandBox == null) throw new Error("rendered layout missing");
+  expect(bandBox.width).toBeGreaterThan(colBox.width * 0.8);
+
+  const alpha = await band.evaluate((el) => {
+    const m = getComputedStyle(el).backgroundColor.match(/rgba?\([^)]*?,\s*([\d.]+)\)/);
+    return m ? Number(m[1]) : 1; // opaque rgb() (no alpha) counts as fully visible
+  });
+  expect(alpha).toBeGreaterThan(0.2);
 });
 
-test("hovering a line's horizontal whitespace highlights that whole row", async ({
+test("hovering a line's horizontal whitespace still highlights the whole row", async ({
   daemon,
   page,
 }) => {
@@ -218,17 +231,14 @@ test("hovering a line's horizontal whitespace highlights that whole row", async 
   const rendered = page.locator(".rendered-plan");
   await expect(rendered).toBeVisible();
 
-  // A line is a contiguous full-width row: hovering the left padding — left of the
-  // bullet's text, not over any element — still lights up that one line, mirroring
-  // the source view where the whole row is the affordance.
+  // Hover the left padding — left of the bullet's text, over no element — and the row
+  // still lights up: the whole display line is the affordance, like the source view.
   const containerBox = await rendered.boundingBox();
-  const item = rendered.locator("[data-line]", { hasText: "first bullet" });
-  const lineBox = await item.boundingBox();
+  const lineBox = await rendered.locator("[data-line]", { hasText: "first bullet" }).boundingBox();
   if (containerBox == null || lineBox == null) throw new Error("rendered layout missing");
 
   await page.mouse.move(containerBox.x + 6, lineBox.y + lineBox.height / 2);
-  await expect(item).toHaveClass(/is-hovered/);
-  await expect(rendered.locator(".is-hovered")).toHaveCount(1);
+  await expect(rendered.locator(".md-hl-hover .md-row-hl")).toHaveCount(1);
 });
 
 test("clicking a line's horizontal whitespace opens a composer on that line", async ({
@@ -307,6 +317,44 @@ test("clicking a source line opens a composer on that exact line and saves inlin
   await composer.getByRole("button", { name: "Comment" }).click();
 
   await expect(rendered.getByText("Comment from the rendered view.")).toBeVisible();
+});
+
+test("opening a composer paints a selection band over its row", async ({ daemon, page }) => {
+  await daemon.seed({ plan: PLAN });
+  await page.goto("/");
+  const rendered = page.locator(".rendered-plan");
+  await expect(rendered).toBeVisible();
+
+  // Click a line to open the composer; its row keeps a persistent selection band
+  // (distinct from the transient hover layer) so the anchored line stays marked.
+  await rendered.locator("[data-line]", { hasText: "A closing paragraph to comment on." }).click();
+  await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
+  await expect(rendered.locator(".md-hl-select .md-row-hl").first()).toBeVisible();
+});
+
+test("hovering a joined paragraph lights the whole display line, not a source slice", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: PLAN });
+  await page.goto("/");
+  const rendered = page.locator(".rendered-plan");
+  await expect(rendered).toBeVisible();
+
+  // The long first paragraph reflows across source lines yet reads as one flowing
+  // block. Hover it: the highlight is a full-width display-row band (what the eye
+  // calls "the line"), never a mid-paragraph text slice keyed to a source row.
+  const para = rendered.locator(".md-paragraph", { hasText: "Prose with" });
+  const paraBox = await para.boundingBox();
+  const colBox = await rendered.boundingBox();
+  if (paraBox == null || colBox == null) throw new Error("rendered layout missing");
+
+  await page.mouse.move(paraBox.x + paraBox.width / 2, paraBox.y + 6);
+  const band = rendered.locator(".md-hl-hover .md-row-hl");
+  await expect(band).toHaveCount(1);
+  const bandBox = await band.boundingBox();
+  if (bandBox == null) throw new Error("hover band missing");
+  expect(bandBox.width).toBeGreaterThan(colBox.width * 0.8);
 });
 
 test("dragging across source lines opens a range composer", async ({ daemon, page }) => {
