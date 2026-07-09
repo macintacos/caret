@@ -12,6 +12,7 @@
   import { type SourceViewGutter, type SourceViewLibOptions, toFileOptions } from "./options.ts";
   import { scrollToLine } from "./scroll.ts";
   import { type CodeBlockRange, codeBlockRanges, tagCodeBlockRows } from "./codeBlocks.ts";
+  import { attachCodeBlockScrollSync } from "./codeScroll.ts";
   import { preloadFenceLanguages, scanFenceLanguages } from "./languages.ts";
   import { registerCaretDiffThemes } from "./theme.ts";
   import type {
@@ -311,6 +312,19 @@
       cancelAnimationFrame(raf);
       observer.disconnect();
     };
+  });
+
+  // Fenced-code horizontal scroll sync (EXC-729). coreStyles.ts makes each code row its
+  // own horizontal scroll container so an over-wide line scrolls instead of breaking out
+  // of the panel; this keeps a block's rows scroll-synced so the whole block scrolls as
+  // one unit (tabular content stays aligned). Attached once to the stable shadow root —
+  // it survives the library's repaints, like the adopted style sheets, so unlike the
+  // tagging effect above it needs no re-arming. Declared after the sync effect, so the
+  // shadow root the library creates in container-managed mode already exists.
+  $effect(() => {
+    const root = container?.shadowRoot;
+    if (root == null) return;
+    return attachCodeBlockScrollSync(root);
   });
 </script>
 
