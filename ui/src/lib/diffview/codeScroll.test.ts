@@ -51,6 +51,17 @@ describe("syncCodeBlockScroll", () => {
     expect(rowAt(root, 3).scrollLeft).toBe(120);
   });
 
+  test("returns the rows it actually moved (so the controller can suppress their echoes)", () => {
+    const root = buildContent(oneBlock);
+    rowAt(root, 2).scrollLeft = 120;
+    const moved = syncCodeBlockScroll(rowAt(root, 2));
+    expect(moved).toHaveLength(2);
+    expect(moved).toContain(rowAt(root, 1));
+    expect(moved).toContain(rowAt(root, 3));
+    // The scrolled row is never in its own moved set.
+    expect(moved).not.toContain(rowAt(root, 2));
+  });
+
   test("leaves rows of a different block untouched", () => {
     // block A (lines 1-3), a prose line (4), block B (lines 5-7).
     const root = buildContent([
@@ -125,6 +136,28 @@ describe("attachCodeBlockScrollSync", () => {
     // After teardown the listener is gone, so the others keep their prior value.
     expect(rowAt(root, 2).scrollLeft).toBe(60);
     expect(rowAt(root, 3).scrollLeft).toBe(60);
+  });
+
+  test("consumes the echo its own sibling write triggers, so a clamped echo can't snap the block back", () => {
+    const host = document.createElement("div");
+    const root = host.attachShadow({ mode: "open" });
+    root.appendChild(buildContent(oneBlock));
+    attachCodeBlockScrollSync(root);
+
+    // User scrolls the opening row to 300; the controller mirrors it onto rows 2 and 3.
+    rowAt(root, 1).scrollLeft = 300;
+    rowAt(root, 1).dispatchEvent(new Event("scroll"));
+    expect(rowAt(root, 2).scrollLeft).toBe(300);
+    expect(rowAt(root, 3).scrollLeft).toBe(300);
+
+    // In a real browser that mirror fires an echo "scroll" on rows 2/3. If row 2 has a
+    // smaller scroll max it clamps (say to 150) and — left unsuppressed — its echo would
+    // drag the whole block back to 150 (the reviewer's snap-back). Simulate that echo:
+    // row 2 lands at 150 and fires scroll. It must be consumed, not re-synced.
+    rowAt(root, 2).scrollLeft = 150;
+    rowAt(root, 2).dispatchEvent(new Event("scroll"));
+    expect(rowAt(root, 1).scrollLeft).toBe(300);
+    expect(rowAt(root, 3).scrollLeft).toBe(300);
   });
 
   test("ignores scroll events from non-code elements", () => {
