@@ -186,8 +186,12 @@ export function readFileExcerpt(cwd: string, candidate: string, line?: number): 
   let startLine: number;
   let endLine: number;
   if (line !== undefined && line >= 1) {
-    startLine = Math.max(1, line - EXCERPT_RADIUS);
-    endLine = Math.min(totalLines, line + EXCERPT_RADIUS);
+    // Clamp a past-EOF line to the last line, so a plan citing a line past a file
+    // that has since shrunk still yields a non-empty, correctly-labeled window
+    // (an unclamped line beyond EOF would give startLine > endLine → no lines).
+    const target = Math.min(line, totalLines);
+    startLine = Math.max(1, target - EXCERPT_RADIUS);
+    endLine = Math.min(totalLines, target + EXCERPT_RADIUS);
   } else {
     startLine = 1;
     endLine = Math.min(totalLines, EXCERPT_HEAD_LINES);

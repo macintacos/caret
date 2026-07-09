@@ -311,6 +311,10 @@
     }
     return rangesMemo.ranges;
   });
+
+  // A stable empty map for the "no file references" case, so the tagging pass
+  // still clears any prior icons without allocating each repaint.
+  const EMPTY_FILE_REFS: FileRefSpanMap = new Map();
   $effect(() => {
     const root = container?.shadowRoot;
     if (root == null) return;
@@ -329,7 +333,9 @@
     const tag = () => {
       tagCodeBlockRows(root, ranges);
       syncCodeBlockCards(root, ranges);
-      if (refs != null) tagFileRefTokens(root, refs);
+      // Always run — the clear-stale pass lives inside tagFileRefTokens, so a
+      // populated→empty transition still drops the prior icons.
+      tagFileRefTokens(root, refs ?? EMPTY_FILE_REFS);
     };
     const schedule = () => {
       cancelAnimationFrame(raf);

@@ -112,6 +112,17 @@ test("clamps the window at the start and end of the file", () => {
   expect(end?.endLine).toBe(10);
 });
 
+test("clamps a line past the end of the file to the last line's window", () => {
+  write("a.ts", numberedLines(10));
+  // A plan can cite a line past a file that has since shrunk; the window must
+  // stay non-empty and correctly labeled rather than startLine > endLine.
+  const ex = readFileExcerpt(cwd, "a.ts", 150);
+  expect(ex?.endLine).toBe(10);
+  expect(ex?.startLine).toBeLessThanOrEqual(10);
+  expect(ex?.lines.length).toBeGreaterThan(0);
+  expect(ex?.lines.at(-1)).toBe("line 10");
+});
+
 test("reports a cwd-relative path and infers the language from the extension", () => {
   write("ui/src/app.css", "body{}");
   const ex = readFileExcerpt(cwd, "ui/src/app.css");
