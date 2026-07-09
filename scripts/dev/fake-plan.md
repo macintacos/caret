@@ -285,6 +285,21 @@ daemon -> browser : review
 @enduml
 ```
 
+Very long lines (EXC-729) — a code block whose lines run well past the panel's width. Per
+the fix these must stay **inside** the panel and scroll horizontally: the whole block
+scrolls as one unit so the aligned columns stay aligned, and a line must never wrap or
+break out of the code block's background. Scroll the longest line to its end — the shorter
+lines follow it, while the short `project.yml` row (which fits) stays put:
+
+```text
+Sieve/App/SieveApp.swift              @main App, WindowGroup { RootView() } — installs the root scene, its window styling, and the shared AppModel every feature module reads
+Sieve/UI/RootView.swift               placeholder View — Text("Sieve"), min 480x320, wired into a NavigationSplitView shell so the sidebar and detail panes exist before any real screens land
+Sieve/Features/.gitkeep               empty group placeholders (kept in git) so the feature folders survive a clean checkout, then get replaced one screen at a time as each is built
+Sieve/Support/Info.plist              CFBundleName Sieve, display name, copyright, LSMinimumSystemVersion 15.0, plus the custom URL scheme and background-modes stubs the sync engine needs
+SieveTests/PlaceholderTests.swift     Swift Testing @Test #expect(true) — proves the test action is wired end to end through the scheme before any real assertions or fixtures exist
+project.yml                           XcodeGen spec
+```
+
 ## Horizontal rules
 
 Text above the rule.
