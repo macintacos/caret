@@ -1,9 +1,18 @@
 import "../../test-setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { type LogCapture, logCapture } from "../../test-helpers.ts";
-import { getApproveMode, getHealth, getReview, HttpError, putDraft, resolveReview } from "./api.ts";
+import {
+  getApproveMode,
+  getFileExcerpt,
+  getHealth,
+  getReview,
+  HttpError,
+  putDraft,
+  resolveFileRefs,
+  resolveReview,
+} from "./api.ts";
 import { flush } from "./log.ts";
-import type { Annotation, ResolveBody } from "@core/types";
+import type { Annotation, FileExcerpt, ResolveBody } from "@core/types";
 
 // Shared URL-routing fetch double (test-helpers.ts): /api/logs POSTs are
 // captured; the review/prefs endpoints answer from the per-test `respond` so
@@ -91,6 +100,83 @@ describe("resolveReview instrumentation", () => {
     expect(err).toBeDefined();
     expect(err!.step).toBe("resolve");
     expect(err!.extra).toMatchObject({ reviewId: ID });
+  });
+});
+
+describe("resolveFileRefs", () => {
+  test("returns the resolved subset from the response", async () => {
+    respond = () => Promise.resolve(jsonResponse({ resolved: ["src/foo.ts"] }));
+    expect(await resolveFileRefs(ID, ["src/foo.ts", "src/ghost.ts"])).toEqual(["src/foo.ts"]);
+  });
+
+  test("posts the candidate paths to the review's file-refs route", async () => {
+    let seen: { url: string; body: unknown } | undefined;
+    respond = (url, options) => {
+      seen = { url, body: JSON.parse(String(options?.body)) };
+      return Promise.resolve(jsonResponse({ resolved: [] }));
+    };
+    await resolveFileRefs(ID, ["a.ts"]);
+    expect(seen?.url).toContain(`/api/reviews/${ID}/file-refs`);
+    expect(seen?.body).toEqual({ paths: ["a.ts"] });
+  });
+
+  test("short-circuits an empty path list without a request", async () => {
+    let called = false;
+    respond = () => {
+      called = true;
+      return Promise.resolve(jsonResponse({ resolved: [] }));
+    };
+    expect(await resolveFileRefs(ID, [])).toEqual([]);
+    expect(called).toBe(false);
+  });
+
+  test("degrades to an empty list (never throws) on a failed request", async () => {
+    respond = () => Promise.resolve(new Response(null, { status: 500 }));
+    expect(await resolveFileRefs(ID, ["a.ts"])).toEqual([]);
+  });
+});
+
+describe("getFileExcerpt", () => {
+  const excerpt: FileExcerpt = {
+    path: "a.ts",
+    language: "typescript",
+    startLine: 1,
+    endLine: 5,
+    lines: ["line 1"],
+    totalLines: 5,
+  };
+
+  test("returns the excerpt for a resolved file", async () => {
+    respond = () => Promise.resolve(jsonResponse(excerpt));
+    expect(await getFileExcerpt(ID, "a.ts")).toEqual(excerpt);
+  });
+
+  test("encodes the path and line as query params on the review's file route", async () => {
+    let seenUrl = "";
+    respond = (url) => {
+      seenUrl = url;
+      return Promise.resolve(jsonResponse(excerpt));
+    };
+    await getFileExcerpt(ID, "src/a b.ts", 29);
+    const parsed = new URL(seenUrl, "http://localhost");
+    expect(parsed.pathname).toBe(`/api/reviews/${ID}/file`);
+    expect(parsed.searchParams.get("path")).toBe("src/a b.ts");
+    expect(parsed.searchParams.get("line")).toBe("29");
+  });
+
+  test("omits the line param when no line is given", async () => {
+    let seenUrl = "";
+    respond = (url) => {
+      seenUrl = url;
+      return Promise.resolve(jsonResponse(excerpt));
+    };
+    await getFileExcerpt(ID, "a.ts");
+    expect(new URL(seenUrl, "http://localhost").searchParams.has("line")).toBe(false);
+  });
+
+  test("throws HttpError on a non-2xx response", async () => {
+    respond = () => Promise.resolve(new Response(null, { status: 404 }));
+    await expect(getFileExcerpt(ID, "ghost.ts")).rejects.toBeInstanceOf(HttpError);
   });
 });
 
