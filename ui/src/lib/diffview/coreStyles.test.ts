@@ -199,10 +199,13 @@ describe("the fenced code-block panel (EXC-692)", () => {
   test("yields a selected code line to the amber band (every rule guards on selection)", () => {
     // CARET_OVERRIDES is adopted after the core sheet, so without the
     // :not([data-selected-line]) guard the panel fill would win over the library's
-    // selection highlight. Every code-block rule — the three row rules plus the two
-    // token-centering rules — must carry it so the whole panel treatment yields.
+    // selection highlight. Every code-block rule keyed on a code row must carry it so the
+    // whole panel treatment yields: the three row rules, the two token-centering rules, and
+    // the two EXC-729 scroll rules (the per-row scrollbar-hide and the reserved-lane
+    // padding). The injected [data-code-scrollbar] element is not a code-row rule and is
+    // not counted here.
     const codeRules = overrideDecls.match(/\[data-code-(?:line|start|end)\][^{]*\{/g) ?? [];
-    expect(codeRules.length).toBe(5);
+    expect(codeRules.length).toBe(7);
     for (const sel of codeRules) expect(sel).toContain(":not([data-selected-line])");
   });
 
@@ -248,5 +251,52 @@ describe("the code-block horizontal scroll (EXC-729)", () => {
     // cap and letting the row stretch full-bleed: overflow and max-width co-locate.
     expect(codeLineBody).toContain("max-width:");
     expect(codeLineBody).toMatch(/overflow-x:\s*auto/);
+  });
+});
+
+// EXC-729 follow-up: one scrollbar per block, not one per line. Each code row is its own
+// scroll container, so a classic-scrollbar platform would draw a bar on every over-wide
+// line. The per-row scrollbars are hidden and codeScrollbar.ts injects a single
+// [data-code-scrollbar] element at the block's bottom (in a reserved lane) that
+// codeScroll.ts drives. This suite pins the CSS side of that consolidation.
+describe("the single per-block code scrollbar (EXC-729)", () => {
+  test("hides every code row's own scrollbar", () => {
+    // Standard property hides it cross-browser; the ::-webkit-scrollbar rule covers the
+    // Chromium render surface caret ships on.
+    const codeLineBody =
+      overrideDecls.match(
+        /\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]:not\(\[data-selected-line\]\)\s*\{[^}]*\}/,
+      )?.[0] ?? "";
+    expect(codeLineBody).toMatch(/scrollbar-width:\s*none/);
+    expect(overrideDecls).toMatch(
+      /\[data-code-line\]:not\(\[data-selected-line\]\)::-webkit-scrollbar\s*\{[^}]*display:\s*none/,
+    );
+  });
+
+  test("reserves a lane under an overflowing block for the bar", () => {
+    // codeScrollbar.ts marks the block's last row data-code-scroll-end; the CSS turns that
+    // into bottom padding so the absolute bar doesn't overlap the code.
+    expect(overrideDecls).toMatch(
+      /\[data-code-end\]\[data-code-scroll-end\]:not\(\[data-selected-line\]\)\s*\{[^}]*padding-block-end:/,
+    );
+  });
+
+  test("places the injected scrollbar out of flow as its own horizontal scroll container", () => {
+    // Absolute keeps it from consuming a subgrid row (which would push the rows below out
+    // of step with their gutter line numbers); it scrolls on the inline axis only.
+    const barBody =
+      overrideDecls.match(/\[data-content\]\s*>\s*\[data-code-scrollbar\]\s*\{[^}]*\}/)?.[0] ?? "";
+    expect(barBody).toMatch(/position:\s*absolute/);
+    expect(barBody).toMatch(/overflow-x:\s*scroll/);
+    expect(barBody).toMatch(/overflow-y:\s*hidden/);
+  });
+
+  test("styles the bar via ::-webkit-scrollbar only, so it stays always-visible", () => {
+    // Setting scrollbar-width/color would let Chromium pull back the auto-hiding platform
+    // scrollbar; the custom ::-webkit-* thumb is what keeps the single bar always shown.
+    const barBody =
+      overrideDecls.match(/\[data-content\]\s*>\s*\[data-code-scrollbar\]\s*\{[^}]*\}/)?.[0] ?? "";
+    expect(barBody).not.toMatch(/scrollbar-width:/);
+    expect(overrideDecls).toMatch(/\[data-code-scrollbar\]::-webkit-scrollbar-thumb\s*\{/);
   });
 });

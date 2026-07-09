@@ -13,6 +13,7 @@
   import { scrollToLine } from "./scroll.ts";
   import { type CodeBlockRange, codeBlockRanges, tagCodeBlockRows } from "./codeBlocks.ts";
   import { attachCodeBlockScrollSync } from "./codeScroll.ts";
+  import { syncCodeBlockScrollbars } from "./codeScrollbar.ts";
   import { preloadFenceLanguages, scanFenceLanguages } from "./languages.ts";
   import { registerCaretDiffThemes } from "./theme.ts";
   import type {
@@ -301,16 +302,30 @@
     if (root == null) return;
     const ranges = codeRanges;
     let raf = 0;
-    const tag = () => tagCodeBlockRows(root, ranges);
-    tag();
-    const observer = new MutationObserver(() => {
+    // Tag the rows, then (re)build each overflowing block's single scrollbar. Both re-run
+    // after every library repaint via the observer below; syncCodeBlockScrollbars is
+    // idempotent (an unchanged block reuses its element), so its own child insertions
+    // settle in one extra frame rather than looping the observer.
+    const tag = () => {
+      tagCodeBlockRows(root, ranges);
+      syncCodeBlockScrollbars(root, ranges);
+    };
+    const schedule = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(tag);
-    });
+    };
+    tag();
+    const observer = new MutationObserver(schedule);
     observer.observe(root, { childList: true, subtree: true });
+    // The code scrollbar is JS-positioned and its overflow depends on the card width, so a
+    // viewport resize (the card is capped but shrinks below its cap) must re-measure and
+    // re-place it — a resize fires no DOM mutation the observer above would catch.
+    const resize = new ResizeObserver(schedule);
+    if (container != null) resize.observe(container);
     return () => {
       cancelAnimationFrame(raf);
       observer.disconnect();
+      resize.disconnect();
     };
   });
 
