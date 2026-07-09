@@ -213,3 +213,40 @@ describe("the fenced code-block panel (EXC-692)", () => {
     expect(bandIdx).toBeGreaterThan(codeIdx);
   });
 });
+
+// EXC-729: a fenced-code line wider than the panel must stay INSIDE the card and
+// scroll horizontally, not break out of the background. The EXC-692 panel caps the
+// row at max-width, but the library renders source lines white-space: pre, so an
+// over-wide line overflowed the capped box and floated over the surface. The fix
+// turns the code-line row into a horizontal scroll container, clipped vertically so
+// a single-line row grows no vertical scrollbar, with overflow-clip-margin keeping
+// the EXC-692 fence-glyph nudges (top: 0.2em / -0.12em) from being clipped.
+describe("the code-block horizontal scroll (EXC-729)", () => {
+  const codeLineBody =
+    overrideDecls.match(
+      /\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]:not\(\[data-selected-line\]\)\s*\{[^}]*\}/,
+    )?.[0] ?? "";
+
+  test("makes the code-line row a horizontal scroll container", () => {
+    expect(codeLineBody).toMatch(/overflow-x:\s*auto/);
+  });
+
+  test("clips vertically so a single-line row never grows a vertical scrollbar", () => {
+    // clip (not auto/scroll/visible) keeps the block axis out of the scroll-container
+    // machinery; a bare overflow-x:auto computes overflow-y to auto, and the EXC-692
+    // glyph nudges would then trip a spurious vertical scrollbar on a 1-line row.
+    expect(codeLineBody).toMatch(/overflow-y:\s*clip/);
+    expect(codeLineBody).not.toMatch(/overflow-y:\s*(?:auto|scroll|visible)/);
+  });
+
+  test("keeps the EXC-692 fence-glyph nudges from clipping (overflow-clip-margin)", () => {
+    expect(codeLineBody).toMatch(/overflow-clip-margin:\s*[\d.]+em/);
+  });
+
+  test("scrolls WITHIN the bounded card — the same rule stays width-capped", () => {
+    // The scroll must happen inside EXC-692's contained card, not by dropping the
+    // cap and letting the row stretch full-bleed: overflow and max-width co-locate.
+    expect(codeLineBody).toContain("max-width:");
+    expect(codeLineBody).toMatch(/overflow-x:\s*auto/);
+  });
+});

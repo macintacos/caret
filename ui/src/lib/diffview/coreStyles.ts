@@ -78,6 +78,18 @@ const CARET_OVERRIDES = `
     max-width: 720px;
     padding-inline-start: 2ch;
     padding-inline-end: 0.75rem;
+    /* EXC-729: the library renders source lines white-space: pre (never wrapping),
+       so a line wider than the capped card overflowed the row box and broke out of
+       the panel background. Make each code row a horizontal scroll container so the
+       over-wide line clips at the card's right edge and scrolls instead (codeScroll.ts
+       keeps a block's rows scroll-synced). overflow-y: clip — not auto — keeps the
+       block axis out of the scroll machinery so a 1-line row grows no vertical
+       scrollbar; overflow-clip-margin gives the clip enough slack that the EXC-692
+       fence-glyph nudges (the closing markers' +0.2em, the language tag's -0.12em)
+       are not shaved. */
+    overflow-x: auto;
+    overflow-y: clip;
+    overflow-clip-margin: 0.4em;
   }
   [data-content] > [data-line][data-code-start]:not([data-selected-line]) {
     border-top-left-radius: var(--radius);
