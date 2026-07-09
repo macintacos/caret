@@ -19,6 +19,7 @@ under the ISC license.
 | `copy` | [ui/src/icons/copy.svg](ui/src/icons/copy.svg) | [copy.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/copy.svg) |
 | `corner-down-left` | [ui/src/icons/corner-down-left.svg](ui/src/icons/corner-down-left.svg) | [corner-down-left.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/corner-down-left.svg) |
 | `corner-up-left` | [ui/src/icons/corner-up-left.svg](ui/src/icons/corner-up-left.svg) | [corner-up-left.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/corner-up-left.svg) |
+| `file` | [ui/src/icons/file.svg](ui/src/icons/file.svg) | [file.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/file.svg) |
 | `unplug` | [ui/src/icons/unplug.svg](ui/src/icons/unplug.svg) | [unplug.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/unplug.svg) |
 
 The verbatim Lucide `LICENSE` text, as published at the `1.17.0` tag, follows:

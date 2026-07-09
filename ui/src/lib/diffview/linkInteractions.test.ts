@@ -3,6 +3,7 @@
 import "../../../test-setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
+import type { FileRefSpanMap } from "./fileRefs.ts";
 import { composeTokenHandlers, createLinkHandlers, hitTestSpan } from "./linkInteractions.ts";
 import type { LinkSpan, LinkSpanMap } from "./links.ts";
 
@@ -177,9 +178,13 @@ describe("composeTokenHandlers", () => {
   });
 
   test("exposes one handler object with all three token handlers", () => {
-    const composed = composeTokenHandlers(new Map([[1, [span(4, 12, "https://a.test")]]]), {
-      openUrl: () => {},
-    });
+    const composed = composeTokenHandlers(
+      new Map([[1, [span(4, 12, "https://a.test")]]]),
+      undefined,
+      {
+        openUrl: () => {},
+      },
+    );
     // A second affordance contributes enter/leave/click HERE, so the composed
     // object must surface exactly those three for the library's single slots.
     expect(typeof composed?.handlers.onTokenClick).toBe("function");
@@ -188,21 +193,29 @@ describe("composeTokenHandlers", () => {
   });
 
   test("carries useTokenTransformer:true so the flag can't drift from the handlers", () => {
-    const composed = composeTokenHandlers(new Map([[1, [span(4, 12, "https://a.test")]]]), {
-      openUrl: () => {},
-    });
+    const composed = composeTokenHandlers(
+      new Map([[1, [span(4, 12, "https://a.test")]]]),
+      undefined,
+      {
+        openUrl: () => {},
+      },
+    );
     expect(composed?.libOptions.useTokenTransformer).toBe(true);
   });
 
-  test("returns undefined when there is no link layer", () => {
-    expect(composeTokenHandlers(undefined, { openUrl: () => {} })).toBeUndefined();
+  test("returns undefined when there is neither a link layer nor file refs", () => {
+    expect(composeTokenHandlers(undefined, undefined, { openUrl: () => {} })).toBeUndefined();
   });
 
   test("opens a clicked link and marks the event as a consumed link click", () => {
     const opened: string[] = [];
-    const composed = composeTokenHandlers(new Map([[1, [span(4, 12, "https://a.test")]]]), {
-      openUrl: (href) => opened.push(href),
-    });
+    const composed = composeTokenHandlers(
+      new Map([[1, [span(4, 12, "https://a.test")]]]),
+      undefined,
+      {
+        openUrl: (href) => opened.push(href),
+      },
+    );
     const event = new MouseEvent("click");
     composed?.handlers.onTokenClick(clickProps(1, 4, 12), event);
     // The link opened, and the same event is now flagged so the row-click
@@ -213,9 +226,13 @@ describe("composeTokenHandlers", () => {
 
   test("a click outside any span opens nothing and is not a link click", () => {
     const opened: string[] = [];
-    const composed = composeTokenHandlers(new Map([[1, [span(4, 12, "https://a.test")]]]), {
-      openUrl: (href) => opened.push(href),
-    });
+    const composed = composeTokenHandlers(
+      new Map([[1, [span(4, 12, "https://a.test")]]]),
+      undefined,
+      {
+        openUrl: (href) => opened.push(href),
+      },
+    );
     const event = new MouseEvent("click");
     composed?.handlers.onTokenClick(clickProps(1, 0, 3), event);
     // No link consumed the click, so the row-click handler is free to act.
@@ -224,9 +241,13 @@ describe("composeTokenHandlers", () => {
   });
 
   test("wasLinkClick tracks only the most recent link-click event", () => {
-    const composed = composeTokenHandlers(new Map([[1, [span(4, 12, "https://a.test")]]]), {
-      openUrl: () => {},
-    });
+    const composed = composeTokenHandlers(
+      new Map([[1, [span(4, 12, "https://a.test")]]]),
+      undefined,
+      {
+        openUrl: () => {},
+      },
+    );
     const first = new MouseEvent("click");
     const second = new MouseEvent("click");
     composed?.handlers.onTokenClick(clickProps(1, 4, 12), first);
@@ -238,9 +259,13 @@ describe("composeTokenHandlers", () => {
   });
 
   test("delegates hover to the link handlers — enter reveals the tooltip, leave hides it", () => {
-    const composed = composeTokenHandlers(new Map([[1, [span(4, 12, "https://a.test/full")]]]), {
-      openUrl: () => {},
-    });
+    const composed = composeTokenHandlers(
+      new Map([[1, [span(4, 12, "https://a.test/full")]]]),
+      undefined,
+      {
+        openUrl: () => {},
+      },
+    );
     const el = fakeTokenElement();
     const props = {
       lineNumber: 1,
@@ -267,5 +292,58 @@ describe("composeTokenHandlers", () => {
     for (const handler of ["onTokenEnter", "onTokenLeave", "onTokenClick"]) {
       expect(source).not.toContain(handler);
     }
+  });
+});
+
+describe("composeTokenHandlers — file references", () => {
+  const fileRefs: FileRefSpanMap = new Map([
+    [1, [{ startCol: 4, endCol: 13, path: "src/a.ts", line: 3 }]],
+  ]);
+
+  function props(charStart: number, charEnd: number) {
+    return {
+      lineNumber: 1,
+      lineCharStart: charStart,
+      lineCharEnd: charEnd,
+      tokenText: "src/a.ts",
+      tokenElement: fakeTokenElement(),
+    };
+  }
+
+  test("returns handlers when only file refs are present (no link layer)", () => {
+    const composed = composeTokenHandlers(undefined, fileRefs, {
+      openUrl: () => {},
+      onFileRefEnter: () => {},
+      onFileRefLeave: () => {},
+    });
+    expect(typeof composed?.handlers.onTokenEnter).toBe("function");
+  });
+
+  test("dispatches enter and leave for a token over a file reference", () => {
+    const entered: string[] = [];
+    let left = 0;
+    const composed = composeTokenHandlers(undefined, fileRefs, {
+      openUrl: () => {},
+      onFileRefEnter: (ref) => entered.push(ref.path),
+      onFileRefLeave: () => {
+        left++;
+      },
+    });
+    const p = props(4, 13);
+    composed?.handlers.onTokenEnter(p, new PointerEvent("pointerenter"));
+    composed?.handlers.onTokenLeave(p, new PointerEvent("pointerleave"));
+    expect(entered).toEqual(["src/a.ts"]);
+    expect(left).toBe(1);
+  });
+
+  test("does not fire for a token that misses every file reference", () => {
+    const entered: string[] = [];
+    const composed = composeTokenHandlers(undefined, fileRefs, {
+      openUrl: () => {},
+      onFileRefEnter: (ref) => entered.push(ref.path),
+      onFileRefLeave: () => {},
+    });
+    composed?.handlers.onTokenEnter(props(0, 3), new PointerEvent("pointerenter"));
+    expect(entered).toEqual([]);
   });
 });

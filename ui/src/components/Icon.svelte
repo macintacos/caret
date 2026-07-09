@@ -14,6 +14,7 @@
   import copy from "../icons/copy.svg?raw";
   import cornerDownLeft from "../icons/corner-down-left.svg?raw";
   import cornerUpLeft from "../icons/corner-up-left.svg?raw";
+  import file from "../icons/file.svg?raw";
   import unplug from "../icons/unplug.svg?raw";
   import type { IconName } from "../lib/icons.ts";
 
@@ -27,6 +28,7 @@
     copy,
     "corner-down-left": cornerDownLeft,
     "corner-up-left": cornerUpLeft,
+    file,
     unplug,
   };
 

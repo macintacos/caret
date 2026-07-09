@@ -37,6 +37,8 @@
     rangeLabel,
   } from "../lib/diffview/commenting.ts";
   import { dismissDragHint, isDragHintDismissed } from "../lib/diffview/dragHint.ts";
+  import { buildFileRefLayer, type FileRefSpan, type FileRefSpanMap } from "../lib/diffview/fileRefs.ts";
+  import { resolveFileRefs } from "../lib/api.ts";
   import { buildLinkLayer } from "../lib/diffview/links.ts";
   import { readDiffStyle, writeDiffStyle } from "../lib/diffStylePref.ts";
   import { readDiffIndicators, writeDiffIndicators } from "../lib/diffIndicatorsPref.ts";
@@ -59,6 +61,7 @@
   import LegacyAnnotationList from "./LegacyAnnotationList.svelte";
   import SourceToc from "./SourceToc.svelte";
   import CodeCopyButton from "./CodeCopyButton.svelte";
+  import FilePreview from "./FilePreview.svelte";
 
   interface Props {
     /** The review whose current plan version is rendered. */
@@ -178,6 +181,80 @@
     }
     return memo.layer;
   });
+
+  // The filename-reference layer (EXC-687). Candidates are parsed from the SAME
+  // display text the view renders (linkLayer.text), so their columns line up with
+  // the tokens; memoized on that text like the link layer so a poll tick yields a
+  // stable reference.
+  let fileRefMemo: { text: string; layer: FileRefSpanMap } | undefined;
+  const fileRefCandidates = $derived.by(() => {
+    const text = linkLayer.text;
+    if (fileRefMemo?.text !== text) {
+      fileRefMemo = { text, layer: buildFileRefLayer(text) };
+    }
+    return fileRefMemo.layer;
+  });
+
+  // Which candidate paths resolve to a real file in the review's cwd — the daemon
+  // is the existence gate, so only these get the icon + hover. Resolved once per
+  // candidate-set change (not per poll tick, since the memo above is stable), and
+  // cleared up front so a plan edit or review switch drops stale icons at once.
+  let resolvedPaths = $state<Set<string>>(new Set());
+  $effect(() => {
+    const candidates = fileRefCandidates;
+    const reviewId = review.id;
+    const paths = [...new Set([...candidates.values()].flat().map((s) => s.path))];
+    resolvedPaths = new Set();
+    if (paths.length === 0) return;
+    let cancelled = false;
+    void resolveFileRefs(reviewId, paths).then((resolved) => {
+      if (!cancelled) resolvedPaths = new Set(resolved);
+    });
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  // The active file-reference spans: candidates confirmed real. Undefined when
+  // none resolve, so SourceView wires no file-ref affordance in that common case.
+  const fileRefs = $derived.by(() => {
+    const resolved = resolvedPaths;
+    if (resolved.size === 0) return undefined;
+    const active: FileRefSpanMap = new Map();
+    for (const [line, spans] of fileRefCandidates) {
+      const keep = spans.filter((s) => resolved.has(s.path));
+      if (keep.length > 0) active.set(line, keep);
+    }
+    return active.size > 0 ? active : undefined;
+  });
+
+  // The file reference the pointer is over, plus the token rect the preview
+  // anchors to. A short dismiss delay lets the pointer travel from the token into
+  // the preview card (to scroll a tall excerpt) without it vanishing; entering the
+  // token or the card cancels it (onKeepAlive → cancelDismiss).
+  let hoveredFileRef = $state<{ path: string; line?: number; anchor: DOMRect } | undefined>();
+  let dismissTimer: ReturnType<typeof setTimeout> | undefined;
+  function cancelDismiss(): void {
+    if (dismissTimer !== undefined) {
+      clearTimeout(dismissTimer);
+      dismissTimer = undefined;
+    }
+  }
+  function showFileRef(ref: FileRefSpan, tokenElement: HTMLElement): void {
+    cancelDismiss();
+    hoveredFileRef = {
+      path: ref.path,
+      line: ref.line,
+      anchor: tokenElement.getBoundingClientRect(),
+    };
+  }
+  function scheduleDismiss(): void {
+    cancelDismiss();
+    dismissTimer = setTimeout(() => {
+      hoveredFileRef = undefined;
+      dismissTimer = undefined;
+    }, 140);
+  }
 
   const baseText = $derived(compare.planFor(review.versions, compareStore.baseVersion));
   const targetText = $derived(compare.planFor(review.versions, compareStore.targetVersion));
@@ -594,6 +671,9 @@
       <SourceView
         doc={{ name: "plan.md", text: linkLayer.text }}
         links={linkLayer.spans}
+        {fileRefs}
+        onFileRefEnter={showFileRef}
+        onFileRefLeave={scheduleDismiss}
         annotations={sourceAnnotations}
         options={readerOptions}
         {gutter}
@@ -624,6 +704,19 @@
         {#key hoveredCopy.range.start}
           <CodeCopyButton text={hoveredCopy.text} top={hoveredCopy.top} left={hoveredCopy.left} />
         {/key}
+      {/if}
+      <!-- The filename-reference hover preview (EXC-687): a viewport-fixed card
+           showing the referenced file's excerpt, anchored to the hovered token.
+           Only appears for references the daemon resolved to a real file. -->
+      {#if hoveredFileRef}
+        <FilePreview
+          reviewId={review.id}
+          path={hoveredFileRef.path}
+          line={hoveredFileRef.line}
+          anchor={hoveredFileRef.anchor}
+          onKeepAlive={cancelDismiss}
+          onDismiss={scheduleDismiss}
+        />
       {/if}
       <!-- Saved comments and the open composer are projected into the library's
            per-line annotation rows (slotInto), so they render inline between the

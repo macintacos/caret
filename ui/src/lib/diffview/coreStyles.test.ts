@@ -300,3 +300,21 @@ describe("the single per-block code scrollbar (EXC-729)", () => {
     expect(thumb).toMatch(/border-radius:\s*var\(--radius\)/);
   });
 });
+
+// EXC-687: a resolved filename reference token (tagged data-file-ref by
+// fileRefTag.ts) gets a small file icon before it, rendered as a mask so it takes
+// the ink color. This pins the rule structurally.
+describe("the filename-reference icon (EXC-687)", () => {
+  const iconRule =
+    overrideDecls.match(/\[data-content\]\s*\[data-file-ref\]::before\s*\{[^}]*\}/)?.[0] ?? "";
+
+  test("scopes the icon to a content-column file-ref token's ::before", () => {
+    expect(iconRule).not.toBe("");
+    expect(iconRule).toContain('content: ""');
+  });
+
+  test("tints the mask with the faint ink token (no hardcoded color)", () => {
+    expect(iconRule).toContain("background-color: var(--ink-faint)");
+    expect(iconRule).toMatch(/mask:\s*\$\{FILE_ICON_MASK\}/);
+  });
+});

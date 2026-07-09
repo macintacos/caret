@@ -4,7 +4,13 @@
 // it owns the shadow root and adopts that stylesheet here — without it the
 // content column collapses to zero width and only the line-number gutter shows.
 
+import fileIconRaw from "../../icons/file.svg?raw";
 import { DIFFS_CORE_STYLES } from "./diffsCoreStyles.ts";
+
+// The vendored Lucide `file` glyph as a CSS mask source (EXC-687). Rendered as a
+// mask rather than an <img> so it takes the ink color of the surrounding text via
+// background-color, matching how Icon.svelte colors an SVG through currentColor.
+const FILE_ICON_MASK = `url("data:image/svg+xml,${encodeURIComponent(fileIconRaw)}")`;
 
 // caret's adjustments layered over the vendored core stylesheet. The gutter and
 // content sit in adjacent grid columns with no gap, which reads cramped — line
@@ -240,6 +246,23 @@ const CARET_OVERRIDES = `
   [data-gutter] > [data-gutter-buffer][data-selected-line],
   [data-content] > [data-line-annotation][data-selected-line] {
     background-color: transparent;
+  }
+
+  /* EXC-687: a resolved filename reference in the plan carries a small file icon
+     before its token. fileRefTag.ts tags the token that starts each reference
+     data-file-ref; the icon is the vendored Lucide file glyph as a mask, so it
+     takes the faint ink color and sits inline with the mono text. Scoped to the
+     content column so it never lands in the gutter. */
+  [data-content] [data-file-ref]::before {
+    content: "";
+    display: inline-block;
+    width: 0.85em;
+    height: 0.85em;
+    margin-right: 0.25em;
+    vertical-align: -0.1em;
+    background-color: var(--ink-faint);
+    -webkit-mask: ${FILE_ICON_MASK} no-repeat center / contain;
+    mask: ${FILE_ICON_MASK} no-repeat center / contain;
   }
 `;
 
