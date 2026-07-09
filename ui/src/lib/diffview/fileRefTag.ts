@@ -27,16 +27,19 @@ export function tagFileRefTokens(root: ParentNode, spanMap: FileRefSpanMap): voi
   }
 }
 
-// Tags the direct-child token whose display columns cover `startCol`. Tokens
-// partition the line, so a running length locates the one that owns the column.
+// Tags the direct-child token that BEGINS at `startCol`. Tokens partition the
+// line, so a running length locates the boundary. Requiring the token to start
+// exactly at the reference (not merely contain it) keeps the icon off a coarse
+// token that spans more than the path — the icon then sits immediately left of
+// the filename, or is omitted rather than misplaced when no token starts there.
 function tagTokenAt(rowEl: Element, startCol: number): void {
   let col = 0;
   for (const token of rowEl.children) {
-    const next = col + (token.textContent?.length ?? 0);
-    if (startCol >= col && startCol < next) {
+    if (col === startCol) {
       token.setAttribute(FILE_REF_ATTR, "");
       return;
     }
-    col = next;
+    if (col > startCol) return;
+    col += token.textContent?.length ?? 0;
   }
 }

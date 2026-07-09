@@ -75,6 +75,15 @@ test("clears stale tags before applying the new set", () => {
   expect(tagged(host)).toEqual(["new.ts"]);
 });
 
+test("does not tag a coarse token that only contains the reference mid-run", () => {
+  // A single prose-like token spanning the whole line: the reference starts at
+  // column 6, inside it, not at its boundary — so no icon is placed (the guard
+  // that keeps the icon off a token wider than the path).
+  host = root(row(1, ["prose src/foo.ts here"]));
+  tagFileRefTokens(host, map([[1, [{ startCol: 6, endCol: 16, path: "src/foo.ts" }]]]));
+  expect(tagged(host)).toEqual([]);
+});
+
 test("is a no-op for a line whose row is not rendered", () => {
   host = root(row(1, ["only ", "here.ts"]));
   expect(() =>

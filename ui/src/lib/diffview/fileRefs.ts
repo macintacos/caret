@@ -5,10 +5,13 @@
 // spans line up with the rendered tokens; line numbers are 1-based, matching the
 // view's per-line data-line.
 //
-// This layer only decides *shape*: a token qualifies when its last path segment
-// ends in a known file extension (optionally trailed by :line[:col]). Whether a
-// candidate is a real file is resolved server-side — so a candidate that doesn't
-// exist simply gets no icon and no hover, giving no impression of a link.
+// Detection is scoped to inline-code spans (`…`), which is where caret's plans
+// cite files and — decisively — the only place a path renders as its own shiki
+// token: prose is tokenized as one coarse run, so a path inside it has no token
+// boundary to hang the icon on or to hit-test the hover against. A token
+// qualifies on *shape* only (last path segment ends in a known file extension,
+// optionally trailed by :line[:col]); whether it is a real file is resolved
+// server-side, so a candidate that doesn't exist gets no icon and no hover.
 
 /** A candidate filename reference on a single display line. Columns are 0-based,
  * half-open [startCol, endCol) into the display line's text; endCol includes any
@@ -30,8 +33,12 @@ export type FileRefSpanMap = Map<number, FileRefSpan[]>;
 // buildLinkLayer uses, so both layers agree on what counts as code.
 const FENCE = /^\s*(`{3,}|~{3,})/;
 
-// A bare URL run — masked so a path-looking tail like ".../app.ts" inside a URL
-// is never mistaken for a file reference.
+// An inline-code span: one or more backticks, then the shortest run closing with
+// the same count. Detection runs only inside these (group 2 is the interior).
+const INLINE_CODE = /(`+)(.*?)\1/g;
+
+// A bare URL run — masked so a path-looking tail like ".../app.ts" inside a
+// code-spanned URL is never mistaken for a file reference.
 const URL_RE = /\bhttps?:\/\/\S+/gi;
 
 // A maximal run of path characters, optionally trailed by :line[:col]. The class
@@ -122,19 +129,30 @@ function classify(raw: string): { path: string; line?: number } | null {
 }
 
 function scanLine(source: string): FileRefSpan[] {
-  const urlRanges = [...source.matchAll(URL_RE)].map((m) => ({
-    start: m.index,
-    end: m.index + m[0].length,
-  }));
   const spans: FileRefSpan[] = [];
-  for (const m of source.matchAll(CANDIDATE_RE)) {
-    const raw = m[0];
-    const startCol = m.index;
-    const endCol = startCol + raw.length;
-    if (urlRanges.some((r) => startCol < r.end && endCol > r.start)) continue;
-    const ref = classify(raw);
-    if (ref === null) continue;
-    spans.push({ startCol, endCol, path: ref.path, line: ref.line });
+  for (const code of source.matchAll(INLINE_CODE)) {
+    const interior = code[2] ?? "";
+    // Column of the interior's first character in the display line (past the
+    // opening backticks), so span columns are absolute.
+    const base = code.index + (code[1]?.length ?? 0);
+    const urlRanges = [...interior.matchAll(URL_RE)].map((m) => ({
+      start: m.index,
+      end: m.index + m[0].length,
+    }));
+    for (const m of interior.matchAll(CANDIDATE_RE)) {
+      const raw = m[0];
+      const localStart = m.index;
+      const localEnd = localStart + raw.length;
+      if (urlRanges.some((r) => localStart < r.end && localEnd > r.start)) continue;
+      const ref = classify(raw);
+      if (ref === null) continue;
+      spans.push({
+        startCol: base + localStart,
+        endCol: base + localEnd,
+        path: ref.path,
+        line: ref.line,
+      });
+    }
   }
   return spans;
 }
