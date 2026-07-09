@@ -158,7 +158,8 @@ function scanLine(source: string): FileRefSpan[] {
 }
 
 /** Scans plan display text into per-line filename-reference spans. Fenced code
- * blocks are skipped, so only prose and inline code are scanned. */
+ * blocks are skipped; each remaining line is scanned for references inside its
+ * inline-code spans. */
 export function buildFileRefLayer(text: string): FileRefSpanMap {
   const lines = text.split("\n");
   const map: FileRefSpanMap = new Map();
