@@ -196,14 +196,19 @@ describe("the fenced code-block panel (EXC-692)", () => {
     expect(langRule).toMatch(/top:\s*-0?\.\d+em/); // negative → up
   });
 
-  test("yields a selected code line to the amber band (every rule guards on selection)", () => {
-    // CARET_OVERRIDES is adopted after the core sheet, so without the
-    // :not([data-selected-line]) guard the panel fill would win over the library's
-    // selection highlight. Every code-block rule — the three row rules plus the two
-    // token-centering rules — must carry it so the whole panel treatment yields.
-    const codeRules = overrideDecls.match(/\[data-code-(?:line|start|end)\][^{]*\{/g) ?? [];
-    expect(codeRules.length).toBe(5);
-    for (const sel of codeRules) expect(sel).toContain(":not([data-selected-line])");
+  test("yields a selected code line to the amber band (every fill rule guards on selection)", () => {
+    // CARET_OVERRIDES is adopted after the core sheet, so a background fill on a code row
+    // would win over the library's amber selection highlight unless it yields. Every rule that
+    // fills a code row — the per-row panel fill and the card's cleared library fill — must
+    // carry :not([data-selected-line]); layout-only rules (padding, radius) need not, so the
+    // check is scoped to rules that set a background-color.
+    const codeRowFillRules = (
+      overrideDecls.match(/\[data-code-(?:line|start|end)\][^{]*\{[^}]*\}/g) ?? []
+    ).filter((rule) => /background-color:/.test(rule));
+    expect(codeRowFillRules.length).toBeGreaterThan(0);
+    for (const rule of codeRowFillRules) {
+      expect(rule).toContain(":not([data-selected-line])");
+    }
   });
 
   test("declares the code-block rules before the selection band", () => {
@@ -211,5 +216,87 @@ describe("the fenced code-block panel (EXC-692)", () => {
     const bandIdx = overrideDecls.indexOf("[data-line][data-selected-line]");
     expect(codeIdx).toBeGreaterThan(-1);
     expect(bandIdx).toBeGreaterThan(codeIdx);
+  });
+});
+
+// EXC-729: a fenced-code line wider than the panel must stay INSIDE the card and scroll
+// horizontally, not break out of the background. The EXC-692 panel caps rows at max-width, but
+// the library renders source lines white-space: pre, so an over-wide line overflowed the
+// capped box and floated over the surface. The fix wraps an overflowing block in ONE scroll
+// card ([data-code-card]) that is a single native horizontal scroll container — the whole
+// block scrolls as one unit (short lines follow, one scrollbar, no per-row jelly) and its
+// subgrid rows keep the gutter aligned. This suite pins the CSS side.
+describe("the fenced code-block scroll card (EXC-729)", () => {
+  const cardBody =
+    overrideDecls.match(/\[data-content\]\s*>\s*\[data-code-card\]\s*\{[^}]*\}/)?.[0] ?? "";
+
+  test("wraps the block in a single subgrid horizontal scroll container", () => {
+    expect(cardBody).toMatch(/display:\s*grid/);
+    // subgrid rows map to the parent tracks, so the gutter line numbers stay aligned.
+    expect(cardBody).toMatch(/grid-template-rows:\s*subgrid/);
+    expect(cardBody).toMatch(/overflow-x:\s*auto/);
+    // the block axis is clipped (hidden), so a single-line-tall row grows no vertical bar.
+    expect(cardBody).toMatch(/overflow-y:\s*hidden/);
+  });
+
+  test("sizes the scroll content to the widest line while capping the visible card", () => {
+    // max-content columns let the content grow to the longest line (the scroll range); the
+    // max-width holds the visible card to its reading width so it scrolls WITHIN the card.
+    expect(cardBody).toMatch(/grid-auto-columns:\s*max-content/);
+    expect(cardBody).toContain("max-width:");
+  });
+
+  test("carries the same panel look as the per-row card so both read identically", () => {
+    // A fitting block keeps the per-row card path; a scrolling block uses this wrapper. They
+    // share the fill, inset, and rounding so the two paths are visually indistinguishable.
+    expect(cardBody).toMatch(
+      /background-color:\s*color-mix\(in lab, var\(--paper-sunk\), var\(--ink\) \d+%\)/,
+    );
+    expect(cardBody).toContain("margin-inline:");
+    expect(cardBody).toMatch(/border-radius:\s*var\(--radius\)/);
+  });
+
+  test("clips a not-yet-wrapped row so it can't break out before the card wraps it", () => {
+    // The per-row rule is the graceful floor for the frame before codeBlockScroll.ts wraps the
+    // block (or if the script never runs): the over-wide line clips at the card's right edge
+    // instead of spilling over the surface. Inline axis only, so the block stays visible and
+    // the EXC-692 fence-glyph nudges are not shaved.
+    const rowBody =
+      overrideDecls.match(
+        /\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]:not\(\[data-selected-line\]\)\s*\{[^}]*\}/,
+      )?.[0] ?? "";
+    expect(rowBody).toMatch(/overflow-x:\s*clip/);
+    expect(rowBody).not.toMatch(/overflow-x:\s*(?:auto|scroll)/);
+  });
+});
+
+// EXC-729: one scrollbar per block, not one per line. The card is a native scroll container,
+// so a single classic scrollbar sits at its bottom in a reserved lane. Styling
+// ::-webkit-scrollbar keeps that bar always-visible (the standard scrollbar-* props would let
+// Chromium pull back the auto-hiding overlay bar); the last row's track reserves the lane so
+// the bar never overlaps the code, and the gutter's matching track grows with it via subgrid.
+describe("the single per-block code scrollbar (EXC-729)", () => {
+  const cardBody =
+    overrideDecls.match(/\[data-content\]\s*>\s*\[data-code-card\]\s*\{[^}]*\}/)?.[0] ?? "";
+
+  test("reserves a bottom lane on the card's last row for the bar", () => {
+    expect(overrideDecls).toMatch(
+      /\[data-code-card\]\s*>\s*\[data-line\]\[data-code-end\]\s*\{[^}]*padding-block-end:/,
+    );
+  });
+
+  test("styles the bar via ::-webkit-scrollbar only, so it stays always-visible", () => {
+    // Setting scrollbar-width/color on the card would let Chromium pull back the auto-hiding
+    // platform scrollbar; the custom ::-webkit-* thumb is what keeps the single bar shown.
+    expect(cardBody).not.toMatch(/scrollbar-width:|scrollbar-color:/);
+    expect(overrideDecls).toMatch(/\[data-code-card\]::-webkit-scrollbar-thumb\s*\{/);
+  });
+
+  test("keeps the thumb a caret-neutral ink mix, not amber", () => {
+    // The diff surface reserves amber for selection, so the bar is a neutral paper→ink mix.
+    const thumb =
+      overrideDecls.match(/\[data-code-card\]::-webkit-scrollbar-thumb\s*\{[^}]*\}/)?.[0] ?? "";
+    expect(thumb).toMatch(/color-mix\(in lab, var\(--paper-sunk\), var\(--ink\) \d+%\)/);
+    expect(thumb).toMatch(/border-radius:\s*var\(--radius\)/);
   });
 });

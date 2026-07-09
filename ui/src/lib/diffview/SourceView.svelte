@@ -12,6 +12,7 @@
   import { type SourceViewGutter, type SourceViewLibOptions, toFileOptions } from "./options.ts";
   import { scrollToLine } from "./scroll.ts";
   import { type CodeBlockRange, codeBlockRanges, tagCodeBlockRows } from "./codeBlocks.ts";
+  import { syncCodeBlockCards } from "./codeBlockScroll.ts";
   import { preloadFenceLanguages, scanFenceLanguages } from "./languages.ts";
   import { registerCaretDiffThemes } from "./theme.ts";
   import type {
@@ -300,16 +301,32 @@
     if (root == null) return;
     const ranges = codeRanges;
     let raf = 0;
-    const tag = () => tagCodeBlockRows(root, ranges);
-    tag();
-    const observer = new MutationObserver(() => {
+    // Tag the rows, then wrap each overflowing block in its scroll card (EXC-729). Both re-run
+    // after every library repaint via the observer below; syncCodeBlockCards is idempotent (an
+    // already-correct block mutates nothing), so its own wrap/unwrap settles in one extra frame
+    // rather than looping the observer. Tagging runs first so the rows carry data-code-line etc.
+    // before they are moved into a card.
+    const tag = () => {
+      tagCodeBlockRows(root, ranges);
+      syncCodeBlockCards(root, ranges);
+    };
+    const schedule = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(tag);
-    });
+    };
+    tag();
+    const observer = new MutationObserver(schedule);
     observer.observe(root, { childList: true, subtree: true });
+    // Whether a block overflows depends on the card width, so a viewport resize (the card is
+    // capped but shrinks below its cap on a narrow viewport) can push a fitting block into
+    // overflow or the reverse — re-run to wrap/unwrap, since a resize fires no DOM mutation the
+    // observer above would catch.
+    const resize = new ResizeObserver(schedule);
+    if (container != null) resize.observe(container);
     return () => {
       cancelAnimationFrame(raf);
       observer.disconnect();
+      resize.disconnect();
     };
   });
 </script>
