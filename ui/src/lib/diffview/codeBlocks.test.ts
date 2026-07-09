@@ -136,6 +136,33 @@ describe("tagCodeBlockRows", () => {
     expect(rowAttrs(root, 4)).toEqual({ code: true, start: true, end: false });
     expect(rowAttrs(root, 5)).toEqual({ code: true, start: false, end: true });
   });
+
+  test("tags rows even when a scroll card has moved them out of direct-child position", () => {
+    // An overflowing block's rows get wrapped in a scroll card (codeBlockScroll.ts), so the
+    // repaint pass after wrapping re-tags rows that are no longer direct children of the
+    // content column. Simulate that by nesting the block's rows one level deep.
+    const root = buildContent(4);
+    const content = root.querySelector("[data-content]") as HTMLElement;
+    const card = document.createElement("div");
+    card.setAttribute("data-code-card", "1");
+    content.insertBefore(card, content.firstChild);
+    for (let n = 1; n <= 3; n++) {
+      card.appendChild(root.querySelector(`[data-content] [data-line="${n}"]`) as HTMLElement);
+    }
+    tagCodeBlockRows(root, [{ start: 1, end: 3 }]);
+    // The nested rows are still tagged as a block.
+    const nested = (line: number) => {
+      const row = root.querySelector(`[data-content] [data-line="${line}"]`);
+      return {
+        code: row?.hasAttribute("data-code-line") ?? false,
+        start: row?.hasAttribute("data-code-start") ?? false,
+        end: row?.hasAttribute("data-code-end") ?? false,
+      };
+    };
+    expect(nested(1)).toEqual({ code: true, start: true, end: false });
+    expect(nested(2)).toEqual({ code: true, start: false, end: false });
+    expect(nested(3)).toEqual({ code: true, start: false, end: true });
+  });
 });
 
 // Fills a content row with shiki-shaped token spans (one <span> per token, no

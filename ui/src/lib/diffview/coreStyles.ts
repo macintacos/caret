@@ -32,10 +32,7 @@ const CARET_OVERRIDES = `
      that opens the seam and the selected-band pull that fills it must move
      together, so they share one named value rather than coupled literals. */
   :host { --caret-seam: 24px; }
-  /* position: relative makes [data-content] the offsetParent for the absolutely-placed
-     per-block code scrollbar (EXC-729, codeScrollbar.ts) — it must be a positioning
-     context in the same coordinate space the rows' offsets are read in. */
-  [data-content] { padding-inline-start: var(--caret-seam); position: relative; }
+  [data-content] { padding-inline-start: var(--caret-seam); }
   [data-utility-button] {
     margin-right: calc(1ch - 1lh - 0.85rem);
     background-color: var(--accent);
@@ -81,57 +78,14 @@ const CARET_OVERRIDES = `
     max-width: 720px;
     padding-inline-start: 2ch;
     padding-inline-end: 0.75rem;
-    /* EXC-729: the library renders source lines white-space: pre (never wrapping), so a
-       line wider than the capped card overflowed the row box and broke out of the panel
-       background. Make each code row a horizontal scroll container so the over-wide line
-       clips at the card's right edge and scrolls instead. Its own scrollbar is hidden
-       (below): one per over-wide line reads as visual noise, so codeScrollbar.ts injects a
-       SINGLE bar at the block's bottom and codeScroll.ts keeps every row and that bar in
-       lockstep. overflow-x stays auto (not hidden) so a trackpad scroll over a row still
-       works and syncs; overflow-y: clip — not auto — keeps the block axis out of the scroll
-       machinery so a 1-line row grows no vertical scrollbar; overflow-clip-margin gives the
-       clip enough slack that the EXC-692 fence-glyph nudges (the closing markers' +0.2em,
-       the language tag's -0.12em) are not shaved. */
-    overflow-x: auto;
-    overflow-y: clip;
-    overflow-clip-margin: 0.4em;
-    scrollbar-width: none;
-  }
-  [data-content] > [data-line][data-code-line]:not([data-selected-line])::-webkit-scrollbar {
-    display: none;
-  }
-
-  /* EXC-729 single scrollbar. codeScrollbar.ts reserves a lane under an overflowing block
-     by tagging its last row data-code-scroll-end (the gutter cell grows with it via
-     subgrid, so line numbers stay aligned) and places one absolutely-positioned scrollbar
-     in that lane. The bar holds a spacer sized to the block's widest line, so its native
-     horizontal scrollbar spans the block's full range; codeScroll.ts drives the rows from
-     it. Kept absolute so it consumes no subgrid row — an in-flow child would push the rows
-     below out of step with their gutter numbers. Thumb is a caret-neutral ink mix (no
-     amber — the diff surface reserves amber for selection). */
-  [data-content] > [data-line][data-code-end][data-code-scroll-end]:not([data-selected-line]) {
-    padding-block-end: 16px;
-  }
-  /* Styling ::-webkit-scrollbar opts this element out of the platform's auto-hiding
-     overlay scrollbar into a custom, always-visible one — the whole point, so the single
-     bar is present whenever the block overflows. Only ::-webkit-* is set (no
-     scrollbar-width/color): the standard props would win in Chromium and pull the platform
-     scrollbar back. caret renders in Chromium, so the webkit pseudo-elements are enough. */
-  [data-content] > [data-code-scrollbar] {
-    position: absolute;
-    overflow-x: scroll;
-    overflow-y: hidden;
-    height: 12px;
-  }
-  [data-content] > [data-code-scrollbar] > * { height: 1px; }
-  [data-content] > [data-code-scrollbar]::-webkit-scrollbar { height: 8px; }
-  [data-content] > [data-code-scrollbar]::-webkit-scrollbar-track { background: transparent; }
-  [data-content] > [data-code-scrollbar]::-webkit-scrollbar-thumb {
-    background: color-mix(in lab, var(--paper-sunk), var(--ink) 30%);
-    border-radius: var(--radius);
-  }
-  [data-content] > [data-code-scrollbar]::-webkit-scrollbar-thumb:hover {
-    background: color-mix(in lab, var(--paper-sunk), var(--ink) 42%);
+    /* EXC-729: the library renders source lines white-space: pre (never wrapping), so a line
+       wider than the capped card would break out of the panel background. An overflowing block
+       is wrapped in a scroll card (codeBlockScroll.ts + the [data-code-card] rules below) that
+       scrolls it as one unit; this clip is the guard for the frame before that wrap runs (and
+       the graceful floor if the script never does) — the over-wide line clips at the card's
+       right edge instead of spilling out. Only the inline axis is clipped, so the block axis
+       stays visible and the EXC-692 fence-glyph nudges are not shaved. */
+    overflow-x: clip;
   }
   [data-content] > [data-line][data-code-start]:not([data-selected-line]) {
     border-top-left-radius: var(--radius);
@@ -159,6 +113,75 @@ const CARET_OVERRIDES = `
     top: 0.2em;
   }
   [data-content] > [data-line][data-code-start]:not([data-selected-line]) [data-code-lang] {
+    position: relative;
+    top: -0.12em;
+  }
+
+  /* EXC-729: an overflowing fenced block is wrapped in one scroll card (codeBlockScroll.ts)
+     that is a single native horizontal scroll container — the whole block scrolls as one unit
+     (short lines follow the wide ones, one scrollbar at the bottom, no per-row jelly). The card
+     is a subgrid, so its rows still map to the parent row tracks and the gutter line numbers
+     stay aligned; grid-auto-columns: max-content sizes the scroll content to the widest line
+     while max-width caps the visible card. It carries the same panel look as the per-row card
+     above — a fitting block keeps that path (its direct-child rows never match this card
+     selector), so a scrolling block and a fitting one read identically. */
+  [data-content] > [data-code-card] {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-rows: subgrid;
+    grid-auto-columns: max-content;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 720px;
+    margin-inline: 0.75rem;
+    background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
+    border-radius: var(--radius);
+  }
+  /* The library paints every line with its own --diffs-bg, so clear it inside the card for
+     the darker panel fill to show through; keep the code's 2ch inset and end padding. A
+     selected line is left to the library's amber highlight (EXC-664) via the :not guard. */
+  [data-content] > [data-code-card] > [data-line][data-code-line] {
+    padding-inline-start: 2ch;
+    padding-inline-end: 0.75rem;
+  }
+  [data-content] > [data-code-card] > [data-line][data-code-line]:not([data-selected-line]) {
+    background-color: transparent;
+  }
+  /* Symmetric breathing room top and bottom. The ::-webkit-scrollbar height (below) makes the
+     browser reserve the bar's own lane at the card's bottom edge, so this padding is only the
+     gap between the last code line and that bar — no extra bar-height reservation is needed
+     here (that double-counted and left a dead gap). The gutter's matching tracks grow with
+     these paddings via subgrid, so the line numbers stay aligned. */
+  [data-content] > [data-code-card] > [data-line][data-code-start] {
+    padding-block-start: 0.5rem;
+  }
+  [data-content] > [data-code-card] > [data-line][data-code-end] {
+    padding-block-end: 0.5rem;
+  }
+  /* One always-visible scrollbar at the card's bottom. Styling ::-webkit-scrollbar opts out
+     of the platform's auto-hiding overlay bar (the standard scrollbar-* props would pull it
+     back in Chromium, where caret renders); the thumb is a caret-neutral ink mix — no amber,
+     the diff surface reserves amber for selection — inset by a transparent border so it reads
+     as a thin pill in the lane. */
+  [data-content] > [data-code-card]::-webkit-scrollbar { height: 12px; }
+  [data-content] > [data-code-card]::-webkit-scrollbar-track { background: transparent; }
+  [data-content] > [data-code-card]::-webkit-scrollbar-thumb {
+    background: color-mix(in lab, var(--paper-sunk), var(--ink) 45%);
+    border: 3px solid transparent;
+    border-radius: var(--radius);
+    background-clip: content-box;
+  }
+  [data-content] > [data-code-card]::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in lab, var(--paper-sunk), var(--ink) 60%);
+    background-clip: content-box;
+  }
+  /* The card's fence lines need the same glyph-centering nudges as the per-row card above
+     (whose rules match direct-child rows only). */
+  [data-content] > [data-code-card] > [data-line][data-code-end]:not([data-selected-line]) [data-code-fence] {
+    position: relative;
+    top: 0.2em;
+  }
+  [data-content] > [data-code-card] > [data-line][data-code-start]:not([data-selected-line]) [data-code-lang] {
     position: relative;
     top: -0.12em;
   }

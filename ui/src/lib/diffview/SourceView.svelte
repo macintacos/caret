@@ -12,8 +12,7 @@
   import { type SourceViewGutter, type SourceViewLibOptions, toFileOptions } from "./options.ts";
   import { scrollToLine } from "./scroll.ts";
   import { type CodeBlockRange, codeBlockRanges, tagCodeBlockRows } from "./codeBlocks.ts";
-  import { attachCodeBlockScrollSync } from "./codeScroll.ts";
-  import { syncCodeBlockScrollbars } from "./codeScrollbar.ts";
+  import { syncCodeBlockCards } from "./codeBlockScroll.ts";
   import { preloadFenceLanguages, scanFenceLanguages } from "./languages.ts";
   import { registerCaretDiffThemes } from "./theme.ts";
   import type {
@@ -302,13 +301,14 @@
     if (root == null) return;
     const ranges = codeRanges;
     let raf = 0;
-    // Tag the rows, then (re)build each overflowing block's single scrollbar. Both re-run
-    // after every library repaint via the observer below; syncCodeBlockScrollbars is
-    // idempotent (an unchanged block reuses its element), so its own child insertions
-    // settle in one extra frame rather than looping the observer.
+    // Tag the rows, then wrap each overflowing block in its scroll card (EXC-729). Both re-run
+    // after every library repaint via the observer below; syncCodeBlockCards is idempotent (an
+    // already-correct block mutates nothing), so its own wrap/unwrap settles in one extra frame
+    // rather than looping the observer. Tagging runs first so the rows carry data-code-line etc.
+    // before they are moved into a card.
     const tag = () => {
       tagCodeBlockRows(root, ranges);
-      syncCodeBlockScrollbars(root, ranges);
+      syncCodeBlockCards(root, ranges);
     };
     const schedule = () => {
       cancelAnimationFrame(raf);
@@ -317,9 +317,10 @@
     tag();
     const observer = new MutationObserver(schedule);
     observer.observe(root, { childList: true, subtree: true });
-    // The code scrollbar is JS-positioned and its overflow depends on the card width, so a
-    // viewport resize (the card is capped but shrinks below its cap) must re-measure and
-    // re-place it — a resize fires no DOM mutation the observer above would catch.
+    // Whether a block overflows depends on the card width, so a viewport resize (the card is
+    // capped but shrinks below its cap on a narrow viewport) can push a fitting block into
+    // overflow or the reverse — re-run to wrap/unwrap, since a resize fires no DOM mutation the
+    // observer above would catch.
     const resize = new ResizeObserver(schedule);
     if (container != null) resize.observe(container);
     return () => {
@@ -327,19 +328,6 @@
       observer.disconnect();
       resize.disconnect();
     };
-  });
-
-  // Fenced-code horizontal scroll sync (EXC-729). coreStyles.ts makes each code row its
-  // own horizontal scroll container so an over-wide line scrolls instead of breaking out
-  // of the panel; this keeps a block's rows scroll-synced so the whole block scrolls as
-  // one unit (tabular content stays aligned). Attached once to the stable shadow root —
-  // it survives the library's repaints, like the adopted style sheets, so unlike the
-  // tagging effect above it needs no re-arming. Declared after the sync effect, so the
-  // shadow root the library creates in container-managed mode already exists.
-  $effect(() => {
-    const root = container?.shadowRoot;
-    if (root == null) return;
-    return attachCodeBlockScrollSync(root);
   });
 </script>
 

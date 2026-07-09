@@ -111,7 +111,10 @@ export function tagCodeBlockRows(root: ParentNode, ranges: CodeBlockRange[]): vo
     tagged.removeAttribute("data-code-lang");
     tagged.removeAttribute("data-code-fence");
   }
-  for (const row of root.querySelectorAll<HTMLElement>("[data-content] > [data-line]")) {
+  // Descendant, not child: an overflowing block's rows get moved into a scroll card
+  // (codeBlockScroll.ts), so on the repaint pass after wrapping they are no longer direct
+  // children of [data-content]. A descendant query re-tags them wherever they sit.
+  for (const row of root.querySelectorAll<HTMLElement>("[data-content] [data-line]")) {
     const n = Number(row.getAttribute("data-line"));
     const code = Number.isFinite(n) && inCode(n);
     row.toggleAttribute("data-code-line", code);
