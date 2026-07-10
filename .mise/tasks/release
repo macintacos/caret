@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #MISE description="Cut a caret release: baseline|compute|prepare|finalize (drive via /release-caret)"
-#USAGE arg "[args]" var=#true help="Subcommand + args forwarded to scripts/release/cli.ts"
-
-set -euo pipefail
-
-exec bun scripts/release/cli.ts "$@"
+# Thin forwarder: subcommands, flags, and --help live in the caret tasks CLI
+# (scripts/tasks/cli.ts release ...); this task just execs the `release`
+# subcommand group. `exec` replaces the shell, so the CLI's exit code becomes the
+# task's, and "$@" (the special parameter, not a plain array) is safe on an empty
+# arg list under set -u.
+exec bun scripts/tasks/cli.ts release "$@"

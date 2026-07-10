@@ -10,7 +10,7 @@
 // their mise task, and `mise run` has no --no-deps flag, so each is spawned
 // with MISE_TASK_SKIP=build-ui to keep build-ui at exactly one run per gate.
 //
-// DI mirrors scripts/release/cli.ts: the spawn collaborator is injected so
+// DI mirrors scripts/tasks/release.ts: the spawn collaborator is injected so
 // test/scripts/preflight.test.ts can drive the DAG without running real tasks;
 // import.meta.main wires the real spawner and process.exit.
 //

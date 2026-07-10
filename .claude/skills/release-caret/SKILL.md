@@ -6,19 +6,20 @@ argument-hint: "[patch|minor|major] [dry run]"
 
 # Release caret
 
-Cut a caret release by orchestrating `scripts/release/cli.ts`. The script owns every
-judgment-free step — version math, version-file edits, the commit range, all `git`/`gh`
-operations — and is the **sole source of the version number**. Your only jobs are: (1)
-confirm the version the script computes — the single gate — (2) author the `CHANGELOG.md`
-prose, and (3) orchestrate the full flow end-to-end: open the release PR, merge it, then
-finalize (tag, GitHub Release, npm). Once the version is confirmed, everything after it
-runs without further prompts. **Never invent, compute, or alter the version yourself** —
-always take it from the script's JSON.
+Cut a caret release by orchestrating the release subcommand group of the caret tasks CLI
+(`bun scripts/tasks/cli.ts release <subcommand>`). The script owns every judgment-free
+step — version math, version-file edits, the commit range, all `git`/`gh` operations — and
+is the **sole source of the version number**. Your only jobs are: (1) confirm the version
+the script computes — the single gate — (2) author the `CHANGELOG.md` prose, and (3)
+orchestrate the full flow end-to-end: open the release PR, merge it, then finalize (tag,
+GitHub Release, npm). Once the version is confirmed, everything after it runs without
+further prompts. **Never invent, compute, or alter the version yourself** — always take it
+from the script's JSON.
 
 The script is invoked directly so its stdout is pure JSON:
 
 ```sh
-bun scripts/release/cli.ts <subcommand> [args]
+bun scripts/tasks/cli.ts release <subcommand> [args]
 ```
 
 Every invocation prints exactly one JSON object on stdout. Parse it. A
@@ -46,7 +47,7 @@ invocation is needed. Phase detection still matters for **resuming** an interrup
 the version oracle once:
 
 ```sh
-bun scripts/release/cli.ts compute <bump>
+bun scripts/tasks/cli.ts release compute <bump>
 ```
 
 - **`ok: false` with `errorCode: "NO_BASELINE"`** → no release tags exist yet → run
@@ -106,8 +107,8 @@ rule (there is no computed version to confirm yet), so it asks its own one-time 
 > - **Tag the initial commit as v0.0.1** — runs `baseline`, pushing the tag.
 > - **Cancel**
 
-On confirmation, run `bun scripts/release/cli.ts baseline --yes` (or `--dry-run` for a dry
-run), then re-run `compute <bump>`.
+On confirmation, run `bun scripts/tasks/cli.ts release baseline --yes` (or `--dry-run` for
+a dry run), then re-run `compute <bump>`.
 
 Otherwise you already have the successful `compute` result from phase detection. From it,
 keep: `currentVersion`, `version`, `tag`, `date`, `commits[]`, `compareUrl`,
@@ -169,8 +170,8 @@ The version gate (step 2) already authorized this — no separate confirmation. 
 changelog on disk, run:
 
 ```sh
-bun scripts/release/cli.ts prepare <bump> --yes      # real
-bun scripts/release/cli.ts prepare <bump> --dry-run  # dry run (no --yes)
+bun scripts/tasks/cli.ts release prepare <bump> --yes      # real
+bun scripts/tasks/cli.ts release prepare <bump> --dry-run  # dry run (no --yes)
 ```
 
 Parse the result and keep `prNumber` and `prUrl`. Report the `prUrl`, then continue to
@@ -215,7 +216,7 @@ only the publish.
 ### 1. Preview the finalize
 
 ```sh
-bun scripts/release/cli.ts finalize --dry-run
+bun scripts/tasks/cli.ts release finalize --dry-run
 ```
 
 This fetches `origin/trunk` and returns the concrete `version`, `tag`, `title`, and
@@ -231,8 +232,8 @@ The version gate (Phase 1 step 2) already authorized this — no separate confir
 Provided the dry-run probe returned `ok: true`, run:
 
 ```sh
-bun scripts/release/cli.ts finalize --yes      # real
-bun scripts/release/cli.ts finalize --dry-run  # dry run
+bun scripts/tasks/cli.ts release finalize --yes      # real
+bun scripts/tasks/cli.ts release finalize --dry-run  # dry run
 ```
 
 Parse the result and report the `releaseUrl` and whether `npmPublished` is true. The

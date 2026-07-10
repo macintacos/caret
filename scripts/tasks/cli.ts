@@ -3,11 +3,13 @@
 // mise file tasks under .mise/tasks/ are thin bash forwarders that exec their
 // subcommand here — e.g. `.mise/tasks/lint` is `exec bun scripts/tasks/cli.ts
 // lint "$@"` — so commander owns every flag's parsing, validation, defaults, and
-// --help, and each task file stays one line. Two tasks stay out of this CLI on
-// purpose: `release` keeps its own CLI at scripts/release/cli.ts (a reverse-merge
-// into this one is tracked by EXC-736), and `preflight` stays a TOML task so
-// mise's usage spec can feed its --json flags into scripts/preflight.ts (migrating
-// it too is tracked by EXC-737).
+// --help, and each task file stays one line. The `release` pipeline is mounted
+// here as a nested subcommand group (`caret-tasks release compute|baseline|
+// prepare|finalize`, built in ./release.ts); it keeps its own JSON-on-stdout
+// error discipline so /release-caret can parse it, independent of this CLI's
+// plain-stderr top-level catch. One task stays out on purpose: `preflight` is a
+// TOML task so mise's usage spec can feed its --json flags into
+// scripts/preflight.ts (migrating it too is tracked by EXC-737).
 //
 // Composition point only, like src/cli.ts: it assembles the commander tree and
 // threads each subcommand's parsed options/args into its run function. Every
@@ -27,6 +29,7 @@ import { DEFAULT_NUM_VERSIONS, parsePositiveInt } from "./dev/protocol.ts";
 import { type RunDevOptions, runDev } from "./dev/run.ts";
 import { runFormat } from "./format.ts";
 import { runLint } from "./lint.ts";
+import { buildReleaseCommand } from "./release.ts";
 import { runSetup } from "./setup.ts";
 import { runSmokeBin } from "./smoke-bin.ts";
 import { runSmokeBundle } from "./smoke-bundle.ts";
@@ -178,6 +181,11 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
     .action(async () => {
       await actions.smokeBundle();
     });
+
+  // The release pipeline mounts as a nested subcommand group with its own
+  // JSON-on-stdout error discipline (see ./release.ts). addCommand (not command)
+  // keeps the group's own configureOutput instead of inheriting this CLI's.
+  program.addCommand(buildReleaseCommand());
 
   return program;
 }

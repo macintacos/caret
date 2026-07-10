@@ -408,27 +408,28 @@ claude --plugin-dir ./    # load caret's hooks for this session only
 
 The `.mise/tasks/*` file tasks are thin forwarders to a single
 [Commander](https://github.com/tj/commander.js) CLI at `scripts/tasks/cli.ts` — the same
-scaffolding (`src/program.ts`) as the product CLI (`src/cli.ts`) and the release CLI
-(`scripts/release/cli.ts`). Each task file is one line: `.mise/tasks/dev` is just
-`exec bun scripts/tasks/cli.ts dev "$@"`, so the CLI owns every flag's parsing,
-validation, defaults, and `--help`, and the task stays trivial. Because mise reserves a
-bare `--help` for its own task help, use `mise run dev -- --help` to see a subcommand's
-flags.
+scaffolding (`src/program.ts`) as the product CLI (`src/cli.ts`). Each task file is one
+line: `.mise/tasks/dev` is just `exec bun scripts/tasks/cli.ts dev "$@"`, so the CLI owns
+every flag's parsing, validation, defaults, and `--help`, and the task stays trivial.
+Because mise reserves a bare `--help` for its own task help, use `mise run dev -- --help`
+to see a subcommand's flags.
 
 The CLI hosts `dev`, `build-ui`, `build-bin`, `build-bundle`, `build`, `lint`, `format`,
-`test`, `test-e2e`, `smoke-bin`, `smoke-bundle`, and `setup`. Every task module is a
-sibling of the CLI in `scripts/tasks/` — one file per task, named after it (e.g.
-`scripts/tasks/build-bin.ts`, `scripts/tasks/smoke-bin.ts`) — except the larger,
-multi-file `dev` task, which keeps its own `scripts/tasks/dev/` folder. Code shared across
-tasks lives in `scripts/tasks/lib/`: `exec.ts` (the `runForward` / `execAndExit` spawn
-helpers), `signals.ts` (the cleanup-on-exit/signal wiring the supervising tasks share),
-and `smoke-probe.ts` (the over-the-wire UI probe both smoke tasks run). Every subcommand's
-parsing contract is unit-tested in `test/scripts/tasks-cli.test.ts`. Two tasks stay
-outside the CLI by design: `release` keeps its own commander CLI at
-`scripts/release/cli.ts` (folding it in is the reverse-merge tracked by
-[EXC-736](https://linear.app/macintacos/issue/EXC-736)), and `preflight` stays a TOML task
-in `mise.toml` because it needs its mise `usage` spec so `mise run preflight --json -v`
-can feed flags into `scripts/preflight.ts` (migrating it too is tracked by
+`test`, `test-e2e`, `smoke-bin`, `smoke-bundle`, `setup`, and the nested `release` group
+(`compute|baseline|prepare|finalize`). Every task module is a sibling of the CLI in
+`scripts/tasks/` — one file per task, named after it (e.g. `scripts/tasks/build-bin.ts`,
+`scripts/tasks/smoke-bin.ts`) — except the larger, multi-file `dev` task, which keeps its
+own `scripts/tasks/dev/` folder. Code shared across tasks lives in `scripts/tasks/lib/`:
+`exec.ts` (the `runForward` / `execAndExit` spawn helpers), `signals.ts` (the
+cleanup-on-exit/signal wiring the supervising tasks share), and `smoke-probe.ts` (the
+over-the-wire UI probe both smoke tasks run). Every subcommand's parsing contract is
+unit-tested in `test/scripts/tasks-cli.test.ts`. The `release` subcommand group lives in
+`scripts/tasks/release.ts` and keeps its own JSON-on-stdout error discipline (Commander
+help/errors to stderr, a typed JSON result per action) so `/release-caret` can parse it,
+independent of the CLI's plain-stderr top-level handling. One task stays outside the CLI
+by design: `preflight` stays a TOML task in `mise.toml` because it needs its mise `usage`
+spec so `mise run preflight --json -v` can feed flags into `scripts/preflight.ts`
+(migrating it too is tracked by
 [EXC-737](https://linear.app/macintacos/issue/EXC-737)).
 
 Task dependencies stay at the mise layer: a forwarder keeps its `#MISE depends=[...]`
