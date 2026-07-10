@@ -124,15 +124,18 @@ echo "caret dev: port=$CARET_PORT state=$state_dir persistent=$persist_state"
 # --num-versions sets how many versions the primary dev review opens with. The
 # driver owns both validation and the default (protocol.ts DEFAULT_NUM_VERSIONS),
 # so only forward the flag when the user actually passed it — no default is
-# duplicated here.
-driver_args=()
+# duplicated here. The base command lives IN the array so it is never empty:
+# expanding an empty "${arr[@]}" under `set -u` is a fatal "unbound variable" on
+# bash 3.2 (macOS /bin/bash), which would abort the script and trip the cleanup
+# trap into killing the daemon.
+driver_cmd=(bun scripts/dev/driver.ts)
 if [ -n "${usage_num_versions:-}" ]; then
-  driver_args+=(--num-versions "$usage_num_versions")
+  driver_cmd+=(--num-versions "$usage_num_versions")
 fi
 if [ "${usage_notify:-}" = "true" ]; then
-  driver_args+=(--notify)
+  driver_cmd+=(--notify)
 fi
-bun scripts/dev/driver.ts "${driver_args[@]}" &
+"${driver_cmd[@]}" &
 driver_pid=$!
 
 # Vite is backgrounded (not foreground/`exec`) and waited on, so a teardown
