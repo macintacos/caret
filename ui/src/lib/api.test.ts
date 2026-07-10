@@ -203,7 +203,7 @@ describe("putDraft instrumentation", () => {
   test("success emits no record", async () => {
     respond = () => Promise.resolve(jsonResponse({ ok: true }));
 
-    await putDraft(ID, { annotations, generalCommentDraft: "" });
+    await putDraft(ID, { annotations, generalCommentDraft: "", composerScratches: [] });
     flush();
 
     expect(cap.events()).toHaveLength(0);
@@ -212,15 +212,26 @@ describe("putDraft instrumentation", () => {
   test("failure warns with annotationCount and rejects", async () => {
     respond = () => Promise.resolve(new Response(null, { status: 500 }));
 
-    await expect(putDraft(ID, { annotations, generalCommentDraft: "" })).rejects.toBeInstanceOf(
-      HttpError,
-    );
+    await expect(
+      putDraft(ID, { annotations, generalCommentDraft: "", composerScratches: [] }),
+    ).rejects.toBeInstanceOf(HttpError);
     flush();
 
     const warn = cap.events().find((r) => r.level === "warn");
     expect(warn).toBeDefined();
     expect(warn!.step).toBe("draft");
     expect(warn!.extra).toMatchObject({ reviewId: ID, annotationCount: 2 });
+  });
+
+  test("forwards the composer scratches in the PUT body", async () => {
+    let body: unknown;
+    respond = (_url, options) => {
+      body = JSON.parse(String(options?.body));
+      return Promise.resolve(jsonResponse({ ok: true }));
+    };
+    const scratches = [{ startLine: 2, endLine: 3, text: "wip" }];
+    await putDraft(ID, { annotations, generalCommentDraft: "", composerScratches: scratches });
+    expect(body).toMatchObject({ composerScratches: scratches });
   });
 });
 
@@ -321,6 +332,7 @@ describe("redaction — no body text reaches the wire", () => {
           },
         ],
         generalCommentDraft: "",
+        composerScratches: [],
       }),
     ).rejects.toBeInstanceOf(HttpError);
     flush();

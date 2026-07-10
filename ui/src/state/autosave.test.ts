@@ -1,6 +1,6 @@
 import "../../test-setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
-import type { Annotation, ClientReview } from "@core/types";
+import type { Annotation, ClientReview, PersistedScratch } from "@core/types";
 import { type AutosaveStore, createAutosave } from "./autosave.svelte.ts";
 import { HttpError } from "./resolve.svelte.ts";
 
@@ -9,6 +9,7 @@ interface SaveCall {
   id: string;
   annotations: Annotation[];
   generalCommentDraft: string;
+  composerScratches: PersistedScratch[];
 }
 
 // A manual timer: createAutosave's debounce is driven by `setTimer`/`clearTimer`
@@ -43,8 +44,13 @@ function review(over: Partial<ClientReview>): ClientReview {
     version: 1,
     annotations: [],
     generalCommentDraft: "",
+    composerScratches: [],
     ...over,
   } as ClientReview;
+}
+
+function scratch(startLine: number, text: string): PersistedScratch {
+  return { startLine, endLine: startLine, text };
 }
 
 function ann(id: string, comment = ""): Annotation {
@@ -52,7 +58,13 @@ function ann(id: string, comment = ""): Annotation {
 }
 
 function makeStore(over: Partial<AutosaveStore> = {}): AutosaveStore {
-  return { annotations: [], generalCommentDraft: "", focusedAnnotation: null, ...over };
+  return {
+    annotations: [],
+    generalCommentDraft: "",
+    composerScratches: [],
+    focusedAnnotation: null,
+    ...over,
+  };
 }
 
 let saves: SaveCall[];
@@ -66,6 +78,7 @@ function build(store: AutosaveStore, activeId: () => string | null, timer = make
         id,
         annotations: draft.annotations,
         generalCommentDraft: draft.generalCommentDraft,
+        composerScratches: draft.composerScratches,
       });
       return saveResult();
     },
@@ -308,5 +321,75 @@ describe("annotation CRUD", () => {
     const { autosave } = build(store, () => "r1");
     autosave.clearGeneralComment();
     expect(store.generalCommentDraft).toBe("");
+  });
+});
+
+describe("composer scratches", () => {
+  test("setScratches schedules a save carrying the scratches", () => {
+    const store = makeStore();
+    const { autosave, timer } = build(store, () => "r1");
+    autosave.setScratches([scratch(2, "wip")]);
+    expect(timer.armed()).toBe(true);
+    timer.fire();
+    expect(saves).toHaveLength(1);
+    expect(saves[0]!.composerScratches).toEqual([scratch(2, "wip")]);
+  });
+
+  test("flushPending sends the scratches alongside annotations and the draft", async () => {
+    const store = makeStore();
+    const { autosave } = build(store, () => "r1");
+    autosave.setScratches([scratch(5, "here")]);
+    autosave.editGeneralComment("gc");
+    await autosave.flushPending();
+    expect(saves).toHaveLength(1);
+    expect(saves[0]!.composerScratches).toEqual([scratch(5, "here")]);
+    expect(saves[0]!.generalCommentDraft).toBe("gc");
+  });
+
+  test("setScratches strips the controller's derived key before persisting", () => {
+    const store = makeStore();
+    const { autosave, timer } = build(store, () => "r1");
+    // The source-view controller emits ComposerScratch objects (with a `key`);
+    // the persisted PersistedScratch shape must not carry it.
+    autosave.setScratches([
+      { key: "2:2", startLine: 2, endLine: 2, text: "wip" } as PersistedScratch,
+    ]);
+    timer.fire();
+    expect(saves[0]!.composerScratches).toEqual([scratch(2, "wip")]);
+    expect(saves[0]!.composerScratches[0]).not.toHaveProperty("key");
+  });
+
+  test("syncActive seeds the store's scratches on an id:version change", () => {
+    const store = makeStore();
+    const { autosave } = build(store, () => "r1");
+    autosave.syncActive(review({ id: "r1", version: 1, composerScratches: [scratch(3, "seed")] }));
+    expect(store.composerScratches).toEqual([scratch(3, "seed")]);
+    // A new version reloads them (version-scoped, like annotations).
+    autosave.syncActive(review({ id: "r1", version: 2, composerScratches: [scratch(7, "v2")] }));
+    expect(store.composerScratches).toEqual([scratch(7, "v2")]);
+  });
+
+  test("syncActive does not re-seed scratches on a same-id:version poll tick", () => {
+    const store = makeStore();
+    const { autosave } = build(store, () => "r1");
+    autosave.syncActive(review({ id: "r1", version: 1, composerScratches: [scratch(3, "seed")] }));
+    // The user types locally; the 2s poll re-delivers the same id:version.
+    store.composerScratches = [scratch(3, "live edit")];
+    autosave.syncActive(review({ id: "r1", version: 1, composerScratches: [scratch(3, "seed")] }));
+    expect(store.composerScratches).toEqual([scratch(3, "live edit")]);
+  });
+
+  test("a review switch mid-flush cannot redirect the scratches onto the new review", async () => {
+    const store = makeStore({ composerScratches: [scratch(1, "r1-scratch")] });
+    let active = "r1";
+    const { autosave } = build(store, () => active);
+    autosave.setScratches([scratch(1, "r1-scratch")]);
+    const flushing = autosave.flushPending();
+    active = "r2";
+    store.composerScratches = [scratch(9, "r2-scratch")];
+    await flushing;
+    expect(saves).toHaveLength(1);
+    expect(saves[0]!.id).toBe("r1");
+    expect(saves[0]!.composerScratches).toEqual([scratch(1, "r1-scratch")]);
   });
 });

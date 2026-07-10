@@ -8,16 +8,24 @@
 // on every id:version change, while the draft seeds on an id change only.
 
 import { putDraft } from "../lib/api.ts";
-import type { Annotation, ClientReview } from "@core/types";
+import type { Annotation, ClientReview, PersistedScratch } from "@core/types";
 import { isNetworkFailure } from "./resolve.svelte.ts";
 
 const SAVE_DEBOUNCE_MS = 500;
+
+/** Copy a scratch list into fresh, persistable objects — dropping the source
+ * view controller's derived `key`, and never aliasing a served array. */
+const copyScratches = (list: readonly PersistedScratch[]): PersistedScratch[] =>
+  list.map((s) => ({ startLine: s.startLine, endLine: s.endLine, text: s.text }));
 
 /** Backing fields the autosave reads and writes. App.svelte supplies a
  * `$state`-backed implementation; tests supply a plain object. */
 export interface AutosaveStore {
   annotations: Annotation[];
   generalCommentDraft: string;
+  /** The current version's unsent composer scratches (line-anchored drafts the
+   * reviewer typed but did not submit). Version-scoped like annotations. */
+  composerScratches: PersistedScratch[];
   focusedAnnotation: string | null;
 }
 
@@ -36,6 +44,7 @@ export interface Autosave {
   readonly annotations: Annotation[];
   readonly focusedAnnotation: string | null;
   readonly generalCommentDraft: string;
+  readonly composerScratches: PersistedScratch[];
 
   /** Reconcile the working copy with the active review. Flushes the previous
    * review's pending save first, then reloads the annotation copy on an
@@ -53,6 +62,10 @@ export interface Autosave {
   editGeneralComment: (value: string) => void;
   /** Clear the local general-comment draft (after a deny clears it server-side). */
   clearGeneralComment: () => void;
+  /** Replace the working-copy scratches (mirrored up from the source-view
+   * controller on every change) and schedule a debounced save. The persisted
+   * shape drops the controller's derived `key`. */
+  setScratches: (next: readonly PersistedScratch[]) => void;
 }
 
 /**
@@ -93,8 +106,13 @@ export function createAutosave(
     const snapshot = store.annotations.map((a) => ({ ...a }));
     // Whitespace-only is treated as empty — never persist a blank draft.
     const draft = store.generalCommentDraft.trim() === "" ? "" : store.generalCommentDraft;
+    const scratches = copyScratches(store.composerScratches);
     try {
-      await save(id, { annotations: snapshot, generalCommentDraft: draft });
+      await save(id, {
+        annotations: snapshot,
+        generalCommentDraft: draft,
+        composerScratches: scratches,
+      });
     } catch (err) {
       // A non-2xx (e.g. the review was resolved/removed) is not a connection
       // problem — the daemon answered. Only a real network failure goes offline.
@@ -119,6 +137,9 @@ export function createAutosave(
     get generalCommentDraft() {
       return store.generalCommentDraft;
     },
+    get composerScratches() {
+      return store.composerScratches;
+    },
 
     syncActive(active) {
       const key = active ? `${active.id}:${active.version}` : null;
@@ -131,6 +152,10 @@ export function createAutosave(
         lastLoadedKey = key;
         store.annotations = active.annotations.map((a) => ({ ...a }));
         store.focusedAnnotation = null;
+        // Scratches are version-scoped like annotations: reload them on every
+        // id:version change so a fresh plan version starts with its own (which
+        // has none), never a prior version's stale line anchors.
+        store.composerScratches = copyScratches(active.composerScratches);
         // Seed on id change only, via its own guard (see lastDraftLoadedId
         // above) — independent of the id:version annotation reload around it.
         if (active.id !== lastDraftLoadedId) {
@@ -143,6 +168,7 @@ export function createAutosave(
         lastDraftLoadedId = null;
         store.annotations = [];
         store.generalCommentDraft = "";
+        store.composerScratches = [];
       }
     },
 
@@ -174,6 +200,10 @@ export function createAutosave(
     },
     clearGeneralComment() {
       store.generalCommentDraft = "";
+    },
+    setScratches(next) {
+      store.composerScratches = copyScratches(next);
+      scheduleSave();
     },
   };
 }

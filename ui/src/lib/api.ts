@@ -9,6 +9,7 @@ import type {
   FileExcerpt,
   FileRefsResponse,
   HealthIdentity,
+  PersistedScratch,
   ResolveBody,
 } from "@core/types";
 
@@ -110,11 +111,16 @@ export async function getFileExcerpt(
   return json(await fetch(`/api/reviews/${encodeURIComponent(id)}/file?${params}`));
 }
 
-/** Autosaves the reviewer's working draft: inline annotations and the
- * review-scoped general-comment draft, sent together from one snapshot. */
+/** Autosaves the reviewer's working draft: inline annotations, the review-scoped
+ * general-comment draft, and the current version's unsent composer scratches, sent
+ * together from one snapshot. */
 export async function putDraft(
   id: string,
-  draft: { annotations: Annotation[]; generalCommentDraft: string },
+  draft: {
+    annotations: Annotation[];
+    generalCommentDraft: string;
+    composerScratches: PersistedScratch[];
+  },
 ): Promise<void> {
   // Success is logged daemon-side; only the failure path is worth a UI record.
   try {
