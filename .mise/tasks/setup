@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Install pinned tools, JS deps, e2e Chromium, and register git hooks"
-
-set -euo pipefail
-
-# `mise install` installs every tool in mise.toml; the postinstall hook then
-# runs `hk install --mise` to (re)register the git hooks.
-mise install
-bun install
-# Install the Chromium binary the Playwright e2e suite drives.
-bunx playwright install chromium
+# Thin forwarder: the install steps live in the caret tasks CLI
+# (scripts/tasks/cli.ts). "$@" is safe on an empty arg list (a special
+# parameter, not a plain array — no set -u footgun).
+exec bun scripts/tasks/cli.ts setup "$@"

@@ -6,7 +6,9 @@ import { buildBundleCommand } from "../../scripts/build/build-bundle.ts";
 import type { RunDevOptions } from "../../scripts/dev/run.ts";
 import { formatCommand } from "../../scripts/lint/format.ts";
 import { lintCommand } from "../../scripts/lint/lint.ts";
+import { setupCommands } from "../../scripts/setup/setup.ts";
 import { type TaskActions, buildProgram } from "../../scripts/tasks/cli.ts";
+import { e2eCommand } from "../../scripts/test/e2e.ts";
 import { testCommand } from "../../scripts/test/test.ts";
 
 // The actions are injectable, so these drive the real commander tree (parsing,
@@ -72,6 +74,7 @@ describe("tasks CLI: passthrough forwarding", () => {
     ["lint", "lint"],
     ["format", "format"],
     ["test", "test"],
+    ["test-e2e", "testE2e"],
   ];
   for (const [command, key] of cases) {
     test(`${command}: no args forwards []`, async () => {
@@ -189,5 +192,36 @@ describe("tasks CLI: build pipeline command lines", () => {
   test("build --install forwards to install.sh --from-local; plain build does not", () => {
     expect(buildInstallCommand({ install: true })).toEqual(["scripts/install.sh", "--from-local"]);
     expect(buildInstallCommand({ install: false })).toBeNull();
+  });
+
+  test("test-e2e runs bunx playwright test with forwarded args", () => {
+    expect(e2eCommand([])).toEqual(["bunx", "playwright", "test"]);
+    expect(e2eCommand(["--grep", "smoke"])).toEqual([
+      "bunx",
+      "playwright",
+      "test",
+      "--grep",
+      "smoke",
+    ]);
+  });
+
+  test("setup installs tools, JS deps, then the e2e Chromium in order", () => {
+    expect(setupCommands()).toEqual([
+      ["mise", "install"],
+      ["bun", "install"],
+      ["bunx", "playwright", "install", "chromium"],
+    ]);
+  });
+});
+
+describe("tasks CLI: setup command", () => {
+  test("setup subcommand invokes its action", async () => {
+    let called = false;
+    await buildProgram({
+      setup: async () => {
+        called = true;
+      },
+    }).parseAsync(["setup"], { from: "user" });
+    expect(called).toBe(true);
   });
 });

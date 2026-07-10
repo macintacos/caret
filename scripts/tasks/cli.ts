@@ -25,6 +25,8 @@ import { DEFAULT_NUM_VERSIONS, parsePositiveInt } from "../dev/protocol.ts";
 import { type RunDevOptions, runDev } from "../dev/run.ts";
 import { runFormat } from "../lint/format.ts";
 import { runLint } from "../lint/lint.ts";
+import { runSetup } from "../setup/setup.ts";
+import { runTestE2e } from "../test/e2e.ts";
 import { runTest } from "../test/test.ts";
 
 /** The action behind each subcommand. Injectable so tests assert the parsed
@@ -39,6 +41,8 @@ export interface TaskActions {
   lint: (args: string[]) => Promise<unknown>;
   format: (args: string[]) => Promise<unknown>;
   test: (args: string[]) => Promise<unknown>;
+  testE2e: (args: string[]) => Promise<unknown>;
+  setup: () => Promise<unknown>;
 }
 
 const realActions: TaskActions = {
@@ -50,6 +54,8 @@ const realActions: TaskActions = {
   lint: runLint,
   format: runFormat,
   test: runTest,
+  testE2e: runTestE2e,
+  setup: runSetup,
 };
 
 /** Build the tasks commander program. `overrides` replaces individual actions
@@ -111,6 +117,9 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
   passthrough("lint", "Check formatting and lint rules (Biome, read-only)", (a) => actions.lint(a));
   passthrough("format", "Format all files (Biome, write mode)", (a) => actions.format(a));
   passthrough("test", "Run the test suite (bun test)", (a) => actions.test(a));
+  passthrough("test-e2e", "Run the Playwright e2e suite against an isolated daemon", (a) =>
+    actions.testE2e(a),
+  );
 
   // build-bin and build-bundle take no args; the mise forwarders carry their
   // `#MISE depends=[...]` so the DAG (build-ui first, etc.) stays at the mise
@@ -137,6 +146,13 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
     .option("--install", "after building, install the local checkout + cycle the daemon (dev only)")
     .action(async (opts) => {
       await actions.build({ install: opts.install ?? false });
+    });
+
+  program
+    .command("setup")
+    .description("Install pinned tools, JS deps, e2e Chromium, and register git hooks")
+    .action(async () => {
+      await actions.setup();
     });
 
   return program;
