@@ -335,6 +335,17 @@ describe("composer scratches", () => {
     expect(saves[0]!.composerScratches).toEqual([scratch(2, "wip")]);
   });
 
+  test("setScratches does not reschedule when the scratches are unchanged", () => {
+    // The controller reseeds on load / switch / version change, echoing the just-
+    // served set back through onScratchesChange. An unchanged set must not schedule
+    // a redundant PUT (nor flip pendingSaveId onto the freshly-seeded review).
+    const store = makeStore({ composerScratches: [scratch(2, "wip")] });
+    const { autosave, timer } = build(store, () => "r1");
+    autosave.setScratches([scratch(2, "wip")]); // structurally equal → no-op
+    expect(timer.armed()).toBe(false);
+    expect(saves).toHaveLength(0);
+  });
+
   test("flushPending sends the scratches alongside annotations and the draft", async () => {
     const store = makeStore();
     const { autosave } = build(store, () => "r1");
@@ -380,7 +391,7 @@ describe("composer scratches", () => {
   });
 
   test("a review switch mid-flush cannot redirect the scratches onto the new review", async () => {
-    const store = makeStore({ composerScratches: [scratch(1, "r1-scratch")] });
+    const store = makeStore();
     let active = "r1";
     const { autosave } = build(store, () => active);
     autosave.setScratches([scratch(1, "r1-scratch")]);

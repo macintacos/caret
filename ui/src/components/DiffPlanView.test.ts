@@ -487,4 +487,28 @@ describe("DiffPlanView scratch rehydration", () => {
     await until(() => reported?.length === 0);
     expect(reported).toEqual([]);
   });
+
+  test("does not reseed when a poll re-delivers the same id:version", async () => {
+    let reported: ComposerScratch[] | undefined;
+    const p = reactiveProps(
+      props({
+        review: reviewFixture({
+          composerScratches: [{ startLine: 3, endLine: 3, text: "live scratch" }],
+        }),
+        onScratchesChange: (s: ComposerScratch[]) => (reported = s),
+      }),
+    );
+    const { flush } = render(DiffPlanView, p);
+    await until(() => (reported?.length ?? 0) > 0);
+    // The 2s poll re-delivers the SAME id:version as a fresh object carrying a
+    // different server-side set; the source view must NOT reseed over the
+    // reviewer's in-progress scratch (contentKey is unchanged, read untracked).
+    p.review = reviewFixture({
+      composerScratches: [{ startLine: 9, endLine: 9, text: "stale server copy" }],
+    });
+    flush();
+    expect(reported).toEqual([
+      { key: scratchKey(3, 3), startLine: 3, endLine: 3, text: "live scratch" },
+    ]);
+  });
 });

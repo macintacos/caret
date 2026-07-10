@@ -18,6 +18,16 @@ const SAVE_DEBOUNCE_MS = 500;
 const copyScratches = (list: readonly PersistedScratch[]): PersistedScratch[] =>
   list.map((s) => ({ startLine: s.startLine, endLine: s.endLine, text: s.text }));
 
+/** Whether two scratch lists carry the same anchored drafts, in order. */
+const scratchesEqual = (a: readonly PersistedScratch[], b: readonly PersistedScratch[]): boolean =>
+  a.length === b.length &&
+  a.every((s, i) => {
+    const o = b[i];
+    return (
+      o !== undefined && s.startLine === o.startLine && s.endLine === o.endLine && s.text === o.text
+    );
+  });
+
 /** Backing fields the autosave reads and writes. App.svelte supplies a
  * `$state`-backed implementation; tests supply a plain object. */
 export interface AutosaveStore {
@@ -202,7 +212,12 @@ export function createAutosave(
       store.generalCommentDraft = "";
     },
     setScratches(next) {
-      store.composerScratches = copyScratches(next);
+      const cleaned = copyScratches(next);
+      // The controller reseeds on load / switch / version change and echoes the
+      // just-served set back through here; an unchanged set must not schedule a
+      // redundant PUT (nor flip pendingSaveId onto the freshly-seeded review).
+      if (scratchesEqual(cleaned, store.composerScratches)) return;
+      store.composerScratches = cleaned;
       scheduleSave();
     },
   };
