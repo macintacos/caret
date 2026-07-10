@@ -51,7 +51,7 @@ assert_contains "$out" "bun install" "plan includes the dependency install"
 assert_contains "$out" "vite" "plan includes the UI build"
 # The compile (and the UI-fallback copy it carries) routes through the one build
 # task, so the plan names that task rather than re-spelling the bun build flags.
-assert_contains "$out" ".mise/tasks/build-bin" "plan compiles through the build task"
+assert_contains "$out" ".mise/tasks/build bin" "plan compiles through the build task"
 assert_contains "$out" "claude plugin install" "plan includes the plugin install"
 assert_contains "$out" "nothing was changed" "ends with the no-change closer"
 assert_absent "$out" "git clone" "local path never clones"
@@ -110,10 +110,10 @@ assert_absent "$fail_out" "Registering" "a failed build aborts before any regist
 # git/bun/bunx/claude on PATH so nothing real builds or registers. Every tool
 # logs its argv to $CALL_LOG, letting us assert the exact register sequence.
 #
-# build-bin is copied into the synthetic checkout as its one-line forwarder to
-# the tasks CLI; the bun stub is what satisfies the post-build
-# `[ -x bin/caret-native ]` guard — it synthesizes that binary for the `build-bin`
-# subcommand, since the real compile inside the (stubbed) CLI never runs.
+# .mise/tasks/build is copied into the synthetic checkout as its one-line
+# forwarder to the tasks CLI; the bun stub is what satisfies the post-build
+# `[ -x bin/caret-native ]` guard — it synthesizes that binary for the `build bin`
+# target, since the real compile inside the (stubbed) CLI never runs.
 
 # Lay down a synthetic checkout + stub dir. Echoes "ROOT STUBS HOME LOG" so the
 # caller can capture the paths; the caller owns cleanup.
@@ -127,7 +127,7 @@ make_success_fixture() {
   mkdir -p "$root/scripts" "$root/.claude-plugin" "$root/.mise/tasks" "$root/ui/dist"
   cp "$script" "$root/scripts/install.sh"
   cp "$test_dir/make-dev-marketplace.sh" "$root/scripts/make-dev-marketplace.sh"
-  cp "$test_dir/../.mise/tasks/build-bin" "$root/.mise/tasks/build-bin"
+  cp "$test_dir/../.mise/tasks/build" "$root/.mise/tasks/build"
   # marketplace.json's presence is the local-checkout signal; the ui/dist tree
   # stands in for the built UI (the stubbed `vite build` leaves it in place).
   printf '{}\n' >"$root/.claude-plugin/marketplace.json"
@@ -143,15 +143,15 @@ make_success_fixture() {
     chmod +x "$stubs/$tool"
   done
 
-  # bun: log argv; the migrated build-bin subcommand (`bun scripts/tasks/cli.ts
-  # build-bin`) forwards to the CLI whose real compile is stubbed out here, so
-  # synthesize its bin/caret-native output so the installer's
-  # `[ -x bin/caret-native ]` guard still passes; every other bun call succeeds.
+  # bun: log argv; the `build bin` target (`bun scripts/tasks/cli.ts build bin`)
+  # forwards to the CLI whose real compile is stubbed out here, so synthesize its
+  # bin/caret-native output so the installer's `[ -x bin/caret-native ]` guard
+  # still passes; every other bun call succeeds.
   cat >"$stubs/bun" <<STUB
 #!/usr/bin/env bash
 printf '%s\n' "bun \$*" >>"$log"
 case " \$* " in
-  *" build-bin "*)
+  *" build bin "*)
     mkdir -p bin
     printf '#!/usr/bin/env bash\nexit 0\n' >bin/caret-native
     chmod +x bin/caret-native
@@ -209,7 +209,7 @@ fi
 # The full pipeline ran, not just detection: build deps, UI build, compile.
 assert_contains "$calls" "bun install" "success run installs build dependencies"
 assert_contains "$calls" "vite build" "success run builds the UI"
-assert_contains "$calls" "scripts/tasks/cli.ts build-bin" "success run compiles the binary via the tasks CLI"
+assert_contains "$calls" "scripts/tasks/cli.ts build bin" "success run compiles the binary via the tasks CLI"
 
 # Register sequence. The local build registers the generated dev marketplace
 # (source symlinked to the checkout), not the checkout's own npm-sourced

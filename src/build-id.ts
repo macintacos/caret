@@ -167,7 +167,7 @@ export function currentCommit(): string {
   if (cachedCommit !== undefined) return cachedCommit;
   cachedCommit = resolveCommit({
     // Replaced with a string literal by `--define` in the build scripts
-    // (.mise/tasks/build-bin, scripts/install.sh), so prod binaries can't be
+    // (the `build bin` target, scripts/install.sh), so prod binaries can't be
     // overridden by runtime env. Deliberately NOT a user setting — it's a
     // build-time substitution token, exempt from the doc/agents/settings-rules.md
     // README-documentation requirement.

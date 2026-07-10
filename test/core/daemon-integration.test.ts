@@ -22,7 +22,7 @@ import { expectNeverLogsBody } from "../support/redaction.ts";
 // Many tests here spawn a real `bun src/cli.ts daemon` subprocess (transpile +
 // boot the whole daemon module graph), then poll the lock file. Standalone that
 // boot is ~tens of ms, but under `mise preflight`'s concurrent load — the unit
-// suite runs alongside build-bin's `bun build --compile`, oversubscribing the box
+// suite runs alongside `build bin`'s `bun build --compile`, oversubscribing the box
 // — a cold boot can take several seconds. EXC-647 first widened the per-test
 // timeout for this, but the inner lock polls stayed at 5s and still flaked: a boot
 // that overran 5s tripped `existsSync(lockPath)` and failed an otherwise-healthy
@@ -412,7 +412,7 @@ test("the daemon logs env warns, ui fallback, and the sigterm shutdown", async (
     ).toBe(true);
     expect(recs.some((r) => r.step === "signal" && r.msg === "sigterm: shutting down")).toBe(true);
     // The ui record fires exactly when no UI is embedded/built — true on a fresh
-    // checkout and in CI; a local `mise run build-ui` artifact flips the branch,
+    // checkout and in CI; a local `mise run build ui` artifact flips the branch,
     // so each environment asserts its own valid outcome.
     const uiBuilt = existsSync(join(process.cwd(), "ui", "dist", "index.html"));
     expect(

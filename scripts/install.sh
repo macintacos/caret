@@ -370,7 +370,7 @@ fi
 run cd "$REPO_DIR"
 
 if [ "$FROM_LOCAL" -eq 1 ]; then
-  # Reuse mode (EXC-555): `mise run build` (build-bin) already produced the
+  # Reuse mode (EXC-555): `mise run build` (build bin) already produced the
   # artifacts; --from-local does NOT rebuild. Assert they exist rather than
   # silently rebuilding — a missing artifact is a misuse, not a fallback.
   if [ "$DRY_RUN" -eq 0 ] && { [ ! -x bin/caret-native ] || [ ! -d bin/ui ]; }; then
@@ -381,13 +381,14 @@ else
   step "Installing build dependencies" run bun install
   step "Building the UI" run bash -c 'cd ui && bunx vite build'
   # Compile through the one build task so the flags can't drift from a local
-  # `mise run build`: it generates the embed manifest from ui/dist, embeds the
+  # `mise run build bin`: it generates the embed manifest from ui/dist, embeds the
   # sourcemap (readable src/*.ts stack frames), bakes the commit (EXC-452), and
   # copies the UI tree beside the binary as a fallback. Run as a plain bash script
   # so the installer needs only bun, not mise; in dry-run step() records it
   # without executing, so its `git rev-parse` never fires in a non-checkout.
-  # build-ui above leaves ui/dist in place for it.
-  step "Compiling the caret binary" run bash .mise/tasks/build-bin
+  # CARET_SKIP_BUILD_UI=1 reuses the UI just built above — without it the
+  # consolidated `build bin` target would rebuild it (EXC-738).
+  step "Compiling the caret binary" run env CARET_SKIP_BUILD_UI=1 bash .mise/tasks/build bin
 
   if [ "$DRY_RUN" -eq 0 ] && [ ! -x bin/caret-native ]; then
     err "build did not produce bin/caret-native"

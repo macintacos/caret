@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-#MISE description="Build the Svelte UI (Vite -> ui/dist: index.html + hashed assets)"
-# Thin forwarder: flags, defaults, and --help live in the caret tasks CLI
-# (scripts/tasks/cli.ts); this task just execs its `build-ui` subcommand. `exec`
-# replaces this shell with the CLI, so its exit code becomes the task's. "$@" is
-# safe on an empty arg list (a special parameter, not a plain array — no set -u
-# footgun).
-exec bun scripts/tasks/cli.ts build-ui "$@"

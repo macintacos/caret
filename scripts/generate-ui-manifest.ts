@@ -5,8 +5,8 @@
 // resolved value. `bun build --compile` embeds the file imports into the binary
 // (the resolved value becomes a /$bunfs path that survives source deletion);
 // the daemon reads each through Bun.file, which also yields its MIME type. The
-// output module is gitignored, biome-excluded, and runs inline from the build-bin
-// task (scripts/tasks/build-bin.ts) after the UI is built and before the compile.
+// output module is gitignored, biome-excluded, and runs inline from the `build
+// bin` target (scripts/tasks/build.ts) after the UI is built and before the compile.
 //
 // Split into a pure renderer (renderManifestModule — unit-tested) and the
 // filesystem effects (enumerateDist, writeManifest) so the URL mapping and the
@@ -86,8 +86,8 @@ export function enumerateDist(distDir: string, outFile: string): ManifestEntry[]
 }
 
 /** Enumerate ui/dist/ and write the generated manifest module. Returns the
- * count of embedded assets. Throws if the dist tree is missing (the build task
- * runs build-ui first, so absence is a real error worth failing the build). */
+ * count of embedded assets. Throws if the dist tree is missing (the `build bin`
+ * target builds the UI first, so absence is a real error worth failing the build). */
 export function writeManifest(distDir: string, outFile: string): number {
   const entries = enumerateDist(distDir, outFile);
   mkdirSync(dirname(outFile), { recursive: true });

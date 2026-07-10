@@ -21,50 +21,47 @@
 
 import { InvalidArgumentError } from "@commander-js/extra-typings";
 import { createProgram } from "../../src/program.ts";
-import { runBuildBin } from "./build-bin.ts";
-import { runBuildBundle } from "./build-bundle.ts";
-import { runBuildUi } from "./build-ui.ts";
-import { runBuild } from "./build.ts";
+import { runBuild, runBuildBin, runBuildBundle, runBuildUi } from "./build.ts";
 import { DEFAULT_NUM_VERSIONS, parsePositiveInt } from "./dev/protocol.ts";
 import { type RunDevOptions, runDev } from "./dev/run.ts";
 import { runFormat } from "./format.ts";
 import { runLint } from "./lint.ts";
 import { buildReleaseCommand } from "./release.ts";
 import { runSetup } from "./setup.ts";
-import { runSmokeBin } from "./smoke-bin.ts";
-import { runSmokeBundle } from "./smoke-bundle.ts";
-import { runTestE2e } from "./test-e2e.ts";
-import { runTest } from "./test.ts";
+import { runSmoke, runSmokeBin, runSmokeBundle } from "./smoke.ts";
+import { runTest, runTestE2e } from "./test.ts";
 
 /** The action behind each subcommand. Injectable so tests assert the parsed
  * options/args without spawning the real tools; production wires the run
  * functions in `realActions`. */
 export interface TaskActions {
   dev: (opts: RunDevOptions) => Promise<unknown>;
+  build: (opts: { install: boolean }) => Promise<unknown>;
   buildUi: (args: string[]) => Promise<unknown>;
   buildBin: () => Promise<unknown>;
   buildBundle: () => Promise<unknown>;
-  build: (opts: { install: boolean }) => Promise<unknown>;
   lint: (args: string[]) => Promise<unknown>;
   format: (args: string[]) => Promise<unknown>;
   test: (args: string[]) => Promise<unknown>;
   testE2e: (args: string[]) => Promise<unknown>;
   setup: () => Promise<unknown>;
+  smoke: () => Promise<unknown>;
   smokeBin: () => Promise<unknown>;
   smokeBundle: () => Promise<unknown>;
 }
 
 const realActions: TaskActions = {
   dev: runDev,
+  build: runBuild,
   buildUi: runBuildUi,
   buildBin: runBuildBin,
   buildBundle: runBuildBundle,
-  build: runBuild,
   lint: runLint,
   format: runFormat,
   test: runTest,
   testE2e: runTestE2e,
   setup: runSetup,
+  smoke: runSmoke,
   smokeBin: runSmokeBin,
   smokeBundle: runSmokeBundle,
 };
@@ -101,9 +98,11 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
       await actions.dev({ numVersions: opts.numVersions, notify: opts.notify ?? false });
     });
 
-  // A passthrough task is a bare subcommand that forwards its raw argv (operands
-  // and flags) to the tool its run function shells out to. allowUnknownOption +
-  // passThroughOptions keep commander from parsing the forwarded flags.
+  // A passthrough command forwards its raw argv (operands and flags) to the tool
+  // its run function shells out to. allowUnknownOption + passThroughOptions keep
+  // commander from parsing the forwarded flags; the top-level
+  // enablePositionalOptions above lets even a nested subcommand (e.g. `build ui`)
+  // pass through untouched.
   const passthrough = (
     name: string,
     description: string,
@@ -120,43 +119,68 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
       });
   };
 
-  passthrough(
-    "build-ui",
-    "Build the Svelte UI (Vite -> ui/dist: index.html + hashed assets)",
-    (a) => actions.buildUi(a),
-  );
   passthrough("lint", "Check formatting and lint rules (Biome, read-only)", (a) => actions.lint(a));
   passthrough("format", "Format all files (Biome, write mode)", (a) => actions.format(a));
-  passthrough("test", "Run the test suite (bun test)", (a) => actions.test(a));
-  passthrough("test-e2e", "Run the Playwright e2e suite against an isolated daemon", (a) =>
-    actions.testE2e(a),
-  );
 
-  // build-bin and build-bundle take no args; the mise forwarders carry their
-  // `#MISE depends=[...]` so the DAG (build-ui first, etc.) stays at the mise
-  // layer, not here.
-  program
-    .command("build-bin")
-    .description("Compile the single caret binary (bun build --compile)")
+  // `build`: bare umbrella (UI -> binary, plus the optional --install dev step),
+  // with `ui`/`bin`/`bundle` as positional targets so `mise run build ui` reaches
+  // the `ui` subcommand. UI-first ordering + the CARET_SKIP_BUILD_UI skip live in
+  // build.ts, not a mise `depends` edge — scripts/preflight.ts is why the gate
+  // builds the UI exactly once. `ui` forwards args to `vite build`.
+  const build = program
+    .command("build")
+    .description("Build the UI then the binary (bare); or a `ui`/`bin`/`bundle` target")
+    .option("--install", "after building, install the local checkout + cycle the daemon (dev only)")
+    .action(async (opts) => {
+      await actions.build({ install: opts.install ?? false });
+    });
+  build
+    .command("ui")
+    .description("Build the Svelte UI (Vite -> ui/dist: index.html + hashed assets)")
+    .allowUnknownOption()
+    .passThroughOptions()
+    .argument("[args...]", "forwarded to vite build")
+    .action(async (args: string[]) => {
+      await actions.buildUi(args);
+    });
+  build
+    .command("bin")
+    .description("Compile the single caret binary (bun build --compile; builds the UI first)")
     .action(async () => {
       await actions.buildBin();
     });
-
-  program
-    .command("build-bundle")
+  build
+    .command("bundle")
     .description(
-      "Bundle caret for the npm/github plugin install (dist/cli.js + ui/dist; runs on bun, no node_modules)",
+      "Bundle caret for the npm/github plugin install (dist/cli.js + ui/dist; builds the UI first)",
     )
     .action(async () => {
       await actions.buildBundle();
     });
 
-  program
-    .command("build")
-    .description("Build the UI then the binary (build-ui -> build-bin)")
-    .option("--install", "after building, install the local checkout + cycle the daemon (dev only)")
-    .action(async (opts) => {
-      await actions.build({ install: opts.install ?? false });
+  // `test`: bare and `unit` run the bun unit suite (the default target); `e2e`
+  // runs the Playwright suite (building the UI first). Each forwards its own args
+  // — a path / --test-name-pattern for unit, a spec path / --grep for e2e.
+  const test = program
+    .command("test")
+    .description("Run tests: bare/`unit` = bun test, `e2e` = Playwright");
+  test
+    .command("unit", { isDefault: true })
+    .description("Run the unit suite (bun test --conditions browser)")
+    .allowUnknownOption()
+    .passThroughOptions()
+    .argument("[args...]", "forwarded to bun test")
+    .action(async (args: string[]) => {
+      await actions.test(args);
+    });
+  test
+    .command("e2e")
+    .description("Run the Playwright e2e suite against an isolated daemon (builds the UI first)")
+    .allowUnknownOption()
+    .passThroughOptions()
+    .argument("[args...]", "forwarded to playwright test")
+    .action(async (args: string[]) => {
+      await actions.testE2e(args);
     });
 
   program
@@ -166,15 +190,22 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
       await actions.setup();
     });
 
-  program
-    .command("smoke-bin")
+  // `smoke`: bare runs both targets (bin then bundle); each target builds its own
+  // artifact first (via the tasks CLI) then smokes it over the wire.
+  const smoke = program
+    .command("smoke")
+    .description("Smoke-test the shipped UI: bare = bin + bundle, or a `bin`/`bundle` target")
+    .action(async () => {
+      await actions.smoke();
+    });
+  smoke
+    .command("bin")
     .description("Smoke-test the compiled binary: serves the embedded multi-asset UI over the wire")
     .action(async () => {
       await actions.smokeBin();
     });
-
-  program
-    .command("smoke-bundle")
+  smoke
+    .command("bundle")
     .description(
       "Smoke-test the run-from-source bundle: prewarm spawns a daemon that serves the UI",
     )

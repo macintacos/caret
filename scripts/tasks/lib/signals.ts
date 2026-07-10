@@ -1,5 +1,5 @@
-// Shared teardown wiring for the tasks that supervise child processes (dev,
-// smoke-bin, smoke-bundle): register one cleanup function to run on normal exit
+// Shared teardown wiring for the tasks that supervise child processes (dev, the
+// smoke bin/bundle targets): register one cleanup function to run on normal exit
 // and on SIGINT/SIGTERM. Without this, a Ctrl-C or `kill` would skip the
 // 'exit' handler and orphan the spawned daemon/driver/Vite children — so the
 // signal handlers run cleanup explicitly, then exit with the conventional

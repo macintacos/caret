@@ -1,7 +1,7 @@
 // Unit coverage for the embed-manifest generator (scripts/generate-ui-manifest.ts):
 // the pure renderer (renderManifestModule) and the filesystem enumerator
-// (enumerateDist / writeManifest). The generator runs inline from
-// .mise/tasks/build-bin to emit src/ui-manifest.generated.ts before the compile;
+// (enumerateDist / writeManifest). The generator runs inline from the `build bin`
+// target to emit src/ui-manifest.generated.ts before the compile;
 // these tests pin its URL mapping, enumeration completeness, and emitted-module
 // shape without a real build.
 import { expect, test } from "bun:test";
