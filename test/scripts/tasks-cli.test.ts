@@ -225,3 +225,25 @@ describe("tasks CLI: setup command", () => {
     expect(called).toBe(true);
   });
 });
+
+describe("tasks CLI: smoke commands", () => {
+  test("smoke-bin subcommand invokes its action", async () => {
+    let called = false;
+    await buildProgram({
+      smokeBin: async () => {
+        called = true;
+      },
+    }).parseAsync(["smoke-bin"], { from: "user" });
+    expect(called).toBe(true);
+  });
+
+  test("smoke-bundle subcommand invokes its action", async () => {
+    let called = false;
+    await buildProgram({
+      smokeBundle: async () => {
+        called = true;
+      },
+    }).parseAsync(["smoke-bundle"], { from: "user" });
+    expect(called).toBe(true);
+  });
+});

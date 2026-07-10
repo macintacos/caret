@@ -26,6 +26,8 @@ import { type RunDevOptions, runDev } from "../dev/run.ts";
 import { runFormat } from "../lint/format.ts";
 import { runLint } from "../lint/lint.ts";
 import { runSetup } from "../setup/setup.ts";
+import { runSmokeBin } from "../smoke/bin.ts";
+import { runSmokeBundle } from "../smoke/bundle.ts";
 import { runTestE2e } from "../test/e2e.ts";
 import { runTest } from "../test/test.ts";
 
@@ -43,6 +45,8 @@ export interface TaskActions {
   test: (args: string[]) => Promise<unknown>;
   testE2e: (args: string[]) => Promise<unknown>;
   setup: () => Promise<unknown>;
+  smokeBin: () => Promise<unknown>;
+  smokeBundle: () => Promise<unknown>;
 }
 
 const realActions: TaskActions = {
@@ -56,6 +60,8 @@ const realActions: TaskActions = {
   test: runTest,
   testE2e: runTestE2e,
   setup: runSetup,
+  smokeBin: runSmokeBin,
+  smokeBundle: runSmokeBundle,
 };
 
 /** Build the tasks commander program. `overrides` replaces individual actions
@@ -153,6 +159,22 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
     .description("Install pinned tools, JS deps, e2e Chromium, and register git hooks")
     .action(async () => {
       await actions.setup();
+    });
+
+  program
+    .command("smoke-bin")
+    .description("Smoke-test the compiled binary: serves the embedded multi-asset UI over the wire")
+    .action(async () => {
+      await actions.smokeBin();
+    });
+
+  program
+    .command("smoke-bundle")
+    .description(
+      "Smoke-test the run-from-source bundle: prewarm spawns a daemon that serves the UI",
+    )
+    .action(async () => {
+      await actions.smokeBundle();
     });
 
   return program;
