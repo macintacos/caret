@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 #MISE description="Cut a caret release: baseline|compute|prepare|finalize (drive via /release-caret)"
+#MISE raw_args=true
+# raw_args hands every argument (including a bare --help) straight to the CLI, so
+# `mise run release --help` shows the CLI's real help instead of mise's task help.
 # Thin forwarder: subcommands, flags, and --help live in the caret tasks CLI
 # (scripts/tasks/cli.ts release ...); this task just execs the `release`
 # subcommand group. `exec` replaces the shell, so the CLI's exit code becomes the

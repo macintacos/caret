@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 #MISE description="Format all files (Biome, write mode)"
+#MISE raw_args=true
+# raw_args hands every argument (including a bare --help) straight to the CLI, so
+# `mise run format --help` shows the CLI's real help instead of mise's task help.
 # Thin forwarder: flags, defaults, and --help live in the caret tasks CLI
 # (scripts/tasks/cli.ts); this task just execs its `format` subcommand. `exec`
 # replaces this shell with the CLI, so its exit code becomes the task's. "$@" is

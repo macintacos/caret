@@ -8,7 +8,7 @@
 // verbosity ladder, --grep line filtering, --task scoping, and the error doc.
 
 import { expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   buildErrorReport,
@@ -142,6 +142,27 @@ test("the consolidated group task files declare no `#MISE depends` edge (concurr
   const taskFile = (name: string): string => join(import.meta.dir, "../../.mise/tasks", name);
   for (const group of ["build", "test", "smoke"]) {
     expect(readFileSync(taskFile(group), "utf8")).not.toContain("#MISE depends");
+  }
+});
+
+test("every `.mise/tasks/*` forwarder to the tasks CLI sets `#MISE raw_args=true` (EXC-741)", () => {
+  // Each forwarder execs `bun scripts/tasks/cli.ts <name> "$@"`, and the CLI owns
+  // every flag and `--help`. `#MISE raw_args=true` makes mise pass arguments —
+  // including a bare `--help` — straight through instead of intercepting them, so
+  // `mise run <task> --help` reaches the CLI's real help. Guard that no forwarder
+  // loses the directive. preflight is excluded on purpose: it is a TOML task in
+  // mise.toml that needs mise's own usage spec (EXC-737), so it has no file here.
+  const tasksDir = join(import.meta.dir, "../../.mise/tasks");
+  const forwarders = readdirSync(tasksDir, { withFileTypes: true })
+    // Skip any namespaced-task subdirectory (mise supports `foo:bar` dirs) so the
+    // readFileSync below can't hit EISDIR; only plain task files can be forwarders.
+    .filter((entry) => entry.isFile())
+    .map((entry) => ({ name: entry.name, body: readFileSync(join(tasksDir, entry.name), "utf8") }))
+    .filter((task) => task.body.includes("scripts/tasks/cli.ts"));
+  // Guard against a glob/path bug making the loop vacuously pass.
+  expect(forwarders.length).toBeGreaterThanOrEqual(8);
+  for (const task of forwarders) {
+    expect(task.body).toContain("#MISE raw_args=true");
   }
 });
 

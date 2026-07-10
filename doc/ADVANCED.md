@@ -412,9 +412,10 @@ The `.mise/tasks/*` file tasks are thin forwarders to a single
 [Commander](https://github.com/tj/commander.js) CLI at `scripts/tasks/cli.ts` — the same
 scaffolding (`src/program.ts`) as the product CLI (`src/cli.ts`). Each task file is one
 line: `.mise/tasks/dev` is just `exec bun scripts/tasks/cli.ts dev "$@"`, so the CLI owns
-every flag's parsing, validation, defaults, and `--help`, and the task stays trivial.
-Because mise reserves a bare `--help` for its own task help, use `mise run dev -- --help`
-to see a subcommand's flags.
+every flag's parsing, validation, defaults, and `--help`, and the task stays trivial. Each
+forwarder sets `#MISE raw_args=true` so mise hands every argument — including a bare
+`--help` — straight to the CLI instead of intercepting it, so `mise run dev --help` shows
+a subcommand's real flags with no `--` separator.
 
 The CLI hosts `dev`; the `build` group (bare umbrella plus the `ui`/`bin`/`bundle`
 targets, `mise run build bin`); the `test` group (bare/`unit` = bun, `e2e` = Playwright);
@@ -464,11 +465,12 @@ removes that whole class of footgun.
 To add a task: register a subcommand on the tasks CLI, put its logic in a
 `scripts/tasks/<name>.ts` module (shared helpers go in `scripts/tasks/lib/`), and add a
 one-line forwarder `.mise/tasks/<name>` = `exec bun scripts/tasks/cli.ts <name> "$@"`
-(carrying any `#MISE description=` and `#MISE depends=[...]` the task needs). The task
-file stays **bash**, not bun: mise derives the task name from the extensionless filename,
-and an extensionless TypeScript file can be neither Biome-linted nor `tsc`-typechecked and
-breaks the shell linters (`hk.pkl` globs `.mise/tasks/*` as shell). The trivial `exec`
-forwarder sidesteps all of that while keeping the real logic in typed, tested TS.
+(carrying `#MISE raw_args=true` so the CLI owns `--help`, plus any `#MISE description=`
+and `#MISE depends=[...]` the task needs). The task file stays **bash**, not bun: mise
+derives the task name from the extensionless filename, and an extensionless TypeScript
+file can be neither Biome-linted nor `tsc`-typechecked and breaks the shell linters
+(`hk.pkl` globs `.mise/tasks/*` as shell). The trivial `exec` forwarder sidesteps all of
+that while keeping the real logic in typed, tested TS.
 
 ### Icons
 

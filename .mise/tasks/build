@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 #MISE description="Build the UI then the binary (bare); or a ui/bin/bundle target"
+#MISE raw_args=true
+# raw_args hands every argument (including a bare --help) straight to the CLI, so
+# `mise run build --help` shows the CLI's real help instead of mise's task help.
 # Thin forwarder: the ui/bin/bundle targets, the UI-first ordering + skip
 # mechanism, and the optional --install step all live in the caret tasks CLI
 # (scripts/tasks/cli.ts). `mise run build ui|bin|bundle` passes the target as $1;
