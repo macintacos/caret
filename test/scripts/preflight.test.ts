@@ -148,8 +148,8 @@ test("every `.mise/tasks/*` forwarder to the tasks CLI sets `#MISE raw_args=true
   // every flag and `--help`. `#MISE raw_args=true` makes mise pass arguments —
   // including a bare `--help` — straight through instead of intercepting them, so
   // `mise run <task> --help` reaches the CLI's real help. Guard that no forwarder
-  // loses the directive. preflight is excluded on purpose: it is a TOML task in
-  // mise.toml that needs mise's own usage spec (EXC-737), so it has no file here.
+  // loses the directive. preflight is a forwarder like the rest now (EXC-737):
+  // it execs `caret-tasks preflight`, whose commander tree owns its --json flags.
   const tasksDir = join(import.meta.dir, "../../.mise/tasks");
   const forwarders = readdirSync(tasksDir, { withFileTypes: true })
     // Skip any namespaced-task subdirectory (mise supports `foo:bar` dirs) so the
