@@ -63,7 +63,12 @@ local formatters = new Mapping<String, Step> {
 local linters = new Mapping<String, Step> {
   ["Web(Lint)         [[biome]]"] = new Step {
     glob = List("**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs")
-    check = "biome lint --no-errors-on-unmatched {{ files }}"
+    // --error-on-warnings makes warn-level rules (e.g. noNonNullAssertion,
+    // noAdjacentSpacesInRegex) fail the gate instead of printing and exiting 0 —
+    // so `mise run lint` and preflight surface them as failures rather than
+    // silently passing. `fix` omits it so autofix still runs and never aborts on
+    // a warning it can't rewrite.
+    check = "biome lint --error-on-warnings --no-errors-on-unmatched {{ files }}"
     fix = "biome lint --write --no-errors-on-unmatched {{ files }}"
   }
   ["TypeScript(Check) [[tsc]]"] = new Step {
