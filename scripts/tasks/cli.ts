@@ -6,7 +6,8 @@
 // --help, and each task file stays one line. Two tasks stay out of this CLI on
 // purpose: `release` keeps its own CLI at scripts/release/cli.ts (a reverse-merge
 // into this one is tracked by EXC-736), and `preflight` stays a TOML task so
-// mise's usage spec can feed its --json flags into scripts/preflight.ts.
+// mise's usage spec can feed its --json flags into scripts/preflight.ts (migrating
+// it too is tracked by EXC-737).
 //
 // Composition point only, like src/cli.ts: it assembles the commander tree and
 // threads each subcommand's parsed options/args into its run function
