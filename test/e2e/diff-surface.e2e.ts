@@ -336,6 +336,49 @@ test("creating a single-line annotation from the gutter persists it line-anchore
   expect(ann).toMatchObject({ startLine: 3, endLine: 3, comment: "Quantify the cold cost here." });
 });
 
+test("an unsubmitted composer scratch survives a page reload (EXC-744)", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+
+  // Type a comment on line 3 but Cancel instead of submitting: it is retained as
+  // a "scratch" that leaves a Resume marker on the line.
+  const plus = await revealGutterPlus(page, 3);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+  await composerInput(composer).fill("Half-written thought to finish later.");
+  await composer.getByRole("button", { name: "Cancel" }).click();
+
+  const marker = page.getByRole("button", { name: "Resume unsent comment" });
+  await expect(marker).toBeVisible();
+  await expect(marker).toContainText("Half-written thought to finish later.");
+
+  // The scratch persists to the daemon through the draft autosave (the fix): the
+  // review now carries a composer scratch.
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.composerScratches?.length ?? 0)
+    .toBe(1);
+
+  // Reload. Before the fix the marker vanished (scratches lived only in memory);
+  // now it rehydrates from the persisted scratch.
+  await page.reload();
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  const restored = page.getByRole("button", { name: "Resume unsent comment" });
+  await expect(restored).toBeVisible();
+  await expect(restored).toContainText("Half-written thought to finish later.");
+
+  // Resuming reopens the composer with the text restored, ready to finish.
+  await restored.click();
+  const reopened = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(reopened).toBeVisible();
+  await expect(composerInput(reopened)).toContainText("Half-written thought to finish later.");
+});
+
 test("creating a range annotation from the gutter persists the correct line span", async ({
   daemon,
   page,
