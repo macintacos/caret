@@ -223,6 +223,55 @@ describe("createPlanNotifier cross-tab dedup (EXC-733)", () => {
 
     expect(a.fired.length + b.fired.length).toBe(1);
   });
+
+  test("two notifiers over one shared Web Locks manager (real defaultClaim) dedupe", async () => {
+    // The composition the injected-claim test above can't reach: both notifiers
+    // run the real defaultClaim against ONE stateful LockManager. ifAvailable
+    // grants the lock when free, hands null when a peer holds it. The winner
+    // holds until its callback's promise settles — which (setTimeout stubbed to
+    // a no-op) it never does here, so the lock stays held and the second
+    // notifier is forced to lose. This is what the 5s hold buys in production.
+    function makeLockManager() {
+      const held = new Set<string>();
+      return {
+        request(name: string, _opts: unknown, cb: (lock: object | null) => unknown) {
+          if (held.has(name)) return Promise.resolve(cb(null));
+          held.add(name);
+          return Promise.resolve(cb({})).finally(() => held.delete(name));
+        },
+      };
+    }
+    const flushMicrotasks = async () => {
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+    };
+
+    const realSetTimeout = globalThis.setTimeout;
+    // No-op the hold timer so the lock never auto-releases (and no 5s timer
+    // lingers past the test); the fake keeps it held for the loser to hit.
+    globalThis.setTimeout = ((_cb: () => void) =>
+      0 as unknown as ReturnType<typeof setTimeout>) as typeof globalThis.setTimeout;
+    const nav = globalThis.navigator as unknown as Record<string, unknown>;
+    const savedLocks = Object.getOwnPropertyDescriptor(nav, "locks");
+    Object.defineProperty(nav, "locks", { configurable: true, value: makeLockManager() });
+    try {
+      // No injected claim → both notifiers use the real defaultClaim (Web Locks).
+      const a = makeNotifier();
+      const b = makeNotifier();
+      a.notifier.observe([]);
+      b.notifier.observe([]);
+      a.notifier.observe([review("y")]);
+      b.notifier.observe([review("y")]);
+      await flushMicrotasks();
+
+      // a claimed first and fired; b found the lock held and stayed silent.
+      expect(a.fired).toHaveLength(1);
+      expect(b.fired).toHaveLength(0);
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+      if (savedLocks) Object.defineProperty(nav, "locks", savedLocks);
+      else delete nav.locks;
+    }
+  });
 });
 
 // defaultClaim is the production cross-tab seam (Web Locks). happy-dom reports

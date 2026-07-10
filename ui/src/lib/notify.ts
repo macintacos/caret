@@ -87,11 +87,15 @@ function defaultPermission(): NotificationPermission {
   return typeof Notification === "undefined" ? "default" : Notification.permission;
 }
 
-// Every open tab observes a newly-pending review within one 2s poll interval of
-// each other, so the winning tab holds the per-id lock a few seconds past that
-// window — long enough that a peer polling a beat later finds the id already
-// claimed, yet well short of any request-changes → revision cycle (so a genuine
-// re-pend still notifies).
+// Under normal polling, open tabs observe a newly-pending review within one 2s
+// poll interval of each other, so the winning tab holds the per-id lock a few
+// seconds past that window — long enough that a peer polling a beat later finds
+// the id already claimed, yet well short of any request-changes → revision cycle
+// (so a genuine re-pend still notifies). This is best-effort, not a hard
+// guarantee: a tab hidden long enough for the browser to throttle its timers to
+// ~once/minute can poll after the hold expires and still duplicate. Acceptable —
+// it is strictly better than the per-tab firing it replaces; a persistent
+// id→timestamp ledger would be the robust follow-up if that case ever bites.
 const NOTIFY_CLAIM_HOLD_MS = 5000;
 
 // Cross-tab claim via the Web Locks API: among same-origin tabs, exactly one
@@ -114,7 +118,16 @@ export function defaultClaim(id: string): boolean | Promise<boolean> {
         resolve(true);
         return new Promise<void>((release) => setTimeout(release, NOTIFY_CLAIM_HOLD_MS));
       })
-      .catch(() => resolve(true));
+      .catch((err) => {
+        // Web Locks rejected (e.g. SecurityError in an unexpected context):
+        // degrade toward firing so the notification is never lost, but log —
+        // a swallowed claim failure would silently revert to duplicate toasts.
+        uiLog.warn("ui", `plan notification claim failed: ${shortId(id)}`, {
+          reviewId: id,
+          reason: String(err),
+        });
+        resolve(true);
+      });
   });
 }
 
