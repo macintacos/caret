@@ -1,15 +1,21 @@
 import { describe, expect, test } from "bun:test";
+import { buildUiCommand } from "../../scripts/build/build-ui.ts";
 import type { RunDevOptions } from "../../scripts/dev/run.ts";
-import { buildProgram } from "../../scripts/tasks/cli.ts";
+import { formatCommand } from "../../scripts/lint/format.ts";
+import { lintCommand } from "../../scripts/lint/lint.ts";
+import { type TaskActions, buildProgram } from "../../scripts/tasks/cli.ts";
+import { testCommand } from "../../scripts/test/test.ts";
 
-// The dev action is injectable, so these drive the real commander tree (parsing,
-// defaults, coercion) and capture the options it would hand runDev — without
-// spawning the daemon/Vite/driver. This pins the task→CLI contract: `mise run
-// dev <flags>` forwards to the `dev` subcommand and commander owns the flags.
+// The actions are injectable, so these drive the real commander tree (parsing,
+// defaults, coercion, passthrough) and capture what it would hand each run
+// function — without spawning vite/hk/bun. This pins the task→CLI contract:
+// `mise run <task> <flags>` forwards to the matching subcommand.
 async function parseDevArgs(args: string[]): Promise<RunDevOptions> {
   let captured: RunDevOptions | undefined;
-  const program = buildProgram(async (opts) => {
-    captured = opts;
+  const program = buildProgram({
+    dev: async (opts) => {
+      captured = opts;
+    },
   });
   await program.parseAsync(["dev", ...args], { from: "user" });
   if (!captured) throw new Error("dev action was not invoked");
@@ -34,5 +40,77 @@ describe("tasks CLI: dev command", () => {
       numVersions: 7,
       notify: true,
     });
+  });
+});
+
+// Capture the raw argv a passthrough subcommand hands its run function. These
+// tasks forward `"$@"` verbatim to an external tool (vite, hk, bun), so
+// commander must pass operands AND flags through untouched (passThroughOptions).
+async function parsePassthrough(
+  command: string,
+  actionKey: keyof TaskActions,
+  args: string[],
+): Promise<string[]> {
+  let captured: string[] | undefined;
+  const overrides = {
+    [actionKey]: async (a: string[]) => {
+      captured = a;
+    },
+  } as Partial<TaskActions>;
+  const program = buildProgram(overrides);
+  await program.parseAsync([command, ...args], { from: "user" });
+  if (captured === undefined) throw new Error(`${command} action was not invoked`);
+  return captured;
+}
+
+describe("tasks CLI: passthrough forwarding", () => {
+  const cases: Array<[string, keyof TaskActions]> = [
+    ["build-ui", "buildUi"],
+    ["lint", "lint"],
+    ["format", "format"],
+    ["test", "test"],
+  ];
+  for (const [command, key] of cases) {
+    test(`${command}: no args forwards []`, async () => {
+      expect(await parsePassthrough(command, key, [])).toEqual([]);
+    });
+    test(`${command}: forwards positionals and flags untouched`, async () => {
+      expect(await parsePassthrough(command, key, ["some/path", "--flag", "-x"])).toEqual([
+        "some/path",
+        "--flag",
+        "-x",
+      ]);
+    });
+  }
+});
+
+// Each task's exact command line — the behavior-preservation contract carried
+// over from the former bash task bodies.
+describe("tasks CLI: task command lines", () => {
+  test("build-ui runs bunx vite build with forwarded args", () => {
+    expect(buildUiCommand([])).toEqual(["bunx", "vite", "build"]);
+    expect(buildUiCommand(["--minify"])).toEqual(["bunx", "vite", "build", "--minify"]);
+  });
+
+  test("lint runs hk check --all", () => {
+    expect(lintCommand([])).toEqual(["hk", "check", "--all"]);
+    expect(lintCommand(["src"])).toEqual(["hk", "check", "--all", "src"]);
+  });
+
+  test("format runs hk fix --all --no-stage", () => {
+    expect(formatCommand([])).toEqual(["hk", "fix", "--all", "--no-stage"]);
+    expect(formatCommand(["src"])).toEqual(["hk", "fix", "--all", "--no-stage", "src"]);
+  });
+
+  test("test runs bun test --conditions browser", () => {
+    expect(testCommand([])).toEqual(["bun", "test", "--conditions", "browser"]);
+    expect(testCommand(["--test-name-pattern", "x"])).toEqual([
+      "bun",
+      "test",
+      "--conditions",
+      "browser",
+      "--test-name-pattern",
+      "x",
+    ]);
   });
 });
