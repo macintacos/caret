@@ -17,7 +17,10 @@
 
 import { InvalidArgumentError } from "@commander-js/extra-typings";
 import { createProgram } from "../../src/program.ts";
+import { runBuildBin } from "../build/build-bin.ts";
+import { runBuildBundle } from "../build/build-bundle.ts";
 import { runBuildUi } from "../build/build-ui.ts";
+import { runBuild } from "../build/build.ts";
 import { DEFAULT_NUM_VERSIONS, parsePositiveInt } from "../dev/protocol.ts";
 import { type RunDevOptions, runDev } from "../dev/run.ts";
 import { runFormat } from "../lint/format.ts";
@@ -30,6 +33,9 @@ import { runTest } from "../test/test.ts";
 export interface TaskActions {
   dev: (opts: RunDevOptions) => Promise<unknown>;
   buildUi: (args: string[]) => Promise<unknown>;
+  buildBin: () => Promise<unknown>;
+  buildBundle: () => Promise<unknown>;
+  build: (opts: { install: boolean }) => Promise<unknown>;
   lint: (args: string[]) => Promise<unknown>;
   format: (args: string[]) => Promise<unknown>;
   test: (args: string[]) => Promise<unknown>;
@@ -38,6 +44,9 @@ export interface TaskActions {
 const realActions: TaskActions = {
   dev: runDev,
   buildUi: runBuildUi,
+  buildBin: runBuildBin,
+  buildBundle: runBuildBundle,
+  build: runBuild,
   lint: runLint,
   format: runFormat,
   test: runTest,
@@ -102,6 +111,33 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
   passthrough("lint", "Check formatting and lint rules (Biome, read-only)", (a) => actions.lint(a));
   passthrough("format", "Format all files (Biome, write mode)", (a) => actions.format(a));
   passthrough("test", "Run the test suite (bun test)", (a) => actions.test(a));
+
+  // build-bin and build-bundle take no args; the mise forwarders carry their
+  // `#MISE depends=[...]` so the DAG (build-ui first, etc.) stays at the mise
+  // layer, not here.
+  program
+    .command("build-bin")
+    .description("Compile the single caret binary (bun build --compile)")
+    .action(async () => {
+      await actions.buildBin();
+    });
+
+  program
+    .command("build-bundle")
+    .description(
+      "Bundle caret for the npm/github plugin install (dist/cli.js + ui/dist; runs on bun, no node_modules)",
+    )
+    .action(async () => {
+      await actions.buildBundle();
+    });
+
+  program
+    .command("build")
+    .description("Build the UI then the binary (build-ui -> build-bin)")
+    .option("--install", "after building, install the local checkout + cycle the daemon (dev only)")
+    .action(async (opts) => {
+      await actions.build({ install: opts.install ?? false });
+    });
 
   return program;
 }

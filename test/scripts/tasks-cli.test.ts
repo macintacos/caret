@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { buildBinCompileCommand } from "../../scripts/build/build-bin.ts";
 import { buildUiCommand } from "../../scripts/build/build-ui.ts";
+import { buildInstallCommand } from "../../scripts/build/build.ts";
+import { buildBundleCommand } from "../../scripts/build/build-bundle.ts";
 import type { RunDevOptions } from "../../scripts/dev/run.ts";
 import { formatCommand } from "../../scripts/lint/format.ts";
 import { lintCommand } from "../../scripts/lint/lint.ts";
@@ -112,5 +115,79 @@ describe("tasks CLI: task command lines", () => {
       "--test-name-pattern",
       "x",
     ]);
+  });
+});
+
+// `build` carries a real --install flag (not passthrough): parse it explicitly.
+async function parseBuildArgs(args: string[]): Promise<{ install: boolean }> {
+  let captured: { install: boolean } | undefined;
+  const program = buildProgram({
+    build: async (opts) => {
+      captured = opts;
+    },
+  });
+  await program.parseAsync(["build", ...args], { from: "user" });
+  if (!captured) throw new Error("build action was not invoked");
+  return captured;
+}
+
+describe("tasks CLI: build command", () => {
+  test("no flag: install false", async () => {
+    expect(await parseBuildArgs([])).toEqual({ install: false });
+  });
+
+  test("--install: install true", async () => {
+    expect(await parseBuildArgs(["--install"])).toEqual({ install: true });
+  });
+
+  test("build-bin subcommand invokes its action", async () => {
+    let called = false;
+    await buildProgram({
+      buildBin: async () => {
+        called = true;
+      },
+    }).parseAsync(["build-bin"], { from: "user" });
+    expect(called).toBe(true);
+  });
+
+  test("build-bundle subcommand invokes its action", async () => {
+    let called = false;
+    await buildProgram({
+      buildBundle: async () => {
+        called = true;
+      },
+    }).parseAsync(["build-bundle"], { from: "user" });
+    expect(called).toBe(true);
+  });
+});
+
+describe("tasks CLI: build pipeline command lines", () => {
+  test("build-bin bakes the commit into the compile via --define", () => {
+    expect(buildBinCompileCommand("abc123")).toEqual([
+      "bun",
+      "build",
+      "--compile",
+      "--sourcemap",
+      '--define=process.env.CARET_BUILD_COMMIT="abc123"',
+      "--outfile",
+      "bin/caret-native",
+      "src/cli.ts",
+    ]);
+  });
+
+  test("build-bundle runs a non-compile bun build into dist/", () => {
+    expect(buildBundleCommand()).toEqual([
+      "bun",
+      "build",
+      "--target=bun",
+      "--outdir",
+      "dist",
+      "src/cli.ts",
+    ]);
+  });
+
+  test("build --install forwards to install.sh --from-local; plain build does not", () => {
+    expect(buildInstallCommand({ install: true })).toEqual(["scripts/install.sh", "--from-local"]);
+    expect(buildInstallCommand({ install: false })).toBeNull();
   });
 });
