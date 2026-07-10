@@ -85,7 +85,7 @@ describe("the global prefers-reduced-motion rule", () => {
   // app-root-scoped reduced-motion @media block — the rule wraps one nested
   // selector block, so capture through its closing brace and the @media's own.
   const block =
-    appCss.match(/@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*?\n  \}\n\})/)?.[1] ?? "";
+    appCss.match(/@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*?\n {2}\}\n\})/)?.[1] ?? "";
 
   test("a global reduced-motion @media rule exists, scoped to the #app root", () => {
     expect(block).not.toBe("");
@@ -124,7 +124,7 @@ describe("the two formerly-unguarded animations reference the tokens", () => {
     // reveal animates opacity only — a transform in the keyframes would change
     // the row's measured height mid-reveal. Pin the keyframe to opacity, with
     // no transform, so the scale bounce can't creep back.
-    const keyframes = composer.match(/@keyframes reveal\s*\{([\s\S]*?)\n  \}/)?.[1] ?? "";
+    const keyframes = composer.match(/@keyframes reveal\s*\{([\s\S]*?)\n {2}\}/)?.[1] ?? "";
     expect(keyframes).toContain("opacity");
     expect(keyframes).not.toContain("transform");
   });

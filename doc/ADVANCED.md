@@ -236,7 +236,7 @@ timeout_s = 3600
 The `[dev]` table holds **dev-only** settings for `mise run dev`: a fixed daemon port, a
 persistent state dir, and the recurring extra-review notification seeder. It is
 **ignored in a production build** — its only consumers are the dev tooling
-(`mise run dev`, `scripts/dev/*`), which never ship in the compiled binary, and the
+(`mise run dev`, `scripts/tasks/dev/*`), which never ship in the compiled binary, and the
 settings layer build-gates it so `[dev]` resolves to inert defaults in a prod build
 regardless of `config.toml`. These keys are **captured at startup** when `mise run dev`
 boots (not hot-reloaded); the matching `CARET_DEV_*` environment variables override them.
@@ -415,29 +415,52 @@ validation, defaults, and `--help`, and the task stays trivial. Because mise res
 bare `--help` for its own task help, use `mise run dev -- --help` to see a subcommand's
 flags.
 
+The CLI hosts `dev`, `build-ui`, `build-bin`, `build-bundle`, `build`, `lint`, `format`,
+`test`, `test-e2e`, `smoke-bin`, `smoke-bundle`, and `setup`. Every task module is a
+sibling of the CLI in `scripts/tasks/` — one file per task, named after it (e.g.
+`scripts/tasks/build-bin.ts`, `scripts/tasks/smoke-bin.ts`) — except the larger,
+multi-file `dev` task, which keeps its own `scripts/tasks/dev/` folder. Code shared across
+tasks lives in `scripts/tasks/lib/`: `exec.ts` (the `runForward` / `execAndExit` spawn
+helpers), `signals.ts` (the cleanup-on-exit/signal wiring the supervising tasks share),
+and `smoke-probe.ts` (the over-the-wire UI probe both smoke tasks run). Every subcommand's
+parsing contract is unit-tested in `test/scripts/tasks-cli.test.ts`. Two tasks stay
+outside the CLI by design: `release` keeps its own commander CLI at
+`scripts/release/cli.ts` (folding it in is the reverse-merge tracked by
+[EXC-736](https://linear.app/macintacos/issue/EXC-736)), and `preflight` stays a TOML task
+in `mise.toml` because it needs its mise `usage` spec so `mise run preflight --json -v`
+can feed flags into `scripts/preflight.ts` (migrating it too is tracked by
+[EXC-737](https://linear.app/macintacos/issue/EXC-737)).
+
+Task dependencies stay at the mise layer: a forwarder keeps its `#MISE depends=[...]`
+directive (e.g. `build-bin` depends on `build-ui`, `smoke-bin` on `build`), so `mise run`
+still orders the DAG — the CLI subcommand carries only the task's own logic.
+
 `mise run dev` takes `--num-versions <n>` (how many versions the primary dev review opens
 with; default 3, a positive integer) and `--notify` (arm the extra-review seeder). Its
-orchestration — resolve the port mode and state dir (`scripts/dev/dev-env.ts`), spawn the
-daemon, pino-pretty, driver, and Vite, discover the daemon's bound port from its lock, and
-reap every child on exit — lives in `scripts/dev/run.ts`, imported by the CLI and
-unit-tested (`test/scripts/tasks-cli.test.ts`). Note `Bun.spawn` snapshots `process.env`
-at startup and ignores later mutations, so the dev env overrides (`XDG_STATE_HOME`,
-`CARET_IDLE_MS`, `CARET_PORT`) are passed explicitly to each child rather than set on
-`process.env`.
+orchestration — resolve the port mode and state dir (`scripts/tasks/dev/dev-env.ts`),
+spawn the daemon, pino-pretty, driver, and Vite, discover the daemon's bound port from its
+lock, and reap every child on exit — lives in `scripts/tasks/dev/run.ts`. Note `Bun.spawn`
+snapshots `process.env` at startup and ignores later mutations, so env overrides
+(`XDG_STATE_HOME`, `CARET_IDLE_MS`, `CARET_PORT`) are passed explicitly to each child
+rather than set on `process.env`; the smoke tasks (`scripts/tasks/smoke-*.ts`) follow the
+same daemon-supervision pattern, and their shared over-the-wire probe is unit-tested in
+`test/scripts/smoke-probe.test.ts`.
 
 This replaces per-task bash scripts carrying `#USAGE` flag specs. Those worked but were
 fragile: mise runs file tasks under macOS `/bin/bash` 3.2, where expanding an empty
 `"${arr[@]}"` under `set -u` is a fatal "unbound variable" — a flagless `mise run dev`
-once aborted the task mid-boot and left Vite proxying to a killed daemon. A typed,
-unit-tested CLI removes that whole class of footgun.
+once aborted the task mid-boot and left Vite proxying to a killed daemon, and the smoke
+tasks built exactly such arrays from the served asset list. A typed, unit-tested CLI
+removes that whole class of footgun.
 
 To add a task: register a subcommand on the tasks CLI, put its logic in a
-`scripts/<area>/*.ts` module, and add a one-line forwarder `.mise/tasks/<name>` =
-`exec bun scripts/tasks/cli.ts <name> "$@"`. The task file stays **bash**, not bun: mise
-derives the task name from the extensionless filename, and an extensionless TypeScript
-file can be neither Biome-linted nor `tsc`-typechecked and breaks the shell linters
-(`hk.pkl` globs `.mise/tasks/*` as shell). The trivial `exec` forwarder sidesteps all of
-that while keeping the real logic in typed, tested TS.
+`scripts/tasks/<name>.ts` module (shared helpers go in `scripts/tasks/lib/`), and add a
+one-line forwarder `.mise/tasks/<name>` = `exec bun scripts/tasks/cli.ts <name> "$@"`
+(carrying any `#MISE description=` and `#MISE depends=[...]` the task needs). The task
+file stays **bash**, not bun: mise derives the task name from the extensionless filename,
+and an extensionless TypeScript file can be neither Biome-linted nor `tsc`-typechecked and
+breaks the shell linters (`hk.pkl` globs `.mise/tasks/*` as shell). The trivial `exec`
+forwarder sidesteps all of that while keeping the real logic in typed, tested TS.
 
 ### Icons
 

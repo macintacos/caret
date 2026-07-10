@@ -1,15 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Run the Playwright e2e suite against an isolated daemon"
 #MISE depends=["build-ui"]
-#USAGE arg "[args]" var=#true help="Extra args forwarded to playwright test (e.g. a spec path or --grep)"
-
-set -euo pipefail
-
-# Probe for the Chromium binary so a missing install fails actionably
-# instead of mid-suite with Playwright's runtime error.
-if ! bun -e 'import { chromium } from "@playwright/test"; import { existsSync } from "node:fs"; process.exit(existsSync(chromium.executablePath()) ? 0 : 1);' 2>/dev/null; then
-  echo "caret e2e: Chromium not installed. Run: mise run setup  (or: bunx playwright install chromium)" >&2
-  exit 1
-fi
-
-bunx playwright test "$@"
+# Thin forwarder: the Chromium probe and the playwright invocation live in the
+# caret tasks CLI (scripts/tasks/cli.ts). "$@" is safe on an empty arg list (a
+# special parameter, not a plain array — no set -u footgun).
+exec bun scripts/tasks/cli.ts test-e2e "$@"

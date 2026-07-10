@@ -110,9 +110,10 @@ assert_absent "$fail_out" "Registering" "a failed build aborts before any regist
 # git/bun/bunx/claude on PATH so nothing real builds or registers. Every tool
 # logs its argv to $CALL_LOG, letting us assert the exact register sequence.
 #
-# build-bin is copied verbatim into the synthetic checkout so the real compile
-# flow runs (through stubs): the bun stub honors `build --compile … --outfile P`
-# by writing an executable P, so the post-build `[ -x bin/caret-native ]` guard passes.
+# build-bin is copied into the synthetic checkout as its one-line forwarder to
+# the tasks CLI; the bun stub is what satisfies the post-build
+# `[ -x bin/caret-native ]` guard — it synthesizes that binary for the `build-bin`
+# subcommand, since the real compile inside the (stubbed) CLI never runs.
 
 # Lay down a synthetic checkout + stub dir. Echoes "ROOT STUBS HOME LOG" so the
 # caller can capture the paths; the caller owns cleanup.
@@ -128,7 +129,7 @@ make_success_fixture() {
   cp "$test_dir/make-dev-marketplace.sh" "$root/scripts/make-dev-marketplace.sh"
   cp "$test_dir/../.mise/tasks/build-bin" "$root/.mise/tasks/build-bin"
   # marketplace.json's presence is the local-checkout signal; the ui/dist tree
-  # is what build-bin's UI-fallback copy reads (`cp -R ui/dist bin/ui`).
+  # stands in for the built UI (the stubbed `vite build` leaves it in place).
   printf '{}\n' >"$root/.claude-plugin/marketplace.json"
   printf '<!doctype html>\n' >"$root/ui/dist/index.html"
 
@@ -142,22 +143,20 @@ make_success_fixture() {
     chmod +x "$stubs/$tool"
   done
 
-  # bun: log argv; `build --compile … --outfile P` writes an executable P so the
-  # post-build guard passes; everything else (install) succeeds.
+  # bun: log argv; the migrated build-bin subcommand (`bun scripts/tasks/cli.ts
+  # build-bin`) forwards to the CLI whose real compile is stubbed out here, so
+  # synthesize its bin/caret-native output so the installer's
+  # `[ -x bin/caret-native ]` guard still passes; every other bun call succeeds.
   cat >"$stubs/bun" <<STUB
 #!/usr/bin/env bash
 printf '%s\n' "bun \$*" >>"$log"
-out=""
-prev=""
-for a in "\$@"; do
-  case "\$prev" in --outfile) out="\$a" ;; esac
-  case "\$a" in --outfile=*) out="\${a#--outfile=}" ;; esac
-  prev="\$a"
-done
-if [ -n "\$out" ]; then
-  printf '#!/usr/bin/env bash\nexit 0\n' >"\$out"
-  chmod +x "\$out"
-fi
+case " \$* " in
+  *" build-bin "*)
+    mkdir -p bin
+    printf '#!/usr/bin/env bash\nexit 0\n' >bin/caret-native
+    chmod +x bin/caret-native
+    ;;
+esac
 exit 0
 STUB
   chmod +x "$stubs/bun"
@@ -210,7 +209,7 @@ fi
 # The full pipeline ran, not just detection: build deps, UI build, compile.
 assert_contains "$calls" "bun install" "success run installs build dependencies"
 assert_contains "$calls" "vite build" "success run builds the UI"
-assert_contains "$calls" "build --compile" "success run compiles the binary"
+assert_contains "$calls" "scripts/tasks/cli.ts build-bin" "success run compiles the binary via the tasks CLI"
 
 # Register sequence. The local build registers the generated dev marketplace
 # (source symlinked to the checkout), not the checkout's own npm-sourced
@@ -397,44 +396,10 @@ else
   fail "--from-local should not require bun (rc=$rc): $nobun_out"
 fi
 
-# --- mise-task glue: `mise run build --install` forwards to install.sh --from-local ---
-# mise sets usage_install=true when --install is passed (verified). Run the real
-# build-task body directly — bash ignores the #MISE/#USAGE directives, so no mise
-# or build-bin depends fire — with a stubbed scripts/install.sh that logs argv.
-glue_root="$(mktemp -d)"
-mkdir -p "$glue_root/scripts" "$glue_root/.mise/tasks"
-cp "$test_dir/../.mise/tasks/build" "$glue_root/.mise/tasks/build"
-glue_log="$glue_root/install-calls.log"
-cat >"$glue_root/scripts/install.sh" <<STUB
-#!/usr/bin/env bash
-printf '%s\n' "install.sh \$*" >>"$glue_log"
-exit 0
-STUB
-chmod +x "$glue_root/scripts/install.sh"
-
-# With the flag set, the task forwards to install.sh --from-local.
-rc=0
-(cd "$glue_root" && usage_install=true "$bash_bin" .mise/tasks/build) >/dev/null 2>&1 || rc=$?
-if [ "$rc" -eq 0 ]; then
-  ok "build --install task exits 0"
-else
-  fail "build --install task exited $rc"
-fi
-assert_contains "$(cat "$glue_log" 2>/dev/null)" "install.sh --from-local" "build --install forwards to install.sh --from-local"
-
-# Without the flag, the build task is build-only: it exits 0 and never calls
-# install.sh. The exit-0 check keeps a crashing build body from passing the
-# never-called assertion vacuously.
-: >"$glue_log"
-rc=0
-(cd "$glue_root" && "$bash_bin" .mise/tasks/build) >/dev/null 2>&1 || rc=$?
-if [ "$rc" -eq 0 ]; then
-  ok "plain build task exits 0"
-else
-  fail "plain build task exited $rc"
-fi
-assert_absent "$(cat "$glue_log" 2>/dev/null)" "install.sh" "plain build never calls install.sh"
-rm -rf "$glue_root"
+# The `build --install` → `install.sh --from-local` forwarding contract now lives
+# in test/scripts/tasks-cli.test.ts: --install is parsed by the tasks CLI
+# (buildInstallCommand), not the old bash `usage_install` env var, so the bash
+# glue that exercised it here is gone.
 
 # --- target selection: CARET_AGENTS chooses the agent(s) to install into ------
 # (EXC-339) caret installs into Claude Code and/or OpenCode. CARET_AGENTS pins the

@@ -1,4 +1,4 @@
-// Unit coverage for the dev task's non-supervisory logic (scripts/dev/dev-env.ts):
+// Unit coverage for the dev task's non-supervisory logic (scripts/tasks/dev/dev-env.ts):
 // port-mode resolution, the dev lock reader's guards, and the bounded
 // port-discovery loop — the seams the bash task now delegates to.
 import { expect, test } from "bun:test";
@@ -13,7 +13,7 @@ import {
   PRODUCTION_DEFAULT_PORT,
   readDevLockPort,
   resolvePortMode,
-} from "../../scripts/dev/dev-env.ts";
+} from "../../scripts/tasks/dev/dev-env.ts";
 
 // ---- resolvePortMode ----
 
@@ -170,7 +170,7 @@ async function withConfig(
 }
 
 function devEnv(env: Record<string, string>, ...args: string[]): string {
-  const r = Bun.spawnSync(["bun", "scripts/dev/dev-env.ts", ...args], { cwd: repoRoot, env });
+  const r = Bun.spawnSync(["bun", "scripts/tasks/dev/dev-env.ts", ...args], { cwd: repoRoot, env });
   if (r.exitCode !== 0) throw new Error(`dev-env ${args.join(" ")} failed: ${r.stderr.toString()}`);
   return r.stdout.toString().trim();
 }

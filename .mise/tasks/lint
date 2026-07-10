@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #MISE description="Check formatting and lint rules (Biome, read-only)"
-#USAGE arg "[args]" var=#true help="Extra args forwarded to hk check (e.g. specific paths)"
-
-set -euo pipefail
-
-hk check --all "$@"
+# Thin forwarder: flags, defaults, and --help live in the caret tasks CLI
+# (scripts/tasks/cli.ts); this task just execs its `lint` subcommand. `exec`
+# replaces this shell with the CLI, so its exit code becomes the task's. "$@" is
+# safe on an empty arg list (a special parameter, not a plain array — no set -u
+# footgun).
+exec bun scripts/tasks/cli.ts lint "$@"

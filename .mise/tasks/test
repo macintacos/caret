@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 #MISE description="Run the test suite (bun test)"
-#USAGE arg "[args]" var=#true help="Extra args forwarded to bun test (e.g. a path or --test-name-pattern)"
-
-set -euo pipefail
-
-# `--conditions browser` selects svelte's client runtime entry so the UI
-# component suite can mount components under happy-dom (see bunfig.toml and
-# ui/test-svelte-preload.ts); the backend suite passes unchanged under it.
-bun test --conditions browser "$@"
+# Thin forwarder: flags, defaults, and --help live in the caret tasks CLI
+# (scripts/tasks/cli.ts); this task just execs its `test` subcommand. `exec`
+# replaces this shell with the CLI, so its exit code becomes the task's. "$@" is
+# safe on an empty arg list (a special parameter, not a plain array — no set -u
+# footgun).
+exec bun scripts/tasks/cli.ts test "$@"

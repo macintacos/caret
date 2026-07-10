@@ -47,7 +47,7 @@ const IdleMs = z.number().int().nonnegative();
 const HeartbeatMs = z.number().int().positive().lt(MAX_HEARTBEAT_MS);
 
 // EXC-558: dev-only settings ([dev]). Consumed ONLY by dev tooling
-// (scripts/dev/*, .mise/tasks/dev), which runs from source under bun;
+// (scripts/tasks/dev/*, .mise/tasks/dev), which runs from source under bun;
 // production code never reads [dev], and a prod build resolves it to inert
 // defaults regardless of config.toml (the gate in parseAndValidate). The
 // CARET_DEV_* env vars fold in as overrides via the devPort/devStateDir/

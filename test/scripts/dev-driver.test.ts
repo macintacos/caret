@@ -9,7 +9,7 @@ import {
   devReviewDeps,
   runExtraReview,
   runExtraSeeder,
-} from "../../scripts/dev/driver.ts";
+} from "../../scripts/tasks/dev/driver.ts";
 import {
   appendRevision,
   bootstrapPlans,
@@ -20,7 +20,7 @@ import {
   nextPlan,
   parseNumVersions,
   parsePositiveInt,
-} from "../../scripts/dev/protocol.ts";
+} from "../../scripts/tasks/dev/protocol.ts";
 import { bootDaemon, type TestDaemon } from "../support/daemon.ts";
 import { setupTempStateDir } from "../support/env.ts";
 import { waitFor } from "../support/poll.ts";
@@ -28,7 +28,7 @@ import { expectNeverLogsBody } from "../support/redaction.ts";
 
 // The v1 fixture the driver seeds — read independently here so the assertions
 // don't lean on the driver's own loader.
-const PLAN_V1 = await Bun.file(`${import.meta.dir}/../../scripts/dev/fake-plan.md`).text();
+const PLAN_V1 = await Bun.file(`${import.meta.dir}/../../scripts/tasks/dev/fake-plan.md`).text();
 
 // Point the state dir at the per-test temp dir so the hook logging that
 // runReview performs lands in a disposable caret.log, not the real one — the
@@ -96,7 +96,7 @@ test("hookStdin takes an explicit session id for extra reviews", () => {
 // ---- seed fixture invariant (EXC-556) ----
 
 test("the seeded fixture has no untagged code blocks", () => {
-  // The stress-test seed (scripts/dev/fake-plan.md) deliberately exercises many
+  // The stress-test seed (scripts/tasks/dev/fake-plan.md) deliberately exercises many
   // code languages; every fence must carry a language tag or the hook's
   // plan-format gate would deny it. This is also why appendRevision over the
   // fixture stays untagged-free below.

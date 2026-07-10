@@ -1,28 +1,9 @@
 #!/usr/bin/env bash
 #MISE description="Compile the single caret binary (bun build --compile)"
 #MISE depends=["build-ui"]
-
-set -euo pipefail
-
-mkdir -p bin
-# Generate the embed manifest from ui/dist (build-ui ran first), so the compile
-# below embeds each UI asset by its `with { type: "file" }` import. Run inline,
-# NOT as a #MISE depends: scripts/install.sh executes this task as bare
-# `bash .mise/tasks/build-bin`, which does not resolve mise dependencies.
-bun scripts/generate-ui-manifest.ts
-# Compiles src/cli.ts into a standalone binary, embedding the UI assets the
-# manifest imports. build-ui must run first so ui/dist exists at compile time.
-# --sourcemap embeds the map so stack frames keep their src/*.ts paths — the
-# log records' caller field (EXC-451) and err.stack stay readable in the
-# compiled binary instead of collapsing into /$bunfs/root bundle positions.
-# The --define bakes the commit into the binary so the daemon can log the
-# revision it runs from (EXC-452) — capture first so a git failure aborts the
-# build under `set -e` instead of baking an empty string.
-CARET_BUILD_COMMIT="$(git rev-parse HEAD)"
-# Output is bin/caret-native, NOT bin/caret: bin/caret is the committed
-# entrypoint shim (EXC-643) that execs this compiled binary when it is present.
-bun build --compile --sourcemap --define="process.env.CARET_BUILD_COMMIT=\"$CARET_BUILD_COMMIT\"" --outfile bin/caret-native src/cli.ts
-# Fallback safety net: keep the built UI tree beside the binary in case the
-# embedded assets are ever unavailable at runtime (the asset resolver's
-# beside-the-binary source).
-cp -R ui/dist bin/ui
+# Thin forwarder: the real logic (embed-manifest gen, compile, UI-beside copy)
+# lives in the caret tasks CLI (scripts/tasks/cli.ts). scripts/install.sh also
+# runs this task bare as `bash .mise/tasks/build-bin`, so the forwarder needs
+# only bun, not mise. "$@" is safe on an empty arg list (a special parameter,
+# not a plain array — no set -u footgun).
+exec bun scripts/tasks/cli.ts build-bin "$@"

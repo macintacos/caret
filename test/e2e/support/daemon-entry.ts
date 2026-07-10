@@ -36,7 +36,7 @@ import { createStore } from "../../../src/store.ts";
 import { loadUiAssets } from "../../../src/ui-assets.ts";
 
 // Refuse to run without an isolated state dir — never fall back to the real
-// ~/.local/state/caret (same posture as assertDevEnv in scripts/dev/driver.ts).
+// ~/.local/state/caret (same posture as assertDevEnv in scripts/tasks/dev/driver.ts).
 if (!process.env.XDG_STATE_HOME) {
   console.error("caret e2e daemon: XDG_STATE_HOME must be set to an isolated state dir");
   process.exit(1);
