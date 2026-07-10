@@ -226,6 +226,30 @@ export interface RouteResult {
   expired: string[];
 }
 
+/** Response of POST /api/reviews/:id/file-refs — the subset of the requested
+ * candidate paths that resolve to a real file inside the review's cwd. The UI
+ * shows the filename icon + hover only for these (EXC-687). */
+export interface FileRefsResponse {
+  resolved: string[];
+}
+
+/** A bounded, line-aware read excerpt of a plan-referenced file, served by GET
+ * /api/reviews/:id/file for the hover preview (EXC-687). */
+export interface FileExcerpt {
+  /** The file's path relative to the review cwd (display + de-dup key). */
+  path: string;
+  /** Inferred shiki grammar name for highlighting, or "text" when unknown. */
+  language: string;
+  /** 1-based first line of the excerpt (inclusive). */
+  startLine: number;
+  /** 1-based last line of the excerpt (inclusive). */
+  endLine: number;
+  /** The excerpt's lines, in order. */
+  lines: string[];
+  /** Total line count of the file, so the UI can show "lines a–b of N". */
+  totalLines: number;
+}
+
 /** Body of POST /api/reviews/:id/resolve. */
 export interface ResolveBody {
   behavior: Behavior;

@@ -7,6 +7,8 @@
   import { createDiffViewLifecycle } from "./instance.ts";
   import { createLineDrag } from "./lineDrag.ts";
   import { shouldCommentOnLineClick } from "./annotationSlot.ts";
+  import type { FileRefSpan, FileRefSpanMap } from "./fileRefs.ts";
+  import { tagFileRefTokens } from "./fileRefTag.ts";
   import { type ComposedTokenHandlers, composeTokenHandlers } from "./linkInteractions.ts";
   import { type LinkSpanMap, openLinkInNewTab } from "./links.ts";
   import { type SourceViewGutter, type SourceViewLibOptions, toFileOptions } from "./options.ts";
@@ -42,6 +44,16 @@
     /** Opens a clicked link. Defaults to a new tab with noopener,noreferrer;
      * overridable for testing. */
     openUrl?: (href: string) => void;
+    /** Opt-in filename-reference layer (EXC-687): per-line spans for the resolved
+     * file references in the display text. When present, the token starting each
+     * reference is tagged (data-file-ref) so the override sheet draws the file
+     * icon, and hovering it reports up so the host can show the excerpt preview. */
+    fileRefs?: FileRefSpanMap;
+    /** A token starting a file reference was entered, with the token element to
+     * anchor the preview to. */
+    onFileRefEnter?: (ref: FileRefSpan, tokenElement: HTMLElement) => void;
+    /** The file-reference token was left — dismiss the preview. */
+    onFileRefLeave?: () => void;
     /** Fires once the view's container is bound, handing the parent an
      * imperative API (currently scroll-to-line) that closes over the container.
      * Lets callers jump the view without reaching into the library's DOM. */
@@ -78,6 +90,9 @@
     annotations,
     links,
     openUrl = openLinkInNewTab,
+    fileRefs,
+    onFileRefEnter,
+    onFileRefLeave,
     onReady,
     gutter,
     onLineComment,
@@ -116,7 +131,7 @@
   // does — a stable `links` reference keeps it referentially stable, so
   // libOptions stays change-detectable by the lifecycle.
   const token = $derived<ComposedTokenHandlers | undefined>(
-    composeTokenHandlers(links, { openUrl }),
+    composeTokenHandlers(links, fileRefs, { openUrl, onFileRefEnter, onFileRefLeave }),
   );
 
   const handleLineClick: NonNullable<SourceViewLibOptions["onLineClick"]> = (props) => {
@@ -296,10 +311,19 @@
     }
     return rangesMemo.ranges;
   });
+
+  // A stable empty map for the "no file references" case, so the tagging pass
+  // still clears any prior icons without allocating each repaint.
+  const EMPTY_FILE_REFS: FileRefSpanMap = new Map();
   $effect(() => {
     const root = container?.shadowRoot;
     if (root == null) return;
     const ranges = codeRanges;
+    // Snapshot the resolved file references so the effect re-arms when the set
+    // changes (a resolve completes); the file icon is tagged onto the token that
+    // starts each reference (EXC-687), re-applied on every repaint alongside the
+    // code-block tagging so it survives the library's row rewrites.
+    const refs = fileRefs;
     let raf = 0;
     // Tag the rows, then wrap each overflowing block in its scroll card (EXC-729). Both re-run
     // after every library repaint via the observer below; syncCodeBlockCards is idempotent (an
@@ -309,6 +333,9 @@
     const tag = () => {
       tagCodeBlockRows(root, ranges);
       syncCodeBlockCards(root, ranges);
+      // Always run — the clear-stale pass lives inside tagFileRefTokens, so a
+      // populated→empty transition still drops the prior icons.
+      tagFileRefTokens(root, refs ?? EMPTY_FILE_REFS);
     };
     const schedule = () => {
       cancelAnimationFrame(raf);

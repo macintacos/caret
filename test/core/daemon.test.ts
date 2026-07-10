@@ -856,6 +856,16 @@ describe("read-confidentiality posture", () => {
       ["GET /api/reviews", () => fetch(`${base}/api/reviews`)],
       ["GET /api/reviews/:id", () => fetch(`${base}/api/reviews/${id}`)],
       ["GET /api/reviews/:id/decision", () => fetch(`${base}/api/reviews/${id}/decision`)],
+      ["GET /api/reviews/:id/file", () => fetch(`${base}/api/reviews/${id}/file?path=x.ts`)],
+      [
+        "POST /api/reviews/:id/file-refs",
+        () =>
+          fetch(`${base}/api/reviews/${id}/file-refs`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ paths: [] }),
+          }),
+      ],
       ["GET /api/prefs", () => fetch(`${base}/api/prefs`)],
       ["GET / (index)", () => fetch(`${base}/`)],
       ["GET /assets/* (asset)", () => fetch(`${base}/assets/index-AB12.js`)],

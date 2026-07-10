@@ -6,6 +6,7 @@
 // line number, so this stays correct as the library virtualizes rows in and
 // out. The URL-open effect is injected so the layer is unit-testable.
 
+import type { FileRefSpan, FileRefSpanMap } from "./fileRefs.ts";
 import type { LinkSpan, LinkSpanMap } from "./links.ts";
 
 /** The slice of @pierre/diffs' TokenEventBase the click handler reads. */
@@ -25,6 +26,17 @@ export interface LinkHandlerDeps {
   /** Opens the link target. Production wires window.open(href, "_blank",
    * "noopener,noreferrer"); tests inject a spy. */
   openUrl(href: string): void;
+}
+
+/** The file-reference hover affordance the composed handlers dispatch to
+ * (EXC-687). Hover-only: a file reference has no click action, so a click on one
+ * falls through to the normal line-click (opening a comment on its line). */
+export interface FileRefHoverDeps {
+  /** A token starting a resolved file reference was entered — the view reveals
+   * the excerpt popover anchored to `tokenElement`. */
+  onFileRefEnter(ref: FileRefSpan, tokenElement: HTMLElement): void;
+  /** The file-reference token was left — the view dismisses the popover. */
+  onFileRefLeave(): void;
 }
 
 export interface LinkHandlers {
@@ -130,15 +142,16 @@ function hideTooltip(tokenElement: HTMLElement): void {
   for (const el of tooltipMount(tokenElement).querySelectorAll(`[${TOOLTIP_ATTR}]`)) el.remove();
 }
 
-/** Returns the first link span on the line whose range overlaps the token's
- * half-open [charStart, charEnd) range, or undefined if the token touches no
- * link. Ranges are 0-based and half-open, so a token ending exactly at a span's
- * startCol (or starting exactly at its endCol) does not count as a hit. */
-export function hitTestSpan(
-  spans: LinkSpan[],
+/** Returns the first column span on the line whose range overlaps the token's
+ * half-open [charStart, charEnd) range, or undefined if the token touches none.
+ * Ranges are 0-based and half-open, so a token ending exactly at a span's
+ * startCol (or starting exactly at its endCol) does not count as a hit. Generic
+ * over the span shape so both link and file-reference spans hit-test through it. */
+export function hitTestSpan<T extends { startCol: number; endCol: number }>(
+  spans: T[],
   charStart: number,
   charEnd: number,
-): LinkSpan | undefined {
+): T | undefined {
   return spans.find((s) => charStart < s.endCol && charEnd > s.startCol);
 }
 
@@ -174,30 +187,53 @@ export function createLinkHandlers(spanMap: LinkSpanMap, deps: LinkHandlerDeps):
  * exactly one onTokenEnter/onTokenLeave/onTokenClick, so a future per-token
  * affordance adds its enter/leave/click here, not in the view.
  *
- * Today the only affordance is the link layer, so the handlers come straight
- * from createLinkHandlers — with onTokenClick wrapped to record the event when
- * a click lands on a link span. That recorded event drives wasLinkClick, which a
- * view's row-click handler reads to stand down: the library fires this layer's
- * onTokenClick before onLineClick for the same event, so a clicked link opens
- * and the line it sits on does not also open a comment composer.
+ * Two affordances compose here today: the link layer (click opens the URL, hover
+ * shows the tooltip) and the file-reference layer (hover reveals the excerpt
+ * popover — see EXC-687). The link's onTokenClick is wrapped to record the event
+ * when a click lands on a link span; that recorded event drives wasLinkClick,
+ * which a view's row-click handler reads to stand down: the library fires this
+ * layer's onTokenClick before onLineClick for the same event, so a clicked link
+ * opens and the line it sits on does not also open a comment composer. File
+ * references are hover-only, so a click on one falls through to the row click.
  *
- * Returns undefined when there is no link layer (`spanMap` null) — a read-only
- * view wires no token handlers at all and the library renders plain.
+ * Returns undefined when neither layer is present — a read-only view then wires
+ * no token handlers at all and the library renders plain.
  */
 export function composeTokenHandlers(
   spanMap: LinkSpanMap | undefined,
-  deps: LinkHandlerDeps,
+  fileRefs: FileRefSpanMap | undefined,
+  deps: LinkHandlerDeps & Partial<FileRefHoverDeps>,
 ): ComposedTokenHandlers | undefined {
-  if (spanMap == null) return undefined;
-  const link = createLinkHandlers(spanMap, deps);
+  const link = spanMap != null ? createLinkHandlers(spanMap, deps) : undefined;
+  const hasFileRefs = fileRefs != null && fileRefs.size > 0;
+  if (link === undefined && !hasFileRefs) return undefined;
+
+  const fileRefAt = (
+    lineNumber: number,
+    charStart: number,
+    charEnd: number,
+  ): FileRefSpan | undefined => {
+    const spans = fileRefs?.get(lineNumber);
+    return spans === undefined ? undefined : hitTestSpan(spans, charStart, charEnd);
+  };
 
   let linkClickEvent: Event | undefined;
   return {
     handlers: {
-      onTokenEnter: link.onTokenEnter,
-      onTokenLeave: link.onTokenLeave,
+      onTokenEnter(props, event) {
+        link?.onTokenEnter(props, event);
+        const ref = fileRefAt(props.lineNumber, props.lineCharStart, props.lineCharEnd);
+        if (ref !== undefined) deps.onFileRefEnter?.(ref, props.tokenElement);
+      },
+      onTokenLeave(props, event) {
+        link?.onTokenLeave(props, event);
+        if (fileRefAt(props.lineNumber, props.lineCharStart, props.lineCharEnd) !== undefined) {
+          deps.onFileRefLeave?.();
+        }
+      },
       onTokenClick(props, event) {
-        const spans = spanMap.get(props.lineNumber);
+        if (link === undefined) return;
+        const spans = spanMap?.get(props.lineNumber);
         if (spans != null && hitTestSpan(spans, props.lineCharStart, props.lineCharEnd) != null) {
           linkClickEvent = event;
         }

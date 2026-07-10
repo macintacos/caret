@@ -6,6 +6,8 @@ import type {
   Annotation,
   ApproveVariantId,
   ClientReview,
+  FileExcerpt,
+  FileRefsResponse,
   HealthIdentity,
   ResolveBody,
 } from "@core/types";
@@ -67,6 +69,45 @@ export async function getReview(id: string): Promise<ClientReview> {
     }
     throw err;
   }
+}
+
+/** Of the plan's candidate filename references, which resolve to a real file
+ * inside the review's cwd — the daemon is the existence gate, so the plan view's
+ * filename icon appears only for these. Non-essential: a failed request degrades
+ * to an empty list (no icons) rather than throwing, and an empty candidate list
+ * skips the round trip entirely. */
+export async function resolveFileRefs(id: string, paths: string[]): Promise<string[]> {
+  if (paths.length === 0) return [];
+  try {
+    const { resolved } = await json<FileRefsResponse>(
+      await fetch(`/api/reviews/${encodeURIComponent(id)}/file-refs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paths }),
+      }),
+    );
+    return resolved;
+  } catch (err) {
+    uiLog.warn("request", `file refs resolve failed: ${shortId(id)}`, {
+      reviewId: id,
+      candidateCount: paths.length,
+      reason: String(err),
+    });
+    return [];
+  }
+}
+
+/** A bounded, line-aware excerpt of a plan-referenced file for the hover
+ * preview: the excerpt centers on `line` when given, else the file's head.
+ * Throws HttpError on a non-2xx so the popover can render a fallback. */
+export async function getFileExcerpt(
+  id: string,
+  path: string,
+  line?: number,
+): Promise<FileExcerpt> {
+  const params = new URLSearchParams({ path });
+  if (line !== undefined) params.set("line", String(line));
+  return json(await fetch(`/api/reviews/${encodeURIComponent(id)}/file?${params}`));
 }
 
 /** Autosaves the reviewer's working draft: inline annotations and the

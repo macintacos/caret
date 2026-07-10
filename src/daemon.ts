@@ -11,6 +11,7 @@ import { deriveIdleTimeoutSec } from "./constants.ts";
 import { createDecisions } from "./decisions.ts";
 import { type CaretLogger, noopLogger, shortId } from "./log.ts";
 import { ensureStateDir, prefsFile } from "./paths.ts";
+import { readFileExcerpt, resolveFileInCwd } from "./plan-files.ts";
 import { type ApproveModeSet, readApproveMode, writeApproveMode } from "./prefs.ts";
 import { routeIncomingPlan } from "./reviews.ts";
 import { DEFAULTS } from "./settings.ts";
@@ -197,6 +198,13 @@ const PlanInputSchema: z.ZodType<PlanInput> = z
   })
   .catch({});
 
+// POST /api/reviews/:id/file-refs: the candidate filename strings the UI parsed
+// from a plan, asking which resolve to a real file. A non-array or non-object
+// body degrades to an empty list (nothing resolves), matching the lenient
+// boundary the other schemas keep. The handler caps how many it will resolve.
+const MAX_FILE_REFS = 200;
+const FileRefsBodySchema = z.object({ paths: z.array(z.string()).catch([]) }).catch({ paths: [] });
+
 const BehaviorSchema: z.ZodType<Behavior> = z.enum(["allow", "deny"]);
 
 // POST /api/reviews/:id/resolve. `behavior` falls back to "allow" unless the
@@ -338,13 +346,16 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
 }
 
 // A request matched to one of the :id sub-routes, with the review id decoded and
-// the optional sub-path (/decision, /resolve, /draft, /expire) split out.
+// the optional sub-path (/decision, /resolve, /draft, /expire, /file-refs, /file)
+// split out. /file-refs precedes /file in the alternation so the longer literal
+// wins rather than /file matching its prefix.
 interface IdRoute {
   id: string;
   sub: string | undefined;
 }
 
-const ID_ROUTE_RE = /^\/api\/reviews\/([^/]+)(\/decision|\/resolve|\/draft|\/expire)?$/;
+const ID_ROUTE_RE =
+  /^\/api\/reviews\/([^/]+)(\/decision|\/resolve|\/draft|\/expire|\/file-refs|\/file)?$/;
 
 /** Match an /api/reviews/:id[/sub] path, decoding the id; null for any other path. */
 function matchIdRoute(path: string): IdRoute | null {
@@ -604,6 +615,40 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return r ? Response.json(toClientReview(r)) : notFound();
   }
 
+  // POST /api/reviews/:id/file-refs — of the candidate filename strings the UI
+  // parsed from this review's plan, which resolve to a real file inside the
+  // review's cwd. Existence only (no reads): it drives the plan view's filename
+  // icon, which must appear only for real files. Deduped and capped.
+  async function handleFileRefs(req: Request, id: string): Promise<Response> {
+    const r = store.get(id);
+    if (!r) return notFound();
+    const { paths } = await parseBody(req, FileRefsBodySchema);
+    const seen = new Set<string>();
+    const resolved: string[] = [];
+    for (const p of paths.slice(0, MAX_FILE_REFS)) {
+      if (seen.has(p)) continue;
+      seen.add(p);
+      if (resolveFileInCwd(r.cwd, p) !== null) resolved.push(p);
+    }
+    log.debug("request", `file-refs resolved: ${resolved.length}/${seen.size}`, { reviewId: id });
+    return Response.json({ resolved });
+  }
+
+  // GET /api/reviews/:id/file?path=&line= — a bounded, line-aware excerpt of a
+  // plan-referenced file for the hover preview. Resolution is confined to the
+  // review's cwd; a path that doesn't resolve (missing, or escaping cwd) is a
+  // 404. File contents are never logged.
+  function handleFileExcerpt(req: Request, id: string): Response {
+    const r = store.get(id);
+    if (!r) return notFound();
+    const params = new URL(req.url).searchParams;
+    const path = params.get("path") ?? "";
+    const lineRaw = params.get("line");
+    const line = lineRaw !== null && /^\d+$/.test(lineRaw) ? Number(lineRaw) : undefined;
+    const excerpt = readFileExcerpt(r.cwd, path, line);
+    return excerpt ? Response.json(excerpt) : notFound();
+  }
+
   // GET /api/reviews/:id/decision — the hook's long-poll for a decision.
   async function handleDecision(id: string): Promise<Response> {
     // A decision may already be recorded: in memory (a deny keeps the review) or
@@ -752,6 +797,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (route) {
       const { id, sub } = route;
       if (method === "GET" && !sub) return handleGetReview(id);
+      if (method === "GET" && sub === "/file") return handleFileExcerpt(req, id);
+      if (method === "POST" && sub === "/file-refs") return handleFileRefs(req, id);
       if (method === "GET" && sub === "/decision") return handleDecision(id);
       if (method === "PUT" && sub === "/draft") return handleDraft(req, id);
       if (method === "POST" && sub === "/resolve") return handleResolve(req, id);

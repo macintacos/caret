@@ -21,6 +21,7 @@ the dev driver reseeds it, so it doubles as a live scratchpad for renderer work.
 7. [Horizontal rules](#horizontal-rules)
 8. [Overflow and edge cases](#overflow-and-edge-cases)
 9. [Sanitizer probes](#sanitizer-probes)
+10. [Filename references](#filename-references)
 
 ---
 
@@ -356,6 +357,26 @@ hook), while the anchor text and plain content remain.
 If anything in the paragraph above escapes the sanitizer — an alert fires, an iframe
 loads, or the overlay covers the page — that is a real security regression in
 `ui/src/lib/render.ts`.
+
+## Filename references
+
+EXC-687: a filename written in **inline code** that resolves to a real file under the
+review's working directory gets a small file icon to its left, and hovering the reference
+reveals a syntax-highlighted excerpt of that file — the head of the file, or a window
+centered on the referenced line when the reference carries a `:line`. The affordance is
+scoped to inline code (a bare-prose path renders as one coarse token with nowhere to hang
+the icon), and a path that does not resolve stays completely inert — no icon, no hover —
+so a made-up reference never masquerades as a link.
+
+The list below points at stable, top-level files so the check keeps working as the tree
+around it changes. Hover each to verify:
+
+- `package.json` — a real file: shows the icon; the hover previews the head of the file.
+- `README.md` — another real file, for a second icon to eyeball beside the first.
+- `README.md:37` — the same file with a line: the excerpt is centered on line 37 (a small
+  ±6-line snippet) instead of the head.
+- `src/does-not-exist.ts` — a path deliberately **not** in the repo: it must show **no**
+  icon and **no** hover. If it ever sprouts one, the existence gate has regressed.
 
 ---
 
