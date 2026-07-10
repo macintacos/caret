@@ -120,11 +120,6 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
       });
   };
 
-  passthrough(
-    "build-ui",
-    "Build the Svelte UI (Vite -> ui/dist: index.html + hashed assets)",
-    (a) => actions.buildUi(a),
-  );
   passthrough("lint", "Check formatting and lint rules (Biome, read-only)", (a) => actions.lint(a));
   passthrough("format", "Format all files (Biome, write mode)", (a) => actions.format(a));
   passthrough("test", "Run the test suite (bun test)", (a) => actions.test(a));
@@ -132,31 +127,47 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
     actions.testE2e(a),
   );
 
-  // build-bin and build-bundle take no args; the mise forwarders carry their
-  // `#MISE depends=[...]` so the DAG (build-ui first, etc.) stays at the mise
-  // layer, not here.
-  program
-    .command("build-bin")
+  // The single `build` command hosts every build target. Bare `build` is the
+  // umbrella (UI then binary) and carries the optional --install step; its
+  // `ui`/`bin`/`bundle` subcommands are the individual targets the mise tasks
+  // (build-ui, build-bin, build-bundle) forward to by name, so their
+  // `#MISE depends=[...]` DAG (build-ui first, etc.) stays at the mise layer, not
+  // here. enablePositionalOptions lets the `ui` target passThroughOptions its
+  // forwarded vite flags.
+  const build = program
+    .command("build")
+    .description("Build the UI then the binary (build ui -> build bin)")
+    .enablePositionalOptions()
+    .option("--install", "after building, install the local checkout + cycle the daemon (dev only)")
+    .action(async (opts) => {
+      await actions.build({ install: opts.install ?? false });
+    });
+
+  build
+    .command("ui")
+    .description("Build the Svelte UI (Vite -> ui/dist: index.html + hashed assets)")
+    .allowUnknownOption()
+    .passThroughOptions()
+    .argument("[args...]", "forwarded to the underlying tool")
+    .action(async (args: string[]) => {
+      await actions.buildUi(args);
+    });
+
+  // bin and bundle take no args.
+  build
+    .command("bin")
     .description("Compile the single caret binary (bun build --compile)")
     .action(async () => {
       await actions.buildBin();
     });
 
-  program
-    .command("build-bundle")
+  build
+    .command("bundle")
     .description(
       "Bundle caret for the npm/github plugin install (dist/cli.js + ui/dist; runs on bun, no node_modules)",
     )
     .action(async () => {
       await actions.buildBundle();
-    });
-
-  program
-    .command("build")
-    .description("Build the UI then the binary (build-ui -> build-bin)")
-    .option("--install", "after building, install the local checkout + cycle the daemon (dev only)")
-    .action(async (opts) => {
-      await actions.build({ install: opts.install ?? false });
     });
 
   program

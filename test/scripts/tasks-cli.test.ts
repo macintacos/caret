@@ -52,7 +52,7 @@ describe("tasks CLI: dev command", () => {
 // tasks forward `"$@"` verbatim to an external tool (vite, hk, bun), so
 // commander must pass operands AND flags through untouched (passThroughOptions).
 async function parsePassthrough(
-  command: string,
+  commandPath: string[],
   actionKey: keyof TaskActions,
   args: string[],
 ): Promise<string[]> {
@@ -63,25 +63,27 @@ async function parsePassthrough(
     },
   } as Partial<TaskActions>;
   const program = buildProgram(overrides);
-  await program.parseAsync([command, ...args], { from: "user" });
-  if (captured === undefined) throw new Error(`${command} action was not invoked`);
+  await program.parseAsync([...commandPath, ...args], { from: "user" });
+  if (captured === undefined) throw new Error(`${commandPath.join(" ")} action was not invoked`);
   return captured;
 }
 
 describe("tasks CLI: passthrough forwarding", () => {
-  const cases: Array<[string, keyof TaskActions]> = [
-    ["build-ui", "buildUi"],
-    ["lint", "lint"],
-    ["format", "format"],
-    ["test", "test"],
-    ["test-e2e", "testE2e"],
+  // build-ui is now the `build ui` target subcommand; the rest stay top-level.
+  const cases: Array<[string[], keyof TaskActions]> = [
+    [["build", "ui"], "buildUi"],
+    [["lint"], "lint"],
+    [["format"], "format"],
+    [["test"], "test"],
+    [["test-e2e"], "testE2e"],
   ];
-  for (const [command, key] of cases) {
-    test(`${command}: no args forwards []`, async () => {
-      expect(await parsePassthrough(command, key, [])).toEqual([]);
+  for (const [commandPath, key] of cases) {
+    const label = commandPath.join(" ");
+    test(`${label}: no args forwards []`, async () => {
+      expect(await parsePassthrough(commandPath, key, [])).toEqual([]);
     });
-    test(`${command}: forwards positionals and flags untouched`, async () => {
-      expect(await parsePassthrough(command, key, ["some/path", "--flag", "-x"])).toEqual([
+    test(`${label}: forwards positionals and flags untouched`, async () => {
+      expect(await parsePassthrough(commandPath, key, ["some/path", "--flag", "-x"])).toEqual([
         "some/path",
         "--flag",
         "-x",
@@ -143,24 +145,35 @@ describe("tasks CLI: build command", () => {
     expect(await parseBuildArgs(["--install"])).toEqual({ install: true });
   });
 
-  test("build-bin subcommand invokes its action", async () => {
+  test("build bin subcommand invokes its action", async () => {
     let called = false;
     await buildProgram({
       buildBin: async () => {
         called = true;
       },
-    }).parseAsync(["build-bin"], { from: "user" });
+    }).parseAsync(["build", "bin"], { from: "user" });
     expect(called).toBe(true);
   });
 
-  test("build-bundle subcommand invokes its action", async () => {
+  test("build bundle subcommand invokes its action", async () => {
     let called = false;
     await buildProgram({
       buildBundle: async () => {
         called = true;
       },
-    }).parseAsync(["build-bundle"], { from: "user" });
+    }).parseAsync(["build", "bundle"], { from: "user" });
     expect(called).toBe(true);
+  });
+});
+
+// The four former top-level build subcommands are merged into one `build`
+// command whose `ui`/`bin`/`bundle` targets the mise tasks (build-ui, build-bin,
+// build-bundle) forward to by name, so the `#MISE depends` DAG stays valid.
+describe("tasks CLI: build target group", () => {
+  test("build hosts the ui, bin, and bundle target subcommands", () => {
+    const build = buildProgram().commands.find((c) => c.name() === "build");
+    expect(build).toBeDefined();
+    expect(build?.commands.map((c) => c.name()).sort()).toEqual(["bin", "bundle", "ui"]);
   });
 });
 

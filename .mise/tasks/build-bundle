@@ -2,6 +2,6 @@
 #MISE description="Bundle caret for the npm/github plugin install (dist/cli.js + ui/dist; runs on bun, no node_modules)"
 #MISE depends=["build-ui"]
 # Thin forwarder: the real logic lives in the caret tasks CLI
-# (scripts/tasks/cli.ts). "$@" is safe on an empty arg list (a special
-# parameter, not a plain array — no set -u footgun).
-exec bun scripts/tasks/cli.ts build-bundle "$@"
+# (scripts/tasks/cli.ts) under the `build bundle` target. "$@" is safe on an
+# empty arg list (a special parameter, not a plain array — no set -u footgun).
+exec bun scripts/tasks/cli.ts build bundle "$@"

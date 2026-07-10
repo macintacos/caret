@@ -2,8 +2,9 @@
 #MISE description="Compile the single caret binary (bun build --compile)"
 #MISE depends=["build-ui"]
 # Thin forwarder: the real logic (embed-manifest gen, compile, UI-beside copy)
-# lives in the caret tasks CLI (scripts/tasks/cli.ts). scripts/install.sh also
-# runs this task bare as `bash .mise/tasks/build-bin`, so the forwarder needs
-# only bun, not mise. "$@" is safe on an empty arg list (a special parameter,
-# not a plain array — no set -u footgun).
-exec bun scripts/tasks/cli.ts build-bin "$@"
+# lives in the caret tasks CLI (scripts/tasks/cli.ts) under the `build bin`
+# target. scripts/install.sh also runs this task bare as `bash
+# .mise/tasks/build-bin`, so the forwarder needs only bun, not mise. "$@" is safe
+# on an empty arg list (a special parameter, not a plain array — no set -u
+# footgun).
+exec bun scripts/tasks/cli.ts build bin "$@"

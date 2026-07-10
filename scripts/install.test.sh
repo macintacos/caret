@@ -112,8 +112,8 @@ assert_absent "$fail_out" "Registering" "a failed build aborts before any regist
 #
 # build-bin is copied into the synthetic checkout as its one-line forwarder to
 # the tasks CLI; the bun stub is what satisfies the post-build
-# `[ -x bin/caret-native ]` guard — it synthesizes that binary for the `build-bin`
-# subcommand, since the real compile inside the (stubbed) CLI never runs.
+# `[ -x bin/caret-native ]` guard — it synthesizes that binary for the `build bin`
+# target, since the real compile inside the (stubbed) CLI never runs.
 
 # Lay down a synthetic checkout + stub dir. Echoes "ROOT STUBS HOME LOG" so the
 # caller can capture the paths; the caller owns cleanup.
@@ -143,15 +143,15 @@ make_success_fixture() {
     chmod +x "$stubs/$tool"
   done
 
-  # bun: log argv; the migrated build-bin subcommand (`bun scripts/tasks/cli.ts
-  # build-bin`) forwards to the CLI whose real compile is stubbed out here, so
+  # bun: log argv; the migrated build bin target (`bun scripts/tasks/cli.ts
+  # build bin`) forwards to the CLI whose real compile is stubbed out here, so
   # synthesize its bin/caret-native output so the installer's
   # `[ -x bin/caret-native ]` guard still passes; every other bun call succeeds.
   cat >"$stubs/bun" <<STUB
 #!/usr/bin/env bash
 printf '%s\n' "bun \$*" >>"$log"
 case " \$* " in
-  *" build-bin "*)
+  *" build bin "*)
     mkdir -p bin
     printf '#!/usr/bin/env bash\nexit 0\n' >bin/caret-native
     chmod +x bin/caret-native
@@ -209,7 +209,7 @@ fi
 # The full pipeline ran, not just detection: build deps, UI build, compile.
 assert_contains "$calls" "bun install" "success run installs build dependencies"
 assert_contains "$calls" "vite build" "success run builds the UI"
-assert_contains "$calls" "scripts/tasks/cli.ts build-bin" "success run compiles the binary via the tasks CLI"
+assert_contains "$calls" "scripts/tasks/cli.ts build bin" "success run compiles the binary via the tasks CLI"
 
 # Register sequence. The local build registers the generated dev marketplace
 # (source symlinked to the checkout), not the checkout's own npm-sourced

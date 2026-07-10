@@ -414,8 +414,9 @@ every flag's parsing, validation, defaults, and `--help`, and the task stays tri
 Because mise reserves a bare `--help` for its own task help, use `mise run dev -- --help`
 to see a subcommand's flags.
 
-The CLI hosts `dev`, `build-ui`, `build-bin`, `build-bundle`, `build`, `lint`, `format`,
-`test`, `test-e2e`, `smoke-bin`, `smoke-bundle`, `setup`, and the nested `release` group
+The CLI hosts `dev`, `build` (bare for the UI-then-binary umbrella, with `ui`, `bin`, and
+`bundle` target subcommands), `lint`, `format`, `test`, `test-e2e`, `smoke-bin`,
+`smoke-bundle`, `setup`, and the nested `release` group
 (`compute|baseline|prepare|finalize`). Every task module is a sibling of the CLI in
 `scripts/tasks/` — one file per task, named after it (e.g. `scripts/tasks/build-bin.ts`,
 `scripts/tasks/smoke-bin.ts`) — except the larger, multi-file `dev` task, which keeps its
