@@ -8,7 +8,7 @@ testing (EXC-453):
 - **Real browser behavior** — text selection, focus/keyboard handling, scroll, popover
   positioning, and timing-driven UI (the 2s decision poll, the 500ms autosave debounce,
   safe mode's 300ms grace window and 2s suppression) → a **committed Playwright spec** in
-  `test/e2e/*.e2e.ts`. Run: `mise run test-e2e`.
+  `test/e2e/*.e2e.ts`. Run: `mise run test e2e`.
 - **Pure logic** — parsing, anchoring math, formatting, state machines → a
   **`bun test` unit** (happy-dom when a DOM API is needed, wired by `ui/test-setup.ts`).
   One runner covers both backend and UI suites; the component suite additionally needs the
@@ -47,7 +47,7 @@ inside a spec.
 - **Seed through the public API.** Reviews are created by `POST /api/reviews`, the same
   surface a real hook uses — never by reaching into the store directly.
 - **No external daemon, no dev driver.** A spec must not reuse a running daemon, depend on
-  `mise run dev`, or drive the dev driver. The `test-e2e` task `depends` on `build-ui`, so
+  `mise run dev`, or drive the dev driver. The `test e2e` task builds the UI first, so
   specs always exercise the shipped artifact, not a Vite dev server.
 
 ## Timing discipline

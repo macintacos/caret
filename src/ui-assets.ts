@@ -6,7 +6,7 @@
 //
 // Resolution preserves today's graceful-degradation chain:
 //   1. the build-generated manifest module — the compiled binary, and a source
-//      run after `mise run build-bin` has emitted it;
+//      run after `mise run build bin` has emitted it;
 //   2. ui/dist/ enumerated on disk relative to the source tree — dev/e2e runs
 //      that built the UI but not the manifest;
 //   3. a dist tree copied beside the binary (dirname(execPath)/ui/) — the

@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-#MISE description="Run the Playwright e2e suite against an isolated daemon"
-#MISE depends=["build-ui"]
-# Thin forwarder: the Chromium probe and the playwright invocation live in the
-# caret tasks CLI (scripts/tasks/cli.ts). "$@" is safe on an empty arg list (a
-# special parameter, not a plain array — no set -u footgun).
-exec bun scripts/tasks/cli.ts test-e2e "$@"

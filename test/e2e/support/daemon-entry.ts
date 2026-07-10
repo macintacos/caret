@@ -45,11 +45,11 @@ if (!process.env.XDG_STATE_HOME) {
 // The shipped artifact, resolved through the daemon's own asset seam so the spec
 // exercises the whole ui/dist/ tree (index plus its hashed siblings), the same
 // resolver the binary uses. Absence fails loudly so a direct `bunx playwright
-// test` that skipped build-ui doesn't silently serve the placeholder; the mise
-// task depends on build-ui.
+// test` that skipped the UI build doesn't silently serve the placeholder; the
+// `test e2e` task builds the UI first.
 const assets = await loadUiAssets();
 if (!assets) {
-  console.error("caret e2e daemon: ui/dist missing — run `mise run build-ui` first");
+  console.error("caret e2e daemon: ui/dist missing — run `mise run build ui` first");
   process.exit(1);
 }
 

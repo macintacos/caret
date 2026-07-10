@@ -5,10 +5,13 @@
 // writes to the tree — `lint` (hk check) is the formatting gate, and a lint
 // failure points at `mise run format`.
 //
-// DAG: lint, test, and build-ui start immediately; test-e2e and build-bin
-// start once build-ui passes. Both dependents declare depends=["build-ui"] in
-// their mise task, and `mise run` has no --no-deps flag, so each is spawned
-// with MISE_TASK_SKIP=build-ui to keep build-ui at exactly one run per gate.
+// DAG: lint, test (unit), and `build ui` start immediately; `test e2e` and
+// `build bin` start once `build ui` passes. The UI-first ordering + skip
+// mechanism now live in the tasks CLI (scripts/tasks/build.ts), so each
+// dependent is spawned with CARET_SKIP_BUILD_UI=1 to keep the UI built at exactly
+// one run per gate — two concurrent Vite builds would otherwise race on ui/dist.
+// (This replaces the old MISE_TASK_SKIP=build-ui dedupe of the mise `depends`
+// edge, which is gone now that build/test are single multi-target tasks.)
 //
 // DI mirrors scripts/tasks/release.ts: the spawn collaborator is injected so
 // test/scripts/preflight.test.ts can drive the DAG without running real tasks;
@@ -110,8 +113,12 @@ export interface JsonArgs {
   tasks: string[];
 }
 
-const IMMEDIATE = ["lint", "test", "build-ui"] as const;
-const DEPENDENT = ["test-e2e", "build-bin"] as const;
+// Task identifiers are the multi-word `mise run` invocations (EXC-738/739): the
+// spawner splits each on spaces into `mise run <words…>` (mise task names never
+// contain spaces, so the split is exact). They double as the map keys and the
+// display titles.
+const IMMEDIATE = ["lint", "test", "build ui"] as const;
+const DEPENDENT = ["test e2e", "build bin"] as const;
 const TASK_ORDER = [...IMMEDIATE, ...DEPENDENT];
 
 // Bumpable integer so machine consumers detect a breaking shape change,
@@ -169,7 +176,7 @@ export async function runPreflight(deps: {
       const status = await runTask(name, undefined, (line) => {
         task.output = line;
       });
-      if (name === "build-ui") releaseBuildUi(status === "passed");
+      if (name === "build ui") releaseBuildUi(status === "passed");
       if (status === "skipped") return task.skip(`${name} (aborted: a sibling failed)`);
       if (status === "failed") throw new Error(`${name} failed`);
     },
@@ -178,12 +185,12 @@ export async function runPreflight(deps: {
   const dependent = (name: string): ListrTask => ({
     title: name,
     task: async (_ctx, task) => {
-      task.output = "waiting for build-ui";
+      task.output = "waiting for build ui";
       if (!(await buildUiDone)) {
         results.set(name, { status: "skipped", output: "" });
-        return task.skip(`${name} (skipped: build-ui failed)`);
+        return task.skip(`${name} (skipped: build ui failed)`);
       }
-      const status = await runTask(name, { MISE_TASK_SKIP: "build-ui" }, (line) => {
+      const status = await runTask(name, { CARET_SKIP_BUILD_UI: "1" }, (line) => {
         task.output = line;
       });
       if (status === "skipped") return task.skip(`${name} (aborted: a sibling failed)`);
@@ -220,7 +227,7 @@ function buildSummary(results: Map<string, TaskResult>): string {
   for (const name of TASK_ORDER) {
     const result = results.get(name);
     if (!result) continue;
-    lines.push(`  ${icons[result.status]} ${name.padEnd(9)} ${result.status}`);
+    lines.push(`  ${icons[result.status]} ${name.padEnd(10)} ${result.status}`);
   }
   for (const name of TASK_ORDER) {
     const result = results.get(name);
@@ -502,7 +509,10 @@ export function createProcessGroupController(graceMs = 2000): ProcessGroupContro
 function makeSpawnMiseTask(controller: ProcessGroupController): SpawnTask {
   return (name, env, onLine, signal) =>
     new Promise<SpawnOutcome>((resolve) => {
-      const child = controller.spawn("mise", ["run", name], {
+      // A multi-word name (`build ui`, `test e2e`, `build bin`) splits into
+      // `mise run build ui` — mise routes the trailing words to the task's
+      // positional target (EXC-738); a single-word name is unchanged.
+      const child = controller.spawn("mise", ["run", ...name.split(" ")], {
         env: withoutMiseUsageVars(process.env, env),
         stdio: ["ignore", "pipe", "pipe"],
       });

@@ -42,7 +42,7 @@ export function createNpm(): NpmOps {
     async publish() {
       // Build the bundle and the UI it serves so the tarball ships fresh
       // artifacts matching this version, then publish.
-      await $`mise run build-bundle`;
+      await $`mise run build bundle`;
       await $`npm publish`;
     },
   };

@@ -333,10 +333,11 @@ Requires [mise](https://mise.jdx.dev), which pins bun, biome, hk, and pkl.
 
 ```sh
 mise run setup      # install pinned tools + JS deps + e2e Chromium + register git hooks
-mise run build      # build:ui (Vite multi-asset) then build:bin (bun build --compile, embeds the UI)
+mise run build      # build the UI (Vite multi-asset) then the binary (bun build --compile, embeds the UI)
+mise run build ui   # just the Svelte UI (Vite -> ui/dist); also `build bin` / `build bundle`
 mise run dev        # isolated daemon + fake plan + Vite UI (ephemeral port)
-mise run test       # bun test
-mise run test-e2e   # Playwright browser e2e (isolated daemon, Chromium)
+mise run test       # bun test (unit); `mise run test unit` is the same target
+mise run test e2e   # Playwright browser e2e (isolated daemon, Chromium)
 mise run lint       # read-only gate: formatting + Biome lint + tsc + svelte-check
 mise run format     # Biome (write)
 mise run preflight  # check-only pre-push gate: lint + tests (unit ∥ e2e) + build, concurrent
@@ -390,11 +391,12 @@ other than `42718` (the production default); this skips `--ephemeral` and binds 
 so only one such session can run at a time. Likewise, set `CARET_DEV_STATE_DIR` (or
 `[dev].state_dir`) to keep dev state across restarts instead of the ephemeral default.
 
-`mise run test-e2e` runs the Playwright specs in `test/e2e/` against an isolated daemon
+`mise run test e2e` runs the Playwright specs in `test/e2e/` against an isolated daemon
 that serves the built `ui/dist/` artifact on an OS-assigned port with ephemeral state, so
-the suite never touches your real daemon or `~/.local/state/caret`. `mise run setup`
-installs the Chromium browser the specs drive. For when to write an e2e spec versus a
-`bun test` unit versus throwaway exploration, see `agents/browser-testing.md`.
+the suite never touches your real daemon or `~/.local/state/caret`. It builds the UI first
+(honouring `CARET_SKIP_BUILD_UI`). `mise run setup` installs the Chromium browser the
+specs drive. For when to write an e2e spec versus a `bun test` unit versus throwaway
+exploration, see `agents/browser-testing.md`.
 
 For a quick local trial without installing, load the plugin from a checkout:
 
@@ -414,27 +416,32 @@ every flag's parsing, validation, defaults, and `--help`, and the task stays tri
 Because mise reserves a bare `--help` for its own task help, use `mise run dev -- --help`
 to see a subcommand's flags.
 
-The CLI hosts `dev`, `build-ui`, `build-bin`, `build-bundle`, `build`, `lint`, `format`,
-`test`, `test-e2e`, `smoke-bin`, `smoke-bundle`, `setup`, and the nested `release` group
-(`compute|baseline|prepare|finalize`). Every task module is a sibling of the CLI in
-`scripts/tasks/` — one file per task, named after it (e.g. `scripts/tasks/build-bin.ts`,
-`scripts/tasks/smoke-bin.ts`) — except the larger, multi-file `dev` task, which keeps its
-own `scripts/tasks/dev/` folder. Code shared across tasks lives in `scripts/tasks/lib/`:
-`exec.ts` (the `runForward` / `execAndExit` spawn helpers), `signals.ts` (the
-cleanup-on-exit/signal wiring the supervising tasks share), and `smoke-probe.ts` (the
-over-the-wire UI probe both smoke tasks run). Every subcommand's parsing contract is
-unit-tested in `test/scripts/tasks-cli.test.ts`. The `release` subcommand group lives in
-`scripts/tasks/release.ts` and keeps its own JSON-on-stdout error discipline (Commander
-help/errors to stderr, a typed JSON result per action) so `/release-caret` can parse it,
-independent of the CLI's plain-stderr top-level handling. One task stays outside the CLI
-by design: `preflight` stays a TOML task in `mise.toml` because it needs its mise `usage`
-spec so `mise run preflight --json -v` can feed flags into `scripts/preflight.ts`
-(migrating it too is tracked by
+The CLI hosts `dev`; the `build` group (bare umbrella plus the `ui`/`bin`/`bundle`
+targets, `mise run build bin`); the `test` group (bare/`unit` = bun, `e2e` = Playwright);
+the `smoke` group (bare = both, plus `bin`/`bundle`); `lint`, `format`, `setup`; and the
+nested `release` group (`compute|baseline|prepare|finalize`). Every task module is a
+sibling of the CLI in `scripts/tasks/` — one file per task group, named after it (e.g.
+`scripts/tasks/build.ts`, `scripts/tasks/smoke.ts`) — except the larger, multi-file `dev`
+task, which keeps its own `scripts/tasks/dev/` folder. Code shared across tasks lives in
+`scripts/tasks/lib/`: `exec.ts` (the `runForward` / `execAndExit` spawn helpers),
+`signals.ts` (the cleanup-on-exit/signal wiring the supervising tasks share), and
+`smoke-probe.ts` (the over-the-wire UI probe both smoke targets run). Every subcommand's
+parsing contract is unit-tested in `test/scripts/tasks-cli.test.ts`. The `release`
+subcommand group lives in `scripts/tasks/release.ts` and keeps its own JSON-on-stdout
+error discipline (Commander help/errors to stderr, a typed JSON result per action) so
+`/release-caret` can parse it, independent of the CLI's plain-stderr top-level handling.
+One task stays outside the CLI by design: `preflight` stays a TOML task in `mise.toml`
+because it needs its mise `usage` spec so `mise run preflight --json -v` can feed flags
+into `scripts/preflight.ts` (migrating it too is tracked by
 [EXC-737](https://linear.app/macintacos/issue/EXC-737)).
 
-Task dependencies stay at the mise layer: a forwarder keeps its `#MISE depends=[...]`
-directive (e.g. `build-bin` depends on `build-ui`, `smoke-bin` on `build`), so `mise run`
-still orders the DAG — the CLI subcommand carries only the task's own logic.
+Task ordering lives in the CLI, not a mise `depends` edge (EXC-738/739/740): the
+ui-dependent targets — `build bin`, `build bundle`, and `test e2e` — build the UI
+themselves first, UNLESS `CARET_SKIP_BUILD_UI` is set, and `smoke bin`/`smoke bundle`
+build their artifact (via the tasks CLI) before smoking it. `scripts/preflight.ts` sets
+`CARET_SKIP_BUILD_UI=1` on the dependents it spawns so the gate builds the UI exactly once
+(two concurrent Vite builds would race on `ui/dist`). This is why the per-variant tasks
+were consolidated into single multi-target `build`/`test`/`smoke` tasks.
 
 `mise run dev` takes `--num-versions <n>` (how many versions the primary dev review opens
 with; default 3, a positive integer) and `--notify` (arm the extra-review seeder). Its
@@ -443,7 +450,7 @@ spawn the daemon, pino-pretty, driver, and Vite, discover the daemon's bound por
 lock, and reap every child on exit — lives in `scripts/tasks/dev/run.ts`. Note `Bun.spawn`
 snapshots `process.env` at startup and ignores later mutations, so env overrides
 (`XDG_STATE_HOME`, `CARET_IDLE_MS`, `CARET_PORT`) are passed explicitly to each child
-rather than set on `process.env`; the smoke tasks (`scripts/tasks/smoke-*.ts`) follow the
+rather than set on `process.env`; the smoke targets (`scripts/tasks/smoke.ts`) follow the
 same daemon-supervision pattern, and their shared over-the-wire probe is unit-tested in
 `test/scripts/smoke-probe.test.ts`.
 

@@ -27,7 +27,7 @@ export async function runForward(cmd: string[], opts: ExecOpts = {}): Promise<nu
 
 /** Spawn `cmd` via runForward and exit this process with the child's code — the
  * "the tool's exit status is the task's exit status" tail shared by every task
- * that forwards to a single tool (build-ui, lint, format, test, test-e2e). */
+ * that forwards to a single tool (build ui, lint, format, test unit, test e2e). */
 export async function execAndExit(cmd: string[], opts: ExecOpts = {}): Promise<never> {
   process.exit(await runForward(cmd, opts));
 }

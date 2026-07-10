@@ -1,8 +1,8 @@
-// The pure, HTTP-level probe shared by the smoke-bin and smoke-bundle tasks:
-// given a base URL of a running caret daemon, assert that it serves the
+// The pure, HTTP-level probe shared by the `smoke bin` and `smoke bundle`
+// targets: given a base URL of a running caret daemon, assert that it serves the
 // multi-asset UI correctly. The daemon boot / process supervision differs
-// between the two tasks (a copied compiled binary vs. a prewarm-spawned bundle
-// daemon) and lives in their own modules; the over-the-wire checks are identical
+// between the two (a copied compiled binary vs. a prewarm-spawned bundle
+// daemon) and lives in smoke.ts; the over-the-wire checks are identical
 // and live here, driven through an injectable `fetch` so they are unit-testable.
 
 /** Every distinct `/assets/…` URL a served index references, deduped and sorted.
@@ -27,7 +27,7 @@ export function isUsableAssetContentType(ctype: string): boolean {
 }
 
 export interface ProbeOptions {
-  /** Prefix for every diagnostic line and thrown message, e.g. "smoke-bin". */
+  /** Prefix for every diagnostic line and thrown message, e.g. "smoke bin". */
   label: string;
   /** Require /api/health to report a production (isDev:false) install. */
   requireProduction: boolean;

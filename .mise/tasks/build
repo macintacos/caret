@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-#MISE description="Build the UI then the binary (build-ui -> build-bin)"
-#MISE depends=["build-bin"]
-# Thin forwarder: the completion line and the optional --install step live in the
-# caret tasks CLI (scripts/tasks/cli.ts), which parses --install. "$@" is safe on
-# an empty arg list (a special parameter, not a plain array — no set -u footgun).
+#MISE description="Build the UI then the binary (bare); or a ui/bin/bundle target"
+# Thin forwarder: the ui/bin/bundle targets, the UI-first ordering + skip
+# mechanism, and the optional --install step all live in the caret tasks CLI
+# (scripts/tasks/cli.ts). `mise run build ui|bin|bundle` passes the target as $1;
+# bare `mise run build` builds the UI then the binary. "$@" is safe on an empty
+# arg list (a special parameter, not a plain array — no set -u footgun).
 exec bun scripts/tasks/cli.ts build "$@"
