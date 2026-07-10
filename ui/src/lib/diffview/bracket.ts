@@ -135,7 +135,8 @@ export function bracketLayer(node: HTMLElement, params: BracketLayerParams) {
       node.appendChild(rail);
     }
     current.spans.forEach((span, i) => {
-      const rail = rails[i]!;
+      const rail = rails[i];
+      if (rail == null) return;
       const box = bracketBox(host, scroller, span);
       if (box == null || box.height === 0) {
         rail.style.display = "none";
