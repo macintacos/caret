@@ -3,9 +3,11 @@
 // EXC-462: lint/test/`build ui` start immediately, dependents wait on `build ui`
 // and dedupe it via CARET_SKIP_BUILD_UI, failures don't hide other results, and
 // the summary surfaces failed output plus the `mise run format` hint. Also
-// covers the `--json` mode (EXC-471): arg parsing (parseJsonArgs) and the
-// report builders — the lean default (status + line counts), the -v/-vv
-// verbosity ladder, --grep line filtering, --task scoping, and the error doc.
+// covers the `--json` report builders (EXC-471) — the lean default (status +
+// line counts), the -v/-vv verbosity ladder, --grep line filtering, --task
+// scoping, and the error doc — plus the CLI's invalid-`--grep` exit path. The
+// --json flags themselves are parsed by the tasks CLI's commander tree, so that
+// parse contract is pinned in tasks-cli.test.ts (EXC-737).
 
 import { expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -15,13 +17,9 @@ import {
   buildResultReport,
   buildStartReport,
   createProcessGroupController,
-  parseJsonArgs,
-  parseJsonEnv,
-  resolveJsonArgs,
   runPreflight,
   type SpawnOutcome,
   type SpawnTask,
-  withoutMiseUsageVars,
 } from "../../scripts/preflight.ts";
 import { waitFor } from "../support/poll.ts";
 
@@ -256,107 +254,6 @@ test("a failed task aborts in-flight siblings that honor the signal (recorded sk
   expect(r.results.get("test e2e")?.status).toBe("skipped");
 });
 
-// --json arg parsing (EXC-471) ----------------------------------------------
-
-test("parseJsonArgs: --json sets json; absent leaves it false", () => {
-  expect(parseJsonArgs(["bun", "preflight.ts", "--json"]).json).toBe(true);
-  expect(parseJsonArgs(["bun", "preflight.ts"]).json).toBe(false);
-});
-
-test("parseJsonArgs: -v counts verbosity; -vv and repeated -v accumulate", () => {
-  expect(parseJsonArgs(["bun", "p", "--json"]).verbosity).toBe(0);
-  expect(parseJsonArgs(["bun", "p", "--json", "-v"]).verbosity).toBe(1);
-  expect(parseJsonArgs(["bun", "p", "--json", "-vv"]).verbosity).toBe(2);
-  expect(parseJsonArgs(["bun", "p", "--json", "-v", "-v"]).verbosity).toBe(2);
-});
-
-test("parseJsonArgs: --grep reads the next arg or the = form", () => {
-  expect(parseJsonArgs(["bun", "p", "--json", "--grep", "err.*"]).grep).toBe("err.*");
-  expect(parseJsonArgs(["bun", "p", "--json", "--grep=err.*"]).grep).toBe("err.*");
-});
-
-test("parseJsonArgs: --task is repeatable and accepts the = form", () => {
-  expect(parseJsonArgs(["bun", "p", "--json", "--task", "test", "--task=lint"]).tasks).toEqual([
-    "test",
-    "lint",
-  ]);
-});
-
-test("parseJsonArgs: an empty or missing --grep value is treated as no filter", () => {
-  expect(parseJsonArgs(["bun", "p", "--json", "--grep="]).grep).toBeUndefined();
-  expect(parseJsonArgs(["bun", "p", "--json", "--grep"]).grep).toBeUndefined();
-});
-
-test("parseJsonEnv: reads mise's usage_* vars (count, repeatable --task)", () => {
-  const env = {
-    usage_json: "true",
-    usage_verbose: "2",
-    usage_grep: "err",
-    usage_task: "lint test",
-  };
-  expect(parseJsonEnv(env)).toEqual({
-    json: true,
-    verbosity: 2,
-    grep: "err",
-    tasks: ["lint", "test"],
-  });
-});
-
-test("parseJsonEnv: unset vars default sensibly", () => {
-  expect(parseJsonEnv({})).toEqual({ json: false, verbosity: 0, tasks: [] });
-  expect(parseJsonEnv({ usage_json: "true", usage_task: "test" })).toEqual({
-    json: true,
-    verbosity: 0,
-    tasks: ["test"],
-  });
-});
-
-test("resolveJsonArgs: uses env when usage_json is set (mise spec path)", () => {
-  // Under the mise usage spec the flags arrive as env vars and argv is empty.
-  expect(resolveJsonArgs([], { usage_json: "true", usage_verbose: "1", usage_grep: "x" })).toEqual({
-    json: true,
-    verbosity: 1,
-    grep: "x",
-    tasks: [],
-  });
-});
-
-test("resolveJsonArgs: parses argv when usage_json is absent (direct invocation)", () => {
-  expect(resolveJsonArgs(["bun", "p", "--json", "-v"], {})).toEqual({
-    json: true,
-    verbosity: 1,
-    tasks: [],
-  });
-});
-
-// Nested-task env sanitizing — the fork-bomb guard (see withoutMiseUsageVars).
-// mise leaks the parent invocation's usage_* flag vars into nested `mise run`
-// children (verified), so without stripping them a `mise run preflight --json`
-// → `mise run test` → `bun test` → this file's `preflight --grep [` subprocess
-// would read the leaked usage_json, ignore its argv, skip the invalid-grep
-// exit(2), and recursively run the whole task graph.
-test("withoutMiseUsageVars: drops every usage_* key, keeps the rest, applies extra", () => {
-  expect(
-    withoutMiseUsageVars(
-      {
-        PATH: "/bin",
-        HOME: "/h",
-        usage_json: "true",
-        usage_verbose: "2",
-        usage_grep: "[",
-        usage_task: "test",
-      },
-      { CARET_SKIP_BUILD_UI: "1" },
-    ),
-  ).toEqual({ PATH: "/bin", HOME: "/h", CARET_SKIP_BUILD_UI: "1" });
-});
-
-test("withoutMiseUsageVars: extra wins over a kept key; undefined values are dropped", () => {
-  expect(withoutMiseUsageVars({ FOO: "old", BAR: undefined }, { FOO: "new" })).toEqual({
-    FOO: "new",
-  });
-});
-
 // --json report builders (EXC-471) ------------------------------------------
 
 test("buildStartReport echoes the parsed filters and lists planned tasks", () => {
@@ -555,7 +452,9 @@ test("buildErrorReport: shape for an invalid --grep pattern", () => {
   });
 });
 
-// runCli entrypoint (EXC-471) — exercised as a subprocess, like release-cli.test.ts.
+// preflight CLI entrypoint (EXC-471/EXC-737) — exercised as a subprocess, like
+// release-cli.test.ts. `mise run preflight` forwards to `caret-tasks preflight`,
+// so the invalid-`--grep` guard is driven through that same CLI path.
 
 // A cold `bun` subprocess spawn (process start + the script's import graph)
 // can take several seconds when the full suite runs its files concurrently on
@@ -564,18 +463,14 @@ test("buildErrorReport: shape for an invalid --grep pattern", () => {
 const SUBPROCESS_SPAWN_TIMEOUT_MS = 30_000;
 
 test(
-  "runCli: an invalid --grep pattern emits an error doc on stdout and exits 2",
+  "preflight CLI: an invalid --grep pattern emits an error doc on stdout and exits 2",
   async () => {
-    // Hermetic env: strip any ambient usage_* so the spawned preflight parses
-    // OUR `--grep [` argv, not a usage_json leaked from an outer `mise run
-    // preflight --json`. Belt-and-suspenders with the spawnMiseTask fix — if
-    // either were missing and this ran under that umbrella, the spawned preflight
-    // would ignore the argv, run the real task graph, and fork-bomb the box.
-    const proc = Bun.spawn([process.execPath, "scripts/preflight.ts", "--json", "--grep", "["], {
-      env: withoutMiseUsageVars(process.env),
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    // Commander parses --grep from argv (not env), so the invalid regex is
+    // rejected before any task spawns — exit 2 with the error doc, no gate run.
+    const proc = Bun.spawn(
+      [process.execPath, "scripts/tasks/cli.ts", "preflight", "--json", "--grep", "["],
+      { stdout: "pipe", stderr: "pipe" },
+    );
     const [stdout, exit] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
 
     expect(exit).toBe(2);

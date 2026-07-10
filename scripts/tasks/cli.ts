@@ -7,9 +7,10 @@
 // here as a nested subcommand group (`caret-tasks release compute|baseline|
 // prepare|finalize`, built in ./release.ts); it keeps its own JSON-on-stdout
 // error discipline so /release-caret can parse it, independent of this CLI's
-// plain-stderr top-level catch. One task stays out on purpose: `preflight` is a
-// TOML task so mise's usage spec can feed its --json flags into
-// scripts/preflight.ts (migrating it too is tracked by EXC-737).
+// plain-stderr top-level catch. The `preflight` gate is a subcommand too, but
+// unlike the passthrough tasks its --json/-v/--grep/--task flags are real
+// commander options (the interface the mise usage spec once carried); the gate
+// orchestration + --json reporting live in scripts/preflight.ts (EXC-737).
 //
 // Composition point only, like src/cli.ts: it assembles the commander tree and
 // threads each subcommand's parsed options/args into its run function. Every
@@ -20,6 +21,7 @@
 // caret CLIs share the same name/description/help conventions.
 
 import { InvalidArgumentError } from "@commander-js/extra-typings";
+import { type JsonArgs, runPreflightCli } from "../../scripts/preflight.ts";
 import { createProgram } from "../../src/program.ts";
 import { runBuild, runBuildBin, runBuildBundle, runBuildUi } from "./build.ts";
 import { DEFAULT_NUM_VERSIONS, parsePositiveInt } from "./dev/protocol.ts";
@@ -48,6 +50,7 @@ export interface TaskActions {
   smoke: () => Promise<unknown>;
   smokeBin: () => Promise<unknown>;
   smokeBundle: () => Promise<unknown>;
+  preflight: (args: JsonArgs) => Promise<unknown>;
 }
 
 const realActions: TaskActions = {
@@ -64,6 +67,7 @@ const realActions: TaskActions = {
   smoke: runSmoke,
   smokeBin: runSmokeBin,
   smokeBundle: runSmokeBundle,
+  preflight: runPreflightCli,
 };
 
 /** Build the tasks commander program. `overrides` replaces individual actions
@@ -211,6 +215,40 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
     )
     .action(async () => {
       await actions.smokeBundle();
+    });
+
+  // `preflight`: the pre-push gate. Its --json output flags are real commander
+  // options (not passthrough), reproducing the interface the mise usage spec
+  // once fed into scripts/preflight.ts via usage_* env vars. `-v` counts up
+  // (`-vv` → 2) and `--task` is repeatable; the action funnels the parsed flags
+  // into a JsonArgs and hands them to runPreflightCli.
+  program
+    .command("preflight")
+    .description("Pre-push gate (check-only): lint, unit + e2e tests, and build, run concurrently")
+    .option(
+      "--json",
+      "Emit machine-readable JSON (two NDJSON docs on stdout) instead of the live display",
+    )
+    .option(
+      "-v, --verbose",
+      "Raise --json detail: -v full failure output + passing snippets, -vv all full",
+      (_value, prev: number) => prev + 1,
+      0,
+    )
+    .option("--grep <pattern>", "In --json mode, keep only output lines matching this regex")
+    .option(
+      "--task <name>",
+      "In --json mode, scope output to the named task(s); repeatable",
+      (value, prev: string[]) => [...prev, value],
+      [] as string[],
+    )
+    .action(async (opts) => {
+      // Commander types a no-arg flag carrying a count reducer as `number | true`;
+      // the reducer plus the `0` default make it always a number at runtime.
+      const verbosity = typeof opts.verbose === "number" ? opts.verbose : 0;
+      const args: JsonArgs = { json: opts.json ?? false, verbosity, tasks: opts.task };
+      if (opts.grep !== undefined) args.grep = opts.grep;
+      await actions.preflight(args);
     });
 
   // The release pipeline mounts as a nested subcommand group with its own

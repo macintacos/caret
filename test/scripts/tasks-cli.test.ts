@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { JsonArgs } from "../../scripts/preflight.ts";
 import {
   buildBinArtifacts,
   buildBinCompileCommand,
@@ -291,6 +292,48 @@ describe("tasks CLI: release subcommand group", () => {
       "finalize",
       "prepare",
     ]);
+  });
+});
+
+// The preflight gate is a first-class subcommand (EXC-737): `mise run preflight`
+// forwards to `caret-tasks preflight`, and commander parses --json/-v/--grep/
+// --task directly — the interface the mise `usage` spec used to carry via
+// usage_* env vars. This pins the parse → JsonArgs contract the preflight action
+// receives, without running the real gate (the injected action just captures).
+async function parsePreflightArgs(args: string[]): Promise<JsonArgs> {
+  let captured: JsonArgs | undefined;
+  const program = buildProgram({
+    preflight: async (a) => {
+      captured = a;
+    },
+  });
+  await program.parseAsync(["preflight", ...args], { from: "user" });
+  if (captured === undefined) throw new Error("preflight action was not invoked");
+  return captured;
+}
+
+describe("tasks CLI: preflight command", () => {
+  test("registers a preflight subcommand", () => {
+    expect(buildProgram().commands.map((c) => c.name())).toContain("preflight");
+  });
+
+  test("bare invocation: json off, verbosity 0, no grep, no tasks", async () => {
+    expect(await parsePreflightArgs([])).toEqual({ json: false, verbosity: 0, tasks: [] });
+  });
+
+  test("parses --json, counts -vv, reads --grep, collects repeatable --task", async () => {
+    expect(
+      await parsePreflightArgs([
+        "--json",
+        "-vv",
+        "--grep",
+        "err.*",
+        "--task",
+        "lint",
+        "--task",
+        "test",
+      ]),
+    ).toEqual({ json: true, verbosity: 2, grep: "err.*", tasks: ["lint", "test"] });
   });
 });
 
