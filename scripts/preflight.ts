@@ -14,8 +14,10 @@
 // edge, which is gone now that build/test are single multi-target tasks.)
 //
 // DI mirrors scripts/tasks/release.ts: the spawn collaborator is injected so
-// test/scripts/preflight.test.ts can drive the DAG without running real tasks;
-// import.meta.main wires the real spawner and process.exit.
+// test/scripts/preflight.test.ts can drive the DAG without running real tasks.
+// The tasks CLI's `preflight` subcommand (scripts/tasks/cli.ts) is the entry
+// point — it parses the --json flags and calls runPreflightCli, which wires the
+// real spawner (EXC-737).
 //
 // Interruption safety (EXC-587): the real spawner runs each task as a detached
 // process group; SIGINT/SIGTERM tear every group down before exit, and the
@@ -105,7 +107,8 @@ export interface PreflightErrorReport {
   message: string;
 }
 
-/** The --json-mode flags parsed out of argv. All are inert without --json. */
+/** The --json-mode flags (parsed by the tasks CLI's commander tree). All are
+ * inert without --json. */
 export interface JsonArgs {
   json: boolean;
   verbosity: number;
@@ -238,61 +241,6 @@ function buildSummary(results: Map<string, TaskResult>): string {
   return lines.join("\n");
 }
 
-/**
- * Parse the --json-mode flags out of argv (EXC-471). `-v`/`-vv` accumulate into
- * verbosity; `--grep`/`--task` accept either a following arg or the `=` form;
- * `--task` is repeatable. All flags are inert unless `--json` is also present.
- */
-export function parseJsonArgs(argv: string[]): JsonArgs {
-  const args: JsonArgs = { json: false, verbosity: 0, tasks: [] };
-  const rest = argv.slice(2);
-  for (let i = 0; i < rest.length; i++) {
-    const arg = rest[i];
-    if (arg === undefined) continue;
-    if (arg === "--json") args.json = true;
-    else if (/^-v+$/.test(arg)) args.verbosity += arg.length - 1;
-    else if (arg === "--grep") {
-      // An empty or missing value (e.g. `--grep` at the end) means no filter,
-      // not a match-everything `new RegExp("")`.
-      const value = rest[++i];
-      if (value) args.grep = value;
-    } else if (arg.startsWith("--grep=")) {
-      const value = arg.slice("--grep=".length);
-      if (value) args.grep = value;
-    } else if (arg === "--task") {
-      const name = rest[++i];
-      if (name) args.tasks.push(name);
-    } else if (arg.startsWith("--task=")) args.tasks.push(arg.slice("--task=".length));
-  }
-  return args;
-}
-
-/**
- * Parse the same flags from mise's `usage_*` env vars (EXC-471). When preflight
- * runs under its mise usage spec, mise consumes the flags and exposes them as
- * env vars rather than argv: `usage_json` ("true"), `usage_verbose` (a count),
- * `usage_grep` (the pattern), `usage_task` (space-joined names — mise task names
- * never contain spaces, so a whitespace split is exact).
- */
-export function parseJsonEnv(env: Record<string, string | undefined>): JsonArgs {
-  const args: JsonArgs = {
-    json: env.usage_json === "true",
-    verbosity: env.usage_verbose ? Number.parseInt(env.usage_verbose, 10) || 0 : 0,
-    tasks: env.usage_task ? env.usage_task.trim().split(/\s+/).filter(Boolean) : [],
-  };
-  if (env.usage_grep) args.grep = env.usage_grep;
-  return args;
-}
-
-/**
- * Resolve the --json-mode flags from whichever channel delivered them: mise's
- * `usage_*` env vars when running under the usage spec (`usage_json` is set only
- * then), or `process.argv` for a direct `bun scripts/preflight.ts …` / test run.
- */
-export function resolveJsonArgs(argv: string[], env: Record<string, string | undefined>): JsonArgs {
-  return env.usage_json === "true" ? parseJsonEnv(env) : parseJsonArgs(argv);
-}
-
 // Trailing-trimmed output split into lines; "" → [] so an empty capture is 0 lines.
 function splitLines(output: string): string[] {
   const trimmed = output.trimEnd();
@@ -405,31 +353,6 @@ export function buildErrorReport(message: string): PreflightErrorReport {
 // so display lines are stripped (buffered failure output stays raw).
 const ANSI_ESCAPES = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, "g");
 
-/**
- * Env for a nested `mise run <task>`: the parent env minus the `usage_*` flag
- * vars, with `extra` merged on top (extra wins; undefined parent values drop).
- *
- * mise injects `usage_json` / `usage_grep` / `usage_verbose` / `usage_task` for
- * THIS preflight's own flags and leaves them in the environment of any nested
- * `mise run` it spawns (verified). Those vars describe preflight, not the child,
- * and they are load-bearing: `resolveJsonArgs` treats `usage_json==="true"` as
- * "flags arrived via mise env" and then ignores argv. So a child chain
- * `mise run test` → `bun test` → preflight.test.ts's `preflight --grep [`
- * subprocess would inherit `usage_json=true`, ignore its `--grep [` argv, skip
- * the invalid-grep `exit(2)`, and recursively run the whole task graph — a fork
- * bomb. Stripping the vars at every nested boundary closes that at the source.
- */
-export function withoutMiseUsageVars(
-  parent: Record<string, string | undefined>,
-  extra?: Record<string, string>,
-): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(parent)) {
-    if (v !== undefined && !k.startsWith("usage_")) out[k] = v;
-  }
-  return extra ? { ...out, ...extra } : out;
-}
-
 /** A registry of detached child process groups, killable as whole subtrees. */
 export interface ProcessGroupController {
   /** Spawn `cmd` as its own process-group leader and track it. */
@@ -513,7 +436,10 @@ function makeSpawnMiseTask(controller: ProcessGroupController): SpawnTask {
       // `mise run build ui` — mise routes the trailing words to the task's
       // positional target (EXC-738); a single-word name is unchanged.
       const child = controller.spawn("mise", ["run", ...name.split(" ")], {
-        env: withoutMiseUsageVars(process.env, env),
+        // Node's spawn accepts `undefined` env values (it drops them), so the
+        // parent env passes through as-is with `extra` (e.g. CARET_SKIP_BUILD_UI)
+        // merged on top.
+        env: env ? { ...process.env, ...env } : process.env,
         stdio: ["ignore", "pipe", "pipe"],
       });
       let aborted = false;
@@ -595,18 +521,19 @@ function installSignalHandlers(controller: ProcessGroupController): void {
   }
 }
 
-// --json (EXC-471): suppress the human display and emit machine-readable
-// documents on stdout instead. parseJsonArgs matches whether mise forwards the
-// flags as `... --json` or `... -- --json`.
-async function runCli(argv: string[], env: Record<string, string | undefined>): Promise<void> {
-  const args = resolveJsonArgs(argv, env);
-
+/**
+ * Run the preflight gate (EXC-471). Invoked by the tasks CLI's `preflight`
+ * subcommand with commander-parsed `args`. Without `--json` it renders the live
+ * human display; with `--json` it suppresses that display and emits the
+ * machine-readable start/result (or error) documents on stdout instead.
+ */
+export async function runPreflightCli(args: JsonArgs): Promise<void> {
   // EXC-587: own a killable process group for every task, and tear it down on a
   // catchable signal, so an interrupted gate can't orphan its descendants.
   const controller = createProcessGroupController();
   installSignalHandlers(controller);
   const spawnTask = makeSpawnMiseTask(controller);
-  const concurrency = parseJobs(env.CARET_PREFLIGHT_JOBS);
+  const concurrency = parseJobs(process.env.CARET_PREFLIGHT_JOBS);
 
   if (!args.json) {
     if (args.verbosity > 0 || args.grep !== undefined || args.tasks.length > 0) {
@@ -650,8 +577,4 @@ async function runCli(argv: string[], env: Record<string, string | undefined>): 
   // release gate's .quiet() — would otherwise see output truncated at the pipe
   // buffer (verified: exit() after a 1MB write delivers only 64KB).
   process.exitCode = exitCode;
-}
-
-if (import.meta.main) {
-  await runCli(process.argv, process.env);
 }

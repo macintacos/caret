@@ -419,22 +419,24 @@ a subcommand's real flags with no `--` separator.
 
 The CLI hosts `dev`; the `build` group (bare umbrella plus the `ui`/`bin`/`bundle`
 targets, `mise run build bin`); the `test` group (bare/`unit` = bun, `e2e` = Playwright);
-the `smoke` group (bare = both, plus `bin`/`bundle`); `lint`, `format`, `setup`; and the
-nested `release` group (`compute|baseline|prepare|finalize`). Every task module is a
-sibling of the CLI in `scripts/tasks/` — one file per task group, named after it (e.g.
-`scripts/tasks/build.ts`, `scripts/tasks/smoke.ts`) — except the larger, multi-file `dev`
-task, which keeps its own `scripts/tasks/dev/` folder. Code shared across tasks lives in
-`scripts/tasks/lib/`: `exec.ts` (the `runForward` / `execAndExit` spawn helpers),
-`signals.ts` (the cleanup-on-exit/signal wiring the supervising tasks share), and
-`smoke-probe.ts` (the over-the-wire UI probe both smoke targets run). Every subcommand's
-parsing contract is unit-tested in `test/scripts/tasks-cli.test.ts`. The `release`
-subcommand group lives in `scripts/tasks/release.ts` and keeps its own JSON-on-stdout
-error discipline (Commander help/errors to stderr, a typed JSON result per action) so
-`/release-caret` can parse it, independent of the CLI's plain-stderr top-level handling.
-One task stays outside the CLI by design: `preflight` stays a TOML task in `mise.toml`
-because it needs its mise `usage` spec so `mise run preflight --json -v` can feed flags
-into `scripts/preflight.ts` (migrating it too is tracked by
-[EXC-737](https://linear.app/macintacos/issue/EXC-737)).
+the `smoke` group (bare = both, plus `bin`/`bundle`); `lint`, `format`, `setup`,
+`preflight`; and the nested `release` group (`compute|baseline|prepare|finalize`). Every
+task module is a sibling of the CLI in `scripts/tasks/` — one file per task group, named
+after it (e.g. `scripts/tasks/build.ts`, `scripts/tasks/smoke.ts`) — except the larger,
+multi-file `dev` task, which keeps its own `scripts/tasks/dev/` folder. Code shared across
+tasks lives in `scripts/tasks/lib/`: `exec.ts` (the `runForward` / `execAndExit` spawn
+helpers), `signals.ts` (the cleanup-on-exit/signal wiring the supervising tasks share),
+and `smoke-probe.ts` (the over-the-wire UI probe both smoke targets run). Every
+subcommand's parsing contract is unit-tested in `test/scripts/tasks-cli.test.ts`. The
+`release` subcommand group lives in `scripts/tasks/release.ts` and keeps its own
+JSON-on-stdout error discipline (Commander help/errors to stderr, a typed JSON result per
+action) so `/release-caret` can parse it, independent of the CLI's plain-stderr top-level
+handling. The `preflight` gate is a CLI subcommand too, but unlike the passthrough tasks
+its `--json` / `-v` / `--grep` / `--task` flags are real Commander options — the interface
+the task's mise `usage` spec once carried via `usage_*` env vars. `mise run preflight`
+forwards through `.mise/tasks/preflight` (`raw_args=true`) into `caret-tasks preflight`,
+whose action hands the parsed flags to the gate orchestrator in `scripts/preflight.ts`
+(the concurrent task DAG, the live listr2 display, and the `--json` report builders).
 
 Task ordering lives in the CLI, not a mise `depends` edge (EXC-738/739/740): the
 ui-dependent targets — `build bin`, `build bundle`, and `test e2e` — build the UI

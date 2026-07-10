@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Pre-push gate (check-only): lint, unit + e2e tests, and build, run concurrently"
+#MISE raw_args=true
+# raw_args hands every argument (including --json/-v/--grep/--task and a bare
+# --help) straight to the CLI, so `mise run preflight --help` shows the CLI's
+# real help instead of mise's task help. Thin forwarder: the gate's flags and its
+# concurrent orchestration live in the caret tasks CLI (scripts/tasks/cli.ts,
+# which calls scripts/preflight.ts); this task just execs its `preflight`
+# subcommand. `exec` replaces this shell with the CLI, so its exit code becomes
+# the task's. "$@" is safe on an empty arg list (a special parameter, not a plain
+# array — no set -u footgun).
+exec bun scripts/tasks/cli.ts preflight "$@"
