@@ -1,13 +1,14 @@
 // Drives the preflight orchestrator's task DAG through an injected fake
 // spawner — no real mise tasks run. Asserts the scheduling contract from
-// EXC-462: lint/test/build-ui start immediately, dependents wait on build-ui
-// and dedupe it via MISE_TASK_SKIP, failures don't hide other results, and
+// EXC-462: lint/test/`build ui` start immediately, dependents wait on `build ui`
+// and dedupe it via CARET_SKIP_BUILD_UI, failures don't hide other results, and
 // the summary surfaces failed output plus the `mise run format` hint. Also
 // covers the `--json` mode (EXC-471): arg parsing (parseJsonArgs) and the
 // report builders — the lean default (status + line counts), the -v/-vv
 // verbosity ladder, --grep line filtering, --task scoping, and the error doc.
 
 import { expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import {
   buildErrorReport,
@@ -24,7 +25,7 @@ import {
 } from "../../scripts/preflight.ts";
 import { waitFor } from "../support/poll.ts";
 
-const ALL_TASKS = ["build-bin", "build-ui", "lint", "test", "test-e2e"];
+const ALL_TASKS = ["build bin", "build ui", "lint", "test", "test e2e"];
 
 /** Fake spawner that resolves immediately from a per-task plan (default: pass). */
 function fakeSpawner(plan?: Record<string, SpawnOutcome>) {
@@ -59,44 +60,44 @@ function waitForCond(cond: () => boolean, ms = 1000): Promise<true> {
   return waitFor(() => (cond() ? true : undefined), ms);
 }
 
-test("all tasks pass: exit 0, every task reported passed, build-ui spawned once", async () => {
+test("all tasks pass: exit 0, every task reported passed, build ui spawned once", async () => {
   const { calls, spawnTask } = fakeSpawner();
   const r = await runPreflight({ spawnTask, renderer: "silent" });
 
   expect(r.exitCode).toBe(0);
   expect([...r.results.keys()].sort()).toEqual(ALL_TASKS);
   for (const result of r.results.values()) expect(result.status).toBe("passed");
-  expect(calls.filter((c) => c.name === "build-ui")).toHaveLength(1);
+  expect(calls.filter((c) => c.name === "build ui")).toHaveLength(1);
   for (const name of ALL_TASKS) expect(r.summary).toContain(name);
 });
 
-test("lint, test, build-ui start immediately; dependents wait for build-ui", async () => {
+test("lint, test, build ui start immediately; dependents wait for build ui", async () => {
   const s = gatedSpawner();
   const run = runPreflight({ spawnTask: s.spawnTask, renderer: "silent" });
 
   await waitForCond(() => s.calls.length === 3);
   await Bun.sleep(20); // would catch eagerly-spawned dependents
-  expect([...s.calls].sort()).toEqual(["build-ui", "lint", "test"]);
+  expect([...s.calls].sort()).toEqual(["build ui", "lint", "test"]);
 
-  s.release("build-ui");
+  s.release("build ui");
   await waitForCond(() => s.calls.length === 5);
-  expect(s.calls).toContain("test-e2e");
-  expect(s.calls).toContain("build-bin");
+  expect(s.calls).toContain("test e2e");
+  expect(s.calls).toContain("build bin");
 
-  for (const name of ["lint", "test", "test-e2e", "build-bin"]) s.release(name);
+  for (const name of ["lint", "test", "test e2e", "build bin"]) s.release(name);
   const r = await run;
   expect(r.exitCode).toBe(0);
 });
 
-test("dependents get MISE_TASK_SKIP=build-ui; immediate tasks do not", async () => {
+test("dependents get CARET_SKIP_BUILD_UI=1; immediate tasks do not", async () => {
   const { calls, spawnTask } = fakeSpawner();
   await runPreflight({ spawnTask, renderer: "silent" });
 
   const envByName = new Map(calls.map((c) => [c.name, c.env]));
-  expect(envByName.get("test-e2e")?.MISE_TASK_SKIP).toBe("build-ui");
-  expect(envByName.get("build-bin")?.MISE_TASK_SKIP).toBe("build-ui");
-  for (const name of ["lint", "test", "build-ui"]) {
-    expect(envByName.get(name)?.MISE_TASK_SKIP).toBeUndefined();
+  expect(envByName.get("test e2e")?.CARET_SKIP_BUILD_UI).toBe("1");
+  expect(envByName.get("build bin")?.CARET_SKIP_BUILD_UI).toBe("1");
+  for (const name of ["lint", "test", "build ui"]) {
+    expect(envByName.get(name)?.CARET_SKIP_BUILD_UI).toBeUndefined();
   }
 });
 
@@ -110,46 +111,40 @@ test("lint failure doesn't stop the others, exits 1, surfaces output and the for
   expect(calls.map((c) => c.name).sort()).toEqual(ALL_TASKS);
   expect(r.results.get("lint")?.status).toBe("failed");
   expect(r.results.get("test")?.status).toBe("passed");
-  expect(r.results.get("build-bin")?.status).toBe("passed");
+  expect(r.results.get("build bin")?.status).toBe("passed");
   expect(r.summary).toContain("biome: src/x.ts needs formatting");
   expect(r.summary).toContain("mise run format");
 });
 
-test("the mise task files declare exactly the DAG preflight hard-codes", async () => {
-  // Pins the MISE_TASK_SKIP contract AND guards against DAG growth: the
-  // orchestrator hard-codes build-ui as the dependents' only shared dependency
-  // (scripts/preflight.ts), rather than deriving the DAG from `mise tasks
-  // --json` (decision recorded in EXC-506's PR). These assertions are the
-  // lockstep edit that keeps that hard-coding honest — if a preflight task's
-  // `depends` ever changes, this fails so the DAG gets updated alongside it.
-  const dependsOf = async (name: string): Promise<string[]> => {
-    const script = await Bun.file(join(import.meta.dir, "../../.mise/tasks", name)).text();
-    const m = script.match(/^#MISE depends=(\[.*\])$/m);
-    return m?.[1] ? (JSON.parse(m[1]) as string[]) : [];
-  };
-  // The two dependents depend on exactly build-ui (the edge preflight skips).
-  expect(await dependsOf("test-e2e")).toEqual(["build-ui"]);
-  expect(await dependsOf("build-bin")).toEqual(["build-ui"]);
-  // The three immediate tasks declare no dependencies — any new edge here (a
-  // task preflight runs concurrently growing a dependency) must trip this.
-  for (const name of ["lint", "test", "build-ui"]) {
-    expect(await dependsOf(name)).toEqual([]);
+test("preflight's task groups map to real mise task files (consolidated, EXC-738)", async () => {
+  // The orchestrator hard-codes its task set (IMMEDIATE/DEPENDENT) and spawns
+  // each as `mise run <words…>`, whose FIRST word is the mise task file. The
+  // UI-first ordering + skip that a mise `depends` edge once carried now live in
+  // the tasks CLI (CARET_SKIP_BUILD_UI, asserted above and in tasks-cli.test.ts),
+  // so there are no `depends` edges left to lockstep-check. This instead guards
+  // the rename: `build ui`/`test e2e`/`build bin` must resolve to the `build` and
+  // `test` group files, and the old per-variant files must be gone.
+  const taskFile = (name: string): string => join(import.meta.dir, "../../.mise/tasks", name);
+  const firstWords = [...new Set(ALL_TASKS.map((t) => t.split(" ", 1)[0] ?? t))];
+  for (const group of firstWords) expect(existsSync(taskFile(group))).toBe(true);
+  for (const gone of ["build-ui", "build-bin", "build-bundle", "test-e2e"]) {
+    expect(existsSync(taskFile(gone))).toBe(false);
   }
 });
 
-test("build-ui failure skips its dependents and reports them as skipped", async () => {
+test("build ui failure skips its dependents and reports them as skipped", async () => {
   const { calls, spawnTask } = fakeSpawner({
-    "build-ui": { exitCode: 1, output: "vite exploded" },
+    "build ui": { exitCode: 1, output: "vite exploded" },
   });
   const r = await runPreflight({ spawnTask, renderer: "silent" });
 
   expect(r.exitCode).toBe(1);
   const names = calls.map((c) => c.name);
-  expect(names).not.toContain("test-e2e");
-  expect(names).not.toContain("build-bin");
-  expect(r.results.get("build-ui")?.status).toBe("failed");
-  expect(r.results.get("test-e2e")?.status).toBe("skipped");
-  expect(r.results.get("build-bin")?.status).toBe("skipped");
+  expect(names).not.toContain("test e2e");
+  expect(names).not.toContain("build bin");
+  expect(r.results.get("build ui")?.status).toBe("failed");
+  expect(r.results.get("test e2e")?.status).toBe("skipped");
+  expect(r.results.get("build bin")?.status).toBe("skipped");
   expect(r.summary).toContain("vite exploded");
 });
 
@@ -213,8 +208,8 @@ test("a failed task aborts in-flight siblings that honor the signal (recorded sk
   const spawnTask: SpawnTask = (name, _env, _onLine, signal) =>
     new Promise<SpawnOutcome>((resolve) => {
       if (name === "lint") return resolve({ exitCode: 1, output: "lint boom" });
-      if (name === "build-ui") return resolve({ exitCode: 0, output: "" });
-      // test, test-e2e, build-bin: stay in-flight until fail-fast aborts them.
+      if (name === "build ui") return resolve({ exitCode: 0, output: "" });
+      // test, test e2e, build bin: stay in-flight until fail-fast aborts them.
       const abort = () => resolve({ exitCode: 143, output: "", aborted: true });
       if (signal.aborted) abort();
       else signal.addEventListener("abort", abort, { once: true });
@@ -224,7 +219,7 @@ test("a failed task aborts in-flight siblings that honor the signal (recorded sk
   expect(r.exitCode).toBe(1);
   expect(r.results.get("lint")?.status).toBe("failed");
   expect(r.results.get("test")?.status).toBe("skipped");
-  expect(r.results.get("test-e2e")?.status).toBe("skipped");
+  expect(r.results.get("test e2e")?.status).toBe("skipped");
 });
 
 // --json arg parsing (EXC-471) ----------------------------------------------
@@ -317,9 +312,9 @@ test("withoutMiseUsageVars: drops every usage_* key, keeps the rest, applies ext
         usage_grep: "[",
         usage_task: "test",
       },
-      { MISE_TASK_SKIP: "build-ui" },
+      { CARET_SKIP_BUILD_UI: "1" },
     ),
-  ).toEqual({ PATH: "/bin", HOME: "/h", MISE_TASK_SKIP: "build-ui" });
+  ).toEqual({ PATH: "/bin", HOME: "/h", CARET_SKIP_BUILD_UI: "1" });
 });
 
 test("withoutMiseUsageVars: extra wins over a kept key; undefined values are dropped", () => {
@@ -334,7 +329,7 @@ test("buildStartReport echoes the parsed filters and lists planned tasks", () =>
   const start = buildStartReport({ json: true, verbosity: 2, grep: "err", tasks: ["test"] });
   expect(start.event).toBe("start");
   expect(start.schemaVersion).toBe(1);
-  expect(start.tasks).toEqual(["lint", "test", "build-ui", "test-e2e", "build-bin"]);
+  expect(start.tasks).toEqual(["lint", "test", "build ui", "test e2e", "build bin"]);
   expect(start.filters).toEqual({ verbosity: 2, grep: "err", tasks: ["test"] });
 });
 
@@ -354,9 +349,9 @@ test("buildResultReport level 0: passing tasks carry status only", async () => {
   expect(report.tasks.map((t) => t.name)).toEqual([
     "lint",
     "test",
-    "build-ui",
-    "test-e2e",
-    "build-bin",
+    "build ui",
+    "test e2e",
+    "build bin",
   ]);
   for (const t of report.tasks) {
     expect(t.status).toBe("passed");
