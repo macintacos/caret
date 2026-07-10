@@ -5,6 +5,7 @@ import { until } from "../../../test/support/poll.ts";
 import { logCapture } from "../../test-helpers.ts";
 import { render } from "../../test-mount.ts";
 import { reactiveProps } from "../../test-props.svelte.ts";
+import { type ComposerScratch, scratchKey } from "../lib/diffview/commenting.ts";
 import DiffPlanView from "./DiffPlanView.svelte";
 
 // Default props: no-op handlers and an empty annotation set, so the rendering
@@ -440,5 +441,50 @@ describe("DiffPlanView scratch hand-off to the host", () => {
     await until(() => actions != null);
     expect(typeof actions?.save).toBe("function");
     expect(typeof actions?.discard).toBe("function");
+  });
+});
+
+// On load, and whenever the rendered content changes, DiffPlanView reseeds the
+// controller from the review's persisted scratches, so a reload restores the
+// reviewer's "Resume" markers instead of starting empty (EXC-744).
+describe("DiffPlanView scratch rehydration", () => {
+  test("seeds the controller from the review's persisted scratches on mount", async () => {
+    let reported: ComposerScratch[] | undefined;
+    render(
+      DiffPlanView,
+      props({
+        review: reviewFixture({
+          composerScratches: [{ startLine: 3, endLine: 3, text: "resume me" }],
+        }),
+        onScratchesChange: (s: ComposerScratch[]) => (reported = s),
+      }),
+    );
+    await until(() => (reported?.length ?? 0) > 0);
+    expect(reported).toEqual([
+      { key: scratchKey(3, 3), startLine: 3, endLine: 3, text: "resume me" },
+    ]);
+  });
+
+  test("wipes the prior version's scratches when a new plan version arrives", async () => {
+    let reported: ComposerScratch[] | undefined;
+    const p = reactiveProps(
+      props({
+        review: reviewFixture({
+          composerScratches: [{ startLine: 3, endLine: 3, text: "v1 scratch" }],
+        }),
+        onScratchesChange: (s: ComposerScratch[]) => (reported = s),
+      }),
+    );
+    const { flush } = render(DiffPlanView, p);
+    await until(() => (reported?.length ?? 0) > 0);
+    // A revision (new version) is served with its own — empty — scratch set.
+    p.review = reviewFixture({
+      version: 2,
+      currentPlan: "# Title\n\nrevised\n",
+      composerScratches: [],
+    });
+    flush();
+    await until(() => reported?.length === 0);
+    expect(reported).toEqual([]);
   });
 });

@@ -210,24 +210,69 @@ describe("scratch drafts", () => {
     ]);
   });
 
-  test("clear() empties the scratch store and closes any open composer", () => {
-    const c = build();
-    c.open({ start: 2, end: 2 });
-    c.cancel("gone on new version");
-    c.open({ start: 4, end: 4 });
-    c.clear();
-    expect(c.scratches()).toHaveLength(0);
-    expect(c.pending()).toBeUndefined();
-  });
-
-  test("onChange fires when a scratch is retained, resumed, and cleared", () => {
+  test("onChange fires when a scratch is retained, resumed, and re-seeded", () => {
     let ticks = 0;
     const c = createSourceCommenting({ onCreate: () => {}, onChange: () => ticks++ });
     c.open({ start: 1, end: 1 }); // 1
     c.cancel("retain"); // 2 (close + store)
     c.resume(scratchKey(1, 1)); // 3 (reopen)
-    c.clear(); // 4 (empties + closes)
+    c.seed([]); // 4 (empties + closes)
     expect(ticks).toBe(4);
+  });
+});
+
+// On load — and whenever the rendered content changes (a new plan version, a
+// review switch) — the host reseeds the controller from the review's persisted
+// scratches, so a reload restores the reviewer's "Resume" markers instead of
+// starting empty. seed() replaces the whole store and closes any open composer.
+describe("seed (rehydrate persisted scratches)", () => {
+  test("seed populates the store from persisted scratches, keyed by range", () => {
+    const c = build();
+    c.seed([
+      { startLine: 2, endLine: 2, text: "one" },
+      { startLine: 5, endLine: 8, text: "two" },
+    ]);
+    expect(c.scratches()).toEqual([
+      { key: scratchKey(2, 2), startLine: 2, endLine: 2, text: "one" },
+      { key: scratchKey(5, 8), startLine: 5, endLine: 8, text: "two" },
+    ]);
+  });
+
+  test("a seeded scratch is resumable and restores its text", () => {
+    const c = build();
+    c.seed([{ startLine: 4, endLine: 6, text: "restore me" }]);
+    c.resume(scratchKey(4, 6));
+    expect(c.pending()).toEqual({ startLine: 4, endLine: 6 });
+    expect(c.pendingText()).toBe("restore me");
+  });
+
+  test("seed replaces existing scratches and closes an open composer", () => {
+    const c = build();
+    c.open({ start: 1, end: 1 });
+    c.cancel("stale");
+    c.open({ start: 9, end: 9 }); // composer left open
+    c.seed([{ startLine: 3, endLine: 3, text: "fresh" }]);
+    expect(c.scratches()).toEqual([
+      { key: scratchKey(3, 3), startLine: 3, endLine: 3, text: "fresh" },
+    ]);
+    expect(c.pending()).toBeUndefined();
+  });
+
+  test("seed([]) empties the store and closes any open composer", () => {
+    const c = build();
+    c.open({ start: 2, end: 2 });
+    c.cancel("gone on new version");
+    c.open({ start: 4, end: 4 });
+    c.seed([]);
+    expect(c.scratches()).toHaveLength(0);
+    expect(c.pending()).toBeUndefined();
+  });
+
+  test("seed fires onChange", () => {
+    let ticks = 0;
+    const c = createSourceCommenting({ onCreate: () => {}, onChange: () => ticks++ });
+    c.seed([{ startLine: 1, endLine: 1, text: "x" }]);
+    expect(ticks).toBe(1);
   });
 });
 
