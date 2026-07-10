@@ -44,6 +44,34 @@ export function appendRevision(plan: string, feedback: string, n: number): strin
   ].join("\n");
 }
 
+/** Default number of versions the primary dev review opens with — v1 plus two
+ * synthetic revisions, enough for the version-compare picker to offer a
+ * non-default pair. Overridable via `mise run dev --num-versions <n>`. */
+export const DEFAULT_NUM_VERSIONS = 3;
+
+/** Resolve the `--num-versions <n>` dev flag from argv: how many versions the
+ * primary dev review should open with. Absent → DEFAULT_NUM_VERSIONS; a value
+ * that isn't a positive integer throws, so a typo fails loudly at boot instead
+ * of silently seeding the wrong shape. */
+/** Validate a raw flag value as a positive integer (≥ 1), or throw with a
+ * message naming the flag. Shared by parseNumVersions (driver argv) and the
+ * tasks CLI's --num-versions commander coercion, so "positive integer" is
+ * defined once. */
+export function parsePositiveInt(raw: string | undefined, flag: string): number {
+  if (raw === undefined || !/^\d+$/.test(raw) || Number(raw) < 1) {
+    throw new Error(
+      `${flag} expects a positive integer (got ${raw === undefined ? "no value" : `"${raw}"`})`,
+    );
+  }
+  return Number(raw);
+}
+
+export function parseNumVersions(argv: string[]): number {
+  const i = argv.indexOf("--num-versions");
+  if (i === -1) return DEFAULT_NUM_VERSIONS;
+  return parsePositiveInt(argv[i + 1], "--num-versions");
+}
+
 /** The sequence of plans the dev bootstrap submits to grow the primary review to
  * several versions before the interactive loop, so `mise run dev` always shows a
  * multi-version review (the version-compare picker needs one). The first entry is

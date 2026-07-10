@@ -22,20 +22,16 @@ import type { ClientReview } from "../../src/types.ts";
 import {
   appendRevision,
   bootstrapPlans,
+  DEFAULT_NUM_VERSIONS,
   DEV_SESSION,
   type DriverState,
   extraPlan,
   hookStdin,
   nextPlan,
+  parseNumVersions,
 } from "./protocol.ts";
 
 const log = (msg: string) => process.stderr.write(`[caret dev driver] ${msg}\n`);
-
-/** How many synthetic revisions the bootstrap threads before the interactive
- * loop, so the primary dev review opens with several comparable versions (the
- * version-compare picker needs at least two; three makes a non-default pair
- * selectable). */
-const BOOTSTRAP_REVISIONS = 2;
 
 /** ReviewDeps for dev — the analog of prodReviewDeps (src/commands/review.ts) with the
  * daemon owned by the mise task: ensureDaemon just waits for health on the
@@ -170,8 +166,10 @@ export async function bootstrapReview(
   base: string,
   v1: string,
   deps: ReviewDeps,
+  numVersions: number = DEFAULT_NUM_VERSIONS,
 ): Promise<DriverState> {
-  const plans = bootstrapPlans(v1, BOOTSTRAP_REVISIONS);
+  // numVersions counts v1 itself, so the bootstrap threads one fewer revision.
+  const plans = bootstrapPlans(v1, numVersions - 1);
   for (let i = 0; i < plans.length; i++) {
     // runReview blocks on the decision long-poll; the deny is what unblocks it.
     const reviewing = runReview(hookStdin(plans[i] as string), deps);
@@ -181,7 +179,7 @@ export async function bootstrapReview(
   log(`bootstrapped the dev review to ${plans.length} versions`);
   // The loop resumes by appending its first interactive revision onto the last
   // bootstrap plan; revision counts continue from the bootstrap total.
-  const nextRevision = BOOTSTRAP_REVISIONS + 1;
+  const nextRevision = plans.length;
   const last = plans[plans.length - 1] as string;
   return {
     plan: appendRevision(last, "Continuing from the bootstrapped dev review.", nextRevision),
@@ -194,6 +192,8 @@ export async function bootstrapReview(
  * (approve), or resubmit unchanged (the hook's own fail-safe denies). */
 export async function run(): Promise<void> {
   assertDevEnv();
+  // Resolve --num-versions early so a bad value fails loudly before any boot work.
+  const numVersions = parseNumVersions(Bun.argv);
   const base = `http://127.0.0.1:${process.env.CARET_PORT}`;
   const v1 = await Bun.file(`${import.meta.dir}/fake-plan.md`).text();
   const deps = devReviewDeps(base);
@@ -225,7 +225,7 @@ export async function run(): Promise<void> {
   // Grow the primary review to several versions up front so the version-compare
   // picker has something to compare the moment the UI opens; the loop resumes
   // from the bootstrapped (rejected) review, appending its next revision.
-  let state: DriverState = await bootstrapReview(base, v1, deps);
+  let state: DriverState = await bootstrapReview(base, v1, deps, numVersions);
   for (;;) {
     // Never throws: every abnormal path inside runReview becomes a deny.
     const out = await runReview(hookStdin(state.plan), deps);
