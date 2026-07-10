@@ -20,14 +20,18 @@ import { recordingLog } from "../support/recording-log.ts";
 import { expectNeverLogsBody } from "../support/redaction.ts";
 
 // Many tests here spawn a real `bun src/cli.ts daemon` subprocess (transpile +
-// boot the whole daemon module graph) and then run sequential `until(..., 5000)`
-// waits for the lock file. Bun's default 5000ms PER-TEST timeout is smaller than
-// that cumulative budget, so under `mise preflight`'s concurrent load (the unit
-// suite running alongside e2e + build-bin oversubscribes the box) a slow spawn
-// tips a passing test over its deadline (EXC-647). Give every test in this file
-// generous headroom; the `until` budgets still fail a genuinely-stuck condition
-// in ~5s, so this only widens the ceiling for slow-but-succeeding spawns.
-setDefaultTimeout(30_000);
+// boot the whole daemon module graph), then poll the lock file. Standalone that
+// boot is ~tens of ms, but under `mise preflight`'s concurrent load — the unit
+// suite runs alongside build-bin's `bun build --compile`, oversubscribing the box
+// — a cold boot can take several seconds. EXC-647 first widened the per-test
+// timeout for this, but the inner lock polls stayed at 5s and still flaked: a boot
+// that overran 5s tripped `existsSync(lockPath)` and failed an otherwise-healthy
+// daemon. LOCK_WAIT_MS is the generous ceiling for a slow-but-succeeding
+// boot/shutdown (a genuinely-stuck daemon still fails within it, and standalone
+// the poll resolves in ms regardless); setDefaultTimeout backstops a truly hung
+// subprocess, sized for the two sequential lock waits in assertLockRemovedOnSignal.
+const LOCK_WAIT_MS = 20_000;
+setDefaultTimeout(60_000);
 
 // In-process health/discovery probe servers (a bare createServer + fixed-path
 // store, distinct from bootDaemon's full boot+client). Stopped after each test.
@@ -143,9 +147,9 @@ async function assertLockRemovedOnSignal(signal: "SIGTERM" | "SIGINT") {
     stdio: ["ignore", "ignore", "ignore"],
   });
   try {
-    expect(await until(() => existsSync(lockPath), 5000)).toBe(true);
+    expect(await until(() => existsSync(lockPath), LOCK_WAIT_MS)).toBe(true);
     proc.kill(signal);
-    expect(await until(() => !existsSync(lockPath), 5000)).toBe(true);
+    expect(await until(() => !existsSync(lockPath), LOCK_WAIT_MS)).toBe(true);
     await proc.exited;
   } finally {
     proc.kill("SIGKILL");
@@ -174,7 +178,7 @@ test("an --ephemeral daemon binds an OS port and records identity in the lock", 
     stdio: ["ignore", "ignore", "ignore"],
   });
   try {
-    expect(await until(() => existsSync(lockPath), 5000)).toBe(true);
+    expect(await until(() => existsSync(lockPath), LOCK_WAIT_MS)).toBe(true);
     const lock = JSON.parse(await Bun.file(lockPath).text()) as {
       port: number;
       stateDir?: string;
@@ -391,7 +395,7 @@ test("the daemon logs env warns, ui fallback, and the sigterm shutdown", async (
     stdio: ["ignore", "ignore", "pipe"],
   });
   try {
-    expect(await until(() => existsSync(lockPath), 5000)).toBe(true);
+    expect(await until(() => existsSync(lockPath), LOCK_WAIT_MS)).toBe(true);
     proc.kill("SIGTERM");
     await proc.exited;
     const recs = ndjsonRecords(await new Response(proc.stderr).text());
@@ -498,7 +502,7 @@ test("the daemon logs the parsed settings at startup", async () => {
   try {
     // The boot settings line is emitted before the server binds (lock write),
     // so the lock appearing means the line is already flushed (sync writes).
-    expect(await until(() => existsSync(lockPath), 5000)).toBe(true);
+    expect(await until(() => existsSync(lockPath), LOCK_WAIT_MS)).toBe(true);
     proc.kill("SIGTERM");
     await proc.exited;
     const stderr = await new Response(proc.stderr).text();
