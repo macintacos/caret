@@ -5,6 +5,7 @@ import { flush } from "./log.ts";
 import {
   bellPresentation,
   createPlanNotifier,
+  defaultClaim,
   fireTestNotification,
   type NotificationHandle,
   type PlanNotifierOptions,
@@ -183,6 +184,97 @@ describe("createPlanNotifier", () => {
     // (acceptable; real review ids are fresh UUIDs).
     notifier.observe([review("a")]);
     expect(fired).toHaveLength(1);
+  });
+});
+
+// EXC-733: two open caret tabs each run their own notifier with a private
+// seen-set. Nothing coordinated them, so a single new review fired one toast
+// per tab. The fix adds a cross-tab `claim` seam; these drive two instances
+// through a shared claim primitive (the Web Locks stand-in) and pin that
+// exactly one wins. Every test above uses a single instance — which is why
+// this class of bug slipped through.
+describe("createPlanNotifier cross-tab dedup (EXC-733)", () => {
+  // A shared, atomic claim across instances: the first caller to see an id wins
+  // (adds it, resolves true); later callers lose (resolve false). Async, like
+  // the Web Locks default it stands in for.
+  function sharedClaim() {
+    const taken = new Set<string>();
+    return (id: string): Promise<boolean> => {
+      if (taken.has(id)) return Promise.resolve(false);
+      taken.add(id);
+      return Promise.resolve(true);
+    };
+  }
+
+  // Let the async claim's resolution (and the fire it gates) run before asserting.
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
+  test("two concurrent notifiers fire exactly one notification for one review", async () => {
+    const claim = sharedClaim();
+    const a = makeNotifier({ claim });
+    const b = makeNotifier({ claim });
+
+    // Both tabs seed silently, then both observe the same genuinely-new id.
+    a.notifier.observe([]);
+    b.notifier.observe([]);
+    a.notifier.observe([review("x")]);
+    b.notifier.observe([review("x")]);
+    await settle();
+
+    expect(a.fired.length + b.fired.length).toBe(1);
+  });
+});
+
+// defaultClaim is the production cross-tab seam (Web Locks). happy-dom reports
+// navigator.locks === null, so the module falls back to always-claim; these
+// fake a LockManager to pin the mapping the real primitive provides.
+describe("defaultClaim (Web Locks seam)", () => {
+  function withFakeLocks(
+    outcome: "granted" | "held",
+    fn: () => void | Promise<void>,
+  ): Promise<void> {
+    const nav = globalThis.navigator as unknown as Record<string, unknown>;
+    const saved = Object.getOwnPropertyDescriptor(nav, "locks");
+    Object.defineProperty(nav, "locks", {
+      configurable: true,
+      value: {
+        // ifAvailable: the callback gets the lock when free, null when a peer
+        // holds it. We resolve cb's result so defaultClaim's promise settles.
+        request(_name: string, _opts: unknown, cb: (lock: object | null) => unknown) {
+          return Promise.resolve(cb(outcome === "granted" ? {} : null));
+        },
+      },
+    });
+    return Promise.resolve(fn()).finally(() => {
+      if (saved) Object.defineProperty(nav, "locks", saved);
+      else delete nav.locks;
+    });
+  }
+
+  test("no Web Locks (navigator.locks null): claims synchronously", () => {
+    expect(defaultClaim("x")).toBe(true);
+  });
+
+  test("winning the per-id lock resolves true", async () => {
+    // Collapse the background hold so no real 5s timer lingers past the test.
+    const realSetTimeout = globalThis.setTimeout;
+    globalThis.setTimeout = ((cb: () => void) => {
+      cb();
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof globalThis.setTimeout;
+    try {
+      await withFakeLocks("granted", async () => {
+        expect(await defaultClaim("abc")).toBe(true);
+      });
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+    }
+  });
+
+  test("a peer already holding the lock (null) resolves false", async () => {
+    await withFakeLocks("held", async () => {
+      expect(await defaultClaim("abc")).toBe(false);
+    });
   });
 });
 

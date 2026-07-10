@@ -48,6 +48,12 @@ export interface PlanNotifierOptions {
   permission?: () => NotificationPermission;
   /** Bring the window forward on click. Defaults to window.focus(). */
   focus?: () => void;
+  /** Dedupe a notification across same-origin tabs (EXC-733): return/resolve
+   * true if THIS context should fire for the id, false if a peer tab already
+   * claimed it. Defaults to a Web Locks claim held just past the poll interval;
+   * runtimes without navigator.locks (tests, non-browser) claim synchronously
+   * and always win, preserving single-instance behavior. */
+  claim?: (id: string) => boolean | Promise<boolean>;
 }
 
 export interface PlanNotifier {
@@ -81,12 +87,74 @@ function defaultPermission(): NotificationPermission {
   return typeof Notification === "undefined" ? "default" : Notification.permission;
 }
 
+// Every open tab observes a newly-pending review within one 2s poll interval of
+// each other, so the winning tab holds the per-id lock a few seconds past that
+// window — long enough that a peer polling a beat later finds the id already
+// claimed, yet well short of any request-changes → revision cycle (so a genuine
+// re-pend still notifies).
+const NOTIFY_CLAIM_HOLD_MS = 5000;
+
+// Cross-tab claim via the Web Locks API: among same-origin tabs, exactly one
+// acquires the per-id lock and fires; peers get a null lock and stay silent.
+// The winner resolves true immediately (prompt toast) and holds the lock in the
+// background for NOTIFY_CLAIM_HOLD_MS. Runtimes without navigator.locks claim
+// synchronously and always win — preserving the single-instance behavior every
+// unit test relies on. A rejected request degrades toward firing: a rare
+// duplicate beats a lost notification.
+export function defaultClaim(id: string): boolean | Promise<boolean> {
+  const locks = globalThis.navigator?.locks;
+  if (!locks) return true;
+  return new Promise<boolean>((resolve) => {
+    locks
+      .request(`caret-notify-${id}`, { ifAvailable: true }, (lock) => {
+        if (lock === null) {
+          resolve(false);
+          return undefined;
+        }
+        resolve(true);
+        return new Promise<void>((release) => setTimeout(release, NOTIFY_CLAIM_HOLD_MS));
+      })
+      .catch(() => resolve(true));
+  });
+}
+
 export function createPlanNotifier(opts: PlanNotifierOptions): PlanNotifier {
   const notify = opts.notify ?? defaultNotify;
   const isAway =
     opts.isAway ?? (() => document.visibilityState !== "visible" || !document.hasFocus());
   const permission = opts.permission ?? defaultPermission;
   const focus = opts.focus ?? (() => window.focus());
+  const claim = opts.claim ?? defaultClaim;
+
+  // Fire the desktop toast for one genuinely-new review and wire its display /
+  // click feedback. The body renders on the user's own desktop — never log it.
+  const fire = (r: PlanReviewLike) => {
+    const handle = notify(NOTIFICATION_TITLE, `${r.title} — ${r.cwd}`);
+    if (!handle) {
+      uiLog.warn("ui", `plan notification unavailable: ${shortId(r.id)}`, { reviewId: r.id });
+      return;
+    }
+    uiLog.info("ui", `plan notification fired: ${shortId(r.id)}`, { reviewId: r.id });
+    // Display feedback: the OS suppressing a granted notification is silent at
+    // the constructor — only these events tell the truth.
+    handle.onshow = () =>
+      uiLog.debug("ui", `plan notification shown: ${shortId(r.id)}`, { reviewId: r.id });
+    handle.onerror = () =>
+      uiLog.warn("ui", `plan notification failed: ${shortId(r.id)}`, { reviewId: r.id });
+    handle.onclick = () => {
+      uiLog.debug("ui", `plan notification clicked: ${shortId(r.id)}`, { reviewId: r.id });
+      focus();
+      opts.onSelect(r.id);
+      handle.close();
+    };
+  };
+
+  // A peer tab already claimed this id — stay silent, but log so every new id
+  // still resolves to exactly one record and the cross-tab dedup stays visible.
+  const skipDuplicate = (r: PlanReviewLike) =>
+    uiLog.debug("ui", `plan notification skipped (duplicate): ${shortId(r.id)}`, {
+      reviewId: r.id,
+    });
 
   // null until the first observe seeds it. Pruning to each snapshot bounds the
   // set to the pending count, and a pruned id reappearing counts as new again.
@@ -124,25 +192,13 @@ export function createPlanNotifier(opts: PlanNotifierOptions): PlanNotifier {
         return;
       }
       for (const r of fresh) {
-        // The body renders on the user's own desktop — never log it.
-        const handle = notify(NOTIFICATION_TITLE, `${r.title} — ${r.cwd}`);
-        if (!handle) {
-          uiLog.warn("ui", `plan notification unavailable: ${shortId(r.id)}`, { reviewId: r.id });
-          continue;
-        }
-        uiLog.info("ui", `plan notification fired: ${shortId(r.id)}`, { reviewId: r.id });
-        // Display feedback: the OS suppressing a granted notification is
-        // silent at the constructor — only these events tell the truth.
-        handle.onshow = () =>
-          uiLog.debug("ui", `plan notification shown: ${shortId(r.id)}`, { reviewId: r.id });
-        handle.onerror = () =>
-          uiLog.warn("ui", `plan notification failed: ${shortId(r.id)}`, { reviewId: r.id });
-        handle.onclick = () => {
-          uiLog.debug("ui", `plan notification clicked: ${shortId(r.id)}`, { reviewId: r.id });
-          focus();
-          opts.onSelect(r.id);
-          handle.close();
-        };
+        // Cross-tab claim: among same-origin tabs, exactly one fires per id.
+        // The default is async (Web Locks); the sync branch keeps every
+        // no-coordination context (tests, non-browser) firing as before.
+        const won = claim(r.id);
+        if (won === true) fire(r);
+        else if (won === false) skipDuplicate(r);
+        else void won.then((w) => (w ? fire(r) : skipDuplicate(r)));
       }
     },
   };
