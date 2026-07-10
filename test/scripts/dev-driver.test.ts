@@ -19,6 +19,7 @@ import {
   hookStdin,
   nextPlan,
   parseNumVersions,
+  parsePositiveInt,
 } from "../../scripts/dev/protocol.ts";
 import { bootDaemon, type TestDaemon } from "../support/daemon.ts";
 import { setupTempStateDir } from "../support/env.ts";
@@ -163,6 +164,16 @@ test("bootstrapPlans with zero revisions is just the v1 plan", () => {
 test("bootstrapPlans never introduces untagged code blocks", () => {
   for (const plan of bootstrapPlans(PLAN_V1, 2)) {
     expect(hasUntaggedCodeBlock(plan)).toBe(false);
+  }
+});
+
+// ---- parsePositiveInt (shared by the driver flag and the CLI option) ----
+
+test("parsePositiveInt accepts positive integers and names the flag on error", () => {
+  expect(parsePositiveInt("5", "--num-versions")).toBe(5);
+  expect(parsePositiveInt("1", "--x")).toBe(1);
+  for (const bad of ["0", "-2", "abc", "2.5", "", undefined]) {
+    expect(() => parsePositiveInt(bad, "--x")).toThrow("--x expects a positive integer");
   }
 });
 

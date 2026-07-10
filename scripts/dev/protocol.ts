@@ -53,16 +53,23 @@ export const DEFAULT_NUM_VERSIONS = 3;
  * primary dev review should open with. Absent → DEFAULT_NUM_VERSIONS; a value
  * that isn't a positive integer throws, so a typo fails loudly at boot instead
  * of silently seeding the wrong shape. */
-export function parseNumVersions(argv: string[]): number {
-  const i = argv.indexOf("--num-versions");
-  if (i === -1) return DEFAULT_NUM_VERSIONS;
-  const raw = argv[i + 1];
+/** Validate a raw flag value as a positive integer (≥ 1), or throw with a
+ * message naming the flag. Shared by parseNumVersions (driver argv) and the
+ * tasks CLI's --num-versions commander coercion, so "positive integer" is
+ * defined once. */
+export function parsePositiveInt(raw: string | undefined, flag: string): number {
   if (raw === undefined || !/^\d+$/.test(raw) || Number(raw) < 1) {
     throw new Error(
-      `--num-versions expects a positive integer (got ${raw === undefined ? "no value" : `"${raw}"`})`,
+      `${flag} expects a positive integer (got ${raw === undefined ? "no value" : `"${raw}"`})`,
     );
   }
   return Number(raw);
+}
+
+export function parseNumVersions(argv: string[]): number {
+  const i = argv.indexOf("--num-versions");
+  if (i === -1) return DEFAULT_NUM_VERSIONS;
+  return parsePositiveInt(argv[i + 1], "--num-versions");
 }
 
 /** The sequence of plans the dev bootstrap submits to grow the primary review to

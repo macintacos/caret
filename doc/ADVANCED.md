@@ -404,6 +404,41 @@ claude --plugin-dir ./    # load caret's hooks for this session only
 /reload-plugins           # if you rebuild while Claude is running
 ```
 
+### The tasks CLI
+
+The `.mise/tasks/*` file tasks are thin forwarders to a single
+[Commander](https://github.com/tj/commander.js) CLI at `scripts/tasks/cli.ts` — the same
+scaffolding (`src/program.ts`) as the product CLI (`src/cli.ts`) and the release CLI
+(`scripts/release/cli.ts`). Each task file is one line: `.mise/tasks/dev` is just
+`exec bun scripts/tasks/cli.ts dev "$@"`, so the CLI owns every flag's parsing,
+validation, defaults, and `--help`, and the task stays trivial. Because mise reserves a
+bare `--help` for its own task help, use `mise run dev -- --help` to see a subcommand's
+flags.
+
+`mise run dev` takes `--num-versions <n>` (how many versions the primary dev review opens
+with; default 3, a positive integer) and `--notify` (arm the extra-review seeder). Its
+orchestration — resolve the port mode and state dir (`scripts/dev/dev-env.ts`), spawn the
+daemon, pino-pretty, driver, and Vite, discover the daemon's bound port from its lock, and
+reap every child on exit — lives in `scripts/dev/run.ts`, imported by the CLI and
+unit-tested (`test/scripts/tasks-cli.test.ts`). Note `Bun.spawn` snapshots `process.env`
+at startup and ignores later mutations, so the dev env overrides (`XDG_STATE_HOME`,
+`CARET_IDLE_MS`, `CARET_PORT`) are passed explicitly to each child rather than set on
+`process.env`.
+
+This replaces per-task bash scripts carrying `#USAGE` flag specs. Those worked but were
+fragile: mise runs file tasks under macOS `/bin/bash` 3.2, where expanding an empty
+`"${arr[@]}"` under `set -u` is a fatal "unbound variable" — a flagless `mise run dev`
+once aborted the task mid-boot and left Vite proxying to a killed daemon. A typed,
+unit-tested CLI removes that whole class of footgun.
+
+To add a task: register a subcommand on the tasks CLI, put its logic in a
+`scripts/<area>/*.ts` module, and add a one-line forwarder `.mise/tasks/<name>` =
+`exec bun scripts/tasks/cli.ts <name> "$@"`. The task file stays **bash**, not bun: mise
+derives the task name from the extensionless filename, and an extensionless TypeScript
+file can be neither Biome-linted nor `tsc`-typechecked and breaks the shell linters
+(`hk.pkl` globs `.mise/tasks/*` as shell). The trivial `exec` forwarder sidesteps all of
+that while keeping the real logic in typed, tested TS.
+
 ### Icons
 
 caret's icons are [Lucide](https://lucide.dev) SVGs vendored verbatim at a pinned release
