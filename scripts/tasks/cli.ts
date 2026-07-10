@@ -9,8 +9,8 @@
 // error discipline so /release-caret can parse it, independent of this CLI's
 // plain-stderr top-level catch. The `preflight` gate is a subcommand too, but
 // unlike the passthrough tasks its --json/-v/--grep/--task flags are real
-// commander options (the interface the mise usage spec once carried); the gate
-// orchestration + --json reporting live in scripts/preflight.ts (EXC-737).
+// commander options, parsed here and handed to the gate orchestrator +
+// --json reporting in scripts/preflight.ts (EXC-737).
 //
 // Composition point only, like src/cli.ts: it assembles the commander tree and
 // threads each subcommand's parsed options/args into its run function. Every
@@ -218,10 +218,9 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
     });
 
   // `preflight`: the pre-push gate. Its --json output flags are real commander
-  // options (not passthrough), reproducing the interface the mise usage spec
-  // once fed into scripts/preflight.ts via usage_* env vars. `-v` counts up
-  // (`-vv` → 2) and `--task` is repeatable; the action funnels the parsed flags
-  // into a JsonArgs and hands them to runPreflightCli.
+  // options (not passthrough): `-v` counts up (`-vv` → 2) and `--task` is
+  // repeatable. The action funnels the parsed flags into a JsonArgs and hands
+  // them to runPreflightCli (the gate orchestrator in scripts/preflight.ts).
   program
     .command("preflight")
     .description("Pre-push gate (check-only): lint, unit + e2e tests, and build, run concurrently")
@@ -247,7 +246,9 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
       // the reducer plus the `0` default make it always a number at runtime.
       const verbosity = typeof opts.verbose === "number" ? opts.verbose : 0;
       const args: JsonArgs = { json: opts.json ?? false, verbosity, tasks: opts.task };
-      if (opts.grep !== undefined) args.grep = opts.grep;
+      // A truthy check (not `!== undefined`): an empty `--grep=` means no filter,
+      // not a match-everything `new RegExp("")`.
+      if (opts.grep) args.grep = opts.grep;
       await actions.preflight(args);
     });
 

@@ -335,6 +335,27 @@ describe("tasks CLI: preflight command", () => {
       ]),
     ).toEqual({ json: true, verbosity: 2, grep: "err.*", tasks: ["lint", "test"] });
   });
+
+  test("also accepts the separate -v -v and the =value forms", async () => {
+    expect(
+      await parsePreflightArgs([
+        "--json",
+        "-v",
+        "-v",
+        "--grep=err.*",
+        "--task=lint",
+        "--task=test",
+      ]),
+    ).toEqual({ json: true, verbosity: 2, grep: "err.*", tasks: ["lint", "test"] });
+  });
+
+  test("an empty --grep= is treated as no filter, not a match-everything pattern", async () => {
+    expect(await parsePreflightArgs(["--json", "--grep="])).toEqual({
+      json: true,
+      verbosity: 0,
+      tasks: [],
+    });
+  });
 });
 
 // --- orchestration ordering + the CARET_SKIP_BUILD_UI skip (EXC-738/739/740) ---
