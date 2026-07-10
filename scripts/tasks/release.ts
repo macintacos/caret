@@ -1,21 +1,27 @@
-#!/usr/bin/env bun
-// CLI entry for the release pipeline. Dispatches to the steps in steps.ts,
-// printing exactly one JSON result on stdout (so /release-caret parses rather
-// than scrapes) and all diagnostics on stderr. Exit 0 on success, 1 on any guard
-// rejection or unexpected error. Commander parses the args (EXC-473) via the
-// shared scaffolding in src/program.ts; the divergence is configureOutput, which
-// routes Commander's help/usage/error output to stderr to keep stdout a lone JSON
-// object, and the onError that emits a typed JSON error rather than denying.
+// The release pipeline as a subcommand group of the caret tasks CLI. Mounted by
+// scripts/tasks/cli.ts as `caret-tasks release compute|baseline|prepare|finalize`;
+// the `.mise/tasks/release` forwarder execs `scripts/tasks/cli.ts release "$@"`.
+//
+// Unlike the sibling tasks, the release group prints exactly one JSON object on
+// stdout — a step result on success or a ReleaseError on a guard rejection — so
+// /release-caret parses rather than scrapes. Two pieces enforce that: a
+// configureOutput that routes Commander's help/usage/parse-error text to stderr
+// (keeping stdout a lone JSON object), and per-action error handling (emitStep)
+// that turns any thrown error into a typed JSON error on stdout. This discipline
+// is deliberately scoped to the release group and does not lean on the tasks
+// CLI's top-level catch, which prints plain stderr and would break the JSON
+// contract. The scripts/release/* step modules own the pipeline; this file only
+// wires the command tree and injects the real collaborators.
 
 import type { Command } from "@commander-js/extra-typings";
 import { $ } from "bun";
-import { createProgram, runProgram } from "../../src/program.ts";
-import { errorResult, type ReleaseError } from "./contract.ts";
-import { createGit } from "./git.ts";
-import { createGitHub } from "./github.ts";
-import { createNpm } from "./npm.ts";
-import { baseline, compute, type Deps, finalize, GuardError, prepare } from "./steps.ts";
-import { isBumpLevel } from "./version.ts";
+import { createProgram } from "../../src/program.ts";
+import { errorResult, type ReleaseError } from "../release/contract.ts";
+import { createGit } from "../release/git.ts";
+import { createGitHub } from "../release/github.ts";
+import { createNpm } from "../release/npm.ts";
+import { baseline, compute, type Deps, finalize, GuardError, prepare } from "../release/steps.ts";
+import { isBumpLevel } from "../release/version.ts";
 
 function realDeps(): Deps {
   return {
@@ -52,6 +58,21 @@ function fail(error: ReleaseError): never {
   process.exit(1);
 }
 
+// Run one release step: emit its JSON result on stdout, or convert any thrown
+// error to a typed JSON ReleaseError on stdout — never the tasks CLI's
+// plain-stderr top-level catch — so /release-caret always gets a parseable
+// stdout. A GuardError is a clean, expected rejection; anything else logs its
+// stack to stderr and emits an INTERNAL error. Both exit 1 via fail().
+async function emitStep(run: () => Promise<unknown>): Promise<void> {
+  try {
+    emit(await run());
+  } catch (e) {
+    if (e instanceof GuardError) fail(errorResult(e.code, e.message));
+    process.stderr.write(`${e instanceof Error ? (e.stack ?? e.message) : String(e)}\n`);
+    fail(errorResult("INTERNAL", e instanceof Error ? e.message : String(e)));
+  }
+}
+
 // Mutating commands need an explicit --yes (the skill passes it after its single
 // version-confirmation gate) or --dry-run to preview.
 function requireGo(command: string, opts: { dryRun?: boolean; yes?: boolean }): void {
@@ -72,11 +93,13 @@ function requireBump(bump: string): "patch" | "minor" | "major" {
   return bump;
 }
 
-function buildProgram(): Command {
-  const deps = realDeps();
-  // Route every Commander-originated write (help, usage, parse errors, and the
-  // post-error help from showHelpAfterError) to stderr; stdout is reserved for
-  // emit()'s single JSON object so /release-caret can parse it (EXC-473).
+/**
+ * Build the release subcommand group. `deps` is injectable to mirror the tasks
+ * CLI's action seam; production wires realDeps(). The group carries its own
+ * configureOutput (help/usage/errors to stderr) so stdout stays a lone JSON
+ * object for /release-caret, independent of how the tasks CLI reports errors.
+ */
+export function buildReleaseCommand(deps: Deps = realDeps()): Command {
   const program = createProgram(
     "release",
     "caret release pipeline: baseline | compute | prepare | finalize",
@@ -89,7 +112,10 @@ function buildProgram(): Command {
     .command("compute")
     .description("compute the next version (read-only)")
     .argument("<bump>", "patch | minor | major")
-    .action(async (bump) => emit(await compute(deps, { bump: requireBump(bump) })));
+    .action(async (bump) => {
+      const level = requireBump(bump);
+      await emitStep(() => compute(deps, { bump: level }));
+    });
 
   program
     .command("baseline")
@@ -98,7 +124,7 @@ function buildProgram(): Command {
     .option("--yes", "confirm the mutation")
     .action(async (opts) => {
       requireGo("baseline", opts);
-      emit(await baseline(deps, { dryRun: opts.dryRun ?? false }));
+      await emitStep(() => baseline(deps, { dryRun: opts.dryRun ?? false }));
     });
 
   program
@@ -110,7 +136,7 @@ function buildProgram(): Command {
     .action(async (bump, opts) => {
       const level = requireBump(bump);
       requireGo("prepare", opts);
-      emit(await prepare(deps, { bump: level, dryRun: opts.dryRun ?? false }));
+      await emitStep(() => prepare(deps, { bump: level, dryRun: opts.dryRun ?? false }));
     });
 
   program
@@ -120,19 +146,8 @@ function buildProgram(): Command {
     .option("--yes", "confirm the mutation")
     .action(async (opts) => {
       requireGo("finalize", opts);
-      emit(await finalize(deps, { dryRun: opts.dryRun ?? false }));
+      await emitStep(() => finalize(deps, { dryRun: opts.dryRun ?? false }));
     });
 
   return program;
-}
-
-if (import.meta.main) {
-  // This onError mirrors the former main()'s try/catch: a GuardError becomes its
-  // typed ReleaseError on stdout; any other error logs its stack to stderr and
-  // emits an INTERNAL ReleaseError. Both exit 1 via fail().
-  runProgram(buildProgram(), (e) => {
-    if (e instanceof GuardError) fail(errorResult(e.code, e.message));
-    process.stderr.write(`${e instanceof Error ? (e.stack ?? e.message) : String(e)}\n`);
-    fail(errorResult("INTERNAL", e instanceof Error ? e.message : String(e)));
-  });
 }
