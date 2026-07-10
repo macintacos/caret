@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { EXCERPT_RADIUS } from "../../src/plan-files.ts";
 import type { FileExcerpt } from "../../src/types.ts";
 import { bootDaemon, type TestDaemon } from "../support/daemon.ts";
 
@@ -83,9 +84,10 @@ test("file returns a line-centered excerpt for a real file", async () => {
   const ex = (await res.json()) as FileExcerpt;
   expect(ex.path).toBe("a.ts");
   expect(ex.language).toBe("typescript");
-  expect(ex.startLine).toBe(38);
-  expect(ex.endLine).toBe(62);
-  expect(ex.lines[0]).toBe("line 38");
+  // A window of ±EXCERPT_RADIUS centered on line 50, well inside the 100-line file.
+  expect(ex.startLine).toBe(50 - EXCERPT_RADIUS);
+  expect(ex.endLine).toBe(50 + EXCERPT_RADIUS);
+  expect(ex.lines[0]).toBe(`line ${50 - EXCERPT_RADIUS}`);
   expect(ex.totalLines).toBe(100);
 });
 

@@ -195,19 +195,28 @@
     return fileRefMemo.layer;
   });
 
+  // The review's id as a value-stable derived: the 2s poll hands us a fresh review
+  // object every tick, so reading `review.id` directly in an effect re-runs it each
+  // tick even when the id is unchanged. A $derived short-circuits on the equal
+  // string, so effects keyed on it fire only when the review actually switches.
+  const reviewId = $derived(review.id);
+
   // Which candidate paths resolve to a real file in the review's cwd — the daemon
   // is the existence gate, so only these get the icon + hover. Resolved once per
-  // candidate-set change (not per poll tick, since the memo above is stable), and
-  // cleared up front so a plan edit or review switch drops stale icons at once.
+  // candidate-set change: both dependencies below (the memoized candidate map and
+  // the value-stable reviewId) hold their reference across a poll tick, so an
+  // unchanged plan never re-resolves — which is what kept the icons and the open
+  // hover preview from flickering every 2s. Cleared up front so a plan edit or
+  // review switch drops stale icons at once.
   let resolvedPaths = $state<Set<string>>(new Set());
   $effect(() => {
     const candidates = fileRefCandidates;
-    const reviewId = review.id;
+    const id = reviewId;
     const paths = [...new Set([...candidates.values()].flat().map((s) => s.path))];
     resolvedPaths = new Set();
     if (paths.length === 0) return;
     let cancelled = false;
-    void resolveFileRefs(reviewId, paths).then((resolved) => {
+    void resolveFileRefs(id, paths).then((resolved) => {
       if (!cancelled) resolvedPaths = new Set(resolved);
     });
     return () => {
@@ -230,8 +239,8 @@
 
   // The file reference the pointer is over, plus the token rect the preview
   // anchors to. A short dismiss delay lets the pointer travel from the token into
-  // the preview card (to scroll a tall excerpt) without it vanishing; entering the
-  // token or the card cancels it (onKeepAlive → cancelDismiss).
+  // the preview card without it vanishing; entering the token or the card cancels
+  // it (onKeepAlive → cancelDismiss).
   let hoveredFileRef = $state<{ path: string; line?: number; anchor: DOMRect } | undefined>();
   let dismissTimer: ReturnType<typeof setTimeout> | undefined;
   function cancelDismiss(): void {
@@ -710,7 +719,7 @@
            Only appears for references the daemon resolved to a real file. -->
       {#if hoveredFileRef}
         <FilePreview
-          reviewId={review.id}
+          reviewId={reviewId}
           path={hoveredFileRef.path}
           line={hoveredFileRef.line}
           anchor={hoveredFileRef.anchor}

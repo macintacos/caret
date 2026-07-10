@@ -2,6 +2,7 @@ import "../../test-mount.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 import type { ClientReview, PlanVersion } from "@core/types";
 import { until } from "../../../test/support/poll.ts";
+import { logCapture } from "../../test-helpers.ts";
 import { render } from "../../test-mount.ts";
 import { reactiveProps } from "../../test-props.svelte.ts";
 import DiffPlanView from "./DiffPlanView.svelte";
@@ -355,6 +356,76 @@ describe("DiffPlanView comment-span brackets", () => {
     target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
     await until(() => (shadow(target)?.textContent ?? "").includes("body revision 2"));
     expect(layer(target)).toBeNull();
+  });
+});
+
+// File-reference resolution (EXC-687) is keyed off the plan text, not the review
+// object identity: the 2s poll re-delivers a fresh review object every tick, but
+// the referenced files don't change underneath the reader, so the daemon must be
+// asked to resolve them once per plan — not on every tick. A per-tick re-resolve
+// briefly clears the resolved set, which flickers the icons and the open hover
+// preview. This pins that the resolve round-trip fires once across many ticks.
+describe("DiffPlanView file-reference resolution", () => {
+  function jsonResponse(value: unknown): Response {
+    return new Response(JSON.stringify(value), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  test("resolves file refs once per plan, not on every poll tick", async () => {
+    let fileRefCalls = 0;
+    const cap = logCapture((url) => {
+      if (url.includes("/file-refs")) {
+        fileRefCalls++;
+        return Promise.resolve(jsonResponse({ resolved: ["src/foo.ts"] }));
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+    try {
+      const plan = "# Title\n\nSee `src/foo.ts` for the cache.\n";
+      const p = reactiveProps(props({ review: reviewFixture({ currentPlan: plan }) }));
+      const { flush } = render(DiffPlanView, p);
+      // The initial mount resolves the one candidate exactly once.
+      await until(() => fileRefCalls === 1);
+
+      // Five poll ticks re-deliver a fresh review object with identical content;
+      // none of them should re-hit the resolver.
+      for (let i = 0; i < 5; i++) {
+        p.review = reviewFixture({ currentPlan: plan });
+        flush();
+      }
+      await Promise.resolve();
+      expect(fileRefCalls).toBe(1);
+    } finally {
+      cap.restore();
+    }
+  });
+
+  test("re-resolves when the plan text actually changes", async () => {
+    let fileRefCalls = 0;
+    const cap = logCapture((url) => {
+      if (url.includes("/file-refs")) {
+        fileRefCalls++;
+        return Promise.resolve(jsonResponse({ resolved: [] }));
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+    try {
+      const p = reactiveProps(
+        props({ review: reviewFixture({ currentPlan: "# T\n\nSee `src/foo.ts`.\n" }) }),
+      );
+      const { flush } = render(DiffPlanView, p);
+      await until(() => fileRefCalls === 1);
+
+      // A genuinely new plan (a revision) with a different reference re-resolves.
+      p.review = reviewFixture({ version: 2, currentPlan: "# T\n\nNow `src/bar.ts`.\n" });
+      flush();
+      await until(() => fileRefCalls === 2);
+      expect(fileRefCalls).toBe(2);
+    } finally {
+      cap.restore();
+    }
   });
 });
 

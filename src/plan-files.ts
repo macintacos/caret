@@ -10,10 +10,13 @@ import { type Dirent, readdirSync, readFileSync, realpathSync, statSync } from "
 import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { FileExcerpt } from "./types.ts";
 
+// The preview is deliberately a small snippet: it must fit in the hover card
+// without vertical scrolling, so it never reads as the whole file. These windows
+// are sized to that — a peek, with the boundary strips saying how much is elided.
 /** Lines of context on each side of a referenced `:line` (the ±window). */
-export const EXCERPT_RADIUS = 12;
+export const EXCERPT_RADIUS = 6;
 /** Lines shown from the top when a reference carries no line number. */
-export const EXCERPT_HEAD_LINES = 24;
+export const EXCERPT_HEAD_LINES = 13;
 /** Files larger than this are not previewed (skip, don't read). */
 export const MAX_EXCERPT_BYTES = 2 * 1024 * 1024;
 /** Upper bound on directory entries the basename fallback will scan. */

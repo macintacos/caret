@@ -96,19 +96,213 @@ test("hovering a real reference reveals a highlighted excerpt centered on its li
 
     // The preview appears (light DOM, not the shadow root) with the resolved path
     // and a window centered on line 42 — so the line-42 marker shows and the
-    // line-1 marker (outside ±12) does not.
+    // line-1 marker (outside the ±6 snippet) does not.
     const preview = page.locator("[data-file-preview]");
     await expect(preview).toBeVisible();
     await expect(preview).toContainText("src/cache.ts");
     await expect(preview).toContainText("MARKER_LINE_FORTYTWO");
     await expect(preview).not.toContainText("MARKER_LINE_ONE");
 
-    // The excerpt is syntax-highlighted, not plain: shiki wraps it in <pre.shiki>.
-    await expect(preview.locator("pre.shiki")).toHaveCount(1);
+    // The excerpt is syntax-highlighted, not plain: shiki colors tokens, one line
+    // per numbered row (not one undivided block).
+    await expect(preview.locator('.fp-lcode span[style*="color"]').first()).toBeVisible();
+
+    // The window centers on line 42 (±EXCERPT_RADIUS = 6) → lines 36–48 of the
+    // 50-line file, so the gutter starts at 36 and both strips report the elided
+    // tail: 35 lines above and 2 below.
+    await expect(preview.locator(".fp-lnum").first()).toHaveText("36");
+    await expect(preview.locator(".fp-edge-top")).toContainText("35");
+    await expect(preview.locator(".fp-edge-bottom")).toContainText("2");
+
+    // The referenced line itself (42) is the one highlighted, so the eye lands on it.
+    await expect(preview.locator(".fp-target")).toHaveCount(1);
+    await expect(preview.locator(".fp-target .fp-lnum")).toHaveText("42");
 
     // Leaving dismisses it (after the short travel grace).
     await page.mouse.move(0, 0);
     await expect(preview).toHaveCount(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("the preview shows only a bounded snippet, never a scrollable full file", async ({
+  daemon,
+  page,
+}) => {
+  // A preview is a peek, not the file: even against a large file it must cap to a
+  // handful of lines and never scroll vertically, so it can't be mistaken for the
+  // whole thing. (Horizontal scroll for long lines is fine; vertical paging is not.)
+  const BIG = Array.from({ length: 400 }, (_, i) => `const line${i + 1} = ${i + 1};`).join("\n");
+  const proj = await makeProject({ "src/big.ts": BIG });
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nOpen `src/big.ts` to see it.\n" });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+
+    await page.locator("[data-file-ref]").first().hover();
+    const preview = page.locator("[data-file-preview]");
+    await expect(preview).toBeVisible();
+
+    // Only a snippet — a handful of rows, nowhere near the 400-line file.
+    const rows = await preview.locator(".fp-row").count();
+    expect(rows).toBeGreaterThan(0);
+    expect(rows).toBeLessThanOrEqual(20);
+
+    // The code region cannot scroll vertically: overflow-y is clipped, not auto.
+    const overflowY = await page.evaluate(() => {
+      const code = document.querySelector("[data-file-preview] .fp-code");
+      return code ? getComputedStyle(code).overflowY : null;
+    });
+    expect(overflowY).toBe("hidden");
+
+    // And a bottom strip announces the large remainder, reinforcing it's an excerpt.
+    await expect(preview.locator(".fp-edge-bottom")).toContainText("below");
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("the hover preview renders code in the plan view's own font, not the browser default", async ({
+  daemon,
+  page,
+}) => {
+  // The excerpt must read as a window onto the plan: it shares the .diffview
+  // source grid's exact font stack, size, and line-height, never the smaller
+  // label size or the UA `code {}` monospace default. Two regressions this
+  // guards: the excerpt set at --text-2xs instead of the diff view's --text-base,
+  // and the <code> lines falling back to the UA `monospace` family because no
+  // author rule targets them directly (an inherited family loses to `code {}`).
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nHover `src/cache.ts` here.\n" });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+
+    await page.locator("[data-file-ref]").first().hover();
+    await expect(page.locator("[data-file-preview]")).toBeVisible();
+
+    // Read the excerpt code's computed font and a plan source line's, across the
+    // light-DOM card and the shadow-root source view.
+    const fonts = await page.evaluate(() => {
+      const read = (el: Element | null | undefined) => {
+        if (el == null) return null;
+        const cs = getComputedStyle(el);
+        return { family: cs.fontFamily, size: cs.fontSize, lineHeight: cs.lineHeight };
+      };
+      const code = document.querySelector("[data-file-preview] .fp-lcode");
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+      const planLine = sh?.querySelector("[data-line] span") ?? sh?.querySelector("[data-line]");
+      return { code: read(code), plan: read(planLine) };
+    });
+
+    expect(fonts.code).not.toBeNull();
+    expect(fonts.plan).not.toBeNull();
+    // The caret mono stack the plan uses — not the UA `monospace` default.
+    expect(fonts.code?.family).toContain("Berkeley Mono");
+    expect(fonts.code?.family).not.toBe("monospace");
+    // Identical to the plan line on all three axes (family, size, line-height).
+    expect(fonts.code).toEqual(fonts.plan);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("the hover preview survives the review poll without repaint churn", async ({
+  daemon,
+  page,
+}) => {
+  // Regression for the periodic hover glitch (EXC-687): the 2s reviews poll hands
+  // the view a fresh review object each tick. If file-ref resolution re-runs on
+  // that identity churn, it rebuilds the resolved set → the token/options change
+  // reference → the library repaints the whole shadow DOM, rebuilding the hovered
+  // token (and its icon) underneath the pointer. With the fix, an unchanged plan
+  // resolves once, so a parked hover sees no repaint across ticks.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nEdit `src/cache.ts` to fix it.\n\nMore prose so the view has rows.\n",
+    });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+
+    const ref = page.locator(".diffview").getByText("src/cache.ts", { exact: false });
+    await ref.first().hover();
+    await expect(page.locator("[data-file-preview]")).toBeVisible();
+
+    // Tag the live file-ref token node with a JS marker, and watch for the preview
+    // being torn down. A repaint rebuilds the token (dropping the marker), which is
+    // exactly what flickers the icon + hover — and is independent of plan size.
+    await page.evaluate(() => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+      const tok = sh?.querySelector("[data-file-ref]");
+      // biome-ignore lint/suspicious/noExplicitAny: mark the node identity
+      if (tok) (tok as any).__caretProbe = true;
+      // biome-ignore lint/suspicious/noExplicitAny: probe counter on window
+      (window as any).__previewRemove = 0;
+      const hasPreview = (n: Node) =>
+        n.nodeType === 1 &&
+        ((n as Element).matches?.("[data-file-preview]") ||
+          (n as Element).querySelector?.("[data-file-preview]") != null);
+      new MutationObserver((recs) => {
+        for (const r of recs)
+          r.removedNodes.forEach((n) => {
+            // biome-ignore lint/suspicious/noExplicitAny: probe counter
+            if (hasPreview(n)) (window as any).__previewRemove++;
+          });
+      }).observe(document.body, { childList: true, subtree: true });
+    });
+
+    await page.waitForTimeout(5200); // > two 2s poll ticks, pointer parked
+
+    // The token node must be the SAME one (marker intact) — a repaint would have
+    // replaced it — and the preview must never have been torn down.
+    const survived = await page.evaluate(() => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+      const tok = sh?.querySelector("[data-file-ref]");
+      // biome-ignore lint/suspicious/noExplicitAny: read node marker + counter
+      return { sameToken: !!(tok as any)?.__caretProbe, removed: (window as any).__previewRemove };
+    });
+    expect(survived.sameToken).toBe(true);
+    expect(survived.removed).toBe(0);
+    await expect(page.locator("[data-file-preview]")).toBeVisible();
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("the hover preview fetches the excerpt once, not on every poll tick", async ({
+  daemon,
+  page,
+}) => {
+  // Regression for the second hover glitch: FilePreview's fetch effect must depend
+  // only on the hovered reference, not on the review object identity. Fed the raw
+  // per-tick `review.id`, its effect re-fired every 2s poll — re-fetching and
+  // re-highlighting the excerpt (a loading→ready flash) while the pointer sat still.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nHover `src/cache.ts` here.\n" });
+    let excerptFetches = 0;
+    page.on("request", (req) => {
+      if (req.url().includes("/file?")) excerptFetches++;
+    });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+
+    const ref = page.locator(".diffview").getByText("src/cache.ts", { exact: false });
+    await ref.first().hover();
+    await expect(page.locator("[data-file-preview]")).toBeVisible();
+    const afterHover = excerptFetches;
+
+    // Park the pointer across more than two poll ticks: no further excerpt fetches.
+    await page.waitForTimeout(5200);
+    expect(excerptFetches).toBe(afterHover);
+    expect(afterHover).toBeLessThanOrEqual(2);
   } finally {
     await proj.cleanup();
   }
@@ -133,6 +327,15 @@ test("a reference with no line shows the head of the file", async ({ daemon, pag
     await expect(preview).toBeVisible();
     await expect(preview).toContainText("MARKER_LINE_ONE");
     await expect(preview).not.toContainText("MARKER_LINE_FORTYTWO");
+
+    // The gutter starts at line 1 and — since the head window omits the file's
+    // tail — a bottom strip reports the remainder, with no strip above.
+    await expect(preview.locator(".fp-lnum").first()).toHaveText("1");
+    await expect(preview.locator(".fp-edge-top")).toHaveCount(0);
+    await expect(preview.locator(".fp-edge-bottom")).toContainText("below");
+
+    // No reference line → nothing is highlighted (the highlight is a :line cue).
+    await expect(preview.locator(".fp-target")).toHaveCount(0);
   } finally {
     await proj.cleanup();
   }
