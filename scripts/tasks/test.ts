@@ -4,7 +4,7 @@
 // passes unchanged under it. Extra args (a path, --test-name-pattern, …) are
 // forwarded to `bun test`.
 
-import { runForward } from "../tasks/exec.ts";
+import { execAndExit } from "./lib/exec.ts";
 
 /** The argv `test` runs, plus forwarded args. */
 export function testCommand(args: string[]): string[] {
@@ -12,5 +12,5 @@ export function testCommand(args: string[]): string[] {
 }
 
 export async function runTest(args: string[]): Promise<never> {
-  process.exit(await runForward(testCommand(args)));
+  return execAndExit(testCommand(args));
 }

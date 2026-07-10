@@ -3,7 +3,7 @@
 // by the time this subcommand runs the compile is already done — its own body is
 // just the completion line plus the optional --install step.
 
-import { runForward } from "../tasks/exec.ts";
+import { runForward } from "./lib/exec.ts";
 
 export interface BuildOptions {
   /** After building, install the local checkout + cycle the daemon (dev only). */

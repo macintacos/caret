@@ -4,7 +4,7 @@ import {
   isHtmlContentType,
   isUsableAssetContentType,
   probeServedUi,
-} from "../../scripts/smoke/probe.ts";
+} from "../../scripts/tasks/lib/smoke-probe.ts";
 
 describe("smoke probe: pure helpers", () => {
   test("extractAssetPaths pulls /assets/ URLs, deduped and sorted", () => {

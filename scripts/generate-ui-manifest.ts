@@ -6,7 +6,7 @@
 // (the resolved value becomes a /$bunfs path that survives source deletion);
 // the daemon reads each through Bun.file, which also yields its MIME type. The
 // output module is gitignored, biome-excluded, and runs inline from the build-bin
-// task (scripts/build/build-bin.ts) after the UI is built and before the compile.
+// task (scripts/tasks/build-bin.ts) after the UI is built and before the compile.
 //
 // Split into a pure renderer (renderManifestModule — unit-tested) and the
 // filesystem effects (enumerateDist, writeManifest) so the URL mapping and the

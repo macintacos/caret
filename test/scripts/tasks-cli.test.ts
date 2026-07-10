@@ -1,15 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { buildBinCompileCommand } from "../../scripts/build/build-bin.ts";
-import { buildUiCommand } from "../../scripts/build/build-ui.ts";
-import { buildInstallCommand } from "../../scripts/build/build.ts";
-import { buildBundleCommand } from "../../scripts/build/build-bundle.ts";
-import type { RunDevOptions } from "../../scripts/dev/run.ts";
-import { formatCommand } from "../../scripts/lint/format.ts";
-import { lintCommand } from "../../scripts/lint/lint.ts";
-import { setupCommands } from "../../scripts/setup/setup.ts";
+import { buildBinCompileCommand } from "../../scripts/tasks/build-bin.ts";
+import { buildBundleCommand } from "../../scripts/tasks/build-bundle.ts";
+import { buildUiCommand } from "../../scripts/tasks/build-ui.ts";
+import { buildInstallCommand } from "../../scripts/tasks/build.ts";
 import { type TaskActions, buildProgram } from "../../scripts/tasks/cli.ts";
-import { e2eCommand } from "../../scripts/test/e2e.ts";
-import { testCommand } from "../../scripts/test/test.ts";
+import type { RunDevOptions } from "../../scripts/tasks/dev/run.ts";
+import { formatCommand } from "../../scripts/tasks/format.ts";
+import { lintCommand } from "../../scripts/tasks/lint.ts";
+import { setupCommands } from "../../scripts/tasks/setup.ts";
+import { e2eCommand } from "../../scripts/tasks/test-e2e.ts";
+import { testCommand } from "../../scripts/tasks/test.ts";
 
 // The actions are injectable, so these drive the real commander tree (parsing,
 // defaults, coercion, passthrough) and capture what it would hand each run

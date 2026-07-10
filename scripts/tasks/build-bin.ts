@@ -8,7 +8,7 @@
 // forwarder) so ui/dist exists at compile time.
 
 import { mkdirSync } from "node:fs";
-import { runForward } from "../tasks/exec.ts";
+import { runForward } from "./lib/exec.ts";
 
 /** The `bun build --compile` argv, baking the commit into the binary via
  * --define (EXC-452) so the daemon can log the revision it runs from, and

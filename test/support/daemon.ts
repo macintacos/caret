@@ -2,7 +2,7 @@
 // bun-test suite, with a small typed HTTP client over the public API — the same
 // POST/GET surface a real hook and the browser UI use. The client is
 // tool-agnostic: it speaks the daemon's wire protocol, never Claude's hook
-// stdin shaping (that lives in scripts/dev/driver.ts).
+// stdin shaping (that lives in scripts/tasks/dev/driver.ts).
 //
 // The e2e suite has its own daemon launcher (test/e2e/support/daemon-entry.ts): it
 // runs under the Playwright/node runner, binds an OS-assigned port for parallel

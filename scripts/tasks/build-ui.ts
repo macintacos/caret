@@ -2,7 +2,7 @@
 // `ui/` workspace (its own vite config); extra args are forwarded to
 // `vite build`.
 
-import { runForward } from "../tasks/exec.ts";
+import { execAndExit } from "./lib/exec.ts";
 
 /** The argv `build-ui` runs (from the `ui/` directory), plus forwarded args. */
 export function buildUiCommand(args: string[]): string[] {
@@ -10,5 +10,5 @@ export function buildUiCommand(args: string[]): string[] {
 }
 
 export async function runBuildUi(args: string[]): Promise<never> {
-  process.exit(await runForward(buildUiCommand(args), { cwd: "ui" }));
+  return execAndExit(buildUiCommand(args), { cwd: "ui" });
 }

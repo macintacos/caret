@@ -3,9 +3,9 @@
 // stdin, thread a "Revision N" section onto a plan, retitle an extra plan, and
 // decide the next submission from a decision. No daemon, no FS, no LLM, so each
 // is a plain unit test. The long-running supervision loops that drive these
-// live in scripts/dev/driver.ts.
+// live in scripts/tasks/dev/driver.ts.
 
-import type { Decision } from "../../src/types.ts";
+import type { Decision } from "../../../src/types.ts";
 
 /** Session id for the single dev review; stable for the process lifetime so a
  * revision threads into the same review instead of forking a new one, but

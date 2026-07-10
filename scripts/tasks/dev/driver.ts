@@ -11,14 +11,14 @@
 //
 // This module owns the dev wiring (devReviewDeps) and the long-running
 // supervision loops; the pure protocol state machine it drives lives in
-// scripts/dev/protocol.ts.
+// scripts/tasks/dev/protocol.ts.
 
-import { expireReview, longPoll, postReview, waitForHealth } from "../../src/daemon-client.ts";
-import { type ReviewDeps, runReview } from "../../src/review.ts";
-import { claudeAdapter } from "../../src/adapters/claude/index.ts";
-import { NEVER_IDLE_MS } from "../../src/constants.ts";
-import { DEFAULT_PORT, devSeeder, loadSettings } from "../../src/settings.ts";
-import type { ClientReview } from "../../src/types.ts";
+import { expireReview, longPoll, postReview, waitForHealth } from "../../../src/daemon-client.ts";
+import { type ReviewDeps, runReview } from "../../../src/review.ts";
+import { claudeAdapter } from "../../../src/adapters/claude/index.ts";
+import { NEVER_IDLE_MS } from "../../../src/constants.ts";
+import { DEFAULT_PORT, devSeeder, loadSettings } from "../../../src/settings.ts";
+import type { ClientReview } from "../../../src/types.ts";
 import {
   appendRevision,
   bootstrapPlans,

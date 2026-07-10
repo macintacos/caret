@@ -4,7 +4,7 @@
 // UI the suite drives is built.
 
 import { existsSync } from "node:fs";
-import { runForward } from "../tasks/exec.ts";
+import { execAndExit } from "./lib/exec.ts";
 
 /** The argv `test-e2e` runs, plus forwarded args. */
 export function e2eCommand(args: string[]): string[] {
@@ -28,5 +28,5 @@ export async function runTestE2e(args: string[]): Promise<never> {
     );
     process.exit(1);
   }
-  process.exit(await runForward(e2eCommand(args)));
+  return execAndExit(e2eCommand(args));
 }

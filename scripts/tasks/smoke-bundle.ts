@@ -26,7 +26,8 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readJsonFileSync } from "../../src/json-file.ts";
-import { probeServedUi } from "./probe.ts";
+import { installCleanupHandlers } from "./lib/signals.ts";
+import { probeServedUi } from "./lib/smoke-probe.ts";
 
 /** The daemon lock's pid field, or undefined if the lock is absent/unreadable. */
 function lockPid(lockFile: string): number | undefined {
@@ -96,15 +97,7 @@ export async function runSmokeBundle(): Promise<never> {
     rmSync(pkgDir, { recursive: true, force: true });
     rmSync(stateDir, { recursive: true, force: true });
   };
-  process.on("exit", cleanup);
-  process.on("SIGINT", () => {
-    cleanup();
-    process.exit(130);
-  });
-  process.on("SIGTERM", () => {
-    cleanup();
-    process.exit(143);
-  });
+  installCleanupHandlers(cleanup);
 
   // Assemble the temp package layout the resolver serves the shipped ui/dist from.
   cpSync(distDir, join(pkgDir, "dist"), { recursive: true });

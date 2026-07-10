@@ -18,7 +18,8 @@ import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { isPidAlive } from "../../src/daemon-lifecycle.ts";
 import { readJsonFileSync } from "../../src/json-file.ts";
-import { probeServedUi } from "./probe.ts";
+import { installCleanupHandlers } from "./lib/signals.ts";
+import { probeServedUi } from "./lib/smoke-probe.ts";
 
 function isExecutable(path: string): boolean {
   try {
@@ -64,15 +65,7 @@ export async function runSmokeBin(): Promise<never> {
     rmSync(stateDir, { recursive: true, force: true });
     rmSync(runDir, { recursive: true, force: true });
   };
-  process.on("exit", cleanup);
-  process.on("SIGINT", () => {
-    cleanup();
-    process.exit(130);
-  });
-  process.on("SIGTERM", () => {
-    cleanup();
-    process.exit(143);
-  });
+  installCleanupHandlers(cleanup);
 
   // Copy the binary into the temp dir alone — no sibling ui/ — so the
   // beside-the-binary fallback has nothing to resolve and the embed must serve.

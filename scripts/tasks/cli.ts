@@ -10,27 +10,28 @@
 // it too is tracked by EXC-737).
 //
 // Composition point only, like src/cli.ts: it assembles the commander tree and
-// threads each subcommand's parsed options/args into its run function
-// (scripts/<area>/*.ts). Each action is injectable so tests drive the real
-// parsing without spawning the tools. It reuses createProgram from
-// src/program.ts so all caret CLIs share the same name/description/help
-// conventions.
+// threads each subcommand's parsed options/args into its run function. Every
+// task module is a sibling in this directory (scripts/tasks/*.ts, plus the
+// multi-file dev task in scripts/tasks/dev/); code shared across tasks lives in
+// scripts/tasks/lib/. Each action is injectable so tests drive the real parsing
+// without spawning the tools. It reuses createProgram from src/program.ts so all
+// caret CLIs share the same name/description/help conventions.
 
 import { InvalidArgumentError } from "@commander-js/extra-typings";
 import { createProgram } from "../../src/program.ts";
-import { runBuildBin } from "../build/build-bin.ts";
-import { runBuildBundle } from "../build/build-bundle.ts";
-import { runBuildUi } from "../build/build-ui.ts";
-import { runBuild } from "../build/build.ts";
-import { DEFAULT_NUM_VERSIONS, parsePositiveInt } from "../dev/protocol.ts";
-import { type RunDevOptions, runDev } from "../dev/run.ts";
-import { runFormat } from "../lint/format.ts";
-import { runLint } from "../lint/lint.ts";
-import { runSetup } from "../setup/setup.ts";
-import { runSmokeBin } from "../smoke/bin.ts";
-import { runSmokeBundle } from "../smoke/bundle.ts";
-import { runTestE2e } from "../test/e2e.ts";
-import { runTest } from "../test/test.ts";
+import { runBuildBin } from "./build-bin.ts";
+import { runBuildBundle } from "./build-bundle.ts";
+import { runBuildUi } from "./build-ui.ts";
+import { runBuild } from "./build.ts";
+import { DEFAULT_NUM_VERSIONS, parsePositiveInt } from "./dev/protocol.ts";
+import { type RunDevOptions, runDev } from "./dev/run.ts";
+import { runFormat } from "./format.ts";
+import { runLint } from "./lint.ts";
+import { runSetup } from "./setup.ts";
+import { runSmokeBin } from "./smoke-bin.ts";
+import { runSmokeBundle } from "./smoke-bundle.ts";
+import { runTestE2e } from "./test-e2e.ts";
+import { runTest } from "./test.ts";
 
 /** The action behind each subcommand. Injectable so tests assert the parsed
  * options/args without spawning the real tools; production wires the run

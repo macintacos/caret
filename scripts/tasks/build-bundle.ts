@@ -11,7 +11,7 @@
 // build-bin left behind is removed first (build-bin regenerates it next run).
 
 import { rmSync } from "node:fs";
-import { runForward } from "../tasks/exec.ts";
+import { runForward } from "./lib/exec.ts";
 
 /** The non-compile `bun build` argv producing dist/cli.js. */
 export function buildBundleCommand(): string[] {

@@ -4,16 +4,17 @@
 // same behavior, but the process supervision and the arg parsing now live in
 // TypeScript (commander owns the flags; see scripts/tasks/cli.ts), so there is
 // no `set -u`/empty-array/bash-3.2 class of footgun. Every non-supervisory
-// decision still comes from scripts/dev/dev-env.ts (port mode, lock-based port
-// discovery, the typed constants), imported directly rather than shelled out.
+// decision still comes from scripts/tasks/dev/dev-env.ts (port mode, lock-based
+// port discovery, the typed constants), imported directly rather than shelled out.
 
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
-import { NEVER_IDLE_MS } from "../../src/constants.ts";
-import { isPidAlive } from "../../src/daemon-lifecycle.ts";
-import { devPort, devStateDir, loadSettings } from "../../src/settings.ts";
+import { NEVER_IDLE_MS } from "../../../src/constants.ts";
+import { isPidAlive } from "../../../src/daemon-lifecycle.ts";
+import { devPort, devStateDir, loadSettings } from "../../../src/settings.ts";
+import { installCleanupHandlers } from "../lib/signals.ts";
 import { discoverPort, readDevLockPort, resolvePortMode } from "./dev-env.ts";
 
 export interface RunDevOptions {
@@ -96,15 +97,7 @@ export async function runDev(opts: RunDevOptions): Promise<never> {
       }
     }
   };
-  process.on("exit", cleanup);
-  process.on("SIGINT", () => {
-    cleanup();
-    process.exit(130);
-  });
-  process.on("SIGTERM", () => {
-    cleanup();
-    process.exit(143);
-  });
+  installCleanupHandlers(cleanup);
 
   // Daemon: stock daemon from source (so edits are live without a rebuild). It
   // emits NDJSON on stderr (EXC-398); render it human-readable through
@@ -137,7 +130,7 @@ export async function runDev(opts: RunDevOptions): Promise<never> {
   const driver = Bun.spawn(
     [
       "bun",
-      "scripts/dev/driver.ts",
+      "scripts/tasks/dev/driver.ts",
       "--num-versions",
       String(opts.numVersions),
       ...(opts.notify ? ["--notify"] : []),
