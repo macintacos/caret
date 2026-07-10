@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 #MISE description="Run tests: bare/unit = bun test, e2e = Playwright"
+#MISE raw_args=true
+# raw_args hands every argument (including a bare --help) straight to the CLI, so
+# `mise run test --help` shows the CLI's real help instead of mise's task help.
 # Thin forwarder: the unit/e2e targets, flags, and --help live in the caret tasks
 # CLI (scripts/tasks/cli.ts). `mise run test e2e` selects Playwright; bare `mise
 # run test` and `mise run test unit` run the bun unit suite. `exec` replaces this

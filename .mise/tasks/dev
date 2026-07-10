@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 #MISE description="Run the dev UI with an isolated, fake-plan-seeded caret daemon"
+#MISE raw_args=true
+# raw_args hands every argument (including a bare --help) straight to the CLI, so
+# `mise run dev --help` shows the CLI's real help instead of mise's task help.
 # Thin forwarder: every flag, default, validation, and --help lives in the caret
 # tasks CLI (scripts/tasks/cli.ts); this task just execs its `dev` subcommand.
 # `exec` replaces this shell with the CLI, so Ctrl-C reaches the CLI's own signal
