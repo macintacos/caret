@@ -5,10 +5,10 @@
 // daemon) and lives in their own modules; the over-the-wire checks are identical
 // and live here, driven through an injectable `fetch` so they are unit-testable.
 
-/** Every distinct `/assets/…` URL a served index references, sorted. An empty
- * result means the served page referenced no hashed assets — for these smoke
- * tests that is itself a failure (a broken embed serves the placeholder, which
- * references none). Mirrors the former bash `grep -oE … | sort -u`. */
+/** Every distinct `/assets/…` URL a served index references, deduped and sorted.
+ * An empty result means the served page referenced no hashed assets — for these
+ * smoke tests that is itself a failure (a broken embed serves the placeholder,
+ * which references none). */
 export function extractAssetPaths(indexHtml: string): string[] {
   const matches = indexHtml.match(/\/assets\/[A-Za-z0-9._/-]+/g) ?? [];
   return [...new Set(matches)].sort();
@@ -57,9 +57,14 @@ export async function probeServedUi(
     throw new Error(`${label}: GET / Content-Type is '${indexCtype}' (expected text/html)`);
   }
 
-  const assets = extractAssetPaths(await indexRes.text());
+  const body = await indexRes.text();
+  const assets = extractAssetPaths(body);
   if (assets.length === 0) {
-    throw new Error(`${label}: served index references no /assets/ URLs (${opts.emptyAssetsHint})`);
+    // Dump the served page: a broken embed is hard to debug without seeing that
+    // the placeholder (which references no assets) was served in its place.
+    throw new Error(
+      `${label}: served index references no /assets/ URLs (${opts.emptyAssetsHint})\n--- served index ---\n${body}`,
+    );
   }
 
   for (const path of assets) {
@@ -81,7 +86,7 @@ export async function probeServedUi(
     };
   } catch {
     // A non-JSON body leaves health null → the service check below reports the
-    // empty service, matching the former bash JSON.parse-with-catch.
+    // empty service rather than throwing on the parse.
   }
   if (health?.service !== "caret") {
     throw new Error(`${label}: /api/health service is '${health?.service ?? ""}' (expected caret)`);

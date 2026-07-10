@@ -27,8 +27,7 @@ export function buildBinCompileCommand(commit: string): string[] {
 }
 
 /** Read HEAD's commit sha, throwing if git fails (e.g. not a checkout) so the
- * build aborts loudly instead of baking an empty string — matching the former
- * task's `set -e` on the `git rev-parse` capture. */
+ * build aborts loudly instead of baking an empty commit into the binary. */
 async function headCommit(): Promise<string> {
   const proc = Bun.spawn(["git", "rev-parse", "HEAD"], { stdout: "pipe", stderr: "inherit" });
   const [out, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);

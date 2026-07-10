@@ -114,8 +114,10 @@ export async function runSmokeBundle(): Promise<never> {
   const port = freePort();
 
   // Drive the real hook: prewarm → ensureDaemon → daemonCommand spawns the
-  // daemon. Env is passed explicitly (Bun.spawn snapshots process.env).
-  await Bun.spawn(["bun", join(pkgDir, "dist", "cli.js"), "prewarm"], {
+  // daemon. Env is passed explicitly (Bun.spawn snapshots process.env). A
+  // non-zero prewarm aborts here — nothing will bind, so there is no point
+  // polling for a lock that can't appear.
+  const prewarmCode = await Bun.spawn(["bun", join(pkgDir, "dist", "cli.js"), "prewarm"], {
     stdout: "inherit",
     stderr: "inherit",
     env: {
@@ -124,6 +126,10 @@ export async function runSmokeBundle(): Promise<never> {
       XDG_STATE_HOME: stateDir,
     },
   }).exited;
+  if (prewarmCode !== 0) {
+    process.stderr.write(`smoke-bundle: prewarm exited ${prewarmCode}\n`);
+    process.exit(prewarmCode);
+  }
 
   // The detached daemon writes its lock after binding (~poll a couple seconds).
   let lockPresent = false;
