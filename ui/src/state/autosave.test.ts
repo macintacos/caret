@@ -10,6 +10,7 @@ interface SaveCall {
   annotations: Annotation[];
   generalCommentDraft: string;
   composerScratches: PersistedScratch[];
+  version?: number;
 }
 
 // A manual timer: createAutosave's debounce is driven by `setTimer`/`clearTimer`
@@ -79,6 +80,7 @@ function build(store: AutosaveStore, activeId: () => string | null, timer = make
         annotations: draft.annotations,
         generalCommentDraft: draft.generalCommentDraft,
         composerScratches: draft.composerScratches,
+        version: draft.version,
       });
       return saveResult();
     },
@@ -355,6 +357,17 @@ describe("composer scratches", () => {
     expect(saves).toHaveLength(1);
     expect(saves[0]!.composerScratches).toEqual([scratch(5, "here")]);
     expect(saves[0]!.generalCommentDraft).toBe("gc");
+  });
+
+  test("flushPending stamps the version the scratch was composed against", async () => {
+    // The daemon drops a scratch write whose version is stale, so the save must
+    // carry the version the reviewer was viewing when they typed.
+    const store = makeStore();
+    const { autosave } = build(store, () => "r1");
+    autosave.syncActive(review({ id: "r1", version: 3, composerScratches: [] }));
+    autosave.setScratches([scratch(2, "wip")]);
+    await autosave.flushPending();
+    expect(saves[0]!.version).toBe(3);
   });
 
   test("setScratches strips the controller's derived key before persisting", () => {

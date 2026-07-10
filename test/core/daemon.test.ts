@@ -618,6 +618,21 @@ test("PUT draft degrades a malformed composerScratches entry (no clobber, no 400
   expect(one.composerScratches).toEqual(SCRATCHES);
 });
 
+test("PUT draft drops composerScratches composed against a stale version", async () => {
+  await boot();
+  const { id } = await newReview(); // pending at v1
+  // A scratch save whose debounce fired after a new version arrived carries the
+  // version it was composed against; when that version is no longer current, its
+  // stale line anchors must not land on the current version's text.
+  await putDraft(id, { composerScratches: SCRATCHES, version: 99 });
+  let one = await (await fetch(`${base}/api/reviews/${id}`)).json();
+  expect(one.composerScratches).toEqual([]);
+  // A matching version (or an omitted version, as the existing tests cover) writes.
+  await putDraft(id, { composerScratches: SCRATCHES, version: 1 });
+  one = await (await fetch(`${base}/api/reviews/${id}`)).json();
+  expect(one.composerScratches).toEqual(SCRATCHES);
+});
+
 test("PUT draft does not clobber the other field (either direction)", async () => {
   await boot();
   const { id } = await newReview();

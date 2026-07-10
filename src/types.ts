@@ -265,6 +265,11 @@ export interface DraftBody {
   annotations?: Annotation[];
   generalCommentDraft?: string;
   composerScratches?: PersistedScratch[];
+  /** The plan version the version-scoped fields were composed against. When
+   * present and stale (≠ the review's current version), the daemon drops the
+   * scratch write, so a draft whose debounce raced a newly-arrived version can't
+   * land its stale line anchors on the new version's text. */
+  version?: number;
 }
 
 /**

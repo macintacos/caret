@@ -95,6 +95,13 @@ export function createAutosave(
 
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
   let pendingSaveId: string | null = null;
+  // The plan version the pending save was composed against, sent with the draft so
+  // the daemon can drop a scratch write whose debounce raced a newly-arrived
+  // version (its old line anchors would mis-land on the new text).
+  let pendingSaveVersion: number | null = null;
+  // The active review's current version, tracked from syncActive so scheduleSave
+  // can stamp each edit with the version it was made against.
+  let currentVersionNum: number | null = null;
   // Keyed on id:version so a new version (revision) also reloads the working
   // copy — never persist stale annotations from a prior version onto the next.
   let lastLoadedKey: string | null = null;
@@ -111,6 +118,8 @@ export function createAutosave(
     if (!pendingSaveId) return;
     const id = pendingSaveId;
     pendingSaveId = null;
+    const version = pendingSaveVersion ?? undefined;
+    pendingSaveVersion = null;
     // Snapshot both fields synchronously (before any await) so a review switch
     // mid-flush can't redirect this save onto the new review's working copy.
     const snapshot = store.annotations.map((a) => ({ ...a }));
@@ -122,6 +131,7 @@ export function createAutosave(
         annotations: snapshot,
         generalCommentDraft: draft,
         composerScratches: scratches,
+        version,
       });
     } catch (err) {
       // A non-2xx (e.g. the review was resolved/removed) is not a connection
@@ -133,6 +143,7 @@ export function createAutosave(
   function scheduleSave() {
     if (!activeId()) return;
     pendingSaveId = activeId();
+    pendingSaveVersion = currentVersionNum;
     if (saveTimer) clearTimer(saveTimer);
     saveTimer = setTimer(() => void flushPending(), SAVE_DEBOUNCE_MS);
   }
@@ -166,6 +177,7 @@ export function createAutosave(
         // id:version change so a fresh plan version starts with its own (which
         // has none), never a prior version's stale line anchors.
         store.composerScratches = copyScratches(active.composerScratches);
+        currentVersionNum = active.version;
         // Seed on id change only, via its own guard (see lastDraftLoadedId
         // above) — independent of the id:version annotation reload around it.
         if (active.id !== lastDraftLoadedId) {
@@ -179,6 +191,7 @@ export function createAutosave(
         store.annotations = [];
         store.generalCommentDraft = "";
         store.composerScratches = [];
+        currentVersionNum = null;
       }
     },
 

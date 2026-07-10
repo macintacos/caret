@@ -120,6 +120,7 @@ export async function putDraft(
     annotations: Annotation[];
     generalCommentDraft: string;
     composerScratches: PersistedScratch[];
+    version?: number;
   },
 ): Promise<void> {
   // Success is logged daemon-side; only the failure path is worth a UI record.
