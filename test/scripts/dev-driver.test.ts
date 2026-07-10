@@ -13,10 +13,12 @@ import {
 import {
   appendRevision,
   bootstrapPlans,
+  DEFAULT_NUM_VERSIONS,
   DEV_SESSION,
   extraPlan,
   hookStdin,
   nextPlan,
+  parseNumVersions,
 } from "../../scripts/dev/protocol.ts";
 import { bootDaemon, type TestDaemon } from "../support/daemon.ts";
 import { setupTempStateDir } from "../support/env.ts";
@@ -164,6 +166,27 @@ test("bootstrapPlans never introduces untagged code blocks", () => {
   }
 });
 
+// ---- parseNumVersions (--num-versions dev flag) ----
+
+test("parseNumVersions defaults to three versions when the flag is absent", () => {
+  expect(DEFAULT_NUM_VERSIONS).toBe(3);
+  expect(parseNumVersions(["bun", "driver.ts"])).toBe(DEFAULT_NUM_VERSIONS);
+});
+
+test("parseNumVersions reads the integer after --num-versions", () => {
+  expect(parseNumVersions(["bun", "driver.ts", "--num-versions", "5"])).toBe(5);
+  // Order-independent and coexists with other flags.
+  expect(parseNumVersions(["bun", "driver.ts", "--notify", "--num-versions", "1"])).toBe(1);
+});
+
+test("parseNumVersions rejects non-positive-integer values loudly", () => {
+  for (const bad of ["0", "-2", "abc", "2.5", ""]) {
+    expect(() => parseNumVersions(["bun", "driver.ts", "--num-versions", bad])).toThrow();
+  }
+  // Flag present but no value → throw rather than silently default.
+  expect(() => parseNumVersions(["bun", "driver.ts", "--num-versions"])).toThrow();
+});
+
 // ---- nextPlan ----
 
 test("nextPlan on a reviewer deny appends a revision and bumps the counter", () => {
@@ -272,6 +295,25 @@ test("bootstrapReview grows the primary review to several versions before the lo
   expect(review!.status).toBe("rejected");
   expect(state.revision).toBe(3);
   expect(state.plan).toContain("## Revision 3");
+});
+
+test("bootstrapReview honors an explicit --num-versions count", async () => {
+  await boot();
+  const deps = devReviewDeps(base);
+  const state = await bootstrapReview(base, PLAN_V1, deps, 5);
+  const review = d.store.bySession(DEV_SESSION)[0];
+  expect(review!.versions).toHaveLength(5);
+  expect(state.revision).toBe(5);
+  expect(state.plan).toContain("## Revision 5");
+});
+
+test("bootstrapReview with a single version seeds just v1", async () => {
+  await boot();
+  const deps = devReviewDeps(base);
+  const state = await bootstrapReview(base, PLAN_V1, deps, 1);
+  const review = d.store.bySession(DEV_SESSION)[0];
+  expect(review!.versions).toHaveLength(1);
+  expect(state.revision).toBe(1);
 });
 
 test("runExtraReview runs one fresh-session review to resolution and stops", async () => {

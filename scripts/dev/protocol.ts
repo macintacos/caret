@@ -44,6 +44,27 @@ export function appendRevision(plan: string, feedback: string, n: number): strin
   ].join("\n");
 }
 
+/** Default number of versions the primary dev review opens with — v1 plus two
+ * synthetic revisions, enough for the version-compare picker to offer a
+ * non-default pair. Overridable via `mise run dev --num-versions <n>`. */
+export const DEFAULT_NUM_VERSIONS = 3;
+
+/** Resolve the `--num-versions <n>` dev flag from argv: how many versions the
+ * primary dev review should open with. Absent → DEFAULT_NUM_VERSIONS; a value
+ * that isn't a positive integer throws, so a typo fails loudly at boot instead
+ * of silently seeding the wrong shape. */
+export function parseNumVersions(argv: string[]): number {
+  const i = argv.indexOf("--num-versions");
+  if (i === -1) return DEFAULT_NUM_VERSIONS;
+  const raw = argv[i + 1];
+  if (raw === undefined || !/^\d+$/.test(raw) || Number(raw) < 1) {
+    throw new Error(
+      `--num-versions expects a positive integer (got ${raw === undefined ? "no value" : `"${raw}"`})`,
+    );
+  }
+  return Number(raw);
+}
+
 /** The sequence of plans the dev bootstrap submits to grow the primary review to
  * several versions before the interactive loop, so `mise run dev` always shows a
  * multi-version review (the version-compare picker needs one). The first entry is

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Run the dev UI with an isolated, fake-plan-seeded caret daemon"
 #USAGE flag "--notify" help="Arm the recurring extra-review seeder (EXC-427 notification path); off by default"
+#USAGE flag "--num-versions <n>" help="How many versions the primary dev review opens with (default 3)"
 
 set -euo pipefail
 
@@ -119,11 +120,19 @@ echo "caret dev: port=$CARET_PORT state=$state_dir persistent=$persist_state"
 # positive interval; the cadence and pending cap come from [dev.notify], with
 # CARET_DEV_NEW_REVIEW_MS overriding the cadence. Forward the flag straight
 # through to the driver, which owns the resolution (EXC-558).
-if [ "${usage_notify:-}" = "true" ]; then
-  bun scripts/dev/driver.ts --notify &
-else
-  bun scripts/dev/driver.ts &
+#
+# --num-versions sets how many versions the primary dev review opens with. The
+# driver owns both validation and the default (protocol.ts DEFAULT_NUM_VERSIONS),
+# so only forward the flag when the user actually passed it — no default is
+# duplicated here.
+driver_args=()
+if [ -n "${usage_num_versions:-}" ]; then
+  driver_args+=(--num-versions "$usage_num_versions")
 fi
+if [ "${usage_notify:-}" = "true" ]; then
+  driver_args+=(--notify)
+fi
+bun scripts/dev/driver.ts "${driver_args[@]}" &
 driver_pid=$!
 
 # Vite is backgrounded (not foreground/`exec`) and waited on, so a teardown
