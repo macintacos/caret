@@ -731,8 +731,8 @@ test("resolve clears composer scratches on the deny/rejected path", async () => 
   await putDraft(id, { composerScratches: SCRATCHES });
   await resolve(id, { behavior: "deny", feedback: "fix it" });
   // Same terminal invariant as the general-comment draft: a resolved record keeps
-  // no unsent scratches.
-  expect(store.get(id)?.composerScratches).toEqual([]);
+  // no unsent scratches on its current version.
+  expect(store.get(id)?.versions.at(-1)?.composerScratches).toEqual([]);
 });
 
 test("resolve clears the draft on the approve path", async () => {

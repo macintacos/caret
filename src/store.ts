@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { readJsonFile } from "./json-file.ts";
 import { ensureStateDir } from "./paths.ts";
 import { type CaretLogger, noopLogger, shortId } from "./log.ts";
-import { isUnresolved, type Review } from "./types.ts";
+import { currentVersion, isUnresolved, type Review } from "./types.ts";
 
 export interface Store {
   create(review: Review): Promise<void>;
@@ -106,7 +106,7 @@ export function createStore(dir: string, log: CaretLogger = noopLogger): Store {
       review.status = "expired";
       // Same invariant as resolve: a terminal record keeps no unsent draft.
       review.generalCommentDraft = "";
-      review.composerScratches = [];
+      currentVersion(review).composerScratches = [];
       review.updatedAt = Math.max(Date.now(), review.updatedAt + 1);
       reviews.delete(id);
       await persist(review);

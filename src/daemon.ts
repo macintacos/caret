@@ -697,11 +697,11 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       if (body.generalCommentDraft != null) {
         r.generalCommentDraft = body.generalCommentDraft;
       }
-      // Persist the unsent composer scratches. Available-but-unused seam: the
-      // value round-trips to disk and is served back on GET, but nothing
-      // rehydrates it into the source view yet (deferred follow-up).
+      // Persist the current version's unsent composer scratches, version-scoped
+      // alongside its annotations so a new plan version starts with neither; the
+      // source view rehydrates them from the served ClientReview on load.
       if (body.composerScratches != null) {
-        r.composerScratches = body.composerScratches;
+        currentVersion(r).composerScratches = body.composerScratches;
       }
     });
     // Id only — draft/annotation text is reviewer prose and never logged.
@@ -730,8 +730,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // the review on disk as rejected and must not retain stale text; an
       // approve removes it (store.remove flushes "" first).
       r.generalCommentDraft = "";
-      // Same invariant for the persisted composer scratches.
-      r.composerScratches = [];
+      // Same invariant for the persisted composer scratches (version-scoped).
+      currentVersion(r).composerScratches = [];
     });
     // Approval is terminal: bump the session epoch (so a later plan is a fresh
     // thread) and drop it from the active set so idle can fire.

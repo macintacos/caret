@@ -175,24 +175,49 @@ test("expire marks terminal, clears the draft, persists once, and drops from mem
 
 test("composer scratches round-trip to disk and rehydrate", async () => {
   const scratches = [{ startLine: 4, endLine: 6, text: "narrow this" }];
-  await store.create({
-    ...makeReview({ id: "cs-1", status: "pending" }),
-    composerScratches: scratches,
-  });
+  await store.create(
+    makeReview({
+      id: "cs-1",
+      status: "pending",
+      versions: [
+        {
+          version: 1,
+          plan: "# Plan\n\nbody",
+          annotations: [],
+          composerScratches: scratches,
+          createdAt: 1,
+        },
+      ],
+    }),
+  );
   const onDisk = JSON.parse(await readFile(join(dir, "cs-1.json"), "utf-8")) as Review;
-  expect(onDisk.composerScratches).toEqual(scratches);
+  expect(onDisk.versions[0]?.composerScratches).toEqual(scratches);
   // The persisted field survives a fresh store's rehydrate (unresolved record).
   const fresh = createStore(dir);
   await fresh.rehydrate();
-  expect(fresh.get("cs-1")?.composerScratches).toEqual(scratches);
+  expect(fresh.get("cs-1")?.versions[0]?.composerScratches).toEqual(scratches);
 });
 
 test("expire clears persisted composer scratches", async () => {
   const scratches = [{ startLine: 1, endLine: 1, text: "wip" }];
-  await store.create({ ...makeReview({ id: "cs-e1" }), composerScratches: scratches });
+  await store.create(
+    makeReview({
+      id: "cs-e1",
+      versions: [
+        {
+          version: 1,
+          plan: "# Plan\n\nbody",
+          annotations: [],
+          composerScratches: scratches,
+          createdAt: 1,
+        },
+      ],
+    }),
+  );
   await store.expire("cs-e1");
   const onDisk = JSON.parse(await readFile(join(dir, "cs-e1.json"), "utf-8")) as Review;
-  expect(onDisk.composerScratches).toEqual([]); // terminal records keep no unsent draft
+  // terminal records keep no unsent draft — the current version's scratches are cleared
+  expect(onDisk.versions[0]?.composerScratches).toEqual([]);
 });
 
 test("rehydrate skips expired reviews", async () => {

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { formatPlanMarkdown } from "../../src/plan-markdown.ts";
 import { newReviewId, routeIncomingPlan } from "../../src/reviews.ts";
 import { createStore, type Store } from "../../src/store.ts";
-import type { PlanInput, Review } from "../../src/types.ts";
+import { currentVersion, type PlanInput, type Review } from "../../src/types.ts";
 import { recordingLog } from "../support/recording-log.ts";
 
 let dir: string;
@@ -58,6 +58,22 @@ test("first plan for a session starts a new thread (v1, epoch 0)", async () => {
   const r = await routeIncomingPlan(input({ plan: "# Hello\n\nx" }), store);
   expect(r).toMatchObject({ action: "new", version: 1, planEpoch: 0 });
   expect(store.get(r.id)?.title).toBe("Hello");
+});
+
+test("appending a revision does not carry the prior version's composer scratches", async () => {
+  // Scratches are version-scoped (like annotations): a draft anchored to v1's text
+  // must not resurface on v2, where its line anchor would be stale.
+  const { id } = await routeIncomingPlan(input({ plan: "# V1\n\nbody" }), store);
+  await store.update(id, (r) => {
+    currentVersion(r).composerScratches = [{ startLine: 1, endLine: 1, text: "wip" }];
+    r.status = "rejected"; // a deny is what lets the next plan append a version
+  });
+  await routeIncomingPlan(input({ plan: "# V2\n\nrevised" }), store);
+  const r = store.get(id) as Review;
+  expect(r.versions).toHaveLength(2);
+  // v2 (current) starts clean; v1 keeps its own scratch.
+  expect(currentVersion(r).composerScratches).toBeUndefined();
+  expect(r.versions[0]?.composerScratches).toEqual([{ startLine: 1, endLine: 1, text: "wip" }]);
 });
 
 test("rewrites the agent's on-disk plan file with the canonical formatted text", async () => {
