@@ -39,9 +39,9 @@ export function shouldBuildUi(env: Record<string, string | undefined>): boolean 
  * child's exit code WITHOUT exiting so a caller can compile/bundle next. Shared
  * by the ui-dependent build targets and by `test e2e` (test.ts), so the skip
  * mechanism is honoured identically everywhere the UI is a prerequisite. */
-export async function ensureUi(): Promise<number> {
+export async function ensureUi(run: typeof runForward = runForward): Promise<number> {
   if (!shouldBuildUi(process.env)) return 0;
-  return await runForward(buildUiCommand([]), { cwd: "ui" });
+  return await run(buildUiCommand([]), { cwd: "ui" });
 }
 
 // --- build bin --------------------------------------------------------------
@@ -82,21 +82,22 @@ async function headCommit(): Promise<string> {
  * bin` from scripts/install.sh still works), compile, and copy the UI tree beside
  * the binary as a runtime fallback. Resolves the exit code (0 = ok) WITHOUT
  * exiting so the umbrella can chain past it. */
-async function compileBin(): Promise<number> {
+async function compileBin(run: typeof runForward = runForward): Promise<number> {
   mkdirSync("bin", { recursive: true });
-  const manifest = await runForward(["bun", "scripts/generate-ui-manifest.ts"]);
+  const manifest = await run(["bun", "scripts/generate-ui-manifest.ts"]);
   if (manifest !== 0) return manifest;
-  const compiled = await runForward(buildBinCompileCommand(await headCommit()));
+  const compiled = await run(buildBinCompileCommand(await headCommit()));
   if (compiled !== 0) return compiled;
-  return await runForward(["cp", "-R", "ui/dist", "bin/ui"]);
+  return await run(["cp", "-R", "ui/dist", "bin/ui"]);
 }
 
 /** Build the UI (unless skipped) then compile the binary. Shared by `build bin`
- * and the bare `build` umbrella. */
-async function buildBinArtifacts(): Promise<number> {
-  const ui = await ensureUi();
+ * and the bare `build` umbrella. The runner is injectable so tests pin the
+ * UI-first ordering + the skip without spawning Vite/the compiler. */
+export async function buildBinArtifacts(run: typeof runForward = runForward): Promise<number> {
+  const ui = await ensureUi(run);
   if (ui !== 0) return ui;
-  return await compileBin();
+  return await compileBin(run);
 }
 
 export async function runBuildBin(): Promise<never> {

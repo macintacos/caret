@@ -8,7 +8,7 @@
 // verbosity ladder, --grep line filtering, --task scoping, and the error doc.
 
 import { expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   buildErrorReport,
@@ -129,6 +129,19 @@ test("preflight's task groups map to real mise task files (consolidated, EXC-738
   for (const group of firstWords) expect(existsSync(taskFile(group))).toBe(true);
   for (const gone of ["build-ui", "build-bin", "build-bundle", "test-e2e"]) {
     expect(existsSync(taskFile(gone))).toBe(false);
+  }
+});
+
+test("the consolidated group task files declare no `#MISE depends` edge (concurrent-UI-build guard, EXC-738)", () => {
+  // preflight builds the UI exactly once: it runs `build ui` itself and spawns
+  // the dependents with CARET_SKIP_BUILD_UI=1. A `#MISE depends` edge on
+  // build/test/smoke would run its dependency REGARDLESS of that env var,
+  // re-introducing a second concurrent Vite build that races on ui/dist (the
+  // exact regression the removed mise-depends lockstep assertion once tripped).
+  // Guard against anyone adding one back.
+  const taskFile = (name: string): string => join(import.meta.dir, "../../.mise/tasks", name);
+  for (const group of ["build", "test", "smoke"]) {
+    expect(readFileSync(taskFile(group), "utf8")).not.toContain("#MISE depends");
   }
 });
 

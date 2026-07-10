@@ -31,12 +31,23 @@ import { probeServedUi } from "./lib/smoke-probe.ts";
 
 // --- smoke (umbrella) -------------------------------------------------------
 
-/** Bare `mise run smoke`: run both targets as fresh subprocesses (each exits on
- * its own), stopping at the first failure. */
+/** Bare `mise run smoke`: build the UI once up front, then run both targets as
+ * fresh subprocesses with CARET_SKIP_BUILD_UI=1 so neither rebuilds it — the
+ * umbrella would otherwise pay the full Vite build twice (each target's build
+ * bin / build bundle runs ensureUi). Each target exits on its own; stop at the
+ * first failure. The runner is injectable so tests pin the sequence + the skip
+ * env without spawning. */
+export async function smokePlan(run: typeof runForward = runForward): Promise<number> {
+  const ui = await run(["bun", "scripts/tasks/cli.ts", "build", "ui"]);
+  if (ui !== 0) return ui;
+  const env = { ...(process.env as Record<string, string>), CARET_SKIP_BUILD_UI: "1" };
+  const bin = await run(["bun", "scripts/tasks/cli.ts", "smoke", "bin"], { env });
+  if (bin !== 0) return bin;
+  return await run(["bun", "scripts/tasks/cli.ts", "smoke", "bundle"], { env });
+}
+
 export async function runSmoke(): Promise<never> {
-  const bin = await runForward(["bun", "scripts/tasks/cli.ts", "smoke", "bin"]);
-  if (bin !== 0) process.exit(bin);
-  process.exit(await runForward(["bun", "scripts/tasks/cli.ts", "smoke", "bundle"]));
+  process.exit(await smokePlan());
 }
 
 // --- smoke bin --------------------------------------------------------------

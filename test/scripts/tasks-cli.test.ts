@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildBinArtifacts,
   buildBinCompileCommand,
   buildBundleCommand,
   buildInstallCommand,
   buildUiCommand,
+  ensureUi,
   shouldBuildUi,
 } from "../../scripts/tasks/build.ts";
 import { type TaskActions, buildProgram } from "../../scripts/tasks/cli.ts";
@@ -11,6 +13,7 @@ import type { RunDevOptions } from "../../scripts/tasks/dev/run.ts";
 import { formatCommand } from "../../scripts/tasks/format.ts";
 import { lintCommand } from "../../scripts/tasks/lint.ts";
 import { setupCommands } from "../../scripts/tasks/setup.ts";
+import { smokePlan } from "../../scripts/tasks/smoke.ts";
 import { e2eCommand, testCommand } from "../../scripts/tasks/test.ts";
 
 // The actions are injectable, so these drive the real commander tree (parsing,
@@ -288,5 +291,98 @@ describe("tasks CLI: release subcommand group", () => {
       "finalize",
       "prepare",
     ]);
+  });
+});
+
+// --- orchestration ordering + the CARET_SKIP_BUILD_UI skip (EXC-738/739/740) ---
+// The UI-first ordering + build-once dedupe that replaced the deleted `#MISE
+// depends` edges now live in the run functions, not mise. Inject a capturing
+// runner to pin the command SEQUENCE (not just each command string): the UI is
+// built before the artifact that needs it, and skipped when the caller (the
+// preflight gate) already built it.
+
+/** A `runForward` stand-in that records each spawn instead of running it. */
+function capturingRun() {
+  const calls: Array<{ cmd: string[]; env: Record<string, string> | undefined }> = [];
+  const run = async (
+    cmd: string[],
+    opts: { cwd?: string; env?: Record<string, string> } = {},
+  ): Promise<number> => {
+    calls.push({ cmd, env: opts.env });
+    return 0;
+  };
+  return { calls, run };
+}
+
+/** Set CARET_SKIP_BUILD_UI for the duration of `fn`, restoring the prior value. */
+async function withSkipUi(fn: () => Promise<void>): Promise<void> {
+  const prev = process.env.CARET_SKIP_BUILD_UI;
+  process.env.CARET_SKIP_BUILD_UI = "1";
+  try {
+    await fn();
+  } finally {
+    if (prev === undefined) delete process.env.CARET_SKIP_BUILD_UI;
+    else process.env.CARET_SKIP_BUILD_UI = prev;
+  }
+}
+
+describe("build bin: UI-first ordering + skip", () => {
+  test("builds the UI before compiling the binary", async () => {
+    const { calls, run } = capturingRun();
+    expect(await buildBinArtifacts(run)).toBe(0);
+    // First spawn is the Vite UI build; the compile follows it.
+    expect(calls[0]?.cmd).toEqual(["bunx", "vite", "build"]);
+    const compileAt = calls.findIndex((c) => c.cmd.includes("--compile"));
+    expect(compileAt).toBeGreaterThan(0);
+  });
+
+  test("skips the UI build when CARET_SKIP_BUILD_UI is set", async () => {
+    await withSkipUi(async () => {
+      const { calls, run } = capturingRun();
+      expect(await buildBinArtifacts(run)).toBe(0);
+      // No Vite build at all; the first spawn is the manifest regen (a compile
+      // prerequisite), so the already-built ui/dist is reused as-is.
+      expect(calls.some((c) => c.cmd.includes("vite"))).toBe(false);
+      expect(calls[0]?.cmd).toEqual(["bun", "scripts/generate-ui-manifest.ts"]);
+    });
+  });
+});
+
+describe("ensureUi: the shared skip contract", () => {
+  test("returns 0 without building when CARET_SKIP_BUILD_UI is set", async () => {
+    // No runner injected: if the skip failed, it would spawn a real Vite build
+    // and hang/fail in the test env. Returning 0 proves the short-circuit.
+    await withSkipUi(async () => {
+      expect(await ensureUi()).toBe(0);
+    });
+  });
+});
+
+describe("smoke umbrella: build the UI once, skip it in each target", () => {
+  test("builds the UI once, then runs bin + bundle with CARET_SKIP_BUILD_UI=1", async () => {
+    const { calls, run } = capturingRun();
+    expect(await smokePlan(run)).toBe(0);
+    expect(calls.map((c) => c.cmd)).toEqual([
+      ["bun", "scripts/tasks/cli.ts", "build", "ui"],
+      ["bun", "scripts/tasks/cli.ts", "smoke", "bin"],
+      ["bun", "scripts/tasks/cli.ts", "smoke", "bundle"],
+    ]);
+    // build ui carries no skip; both targets inherit it so they don't rebuild.
+    expect(calls[0]?.env?.CARET_SKIP_BUILD_UI).toBeUndefined();
+    expect(calls[1]?.env?.CARET_SKIP_BUILD_UI).toBe("1");
+    expect(calls[2]?.env?.CARET_SKIP_BUILD_UI).toBe("1");
+  });
+
+  test("stops at the first failing target", async () => {
+    const calls: string[][] = [];
+    const run = async (cmd: string[]): Promise<number> => {
+      calls.push(cmd);
+      return cmd.includes("bin") ? 1 : 0; // build ui ok, smoke bin fails
+    };
+    expect(await smokePlan(run)).toBe(1);
+    expect(calls).toEqual([
+      ["bun", "scripts/tasks/cli.ts", "build", "ui"],
+      ["bun", "scripts/tasks/cli.ts", "smoke", "bin"],
+    ]); // bundle never runs
   });
 });
