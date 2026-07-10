@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Run the dev UI with an isolated, fake-plan-seeded caret daemon"
 #USAGE flag "--notify" help="Arm the recurring extra-review seeder (EXC-427 notification path); off by default"
-#USAGE flag "--num-versions <n>" help="How many versions the primary dev review opens with (default 3)"
+#USAGE flag "--num-versions <n>" help="How many versions the primary dev review opens with" default="3"
 
 set -euo pipefail
 
@@ -121,17 +121,16 @@ echo "caret dev: port=$CARET_PORT state=$state_dir persistent=$persist_state"
 # CARET_DEV_NEW_REVIEW_MS overriding the cadence. Forward the flag straight
 # through to the driver, which owns the resolution (EXC-558).
 #
-# --num-versions sets how many versions the primary dev review opens with. The
-# driver owns both validation and the default (protocol.ts DEFAULT_NUM_VERSIONS),
-# so only forward the flag when the user actually passed it — no default is
-# duplicated here. The base command lives IN the array so it is never empty:
-# expanding an empty "${arr[@]}" under `set -u` is a fatal "unbound variable" on
-# bash 3.2 (macOS /bin/bash), which would abort the script and trip the cleanup
-# trap into killing the daemon.
-driver_cmd=(bun scripts/dev/driver.ts)
-if [ -n "${usage_num_versions:-}" ]; then
-  driver_cmd+=(--num-versions "$usage_num_versions")
-fi
+# --num-versions: its default is declared on the #USAGE flag above (mirroring
+# the driver's DEFAULT_NUM_VERSIONS), so mise always sets usage_num_versions —
+# to the default when the flag is omitted, or the user's value otherwise. The
+# ${var?} form is mise's documented idiom for a defaulted flag: it asserts the
+# var is set (fails loud if the task is ever run outside mise) and satisfies the
+# linter (SC2154). Forwarding it unconditionally also means driver_cmd is never
+# an empty array — an empty "${arr[@]}" under set -u is a fatal "unbound
+# variable" on bash 3.2 (macOS /bin/bash), which would abort the task and trip
+# the cleanup trap into killing the daemon.
+driver_cmd=(bun scripts/dev/driver.ts --num-versions "${usage_num_versions?run via 'mise run dev'}")
 if [ "${usage_notify:-}" = "true" ]; then
   driver_cmd+=(--notify)
 fi
