@@ -153,13 +153,16 @@ test("every `.mise/tasks/*` forwarder to the tasks CLI sets `#MISE raw_args=true
   // loses the directive. preflight is excluded on purpose: it is a TOML task in
   // mise.toml that needs mise's own usage spec (EXC-737), so it has no file here.
   const tasksDir = join(import.meta.dir, "../../.mise/tasks");
-  const forwarders = readdirSync(tasksDir).filter((name) =>
-    readFileSync(join(tasksDir, name), "utf8").includes("scripts/tasks/cli.ts"),
-  );
+  const forwarders = readdirSync(tasksDir, { withFileTypes: true })
+    // Skip any namespaced-task subdirectory (mise supports `foo:bar` dirs) so the
+    // readFileSync below can't hit EISDIR; only plain task files can be forwarders.
+    .filter((entry) => entry.isFile())
+    .map((entry) => ({ name: entry.name, body: readFileSync(join(tasksDir, entry.name), "utf8") }))
+    .filter((task) => task.body.includes("scripts/tasks/cli.ts"));
   // Guard against a glob/path bug making the loop vacuously pass.
   expect(forwarders.length).toBeGreaterThanOrEqual(8);
-  for (const name of forwarders) {
-    expect(readFileSync(join(tasksDir, name), "utf8")).toContain("#MISE raw_args=true");
+  for (const task of forwarders) {
+    expect(task.body).toContain("#MISE raw_args=true");
   }
 });
 
