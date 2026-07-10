@@ -27,7 +27,7 @@ mise run preflight  # the pre-push gate: lint + unit/e2e tests + build, run conc
 ```
 
 `mise run preflight` is the gate to pass before pushing. The full task catalog (`build`,
-`test`, `test-e2e`, `lint`, `format`) is documented in
+`test`, `smoke`, `lint`, `format`) is documented in
 [`doc/ADVANCED.md`](doc/ADVANCED.md#development).
 
 ## Where tests live
@@ -37,7 +37,7 @@ mise run preflight  # the pre-push gate: lint + unit/e2e tests + build, run conc
   belongs is covered in `doc/agents/test-layout.md`.
 - `ui/src/**/*.test.ts` — Svelte component and UI-logic tests, run with
   `bun test --conditions browser` from the repo root.
-- `test/e2e/` — Playwright browser end-to-end specs (`mise run test-e2e`). When to write
+- `test/e2e/` — Playwright browser end-to-end specs (`mise run test e2e`). When to write
   an e2e spec versus a unit test is covered in `doc/agents/browser-testing.md`.
 
 ## Configuration
