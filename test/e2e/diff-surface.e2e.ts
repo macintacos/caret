@@ -336,6 +336,49 @@ test("creating a single-line annotation from the gutter persists it line-anchore
   expect(ann).toMatchObject({ startLine: 3, endLine: 3, comment: "Quantify the cold cost here." });
 });
 
+test("an unsubmitted composer scratch survives a page reload (EXC-744)", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+
+  // Type a comment on line 3 but Cancel instead of submitting: it is retained as
+  // a "scratch" that leaves a Resume marker on the line.
+  const plus = await revealGutterPlus(page, 3);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+  await composerInput(composer).fill("Half-written thought to finish later.");
+  await composer.getByRole("button", { name: "Cancel" }).click();
+
+  const marker = page.getByRole("button", { name: "Resume unsent comment" });
+  await expect(marker).toBeVisible();
+  await expect(marker).toContainText("Half-written thought to finish later.");
+
+  // The scratch persists to the daemon through the draft autosave (the fix): the
+  // review now carries a composer scratch.
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.composerScratches?.length ?? 0)
+    .toBe(1);
+
+  // Reload. Before the fix the marker vanished (scratches lived only in memory);
+  // now it rehydrates from the persisted scratch.
+  await page.reload();
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  const restored = page.getByRole("button", { name: "Resume unsent comment" });
+  await expect(restored).toBeVisible();
+  await expect(restored).toContainText("Half-written thought to finish later.");
+
+  // Resuming reopens the composer with the text restored, ready to finish.
+  await restored.click();
+  const reopened = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(reopened).toBeVisible();
+  await expect(composerInput(reopened)).toContainText("Half-written thought to finish later.");
+});
+
 test("creating a range annotation from the gutter persists the correct line span", async ({
   daemon,
   page,
@@ -621,6 +664,69 @@ test("a drag selection renders the selected lines in caret amber, not library-bl
   expect(axes.line as number).toBeGreaterThan(2);
   expect(axes.number).not.toBeNull();
   expect(axes.number as number).toBeGreaterThan(2);
+});
+
+// A plan whose fenced code block has a line far wider than the panel, so EXC-729 wraps it
+// in a horizontal-scroll card ([data-code-card]). That card collapses the block's rows into a
+// single content-column child, which once desynced @pierre/diffs' gutter/content child counts
+// and made InteractionManager.renderSelection throw ("gutter and content children dont match")
+// — silently killing the drag-selection highlight for the WHOLE view. The gutter mirror
+// (codeBlockScroll.ts) rebalances the columns; this proves a drag still highlights, and never
+// throws, when an overflowing code-block card is present. Same reflow-stable shape as CODE_PLAN
+// (fence at 5–8), so the prose above is at lines 1–3.
+const WIDE_CODE_PLAN = `# Wide code selection
+
+Intro prose here.
+
+\`\`\`text
+${"const veryLongIdentifierThatRunsWellPastThePanelWidthToForceHorizontalOverflow = ".repeat(8)}0;
+short tail line
+\`\`\`
+
+Closing prose after the block.
+`;
+
+test("a drag selection still highlights when the plan has an overflowing code-block card", async ({
+  daemon,
+  page,
+}) => {
+  // The library's selection render throws in a rAF, so it surfaces as an uncaught page error;
+  // collect them and assert the specific mismatch never fires.
+  const pageErrors: string[] = [];
+  page.on("pageerror", (err) => pageErrors.push(err.message));
+
+  await daemon.seed({ plan: WIDE_CODE_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("Intro prose here.")).toBeVisible();
+
+  // Precondition: the wide block overflowed and was carded — the exact DOM shape that used to
+  // break the selection walk. Without a card present the test would pass vacuously.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document.querySelector(".diffview")?.shadowRoot?.querySelectorAll("[data-code-card]")
+            .length ?? 0,
+      ),
+    )
+    .toBeGreaterThan(0);
+
+  const selectedLineCount = () =>
+    page.evaluate(
+      () =>
+        document.querySelector(".diffview")?.shadowRoot?.querySelectorAll("[data-selected-line]")
+          .length ?? 0,
+    );
+
+  // Drag across the prose above the block: the throw was global (any selection while any card
+  // exists), so this range is a faithful trigger, and lines 1–3 are reflow-stable.
+  await selectGutterRange(page, 1, 3);
+
+  // The highlight rendered — the bug left it at zero (the library bailed on the throw) — and the
+  // column-mismatch error never fired.
+  await expect.poll(selectedLineCount).toBeGreaterThan(0);
+  expect(pageErrors.filter((m) => /renderSelection|children dont match/.test(m))).toEqual([]);
 });
 
 // A plan with a fenced code block: heading (1), blank (2), prose (3), blank (4),

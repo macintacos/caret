@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import type { CodeBlockRange } from "./codeBlocks.ts";
 import {
   CARD_ATTR,
+  GUTTER_CARD_ATTR,
   type MetricsReader,
   type RowMetrics,
   syncCodeBlockCards,
@@ -209,5 +210,128 @@ describe("syncCodeBlockCards", () => {
     expect(cards[0]?.getAttribute(CARD_ATTR)).toBe("4"); // only the overflowing block
     // The fitting block's rows and the prose row stay as direct children.
     expect(directRows(content).map((r) => r.getAttribute("data-line"))).toEqual(["1", "2", "3"]);
+  });
+});
+
+// EXC-744 follow-up: @pierre/diffs' selection walk (InteractionManager.renderSelection) pairs
+// the gutter and content columns by direct-child index and throws when their child counts
+// differ. A content card collapses a block's N rows into ONE child, so without a matching
+// gutter card the counts diverge and the library throws — killing the drag-selection highlight
+// for the WHOLE view whenever any block is carded. So each content card gets a parallel,
+// display:contents gutter card wrapping the block's line-number cells: purely structural (the
+// cells still map to the shared subgrid row tracks), it only rebalances the columns. These
+// tests build BOTH columns; the earlier suite builds content only, exercising the wrap logic
+// in isolation (the mirror is skipped when there is no gutter).
+function buildColumns(specs: RowSpec[]): {
+  root: HTMLElement;
+  gutter: HTMLElement;
+  content: HTMLElement;
+  rowMetrics: Map<Element, RowMetrics>;
+} {
+  const root = document.createElement("div");
+  const code = document.createElement("div");
+  const gutter = document.createElement("div");
+  gutter.setAttribute("data-gutter", "");
+  const content = document.createElement("div");
+  content.setAttribute("data-content", "");
+  const rowMetrics = new Map<Element, RowMetrics>();
+  specs.forEach((spec, i) => {
+    const n = String(i + 1);
+    const cell = document.createElement("div");
+    cell.setAttribute("data-column-number", n);
+    gutter.appendChild(cell);
+    const row = document.createElement("div");
+    row.setAttribute("data-line", n);
+    if (spec.code) row.setAttribute("data-code-line", "");
+    if (spec.start) row.setAttribute("data-code-start", "");
+    if (spec.end) row.setAttribute("data-code-end", "");
+    content.appendChild(row);
+    rowMetrics.set(row, { scrollWidth: 100, clientWidth: 100, ...spec.metrics });
+  });
+  code.append(gutter, content);
+  root.appendChild(code);
+  return { root, gutter, content, rowMetrics };
+}
+
+describe("syncCodeBlockCards — gutter mirror (keeps the library's selection walk balanced)", () => {
+  const gutterCardsIn = (gutter: HTMLElement) =>
+    [...gutter.querySelectorAll(`:scope > [${GUTTER_CARD_ATTR}]`)] as HTMLElement[];
+  const cellsInGutterCard = (card: HTMLElement) =>
+    [...card.querySelectorAll(":scope > [data-column-number]")].map((c) =>
+      c.getAttribute("data-column-number"),
+    );
+  const gutterCells = (gutter: HTMLElement) =>
+    [...gutter.querySelectorAll(":scope > [data-column-number]")].map((c) =>
+      c.getAttribute("data-column-number"),
+    );
+
+  test("wraps the block's gutter cells in a parallel display:contents card, restoring parity", () => {
+    const { root, gutter, content, rowMetrics } = buildColumns(overflowingBlock);
+    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics));
+
+    const gcards = gutterCardsIn(gutter);
+    expect(gcards).toHaveLength(1);
+    const gcard = gcards[0] as HTMLElement;
+    expect(gcard.getAttribute(GUTTER_CARD_ATTR)).toBe("1"); // keyed like its content card
+    expect(gcard.style.display).toBe("contents"); // structural only, never a scroll box
+    expect(cellsInGutterCard(gcard)).toEqual(["1", "2", "3"]);
+    // The library asserts gutter.children.length === content.children.length.
+    expect(gutter.children.length).toBe(content.children.length);
+  });
+
+  test("mirrors only the overflowing block; a fitting block's gutter cells stay loose", () => {
+    // fitting block (1-2), prose (3), overflowing block (4-5)
+    const { root, gutter, content, rowMetrics } = buildColumns([
+      { code: true, start: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
+      { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 280 } },
+      {},
+      { code: true, start: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
+      { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 900 } },
+    ]);
+    syncCodeBlockCards(
+      root,
+      [
+        { start: 1, end: 2 },
+        { start: 4, end: 5 },
+      ],
+      makeReader(rowMetrics),
+    );
+    const gcards = gutterCardsIn(gutter);
+    expect(gcards).toHaveLength(1);
+    expect(gcards[0]?.getAttribute(GUTTER_CARD_ATTR)).toBe("4");
+    expect(gutter.children.length).toBe(content.children.length);
+  });
+
+  test("is idempotent — a re-run reuses the gutter card, mutating nothing", () => {
+    const { root, gutter, rowMetrics } = buildColumns(overflowingBlock);
+    const read = makeReader(rowMetrics, cardOverflows);
+    syncCodeBlockCards(root, [overflowingRange], read);
+    const first = gutterCardsIn(gutter)[0];
+    syncCodeBlockCards(root, [overflowingRange], read);
+    const gcards = gutterCardsIn(gutter);
+    expect(gcards).toHaveLength(1);
+    expect(gcards[0]).toBe(first);
+    expect(cellsInGutterCard(gcards[0] as HTMLElement)).toEqual(["1", "2", "3"]);
+  });
+
+  test("unwraps the gutter card when the block fits again, returning cells in order", () => {
+    const { root, gutter, content, rowMetrics } = buildColumns(overflowingBlock);
+    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics, cardOverflows));
+    expect(gutterCardsIn(gutter)).toHaveLength(1);
+    const cardFits = { "1": { scrollWidth: 300, clientWidth: 300 } };
+    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics, cardFits));
+    expect(gutterCardsIn(gutter)).toHaveLength(0);
+    expect(gutterCells(gutter)).toEqual(["1", "2", "3"]);
+    expect(gutter.children.length).toBe(content.children.length);
+  });
+
+  test("retires the gutter card when the block no longer exists", () => {
+    const { root, gutter, content, rowMetrics } = buildColumns(overflowingBlock);
+    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics, cardOverflows));
+    expect(gutterCardsIn(gutter)).toHaveLength(1);
+    syncCodeBlockCards(root, [], makeReader(rowMetrics, cardOverflows));
+    expect(gutterCardsIn(gutter)).toHaveLength(0);
+    expect(gutterCells(gutter)).toEqual(["1", "2", "3"]);
+    expect(gutter.children.length).toBe(content.children.length);
   });
 });

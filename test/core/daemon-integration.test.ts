@@ -19,19 +19,42 @@ import { until } from "../support/poll.ts";
 import { recordingLog } from "../support/recording-log.ts";
 import { expectNeverLogsBody } from "../support/redaction.ts";
 
-// Many tests here spawn a real `bun src/cli.ts daemon` subprocess (transpile +
-// boot the whole daemon module graph), then poll the lock file. Standalone that
-// boot is ~tens of ms, but under `mise preflight`'s concurrent load — the unit
-// suite runs alongside `build bin`'s `bun build --compile`, oversubscribing the box
-// — a cold boot can take several seconds. EXC-647 first widened the per-test
-// timeout for this, but the inner lock polls stayed at 5s and still flaked: a boot
-// that overran 5s tripped `existsSync(lockPath)` and failed an otherwise-healthy
-// daemon. LOCK_WAIT_MS is the generous ceiling for a slow-but-succeeding
-// boot/shutdown (a genuinely-stuck daemon still fails within it, and standalone
-// the poll resolves in ms regardless); setDefaultTimeout backstops a truly hung
-// subprocess, sized for the two sequential lock waits in assertLockRemovedOnSignal.
-const LOCK_WAIT_MS = 20_000;
-setDefaultTimeout(60_000);
+// Many tests here spawn a real `bun src/cli.ts daemon` subprocess (transpile + boot
+// the whole daemon module graph), then wait on the lock file. Standalone that boot is
+// ~tens of ms, but under `mise preflight`'s concurrent load — the unit suite racing
+// `build bin`'s `bun build --compile`, oversubscribing the box — the subprocess is
+// starved of scheduling and a ~100ms boot can stretch to many seconds. A fixed poll
+// ceiling flaked there: EXC-647 kept widening it and 20s still tripped (measured: the
+// transpile is NOT the cost — a prebuilt bundle boots no faster under load — it is raw
+// scheduling starvation, which no magic ceiling reliably clears). So the waits are
+// patient-while-alive instead: untilLockWritten polls only while the daemon PROCESS is
+// alive — a boot that is merely slow still passes, while a process that exits WITHOUT a
+// lock fails fast with its exit code (a real crash, distinguished from slowness) — and
+// the shutdown assertion keys off the actual process exit, not a second cliff.
+// setDefaultTimeout is the single, generous backstop for a genuinely hung subprocess.
+setDefaultTimeout(90_000);
+
+/**
+ * Wait for the daemon to write `lockPath`, polling only while the process is alive:
+ * tolerant of an arbitrarily slow boot under a loaded box, but failing fast — with the
+ * exit code — the instant the process exits without a lock (a crash, not slowness). The
+ * test's setDefaultTimeout backstops a boot that hangs without ever exiting.
+ */
+async function untilLockWritten(
+  proc: { exited: Promise<number> },
+  lockPath: string,
+): Promise<void> {
+  let exitCode: number | undefined;
+  void proc.exited.then((code) => {
+    exitCode = code;
+  });
+  while (!existsSync(lockPath)) {
+    if (exitCode !== undefined) {
+      throw new Error(`daemon exited (code ${exitCode}) before writing its lock at ${lockPath}`);
+    }
+    await Bun.sleep(25);
+  }
+}
 
 // In-process health/discovery probe servers (a bare createServer + fixed-path
 // store, distinct from bootDaemon's full boot+client). Stopped after each test.
@@ -147,10 +170,14 @@ async function assertLockRemovedOnSignal(signal: "SIGTERM" | "SIGINT") {
     stdio: ["ignore", "ignore", "ignore"],
   });
   try {
-    expect(await until(() => existsSync(lockPath), LOCK_WAIT_MS)).toBe(true);
+    await untilLockWritten(proc, lockPath);
     proc.kill(signal);
-    expect(await until(() => !existsSync(lockPath), LOCK_WAIT_MS)).toBe(true);
+    // The shutdown closure unlinks the lock, then the process exits — so wait for the
+    // exit (again patient under a loaded box, backstopped by setDefaultTimeout), then
+    // assert the lock is gone. The unlink runs before exit, so this short poll only
+    // absorbs fs latency; a lock still present here is a real cleanup regression.
     await proc.exited;
+    expect(await until(() => !existsSync(lockPath), 2_000)).toBe(true);
   } finally {
     proc.kill("SIGKILL");
     await proc.exited;
@@ -178,7 +205,7 @@ test("an --ephemeral daemon binds an OS port and records identity in the lock", 
     stdio: ["ignore", "ignore", "ignore"],
   });
   try {
-    expect(await until(() => existsSync(lockPath), LOCK_WAIT_MS)).toBe(true);
+    await untilLockWritten(proc, lockPath);
     const lock = JSON.parse(await Bun.file(lockPath).text()) as {
       port: number;
       stateDir?: string;
@@ -395,7 +422,7 @@ test("the daemon logs env warns, ui fallback, and the sigterm shutdown", async (
     stdio: ["ignore", "ignore", "pipe"],
   });
   try {
-    expect(await until(() => existsSync(lockPath), LOCK_WAIT_MS)).toBe(true);
+    await untilLockWritten(proc, lockPath);
     proc.kill("SIGTERM");
     await proc.exited;
     const recs = ndjsonRecords(await new Response(proc.stderr).text());
@@ -502,7 +529,7 @@ test("the daemon logs the parsed settings at startup", async () => {
   try {
     // The boot settings line is emitted before the server binds (lock write),
     // so the lock appearing means the line is already flushed (sync writes).
-    expect(await until(() => existsSync(lockPath), LOCK_WAIT_MS)).toBe(true);
+    await untilLockWritten(proc, lockPath);
     proc.kill("SIGTERM");
     await proc.exited;
     const stderr = await new Response(proc.stderr).text();

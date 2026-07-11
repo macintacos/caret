@@ -12,13 +12,17 @@
 // reviewer can resume it: open() at a scratched range — or resume() from its
 // line marker — reopens the composer with the text restored. An empty dismiss
 // leaves no scratch, and submitting graduates the text to a real annotation and
-// drops the scratch. The store is plain in-memory state on the controller
-// instance, so a reload starts empty; the host calls clear() when the rendered
-// content changes (a new version) so a scratch never mis-anchors onto new text.
+// drops the scratch. The store is seeded via seed() from the review's persisted
+// scratches — on load and whenever the rendered content changes (a new version,
+// a review switch) — so a reload restores the reviewer's markers, while a scratch
+// still never mis-anchors onto text it was not written against (a fresh version
+// carries none of its own).
 //
 // This is deliberately distinct from commentState.ts's "Draft" — a created,
 // pending annotation already added to the working copy. A scratch was never
 // added; its line marker reads "Resume", an action, not the "Draft" state.
+
+import type { PersistedScratch } from "@core/types";
 
 /** The 1-based, inclusive line anchor a submit produces. */
 export interface CreatedAnchor {
@@ -118,10 +122,11 @@ export interface SourceCommenting {
   /** Drop the scratch at `key` without creating anything. No-op if no scratch
    * matches. The per-scratch counterpart to clear(), for the dialog's Discard. */
   discard(key: string): void;
-  /** Drop every scratch and close any open composer. The host calls this when the
-   * rendered content changes (a new plan version) so a scratch never mis-anchors
-   * onto text it was not written against. */
-  clear(): void;
+  /** Replace every scratch with the persisted set (keyed by range) and close any
+   * open composer. The host calls this on load and whenever the rendered content
+   * changes (a new plan version, a review switch), so scratches rehydrate from the
+   * review while never mis-anchoring onto text they were not written against. */
+  seed(persisted: PersistedScratch[]): void;
 }
 
 export function createSourceCommenting(deps: SourceCommentingDeps): SourceCommenting {
@@ -222,12 +227,16 @@ export function createSourceCommenting(deps: SourceCommentingDeps): SourceCommen
       rebuildSnapshot();
       deps.onChange?.();
     },
-    clear() {
-      if (store.size > 0) {
-        store.clear();
-        rebuildSnapshot();
+    seed(persisted) {
+      open = null;
+      openText = "";
+      store.clear();
+      for (const s of persisted) {
+        const key = scratchKey(s.startLine, s.endLine);
+        store.set(key, { key, startLine: s.startLine, endLine: s.endLine, text: s.text });
       }
-      close();
+      rebuildSnapshot();
+      deps.onChange?.();
     },
   };
 }

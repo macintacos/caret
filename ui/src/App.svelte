@@ -13,7 +13,7 @@
   import { createResolve, type ResolveStore } from "./state/resolve.svelte.ts";
   import { coveredLineCount, pendingInlineCount } from "./lib/feedback.ts";
   import type { ComposerScratch } from "./lib/diffview/commenting.ts";
-  import type { ApproveVariant, ApproveVariantId, Annotation } from "@core/types";
+  import type { ApproveVariant, ApproveVariantId, Annotation, PersistedScratch } from "@core/types";
 
   import ApproveConfirmDialog from "./components/ApproveConfirmDialog.svelte";
   import DiffPlanView from "./components/DiffPlanView.svelte";
@@ -53,8 +53,9 @@
   let work = $state<{
     annotations: Annotation[];
     generalCommentDraft: string;
+    composerScratches: PersistedScratch[];
     focusedAnnotation: string | null;
-  }>({ annotations: [], generalCommentDraft: "", focusedAnnotation: null });
+  }>({ annotations: [], generalCommentDraft: "", composerScratches: [], focusedAnnotation: null });
 
   let showDialog = $state(false);
   // The approve variant a pending-comment guard is holding: the mode the reviewer
@@ -251,7 +252,10 @@
       onEditAnnotation={autosave.editAnnotation}
       onDeleteAnnotation={autosave.deleteAnnotation}
       onFocusAnnotation={autosave.focusAnnotation}
-      onScratchesChange={(s) => (scratches = s)}
+      onScratchesChange={(s) => {
+        scratches = s;
+        autosave.setScratches(s);
+      }}
       onExposeScratchActions={(a) => (scratchActions = a)}
     />
   {:else}

@@ -8,16 +8,34 @@
 // on every id:version change, while the draft seeds on an id change only.
 
 import { putDraft } from "../lib/api.ts";
-import type { Annotation, ClientReview } from "@core/types";
+import type { Annotation, ClientReview, PersistedScratch } from "@core/types";
 import { isNetworkFailure } from "./resolve.svelte.ts";
 
 const SAVE_DEBOUNCE_MS = 500;
+
+/** Copy a scratch list into fresh, persistable objects — dropping the source
+ * view controller's derived `key`, and never aliasing a served array. */
+const copyScratches = (list: readonly PersistedScratch[]): PersistedScratch[] =>
+  list.map((s) => ({ startLine: s.startLine, endLine: s.endLine, text: s.text }));
+
+/** Whether two scratch lists carry the same anchored drafts, in order. */
+const scratchesEqual = (a: readonly PersistedScratch[], b: readonly PersistedScratch[]): boolean =>
+  a.length === b.length &&
+  a.every((s, i) => {
+    const o = b[i];
+    return (
+      o !== undefined && s.startLine === o.startLine && s.endLine === o.endLine && s.text === o.text
+    );
+  });
 
 /** Backing fields the autosave reads and writes. App.svelte supplies a
  * `$state`-backed implementation; tests supply a plain object. */
 export interface AutosaveStore {
   annotations: Annotation[];
   generalCommentDraft: string;
+  /** The current version's unsent composer scratches (line-anchored drafts the
+   * reviewer typed but did not submit). Version-scoped like annotations. */
+  composerScratches: PersistedScratch[];
   focusedAnnotation: string | null;
 }
 
@@ -36,6 +54,7 @@ export interface Autosave {
   readonly annotations: Annotation[];
   readonly focusedAnnotation: string | null;
   readonly generalCommentDraft: string;
+  readonly composerScratches: PersistedScratch[];
 
   /** Reconcile the working copy with the active review. Flushes the previous
    * review's pending save first, then reloads the annotation copy on an
@@ -53,6 +72,10 @@ export interface Autosave {
   editGeneralComment: (value: string) => void;
   /** Clear the local general-comment draft (after a deny clears it server-side). */
   clearGeneralComment: () => void;
+  /** Replace the working-copy scratches (mirrored up from the source-view
+   * controller on every change) and schedule a debounced save. The persisted
+   * shape drops the controller's derived `key`. */
+  setScratches: (next: readonly PersistedScratch[]) => void;
 }
 
 /**
@@ -72,6 +95,13 @@ export function createAutosave(
 
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
   let pendingSaveId: string | null = null;
+  // The plan version the pending save was composed against, sent with the draft so
+  // the daemon can drop a scratch write whose debounce raced a newly-arrived
+  // version (its old line anchors would mis-land on the new text).
+  let pendingSaveVersion: number | null = null;
+  // The active review's current version, tracked from syncActive so scheduleSave
+  // can stamp each edit with the version it was made against.
+  let currentVersionNum: number | null = null;
   // Keyed on id:version so a new version (revision) also reloads the working
   // copy — never persist stale annotations from a prior version onto the next.
   let lastLoadedKey: string | null = null;
@@ -88,13 +118,21 @@ export function createAutosave(
     if (!pendingSaveId) return;
     const id = pendingSaveId;
     pendingSaveId = null;
+    const version = pendingSaveVersion ?? undefined;
+    pendingSaveVersion = null;
     // Snapshot both fields synchronously (before any await) so a review switch
     // mid-flush can't redirect this save onto the new review's working copy.
     const snapshot = store.annotations.map((a) => ({ ...a }));
     // Whitespace-only is treated as empty — never persist a blank draft.
     const draft = store.generalCommentDraft.trim() === "" ? "" : store.generalCommentDraft;
+    const scratches = copyScratches(store.composerScratches);
     try {
-      await save(id, { annotations: snapshot, generalCommentDraft: draft });
+      await save(id, {
+        annotations: snapshot,
+        generalCommentDraft: draft,
+        composerScratches: scratches,
+        version,
+      });
     } catch (err) {
       // A non-2xx (e.g. the review was resolved/removed) is not a connection
       // problem — the daemon answered. Only a real network failure goes offline.
@@ -105,6 +143,7 @@ export function createAutosave(
   function scheduleSave() {
     if (!activeId()) return;
     pendingSaveId = activeId();
+    pendingSaveVersion = currentVersionNum;
     if (saveTimer) clearTimer(saveTimer);
     saveTimer = setTimer(() => void flushPending(), SAVE_DEBOUNCE_MS);
   }
@@ -119,6 +158,9 @@ export function createAutosave(
     get generalCommentDraft() {
       return store.generalCommentDraft;
     },
+    get composerScratches() {
+      return store.composerScratches;
+    },
 
     syncActive(active) {
       const key = active ? `${active.id}:${active.version}` : null;
@@ -131,6 +173,11 @@ export function createAutosave(
         lastLoadedKey = key;
         store.annotations = active.annotations.map((a) => ({ ...a }));
         store.focusedAnnotation = null;
+        // Scratches are version-scoped like annotations: reload them on every
+        // id:version change so a fresh plan version starts with its own (which
+        // has none), never a prior version's stale line anchors.
+        store.composerScratches = copyScratches(active.composerScratches);
+        currentVersionNum = active.version;
         // Seed on id change only, via its own guard (see lastDraftLoadedId
         // above) — independent of the id:version annotation reload around it.
         if (active.id !== lastDraftLoadedId) {
@@ -143,6 +190,8 @@ export function createAutosave(
         lastDraftLoadedId = null;
         store.annotations = [];
         store.generalCommentDraft = "";
+        store.composerScratches = [];
+        currentVersionNum = null;
       }
     },
 
@@ -174,6 +223,15 @@ export function createAutosave(
     },
     clearGeneralComment() {
       store.generalCommentDraft = "";
+    },
+    setScratches(next) {
+      const cleaned = copyScratches(next);
+      // The controller reseeds on load / switch / version change and echoes the
+      // just-served set back through here; an unchanged set must not schedule a
+      // redundant PUT (nor flip pendingSaveId onto the freshly-seeded review).
+      if (scratchesEqual(cleaned, store.composerScratches)) return;
+      store.composerScratches = cleaned;
+      scheduleSave();
     },
   };
 }

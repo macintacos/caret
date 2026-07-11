@@ -113,12 +113,18 @@ export function isLegacyAnnotation(a: Annotation): a is LegacyAnnotation {
   return "blockId" in a;
 }
 
-/** One revision of a plan within a review thread. Annotations are version-scoped. */
+/** One revision of a plan within a review thread. Annotations and the unsent
+ * composer scratches are version-scoped — both anchor to this version's plan text,
+ * so a new version starts with neither. */
 export interface PlanVersion {
   /** 1-based version number. */
   version: number;
   plan: string;
   annotations: Annotation[];
+  /** Persisted, unsent composer scratches — the line-anchored drafts the reviewer
+   * typed but did not submit against this version's text. Optional because
+   * pre-existing on-disk versions predate the field. */
+  composerScratches?: PersistedScratch[];
   createdAt: number;
 }
 
@@ -168,12 +174,6 @@ export interface Review {
    * (not version-scoped like annotations): it has no anchor in a specific plan
    * text. Optional because pre-existing on-disk reviews predate the field. */
   generalCommentDraft?: string;
-  /** Persisted, unsent composer scratches — the line-anchored drafts the reviewer
-   * typed but did not submit. This is an available-but-unused persistence seam: the
-   * field is written and round-tripped through the draft endpoint and storage, but
-   * nothing rehydrates it into the source view yet (deferred follow-up). Optional
-   * because pre-existing on-disk reviews predate the field. */
-  composerScratches?: PersistedScratch[];
   createdAt: number;
   updatedAt: number;
   decision?: Decision;
@@ -193,9 +193,9 @@ export interface ClientReview {
   versions: PlanVersion[];
   /** Always a string (coerced from the optional Review field in toClientReview). */
   generalCommentDraft: string;
-  /** Always present (coerced from the optional Review field in toClientReview). The
-   * read half of the persisted-scratch seam: a GET serves it so a future load can
-   * rehydrate it; no UI consumes it yet. */
+  /** The current version's unsent composer scratches (coerced to [] from the
+   * optional PlanVersion field in toClientReview). Served on every GET so the
+   * source view rehydrates the reviewer's line-anchored drafts on load. */
   composerScratches: PersistedScratch[];
   createdAt: number;
   updatedAt: number;
@@ -265,6 +265,11 @@ export interface DraftBody {
   annotations?: Annotation[];
   generalCommentDraft?: string;
   composerScratches?: PersistedScratch[];
+  /** The plan version the version-scoped fields were composed against. When
+   * present and stale (≠ the review's current version), the daemon drops the
+   * scratch write, so a draft whose debounce raced a newly-arrived version can't
+   * land its stale line anchors on the new version's text. */
+  version?: number;
 }
 
 /**
@@ -317,7 +322,7 @@ export function toClientReview(review: Review): ClientReview {
     annotations: cur.annotations,
     versions: review.versions,
     generalCommentDraft: review.generalCommentDraft ?? "",
-    composerScratches: review.composerScratches ?? [],
+    composerScratches: cur.composerScratches ?? [],
     createdAt: review.createdAt,
     updatedAt: review.updatedAt,
     decision: review.decision,

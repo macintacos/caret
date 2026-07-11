@@ -291,11 +291,15 @@ const DraftBodySchema: z.ZodType<DraftBody> = z
       .nullish()
       .transform(nullToUndefined)
       .catch(undefined),
+    // The version the scratches were composed against (optional for back-compat
+    // with clients that don't send it); the daemon uses it to drop a stale write.
+    version: z.number().int().min(1).nullish().transform(nullToUndefined).catch(undefined),
   })
   .catch({
     annotations: undefined,
     generalCommentDraft: undefined,
     composerScratches: undefined,
+    version: undefined,
   });
 
 /** Parse a request body that may be malformed JSON. A JSON parse failure
@@ -697,11 +701,19 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       if (body.generalCommentDraft != null) {
         r.generalCommentDraft = body.generalCommentDraft;
       }
-      // Persist the unsent composer scratches. Available-but-unused seam: the
-      // value round-trips to disk and is served back on GET, but nothing
-      // rehydrates it into the source view yet (deferred follow-up).
-      if (body.composerScratches != null) {
-        r.composerScratches = body.composerScratches;
+      // Persist the current version's unsent composer scratches, version-scoped
+      // alongside its annotations so a new plan version starts with neither; the
+      // source view rehydrates them from the served ClientReview on load. Drop a
+      // stale write: a scratch save whose debounce fired after a new version
+      // arrived carries the version it was composed against, and its old line
+      // anchors must not land on the current version (an omitted version writes,
+      // for back-compat).
+      const cur = currentVersion(r);
+      if (
+        body.composerScratches != null &&
+        (body.version == null || body.version === cur.version)
+      ) {
+        cur.composerScratches = body.composerScratches;
       }
     });
     // Id only — draft/annotation text is reviewer prose and never logged.
@@ -730,8 +742,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // the review on disk as rejected and must not retain stale text; an
       // approve removes it (store.remove flushes "" first).
       r.generalCommentDraft = "";
-      // Same invariant for the persisted composer scratches.
-      r.composerScratches = [];
+      // Same invariant for the persisted composer scratches (version-scoped).
+      currentVersion(r).composerScratches = [];
     });
     // Approval is terminal: bump the session epoch (so a later plan is a fresh
     // thread) and drop it from the active set so idle can fire.

@@ -510,14 +510,17 @@
     commenting.resume(key);
   }
 
-  // Clear the open composer and every scratch when the rendered content changes
-  // (a new version arrives, or the review switches): a scratch's line anchor
-  // belongs to the prior text, so resuming it onto the new version would
-  // mis-anchor. contentKey is the reactive trigger. (Scratches are in-memory, so
-  // a reload starts empty without any teardown here.)
+  // Reseed the controller's scratches from the review's persisted set whenever the
+  // rendered content changes (a new version arrives, or the review switches) and on
+  // first mount, so a reload restores the reviewer's "Resume" markers. A fresh
+  // version is served with none of its own, so this doubles as the wipe that keeps
+  // a scratch from mis-anchoring onto text it was not written against. contentKey
+  // is the reactive trigger; review.composerScratches is read untracked so a poll
+  // tick re-delivering the same id:version (a new array reference) never re-seeds
+  // over live typing.
   $effect(() => {
     void contentKey;
-    commenting.clear();
+    untrack(() => commenting.seed(review.composerScratches));
   });
 
   // The live drag readout: while the reviewer drags down the line-number column,
