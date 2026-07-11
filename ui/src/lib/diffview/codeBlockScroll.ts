@@ -25,6 +25,20 @@ import type { CodeBlockRange } from "./codeBlocks.ts";
  * ties it to its block for idempotent reuse and for the card's coreStyles.ts styling. */
 export const CARD_ATTR = "data-code-card";
 
+/** Marks a block's gutter card — the line-number-column mirror of its content scroll card,
+ * keyed by the same 1-based start line. @pierre/diffs' selection walk
+ * (InteractionManager.renderSelection) pairs the gutter and content columns by direct-child
+ * index and THROWS when their child counts differ ("gutter and content children dont match");
+ * a content card collapses a block's N rows into one child, so without this mirror the columns
+ * diverge and the throw kills the drag-selection highlight for the WHOLE view whenever any
+ * block is carded. The gutter card is `display: contents` (set inline, like the content card's
+ * grid-row) so it is purely structural — its cells still map to the shared subgrid row tracks
+ * and keep their library styling (descendant-selector based) — and it lands at the same child
+ * index as its content card, so the library's walk skips both (a card has no line index) and
+ * stays balanced. Trade-off: a carded block's own code lines are not highlighted while dragging
+ * across them, which keeps the rest of the selection working. */
+export const GUTTER_CARD_ATTR = "data-code-card-gutter";
+
 /** The layout metrics that decide whether a block overflows its card. For an unwrapped block
  * these are read per row (does the capped row box overflow?); for a wrapped block they are
  * read from the card (does the block still overflow after wrapping?). */
@@ -62,10 +76,35 @@ function wrapBlock(content: Element, key: string, rows: HTMLElement[]): void {
   for (const row of rows) card.appendChild(row);
 }
 
-/** Unwraps a card, returning its rows to the content column in place, then removes it. */
-function unwrapCard(content: Element, card: HTMLElement): void {
-  while (card.firstChild != null) content.insertBefore(card.firstChild, card);
+/** Unwraps a card, returning its children to the column in place, then removes it. Used for
+ * both the content scroll card and the gutter mirror card. */
+function unwrapCard(column: Element, card: HTMLElement): void {
+  while (card.firstChild != null) column.insertBefore(card.firstChild, card);
   card.remove();
+}
+
+/** The direct-child gutter cells for a block, in document order, by 1-based column number —
+ * the gutter counterpart of directBlockRows. Only direct children (a wrapped block's cells
+ * live inside its gutter card and are handled through that card). */
+function directGutterCells(gutter: Element, range: CodeBlockRange): HTMLElement[] {
+  const cells: HTMLElement[] = [];
+  for (let n = range.start; n <= range.end; n++) {
+    const cell = gutter.querySelector<HTMLElement>(`:scope > [data-column-number="${n}"]`);
+    if (cell != null) cells.push(cell);
+  }
+  return cells;
+}
+
+/** Wraps a block's gutter cells in a display:contents card at their position, keyed like its
+ * content card. display:contents keeps the cells mapped to the shared subgrid row tracks (the
+ * card has no box), so the mirror is invisible — it exists only to rebalance the column counts
+ * the library's selection walk asserts (see GUTTER_CARD_ATTR). */
+function wrapGutterBlock(gutter: Element, key: string, cells: HTMLElement[]): void {
+  const card = document.createElement("div");
+  card.setAttribute(GUTTER_CARD_ATTR, key);
+  card.style.display = "contents";
+  gutter.insertBefore(card, cells[0] ?? null);
+  for (const cell of cells) card.appendChild(cell);
 }
 
 /**
@@ -110,5 +149,23 @@ export function syncCodeBlockCards(
   // Unwrap any card that is no longer wanted — its block now fits, or no longer exists.
   for (const card of content.querySelectorAll<HTMLElement>(`:scope > [${CARD_ATTR}]`)) {
     if (!wanted.has(card.getAttribute(CARD_ATTR) ?? "")) unwrapCard(content, card);
+  }
+
+  // Mirror the content cards into the gutter column so the two columns keep matching
+  // direct-child counts (see GUTTER_CARD_ATTR). The overflow decision is content's alone — the
+  // gutter never overflows — so the gutter simply follows `wanted`: wrap the cells of any newly
+  // carded block, and unwrap any gutter card whose block was retired. Guarded on the gutter
+  // existing so the content-only test harness (and any gutterless layout) is unaffected.
+  const gutter = root.querySelector<HTMLElement>("[data-gutter]");
+  if (gutter == null) return;
+  for (const range of ranges) {
+    const key = String(range.start);
+    if (!wanted.has(key)) continue;
+    if (gutter.querySelector(`:scope > [${GUTTER_CARD_ATTR}="${key}"]`) != null) continue;
+    const cells = directGutterCells(gutter, range);
+    if (cells.length > 0) wrapGutterBlock(gutter, key, cells);
+  }
+  for (const card of gutter.querySelectorAll<HTMLElement>(`:scope > [${GUTTER_CARD_ATTR}]`)) {
+    if (!wanted.has(card.getAttribute(GUTTER_CARD_ATTR) ?? "")) unwrapCard(gutter, card);
   }
 }

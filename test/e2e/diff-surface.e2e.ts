@@ -666,6 +666,69 @@ test("a drag selection renders the selected lines in caret amber, not library-bl
   expect(axes.number as number).toBeGreaterThan(2);
 });
 
+// A plan whose fenced code block has a line far wider than the panel, so EXC-729 wraps it
+// in a horizontal-scroll card ([data-code-card]). That card collapses the block's rows into a
+// single content-column child, which once desynced @pierre/diffs' gutter/content child counts
+// and made InteractionManager.renderSelection throw ("gutter and content children dont match")
+// — silently killing the drag-selection highlight for the WHOLE view. The gutter mirror
+// (codeBlockScroll.ts) rebalances the columns; this proves a drag still highlights, and never
+// throws, when an overflowing code-block card is present. Same reflow-stable shape as CODE_PLAN
+// (fence at 5–8), so the prose above is at lines 1–3.
+const WIDE_CODE_PLAN = `# Wide code selection
+
+Intro prose here.
+
+\`\`\`text
+${"const veryLongIdentifierThatRunsWellPastThePanelWidthToForceHorizontalOverflow = ".repeat(8)}0;
+short tail line
+\`\`\`
+
+Closing prose after the block.
+`;
+
+test("a drag selection still highlights when the plan has an overflowing code-block card", async ({
+  daemon,
+  page,
+}) => {
+  // The library's selection render throws in a rAF, so it surfaces as an uncaught page error;
+  // collect them and assert the specific mismatch never fires.
+  const pageErrors: string[] = [];
+  page.on("pageerror", (err) => pageErrors.push(err.message));
+
+  await daemon.seed({ plan: WIDE_CODE_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("Intro prose here.")).toBeVisible();
+
+  // Precondition: the wide block overflowed and was carded — the exact DOM shape that used to
+  // break the selection walk. Without a card present the test would pass vacuously.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document.querySelector(".diffview")?.shadowRoot?.querySelectorAll("[data-code-card]")
+            .length ?? 0,
+      ),
+    )
+    .toBeGreaterThan(0);
+
+  const selectedLineCount = () =>
+    page.evaluate(
+      () =>
+        document.querySelector(".diffview")?.shadowRoot?.querySelectorAll("[data-selected-line]")
+          .length ?? 0,
+    );
+
+  // Drag across the prose above the block: the throw was global (any selection while any card
+  // exists), so this range is a faithful trigger, and lines 1–3 are reflow-stable.
+  await selectGutterRange(page, 1, 3);
+
+  // The highlight rendered — the bug left it at zero (the library bailed on the throw) — and the
+  // column-mismatch error never fired.
+  await expect.poll(selectedLineCount).toBeGreaterThan(0);
+  expect(pageErrors.filter((m) => /renderSelection|children dont match/.test(m))).toEqual([]);
+});
+
 // A plan with a fenced code block: heading (1), blank (2), prose (3), blank (4),
 // opening fence (5), two code lines (6–7), closing fence (8), blank (9), prose (10).
 const CODE_PLAN = `# Code Plan
