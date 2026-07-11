@@ -59,6 +59,31 @@ test("a pending inline comment guards approve and routes to request-changes inta
   expect(feedback).toContain("explain the cold cost");
 });
 
+test("an uncommitted composer scratch guards approve (EXC-745)", async ({ daemon, page }) => {
+  const id = await daemon.seed();
+  // Seed a retained-but-unsent composer scratch the same way the UI's autosave
+  // persists one: a reviewer who typed an inline comment but never clicked
+  // "Comment", so it never became a committed annotation.
+  await daemon.putDraft(id, {
+    composerScratches: [{ startLine: 7, endLine: 8, text: "half a thought to finish later" }],
+  });
+
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  // The scratch rehydrated on load — its Resume marker is proof it reached the UI.
+  await expect(page.getByRole("button", { name: "Resume unsent comment" })).toBeVisible();
+
+  // Approve must open the guard, not resolve: an uncommitted scratch is unsent
+  // inline work that a plain approve would silently drop.
+  const guard = page.getByRole("dialog", { name: "Approve with pending comments" });
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(guard).toBeVisible();
+  await expect(guard).toContainText("1 pending comment");
+
+  // The review is still pending: nothing was sent, the scratch was not dropped.
+  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
+});
+
 test("'Approve anyway' on the guard resolves as an allow", async ({ daemon, page }) => {
   const id = await daemon.seed();
   await daemon.putDraft(id, {
