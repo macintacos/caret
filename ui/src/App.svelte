@@ -92,10 +92,14 @@
   // The variants the split-button renders: the declared set when present, else
   // the built-in fallback.
   let variants = $derived(approveVariants(declaredVariants));
-  // Non-blank inline comments the working copy holds — the count the approve
-  // guard and the request-changes dialog both read, so they never disagree about
-  // what's pending.
-  let pendingCount = $derived(pendingInlineCount(work.annotations));
+  // Everything a plain Approve would silently drop: the working copy's non-blank
+  // committed inline comments plus the retained-but-unsent composer scratches (the
+  // controller keeps a scratch only when its trimmed text is non-empty, so
+  // scratches.length is exactly the non-blank count). The approve guard, the
+  // request-changes dialog, the TopBar badge, and the status strip all read this
+  // one count, so they never disagree about what's pending — and an uncommitted
+  // scratch is now protected on Approve exactly like a committed comment (EXC-745).
+  let pendingCount = $derived(pendingInlineCount(work.annotations) + scratches.length);
   // Distinct source lines the pending line-anchored comments cover (union of
   // ranges), for the status strip's at-a-glance "N comments · M lines" readout.
   let coveredLines = $derived(coveredLineCount(work.annotations));
