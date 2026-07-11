@@ -217,9 +217,10 @@ describe("RequestChangesDialog keyboard", () => {
 // pending annotation in commentState.ts), and an unsaved scratch never counts
 // toward the committed-comment tally or the sent feedback (EXC-635).
 describe("RequestChangesDialog unsent scratches", () => {
-  test("no scratch section when there are no scratches", () => {
+  test("no scratch section or drafts-hint when there are no scratches", () => {
     const { target } = render(RequestChangesDialog, baseProps);
     expect(target.querySelector(".scratches")).toBeNull();
+    expect(target.querySelector(".drafts-hint")).toBeNull();
   });
 
   test("lists one row per scratch; the full text sits behind a collapsed disclosure", () => {
