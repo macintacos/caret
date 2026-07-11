@@ -79,3 +79,43 @@ test("a line-anchored annotation reaches Decision.feedback as a line reference p
   expect(feedback).toContain("> The cache layer … full cold cost.");
   expect(feedback).toContain("explain the cold cost");
 });
+
+test("a scratch's Save shows without expanding the row and graduates it into the sent feedback (EXC-746)", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  // Seed a retained-but-unsent composer scratch (the reviewer typed an inline
+  // comment but never clicked "Comment"), the same way the UI's autosave persists
+  // one, before the page loads its working copy.
+  await daemon.putDraft(id, {
+    composerScratches: [{ startLine: 7, endLine: 8, text: "a half-typed thought" }],
+  });
+
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const dialog = page.getByRole("dialog", { name: "Request changes" });
+  await page.getByRole("button", { name: "Request changes" }).click();
+  await expect(dialog).toBeVisible();
+
+  // The regression (EXC-746): the scratch's Save is visible WITHOUT expanding any
+  // row. Before the fix it lived inside a collapsed <details> body and was hidden,
+  // so a reviewer could hit "Send for revision" and drop the draft never having
+  // seen Save. A unit test can't catch this — happy-dom renders <details> children
+  // regardless of `open` — so this real-Chromium visibility check is the guard.
+  const save = dialog.locator(".scratch-row .save");
+  await expect(save).toBeVisible();
+
+  // Saving graduates the scratch into a committed comment: the live preview now
+  // quotes it (the deny button enables with it), and it reaches Decision.feedback.
+  await save.click();
+  await expect(dialog.locator(".preview pre")).toContainText("a half-typed thought");
+  await dialog.getByRole("button", { name: "Send for revision" }).click();
+
+  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
+  await expect.poll(async () => (await daemon.getReview(id)).body?.decision?.behavior).toBe("deny");
+  const feedback = (await daemon.getReview(id)).body?.decision?.feedback ?? "";
+  expect(feedback).toContain("a half-typed thought");
+});
