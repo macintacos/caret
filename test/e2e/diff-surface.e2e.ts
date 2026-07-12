@@ -1651,6 +1651,22 @@ test("clicking a line near the top opens its composer without jumping the scroll
   expect(await view.evaluate((el) => el.scrollTop)).toBeLessThan(50);
 });
 
+test("clicking a line focuses the comment field immediately", async ({ daemon, page }) => {
+  // Clicking a line to comment must land focus in the editor so the reviewer can
+  // start typing at once — no second click into the field. The composer's node
+  // is relocated into the library's slot on open (slotInto), which blurs the
+  // just-autofocused editor unless slotInto restores it.
+  await daemon.seed({ plan: TALL_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("Line 1 of the plan body")).toBeVisible();
+
+  await page.getByText("Line 1 of the plan body").click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+  await expect(composerInput(composer)).toBeFocused();
+});
+
 test("highlights fenced code blocks with per-language syntax colors", async ({ daemon, page }) => {
   // The plan renders as one markdown document; shiki's markdown grammar only
   // tokenizes a ```lang block when that grammar is attached, which the library

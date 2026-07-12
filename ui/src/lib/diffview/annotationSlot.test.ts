@@ -110,4 +110,23 @@ describe("slotInto", () => {
     action.update({ host, line: 3 });
     expect(node.parentElement).toBe(host);
   });
+
+  test("keeps a focused descendant focused across the relocation into the host", () => {
+    // The composer autofocuses its editor before slotInto relocates it into the
+    // library slot; the appendChild move blurs a focused descendant, so slotInto
+    // must restore focus — otherwise the reviewer has to click the field again.
+    const host = document.createElement("div");
+    document.body.append(host);
+    const node = document.createElement("div");
+    const input = document.createElement("input");
+    node.append(input);
+    document.body.append(node); // connected, like the composer before it is slotted
+    input.focus();
+    expect(document.activeElement).toBe(input);
+
+    slotInto(node, { host, line: 4 });
+
+    expect(node.parentElement).toBe(host);
+    expect(document.activeElement).toBe(input);
+  });
 });

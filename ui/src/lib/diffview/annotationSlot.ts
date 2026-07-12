@@ -95,8 +95,15 @@ export function slotInto(node: HTMLElement, params: SlotIntoParams) {
   const place = (p: SlotIntoParams) => {
     node.slot = annotationSlotName(p.line);
     if (p.host != null && p.host !== placedIn) {
+      // Relocating the node with appendChild blurs any focused descendant. The
+      // composer autofocuses its editor before this move, so capture the focused
+      // element and restore it after — otherwise clicking a line opens a composer
+      // the reviewer must click again before typing. preventScroll matches the
+      // composer's own autofocus, so restoring focus never jumps the view.
+      const focused = node.contains(document.activeElement) ? document.activeElement : null;
       p.host.appendChild(node);
       placedIn = p.host;
+      if (focused instanceof HTMLElement) focused.focus({ preventScroll: true });
     }
   };
 
