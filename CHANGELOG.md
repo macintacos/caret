@@ -27,18 +27,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Unified tasks CLI.** The remaining mise file tasks were consolidated into a single
   tasks CLI: build/test/smoke collapsed into single tasks, the release CLI merged in, raw
-  args passed through the mise file tasks, and the preflight gate moved into the CLI — plus
-  dev-task follow-ups (in-process driver, testable supervision, flags) (#203, #204, #206,
-  #207, #208, #213).
-- **Release prepare no longer preflights.** The preflight gate was removed from the release
-  prepare step (a758a5e).
+  args passed through the mise file tasks, and the preflight gate moved into the CLI —
+  plus dev-task follow-ups (in-process driver, testable supervision, flags) (#203, #204,
+  #206, #207, #208, #213).
+- **Release prepare no longer preflights.** The preflight gate was removed from the
+  release prepare step (a758a5e).
 - **Unsent-comment guardrails.** The approve "are you sure?" guard now previews the unsent
   comments it is about to drop and counts unsent inline scratches toward the pending total
   (#210, #215).
 - **Distinct, scrollable plan code blocks.** Code blocks get a distinct panel styling in
   the plan view and scroll horizontally when wide (#198, #200).
-- **Leaner OpenCode change-request output.** OpenCode change-request tool results no longer
-  re-paste the full plan (#196).
+- **Leaner OpenCode change-request output.** OpenCode change-request tool results no
+  longer re-paste the full plan (#196).
 - **Documented the review timeout.** Added an explanation of why the caret review timeout
   exists (#194).
 
