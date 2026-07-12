@@ -15,8 +15,13 @@ test("rejecting resolves the review as a deny carrying the wait message", async 
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
 
-  // Exact match so it doesn't collide with "Request changes".
+  // Reject always confirms (EXC-685), even with nothing queued: the top-bar
+  // button opens a plain "are you sure?" dialog — no "won't be sent" warning.
   await page.getByRole("button", { name: "Reject", exact: true }).click();
+  const confirm = page.getByRole("dialog", { name: "Reject this plan" });
+  await expect(confirm).toBeVisible();
+  await expect(confirm).not.toContainText("won't be sent");
+  await confirm.getByRole("button", { name: "Reject", exact: true }).click();
 
   // UI: the review leaves the pending set.
   await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();

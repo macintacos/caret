@@ -4,12 +4,14 @@
   import Icon from "./Icon.svelte";
 
   interface Props {
-    /** Non-blank pending comments — always > 0 when this dialog renders. */
+    /** Non-blank pending comments. When 0 the dialog is a plain "are you sure?"
+     * confirm (Reject always confirms, EXC-685); when > 0 it also guards the
+     * unsent comments from being silently dropped. */
     count: number;
-    /** The lossy action's label, e.g. "Approve" or "Reject". Drives the title,
-     * eyebrow, aria-label, and the confirm button's "{action} anyway". */
+    /** The verdict's label, e.g. "Approve" or "Reject". Drives the title,
+     * eyebrow, aria-label, and the confirm button. */
     action: string;
-    /** One-line consequence specific to the action, shown after the count. */
+    /** One-line sentence describing what the verdict does, always shown. */
     consequence: string;
     /** Optional glyph for the confirm button (omit for a text-only action). */
     icon?: IconName;
@@ -20,6 +22,11 @@
   let { count, action, consequence, icon, onConfirm, onRequestChanges, onCancel }: Props = $props();
 
   let dialog = $state<HTMLDivElement | undefined>();
+  // With queued comments the dialog guards against dropping them; with none it's
+  // a bare confirmation. The label, the "won't be sent" warning, the Request-
+  // changes divert, and the "anyway" wording all key off this.
+  let hasComments = $derived(count > 0);
+  let label = $derived(hasComments ? `${action} with pending comments` : `${action} this plan`);
 
   // Focus the dialog so Escape/Enter land here, not on the button left behind it.
   $effect(() => {
@@ -40,28 +47,33 @@
     bind:this={dialog}
     role="dialog"
     aria-modal="true"
-    aria-label="{action} with pending comments"
+    aria-label={label}
     tabindex="-1"
     onkeydown={onKey}
   >
     <header>
       <span class="eyebrow">{action}</span>
-      <h2>{action} without sending your comments?</h2>
+      <h2>{action} this plan?</h2>
     </header>
 
     <p class="body">
-      You have {count} pending comment{count === 1 ? "" : "s"} that won't be sent. {consequence}
+      {consequence}
+      {#if hasComments}
+        You have {count} pending comment{count === 1 ? "" : "s"} that won't be sent.
+      {/if}
     </p>
 
     <footer>
       <button class="ghost" onclick={onCancel}>Cancel</button>
-      <button class="to-request" onclick={onRequestChanges}>
-        <Icon name="corner-up-left" size={14} />
-        Request changes
-      </button>
+      {#if hasComments}
+        <button class="to-request" onclick={onRequestChanges}>
+          <Icon name="corner-up-left" size={14} />
+          Request changes
+        </button>
+      {/if}
       <button class="confirm" onclick={onConfirm}>
         {#if icon}<Icon name={icon} size={14} />{/if}
-        {action} anyway
+        {hasComments ? `${action} anyway` : action}
       </button>
     </footer>
   </div>

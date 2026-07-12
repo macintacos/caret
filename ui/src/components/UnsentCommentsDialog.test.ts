@@ -7,7 +7,7 @@ import UnsentCommentsDialog from "./UnsentCommentsDialog.svelte";
 const approveProps = {
   count: 2,
   action: "Approve",
-  consequence: "Approving accepts the plan and leaves them behind.",
+  consequence: "Approving accepts the plan and starts the agent's work.",
   icon: "check" as const,
   onConfirm: () => {},
   onRequestChanges: () => {},
@@ -17,7 +17,7 @@ const approveProps = {
 const rejectProps = {
   count: 2,
   action: "Reject",
-  consequence: "Rejecting sends only a brief note and leaves them behind.",
+  consequence: "The agent will be told the plan was rejected and to wait.",
   onConfirm: () => {},
   onRequestChanges: () => {},
   onCancel: () => {},
@@ -42,21 +42,32 @@ describe("UnsentCommentsDialog render", () => {
   test("the Approve variant reads with the approve vocabulary and accessible names", () => {
     const { target } = render(UnsentCommentsDialog, approveProps);
     expect(dialog(target).getAttribute("aria-label")).toBe("Approve with pending comments");
-    expect(target.querySelector("h2")!.textContent).toContain("Approve without sending");
+    expect(target.querySelector("h2")!.textContent).toContain("Approve this plan?");
     expect(target.querySelector(".confirm")!.textContent).toContain("Approve anyway");
     expect(target.querySelector(".body")!.textContent).toContain(
-      "Approving accepts the plan and leaves them behind.",
+      "Approving accepts the plan and starts the agent's work.",
     );
   });
 
   test("the Reject variant swaps in the reject vocabulary and accessible names", () => {
     const { target } = render(UnsentCommentsDialog, rejectProps);
     expect(dialog(target).getAttribute("aria-label")).toBe("Reject with pending comments");
-    expect(target.querySelector("h2")!.textContent).toContain("Reject without sending");
+    expect(target.querySelector("h2")!.textContent).toContain("Reject this plan?");
     expect(target.querySelector(".confirm")!.textContent).toContain("Reject anyway");
     expect(target.querySelector(".body")!.textContent).toContain(
-      "Rejecting sends only a brief note and leaves them behind.",
+      "The agent will be told the plan was rejected and to wait.",
     );
+  });
+
+  test("with no pending comments it is a plain confirm — no warning, no divert, no 'anyway'", () => {
+    const { target } = render(UnsentCommentsDialog, { ...rejectProps, count: 0 });
+    // A bare confirmation: distinct label, no comments warning, no Request-changes
+    // divert, and the confirm button drops the "anyway" qualifier.
+    expect(dialog(target).getAttribute("aria-label")).toBe("Reject this plan");
+    expect(target.querySelector(".body")!.textContent).not.toContain("pending comment");
+    expect(target.querySelector(".to-request")).toBeNull();
+    expect(target.querySelector(".confirm")!.textContent).toContain("Reject");
+    expect(target.querySelector(".confirm")!.textContent).not.toContain("anyway");
   });
 });
 

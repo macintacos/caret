@@ -202,10 +202,9 @@
     if (mode) void resolve.approve(mode);
   }
   function onReject() {
-    // Reject sends only the canned message, never pending comments — so guard it
-    // the same way approve does when any inline work is queued (EXC-685).
-    if (pendingCount > 0) pendingReject = true;
-    else void resolve.reject();
+    // Reject always confirms (EXC-685): consistent whether or not comments are
+    // queued. The dialog additionally guards unsent comments when present.
+    pendingReject = true;
   }
   function rejectAnyway() {
     pendingReject = false;
@@ -305,7 +304,7 @@
   <UnsentCommentsDialog
     count={pendingCount}
     action="Approve"
-    consequence="Approving accepts the plan and leaves them behind."
+    consequence="Approving accepts the plan and starts the agent's work."
     icon="check"
     onConfirm={approveAnyway}
     onRequestChanges={divertToRequestChanges}
@@ -317,7 +316,7 @@
   <UnsentCommentsDialog
     count={pendingCount}
     action="Reject"
-    consequence="Rejecting sends only a brief note and leaves them behind."
+    consequence="The agent will be told the plan was rejected and to wait for your next message."
     onConfirm={rejectAnyway}
     onRequestChanges={divertToRequestChanges}
     onCancel={() => (pendingReject = false)}
