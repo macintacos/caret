@@ -148,6 +148,39 @@ body {
   }
 }
 
+/* The theme-switch "wipe" (EXC-730). changeTheme() (lib/themeWipe.ts) runs the
+   palette swap inside document.startViewTransition, so the browser snapshots the
+   whole page — the light-DOM chrome AND the shadow-DOM diff view, as pixels — and
+   animates between the old and new themes. The new snapshot wipes in from the left
+   over the old (which is held static beneath it); a directional sweep reads as a
+   deliberate "restyled everything" gesture rather than a cross-fade. 0.45s is a
+   one-off, larger than the chrome's ≤200ms one-shot vocabulary on purpose — a
+   full-viewport sweep needs the extra time to read, the same way the ambient
+   animations keep their own longer literals. These pseudo-elements live on the
+   document root, outside #app, so the reduced-motion guard above can't reach them:
+   changeTheme already skips the transition under reduced motion, and the media
+   query below is the belt-and-suspenders CSS half. */
+::view-transition-old(root) {
+  animation: none;
+}
+::view-transition-new(root) {
+  animation: theme-wipe 0.45s var(--ease-out);
+}
+@keyframes theme-wipe {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
+
 /* ----- App shell: plan + annotation-gutter grid ----- */
 /* Keep .shell, #app, and body free of `transform` / `filter` / `perspective` /
    `will-change`: any of those establishes a containing block for the fixed TOC

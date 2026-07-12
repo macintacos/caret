@@ -30,6 +30,9 @@
     /** Reject the plan: deny with a concise "wait for the user" message and no
      * inline comments (EXC-685). Guarded for pending comments in App.svelte. */
     onReject: () => void;
+    /** Open the Settings modal (theme switching). Persistent chrome, like the
+     * bell — reachable whether or not a review is active (EXC-730). */
+    onOpenSettings: () => void;
   }
   let {
     reviews,
@@ -43,6 +46,7 @@
     onApprove,
     onRequestChanges,
     onReject,
+    onOpenSettings,
   }: Props = $props();
 
   let menuOpen = $state(false);
@@ -129,6 +133,9 @@
        after `.actions`; with no review its own margin-left pushes it right. -->
   <div class="bell-slot">
     <NotifyBell />
+    <button class="settings" aria-label="Settings" onclick={onOpenSettings}>
+      <Icon name="settings" size={16} />
+    </button>
   </div>
 </header>
 
@@ -194,11 +201,32 @@
     gap: 0.6rem;
     margin-left: auto;
   }
-  /* Pins the bell to the right edge when no review is active (`.context`'s
-     flex:1 handles the active layout; here auto resolves to 0). */
+  /* Pins the bell + settings cluster to the right edge when no review is active
+     (`.context`'s flex:1 handles the active layout; here auto resolves to 0). */
   .bell-slot {
     display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
     margin-left: auto;
+  }
+  /* Quiet icon button — subordinate chrome, warming to full ink on a sunk hover,
+     never borrowing the brand amber. Sits beside the bell as persistent chrome. */
+  .settings {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    color: var(--ink-faint);
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    padding: 0.35rem;
+    transition:
+      color var(--dur-fast) var(--ease-out),
+      background var(--dur-fast) var(--ease-out);
+  }
+  .settings:hover {
+    color: var(--ink);
+    background: var(--paper-sunk);
   }
   .actions.busy {
     opacity: 0.6;
