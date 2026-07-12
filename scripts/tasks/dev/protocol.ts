@@ -5,6 +5,7 @@
 // is a plain unit test. The long-running supervision loops that drive these
 // live in scripts/tasks/dev/driver.ts.
 
+import { PLAN_REJECTED_MESSAGE } from "../../../src/constants.ts";
 import type { Decision } from "../../../src/types.ts";
 
 /** Session id for the single dev review; stable for the process lifetime so a
@@ -98,18 +99,24 @@ export interface DriverState {
 }
 
 /** Pure step: from the hook's decision, compute the next submission. Approve
- * re-seeds a fresh v1 (the daemon ended the thread; reset the counter). A deny
- * whose feedback starts with "caret: " is one of the hook's own fail-safe /
- * format denies, not reviewer feedback — resubmit unchanged rather than append
- * a bogus revision. Any other deny is reviewer feedback: append a Revision N
+ * re-seeds a fresh v1 (the daemon ended the thread; reset the counter). A
+ * Reject (deny carrying PLAN_REJECTED_MESSAGE, EXC-685) waits — the agent does
+ * NOT re-present, simulating a wait for the user's next message. A deny whose
+ * feedback starts with "caret: " is one of the hook's own fail-safe / format
+ * denies, not reviewer feedback — resubmit unchanged rather than append a bogus
+ * revision. Any other deny is request-changes feedback: append a Revision N
  * section. */
 export function nextPlan(
   state: DriverState,
   decision: Decision,
   freshPlan: string,
-): DriverState & { action: "reseed" | "revise" | "resubmit" } {
+): DriverState & { action: "reseed" | "revise" | "resubmit" | "wait" } {
   if (decision.behavior === "allow") return { plan: freshPlan, revision: 0, action: "reseed" };
   const feedback = decision.feedback ?? "";
+  // Match on the shared constant, not a substring, so a message reword can't
+  // silently turn Reject back into a request-changes revision (they share the
+  // same deny wire shape — only the message distinguishes them).
+  if (feedback === PLAN_REJECTED_MESSAGE) return { ...state, action: "wait" };
   if (feedback.startsWith("caret: ")) return { ...state, action: "resubmit" };
   const revision = state.revision + 1;
   return { plan: appendRevision(state.plan, feedback, revision), revision, action: "revise" };

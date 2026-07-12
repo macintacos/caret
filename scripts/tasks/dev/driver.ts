@@ -70,6 +70,7 @@ export async function runExtraReview(
     const out = await runReview(hookStdin(state.plan, sessionId), deps);
     const next = nextPlan(state, out, plan);
     if (next.action === "reseed") return; // approved: this thread is done
+    if (next.action === "wait") return; // rejected (EXC-685): the agent waits — thread done
     if (next.action === "revise") {
       log(`extra review: changes requested → appending Revision ${next.revision}`);
     } else {
@@ -244,6 +245,14 @@ export async function run(opts: DriverOptions): Promise<void> {
     // Never throws: every abnormal path inside runReview becomes a deny.
     const out = await runReview(hookStdin(state.plan), deps);
     const next = nextPlan(state, out, v1);
+    if (next.action === "wait") {
+      // Reject (EXC-685): the agent waits for the user's next message instead of
+      // re-presenting. Stop the primary loop — the daemon and UI stay up (run.ts
+      // blocks on Vite, not on this driver), so no new plan is sent until the dev
+      // session is restarted. This is the faithful "rejected → agent waits" demo.
+      log("plan rejected → agent waits for the user (not resubmitting a plan)");
+      return;
+    }
     if (next.action === "revise") {
       log(`changes requested → appending Revision ${next.revision} and resubmitting`);
     } else if (next.action === "reseed") {

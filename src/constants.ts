@@ -5,6 +5,17 @@
 /** Default daemon port — the [daemon].port schema default (EXC-430). */
 export const DEFAULT_PORT = 42718;
 
+/**
+ * Sent verbatim as the deny feedback when the reviewer clicks Reject (EXC-685):
+ * a concise signal that the plan was rejected and the agent should wait for the
+ * user's next message rather than revising and re-presenting the plan. Unlike
+ * Request changes, Reject carries no inline comments — only this message. Lives
+ * in @core (not the UI) so both the browser (which sends it) and the dev driver
+ * (which recognizes it to simulate the agent waiting) share one source of truth.
+ */
+export const PLAN_REJECTED_MESSAGE =
+  "The user rejected the plan. Wait for the user's next message to decide how to proceed; do not present a plan for review again unless they ask.";
+
 /** The PermissionRequest hook's `timeout` budget (seconds) declared in
  * `hooks/hooks.json` (EXC-531). The review-timeout ceiling (`TimeoutS` in
  * settings.ts) is a strict `.lt(...)` of this, so caret's own fail-safe deny

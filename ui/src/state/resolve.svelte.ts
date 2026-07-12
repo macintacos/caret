@@ -7,7 +7,8 @@
 // advances; only a genuine network failure flips the connection offline.
 
 import { getApproveMode, HttpError, resolveReview } from "../lib/api.ts";
-import { formatFeedback, PLAN_REJECTED_MESSAGE } from "../lib/feedback.ts";
+import { formatFeedback } from "../lib/feedback.ts";
+import { PLAN_REJECTED_MESSAGE } from "@core/constants";
 import type { Annotation, ApproveVariantId } from "@core/types";
 
 export { HttpError };

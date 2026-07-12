@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
+import { PLAN_REJECTED_MESSAGE } from "../../src/constants.ts";
 import { runReview } from "../../src/review.ts";
 import { setLogLevel } from "../../src/log.ts";
 import { hasUntaggedCodeBlock } from "../../src/plan-format.ts";
@@ -250,6 +251,21 @@ test("nextPlan on approve re-seeds a fresh v1 and resets the counter", () => {
   expect(next.action).toBe("reseed");
   expect(next.plan).toBe(PLAN_V1);
   expect(next.revision).toBe(0);
+});
+
+test("nextPlan on a Reject deny waits — no revision, no resubmit (EXC-685)", () => {
+  // The reviewer rejected the plan (deny carrying the canned reject-and-wait
+  // message). The dev agent must NOT thread a revision and re-present — it
+  // simulates waiting for the user's next message. Distinct from request-changes.
+  const revised = appendRevision(PLAN_V1, "earlier feedback", 1);
+  const next = nextPlan(
+    { plan: revised, revision: 1 },
+    { behavior: "deny", feedback: PLAN_REJECTED_MESSAGE, decidedAt: 1 },
+    PLAN_V1,
+  );
+  expect(next.action).toBe("wait");
+  expect(next.plan).toBe(revised);
+  expect(next.plan).not.toContain("## Revision 2");
 });
 
 // ---- the real hook path, end to end ----
