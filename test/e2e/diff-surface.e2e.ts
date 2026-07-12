@@ -1145,6 +1145,33 @@ test("opening a different range retains the in-progress text as a scratch", asyn
   await expect(composerInput(composer)).toHaveText("started on line 3");
 });
 
+test("opening a different range starts the new composer empty, not seeded with the prior draft", async ({
+  daemon,
+  page,
+}) => {
+  // Regression: switching lines mid-draft must open a CLEAN composer at the new
+  // line. Keeping the prior line's text as a Resume marker is correct, but that
+  // text must not bleed into the fresh composer — each range is its own draft.
+  await daemon.seed({ plan: RANGE_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await page.getByText("Body line 1 content here.").click();
+  await expect(composer.getByText("Line 3")).toBeVisible();
+  await composerInput(composer).fill("started on line 3");
+
+  // Switch to line 7 without dismissing: the new composer opens empty.
+  await page.getByText("Body line 3 content here.").click();
+  await expect(composer.getByText("Line 7")).toBeVisible();
+  await expect(composerInput(composer)).not.toContainText("started on line 3");
+
+  // The line-3 text is safe as a Resume marker, not lost.
+  await expect(scratchMarker(page)).toContainText("started on line 3");
+});
+
 test("scratch drafts clear when a new plan version arrives", async ({ daemon, page }) => {
   // A scratch's anchor belongs to the version it was typed against; a new version
   // must drop it so it never resumes onto text it was not written for. This

@@ -748,15 +748,23 @@
       {/each}
       {#if pending}
         <div use:slotInto={{ host, line: pending.endLine }}>
-          <SourceComposer
-            startLine={pending.startLine}
-            endLine={pending.endLine}
-            initial={pendingText}
-            onInput={(text) => (liveText = text)}
-            onSubmit={(comment) => commenting.submit(comment)}
-            onKeep={(text) => commenting.cancel(text)}
-            onDiscard={() => commenting.discardOpen()}
-          />
+          <!-- Re-mount the composer per range. SourceComposer (and its
+               MarkdownEditor) seed their text once at mount, so switching to a
+               new line — which updates props without unmounting — would otherwise
+               keep the previous line's draft. Keying on the range gives each line
+               a clean composer; the dismissed line's text is retained as a scratch
+               by openRange, so nothing is lost. -->
+          {#key `${pending.startLine}:${pending.endLine}`}
+            <SourceComposer
+              startLine={pending.startLine}
+              endLine={pending.endLine}
+              initial={pendingText}
+              onInput={(text) => (liveText = text)}
+              onSubmit={(comment) => commenting.submit(comment)}
+              onKeep={(text) => commenting.cancel(text)}
+              onDiscard={() => commenting.discardOpen()}
+            />
+          {/key}
         </div>
       {/if}
       <!-- Retained scratch drafts: an unsubmitted composer dismissed with typed
