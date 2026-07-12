@@ -61,7 +61,9 @@ function sharedOptions(
     overflow: options.overflow,
     disableLineNumbers: options.disableLineNumbers,
     theme: caretDiffTheme.theme,
-    themeType: caretDiffTheme.themeType,
+    // caret's theme selection forces light/dark; with none supplied the library
+    // follows the system preference (caretDiffTheme.themeType) as before (EXC-730).
+    themeType: options.scheme ?? caretDiffTheme.themeType,
   };
 }
 

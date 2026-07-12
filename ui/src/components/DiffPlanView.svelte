@@ -90,6 +90,10 @@
       save: (key: string) => void;
       discard: (key: string) => void;
     }) => void;
+    /** The active caret theme's color scheme, forwarded to the shadow-DOM diff
+     * view so its shiki highlighting follows the selected theme (EXC-730). Omitted
+     * leaves the library following the system preference. */
+    scheme?: "light" | "dark";
   }
 
   let {
@@ -102,6 +106,7 @@
     onFocusAnnotation,
     onScratchesChange,
     onExposeScratchActions,
+    scheme,
   }: Props = $props();
 
   // Line-anchored annotations render inline in the source view's per-line
@@ -157,7 +162,14 @@
   // line-number gutter is always shown. These were once user toggles (EXC-606),
   // but that configurability was removed, so the former defaults are now the only
   // behavior.
-  const readerOptions: SourceViewOptions = { overflow: "scroll", disableLineNumbers: false };
+  // Reactive on `scheme` so a theme switch yields a new options reference — both
+  // the reader (SourceView) and the compare view (which spreads this) re-apply it
+  // through their existing `lifecycle.sync`, re-highlighting in the chosen theme.
+  const readerOptions = $derived<SourceViewOptions>({
+    overflow: "scroll",
+    disableLineNumbers: false,
+    scheme,
+  });
 
   // Identity of the rendered content: the wrapper recreates its instance only
   // when this changes, so a poll tick that re-delivers the same version updates
