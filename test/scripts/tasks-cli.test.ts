@@ -34,22 +34,41 @@ async function parseDevArgs(args: string[]): Promise<RunDevOptions> {
 }
 
 describe("tasks CLI: dev command", () => {
-  test("defaults: num-versions 3, notify false", async () => {
-    expect(await parseDevArgs([])).toEqual({ numVersions: 3, notify: false });
+  test("defaults: num-versions 3, notify false, persist false", async () => {
+    expect(await parseDevArgs([])).toEqual({ numVersions: 3, notify: false, persist: false });
   });
 
   test("parses --num-versions", async () => {
-    expect(await parseDevArgs(["--num-versions", "5"])).toEqual({ numVersions: 5, notify: false });
+    expect(await parseDevArgs(["--num-versions", "5"])).toEqual({
+      numVersions: 5,
+      notify: false,
+      persist: false,
+    });
   });
 
   test("parses --notify", async () => {
-    expect(await parseDevArgs(["--notify"])).toEqual({ numVersions: 3, notify: true });
+    expect(await parseDevArgs(["--notify"])).toEqual({
+      numVersions: 3,
+      notify: true,
+      persist: false,
+    });
   });
 
   test("parses both flags together, in any order", async () => {
     expect(await parseDevArgs(["--notify", "--num-versions", "7"])).toEqual({
       numVersions: 7,
       notify: true,
+      persist: false,
+    });
+  });
+
+  test("parses --port, --state-dir, and --persist", async () => {
+    expect(await parseDevArgs(["--port", "40000", "--state-dir", "/tmp/x", "--persist"])).toEqual({
+      numVersions: 3,
+      notify: false,
+      port: 40000,
+      stateDir: "/tmp/x",
+      persist: true,
     });
   });
 });
