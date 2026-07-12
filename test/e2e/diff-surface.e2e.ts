@@ -345,14 +345,14 @@ test("an unsubmitted composer scratch survives a page reload (EXC-744)", async (
   await expect(page.locator(".diff-plan")).toBeVisible();
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
 
-  // Type a comment on line 3 but Cancel instead of submitting: it is retained as
-  // a "scratch" that leaves a Resume marker on the line.
+  // Type a comment on line 3 and Keep it for later instead of submitting: it is
+  // retained as a "scratch" that leaves a Resume marker on the line.
   const plus = await revealGutterPlus(page, 3);
   await plus.click();
   const composer = page.getByRole("dialog", { name: "Add a comment" });
   await expect(composer).toBeVisible();
   await composerInput(composer).fill("Half-written thought to finish later.");
-  await composer.getByRole("button", { name: "Cancel" }).click();
+  await composer.getByRole("button", { name: "Keep for later" }).click();
 
   const marker = page.getByRole("button", { name: "Resume unsent comment" });
   await expect(marker).toBeVisible();
@@ -935,10 +935,7 @@ function scratchMarker(page: Page): Locator {
   return page.getByRole("button", { name: "Resume unsent comment" });
 }
 
-test("dismissing the composer with typed text retains a returnable Resume marker", async ({
-  daemon,
-  page,
-}) => {
+test("Keep for later retains a returnable Resume marker", async ({ daemon, page }) => {
   const id = await daemon.seed();
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
@@ -951,8 +948,7 @@ test("dismissing the composer with typed text retains a returnable Resume marker
   await expect(composer).toBeVisible();
   const textarea = composerInput(composer);
   await textarea.fill("half a thought to finish later");
-  await textarea.click();
-  await page.keyboard.press("Escape");
+  await composer.getByRole("button", { name: "Keep for later" }).click();
 
   // The composer closes; a quiet Resume marker takes its place, previewing the
   // text. It reads "Resume" (an action), never "Draft" (the committed-annotation
@@ -970,6 +966,91 @@ test("dismissing the composer with typed text retains a returnable Resume marker
     .toBe(0);
 });
 
+test("Escape discards a typed draft, leaving no Resume marker", async ({ daemon, page }) => {
+  // Esc is discard, not stash: a typed draft dismissed with Escape drops
+  // entirely — no Resume marker, nothing persisted. Keeping a draft for later (a
+  // returnable marker) is the separate, explicit "Keep for later" button.
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const plus = await revealGutterPlus(page, 3);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await composerInput(composer).fill("abandon this draft");
+  await composerInput(composer).click();
+  await page.keyboard.press("Escape");
+
+  // The composer closes with no scratch marker, and nothing was persisted.
+  await expect(composer).toHaveCount(0);
+  await expect(scratchMarker(page)).toHaveCount(0);
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.composerScratches?.length ?? 0)
+    .toBe(0);
+});
+
+test("the Discard button discards a typed draft, leaving no Resume marker", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const plus = await revealGutterPlus(page, 3);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await composerInput(composer).fill("drop this via the button");
+  await composer.getByRole("button", { name: "Discard" }).click();
+
+  await expect(composer).toHaveCount(0);
+  await expect(scratchMarker(page)).toHaveCount(0);
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.composerScratches?.length ?? 0)
+    .toBe(0);
+});
+
+test("resuming a kept scratch then Discarding removes the marker and un-persists it", async ({
+  daemon,
+  page,
+}) => {
+  // Keep for later persists a scratch; resuming consumes it back into the
+  // composer; Discarding then drops it for good — the persisted scratch is
+  // removed, not merely hidden.
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const plus = await revealGutterPlus(page, 3);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await composerInput(composer).fill("keep then change my mind");
+  await composer.getByRole("button", { name: "Keep for later" }).click();
+
+  const marker = scratchMarker(page);
+  await expect(marker).toBeVisible();
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.composerScratches?.length ?? 0)
+    .toBe(1);
+
+  // Resume it, then Discard: the marker is gone and the persisted scratch cleared.
+  await marker.click();
+  await expect(composer).toBeVisible();
+  await composer.getByRole("button", { name: "Discard" }).click();
+
+  await expect(composer).toHaveCount(0);
+  await expect(scratchMarker(page)).toHaveCount(0);
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.composerScratches?.length ?? 0)
+    .toBe(0);
+});
+
 test("clicking the Resume marker reopens the composer with the text restored", async ({
   daemon,
   page,
@@ -984,8 +1065,7 @@ test("clicking the Resume marker reopens the composer with the text restored", a
   await plus.click();
   const composer = page.getByRole("dialog", { name: "Add a comment" });
   await composerInput(composer).fill("restore this exactly");
-  await composerInput(composer).click();
-  await page.keyboard.press("Escape");
+  await composer.getByRole("button", { name: "Keep for later" }).click();
 
   const marker = scratchMarker(page);
   await expect(marker).toBeVisible();
@@ -1009,8 +1089,7 @@ test("a resumed scratch can be completed into a persisted annotation", async ({ 
   await plus.click();
   const composer = page.getByRole("dialog", { name: "Add a comment" });
   await composerInput(composer).fill("start it");
-  await composerInput(composer).click();
-  await page.keyboard.press("Escape");
+  await composer.getByRole("button", { name: "Keep for later" }).click();
 
   await scratchMarker(page).click();
   await expect(composer).toBeVisible();
@@ -1080,8 +1159,7 @@ test("scratch drafts clear when a new plan version arrives", async ({ daemon, pa
   await plus.click();
   const composer = page.getByRole("dialog", { name: "Add a comment" });
   await composerInput(composer).fill("anchored to v1");
-  await composerInput(composer).click();
-  await page.keyboard.press("Escape");
+  await composer.getByRole("button", { name: "Keep for later" }).click();
   await expect(scratchMarker(page)).toBeVisible();
 
   // A new version supersedes the current plan text in place.
@@ -1106,8 +1184,7 @@ async function scratchThenOpenDialog(page: Page, line: number, text: string): Pr
   await plus.click();
   const composer = page.getByRole("dialog", { name: "Add a comment" });
   await composerInput(composer).fill(text);
-  await composerInput(composer).click();
-  await page.keyboard.press("Escape");
+  await composer.getByRole("button", { name: "Keep for later" }).click();
   await expect(scratchMarker(page)).toBeVisible();
 
   await page.getByRole("button", { name: "Request changes" }).click();
