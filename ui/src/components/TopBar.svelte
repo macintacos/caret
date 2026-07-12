@@ -203,9 +203,10 @@
     opacity: 0.6;
     pointer-events: none;
   }
-  /* The quietest of the three verdicts: no border and faint ink at rest, so it
-     stays subordinate to Request changes (bordered) and the amber Approve. A
-     text-only label — Reject earns no icon, and none in the vendored set fits. */
+  /* The quietest of the three verdicts at rest: no border, faint ink —
+     subordinate to Request changes (bordered) and the amber Approve. On hover it
+     fills red (--danger) to signal the negative action. Text-only label — Reject
+     earns no icon, and none in the vendored set fits. */
   .reject {
     background: transparent;
     color: var(--ink-faint);
@@ -215,12 +216,14 @@
     font-size: var(--text-base);
     font-weight: 600;
     transition:
+      background var(--dur-fast) var(--ease-out),
       color var(--dur-fast) var(--ease-out),
       border-color var(--dur-fast) var(--ease-out);
   }
   .reject:hover:not(:disabled) {
-    color: var(--ink);
-    border-color: var(--rule);
+    background: var(--danger);
+    color: var(--paper);
+    border-color: var(--danger);
   }
   .request {
     background: transparent;
