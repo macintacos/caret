@@ -23,6 +23,7 @@ const baseProps = {
   onSelect: () => {},
   onApprove: () => {},
   onRequestChanges: () => {},
+  onReject: () => {},
 };
 
 describe("TopBar render", () => {
@@ -171,5 +172,34 @@ describe("TopBar request changes", () => {
   test("the count is hidden when no review is active", () => {
     const { target } = render(TopBar, { ...baseProps, active: null, pendingCount: 4 });
     expect(target.querySelector(".count")).toBeNull();
+  });
+});
+
+describe("TopBar reject", () => {
+  test("renders a Reject button when a review is active", () => {
+    const { target } = render(TopBar, baseProps);
+    const reject = target.querySelector(".reject");
+    expect(reject).not.toBeNull();
+    expect(reject!.textContent).toContain("Reject");
+  });
+
+  test("the reject button fires onReject", () => {
+    let rejected = false;
+    const { target } = render(TopBar, {
+      ...baseProps,
+      onReject: () => (rejected = true),
+    });
+    (target.querySelector(".reject") as HTMLElement).click();
+    expect(rejected).toBe(true);
+  });
+
+  test("busy disables the reject button", () => {
+    const { target } = render(TopBar, { ...baseProps, busy: true });
+    expect((target.querySelector(".reject") as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  test("hides the reject button when no review is active", () => {
+    const { target } = render(TopBar, { ...baseProps, active: null });
+    expect(target.querySelector(".reject")).toBeNull();
   });
 });

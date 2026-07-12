@@ -1,4 +1,4 @@
-// Approve / request-changes resolve flow.
+// Approve / request-changes / reject resolve flow.
 //
 // Approving (allow) or requesting changes (deny) flushes any pending draft,
 // POSTs the decision, and advances to the next review. The approve mode is
@@ -8,6 +8,7 @@
 
 import { getApproveMode, HttpError, resolveReview } from "../lib/api.ts";
 import { formatFeedback } from "../lib/feedback.ts";
+import { PLAN_REJECTED_MESSAGE } from "@core/constants";
 import type { Annotation, ApproveVariantId } from "@core/types";
 
 export { HttpError };
@@ -57,6 +58,9 @@ export interface Resolve {
   loadApproveMode: () => void;
   approve: (mode: ApproveVariantId) => Promise<void>;
   requestChanges: (generalComment: string) => Promise<void>;
+  /** Deny the plan with a concise "rejected — wait for the user" message and no
+   * inline comments (EXC-685). Otherwise identical to requestChanges. */
+  reject: () => Promise<void>;
 }
 
 export function createResolve(store: ResolveStore, deps: ResolveDeps): Resolve {
@@ -106,6 +110,26 @@ export function createResolve(store: ResolveStore, deps: ResolveDeps): Resolve {
         // The daemon cleared the stored draft on resolve; clear the local mirror
         // too. A deny keeps this review id (the revision reuses it), and the seed
         // is id-keyed, so without this the sent text would linger on reopen.
+        deps.clearGeneralComment();
+        deps.afterResolve(id);
+      } catch (err) {
+        if (err instanceof HttpError) deps.afterResolve(id);
+        else deps.onOffline();
+      } finally {
+        store.busy = false;
+      }
+    },
+
+    async reject() {
+      const id = deps.activeId();
+      if (!id) return;
+      store.busy = true;
+      await deps.flushPending();
+      try {
+        await submit(id, { behavior: "deny", feedback: PLAN_REJECTED_MESSAGE });
+        // Same as requestChanges: the daemon clears the stored draft on resolve,
+        // so clear the local mirror too. Reject sends no annotations — just the
+        // canned message.
         deps.clearGeneralComment();
         deps.afterResolve(id);
       } catch (err) {

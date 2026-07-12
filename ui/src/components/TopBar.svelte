@@ -26,6 +26,9 @@
     onSelect: (id: string) => void;
     onApprove: (mode: ApproveVariantId) => void;
     onRequestChanges: () => void;
+    /** Reject the plan: deny with a concise "wait for the user" message and no
+     * inline comments (EXC-685). Guarded for pending comments in App.svelte. */
+    onReject: () => void;
   }
   let {
     reviews,
@@ -38,6 +41,7 @@
     onSelect,
     onApprove,
     onRequestChanges,
+    onReject,
   }: Props = $props();
 
   let menuOpen = $state(false);
@@ -71,6 +75,9 @@
     <div class="context mono" title={active.cwd}>{shortCwd(active.cwd)}</div>
 
     <div class="actions" class:busy>
+      <button class="reject" onclick={onReject} disabled={busy}>
+        Reject
+      </button>
       <button class="request" onclick={onRequestChanges} disabled={busy}>
         <Icon name="corner-up-left" size={14} />
         Request changes
@@ -195,6 +202,28 @@
   .actions.busy {
     opacity: 0.6;
     pointer-events: none;
+  }
+  /* The quietest of the three verdicts at rest: no border, faint ink —
+     subordinate to Request changes (bordered) and the amber Approve. On hover it
+     fills red (--danger) to signal the negative action. Text-only label — Reject
+     earns no icon, and none in the vendored set fits. */
+  .reject {
+    background: transparent;
+    color: var(--ink-faint);
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    padding: 0.5rem 0.9rem;
+    font-size: var(--text-base);
+    font-weight: 600;
+    transition:
+      background var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out),
+      border-color var(--dur-fast) var(--ease-out);
+  }
+  .reject:hover:not(:disabled) {
+    background: var(--danger);
+    color: var(--paper);
+    border-color: var(--danger);
   }
   .request {
     background: transparent;

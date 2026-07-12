@@ -15,7 +15,7 @@
   import type { ComposerScratch } from "./lib/diffview/commenting.ts";
   import type { ApproveVariant, ApproveVariantId, Annotation, PersistedScratch } from "@core/types";
 
-  import ApproveConfirmDialog from "./components/ApproveConfirmDialog.svelte";
+  import UnsentCommentsDialog from "./components/UnsentCommentsDialog.svelte";
   import DiffPlanView from "./components/DiffPlanView.svelte";
   import EmptyState from "./components/EmptyState.svelte";
   import RequestChangesDialog from "./components/RequestChangesDialog.svelte";
@@ -61,6 +61,9 @@
   // The approve variant a pending-comment guard is holding: the mode the reviewer
   // chose, parked until they confirm or divert. Null = no guard open.
   let pendingApproveMode = $state<ApproveVariantId | null>(null);
+  // The reject guard (EXC-685): true while a Reject is parked on a pending-
+  // comment confirmation, mirroring pendingApproveMode. False = no guard open.
+  let pendingReject = $state(false);
   let safeMode = $state(false);
 
   // The source view's retained-but-unsent composer drafts ("scratches"), mirrored
@@ -198,10 +201,21 @@
     pendingApproveMode = null;
     if (mode) void resolve.approve(mode);
   }
+  function onReject() {
+    // Reject always confirms (EXC-685): consistent whether or not comments are
+    // queued. The dialog additionally guards unsent comments when present.
+    pendingReject = true;
+  }
+  function rejectAnyway() {
+    pendingReject = false;
+    void resolve.reject();
+  }
   function divertToRequestChanges() {
     // The annotations + general-comment draft are App.svelte's autosaved state,
     // so they survive the hand-off to the request-changes dialog untouched.
+    // Shared by both guards (approve + reject), so clear both.
     pendingApproveMode = null;
+    pendingReject = false;
     showDialog = true;
   }
   function onRequestChanges(generalComment: string) {
@@ -222,6 +236,7 @@
     onSelect={selection.selectReview}
     {onApprove}
     onRequestChanges={() => (showDialog = true)}
+    {onReject}
   />
 
   {#if selection.daemonChanged}
@@ -286,11 +301,25 @@
 />
 
 {#if pendingApproveMode !== null && active}
-  <ApproveConfirmDialog
+  <UnsentCommentsDialog
     count={pendingCount}
-    onApproveAnyway={approveAnyway}
+    action="Approve"
+    consequence="Approving accepts the plan and starts the agent's work."
+    icon="check"
+    onConfirm={approveAnyway}
     onRequestChanges={divertToRequestChanges}
     onCancel={() => (pendingApproveMode = null)}
+  />
+{/if}
+
+{#if pendingReject && active}
+  <UnsentCommentsDialog
+    count={pendingCount}
+    action="Reject"
+    consequence="The agent will be told the plan was rejected and to wait for your next message."
+    onConfirm={rejectAnyway}
+    onRequestChanges={divertToRequestChanges}
+    onCancel={() => (pendingReject = false)}
   />
 {/if}
 

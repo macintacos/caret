@@ -1,17 +1,32 @@
 <script lang="ts">
+  import type { IconName } from "../lib/icons.ts";
   import { isCancelKey } from "../lib/keys.ts";
   import Icon from "./Icon.svelte";
 
   interface Props {
-    /** Non-blank inline comments pending — always > 0 when this dialog renders. */
+    /** Non-blank pending comments. When 0 the dialog is a plain "are you sure?"
+     * confirm (Reject always confirms, EXC-685); when > 0 it also guards the
+     * unsent comments from being silently dropped. */
     count: number;
-    onApproveAnyway: () => void;
+    /** The verdict's label, e.g. "Approve" or "Reject". Drives the title,
+     * eyebrow, aria-label, and the confirm button. */
+    action: string;
+    /** One-line sentence describing what the verdict does, always shown. */
+    consequence: string;
+    /** Optional glyph for the confirm button (omit for a text-only action). */
+    icon?: IconName;
+    onConfirm: () => void;
     onRequestChanges: () => void;
     onCancel: () => void;
   }
-  let { count, onApproveAnyway, onRequestChanges, onCancel }: Props = $props();
+  let { count, action, consequence, icon, onConfirm, onRequestChanges, onCancel }: Props = $props();
 
   let dialog = $state<HTMLDivElement | undefined>();
+  // With queued comments the dialog guards against dropping them; with none it's
+  // a bare confirmation. The label, the "won't be sent" warning, the Request-
+  // changes divert, and the "anyway" wording all key off this.
+  let hasComments = $derived(count > 0);
+  let label = $derived(hasComments ? `${action} with pending comments` : `${action} this plan`);
 
   // Focus the dialog so Escape/Enter land here, not on the button left behind it.
   $effect(() => {
@@ -22,7 +37,7 @@
     if (isCancelKey(e)) onCancel();
     // Plain Enter confirms the primary path. The dialog holds no text input, so a
     // bare Enter is unambiguous; it mirrors the focused primary button's Activate.
-    else if (e.key === "Enter") onApproveAnyway();
+    else if (e.key === "Enter") onConfirm();
   }
 </script>
 
@@ -32,29 +47,33 @@
     bind:this={dialog}
     role="dialog"
     aria-modal="true"
-    aria-label="Approve with pending comments"
+    aria-label={label}
     tabindex="-1"
     onkeydown={onKey}
   >
     <header>
-      <span class="eyebrow">Approve</span>
-      <h2>Approve without sending your comments?</h2>
+      <span class="eyebrow">{action}</span>
+      <h2>{action} this plan?</h2>
     </header>
 
     <p class="body">
-      You have {count} pending comment{count === 1 ? "" : "s"} that won't be sent on approve.
-      Approving accepts the plan and leaves them behind.
+      {consequence}
+      {#if hasComments}
+        You have {count} pending comment{count === 1 ? "" : "s"} that won't be sent.
+      {/if}
     </p>
 
     <footer>
       <button class="ghost" onclick={onCancel}>Cancel</button>
-      <button class="to-request" onclick={onRequestChanges}>
-        <Icon name="corner-up-left" size={14} />
-        Request changes
-      </button>
-      <button class="approve-anyway" onclick={onApproveAnyway}>
-        <Icon name="check" size={14} />
-        Approve anyway
+      {#if hasComments}
+        <button class="to-request" onclick={onRequestChanges}>
+          <Icon name="corner-up-left" size={14} />
+          Request changes
+        </button>
+      {/if}
+      <button class="confirm" onclick={onConfirm}>
+        {#if icon}<Icon name={icon} size={14} />{/if}
+        {hasComments ? `${action} anyway` : action}
       </button>
     </footer>
   </div>
@@ -114,7 +133,7 @@
   }
   .ghost,
   .to-request,
-  .approve-anyway {
+  .confirm {
     border-radius: var(--radius);
     font-size: var(--text-base);
     font-weight: 600;
@@ -140,12 +159,12 @@
     color: var(--ink);
     border-color: var(--rule-strong);
   }
-  .approve-anyway {
+  .confirm {
     background: var(--ink);
     color: var(--paper);
     border: 1px solid var(--ink);
   }
-  .approve-anyway:hover {
+  .confirm:hover {
     background: var(--accent);
     border-color: var(--accent);
     color: var(--accent-ink);
