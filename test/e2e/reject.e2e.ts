@@ -1,0 +1,85 @@
+// Reject (EXC-685): a one-click verdict that denies the plan with a concise
+// canned "rejected — wait for the user" message and NO inline comments. Like
+// approve, when inline work is queued it first routes through the shared guard
+// so composed comments are never silently dropped. Asserted daemon-side via
+// GET /api/reviews/:id (a deny keeps the review as `rejected` with the decision
+// riding on it), not just by UI disappearance.
+
+import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
+
+test("rejecting resolves the review as a deny carrying the wait message", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  // Exact match so it doesn't collide with "Request changes".
+  await page.getByRole("button", { name: "Reject", exact: true }).click();
+
+  // UI: the review leaves the pending set.
+  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
+
+  // API: rejected, and the decision carries only the concise reject-and-wait
+  // message (no reviewer prose).
+  await expect.poll(async () => (await daemon.getReview(id)).body?.decision?.behavior).toBe("deny");
+  const review = (await daemon.getReview(id)).body;
+  expect(review?.status).toBe("rejected");
+  const feedback = review?.decision?.feedback ?? "";
+  expect(feedback).toContain("rejected");
+  expect(feedback.toLowerCase()).toContain("wait");
+});
+
+test("a pending inline comment guards reject; 'Reject anyway' sends only the wait message", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  // Seed a non-blank inline comment the same way the UI's autosave would.
+  await daemon.putDraft(id, {
+    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain cold cost" }],
+  });
+
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  // Reject now opens the confirmation naming the count — it does NOT resolve.
+  const guard = page.getByRole("dialog", { name: "Reject with pending comments" });
+  await page.getByRole("button", { name: "Reject", exact: true }).click();
+  await expect(guard).toBeVisible();
+  await expect(guard).toContainText("1 pending comment");
+  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
+
+  // "Reject anyway" resolves as a deny whose feedback is the canned message —
+  // never the queued inline comment.
+  await guard.getByRole("button", { name: "Reject anyway" }).click();
+  await expect.poll(async () => (await daemon.getReview(id)).body?.decision?.behavior).toBe("deny");
+  const feedback = (await daemon.getReview(id)).body?.decision?.feedback ?? "";
+  expect(feedback).toContain("rejected");
+  expect(feedback).not.toContain("explain cold cost");
+});
+
+test("Escape dismisses the reject guard and leaves the review pending", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain cold cost" }],
+  });
+
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const guard = page.getByRole("dialog", { name: "Reject with pending comments" });
+  await page.getByRole("button", { name: "Reject", exact: true }).click();
+  await expect(guard).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(guard).toBeHidden();
+
+  // The review is untouched.
+  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
+});

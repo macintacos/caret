@@ -61,6 +61,9 @@
   // The approve variant a pending-comment guard is holding: the mode the reviewer
   // chose, parked until they confirm or divert. Null = no guard open.
   let pendingApproveMode = $state<ApproveVariantId | null>(null);
+  // The reject guard (EXC-685): true while a Reject is parked on a pending-
+  // comment confirmation, mirroring pendingApproveMode. False = no guard open.
+  let pendingReject = $state(false);
   let safeMode = $state(false);
 
   // The source view's retained-but-unsent composer drafts ("scratches"), mirrored
@@ -198,10 +201,22 @@
     pendingApproveMode = null;
     if (mode) void resolve.approve(mode);
   }
+  function onReject() {
+    // Reject sends only the canned message, never pending comments — so guard it
+    // the same way approve does when any inline work is queued (EXC-685).
+    if (pendingCount > 0) pendingReject = true;
+    else void resolve.reject();
+  }
+  function rejectAnyway() {
+    pendingReject = false;
+    void resolve.reject();
+  }
   function divertToRequestChanges() {
     // The annotations + general-comment draft are App.svelte's autosaved state,
     // so they survive the hand-off to the request-changes dialog untouched.
+    // Shared by both guards (approve + reject), so clear both.
     pendingApproveMode = null;
+    pendingReject = false;
     showDialog = true;
   }
   function onRequestChanges(generalComment: string) {
@@ -222,6 +237,7 @@
     onSelect={selection.selectReview}
     {onApprove}
     onRequestChanges={() => (showDialog = true)}
+    {onReject}
   />
 
   {#if selection.daemonChanged}
@@ -294,6 +310,17 @@
     onConfirm={approveAnyway}
     onRequestChanges={divertToRequestChanges}
     onCancel={() => (pendingApproveMode = null)}
+  />
+{/if}
+
+{#if pendingReject && active}
+  <UnsentCommentsDialog
+    count={pendingCount}
+    action="Reject"
+    consequence="Rejecting sends only a brief note and leaves them behind."
+    onConfirm={rejectAnyway}
+    onRequestChanges={divertToRequestChanges}
+    onCancel={() => (pendingReject = false)}
   />
 {/if}
 
