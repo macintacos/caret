@@ -5,7 +5,9 @@
 // daemon. The pure protocol side lives in dev-driver.test.ts; the port-mode /
 // lock guards in dev-env.test.ts.
 import { describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { NEVER_IDLE_MS } from "../../src/constants.ts";
 import { DEFAULTS } from "../../src/settings.ts";
 import type { DriverOptions } from "../../scripts/tasks/dev/driver.ts";
@@ -116,7 +118,9 @@ function capturingSpawn(viteCode = 0) {
         this.killed++;
       },
     };
-    calls.push({ cmd, env: opts.env });
+    // Snapshot env at spawn time: real Bun.spawn snapshots it, and runDev mutates
+    // the shared childEnv (CARET_PORT) afterward for Vite.
+    calls.push({ cmd, env: opts.env ? { ...opts.env } : undefined });
     children.push(child);
     return child;
   };
@@ -173,9 +177,9 @@ describe("runDev supervision", () => {
         }) as (code: number) => never,
       });
 
-      await expect(runDev({ numVersions: 4, notify: true }, deps)).rejects.toBeInstanceOf(
-        ExitSignal,
-      );
+      await expect(
+        runDev({ numVersions: 4, notify: true, persist: false }, deps),
+      ).rejects.toBeInstanceOf(ExitSignal);
 
       // daemon (ephemeral), pino-pretty, then vite.
       expect(calls[0]?.cmd).toEqual(["bun", "src/cli.ts", "daemon", "--ephemeral"]);
@@ -210,12 +214,54 @@ describe("runDev supervision", () => {
         },
       });
 
-      await expect(runDev({ numVersions: 3, notify: false }, deps)).rejects.toThrow(DAEMON_DIED);
+      await expect(runDev({ numVersions: 3, notify: false, persist: false }, deps)).rejects.toThrow(
+        DAEMON_DIED,
+      );
 
       // Only daemon + pretty were spawned (vite never reached), and both were
       // killed by the mid-boot cleanup rather than leaked.
       expect(children.length).toBe(2);
       expect(children.every((c) => c.killed >= 1)).toBe(true);
+    });
+  });
+
+  test("--state-dir names a kept dir and --port pins a fixed daemon port", async () => {
+    await withCleanDevEnv(async () => {
+      const stateDir = mkdtempSync(join(tmpdir(), "caret-dev-named."));
+      const { spawn, calls } = capturingSpawn(0);
+      const deps = baseDeps({ spawn });
+
+      await expect(
+        runDev({ numVersions: 3, notify: false, port: 45000, stateDir, persist: false }, deps),
+      ).rejects.toBeInstanceOf(ExitSignal);
+
+      // --port takes precedence: fixed mode, so no --ephemeral and the daemon
+      // gets the pinned port through its env.
+      expect(calls[0]?.cmd).toEqual(["bun", "src/cli.ts", "daemon"]);
+      expect(calls[0]?.env?.CARET_PORT).toBe("45000");
+      // --state-dir takes precedence: the named dir is used and kept, not wiped.
+      expect(calls[0]?.env?.XDG_STATE_HOME).toBe(stateDir);
+      expect(existsSync(stateDir)).toBe(true);
+
+      rmSync(stateDir, { recursive: true, force: true });
+    });
+  });
+
+  test("--persist keeps the ephemeral state dir on exit", async () => {
+    await withCleanDevEnv(async () => {
+      const { spawn, calls } = capturingSpawn(0);
+      const deps = baseDeps({ spawn });
+
+      await expect(
+        runDev({ numVersions: 3, notify: false, persist: true }, deps),
+      ).rejects.toBeInstanceOf(ExitSignal);
+
+      // Ephemeral dir (no --state-dir), but --persist keeps it for inspection.
+      const stateDir = calls[0]?.env?.XDG_STATE_HOME as string;
+      expect(stateDir).toBeDefined();
+      expect(existsSync(stateDir)).toBe(true);
+
+      rmSync(stateDir, { recursive: true, force: true });
     });
   });
 });

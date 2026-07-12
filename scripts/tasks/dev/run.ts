@@ -33,6 +33,16 @@ export interface RunDevOptions {
   numVersions: number;
   /** Arm the recurring extra-review seeder (the EXC-427 notification path). */
   notify: boolean;
+  /** --port: the fixed dev daemon port, taking precedence over CARET_DEV_PORT /
+   * [dev].port. Unset → the env/config value (or an OS-assigned ephemeral port). */
+  port?: number;
+  /** --state-dir: a persistent dev state dir, taking precedence over
+   * CARET_DEV_STATE_DIR / [dev].state_dir. Unset → the env/config value (or an
+   * ephemeral mktemp dir). */
+  stateDir?: string;
+  /** --persist: keep the state dir on exit even when it is the ephemeral default
+   * (a named dir is always kept). */
+  persist: boolean;
 }
 
 /** The daemon argv, adding `--ephemeral` only in ephemeral port mode (a fixed
@@ -161,14 +171,16 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
   const settings = deps.loadSettings();
 
   // Port mode (EXC-461): ephemeral by default (OS-assigned, discovered from the
-  // daemon's lock, so any number of sessions coexist); a fixed CARET_DEV_PORT /
-  // [dev].port pins it (dev-env.ts rejects the production default).
-  const rawPort = devPort(settings);
+  // daemon's lock, so any number of sessions coexist); a fixed port pins it
+  // (dev-env.ts rejects the production default). Precedence: --port > CARET_DEV_PORT
+  // > [dev].port.
+  const rawPort = opts.port ?? devPort(settings);
   const portMode = resolvePortMode(rawPort === undefined ? undefined : String(rawPort));
 
   // State dir: ephemeral mktemp by default (isolated + wiped on exit); a
-  // persistent CARET_DEV_STATE_DIR / [dev].state_dir is reused and kept.
-  const plan = planStateDir(devStateDir(settings), false);
+  // persistent dir is reused and kept. Precedence: --state-dir > CARET_DEV_STATE_DIR
+  // > [dev].state_dir; --persist keeps an otherwise-ephemeral dir too.
+  const plan = planStateDir(opts.stateDir ?? devStateDir(settings), opts.persist);
   let stateDirPath: string;
   let wipeOnExit: boolean;
   if (plan.kind === "named") {

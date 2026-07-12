@@ -389,7 +389,11 @@ the dev daemon never reads or writes a globally-installed caret's reviews. To pi
 dev port instead, set `CARET_DEV_PORT` (or `[dev].port` in `config.toml`) to any free port
 other than `42718` (the production default); this skips `--ephemeral` and binds that port,
 so only one such session can run at a time. Likewise, set `CARET_DEV_STATE_DIR` (or
-`[dev].state_dir`) to keep dev state across restarts instead of the ephemeral default.
+`[dev].state_dir`) to keep dev state across restarts instead of the ephemeral default. The
+same three knobs are also `mise run dev` flags — `--port <n>`, `--state-dir <dir>`, and
+`--persist` — which take precedence over the environment variables and the `[dev]` config;
+`--persist` keeps even the ephemeral default state dir on exit (so you can inspect its
+`caret.log`) rather than wiping it.
 
 `mise run test e2e` runs the Playwright specs in `test/e2e/` against an isolated daemon
 that serves the built `ui/dist/` artifact on an OS-assigned port with ephemeral state, so

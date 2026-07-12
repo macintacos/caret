@@ -98,8 +98,30 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
       DEFAULT_NUM_VERSIONS,
     )
     .option("--notify", "arm the recurring extra-review seeder (the EXC-427 notification path)")
+    .option(
+      "--port <n>",
+      "fixed dev daemon port (overrides CARET_DEV_PORT / [dev].port)",
+      (raw) => {
+        try {
+          return parsePositiveInt(raw, "--port");
+        } catch (err) {
+          throw new InvalidArgumentError((err as Error).message);
+        }
+      },
+    )
+    .option(
+      "--state-dir <dir>",
+      "persistent dev state dir (overrides CARET_DEV_STATE_DIR / [dev].state_dir)",
+    )
+    .option("--persist", "keep the ephemeral state dir on exit instead of wiping it")
     .action(async (opts) => {
-      await actions.dev({ numVersions: opts.numVersions, notify: opts.notify ?? false });
+      await actions.dev({
+        numVersions: opts.numVersions,
+        notify: opts.notify ?? false,
+        port: opts.port,
+        stateDir: opts.stateDir,
+        persist: opts.persist ?? false,
+      });
     });
 
   // A passthrough command forwards its raw argv (operands and flags) to the tool
