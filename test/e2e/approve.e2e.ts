@@ -40,6 +40,9 @@ test("a pending inline comment guards approve and routes to request-changes inta
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(guard).toBeVisible();
   await expect(guard).toContainText("1 pending comment");
+  // The guard previews the inline comment, anchored to its lines.
+  await expect(guard.locator(".comments")).toContainText("Lines 7–8");
+  await expect(guard.locator(".comments")).toContainText("explain the cold cost");
 
   // The review is still pending: nothing was sent.
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
@@ -101,6 +104,9 @@ test("a lone general-comment draft guards approve (EXC-742)", async ({ daemon, p
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(guard).toBeVisible();
   await expect(guard).toContainText("1 pending comment");
+  // The guard previews the draft itself under the General label.
+  await expect(guard.locator(".comments")).toContainText("General");
+  await expect(guard.locator(".comments")).toContainText("reconsider the migration order");
 
   // The review is still pending: nothing was sent.
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);

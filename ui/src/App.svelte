@@ -304,7 +304,7 @@
 
 {#if pendingApproveMode !== null && active}
   <UnsentCommentsDialog
-    count={pendingCount}
+    items={guardItems}
     action="Approve"
     consequence="Approving accepts the plan and starts the agent's work."
     icon="check"
@@ -316,7 +316,7 @@
 
 {#if pendingReject && active}
   <UnsentCommentsDialog
-    count={pendingCount}
+    items={guardItems}
     action="Reject"
     consequence="The agent will be told the plan was rejected and to wait for your next message."
     onConfirm={rejectAnyway}
