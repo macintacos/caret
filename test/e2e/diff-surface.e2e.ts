@@ -988,6 +988,9 @@ test("Escape discards a typed draft, leaving no Resume marker", async ({ daemon,
   await composerInput(composer).fill("abandon this draft");
   await composerInput(composer).click();
   await page.keyboard.press("Escape");
+  // A typed draft can't be un-discarded, so Escape now asks to confirm first
+  // (EXC-749); confirm to drop it.
+  await page.locator(".confirm-popover .confirm").click();
 
   // The composer closes with no scratch marker, and nothing was persisted.
   await expect(composer).toHaveCount(0);
@@ -1012,12 +1015,35 @@ test("the Discard button discards a typed draft, leaving no Resume marker", asyn
   const composer = page.getByRole("dialog", { name: "Add a comment" });
   await composerInput(composer).fill("drop this via the button");
   await composer.getByRole("button", { name: "Discard" }).click();
+  // Confirm the discard (EXC-749).
+  await page.locator(".confirm-popover .confirm").click();
 
   await expect(composer).toHaveCount(0);
   await expect(scratchMarker(page)).toHaveCount(0);
   await expect
     .poll(async () => (await daemon.getReview(id)).body?.composerScratches?.length ?? 0)
     .toBe(0);
+});
+
+test("canceling a Discard keeps the composer open", async ({ daemon, page }) => {
+  // The confirmation's whole point: an accidental Discard is recoverable.
+  // Canceling backs out and leaves the composer (and its draft) in place.
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const plus = await revealGutterPlus(page, 3);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await composerInput(composer).fill("do not lose me");
+  await composer.getByRole("button", { name: "Discard" }).click();
+
+  await expect(page.locator(".confirm-popover")).toBeVisible();
+  await page.locator(".confirm-popover .cancel").click();
+  await expect(page.locator(".confirm-popover")).toHaveCount(0);
+  await expect(composer).toBeVisible();
 });
 
 test("resuming a kept scratch then Discarding removes the marker and un-persists it", async ({
@@ -1049,6 +1075,8 @@ test("resuming a kept scratch then Discarding removes the marker and un-persists
   await marker.click();
   await expect(composer).toBeVisible();
   await composer.getByRole("button", { name: "Discard" }).click();
+  // Confirm the discard (EXC-749).
+  await page.locator(".confirm-popover .confirm").click();
 
   await expect(composer).toHaveCount(0);
   await expect(scratchMarker(page)).toHaveCount(0);
@@ -1593,12 +1621,34 @@ test("deleting an inline card removes the annotation", async ({ daemon, page }) 
     .toBe(1);
 
   await page.locator("[data-annotation-card]").getByRole("button", { name: "delete" }).click();
+  // Deleting a submitted comment can't be undone, so confirm first (EXC-749).
+  await page.locator(".confirm-popover .confirm").click();
 
   // The card leaves the DOM and the delete persists through /draft.
   await expect(page.locator("[data-annotation-card]")).toHaveCount(0);
   await expect
     .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
     .toBe(0);
+});
+
+test("canceling a delete keeps the inline card", async ({ daemon, page }) => {
+  // Deleting a submitted comment is irreversible; canceling the confirm must
+  // leave the card and its persisted annotation untouched (EXC-749).
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+
+  await createAnnotation(page, 3, "Keep this section.");
+  await page.locator("[data-annotation-card]").getByRole("button", { name: "delete" }).click();
+
+  await expect(page.locator(".confirm-popover")).toBeVisible();
+  await page.locator(".confirm-popover .cancel").click();
+  await expect(page.locator(".confirm-popover")).toHaveCount(0);
+  await expect(page.locator("[data-annotation-card]")).toHaveCount(1);
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
+    .toBe(1);
 });
 
 test("editing an inline card rewrites the comment and persists it", async ({ daemon, page }) => {

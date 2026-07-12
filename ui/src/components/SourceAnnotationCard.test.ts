@@ -194,16 +194,37 @@ describe("SourceAnnotationCard focus + position", () => {
 });
 
 describe("SourceAnnotationCard edit/delete", () => {
-  test("delete fires onDelete and does not also focus", () => {
+  test("delete confirms first, then fires onDelete without focusing", () => {
     const deleted = capture<string>();
     let focused = false;
-    const { target } = render(
+    const { target, flush } = render(
       SourceAnnotationCard,
       base({ focused: true, onFocus: () => (focused = true), onDelete: deleted.cb }),
     );
     click(target, ".danger");
+    flush();
+    // The confirm pops out of the delete link; nothing is deleted yet.
+    expect(target.querySelector(".confirm-popover")).not.toBeNull();
+    expect(deleted.last()).toBeUndefined();
+    // Confirming deletes, and the original click never focused the card.
+    click(target, ".confirm-popover .confirm");
+    flush();
     expect(deleted.last()).toBe("a1");
     expect(focused).toBe(false);
+  });
+
+  test("canceling the delete keeps the comment", () => {
+    const deleted = capture<string>();
+    const { target, flush } = render(
+      SourceAnnotationCard,
+      base({ focused: true, onDelete: deleted.cb }),
+    );
+    click(target, ".danger");
+    flush();
+    click(target, ".confirm-popover .cancel");
+    flush();
+    expect(deleted.last()).toBeUndefined();
+    expect(target.querySelector(".confirm-popover")).toBeNull();
   });
 
   test("edit opens the editor seeded with the current comment", () => {

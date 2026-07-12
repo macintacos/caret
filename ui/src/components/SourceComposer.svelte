@@ -3,13 +3,15 @@
   // view's per-line annotation row (the parent projects it into the library's slot
   // — see annotationSlot.ts) at the line or range the reviewer chose from the
   // gutter. Submitting (Comment / Cmd/Ctrl+Enter) creates a line-anchored
-  // annotation; Discard (the button or Esc) drops the draft with no residue;
-  // Keep for later stashes it as a resumable scratch. The editing surface is
+  // annotation; Discard (the button or Esc) drops the draft with no residue,
+  // confirming first when it holds text; Keep for later stashes it as a
+  // resumable scratch. The editing surface is
   // MarkdownEditor (the swappable
   // CodeMirror boundary): it styles markdown as you type, auto-grows, owns the
   // autofocus/preventScroll guard, and reports the chords back here.
   import { untrack } from "svelte";
   import { rangeLabel } from "../lib/diffview/commenting.ts";
+  import ConfirmPopover from "./ConfirmPopover.svelte";
   import Icon from "./Icon.svelte";
   import MarkdownEditor from "./MarkdownEditor.svelte";
 
@@ -60,11 +62,24 @@
   // button stays disabled until the reviewer has typed.
   const canKeep = $derived(comment.trim() !== "");
 
+  // Whether the "are you sure?" confirmation is showing over the Discard button.
+  let confirming = $state(false);
+
   function submit() {
     onSubmit(comment);
   }
 
-  function discard() {
+  // Dropping a non-empty draft loses typed text with no undo, so it routes
+  // through a confirmation (EXC-749). An empty box has nothing to lose, so it
+  // discards at once — no nag for the "clicked a line, changed my mind" case.
+  // Both the Discard button and the Esc chord enter here.
+  function requestDiscard() {
+    if (canKeep) confirming = true;
+    else onDiscard();
+  }
+
+  function confirmDiscard() {
+    confirming = false;
     onDiscard();
   }
 
@@ -82,11 +97,25 @@
     autofocus
     onInput={(text) => (comment = text)}
     onSubmitChord={submit}
-    onCancelChord={discard}
+    onCancelChord={requestDiscard}
   />
   <div class="row">
     <button class="keep" type="button" onclick={keep} disabled={!canKeep}>Keep for later</button>
-    <button class="ghost" type="button" onclick={discard} aria-keyshortcuts="Escape">Discard</button>
+    <span class="discard-wrap">
+      <button class="ghost" type="button" onclick={requestDiscard} aria-keyshortcuts="Escape"
+        >Discard</button
+      >
+      {#if confirming}
+        <ConfirmPopover
+          question="Discard this comment?"
+          confirmLabel="Discard"
+          cancelLabel="Keep editing"
+          align="end"
+          onConfirm={confirmDiscard}
+          onCancel={() => (confirming = false)}
+        />
+      {/if}
+    </span>
     <button
       class="solid"
       type="button"
@@ -132,6 +161,12 @@
     justify-content: flex-end;
     gap: 0.4rem;
     margin-top: 0.55rem;
+  }
+  /* Positioning context for the discard confirmation, so it anchors to the
+     button rather than floating (see ConfirmPopover). */
+  .discard-wrap {
+    position: relative;
+    display: inline-flex;
   }
   .keep,
   .ghost,
