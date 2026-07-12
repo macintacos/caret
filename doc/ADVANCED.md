@@ -451,14 +451,17 @@ build their artifact (via the tasks CLI) before smoking it. `scripts/preflight.t
 were consolidated into single multi-target `build`/`test`/`smoke` tasks.
 
 `mise run dev` takes `--num-versions <n>` (how many versions the primary dev review opens
-with; default 3, a positive integer) and `--notify` (arm the extra-review seeder). Its
-orchestration — resolve the port mode and state dir (`scripts/tasks/dev/dev-env.ts`),
-spawn the daemon, pino-pretty, driver, and Vite, discover the daemon's bound port from its
-lock, and reap every child on exit — lives in `scripts/tasks/dev/run.ts`. Note `Bun.spawn`
-snapshots `process.env` at startup and ignores later mutations, so env overrides
-(`XDG_STATE_HOME`, `CARET_IDLE_MS`, `CARET_PORT`) are passed explicitly to each child
-rather than set on `process.env`; the smoke targets (`scripts/tasks/smoke.ts`) follow the
-same daemon-supervision pattern, and their shared over-the-wire probe is unit-tested in
+with; default 3, a positive integer), `--notify` (arm the extra-review seeder), and
+`--port` / `--state-dir` / `--persist` (the port, state dir, and state-persistence
+overrides described under Configuration above). Its orchestration — resolve the port mode
+and state dir (`scripts/tasks/dev/dev-env.ts`), spawn the daemon, pino-pretty, and Vite,
+run the protocol driver in-process (so commander parses `--num-versions` once, with no
+re-spawned child to reap), discover the daemon's bound port from its lock, and reap every
+child on exit — lives in `scripts/tasks/dev/run.ts`. Note `Bun.spawn` snapshots
+`process.env` at startup and ignores later mutations, so env overrides (`XDG_STATE_HOME`,
+`CARET_IDLE_MS`, `CARET_PORT`) are passed explicitly to each child rather than set on
+`process.env`; the smoke targets (`scripts/tasks/smoke.ts`) follow the same
+daemon-supervision pattern, and their shared over-the-wire probe is unit-tested in
 `test/scripts/smoke-probe.test.ts`.
 
 This replaces per-task bash scripts carrying `#USAGE` flag specs. Those worked but were

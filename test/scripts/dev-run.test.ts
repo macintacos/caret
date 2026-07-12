@@ -53,7 +53,8 @@ test("childEnvFor isolates state and never idles; pins CARET_PORT only when fixe
   // Ephemeral mode leaves CARET_PORT to be filled after port discovery.
   const eph = childEnvFor("/tmp/world", { kind: "ephemeral" });
   expect(eph.XDG_STATE_HOME).toBe("/tmp/world");
-  expect("CARET_PORT" in eph && eph.CARET_PORT !== process.env.CARET_PORT).toBe(false);
+  // No fresh CARET_PORT in ephemeral mode — it only carries whatever process.env had.
+  expect(eph.CARET_PORT).toBe(process.env.CARET_PORT);
 });
 
 // ---- makeCleanup ----
@@ -149,6 +150,9 @@ async function withCleanDevEnv(fn: () => Promise<void>): Promise<void> {
   const saved = {
     CARET_DEV_STATE_DIR: process.env.CARET_DEV_STATE_DIR,
     CARET_DEV_PORT: process.env.CARET_DEV_PORT,
+    // runDev sets XDG_STATE_HOME for the in-process driver; capture it so the
+    // mutation doesn't leak into other tests.
+    XDG_STATE_HOME: process.env.XDG_STATE_HOME,
   };
   delete process.env.CARET_DEV_STATE_DIR;
   delete process.env.CARET_DEV_PORT;
@@ -167,10 +171,15 @@ describe("runDev supervision", () => {
     await withCleanDevEnv(async () => {
       const { spawn, calls, children } = capturingSpawn(0);
       const driverCalls: DriverOptions[] = [];
+      let xdgAtDriver: string | undefined;
       let exitCode: number | undefined;
       const deps = baseDeps({
         spawn,
-        runDriver: (o) => driverCalls.push(o),
+        runDriver: (o) => {
+          // Capture the state dir the in-process driver sees at call time.
+          xdgAtDriver = process.env.XDG_STATE_HOME;
+          driverCalls.push(o);
+        },
         exit: ((code: number): never => {
           exitCode = code;
           throw new ExitSignal(String(code));
@@ -192,6 +201,10 @@ describe("runDev supervision", () => {
       expect(driverCalls).toEqual([
         { base: "http://127.0.0.1:40123", numVersions: 4, notify: true, settings: DEFAULTS },
       ]);
+
+      // The in-process driver sees the isolated dev state dir — its hook logging
+      // (runReview → caret.log) would otherwise escape to ~/.local/state/caret.
+      expect(xdgAtDriver).toBe(calls[0]?.env?.XDG_STATE_HOME);
 
       // Teardown killed every child and exited with vite's code.
       expect(children.every((c) => c.killed >= 1)).toBe(true);

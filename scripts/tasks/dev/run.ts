@@ -241,7 +241,14 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
     // Driver: seeds the fake plan and plays the agent's protocol side, in this
     // same process. Its options arrive already parsed (commander), so there is no
     // subprocess and no argv re-parse; the loop never resolves and dies with this
-    // process on teardown, so it is not among the reaped children.
+    // process on teardown, so it is not among the reaped children. Because it runs
+    // here rather than in a child with `env: childEnv`, point this process's
+    // XDG_STATE_HOME at the isolated dev state dir: the driver's hook-side logging
+    // (runReview → caret.log, read lazily off process.env) would otherwise write
+    // to the real ~/.local/state/caret instead of the dev dir. Safe now — the
+    // daemon and pino-pretty are already spawned (env snapshotted) and Vite below
+    // is spawned with an explicit `env: childEnv`, so this reaches only the driver.
+    process.env.XDG_STATE_HOME = stateDirPath;
     deps.runDriver({
       base: `http://127.0.0.1:${port}`,
       numVersions: opts.numVersions,
