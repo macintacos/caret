@@ -81,11 +81,16 @@ describe("SourceAnnotationThread stacked comments", () => {
 
   test("routes a card's delete to onDelete with its id", () => {
     const deleted = capture<string>();
-    const { target } = render(
+    const { target, flush } = render(
       SourceAnnotationThread,
       base({ annotations: two, focusedAnnotation: "a", onDelete: deleted.cb }),
     );
     (target.querySelector('[data-annotation-card="a"] .danger') as HTMLElement).click();
+    flush();
+    // Delete now confirms first (EXC-749); confirm to fire onDelete.
+    (
+      target.querySelector('[data-annotation-card="a"] .confirm-popover .confirm') as HTMLElement
+    ).click();
     expect(deleted.last()).toBe("a");
   });
 

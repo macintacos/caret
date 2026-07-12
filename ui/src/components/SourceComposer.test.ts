@@ -29,15 +29,22 @@ function mount(over: Record<string, unknown> = {}) {
   const buttons = Array.from(target.querySelectorAll("button"));
   return {
     target,
+    flush,
     content: target.querySelector(".cm-content") as HTMLElement,
     submitBtn: buttons.find((b) => b.textContent?.includes("Comment")) ?? null,
-    discardBtn: buttons.find((b) => b.textContent?.trim() === "Discard") ?? null,
+    // The Discard trigger in the row (its own `.ghost` class), distinct from the
+    // confirm popover's own "Discard" button that appears once it's clicked.
+    discardBtn: target.querySelector(".ghost") as HTMLButtonElement | null,
     keepBtn: buttons.find((b) => b.textContent?.includes("Keep for later")) ?? null,
     submitted,
     keptWith,
     discardCount: () => discardCalls,
   };
 }
+
+const confirmPopover = (target: HTMLElement) => target.querySelector(".confirm-popover");
+const clickIn = (target: HTMLElement, sel: string) =>
+  (target.querySelector(sel) as HTMLElement).click();
 
 function key(content: HTMLElement, k: string, mods: Partial<KeyboardEventInit> = {}) {
   content.dispatchEvent(
@@ -78,11 +85,36 @@ describe("SourceComposer submit/discard/keep", () => {
     expect(keptWith).toEqual(["draft text"]);
   });
 
-  test("the Discard button drops the draft, keeping nothing", () => {
-    const { discardBtn, discardCount, keptWith } = mount({ initial: "draft text" });
+  test("the Discard button confirms before dropping a non-empty draft", () => {
+    const { target, discardBtn, flush, discardCount, keptWith } = mount({ initial: "draft text" });
     discardBtn!.click();
+    flush();
+    // The confirm pops out; nothing is dropped yet.
+    expect(confirmPopover(target)).not.toBeNull();
+    expect(discardCount()).toBe(0);
+    // Confirming drops the draft, keeping nothing.
+    clickIn(target, ".confirm-popover .confirm");
+    flush();
     expect(discardCount()).toBe(1);
     expect(keptWith).toHaveLength(0);
+  });
+
+  test("canceling the discard keeps the draft and closes the confirm", () => {
+    const { target, discardBtn, flush, discardCount } = mount({ initial: "draft text" });
+    discardBtn!.click();
+    flush();
+    clickIn(target, ".confirm-popover .cancel");
+    flush();
+    expect(discardCount()).toBe(0);
+    expect(confirmPopover(target)).toBeNull();
+  });
+
+  test("an empty composer discards immediately without confirming", () => {
+    const { target, discardBtn, flush, discardCount } = mount();
+    discardBtn!.click();
+    flush();
+    expect(discardCount()).toBe(1);
+    expect(confirmPopover(target)).toBeNull();
   });
 
   test("Keep for later is disabled with an empty box and enabled once there is text", () => {
@@ -98,10 +130,20 @@ describe("SourceComposer keyboard chords", () => {
     expect(submitted).toEqual(["via chord"]);
   });
 
-  test("Escape discards the draft", () => {
-    const { content, discardCount } = mount({ initial: "abandon me" });
+  test("Escape confirms before discarding a non-empty draft", () => {
+    const { target, content, flush, discardCount } = mount({ initial: "abandon me" });
     key(content, "Escape");
+    flush();
+    expect(confirmPopover(target)).not.toBeNull();
+    expect(discardCount()).toBe(0);
+  });
+
+  test("Escape on an empty composer discards immediately", () => {
+    const { target, content, flush, discardCount } = mount();
+    key(content, "Escape");
+    flush();
     expect(discardCount()).toBe(1);
+    expect(confirmPopover(target)).toBeNull();
   });
 
   test("a bare Enter does not submit", () => {

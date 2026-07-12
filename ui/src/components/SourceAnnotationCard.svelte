@@ -9,6 +9,7 @@
   import type { LineAnnotation } from "@core/types";
   import { commentState } from "../lib/commentState.ts";
   import { renderMarkdown } from "../lib/markdown.ts";
+  import ConfirmPopover from "./ConfirmPopover.svelte";
   import Icon from "./Icon.svelte";
   import MarkdownEditor from "./MarkdownEditor.svelte";
 
@@ -39,6 +40,11 @@
 
   let editing = $state(false);
   let draft = $state("");
+
+  // Whether the "are you sure?" confirmation is showing over the delete link.
+  // Deleting a submitted comment is irreversible, so it routes through a confirm
+  // (EXC-749) instead of firing on the first click.
+  let confirming = $state(false);
 
   const label = $derived(
     annotation.startLine === annotation.endLine
@@ -82,6 +88,11 @@
   function cancelEdit() {
     editing = false;
     draft = annotation.comment;
+  }
+
+  function confirmDelete() {
+    confirming = false;
+    onDelete(annotation.id);
   }
 </script>
 
@@ -127,14 +138,25 @@
         <div class="comment">{@html renderedComment}</div>
         <footer>
           <button class="link edit" type="button" onclick={startEdit}>edit</button>
-          <button
-            class="link danger"
-            type="button"
-            onclick={(e) => {
-              e.stopPropagation();
-              onDelete(annotation.id);
-            }}>delete</button
-          >
+          <span class="delete-wrap">
+            <button
+              class="link danger"
+              type="button"
+              onclick={(e) => {
+                e.stopPropagation();
+                confirming = true;
+              }}>delete</button
+            >
+            {#if confirming}
+              <ConfirmPopover
+                question="Delete this comment?"
+                confirmLabel="Delete"
+                align="start"
+                onConfirm={confirmDelete}
+                onCancel={() => (confirming = false)}
+              />
+            {/if}
+          </span>
         </footer>
       {/if}
     </div>
@@ -350,6 +372,12 @@
     display: flex;
     gap: 0.75rem;
     margin-top: 0.4rem;
+  }
+  /* Positioning context for the delete confirmation, so it anchors to the link
+     rather than floating (see ConfirmPopover). */
+  .delete-wrap {
+    position: relative;
+    display: inline-flex;
   }
   .link {
     background: none;
