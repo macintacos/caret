@@ -9,6 +9,7 @@
 // when its own line numbering differs.
 
 import { type Annotation, isLegacyAnnotation, isLineAnnotation } from "@core/types";
+import { type ComposerScratch, rangeLabel } from "./diffview/commenting.ts";
 
 /** Collapses any run of whitespace (incl. newlines) to a single space. */
 function flatten(text: string): string {
@@ -73,6 +74,42 @@ export function pendingInline(annotations: Annotation[]): Annotation[] {
  * the count without formatting the feedback. */
 export function pendingInlineCount(annotations: Annotation[]): number {
   return pendingInline(annotations).length;
+}
+
+/** One line in the approve/reject guard's preview of unsent feedback: a short
+ * anchor label and the comment/draft text. */
+export interface PendingItem {
+  /** Short anchor: "General", "Line N", "Lines N–M", or a legacy quote. */
+  label: string;
+  /** The comment / draft text, trimmed. */
+  text: string;
+}
+
+/** Everything a plain Approve would silently leave behind, as a flat preview
+ * list: the general-comment draft first, then the non-blank committed inline
+ * comments, then the retained-but-unsent composer scratches. The guard renders
+ * this so the reviewer sees what is at stake, and App.svelte's pendingCount is
+ * this list's length — so the count and the preview can never disagree about
+ * what's pending. Scratch text arrives already trimmed (the controller keeps a
+ * scratch only when its trimmed text is non-empty). */
+export function pendingItems(
+  annotations: Annotation[],
+  generalComment: string,
+  scratches: ComposerScratch[],
+): PendingItem[] {
+  const items: PendingItem[] = [];
+  const general = generalComment.trim();
+  if (general) items.push({ label: "General", text: general });
+  for (const a of pendingInline(annotations)) {
+    const label = isLineAnnotation(a)
+      ? rangeLabel(a.startLine, a.endLine)
+      : abbreviate(a.quote) || "Comment";
+    items.push({ label, text: a.comment.trim() });
+  }
+  for (const s of scratches) {
+    items.push({ label: rangeLabel(s.startLine, s.endLine), text: s.text });
+  }
+  return items;
 }
 
 /** How many distinct source locations the pending inline comments anchor to. A
