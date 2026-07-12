@@ -10,6 +10,15 @@
 
 import { type Annotation, isLegacyAnnotation, isLineAnnotation } from "@core/types";
 
+/**
+ * Sent verbatim as the deny feedback when the reviewer clicks Reject (EXC-685):
+ * a concise signal that the plan was rejected and the agent should wait for the
+ * user's next message rather than revising and re-presenting the plan. Unlike
+ * Request changes, Reject carries no inline comments — only this message.
+ */
+export const PLAN_REJECTED_MESSAGE =
+  "The user rejected the plan. Wait for the user's next message to decide how to proceed; do not present a plan for review again unless they ask.";
+
 /** Collapses any run of whitespace (incl. newlines) to a single space. */
 function flatten(text: string): string {
   return text.replace(/\s+/g, " ").trim();

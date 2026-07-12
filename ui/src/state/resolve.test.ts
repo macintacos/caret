@@ -185,6 +185,72 @@ describe("requestChanges", () => {
   });
 });
 
+describe("reject", () => {
+  test("submits a deny with the canned reject-and-wait message, clears the draft, and advances", async () => {
+    const store = makeStore();
+    const resolve = build(store);
+    await resolve.reject();
+    expect(submits).toHaveLength(1);
+    expect(submits[0]!.body.behavior).toBe("deny");
+    // The concise message tells the agent the plan was rejected and to wait.
+    expect(submits[0]!.body.feedback).toContain("rejected");
+    expect(submits[0]!.body.feedback?.toLowerCase()).toContain("wait");
+    expect(cleared).toBe(1);
+    expect(advanced).toEqual(["r1"]);
+  });
+
+  test("sends only the canned message — never the queued inline comments", async () => {
+    const store = makeStore();
+    const annotations: Annotation[] = [
+      {
+        id: "a1",
+        blockId: "b0",
+        startOffset: 0,
+        endOffset: 1,
+        quote: "the cache",
+        comment: "tighten",
+      },
+    ];
+    const resolve = build(store, { annotations });
+    await resolve.reject();
+    expect(submits).toHaveLength(1);
+    expect(submits[0]!.body.feedback).not.toContain("tighten");
+  });
+
+  test("flushes the pending draft before submitting", async () => {
+    const store = makeStore();
+    const resolve = build(store);
+    flushOrder = [];
+    await resolve.reject();
+    expect(flushOrder).toEqual(["flush"]);
+  });
+
+  test("an HttpError (already resolved elsewhere) still advances", async () => {
+    submitResult = () => Promise.reject(new HttpError(409));
+    const store = makeStore();
+    const resolve = build(store);
+    await resolve.reject();
+    expect(advanced).toEqual(["r1"]);
+    expect(offline).toBe(false);
+  });
+
+  test("a network failure flips offline and does NOT advance", async () => {
+    submitResult = () => Promise.reject(new Error("down"));
+    const store = makeStore();
+    const resolve = build(store);
+    await resolve.reject();
+    expect(advanced).toEqual([]);
+    expect(offline).toBe(true);
+  });
+
+  test("no-ops when nothing is active", async () => {
+    const store = makeStore();
+    const resolve = build(store, { activeId: null });
+    await resolve.reject();
+    expect(submits).toEqual([]);
+  });
+});
+
 describe("loadApproveMode", () => {
   test("reads the remembered mode into the store", async () => {
     const store = makeStore();
