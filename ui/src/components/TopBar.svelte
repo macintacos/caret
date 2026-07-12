@@ -19,9 +19,10 @@
     variants: ApproveVariant[];
     /** True when the daemon runs from source; shows the "local build" badge. */
     isDev?: boolean;
-    /** Non-blank inline comments the reviewer has queued. Surfaced as a count on
-     * the Request-changes button so the pending work is visible before they open
-     * the dialog; hidden at zero. */
+    /** How much unsent feedback is queued — the general-comment draft, committed
+     * inline comments, and retained-but-unsent composer scratches (App.svelte's
+     * shared pendingCount). Surfaced as a count on the Request-changes button so
+     * the pending work is visible before they open the dialog; hidden at zero. */
     pendingCount: number;
     onSelect: (id: string) => void;
     onApprove: (mode: ApproveVariantId) => void;

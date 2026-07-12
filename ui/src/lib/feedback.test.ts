@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { Annotation } from "@core/types";
+import type { ComposerScratch } from "./diffview/commenting.ts";
 import {
   coveredLineCount,
   formatFeedback,
   pendingInlineCount,
+  pendingItems,
   pendingLineCount,
 } from "./feedback.ts";
 
@@ -34,6 +36,13 @@ const lineAnn = (startLine: number, endLine: number, comment: string): Annotatio
   startLine,
   endLine,
   comment,
+});
+
+const scratch = (startLine: number, endLine: number, text: string): ComposerScratch => ({
+  key: `${startLine}:${endLine}`,
+  startLine,
+  endLine,
+  text,
 });
 
 describe("formatFeedback", () => {
@@ -316,5 +325,80 @@ describe("coveredLineCount", () => {
   test("is zero with no line annotations", () => {
     expect(coveredLineCount([])).toBe(0);
     expect(coveredLineCount([ann({ comment: "legacy only" })])).toBe(0);
+  });
+});
+
+describe("pendingItems", () => {
+  test("a non-blank general comment leads the list, labeled General", () => {
+    expect(pendingItems([], "Please rethink the rollout.", [])).toEqual([
+      { label: "General", text: "Please rethink the rollout." },
+    ]);
+  });
+
+  test("a blank general comment contributes nothing", () => {
+    expect(pendingItems([], "   ", [])).toEqual([]);
+  });
+
+  test("a line annotation is labeled by its range and carries its comment", () => {
+    expect(pendingItems([lineAnn(3, 3, "tighten")], "", [])).toEqual([
+      { label: "Line 3", text: "tighten" },
+    ]);
+  });
+
+  test("a multi-line annotation uses the en-dash range label", () => {
+    expect(pendingItems([lineAnn(4, 6, "split this up")], "", [])).toEqual([
+      { label: "Lines 4–6", text: "split this up" },
+    ]);
+  });
+
+  test("blank-comment annotations are skipped (shares pendingInline)", () => {
+    expect(pendingItems([lineAnn(3, 3, "   ")], "", [])).toEqual([]);
+  });
+
+  test("a scratch is labeled by its range and carries its text", () => {
+    expect(pendingItems([], "", [scratch(7, 8, "half a thought")])).toEqual([
+      { label: "Lines 7–8", text: "half a thought" },
+    ]);
+  });
+
+  test("orders general, then inline comments, then scratches", () => {
+    const items = pendingItems([lineAnn(3, 3, "inline note")], "overall note", [
+      scratch(7, 7, "draft note"),
+    ]);
+    expect(items).toEqual([
+      { label: "General", text: "overall note" },
+      { label: "Line 3", text: "inline note" },
+      { label: "Line 7", text: "draft note" },
+    ]);
+  });
+
+  test("a legacy annotation is labeled by its abbreviated quote", () => {
+    expect(
+      pendingItems(
+        [ann({ quote: "deploy the new cache layer before the migration", comment: "risky" })],
+        "",
+        [],
+      ),
+    ).toEqual([{ label: "deploy the new … before the migration", text: "risky" }]);
+  });
+
+  test("trims the general comment and inline comment text", () => {
+    expect(pendingItems([lineAnn(3, 3, "  spaced  ")], "  hi  ", [])).toEqual([
+      { label: "General", text: "hi" },
+      { label: "Line 3", text: "spaced" },
+    ]);
+  });
+
+  test("length equals the shared pending count (general + inline + scratches)", () => {
+    const anns = [lineAnn(3, 3, "a"), ann({ comment: "   " }), lineAnn(4, 4, "b")];
+    const scratches = [scratch(7, 8, "s")];
+    const items = pendingItems(anns, "note", scratches);
+    // 1 general + 2 non-blank inline + 1 scratch = 4, matching App.svelte's pendingCount.
+    expect(items.length).toBe(pendingInlineCount(anns) + scratches.length + 1);
+    expect(items.length).toBe(4);
+  });
+
+  test("is empty for no feedback at all", () => {
+    expect(pendingItems([], "", [])).toEqual([]);
   });
 });

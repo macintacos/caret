@@ -4,8 +4,13 @@ import { describe, expect, test } from "bun:test";
 import { render } from "../../test-mount.ts";
 import UnsentCommentsDialog from "./UnsentCommentsDialog.svelte";
 
+const twoItems = [
+  { label: "General", text: "reconsider the rollout" },
+  { label: "Line 7", text: "explain the cold cost" },
+];
+
 const approveProps = {
-  count: 2,
+  items: twoItems,
   action: "Approve",
   consequence: "Approving accepts the plan and starts the agent's work.",
   icon: "check" as const,
@@ -15,7 +20,7 @@ const approveProps = {
 };
 
 const rejectProps = {
-  count: 2,
+  items: twoItems,
   action: "Reject",
   consequence: "The agent will be told the plan was rejected and to wait.",
   onConfirm: () => {},
@@ -29,14 +34,28 @@ function dialog(target: HTMLElement) {
 
 describe("UnsentCommentsDialog render", () => {
   test("names the pending count, pluralized", () => {
-    const { target } = render(UnsentCommentsDialog, { ...approveProps, count: 2 });
+    const { target } = render(UnsentCommentsDialog, approveProps);
     expect(target.querySelector(".body")!.textContent).toContain("2 pending comments");
   });
 
   test("singularizes the count for one pending comment", () => {
-    const { target } = render(UnsentCommentsDialog, { ...approveProps, count: 1 });
+    const { target } = render(UnsentCommentsDialog, {
+      ...approveProps,
+      items: [{ label: "Line 3", text: "tighten" }],
+    });
     expect(target.querySelector(".body")!.textContent).toContain("1 pending comment");
     expect(target.querySelector(".body")!.textContent).not.toContain("1 pending comments");
+  });
+
+  test("previews each pending comment's label and text", () => {
+    const { target } = render(UnsentCommentsDialog, approveProps);
+    const rows = target.querySelectorAll(".comments .comment");
+    expect(rows.length).toBe(2);
+    const preview = target.querySelector(".comments")!.textContent!;
+    expect(preview).toContain("General");
+    expect(preview).toContain("reconsider the rollout");
+    expect(preview).toContain("Line 7");
+    expect(preview).toContain("explain the cold cost");
   });
 
   test("the Approve variant reads with the approve vocabulary and accessible names", () => {
@@ -59,12 +78,13 @@ describe("UnsentCommentsDialog render", () => {
     );
   });
 
-  test("with no pending comments it is a plain confirm — no warning, no divert, no 'anyway'", () => {
-    const { target } = render(UnsentCommentsDialog, { ...rejectProps, count: 0 });
-    // A bare confirmation: distinct label, no comments warning, no Request-changes
-    // divert, and the confirm button drops the "anyway" qualifier.
+  test("with no pending comments it is a plain confirm — no warning, no preview, no divert, no 'anyway'", () => {
+    const { target } = render(UnsentCommentsDialog, { ...rejectProps, items: [] });
+    // A bare confirmation: distinct label, no comments warning, no preview list, no
+    // Request-changes divert, and the confirm button drops the "anyway" qualifier.
     expect(dialog(target).getAttribute("aria-label")).toBe("Reject this plan");
     expect(target.querySelector(".body")!.textContent).not.toContain("pending comment");
+    expect(target.querySelector(".comments")).toBeNull();
     expect(target.querySelector(".to-request")).toBeNull();
     expect(target.querySelector(".confirm")!.textContent).toContain("Reject");
     expect(target.querySelector(".confirm")!.textContent).not.toContain("anyway");

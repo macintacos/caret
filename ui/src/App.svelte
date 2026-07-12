@@ -11,7 +11,7 @@
     type SelectionStore,
   } from "./state/polling.svelte.ts";
   import { createResolve, type ResolveStore } from "./state/resolve.svelte.ts";
-  import { coveredLineCount, pendingInlineCount } from "./lib/feedback.ts";
+  import { coveredLineCount, pendingItems } from "./lib/feedback.ts";
   import type { ComposerScratch } from "./lib/diffview/commenting.ts";
   import type { ApproveVariant, ApproveVariantId, Annotation, PersistedScratch } from "@core/types";
 
@@ -95,14 +95,16 @@
   // The variants the split-button renders: the declared set when present, else
   // the built-in fallback.
   let variants = $derived(approveVariants(declaredVariants));
-  // Everything a plain Approve would silently drop: the working copy's non-blank
-  // committed inline comments plus the retained-but-unsent composer scratches (the
-  // controller keeps a scratch only when its trimmed text is non-empty, so
-  // scratches.length is exactly the non-blank count). The approve guard, the
-  // request-changes dialog, the TopBar badge, and the status strip all read this
-  // one count, so they never disagree about what's pending — and an uncommitted
-  // scratch is now protected on Approve exactly like a committed comment (EXC-745).
-  let pendingCount = $derived(pendingInlineCount(work.annotations) + scratches.length);
+  // Everything a plain Approve would silently leave behind, as a preview list:
+  // the general-comment draft first, then the non-blank committed inline comments,
+  // then the retained-but-unsent composer scratches. The approve/reject guard
+  // renders this list so the reviewer sees what's at stake; the TopBar badge and
+  // status strip read its length. Deriving pendingCount from the same list keeps
+  // every surface in agreement about what's pending — an uncommitted scratch
+  // (EXC-745) and a lone general-comment draft (EXC-742) are both now protected on
+  // Approve exactly like a committed comment.
+  let guardItems = $derived(pendingItems(work.annotations, work.generalCommentDraft, scratches));
+  let pendingCount = $derived(guardItems.length);
   // Distinct source lines the pending line-anchored comments cover (union of
   // ranges), for the status strip's at-a-glance "N comments · M lines" readout.
   let coveredLines = $derived(coveredLineCount(work.annotations));
@@ -302,7 +304,7 @@
 
 {#if pendingApproveMode !== null && active}
   <UnsentCommentsDialog
-    count={pendingCount}
+    items={guardItems}
     action="Approve"
     consequence="Approving accepts the plan and starts the agent's work."
     icon="check"
@@ -314,7 +316,7 @@
 
 {#if pendingReject && active}
   <UnsentCommentsDialog
-    count={pendingCount}
+    items={guardItems}
     action="Reject"
     consequence="The agent will be told the plan was rejected and to wait for your next message."
     onConfirm={rejectAnyway}

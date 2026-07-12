@@ -40,6 +40,9 @@ test("a pending inline comment guards approve and routes to request-changes inta
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(guard).toBeVisible();
   await expect(guard).toContainText("1 pending comment");
+  // The guard previews the inline comment, anchored to its lines.
+  await expect(guard.locator(".comments")).toContainText("Lines 7–8");
+  await expect(guard.locator(".comments")).toContainText("explain the cold cost");
 
   // The review is still pending: nothing was sent.
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
@@ -81,6 +84,31 @@ test("an uncommitted composer scratch guards approve (EXC-745)", async ({ daemon
   await expect(guard).toContainText("1 pending comment");
 
   // The review is still pending: nothing was sent, the scratch was not dropped.
+  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
+});
+
+test("a lone general-comment draft guards approve (EXC-742)", async ({ daemon, page }) => {
+  const id = await daemon.seed();
+  // Seed only the review-scoped general-comment draft — the "overall note" typed
+  // into the Request Changes dialog and never sent. No inline comments, no
+  // scratches: before EXC-742 this left pendingCount at 0 and approve resolved
+  // straight through, silently dropping the draft.
+  await daemon.putDraft(id, { generalCommentDraft: "reconsider the migration order" });
+
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  // Approve must open the guard, not resolve: the unsent general comment is
+  // feedback a plain approve would leave behind.
+  const guard = page.getByRole("dialog", { name: "Approve with pending comments" });
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(guard).toBeVisible();
+  await expect(guard).toContainText("1 pending comment");
+  // The guard previews the draft itself under the General label.
+  await expect(guard.locator(".comments")).toContainText("General");
+  await expect(guard.locator(".comments")).toContainText("reconsider the migration order");
+
+  // The review is still pending: nothing was sent.
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
 });
 
