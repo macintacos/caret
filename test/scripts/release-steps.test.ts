@@ -431,4 +431,3 @@ test("finalize reuses an existing GitHub release", async () => {
   expect(calls).not.toContain("releaseCreate:v0.1.0");
   expect(r.releaseUrl).toBe("https://github.com/macintacos/caret/releases/tag/v0.1.0");
 });
-

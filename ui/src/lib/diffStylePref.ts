@@ -6,39 +6,22 @@
 // 0600 store beside plan bodies for the opaque approve-variant token, written
 // only on the decision path, and a layout toggle belongs nowhere near it.
 //
-// Both read and write fail safe and never throw: a blocked or unavailable
-// localStorage (private mode, disabled storage) degrades to the library default
-// rather than breaking the view.
+// The read/write pair is built from the shared enumLocalStoragePref helper, which
+// owns the never-throw fail-safe: a blocked or unavailable localStorage degrades
+// to the default rather than breaking the view.
 
 import type { DiffStyle } from "./diffview/types.ts";
+import { enumLocalStoragePref } from "./enumLocalStoragePref.ts";
 
 /** localStorage key holding the remembered diff layout. */
 export const DIFF_STYLE_KEY = "caret.diffStyle";
 
-/** The library's default layout, used whenever no valid value is stored. */
-const DEFAULT_DIFF_STYLE: DiffStyle = "split";
-
-function isDiffStyle(value: unknown): value is DiffStyle {
-  return value === "split" || value === "unified";
-}
+const pref = enumLocalStoragePref<DiffStyle>(DIFF_STYLE_KEY, ["split", "unified"], "split");
 
 /** Read the remembered layout, defaulting to "split" on a missing, unrecognized,
  * or unreadable value. */
-export function readDiffStyle(): DiffStyle {
-  try {
-    const stored = localStorage.getItem(DIFF_STYLE_KEY);
-    return isDiffStyle(stored) ? stored : DEFAULT_DIFF_STYLE;
-  } catch {
-    return DEFAULT_DIFF_STYLE;
-  }
-}
+export const readDiffStyle = pref.read;
 
 /** Persist the chosen layout. A storage failure is swallowed — the preference is
  * non-essential, so a write that can't land must not surface to the reviewer. */
-export function writeDiffStyle(style: DiffStyle): void {
-  try {
-    localStorage.setItem(DIFF_STYLE_KEY, style);
-  } catch {
-    // Storage unavailable (private mode, quota, disabled) — drop silently.
-  }
-}
+export const writeDiffStyle = pref.write;
