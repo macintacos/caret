@@ -217,26 +217,48 @@ describe("RequestChangesDialog keyboard", () => {
 // pending annotation in commentState.ts), and an unsaved scratch never counts
 // toward the committed-comment tally or the sent feedback (EXC-635).
 describe("RequestChangesDialog unsent scratches", () => {
-  test("no scratch section when there are no scratches", () => {
+  test("no scratch section or drafts-hint when there are no scratches", () => {
     const { target } = render(RequestChangesDialog, baseProps);
     expect(target.querySelector(".scratches")).toBeNull();
+    expect(target.querySelector(".drafts-hint")).toBeNull();
   });
 
-  test("lists one collapsed row per scratch with its text preview", () => {
+  test("lists one row per scratch; the full text sits behind a collapsed disclosure", () => {
     const { target } = render(RequestChangesDialog, {
       ...baseProps,
       scratches: [scratch(3, 3, "half a thought"), scratch(5, 8, "another one")],
     });
     const rows = target.querySelectorAll(".scratch-row");
     expect(rows.length).toBe(2);
-    // Collapsed by default: each row is a <details> without the open attribute.
+    // The full-text preview is behind a per-row disclosure, collapsed by default
+    // so the list stays compact — but the actions are NOT (see the next test).
     for (const row of rows) {
-      expect(row.tagName).toBe("DETAILS");
-      expect((row as HTMLDetailsElement).open).toBe(false);
+      const disclosure = row.querySelector(".scratch-disclosure");
+      expect(disclosure).not.toBeNull();
+      expect(disclosure!.tagName).toBe("DETAILS");
+      expect((disclosure as HTMLDetailsElement).open).toBe(false);
     }
     const text = target.querySelector(".scratches")!.textContent ?? "";
     expect(text).toContain("half a thought");
     expect(text).toContain("another one");
+  });
+
+  test("Save/Discard live outside the collapsed disclosure, so they show without expanding", () => {
+    const { target } = render(RequestChangesDialog, {
+      ...baseProps,
+      scratches: [scratch(5, 8, "graduate me")],
+    });
+    const row = target.querySelector(".scratch-row")!;
+    const disclosure = row.querySelector(".scratch-disclosure");
+    const actions = row.querySelector(".scratch-actions");
+    expect(disclosure).not.toBeNull();
+    expect(actions).not.toBeNull();
+    // The actions are a sibling of the disclosure, never inside its collapsible
+    // body — that is what makes them reachable before any expand (EXC-746). A unit
+    // (happy-dom) can only prove the structure; real visibility is the e2e.
+    expect(disclosure!.contains(actions)).toBe(false);
+    expect(actions!.querySelector(".save")).not.toBeNull();
+    expect(actions!.querySelector(".discard")).not.toBeNull();
   });
 
   test("uses unsent vocabulary, never the Draft state label", () => {
@@ -293,5 +315,31 @@ describe("RequestChangesDialog unsent scratches", () => {
     // And there is nothing to send, so submit stays disabled and no preview shows.
     expect((target.querySelector(".deny") as HTMLButtonElement).disabled).toBe(true);
     expect(target.querySelector(".preview")).toBeNull();
+  });
+
+  test("surfaces an unsent-draft hint so the summary doesn't contradict the section chip", () => {
+    const { target } = render(RequestChangesDialog, {
+      ...baseProps,
+      generalComment: "please revise the approach",
+      scratches: [scratch(3, 3, "unsent")],
+    });
+    // A general comment makes the committed tally read "0 comments will be
+    // included"; on its own that flatly contradicts the "Unsent comments [1]" chip
+    // below. The hint reflects the draft count and states drafts aren't sent
+    // unless Saved (EXC-746).
+    const hint = target.querySelector(".drafts-hint");
+    expect(hint).not.toBeNull();
+    expect(hint!.textContent).toContain("1 unsent draft");
+    expect(hint!.textContent).toMatch(/Save/);
+  });
+
+  test("pluralizes the unsent-draft hint and shows it even with nothing else pending", () => {
+    const { target } = render(RequestChangesDialog, {
+      ...baseProps,
+      scratches: [scratch(3, 3, "one"), scratch(5, 5, "two")],
+    });
+    const hint = target.querySelector(".drafts-hint");
+    expect(hint).not.toBeNull();
+    expect(hint!.textContent).toContain("2 unsent drafts");
   });
 });

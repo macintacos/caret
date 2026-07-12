@@ -56,6 +56,15 @@
       ? `${inlineCount} comments on ${lineCount} line${lineCount === 1 ? "" : "s"} will be included.`
       : `${inlineCount} comment${inlineCount === 1 ? "" : "s"} will be included.`,
   );
+  // Scratches are surfaced for a conscious Save but are never counted into the
+  // tally above (they aren't sent unless Saved), so the count would otherwise read
+  // as a bare contradiction of the "Unsent comments [N]" chip below. Say plainly
+  // they won't go unless Saved (EXC-746).
+  let draftsHint = $derived(
+    scratches.length === 1
+      ? "1 unsent draft below won't be sent unless you Save it."
+      : `${scratches.length} unsent drafts below won't be sent unless you Save them.`,
+  );
 
   $effect(() => {
     textarea?.focus();
@@ -106,13 +115,18 @@
         {countSummary}
       {/if}
     </div>
+    {#if scratches.length > 0}
+      <p class="drafts-hint">{draftsHint}</p>
+    {/if}
 
     <!-- Unsent composer drafts ("scratches"): text typed into a line composer but
          never submitted. They are not committed comments — the count, empty-state,
-         and preview above ignore them — so they are surfaced here for a conscious
-         Save (graduate into the sent feedback) or Discard. Each row is collapsed
-         by default and reads "unsent", never "Draft" (a created, pending
-         annotation), so it never looks like a comment that was actually added. -->
+         and preview above never include them — so they are surfaced here for a
+         conscious Save (graduate into the sent feedback) or Discard, and the
+         drafts-hint above states they won't be sent unless Saved. Each row keeps
+         its Save/Discard in view (only the full-text preview collapses) and reads
+         "unsent", never "Draft" (a created, pending annotation), so it never looks
+         like a comment that was actually added. -->
     {#if scratches.length > 0}
       <section class="scratches" aria-labelledby="scratches-label">
         <span class="lbl" id="scratches-label">
@@ -123,23 +137,23 @@
           Comments you started but never sent. Save one to include it, or discard it.
         </p>
         {#each scratches as s (s.key)}
-          <details class="scratch-row">
-            <summary>
-              <span class="anchor metric">{rangeLabel(s.startLine, s.endLine)}</span>
-              <span class="snippet">{s.text}</span>
-            </summary>
-            <div class="scratch-body">
+          <div class="scratch-row">
+            <details class="scratch-disclosure">
+              <summary>
+                <span class="anchor metric">{rangeLabel(s.startLine, s.endLine)}</span>
+                <span class="snippet">{s.text}</span>
+              </summary>
               <pre class="scratch-text">{s.text}</pre>
-              <div class="scratch-actions">
-                <button class="save" type="button" onclick={() => onSaveScratch(s.key)}>
-                  Save
-                </button>
-                <button class="discard" type="button" onclick={() => onDiscardScratch(s.key)}>
-                  Discard
-                </button>
-              </div>
+            </details>
+            <div class="scratch-actions">
+              <button class="save" type="button" onclick={() => onSaveScratch(s.key)}>
+                Save
+              </button>
+              <button class="discard" type="button" onclick={() => onDiscardScratch(s.key)}>
+                Discard
+              </button>
             </div>
-          </details>
+          </div>
         {/each}
       </section>
     {/if}
@@ -244,6 +258,13 @@
     font-style: italic;
     color: var(--ink-soft);
   }
+  /* The unsent-draft clarifier: the same muted register as the count summary,
+     since it qualifies that count rather than competing with it. */
+  .drafts-hint {
+    margin: 0.35rem 0 0;
+    font-size: var(--text-sm);
+    color: var(--ink-faint);
+  }
 
   /* Unsent-scratch section: a quieter block than the committed-feedback preview,
      reading as "started, not sent". It borrows the source view's Resume-marker
@@ -280,20 +301,30 @@
     font-size: var(--text-sm);
     color: var(--ink-faint);
   }
-  /* One collapsed draft. Dashed neutral left rail echoes SourceScratchMarker, so
-     the dialog and the in-source affordance read as the same kind of thing. */
+  /* One unsent draft: a flex row pairing a disclosure (anchor + one-line snippet,
+     expanding to the full text) with always-visible Save/Discard. The dashed
+     neutral left rail echoes SourceScratchMarker, so the dialog and the in-source
+     affordance read as the same kind of thing. The actions sit OUTSIDE the
+     disclosure, so they never hide behind its collapse (EXC-746). */
   .scratch-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
     border-left: 3px dashed var(--ink-faint);
     border-radius: var(--radius);
     background: var(--paper);
     margin-top: 0.4rem;
+    padding: 0.4rem 0.55rem;
   }
-  .scratch-row summary {
+  .scratch-disclosure {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .scratch-disclosure summary {
     cursor: pointer;
     display: flex;
     align-items: baseline;
     gap: 0.5rem;
-    padding: 0.4rem 0.55rem;
   }
   /* The line-anchor label: a numeric chrome surface, so it takes the tabular
      metric face the rest of the review's line references use. */
@@ -312,11 +343,8 @@
     font-size: var(--text-base);
     color: var(--ink-soft);
   }
-  .scratch-body {
-    padding: 0 0.55rem 0.55rem;
-  }
   .scratch-text {
-    margin: 0 0 0.5rem;
+    margin: 0.4rem 0 0;
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     line-height: var(--leading-snug);
@@ -324,6 +352,7 @@
     color: var(--ink);
   }
   .scratch-actions {
+    flex: none;
     display: flex;
     gap: 0.5rem;
   }
