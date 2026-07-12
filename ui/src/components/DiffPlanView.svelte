@@ -754,7 +754,8 @@
             initial={pendingText}
             onInput={(text) => (liveText = text)}
             onSubmit={(comment) => commenting.submit(comment)}
-            onCancel={(text) => commenting.cancel(text)}
+            onKeep={(text) => commenting.cancel(text)}
+            onDiscard={() => commenting.discardOpen()}
           />
         </div>
       {/if}

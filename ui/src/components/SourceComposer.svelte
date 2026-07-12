@@ -20,15 +20,21 @@
      * empty composer for a fresh comment. */
     initial?: string;
     onSubmit: (comment: string) => void;
-    /** Dismiss the composer, handing back the current text so the host can retain
-     * it as a scratch draft (non-empty) or discard it (empty). */
-    onCancel: (text: string) => void;
+    /** Discard the draft outright — the Discard button and the Esc chord. Drops
+     * the text with no scratch retained, so the host closes the composer and
+     * leaves no "Resume" marker. */
+    onDiscard: () => void;
+    /** Keep the draft for later, handing back the current text so the host retains
+     * it as a resumable scratch. The "Keep for later" button; disabled when the
+     * box is empty (nothing to keep). */
+    onKeep: (text: string) => void;
     /** Report the live text on every edit, so the host can retain it as a scratch
-     * if the composer is replaced (a new range opened) without an explicit cancel.
-     * Optional. */
+     * if the composer is replaced (a new range opened) without an explicit
+     * dismiss. Optional. */
     onInput?: (text: string) => void;
   }
-  let { startLine, endLine, initial = "", onSubmit, onCancel, onInput }: Props = $props();
+  let { startLine, endLine, initial = "", onSubmit, onDiscard, onKeep, onInput }: Props =
+    $props();
 
   // Seed from `initial` once, at mount: a resumed scratch mounts a fresh composer
   // with the restored text, and the reviewer edits the local copy from there.
@@ -47,12 +53,21 @@
   // dragging and this post-release label always read the same range.
   const label = $derived(rangeLabel(startLine, endLine));
 
+  // "Keep for later" only makes sense with something to keep: an empty box has
+  // nothing to stash (an empty keep and a discard behave identically), so the
+  // button stays disabled until the reviewer has typed.
+  const canKeep = $derived(comment.trim() !== "");
+
   function submit() {
     onSubmit(comment);
   }
 
-  function cancel() {
-    onCancel(comment);
+  function discard() {
+    onDiscard();
+  }
+
+  function keep() {
+    onKeep(comment);
   }
 </script>
 
@@ -65,10 +80,11 @@
     autofocus
     onInput={(text) => (comment = text)}
     onSubmitChord={submit}
-    onCancelChord={cancel}
+    onCancelChord={discard}
   />
   <div class="row">
-    <button class="ghost" type="button" onclick={cancel}>Cancel</button>
+    <button class="keep" type="button" onclick={keep} disabled={!canKeep}>Keep for later</button>
+    <button class="ghost" type="button" onclick={discard} aria-keyshortcuts="Escape">Discard</button>
     <button
       class="solid"
       type="button"
@@ -115,12 +131,28 @@
     gap: 0.4rem;
     margin-top: 0.55rem;
   }
+  .keep,
   .ghost,
   .solid {
     border-radius: var(--radius);
     font-size: var(--text-sm);
     font-weight: 600;
     padding: 0.35rem 0.75rem;
+  }
+  /* Tertiary: the deliberate "stash for later" opt-in. Borderless and faint so it
+     never competes with the ghost Discard or the solid Comment — the quietest
+     control in the row. */
+  .keep {
+    background: transparent;
+    color: var(--ink-faint);
+    border: 1px solid transparent;
+  }
+  .keep:hover:not(:disabled) {
+    color: var(--ink-soft);
+  }
+  .keep:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
   .ghost {
     background: transparent;
