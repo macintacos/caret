@@ -7,6 +7,51 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-12 - The Reviewer Release
+
+### Added
+
+- **Reject decision.** A Reject button in the review top bar rounds out the decision set
+  alongside Approve and Request Changes (#214).
+- **Persistent inline comment scratches.** Uncommitted inline-comment scratches now
+  persist across reloads, scoped to the plan version, so in-progress annotations survive a
+  refresh or a new plan version (#209).
+- **Discard affordance for the inline composer.** The inline comment composer gained an
+  explicit control to discard a draft (#212).
+- **Filename-reference hovering.** Filename references in the plan view are now
+  intelligently hoverable (#201).
+- **Agent-interface plan reconciliation.** Plan decisions made directly in the agent's own
+  interface are reconciled back into caret's review state (#195).
+
+### Changed
+
+- **Unified tasks CLI.** The remaining mise file tasks were consolidated into a single
+  tasks CLI: build/test/smoke collapsed into single tasks, the release CLI merged in, raw
+  args passed through the mise file tasks, and the preflight gate moved into the CLI — plus
+  dev-task follow-ups (in-process driver, testable supervision, flags) (#203, #204, #206,
+  #207, #208, #213).
+- **Release prepare no longer preflights.** The preflight gate was removed from the release
+  prepare step (a758a5e).
+- **Unsent-comment guardrails.** The approve "are you sure?" guard now previews the unsent
+  comments it is about to drop and counts unsent inline scratches toward the pending total
+  (#210, #215).
+- **Distinct, scrollable plan code blocks.** Code blocks get a distinct panel styling in
+  the plan view and scroll horizontally when wide (#198, #200).
+- **Leaner OpenCode change-request output.** OpenCode change-request tool results no longer
+  re-paste the full plan (#196).
+- **Documented the review timeout.** Added an explanation of why the caret review timeout
+  exists (#194).
+
+### Fixed
+
+- **Visible Save/Discard in Request Changes.** Unsent-scratch Save/Discard controls stayed
+  hidden inside a collapsed disclosure in Request Changes; they are now always visible
+  (#211).
+- **Deduped plan-review notifications.** Desktop plan-review notifications no longer fire
+  once per open tab (#202).
+- **Cleared lingering OpenCode review link.** The OpenCode review-link line is now cleared
+  after a plan decision (#197).
+
 ## [0.1.3] - 2026-07-07 - The Compatibility Release
 
 ### Fixed
@@ -251,7 +296,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Review decisions are delivered via a bounded poll, fixing missed or delayed decision
   delivery.
 
-[Unreleased]: https://github.com/macintacos/caret/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/macintacos/caret/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/macintacos/caret/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/macintacos/caret/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/macintacos/caret/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/macintacos/caret/compare/v0.1.0...v0.1.1
