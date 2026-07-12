@@ -135,9 +135,11 @@ skill does not prompt again unless a step errors.
 
 ### 3. Author the changelog
 
-Pick a short, evocative **theme** for the release by reading `commits[]` — the one or two
-words that capture what this release is really about (e.g. "Foundations", "Plan Review",
-"Polish"). Then author `CHANGELOG.md` in
+Pick an evocative **theme** for the release by reading `commits[]` — the descriptor that
+captures what this release is really about (e.g. "Foundations", "Plan Review", "Polish").
+The descriptor can be any number of words and is allowed to be clever, but it **must** be
+Title Case and always sandwiched between "The" and "Release" (`The <Descriptor> Release`).
+Then author `CHANGELOG.md` in
 [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) format.
 
 The section heading **must** be exactly this shape so the script can parse the themed
