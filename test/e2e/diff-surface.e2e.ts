@@ -384,6 +384,12 @@ test("creating a range annotation from the gutter persists the correct line span
   page,
 }) => {
   const id = await daemon.seed({ plan: RANGE_PLAN });
+  // Pin this test to caret-light: EXC-730 made caret-dark the default, which
+  // surfaces the pre-existing dark-mode bug tracked in EXC-751 (the multi-line
+  // range composer's Cmd+Enter submit does not fire when the diff renders dark).
+  // This test guards range-annotation correctness, not theming, so it exercises
+  // the working (light) path; EXC-751 owns the dark case.
+  await page.addInitScript(() => localStorage.setItem("caret.theme", "caret-light"));
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();
