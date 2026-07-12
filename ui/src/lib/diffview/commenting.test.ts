@@ -115,6 +115,48 @@ describe("cancel transition", () => {
   });
 });
 
+// discardOpen is the explicit-discard counterpart to cancel: the reviewer chose
+// to drop the open draft, so it closes with no scratch retained (no "Resume"
+// marker). cancel keeps non-empty text; discardOpen never does.
+describe("discard the open composer", () => {
+  test("discardOpen closes an open composer, retaining no scratch and creating nothing", () => {
+    const c = build();
+    c.open({ start: 6, end: 6 });
+    c.discardOpen();
+    expect(created).toHaveLength(0);
+    expect(c.pending()).toBeUndefined();
+    expect(c.scratches()).toHaveLength(0);
+  });
+
+  test("discardOpen drops a resumed scratch entirely, leaving no marker", () => {
+    const c = build();
+    c.open({ start: 5, end: 5 });
+    c.cancel("kept for later"); // stash it as a scratch
+    expect(c.scratches()).toHaveLength(1);
+    c.resume(scratchKey(5, 5)); // consume the scratch back into the open composer
+    c.discardOpen(); // discarding the resumed draft leaves nothing behind
+    expect(created).toHaveLength(0);
+    expect(c.pending()).toBeUndefined();
+    expect(c.scratches()).toHaveLength(0);
+  });
+
+  test("discardOpen while closed is a no-op", () => {
+    const c = build();
+    expect(() => c.discardOpen()).not.toThrow();
+    expect(c.pending()).toBeUndefined();
+    expect(c.scratches()).toHaveLength(0);
+  });
+
+  test("discardOpen fires onChange once per real close, and not when already closed", () => {
+    let ticks = 0;
+    const c = createSourceCommenting({ onCreate: () => {}, onChange: () => ticks++ });
+    c.open({ start: 1, end: 1 }); // 1
+    c.discardOpen(); // 2 (closed the open composer)
+    c.discardOpen(); // no-op — already closed
+    expect(ticks).toBe(2);
+  });
+});
+
 // An unsubmitted composer dismissed with typed text is retained as an in-memory
 // scratch anchored to its range, so the reviewer can resume it. This is distinct
 // from commentState.ts's "Draft" (a created, pending annotation) — a scratch was

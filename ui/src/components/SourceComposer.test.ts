@@ -5,19 +5,24 @@ import SourceComposer from "./SourceComposer.svelte";
 
 // SourceComposer is the inline comment editor for the source-view gutter flow.
 // It wraps MarkdownEditor (the CodeMirror boundary) with the range label and the
-// Cancel/Comment buttons, and wires submit/cancel — via the buttons and via the
-// chords the editor reports — plus draft surfacing through onInput. Real typing
-// and caret behaviour live in e2e (CodeMirror needs a real browser); these units
-// drive the seeded value and the reported chords to cover the wiring.
+// Keep for later / Discard / Comment buttons, and wires submit/discard/keep — via
+// the buttons and via the chords the editor reports — plus draft surfacing through
+// onInput. Real typing and caret behaviour live in e2e (CodeMirror needs a real
+// browser); these units drive the seeded value and the reported chords to cover
+// the wiring.
 
 function mount(over: Record<string, unknown> = {}) {
   const submitted: string[] = [];
-  const cancelledWith: string[] = [];
+  const keptWith: string[] = [];
+  let discardCalls = 0;
   const { target, flush } = render(SourceComposer, {
     startLine: 3,
     endLine: 3,
     onSubmit: (c: string) => submitted.push(c),
-    onCancel: (c: string) => cancelledWith.push(c),
+    onKeep: (c: string) => keptWith.push(c),
+    onDiscard: () => {
+      discardCalls++;
+    },
     ...over,
   });
   flush();
@@ -26,10 +31,11 @@ function mount(over: Record<string, unknown> = {}) {
     target,
     content: target.querySelector(".cm-content") as HTMLElement,
     submitBtn: buttons.find((b) => b.textContent?.includes("Comment")) ?? null,
-    cancelBtn: buttons.find((b) => b.textContent?.includes("Cancel")) ?? null,
+    discardBtn: buttons.find((b) => b.textContent?.trim() === "Discard") ?? null,
+    keepBtn: buttons.find((b) => b.textContent?.includes("Keep for later")) ?? null,
     submitted,
-    cancelledWith,
-    cancelled: () => cancelledWith.length,
+    keptWith,
+    discardCount: () => discardCalls,
   };
 }
 
@@ -59,17 +65,29 @@ describe("SourceComposer initial value", () => {
   });
 });
 
-describe("SourceComposer submit/cancel", () => {
+describe("SourceComposer submit/discard/keep", () => {
   test("the Comment button submits the current text", () => {
     const { submitBtn, submitted } = mount({ initial: "resume me" });
     submitBtn!.click();
     expect(submitted).toEqual(["resume me"]);
   });
 
-  test("the Cancel button hands back the current text", () => {
-    const { cancelBtn, cancelledWith } = mount({ initial: "draft text" });
-    cancelBtn!.click();
-    expect(cancelledWith).toEqual(["draft text"]);
+  test("the Keep for later button hands back the current text to stash", () => {
+    const { keepBtn, keptWith } = mount({ initial: "draft text" });
+    keepBtn!.click();
+    expect(keptWith).toEqual(["draft text"]);
+  });
+
+  test("the Discard button drops the draft, keeping nothing", () => {
+    const { discardBtn, discardCount, keptWith } = mount({ initial: "draft text" });
+    discardBtn!.click();
+    expect(discardCount()).toBe(1);
+    expect(keptWith).toHaveLength(0);
+  });
+
+  test("Keep for later is disabled with an empty box and enabled once there is text", () => {
+    expect(mount().keepBtn?.disabled).toBe(true);
+    expect(mount({ initial: "something" }).keepBtn?.disabled).toBe(false);
   });
 });
 
@@ -80,10 +98,10 @@ describe("SourceComposer keyboard chords", () => {
     expect(submitted).toEqual(["via chord"]);
   });
 
-  test("Escape cancels", () => {
-    const { content, cancelled } = mount();
+  test("Escape discards the draft", () => {
+    const { content, discardCount } = mount({ initial: "abandon me" });
     key(content, "Escape");
-    expect(cancelled()).toBe(1);
+    expect(discardCount()).toBe(1);
   });
 
   test("a bare Enter does not submit", () => {

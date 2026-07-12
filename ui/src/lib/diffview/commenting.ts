@@ -7,16 +7,16 @@
 // library's renderAnnotation, so the composer is rendered host-side rather than
 // slotted by the library.
 //
-// Dismissing the composer with typed-but-unsubmitted text retains it as a
-// scratch (an in-memory, version-scoped draft) anchored to its range, so the
-// reviewer can resume it: open() at a scratched range — or resume() from its
-// line marker — reopens the composer with the text restored. An empty dismiss
-// leaves no scratch, and submitting graduates the text to a real annotation and
-// drops the scratch. The store is seeded via seed() from the review's persisted
-// scratches — on load and whenever the rendered content changes (a new version,
-// a review switch) — so a reload restores the reviewer's markers, while a scratch
-// still never mis-anchors onto text it was not written against (a fresh version
-// carries none of its own).
+// The composer has two dismiss paths. "Keep for later" (cancel with non-empty
+// text) retains it as a scratch (an in-memory, version-scoped draft) anchored to
+// its range, so the reviewer can resume it: open() at a scratched range — or
+// resume() from its line marker — reopens the composer with the text restored.
+// "Discard" (discardOpen, or an empty dismiss) leaves no scratch. Submitting
+// graduates the text to a real annotation and drops the scratch. The store is
+// seeded via seed() from the review's persisted scratches — on load and whenever
+// the rendered content changes (a new version, a review switch) — so a reload
+// restores the reviewer's markers, while a scratch still never mis-anchors onto
+// text it was not written against (a fresh version carries none of its own).
 //
 // This is deliberately distinct from commentState.ts's "Draft" — a created,
 // pending annotation already added to the working copy. A scratch was never
@@ -98,11 +98,17 @@ export interface SourceCommenting {
    * dropped — a successful submit graduates it to an annotation, and an empty
    * submit means the reviewer cleared the box. No-op when closed. */
   submit(text: string): void;
-  /** Dismiss the open composer. If `text` has non-empty trimmed content, retain
-   * it as a scratch anchored to the pending range so the reviewer can resume it;
-   * otherwise close with no residue (the prior discard behavior). No-op when
-   * closed. */
+  /** Dismiss the open composer, keeping non-empty trimmed text as a scratch
+   * anchored to the pending range so the reviewer can resume it — the "keep for
+   * later" path, and the implicit retain when the host opens another range.
+   * Empty text closes with no residue. To drop the draft outright instead, see
+   * discardOpen(). No-op when closed. */
   cancel(text?: string): void;
+  /** Dismiss the open composer, dropping its text without retaining a scratch —
+   * the composer's explicit Discard (button or Esc). A scratch consumed on
+   * open()/resume() was already moved into the open composer, so nothing is left
+   * behind. No-op when closed. */
+  discardOpen(): void;
   /** The pending composer target, or undefined when closed. */
   pending(): PendingComposer | undefined;
   /** The text to seed the open composer with (from a consumed/resumed scratch),
@@ -194,6 +200,10 @@ export function createSourceCommenting(deps: SourceCommentingDeps): SourceCommen
         store.set(key, { key, startLine, endLine, text: retained });
         rebuildSnapshot();
       }
+      close();
+    },
+    discardOpen() {
+      if (open == null) return;
       close();
     },
     pending() {
