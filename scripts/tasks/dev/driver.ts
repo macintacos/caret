@@ -17,7 +17,7 @@ import { expireReview, longPoll, postReview, waitForHealth } from "../../../src/
 import { type ReviewDeps, runReview } from "../../../src/review.ts";
 import { claudeAdapter } from "../../../src/adapters/claude/index.ts";
 import { NEVER_IDLE_MS } from "../../../src/constants.ts";
-import { DEFAULT_PORT, devSeeder, loadSettings } from "../../../src/settings.ts";
+import { DEFAULT_PORT, devSeeder, loadSettings, type Settings } from "../../../src/settings.ts";
 import type { ClientReview } from "../../../src/types.ts";
 import {
   appendRevision,
@@ -187,14 +187,28 @@ export async function bootstrapReview(
   };
 }
 
+/** Everything the driver's supervision loop needs, resolved by its caller so
+ * commander parses the flags exactly once. `runDev` (scripts/tasks/dev/run.ts)
+ * calls `run` in-process with these; the standalone entry below builds them
+ * from argv + env for direct `bun scripts/tasks/dev/driver.ts` debugging. */
+export interface DriverOptions {
+  /** The daemon base URL, e.g. `http://127.0.0.1:<port>`. */
+  base: string;
+  /** How many versions the primary review opens with. */
+  numVersions: number;
+  /** Arm the recurring extra-review seeder (the EXC-427 notification path). */
+  notify: boolean;
+  /** Settings snapshot the seeder's cadence and pending cap come from. */
+  settings: Settings;
+}
+
 /** Submit plans through the real hook forever: seed v1, then per decision
  * append a feedback-quoting revision (request-changes), re-seed a fresh v1
- * (approve), or resubmit unchanged (the hook's own fail-safe denies). */
-export async function run(): Promise<void> {
-  assertDevEnv();
-  // Resolve --num-versions early so a bad value fails loudly before any boot work.
-  const numVersions = parseNumVersions(Bun.argv);
-  const base = `http://127.0.0.1:${process.env.CARET_PORT}`;
+ * (approve), or resubmit unchanged (the hook's own fail-safe denies). Runs
+ * in-process under `mise run dev` (no subprocess), so its options arrive
+ * already parsed rather than being re-read from argv. */
+export async function run(opts: DriverOptions): Promise<void> {
+  const { base, numVersions, notify, settings } = opts;
   const v1 = await Bun.file(`${import.meta.dir}/fake-plan.md`).text();
   const deps = devReviewDeps(base);
   // Extra-review seeder (EXC-427), OFF by default: when armed it seeds a
@@ -205,7 +219,7 @@ export async function run(): Promise<void> {
   // positive CARET_DEV_NEW_REVIEW_MS; the cadence and pending cap come from
   // [dev.notify] (CARET_DEV_NEW_REVIEW_MS overrides the cadence). Loud at boot
   // either way — a silent no-op is indistinguishable from a broken notification.
-  const seeder = devSeeder(Bun.argv.includes("--notify"), loadSettings());
+  const seeder = devSeeder(notify, settings);
   if (seeder.intervalInvalid) {
     log(
       `CARET_DEV_NEW_REVIEW_MS invalid (want a positive integer ms): ${process.env.CARET_DEV_NEW_REVIEW_MS}`,
@@ -249,7 +263,17 @@ export async function run(): Promise<void> {
 }
 
 if (import.meta.main) {
-  run().catch((err) => {
+  // Standalone debugging entry (`bun scripts/tasks/dev/driver.ts`): the isolated
+  // dev env must already be exported, so guard it and resolve the options from
+  // argv + env here. Under `mise run dev` the driver runs in-process instead and
+  // is handed its options directly (scripts/tasks/dev/run.ts).
+  assertDevEnv();
+  run({
+    base: `http://127.0.0.1:${process.env.CARET_PORT}`,
+    numVersions: parseNumVersions(Bun.argv),
+    notify: Bun.argv.includes("--notify"),
+    settings: loadSettings(),
+  }).catch((err) => {
     process.stderr.write(`caret dev driver: ${err}\n`);
     process.exit(1);
   });
