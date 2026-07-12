@@ -44,6 +44,11 @@ export interface SourceViewOptions {
   overflow?: "scroll" | "wrap";
   /** Hide the line-number gutter. */
   disableLineNumbers?: boolean;
+  /** Force the shiki highlighter's light/dark selection to the caret theme in
+   * effect. The diff view renders into a shadow root that can't inherit the
+   * chrome's forced color-scheme, so the scheme is passed in explicitly; omitted
+   * leaves the library following the system preference (EXC-730). */
+  scheme?: "light" | "dark";
 }
 
 /** Display options caret exposes for the diff view. */

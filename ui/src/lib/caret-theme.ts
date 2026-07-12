@@ -1,4 +1,5 @@
 import type { ThemeRegistrationRaw } from "shiki/core";
+import { type Theme, THEMES } from "./theme.ts";
 
 // Custom shiki themes that mirror caret's neutral palette so highlighted code
 // reads like a typeset listing rather than a generic editor theme: mostly ink,
@@ -6,10 +7,12 @@ import type { ThemeRegistrationRaw } from "shiki/core";
 // Registered into the source view's highlighter (see diffview/theme.ts) as
 // dual-theme CSS variables so light/dark switches happen via CSS only.
 //
-// The values below are duplicated from ui/src/app.css — see EXC-370. shiki
-// resolves token colors at highlight time and can't read CSS custom properties,
-// so this palette is copied from app.css's tokens; keep the two in sync by hand
-// if the paper/ink tokens ever change (a unit test guards the match).
+// The seven token colors are DERIVED from the palette objects in theme.ts — the
+// single source of truth for every color the UI paints (EXC-730; supersedes the
+// hand-copied duplication of EXC-370). shiki resolves token colors at highlight
+// time and can't read CSS custom properties, so the values are read out of
+// THEMES here rather than re-typed; change a paper/ink token in theme.ts and the
+// highlighter follows automatically.
 interface Palette {
   bg: string; // --paper-sunk: code-block background
   fg: string; // --ink: default text, identifiers
@@ -20,25 +23,20 @@ interface Palette {
   string: string; // --ok (green)
 }
 
-const light: Palette = {
-  bg: "#f4f4f4",
-  fg: "#171717",
-  comment: "#868686",
-  punctuation: "#555555",
-  keyword: "#c2410c",
-  entity: "#ea580c",
-  string: "#15803d",
-};
-
-const dark: Palette = {
-  bg: "#131313",
-  fg: "#fafafa",
-  comment: "#737373",
-  punctuation: "#a1a1a1",
-  keyword: "#fb923c",
-  entity: "#fdba74",
-  string: "#4ade80",
-};
+// Map a theme's CSS custom properties onto the seven shiki roles. These tokens
+// are plain 6-digit hex (no alpha), which is what shiki accepts.
+function paletteFromTheme(t: Theme): Palette {
+  const k = t.tokens;
+  return {
+    bg: k["--paper-sunk"],
+    fg: k["--ink"],
+    comment: k["--ink-faint"],
+    punctuation: k["--ink-soft"],
+    keyword: k["--accent"],
+    entity: k["--accent-bright"],
+    string: k["--ok"],
+  };
+}
 
 function build(name: string, type: "light" | "dark", p: Palette): ThemeRegistrationRaw {
   return {
@@ -153,5 +151,5 @@ function build(name: string, type: "light" | "dark", p: Palette): ThemeRegistrat
   };
 }
 
-export const caretLight = build("caret-light", "light", light);
-export const caretDark = build("caret-dark", "dark", dark);
+export const caretLight = build("caret-light", "light", paletteFromTheme(THEMES["caret-light"]));
+export const caretDark = build("caret-dark", "dark", paletteFromTheme(THEMES["caret-dark"]));

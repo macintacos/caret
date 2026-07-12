@@ -12,6 +12,8 @@
   } from "./state/polling.svelte.ts";
   import { createResolve, type ResolveStore } from "./state/resolve.svelte.ts";
   import { coveredLineCount, pendingItems } from "./lib/feedback.ts";
+  import { readThemeId, THEMES, type ThemeId } from "./lib/theme.ts";
+  import { changeTheme } from "./lib/themeWipe.ts";
   import type { ComposerScratch } from "./lib/diffview/commenting.ts";
   import type { ApproveVariant, ApproveVariantId, Annotation, PersistedScratch } from "@core/types";
 
@@ -19,6 +21,7 @@
   import DiffPlanView from "./components/DiffPlanView.svelte";
   import EmptyState from "./components/EmptyState.svelte";
   import RequestChangesDialog from "./components/RequestChangesDialog.svelte";
+  import SettingsDialog from "./components/SettingsDialog.svelte";
   import StatusStrip from "./components/StatusStrip.svelte";
   import TopBar from "./components/TopBar.svelte";
   import VersionBadge from "./components/VersionBadge.svelte";
@@ -65,6 +68,19 @@
   // comment confirmation, mirroring pendingApproveMode. False = no guard open.
   let pendingReject = $state(false);
   let safeMode = $state(false);
+
+  // Theme (EXC-730). main.ts applies the saved theme before mount (no wipe at
+  // boot); this mirrors the chosen id so the derived scheme reaches the diff view
+  // and the Settings dialog reflects the current selection. Switching runs through
+  // changeTheme (the view-transition wipe), then updates themeId so the reactive
+  // reads follow.
+  let themeId = $state<ThemeId>(readThemeId());
+  const scheme = $derived(THEMES[themeId].scheme);
+  let showSettings = $state(false);
+  function selectTheme(id: ThemeId) {
+    changeTheme(id);
+    themeId = id;
+  }
 
   // The source view's retained-but-unsent composer drafts ("scratches"), mirrored
   // up from DiffPlanView so the Request Changes dialog can surface them with
@@ -239,6 +255,7 @@
     {onApprove}
     onRequestChanges={() => (showDialog = true)}
     {onReject}
+    onOpenSettings={() => (showSettings = true)}
   />
 
   {#if selection.daemonChanged}
@@ -267,6 +284,7 @@
          filterable contents pane and a line gutter for creating comments. -->
     <DiffPlanView
       review={active}
+      {scheme}
       onCreateLineAnnotation={autosave.createLineAnnotation}
       annotations={autosave.annotations}
       focusedAnnotation={autosave.focusedAnnotation}
@@ -353,6 +371,16 @@
       <span>Ignoring input for a moment…</span>
     </div>
   </div>
+{/if}
+
+<!-- Settings is persistent chrome (theme switching), reachable whether or not a
+     review is active — so it renders at the top level, ungated on `active`. -->
+{#if showSettings}
+  <SettingsDialog
+    current={themeId}
+    onSelect={selectTheme}
+    onClose={() => (showSettings = false)}
+  />
 {/if}
 
 <style>

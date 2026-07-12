@@ -2,19 +2,19 @@ import { describe, expect, test } from "bun:test";
 import { createHighlighterCore } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 import { caretDark, caretLight } from "./caret-theme.ts";
+import { type ColorToken, type ThemeId, THEMES } from "./theme.ts";
 
-// caret-theme.ts hand-duplicates the app.css paper/ink hex palette because shiki
-// resolves token colors at highlight time and can't read CSS custom properties
-// (EXC-370). That duplication is deliberate but unguarded, so this test parses
-// the tokens straight out of app.css and asserts every color the theme emits
-// matches its app.css source — a hand-edit to either copy that drifts the two
-// fails here.
+// caret-theme.ts derives its two shiki palettes from the THEMES color tokens in
+// theme.ts (EXC-730) — the single source of truth for every color the UI paints.
+// shiki resolves token colors at highlight time and can't read CSS custom
+// properties, so it reads the hex out of THEMES at module load. These tests pin
+// that derivation: every color a theme emits must be one of the seven mapped
+// tokens, and each mapped token must actually be used — so renaming or dropping a
+// token, or leaking a stray color in, fails here.
 
-const APP_CSS = new URL("../app.css", import.meta.url).pathname;
-
-// Each Palette field maps to one app.css custom property (the mapping the
-// caret-theme.ts field comments document).
-const FIELD_TO_TOKEN: Record<string, string> = {
+// Each Palette field maps to one THEMES custom property (the mapping
+// caret-theme.ts's paletteFromTheme performs).
+const FIELD_TO_TOKEN: Record<string, ColorToken> = {
   bg: "--paper-sunk",
   fg: "--ink",
   comment: "--ink-faint",
@@ -24,29 +24,13 @@ const FIELD_TO_TOKEN: Record<string, string> = {
   string: "--ok",
 };
 
-/**
- * Reads the custom-property declarations from a single `:root { ... }` block of
- * app.css: the first block is the light theme, the second (inside the
- * prefers-color-scheme: dark media query) is the dark theme.
- */
-function readRootTokens(css: string, which: 0 | 1): Record<string, string> {
-  const blocks = [...css.matchAll(/:root\s*\{([^}]*)\}/g)];
-  const body = blocks[which]?.[1];
-  if (body === undefined) throw new Error(`app.css :root block #${which} not found`);
-  const tokens: Record<string, string> = {};
-  for (const decl of body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
-    tokens[decl[1]!] = decl[2]!.trim();
-  }
-  return tokens;
-}
-
-/** The expected color for each Palette field, sourced from app.css tokens. */
-function expectedPalette(tokens: Record<string, string>): Record<string, string> {
+/** The expected color for each Palette field, sourced from a theme's tokens. The
+ * ColorToken-keyed tokens map guarantees each lookup resolves. */
+function expectedPalette(id: ThemeId): Record<string, string> {
+  const tokens = THEMES[id].tokens;
   const palette: Record<string, string> = {};
   for (const [field, token] of Object.entries(FIELD_TO_TOKEN)) {
-    const value = tokens[token];
-    if (value === undefined) throw new Error(`app.css token ${token} (for ${field}) not found`);
-    palette[field] = value;
+    palette[field] = tokens[token];
   }
   return palette;
 }
@@ -67,32 +51,30 @@ function themeColors(theme: ThemeLike): Set<string> {
   return colors;
 }
 
-describe("caret-theme ↔ app.css palette sync", () => {
-  const css = Bun.file(APP_CSS).text();
-
-  for (const [label, theme, blockIndex] of [
-    ["caretLight", caretLight, 0],
-    ["caretDark", caretDark, 1],
+describe("caret-theme ↔ THEMES palette sync", () => {
+  for (const [label, theme, id] of [
+    ["caretLight", caretLight, "caret-light"],
+    ["caretDark", caretDark, "caret-dark"],
   ] as const) {
     describe(label, () => {
-      test("editor background/foreground match the app.css tokens", async () => {
-        const expected = expectedPalette(readRootTokens(await css, blockIndex));
+      test("editor background/foreground match the THEMES tokens", () => {
+        const expected = expectedPalette(id);
         expect(theme.colors?.["editor.background"]).toBe(expected.bg);
         expect(theme.colors?.["editor.foreground"]).toBe(expected.fg);
       });
 
-      test("every emitted foreground is an app.css palette value", async () => {
-        const expected = expectedPalette(readRootTokens(await css, blockIndex));
+      test("every emitted foreground is a mapped THEMES value", () => {
+        const expected = expectedPalette(id);
         const allowed = new Set(Object.values(expected));
         for (const color of themeColors(theme)) {
           // A color the theme emits that is not one of the seven mapped tokens
-          // signals the palette drifted from app.css (or a new color leaked in).
+          // signals the palette drifted from theme.ts (or a new color leaked in).
           expect(allowed).toContain(color);
         }
       });
 
-      test("each mapped token appears in the emitted theme", async () => {
-        const expected = expectedPalette(readRootTokens(await css, blockIndex));
+      test("each mapped token appears in the emitted theme", () => {
+        const expected = expectedPalette(id);
         const emitted = themeColors(theme);
         for (const [field, color] of Object.entries(expected)) {
           // Guards the reverse direction: a token the palette claims to mirror
@@ -118,9 +100,7 @@ describe("caret-theme ↔ app.css palette sync", () => {
 // color untouched. Tokenizing a real fence with caret-light pins those outcomes;
 // the markers and language only render as separate spans once their colors differ.
 describe("caret-theme fenced-code fence line", () => {
-  const css = Bun.file(APP_CSS).text();
-
-  // The app.css palette values are lowercase hex; shiki emits some token colors
+  // The THEMES palette values are lowercase hex; shiki emits some token colors
   // uppercased, so normalize the received color (only) before comparing.
   async function tokenizeFence() {
     const hl = await createHighlighterCore({
@@ -133,14 +113,14 @@ describe("caret-theme fenced-code fence line", () => {
   }
 
   test("subdues the fence backticks to --ink-faint", async () => {
-    const expected = expectedPalette(readRootTokens(await css, 0));
+    const expected = expectedPalette("caret-light");
     const [line1] = await tokenizeFence();
     const backticks = line1?.find((t) => t.content === "```");
     expect(backticks?.color?.toLowerCase()).toBe(expected.comment);
   });
 
   test("renders the language tag in bold --accent", async () => {
-    const expected = expectedPalette(readRootTokens(await css, 0));
+    const expected = expectedPalette("caret-light");
     const [line1] = await tokenizeFence();
     const lang = line1?.find((t) => t.content === "ts");
     expect(lang?.color?.toLowerCase()).toBe(expected.keyword);
@@ -149,7 +129,7 @@ describe("caret-theme fenced-code fence line", () => {
   });
 
   test("leaves the code body color unchanged (--accent-bright)", async () => {
-    const expected = expectedPalette(readRootTokens(await css, 0));
+    const expected = expectedPalette("caret-light");
     const code = (await tokenizeFence())[1]?.find((t) => t.content === "code");
     expect(code?.color?.toLowerCase()).toBe(expected.entity);
   });

@@ -19,9 +19,12 @@ import { caretDark, caretLight } from "../caret-theme.ts";
 type RegisterTheme = typeof registerCustomTheme;
 type ThemeLoader = Parameters<RegisterTheme>[1];
 
-/** The diff-view theme selection. caret's themes follow the system color
- * scheme, mirroring how app.css switches paper/ink tokens via
- * prefers-color-scheme. */
+/** The diff-view theme selection. `theme` names caret's light/dark shiki themes;
+ * `themeType` is the default the options mapper falls back to when no explicit
+ * scheme is supplied. Since EXC-730 the reader view threads the selected caret
+ * theme's scheme through as an explicit "light"/"dark" themeType (see
+ * options.ts), so the diff follows the user's chosen palette rather than the OS —
+ * "system" now only applies when a caller omits the scheme. */
 export const caretDiffTheme = {
   theme: { light: "caret-light", dark: "caret-dark" },
   themeType: "system",

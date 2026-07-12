@@ -24,6 +24,7 @@ const baseProps = {
   onApprove: () => {},
   onRequestChanges: () => {},
   onReject: () => {},
+  onOpenSettings: () => {},
 };
 
 describe("TopBar render", () => {
@@ -38,6 +39,27 @@ describe("TopBar render", () => {
     const { target } = render(TopBar, { ...baseProps, active: null });
     expect(target.querySelector(".actions")).toBeNull();
     expect(target.querySelector(".bell-slot")).not.toBeNull();
+  });
+
+  test("renders a settings gear that opens settings on click", () => {
+    let opened = false;
+    const { target } = render(TopBar, {
+      ...baseProps,
+      onOpenSettings: () => {
+        opened = true;
+      },
+    });
+    const gear = target.querySelector(".settings") as HTMLButtonElement;
+    expect(gear).not.toBeNull();
+    expect(gear.getAttribute("aria-label")).toBe("Settings");
+    gear.click();
+    expect(opened).toBe(true);
+  });
+
+  test("the settings gear stays visible with no active review", () => {
+    // Settings is persistent chrome, like the bell — reachable before any plan lands.
+    const { target } = render(TopBar, { ...baseProps, active: null });
+    expect(target.querySelector(".settings")).not.toBeNull();
   });
 
   test("the primary approve button shows the remembered variant's label", () => {

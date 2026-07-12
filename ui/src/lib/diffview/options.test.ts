@@ -116,6 +116,18 @@ describe("toFileOptions", () => {
     expect("renderAnnotation" in result).toBe(false);
   });
 
+  test("threads the selected scheme through to the library themeType", () => {
+    // The diff view renders into a shadow root whose :host re-declares
+    // color-scheme, so it can't inherit the chrome's forced scheme — the caret
+    // theme selection reaches it only as an explicit light/dark themeType (EXC-730).
+    expect(toFileOptions({ scheme: "light" }).themeType).toBe("light");
+    expect(toFileOptions({ scheme: "dark" }).themeType).toBe("dark");
+  });
+
+  test("omitting scheme falls back to the system themeType", () => {
+    expect(toFileOptions({}).themeType).toBe("system");
+  });
+
   test("spreads the line-click handler when provided", () => {
     const onLineClick = () => {};
     const result = toFileOptions({}, undefined, undefined, onLineClick);
@@ -169,6 +181,12 @@ describe("toFileDiffOptions", () => {
     const result = toFileDiffOptions({});
     expect(result.hunkSeparators).toBe("line-info");
     expect(result.expandUnchanged).toBe(false);
+  });
+
+  test("threads the selected scheme through to the diff view themeType", () => {
+    expect(toFileDiffOptions({ scheme: "light" }).themeType).toBe("light");
+    expect(toFileDiffOptions({ scheme: "dark" }).themeType).toBe("dark");
+    expect(toFileDiffOptions({}).themeType).toBe("system");
   });
 
   test("pins the compare header sticky so the version pair and counts stay in view", () => {

@@ -57,30 +57,36 @@
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
 
-  /* Light: neutral grey paper + ink */
-  --paper: #fafafa;
-  --paper-raised: #ffffff;
-  --paper-sunk: #f4f4f4;
-  --ink: #171717;
-  --ink-soft: #555555;
-  --ink-faint: #868686;
-  --rule: #0000001a;
-  --rule-strong: #00000029;
+  /* caret-dark palette — the default (EXC-730). These color tokens are the
+     static first-paint / no-JS fallback; the source of truth is
+     THEMES["caret-dark"] in lib/theme.ts, whose applyTheme() writes them (and
+     the caret-light set) as inline :root properties to switch palettes at
+     runtime. theme.test.ts pins this :root block equal to THEMES["caret-dark"]
+     so the two never drift. The UI no longer follows prefers-color-scheme;
+     scheme is an explicit user choice, defaulting here to caret-dark. */
+  --paper: #0a0a0a;
+  --paper-raised: #171717;
+  --paper-sunk: #131313;
+  --ink: #fafafa;
+  --ink-soft: #a1a1a1;
+  --ink-faint: #737373;
+  --rule: #ffffff1a;
+  --rule-strong: #ffffff29;
 
   /* Caret amber accent */
-  --accent: #c2410c;
-  --accent-bright: #ea580c;
-  --accent-wash: #ec7c381f;
-  --accent-ink: #fff7ed;
+  --accent: #fb923c;
+  --accent-bright: #fdba74;
+  --accent-wash: #ec7c3829;
+  --accent-ink: #0a0a0a;
 
   /* Annotation highlight */
-  --mark: #ec7c3824;
-  --mark-active: #ec7c3847;
-  --mark-orphan: #70707029;
+  --mark: #f3953c2e;
+  --mark-active: #f3953c57;
+  --mark-orphan: #9b9b9b29;
 
-  --ok: #15803d;
-  --danger: #b91c1c;
-  --shadow-card: 0 1px 2px #0000000f, 0 8px 24px #00000014;
+  --ok: #4ade80;
+  --danger: #f87171;
+  --shadow-card: 0 1px 2px #00000066, 0 10px 30px #00000080;
 
   /* Radius roles, shared by the shell chrome and the source-view surface so the
      two read as one system: --radius tags interactive controls (buttons,
@@ -90,35 +96,7 @@
   --radius: 6px;
   --radius-lg: 10px;
 
-  color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #0a0a0a;
-    --paper-raised: #171717;
-    --paper-sunk: #131313;
-    --ink: #fafafa;
-    --ink-soft: #a1a1a1;
-    --ink-faint: #737373;
-    --rule: #ffffff1a;
-    --rule-strong: #ffffff29;
-
-    --accent: #fb923c;
-    --accent-bright: #fdba74;
-    --accent-wash: #ec7c3829;
-    --accent-ink: #0a0a0a;
-
-    --mark: #f3953c2e;
-    --mark-active: #f3953c57;
-    --mark-orphan: #9b9b9b29;
-
-    --ok: #4ade80;
-    --danger: #f87171;
-    --shadow-card: 0 1px 2px #00000066, 0 10px 30px #00000080;
-
-    color-scheme: dark;
-  }
+  color-scheme: dark;
 }
 
 * {
@@ -167,6 +145,39 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* The theme-switch "wipe" (EXC-730). changeTheme() (lib/themeWipe.ts) runs the
+   palette swap inside document.startViewTransition, so the browser snapshots the
+   whole page — the light-DOM chrome AND the shadow-DOM diff view, as pixels — and
+   animates between the old and new themes. The new snapshot wipes in from the left
+   over the old (which is held static beneath it); a directional sweep reads as a
+   deliberate "restyled everything" gesture rather than a cross-fade. 0.45s is a
+   one-off, larger than the chrome's ≤200ms one-shot vocabulary on purpose — a
+   full-viewport sweep needs the extra time to read, the same way the ambient
+   animations keep their own longer literals. These pseudo-elements live on the
+   document root, outside #app, so the reduced-motion guard above can't reach them:
+   changeTheme already skips the transition under reduced motion, and the media
+   query below is the belt-and-suspenders CSS half. */
+::view-transition-old(root) {
+  animation: none;
+}
+::view-transition-new(root) {
+  animation: theme-wipe 0.45s var(--ease-out);
+}
+@keyframes theme-wipe {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
   }
 }
 

@@ -12,6 +12,7 @@ export const ICON_NAMES = [
   "corner-down-left",
   "corner-up-left",
   "file",
+  "settings",
   "unplug",
 ] as const;
 
