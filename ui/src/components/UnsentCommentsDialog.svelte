@@ -1,15 +1,23 @@
 <script lang="ts">
+  import type { IconName } from "../lib/icons.ts";
   import { isCancelKey } from "../lib/keys.ts";
   import Icon from "./Icon.svelte";
 
   interface Props {
-    /** Non-blank inline comments pending — always > 0 when this dialog renders. */
+    /** Non-blank pending comments — always > 0 when this dialog renders. */
     count: number;
-    onApproveAnyway: () => void;
+    /** The lossy action's label, e.g. "Approve" or "Reject". Drives the title,
+     * eyebrow, aria-label, and the confirm button's "{action} anyway". */
+    action: string;
+    /** One-line consequence specific to the action, shown after the count. */
+    consequence: string;
+    /** Optional glyph for the confirm button (omit for a text-only action). */
+    icon?: IconName;
+    onConfirm: () => void;
     onRequestChanges: () => void;
     onCancel: () => void;
   }
-  let { count, onApproveAnyway, onRequestChanges, onCancel }: Props = $props();
+  let { count, action, consequence, icon, onConfirm, onRequestChanges, onCancel }: Props = $props();
 
   let dialog = $state<HTMLDivElement | undefined>();
 
@@ -22,7 +30,7 @@
     if (isCancelKey(e)) onCancel();
     // Plain Enter confirms the primary path. The dialog holds no text input, so a
     // bare Enter is unambiguous; it mirrors the focused primary button's Activate.
-    else if (e.key === "Enter") onApproveAnyway();
+    else if (e.key === "Enter") onConfirm();
   }
 </script>
 
@@ -32,18 +40,17 @@
     bind:this={dialog}
     role="dialog"
     aria-modal="true"
-    aria-label="Approve with pending comments"
+    aria-label="{action} with pending comments"
     tabindex="-1"
     onkeydown={onKey}
   >
     <header>
-      <span class="eyebrow">Approve</span>
-      <h2>Approve without sending your comments?</h2>
+      <span class="eyebrow">{action}</span>
+      <h2>{action} without sending your comments?</h2>
     </header>
 
     <p class="body">
-      You have {count} pending comment{count === 1 ? "" : "s"} that won't be sent on approve.
-      Approving accepts the plan and leaves them behind.
+      You have {count} pending comment{count === 1 ? "" : "s"} that won't be sent. {consequence}
     </p>
 
     <footer>
@@ -52,9 +59,9 @@
         <Icon name="corner-up-left" size={14} />
         Request changes
       </button>
-      <button class="approve-anyway" onclick={onApproveAnyway}>
-        <Icon name="check" size={14} />
-        Approve anyway
+      <button class="confirm" onclick={onConfirm}>
+        {#if icon}<Icon name={icon} size={14} />{/if}
+        {action} anyway
       </button>
     </footer>
   </div>
@@ -114,7 +121,7 @@
   }
   .ghost,
   .to-request,
-  .approve-anyway {
+  .confirm {
     border-radius: var(--radius);
     font-size: var(--text-base);
     font-weight: 600;
@@ -140,12 +147,12 @@
     color: var(--ink);
     border-color: var(--rule-strong);
   }
-  .approve-anyway {
+  .confirm {
     background: var(--ink);
     color: var(--paper);
     border: 1px solid var(--ink);
   }
-  .approve-anyway:hover {
+  .confirm:hover {
     background: var(--accent);
     border-color: var(--accent);
     color: var(--accent-ink);

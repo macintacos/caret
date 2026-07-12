@@ -28,7 +28,7 @@ const chromeComponents = [
   "components/SourceAnnotationCard.svelte",
   "components/DiffPlanView.svelte",
   "components/VersionComparePicker.svelte",
-  "components/ApproveConfirmDialog.svelte",
+  "components/UnsentCommentsDialog.svelte",
 ];
 const chromeSources: Record<string, string> = Object.fromEntries(
   await Promise.all(

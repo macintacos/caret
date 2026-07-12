@@ -15,7 +15,7 @@
   import type { ComposerScratch } from "./lib/diffview/commenting.ts";
   import type { ApproveVariant, ApproveVariantId, Annotation, PersistedScratch } from "@core/types";
 
-  import ApproveConfirmDialog from "./components/ApproveConfirmDialog.svelte";
+  import UnsentCommentsDialog from "./components/UnsentCommentsDialog.svelte";
   import DiffPlanView from "./components/DiffPlanView.svelte";
   import EmptyState from "./components/EmptyState.svelte";
   import RequestChangesDialog from "./components/RequestChangesDialog.svelte";
@@ -286,9 +286,12 @@
 />
 
 {#if pendingApproveMode !== null && active}
-  <ApproveConfirmDialog
+  <UnsentCommentsDialog
     count={pendingCount}
-    onApproveAnyway={approveAnyway}
+    action="Approve"
+    consequence="Approving accepts the plan and leaves them behind."
+    icon="check"
+    onConfirm={approveAnyway}
     onRequestChanges={divertToRequestChanges}
     onCancel={() => (pendingApproveMode = null)}
   />

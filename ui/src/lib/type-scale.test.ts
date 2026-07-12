@@ -110,7 +110,7 @@ const EXEMPT: Record<string, string[]> = {
   "RequestChangesDialog.svelte": ["1.35rem"],
   // Shares the request-changes dialog's title size — the two review dialogs read
   // as one vocabulary, so their <h2> sits at the same display step above the scale.
-  "ApproveConfirmDialog.svelte": ["1.35rem"],
+  "UnsentCommentsDialog.svelte": ["1.35rem"],
 };
 
 describe("chrome components reference the scale, not raw font-size literals", () => {
