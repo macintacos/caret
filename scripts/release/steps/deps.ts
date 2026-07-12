@@ -1,5 +1,5 @@
 // The injected collaborators the release orchestration runs against. Effectful
-// dependencies (git, gh, fs, preflight, the clock) are passed in so each step is
+// dependencies (git, gh, fs, the clock) are passed in so each step is
 // unit-testable with fakes; cli.ts wires the real ones.
 
 import type { GitOps } from "../git.ts";
@@ -26,5 +26,4 @@ export interface Deps {
   io: Io;
   /** Clock seam: the current instant, injected so `compute`'s date is testable. */
   now(): Date;
-  preflight(): Promise<{ ok: boolean; output: string }>;
 }

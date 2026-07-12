@@ -1,5 +1,5 @@
 // The release pipeline's in-memory test harness: builds a `Deps` whose git, gh,
-// fs, preflight, and clock collaborators are fakes typed against their real
+// fs, and clock collaborators are fakes typed against their real
 // interfaces, so each baseline/compute/prepare/finalize step runs with no live
 // repo and no network. Every mutating call is recorded into `calls` so a test can
 // assert exactly what would (or would not) run. It lives in test/support/ (not a
@@ -64,12 +64,9 @@ export interface NpmOptions {
   npmPublishedVersions?: string[];
 }
 
-/** Controls for the working-tree, preflight, and clock seams. */
+/** Controls for the working-tree and clock seams. */
 export interface IoOptions {
   files?: Record<string, string>;
-  preflightOk?: boolean;
-  /** Porcelain lines preflight's write-mode format leaves behind (e.g. `[" M src/x.ts"]`). */
-  preflightDirties?: string[];
   now?: string;
 }
 
@@ -270,14 +267,6 @@ export function makeReleaseHarness(opts: HarnessOptions = {}): ReleaseHarness {
     fs,
     io: { log: () => {} },
     now: () => new Date(opts.now ?? "2026-06-02T00:00:00Z"),
-    preflight: async () => {
-      calls.push("preflight");
-      // Model write-mode `mise run format`: append drift to the tree without
-      // mutating the shared opts array (fresh array, not push).
-      const drift = opts.preflightDirties ?? [];
-      if (drift.length > 0) state.porcelain = [...state.porcelain, ...drift];
-      return { ok: opts.preflightOk ?? true, output: "" };
-    },
   };
   return { deps, calls, files, state };
 }

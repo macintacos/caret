@@ -214,22 +214,6 @@ test("prepare fails loudly when the changelog section is missing", async () => {
   await expectGuard(prepare(deps, { bump: "minor", dryRun: false }), "CHANGELOG_MISSING");
 });
 
-test("prepare aborts when preflight fails", async () => {
-  const { deps } = makeReleaseHarness({ ...PREPARE_OPTS, preflightOk: false });
-  await expectGuard(prepare(deps, { bump: "minor", dryRun: false }), "PREFLIGHT_FAILED");
-});
-
-test("prepare aborts when the tree drifts outside the release set during preflight", async () => {
-  // Preflight is check-only, but the tree drifted anyway (whatever the cause).
-  // Committing only [MANIFESTS, CHANGELOG] would silently drop the drift.
-  const { deps, calls } = makeReleaseHarness({
-    ...PREPARE_OPTS,
-    preflightDirties: [" M src/app.ts"],
-  });
-  await expectGuard(prepare(deps, { bump: "minor", dryRun: false }), "PREFLIGHT_DIRTY");
-  expect(calls.filter((c) => c.startsWith("commit:"))).toEqual([]); // never committed a partial set
-});
-
 test("prepare rejects BRANCH_DIVERGED when the remote release branch is not an ancestor", async () => {
   // Local and remote release-branch SHAs differ and the remote is not an
   // ancestor of local, so pushing would need a force-push the script never does.
@@ -448,21 +432,3 @@ test("finalize reuses an existing GitHub release", async () => {
   expect(r.releaseUrl).toBe("https://github.com/macintacos/caret/releases/tag/v0.1.0");
 });
 
-// --- preflight gating is scoped to prepare --------------------------------
-
-test("only prepare gates on preflight; compute/baseline/finalize never invoke it", async () => {
-  // The other release paths rely on their own assertCleanTree guards and must
-  // never reach the preflight seam, so a failing/dirtying preflight cannot leak
-  // past them via a hidden gate.
-  const c = makeReleaseHarness();
-  expect(await compute(c.deps, { bump: "minor" })).toBeTruthy(); // ran to completion
-  expect(c.calls).not.toContain("preflight");
-
-  const b = makeReleaseHarness();
-  expect(await baseline(b.deps, { dryRun: false })).toBeTruthy();
-  expect(b.calls).not.toContain("preflight");
-
-  const f = makeReleaseHarness(FINALIZE_OPTS);
-  expect(await finalize(f.deps, { dryRun: false })).toBeTruthy();
-  expect(f.calls).not.toContain("preflight");
-});

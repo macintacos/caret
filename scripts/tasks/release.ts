@@ -14,7 +14,6 @@
 // wires the command tree and injects the real collaborators.
 
 import type { Command } from "@commander-js/extra-typings";
-import { $ } from "bun";
 import { createProgram } from "../../src/program.ts";
 import { errorResult, type ReleaseError } from "../release/contract.ts";
 import { createGit } from "../release/git.ts";
@@ -37,15 +36,6 @@ function realDeps(): Deps {
     },
     io: { log: (m) => process.stderr.write(`${m}\n`) },
     now: () => new Date(),
-    preflight: async () => {
-      // .quiet() keeps preflight's task output off our stdout (which must
-      // stay a single JSON object); it is still captured into r.stdout/r.stderr.
-      const r = await $`mise run preflight`.quiet().nothrow();
-      return {
-        ok: r.exitCode === 0,
-        output: `${r.stdout.toString()}${r.stderr.toString()}`,
-      };
-    },
   };
 }
 

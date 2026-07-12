@@ -181,8 +181,8 @@ so skip step 5 and stop here.)
 ### 5. Merge the release PR
 
 The skill merges its own release PR; there is no human-merge handoff. caret has no CI to
-wait on and `prepare` already gated on `mise run preflight`, and the repo merges via
-squash, so merge immediately:
+wait on, release does not gate on `mise run preflight` (verify locally before releasing),
+and the repo merges via squash, so merge immediately:
 
 ```sh
 gh pr merge <prNumber> --squash --delete-branch

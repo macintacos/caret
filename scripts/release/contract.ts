@@ -20,8 +20,6 @@ export type ErrorCode =
   | "NO_GH"
   | "BAD_BUMP"
   | "CHANGELOG_MISSING"
-  | "PREFLIGHT_FAILED"
-  | "PREFLIGHT_DIRTY"
   | "BRANCH_DIVERGED"
   | "PR_CLOSED"
   | "ALREADY_MERGED"

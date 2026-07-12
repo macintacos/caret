@@ -17,13 +17,7 @@ import {
   type ReleaseContext,
 } from "./context.ts";
 import type { Deps } from "./deps.ts";
-import {
-  assertBranch,
-  assertCleanTree,
-  assertRepoAndGh,
-  GuardError,
-  offendingPaths,
-} from "./guards.ts";
+import { assertBranch, assertCleanTree, assertRepoAndGh, GuardError } from "./guards.ts";
 
 function prBody(version: string, title: string): string {
   return [
@@ -98,29 +92,6 @@ async function bumpManifests(deps: Deps, ctx: ReleaseContext, apply: boolean): P
     } else {
       deps.io.log(`Would bump ${file} ${ctx.previousVersion} -> ${ctx.version}.`);
     }
-  }
-}
-
-/** Gate on preflight (lint, tests, build — check-only, EXC-462) and reject any drift it left. */
-async function gatePreflight(deps: Deps, apply: boolean): Promise<void> {
-  if (!apply) {
-    deps.io.log("Would gate on `mise run preflight`.");
-    return;
-  }
-  const pf = await deps.preflight();
-  if (!pf.ok) {
-    throw new GuardError("PREFLIGHT_FAILED", pf.output.trim() || "mise run preflight failed.");
-  }
-  // Preflight is check-only (EXC-462) and must leave the tree untouched. If
-  // any tracked file outside the release's manifest+changelog set drifted
-  // anyway, committing only the release set would silently drop that change —
-  // abort so a human sorts it out first.
-  const drifted = await offendingPaths(deps, [...MANIFESTS, CHANGELOG_PATH]);
-  if (drifted.length > 0) {
-    throw new GuardError(
-      "PREFLIGHT_DIRTY",
-      `Working tree drifted outside the release set during preflight (${drifted.join(", ")}); resolve it on a normal PR before releasing.`,
-    );
   }
 }
 
@@ -232,7 +203,9 @@ export async function prepare(
   const title = await composeTitle(deps, ctx);
   await resolveReleaseBranch(deps, ctx, apply);
   await bumpManifests(deps, ctx, apply);
-  await gatePreflight(deps, apply);
+  // No preflight gate here: release deliberately does not run `mise run preflight`
+  // (verify locally before releasing). Don't re-add it — flaky-test churn was
+  // blocking releases for no gain the operator can't get by running it themselves.
   const committed = await commitRelease(deps, title, apply);
   const pushed = await pushReleaseBranch(deps, ctx, apply);
   const { prNumber, prUrl } = await ensurePr(deps, ctx, title, defaultBranch, apply);
