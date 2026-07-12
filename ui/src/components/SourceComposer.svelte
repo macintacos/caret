@@ -2,8 +2,10 @@
   // Inline comment composer for the source-view surface. It renders in the source
   // view's per-line annotation row (the parent projects it into the library's slot
   // — see annotationSlot.ts) at the line or range the reviewer chose from the
-  // gutter. Submitting creates a line-anchored annotation, Esc cancels,
-  // Cmd/Ctrl+Enter submits. The editing surface is MarkdownEditor (the swappable
+  // gutter. Submitting (Comment / Cmd/Ctrl+Enter) creates a line-anchored
+  // annotation; Discard (the button or Esc) drops the draft with no residue;
+  // Keep for later stashes it as a resumable scratch. The editing surface is
+  // MarkdownEditor (the swappable
   // CodeMirror boundary): it styles markdown as you type, auto-grows, owns the
   // autofocus/preventScroll guard, and reports the chords back here.
   import { untrack } from "svelte";

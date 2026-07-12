@@ -13,11 +13,10 @@
 // resume() from its line marker — reopens the composer with the text restored.
 // "Discard" (discardOpen, or an empty dismiss) leaves no scratch. Submitting
 // graduates the text to a real annotation and drops the scratch. The store is
-// seeded via seed() from the review's persisted
-// scratches — on load and whenever the rendered content changes (a new version,
-// a review switch) — so a reload restores the reviewer's markers, while a scratch
-// still never mis-anchors onto text it was not written against (a fresh version
-// carries none of its own).
+// seeded via seed() from the review's persisted scratches — on load and whenever
+// the rendered content changes (a new version, a review switch) — so a reload
+// restores the reviewer's markers, while a scratch still never mis-anchors onto
+// text it was not written against (a fresh version carries none of its own).
 //
 // This is deliberately distinct from commentState.ts's "Draft" — a created,
 // pending annotation already added to the working copy. A scratch was never
