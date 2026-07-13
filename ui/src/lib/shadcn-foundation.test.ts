@@ -21,13 +21,21 @@ import { render } from "../../test-mount.ts";
 import { Button } from "$lib/components/ui/button/index.js";
 import DialogFixture from "./shadcn-dialog-fixture.svelte";
 
-/** Flush pending effects, advance one timer tick, flush again — the sequence
- * bits-ui's portal/presence needs before its deferred content is in the DOM. */
-async function settle(flush: () => void): Promise<void> {
-  flush();
-  await new Promise((resolve) => setTimeout(resolve, 30));
+/** Flush effects and advance timer ticks until `done()` holds (or a bounded
+ * number of tries elapses) — bits-ui's portal/presence mounts its content on a
+ * deferred timer, so we poll rather than sleep a fixed interval (a fixed wait
+ * risks flaking on a loaded box). Returns as soon as the condition is met. */
+async function flushUntil(flush: () => void, done: () => boolean): Promise<void> {
+  for (let i = 0; i < 40; i++) {
+    flush();
+    if (done()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
   flush();
 }
+
+const dialogContentMounted = () =>
+  document.body.querySelector("[data-slot='dialog-content']") !== null;
 
 test("Button mounts as a native <button> carrying its tailwind-variants classes", () => {
   const { target } = render(Button, { children: undefined });
@@ -52,12 +60,12 @@ test("Dialog (bits-ui) mounts: the trigger reflects reactive open-state synchron
   expect(trigger?.getAttribute("data-state")).toBe("open");
   expect(trigger?.getAttribute("aria-expanded")).toBe("true");
   // Drain the deferred portal so its pending timer can't fire into teardown.
-  await settle(flush);
+  await flushUntil(flush, dialogContentMounted);
 });
 
 test("Dialog portalled content renders after an async effect + timer flush", async () => {
   const { flush } = render(DialogFixture, { open: true });
-  await settle(flush);
+  await flushUntil(flush, dialogContentMounted);
 
   const content = document.body.querySelector("[data-slot='dialog-content']");
   expect(content).not.toBeNull();
