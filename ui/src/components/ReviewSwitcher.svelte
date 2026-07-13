@@ -34,13 +34,12 @@
         </Button>
       {/snippet}
     </DropdownMenu.Trigger>
-    <DropdownMenu.Content align="start" class="switcher-menu">
+    <!-- Bounded width: comfortable minimum, and a max so a long plan title
+         ellipsizes (via .m-title) instead of stretching the menu. Inline, not a
+         class — the portalled content is out of this component's scoped-CSS reach. -->
+    <DropdownMenu.Content align="start" style="min-width: 18rem; max-width: 26rem">
       {#each reviews as r (r.id)}
-        <DropdownMenu.Item
-          class="switcher-option"
-          data-active={r.id === activeId ? "true" : undefined}
-          onSelect={() => onSelect(r.id)}
-        >
+        <DropdownMenu.Item class="switcher-option" onSelect={() => onSelect(r.id)}>
           <span class="opt">
             <span class="m-title">{stripTitleLinks(r.title)}</span>
             <span class="m-meta mono">{shortCwd(r.cwd)}</span>

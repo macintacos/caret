@@ -34,8 +34,13 @@ test("Escape closes the options menu and leaves the review pending", async ({ da
   await page.getByRole("button", { name: "Approve options" }).click();
   await expect(item).toBeVisible();
 
-  await page.keyboard.press("Escape");
-  await expect(item).toBeHidden();
+  // Retry Escape until the menu closes: bits-ui attaches its dismiss listener a
+  // tick after the content becomes visible, so a single immediate press can race
+  // it (no fixed sleep — toPass polls the web-first assertion).
+  await expect(async () => {
+    await page.keyboard.press("Escape");
+    await expect(item).toBeHidden({ timeout: 500 });
+  }).toPass();
   // Nothing was approved — the menu is just a picker, not an action.
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
 });

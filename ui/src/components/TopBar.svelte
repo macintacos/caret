@@ -60,7 +60,7 @@
       <span class="brand-caret" aria-hidden="true">^</span>caret
     </span>
     <DevBadge {isDev} />
-    <Separator orientation="vertical" class="divider" style="height: 1.4rem; min-height: 0" />
+    <Separator orientation="vertical" style="height: 1.4rem; min-height: 0" />
     {#if active}
       <ReviewSwitcher {reviews} activeId={active.id} {onSelect} />
       <VersionLabel version={active.version} />
@@ -73,6 +73,10 @@
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
+            <!-- The cwd is non-interactive display text; the tooltip is a
+                 pointer-hover enhancement over the always-visible abbreviated path.
+                 No tabindex — a nonnegative tabindex on a non-interactive element is
+                 itself an a11y anti-pattern (svelte a11y_no_noninteractive_tabindex). -->
             <div {...props} class="context mono">{shortCwd(active.cwd)}</div>
           {/snippet}
         </Tooltip.Trigger>
@@ -122,7 +126,10 @@
               </Button>
             {/snippet}
           </DropdownMenu.Trigger>
-          <DropdownMenu.Content align="end" class="approve-menu">
+          <!-- min-width restores the old menu's comfortable width (shadcn's default
+               8rem would crowd the label + description rows). Inline, not a class:
+               the portalled content can't be reached by this component's scoped CSS. -->
+          <DropdownMenu.Content align="end" style="min-width: 15rem">
             {#each variants as v (v.id)}
               <DropdownMenu.Item class="approve-variant" onSelect={() => onApprove(v.id)}>
                 <span class="v-col">

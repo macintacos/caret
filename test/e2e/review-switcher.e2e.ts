@@ -52,8 +52,13 @@ test("Escape closes the switcher menu, leaving the active plan unchanged", async
   await expect(alpha).toBeVisible();
 
   const before = await trigger.locator(".title").textContent();
-  await page.keyboard.press("Escape");
-  await expect(alpha).toBeHidden();
+  // Retry Escape until the menu closes: bits-ui attaches its dismiss listener a
+  // tick after the content becomes visible, so a single immediate press can race
+  // it (no fixed sleep — toPass polls the web-first assertion).
+  await expect(async () => {
+    await page.keyboard.press("Escape");
+    await expect(alpha).toBeHidden({ timeout: 500 });
+  }).toPass();
   // The title is untouched — Escape dismisses without selecting.
   await expect(trigger.locator(".title")).toHaveText(before ?? "");
 });
