@@ -9,6 +9,18 @@
   // state), present otherwise. Connection state appears here once — distinct from
   // the daemon-replaced banner (daemon identity flipped) and VersionBadge (build
   // identity).
+  //
+  // EXC-763: rebuilt on shadcn primitives — the metric dividers are vertical
+  // Separators (the TopBar cluster's divider), the ^vN revision is a Badge
+  // reusing VersionLabel's amber-^ idiom, and the revision + connection carry
+  // their hover hints on shadcn Tooltips (replacing native title=), matching the
+  // TopBar cwd tooltip. The strip stays a quiet pinned pill: content-floating
+  // chrome recedes until looked at, so it keeps its own hairline surface rather
+  // than the topbar's louder .float-chip fill.
+  import { Badge } from "$lib/components/ui/badge/index.js";
+  import { Separator } from "$lib/components/ui/separator/index.js";
+  import * as Tooltip from "$lib/components/ui/tooltip/index.js";
+
   let {
     active,
     pendingCount,
@@ -30,32 +42,49 @@
 
 {#if active}
   <aside class="status-strip metric" aria-label="Plan review status">
-    <span class="stat">
-      <span class="num" class:has={pendingCount > 0}>{pendingCount}</span>
-      <span class="label">{pendingCount === 1 ? "comment" : "comments"}</span>
-    </span>
-    {#if showCovered}
-      <span class="sep" aria-hidden="true">·</span>
+    <Tooltip.Provider delayDuration={0}>
       <span class="stat">
-        <span class="num covered">{coveredLines}</span>
-        <span class="label">{coveredLines === 1 ? "line" : "lines"}</span>
+        <span class="num" class:has={pendingCount > 0}>{pendingCount}</span>
+        <span class="label">{pendingCount === 1 ? "comment" : "comments"}</span>
       </span>
-    {/if}
-    {#if version > 1}
-      <span class="sep" aria-hidden="true">·</span>
-      <span class="stat rev" title="Revision {version} of this plan">
-        <span class="caret" aria-hidden="true">^</span>v{version}
-      </span>
-    {/if}
-    <span class="sep" aria-hidden="true">·</span>
-    <span
-      class="conn"
-      class:offline={!connected}
-      title={connected ? "Connected to the caret daemon" : "Not connected to the caret daemon"}
-    >
-      <span class="dot" aria-hidden="true"></span>
-      {connected ? "live" : "offline"}
-    </span>
+      {#if showCovered}
+        <Separator orientation="vertical" style="height: 0.9em; min-height: 0" />
+        <span class="stat">
+          <span class="num covered">{coveredLines}</span>
+          <span class="label">{coveredLines === 1 ? "line" : "lines"}</span>
+        </span>
+      {/if}
+      {#if version > 1}
+        <Separator orientation="vertical" style="height: 0.9em; min-height: 0" />
+        <Tooltip.Root>
+          <Tooltip.Trigger>
+            {#snippet child({ props })}
+              <!-- The ^vN revision marker: a Badge, so it reads as the same chip
+                   the TopBar VersionLabel shows. Only the ^ carries amber
+                   (brand); the rest stays ink-soft, holding amber-scarcity. -->
+              <Badge {...props} variant="secondary" class="rev metric" style="color: var(--ink-soft)">
+                <span class="caret" aria-hidden="true">^</span>v{version}
+              </Badge>
+            {/snippet}
+          </Tooltip.Trigger>
+          <Tooltip.Content>Revision {version} of this plan</Tooltip.Content>
+        </Tooltip.Root>
+      {/if}
+      <Separator orientation="vertical" style="height: 0.9em; min-height: 0" />
+      <Tooltip.Root>
+        <Tooltip.Trigger>
+          {#snippet child({ props })}
+            <span class="conn" class:offline={!connected} {...props}>
+              <span class="dot" aria-hidden="true"></span>
+              {connected ? "live" : "offline"}
+            </span>
+          {/snippet}
+        </Tooltip.Trigger>
+        <Tooltip.Content>
+          {connected ? "Connected to the caret daemon" : "Not connected to the caret daemon"}
+        </Tooltip.Content>
+      </Tooltip.Root>
+    </Tooltip.Provider>
   </aside>
 {/if}
 
@@ -112,16 +141,19 @@
   .label {
     color: var(--ink-soft);
   }
-  .sep {
-    color: var(--rule-strong);
-  }
-  /* Revision pill vocabulary mirrors VersionLabel's ^vN: amber, the brand caret. */
-  .rev {
-    color: var(--accent);
-    font-weight: 600;
+  /* The revision Badge is a child component, so its own class carries no scope
+     hash — reach it with :global, bounded under the scoped .status-strip. Tightens
+     the shadcn Badge's default padding/size down to the dense strip's scale. */
+  .status-strip :global(.rev) {
+    gap: 0.05rem;
+    padding: 0.04rem 0.32rem;
+    font-size: var(--text-2xs);
     letter-spacing: 0.04em;
   }
-  .rev .caret {
+  /* Revision pill vocabulary mirrors VersionLabel's ^vN: the ^ is the caret brand
+     glyph, so it carries the amber accent; the rest of the chip stays neutral. */
+  .caret {
+    color: var(--accent);
     font-weight: 700;
   }
   .conn {

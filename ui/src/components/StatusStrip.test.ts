@@ -3,6 +3,14 @@ import { describe, expect, test } from "bun:test";
 import { render } from "../../test-mount.ts";
 import StatusStrip from "./StatusStrip.svelte";
 
+// EXC-763: the StatusStrip readout is rebuilt on shadcn primitives (Badge for
+// the revision pill, Separator for the metric dividers, Tooltip for the hover
+// hints on the revision and connection). This suite covers the synchronous
+// surface — the readout's numbers, gates, and connection state, plus the
+// shadcn structure. The tooltip *content* is bits-ui overlay (portalled,
+// deferred under happy-dom), so it is a visual/e2e concern, not asserted here —
+// the same split TopBar.test.ts uses for its cwd tooltip.
+
 const base = {
   active: true,
   pendingCount: 0,
@@ -77,5 +85,34 @@ describe("StatusStrip", () => {
     const offConn = offline.target.querySelector(".conn")!;
     expect(offConn.classList.contains("offline")).toBe(true);
     expect(offConn.textContent).toContain("offline");
+  });
+
+  // EXC-763 shadcn structure ------------------------------------------------
+
+  // The metric dividers are shadcn Separators, not the old `·` glyph spans —
+  // the same vertical Separator the TopBar cluster uses, so the chrome shares
+  // one divider vocabulary.
+  test("divides the readout with shadcn Separators, not `·` glyphs", () => {
+    const { target } = render(StatusStrip, {
+      ...base,
+      pendingCount: 2,
+      coveredLines: 3,
+      version: 2,
+    });
+    const strip = target.querySelector(".status-strip")!;
+    expect(strip.querySelector('[data-slot="separator"]')).not.toBeNull();
+    expect(strip.textContent).not.toContain("·");
+  });
+
+  // The revision pill is a shadcn Badge, reusing VersionLabel's amber-^ idiom,
+  // so the ^vN marker reads identically whether it appears in the TopBar or the
+  // status strip. It also drives a Tooltip, so bits-ui overwrites its own
+  // data-slot to "tooltip-trigger" — the badge signature (the rounded-full pill
+  // base from badgeVariants) is the stable proof the Badge component rendered it.
+  test("renders the revision as a shadcn Badge", () => {
+    const { target } = render(StatusStrip, { ...base, version: 2 });
+    const rev = target.querySelector(".rev")!;
+    expect(rev.classList.contains("rounded-full")).toBe(true);
+    expect(rev.getAttribute("data-slot")).toBe("tooltip-trigger");
   });
 });
