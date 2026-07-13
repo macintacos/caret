@@ -46,12 +46,20 @@ const baseProps = {
   onCancel: () => {},
   onSaveScratch: () => {},
   onDiscardScratch: () => {},
+  onDiscardAnnotation: () => {},
+  onDraftAnnotation: () => {},
 };
 
 const q = (sel: string) => document.body.querySelector(sel);
 const content = () => q("[data-slot='dialog-content']");
 const mounted = () => content() !== null;
 const summary = () => q(".summary");
+const label = () => q(".field .lbl");
+// The confirm bubble a Discard opens; its "Discard" button completes the action.
+const confirmButton = () =>
+  [...document.body.querySelectorAll(".confirm-popover .confirm")].find(
+    (b) => b.textContent?.trim() === "Discard",
+  ) as HTMLButtonElement | undefined;
 const footerButtons = () => [
   ...document.body.querySelectorAll("[data-slot='dialog-footer'] button"),
 ];
@@ -239,14 +247,21 @@ describe("RequestChangesDialog unsent scratches", () => {
     expect(saved.last()).toBe("5:8");
   });
 
-  test("Discard fires onDiscardScratch with the scratch key", async () => {
+  test("Discard opens a confirm popover; only confirming fires onDiscardScratch (EXC-762)", async () => {
     const discarded = capture<string>();
-    await mount({
+    const { flush } = render(RequestChangesDialog, {
       ...baseProps,
       scratches: [scratch(3, 3, "drop me")],
       onDiscardScratch: discarded.cb,
     });
+    await flushUntil(flush, mounted);
+    // Clicking Discard opens a confirmation rather than dropping immediately.
     (q(".scratch-row .discard") as HTMLElement).click();
+    await flushUntil(flush, () => confirmButton() !== undefined);
+    expect(discarded.last()).toBeUndefined();
+    // Confirming completes the drop with the scratch key.
+    confirmButton()?.click();
+    flush();
     expect(discarded.last()).toBe("3:3");
   });
 
@@ -285,5 +300,73 @@ describe("RequestChangesDialog unsent scratches", () => {
     const hint = q(".drafts-hint");
     expect(hint).not.toBeNull();
     expect(hint?.textContent).toContain("2 unsent drafts");
+  });
+});
+
+describe("general comment optional vs required (EXC-762)", () => {
+  test("labels the field optional (and aria-required false) when inline comments will be sent", async () => {
+    await mount({ ...baseProps, annotations: [lineAnn("a1", 3, 3, "tighten this")] });
+    expect(label()?.textContent).toContain("(optional)");
+    expect(content()?.querySelector("textarea")?.getAttribute("aria-required")).toBe("false");
+  });
+
+  test("drops the optional label and marks the field required when nothing else will be sent", async () => {
+    await mount(baseProps);
+    expect(label()?.textContent).not.toContain("(optional)");
+    const ta = content()?.querySelector("textarea");
+    expect(ta?.getAttribute("aria-required")).toBe("true");
+    expect(ta?.hasAttribute("required")).toBe(true);
+  });
+});
+
+describe("inline comments — Discard / Mark as draft (EXC-762)", () => {
+  test("lists each committed inline comment with its anchor and text", async () => {
+    await mount({ ...baseProps, annotations: [lineAnn("a1", 7, 8, "reconsider the cache")] });
+    const section = q(".inline-comments");
+    expect(section).not.toBeNull();
+    expect(section?.textContent).toContain("Lines 7–8");
+    expect(section?.textContent).toContain("reconsider the cache");
+  });
+
+  test("Mark as draft fires onDraftAnnotation with the line-anchored comment", async () => {
+    const drafted = capture<Annotation>();
+    await mount({
+      ...baseProps,
+      annotations: [lineAnn("a1", 7, 8, "reconsider")],
+      onDraftAnnotation: drafted.cb,
+    });
+    (q(".inline-row .mark-draft") as HTMLElement).click();
+    expect(drafted.last()?.id).toBe("a1");
+  });
+
+  test("a legacy (selection-anchored) comment offers Discard but no Mark as draft", async () => {
+    await mount({ ...baseProps, annotations: [ann("l1", "old style")] });
+    const row = q(".inline-row") as HTMLElement;
+    expect(row.querySelector(".mark-draft")).toBeNull();
+    expect(row.querySelector(".discard")).not.toBeNull();
+  });
+
+  test("Discard opens a confirm popover; only confirming fires onDiscardAnnotation", async () => {
+    const discarded = capture<string>();
+    const { flush } = render(RequestChangesDialog, {
+      ...baseProps,
+      annotations: [lineAnn("a1", 7, 8, "reconsider")],
+      onDiscardAnnotation: discarded.cb,
+    });
+    await flushUntil(flush, mounted);
+    (q(".inline-row .discard") as HTMLElement).click();
+    await flushUntil(flush, () => confirmButton() !== undefined);
+    expect(discarded.last()).toBeUndefined();
+    confirmButton()?.click();
+    flush();
+    expect(discarded.last()).toBe("a1");
+  });
+});
+
+describe("compiled feedback preview (EXC-762)", () => {
+  test("relabels the preview disclosure and still shows it when there is feedback", async () => {
+    await mount({ ...baseProps, generalComment: "please revise" });
+    expect(q(".preview")).not.toBeNull();
+    expect(q(".preview-trigger")?.textContent).toContain("Compiled feedback preview");
   });
 });

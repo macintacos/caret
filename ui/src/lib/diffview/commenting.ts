@@ -128,6 +128,13 @@ export interface SourceCommenting {
   /** Drop the scratch at `key` without creating anything. No-op if no scratch
    * matches. The per-scratch counterpart to clear(), for the dialog's Discard. */
   discard(key: string): void;
+  /** Insert a scratch directly from an annotation's range + text, WITHOUT opening
+   * the composer — the reverse of save(). The Request Changes dialog "marks a
+   * committed comment as a draft," demoting it out of the send and into the
+   * unsent-scratch section (EXC-762). Text is trimmed; a blank text is a no-op. On
+   * a same-range collision with an existing scratch the texts are merged
+   * (newline-joined) so no unsent draft is lost. */
+  draft(scratch: { startLine: number; endLine: number; text: string }): void;
   /** Replace every scratch with the persisted set (keyed by range) and close any
    * open composer. The host calls this on load and whenever the rendered content
    * changes (a new plan version, a review switch), so scratches rehydrate from the
@@ -234,6 +241,18 @@ export function createSourceCommenting(deps: SourceCommentingDeps): SourceCommen
     },
     discard(key) {
       if (!store.delete(key)) return;
+      rebuildSnapshot();
+      deps.onChange?.();
+    },
+    draft({ startLine, endLine, text }) {
+      const trimmed = text.trim();
+      if (trimmed === "") return;
+      const key = scratchKey(startLine, endLine);
+      const existing = store.get(key);
+      // Merge on collision so demoting a comment onto a range that already holds
+      // an unsent draft never silently drops the reviewer's other text.
+      const merged = existing ? `${existing.text}\n${trimmed}` : trimmed;
+      store.set(key, { key, startLine, endLine, text: merged });
       rebuildSnapshot();
       deps.onChange?.();
     },

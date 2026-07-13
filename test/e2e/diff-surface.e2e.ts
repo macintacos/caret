@@ -1323,7 +1323,9 @@ test("Discarding a scratch removes it and never sends it", async ({ daemon, page
   const dialog = await scratchThenOpenDialog(page, 3, "discard this draft");
 
   // Discard sits outside the collapsed disclosure (EXC-746), so no expand is needed.
+  // It asks to confirm before dropping the draft (EXC-762).
   await dialog.locator(".scratch-row .discard").click();
+  await dialog.locator(".confirm-popover").getByRole("button", { name: "Discard" }).click();
 
   // The scratch is gone from the dialog, and the underlying Resume marker is gone
   // too — Discard drops it from the review entirely.

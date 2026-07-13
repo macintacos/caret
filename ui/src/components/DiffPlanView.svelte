@@ -84,11 +84,14 @@
      * snapshot verbatim — the host must forward it as-is (no copy/map) to keep the
      * reference-stability that avoids redundant re-renders. */
     onScratchesChange?: (scratches: ComposerScratch[]) => void;
-    /** Hand the host the controller's per-scratch Save/Discard actions, once, so
-     * the dialog can graduate or drop a scratch without owning the controller. */
+    /** Hand the host the controller's per-scratch Save/Discard/Draft actions, once,
+     * so the dialog can graduate, drop, or demote-into a scratch without owning the
+     * controller. `draft` is how the dialog marks a committed inline comment as an
+     * unsent draft (EXC-762). */
     onExposeScratchActions?: (actions: {
       save: (key: string) => void;
       discard: (key: string) => void;
+      draft: (scratch: { startLine: number; endLine: number; text: string }) => void;
     }) => void;
     /** The active caret theme's color scheme, forwarded to the shadow-DOM diff
      * view so its shiki highlighting follows the selected theme (EXC-730). Omitted
@@ -506,7 +509,11 @@
   // `onExposeScratchActions` prop from becoming a reactive dependency — the host
   // re-creating that callback on every render must not re-run this.
   $effect(() => {
-    untrack(() => onExposeScratchActions)?.({ save: commenting.save, discard: commenting.discard });
+    untrack(() => onExposeScratchActions)?.({
+      save: commenting.save,
+      discard: commenting.discard,
+      draft: commenting.draft,
+    });
   });
 
   // The open composer's live text, reported by SourceComposer.onInput. Held here

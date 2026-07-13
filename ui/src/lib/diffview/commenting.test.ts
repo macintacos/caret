@@ -402,6 +402,76 @@ describe("save and discard a scratch", () => {
   });
 });
 
+// EXC-762: the Request Changes dialog can "mark as draft" a committed inline
+// comment — demoting it out of the send and INTO the unsent-scratch section.
+// draft() is the reverse of save(): it inserts a scratch directly from an
+// annotation's range + comment, without touching the open composer.
+describe("draft (demote an annotation into a scratch)", () => {
+  test("inserts a scratch at the range, visible in scratches(), creating nothing", () => {
+    const c = build();
+    c.draft({ startLine: 4, endLine: 6, text: "reconsider this" });
+    expect(created).toHaveLength(0);
+    expect(c.pending()).toBeUndefined();
+    expect(c.scratches()).toEqual([
+      { key: scratchKey(4, 6), startLine: 4, endLine: 6, text: "reconsider this" },
+    ]);
+  });
+
+  test("trims the demoted text", () => {
+    const c = build();
+    c.draft({ startLine: 2, endLine: 2, text: "  spaced  " });
+    expect(c.scratches()[0]?.text).toBe("spaced");
+  });
+
+  test("a blank demote is a no-op (nothing to keep, no onChange)", () => {
+    let ticks = 0;
+    const c = createSourceCommenting({ onCreate: () => {}, onChange: () => ticks++ });
+    c.draft({ startLine: 9, endLine: 9, text: "   " });
+    expect(c.scratches()).toHaveLength(0);
+    expect(ticks).toBe(0);
+  });
+
+  test("merges into an existing scratch at the same range so no unsent draft is lost", () => {
+    const c = build();
+    c.open({ start: 5, end: 5 });
+    c.cancel("existing unsent draft");
+    c.draft({ startLine: 5, endLine: 5, text: "demoted comment" });
+    expect(c.scratches()).toEqual([
+      {
+        key: scratchKey(5, 5),
+        startLine: 5,
+        endLine: 5,
+        text: "existing unsent draft\ndemoted comment",
+      },
+    ]);
+  });
+
+  test("leaves scratches on other ranges untouched", () => {
+    const c = build();
+    c.open({ start: 1, end: 1 });
+    c.cancel("keep me");
+    c.draft({ startLine: 5, endLine: 8, text: "demoted" });
+    expect(c.scratches()).toEqual([
+      { key: scratchKey(1, 1), startLine: 1, endLine: 1, text: "keep me" },
+      { key: scratchKey(5, 8), startLine: 5, endLine: 8, text: "demoted" },
+    ]);
+  });
+
+  test("does not open the composer", () => {
+    const c = build();
+    c.draft({ startLine: 2, endLine: 2, text: "x" });
+    expect(c.pending()).toBeUndefined();
+    expect(c.pendingText()).toBe("");
+  });
+
+  test("fires onChange once on a real insert", () => {
+    let ticks = 0;
+    const c = createSourceCommenting({ onCreate: () => {}, onChange: () => ticks++ });
+    c.draft({ startLine: 1, endLine: 1, text: "x" });
+    expect(ticks).toBe(1);
+  });
+});
+
 describe("notifies on state change", () => {
   test("open, submit, and cancel fire the onChange callback", () => {
     let ticks = 0;

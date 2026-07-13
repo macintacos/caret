@@ -62,8 +62,9 @@ test("a line-anchored annotation reaches Decision.feedback as a line reference p
   const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
   await page.getByRole("button", { name: "Request changes" }).click();
   await expect(dialog).toBeVisible();
-  // The preview already shows the new format the agent will receive — the line
-  // reference and the abbreviated quote, identical to the sent feedback.
+  // The preview shows the new format the agent will receive — the line reference
+  // and the abbreviated quote, identical to the sent feedback. (Behind a collapsed
+  // disclosure but still in the DOM, so its text is readable without expanding.)
   await expect(dialog.locator(".preview pre")).toContainText("Lines 7-8:");
   await expect(dialog.locator(".preview pre")).toContainText("The cache layer … full cold cost.");
   await dialog.getByRole("button", { name: "Send for revision" }).click();
@@ -118,4 +119,65 @@ test("a scratch's Save shows without expanding the row and graduates it into the
   await expect.poll(async () => (await daemon.getReview(id)).body?.decision?.behavior).toBe("deny");
   const feedback = (await daemon.getReview(id)).body?.decision?.feedback ?? "";
   expect(feedback).toContain("a half-typed thought");
+});
+
+test("discarding an unsent comment asks to confirm before dropping it (EXC-762)", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    composerScratches: [{ startLine: 7, endLine: 8, text: "a half-typed thought" }],
+  });
+
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
+  await page.getByRole("button", { name: "Request changes" }).click();
+  await expect(dialog).toBeVisible();
+
+  const row = dialog.locator(".scratch-row");
+  await expect(row).toHaveCount(1);
+  // Discard opens a confirmation bubble — the scratch is NOT dropped yet.
+  await row.locator(".discard").click();
+  await expect(dialog.locator(".confirm-popover")).toBeVisible();
+  await expect(row).toHaveCount(1);
+  // Confirming completes the drop.
+  await dialog.locator(".confirm-popover").getByRole("button", { name: "Discard" }).click();
+  await expect(dialog.locator(".scratch-row")).toHaveCount(0);
+});
+
+test("marking an inline comment as a draft demotes it into Unsent and out of the send (EXC-762)", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain the cold cost" }],
+  });
+
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
+  await page.getByRole("button", { name: "Request changes" }).click();
+  await expect(dialog).toBeVisible();
+
+  // It starts as a committed inline comment, and Send is enabled.
+  await expect(dialog.locator(".inline-row")).toHaveCount(1);
+  await expect(dialog.locator(".scratch-row")).toHaveCount(0);
+  const send = dialog.getByRole("button", { name: "Send for revision" });
+  await expect(send).toBeEnabled();
+
+  // Mark as draft demotes it: it leaves the inline list, appears under Unsent, and
+  // with nothing left to include the primary action disables.
+  await dialog.locator(".inline-row .mark-draft").click();
+  await expect(dialog.locator(".inline-comments")).toHaveCount(0);
+  const scratchRow = dialog.locator(".scratch-row");
+  await expect(scratchRow).toHaveCount(1);
+  await expect(scratchRow).toContainText("explain the cold cost");
+  await expect(send).toBeDisabled();
 });
