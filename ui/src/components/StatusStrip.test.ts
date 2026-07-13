@@ -100,8 +100,12 @@ describe("StatusStrip", () => {
       version: 2,
     });
     const strip = target.querySelector(".status-strip")!;
-    expect(strip.querySelector('[data-slot="separator"]')).not.toBeNull();
+    const sep = strip.querySelector('[data-slot="separator"]');
+    expect(sep).not.toBeNull();
     expect(strip.textContent).not.toContain("·");
+    // Decorative, matching the old aria-hidden `·` glyphs — a screen reader
+    // traversing the labelled strip shouldn't announce "separator" between metrics.
+    expect(sep!.getAttribute("aria-hidden")).toBe("true");
   });
 
   // The revision pill is a shadcn Badge, reusing VersionLabel's amber-^ idiom,
