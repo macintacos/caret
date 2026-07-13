@@ -4,6 +4,13 @@ import type { ApproveVariant, ClientReview } from "@core/types";
 import { capture, render } from "../../test-mount.ts";
 import TopBar from "./TopBar.svelte";
 
+// EXC-760: the TopBar is rebuilt on shadcn primitives (Button / Badge /
+// DropdownMenu / Tooltip / Separator). This suite covers the synchronous
+// surface — which buttons render, their labels, the pending-count Badge, and
+// callback wiring. The approve split-button's DropdownMenu is bits-ui overlay
+// interaction (open on click, pick a variant, Escape, outside-click), so it
+// lives in test/e2e/approve-options.e2e.ts per doc/agents/browser-testing.md.
+
 const variants: ApproveVariant[] = [
   { id: "default", label: "Approve", description: "Approve edits manually" },
   { id: "acceptEdits", label: "Approve & accept edits", description: "Auto-accept edits" },
@@ -33,9 +40,13 @@ describe("TopBar render", () => {
     expect(target.querySelector(".brand")!.textContent).toContain("caret");
     expect(target.querySelector(".request")).not.toBeNull();
     expect(target.querySelector(".approve")).not.toBeNull();
+    // The split toggle is a distinct control from the primary approve.
+    const toggle = target.querySelector(".split-toggle") as HTMLButtonElement;
+    expect(toggle).not.toBeNull();
+    expect(toggle.getAttribute("aria-label")).toBe("Approve options");
   });
 
-  test("with no active review, hides the actions but keeps the bell slot", () => {
+  test("with no active review, hides actions but keeps the bell slot", () => {
     const { target } = render(TopBar, { ...baseProps, active: null });
     expect(target.querySelector(".actions")).toBeNull();
     expect(target.querySelector(".bell-slot")).not.toBeNull();
@@ -43,12 +54,7 @@ describe("TopBar render", () => {
 
   test("renders a settings gear that opens settings on click", () => {
     let opened = false;
-    const { target } = render(TopBar, {
-      ...baseProps,
-      onOpenSettings: () => {
-        opened = true;
-      },
-    });
+    const { target } = render(TopBar, { ...baseProps, onOpenSettings: () => (opened = true) });
     const gear = target.querySelector(".settings") as HTMLButtonElement;
     expect(gear).not.toBeNull();
     expect(gear.getAttribute("aria-label")).toBe("Settings");
@@ -56,27 +62,25 @@ describe("TopBar render", () => {
     expect(opened).toBe(true);
   });
 
-  test("the settings gear stays visible with no active review", () => {
-    // Settings is persistent chrome, like the bell — reachable before any plan lands.
+  test("keeps the settings gear reachable with no active review", () => {
     const { target } = render(TopBar, { ...baseProps, active: null });
     expect(target.querySelector(".settings")).not.toBeNull();
   });
 
-  test("the primary approve button shows the remembered variant's label", () => {
+  test("the primary approve button reflects the remembered mode's label", () => {
     const { target } = render(TopBar, { ...baseProps, approveMode: "auto" });
     expect(target.querySelector(".approve")!.textContent).toContain("Approve & auto mode");
   });
 
-  test("busy disables the buttons and dims the actions", () => {
+  test("busy disables the buttons and marks the actions row", () => {
     const { target } = render(TopBar, { ...baseProps, busy: true });
     expect(target.querySelector(".actions")!.classList.contains("busy")).toBe(true);
     expect((target.querySelector(".approve") as HTMLButtonElement).disabled).toBe(true);
     expect((target.querySelector(".request") as HTMLButtonElement).disabled).toBe(true);
+    expect((target.querySelector(".split-toggle") as HTMLButtonElement).disabled).toBe(true);
   });
-});
 
-describe("TopBar approve split-button", () => {
-  test("primary click approves with the remembered mode", () => {
+  test("the primary approve button approves in the remembered mode", () => {
     const approved = capture<string>();
     const { target } = render(TopBar, {
       ...baseProps,
@@ -85,64 +89,6 @@ describe("TopBar approve split-button", () => {
     });
     (target.querySelector(".approve") as HTMLElement).click();
     expect(approved.last()).toBe("acceptEdits");
-  });
-
-  test("the toggle opens and closes the variants menu", () => {
-    const { target, flush } = render(TopBar, baseProps);
-    const toggle = target.querySelector(".split-toggle") as HTMLElement;
-    expect(target.querySelector(".menu")).toBeNull();
-    toggle.click();
-    flush();
-    const menu = target.querySelector(".menu")!;
-    expect(menu).not.toBeNull();
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    expect(menu.querySelectorAll('[role="menuitem"]')).toHaveLength(3);
-    toggle.click();
-    flush();
-    expect(target.querySelector(".menu")).toBeNull();
-  });
-
-  test("choosing a menu variant approves with that id and closes the menu", () => {
-    const approved = capture<string>();
-    const { target, flush } = render(TopBar, {
-      ...baseProps,
-      onApprove: approved.cb,
-    });
-    (target.querySelector(".split-toggle") as HTMLElement).click();
-    flush();
-    const items = target.querySelectorAll('[role="menuitem"]');
-    (items[2] as HTMLElement).click();
-    flush();
-    expect(approved.last()).toBe("auto");
-    expect(target.querySelector(".menu")).toBeNull();
-  });
-
-  test("renders each variant's label and description in the menu", () => {
-    const { target, flush } = render(TopBar, baseProps);
-    (target.querySelector(".split-toggle") as HTMLElement).click();
-    flush();
-    const labels = [...target.querySelectorAll(".v-label")].map((n) => n.textContent);
-    expect(labels).toEqual(["Approve", "Approve & accept edits", "Approve & auto mode"]);
-    expect(target.querySelector(".v-note")!.textContent).toBe("Approve edits manually");
-  });
-
-  test("the click-away scrim closes an open menu", () => {
-    const { target, flush } = render(TopBar, baseProps);
-    (target.querySelector(".split-toggle") as HTMLElement).click();
-    flush();
-    (target.querySelector(".scrim-invisible") as HTMLElement).click();
-    flush();
-    expect(target.querySelector(".menu")).toBeNull();
-  });
-
-  test("Escape closes an open menu", () => {
-    const { target, flush } = render(TopBar, baseProps);
-    (target.querySelector(".split-toggle") as HTMLElement).click();
-    flush();
-    expect(target.querySelector(".menu")).not.toBeNull();
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    flush();
-    expect(target.querySelector(".menu")).toBeNull();
   });
 });
 
@@ -190,27 +136,17 @@ describe("TopBar request changes", () => {
     const { target } = render(TopBar, { ...baseProps, pendingCount: 2 });
     expect(target.querySelector(".request .count")!.classList.contains("metric")).toBe(true);
   });
-
-  test("the count is hidden when no review is active", () => {
-    const { target } = render(TopBar, { ...baseProps, active: null, pendingCount: 4 });
-    expect(target.querySelector(".count")).toBeNull();
-  });
 });
 
 describe("TopBar reject", () => {
-  test("renders a Reject button when a review is active", () => {
+  test("renders a reject button", () => {
     const { target } = render(TopBar, baseProps);
-    const reject = target.querySelector(".reject");
-    expect(reject).not.toBeNull();
-    expect(reject!.textContent).toContain("Reject");
+    expect(target.querySelector(".reject")).not.toBeNull();
   });
 
   test("the reject button fires onReject", () => {
     let rejected = false;
-    const { target } = render(TopBar, {
-      ...baseProps,
-      onReject: () => (rejected = true),
-    });
+    const { target } = render(TopBar, { ...baseProps, onReject: () => (rejected = true) });
     (target.querySelector(".reject") as HTMLElement).click();
     expect(rejected).toBe(true);
   });

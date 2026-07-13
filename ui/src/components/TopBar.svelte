@@ -1,8 +1,12 @@
 <script lang="ts">
   import { approveLabel } from "../lib/approve.ts";
   import { shortCwd } from "../lib/cwd.ts";
-  import { isCancelKey } from "../lib/keys.ts";
   import type { ApproveVariant, ApproveVariantId, ClientReview } from "@core/types";
+  import { Badge } from "$lib/components/ui/badge/index.js";
+  import { Button } from "$lib/components/ui/button/index.js";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
+  import { Separator } from "$lib/components/ui/separator/index.js";
+  import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import DevBadge from "./DevBadge.svelte";
   import Icon from "./Icon.svelte";
   import NotifyBell from "./NotifyBell.svelte";
@@ -48,20 +52,7 @@
     onReject,
     onOpenSettings,
   }: Props = $props();
-
-  let menuOpen = $state(false);
-
-  function approve(mode: ApproveVariantId) {
-    menuOpen = false;
-    onApprove(mode);
-  }
 </script>
-
-<svelte:window
-  onkeydown={(e) => {
-    if (menuOpen && isCancelKey(e)) menuOpen = false;
-  }}
-/>
 
 <header class="topbar">
   <div class="lead">
@@ -69,7 +60,7 @@
       <span class="brand-caret" aria-hidden="true">^</span>caret
     </span>
     <DevBadge {isDev} />
-    <span class="divider" aria-hidden="true"></span>
+    <Separator orientation="vertical" class="divider" style="height: 1.4rem; min-height: 0" />
     {#if active}
       <ReviewSwitcher {reviews} activeId={active.id} {onSelect} />
       <VersionLabel version={active.version} />
@@ -77,77 +68,85 @@
   </div>
 
   {#if active}
-    <div class="context mono" title={active.cwd}>{shortCwd(active.cwd)}</div>
+    <!-- Full cwd on hover; the row itself shows the abbreviated path. -->
+    <Tooltip.Provider delayDuration={0}>
+      <Tooltip.Root>
+        <Tooltip.Trigger>
+          {#snippet child({ props })}
+            <div {...props} class="context mono">{shortCwd(active.cwd)}</div>
+          {/snippet}
+        </Tooltip.Trigger>
+        <Tooltip.Content>{active.cwd}</Tooltip.Content>
+      </Tooltip.Root>
+    </Tooltip.Provider>
 
     <div class="actions" class:busy>
-      <button class="reject" onclick={onReject} disabled={busy}>
-        Reject
-      </button>
-      <button class="request" onclick={onRequestChanges} disabled={busy}>
+      <!-- Quietest verdict at rest (ghost); warms to danger on hover. Reject
+           always routes through a confirm dialog, so the button stays low-key. -->
+      <Button variant="ghost" class="reject" onclick={onReject} disabled={busy}>Reject</Button>
+
+      <Button variant="outline" class="request" onclick={onRequestChanges} disabled={busy}>
         <Icon name="corner-up-left" size={14} />
         Request changes
         {#if pendingCount > 0}
-          <span
+          <Badge
+            variant="secondary"
             class="count metric"
             aria-label="{pendingCount} pending comment{pendingCount === 1 ? '' : 's'}"
           >
             {pendingCount}
-          </span>
+          </Badge>
         {/if}
-      </button>
+      </Button>
 
+      <!-- Split button: the primary approves in the remembered mode; the toggle
+           opens a DropdownMenu of every variant. bits-ui owns open/Escape/
+           outside-click — the old hand-rolled menu + full-screen scrim are gone. -->
       <div class="split">
-        <button class="approve" onclick={() => approve(approveMode)} disabled={busy}>
+        <Button variant="default" class="approve" onclick={() => onApprove(approveMode)} disabled={busy}>
           <Icon name="check" size={14} />
           {approveLabel(approveMode, variants)}
-        </button>
-        <button
-          class="split-toggle"
-          aria-label="Approve options"
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          onclick={() => (menuOpen = !menuOpen)}
-          disabled={busy}
-        >
-          <Icon name="chevron-down" size={14} />
-        </button>
-
-        {#if menuOpen}
-          <ul class="menu" role="menu">
+        </Button>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger>
+            {#snippet child({ props })}
+              <Button
+                {...props}
+                variant="default"
+                size="icon"
+                class="split-toggle"
+                aria-label="Approve options"
+                disabled={busy}
+              >
+                <Icon name="chevron-down" size={14} />
+              </Button>
+            {/snippet}
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content align="end" class="approve-menu">
             {#each variants as v (v.id)}
-              <li>
-                <button role="menuitem" onclick={() => approve(v.id)}>
+              <DropdownMenu.Item class="approve-variant" onSelect={() => onApprove(v.id)}>
+                <span class="v-col">
                   <span class="v-label">{v.label}</span>
                   {#if v.description}<span class="v-note">{v.description}</span>{/if}
-                </button>
-              </li>
+                </span>
+              </DropdownMenu.Item>
             {/each}
-          </ul>
-        {/if}
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
       </div>
     </div>
   {/if}
 
-  <!-- Always-visible permission badge, pinned right in both layouts: when a
-       review is active `.context` (flex: 1) eats the slack and the bell sits
-       after `.actions`; with no review its own margin-left pushes it right. -->
+  <!-- Always-visible permission badge + settings, pinned right in both layouts:
+       when a review is active `.context` (flex: 1) eats the slack; with no
+       review the slot's own margin-left pushes it right. -->
   <div class="bell-slot">
     <NotifyBell />
-    <button class="settings" aria-label="Settings" onclick={onOpenSettings}>
+    <Button variant="ghost" size="icon" class="settings" aria-label="Settings" onclick={onOpenSettings}>
       <Icon name="settings" size={16} />
-    </button>
+    </Button>
   </div>
 </header>
-
-<!-- Click-away closes the approve menu. -->
-{#if menuOpen}
-  <button
-    class="scrim-invisible"
-    aria-hidden="true"
-    tabindex="-1"
-    onclick={() => (menuOpen = false)}
-  ></button>
-{/if}
 
 <style>
   /* The header row sits on the raised paper surface with a hairline rule, so it
@@ -182,11 +181,6 @@
     color: var(--accent);
     margin-right: 0.05em;
   }
-  .divider {
-    width: 1px;
-    height: 1.4rem;
-    background: var(--rule-strong);
-  }
   .context {
     flex: 1;
     text-align: center;
@@ -194,12 +188,18 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    cursor: default;
   }
   .actions {
     display: flex;
     align-items: center;
     gap: 0.6rem;
     margin-left: auto;
+  }
+  /* Buttons carry their own disabled dimming (shadcn disabled:opacity-50); this
+     just hardens the whole cluster against clicks while a verdict is in flight. */
+  .actions.busy {
+    pointer-events: none;
   }
   /* Pins the bell + settings cluster to the right edge when no review is active
      (`.context`'s flex:1 handles the active layout; here auto resolves to 0). */
@@ -209,171 +209,47 @@
     gap: 0.35rem;
     margin-left: auto;
   }
-  /* Quiet icon button — subordinate chrome, warming to full ink on a sunk hover,
-     never borrowing the brand amber. Sits beside the bell as persistent chrome. */
-  .settings {
+
+  /* Split button: join the amber primary and its options toggle into one control
+     with a shared radius and a hairline seam, and restore caret's brighter-amber
+     press affordance (the shadcn default variant ships no button-hover). These
+     reach the composed Buttons through a scope-bounded :global, so nothing leaks
+     past `.split`. */
+  .split {
     display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    color: var(--ink-faint);
-    border: 1px solid transparent;
-    border-radius: var(--radius);
-    padding: 0.35rem;
-    transition:
-      color var(--dur-fast) var(--ease-out),
-      background var(--dur-fast) var(--ease-out);
   }
-  .settings:hover {
-    color: var(--ink);
-    background: var(--paper-sunk);
+  .split :global(.approve) {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
   }
-  .actions.busy {
-    opacity: 0.6;
-    pointer-events: none;
+  .split :global(.split-toggle) {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-left: 1px solid color-mix(in srgb, var(--accent-ink) 30%, var(--accent));
   }
-  /* The quietest of the three verdicts at rest: no border, faint ink —
-     subordinate to Request changes (bordered) and the amber Approve. On hover it
-     fills red (--danger) to signal the negative action. Text-only label — Reject
-     earns no icon, and none in the vendored set fits. */
-  .reject {
-    background: transparent;
-    color: var(--ink-faint);
-    border: 1px solid transparent;
-    border-radius: var(--radius);
-    padding: 0.5rem 0.9rem;
-    font-size: var(--text-base);
-    font-weight: 600;
-    transition:
-      background var(--dur-fast) var(--ease-out),
-      color var(--dur-fast) var(--ease-out),
-      border-color var(--dur-fast) var(--ease-out);
+  .split :global(.approve:not(:disabled):hover),
+  .split :global(.split-toggle:not(:disabled):hover) {
+    background: var(--accent-bright);
   }
-  .reject:hover:not(:disabled) {
+  /* Reject warms to danger on hover — the one place red belongs in the row. */
+  .actions :global(.reject:not(:disabled):hover) {
     background: var(--danger);
     color: var(--paper);
-    border-color: var(--danger);
   }
-  .request {
-    background: transparent;
-    color: var(--ink);
-    border: 1px solid var(--rule-strong);
-    border-radius: var(--radius);
-    padding: 0.5rem 0.9rem;
-    font-size: var(--text-base);
-    font-weight: 600;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    transition:
-      border-color var(--dur-fast) var(--ease-out),
-      color var(--dur-fast) var(--ease-out);
-  }
-  .request:hover:not(:disabled) {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-  /* Neutral count pill: the pending work is review state, not the primary action,
-     so it stays off the brand-reserved amber even while `.request` warms to accent
-     on hover. Inherits no color from the button — pinned to a sunk surface so it
-     reads as a tally rather than a second affordance. */
-  .count {
-    background: var(--paper-sunk);
-    color: var(--ink-soft);
-    border: 1px solid var(--rule);
-    border-radius: 99px;
-    font-size: var(--text-2xs);
-    font-weight: 700;
-    line-height: 1;
-    padding: 0.1rem 0.4rem;
-    margin-left: 0.1rem;
-  }
-  .split {
-    position: relative;
-    display: flex;
-  }
-  .approve {
-    background: var(--accent);
-    color: var(--accent-ink);
-    border: 1px solid var(--accent);
-    border-right: none;
-    border-radius: var(--radius) 0 0 var(--radius);
-    padding: 0.5rem 1rem;
-    font-size: var(--text-base);
-    font-weight: 700;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    transition:
-      background var(--dur-fast) var(--ease-out),
-      border-color var(--dur-fast) var(--ease-out);
-  }
-  .split-toggle {
-    background: var(--accent);
-    color: var(--accent-ink);
-    border: 1px solid var(--accent);
-    border-radius: 0 var(--radius) var(--radius) 0;
-    padding: 0.5rem 0.55rem;
-    border-left: 1px solid color-mix(in srgb, var(--accent-ink) 30%, var(--accent));
-    transition:
-      background var(--dur-fast) var(--ease-out),
-      border-color var(--dur-fast) var(--ease-out);
-  }
-  .approve:hover:not(:disabled),
-  .split-toggle:hover:not(:disabled) {
-    background: var(--accent-bright);
-    border-color: var(--accent-bright);
-  }
-  .menu {
-    position: absolute;
-    z-index: 41;
-    top: calc(100% + 0.4rem);
-    right: 0;
-    min-width: 260px;
-    list-style: none;
-    margin: 0;
-    padding: 0.3rem;
-    background: var(--paper-raised);
-    border: 1px solid var(--rule-strong);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-card);
-  }
-  .menu button {
-    width: 100%;
-    text-align: left;
-    background: none;
-    border: none;
-    border-radius: var(--radius);
-    padding: 0.5rem 0.6rem;
+
+  /* Approve-menu variant rows stack a label over its description. Scoped styles
+     ride the elements into the portal (the hash travels on the class). */
+  .v-col {
     display: flex;
     flex-direction: column;
     gap: 0.1rem;
-    /* The accent bar (inset, so it doesn't shift layout) is the source-view
-       surface's signature for an active row; it appears on hover here. */
-    box-shadow: inset 2px 0 0 transparent;
-    transition:
-      background var(--dur-fast) var(--ease-out),
-      box-shadow var(--dur-fast) var(--ease-out);
-  }
-  .menu button:hover {
-    background: var(--accent-wash);
-    box-shadow: inset 2px 0 0 var(--accent);
   }
   .v-label {
-    font-size: var(--text-base);
     font-weight: 600;
     color: var(--ink);
   }
   .v-note {
     color: var(--ink-faint);
     font-size: var(--text-xs);
-  }
-  .scrim-invisible {
-    position: fixed;
-    inset: 0;
-    z-index: 20;
-    background: transparent;
-    border: none;
-    cursor: default;
   }
 </style>
