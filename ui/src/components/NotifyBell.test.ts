@@ -7,6 +7,11 @@ import NotifyBell from "./NotifyBell.svelte";
 // notify.test.ts; this suite covers NotifyBell's DOM wiring of that mapping and
 // its click behavior. The component reads the live Notification static, so each
 // test installs a stub with a chosen permission and a requestPermission spy.
+//
+// EXC-760: the state hint moved off a native `title=` onto a shadcn Tooltip
+// (portalled, hover-driven), so the tooltip text is asserted in
+// notifications.e2e.ts (real hover) rather than here. The tone now lives on the
+// inner icon `.stack` (the Button is neutral ghost chrome).
 
 type Perm = NotificationPermission;
 
@@ -50,8 +55,7 @@ describe("NotifyBell presentation wiring", () => {
   test("undecided: muted tone, request title, question-mark overlay", () => {
     const { target } = render(NotifyBell, {});
     const bell = target.querySelector(".bell")!;
-    expect(bell.classList.contains("tone-muted")).toBe(true);
-    expect(bell.getAttribute("title")).toContain("Enable desktop notifications");
+    expect(target.querySelector(".stack")!.classList.contains("tone-muted")).toBe(true);
     expect(bell.getAttribute("aria-label")).toBe("Notifications: default");
     // overlay present (two stacked icons), bell base + question-mark.
     expect(target.querySelector(".overlay")).not.toBeNull();
@@ -61,7 +65,7 @@ describe("NotifyBell presentation wiring", () => {
     installNotification("granted");
     const { target } = render(NotifyBell, {});
     const bell = target.querySelector(".bell")!;
-    expect(bell.classList.contains("tone-ok")).toBe(true);
+    expect(target.querySelector(".stack")!.classList.contains("tone-ok")).toBe(true);
     expect(target.querySelector(".overlay")).toBeNull();
     expect(bell.getAttribute("aria-disabled")).toBeNull();
   });
@@ -70,7 +74,7 @@ describe("NotifyBell presentation wiring", () => {
     installNotification("denied");
     const { target } = render(NotifyBell, {});
     const bell = target.querySelector(".bell")!;
-    expect(bell.classList.contains("tone-danger")).toBe(true);
+    expect(target.querySelector(".stack")!.classList.contains("tone-danger")).toBe(true);
     expect(bell.getAttribute("aria-disabled")).toBe("true");
   });
 
