@@ -113,6 +113,13 @@ stays green under any invocation.
   `-base`/line-bg/emphasis var. Mix `in lab` only — `oklch` is mangled in the embedding
   Chrome build, and a pinned library hex fails the no-hex bridge test.
   `css-bridge.test.ts` pins these invariants.
+- **shadcn components read the same tokens through the shadcn bridge.** The shadcn-svelte
+  semantic variables (`--background`, `--primary`, `--border`, …) are `var()`-mapped onto
+  caret's tokens in a second `app.css` block (EXC-758), so a copied shadcn component
+  paints on caret's palette and retints on theme switch — same single-source discipline,
+  pinned by `shadcn-bridge.test.ts`. When composing UI from shadcn components, see
+  [`shadcn-rules.md`](shadcn-rules.md) for the compose-first norm and the bridge's
+  component-side rules.
 
 ## Motion principles
 
@@ -144,6 +151,8 @@ in the diff view.
 
 ## Related rules
 
+- `shadcn-rules.md` — the shadcn-first composition norm and the shadcn token bridge that
+  extends the CSS-token discipline above.
 - `browser-testing.md` — the unit-vs-e2e decision and the e2e harness contract.
 - `icon-rules.md` — the `Icon.svelte` render path and when an icon earns its place.
 - `architecture-rules.md` — why `ui/` imports nothing from `src/adapters/` and reaches

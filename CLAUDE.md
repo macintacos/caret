@@ -20,6 +20,7 @@ digraph caret_rules_router {
     "Load doc/agents/architecture-rules.md" [shape=box];
     "Load doc/agents/typescript-rules.md" [shape=box];
     "Load doc/agents/svelte-rules.md" [shape=box];
+    "Load doc/agents/shadcn-rules.md" [shape=box];
     "Load doc/agents/browser-testing.md" [shape=box];
     "Load doc/agents/test-layout.md" [shape=box];
     "Load doc/agents/logging-rules.md" [shape=box];
@@ -32,6 +33,7 @@ digraph caret_rules_router {
     "What does the change touch?" -> "Load doc/agents/architecture-rules.md" [label="core/adapter boundary, daemon routing, @core shared modules"];
     "What does the change touch?" -> "Load doc/agents/typescript-rules.md" [label="TS module shape: DI, file-split seams, zod boundaries, helpers"];
     "What does the change touch?" -> "Load doc/agents/svelte-rules.md" [label="Svelte UI in ui/: components, runes, state factories, CSS tokens"];
+    "What does the change touch?" -> "Load doc/agents/shadcn-rules.md" [label="composing UI from shadcn-svelte components: compose-first norm, token bridge, icon swap, what stays custom"];
     "What does the change touch?" -> "Load doc/agents/browser-testing.md" [label="testing browser behavior: e2e vs. unit, the e2e harness"];
     "What does the change touch?" -> "Load doc/agents/test-layout.md" [label="where a backend test suite belongs under test/"];
     "What does the change touch?" -> "Load doc/agents/logging-rules.md" [label="logging: levels, message style, redaction"];
