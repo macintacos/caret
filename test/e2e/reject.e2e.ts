@@ -18,7 +18,7 @@ test("rejecting resolves the review as a deny carrying the wait message", async 
   // Reject always confirms (EXC-685), even with nothing queued: the top-bar
   // button opens a plain "are you sure?" dialog — no "won't be sent" warning.
   await page.getByRole("button", { name: "Reject", exact: true }).click();
-  const confirm = page.getByRole("alertdialog");
+  const confirm = page.getByRole("dialog", { name: "Reject this plan" });
   await expect(confirm).toBeVisible();
   await expect(confirm).not.toContainText("won't be sent");
   await confirm.getByRole("button", { name: "Reject", exact: true }).click();
@@ -51,7 +51,7 @@ test("a pending inline comment guards reject; 'Reject anyway' sends only the wai
   await waitPastSafeModeGrace(page);
 
   // Reject now opens the confirmation naming the count — it does NOT resolve.
-  const guard = page.getByRole("alertdialog");
+  const guard = page.getByRole("dialog", { name: "Reject with pending comments" });
   await page.getByRole("button", { name: "Reject", exact: true }).click();
   await expect(guard).toBeVisible();
   await expect(guard).toContainText("1 pending comment");
@@ -79,7 +79,7 @@ test("Escape dismisses the reject guard and leaves the review pending", async ({
   await expect(page.locator(".diff-plan")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
-  const guard = page.getByRole("alertdialog");
+  const guard = page.getByRole("dialog", { name: "Reject with pending comments" });
   await page.getByRole("button", { name: "Reject", exact: true }).click();
   await expect(guard).toBeVisible();
   await page.keyboard.press("Escape");
