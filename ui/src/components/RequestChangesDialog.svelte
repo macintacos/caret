@@ -372,6 +372,12 @@
      (role="presentation": no semantics, mirrors the scrim's role in the old shell). */
   .body {
     display: grid;
+    /* Pin the single column to minmax(0, 1fr): without the explicit `0` min, grid
+       items default to min-width:auto (min-content) and a long unbroken comment
+       expands the column past the modal, forcing a horizontal scroll and shoving
+       the row's action buttons off-screen. This is what keeps the buttons in view
+       and lets the snippet truncate instead. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.8rem;
     overflow-y: auto;
     min-height: 0;
@@ -527,6 +533,7 @@
      wrapper) and an inline row read with the same left edge. */
   .row-body {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.35rem;
   }
   .context-disclosure {
@@ -550,6 +557,7 @@
     font-size: var(--text-sm);
     line-height: var(--leading-snug);
     white-space: pre-wrap;
+    overflow-wrap: anywhere;
     color: var(--ink-soft);
   }
   /* The line-anchor label: a numeric chrome surface, so it takes the tabular metric
@@ -576,6 +584,7 @@
     font-size: var(--text-sm);
     line-height: var(--leading-snug);
     white-space: pre-wrap;
+    overflow-wrap: anywhere;
     color: var(--ink);
   }
 
@@ -639,6 +648,7 @@
     font-size: var(--text-sm);
     line-height: var(--leading-snug);
     white-space: pre-wrap;
+    overflow-wrap: anywhere;
     color: var(--ink);
   }
 
