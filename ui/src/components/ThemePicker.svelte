@@ -189,10 +189,14 @@
   .chevron {
     flex: none;
     opacity: 0.6;
+    /* Mac disclosure affordance: the chevron points RIGHT while collapsed and
+       rotates DOWN when the menu opens (reduced-motion is caught by the global
+       guard in app.css). */
+    transform: rotate(-90deg);
     transition: transform var(--dur-fast) var(--ease-out);
   }
   .trigger[aria-expanded="true"] .chevron {
-    transform: rotate(180deg);
+    transform: rotate(0deg);
   }
 
   /* The menu carries the scope hash into the portal via these classes. Rows lay out

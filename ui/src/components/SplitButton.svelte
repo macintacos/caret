@@ -94,4 +94,16 @@
   .split :global(.split-toggle:not(:disabled):hover) {
     background: var(--split-hover-bg);
   }
+
+  /* Mac disclosure affordance on the options toggle: the chevron points RIGHT at
+     rest and rotates DOWN while the menu is open. Targets the Icon's .icon wrapper
+     inside the toggle (Icon has no class prop); reduced-motion is caught by the
+     global guard in app.css. */
+  .split :global(.split-toggle .icon) {
+    transform: rotate(-90deg);
+    transition: transform var(--dur-fast) var(--ease-out);
+  }
+  .split :global(.split-toggle[aria-expanded="true"] .icon) {
+    transform: rotate(0deg);
+  }
 </style>
