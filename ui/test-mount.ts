@@ -25,6 +25,23 @@ interface Mounted {
 
 const live: Array<{ instance: Record<string, unknown>; target: HTMLElement }> = [];
 
+// bits-ui teleports its overlay/content (Dialog, AlertDialog, Select) straight
+// into document.body — outside the render target — and its portal "presence"
+// waits for an animationend that never fires under happy-dom, so those nodes
+// never self-remove on unmount. Left alone they accumulate, and a later
+// `document.body.querySelector("[data-slot=…]")` picks up a stale portal from an
+// earlier test (cross-test bleed). Snapshot the body's pre-test children once, so
+// purgeLeakedNodes can drop anything a test (target or leaked portal) added. It
+// runs at the START of every render — not just afterEach — because a top-level
+// afterEach in this import-cached module only fires for the first file that
+// imported it, whereas render() is called by every mounting test in every file.
+const initialBodyChildren = new Set<Element>(document.body.children);
+function purgeLeakedNodes(): void {
+  for (const child of [...document.body.children]) {
+    if (!initialBodyChildren.has(child)) child.remove();
+  }
+}
+
 /** Mounts `component` with `props`, returning its container + a flush helper.
  * The two type params mirror svelte's own mount() so Props infers from the
  * component (a missing or mistyped prop is a type error at the call site);
@@ -41,6 +58,9 @@ export function render<
   component: Component<Props, Exports, any>,
   props: Props,
 ): Mounted {
+  // Clear any portal a prior test leaked before mounting, so this test's
+  // document.body queries only see its own bits-ui content.
+  purgeLeakedNodes();
   const target = document.createElement("div");
   document.body.appendChild(target);
   const instance = mount(component, { target, props }) as Record<string, unknown>;
@@ -53,6 +73,7 @@ afterEach(() => {
     unmount(instance);
     target.remove();
   }
+  purgeLeakedNodes();
 });
 
 /** Flush pending reactive effects and advance timer ticks until `done()` holds
