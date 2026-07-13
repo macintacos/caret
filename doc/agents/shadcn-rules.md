@@ -13,8 +13,9 @@ stays custom.
 
 Reach for a shadcn-svelte component first. `shadcn-svelte add <name>` copies the
 component's source into `ui/src/lib/components/ui/<name>/` (config: `ui/components.json`;
-the `$lib` alias and the `cn()` class-merge helper live in `ui/src/lib/utils.ts`). Button
-and Dialog already live there as the proof-of-life pair.
+the `$lib` import alias the copies assume is declared there and resolved by
+`ui/vite.config.ts` + `ui/tsconfig.json`, and the `cn()` class-merge helper lives in
+`ui/src/lib/utils.ts`). Button and Dialog already live there as the proof-of-life pair.
 
 - **Never hand-roll a primitive the catalog covers** — button, dialog, menu, tooltip,
   badge, select, toggle group, and the rest. If shadcn-svelte ships it, add it.
