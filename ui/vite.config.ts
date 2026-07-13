@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 import { DEFAULT_PORT } from "../src/constants.ts";
 
@@ -9,6 +10,7 @@ import { DEFAULT_PORT } from "../src/constants.ts";
 // cache headers (EXC-522).
 export default defineConfig({
   plugins: [
+    tailwindcss(),
     svelte(),
     {
       // EXC-426: print the vanity origin in the dev banner. Cosmetic — the bind
@@ -49,6 +51,10 @@ export default defineConfig({
     // resolving to the real package — only the bare barrel is redirected.
     alias: [
       { find: "@core", replacement: fileURLToPath(new URL("../src", import.meta.url)) },
+      // `$lib` → ui/src/lib, the import prefix shadcn-svelte's copied components
+      // and components.json assume. Mirrors the @core mapping; the matching
+      // tsconfig `paths` entry keeps svelte-check and bun test in step (EXC-757).
+      { find: "$lib", replacement: fileURLToPath(new URL("./src/lib", import.meta.url)) },
       {
         find: /^shiki$/,
         replacement: fileURLToPath(new URL("./src/lib/diffview/shiki-bundle.ts", import.meta.url)),

@@ -7,6 +7,27 @@
    accents (working-directory paths, the version tag); no font files ship, so
    each stack falls back gracefully. */
 
+/* `source(none)` disables Tailwind's automatic content detection; the @source
+   below then scans ONLY the copied shadcn tree. This is load-bearing: caret's
+   own components use plain semantic class names (`.collapse`, `.chip`, `.state`,
+   …) that COLLIDE with Tailwind utility names — with auto-detection on, Tailwind
+   sees `collapse` in a .svelte file and emits `.collapse{visibility:collapse}`,
+   which then hides caret's collapse button. Scoping generation to the shadcn
+   components (the only place utilities are authored) makes those collisions
+   impossible while still emitting every class shadcn needs. Preflight and the
+   theme layer are unaffected by source scoping — they still apply globally, so
+   the form-control baseline is re-asserted in @layer base further down. A later
+   ticket that authors utilities in a caret chrome file adds it to @source then. */
+@import "tailwindcss" source(none);
+@import "tw-animate-css";
+@source "./lib/components/ui";
+
+/* shadcn-svelte's `dark:` variant, keyed to the [data-theme] attribute
+   applyTheme() (lib/theme.ts) already stamps on <html>. caret has NO `.dark`
+   class and must not grow one, so the variant targets the attribute directly;
+   a `dark:` utility then activates under any caret dark scheme. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 :root {
   /* Type */
   --font-display: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -97,6 +118,95 @@
   --radius-lg: 10px;
 
   color-scheme: dark;
+}
+
+/* ── shadcn-svelte design tokens (EXC-757 foundation) ──────────────────────────
+   The semantic layer shadcn components read (--background, --primary, --border,
+   …), seeded with the stock shadcn `neutral` palette so copied components render
+   correctly the moment a later ticket places one. This block is a STUB: EXC-758
+   replaces these values with live var() refs to caret's THEMES tokens (the
+   .diffview-bridge pattern), keeping the palette single-sourced. That bridge
+   MUST cover this :root block, not only the [data-theme="dark"] override below:
+   caret defaults to dark but data-theme is stamped only after applyTheme() runs,
+   so a shadcn surface reading these stock LIGHT :root values would flash
+   light-on-dark on first paint until the bridge ties them to caret's tokens.
+
+   Two shadcn token names — --accent and --radius — collide with caret's existing
+   vocabulary (caret amber, caret 6px). They are deliberately NOT redeclared here:
+   caret keeps ownership, so existing chrome is byte-for-byte unchanged and the
+   first-:root guard in theme.test.ts (which pins caret's :root above) still holds.
+   The @theme map below therefore leaves --color-accent pointing at caret's amber
+   --accent and shadcn radii riding caret's --radius; EXC-758 introduces the
+   neutral shadcn accent (amber stays brand-reserved) and reconciles radius. */
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+}
+
+[data-theme="dark"] {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.269 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+}
+
+/* @theme inline: map shadcn's semantic vars onto Tailwind's color/radius utility
+   scales without emitting a second :root layer. Radii ride caret's --radius;
+   --color-accent rides caret's amber --accent (see the block comment above). */
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
 }
 
 * {
@@ -224,13 +334,31 @@ button {
   cursor: pointer;
 }
 
-/* Form controls don't inherit font-family from <body>; default them all to
-   sans. Mono is opt-in only (.mono or an explicit font-family). */
-textarea,
-input,
-select,
-button {
-  font-family: var(--font-sans);
+/* Form controls default to sans (they don't inherit font-family from <body>);
+   mono is opt-in (.mono or an explicit font-family). This rule also re-asserts
+   the pre-Tailwind typographic baseline: Preflight (@layer base) resets controls
+   to `font: inherit`, which pulls caret's chrome buttons up to the body's 15px
+   reading size and 1.55 line-height — visibly taller than their UA baseline (it
+   grew the TopBar ~6px). We restore chrome defaults here, kept IN @layer base so
+   it wins over Preflight (declared after it) yet still loses to shadcn's own
+   utility classes in @layer utilities — so the copied components size themselves.
+   Controls that set their own size/leading (the toc filter, the dialog
+   selects/textarea) override this via their unlayered component styles. */
+@layer base {
+  textarea,
+  input,
+  select,
+  button {
+    font-family: var(--font-sans);
+    line-height: normal;
+  }
+
+  /* Chrome buttons that set no explicit size (e.g. TopBar's .reject) relied on
+     the UA button font (~13.3px); restore a chrome size so Preflight's inherited
+     15px doesn't enlarge them. Buttons with their own font-size still win. */
+  button {
+    font-size: var(--text-base);
+  }
 }
 
 button:focus-visible,

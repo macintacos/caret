@@ -11,7 +11,10 @@
     // (src/types.ts) through this alias rather than a hand-kept mirror; the vite
     // alias and root tsconfig mirror this mapping so svelte-check, the
     // vite build, and bun test agree (EXC-507).
-    "paths": { "@core/*": ["../src/*"] }
+    // `$lib/*` → ui/src/lib/*, the import prefix shadcn-svelte's copied
+    // components and components.json assume. Mirrors the vite `$lib` alias so
+    // svelte-check, the vite build, and bun test agree (EXC-757).
+    "paths": { "@core/*": ["../src/*"], "$lib": ["./src/lib"], "$lib/*": ["./src/lib/*"] }
   },
   "include": ["src/**/*.ts", "*.ts"]
 }
