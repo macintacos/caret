@@ -136,10 +136,12 @@
    already flip). Scheme lives entirely in the caret operands, exactly as it does
    for the .diffview bridge — no @media, no per-scheme block.
 
-   --primary carries caret's amber accent: the primary action, the one place
-   amber reaches a shadcn surface. shadcn's OTHER accent — a neutral hover/active
-   wash — collides with caret's --accent (amber), so it is deliberately NOT
-   declared here (that would clobber caret amber app-wide and break the
+   --primary carries caret's amber accent — the primary action's fill. Amber
+   reaches shadcn surfaces in just two controlled spots: this fill and --ring
+   (the focus outline, matching caret's global :focus-visible). shadcn's OTHER
+   accent — a neutral hover/active wash — collides with caret's --accent (amber),
+   so it is deliberately NOT declared here (that would clobber caret amber
+   app-wide and break the
    first-:root guard in theme.test.ts). It is set as a neutral --color-accent in
    @theme inline below. --radius likewise stays caret-owned; the radius ramp below
    is single-sourced from caret's two radius roles. */

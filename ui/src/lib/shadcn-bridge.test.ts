@@ -109,7 +109,8 @@ describe("the shadcn @theme inline map", () => {
     expect(decls).toMatch(/--radius-xl:\s*var\(--radius-lg\);/);
   });
 
-  test("uses no oklch", () => {
+  test("uses no hardcoded hex or oklch", () => {
+    expect(decls).not.toMatch(/#[0-9a-fA-F]{3,8}/);
     expect(decls).not.toContain("oklch");
   });
 });
