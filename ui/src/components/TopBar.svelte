@@ -85,9 +85,10 @@
     </Tooltip.Provider>
 
     <div class="actions" class:busy>
-      <!-- Quietest verdict at rest (ghost); warms to danger on hover. Reject
-           always routes through a confirm dialog, so the button stays low-key. -->
-      <Button variant="ghost" class="reject" onclick={onReject} disabled={busy}>Reject</Button>
+      <!-- Same quiet floating-chip as Request changes (soft fill, ink-soft label),
+           differentiated only by warming to danger on hover. Reject always routes
+           through a confirm dialog, so the resting button stays low-key. -->
+      <Button variant="secondary" class="reject float-chip" onclick={onReject} disabled={busy}>Reject</Button>
 
       <Button variant="secondary" class="request float-chip" onclick={onRequestChanges} disabled={busy}>
         <Icon name="corner-up-left" size={14} />

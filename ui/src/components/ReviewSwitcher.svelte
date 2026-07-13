@@ -64,10 +64,14 @@
     display: inline-flex;
     align-items: center;
     min-width: 0;
+    /* The inert single-review label reads as a heading, so it keeps full ink. */
+    color: var(--ink);
   }
+  /* No color of its own: inside the trigger it inherits the button's quiet
+     ink-soft (brightening on hover with it), matching the badges; in the single
+     case it inherits the full ink above. */
   .title {
     font-weight: 500;
-    color: var(--ink);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
