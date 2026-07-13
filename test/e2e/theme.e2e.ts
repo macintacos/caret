@@ -33,9 +33,16 @@ test("the Settings gear switches theme, retinting the UI and persisting across r
   const darkKeyword = await tokenColor();
   expect(darkKeyword).toBe("rgb(251, 146, 60)"); // caret-dark --accent (#fb923c)
 
-  // Open Settings from the gear and pick caret light.
+  // Open Settings from the gear, then pick caret light from the shadcn Select
+  // (a bits-ui listbox behind a button trigger — no native <select> anymore,
+  // EXC-761; the Select trigger renders as a button, not a combobox).
   await page.getByRole("button", { name: "Settings" }).click();
-  await page.locator(".theme-select").selectOption("caret-light");
+  await page.getByRole("button", { name: "Theme" }).click();
+  // The picker lists every theme — this coverage moved off the unit test, since
+  // the option list is portalled and only real in a browser.
+  await expect(page.getByRole("option", { name: "caret dark" })).toBeVisible();
+  await expect(page.getByRole("option", { name: "caret light" })).toBeVisible();
+  await page.getByRole("option", { name: "caret light" }).click();
 
   // The whole chrome retints: the root scheme attribute flips and the paper token
   // becomes the light value.
