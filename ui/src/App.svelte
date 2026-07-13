@@ -17,6 +17,7 @@
   import type { ComposerScratch } from "./lib/diffview/commenting.ts";
   import type { ApproveVariant, ApproveVariantId, Annotation, PersistedScratch } from "@core/types";
 
+  import * as Alert from "$lib/components/ui/alert/index.js";
   import UnsentCommentsDialog from "./components/UnsentCommentsDialog.svelte";
   import DiffPlanView from "./components/DiffPlanView.svelte";
   import EmptyState from "./components/EmptyState.svelte";
@@ -264,10 +265,13 @@
   />
 
   {#if selection.daemonChanged}
-    <div class="daemon-banner" role="alert">
-      <p class="db-text">
-        The caret daemon was replaced — reload to resync.
-      </p>
+    <!-- shadcn Alert (role="alert" baked in). It consumes grid row 2 and pushes
+         the content down rather than overlaying it, so it can't be mistaken for
+         a dismissable toast. Alert's default is a card block; the banner overrides
+         it to a full-width top strip with an accent left rule (see .daemon-banner
+         in the style block). -->
+    <Alert.Root class="daemon-banner">
+      <p class="db-text">The caret daemon was replaced — reload to resync.</p>
       <div class="db-actions">
         <button type="button" class="db-reload" onclick={() => location.reload()}>
           Reload
@@ -281,7 +285,7 @@
           Dismiss
         </button>
       </div>
-    </div>
+    </Alert.Root>
   {/if}
 
   {#if active}
@@ -411,12 +415,15 @@
   }
 
   /* Persistent, dismissible banner shown when the daemon behind the port was
-     replaced (its instanceId flipped). A sibling of TopBar at the top of the
-     shell — it consumes a grid row and pushes the content down rather than
-     overlaying it, so it can't be mistaken for a transient toast. Accent left
-     rule signals urgency without an icon (icon-rules: an icon must earn its
-     place; a one-line message doesn't need one). */
-  .daemon-banner {
+     replaced (its instanceId flipped). A shadcn Alert sibling of TopBar at the
+     top of the shell — it consumes grid row 2 and pushes the content down rather
+     than overlaying it, so it can't be mistaken for a transient toast. Reached
+     with :global because the class rides the Alert child component (no scope
+     hash), and it re-shapes Alert's card default into a full-width top strip:
+     accent left rule signals urgency without an icon (icon-rules: an icon must
+     earn its place; a one-line message doesn't need one). The unlayered rule out-
+     specifies Alert's Tailwind base. */
+  .shell > :global(.daemon-banner) {
     grid-row: 2;
     display: flex;
     align-items: center;
@@ -425,8 +432,10 @@
     padding: 0.6rem clamp(1rem, 3vw, 2rem);
     background: var(--accent-wash);
     color: var(--ink);
+    border: 0;
     border-bottom: 1px solid var(--rule-strong);
     border-left: 3px solid var(--accent);
+    border-radius: 0;
     font-size: var(--text-base);
     animation: daemon-banner-in var(--dur-base) var(--ease-out);
   }
