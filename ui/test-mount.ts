@@ -55,6 +55,24 @@ afterEach(() => {
   }
 });
 
+/** Flush pending reactive effects and advance timer ticks until `done()` holds
+ * (or `tries` iterations elapse). bits-ui portal/presence surfaces (Dialog,
+ * AlertDialog, Select content) mount deferred on a timer, so structure/ARIA
+ * assertions must poll rather than sleep a fixed interval — a fixed wait risks
+ * flaking on a loaded box. Records the verdict recorded by shadcn-foundation.test.ts. */
+export async function flushUntil(
+  flush: () => void,
+  done: () => boolean,
+  tries = 40,
+): Promise<void> {
+  for (let i = 0; i < tries; i++) {
+    flush();
+    if (done()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  flush();
+}
+
 /** Records the last value a callback prop was invoked with. Returns the
  * callback to wire into props plus a `last()` reader — the indirection keeps
  * TypeScript from narrowing the captured value to its initial type when the

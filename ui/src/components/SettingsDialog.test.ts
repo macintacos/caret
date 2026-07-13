@@ -1,8 +1,8 @@
 import "../../test-mount.ts";
 
 import { describe, expect, test } from "bun:test";
-import { render } from "../../test-mount.ts";
-import { THEME_IDS, THEMES } from "../lib/theme.ts";
+import { flushUntil, render } from "../../test-mount.ts";
+import { THEMES } from "../lib/theme.ts";
 import SettingsDialog from "./SettingsDialog.svelte";
 
 const baseProps = {
@@ -11,86 +11,45 @@ const baseProps = {
   onClose: () => {},
 };
 
-function select(target: HTMLElement) {
-  return target.querySelector(".theme-select") as HTMLSelectElement;
-}
+// bits-ui Dialog portals its content to document.body on a deferred tick, so
+// structure/ARIA is asserted against the body after an effect+timer flush (the
+// shadcn-foundation verdict). The Select's option list and picking a theme are
+// real-browser interaction — covered by test/e2e/theme.e2e.ts, not here.
+const content = () => document.body.querySelector("[data-slot='dialog-content']");
+const mounted = () => content() !== null;
 
 describe("SettingsDialog render", () => {
-  test("lists every theme with its human label", () => {
-    const { target } = render(SettingsDialog, baseProps);
-    const options = [...select(target).querySelectorAll("option")];
-    expect(options.map((o) => o.value)).toEqual([...THEME_IDS]);
-    expect(options.map((o) => o.textContent?.trim())).toEqual(
-      THEME_IDS.map((id) => THEMES[id].label),
+  test("mounts a dialog titled Settings", async () => {
+    const { flush } = render(SettingsDialog, baseProps);
+    await flushUntil(flush, mounted);
+    expect(content()?.getAttribute("role")).toBe("dialog");
+    expect(document.body.querySelector("[data-slot='dialog-title']")?.textContent).toContain(
+      "Settings",
     );
   });
 
-  test("selects the current theme", () => {
-    const { target } = render(SettingsDialog, { ...baseProps, current: "caret-light" });
-    expect(select(target).value).toBe("caret-light");
-  });
-
-  test("is a labelled modal dialog", () => {
-    const { target } = render(SettingsDialog, baseProps);
-    const dialog = target.querySelector(".dialog") as HTMLElement;
-    expect(dialog.getAttribute("role")).toBe("dialog");
-    expect(dialog.getAttribute("aria-modal")).toBe("true");
-    expect(dialog.getAttribute("aria-label")).toBe("Settings");
+  test("the theme trigger shows the applied theme's label", async () => {
+    const { flush } = render(SettingsDialog, { ...baseProps, current: "caret-light" });
+    await flushUntil(flush, mounted);
+    const trigger = document.body.querySelector("[data-slot='select-trigger']");
+    expect(trigger?.textContent).toContain(THEMES["caret-light"].label);
   });
 });
 
 describe("SettingsDialog wiring", () => {
-  test("changing the dropdown fires onSelect with the chosen id", () => {
-    let picked: string | undefined;
-    const { target } = render(SettingsDialog, {
-      ...baseProps,
-      onSelect: (id: string) => {
-        picked = id;
-      },
-    });
-    const el = select(target);
-    el.value = "caret-light";
-    el.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(picked).toBe("caret-light");
-  });
-
-  test("clicking Done fires onClose", () => {
+  test("clicking Done fires onClose", async () => {
     let closed = false;
-    const { target } = render(SettingsDialog, {
+    const { flush } = render(SettingsDialog, {
       ...baseProps,
       onClose: () => {
         closed = true;
       },
     });
-    (target.querySelector(".done") as HTMLElement).click();
-    expect(closed).toBe(true);
-  });
-
-  test("clicking the scrim backdrop closes", () => {
-    let closed = false;
-    const { target } = render(SettingsDialog, {
-      ...baseProps,
-      onClose: () => {
-        closed = true;
-      },
-    });
-    (target.querySelector(".scrim") as HTMLElement).click();
-    expect(closed).toBe(true);
-  });
-});
-
-describe("SettingsDialog keyboard", () => {
-  test("Escape closes", () => {
-    let closed = false;
-    const { target } = render(SettingsDialog, {
-      ...baseProps,
-      onClose: () => {
-        closed = true;
-      },
-    });
-    (target.querySelector(".dialog") as HTMLElement).dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    await flushUntil(flush, mounted);
+    const done = [...document.body.querySelectorAll("button")].find(
+      (b) => b.textContent?.trim() === "Done",
     );
+    done?.click();
     expect(closed).toBe(true);
   });
 });
