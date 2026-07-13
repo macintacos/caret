@@ -7,6 +7,15 @@
    accents (working-directory paths, the version tag); no font files ship, so
    each stack falls back gracefully. */
 
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* shadcn-svelte's `dark:` variant, keyed to the [data-theme] attribute
+   applyTheme() (lib/theme.ts) already stamps on <html>. caret has NO `.dark`
+   class and must not grow one, so the variant targets the attribute directly;
+   a `dark:` utility then activates under any caret dark scheme. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 :root {
   /* Type */
   --font-display: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -97,6 +106,91 @@
   --radius-lg: 10px;
 
   color-scheme: dark;
+}
+
+/* ── shadcn-svelte design tokens (EXC-757 foundation) ──────────────────────────
+   The semantic layer shadcn components read (--background, --primary, --border,
+   …), seeded with the stock shadcn `neutral` palette so copied components render
+   correctly the moment a later ticket places one. This block is a STUB: EXC-758
+   replaces these values with live var() refs to caret's THEMES tokens (the
+   .diffview-bridge pattern), keeping the palette single-sourced.
+
+   Two shadcn token names — --accent and --radius — collide with caret's existing
+   vocabulary (caret amber, caret 6px). They are deliberately NOT redeclared here:
+   caret keeps ownership, so existing chrome is byte-for-byte unchanged and the
+   first-:root guard in theme.test.ts (which pins caret's :root above) still holds.
+   The @theme map below therefore leaves --color-accent pointing at caret's amber
+   --accent and shadcn radii riding caret's --radius; EXC-758 introduces the
+   neutral shadcn accent (amber stays brand-reserved) and reconciles radius. */
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+}
+
+[data-theme="dark"] {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.269 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+}
+
+/* @theme inline: map shadcn's semantic vars onto Tailwind's color/radius utility
+   scales without emitting a second :root layer. Radii ride caret's --radius;
+   --color-accent rides caret's amber --accent (see the block comment above). */
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
 }
 
 * {

@@ -28,7 +28,13 @@
       // Vendored verbatim from the source-view library's core stylesheet: a
       // single ~40 KB string literal that must stay byte-identical to upstream
       // (a drift test guards it), so it is not biome's to reformat.
-      "!ui/src/lib/diffview/diffsCoreStyles.ts"
+      "!ui/src/lib/diffview/diffsCoreStyles.ts",
+      // shadcn-svelte components are copied verbatim from the registry (the `.ts`
+      // barrels here; the `.svelte` bodies are already excluded above). They're
+      // vendored code we re-sync with `shadcn-svelte add`, not ours to police —
+      // biome-formatting them would diff against upstream on every re-copy. Our
+      // own helpers (ui/src/lib/utils.ts, etc.) stay in scope (EXC-757).
+      "!ui/src/lib/components/ui"
     ]
   },
   "formatter": {
