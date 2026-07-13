@@ -22,6 +22,7 @@ const chromeComponents = [
   "components/TopBar.svelte",
   "components/ReviewSwitcher.svelte",
   "components/SourceToc.svelte",
+  "components/CommentNavigator.svelte",
   "components/NotifyBell.svelte",
   "components/VersionBadge.svelte",
   "components/SourceAnnotationCard.svelte",

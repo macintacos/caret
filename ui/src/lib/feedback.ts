@@ -121,6 +121,47 @@ export function pendingItems(
   return items;
 }
 
+/** A line-anchored comment as a navigable index entry for the comment navigator:
+ * the annotation id to focus, the source line to scroll to (its endLine, where the
+ * annotation thread renders), a short range label, and the trimmed comment text. */
+export interface CommentIndexEntry {
+  /** The annotation id — focusing it highlights the card in the source view. */
+  id: string;
+  /** 1-based source line the annotation's thread anchors to (its endLine). */
+  line: number;
+  /** "Line N" / "Lines N–M". */
+  label: string;
+  /** The comment text, trimmed. */
+  text: string;
+}
+
+/** The navigable list of the plan's inline comments, in document order — one entry
+ * per line-anchored, non-blank annotation. Legacy (selection-anchored) annotations
+ * are excluded: they carry no source line, so there is nowhere to jump. Shares the
+ * pendingInline predicate with the count surfaces, so the navigator lists the same
+ * inline comments the status strip tallies. */
+export function commentIndex(annotations: Annotation[]): CommentIndexEntry[] {
+  return pendingInline(annotations)
+    .filter(isLineAnnotation)
+    .map((a) => ({
+      id: a.id,
+      line: a.endLine,
+      label: rangeLabel(a.startLine, a.endLine),
+      text: a.comment.trim(),
+    }))
+    .sort((x, y) => x.line - y.line);
+}
+
+/** Narrows the comment index to entries whose text matches a search query
+ * (case-insensitive substring). A blank query returns every entry. Matches the
+ * comment text only — never the line label — so the navigator search filters on
+ * what the reviewer wrote, not on the plan. */
+export function filterComments(entries: CommentIndexEntry[], query: string): CommentIndexEntry[] {
+  const q = query.trim().toLowerCase();
+  if (q === "") return entries;
+  return entries.filter((e) => e.text.toLowerCase().includes(q));
+}
+
 /** How many distinct source locations the pending inline comments anchor to. A
  * line-anchored annotation's location is its `startLine-endLine` span, so several
  * comments on the same line (or the same range) collapse to one location; a

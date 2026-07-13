@@ -93,6 +93,10 @@
       discard: (key: string) => void;
       draft: (scratch: { startLine: number; endLine: number; text: string }) => void;
     }) => void;
+    /** Hand the host a reveal(line) action once the source view mounts, so a sibling
+     * (the comment navigator) can scroll the plan to a commented line. A call before
+     * the view paints is a bounded-retry no-op. */
+    onExposeReveal?: (reveal: (line: number) => void) => void;
     /** The active caret theme's color scheme, forwarded to the shadow-DOM diff
      * view so its shiki highlighting follows the selected theme (EXC-730). Omitted
      * leaves the library following the system preference. */
@@ -109,6 +113,7 @@
     onFocusAnnotation,
     onScratchesChange,
     onExposeScratchActions,
+    onExposeReveal,
     scheme,
   }: Props = $props();
 
@@ -383,6 +388,28 @@
   // post-mount effect runs first.
   let restored = $state(false);
 
+  // Scroll to a 1-based line, retrying across a bounded number of frames until the
+  // library has painted the target row (scrollToLine returns true). The rows paint
+  // asynchronously after the container is ready, so a fresh target may not exist on
+  // the first frame; the retry lets a jump land even on a long, highlight-heavy plan.
+  // Shared by the deep-link restore and the comment navigator's reveal.
+  function retryScrollTo(line: number): void {
+    const a = api;
+    if (a == null) return;
+    let tries = 0;
+    const attempt = () => {
+      if (a.scrollToLine(line) || ++tries >= 30) return;
+      requestAnimationFrame(attempt);
+    };
+    requestAnimationFrame(attempt);
+  }
+
+  // Reveal a commented line for the host (the comment navigator): scroll the plan to
+  // it. Reads the live `api`, so a call before the view mounts is a no-op.
+  function revealLine(line: number): void {
+    retryScrollTo(line);
+  }
+
   // Captures the imperative API and, on the first ready, restores a deep-linked
   // heading (`?heading=<slug>`) by resolving the slug to its source line and
   // scrolling to it once. takeHeadingSlug() clears the param, so a later SourceView
@@ -392,20 +419,17 @@
     api = a;
     const slug = takeHeadingSlug();
     const line = slug != null ? lineForSlug(headings, slug) : null;
-    if (line != null) {
-      // The library paints its data-line rows asynchronously after the container is
-      // ready, so the target row may not exist on the first frame. Retry across a
-      // bounded number of frames until scrollToLine finds the row (it returns true),
-      // so a deep link lands even on a long, highlight-heavy plan.
-      let tries = 0;
-      const restoreScroll = () => {
-        if (a.scrollToLine(line) || ++tries >= 30) return;
-        requestAnimationFrame(restoreScroll);
-      };
-      requestAnimationFrame(restoreScroll);
-    }
+    if (line != null) retryScrollTo(line);
     restored = true;
   }
+
+  // Hand the host the reveal(line) action once, mirroring the scratch-actions
+  // hand-off. `untrack` keeps onExposeReveal from becoming a reactive dependency;
+  // revealLine closes over the live `api`, so exposing it before the view paints is
+  // safe (the reveal simply no-ops until the api lands).
+  $effect(() => {
+    untrack(() => onExposeReveal)?.(revealLine);
+  });
 
   // The source line of the heading currently in the reading zone. Tracked from
   // the scroll container's topmost rendered line so the pane highlights the

@@ -119,4 +119,34 @@ describe("StatusStrip", () => {
     expect(rev.classList.contains("rounded-full")).toBe(true);
     expect(rev.getAttribute("data-slot")).toBe("tooltip-trigger");
   });
+
+  // EXC-763 follow-up: the comment tally is the toggle that opens the comment
+  // navigator, so it must be a real button carrying its expanded state — not the
+  // inert span it started as.
+  test("renders the comment tally as a toggle button reflecting the open state", () => {
+    const closed = render(StatusStrip, { ...base, pendingCount: 2, commentsOpen: false });
+    const btn = closed.target.querySelector<HTMLButtonElement>("button.comments-toggle");
+    expect(btn).not.toBeNull();
+    expect(btn!.getAttribute("aria-expanded")).toBe("false");
+    // The tally still lives inside the button.
+    expect(btn!.querySelector(".num")!.textContent).toBe("2");
+
+    const open = render(StatusStrip, { ...base, pendingCount: 2, commentsOpen: true });
+    expect(open.target.querySelector("button.comments-toggle")!.getAttribute("aria-expanded")).toBe(
+      "true",
+    );
+  });
+
+  test("clicking the comment tally fires onToggleComments", () => {
+    let toggled = 0;
+    const { target } = render(StatusStrip, {
+      ...base,
+      pendingCount: 1,
+      onToggleComments: () => {
+        toggled += 1;
+      },
+    });
+    target.querySelector<HTMLButtonElement>("button.comments-toggle")!.click();
+    expect(toggled).toBe(1);
+  });
 });

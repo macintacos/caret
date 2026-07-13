@@ -27,12 +27,18 @@
     coveredLines,
     version,
     connected,
+    commentsOpen = false,
+    onToggleComments,
   }: {
     active: boolean;
     pendingCount: number;
     coveredLines: number;
     version: number;
     connected: boolean;
+    /** Whether the comment navigator is open — drives the tally button's aria-expanded. */
+    commentsOpen?: boolean;
+    /** Toggle the comment navigator. The comment tally is its trigger. */
+    onToggleComments?: () => void;
   } = $props();
 
   // Only worth showing the lines tally once a line-anchored comment covers source
@@ -43,10 +49,18 @@
 {#if active}
   <aside class="status-strip metric" aria-label="Plan review status">
     <Tooltip.Provider delayDuration={0}>
-      <span class="stat">
+      <!-- The comment tally is the trigger for the comment navigator, so it is a
+           real toggle button (aria-expanded) rather than an inert readout. -->
+      <button
+        type="button"
+        class="stat comments-toggle"
+        aria-expanded={commentsOpen}
+        aria-controls="comment-navigator"
+        onclick={onToggleComments}
+      >
         <span class="num" class:has={pendingCount > 0}>{pendingCount}</span>
         <span class="label">{pendingCount === 1 ? "comment" : "comments"}</span>
-      </span>
+      </button>
       {#if showCovered}
         <Separator orientation="vertical" decorative style="height: 0.9em; min-height: 0" />
         <span class="stat">
@@ -125,6 +139,30 @@
     display: inline-flex;
     align-items: baseline;
     gap: 0.28rem;
+  }
+  /* The comment tally doubles as the navigator's trigger, so it is a real button;
+     strip the native chrome back to the strip's inline text and add a quiet
+     underline-on-hover + focus ring so it reads as activatable without shouting. */
+  .comments-toggle {
+    margin: 0;
+    padding: 0;
+    background: none;
+    border: none;
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    cursor: pointer;
+    border-radius: var(--radius);
+  }
+  .comments-toggle:hover .label,
+  .comments-toggle[aria-expanded="true"] .label {
+    color: var(--ink);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .comments-toggle:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
   .num {
     font-weight: 600;

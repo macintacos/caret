@@ -11,7 +11,12 @@
     type SelectionStore,
   } from "./state/polling.svelte.ts";
   import { createResolve, type ResolveStore } from "./state/resolve.svelte.ts";
-  import { coveredLineCount, pendingItems } from "./lib/feedback.ts";
+  import {
+    type CommentIndexEntry,
+    commentIndex,
+    coveredLineCount,
+    pendingItems,
+  } from "./lib/feedback.ts";
   import { readThemeId, THEMES, type ThemeId } from "./lib/theme.ts";
   import { changeTheme } from "./lib/themeWipe.ts";
   import type { ComposerScratch } from "./lib/diffview/commenting.ts";
@@ -19,6 +24,7 @@
 
   import * as Alert from "$lib/components/ui/alert/index.js";
   import UnsentCommentsDialog from "./components/UnsentCommentsDialog.svelte";
+  import CommentNavigator from "./components/CommentNavigator.svelte";
   import DiffPlanView from "./components/DiffPlanView.svelte";
   import EmptyState from "./components/EmptyState.svelte";
   import RequestChangesDialog from "./components/RequestChangesDialog.svelte";
@@ -62,6 +68,11 @@
   }>({ annotations: [], generalCommentDraft: "", composerScratches: [], focusedAnnotation: null });
 
   let showDialog = $state(false);
+  // Whether the comment navigator is open (toggled by the status strip's comment
+  // tally). The reveal action DiffPlanView hands up on mount, used to scroll the
+  // plan to a navigated comment's line; undefined until the source view paints.
+  let showComments = $state(false);
+  let revealLine = $state<((line: number) => void) | undefined>();
   // The approve variant a pending-comment guard is holding: the mode the reviewer
   // chose, parked until they confirm or divert. Null = no guard open.
   let pendingApproveMode = $state<ApproveVariantId | null>(null);
@@ -130,6 +141,16 @@
   // Distinct source lines the pending line-anchored comments cover (union of
   // ranges), for the status strip's at-a-glance "N comments · M lines" readout.
   let coveredLines = $derived(coveredLineCount(work.annotations));
+  // The plan's inline comments as a navigable, searchable index for the comment
+  // navigator — one entry per line-anchored comment, in document order.
+  let comments = $derived(commentIndex(work.annotations));
+
+  // Reveal a comment from the navigator: focus it (the source view highlights the
+  // card in amber and expands it) and scroll the plan to its line.
+  function revealComment(entry: CommentIndexEntry) {
+    autosave.focusAnnotation(entry.id);
+    revealLine?.(entry.line);
+  }
 
   // ----- Working-copy reload -----
   // When the active review (or its version) changes — whether from a selection
@@ -302,6 +323,7 @@
         autosave.setScratches(s);
       }}
       onExposeScratchActions={(a) => (scratchActions = a)}
+      onExposeReveal={(r) => (revealLine = r)}
     />
   {:else}
     <EmptyState connected={selection.connected} />
@@ -324,6 +346,21 @@
   {coveredLines}
   version={active?.version ?? 1}
   connected={selection.connected}
+  commentsOpen={showComments}
+  onToggleComments={() => (showComments = !showComments)}
+/>
+
+<!-- The comment navigator: a searchable index of the plan's inline comments,
+     docked above the status strip. Another root sibling of .shell, gated on an
+     active review so it disappears with the strip that toggles it. Reveals a
+     comment by focusing it (the source view highlights + expands the card) and
+     scrolling the plan to its line. -->
+<CommentNavigator
+  open={active !== null && showComments}
+  {comments}
+  activeId={autosave.focusedAnnotation}
+  onReveal={revealComment}
+  onClose={() => (showComments = false)}
 />
 
 {#if pendingApproveMode !== null && active}
