@@ -1,8 +1,7 @@
 import "../../test-mount.ts";
 
 import { describe, expect, test } from "bun:test";
-import type { ComponentProps } from "svelte";
-import { flushUntil, render } from "../../test-mount.ts";
+import { render } from "../../test-mount.ts";
 import UnsentCommentsDialog from "./UnsentCommentsDialog.svelte";
 
 const twoItems = [
@@ -29,75 +28,141 @@ const rejectProps = {
   onCancel: () => {},
 };
 
-// bits-ui AlertDialog portals its content to document.body on a deferred tick, so
-// render/structure is asserted against the body after an effect+timer flush (the
-// shadcn-foundation verdict). Interaction — Escape/Enter-to-confirm, the button
-// callbacks, and the no-backdrop-dismiss behavior — is real-browser and lives in
-// test/e2e/approve.e2e.ts + reject.e2e.ts.
-const q = (sel: string) => document.body.querySelector(sel);
-const content = () => q("[data-slot='alert-dialog-content']");
-const mounted = () => content() !== null;
-const description = () => q("[data-slot='alert-dialog-description']");
-const confirm = () => q("[data-slot='alert-dialog-action']");
-
-async function mount(props: ComponentProps<typeof UnsentCommentsDialog>) {
-  const { flush } = render(UnsentCommentsDialog, props);
-  await flushUntil(flush, mounted);
+function dialog(target: HTMLElement) {
+  return target.querySelector(".dialog") as HTMLElement;
 }
 
 describe("UnsentCommentsDialog render", () => {
-  test("names the pending count, pluralized", async () => {
-    await mount(approveProps);
-    expect(description()?.textContent).toContain("2 pending comments");
+  test("names the pending count, pluralized", () => {
+    const { target } = render(UnsentCommentsDialog, approveProps);
+    expect(target.querySelector(".body")!.textContent).toContain("2 pending comments");
   });
 
-  test("singularizes the count for one pending comment", async () => {
-    await mount({ ...approveProps, items: [{ label: "Line 3", text: "tighten" }] });
-    expect(description()?.textContent).toContain("1 pending comment");
-    expect(description()?.textContent).not.toContain("1 pending comments");
+  test("singularizes the count for one pending comment", () => {
+    const { target } = render(UnsentCommentsDialog, {
+      ...approveProps,
+      items: [{ label: "Line 3", text: "tighten" }],
+    });
+    expect(target.querySelector(".body")!.textContent).toContain("1 pending comment");
+    expect(target.querySelector(".body")!.textContent).not.toContain("1 pending comments");
   });
 
-  test("previews each pending comment's label and text", async () => {
-    await mount(approveProps);
-    const rows = document.body.querySelectorAll(".comments .comment");
+  test("previews each pending comment's label and text", () => {
+    const { target } = render(UnsentCommentsDialog, approveProps);
+    const rows = target.querySelectorAll(".comments .comment");
     expect(rows.length).toBe(2);
-    const preview = q(".comments")?.textContent ?? "";
+    const preview = target.querySelector(".comments")!.textContent!;
     expect(preview).toContain("General");
     expect(preview).toContain("reconsider the rollout");
     expect(preview).toContain("Line 7");
     expect(preview).toContain("explain the cold cost");
   });
 
-  test("the Approve variant reads with the approve vocabulary and accessible name", async () => {
-    await mount(approveProps);
-    // The dialog's accessible name is its Title (bits-ui wires aria-labelledby to it).
-    expect(q("[data-slot='alert-dialog-title']")?.textContent).toContain("Approve this plan?");
-    expect(confirm()?.textContent).toContain("Approve anyway");
-    expect(description()?.textContent).toContain(
+  test("the Approve variant reads with the approve vocabulary and accessible names", () => {
+    const { target } = render(UnsentCommentsDialog, approveProps);
+    expect(dialog(target).getAttribute("aria-label")).toBe("Approve with pending comments");
+    expect(target.querySelector("h2")!.textContent).toContain("Approve this plan?");
+    expect(target.querySelector(".confirm")!.textContent).toContain("Approve anyway");
+    expect(target.querySelector(".body")!.textContent).toContain(
       "Approving accepts the plan and starts the agent's work.",
     );
   });
 
-  test("the Reject variant swaps in the reject vocabulary and accessible name", async () => {
-    await mount(rejectProps);
-    expect(q("[data-slot='alert-dialog-title']")?.textContent).toContain("Reject this plan?");
-    expect(confirm()?.textContent).toContain("Reject anyway");
-    expect(description()?.textContent).toContain(
+  test("the Reject variant swaps in the reject vocabulary and accessible names", () => {
+    const { target } = render(UnsentCommentsDialog, rejectProps);
+    expect(dialog(target).getAttribute("aria-label")).toBe("Reject with pending comments");
+    expect(target.querySelector("h2")!.textContent).toContain("Reject this plan?");
+    expect(target.querySelector(".confirm")!.textContent).toContain("Reject anyway");
+    expect(target.querySelector(".body")!.textContent).toContain(
       "The agent will be told the plan was rejected and to wait.",
     );
   });
 
-  test("with no pending comments it is a plain confirm — no warning, no preview, no divert, no 'anyway'", async () => {
-    await mount({ ...rejectProps, items: [] });
-    // A bare confirmation: no comments warning, no preview list, no Request-changes
-    // divert, and the confirm button drops the "anyway".
-    expect(description()?.textContent).not.toContain("pending comment");
-    expect(q(".comments")).toBeNull();
-    const requestChanges = [...document.body.querySelectorAll("button")].find((b) =>
-      b.textContent?.includes("Request changes"),
-    );
-    expect(requestChanges).toBeUndefined();
-    expect(confirm()?.textContent).toContain("Reject");
-    expect(confirm()?.textContent).not.toContain("anyway");
+  test("with no pending comments it is a plain confirm — no warning, no preview, no divert, no 'anyway'", () => {
+    const { target } = render(UnsentCommentsDialog, { ...rejectProps, items: [] });
+    // A bare confirmation: distinct label, no comments warning, no preview list, no
+    // Request-changes divert, and the confirm button drops the "anyway" qualifier.
+    expect(dialog(target).getAttribute("aria-label")).toBe("Reject this plan");
+    expect(target.querySelector(".body")!.textContent).not.toContain("pending comment");
+    expect(target.querySelector(".comments")).toBeNull();
+    expect(target.querySelector(".to-request")).toBeNull();
+    expect(target.querySelector(".confirm")!.textContent).toContain("Reject");
+    expect(target.querySelector(".confirm")!.textContent).not.toContain("anyway");
+  });
+});
+
+describe("UnsentCommentsDialog wiring", () => {
+  test("clicking the confirm button fires onConfirm", () => {
+    let called = false;
+    const { target } = render(UnsentCommentsDialog, {
+      ...approveProps,
+      onConfirm: () => {
+        called = true;
+      },
+    });
+    (target.querySelector(".confirm") as HTMLElement).click();
+    expect(called).toBe(true);
+  });
+
+  test("clicking the request-changes route fires onRequestChanges", () => {
+    let routed = false;
+    const { target } = render(UnsentCommentsDialog, {
+      ...approveProps,
+      onRequestChanges: () => {
+        routed = true;
+      },
+    });
+    (target.querySelector(".to-request") as HTMLElement).click();
+    expect(routed).toBe(true);
+  });
+
+  test("clicking Cancel fires onCancel", () => {
+    let cancelled = false;
+    const { target } = render(UnsentCommentsDialog, {
+      ...approveProps,
+      onCancel: () => {
+        cancelled = true;
+      },
+    });
+    (target.querySelector(".ghost") as HTMLElement).click();
+    expect(cancelled).toBe(true);
+  });
+
+  test("clicking the scrim backdrop cancels", () => {
+    let cancelled = false;
+    const { target } = render(UnsentCommentsDialog, {
+      ...approveProps,
+      onCancel: () => {
+        cancelled = true;
+      },
+    });
+    (target.querySelector(".scrim") as HTMLElement).click();
+    expect(cancelled).toBe(true);
+  });
+});
+
+describe("UnsentCommentsDialog keyboard", () => {
+  test("Escape cancels", () => {
+    let cancelled = false;
+    const { target } = render(UnsentCommentsDialog, {
+      ...approveProps,
+      onCancel: () => {
+        cancelled = true;
+      },
+    });
+    dialog(target).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(cancelled).toBe(true);
+  });
+
+  test("Enter confirms the primary action", () => {
+    let confirmed = false;
+    const { target } = render(UnsentCommentsDialog, {
+      ...approveProps,
+      onConfirm: () => {
+        confirmed = true;
+      },
+    });
+    dialog(target).dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(confirmed).toBe(true);
   });
 });

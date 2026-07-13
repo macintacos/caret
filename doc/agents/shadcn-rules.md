@@ -89,15 +89,7 @@ later work doesn't rediscover it — see `shadcn-foundation.test.ts`:
 - A bits-ui component (Dialog) mounts too, and its trigger reflects reactive open-state
   synchronously — but the **portalled content** (overlay + panel) is deferred, appearing
   only after effects flush *and* a timer tick advances. Poll with an effect+timer flush,
-  don't assert synchronously (`flushUntil` in `ui/test-mount.ts`), and query
-  `document.body` — the portalled content lands there, not inside the mount target.
-- **Portalled content leaks between tests.** bits-ui teleports the overlay/content into
-  `document.body`, and its portal presence waits for an `animationend` that never fires
-  under happy-dom, so the nodes never self-remove on unmount. `ui/test-mount.ts` purges
-  leaked portal nodes at every `render()` and `afterEach`; without that a later
-  `document.body.querySelector("[data-slot=…]")` matches a **stale** portal from an
-  earlier test — a real cross-suite failure EXC-761 hit (the foundation "Proof of life"
-  title assertion started matching SettingsDialog's "Settings").
+  don't assert synchronously.
 - **Takeaway**: bits-ui overlays are unit-mountable for **structure / ARIA** assertions
   (with the async flush), but their real interaction semantics — focus trap,
   Escape-to-close, outside-click, focus restoration, scroll lock — are real-browser
