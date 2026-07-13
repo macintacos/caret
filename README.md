@@ -95,8 +95,8 @@ defaults, and the environment variables is in
 
 ## Reporting bugs
 
-- `caret discovery` prints a one-shot, read-only diagnostics snapshot of your install —
-  ready to paste into a bug report (`caret discovery --json` for machine-readable output).
+- `/caret:discovery` prints a one-shot, read-only diagnostics snapshot of your install —
+  ready to paste into a bug report.
 - `/caret:debug` reviews the current session's plans and recent errors.
 
 Details, plus how to scrub logs with `caret redact`, are in
