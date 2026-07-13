@@ -3,8 +3,13 @@
   // (EXC-427). It mirrors Notification.permission and, in the undecided state,
   // requests it on click. Presentation is the pure bellPresentation() mapping
   // from notify.ts; this file is only the Svelte shell + styling.
+  // EXC-760: composed from the shadcn Button (ghost icon) with the state help
+  // text moved off a native `title=` onto a shadcn Tooltip. The bell's live
+  // state stays announced via aria-label; the tooltip carries the hover hint.
   import { uiLog } from "../lib/log.ts";
   import { bellPresentation, fireTestNotification } from "../lib/notify.ts";
+  import { Button } from "$lib/components/ui/button/index.js";
+  import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import Icon from "./Icon.svelte";
 
   // The Notification API may be absent (older browsers, insecure contexts) — the
@@ -25,7 +30,7 @@
       return;
     }
     // Inert outside the undecided state — keep the button enabled so its tooltip
-    // stays reliable (a disabled button suppresses `title` in some browsers).
+    // stays reliable (a disabled button suppresses hover in some browsers).
     if (!presentation.canRequest) return;
     try {
       await Notification.requestPermission();
@@ -44,41 +49,46 @@
 </script>
 
 {#if supported}
-  <button
-    class="bell tone-{presentation.tone}"
-    title={presentation.title}
-    aria-label="Notifications: {permission}"
-    aria-disabled={presentation.canRequest || presentation.canTest ? undefined : "true"}
-    onclick={handleClick}
-  >
-    <span class="stack">
-      <!-- Decorative: the button's aria-label already announces the state. -->
-      <Icon name={presentation.icon} size={16} />
-      {#if presentation.overlay}
-        <span class="overlay">
-          <Icon name={presentation.overlay} size={9} />
-        </span>
-      {/if}
-    </span>
-  </button>
+  <!-- delayDuration=0: the hint is short state help; an instant reveal reads as
+       a native title replacement rather than a lingering popover. -->
+  <Tooltip.Provider delayDuration={0}>
+    <Tooltip.Root>
+      <Tooltip.Trigger>
+        {#snippet child({ props })}
+          <Button
+            {...props}
+            variant="secondary"
+            size="icon"
+            class="bell float-chip"
+            aria-label="Notifications: {permission}"
+            aria-disabled={presentation.canRequest || presentation.canTest ? undefined : "true"}
+            onclick={handleClick}
+          >
+            <span class="stack tone-{presentation.tone}">
+              <!-- Decorative: the button's aria-label already announces the state. -->
+              <Icon name={presentation.icon} size={16} />
+              {#if presentation.overlay}
+                <span class="overlay">
+                  <Icon name={presentation.overlay} size={9} />
+                </span>
+              {/if}
+            </span>
+          </Button>
+        {/snippet}
+      </Tooltip.Trigger>
+      <Tooltip.Content>{presentation.title}</Tooltip.Content>
+    </Tooltip.Root>
+  </Tooltip.Provider>
 {/if}
 
 <style>
-  /* Quiet status control: transparent, borderless, no chrome until hover — it
-     must read calmer than the Approve button (see TopBar's primary buttons). */
-  .bell {
-    background: transparent;
-    border: none;
-    border-radius: var(--radius);
-    padding: 0.35rem;
+  /* Tone owns the icon color; icons inherit it via stroke="currentColor". It
+     lives on the icon stack (this component's own element) rather than the
+     Button, because Svelte scoped styles don't pierce the child component. */
+  .stack {
+    position: relative;
     display: inline-flex;
-    align-items: center;
-    transition: background var(--dur-fast) var(--ease-out);
   }
-  .bell:hover {
-    background: var(--paper-sunk);
-  }
-  /* Tone owns the resting color; icons inherit it via stroke="currentColor". */
   .tone-ok {
     color: var(--ok);
   }
@@ -87,15 +97,6 @@
   }
   .tone-muted {
     color: var(--ink-faint);
-  }
-  /* denied is the one read-only state (request and test clicks are real). */
-  .bell[aria-disabled="true"] {
-    cursor: default;
-  }
-
-  .stack {
-    position: relative;
-    display: inline-flex;
   }
   /* Small glyph pinned to the bell's top-right. A paper-toned ring lifts it off
      the bell strokes so the two icons stay legible; the overlay is decorative

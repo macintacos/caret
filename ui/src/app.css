@@ -308,6 +308,37 @@ body {
   letter-spacing: 0.01em;
 }
 
+/* Floating chip: a soft solid fill lifted just off the raised topbar surface
+   (paper-raised nudged toward ink), no hard border — the shared "floats above
+   the background" look worn by the topbar's neutral badges (DevBadge,
+   VersionLabel) and its neutral buttons (Request changes, the review switcher).
+   Derived from the palette tokens so it retints on theme switch; declared in its
+   own :root — not the first palette block theme.test.ts pins, nor the shadcn
+   bridge block — because it's a derived surface, not a theme-contract token.
+   Unlayered, so it wins over the shadcn variant's Tailwind bg utility. On a
+   <button> it lifts on hover / while its menu is open; passive <span> badges
+   stay at rest. */
+:root {
+  --chip: color-mix(in lab, var(--paper-raised), var(--ink) 9%);
+  --chip-hover: color-mix(in lab, var(--paper-raised), var(--ink) 15%);
+}
+.float-chip {
+  background: var(--chip);
+}
+/* On a button the label rides the badges' quiet ink-soft tone at rest and
+   brightens to full ink on hover / while its menu is open — the "subtle" half of
+   the transformation, the part that makes a neutral button read as a quiet chip
+   rather than a full-contrast control. Passive <span> badges set their own
+   color, so this only reaches the buttons. */
+button.float-chip {
+  color: var(--ink-soft);
+}
+button.float-chip:not(:disabled):hover,
+button.float-chip[aria-expanded="true"]:not(:disabled) {
+  background: var(--chip-hover);
+  color: var(--ink);
+}
+
 /* Numeric chrome. Carries the mono family and tabular figures together so a
    surface showing counts or version numbers (the composer's line range, the
    version pills, the compare picker) gets fixed-width digits that line up in a

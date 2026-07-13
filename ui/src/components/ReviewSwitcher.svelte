@@ -1,7 +1,15 @@
 <script lang="ts">
+  // The active-plan switcher. With one review it's an inert label; with several
+  // it's a shadcn DropdownMenu (EXC-760) whose trigger carries the active title
+  // and a count Badge, and whose items list each plan's title + abbreviated cwd.
+  // The hand-rolled listbox + click-away scrim it replaced are gone — bits-ui
+  // owns open/close, Escape, outside-click, and focus.
   import { shortCwd } from "../lib/cwd.ts";
   import { stripTitleLinks } from "../lib/title.ts";
   import type { ClientReview } from "@core/types";
+  import { Badge } from "$lib/components/ui/badge/index.js";
+  import { Button } from "$lib/components/ui/button/index.js";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
   import Icon from "./Icon.svelte";
 
   interface Props {
@@ -11,142 +19,89 @@
   }
   let { reviews, activeId, onSelect }: Props = $props();
 
-  let open = $state(false);
   let active = $derived(reviews.find((r) => r.id === activeId) ?? null);
-
-  function pick(id: string) {
-    open = false;
-    onSelect(id);
-  }
+  let multiple = $derived(reviews.length > 1);
 </script>
 
-<div class="switcher" class:single={reviews.length <= 1}>
-  <button
-    class="current"
-    onclick={() => (open = reviews.length > 1 ? !open : false)}
-    aria-haspopup="listbox"
-    aria-expanded={open}
-  >
-    <span class="title">{stripTitleLinks(active?.title ?? "—")}</span>
-    {#if reviews.length > 1}
-      <span class="badge metric">{reviews.length}</span>
-      <span class="chev" class:open aria-hidden="true">
-        <Icon name="chevron-down" size={14} />
-      </span>
-    {/if}
-  </button>
-
-  {#if open}
-    <ul class="menu" role="listbox">
+{#if multiple}
+  <DropdownMenu.Root>
+    <DropdownMenu.Trigger>
+      {#snippet child({ props })}
+        <Button {...props} variant="secondary" size="sm" class="switcher-trigger float-chip">
+          <span class="title">{stripTitleLinks(active?.title ?? "—")}</span>
+          <Badge variant="secondary" class="count metric">{reviews.length}</Badge>
+          <span class="chev"><Icon name="chevron-down" size={14} /></span>
+        </Button>
+      {/snippet}
+    </DropdownMenu.Trigger>
+    <!-- Bounded width: comfortable minimum, and a max so a long plan title
+         ellipsizes (via .m-title) instead of stretching the menu. Inline, not a
+         class — the portalled content is out of this component's scoped-CSS reach. -->
+    <DropdownMenu.Content align="start" style="min-width: 18rem; max-width: 26rem">
       {#each reviews as r (r.id)}
-        <li>
-          <button
-            class:active={r.id === activeId}
-            role="option"
-            aria-selected={r.id === activeId}
-            onclick={() => pick(r.id)}
-          >
+        <DropdownMenu.Item class="switcher-option" onSelect={() => onSelect(r.id)}>
+          <span class="opt">
             <span class="m-title">{stripTitleLinks(r.title)}</span>
             <span class="m-meta mono">{shortCwd(r.cwd)}</span>
-          </button>
-        </li>
+          </span>
+          {#if r.id === activeId}
+            <span class="opt-check"><Icon name="check" size={14} /></span>
+          {/if}
+        </DropdownMenu.Item>
       {/each}
-    </ul>
-  {/if}
-</div>
+    </DropdownMenu.Content>
+  </DropdownMenu.Root>
+{:else}
+  <div class="switcher single">
+    <span class="title">{stripTitleLinks(active?.title ?? "—")}</span>
+  </div>
+{/if}
 
 <style>
-  .switcher {
-    position: relative;
-    min-width: 0;
-  }
-  /* A tagged control (--radius), matching the diff surface's input/select voice,
-     rather than a pill — pills are reserved for true badges (the count, below). */
-  .current {
+  /* Inert single-review label: no control chrome, just the title reading inline
+     with the wordmark to its left. */
+  .switcher.single {
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
-    background: var(--paper-sunk);
-    border: 1px solid var(--rule);
-    border-radius: var(--radius);
-    padding: 0.3rem 0.75rem;
-    max-width: 46vw;
-    transition: border-color var(--dur-fast) var(--ease-out);
+    min-width: 0;
+    /* The inert single-review label reads as a heading, so it keeps full ink. */
+    color: var(--ink);
   }
-  .current:hover {
-    border-color: var(--rule-strong);
-  }
-  .single .current {
-    cursor: default;
-  }
-  .single .current:hover {
-    border-color: var(--rule);
-  }
+  /* No color of its own: inside the trigger it inherits the button's quiet
+     ink-soft (brightening on hover with it), matching the badges; in the single
+     case it inherits the full ink above. */
   .title {
-    font-family: var(--font-sans);
     font-weight: 500;
-    font-size: var(--text-md);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 46vw;
+  }
+  .chev {
+    display: inline-flex;
+    color: var(--ink-faint);
+  }
+  /* Each option stacks its title over its abbreviated path; the active row gets
+     a trailing check (neutral, no amber — amber stays brand-reserved). */
+  .opt {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+  }
+  .m-title {
     color: var(--ink);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .badge {
-    background: var(--accent);
-    color: var(--accent-ink);
-    border-radius: 99px;
-    font-size: var(--text-2xs);
-    font-weight: 700;
-    padding: 0.05rem 0.4rem;
-  }
-  .chev {
-    display: inline-flex;
-    color: var(--ink-faint);
-    transition: transform var(--dur-fast) var(--ease-out);
-  }
-  .chev.open {
-    transform: rotate(180deg);
-  }
-  .menu {
-    position: absolute;
-    z-index: 40;
-    top: calc(100% + 0.4rem);
-    left: 0;
-    min-width: 280px;
-    max-width: 420px;
-    list-style: none;
-    margin: 0;
-    padding: 0.3rem;
-    background: var(--paper-raised);
-    border: 1px solid var(--rule-strong);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-card);
-  }
-  .menu button {
-    width: 100%;
-    text-align: left;
-    background: none;
-    border: none;
-    border-radius: var(--radius);
-    padding: 0.45rem 0.6rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.1rem;
-    transition: background var(--dur-fast) var(--ease-out);
-  }
-  .menu button:hover {
-    background: var(--paper-sunk);
-  }
-  .menu button.active {
-    background: var(--accent-wash);
-  }
-  .m-title {
-    font-family: var(--font-sans);
-    font-size: var(--text-md);
-    color: var(--ink);
-  }
   .m-meta {
     color: var(--ink-faint);
     font-size: var(--text-xs);
+  }
+  .opt-check {
+    display: inline-flex;
+    margin-inline-start: auto;
+    color: var(--ink-soft);
   }
 </style>

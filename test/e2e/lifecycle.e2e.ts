@@ -19,11 +19,12 @@ test("switching between two pending reviews shows the right plan", async ({ daem
   const plan = page.locator(".diff-plan");
   await expect(plan.getByText("Widget Cache Refactor")).toBeVisible();
 
-  // The switcher carries both ("2" badge); pick the other review.
-  const switcher = page.locator(".switcher");
-  await expect(switcher.getByText("2", { exact: true })).toBeVisible();
-  await switcher.getByRole("button", { name: /Widget Cache Refactor/ }).click();
-  await page.getByRole("option", { name: /Gadget Renderer Cleanup/ }).click();
+  // The switcher (a shadcn DropdownMenu since EXC-760) carries both — count "2";
+  // open it and pick the other review from the menu.
+  const trigger = page.locator(".switcher-trigger");
+  await expect(trigger.locator(".count")).toHaveText("2");
+  await trigger.click();
+  await page.getByRole("menuitem", { name: /Gadget Renderer Cleanup/ }).click();
   await expect(plan.getByText("Gadget Renderer Cleanup")).toBeVisible();
 });
 
@@ -47,9 +48,11 @@ test("a review posted while the page is open appears without a reload", async ({
   // Seed through the API while the page is open: the 2s poll must pick it up.
   await daemon.seed({ plan: SECOND_PLAN });
 
-  // The switcher badge flips to 2 with no reload; generous auto-retry timeout
-  // covers the poll interval (never a fixed sleep).
-  await expect(page.locator(".switcher").getByText("2", { exact: true })).toBeVisible({
+  // The switcher's count Badge flips to 2 with no reload; generous auto-retry
+  // timeout covers the poll interval (never a fixed sleep). The trigger itself
+  // only appears once there's a second review, so this also waits for the
+  // single→multiple switch.
+  await expect(page.locator(".switcher-trigger").locator(".count")).toHaveText("2", {
     timeout: 5_000,
   });
 });

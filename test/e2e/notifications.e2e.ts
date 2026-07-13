@@ -140,5 +140,13 @@ test("undecided permission shows the muted, requestable badge", async ({ daemon,
 
   const bell = page.getByRole("button", { name: "Notifications: default" });
   await expect(bell).toBeVisible();
-  await expect(bell).toHaveAttribute("title", "Enable desktop notifications for new plans");
+  // EXC-760: the state hint moved off a native `title=` onto a shadcn Tooltip
+  // (bits-ui links it to the trigger via aria-describedby, not a tooltip role),
+  // revealed on hover (delayDuration=0 keeps it instant).
+  const tip = page
+    .locator("[data-slot='tooltip-content']")
+    .filter({ hasText: "Enable desktop notifications for new plans" });
+  await expect(tip).toBeHidden();
+  await bell.hover();
+  await expect(tip).toBeVisible();
 });
