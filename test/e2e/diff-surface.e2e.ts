@@ -336,6 +336,59 @@ test("creating a single-line annotation from the gutter persists it line-anchore
   expect(ann).toMatchObject({ startLine: 3, endLine: 3, comment: "Quantify the cold cost here." });
 });
 
+test("typing in a composer opened while another is open keeps the caret in place (EXC-780)", async ({
+  daemon,
+  page,
+}) => {
+  // Regression: opening a second composer while the first is still open used to
+  // corrupt the new composer's caret — the host container survived the range
+  // switch and its slot was reassigned in place, desyncing the just-focused
+  // CodeMirror editable's DOM caret from CodeMirror's own offset. The first
+  // Backspace then jumped the caret to the start, so subsequent input landed at
+  // position 0. This MUST exercise REAL per-character keystrokes: the other
+  // composer specs use fill(), which replaces the field in one shot and bypasses
+  // the per-character path where the desync lives, so a fill()-based test passes
+  // even while the bug is present.
+  const id = await daemon.seed({ plan: RANGE_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  // Composer A: open on line 3 via a line-body click and give it text, matching
+  // the reported repro (the first field holds an in-progress draft when the
+  // second is opened).
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await page.getByText("Body line 1 content here.").click();
+  await expect(composer.getByText("Line 3")).toBeVisible();
+  await composerInput(composer).fill("first draft, kept for later");
+
+  // Composer B: open on line 7 while A is still open — the open-while-open
+  // transition that switches `pending` to a new range and (before the fix)
+  // re-slotted the surviving host container in place.
+  await page.getByText("Body line 3 content here.").click();
+  await expect(composer.getByText("Line 7")).toBeVisible();
+
+  // Type into B's autofocused editor with real keystrokes — no click/focus of
+  // our own, which would place the caret and mask the desync. toBeFocused()
+  // confirms the composer autofocused (without moving focus); page.keyboard then
+  // targets the active element. Correct result is "hellX"; the bug yields "Xhell"
+  // (the Backspace jumps the caret to 0, so "X" inserts at the start).
+  await expect(composerInput(composer)).toBeFocused();
+  await page.keyboard.type("hello");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.type("X");
+
+  await composer.getByRole("button", { name: "Comment" }).click();
+
+  await expect(composer).toHaveCount(0);
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
+    .toBe(1);
+  const ann = (await daemon.getReview(id)).body?.annotations?.[0];
+  expect(ann).toMatchObject({ startLine: 7, endLine: 7, comment: "hellX" });
+});
+
 test("an unsubmitted composer scratch survives a page reload (EXC-744)", async ({
   daemon,
   page,
