@@ -1,42 +1,41 @@
 <script lang="ts">
   // Shown when no pending reviews remain (initial load or after resolving all).
+  //
+  // EXC-763: rebuilt on the shadcn Empty container (+ EmptyHeader / EmptyMedia
+  // structure), so the empty screen reads as one system with the rest of the
+  // shadcn-migrated UI. The bespoke brand moment stays custom: the ^ hero glyph
+  // (amber, 6rem, floating), the metric status pill, and the connection warning
+  // are authored as scoped elements inside the Empty (a class passed to a shadcn
+  // child component carries no scope hash, so the brand styling lives on our own
+  // elements). The title stays a real <h2> — the correct heading semantics, and
+  // the anchor 8 e2e specs locate via getByRole("heading", …).
+  import { Empty, EmptyHeader, EmptyMedia } from "$lib/components/ui/empty/index.js";
   import Icon from "./Icon.svelte";
 
   let { connected = true }: { connected?: boolean } = $props();
 </script>
 
-<div class="empty">
-  <div class="glyph" aria-hidden="true">^</div>
-  <h2>No plans awaiting review</h2>
-  {#if connected}
-    <p>
-      When an agent proposes a plan, it will appear here for inline review and
-      approval. This window stays open and listening.
-    </p>
-  {:else}
-    <p class="warn">
-      <Icon name="unplug" size={14} />
-      Not connected to the caret daemon. Make sure it's running, then this will
-      update automatically.
-    </p>
-  {/if}
+<Empty class="empty">
+  <EmptyHeader>
+    <EmptyMedia>
+      <span class="glyph" aria-hidden="true">^</span>
+    </EmptyMedia>
+    <h2 class="title">No plans awaiting review</h2>
+    {#if connected}
+      <p class="body">When an agent proposes a plan, it will appear here for inline review and approval. This window stays open and listening.</p>
+    {:else}
+      <p class="body warn">
+        <Icon name="unplug" size={14} />Not connected to the caret daemon. Make sure it's running, then this will update automatically.
+      </p>
+    {/if}
+  </EmptyHeader>
   <div class="hint metric">listening &middot; polling /api/reviews</div>
-</div>
+</Empty>
 
 <style>
-  .empty {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    padding: 4rem 2rem;
-    color: var(--ink-soft);
-  }
   .glyph {
     font-family: var(--font-mono);
-    /* Display one-off: the hero unplug glyph sits well above the type scale. */
+    /* Display one-off: the hero ^ glyph sits well above the type scale. */
     font-size: 6rem;
     line-height: var(--leading-none);
     color: var(--accent);
@@ -53,34 +52,29 @@
       transform: translateY(-8px);
     }
   }
-  h2 {
+  .title {
     font-weight: 500;
-    /* Display one-off: the empty-state title is larger than any chrome step. */
+    /* Display one-off: the empty-state title sits a step above any chrome. */
     font-size: 1.7rem;
-    margin: 1.5rem 0 0.5rem;
+    margin: 0;
     color: var(--ink);
   }
-  p {
-    max-width: 38ch;
+  .body {
     margin: 0;
+    color: var(--ink-soft);
   }
+  /* The disconnected copy warms to the accent and leads with the unplug icon. */
   .warn {
     color: var(--accent);
   }
-  /* Sit the unplug glyph on the first text line. .icon is scoped to
-     Icon.svelte, so reach it with :global. */
   .warn :global(.icon) {
     vertical-align: -0.15em;
-    margin-right: 0.15em;
+    margin-right: 0.3rem;
   }
-  /* A quiet status chip carrying the live endpoint in the technical voice the
-     source-view surface uses for paths and metadata. It shares the build/version
-     badges' vocabulary so the empty and populated states read as one system: the
-     same --paper-raised surface on a --rule hairline pill, and the mono family +
-     tabular figures from the shared .metric atom (so any digits line up exactly
-     as they do in the badges). */
+  /* The status pill shares the badge vocabulary: the same --paper-raised surface
+     on a --rule hairline, mono family + tabular figures from the shared .metric
+     atom (so any digits line up exactly as they do in the badges). */
   .hint {
-    margin-top: 2rem;
     display: inline-flex;
     align-items: center;
     font-size: var(--text-xs);
