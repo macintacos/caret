@@ -33,7 +33,7 @@ digraph caret_docs_router {
     "Which doc does the change affect?" -> "Edit doc/ADVANCED.md" [label="advanced/contributor reference: build-from-source, architecture, adapter internals, full config + CARET_* tables, dev workflow, logging"];
     "Which doc does the change affect?" -> "Edit CONTRIBUTING.md" [label="human contributor onboarding: local setup, the mise workflow, where tests live"];
     "Which doc does the change affect?" -> "Edit CLAUDE.md" [label="the code-change routing index, plus the CodeGraph / verifying-changes prose"];
-    "Which doc does the change affect?" -> "Edit a doc/agents/*.md rule file" [label="a rule-of-the-road for a code area (architecture, logging, TS, Svelte, testing, icons, settings, OpenCode)"];
+    "Which doc does the change affect?" -> "Edit a doc/agents/*.md rule file" [label="a rule-of-the-road for a code area (architecture, logging, TS, Svelte, shadcn, testing, icons, settings, OpenCode)"];
     "Which doc does the change affect?" -> "Edit doc/README.md" [label="the index of the doc/ directory itself"];
     "Which doc does the change affect?" -> "Edit CHANGELOG.md (via /release-caret)" [label="release history — owned by the release flow, not hand-edited mid-feature"];
 }
