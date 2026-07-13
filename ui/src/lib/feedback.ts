@@ -121,6 +121,97 @@ export function pendingItems(
   return items;
 }
 
+/** A line-anchored comment as a navigable index entry for the comment navigator:
+ * the id to focus, the source line to scroll to (its endLine, where the annotation
+ * thread or scratch marker renders), a short range label, and the trimmed text. */
+export interface CommentIndexEntry {
+  /** The annotation id (a committed comment) or the scratch key (a draft) —
+   * focusing it highlights the card in the source view; a scratch key focuses
+   * nothing, so a draft reveal just scrolls to its marker. */
+  id: string;
+  /** 1-based source line the entry anchors to (its endLine). */
+  line: number;
+  /** "Line N" / "Lines N–M". */
+  label: string;
+  /** The comment/draft text, trimmed. */
+  text: string;
+  /** True for an unsent composer scratch — a draft the reviewer typed but never
+   * committed as a comment. The navigator marks these distinctly. */
+  draft: boolean;
+}
+
+/** The navigable list of the plan's inline comments + unsent drafts, in document
+ * order. Committed comments come from the line-anchored, non-blank annotations
+ * (sharing the pendingInline predicate the status strip tallies); drafts come from
+ * the unsent composer scratches, flagged `draft: true`. Legacy (selection-anchored)
+ * annotations are excluded — they carry no source line, so there is nowhere to jump. */
+export function commentIndex(
+  annotations: Annotation[],
+  scratches: ComposerScratch[] = [],
+): CommentIndexEntry[] {
+  const entries: CommentIndexEntry[] = [];
+  for (const a of pendingInline(annotations)) {
+    if (!isLineAnnotation(a)) continue;
+    entries.push({
+      id: a.id,
+      line: a.endLine,
+      label: rangeLabel(a.startLine, a.endLine),
+      text: a.comment.trim(),
+      draft: false,
+    });
+  }
+  for (const s of scratches) {
+    entries.push({
+      id: s.key,
+      line: s.endLine,
+      label: rangeLabel(s.startLine, s.endLine),
+      text: s.text.trim(),
+      draft: true,
+    });
+  }
+  return entries.sort((x, y) => x.line - y.line);
+}
+
+/** Narrows the comment index to entries whose text matches a search query
+ * (case-insensitive substring). A blank query returns every entry. Matches the
+ * comment text only — never the line label — so the navigator search filters on
+ * what the reviewer wrote, not on the plan. */
+export function filterComments(entries: CommentIndexEntry[], query: string): CommentIndexEntry[] {
+  const q = query.trim().toLowerCase();
+  if (q === "") return entries;
+  return entries.filter((e) => e.text.toLowerCase().includes(q));
+}
+
+/** One run of comment text, flagged whether it matches the active search query —
+ * so the navigator can underline the matched substring live as the reviewer types. */
+export interface TextSegment {
+  text: string;
+  match: boolean;
+}
+
+/** Splits `text` into matched/unmatched runs against `query` (case-insensitive,
+ * every occurrence), preserving the text's original case in the matched slices. A
+ * blank query yields the whole text as one unmatched run. Trims the query to mirror
+ * filterComments, so the underlined substring is exactly what filtered the list. */
+export function highlightMatches(text: string, query: string): TextSegment[] {
+  const needle = query.trim().toLowerCase();
+  if (needle === "") return [{ text, match: false }];
+  const hay = text.toLowerCase();
+  const segments: TextSegment[] = [];
+  let i = 0;
+  while (i < text.length) {
+    const at = hay.indexOf(needle, i);
+    if (at === -1) {
+      segments.push({ text: text.slice(i), match: false });
+      break;
+    }
+    if (at > i) segments.push({ text: text.slice(i, at), match: false });
+    segments.push({ text: text.slice(at, at + needle.length), match: true });
+    i = at + needle.length;
+  }
+  return segments;
+}
+
 /** How many distinct source locations the pending inline comments anchor to. A
  * line-anchored annotation's location is its `startLine-endLine` span, so several
  * comments on the same line (or the same range) collapse to one location; a

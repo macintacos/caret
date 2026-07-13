@@ -3,6 +3,14 @@ import { describe, expect, test } from "bun:test";
 import { render } from "../../test-mount.ts";
 import StatusStrip from "./StatusStrip.svelte";
 
+// EXC-763: the StatusStrip readout is rebuilt on shadcn primitives (Badge for
+// the revision pill, Separator for the metric dividers, Tooltip for the hover
+// hints on the revision and connection). This suite covers the synchronous
+// surface — the readout's numbers, gates, and connection state, plus the
+// shadcn structure. The tooltip *content* is bits-ui overlay (portalled,
+// deferred under happy-dom), so it is a visual/e2e concern, not asserted here —
+// the same split TopBar.test.ts uses for its cwd tooltip.
+
 const base = {
   active: true,
   pendingCount: 0,
@@ -77,5 +85,68 @@ describe("StatusStrip", () => {
     const offConn = offline.target.querySelector(".conn")!;
     expect(offConn.classList.contains("offline")).toBe(true);
     expect(offConn.textContent).toContain("offline");
+  });
+
+  // EXC-763 shadcn structure ------------------------------------------------
+
+  // The metric dividers are shadcn Separators, not the old `·` glyph spans —
+  // the same vertical Separator the TopBar cluster uses, so the chrome shares
+  // one divider vocabulary.
+  test("divides the readout with shadcn Separators, not `·` glyphs", () => {
+    const { target } = render(StatusStrip, {
+      ...base,
+      pendingCount: 2,
+      coveredLines: 3,
+      version: 2,
+    });
+    const strip = target.querySelector(".status-strip")!;
+    const sep = strip.querySelector('[data-slot="separator"]');
+    expect(sep).not.toBeNull();
+    expect(strip.textContent).not.toContain("·");
+    // Decorative, matching the old aria-hidden `·` glyphs — a screen reader
+    // traversing the labelled strip shouldn't announce "separator" between metrics.
+    expect(sep!.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  // The revision pill is a shadcn Badge, reusing VersionLabel's amber-^ idiom,
+  // so the ^vN marker reads identically whether it appears in the TopBar or the
+  // status strip. It also drives a Tooltip, so bits-ui overwrites its own
+  // data-slot to "tooltip-trigger" — the badge signature (the rounded-full pill
+  // base from badgeVariants) is the stable proof the Badge component rendered it.
+  test("renders the revision as a shadcn Badge", () => {
+    const { target } = render(StatusStrip, { ...base, version: 2 });
+    const rev = target.querySelector(".rev")!;
+    expect(rev.classList.contains("rounded-full")).toBe(true);
+    expect(rev.getAttribute("data-slot")).toBe("tooltip-trigger");
+  });
+
+  // EXC-763 follow-up: the comment tally is the toggle that opens the comment
+  // navigator, so it must be a real button carrying its expanded state — not the
+  // inert span it started as.
+  test("renders the comment tally as a toggle button reflecting the open state", () => {
+    const closed = render(StatusStrip, { ...base, pendingCount: 2, commentsOpen: false });
+    const btn = closed.target.querySelector<HTMLButtonElement>("button.comments-toggle");
+    expect(btn).not.toBeNull();
+    expect(btn!.getAttribute("aria-expanded")).toBe("false");
+    // The tally still lives inside the button.
+    expect(btn!.querySelector(".num")!.textContent).toBe("2");
+
+    const open = render(StatusStrip, { ...base, pendingCount: 2, commentsOpen: true });
+    expect(open.target.querySelector("button.comments-toggle")!.getAttribute("aria-expanded")).toBe(
+      "true",
+    );
+  });
+
+  test("clicking the comment tally fires onToggleComments", () => {
+    let toggled = 0;
+    const { target } = render(StatusStrip, {
+      ...base,
+      pendingCount: 1,
+      onToggleComments: () => {
+        toggled += 1;
+      },
+    });
+    target.querySelector<HTMLButtonElement>("button.comments-toggle")!.click();
+    expect(toggled).toBe(1);
   });
 });

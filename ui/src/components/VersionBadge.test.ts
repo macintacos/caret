@@ -11,8 +11,17 @@ describe("VersionBadge", () => {
     const badge = target.querySelector(".version-badge");
     expect(badge).not.toBeNull();
     expect(badge!.textContent?.trim()).toBe("v0.0.4-222222");
-    // the hover tooltip spells out the version and the same 6-char commit
-    expect(badge!.getAttribute("title")).toContain("commit 222222");
+  });
+
+  // EXC-763: the build/commit hint moved from a native title= to a shadcn
+  // Tooltip (matching the TopBar cwd tooltip), so the button is a tooltip
+  // trigger and carries no native title. The tooltip *content* is bits-ui
+  // overlay (portalled, deferred under happy-dom), a visual/e2e concern.
+  test("surfaces the build hint via a shadcn Tooltip, not a native title", () => {
+    const { target } = render(VersionBadge, { version: "0.0.4", commit: "111111222222" });
+    const badge = target.querySelector(".version-badge")!;
+    expect(badge.getAttribute("title")).toBeNull();
+    expect(badge.getAttribute("data-slot")).toBe("tooltip-trigger");
   });
 
   test("degrades to version-only when the commit is the 'unknown' sentinel", () => {

@@ -13,7 +13,15 @@
   // the FULL commit (not the truncated display tail), build type, page URL, and
   // user agent — and flashes a "Copied" confirmation, so a bug report can carry
   // the exact running build in one click.
+  //
+  // EXC-763: the build/commit hint moved from a native title= to a shadcn
+  // Tooltip (matching the TopBar cwd tooltip), and the pill wears the tabular
+  // .metric badge vocabulary. It stays a real <button> — click-to-copy needs
+  // button semantics, which the shadcn Badge (span/anchor only) can't give — and
+  // keeps its quiet content-floating surface rather than the topbar's louder
+  // .float-chip fill.
   import { onDestroy } from "svelte";
+  import * as Tooltip from "$lib/components/ui/tooltip/index.js";
 
   let {
     version,
@@ -57,18 +65,29 @@
 </script>
 
 {#if version}
-  <button
-    type="button"
-    class="version-badge metric"
-    class:copied
-    aria-label={`Copy build info (v${version}) to the clipboard`}
-    title={sha
-      ? `Running caret build · v${version} · commit ${sha} — click to copy debug info`
-      : `Running caret build · v${version} — click to copy debug info`}
-    onclick={copy}
-  >
-    {copied ? "Copied" : label}
-  </button>
+  <Tooltip.Provider delayDuration={0}>
+    <Tooltip.Root>
+      <Tooltip.Trigger>
+        {#snippet child({ props })}
+          <button
+            {...props}
+            type="button"
+            class="version-badge metric"
+            class:copied
+            aria-label={`Copy build info (v${version}) to the clipboard`}
+            onclick={copy}
+          >
+            {copied ? "Copied" : label}
+          </button>
+        {/snippet}
+      </Tooltip.Trigger>
+      <Tooltip.Content>
+        {sha
+          ? `Running caret build · v${version} · commit ${sha} — click to copy debug info`
+          : `Running caret build · v${version} — click to copy debug info`}
+      </Tooltip.Content>
+    </Tooltip.Root>
+  </Tooltip.Provider>
 {/if}
 
 <style>

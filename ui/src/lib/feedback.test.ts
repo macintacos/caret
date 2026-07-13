@@ -2,8 +2,11 @@ import { describe, expect, test } from "bun:test";
 import type { Annotation } from "@core/types";
 import type { ComposerScratch } from "./diffview/commenting.ts";
 import {
+  commentIndex,
   coveredLineCount,
+  filterComments,
   formatFeedback,
+  highlightMatches,
   pendingInlineCount,
   pendingItems,
   pendingLineCount,
@@ -419,5 +422,148 @@ describe("sourceLines", () => {
 
   test("returns [] for a stale anchor past the end of the text", () => {
     expect(sourceLines(99, 100, PLAN)).toEqual([]);
+  });
+});
+
+// A line-anchored annotation with a caller-chosen id, so commentIndex's id
+// pass-through and line-order sort are observable (the shared lineAnn helper
+// hardcodes one id).
+const lineC = (id: string, startLine: number, endLine: number, comment: string): Annotation => ({
+  id,
+  startLine,
+  endLine,
+  comment,
+});
+
+// The navigable index the comment navigator lists: one entry per line-anchored
+// comment, anchored to the line the reviewer jumps to, in document order.
+describe("commentIndex", () => {
+  test("maps each line-anchored comment to a navigable entry, trimming the text", () => {
+    const entries = commentIndex([
+      lineC("a", 3, 3, "  tighten this  "),
+      lineC("b", 5, 6, "second"),
+    ]);
+    expect(entries).toEqual([
+      { id: "a", line: 3, label: "Line 3", text: "tighten this", draft: false },
+      { id: "b", line: 6, label: "Lines 5–6", text: "second", draft: false },
+    ]);
+  });
+
+  test("anchors an entry to its endLine and labels the span", () => {
+    expect(commentIndex([lineC("a", 4, 9, "x")])[0]).toMatchObject({ line: 9, label: "Lines 4–9" });
+  });
+
+  test("orders entries by anchor line ascending, regardless of input order", () => {
+    const entries = commentIndex([lineC("late", 20, 20, "z"), lineC("early", 2, 2, "a")]);
+    expect(entries.map((e) => e.id)).toEqual(["early", "late"]);
+  });
+
+  test("excludes legacy (selection-anchored) annotations — they have no line to jump to", () => {
+    const entries = commentIndex([ann({ comment: "legacy note" }), lineC("l", 5, 5, "inline")]);
+    expect(entries.map((e) => e.id)).toEqual(["l"]);
+  });
+
+  test("excludes blank-comment annotations, matching the pending-inline predicate", () => {
+    const ids = commentIndex([lineC("blank", 3, 3, "   "), lineC("real", 4, 4, "hi")]).map(
+      (e) => e.id,
+    );
+    expect(ids).toEqual(["real"]);
+  });
+
+  test("includes unsent scratches as draft entries, keyed and trimmed", () => {
+    expect(commentIndex([], [scratch(3, 3, "  half a thought  ")])).toEqual([
+      { id: "3:3", line: 3, label: "Line 3", text: "half a thought", draft: true },
+    ]);
+  });
+
+  test("merges committed comments and draft scratches, sorted by line", () => {
+    const entries = commentIndex(
+      [lineC("committed", 10, 10, "placed comment")],
+      [scratch(2, 2, "unsent draft")],
+    );
+    expect(entries).toEqual([
+      { id: "2:2", line: 2, label: "Line 2", text: "unsent draft", draft: true },
+      { id: "committed", line: 10, label: "Line 10", text: "placed comment", draft: false },
+    ]);
+  });
+});
+
+// The navigator's search: filters the entry list by the comment text alone, so
+// typing narrows the list without touching the plan text.
+describe("filterComments", () => {
+  const entries = commentIndex([
+    lineC("a", 2, 2, "Cache the cold path"),
+    lineC("b", 5, 5, "Tighten the verification section"),
+  ]);
+
+  test("returns every entry for a blank query", () => {
+    expect(filterComments(entries, "")).toEqual(entries);
+    expect(filterComments(entries, "   ")).toEqual(entries);
+  });
+
+  test("matches the comment text case-insensitively", () => {
+    expect(filterComments(entries, "CACHE").map((e) => e.id)).toEqual(["a"]);
+  });
+
+  test("trims the query before matching", () => {
+    expect(filterComments(entries, "  verification  ").map((e) => e.id)).toEqual(["b"]);
+  });
+
+  test("returns [] when nothing matches", () => {
+    expect(filterComments(entries, "zzzz")).toEqual([]);
+  });
+
+  test("searches the comment text, not the line label", () => {
+    // "Line 2" is entry a's label but appears in no comment — a label query finds nothing.
+    expect(filterComments(entries, "Line 2")).toEqual([]);
+  });
+});
+
+// The navigator's search underlines the matched substring live as the reviewer
+// types: this splits a comment into matched/unmatched segments, preserving the
+// text's original case in the matched slice.
+describe("highlightMatches", () => {
+  test("returns the whole text as one unmatched segment for a blank query", () => {
+    expect(highlightMatches("Cache the cold path", "")).toEqual([
+      { text: "Cache the cold path", match: false },
+    ]);
+    expect(highlightMatches("Cache the cold path", "   ")).toEqual([
+      { text: "Cache the cold path", match: false },
+    ]);
+  });
+
+  test("splits around a single match, keeping the matched slice's original case", () => {
+    expect(highlightMatches("Cache the cold path", "cache")).toEqual([
+      { text: "Cache", match: true },
+      { text: " the cold path", match: false },
+    ]);
+  });
+
+  test("marks every occurrence", () => {
+    expect(highlightMatches("warm then re-warm", "warm")).toEqual([
+      { text: "warm", match: true },
+      { text: " then re-", match: false },
+      { text: "warm", match: true },
+    ]);
+  });
+
+  test("handles a match in the middle and at the end", () => {
+    expect(highlightMatches("the sidecar", "sidecar")).toEqual([
+      { text: "the ", match: false },
+      { text: "sidecar", match: true },
+    ]);
+  });
+
+  test("returns a single unmatched segment when nothing matches", () => {
+    expect(highlightMatches("Cache the cold path", "zzz")).toEqual([
+      { text: "Cache the cold path", match: false },
+    ]);
+  });
+
+  test("trims the query before matching, mirroring filterComments", () => {
+    expect(highlightMatches("the sidecar", "  sidecar  ")).toEqual([
+      { text: "the ", match: false },
+      { text: "sidecar", match: true },
+    ]);
   });
 });
