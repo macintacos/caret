@@ -1,13 +1,16 @@
-// Theme switching (EXC-730): the Settings gear opens the theme dropdown, picking
-// a theme retints the whole chrome in realtime, and the choice survives a reload
+// Theme switching (EXC-730, EXC-761 picker round): the Settings gear opens the
+// theme picker — a bits-ui DropdownMenu, not a native select — where the active
+// theme reads selected, arrow/j/k navigation previews each theme live while the
+// menu stays open, and only Enter / outside-click dismiss it. Picking retints the
+// whole chrome (and the shadow-DOM diff view) in realtime and survives a reload
 // (it lives in browser localStorage, which outlives daemon runs). The wipe itself
-// isn't asserted — view-transition timing is unobservable to a web-first
-// assertion — only its end state. The scheme→diff-view threading is unit-covered
-// in ui/src/lib/diffview/options.test.ts.
+// isn't asserted — view-transition timing is unobservable to a web-first assertion
+// — only its end state. The scheme→diff-view threading is unit-covered in
+// ui/src/lib/diffview/options.test.ts.
 
 import { expect, test } from "./support/fixtures.ts";
 
-test("the Settings gear switches theme, retinting the UI and persisting across reload", async ({
+test("the theme picker previews themes live on keyboard nav and persists the pick", async ({
   daemon,
   page,
 }) => {
@@ -30,29 +33,64 @@ test("the Settings gear switches theme, retinting the UI and persisting across r
       );
       return span ? getComputedStyle(span).color : null;
     });
-  const darkKeyword = await tokenColor();
-  expect(darkKeyword).toBe("rgb(251, 146, 60)"); // caret-dark --accent (#fb923c)
+  expect(await tokenColor()).toBe("rgb(251, 146, 60)"); // caret-dark --accent (#fb923c)
 
-  // Open Settings from the gear and pick caret light.
+  // Open Settings from the gear, then open the theme picker (a DropdownMenu behind
+  // a .float-chip trigger button — no native <select>, EXC-761).
   await page.getByRole("button", { name: "Settings" }).click();
-  await page.locator(".theme-select").selectOption("caret-light");
+  await page.getByRole("button", { name: "Theme" }).click();
 
-  // The whole chrome retints: the root scheme attribute flips and the paper token
-  // becomes the light value.
+  // The picker is an open menu listing every theme as a radio option; the active
+  // one is checked. This coverage lives here since the option list is portalled and
+  // only real in a browser.
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+  await expect(page.getByRole("menuitemradio", { name: "caret dark" })).toBeVisible();
+  await expect(page.getByRole("menuitemradio", { name: "caret light" })).toBeVisible();
+  await expect(page.getByRole("menuitemradio", { name: "caret dark" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+
+  // Keyboard navigation previews the theme IMMEDIATELY while the menu stays open:
+  // ArrowDown moves off caret dark to caret light and retints the whole UI.
+  await page.keyboard.press("ArrowDown");
   await expect(html).toHaveAttribute("data-theme", "light");
+  await expect(menu).toBeVisible();
   const paper = await page.evaluate(() =>
     getComputedStyle(document.documentElement).getPropertyValue("--paper").trim(),
   );
   expect(paper).toBe("#fafafa");
-
-  // The shadow-DOM diff view retints too: the same keyword token now resolves to
-  // the caret-light accent. This guards the scheme→themeType thread end to end
-  // (App → DiffPlanView reactive options → the library) — a plain-const
-  // readerOptions would leave the diff on the dark theme and fail here.
+  // The shadow-DOM diff view retints too — the same keyword token resolves to the
+  // caret-light accent. Guards the scheme→themeType thread end to end.
   await expect.poll(tokenColor).toBe("rgb(194, 65, 12)"); // caret-light --accent (#c2410c)
 
-  // "Saved between daemon runs" is really browser-origin localStorage — it must
-  // survive a reload without the daemon holding any theme state.
+  // The vim key `k` mirrors ArrowUp: with two themes it wraps back to caret dark,
+  // still live, still open.
+  await page.keyboard.press("k");
+  await expect(html).toHaveAttribute("data-theme", "dark");
+  await expect(menu).toBeVisible();
+
+  // Clicking an option selects it and — unlike a native select — keeps the menu
+  // open for continued live switching.
+  await page.getByRole("menuitemradio", { name: "caret light" }).click();
+  await expect(html).toHaveAttribute("data-theme", "light");
+  await expect(menu).toBeVisible();
+
+  // Enter commits and dismisses the picker (the theme is already applied); the
+  // Settings dialog stays open beneath it.
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await page.keyboard.press("Enter");
+  await expect(menu).toBeHidden();
+  await expect(settings).toBeVisible();
+
+  // Escape then closes the Settings dialog itself (bits-ui routes the intent through
+  // onOpenChange to onClose).
+  await page.keyboard.press("Escape");
+  await expect(settings).toBeHidden();
+
+  // "Saved between daemon runs" is really browser-origin localStorage — the last
+  // pick must survive a reload without the daemon holding any theme state.
   await page.reload();
   await expect(html).toHaveAttribute("data-theme", "light");
 });

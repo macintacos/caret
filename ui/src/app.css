@@ -195,9 +195,15 @@
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   /* shadcn's neutral hover/active wash — NOT caret amber (that's --color-primary).
-     A subtle neutral grey mixed off paper→ink; the operands flip per scheme, so it
-     reads correct in both without a second block, like the .diffview hover. */
-  --color-accent: color-mix(in lab, var(--paper), var(--ink) 6%);
+     A neutral grey mixed off the RAISED paper (the --popover surface menus render
+     on) toward ink — matching --chip-hover's formula (paper-raised + 15% ink), the
+     brightness the topbar's .float-chip buttons hover to, so a menu/select highlight
+     reads at the same strength as every other neutral control (the old 6%-off-paper
+     wash was too faint to register). Kept a self-contained color-mix rather than a
+     var(--chip-hover) reference so the bridge block stays self-describing (a pinned
+     contract in shadcn-bridge.test.ts); the operands flip per scheme, so it reads
+     right in both without a second block. */
+  --color-accent: color-mix(in lab, var(--paper-raised), var(--ink) 15%);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
@@ -373,6 +379,21 @@ button {
    Controls that set their own size/leading (the toc filter, the dialog
    selects/textarea) override this via their unlayered component styles. */
 @layer base {
+  /* Bridge Tailwind v4's default border color to caret's rule token. v4 changed
+     the `border` utility's fallback color to `currentColor` (v3 defaulted to a
+     grey), and shadcn-svelte's own base rule — `* { @apply border-border }` — was
+     never copied when caret hand-bridged the tokens. Without it, every copied
+     component that writes a bare `border` / `border-t` (the dialog panels, footers,
+     the select/menu popovers) painted a hairline in the INK color — a bright near-
+     white line on caret-dark. Restoring shadcn's default makes those borders resolve
+     to --border (= --rule, a ~10% hairline). caret's own chrome always sets an
+     explicit border-color, so this only reaches the shadcn tree. */
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-border);
+  }
+
   textarea,
   input,
   select,
