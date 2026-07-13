@@ -51,6 +51,45 @@ The deep detail — the full bridge invariants, the amber-scarcity rule, `color-
 over `oklch` — lives in [`svelte-rules.md`](svelte-rules.md) § CSS-token discipline. Defer
 to it rather than restating it here.
 
+## The caret surface language
+
+The TopBar cluster (EXC-760) set the look every neutral control follows; keep new surfaces
+consistent with it rather than inventing a per-component treatment.
+
+- **Neutral controls wear `.float-chip`.** A button, a dropdown trigger, or any resting
+  control that isn't the primary action uses `variant="secondary"` **plus**
+  `class="float-chip"` — a soft solid fill (`--chip`) lifted off the surface with
+  **no hard border**, whose label rides `--ink-soft` and brightens to `--ink` on hover /
+  while its menu is open (`aria-expanded`). The `.float-chip` atom +
+  `--chip`/`--chip-hover` tokens live in `app.css`. Don't give a neutral control an
+  outline border; the chip fill is the affordance.
+- **Amber stays the single primary.** One action per surface carries amber
+  (`variant="default"` → `--primary`); everything else is a neutral chip. Don't spend
+  amber on secondary controls.
+- **Borders are hairlines, never bright.** Tailwind v4 defaults a bare `border` to
+  `currentColor` (the ink), which paints a bright near-white line on caret-dark. The
+  `* { border-color: var(--color-border) }` base rule in `app.css` bridges that default to
+  `--rule` (the ~10% hairline), so a copied component's `border`/`border-t` resolves
+  quiet. For a floating panel edge prefer a soft ring (`ring-1 ring-foreground/10`) over a
+  border. If you still see a bright divider, a component is overriding the bridged color —
+  fix the component, don't add another border on top.
+- **Menu highlight vs. selection.** A menu/select row's hover/keyboard highlight is
+  `bg-accent`, bound (via `--color-accent`) to `--chip-hover` so it matches the topbar's
+  button hover app-wide. The **active/selected** row instead carries an amber wash
+  (`--accent-wash`) — the same "amber marks the selection" language the diff view uses —
+  so the current choice reads distinct from one that's merely hovered.
+- **Modals compose `Modal.svelte`.** `ui/src/components/Modal.svelte` is the shared shell:
+  `kind="dialog"` (dismissible, e.g. Settings) or `kind="confirm"` (an `alertdialog`
+  guard, e.g. Approve/Reject) selects the bits-ui primitive, but the eyebrow, title,
+  description, footer band, and raised-paper surface are styled **once** so the modals
+  can't drift. A new modal reuses it instead of hand-rolling a Dialog. The shadcn
+  `dialog-*` and `alert-dialog-*` `content`/`footer` are kept visually aligned as its
+  base.
+- **Palette-derived affordances read the registry.** Anything that visualizes a theme (the
+  Settings theme swatch) derives its colors from the `THEMES` token set in
+  [`lib/theme.ts`](../../ui/src/lib/theme.ts), not literals — so any future palette works
+  with zero per-theme wiring (a token every theme must supply is safe to index).
+
 ## Icon-swap convention
 
 Stock shadcn-svelte components import icons from `@lucide/svelte`. caret vendors its icons

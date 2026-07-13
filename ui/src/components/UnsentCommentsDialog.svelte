@@ -1,9 +1,9 @@
 <script lang="ts">
   import type { PendingItem } from "../lib/feedback.ts";
   import type { IconName } from "../lib/icons.ts";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import Icon from "./Icon.svelte";
+  import Modal from "./Modal.svelte";
 
   interface Props {
     /** The unsent feedback a plain confirm would leave behind — the general-comment
@@ -33,74 +33,63 @@
   let hasComments = $derived(count > 0);
 
   // The primary path is Enter-confirmable (EXC-761 keeps today's behavior): focus
-  // the confirm action on open so a bare Enter activates it, rather than letting
-  // bits-ui land focus on Cancel.
+  // the confirm action on open (via Modal's onOpenAutoFocus) so a bare Enter
+  // activates it, rather than letting bits-ui land focus on Cancel.
   let confirmEl = $state<HTMLElement | null>(null);
 </script>
 
-<!-- shadcn AlertDialog: the confirm-guard role (`alertdialog`), a real focus trap,
-     and Escape-to-cancel come from bits-ui. App gates this with {#if}, so it mounts
-     open (controlled); Escape and the buttons route to the existing callbacks. Unlike
-     the old scrim, a backdrop click does NOT dismiss — correct for a confirm guard. -->
-<AlertDialog.Root open>
-  <AlertDialog.Content
-    onEscapeKeydown={() => onCancel()}
-    onOpenAutoFocus={(e) => {
-      e.preventDefault();
-      confirmEl?.focus();
-    }}
-  >
-    <AlertDialog.Header>
-      <span class="eyebrow">{action}</span>
-      <AlertDialog.Title>{action} this plan?</AlertDialog.Title>
-      <AlertDialog.Description class="body">
-        {consequence}
-        {#if hasComments}
-          You have {count} pending comment{count === 1 ? "" : "s"} that won't be sent.
-        {/if}
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-
+<!-- Composes the shared Modal as a confirm guard (kind="confirm": role="alertdialog",
+     no backdrop dismiss — a verdict is deliberate; Escape still cancels). App gates
+     this with {#if}, so it mounts open; the buttons route to the existing callbacks. -->
+<Modal
+  kind="confirm"
+  open
+  eyebrow={action}
+  title="{action} this plan?"
+  onDismiss={onCancel}
+  onOpenAutoFocus={(e) => {
+    e.preventDefault();
+    confirmEl?.focus();
+  }}
+>
+  {#snippet description()}
+    {consequence}
     {#if hasComments}
-      <!-- A preview of exactly what a plain confirm would leave behind, so the
-           reviewer sees their unsent work before deciding. Each row pairs a short
-           anchor (the general note, a line reference, or an unsent draft's range)
-           with the comment text, clamped so a long comment stays a scan-line. -->
-      <ul class="comments" aria-label="Your unsent comments">
-        {#each items as item, i (i)}
-          <li class="comment">
-            <span class="anchor metric">{item.label}</span>
-            <span class="text">{item.text}</span>
-          </li>
-        {/each}
-      </ul>
+      You have {count} pending comment{count === 1 ? "" : "s"} that won't be sent.
     {/if}
+  {/snippet}
 
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel onclick={onCancel}>Cancel</AlertDialog.Cancel>
-      {#if hasComments}
-        <Button variant="outline" onclick={onRequestChanges}>
-          <Icon name="corner-up-left" size={14} />
-          Request changes
-        </Button>
-      {/if}
-      <AlertDialog.Action bind:ref={confirmEl} onclick={onConfirm}>
-        {#if icon}<Icon name={icon} size={14} />{/if}
-        {hasComments ? `${action} anyway` : action}
-      </AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
+  {#if hasComments}
+    <!-- A preview of exactly what a plain confirm would leave behind, so the
+         reviewer sees their unsent work before deciding. Each row pairs a short
+         anchor (the general note, a line reference, or an unsent draft's range)
+         with the comment text, clamped so a long comment stays a scan-line. -->
+    <ul class="comments" aria-label="Your unsent comments">
+      {#each items as item, i (i)}
+        <li class="comment">
+          <span class="anchor metric">{item.label}</span>
+          <span class="text">{item.text}</span>
+        </li>
+      {/each}
+    </ul>
+  {/if}
+
+  {#snippet footer()}
+    <Button variant="secondary" class="float-chip" onclick={onCancel}>Cancel</Button>
+    {#if hasComments}
+      <Button variant="secondary" class="float-chip" onclick={onRequestChanges}>
+        <Icon name="corner-up-left" size={14} />
+        Request changes
+      </Button>
+    {/if}
+    <Button bind:ref={confirmEl} onclick={onConfirm}>
+      {#if icon}<Icon name={icon} size={14} />{/if}
+      {hasComments ? `${action} anyway` : action}
+    </Button>
+  {/snippet}
+</Modal>
 
 <style>
-  /* caret's dialog identity: the uppercase eyebrow over the title. The panel,
-     title, and description wear the bridged shadcn look; colors ride caret tokens. */
-  .eyebrow {
-    font-size: var(--text-xs);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--ink-soft);
-  }
   /* Preview of the unsent feedback: a quiet sunk container — no accent (reserved
      for actions), muted ink, hairline row dividers — reading as "here's what you'd
      leave behind". Height-capped and scrollable so a long queue never grows the
