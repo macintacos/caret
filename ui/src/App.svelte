@@ -141,9 +141,10 @@
   // Distinct source lines the pending line-anchored comments cover (union of
   // ranges), for the status strip's at-a-glance "N comments · M lines" readout.
   let coveredLines = $derived(coveredLineCount(work.annotations));
-  // The plan's inline comments as a navigable, searchable index for the comment
-  // navigator — one entry per line-anchored comment, in document order.
-  let comments = $derived(commentIndex(work.annotations));
+  // The plan's inline comments + unsent drafts as a navigable, searchable index for
+  // the comment navigator — committed line-anchored comments plus the retained
+  // composer scratches (flagged draft), in document order.
+  let comments = $derived(commentIndex(work.annotations, scratches));
 
   // Reveal a comment from the navigator: focus it (the source view highlights the
   // card in amber and expands it) and scroll the plan to its line.

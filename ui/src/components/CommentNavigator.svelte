@@ -7,7 +7,7 @@
   // modal: clicking a row leaves it open so the reviewer can walk the list while the
   // plan scrolls behind it, and it dismisses only on Escape, the close button, or a
   // re-toggle. Mirrors the SourceToc contents pane's filter-then-jump idiom.
-  import { type CommentIndexEntry, filterComments } from "../lib/feedback.ts";
+  import { type CommentIndexEntry, filterComments, highlightMatches } from "../lib/feedback.ts";
 
   interface Props {
     /** Whether the navigator is shown. The status strip's tally button toggles it. */
@@ -77,11 +77,22 @@
               type="button"
               class="nav-item"
               class:active={entry.id === activeId}
+              class:draft={entry.draft}
               aria-current={entry.id === activeId ? "true" : undefined}
               onclick={() => onReveal(entry)}
             >
-              <span class="nav-item-ref metric">{entry.label}</span>
-              <span class="nav-item-text">{entry.text}</span>
+              <span class="nav-item-head">
+                <span class="nav-item-ref metric">{entry.label}</span>
+                {#if entry.draft}<span class="nav-draft-tag metric">draft</span>{/if}
+              </span>
+              <!-- Underline the run(s) matching the live search query. Kept on one
+                   line so no whitespace text node splits the segments (the text is
+                   white-space: pre-wrap). -->
+              <span class="nav-item-text"
+                >{#each highlightMatches(entry.text, query) as seg}{#if seg.match}<mark
+                      class="nav-match">{seg.text}</mark
+                    >{:else}{seg.text}{/if}{/each}</span
+              >
             </button>
           </li>
         {/each}
@@ -217,19 +228,45 @@
   .nav-item:hover {
     background: var(--paper-sunk);
   }
+  /* A draft (an unsent composer scratch) reads as provisional: a dashed left rule +
+     a "draft" tag, distinct from a committed comment's solid frame. */
+  .nav-item.draft {
+    border-left-style: dashed;
+    border-left-color: var(--rule-strong);
+  }
+  /* Active (revealed) wins the left rule in amber — the brand cue the focused card
+     carries in the plan — even for a draft, whose tag still marks it provisional. */
   .nav-item.active {
     background: var(--paper-sunk);
-    border-left-color: var(--accent);
+    border-left: 2px solid var(--accent);
   }
   .nav-item:focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: -2px;
+  }
+  /* The row's lead line: the range reference and, for a draft, its tag. */
+  .nav-item-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
   }
   .nav-item-ref {
     font-size: var(--text-2xs);
     font-weight: 600;
     letter-spacing: 0.02em;
     color: var(--ink-faint);
+  }
+  /* The draft tag: a quiet uppercase pill marking an unsent scratch as provisional,
+     kept neutral so amber stays the navigation cue. */
+  .nav-draft-tag {
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding: 0 0.3rem;
+    border: 1px dashed var(--rule-strong);
+    border-radius: var(--radius);
   }
   .nav-item-text {
     font-size: var(--text-sm);
@@ -241,6 +278,16 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
     white-space: pre-wrap;
+  }
+  /* The live search match: underlined and lifted to full ink so the matched
+     substring stands out as the reviewer types, without the <mark> default fill. */
+  .nav-match {
+    background: none;
+    color: var(--ink);
+    font-weight: 600;
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 2px;
   }
 
   .nav-empty {

@@ -6,6 +6,7 @@ import {
   coveredLineCount,
   filterComments,
   formatFeedback,
+  highlightMatches,
   pendingInlineCount,
   pendingItems,
   pendingLineCount,
@@ -443,8 +444,8 @@ describe("commentIndex", () => {
       lineC("b", 5, 6, "second"),
     ]);
     expect(entries).toEqual([
-      { id: "a", line: 3, label: "Line 3", text: "tighten this" },
-      { id: "b", line: 6, label: "Lines 5–6", text: "second" },
+      { id: "a", line: 3, label: "Line 3", text: "tighten this", draft: false },
+      { id: "b", line: 6, label: "Lines 5–6", text: "second", draft: false },
     ]);
   });
 
@@ -467,6 +468,23 @@ describe("commentIndex", () => {
       (e) => e.id,
     );
     expect(ids).toEqual(["real"]);
+  });
+
+  test("includes unsent scratches as draft entries, keyed and trimmed", () => {
+    expect(commentIndex([], [scratch(3, 3, "  half a thought  ")])).toEqual([
+      { id: "3:3", line: 3, label: "Line 3", text: "half a thought", draft: true },
+    ]);
+  });
+
+  test("merges committed comments and draft scratches, sorted by line", () => {
+    const entries = commentIndex(
+      [lineC("committed", 10, 10, "placed comment")],
+      [scratch(2, 2, "unsent draft")],
+    );
+    expect(entries).toEqual([
+      { id: "2:2", line: 2, label: "Line 2", text: "unsent draft", draft: true },
+      { id: "committed", line: 10, label: "Line 10", text: "placed comment", draft: false },
+    ]);
   });
 });
 
@@ -498,5 +516,54 @@ describe("filterComments", () => {
   test("searches the comment text, not the line label", () => {
     // "Line 2" is entry a's label but appears in no comment — a label query finds nothing.
     expect(filterComments(entries, "Line 2")).toEqual([]);
+  });
+});
+
+// The navigator's search underlines the matched substring live as the reviewer
+// types: this splits a comment into matched/unmatched segments, preserving the
+// text's original case in the matched slice.
+describe("highlightMatches", () => {
+  test("returns the whole text as one unmatched segment for a blank query", () => {
+    expect(highlightMatches("Cache the cold path", "")).toEqual([
+      { text: "Cache the cold path", match: false },
+    ]);
+    expect(highlightMatches("Cache the cold path", "   ")).toEqual([
+      { text: "Cache the cold path", match: false },
+    ]);
+  });
+
+  test("splits around a single match, keeping the matched slice's original case", () => {
+    expect(highlightMatches("Cache the cold path", "cache")).toEqual([
+      { text: "Cache", match: true },
+      { text: " the cold path", match: false },
+    ]);
+  });
+
+  test("marks every occurrence", () => {
+    expect(highlightMatches("warm then re-warm", "warm")).toEqual([
+      { text: "warm", match: true },
+      { text: " then re-", match: false },
+      { text: "warm", match: true },
+    ]);
+  });
+
+  test("handles a match in the middle and at the end", () => {
+    expect(highlightMatches("the sidecar", "sidecar")).toEqual([
+      { text: "the ", match: false },
+      { text: "sidecar", match: true },
+    ]);
+  });
+
+  test("returns a single unmatched segment when nothing matches", () => {
+    expect(highlightMatches("Cache the cold path", "zzz")).toEqual([
+      { text: "Cache the cold path", match: false },
+    ]);
+  });
+
+  test("trims the query before matching, mirroring filterComments", () => {
+    expect(highlightMatches("the sidecar", "  sidecar  ")).toEqual([
+      { text: "the ", match: false },
+      { text: "sidecar", match: true },
+    ]);
   });
 });
