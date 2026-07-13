@@ -1,9 +1,15 @@
 <script lang="ts">
   import type { Annotation } from "@core/types";
+  import { Badge } from "$lib/components/ui/badge/index.js";
+  import { Button } from "$lib/components/ui/button/index.js";
+  import * as Collapsible from "$lib/components/ui/collapsible/index.js";
+  import { Kbd } from "$lib/components/ui/kbd/index.js";
+  import { Textarea } from "$lib/components/ui/textarea/index.js";
   import { type ComposerScratch, rangeLabel } from "../lib/diffview/commenting.ts";
   import { formatFeedback, pendingInlineCount, pendingLineCount } from "../lib/feedback.ts";
-  import { isCancelKey, isSubmitChord } from "../lib/keys.ts";
+  import { isSubmitChord } from "../lib/keys.ts";
   import Icon from "./Icon.svelte";
+  import Modal from "./Modal.svelte";
 
   interface Props {
     annotations: Annotation[];
@@ -37,7 +43,9 @@
     onDiscardScratch,
   }: Props = $props();
 
-  let textarea = $state<HTMLTextAreaElement | undefined>();
+  // The general-comment input, focused on open via the Modal's onOpenAutoFocus
+  // hook (bits-ui owns initial focus; this lands it on the primary input).
+  let textarea = $state<HTMLElement | null>(null);
 
   // Live preview of exactly what the agent will receive.
   let preview = $derived(formatFeedback(annotations, generalComment, planText));
@@ -66,46 +74,46 @@
       : `${scratches.length} unsent drafts below won't be sent unless you Save them.`,
   );
 
-  $effect(() => {
-    textarea?.focus();
-  });
-
   function submit() {
     onSubmit(generalComment.trim());
   }
+  // Escape-to-dismiss is owned by bits-ui (Modal's onDismiss → onCancel); this
+  // handler carries only caret's own ⌘↵/Ctrl+Enter submit chord, and rides the
+  // body wrapper so it fires wherever focus sits inside the dialog.
   function onKey(e: KeyboardEvent) {
-    if (isCancelKey(e)) onCancel();
-    else if (isSubmitChord(e)) submit();
+    if (isSubmitChord(e)) submit();
   }
 </script>
 
-<div
-  class="scrim"
-  role="presentation"
-  onclick={(e) => e.target === e.currentTarget && onCancel()}
+<!-- Composes the shared Modal (kind="dialog": Escape + backdrop dismiss, routed to
+     onCancel). App gates this with {#if showDialog}, so it mounts open. The eyebrow
+     keeps caret's dialog signature; the title is the fuller heading bits-ui wires as
+     the accessible name. -->
+<Modal
+  kind="dialog"
+  open
+  eyebrow="Request changes"
+  title="Send the plan back for revision"
+  onDismiss={onCancel}
+  onOpenAutoFocus={(e) => {
+    // Land focus on the general-comment input rather than bits-ui's default
+    // first-focusable; if the ref isn't bound yet, let bits-ui do its default.
+    if (textarea) {
+      e.preventDefault();
+      textarea.focus();
+    }
+  }}
 >
-  <div
-    class="dialog"
-    role="dialog"
-    aria-modal="true"
-    aria-label="Request changes"
-    tabindex="-1"
-    onkeydown={onKey}
-  >
-    <header>
-      <span class="eyebrow">Request changes</span>
-      <h2>Send the plan back for revision</h2>
-    </header>
-
+  <div class="body" role="presentation" onkeydown={onKey}>
     <label class="field">
       <span class="lbl">General comment</span>
-      <textarea
-        bind:this={textarea}
+      <Textarea
+        bind:ref={textarea}
         value={generalComment}
         oninput={(e) => onGeneralCommentInput(e.currentTarget.value)}
-        rows="4"
+        rows={4}
         placeholder="Describe the overall changes you want…"
-      ></textarea>
+      />
     </label>
 
     <div class="summary" class:empty>
@@ -124,34 +132,46 @@
          and preview above never include them — so they are surfaced here for a
          conscious Save (graduate into the sent feedback) or Discard, and the
          drafts-hint above states they won't be sent unless Saved. Each row keeps
-         its Save/Discard in view (only the full-text preview collapses) and reads
-         "unsent", never "Draft" (a created, pending annotation), so it never looks
-         like a comment that was actually added. -->
+         its Save/Discard OUTSIDE the collapsible (only the full-text preview
+         collapses) and reads "unsent", never "Draft" (a created, pending
+         annotation), so it never looks like a comment that was actually added. -->
     {#if scratches.length > 0}
       <section class="scratches" aria-labelledby="scratches-label">
         <span class="lbl" id="scratches-label">
           Unsent comments
-          <span class="tally">{scratches.length}</span>
+          <Badge variant="outline" class="tally">{scratches.length}</Badge>
         </span>
         <p class="scratches-note">
           Comments you started but never sent. Save one to include it, or discard it.
         </p>
         {#each scratches as s (s.key)}
           <div class="scratch-row">
-            <details class="scratch-disclosure">
-              <summary>
+            <Collapsible.Root class="scratch-disclosure">
+              <Collapsible.Trigger class="scratch-trigger">
                 <span class="anchor metric">{rangeLabel(s.startLine, s.endLine)}</span>
                 <span class="snippet">{s.text}</span>
-              </summary>
-              <pre class="scratch-text">{s.text}</pre>
-            </details>
+              </Collapsible.Trigger>
+              <Collapsible.Content>
+                <pre class="scratch-text">{s.text}</pre>
+              </Collapsible.Content>
+            </Collapsible.Root>
             <div class="scratch-actions">
-              <button class="save" type="button" onclick={() => onSaveScratch(s.key)}>
+              <Button
+                variant="secondary"
+                size="sm"
+                class="float-chip save"
+                onclick={() => onSaveScratch(s.key)}
+              >
                 Save
-              </button>
-              <button class="discard" type="button" onclick={() => onDiscardScratch(s.key)}>
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                class="float-chip discard"
+                onclick={() => onDiscardScratch(s.key)}
+              >
                 Discard
-              </button>
+              </Button>
             </div>
           </div>
         {/each}
@@ -159,62 +179,41 @@
     {/if}
 
     {#if preview}
-      <details class="preview">
-        <summary>Preview feedback sent to the agent</summary>
-        <pre>{preview}</pre>
-      </details>
+      <div class="preview">
+        <Collapsible.Root>
+          <Collapsible.Trigger class="preview-trigger">
+            Preview feedback sent to the agent
+          </Collapsible.Trigger>
+          <Collapsible.Content>
+            <pre>{preview}</pre>
+          </Collapsible.Content>
+        </Collapsible.Root>
+      </div>
     {/if}
-
-    <footer>
-      <button class="ghost" onclick={onCancel}>Cancel</button>
-      <button
-        class="deny"
-        onclick={submit}
-        disabled={!preview}
-        aria-keyshortcuts="Meta+Enter Control+Enter"
-      >
-        Send for revision
-        <span class="kbd" aria-hidden="true">
-          <Icon name="command" size={12} /><Icon name="corner-down-left" size={12} />
-        </span>
-      </button>
-    </footer>
   </div>
-</div>
+
+  {#snippet footer()}
+    <Button variant="secondary" class="float-chip" onclick={onCancel}>Cancel</Button>
+    <Button
+      onclick={submit}
+      disabled={!preview}
+      aria-keyshortcuts="Meta+Enter Control+Enter"
+    >
+      Send for revision
+      <Kbd class="send-kbd" aria-hidden="true">
+        <Icon name="command" size={12} /><Icon name="corner-down-left" size={12} />
+      </Kbd>
+    </Button>
+  {/snippet}
+</Modal>
 
 <style>
-  .scrim {
-    position: fixed;
-    inset: 0;
-    z-index: 100;
-    background: color-mix(in srgb, var(--paper-sunk) 70%, rgba(0, 0, 0, 0.4));
-    backdrop-filter: blur(3px);
+  /* Body is a plain flow column; Modal's grid owns the header→body→footer rhythm,
+     so this only needs the intra-body spacing. It also carries the ⌘↵ keydown
+     (role="presentation": no semantics, mirrors the scrim's role in the old shell). */
+  .body {
     display: grid;
-    place-items: center;
-    padding: 2rem;
-    /* Scrim fade on the fast tier; the dialog rises a step slower (--dur-base).
-       The global reduced-motion rule in app.css collapses both to a static
-       frame when the OS asks. */
-    animation: fade var(--dur-fast) var(--ease-out);
-  }
-  .dialog {
-    width: min(560px, 100%);
-    background: var(--paper-raised);
-    border: 1px solid var(--rule-strong);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-card);
-    padding: 1.5rem;
-    animation: rise var(--dur-base) var(--ease-out);
-  }
-  header {
-    margin-bottom: 1.25rem;
-  }
-  h2 {
-    font-weight: 500;
-    /* Display one-off: the dialog title sits above the chrome type scale. */
-    font-size: 1.35rem;
-    margin: 0.25rem 0 0;
-    color: var(--ink);
+    gap: 0.8rem;
   }
   .field {
     display: block;
@@ -227,30 +226,11 @@
     color: var(--ink-soft);
     margin-bottom: 0.4rem;
   }
-  textarea {
-    width: 100%;
-    resize: vertical;
-    font-size: var(--text-lg);
-    line-height: var(--leading-snug);
-    color: var(--ink);
-    background: var(--paper);
-    border: 1px solid var(--rule);
-    border-radius: var(--radius);
-    padding: 0.6rem 0.7rem;
-  }
-  /* The accent + accent-wash ring matches the source-view ToC filter's focus
-     affordance, so every text input in the app focuses the same way. */
-  textarea:focus {
-    outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 2px var(--accent-wash);
-  }
   .summary {
     /* Matches the .mono atom's size (--text-sm) but stays in the sans face — this
        is a count summary, not code, so it takes the size without the mono font. */
     font-size: var(--text-sm);
     color: var(--ink-faint);
-    margin-top: 0.6rem;
   }
   /* The empty-state nudge reads as guidance, not a tally — italic to set it apart
      from the count summary without spending a stronger ink or the accent. */
@@ -261,7 +241,7 @@
   /* The unsent-draft clarifier: the same muted register as the count summary,
      since it qualifies that count rather than competing with it. */
   .drafts-hint {
-    margin: 0.35rem 0 0;
+    margin: 0;
     font-size: var(--text-sm);
     color: var(--ink-faint);
   }
@@ -272,7 +252,6 @@
      draft never carries the actionable accent the dialog reserves for real
      feedback. */
   .scratches {
-    margin-top: 1rem;
     padding: 0.7rem 0.8rem;
     border: 1px dashed var(--rule);
     border-radius: var(--radius);
@@ -284,15 +263,11 @@
     gap: 0.4rem;
     margin-bottom: 0;
   }
-  /* The count chip beside the section label, matching the tabular metric face. */
-  .tally {
+  /* The count chip beside the section label: an outline Badge, kept to the tabular
+     metric face so a growing count stays fixed-width. */
+  .scratches :global(.tally) {
     font-family: var(--font-mono);
-    font-size: var(--text-2xs);
     font-variant-numeric: tabular-nums;
-    color: var(--ink-faint);
-    padding: 0.05rem 0.3rem;
-    border: 1px solid var(--rule);
-    border-radius: var(--radius-sm);
     text-transform: none;
     letter-spacing: 0;
   }
@@ -316,15 +291,24 @@
     margin-top: 0.4rem;
     padding: 0.4rem 0.55rem;
   }
-  .scratch-disclosure {
+  .scratches :global(.scratch-disclosure) {
     flex: 1 1 auto;
     min-width: 0;
   }
-  .scratch-disclosure summary {
-    cursor: pointer;
+  /* The disclosure trigger is a bits-ui Collapsible.Trigger (a <button>); reset its
+     button chrome so it reads as the old <summary> line, not a control. */
+  .scratches :global(.scratch-trigger) {
     display: flex;
     align-items: baseline;
     gap: 0.5rem;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    text-align: start;
+    cursor: pointer;
+    color: inherit;
+    font: inherit;
   }
   /* The line-anchor label: a numeric chrome surface, so it takes the tabular
      metric face the rest of the review's line references use. */
@@ -356,36 +340,23 @@
     display: flex;
     gap: 0.5rem;
   }
-  .scratch-actions button {
-    border-radius: var(--radius);
-    font-size: var(--text-sm);
-    font-weight: 600;
-    padding: 0.3rem 0.7rem;
-    border: 1px solid var(--rule);
-    background: transparent;
-    color: var(--ink-soft);
-  }
-  /* Save is the affirmative action — it graduates the draft into the sent
-     feedback — so it earns the accent on hover, matching the dialog's primary
-     button. Discard stays neutral. */
-  .scratch-actions .save:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-  .scratch-actions .discard:hover {
-    color: var(--ink);
-    border-color: var(--rule-strong);
-  }
 
+  /* Committed-feedback preview: a quiet sunk container behind a disclosure, showing
+     exactly what the agent will receive. */
   .preview {
-    margin-top: 1rem;
     border: 1px solid var(--rule);
     border-radius: var(--radius);
     background: var(--paper-sunk);
+    overflow: hidden;
   }
-  .preview summary {
-    cursor: pointer;
+  .preview :global(.preview-trigger) {
+    display: block;
+    width: 100%;
     padding: 0.5rem 0.7rem;
+    border: 0;
+    background: none;
+    text-align: start;
+    cursor: pointer;
     font-size: var(--text-xs);
     color: var(--ink-soft);
   }
@@ -399,59 +370,13 @@
     color: var(--ink);
     border-top: 1px solid var(--rule);
   }
-  footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.6rem;
-    margin-top: 1.5rem;
-  }
-  .ghost,
-  .deny {
-    border-radius: var(--radius);
-    font-size: var(--text-base);
-    font-weight: 600;
-    padding: 0.5rem 1rem;
-  }
-  .ghost {
+
+  /* The ⌘↵ cap rides inside the filled Send button, so it sheds the Kbd chip's own
+     light fill and inherits the button ink — subtle glyphs on the amber, not a
+     light box punched into it. */
+  :global(.send-kbd) {
     background: transparent;
-    color: var(--ink-soft);
-    border: 1px solid var(--rule);
-  }
-  .ghost:hover {
-    color: var(--ink);
-  }
-  .deny {
-    background: var(--ink);
-    color: var(--paper);
-    border: 1px solid var(--ink);
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-  }
-  .deny:hover:not(:disabled) {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--accent-ink);
-  }
-  .deny:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-  .kbd {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.15rem;
-    opacity: 0.75;
-  }
-  @keyframes fade {
-    from {
-      opacity: 0;
-    }
-  }
-  @keyframes rise {
-    from {
-      opacity: 0;
-      transform: translateY(8px) scale(0.99);
-    }
+    color: inherit;
+    opacity: 0.8;
   }
 </style>

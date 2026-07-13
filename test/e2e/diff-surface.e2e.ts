@@ -74,7 +74,7 @@ test("request-changes with a general comment round-trips on the source-view surf
   await waitPastSafeModeGrace(page);
 
   const feedback = "Please tighten the verification section.";
-  const dialog = page.getByRole("dialog", { name: "Request changes" });
+  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
   await page.getByRole("button", { name: "Request changes" }).click();
   await expect(dialog).toBeVisible();
   await dialog.locator("textarea").fill(feedback);
@@ -1249,7 +1249,7 @@ async function scratchThenOpenDialog(page: Page, line: number, text: string): Pr
   await expect(scratchMarker(page)).toBeVisible();
 
   await page.getByRole("button", { name: "Request changes" }).click();
-  const dialog = page.getByRole("dialog", { name: "Request changes" });
+  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
   await expect(dialog).toBeVisible();
   return dialog;
 }
@@ -1267,7 +1267,7 @@ test("the Request Changes dialog lists an unsent scratch, collapsed and uncounte
   const dialog = await scratchThenOpenDialog(page, 3, "an unsent thought on line 3");
 
   // The scratch is listed under "Unsent comments", collapsed (its text shows in
-  // the summary preview, the full body is in the closed <details>).
+  // the trigger's one-line snippet, the full body behind the collapsed disclosure).
   const section = dialog.locator(".scratches");
   await expect(section).toBeVisible();
   await expect(section).toContainText("Unsent comments");
@@ -1294,9 +1294,9 @@ test("Saving a scratch graduates it into the sent feedback", async ({ daemon, pa
 
   const dialog = await scratchThenOpenDialog(page, 3, "save me into the review");
 
-  // Expand the row and Save it. The scratch leaves the unsent list and becomes a
-  // committed comment: the count summary and the preview now include it.
-  await dialog.locator(".scratch-row summary").click();
+  // Save it — the action sits outside the collapsed disclosure (EXC-746), so no
+  // expand is needed. The scratch leaves the unsent list and becomes a committed
+  // comment: the count summary and the preview now include it.
   await dialog.locator(".scratch-row .save").click();
 
   await expect(dialog.locator(".scratch-row")).toHaveCount(0);
@@ -1322,7 +1322,7 @@ test("Discarding a scratch removes it and never sends it", async ({ daemon, page
 
   const dialog = await scratchThenOpenDialog(page, 3, "discard this draft");
 
-  await dialog.locator(".scratch-row summary").click();
+  // Discard sits outside the collapsed disclosure (EXC-746), so no expand is needed.
   await dialog.locator(".scratch-row .discard").click();
 
   // The scratch is gone from the dialog, and the underlying Resume marker is gone

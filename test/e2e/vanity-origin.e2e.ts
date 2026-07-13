@@ -38,7 +38,7 @@ test("request changes under caret.localhost rejects with feedback", async ({ dae
   await expect(page.locator(".diff-plan")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
-  const dialog = page.getByRole("dialog", { name: "Request changes" });
+  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
   await page.getByRole("button", { name: "Request changes" }).click();
   await expect(dialog).toBeVisible();
   await dialog.locator("textarea").fill(FEEDBACK);

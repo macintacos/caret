@@ -49,7 +49,7 @@ test("a pending inline comment guards approve and routes to request-changes inta
 
   // Routing to "Request changes" carries the seeded comment into that dialog.
   await guard.getByRole("button", { name: "Request changes" }).click();
-  const dialog = page.getByRole("dialog", { name: "Request changes" });
+  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
   await expect(dialog).toBeVisible();
   await expect(dialog.locator(".summary")).toContainText("1 comment");
   await expect(dialog.locator(".preview pre")).toContainText("explain the cold cost");

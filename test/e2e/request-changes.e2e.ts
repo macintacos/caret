@@ -16,7 +16,7 @@ test("dialog opens, Escape closes, Cmd/Ctrl+Enter submits a rejection with feedb
   await expect(page.locator(".diff-plan")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
-  const dialog = page.getByRole("dialog", { name: "Request changes" });
+  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
 
   // Open → Escape closes. Anchor on the autofocused textarea before pressing so
   // the key event reliably originates inside the dialog.
@@ -59,7 +59,7 @@ test("a line-anchored annotation reaches Decision.feedback as a line reference p
 
   // Open the dialog and submit with no general comment — the seeded annotation
   // alone produces feedback, so the deny button is enabled.
-  const dialog = page.getByRole("dialog", { name: "Request changes" });
+  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
   await page.getByRole("button", { name: "Request changes" }).click();
   await expect(dialog).toBeVisible();
   // The preview already shows the new format the agent will receive — the line
@@ -96,15 +96,15 @@ test("a scratch's Save shows without expanding the row and graduates it into the
   await expect(page.locator(".diff-plan")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
-  const dialog = page.getByRole("dialog", { name: "Request changes" });
+  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
   await page.getByRole("button", { name: "Request changes" }).click();
   await expect(dialog).toBeVisible();
 
   // The regression (EXC-746): the scratch's Save is visible WITHOUT expanding any
-  // row. Before the fix it lived inside a collapsed <details> body and was hidden,
-  // so a reviewer could hit "Send for revision" and drop the draft never having
-  // seen Save. A unit test can't catch this — happy-dom renders <details> children
-  // regardless of `open` — so this real-Chromium visibility check is the guard.
+  // row. Before the fix it lived inside the collapsed disclosure body and was
+  // hidden, so a reviewer could hit "Send for revision" and drop the draft never
+  // having seen Save. A unit test can't catch this — happy-dom keeps the collapsed
+  // disclosure's content mounted — so this real-Chromium visibility check is the guard.
   const save = dialog.locator(".scratch-row .save");
   await expect(save).toBeVisible();
 

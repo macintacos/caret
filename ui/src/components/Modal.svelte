@@ -20,8 +20,9 @@
     title: string;
     /** Any dismissal intent (Escape always; backdrop only for kind="dialog"). */
     onDismiss: () => void;
-    /** confirm-only: bits-ui AlertDialog's open-autofocus hook, e.g. to land focus
-     * on the confirm action instead of Cancel. Passed straight through. */
+    /** bits-ui's open-autofocus hook (both roles), e.g. to land focus on the
+     * confirm action instead of Cancel, or on a dialog's primary input. Passed
+     * straight through to the Content of whichever primitive `kind` selects. */
     onOpenAutoFocus?: (e: Event) => void;
     /** Optional description, rendered inside the primitive's Description element so
      * bits-ui wires aria-describedby. A snippet so a consumer can compose dynamic
@@ -67,7 +68,7 @@
   </AlertDialog.Root>
 {:else}
   <Dialog.Root {open} onOpenChange={(o) => { if (!o) onDismiss(); }}>
-    <Dialog.Content showCloseButton={false}>
+    <Dialog.Content showCloseButton={false} {onOpenAutoFocus}>
       <Dialog.Header class="m-head">
         {#if eyebrow}<span class="eyebrow">{eyebrow}</span>{/if}
         <Dialog.Title class="m-title">{title}</Dialog.Title>

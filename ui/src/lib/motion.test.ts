@@ -11,7 +11,6 @@ import { join } from "node:path";
 const uiDir = join(import.meta.dir, "..");
 const appCss = await Bun.file(join(uiDir, "app.css")).text();
 const composer = await Bun.file(join(uiDir, "components/SourceComposer.svelte")).text();
-const dialog = await Bun.file(join(uiDir, "components/RequestChangesDialog.svelte")).text();
 const emptyState = await Bun.file(join(uiDir, "components/EmptyState.svelte")).text();
 
 // Every light-DOM chrome component whose CSS carries a one-shot reveal or a
@@ -111,7 +110,7 @@ describe("the global prefers-reduced-motion rule", () => {
   });
 });
 
-describe("the two formerly-unguarded animations reference the tokens", () => {
+describe("the formerly-unguarded composer reveal references the tokens", () => {
   test("SourceComposer's reveal uses a duration + easing token and is opacity-only", () => {
     // The `animation:` shorthand on the composer carries a var(--dur-*) and a
     // var(--ease-*), not a raw seconds/ease-out literal.
@@ -127,16 +126,6 @@ describe("the two formerly-unguarded animations reference the tokens", () => {
     const keyframes = composer.match(/@keyframes reveal\s*\{([\s\S]*?)\n {2}\}/)?.[1] ?? "";
     expect(keyframes).toContain("opacity");
     expect(keyframes).not.toContain("transform");
-  });
-
-  test("RequestChangesDialog's fade + rise use a duration + easing token", () => {
-    const fade = dialog.match(/animation:\s*fade\s+([^;]+);/)?.[1] ?? "";
-    const rise = dialog.match(/animation:\s*rise\s+([^;]+);/)?.[1] ?? "";
-    for (const decl of [fade, rise]) {
-      expect(decl).toContain("var(--dur-");
-      expect(decl).toContain("var(--ease-");
-      expect(decl).not.toMatch(/\d+(\.\d+)?s\b/);
-    }
   });
 });
 
