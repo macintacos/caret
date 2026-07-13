@@ -94,6 +94,7 @@
   open
   eyebrow="Request changes"
   title="Send the plan back for revision"
+  contentClass="sm:max-w-xl"
   onDismiss={onCancel}
   onOpenAutoFocus={(e) => {
     // Land focus on the general-comment input rather than bits-ui's default

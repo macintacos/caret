@@ -32,6 +32,10 @@
     children: Snippet;
     /** Footer actions (rendered in the shared footer band). */
     footer?: Snippet;
+    /** Extra classes for the Content element, mainly to widen a content-heavy
+     * modal past the shadcn default (max-w-sm) — e.g. "sm:max-w-xl". Merged via
+     * the primitive's cn(), so a later max-w wins over the default. */
+    contentClass?: string;
   }
   let {
     kind = "dialog",
@@ -43,6 +47,7 @@
     description,
     children,
     footer,
+    contentClass,
   }: Props = $props();
 </script>
 
@@ -54,7 +59,7 @@
      rolling a look that drifts. -->
 {#if kind === "confirm"}
   <AlertDialog.Root {open}>
-    <AlertDialog.Content onEscapeKeydown={() => onDismiss()} {onOpenAutoFocus}>
+    <AlertDialog.Content onEscapeKeydown={() => onDismiss()} {onOpenAutoFocus} class={contentClass}>
       <AlertDialog.Header class="m-head">
         {#if eyebrow}<span class="eyebrow">{eyebrow}</span>{/if}
         <AlertDialog.Title class="m-title">{title}</AlertDialog.Title>
@@ -68,7 +73,7 @@
   </AlertDialog.Root>
 {:else}
   <Dialog.Root {open} onOpenChange={(o) => { if (!o) onDismiss(); }}>
-    <Dialog.Content showCloseButton={false} {onOpenAutoFocus}>
+    <Dialog.Content showCloseButton={false} {onOpenAutoFocus} class={contentClass}>
       <Dialog.Header class="m-head">
         {#if eyebrow}<span class="eyebrow">{eyebrow}</span>{/if}
         <Dialog.Title class="m-title">{title}</Dialog.Title>
