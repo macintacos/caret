@@ -11,6 +11,7 @@
   import Icon from "./Icon.svelte";
   import NotifyBell from "./NotifyBell.svelte";
   import ReviewSwitcher from "./ReviewSwitcher.svelte";
+  import SplitButton from "./SplitButton.svelte";
   import VersionLabel from "./VersionLabel.svelte";
 
   interface Props {
@@ -104,44 +105,26 @@
         {/if}
       </Button>
 
-      <!-- Split button: the primary approves in the remembered mode; the toggle
-           opens a DropdownMenu of every variant. bits-ui owns open/Escape/
-           outside-click — the old hand-rolled menu + full-screen scrim are gone. -->
-      <div class="split">
-        <Button variant="default" class="approve" onclick={() => onApprove(approveMode)} disabled={busy}>
-          <Icon name="check" size={14} />
-          {approveLabel(approveMode, variants)}
-        </Button>
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger>
-            {#snippet child({ props })}
-              <Button
-                {...props}
-                variant="default"
-                size="icon"
-                class="split-toggle"
-                aria-label="Approve options"
-                disabled={busy}
-              >
-                <Icon name="chevron-down" size={14} />
-              </Button>
-            {/snippet}
-          </DropdownMenu.Trigger>
-          <!-- min-width restores the old menu's comfortable width (shadcn's default
-               8rem would crowd the label + description rows). Inline, not a class:
-               the portalled content can't be reached by this component's scoped CSS. -->
-          <DropdownMenu.Content align="end" style="min-width: 15rem">
-            {#each variants as v (v.id)}
-              <DropdownMenu.Item class="approve-variant" onSelect={() => onApprove(v.id)}>
-                <span class="v-col">
-                  <span class="v-label">{v.label}</span>
-                  {#if v.description}<span class="v-note">{v.description}</span>{/if}
-                </span>
-              </DropdownMenu.Item>
-            {/each}
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
-      </div>
+      <!-- Approve split-button (SplitButton): the primary approves in the
+           remembered mode; the toggle opens the variant menu. Seamless at rest,
+           each half hovers independently — mechanics live in SplitButton.svelte.
+           The menu rows stay here (approve-specific) and render into the
+           component's portal, where this component's scoped .v-* styles still
+           reach them because the scope hash rides the elements. -->
+      <SplitButton onclick={() => onApprove(approveMode)} optionsLabel="Approve options" disabled={busy}>
+        <Icon name="check" size={14} />
+        {approveLabel(approveMode, variants)}
+        {#snippet menu()}
+          {#each variants as v (v.id)}
+            <DropdownMenu.Item class="approve-variant" onSelect={() => onApprove(v.id)}>
+              <span class="v-col">
+                <span class="v-label">{v.label}</span>
+                {#if v.description}<span class="v-note">{v.description}</span>{/if}
+              </span>
+            </DropdownMenu.Item>
+          {/each}
+        {/snippet}
+      </SplitButton>
     </div>
   {/if}
 
@@ -218,27 +201,6 @@
     margin-left: auto;
   }
 
-  /* Split button: join the amber primary and its options toggle into one control
-     with a shared radius and a hairline seam, and restore caret's brighter-amber
-     press affordance (the shadcn default variant ships no button-hover). These
-     reach the composed Buttons through a scope-bounded :global, so nothing leaks
-     past `.split`. */
-  .split {
-    display: inline-flex;
-  }
-  .split :global(.approve) {
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-  }
-  .split :global(.split-toggle) {
-    border-top-left-radius: 0;
-    border-bottom-left-radius: 0;
-    border-left: 1px solid color-mix(in srgb, var(--accent-ink) 30%, var(--accent));
-  }
-  .split :global(.approve:not(:disabled):hover),
-  .split :global(.split-toggle:not(:disabled):hover) {
-    background: var(--accent-bright);
-  }
   /* Reject warms to danger on hover — the one place red belongs in the row. */
   .actions :global(.reject:not(:disabled):hover) {
     background: var(--danger);

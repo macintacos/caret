@@ -39,7 +39,7 @@ describe("TopBar render", () => {
     const { target } = render(TopBar, baseProps);
     expect(target.querySelector(".brand")!.textContent).toContain("caret");
     expect(target.querySelector(".request")).not.toBeNull();
-    expect(target.querySelector(".approve")).not.toBeNull();
+    expect(target.querySelector(".split-primary")).not.toBeNull();
     // The split toggle is a distinct control from the primary approve.
     const toggle = target.querySelector(".split-toggle") as HTMLButtonElement;
     expect(toggle).not.toBeNull();
@@ -69,13 +69,13 @@ describe("TopBar render", () => {
 
   test("the primary approve button reflects the remembered mode's label", () => {
     const { target } = render(TopBar, { ...baseProps, approveMode: "auto" });
-    expect(target.querySelector(".approve")!.textContent).toContain("Approve & auto mode");
+    expect(target.querySelector(".split-primary")!.textContent).toContain("Approve & auto mode");
   });
 
   test("busy disables the buttons and marks the actions row", () => {
     const { target } = render(TopBar, { ...baseProps, busy: true });
     expect(target.querySelector(".actions")!.classList.contains("busy")).toBe(true);
-    expect((target.querySelector(".approve") as HTMLButtonElement).disabled).toBe(true);
+    expect((target.querySelector(".split-primary") as HTMLButtonElement).disabled).toBe(true);
     expect((target.querySelector(".request") as HTMLButtonElement).disabled).toBe(true);
     expect((target.querySelector(".split-toggle") as HTMLButtonElement).disabled).toBe(true);
   });
@@ -87,7 +87,7 @@ describe("TopBar render", () => {
       approveMode: "acceptEdits",
       onApprove: approved.cb,
     });
-    (target.querySelector(".approve") as HTMLElement).click();
+    (target.querySelector(".split-primary") as HTMLElement).click();
     expect(approved.last()).toBe("acceptEdits");
   });
 });
