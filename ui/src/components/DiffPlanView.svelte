@@ -766,14 +766,19 @@
         </div>
       {/each}
       {#if pending}
-        <div use:slotInto={{ host, line: pending.endLine }}>
-          <!-- Re-mount the composer per range. SourceComposer (and its
-               MarkdownEditor) seed their text once at mount, so switching to a
-               new line — which updates props without unmounting — would otherwise
-               keep the previous line's draft. Keying on the range gives each line
-               a clean composer; the dismissed line's text is retained as a scratch
-               by openRange, so nothing is lost. -->
-          {#key `${pending.startLine}:${pending.endLine}`}
+        <!-- Key the whole composer host container per range, not just the inner
+             SourceComposer. This <div> is the node slotInto projects into the
+             library's annotation row; keying only the composer left it mounted
+             across a range switch, so slotInto reassigned its slot in place, and
+             that reprojection stripped the just-focused editor's DOM caret while
+             CodeMirror kept its offset — the first Backspace then jumped the caret
+             to the start (EXC-780). Remounting the container gives a fresh slot
+             placement on each switch. The key still gives each line a clean
+             composer (SourceComposer/MarkdownEditor seed their text once at mount);
+             the dismissed line's text is retained as a scratch by openRange, so
+             nothing is lost. -->
+        {#key `${pending.startLine}:${pending.endLine}`}
+          <div use:slotInto={{ host, line: pending.endLine }}>
             <SourceComposer
               startLine={pending.startLine}
               endLine={pending.endLine}
@@ -783,8 +788,8 @@
               onKeep={(text) => commenting.cancel(text)}
               onDiscard={() => commenting.discardOpen()}
             />
-          {/key}
-        </div>
+          </div>
+        {/key}
       {/if}
       <!-- Retained scratch drafts: an unsubmitted composer dismissed with typed
            text leaves a quiet "Resume" marker at its line, clicking which reopens
