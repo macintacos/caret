@@ -58,6 +58,13 @@ test("the Settings gear switches theme, retinting the UI and persisting across r
   // readerOptions would leave the diff on the dark theme and fail here.
   await expect.poll(tokenColor).toBe("rgb(194, 65, 12)"); // caret-light --accent (#c2410c)
 
+  // Escape closes the Settings dialog — the bits-ui Escape intent routes through
+  // onOpenChange to the onClose prop (EXC-761's one-line dismiss wiring).
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await expect(settings).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(settings).toBeHidden();
+
   // "Saved between daemon runs" is really browser-origin localStorage — it must
   // survive a reload without the daemon holding any theme state.
   await page.reload();

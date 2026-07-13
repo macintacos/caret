@@ -13,7 +13,7 @@
      * guards them from being silently dropped. */
     items: PendingItem[];
     /** The verdict's label, e.g. "Approve" or "Reject". Drives the title,
-     * eyebrow, aria-label, and the confirm button. */
+     * eyebrow, and the confirm button. */
     action: string;
     /** One-line sentence describing what the verdict does, always shown. */
     consequence: string;
@@ -31,7 +31,6 @@
   // wording all key off whether any are pending.
   let count = $derived(items.length);
   let hasComments = $derived(count > 0);
-  let label = $derived(hasComments ? `${action} with pending comments` : `${action} this plan`);
 
   // The primary path is Enter-confirmable (EXC-761 keeps today's behavior): focus
   // the confirm action on open so a bare Enter activates it, rather than letting
@@ -45,7 +44,6 @@
      the old scrim, a backdrop click does NOT dismiss — correct for a confirm guard. -->
 <AlertDialog.Root open>
   <AlertDialog.Content
-    aria-label={label}
     onEscapeKeydown={() => onCancel()}
     onOpenAutoFocus={(e) => {
       e.preventDefault();

@@ -174,3 +174,27 @@ test("Escape dismisses the approve guard and leaves the review pending", async (
   // The review is untouched and the approve button still works.
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
 });
+
+test("Cancel dismisses the approve guard and leaves the review pending", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain the cold cost" }],
+  });
+
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const guard = page.getByRole("alertdialog");
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(guard).toBeVisible();
+
+  // The explicit Cancel button routes to onCancel (distinct from Escape) — it
+  // closes the guard and sends nothing.
+  await guard.getByRole("button", { name: "Cancel" }).click();
+  await expect(guard).toBeHidden();
+  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
+});

@@ -70,7 +70,7 @@ describe("UnsentCommentsDialog render", () => {
 
   test("the Approve variant reads with the approve vocabulary and accessible name", async () => {
     await mount(approveProps);
-    expect(content()?.getAttribute("aria-label")).toBe("Approve with pending comments");
+    // The dialog's accessible name is its Title (bits-ui wires aria-labelledby to it).
     expect(q("[data-slot='alert-dialog-title']")?.textContent).toContain("Approve this plan?");
     expect(confirm()?.textContent).toContain("Approve anyway");
     expect(description()?.textContent).toContain(
@@ -80,7 +80,6 @@ describe("UnsentCommentsDialog render", () => {
 
   test("the Reject variant swaps in the reject vocabulary and accessible name", async () => {
     await mount(rejectProps);
-    expect(content()?.getAttribute("aria-label")).toBe("Reject with pending comments");
     expect(q("[data-slot='alert-dialog-title']")?.textContent).toContain("Reject this plan?");
     expect(confirm()?.textContent).toContain("Reject anyway");
     expect(description()?.textContent).toContain(
@@ -90,9 +89,8 @@ describe("UnsentCommentsDialog render", () => {
 
   test("with no pending comments it is a plain confirm — no warning, no preview, no divert, no 'anyway'", async () => {
     await mount({ ...rejectProps, items: [] });
-    // A bare confirmation: distinct accessible name, no comments warning, no preview
-    // list, no Request-changes divert, and the confirm button drops the "anyway".
-    expect(content()?.getAttribute("aria-label")).toBe("Reject this plan");
+    // A bare confirmation: no comments warning, no preview list, no Request-changes
+    // divert, and the confirm button drops the "anyway".
     expect(description()?.textContent).not.toContain("pending comment");
     expect(q(".comments")).toBeNull();
     const requestChanges = [...document.body.querySelectorAll("button")].find((b) =>
