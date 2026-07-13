@@ -150,7 +150,7 @@
        review the slot's own margin-left pushes it right. -->
   <div class="bell-slot">
     <NotifyBell />
-    <Button variant="ghost" size="icon" class="settings" aria-label="Settings" onclick={onOpenSettings}>
+    <Button variant="secondary" size="icon" class="settings float-chip" aria-label="Settings" onclick={onOpenSettings}>
       <Icon name="settings" size={16} />
     </Button>
   </div>

@@ -57,9 +57,9 @@
         {#snippet child({ props })}
           <Button
             {...props}
-            variant="ghost"
+            variant="secondary"
             size="icon"
-            class="bell"
+            class="bell float-chip"
             aria-label="Notifications: {permission}"
             aria-disabled={presentation.canRequest || presentation.canTest ? undefined : "true"}
             onclick={handleClick}
