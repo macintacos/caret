@@ -27,7 +27,7 @@
   <DropdownMenu.Root>
     <DropdownMenu.Trigger>
       {#snippet child({ props })}
-        <Button {...props} variant="outline" size="sm" class="switcher-trigger">
+        <Button {...props} variant="secondary" size="sm" class="switcher-trigger float-chip">
           <span class="title">{stripTitleLinks(active?.title ?? "—")}</span>
           <Badge variant="secondary" class="count metric">{reviews.length}</Badge>
           <span class="chev"><Icon name="chevron-down" size={14} /></span>

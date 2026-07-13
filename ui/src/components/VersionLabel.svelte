@@ -1,11 +1,11 @@
 <script lang="ts">
   // Shows e.g. "v2" once a plan has been revised. No diff UI (out of scope).
-  // EXC-760: composed from the shadcn Badge. A soft, borderless solid fill — a
-  // subtle tonal lift above the topbar surface (paper-raised nudged toward ink)
-  // so it reads as a chip floating just over the background rather than a
-  // hard-bordered pill; ink-soft text keeps it quiet. The ^ brand glyph keeps
-  // caret amber — one of the sanctioned amber spots alongside the wordmark and
-  // the primary action (doc/agents/shadcn-rules.md).
+  // EXC-760: composed from the shadcn Badge wearing the shared `.float-chip`
+  // look (app.css) — a soft, borderless solid fill floating just above the
+  // topbar surface rather than a hard-bordered pill; ink-soft text keeps it
+  // quiet. The ^ brand glyph keeps caret amber — one of the sanctioned amber
+  // spots alongside the wordmark and the primary action
+  // (doc/agents/shadcn-rules.md).
   import { Badge } from "$lib/components/ui/badge/index.js";
 
   let { version }: { version: number } = $props();
@@ -14,8 +14,8 @@
 {#if version > 1}
   <Badge
     variant="secondary"
-    class="version metric"
-    style="background: color-mix(in lab, var(--paper-raised), var(--ink) 9%); color: var(--ink-soft)"
+    class="version metric float-chip"
+    style="color: var(--ink-soft)"
     title="Revision {version} of this plan"
   >
     <span class="caret" aria-hidden="true">^</span>v{version}

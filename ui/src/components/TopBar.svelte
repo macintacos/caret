@@ -89,7 +89,7 @@
            always routes through a confirm dialog, so the button stays low-key. -->
       <Button variant="ghost" class="reject" onclick={onReject} disabled={busy}>Reject</Button>
 
-      <Button variant="outline" class="request" onclick={onRequestChanges} disabled={busy}>
+      <Button variant="secondary" class="request float-chip" onclick={onRequestChanges} disabled={busy}>
         <Icon name="corner-up-left" size={14} />
         Request changes
         {#if pendingCount > 0}
