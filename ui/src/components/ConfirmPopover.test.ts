@@ -75,6 +75,30 @@ describe("ConfirmPopover wiring", () => {
   });
 });
 
+// When an `anchor` is passed, the bubble portals to document.body and positions
+// itself with fixed coordinates against that element, so it escapes an ancestor's
+// overflow (a scrollable modal body) and stays inside the viewport (EXC-762). With
+// no anchor it stays in-flow under its trigger — the composer/card behaviour.
+describe("ConfirmPopover anchored (portal + viewport-aware)", () => {
+  test("stays in the render target when no anchor is given", () => {
+    const { target } = render(ConfirmPopover, baseProps);
+    expect(popover(target)).not.toBeNull();
+  });
+
+  test("portals to document.body and fixes its position when anchored", () => {
+    const anchor = document.createElement("button");
+    const { target, flush } = render(ConfirmPopover, { ...baseProps, anchor });
+    flush();
+    // Moved out of the mount target, up to document.body, so no ancestor overflow
+    // can clip it.
+    expect(popover(target)).toBeNull();
+    const bubble = document.body.querySelector(".confirm-popover") as HTMLElement;
+    expect(bubble).not.toBeNull();
+    expect(bubble.parentElement).toBe(document.body);
+    expect(bubble.style.position).toBe("fixed");
+  });
+});
+
 describe("ConfirmPopover keyboard", () => {
   test("Escape fires onCancel", () => {
     let cancelled = false;

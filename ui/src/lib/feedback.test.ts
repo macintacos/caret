@@ -7,6 +7,7 @@ import {
   pendingInlineCount,
   pendingItems,
   pendingLineCount,
+  sourceLines,
 } from "./feedback.ts";
 
 // A synthetic plan whose lines are individually identifiable, so a quoted block
@@ -400,5 +401,23 @@ describe("pendingItems", () => {
 
   test("is empty for no feedback at all", () => {
     expect(pendingItems([], "", [])).toEqual([]);
+  });
+});
+
+// The source lines a line-anchored comment sits on, sliced 1-based inclusive from
+// the plan text — the "Context" the Request Changes dialog reveals under an inline
+// comment so the reviewer can see the code the comment was written against.
+describe("sourceLines", () => {
+  test("returns the 1-based, inclusive span of plan lines", () => {
+    // PLAN line 3 is "First body line.", line 4 is "Second body line."
+    expect(sourceLines(3, 4, PLAN)).toEqual(["First body line.", "Second body line."]);
+  });
+
+  test("returns a single line for a single-line anchor", () => {
+    expect(sourceLines(1, 1, PLAN)).toEqual(["# Title"]);
+  });
+
+  test("returns [] for a stale anchor past the end of the text", () => {
+    expect(sourceLines(99, 100, PLAN)).toEqual([]);
   });
 });

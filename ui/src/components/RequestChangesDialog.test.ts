@@ -207,17 +207,17 @@ describe("RequestChangesDialog unsent scratches", () => {
     expect(text).toContain("another one");
   });
 
-  test("Save/Discard live OUTSIDE the collapsible, so they show without expanding (EXC-746)", async () => {
+  test("Save/Discard live OUTSIDE the collapsible body, so they show without expanding (EXC-746)", async () => {
     await mount({ ...baseProps, scratches: [scratch(5, 8, "graduate me")] });
     const row = q(".scratch-row") as HTMLElement;
-    const disclosure = row.querySelector(".scratch-disclosure");
     const actions = row.querySelector(".scratch-actions");
-    expect(disclosure).not.toBeNull();
+    // The collapsible BODY is what collapses; the actions ride the always-visible
+    // row head, so they must never be nested inside the body. (A unit can only
+    // check the structure; the real-visibility guard is the e2e.)
+    const body = row.querySelector("[data-slot='collapsible-content']");
     expect(actions).not.toBeNull();
-    // The actions are a sibling of the disclosure, never nested in its collapsible
-    // body — what keeps them reachable before any expand. (A unit can only check
-    // the structure; the real-visibility guard is the e2e.)
-    expect(disclosure?.contains(actions)).toBe(false);
+    expect(body).not.toBeNull();
+    expect(body?.contains(actions)).toBe(false);
     expect(actions?.querySelector(".save")).not.toBeNull();
     expect(actions?.querySelector(".discard")).not.toBeNull();
   });
@@ -344,6 +344,38 @@ describe("inline comments — Discard / Mark as draft (EXC-762)", () => {
     const row = q(".inline-row") as HTMLElement;
     expect(row.querySelector(".mark-draft")).toBeNull();
     expect(row.querySelector(".discard")).not.toBeNull();
+  });
+
+  test("nests a collapsed Context disclosure showing the anchored source lines", async () => {
+    await mount({
+      ...baseProps,
+      annotations: [lineAnn("a1", 3, 4, "reconsider")],
+      planText: ["# Title", "", "First body line.", "Second body line."].join("\n"),
+    });
+    const row = q(".inline-row") as HTMLElement;
+    const context = row.querySelector(".context-disclosure");
+    expect(context).not.toBeNull();
+    // The actual plan lines the comment anchors to are present (behind the nested
+    // collapsed disclosure, but in the DOM so readable without expanding).
+    const lines = row.querySelector(".context-lines")?.textContent ?? "";
+    expect(lines).toContain("First body line.");
+    expect(lines).toContain("Second body line.");
+  });
+
+  test("omits Context for a legacy comment with no source-line anchor", async () => {
+    await mount({ ...baseProps, annotations: [ann("l1", "old style")] });
+    const row = q(".inline-row") as HTMLElement;
+    expect(row.querySelector(".context-disclosure")).toBeNull();
+  });
+
+  test("omits Context when the line anchor is stale (nothing to quote)", async () => {
+    await mount({
+      ...baseProps,
+      annotations: [lineAnn("a1", 99, 100, "reconsider")],
+      planText: ["# Title", "", "First body line."].join("\n"),
+    });
+    const row = q(".inline-row") as HTMLElement;
+    expect(row.querySelector(".context-disclosure")).toBeNull();
   });
 
   test("Discard opens a confirm popover; only confirming fires onDiscardAnnotation", async () => {

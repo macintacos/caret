@@ -140,12 +140,14 @@ test("discarding an unsent comment asks to confirm before dropping it (EXC-762)"
 
   const row = dialog.locator(".scratch-row");
   await expect(row).toHaveCount(1);
-  // Discard opens a confirmation bubble — the scratch is NOT dropped yet.
+  // Discard opens a confirmation bubble — the scratch is NOT dropped yet. The
+  // bubble portals to the body (viewport-aware, EXC-762), so it's a page locator,
+  // not a descendant of the dialog element.
   await row.locator(".discard").click();
-  await expect(dialog.locator(".confirm-popover")).toBeVisible();
+  await expect(page.locator(".confirm-popover")).toBeVisible();
   await expect(row).toHaveCount(1);
   // Confirming completes the drop.
-  await dialog.locator(".confirm-popover").getByRole("button", { name: "Discard" }).click();
+  await page.locator(".confirm-popover").getByRole("button", { name: "Discard" }).click();
   await expect(dialog.locator(".scratch-row")).toHaveCount(0);
 });
 
@@ -180,4 +182,35 @@ test("marking an inline comment as a draft demotes it into Unsent and out of the
   await expect(scratchRow).toHaveCount(1);
   await expect(scratchRow).toContainText("explain the cold cost");
   await expect(send).toBeDisabled();
+});
+
+test("an inline comment reveals a nested Context with the anchored source lines (EXC-762)", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain the cold cost" }],
+  });
+
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
+  await page.getByRole("button", { name: "Request changes" }).click();
+  await expect(dialog).toBeVisible();
+
+  // Both disclosures are collapsed by default (a real-browser check — happy-dom
+  // can't tell a collapsed disclosure from an open one). The Context lives nested
+  // in the inline comment's own expansion, so it takes two clicks to reveal.
+  const context = dialog.locator(".context-lines");
+  await expect(context).toBeHidden();
+  await dialog.locator(".inline-row .row-head .row-trigger").click();
+  await dialog.locator(".context-trigger").click();
+  await expect(context).toBeVisible();
+  // It quotes the actual plan lines the comment anchors to, not the abbreviated
+  // preview quote — the reviewer sees the real code they commented on.
+  await expect(context).toContainText("cache layer");
+  await expect(context).toContainText("cold cost");
 });

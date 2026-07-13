@@ -8,8 +8,13 @@
   // floating as a centered modal (the wrong feel for a quick in-context yes/no).
   // Esc, an outside click, or the Cancel button back out; the confirm button is
   // focused on mount so Enter completes the action the reviewer already started.
-  // ponytail: pops straight down with no collision-flip — a confirm opened on a
-  // row hard against the viewport bottom can clip; add flip logic if that surfaces.
+  //
+  // Two positioning modes. Without `anchor` (the composer/card) it stays in-flow,
+  // absolutely positioned under its trigger's wrapper. With `anchor` (the Request
+  // Changes dialog, whose body scrolls) it PORTALS to document.body and positions
+  // itself `fixed` against the anchor element, so it escapes the modal body's
+  // overflow and clamps inside the viewport — flipping above the trigger when it
+  // would run off the bottom, and shifting horizontally off any edge (EXC-762).
   import { isCancelKey } from "../lib/keys.ts";
 
   interface Props {
@@ -23,14 +28,86 @@
      * default — matches the composer's right-aligned row) or "start" (left —
      * matches the card footer's left-aligned links). */
     align?: "start" | "end";
+    /** The trigger element to position against. When set, the bubble portals to
+     * document.body and positions `fixed` relative to this element with viewport
+     * collision handling — the escape hatch for a scrollable/edge-hugging host.
+     * When omitted, the bubble stays in-flow under its wrapper (the default). */
+    anchor?: HTMLElement;
     onConfirm: () => void;
     onCancel: () => void;
   }
-  let { question, confirmLabel, cancelLabel = "Cancel", align = "end", onConfirm, onCancel }: Props =
-    $props();
+  let {
+    question,
+    confirmLabel,
+    cancelLabel = "Cancel",
+    align = "end",
+    anchor,
+    onConfirm,
+    onCancel,
+  }: Props = $props();
 
   let popover = $state<HTMLDivElement | undefined>();
   let confirmEl = $state<HTMLButtonElement | undefined>();
+
+  // Fixed-position coordinates, computed against the anchor in the effect below
+  // (anchor mode only). Undefined until measured; the pop keyframe fades in from
+  // opacity 0, so the pre-measurement frame at (0,0) never shows.
+  let posTop = $state<number>();
+  let posLeft = $state<number>();
+  let tailLeft = $state<number>();
+
+  const VIEWPORT_MARGIN = 8;
+  const ANCHOR_GAP = 8;
+
+  // Moves the bubble out to document.body when anchored, so no ancestor overflow
+  // (the scrollable dialog body) can clip it. A no-op in-flow. Svelte removes the
+  // node on unmount via destroy.
+  function portal(node: HTMLElement) {
+    if (anchor) document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      },
+    };
+  }
+
+  // Position against the anchor: honour `align` as the horizontal preference then
+  // clamp into the viewport; sit below the trigger, flipping above when the bubble
+  // would overflow the bottom. Runs once the portaled node is measurable.
+  $effect(() => {
+    if (!anchor || !popover) return;
+    const a = anchor.getBoundingClientRect();
+    const p = popover.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    let left = align === "end" ? a.right - p.width : a.left;
+    left = Math.max(VIEWPORT_MARGIN, Math.min(left, vw - p.width - VIEWPORT_MARGIN));
+
+    let top = a.bottom + ANCHOR_GAP;
+    if (top + p.height > vh - VIEWPORT_MARGIN) {
+      const aboveTop = a.top - ANCHOR_GAP - p.height;
+      top = aboveTop >= VIEWPORT_MARGIN ? aboveTop : Math.max(VIEWPORT_MARGIN, vh - p.height - VIEWPORT_MARGIN);
+    }
+
+    posLeft = left;
+    posTop = top;
+    // Point the tail at the trigger's centre, clamped a little inside the bubble.
+    tailLeft = Math.max(12, Math.min(a.left + a.width / 2 - left, p.width - 12));
+  });
+
+  // A fixed bubble can't track a moving anchor, so any scroll (capture: catches
+  // the dialog body's own scroller) or resize backs it out rather than drift.
+  $effect(() => {
+    if (!anchor) return;
+    const close = () => onCancel();
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  });
 
   // Focus the confirm button so the bubble takes focus off the trigger (Esc/Enter
   // land here) and a keyboard reviewer can complete the action they initiated.
@@ -60,7 +137,13 @@
 
 <div
   class="confirm-popover align-{align}"
+  class:portaled={anchor}
   bind:this={popover}
+  use:portal
+  style:position={anchor ? "fixed" : null}
+  style:top={anchor && posTop !== undefined ? `${posTop}px` : null}
+  style:left={anchor && posLeft !== undefined ? `${posLeft}px` : null}
+  style:--tail-left={anchor && tailLeft !== undefined ? `${tailLeft}px` : null}
   role="alertdialog"
   aria-label={question}
   tabindex="-1"
@@ -109,6 +192,28 @@
   .align-start {
     left: 0;
     --pop-origin: left;
+  }
+  /* Portaled (anchor mode): fixed coords come from inline styles set in the
+     effect, so neutralize the in-flow align offsets and pin the transform origin
+     to the top (it can flip either side after clamping). Portaled to document.body,
+     it sits OUTSIDE the dialog's stacking context, so its in-flow z-index (20) now
+     lands under the dialog overlay (z-50) and the backdrop would eat the confirm
+     click — lift it above the whole dialog layer. */
+  .confirm-popover.portaled {
+    right: auto;
+    z-index: 60;
+    /* bits-ui's dialog scroll-lock sets pointer-events:none on <body>, which this
+       portaled child inherits — without re-enabling it, every click falls through
+       to the backdrop and the confirm buttons are dead. The dialog content does
+       the same for itself. */
+    pointer-events: auto;
+    --pop-origin: center;
+  }
+  /* The tail's "pops out of the button" cue only reads when the bubble sits
+     directly under its trigger. Once portaled + clamped it can land anywhere, so
+     drop the tail rather than let it point at nothing. */
+  .confirm-popover.portaled .tail {
+    display: none;
   }
   .confirm-popover:focus {
     outline: none;

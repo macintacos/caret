@@ -6,7 +6,7 @@
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { Textarea } from "$lib/components/ui/textarea/index.js";
   import { type ComposerScratch, rangeLabel } from "../lib/diffview/commenting.ts";
-  import { formatFeedback, pendingInline, pendingLineCount } from "../lib/feedback.ts";
+  import { formatFeedback, pendingInline, pendingLineCount, sourceLines } from "../lib/feedback.ts";
   import { isSubmitChord } from "../lib/keys.ts";
   import ConfirmPopover from "./ConfirmPopover.svelte";
   import Icon from "./Icon.svelte";
@@ -95,6 +95,10 @@
   // non-destructive and skip the bubble.
   let confirmingAnnotation = $state<string | null>(null);
   let confirmingScratch = $state<string | null>(null);
+  // The Discard button the open confirm anchors to. The dialog body scrolls, so
+  // the bubble portals out and positions against this element (viewport-aware) —
+  // captured on the click that opens it. One slot: only one confirm opens at a time.
+  let confirmAnchor = $state<HTMLElement | null>(null);
 
   function submit() {
     onSubmit(generalComment.trim());
@@ -168,53 +172,80 @@
           <Badge variant="outline" class="tally">{inlineCount}</Badge>
         </span>
         {#each inlineComments as a (a.id)}
+          {@const context = isLineAnnotation(a) ? sourceLines(a.startLine, a.endLine, planText) : []}
           <div class="inline-row">
             <Collapsible.Root class="inline-disclosure">
-              <Collapsible.Trigger class="row-trigger">
-                <Icon name="chevron-down" size={14} />
-                <span class="anchor metric">
-                  {isLineAnnotation(a) ? rangeLabel(a.startLine, a.endLine) : "Comment"}
-                </span>
-                <span class="snippet">{a.comment}</span>
-              </Collapsible.Trigger>
+              <!-- Row head: the disclosure trigger and the per-comment actions on
+                   one centered line. The actions ride the head (never the collapsing
+                   body) so they show without expanding (the EXC-746 guard). -->
+              <div class="row-head">
+                <Collapsible.Trigger class="row-trigger">
+                  <Icon name="chevron-down" size={14} />
+                  <span class="anchor metric">
+                    {isLineAnnotation(a) ? rangeLabel(a.startLine, a.endLine) : "Comment"}
+                  </span>
+                  <span class="snippet">{a.comment}</span>
+                </Collapsible.Trigger>
+                <div class="inline-actions">
+                  {#if isLineAnnotation(a)}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      class="float-chip mark-draft"
+                      onclick={() => onDraftAnnotation(a)}
+                    >
+                      Mark as draft
+                    </Button>
+                  {/if}
+                  <span class="confirm-wrap">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      class="float-chip discard"
+                      onclick={(e) => {
+                        confirmingAnnotation = a.id;
+                        confirmAnchor = e.currentTarget as HTMLElement;
+                      }}
+                    >
+                      Discard
+                    </Button>
+                    {#if confirmingAnnotation === a.id}
+                      <ConfirmPopover
+                        question="Discard this comment?"
+                        confirmLabel="Discard"
+                        align="start"
+                        anchor={confirmAnchor ?? undefined}
+                        onConfirm={() => {
+                          onDiscardAnnotation(a.id);
+                          confirmingAnnotation = null;
+                        }}
+                        onCancel={() => (confirmingAnnotation = null)}
+                      />
+                    {/if}
+                  </span>
+                </div>
+              </div>
               <Collapsible.Content>
-                <pre class="row-text">{a.comment}</pre>
+                <div class="row-body">
+                  <pre class="row-text">{a.comment}</pre>
+                  <!-- Nested, collapsed-by-default: the actual source lines the
+                       comment anchors to, so the reviewer can read the code it was
+                       written against without leaving the dialog (EXC-762). Only for
+                       line-anchored comments with a live anchor. -->
+                  {#if context.length > 0}
+                    <Collapsible.Root class="context-disclosure">
+                      <Collapsible.Trigger class="row-trigger context-trigger">
+                        <Icon name="chevron-down" size={14} />
+                        <span class="context-label">Context</span>
+                      </Collapsible.Trigger>
+                      <Collapsible.Content>
+                        <pre class="context-lines">{context.join("\n")}</pre>
+                      </Collapsible.Content>
+                    </Collapsible.Root>
+                  {/if}
+                </div>
               </Collapsible.Content>
             </Collapsible.Root>
-            <div class="inline-actions">
-              {#if isLineAnnotation(a)}
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  class="float-chip mark-draft"
-                  onclick={() => onDraftAnnotation(a)}
-                >
-                  Mark as draft
-                </Button>
-              {/if}
-              <span class="confirm-wrap">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  class="float-chip discard"
-                  onclick={() => (confirmingAnnotation = a.id)}
-                >
-                  Discard
-                </Button>
-                {#if confirmingAnnotation === a.id}
-                  <ConfirmPopover
-                    question="Discard this comment?"
-                    confirmLabel="Discard"
-                    align="start"
-                    onConfirm={() => {
-                      onDiscardAnnotation(a.id);
-                      confirmingAnnotation = null;
-                    }}
-                    onCancel={() => (confirmingAnnotation = null)}
-                  />
-                {/if}
-              </span>
-            </div>
           </div>
         {/each}
       </section>
@@ -239,47 +270,53 @@
         {#each scratches as s (s.key)}
           <div class="scratch-row">
             <Collapsible.Root class="scratch-disclosure">
-              <Collapsible.Trigger class="row-trigger">
-                <Icon name="chevron-down" size={14} />
-                <span class="anchor metric">{rangeLabel(s.startLine, s.endLine)}</span>
-                <span class="snippet">{s.text}</span>
-              </Collapsible.Trigger>
+              <div class="row-head">
+                <Collapsible.Trigger class="row-trigger">
+                  <Icon name="chevron-down" size={14} />
+                  <span class="anchor metric">{rangeLabel(s.startLine, s.endLine)}</span>
+                  <span class="snippet">{s.text}</span>
+                </Collapsible.Trigger>
+                <div class="scratch-actions">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    class="float-chip save"
+                    onclick={() => onSaveScratch(s.key)}
+                  >
+                    Save
+                  </Button>
+                  <span class="confirm-wrap">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      class="float-chip discard"
+                      onclick={(e) => {
+                        confirmingScratch = s.key;
+                        confirmAnchor = e.currentTarget as HTMLElement;
+                      }}
+                    >
+                      Discard
+                    </Button>
+                    {#if confirmingScratch === s.key}
+                      <ConfirmPopover
+                        question="Discard this comment?"
+                        confirmLabel="Discard"
+                        align="start"
+                        anchor={confirmAnchor ?? undefined}
+                        onConfirm={() => {
+                          onDiscardScratch(s.key);
+                          confirmingScratch = null;
+                        }}
+                        onCancel={() => (confirmingScratch = null)}
+                      />
+                    {/if}
+                  </span>
+                </div>
+              </div>
               <Collapsible.Content>
                 <pre class="row-text">{s.text}</pre>
               </Collapsible.Content>
             </Collapsible.Root>
-            <div class="scratch-actions">
-              <Button
-                variant="secondary"
-                size="sm"
-                class="float-chip save"
-                onclick={() => onSaveScratch(s.key)}
-              >
-                Save
-              </Button>
-              <span class="confirm-wrap">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  class="float-chip discard"
-                  onclick={() => (confirmingScratch = s.key)}
-                >
-                  Discard
-                </Button>
-                {#if confirmingScratch === s.key}
-                  <ConfirmPopover
-                    question="Discard this comment?"
-                    confirmLabel="Discard"
-                    align="start"
-                    onConfirm={() => {
-                      onDiscardScratch(s.key);
-                      confirmingScratch = null;
-                    }}
-                    onCancel={() => (confirmingScratch = null)}
-                  />
-                {/if}
-              </span>
-            </div>
           </div>
         {/each}
       </section>
@@ -319,14 +356,25 @@
      `.sm:max-w-sm` (0,1,0); min() keeps the small-screen inset. */
   :global([data-slot="dialog-content"].rcd-content) {
     max-width: min(900px, calc(100% - 2rem));
+    /* Cap the height so a long inline-comment list can't push the modal past the
+       screen (it clipped at top and bottom before). The content is a header /
+       body / footer grid; pinning the outer rows to auto and the body to 1fr lets
+       ONLY the body scroll, keeping the title and the Send/Cancel actions in view.
+       dvh tracks the mobile URL-bar viewport. */
+    max-height: calc(100dvh - 2rem);
+    grid-template-rows: auto minmax(0, 1fr) auto;
   }
 
-  /* Body is a plain flow column; Modal's grid owns the header→body→footer rhythm,
-     so this only needs the intra-body spacing. It also carries the ⌘↵ keydown
+  /* Body is the scroll region when the content overflows the capped height; Modal's
+     grid owns the header→body→footer rhythm, so this only needs the intra-body
+     spacing plus the overflow. min-height:0 lets it actually shrink inside the grid
+     row rather than forcing the modal taller. It also carries the ⌘↵ keydown
      (role="presentation": no semantics, mirrors the scrim's role in the old shell). */
   .body {
     display: grid;
     gap: 0.8rem;
+    overflow-y: auto;
+    min-height: 0;
   }
   .field {
     display: block;
@@ -385,20 +433,26 @@
     margin-bottom: 0.4rem;
   }
   .inline-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.5rem;
     border-left: 3px solid var(--rule-strong);
     border-radius: var(--radius);
     background: var(--paper);
     margin-top: 0.4rem;
-    padding: 0.4rem 0.55rem;
+    padding: 0.15rem 0.25rem;
   }
   .inline-comments :global(.inline-disclosure) {
-    flex: 1 1 auto;
     min-width: 0;
   }
-  .inline-actions {
+  /* The always-visible top line of a row: the disclosure trigger (grows) and the
+     per-row actions, vertically centered so a taller action button and the one-line
+     trigger read as a single row rather than top-aligned and off-kilter. The
+     collapsing body sits below this head, so the actions never hide on collapse. */
+  .row-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .inline-actions,
+  .scratch-actions {
     flex: none;
     display: flex;
     gap: 0.5rem;
@@ -434,40 +488,69 @@
     color: var(--ink-faint);
   }
   .scratch-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.5rem;
     border-left: 3px dashed var(--ink-faint);
     border-radius: var(--radius);
     background: var(--paper);
     margin-top: 0.4rem;
-    padding: 0.4rem 0.55rem;
+    padding: 0.15rem 0.25rem;
   }
   .scratches :global(.scratch-disclosure) {
-    flex: 1 1 auto;
     min-width: 0;
   }
-  .scratch-actions {
-    flex: none;
-    display: flex;
-    gap: 0.5rem;
-  }
 
-  /* Shared row disclosure trigger (inline + scratch): a bits-ui Collapsible.Trigger
-     (a <button>) reset to read as a plain summary line — a rotating chevron, the
-     line anchor, and a one-line snippet that expands to the full text. */
+  /* Shared row disclosure trigger (inline + scratch + nested context): a bits-ui
+     Collapsible.Trigger (a <button>) reset to read as a plain summary line — a
+     rotating chevron, the line anchor, and a one-line snippet that expands to the
+     full text. It grows to fill the head; a subtle raised-paper wash on hover
+     signals the whole line is clickable to toggle it. */
   :global(.row-trigger) {
     display: flex;
     align-items: center;
     gap: 0.4rem;
-    width: 100%;
-    padding: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0.35rem 0.4rem;
     border: 0;
+    border-radius: var(--radius);
     background: none;
     text-align: start;
     cursor: pointer;
     color: inherit;
     font: inherit;
+    transition: background var(--dur-fast) var(--ease-out);
+  }
+  :global(.row-trigger:hover) {
+    background: var(--paper-raised);
+  }
+  /* The expanded body of an inline row: the full comment, then the nested Context
+     disclosure. Children carry their own inset so a scratch row (whose body has no
+     wrapper) and an inline row read with the same left edge. */
+  .row-body {
+    display: grid;
+    gap: 0.35rem;
+  }
+  .context-disclosure {
+    margin-top: 0.1rem;
+  }
+  .context-label {
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  /* The quoted source lines — a quiet sunk block so the code reads as context
+     beneath the comment, not another comment. */
+  .context-lines {
+    margin: 0.15rem 0 0;
+    padding: 0.4rem 0.55rem;
+    border-radius: var(--radius);
+    background: var(--paper-sunk);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    line-height: var(--leading-snug);
+    white-space: pre-wrap;
+    color: var(--ink-soft);
   }
   /* The line-anchor label: a numeric chrome surface, so it takes the tabular metric
      face the rest of the review's line references use. */
@@ -487,7 +570,8 @@
     color: var(--ink-soft);
   }
   .row-text {
-    margin: 0.4rem 0 0;
+    margin: 0;
+    padding: 0.1rem 0.4rem 0.25rem;
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     line-height: var(--leading-snug);
@@ -543,6 +627,10 @@
     cursor: pointer;
     font-size: var(--text-xs);
     color: var(--ink-soft);
+    transition: background var(--dur-fast) var(--ease-out);
+  }
+  .preview :global(.preview-trigger:hover) {
+    background: var(--paper-raised);
   }
   .preview pre {
     margin: 0;
@@ -567,24 +655,39 @@
     transform: rotate(-90deg);
   }
 
-  /* Animated expand/collapse via the grid-template-rows 0fr↔1fr technique: the
-     content row grows from 0 to its natural height while its single child clips, so
-     both directions animate smoothly with no height measurement and no mount flash.
-     The vendored Collapsible.Content always renders its child (hiding is left to
-     CSS), so a collapsed disclosure stays in the DOM — just 0-height and clipped.
-     Scoped to this dialog's content. The one global reduced-motion rule in app.css
-     neutralizes it (a per-component block would be dead CSS — see motion.test.ts). */
+  /* Animated expand/collapse of the disclosure body (preview, inline/scratch rows,
+     and the nested Context), so the content grows out of the trigger line rather
+     than snapping in. Driven by bits-ui's own measured height var + data-state: on
+     open it plays expand, on close it plays collapse, and the Collapsible's presence
+     machine keeps the node mounted for the whole collapse keyframe (it waits for the
+     animationend) before hiding it — a keyframe reveal, not a tween, is what that
+     presence machine watches for. Scoped to this dialog's content. The one global
+     reduced-motion rule in app.css neutralizes it (a per-component block would be
+     dead CSS — see motion.test.ts). */
   :global(.rcd-content [data-slot="collapsible-content"]) {
-    display: grid;
-    grid-template-rows: 0fr;
-    transition: grid-template-rows var(--dur-base) var(--ease-out);
+    overflow: hidden;
   }
   :global(.rcd-content [data-slot="collapsible-content"][data-state="open"]) {
-    grid-template-rows: 1fr;
+    animation: rcd-expand var(--dur-base) var(--ease-out);
   }
-  :global(.rcd-content [data-slot="collapsible-content"] > *) {
-    min-height: 0;
-    overflow: hidden;
+  :global(.rcd-content [data-slot="collapsible-content"][data-state="closed"]) {
+    animation: rcd-collapse var(--dur-base) var(--ease-in);
+  }
+  @keyframes rcd-expand {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--bits-collapsible-content-height);
+    }
+  }
+  @keyframes rcd-collapse {
+    from {
+      height: var(--bits-collapsible-content-height);
+    }
+    to {
+      height: 0;
+    }
   }
 
   /* The ⌘↵ cap rides inside the filled Send button, so it sheds the Kbd chip's own
