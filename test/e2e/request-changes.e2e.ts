@@ -16,7 +16,7 @@ test("dialog opens, Escape closes, Cmd/Ctrl+Enter submits a rejection with feedb
   await expect(page.locator(".diff-plan")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
-  const dialog = page.getByRole("dialog", { name: "Request changes" });
+  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
 
   // Open → Escape closes. Anchor on the autofocused textarea before pressing so
   // the key event reliably originates inside the dialog.
@@ -59,11 +59,12 @@ test("a line-anchored annotation reaches Decision.feedback as a line reference p
 
   // Open the dialog and submit with no general comment — the seeded annotation
   // alone produces feedback, so the deny button is enabled.
-  const dialog = page.getByRole("dialog", { name: "Request changes" });
+  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
   await page.getByRole("button", { name: "Request changes" }).click();
   await expect(dialog).toBeVisible();
-  // The preview already shows the new format the agent will receive — the line
-  // reference and the abbreviated quote, identical to the sent feedback.
+  // The preview shows the new format the agent will receive — the line reference
+  // and the abbreviated quote, identical to the sent feedback. (Behind a collapsed
+  // disclosure but still in the DOM, so its text is readable without expanding.)
   await expect(dialog.locator(".preview pre")).toContainText("Lines 7-8:");
   await expect(dialog.locator(".preview pre")).toContainText("The cache layer … full cold cost.");
   await dialog.getByRole("button", { name: "Send for revision" }).click();
@@ -96,15 +97,15 @@ test("a scratch's Save shows without expanding the row and graduates it into the
   await expect(page.locator(".diff-plan")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
-  const dialog = page.getByRole("dialog", { name: "Request changes" });
+  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
   await page.getByRole("button", { name: "Request changes" }).click();
   await expect(dialog).toBeVisible();
 
   // The regression (EXC-746): the scratch's Save is visible WITHOUT expanding any
-  // row. Before the fix it lived inside a collapsed <details> body and was hidden,
-  // so a reviewer could hit "Send for revision" and drop the draft never having
-  // seen Save. A unit test can't catch this — happy-dom renders <details> children
-  // regardless of `open` — so this real-Chromium visibility check is the guard.
+  // row. Before the fix it lived inside the collapsed disclosure body and was
+  // hidden, so a reviewer could hit "Send for revision" and drop the draft never
+  // having seen Save. A unit test can't catch this — happy-dom keeps the collapsed
+  // disclosure's content mounted — so this real-Chromium visibility check is the guard.
   const save = dialog.locator(".scratch-row .save");
   await expect(save).toBeVisible();
 
@@ -118,4 +119,98 @@ test("a scratch's Save shows without expanding the row and graduates it into the
   await expect.poll(async () => (await daemon.getReview(id)).body?.decision?.behavior).toBe("deny");
   const feedback = (await daemon.getReview(id)).body?.decision?.feedback ?? "";
   expect(feedback).toContain("a half-typed thought");
+});
+
+test("discarding an unsent comment asks to confirm before dropping it (EXC-762)", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    composerScratches: [{ startLine: 7, endLine: 8, text: "a half-typed thought" }],
+  });
+
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
+  await page.getByRole("button", { name: "Request changes" }).click();
+  await expect(dialog).toBeVisible();
+
+  const row = dialog.locator(".scratch-row");
+  await expect(row).toHaveCount(1);
+  // Discard opens a confirmation bubble — the scratch is NOT dropped yet. The
+  // bubble portals to the body (viewport-aware, EXC-762), so it's a page locator,
+  // not a descendant of the dialog element.
+  await row.locator(".discard").click();
+  await expect(page.locator(".confirm-popover")).toBeVisible();
+  await expect(row).toHaveCount(1);
+  // Confirming completes the drop.
+  await page.locator(".confirm-popover").getByRole("button", { name: "Discard" }).click();
+  await expect(dialog.locator(".scratch-row")).toHaveCount(0);
+});
+
+test("marking an inline comment as a draft demotes it into Unsent and out of the send (EXC-762)", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain the cold cost" }],
+  });
+
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
+  await page.getByRole("button", { name: "Request changes" }).click();
+  await expect(dialog).toBeVisible();
+
+  // It starts as a committed inline comment, and Send is enabled.
+  await expect(dialog.locator(".inline-row")).toHaveCount(1);
+  await expect(dialog.locator(".scratch-row")).toHaveCount(0);
+  const send = dialog.getByRole("button", { name: "Send for revision" });
+  await expect(send).toBeEnabled();
+
+  // Mark as draft demotes it: it leaves the inline list, appears under Unsent, and
+  // with nothing left to include the primary action disables.
+  await dialog.locator(".inline-row .mark-draft").click();
+  await expect(dialog.locator(".inline-comments")).toHaveCount(0);
+  const scratchRow = dialog.locator(".scratch-row");
+  await expect(scratchRow).toHaveCount(1);
+  await expect(scratchRow).toContainText("explain the cold cost");
+  await expect(send).toBeDisabled();
+});
+
+test("an inline comment reveals a nested Context with the anchored source lines (EXC-762)", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain the cold cost" }],
+  });
+
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
+  await page.getByRole("button", { name: "Request changes" }).click();
+  await expect(dialog).toBeVisible();
+
+  // Both disclosures are collapsed by default (a real-browser check — happy-dom
+  // can't tell a collapsed disclosure from an open one). The Context lives nested
+  // in the inline comment's own expansion, so it takes two clicks to reveal.
+  const context = dialog.locator(".context-lines");
+  await expect(context).toBeHidden();
+  await dialog.locator(".inline-row .row-head .row-trigger").click();
+  await dialog.locator(".context-trigger").click();
+  await expect(context).toBeVisible();
+  // It quotes the actual plan lines the comment anchors to, not the abbreviated
+  // preview quote — the reviewer sees the real code they commented on.
+  await expect(context).toContainText("cache layer");
+  await expect(context).toContainText("cold cost");
 });

@@ -90,7 +90,12 @@
   // DiffPlanView mount, which always precedes the dialog opening.
   let scratches = $state<ComposerScratch[]>([]);
   let scratchActions = $state<
-    { save: (key: string) => void; discard: (key: string) => void } | undefined
+    | {
+        save: (key: string) => void;
+        discard: (key: string) => void;
+        draft: (scratch: { startLine: number; endLine: number; text: string }) => void;
+      }
+    | undefined
   >();
 
   // ----- State modules -----
@@ -353,6 +358,14 @@
     onSubmit={onRequestChanges}
     onSaveScratch={(key) => scratchActions?.save(key)}
     onDiscardScratch={(key) => scratchActions?.discard(key)}
+    onDiscardAnnotation={(id) => autosave.deleteAnnotation(id)}
+    onDraftAnnotation={(a) => {
+      // "Mark as draft": demote a committed line comment into the unsent-scratch
+      // section — drop the annotation and insert a scratch at its range, so it can
+      // be Saved back or Discarded like any other unsent draft (EXC-762).
+      autosave.deleteAnnotation(a.id);
+      scratchActions?.draft({ startLine: a.startLine, endLine: a.endLine, text: a.comment });
+    }}
     onCancel={() => {
       showDialog = false;
       // Flush now so a draft typed within the last 500ms debounce window is

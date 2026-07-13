@@ -29,6 +29,15 @@ function quotedLines(startLine: number, endLine: number, planLines: string[]): s
   return planLines.slice(startLine - 1, endLine);
 }
 
+/** The source lines a line-anchored comment spans, sliced 1-based and inclusive
+ * from the plan text — the exact code the reviewer commented against. Returns []
+ * for a stale anchor past the end of the text (nothing to show). The dialog's
+ * inline-comment "Context" disclosure renders these so the reviewer sees the
+ * lines without leaving the modal (EXC-762). */
+export function sourceLines(startLine: number, endLine: number, planText: string): string[] {
+  return quotedLines(startLine, endLine, planText.split("\n"));
+}
+
 const QUOTE_HEAD_WORDS = 3;
 const QUOTE_TAIL_WORDS = 3;
 
