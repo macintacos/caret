@@ -62,7 +62,7 @@
               <!-- The ^vN revision marker: a Badge, so it reads as the same chip
                    the TopBar VersionLabel shows. Only the ^ carries amber
                    (brand); the rest stays ink-soft, holding amber-scarcity. -->
-              <Badge {...props} variant="secondary" class="rev metric" style="color: var(--ink-soft)">
+              <Badge {...props} variant="secondary" class="rev metric">
                 <span class="caret" aria-hidden="true">^</span>v{version}
               </Badge>
             {/snippet}
@@ -143,12 +143,14 @@
   }
   /* The revision Badge is a child component, so its own class carries no scope
      hash — reach it with :global, bounded under the scoped .status-strip. Tightens
-     the shadcn Badge's default padding/size down to the dense strip's scale. */
+     the shadcn Badge's default padding/size down to the dense strip's scale and
+     tones the pill neutral (the ^ caret keeps the amber below). */
   .status-strip :global(.rev) {
     gap: 0.05rem;
     padding: 0.04rem 0.32rem;
     font-size: var(--text-2xs);
     letter-spacing: 0.04em;
+    color: var(--ink-soft);
   }
   /* Revision pill vocabulary mirrors VersionLabel's ^vN: the ^ is the caret brand
      glyph, so it carries the amber accent; the rest of the chip stays neutral. */

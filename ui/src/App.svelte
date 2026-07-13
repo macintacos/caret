@@ -265,11 +265,8 @@
   />
 
   {#if selection.daemonChanged}
-    <!-- shadcn Alert (role="alert" baked in). It consumes grid row 2 and pushes
-         the content down rather than overlaying it, so it can't be mistaken for
-         a dismissable toast. Alert's default is a card block; the banner overrides
-         it to a full-width top strip with an accent left rule (see .daemon-banner
-         in the style block). -->
+    <!-- shadcn Alert as the semantic role="alert" container, molded to a
+         full-width top strip (see .daemon-banner in the style block). -->
     <Alert.Root class="daemon-banner">
       <p class="db-text">The caret daemon was replaced — reload to resync.</p>
       <div class="db-actions">
@@ -415,14 +412,15 @@
   }
 
   /* Persistent, dismissible banner shown when the daemon behind the port was
-     replaced (its instanceId flipped). A shadcn Alert sibling of TopBar at the
-     top of the shell — it consumes grid row 2 and pushes the content down rather
-     than overlaying it, so it can't be mistaken for a transient toast. Reached
-     with :global because the class rides the Alert child component (no scope
-     hash), and it re-shapes Alert's card default into a full-width top strip:
-     accent left rule signals urgency without an icon (icon-rules: an icon must
-     earn its place; a one-line message doesn't need one). The unlayered rule out-
-     specifies Alert's Tailwind base. */
+     replaced (its instanceId flipped). Alert.Root carries only the semantic
+     role="alert" here; the rest re-shapes its card default into a full-width top
+     strip that consumes grid row 2 and pushes the content down rather than
+     overlaying it, so it can't be mistaken for a transient toast. The accent left
+     rule signals urgency without an icon (icon-rules: an icon must earn its place;
+     a one-line message doesn't need one). Reached with :global because the class
+     rides the Alert child component (no scope hash); the overrides win because
+     this scoped component CSS is unlayered and Tailwind's utilities are layered —
+     unlayered always beats layered. */
   .shell > :global(.daemon-banner) {
     grid-row: 2;
     display: flex;
