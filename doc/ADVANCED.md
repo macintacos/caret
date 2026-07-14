@@ -144,9 +144,12 @@ dependency into its own cache and loads it — caret writes no config-dir manife
 no `bun install` itself. The plugin resolves the caret binary and its own version at
 runtime from the package it ships in (an env override, `CARET_OPENCODE_BIN`, still wins),
 and on load it checks caret's latest GitHub release and toasts an update nudge when you're
-behind (`CARET_OPENCODE_NO_UPDATE_CHECK` opts out). `caret install --target claude`
-registers caret with Claude Code through its plugin CLI, and `--target opencode,claude`
-does both agents at once. See
+behind (`CARET_OPENCODE_NO_UPDATE_CHECK` opts out). To take an update, delete OpenCode's
+cached copy (`~/.cache/opencode/node_modules/@macintacos/caret`) and restart, or pin
+`"@macintacos/caret@<version>"` in the array and bump it. `caret install --target claude`
+registers caret with Claude Code through its plugin CLI, `--target opencode,claude` does
+both agents at once, `--uninstall` reverses any target, and `--dry-run` previews the
+changes without writing. See
 [`agents/opencode-integration.md`](agents/opencode-integration.md) for the design.
 
 ### Desktop notifications

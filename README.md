@@ -80,10 +80,13 @@ no longer need it for a one-time install.
 
 **Update**: caret checks its
 [latest release](https://github.com/macintacos/caret/releases) at OpenCode startup and
-toasts you when a newer version is available; to take it, repin the array entry (or clear
-OpenCode's plugin cache) and restart. **Uninstall**:
-`caret install --target opencode --uninstall`, or just remove the array entry. See
-[`doc/ADVANCED.md`](doc/ADVANCED.md#the-opencode-adapter) for how the integration works.
+toasts you when a newer version is available. To take it, delete OpenCode's cached copy of
+caret and restart — `rm -rf ~/.cache/opencode/node_modules/@macintacos/caret` makes
+OpenCode reinstall the latest on its next start. (Prefer to control the version yourself?
+Pin it in the array — `"@macintacos/caret@<version>"` — and bump that when you want to
+move.) **Uninstall**: `caret install --target opencode --uninstall`, or just remove the
+array entry. See [`doc/ADVANCED.md`](doc/ADVANCED.md#the-opencode-adapter) for how the
+integration works.
 
 ## Using caret
 
