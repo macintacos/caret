@@ -189,9 +189,13 @@
     white-space: nowrap;
   }
   .compare-picker :global(.compare-toggle:hover:not(:disabled)) {
-    background: transparent;
     border-color: var(--accent);
     color: var(--accent);
+  }
+  /* Neutralize the outline variant's chip-hover fill, but only while the toggle
+     is off — an on toggle keeps its amber wash when hovered. */
+  .compare-picker :global(.compare-toggle:not([data-state="on"]):hover:not(:disabled)) {
+    background: transparent;
   }
   .compare-picker :global(.compare-toggle[data-state="on"]) {
     background: var(--accent-wash);
