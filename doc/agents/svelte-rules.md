@@ -92,6 +92,15 @@ stays green under any invocation.
 - **App.css owns the design tokens** as CSS custom properties (`--paper`, `--ink`,
   `--accent`, `--mark`, …). Components reference `var(--token)`; they don't hardcode hex.
   A color used in two places is a token, declared once.
+- **Shared style atoms stay global CSS classes, not Tailwind `@utility`.** The chrome's
+  cross-component vocabulary — `.mono`/`.metric` (mono family, tabular figures),
+  `.eyebrow` (the uppercase label), `.float-chip` (the topbar's soft-solid surface) —
+  lives as plain global classes in `app.css`, alongside the tokens. They are deliberately
+  **not** Tailwind `@utility` entries: `app.css` imports Tailwind with `source(none)` and
+  scans only `lib/components/ui` (the shadcn tree), so a `@utility` referenced from
+  caret's own components — which are never scanned — would never be emitted. A named class
+  also beats inlining a multi-property atom at each call site (the declared-once rule
+  again). Tailwind utilities are the shadcn tree's; caret chrome wears caret-token CSS.
 - **A constant coupled across files gets one named source.** The reference layout width
   the Playwright viewport depends on lives as `REFERENCE_WIDTH_PX` in
   `ui/src/lib/layout.ts` (pure TS, node-free), and `layout.test.ts` asserts the e2e
@@ -123,13 +132,22 @@ stays green under any invocation.
 
 ## Motion principles
 
-The chrome's motion is restraint over flourish: functional one-shot transitions stay
-≤200ms and draw their duration/easing from the `--dur-*`/`--ease-*` tokens in `app.css`
-(one enter easing, one exit easing — a caret design call, not ported); ambient/infinite
-animations (the safe-mode pulse, the EmptyState float) are exempt and keep their own
-bespoke durations. `prefers-reduced-motion: reduce` is a global kill-switch for the
-light-DOM chrome — a single rule in `app.css` collapses every animation and transition
-under `#app` to one static frame, so no chrome component honors the preference on its own.
+caret runs two motion tracks, one system by intent. The chrome's own motion is restraint
+over flourish: functional one-shot transitions stay ≤200ms and draw their duration/easing
+from the `--dur-*`/`--ease-*` tokens in `app.css` (one enter easing, one exit easing — a
+caret design call, not ported). The portalled shadcn surfaces (dialogs, dropdown menus,
+tooltips, popovers) instead animate their enter/exit through `tw-animate-css` — the
+`animate-in`/`fade`/`zoom`/`slide` utilities the copied components ship with.
+Ambient/infinite animations (the safe-mode pulse, the EmptyState float, the theme wipe)
+are exempt from both and keep their own bespoke durations.
+
+`prefers-reduced-motion: reduce` is the single global kill-switch over all of it: one rule
+in `app.css` collapses every animation and transition to one static frame, so no component
+honors the preference on its own. It is anchored to two real selectors, never a bare `*` —
+`#app` (the light-DOM chrome) and `[data-slot]` (the shadcn surfaces bits-ui portals to
+`document.body`, outside `#app`; `tw-animate-css` ships no reduced-motion guard of its
+own, so the `#app` anchor alone would leave a portalled dialog free to fade in).
+`motion.test.ts` pins both anchors.
 
 The `@pierre/diffs` render surface is motionless by design. Line hover,
 line/range-selection highlight, the decoration bars, gutter affordances, and hunk-expand
