@@ -7,6 +7,37 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-14 - The Reforged Release
+
+### Added
+
+- **Color palettes and theme switching.** The review UI now supports selectable color
+  palettes and switching between themes, with the diff view's syntax colors following the
+  active theme (#218).
+- **Confirm before dropping inline comments.** Discarding or deleting an inline comment
+  now asks for confirmation first, so a stray click can't silently drop an in-progress
+  annotation (#219).
+
+### Changed
+
+- **UI rebuilt on shadcn-svelte.** The review UI's component layer was migrated onto a
+  Tailwind v4 + shadcn-svelte foundation, with caret's theme tokens bridged into the
+  shadcn token system and a shadcn-first composition rule added for contributors. The
+  TopBar cluster, the Settings and confirm-guard modals, the Request Changes dialog, the
+  status and ambient chrome, the version-compare picker, the inline-annotation surfaces
+  (Card, Button, Badge), and SourceToc/CodeCopyButton/FilePreview were all rebuilt on
+  shadcn primitives, closed out by a cohesion pass that retired the bespoke CSS the
+  migration superseded (#220, #221, #222, #223, #226, #228, #230, #231, #232, #233, #234).
+- **Consolidated preference storage.** The duplicated localStorage enum-preference modules
+  were collapsed into a single shared helper (#217).
+- **Bug reports point at the discovery command.** The README's bug-reporting section now
+  directs you to the `/caret:discovery` slash command for a diagnostics snapshot (#227).
+
+### Fixed
+
+- **Comment composer caret jump.** The inline comment composer no longer jumps the caret
+  to the wrong position when you switch the line it's anchored to (#229).
+
 ## [0.2.0] - 2026-07-12 - The Reviewer Release
 
 ### Added
@@ -296,7 +327,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Review decisions are delivered via a bounded poll, fixing missed or delayed decision
   delivery.
 
-[Unreleased]: https://github.com/macintacos/caret/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/macintacos/caret/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/macintacos/caret/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/macintacos/caret/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/macintacos/caret/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/macintacos/caret/compare/v0.1.1...v0.1.2
