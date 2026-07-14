@@ -94,6 +94,17 @@ describe("the global prefers-reduced-motion rule", () => {
     expect(block).toContain("#app");
   });
 
+  test("also reaches shadcn surfaces portalled outside #app (via data-slot)", () => {
+    // bits-ui portals dialog / dropdown / tooltip / popover content to
+    // document.body — outside #app — and tw-animate-css (which drives their
+    // enter/exit) ships no reduced-motion guard of its own. The single global
+    // rule must therefore also cover the portalled shadcn surfaces, anchored to
+    // their data-slot attribute (still not a bare universal), and their
+    // descendants, so a dialog can't fade/zoom in under reduced motion.
+    expect(block).toContain("[data-slot]");
+    expect(block).toContain("[data-slot] *");
+  });
+
   test("neutralizes animation and transition to near-zero", () => {
     expect(block).toMatch(/animation-duration:\s*0(\.0+)?(m?s)?/);
     expect(block).toMatch(/transition-duration:\s*0(\.0+)?(m?s)?/);

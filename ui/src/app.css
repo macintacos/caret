@@ -247,23 +247,35 @@ body {
 }
 
 /* The single global reduced-motion guard for the chrome. When the OS asks for
-   reduced motion, every animation and transition under the light-DOM app root
-   collapses to a near-zero, single static frame — so no chrome component can
-   forget to honor the preference on its own. animation-iteration-count: 1
-   resolves an infinite ambient animation (the safe-mode pulse, EmptyState
-   float) to one frame instead of letting it loop invisibly. Authored unlayered
-   so it wins over any component @layer, and scoped to #app and its descendants
-   (the true light-DOM root) rather than a bare `*`.
-   Reach: light-DOM chrome ONLY. The @pierre/diffs diff view renders into a
-   Shadow DOM (.diffview's shadow root), a separate tree this selector cannot
-   pierce — its own reduced-motion handling stays the library's concern. The
-   JS-side mirror for scroll behavior (CSS cannot gate ScrollBehavior) lives in
-   lib/diffview/scroll.ts's prefersReducedMotion(). */
+   reduced motion, every animation and transition under it collapses to a near-
+   zero, single static frame — so no chrome component can forget to honor the
+   preference on its own. animation-iteration-count: 1 resolves an infinite
+   ambient animation (the safe-mode pulse, EmptyState float) to one frame instead
+   of letting it loop invisibly. Authored unlayered so it wins over any component
+   @layer.
+   Two real anchors, never a bare `*`: (1) #app and its descendants — the light-
+   DOM chrome; (2) [data-slot] and its descendants — the shadcn surfaces bits-ui
+   PORTALS to document.body (dialogs, dropdown menus, tooltips, popovers), which
+   mount OUTSIDE #app and whose tw-animate-css enter/exit (fade/zoom/slide) ships
+   no reduced-motion guard of its own, so the #app anchor alone would let them
+   still animate. data-slot is stamped on every copied shadcn component, so it is
+   the portal-safe hook; anchoring to it (not a bare universal) keeps the rule
+   from bleeding past caret's own surfaces.
+   Reach: light-DOM ONLY (both the #app tree and the body-level portal). The
+   @pierre/diffs diff view renders into a Shadow DOM (.diffview's shadow root), a
+   separate tree neither selector can pierce — its own reduced-motion handling
+   stays the library's concern. The JS-side mirror for scroll behavior (CSS
+   cannot gate ScrollBehavior) lives in lib/diffview/scroll.ts's
+   prefersReducedMotion(). */
 @media (prefers-reduced-motion: reduce) {
   #app,
   #app *,
   #app *::before,
-  #app *::after {
+  #app *::after,
+  [data-slot],
+  [data-slot] *,
+  [data-slot] *::before,
+  [data-slot] *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

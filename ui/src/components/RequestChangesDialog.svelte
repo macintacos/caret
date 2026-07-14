@@ -536,9 +536,6 @@
     grid-template-columns: minmax(0, 1fr);
     gap: 0.35rem;
   }
-  .context-disclosure {
-    margin-top: 0.1rem;
-  }
   .context-label {
     font-size: var(--text-2xs);
     font-weight: 600;
