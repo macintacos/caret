@@ -8,7 +8,13 @@
   // with a comment count and a per-card order cue, in thread order. Card behavior
   // (collapse, edit, delete) stays in SourceAnnotationCard; this owns the framing
   // and passes focus/edit/delete straight through.
+  //
+  // The framing is a shadcn Card (EXC-765) with a Separator dividing each pair of
+  // stacked comments; caret's compact padding is re-applied over the copied source
+  // via the :global(.thread) rule below.
   import type { LineAnnotation } from "@core/types";
+  import { Card } from "$lib/components/ui/card/index.js";
+  import { Separator } from "$lib/components/ui/separator/index.js";
   import SourceAnnotationCard from "./SourceAnnotationCard.svelte";
 
   interface Props {
@@ -26,11 +32,14 @@
 </script>
 
 {#if threaded}
-  <section class="thread" aria-label="Comment thread">
+  <Card class="thread" role="group" aria-label="Comment thread">
     <header class="thread-head">
       <span class="thread-count metric">{annotations.length} comments</span>
     </header>
     {#each annotations as a, i (a.id)}
+      {#if i > 0}
+        <Separator class="thread-rule" />
+      {/if}
       <div class="thread-item">
         <span class="thread-ordinal metric" aria-hidden="true">{i + 1}</span>
         <SourceAnnotationCard
@@ -42,7 +51,7 @@
         />
       </div>
     {/each}
-  </section>
+  </Card>
 {:else if annotations[0]}
   <SourceAnnotationCard
     annotation={annotations[0]}
@@ -54,17 +63,19 @@
 {/if}
 
 <style>
-  /* The thread container: quiet paper-raised chrome that binds the line's comments
-     into one block. It is structural framing, not the amber action affordance —
-     the focused card keeps its own amber left-border, so the thread stays neutral
-     and amber stays scarce. */
-  .thread {
+  /* The thread container: a Card reshaped to quiet paper-raised chrome that binds
+     the line's comments into one block. It is structural framing, not the amber
+     action affordance — the focused card keeps its own amber left-border, so the
+     thread stays neutral and amber stays scarce. The compound [data-slot] selector
+     (0,2,0) outranks the copied Card's utility classes. */
+  :global([data-slot="card"].thread) {
+    display: block;
     max-width: min(46rem, 100%);
     margin: 0.4rem 0 0.55rem;
     padding: 0.35rem 0.45rem 0.45rem;
-    background: var(--paper-raised);
     border: 1px solid var(--rule);
     border-radius: var(--radius-lg);
+    box-shadow: none;
   }
   .thread-head {
     display: flex;
@@ -78,6 +89,11 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--ink-faint);
+  }
+  /* The hairline between stacked comments — a Separator inset a hair so it reads
+     as a divider within the thread, not a full-bleed cut. */
+  :global(.thread-rule) {
+    margin: 0.15rem 0;
   }
   /* Each entry pairs an order cue with its card. The cards sit flush; the inner
      card's own vertical margin gives them air, so the ordinal aligns to the
