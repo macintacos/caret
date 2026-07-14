@@ -184,6 +184,37 @@ test("marking an inline comment as a draft demotes it into Unsent and out of the
   await expect(send).toBeDisabled();
 });
 
+test("discarding a committed inline comment drops it and leaves the dialog open (EXC-765)", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain the cold cost" }],
+  });
+
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
+  await page.getByRole("button", { name: "Request changes" }).click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator(".inline-row")).toHaveCount(1);
+
+  // Discard opens the confirmation; nothing is dropped yet.
+  await dialog.locator(".inline-row .discard").click();
+  await expect(page.locator(".confirm-popover")).toBeVisible();
+  await expect(dialog.locator(".inline-row")).toHaveCount(1);
+
+  // Confirming drops the comment AND the dialog must stay open — the confirm click
+  // (on a bubble portaled to document.body, outside the dialog content) must reach
+  // its button, not fall through to the modal's outside-dismiss (EXC-765).
+  await page.locator(".confirm-popover").getByRole("button", { name: "Discard" }).click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator(".inline-row")).toHaveCount(0);
+});
+
 test("an inline comment reveals a nested Context with the anchored source lines (EXC-762)", async ({
   daemon,
   page,

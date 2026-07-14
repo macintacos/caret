@@ -30,22 +30,41 @@
     /** Text to pre-fill, restoring a resumed scratch draft. Default "" opens an
      * empty composer for a fresh comment. */
     initial?: string;
+    /** "create" (default) is the gutter flow that mints a new annotation:
+     * Keep-for-later / Discard / Comment. "edit" reuses the exact same surface to
+     * revise a saved comment (EXC-765), swapping only the action row to Cancel /
+     * Save — so editing a comment looks identical to writing one, never a bespoke
+     * inline form. */
+    mode?: "create" | "edit";
     onSubmit: (comment: string) => void;
-    /** Discard the draft outright — the Discard button and the Esc chord. Drops
-     * the text with no scratch retained, so the host closes the composer and
-     * leaves no "Resume" marker. */
+    /** Discard the draft outright — the Discard/Cancel button and the Esc chord.
+     * In "create" this drops the text with no scratch retained; in "edit" it
+     * reverts to the saved comment. Either way the host closes the composer. */
     onDiscard: () => void;
     /** Keep the draft for later, handing back the current text so the host retains
      * it as a resumable scratch. The "Keep for later" button; disabled when the
-     * box is empty (nothing to keep). */
-    onKeep: (text: string) => void;
+     * box is empty (nothing to keep). "create" only. */
+    onKeep?: (text: string) => void;
     /** Report the live text on every edit, so the host can retain it as a scratch
      * if the composer is replaced (a new range opened) without an explicit
      * dismiss. Optional. */
     onInput?: (text: string) => void;
   }
-  let { startLine, endLine, initial = "", onSubmit, onDiscard, onKeep, onInput }: Props =
-    $props();
+  let {
+    startLine,
+    endLine,
+    initial = "",
+    mode = "create",
+    onSubmit,
+    onDiscard,
+    onKeep,
+    onInput,
+  }: Props = $props();
+
+  // "edit" reuses this whole surface to revise a saved comment: same Card, same
+  // MarkdownEditor, same layout — only the action row and the accessible names
+  // change, so the reviewer never meets a second, differently-shaped editor.
+  const isEdit = $derived(mode === "edit");
 
   // Seed from `initial` once, at mount: a resumed scratch mounts a fresh composer
   // with the restored text, and the reviewer edits the local copy from there.
@@ -79,7 +98,7 @@
   // Dropping a non-empty draft loses typed text with no undo, so it routes
   // through a confirmation (EXC-749). An empty box has nothing to lose, so it
   // discards at once — no nag for the "clicked a line, changed my mind" case.
-  // Both the Discard button and the Esc chord enter here.
+  // The create-mode Discard button and the create-mode Esc chord enter here.
   function requestDiscard() {
     if (canKeep) confirming = true;
     else onDiscard();
@@ -90,48 +109,73 @@
     onDiscard();
   }
 
+  // The Esc chord: in "edit" it plainly reverts (Cancel — the saved comment
+  // stays, so there is nothing to lose that a confirm would guard); in "create"
+  // it routes through the discard confirmation like the Discard button.
+  function cancelChord() {
+    if (isEdit) onDiscard();
+    else requestDiscard();
+  }
+
   function keep() {
-    onKeep(comment);
+    onKeep?.(comment);
   }
 </script>
 
-<Card class="composer" role="dialog" aria-label="Add a comment" tabindex={-1}>
+<Card
+  class="composer"
+  role="dialog"
+  aria-label={isEdit ? "Edit comment" : "Add a comment"}
+  tabindex={-1}
+>
   <p class="label metric">{label}</p>
   <MarkdownEditor
     value={initial}
-    placeholder="What should change here?"
-    ariaLabel="Comment"
+    placeholder={isEdit ? "" : "What should change here?"}
+    ariaLabel={isEdit ? "Edit comment" : "Comment"}
     autofocus
     onInput={(text) => (comment = text)}
     onSubmitChord={submit}
-    onCancelChord={requestDiscard}
+    onCancelChord={cancelChord}
   />
   <div class="row">
-    <Button variant="ghost" class="keep" onclick={keep} disabled={!canKeep}>Keep for later</Button>
-    <span class="discard-wrap">
-      <Button
-        variant="secondary"
-        class="float-chip ghost"
-        onclick={requestDiscard}
-        aria-keyshortcuts="Escape">Discard</Button
-      >
-      {#if confirming}
-        <ConfirmPopover
-          question="Discard this comment?"
-          confirmLabel="Discard"
-          cancelLabel="Keep editing"
-          align="end"
-          onConfirm={confirmDiscard}
-          onCancel={() => (confirming = false)}
-        />
-      {/if}
-    </span>
-    <Button onclick={submit} aria-keyshortcuts="Meta+Enter Control+Enter">
-      Comment
-      <Kbd class="kbd" aria-hidden="true">
-        <Icon name="command" size={12} /><Icon name="corner-down-left" size={12} />
-      </Kbd>
-    </Button>
+    {#if isEdit}
+      <!-- Edit mode: revise a saved comment. Cancel reverts (the comment survives,
+           so no confirm), Save commits — same amber primary + ⌘↵ hint as Comment. -->
+      <Button variant="ghost" class="cancel" onclick={onDiscard}>Cancel</Button>
+      <Button class="save" onclick={submit} aria-keyshortcuts="Meta+Enter Control+Enter">
+        Save
+        <Kbd class="kbd" aria-hidden="true">
+          <Icon name="command" size={12} /><Icon name="corner-down-left" size={12} />
+        </Kbd>
+      </Button>
+    {:else}
+      <Button variant="ghost" class="keep" onclick={keep} disabled={!canKeep}>Keep for later</Button>
+      <span class="discard-wrap">
+        <Button
+          variant="secondary"
+          class="float-chip ghost"
+          onclick={requestDiscard}
+          aria-keyshortcuts="Escape">Discard</Button
+        >
+        {#if confirming}
+          <ConfirmPopover
+            question="Discard this comment?"
+            confirmLabel="Discard"
+            cancelLabel="Keep editing"
+            align="start"
+            onConfirm={confirmDiscard}
+            onCancel={() => (confirming = false)}
+          />
+        {/if}
+      </span>
+      <Button onclick={submit} aria-keyshortcuts="Meta+Enter Control+Enter">
+        Comment
+        <Kbd class="kbd" aria-hidden="true">
+          <Icon name="command" size={12} /><Icon name="corner-down-left" size={12} />
+        </Kbd>
+      </Button>
+    {/if}
   </div>
 </Card>
 

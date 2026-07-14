@@ -73,7 +73,19 @@
   </AlertDialog.Root>
 {:else}
   <Dialog.Root {open} onOpenChange={(o) => { if (!o) onDismiss(); }}>
-    <Dialog.Content showCloseButton={false} {onOpenAutoFocus} class={contentClass}>
+    <Dialog.Content
+      showCloseButton={false}
+      {onOpenAutoFocus}
+      class={contentClass}
+      onInteractOutside={(e) => {
+        // A confirmation bubble (ConfirmPopover) portals to document.body — a
+        // sibling of this content, not a descendant — so bits-ui counts a click on
+        // it as an outside interaction and would dismiss the whole modal, tearing
+        // the bubble down before its Discard click lands (that was the unreliable
+        // in-modal discard — EXC-765). Treat a click within the bubble as inside.
+        if ((e.target as Element | null)?.closest?.(".confirm-popover")) e.preventDefault();
+      }}
+    >
       <Dialog.Header class="m-head">
         {#if eyebrow}<span class="eyebrow">{eyebrow}</span>{/if}
         <Dialog.Title class="m-title">{title}</Dialog.Title>

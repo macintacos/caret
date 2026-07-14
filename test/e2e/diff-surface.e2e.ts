@@ -1608,9 +1608,10 @@ test("an inline card collapses to a chip and expands again", async ({ daemon, pa
   const card = page.locator("[data-annotation-card]");
   await expect(card.locator(".body")).toBeVisible();
 
-  // Collapse: the body disappears, leaving the compact chip.
+  // Collapse: the body's grid row shrinks to zero height (it stays mounted for the
+  // reveal, so it goes not-visible rather than leaving the DOM), leaving the chip.
   await card.getByRole("button", { name: "Collapse comment" }).click();
-  await expect(card.locator(".body")).toHaveCount(0);
+  await expect(card.locator(".body")).not.toBeVisible();
   await expect(card.locator(".chip")).toBeVisible();
 
   // Expand again by clicking the chip; the full comment returns.
@@ -1655,15 +1656,17 @@ test("the composer reveal and the card swap share one opacity-only token transit
   // Opacity only — no scale bounce, no translate.
   expect(composerMotion.transform).toBe("none");
 
-  // The card's expanded body reveals on the same contract.
+  // The saved card reveals on the same contract: a one-shot opacity fade as it
+  // settles into the document, no transform bounce. (The expand/collapse height
+  // reveal is a separate grid-rows transition, exercised below.)
   await composerInput(composer).fill("Same considered reveal.");
   await composer.getByRole("button", { name: "Comment" }).click();
   await expect(composer).toHaveCount(0);
-  const body = page.locator("[data-annotation-card] .body");
-  await expect(body).toBeVisible();
-  const bodyMotion = await body.evaluate(motionOf);
-  expect(bodyMotion.name).toMatch(/reveal$/);
-  expect(bodyMotion.transform).toBe("none");
+  const card = page.locator("[data-annotation-card]");
+  await expect(card).toBeVisible();
+  const cardMotion = await card.evaluate(motionOf);
+  expect(cardMotion.name).toMatch(/reveal$/);
+  expect(cardMotion.transform).toBe("none");
 });
 
 test("deleting an inline card removes the annotation", async ({ daemon, page }) => {
@@ -1677,8 +1680,8 @@ test("deleting an inline card removes the annotation", async ({ daemon, page }) 
     .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
     .toBe(1);
 
-  await page.locator("[data-annotation-card]").getByRole("button", { name: "delete" }).click();
-  // Deleting a submitted comment can't be undone, so confirm first (EXC-749).
+  await page.locator("[data-annotation-card]").getByRole("button", { name: "Discard" }).click();
+  // Discarding a submitted comment can't be undone, so confirm first (EXC-749).
   await page.locator(".confirm-popover .confirm").click();
 
   // The card leaves the DOM and the delete persists through /draft.
@@ -1697,7 +1700,7 @@ test("canceling a delete keeps the inline card", async ({ daemon, page }) => {
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
 
   await createAnnotation(page, 3, "Keep this section.");
-  await page.locator("[data-annotation-card]").getByRole("button", { name: "delete" }).click();
+  await page.locator("[data-annotation-card]").getByRole("button", { name: "Discard" }).click();
 
   await expect(page.locator(".confirm-popover")).toBeVisible();
   await page.locator(".confirm-popover .cancel").click();
@@ -1722,7 +1725,7 @@ test("editing an inline card rewrites the comment and persists it", async ({ dae
   // Enter edit mode; the textarea seeds with the current comment, then rewrite it
   // and submit with the keyboard chord.
   const card = page.locator("[data-annotation-card]");
-  await card.getByRole("button", { name: "edit" }).click();
+  await card.getByRole("button", { name: "Edit" }).click();
   const textarea = card.getByRole("textbox", { name: "Edit comment" });
   await expect(textarea).toHaveText("Original note.");
   await textarea.fill("Revised note with more detail.");

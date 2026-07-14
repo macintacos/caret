@@ -169,6 +169,13 @@
      floating layer rather than melting into what it covers. */
   .confirm-popover {
     --pop-bg: color-mix(in srgb, var(--paper-raised), var(--ink) 8%);
+    /* Pin the sans stack explicitly: in anchor mode the bubble portals to
+       document.body — outside #app and the diff view's slotted content — so it
+       can't rely on inheriting a font-family from either. Without this it fell
+       back to the UA serif in the Request Changes dialog while the in-flow
+       card/composer bubbles read sans, so the three looked like different popups
+       (EXC-765). One font here keeps every discard confirmation identical. */
+    font-family: var(--font-sans);
     position: absolute;
     top: calc(100% + 0.5rem);
     z-index: 20;

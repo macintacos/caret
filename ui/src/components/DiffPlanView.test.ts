@@ -232,7 +232,7 @@ describe("DiffPlanView annotation display", () => {
     expect(card).toBe(true);
   });
 
-  test("the focused annotation expands while others collapse", async () => {
+  test("the focused annotation renders expanded, the rest collapsed", async () => {
     const annotations = [
       lineAnn({ id: "a", startLine: 2, endLine: 2, comment: "first" }),
       lineAnn({ id: "b", startLine: 4, endLine: 4, comment: "second" }),
@@ -241,8 +241,11 @@ describe("DiffPlanView annotation display", () => {
     await until(() => target.querySelector('[data-annotation-card="a"]') != null);
     const a = target.querySelector('[data-annotation-card="a"]')!;
     const b = target.querySelector('[data-annotation-card="b"]')!;
-    expect(a.querySelector(".body")).not.toBeNull();
-    expect(b.querySelector(".body")).toBeNull();
+    // Expansion is per-card and independent (EXC-765): focusing "a" expands it
+    // without collapsing "b" — but "b" was never focused, so it starts a chip. The
+    // body stays mounted for the grid reveal, so expansion is the .expanded class.
+    expect(a.classList.contains("expanded")).toBe(true);
+    expect(b.classList.contains("expanded")).toBe(false);
     expect(b.querySelector(".chip")).not.toBeNull();
   });
 

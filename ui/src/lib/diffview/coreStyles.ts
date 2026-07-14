@@ -367,6 +367,21 @@ const CARET_OVERRIDES = `
     background-color: transparent;
   }
 
+  /* Match the annotation row's gutter to the plan surface (EXC-765). The library
+     bases the annotation row's background on --diffs-bg-context — a step lighter
+     than --diffs-bg — so the gutter strip to the left of a saved or draft comment
+     read subtly lighter than the code gutter above and below it, drawing the eye
+     to a seam that isn't meaningful. Rebinding the row's single base var to
+     --diffs-bg drops it onto the same surface as the surrounding lines (the
+     library's computed row backgrounds all cascade from this one var); the
+     card/composer still paints its own paper-raised over the content cell, so only
+     the bare gutter buffer changes. Higher specificity than the library's
+     [data-line-annotation] base rule, and adopted after it, so it wins. */
+  [data-gutter] > [data-gutter-buffer="annotation"],
+  [data-content] > [data-line-annotation] {
+    --diffs-annotation-bg: var(--diffs-bg);
+  }
+
   /* EXC-687: a resolved filename reference in the plan carries a small file icon
      before its token. fileRefTag.ts tags the token that starts each reference
      data-file-ref; the icon is the vendored Lucide file glyph as a mask, so it
