@@ -277,7 +277,7 @@
      dot plus a quiet label. The dot carries the hue (state-driven, via the
      inherited --state-accent); the label stays neutral so the indicator reads as
      chrome, not a second accent. Shown collapsed and expanded alike. */
-  :global(.state) {
+  :global([data-slot="badge"].state) {
     flex: none;
     gap: 0.3rem;
     padding: 0.05rem 0.4rem;
