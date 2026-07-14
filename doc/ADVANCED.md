@@ -9,32 +9,32 @@ install it, and basic usage, start there.
 
 ## Build from source
 
-Prefer a platform-native compiled binary over the `bun` bundle? The build-from-source
-installer clones caret at its latest release (the newest `vX.Y.Z` tag), compiles the
-binary for your platform, and registers it with your agent(s) — no `claude --plugin-dir`.
-It needs [`git`](https://git-scm.com) and [`bun`](https://bun.sh) on your `PATH`; it
-detects Claude Code and/or OpenCode and installs into the one(s) present (the
-[`claude`](https://claude.com/claude-code) CLI is required only for the Claude target —
-set `CARET_AGENTS=claude,opencode` to choose non-interactively):
+The [install methods in the README](../README.md#install) ship prebuilt artifacts — the
+`bun` bundle behind the plugin, and the published `@macintacos/caret` package — so you
+never need a compiler to _use_ caret; `scripts/install.sh` just registers those with your
+agents. Build from source only when you want the platform-native compiled binary
+(`bin/caret-native`, which the entrypoint shim prefers when it is present) or you are
+hacking on caret itself. It uses the `mise` toolchain from a checkout:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/install.sh | bash
+git clone https://github.com/macintacos/caret.git
+cd caret
+mise run build            # compile bin/caret-native + build the UI
+mise run build --install  # …then install THIS local build into your detected agent(s)
 ```
 
-Set `CARET_DRY_RUN=1` and the installer runs the same read-only detection — tool checks,
-release-tag lookup, clone-vs-update — then prints the exact commands it would run and
-changes nothing:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/install.sh | CARET_DRY_RUN=1 bash
-```
+`mise run build --install` is the dev loop: it registers the freshly built checkout with
+Claude Code (via a private dev marketplace) and OpenCode and cycles the daemon — see
+[Development](#development) below and [CONTRIBUTING.md](../CONTRIBUTING.md). It needs
+[`git`](https://git-scm.com) and [`bun`](https://bun.sh); the
+[`claude`](https://claude.com/claude-code) CLI is required only for the Claude target.
 
 ## How it works
 
 Claude Code's hooks invoke `bin/caret`, a small entrypoint shim that runs caret's
 subcommands. The shim execs the platform-native compiled binary (`bin/caret-native`) when
-a build-from-source install produced one, and otherwise runs the `bun` bundle
-(`dist/cli.js`) that the marketplace install ships.
+a `mise run build` produced one, and otherwise runs the `bun` bundle (`dist/cli.js`) that
+the marketplace and npm installs ship.
 
 ### Architecture: tool-agnostic core + agent adapter
 
@@ -510,7 +510,7 @@ ui/                 Svelte 5 multi-asset SPA (Vite) embedded into the binary via
 hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode + PostToolUse/ExitPlanMode) — Claude-adapter packaging
 commands/           /caret:demo · /caret:debug · /caret:discovery — Claude-adapter packaging (agent-specific behavioral prose)
 test/               core/ (tool-agnostic suites) · adapters/claude/ + adapters/codex/ (per-adapter suites + fixtures) · scripts/ (release + dev tooling) · support/ (shared scaffolding)
-scripts/            install.sh (build + register via the native plugin system)
+scripts/            install.sh (register the published plugin with each agent; --from-local builds+installs a checkout)
 ```
 
 The polished diff/compare viewer for plan versions is a planned fast-follow.

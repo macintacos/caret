@@ -8,6 +8,9 @@
   "exports": {
     ".": "./opencode/index.ts"
   },
+  "bin": {
+    "caret": "./bin/caret"
+  },
   "homepage": "https://github.com/macintacos/caret",
   "repository": {
     "type": "git",

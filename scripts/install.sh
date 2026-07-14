@@ -1,39 +1,49 @@
 #!/usr/bin/env bash
 #
-# caret installer — builds caret on your machine and registers it with your
-# coding agent(s): Claude Code (the native plugin system, so you never need
-# `claude --plugin-dir`) and/or OpenCode (an auto-loaded plugin).
+# caret installer — registers the *published* caret with your coding agent(s):
+# Claude Code (its native plugin marketplace, so you never need
+# `claude --plugin-dir`) and/or OpenCode (its `plugin` array). It installs
+# prebuilt artifacts — no `git clone`, no compile step.
 #
 #   curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/install.sh | bash
 #
-# It clones caret at its latest release tag (vX.Y.Z) — no manual `git clone`
-# needed — builds the platform-specific binary, and installs it as a plugin.
-# Re-run any time to update — it fetches the latest release, rebuilds, and
-# reinstalls. Requires `git` and `bun` (https://bun.sh); `claude` and/or
-# `opencode` for the agent(s) you install into.
+# Claude Code gets the published plugin from the `macintacos/caret` marketplace;
+# OpenCode gets the published `@macintacos/caret` npm package (added to its
+# `plugin` array, with the `/caret:*` command files) via `bunx`. Requires `bun`
+# (https://bun.sh) on your PATH — caret runs from a `bun` bundle, and the
+# OpenCode step runs the published package through `bunx`; plus
+# `claude` (https://claude.com/claude-code) for the Claude Code target.
 #
-# caret installs into Claude Code and/or OpenCode. It detects which you have and,
-# when both are present, prompts (on a TTY) or installs into both. Set
-# CARET_AGENTS=claude or CARET_AGENTS=claude,opencode to choose non-interactively.
+# It detects which agent(s) you have and, when both are present, prompts (on a
+# TTY) or installs into both. Set CARET_AGENTS=claude or CARET_AGENTS=claude,opencode
+# to choose non-interactively. Re-run any time to update — Claude re-pulls the
+# latest published plugin and `bunx @macintacos/caret@latest` re-resolves the
+# newest OpenCode package.
 #
 # Set CARET_DRY_RUN=1 to preview without changing anything: it runs the same
 # read-only detection, then prints the exact commands it would run. As an env
 # var it survives the piped `curl … | CARET_DRY_RUN=1 bash`.
 #
-# Pass --from-local for the dev loop (what `mise run build --install` calls):
-# it forces local-checkout mode and REUSES the already-built bin/caret-native +
-# bin/ui instead of rebuilding, reinstalls the plugin, then prewarms so the fresh
-# build takes over the daemon via `caret prewarm`. The takeover retires a current-build
-# daemon; a long-running legacy daemon (no /api/retire, no lock) can't be retired
-# and keeps serving until it idle-exits — restart it manually (kill its pid) once
-# to migrate. Dev only — it mutates your Claude plugin state and daemon, so it is
-# not for the piped curl install. CARET_DRY_RUN=1 previews it like any other run.
+# Pass --from-local for the dev loop (what `mise run build --install` calls): it
+# builds nothing — it REUSES the already-built bin/caret-native + bin/ui from the
+# checkout it runs in, installs THAT local build into Claude Code via a private
+# dev marketplace (symlinked to the checkout) and into OpenCode via the freshly
+# built binary, then prewarms so the fresh build takes over the daemon via
+# `caret prewarm`. The takeover retires a current-build daemon; a long-running
+# legacy daemon (no /api/retire, no lock) can't be retired and keeps serving
+# until it idle-exits — restart it manually (kill its pid) once to migrate.
+# Requires `git`. Dev only — it mutates your Claude plugin state and daemon, so
+# it is not for the piped curl install. CARET_DRY_RUN=1 previews it too.
 
 set -euo pipefail
 
-REPO_URL="https://github.com/macintacos/caret.git"
 MARKETPLACE="caret"
 PLUGIN="caret"
+# The published npm package (OpenCode target) and the public plugin marketplace
+# source (Claude Code target). The end-user install resolves both remotely; the
+# --from-local dev path installs the local checkout instead (see below).
+PACKAGE="@macintacos/caret"
+MARKETPLACE_SRC="macintacos/caret"
 
 # Dry-run is an env var, not a flag, so it survives a piped
 # `curl … | CARET_DRY_RUN=1 bash` (no `bash -s --` needed).
@@ -201,22 +211,13 @@ print_plan() {
   local i=1 cmd
   printf '\n%s┌─ DRY RUN ─ caret installer%s\n' "$C_BOLD" "$C_RESET"
   printf '%s│%s\n' "$C_DIM" "$C_RESET"
-  if [ "$SRC_KIND" = "local" ]; then
+  if [ "$FROM_LOCAL" -eq 1 ]; then
     printf '%s│%s  Source   local checkout at %s\n' "$C_DIM" "$C_RESET" "$REPO_DIR"
-    if [ "$FROM_LOCAL" -eq 1 ]; then
-      printf '%s│%s           reuse the freshly-built bin/caret-native + bin/ui (%s) — no rebuild, then prewarm the daemon\n' \
-        "$C_DIM" "$C_RESET" "$REF_DESC"
-    else
-      printf '%s│%s           build the current ref (%s) in place — no tag lookup, no clone\n' \
-        "$C_DIM" "$C_RESET" "$REF_DESC"
-    fi
+    printf '%s│%s           reuse the freshly-built bin/caret-native + bin/ui (%s) — no rebuild, then prewarm the daemon\n' \
+      "$C_DIM" "$C_RESET" "$REF_DESC"
   else
-    printf '%s│%s  Source   caret release %s\n' "$C_DIM" "$C_RESET" "$TAG"
-    if [ "$SRC_ACTION" = "update" ]; then
-      printf '%s│%s           fast-forward the existing checkout at %s\n' "$C_DIM" "$C_RESET" "$REPO_DIR"
-    else
-      printf '%s│%s           clone fresh into %s\n' "$C_DIM" "$C_RESET" "$REPO_DIR"
-    fi
+    printf '%s│%s  Source   published caret — the Claude Code plugin marketplace + the %s npm package (no clone, no build)\n' \
+      "$C_DIM" "$C_RESET" "$PACKAGE"
   fi
   printf '%s│%s\n' "$C_DIM" "$C_RESET"
   printf '%s│%s  Would run, in order:\n' "$C_DIM" "$C_RESET"
@@ -230,22 +231,12 @@ print_plan() {
   printf '%s└─%s dry run complete — nothing was changed.\n' "$C_BOLD" "$C_RESET"
 }
 
-# --- preflight (read-only) --------------------------------------------------
-# Runs in dry-run too: a missing tool hard-fails here exactly as in a real run.
-require git "install git, then re-run"
-# bun is only needed to build; --from-local reuses the artifacts and never
-# invokes bun, so it must not require it (EXC-555).
-if [ "$FROM_LOCAL" -eq 0 ]; then
-  require bun "install Bun from https://bun.sh, then re-run"
-fi
-
 # --- target selection (read-only) -------------------------------------------
 # caret installs into Claude Code and/or OpenCode. Detect which agent each
 # machine has, then choose targets: CARET_AGENTS (comma list, e.g. "claude" or
 # "claude,opencode") overrides; else with both present, prompt on a TTY and
 # otherwise install into both; with one present, use it; with neither, default to
-# Claude for back-compat. `claude` is required only when Claude is a target; the
-# OpenCode install needs no `opencode` binary (it just writes files).
+# Claude for back-compat. `claude` is required only when Claude is a target.
 WANT_CLAUDE=0
 WANT_OPENCODE=0
 have_claude=0
@@ -285,177 +276,124 @@ if [ "$WANT_CLAUDE" -eq 1 ]; then
   require claude "install Claude Code (https://claude.com/claude-code), then re-run"
 fi
 
-# Latest published release tag (vX.Y.Z), newest first — mirrors the sort used by
-# the release tooling in scripts/release/git.ts.
-latest_release_tag() {
-  local out ref
-  # Distinguish "couldn't reach the remote" from "remote has no release tags":
-  # ls-remote exits non-zero only on the former; an empty result is the latter.
-  if ! out="$(git ls-remote --tags --refs --sort=-v:refname "$REPO_URL" 'v*.*.*' 2>/dev/null)"; then
-    err "could not reach $REPO_URL to list release tags — check your connection and re-run"
-    exit 1
-  fi
-  ref="${out%%$'\n'*}"     # first line: "<sha>\trefs/tags/vX.Y.Z"
-  printf '%s' "${ref##*/}" # strip through the last slash -> "vX.Y.Z"
+# Set for print_plan; populated by the --from-local branch, unused otherwise.
+REPO_DIR=""
+REF_DESC=""
+
+# --- Claude Code register helpers -------------------------------------------
+# Reinstall so the latest plugin always lands in the cache, even when the version
+# is unchanged. uninstall/enable are best-effort (|| true); install is the only
+# fatal command, so the step fails iff install fails. Shared by both install
+# paths — only the marketplace SOURCE differs (public vs the private dev dir).
+install_plugin() {
+  run claude plugin uninstall "${PLUGIN}@${MARKETPLACE}" >/dev/null 2>&1 || true
+  run claude plugin install "${PLUGIN}@${MARKETPLACE}" --scope user >/dev/null &&
+    { run claude plugin enable "${PLUGIN}@${MARKETPLACE}" >/dev/null 2>&1 || true; }
 }
 
-# --- source resolution (read-only) ------------------------------------------
-# If this script is being run from a file inside an existing caret checkout
-# (dev, or already cloned), build that checkout in place. Otherwise resolve the
-# latest release and clone (or fast-forward) into a stable data directory. This
-# detection is identical in dry-run and a real run — only execution differs.
-REPO_DIR=""
-SRC_KIND=""
-REF_DESC=""
-TAG=""
-SRC_ACTION=""
-src="${BASH_SOURCE[0]:-}"
-if [ -n "$src" ] && [ -f "$src" ]; then
-  candidate="$(cd "$(dirname "$src")/.." 2>/dev/null && pwd || true)"
-  if [ -n "$candidate" ] && [ -f "$candidate/.claude-plugin/marketplace.json" ]; then
-    REPO_DIR="$candidate"
-    SRC_KIND="local"
-    REF_DESC="$(git -C "$REPO_DIR" describe --tags --always --dirty 2>/dev/null || echo 'unknown ref')"
-  fi
-fi
 if [ "$FROM_LOCAL" -eq 1 ]; then
-  # --from-local never fetches or clones: it builds nothing and reuses the
-  # checkout it is run from. Require that local detection above succeeded.
-  if [ "$SRC_KIND" != "local" ]; then
+  # ===== dev install (what `mise run build --install` runs) =================
+  # Build nothing: reuse the artifacts `mise run build` just produced and install
+  # THIS checkout — into Claude via a private dev marketplace symlinked to the
+  # checkout, into OpenCode via the freshly built binary — then cycle the daemon.
+  require git "install git, then re-run"
+
+  # Must run from inside a caret checkout (detected by its marketplace manifest),
+  # resolved through the script's own on-disk path, not the cwd.
+  src="${BASH_SOURCE[0]:-}"
+  if [ -n "$src" ] && [ -f "$src" ]; then
+    candidate="$(cd "$(dirname "$src")/.." 2>/dev/null && pwd || true)"
+    if [ -n "$candidate" ] && [ -f "$candidate/.claude-plugin/marketplace.json" ]; then
+      REPO_DIR="$candidate"
+    fi
+  fi
+  if [ -z "$REPO_DIR" ]; then
     err "--from-local must run from inside a caret checkout (no .claude-plugin/marketplace.json found)"
     exit 1
   fi
-elif [ -z "$REPO_DIR" ]; then
-  SRC_KIND="release"
-  REPO_DIR="${CARET_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/caret}"
-  TAG="$(latest_release_tag)"
-  if [ -z "$TAG" ]; then
-    err "no caret release tags (vX.Y.Z) found at $REPO_URL — the release process may not have run yet"
-    exit 1
-  fi
-  if [ -d "$REPO_DIR/.git" ]; then
-    SRC_ACTION="update"
-  else
-    SRC_ACTION="clone"
-  fi
-fi
+  REF_DESC="$(git -C "$REPO_DIR" describe --tags --always --dirty 2>/dev/null || echo 'unknown ref')"
 
-# --- fetch / source ---------------------------------------------------------
-# One "Installing caret" section header covers every step below; each step then
-# animates in place. The network steps go through step(), so git's transfer
-# chatter (the remote: counting lines, "Unpacking objects", the ref-update
-# summary) is captured and shown only on failure — a clean fetch collapses to a
-# quiet ✓, like the builds.
-section "Installing caret"
-if [ "$SRC_KIND" = "local" ]; then
-  if [ "$FROM_LOCAL" -eq 1 ]; then
-    step "Reusing the freshly built checkout at $REPO_DIR ($REF_DESC) — no rebuild" :
-  else
-    step "Building the local checkout at $REPO_DIR ($REF_DESC) in place" :
-  fi
-else
-  if [ "$SRC_ACTION" = "update" ]; then
-    # fetch + checkout as one step so the ✓ prints only after both succeed. The
-    # checkout is already --quiet; the fetch is the noisy half step() hushes.
-    # shellcheck disable=SC2016  # $1/$2 are the inner `bash -c` positional args, expanded at runtime
-    step "Updating $REPO_DIR to release $TAG" \
-      run bash -c 'git -C "$1" fetch --depth 1 --force origin "refs/tags/$2:refs/tags/$2" && git -C "$1" checkout --quiet --detach "$2"' _ "$REPO_DIR" "$TAG"
-  else
-    step "Cloning release $TAG into $REPO_DIR" \
-      run git clone --depth 1 --branch "$TAG" "$REPO_URL" "$REPO_DIR"
-  fi
-fi
-
-# --- build ------------------------------------------------------------------
-run cd "$REPO_DIR"
-
-if [ "$FROM_LOCAL" -eq 1 ]; then
-  # Reuse mode (EXC-555): `mise run build` (build bin) already produced the
-  # artifacts; --from-local does NOT rebuild. Assert they exist rather than
-  # silently rebuilding — a missing artifact is a misuse, not a fallback.
+  section "Installing caret"
+  step "Reusing the freshly built checkout at $REPO_DIR ($REF_DESC) — no rebuild" :
+  run cd "$REPO_DIR"
+  # Reuse mode (EXC-555): `mise run build` already produced the artifacts;
+  # --from-local does NOT rebuild. Assert they exist rather than silently
+  # rebuilding — a missing artifact is a misuse, not a fallback.
   if [ "$DRY_RUN" -eq 0 ] && { [ ! -x bin/caret-native ] || [ ! -d bin/ui ]; }; then
     err "--from-local needs the build artifacts bin/caret-native + bin/ui — run \`mise run build\` first"
     exit 1
   fi
-else
-  step "Installing build dependencies" run bun install
-  step "Building the UI" run bash -c 'cd ui && bunx vite build'
-  # Compile through the one build task so the flags can't drift from a local
-  # `mise run build bin`: it generates the embed manifest from ui/dist, embeds the
-  # sourcemap (readable src/*.ts stack frames), bakes the commit (EXC-452), and
-  # copies the UI tree beside the binary as a fallback. Run as a plain bash script
-  # so the installer needs only bun, not mise; in dry-run step() records it
-  # without executing, so its `git rev-parse` never fires in a non-checkout.
-  # CARET_SKIP_BUILD_UI=1 reuses the UI just built above — without it the
-  # consolidated `build bin` target would rebuild it (EXC-738).
-  step "Compiling the caret binary" run env CARET_SKIP_BUILD_UI=1 bash .mise/tasks/build bin
 
-  if [ "$DRY_RUN" -eq 0 ] && [ ! -x bin/caret-native ]; then
-    err "build did not produce bin/caret-native"
-    exit 1
+  if [ "$WANT_CLAUDE" -eq 1 ]; then
+    # The committed .claude-plugin/marketplace.json uses an npm source so the
+    # public `/plugin marketplace add macintacos/caret` installs the published
+    # package (EXC-643). A LOCAL build must install THIS checkout instead, so
+    # generate a private dev marketplace whose plugin source symlinks to the
+    # checkout (make-dev-marketplace.sh owns the generation so the whole step
+    # stays one run()-tracked command in the dry-run plan), then register it
+    # (idempotent: add, else update). The add's "already on disk" chatter is
+    # hidden so a re-run stays clean; a real failure still aborts via the
+    # visible-stderr update fallback.
+    DEV_MARKETPLACE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/caret/dev-marketplace"
+    register_marketplace() {
+      run bash "$REPO_DIR/scripts/make-dev-marketplace.sh" "$REPO_DIR" "$DEV_MARKETPLACE_DIR" &&
+        { run claude plugin marketplace add "$DEV_MARKETPLACE_DIR" >/dev/null 2>&1 ||
+          run claude plugin marketplace update "$MARKETPLACE" >/dev/null; }
+    }
+    step "Registering the caret marketplace" register_marketplace
+    step "Installing the caret plugin" install_plugin
   fi
-fi
 
-# --- register: Claude Code --------------------------------------------------
-if [ "$WANT_CLAUDE" -eq 1 ]; then
-  # The committed .claude-plugin/marketplace.json now uses an npm source so the
-  # public `/plugin marketplace add macintacos/caret` installs the published
-  # package (EXC-643). A LOCAL build must install THIS checkout instead, so
-  # generate a private dev marketplace whose plugin source symlinks to the
-  # checkout (make-dev-marketplace.sh owns the generation so the whole step stays
-  # one run()-tracked command in the dry-run plan), then register it (idempotent:
-  # add, else update). The add's chatter — it prints an "already on disk" note to
-  # stdout when the marketplace exists — is hidden so a re-run stays clean; a real
-  # failure still aborts via the visible-stderr update fallback.
-  DEV_MARKETPLACE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/caret/dev-marketplace"
-  # add succeeds → the update fallback is skipped; a failing add falls through to
-  # update, and a failing update (no `|| true`) aborts the step.
-  register_marketplace() {
-    run bash "$REPO_DIR/scripts/make-dev-marketplace.sh" "$REPO_DIR" "$DEV_MARKETPLACE_DIR" &&
-      { run claude plugin marketplace add "$DEV_MARKETPLACE_DIR" >/dev/null 2>&1 ||
-        run claude plugin marketplace update "$MARKETPLACE" >/dev/null; }
-  }
-  step "Registering the caret marketplace" register_marketplace
+  # OpenCode: add the array entry + command files via the freshly built binary's
+  # own tested subcommand (the config/JSON logic lives in TS, not bash).
+  if [ "$WANT_OPENCODE" -eq 1 ]; then
+    step "Installing caret into OpenCode (plugin array + commands)" \
+      run "$REPO_DIR/bin/caret" install --target opencode
+  fi
 
-  # Reinstall so the freshly built binary always lands in the plugin cache, even
-  # when the version is unchanged. uninstall/enable are best-effort (|| true);
-  # their routine noise is hidden, matching the pre-polish installer. install is
-  # the only fatal command, so the step fails iff install fails.
-  install_plugin() {
-    run claude plugin uninstall "${PLUGIN}@${MARKETPLACE}" >/dev/null 2>&1 || true
-    run claude plugin install "${PLUGIN}@${MARKETPLACE}" --scope user >/dev/null &&
-      { run claude plugin enable "${PLUGIN}@${MARKETPLACE}" >/dev/null 2>&1 || true; }
-  }
-  step "Installing the caret plugin" install_plugin
-fi
-
-# --- register: OpenCode ------------------------------------------------------
-# caret installs into OpenCode as a first-class `plugin` array entry
-# (@macintacos/caret) plus its command files, via its own tested subcommand (the
-# config/JSON logic lives in TS, not bash): it adds the array entry — OpenCode
-# installs the package + its deps on its next start — and drops the `/caret:*`
-# command files into OpenCode's config dir. Routed through run(), so CARET_DRY_RUN
-# previews the exact command; step() captures its output and shows it only on
-# failure, so the ✓ line speaks for it.
-if [ "$WANT_OPENCODE" -eq 1 ]; then
-  step "Installing caret into OpenCode (plugin array + commands)" \
-    run "$REPO_DIR/bin/caret" install --target opencode
-fi
-
-# --- daemon cycle (--from-local only) ---------------------------------------
-# Prewarm so the fresh build takes over the daemon (EXC-555). The just-built
-# `caret prewarm` runs ensureDaemon, whose build fingerprint differs from the
-# running daemon's, so its same-world/state-dir-gated takeover retires the old
-# daemon and spawns this build — no explicit "kill the daemon" step. The handoff
-# is best-effort in two ways: `|| true` keeps a hiccup from aborting the install,
-# and ensureDaemon REUSES (does not retire) a daemon it can't step down — a
-# legacy build with no /api/retire endpoint and no lock file — which then keeps
-# serving until it idle-exits. prewarm can't report which path it took, so this
-# step does NOT claim the swap is done; it reports only that prewarm ran. Routed
-# through run(), so CARET_DRY_RUN previews it and never performs a real handoff.
-if [ "$FROM_LOCAL" -eq 1 ]; then
+  # Prewarm so the fresh build takes over the daemon (EXC-555). The just-built
+  # `caret prewarm` runs ensureDaemon, whose build fingerprint differs from the
+  # running daemon's, so its same-world/state-dir-gated takeover retires the old
+  # daemon and spawns this build — no explicit "kill the daemon" step. The
+  # handoff is best-effort in two ways: `|| true` keeps a hiccup from aborting
+  # the install, and ensureDaemon REUSES (does not retire) a daemon it can't step
+  # down — a legacy build with no /api/retire endpoint and no lock file — which
+  # then keeps serving until it idle-exits. prewarm can't report which path it
+  # took, so this step does NOT claim the swap is done; it reports only that
+  # prewarm ran. Routed through run(), so CARET_DRY_RUN previews it and never
+  # performs a real handoff.
   prewarm_daemon() { run ./bin/caret-native prewarm >/dev/null 2>&1 || true; }
   step "Prewarming the fresh build's daemon" prewarm_daemon
+else
+  # ===== end-user install (published, prebuilt) ============================
+  # No clone, no compile: register the public plugin with Claude Code and hand
+  # OpenCode the published package. `bun` is needed for the OpenCode step (bunx)
+  # and to run the caret bundle at hook time.
+  if [ "$WANT_OPENCODE" -eq 1 ]; then
+    require bun "install Bun from https://bun.sh, then re-run"
+  fi
+
+  section "Installing caret"
+
+  if [ "$WANT_CLAUDE" -eq 1 ]; then
+    # Register the public marketplace (idempotent: add, else update), then
+    # install the published plugin — the CLI form of the README's
+    # `/plugin marketplace add macintacos/caret` + `/plugin install caret@caret`.
+    register_marketplace() {
+      run claude plugin marketplace add "$MARKETPLACE_SRC" >/dev/null 2>&1 ||
+        run claude plugin marketplace update "$MARKETPLACE" >/dev/null
+    }
+    step "Registering the caret marketplace" register_marketplace
+    step "Installing the caret plugin" install_plugin
+  fi
+
+  # OpenCode: run the published package's tested installer via bunx — it adds the
+  # `@macintacos/caret` array entry and drops the `/caret:*` command files.
+  # `@latest` so a re-run re-resolves the newest package.
+  if [ "$WANT_OPENCODE" -eq 1 ]; then
+    step "Installing caret into OpenCode (plugin array + commands)" \
+      run bunx "${PACKAGE}@latest" install --target opencode
+  fi
 fi
 
 if [ "$DRY_RUN" -eq 1 ]; then

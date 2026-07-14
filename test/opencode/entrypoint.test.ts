@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs";
 const pkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf-8")) as {
   exports?: Record<string, unknown>;
   main?: string;
+  bin?: Record<string, string>;
   dependencies: Record<string, string>;
   devDependencies: Record<string, string>;
 };
@@ -26,6 +27,14 @@ test("the OpenCode package entrypoint exports only the plugin (OpenCode loader i
 test('package.json entrypoint resolves to the OpenCode plugin so `plugin: ["@macintacos/caret"]` loads', () => {
   expect(pkg.exports?.["."]).toBe("./opencode/index.ts");
   expect(pkg.main).toBe("./opencode/index.ts");
+});
+
+test("package.json exposes a `caret` bin so `bunx @macintacos/caret` runs the CLI", () => {
+  // The prebuilt installer's OpenCode step is `bunx @macintacos/caret install
+  // --target opencode`, and `npm i -g @macintacos/caret` must yield a `caret`
+  // command — both resolve this bin entry (the shim picks the native binary or
+  // the bundle at runtime).
+  expect(pkg.bin?.caret).toBe("./bin/caret");
 });
 
 test("@opencode-ai/plugin is a runtime dependency (moved out of devDependencies)", () => {
