@@ -34,53 +34,56 @@
 # until it idle-exits — restart it manually (kill its pid) once to migrate.
 # Requires `git`. Dev only — it mutates your Claude plugin state and daemon, so
 # it is not for the piped curl install. CARET_DRY_RUN=1 previews it too.
+#
+# STRUCTURE: everything below is functions, invoked by main() at the very bottom
+# — but only when this file is executed (directly or via `curl | bash`), not when
+# it is sourced. scripts/install-lib.test.sh sources it to unit-test the helpers.
 
 set -euo pipefail
 
-MARKETPLACE="caret"
+# --- constants --------------------------------------------------------------
+MARKETPLACE="caret" # the registered marketplace + plugin name (caret@caret)
 PLUGIN="caret"
-# The published npm package (OpenCode target) and the public plugin marketplace
-# source (Claude Code target). The end-user install resolves both remotely; the
-# --from-local dev path installs the local checkout instead (see below).
-PACKAGE="@macintacos/caret"
-MARKETPLACE_SRC="macintacos/caret"
+PACKAGE="@macintacos/caret"        # the published npm package (OpenCode target, via bunx)
+MARKETPLACE_SRC="macintacos/caret" # the public marketplace source (Claude target)
 
-# Dry-run is an env var, not a flag, so it survives a piped
-# `curl … | CARET_DRY_RUN=1 bash` (no `bash -s --` needed).
+# --- mutable state (safe defaults so the file is sourceable for unit tests) --
+# main() re-derives DRY_RUN / FANCY / the targets from the environment; these
+# defaults just keep every helper safe to call under `set -u` after a bare source.
 DRY_RUN=0
-if [ "${CARET_DRY_RUN:-0}" = "1" ]; then DRY_RUN=1; fi
-
-# Parse --from-local (EXC-555; the header comment documents what it does). It is
-# the only supported flag, so anything else is a hard error. err() isn't defined
-# yet at this point, so this uses a raw stderr printf.
 FROM_LOCAL=0
-for arg in "$@"; do
-  case "$arg" in
-  --from-local) FROM_LOCAL=1 ;;
-  *)
-    printf 'error: unknown argument: %s (the only supported flag is --from-local)\n' "$arg" >&2
-    exit 1
-    ;;
-  esac
-done
-
-# --- presentation -----------------------------------------------------------
-# Color and glyphs only on an interactive terminal with NO_COLOR unset. Anywhere
-# else (a pipe, CI, `| cat`) FANCY stays 0 and every helper degrades to a plain
-# line with no escape codes.
 FANCY=0
-if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then FANCY=1; fi
+WANT_CLAUDE=0
+WANT_OPENCODE=0
+REPO_DIR=""
+REF_DESC=""
+PLAN=()
+SPIN_PID=""
+SPIN_LABEL=""
+C_RESET='' C_BLUE='' C_GREEN='' C_RED='' C_DIM='' C_BOLD=''
 
-if [ "$FANCY" -eq 1 ]; then
-  C_RESET=$'\033[0m'
-  C_BLUE=$'\033[1;34m'
-  C_GREEN=$'\033[0;32m'
-  C_RED=$'\033[1;31m'
-  C_DIM=$'\033[2m'
-  C_BOLD=$'\033[1m'
-else
-  C_RESET='' C_BLUE='' C_GREEN='' C_RED='' C_DIM='' C_BOLD=''
-fi
+# ============================================================================
+# Presentation + execution library
+# Generic, install-agnostic helpers: colored output, the print-or-execute run()
+# chokepoint, and the animated step runner. Kept together so they read as a unit.
+# ============================================================================
+
+# Enable color + glyphs only on an interactive terminal with NO_COLOR unset.
+# Anywhere else (a pipe, CI, `| cat`) FANCY stays 0 and every helper degrades to
+# a plain line with no escape codes.
+setup_colors() {
+  if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then FANCY=1; else FANCY=0; fi
+  if [ "$FANCY" -eq 1 ]; then
+    C_RESET=$'\033[0m'
+    C_BLUE=$'\033[1;34m'
+    C_GREEN=$'\033[0;32m'
+    C_RED=$'\033[1;31m'
+    C_DIM=$'\033[2m'
+    C_BOLD=$'\033[1m'
+  else
+    C_RESET='' C_BLUE='' C_GREEN='' C_RED='' C_DIM='' C_BOLD=''
+  fi
+}
 
 info() { printf '%s==>%s %s\n' "$C_BLUE" "$C_RESET" "$1"; }
 err() { printf '%serror:%s %s\n' "$C_RED" "$C_RESET" "$1" >&2; }
@@ -92,9 +95,8 @@ section() {
 }
 
 # Per-step result glyphs: ✓ done, ✗ failed. The in-progress "→ …" line and the
-# spinner are owned by step() (below); ok()/fail_step() just render the settled
-# line for the label step() hands them. All silent in dry-run — the plan summary
-# speaks for that mode.
+# spinner are owned by step(); ok()/fail_step() just render the settled line.
+# All silent in dry-run — the plan summary speaks for that mode.
 ok() {
   if [ "$DRY_RUN" -eq 1 ]; then return 0; fi
   printf '  %s✓%s %s\n' "$C_GREEN" "$C_RESET" "$1"
@@ -111,11 +113,9 @@ require() {
   }
 }
 
-# --- print-or-execute -------------------------------------------------------
 # Every mutating command goes through run(): in dry-run it is recorded (quoted)
 # into PLAN and not executed; otherwise it runs under `set -euo pipefail`. One
 # chokepoint means the dry-run preview IS the real command list — it can't drift.
-PLAN=()
 quote() {
   local q
   q="$(printf '%q ' "$@")"
@@ -129,18 +129,8 @@ run() {
   "$@"
 }
 
-# --- step runner ------------------------------------------------------------
-# Every install step renders the same way: a braille spinner on a TTY (or a
-# plain "→ …" line otherwise) while its body runs, collapsing in place to a
-# green ✓ on success or a red ✗ + the captured output on failure. The body does
-# its work through run(), so in dry-run step() runs the body to record the plan
-# and draws nothing — print_plan speaks for that mode. Output is captured and
-# shown only on failure, so a clean run is a quiet column of checkmarks.
-# Safe under `set -euo pipefail`: the body runs inside an `if` (a failure is
-# caught, not aborted mid-helper), the real exit code is returned to the caller,
-# and the EXIT/INT trap restores the cursor and reaps the spinner on every path.
-SPIN_PID=""
-SPIN_LABEL=""
+# Reap the spinner and restore the cursor on every exit path (EXIT/INT trap,
+# installed by main()).
 cleanup() {
   if [ -n "$SPIN_PID" ]; then
     kill "$SPIN_PID" 2>/dev/null || true
@@ -149,8 +139,6 @@ cleanup() {
   fi
   if [ "$FANCY" -eq 1 ]; then printf '\033[?25h'; fi
 }
-trap cleanup EXIT
-trap 'cleanup; exit 130' INT
 
 spinner() {
   # Braille dots as an array so each frame is one whole glyph regardless of
@@ -170,7 +158,11 @@ spinner() {
 # command, a small body function that chains its run() calls with && / || (so its
 # exit status is "failed iff a non-best-effort command failed" — set -e is
 # suppressed inside an if-tested function, so the chaining, not set -e, drives the
-# abort), or `:` for an informational step with no command of its own.
+# abort), or `:` for an informational step with no command of its own. On a TTY a
+# braille spinner animates while BODY runs, collapsing to a green ✓ on success or
+# a red ✗ + the captured output on failure; elsewhere a plain "→ …" line. Output
+# is captured and shown only on failure, so a clean run is a quiet ✓ column. In
+# dry-run step() just runs BODY (to record the plan) and draws nothing.
 step() {
   local label="$1"
   shift
@@ -204,8 +196,8 @@ step() {
   return "$rc"
 }
 
-# The dry-run summary: what was detected, the exact commands that would run, and
-# an explicit "nothing changed" closer. Drawn with a left bar so it needs no
+# The dry-run summary: the source, the exact commands that would run, and an
+# explicit "nothing changed" closer. Drawn with a left bar so it needs no
 # right-edge width math, and it reads fine plain (no color) too.
 print_plan() {
   local i=1 cmd
@@ -231,76 +223,114 @@ print_plan() {
   printf '%s└─%s dry run complete — nothing was changed.\n' "$C_BOLD" "$C_RESET"
 }
 
-# --- target selection (read-only) -------------------------------------------
+# ============================================================================
+# Install-specific helpers
+# ============================================================================
+
+# --from-local is the only supported flag; anything else is a hard error.
+parse_args() {
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+    --from-local) FROM_LOCAL=1 ;;
+    *)
+      err "unknown argument: $arg (the only supported flag is --from-local)"
+      exit 1
+      ;;
+    esac
+  done
+}
+
 # caret installs into Claude Code and/or OpenCode. Detect which agent each
 # machine has, then choose targets: CARET_AGENTS (comma list, e.g. "claude" or
 # "claude,opencode") overrides; else with both present, prompt on a TTY and
 # otherwise install into both; with one present, use it; with neither, default to
 # Claude for back-compat. `claude` is required only when Claude is a target.
-WANT_CLAUDE=0
-WANT_OPENCODE=0
-have_claude=0
-have_opencode=0
-command -v claude >/dev/null 2>&1 && have_claude=1
-if command -v opencode >/dev/null 2>&1 || [ -d "${XDG_CONFIG_HOME:-$HOME/.config}/opencode" ]; then
-  have_opencode=1
-fi
-if [ -n "${CARET_AGENTS:-}" ]; then
-  case ",$CARET_AGENTS," in *,claude,*) WANT_CLAUDE=1 ;; esac
-  case ",$CARET_AGENTS," in *,opencode,*) WANT_OPENCODE=1 ;; esac
-elif [ "$have_claude" -eq 1 ] && [ "$have_opencode" -eq 1 ]; then
-  if [ -t 0 ] && [ "$DRY_RUN" -eq 0 ]; then
-    printf 'Both Claude Code and OpenCode detected. Install caret into which? [both/claude/opencode] (both): '
-    read -r reply </dev/tty 2>/dev/null || reply=""
-    case "$reply" in
-    claude) WANT_CLAUDE=1 ;;
-    opencode) WANT_OPENCODE=1 ;;
-    *)
+select_targets() {
+  local have_claude=0 have_opencode=0 reply=""
+  command -v claude >/dev/null 2>&1 && have_claude=1
+  if command -v opencode >/dev/null 2>&1 || [ -d "${XDG_CONFIG_HOME:-$HOME/.config}/opencode" ]; then
+    have_opencode=1
+  fi
+  if [ -n "${CARET_AGENTS:-}" ]; then
+    case ",$CARET_AGENTS," in *,claude,*) WANT_CLAUDE=1 ;; esac
+    case ",$CARET_AGENTS," in *,opencode,*) WANT_OPENCODE=1 ;; esac
+  elif [ "$have_claude" -eq 1 ] && [ "$have_opencode" -eq 1 ]; then
+    if [ -t 0 ] && [ "$DRY_RUN" -eq 0 ]; then
+      printf 'Both Claude Code and OpenCode detected. Install caret into which? [both/claude/opencode] (both): '
+      read -r reply </dev/tty 2>/dev/null || reply=""
+      case "$reply" in
+      claude) WANT_CLAUDE=1 ;;
+      opencode) WANT_OPENCODE=1 ;;
+      *)
+        WANT_CLAUDE=1
+        WANT_OPENCODE=1
+        ;;
+      esac
+    else
       WANT_CLAUDE=1
       WANT_OPENCODE=1
-      ;;
-    esac
+    fi
   else
-    WANT_CLAUDE=1
-    WANT_OPENCODE=1
+    WANT_CLAUDE="$have_claude"
+    WANT_OPENCODE="$have_opencode"
   fi
-else
-  WANT_CLAUDE="$have_claude"
-  WANT_OPENCODE="$have_opencode"
-fi
-# Neither detected (or CARET_AGENTS matched nothing): default to Claude.
-if [ "$WANT_CLAUDE" -eq 0 ] && [ "$WANT_OPENCODE" -eq 0 ]; then
-  WANT_CLAUDE=1
-fi
-if [ "$WANT_CLAUDE" -eq 1 ]; then
-  require claude "install Claude Code (https://claude.com/claude-code), then re-run"
-fi
+  # Neither detected (or CARET_AGENTS matched nothing): default to Claude.
+  if [ "$WANT_CLAUDE" -eq 0 ] && [ "$WANT_OPENCODE" -eq 0 ]; then
+    WANT_CLAUDE=1
+  fi
+  if [ "$WANT_CLAUDE" -eq 1 ]; then
+    require claude "install Claude Code (https://claude.com/claude-code), then re-run"
+  fi
+}
 
-# Set for print_plan; populated by the --from-local branch, unused otherwise.
-REPO_DIR=""
-REF_DESC=""
+# Register a Claude plugin marketplace by SOURCE (a public `owner/repo` or a local
+# dev-marketplace dir), idempotently: add, else fall back to updating the existing
+# `caret` marketplace. The add's "already on disk" chatter is hidden so a re-run
+# stays clean; a real add failure falls through to the visible-stderr update,
+# whose failure (no `|| true`) aborts the step.
+register_marketplace_from() {
+  run claude plugin marketplace add "$1" >/dev/null 2>&1 ||
+    run claude plugin marketplace update "$MARKETPLACE" >/dev/null
+}
 
-# --- Claude Code register helpers -------------------------------------------
+# --from-local only: generate a private dev marketplace whose plugin source
+# symlinks to the checkout (make-dev-marketplace.sh owns the generation so the
+# whole step stays one run()-tracked command in the dry-run plan), then register
+# it. This is what makes the local build — not the published package — install.
+register_dev_marketplace() {
+  run bash "$REPO_DIR/scripts/make-dev-marketplace.sh" "$REPO_DIR" "$1" &&
+    register_marketplace_from "$1"
+}
+
 # Reinstall so the latest plugin always lands in the cache, even when the version
 # is unchanged. uninstall/enable are best-effort (|| true); install is the only
 # fatal command, so the step fails iff install fails. Shared by both install
 # paths — only the marketplace SOURCE differs (public vs the private dev dir).
-install_plugin() {
+install_claude_plugin() {
   run claude plugin uninstall "${PLUGIN}@${MARKETPLACE}" >/dev/null 2>&1 || true
   run claude plugin install "${PLUGIN}@${MARKETPLACE}" --scope user >/dev/null &&
     { run claude plugin enable "${PLUGIN}@${MARKETPLACE}" >/dev/null 2>&1 || true; }
 }
 
-if [ "$FROM_LOCAL" -eq 1 ]; then
-  # ===== dev install (what `mise run build --install` runs) =================
-  # Build nothing: reuse the artifacts `mise run build` just produced and install
-  # THIS checkout — into Claude via a private dev marketplace symlinked to the
-  # checkout, into OpenCode via the freshly built binary — then cycle the daemon.
-  require git "install git, then re-run"
+# --from-local only: prewarm so the fresh build takes over the daemon (EXC-555).
+# The just-built `caret prewarm` runs ensureDaemon, whose build fingerprint
+# differs from the running daemon's, so its same-world/state-dir-gated takeover
+# retires the old daemon and spawns this build — no explicit "kill the daemon"
+# step. Best-effort in two ways: `|| true` keeps a hiccup from aborting the
+# install, and ensureDaemon REUSES (does not retire) a daemon it can't step down —
+# a legacy build with no /api/retire endpoint and no lock file — which then keeps
+# serving until it idle-exits. It can't report which path it took, so the step
+# does NOT claim the swap is done; it reports only that prewarm ran.
+prewarm_daemon() { run ./bin/caret-native prewarm >/dev/null 2>&1 || true; }
 
-  # Must run from inside a caret checkout (detected by its marketplace manifest),
-  # resolved through the script's own on-disk path, not the cwd.
+# --from-local only: resolve the caret checkout this script lives in (detected by
+# its marketplace manifest, via the script's own on-disk path — not the cwd) into
+# REPO_DIR / REF_DESC, or exit with guidance.
+resolve_local_checkout() {
+  local src candidate
   src="${BASH_SOURCE[0]:-}"
+  REPO_DIR=""
   if [ -n "$src" ] && [ -f "$src" ]; then
     candidate="$(cd "$(dirname "$src")/.." 2>/dev/null && pwd || true)"
     if [ -n "$candidate" ] && [ -f "$candidate/.claude-plugin/marketplace.json" ]; then
@@ -312,6 +342,15 @@ if [ "$FROM_LOCAL" -eq 1 ]; then
     exit 1
   fi
   REF_DESC="$(git -C "$REPO_DIR" describe --tags --always --dirty 2>/dev/null || echo 'unknown ref')"
+}
+
+# The dev loop (what `mise run build --install` runs). Build nothing: reuse the
+# artifacts `mise run build` just produced and install THIS checkout — into Claude
+# via a private dev marketplace symlinked to the checkout, into OpenCode via the
+# freshly built binary — then cycle the daemon.
+run_dev_install() {
+  require git "install git, then re-run"
+  resolve_local_checkout
 
   section "Installing caret"
   step "Reusing the freshly built checkout at $REPO_DIR ($REF_DESC) — no rebuild" :
@@ -325,23 +364,9 @@ if [ "$FROM_LOCAL" -eq 1 ]; then
   fi
 
   if [ "$WANT_CLAUDE" -eq 1 ]; then
-    # The committed .claude-plugin/marketplace.json uses an npm source so the
-    # public `/plugin marketplace add macintacos/caret` installs the published
-    # package (EXC-643). A LOCAL build must install THIS checkout instead, so
-    # generate a private dev marketplace whose plugin source symlinks to the
-    # checkout (make-dev-marketplace.sh owns the generation so the whole step
-    # stays one run()-tracked command in the dry-run plan), then register it
-    # (idempotent: add, else update). The add's "already on disk" chatter is
-    # hidden so a re-run stays clean; a real failure still aborts via the
-    # visible-stderr update fallback.
-    DEV_MARKETPLACE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/caret/dev-marketplace"
-    register_marketplace() {
-      run bash "$REPO_DIR/scripts/make-dev-marketplace.sh" "$REPO_DIR" "$DEV_MARKETPLACE_DIR" &&
-        { run claude plugin marketplace add "$DEV_MARKETPLACE_DIR" >/dev/null 2>&1 ||
-          run claude plugin marketplace update "$MARKETPLACE" >/dev/null; }
-    }
-    step "Registering the caret marketplace" register_marketplace
-    step "Installing the caret plugin" install_plugin
+    local dev_marketplace="${XDG_STATE_HOME:-$HOME/.local/state}/caret/dev-marketplace"
+    step "Registering the caret marketplace" register_dev_marketplace "$dev_marketplace"
+    step "Installing the caret plugin" install_claude_plugin
   fi
 
   # OpenCode: add the array entry + command files via the freshly built binary's
@@ -351,24 +376,13 @@ if [ "$FROM_LOCAL" -eq 1 ]; then
       run "$REPO_DIR/bin/caret" install --target opencode
   fi
 
-  # Prewarm so the fresh build takes over the daemon (EXC-555). The just-built
-  # `caret prewarm` runs ensureDaemon, whose build fingerprint differs from the
-  # running daemon's, so its same-world/state-dir-gated takeover retires the old
-  # daemon and spawns this build — no explicit "kill the daemon" step. The
-  # handoff is best-effort in two ways: `|| true` keeps a hiccup from aborting
-  # the install, and ensureDaemon REUSES (does not retire) a daemon it can't step
-  # down — a legacy build with no /api/retire endpoint and no lock file — which
-  # then keeps serving until it idle-exits. prewarm can't report which path it
-  # took, so this step does NOT claim the swap is done; it reports only that
-  # prewarm ran. Routed through run(), so CARET_DRY_RUN previews it and never
-  # performs a real handoff.
-  prewarm_daemon() { run ./bin/caret-native prewarm >/dev/null 2>&1 || true; }
   step "Prewarming the fresh build's daemon" prewarm_daemon
-else
-  # ===== end-user install (published, prebuilt) ============================
-  # No clone, no compile: register the public plugin with Claude Code and hand
-  # OpenCode the published package. `bun` is needed for the OpenCode step (bunx)
-  # and to run the caret bundle at hook time.
+}
+
+# The end-user install (the curl one-liner). No clone, no compile: register the
+# public plugin with Claude Code and hand OpenCode the published package. `bun` is
+# needed for the OpenCode step (bunx) and to run the caret bundle at hook time.
+run_user_install() {
   if [ "$WANT_OPENCODE" -eq 1 ]; then
     require bun "install Bun from https://bun.sh, then re-run"
   fi
@@ -376,15 +390,10 @@ else
   section "Installing caret"
 
   if [ "$WANT_CLAUDE" -eq 1 ]; then
-    # Register the public marketplace (idempotent: add, else update), then
-    # install the published plugin — the CLI form of the README's
-    # `/plugin marketplace add macintacos/caret` + `/plugin install caret@caret`.
-    register_marketplace() {
-      run claude plugin marketplace add "$MARKETPLACE_SRC" >/dev/null 2>&1 ||
-        run claude plugin marketplace update "$MARKETPLACE" >/dev/null
-    }
-    step "Registering the caret marketplace" register_marketplace
-    step "Installing the caret plugin" install_plugin
+    # The CLI form of the README's `/plugin marketplace add macintacos/caret` +
+    # `/plugin install caret@caret`.
+    step "Registering the caret marketplace" register_marketplace_from "$MARKETPLACE_SRC"
+    step "Installing the caret plugin" install_claude_plugin
   fi
 
   # OpenCode: run the published package's tested installer via bunx — it adds the
@@ -394,11 +403,9 @@ else
     step "Installing caret into OpenCode (plugin array + commands)" \
       run bunx "${PACKAGE}@latest" install --target opencode
   fi
-fi
+}
 
-if [ "$DRY_RUN" -eq 1 ]; then
-  print_plan
-else
+print_summary() {
   echo
   if [ "$WANT_CLAUDE" -eq 1 ] && [ "$WANT_OPENCODE" -eq 1 ]; then
     info "caret installed for Claude Code + OpenCode. Restart each, then try /caret:demo."
@@ -407,4 +414,40 @@ else
   else
     info "caret installed for Claude Code. Restart Claude Code (or run /reload-plugins), then try /caret:demo."
   fi
+}
+
+main() {
+  # DRY_RUN is an env var, not a flag, so it survives a piped
+  # `curl … | CARET_DRY_RUN=1 bash` (no `bash -s --` needed).
+  [ "${CARET_DRY_RUN:-0}" = "1" ] && DRY_RUN=1
+  setup_colors
+  parse_args "$@"
+  trap cleanup EXIT
+  trap 'cleanup; exit 130' INT
+
+  # bun is only needed to build/run; --from-local reuses the artifacts and never
+  # invokes bun, so it must not require it (EXC-555). The user path requires bun
+  # only for the OpenCode step (inside run_user_install).
+  select_targets
+
+  if [ "$FROM_LOCAL" -eq 1 ]; then
+    run_dev_install
+  else
+    run_user_install
+  fi
+
+  if [ "$DRY_RUN" -eq 1 ]; then
+    print_plan
+  else
+    print_summary
+  fi
+}
+
+# Run main only when executed (directly or via `curl | bash`), not when sourced.
+# `return` succeeds solely in a sourced context, so a failing return means
+# "executed" — this is robust for the piped install, where `${BASH_SOURCE[0]}` is
+# unset and a `$0`-based guard would wrongly skip. Unit tests source this file to
+# exercise the helpers above without running main.
+if ! (return 0 2>/dev/null); then
+  main "$@"
 fi

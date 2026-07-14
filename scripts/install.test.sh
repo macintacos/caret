@@ -35,26 +35,27 @@ assert_absent() {
   esac
 }
 
-# --- dry run from inside this checkout: in-place build, no clone, no network ---
+# --- default dry run: install the published caret, no clone, no build ----------
+# The default (non---from-local) path installs prebuilt artifacts: Claude via the
+# public plugin marketplace, OpenCode via `bunx @macintacos/caret`. Pin both
+# agents so the plan is deterministic regardless of what this machine has.
 rc=0
-out="$(CARET_DRY_RUN=1 "$bash_bin" "$script" 2>&1)" || rc=$?
+out="$(CARET_DRY_RUN=1 CARET_AGENTS=claude,opencode "$bash_bin" "$script" 2>&1)" || rc=$?
 if [ "$rc" -eq 0 ]; then
-  ok "local-checkout dry run exits 0"
+  ok "default dry run exits 0"
 else
-  fail "local-checkout dry run exited $rc"
+  fail "default dry run exited $rc"
 fi
 
 assert_contains "$out" "DRY RUN" "announces dry-run mode"
-assert_contains "$out" "local checkout" "reports the local-checkout source"
-assert_contains "$out" "in place" "reports an in-place build"
-assert_contains "$out" "bun install" "plan includes the dependency install"
-assert_contains "$out" "vite" "plan includes the UI build"
-# The compile (and the UI-fallback copy it carries) routes through the one build
-# task, so the plan names that task rather than re-spelling the bun build flags.
-assert_contains "$out" ".mise/tasks/build bin" "plan compiles through the build task"
-assert_contains "$out" "claude plugin install" "plan includes the plugin install"
+assert_contains "$out" "published caret" "reports the published-package source"
+assert_contains "$out" "claude plugin marketplace add macintacos/caret" "plan adds the public marketplace"
+assert_contains "$out" "claude plugin install caret@caret" "plan installs the published plugin"
+assert_contains "$out" "bunx @macintacos/caret@latest install --target opencode" "plan installs OpenCode via bunx"
 assert_contains "$out" "nothing was changed" "ends with the no-change closer"
-assert_absent "$out" "git clone" "local path never clones"
+assert_absent "$out" "git clone" "default path never clones"
+assert_absent "$out" "bun install" "default path never installs build deps"
+assert_absent "$out" "vite" "default path never builds the UI"
 
 # --- piped / NO_COLOR output carries no ANSI escapes ---
 rc=0
@@ -77,43 +78,43 @@ else
 fi
 assert_contains "$missing_out" "missing" "missing-tool error names the gap"
 
-# --- a failing long step surfaces a ✗ and a non-zero exit (spinner safety) ---
-# Real-mode run with stubbed tools: `bun install` fails, so the first long step
-# errors out before any registration step — hermetic and non-mutating.
+# --- a failing step surfaces a ✗ and a non-zero exit (spinner safety) ---
+# Real-mode run with stubbed tools: `claude plugin marketplace` fails (so both the
+# add and its update fallback error out), the register step fails, and the script
+# aborts before the plugin install — hermetic and non-mutating. CARET_AGENTS=claude
+# keeps it on the Claude path (no bunx OpenCode step).
 stub_dir="$(mktemp -d)"
-for tool in git bunx claude; do
+for tool in git bunx bun; do
   printf '#!/usr/bin/env bash\nexit 0\n' >"$stub_dir/$tool"
   chmod +x "$stub_dir/$tool"
 done
-cat >"$stub_dir/bun" <<'STUB'
+cat >"$stub_dir/claude" <<'STUB'
 #!/usr/bin/env bash
-[ "${1:-}" = "install" ] && exit 1
+[ "${2:-}" = "marketplace" ] && exit 1
 exit 0
 STUB
-chmod +x "$stub_dir/bun"
+chmod +x "$stub_dir/claude"
 
 rc=0
-fail_out="$(PATH="$stub_dir:$PATH" "$bash_bin" "$script" 2>&1)" || rc=$?
+fail_out="$(PATH="$stub_dir:$PATH" CARET_AGENTS=claude "$bash_bin" "$script" 2>&1)" || rc=$?
 rm -rf "$stub_dir"
 if [ "$rc" -ne 0 ]; then
-  ok "failed long step exits non-zero ($rc)"
+  ok "failed step exits non-zero ($rc)"
 else
-  fail "failed long step should exit non-zero"
+  fail "failed step should exit non-zero"
 fi
-assert_contains "$fail_out" "✗" "failed long step prints a ✗ glyph"
-assert_absent "$fail_out" "Registering" "a failed build aborts before any registration step"
+assert_contains "$fail_out" "✗" "failed step prints a ✗ glyph"
+assert_absent "$fail_out" "Installing the caret plugin" "a failed marketplace step aborts before the plugin install"
 
-# --- success path through the register phase (synthetic checkout, all tools stubbed) ---
+# --- success path through the register phase (all tools stubbed) ---
 # A real run only ever exercised the register block and step()'s success branch
-# interactively. We drive it hermetically: a synthetic local checkout (so source
-# resolution takes the in-place build path — no clone, no network) plus stub
-# git/bun/bunx/claude on PATH so nothing real builds or registers. Every tool
-# logs its argv to $CALL_LOG, letting us assert the exact register sequence.
-#
-# .mise/tasks/build is copied into the synthetic checkout as its one-line
-# forwarder to the tasks CLI; the bun stub is what satisfies the post-build
-# `[ -x bin/caret-native ]` guard — it synthesizes that binary for the `build bin`
-# target, since the real compile inside the (stubbed) CLI never runs.
+# interactively. We drive it hermetically: stub git/bun/bunx/claude on PATH so
+# nothing real registers, and every tool logs its argv to $CALL_LOG so we can
+# assert the exact register sequence. The default (non---from-local) path installs
+# the PUBLISHED caret and ignores any surrounding checkout — but the fixture still
+# lays one down (marketplace.json + .mise/tasks/build + make-dev-marketplace.sh),
+# because the --from-local dev-path tests below reuse this same fixture and DO need
+# the checkout (they seed bin/caret-native + bin/ui via seed_local_artifacts).
 
 # Lay down a synthetic checkout + stub dir. Echoes "ROOT STUBS HOME LOG" so the
 # caller can capture the paths; the caller owns cleanup.
@@ -133,8 +134,10 @@ make_success_fixture() {
   printf '{}\n' >"$root/.claude-plugin/marketplace.json"
   printf '<!doctype html>\n' >"$root/ui/dist/index.html"
 
-  # git/bunx/claude: log argv, succeed. (claude is overridden per-test below.)
-  for tool in git bunx claude; do
+  # git/bun/bunx/claude: log argv, succeed. (claude is overridden per-test below.)
+  # None of them run a real build — the default path is prebuilt, and the
+  # --from-local path seeds its artifacts via seed_local_artifacts.
+  for tool in git bun bunx claude; do
     {
       printf '#!/usr/bin/env bash\n'
       printf 'printf "%%s\\n" "%s $*" >>"%s"\n' "$tool" "$log"
@@ -142,24 +145,6 @@ make_success_fixture() {
     } >"$stubs/$tool"
     chmod +x "$stubs/$tool"
   done
-
-  # bun: log argv; the `build bin` target (`bun scripts/tasks/cli.ts build bin`)
-  # forwards to the CLI whose real compile is stubbed out here, so synthesize its
-  # bin/caret-native output so the installer's `[ -x bin/caret-native ]` guard
-  # still passes; every other bun call succeeds.
-  cat >"$stubs/bun" <<STUB
-#!/usr/bin/env bash
-printf '%s\n' "bun \$*" >>"$log"
-case " \$* " in
-  *" build bin "*)
-    mkdir -p bin
-    printf '#!/usr/bin/env bash\nexit 0\n' >bin/caret-native
-    chmod +x bin/caret-native
-    ;;
-esac
-exit 0
-STUB
-  chmod +x "$stubs/bun"
 
   printf '%s %s %s %s' "$root" "$stubs" "$home" "$log"
 }
@@ -181,16 +166,14 @@ STUB
   chmod +x "$stubs/claude"
 }
 
-# Run the synthetic installer; echoes captured stdout+stderr, sets $? to its rc.
+# Run the default (published) installer; echoes captured stdout+stderr, sets $? to
+# its rc. Pin CARET_AGENTS=claude so agent detection is deterministic: the fixture
+# stubs claude but can't hide a host `opencode` binary, and a detected opencode
+# would fire the bunx OpenCode step. The OpenCode path has its own dry-run + real
+# both-agents tests. HOME is pinned to the throwaway fixture dir for isolation.
 run_success_installer() {
   local root="$1" stubs="$2" home="$3"
-  # Pin XDG_STATE_HOME under the stub HOME so the generated dev marketplace
-  # (make-dev-marketplace.sh) lands inside the fixture and is cleaned with it.
-  # Pin CARET_AGENTS=claude so agent detection is deterministic: the fixture stubs
-  # claude/git/bun/bunx but can't hide a host `opencode` binary, and a detected
-  # opencode would fire the OpenCode step looking for a bin/caret this fixture
-  # never builds. The OpenCode path has its own dry-run + real both-agents tests.
-  PATH="$stubs:$PATH" HOME="$home" XDG_STATE_HOME="$home/.local/state" NO_COLOR=1 CARET_AGENTS=claude "$bash_bin" "$root/scripts/install.sh" 2>&1
+  PATH="$stubs:$PATH" HOME="$home" NO_COLOR=1 CARET_AGENTS=claude "$bash_bin" "$root/scripts/install.sh" 2>&1
 }
 
 # Happy path: every tool succeeds.
@@ -206,15 +189,15 @@ else
   fail "success run exited $rc"
 fi
 
-# The full pipeline ran, not just detection: build deps, UI build, compile.
-assert_contains "$calls" "bun install" "success run installs build dependencies"
-assert_contains "$calls" "vite build" "success run builds the UI"
-assert_contains "$calls" "scripts/tasks/cli.ts build bin" "success run compiles the binary via the tasks CLI"
+# The default path is prebuilt — it never builds or clones.
+assert_absent "$calls" "bun install" "success run does not install build deps"
+assert_absent "$calls" "vite" "success run does not build the UI"
+assert_absent "$calls" "build bin" "success run does not compile the binary"
 
-# Register sequence. The local build registers the generated dev marketplace
-# (source symlinked to the checkout), not the checkout's own npm-sourced
-# manifest. marketplace add succeeds, so the update fallback never runs.
-assert_contains "$calls" "marketplace add $HOME_DIR/.local/state/caret/dev-marketplace" "register adds the generated dev marketplace"
+# Register sequence: the published plugin comes from the PUBLIC marketplace
+# (`macintacos/caret`), not the dev marketplace. add succeeds, so the update
+# fallback never runs.
+assert_contains "$calls" "claude plugin marketplace add macintacos/caret" "register adds the public marketplace"
 assert_absent "$calls" "marketplace update" "marketplace update is skipped when add succeeds"
 assert_contains "$calls" "claude plugin install caret@caret --scope user" "register installs the plugin"
 assert_contains "$calls" "claude plugin enable" "register enables the plugin"
@@ -323,6 +306,10 @@ if [ "$rc" -eq 0 ]; then
 else
   fail "--from-local real run exited $rc"
 fi
+# The local build registers the GENERATED dev marketplace (source symlinked to the
+# checkout), not the public one — this is the dev path's defining difference.
+assert_contains "$calls" "marketplace add" "--from-local registers a marketplace"
+assert_contains "$calls" "caret/dev-marketplace" "--from-local registers the GENERATED dev marketplace (not the public one)"
 assert_contains "$calls" "claude plugin install caret@caret --scope user" "--from-local installs the plugin"
 assert_contains "$calls" "claude plugin enable" "--from-local enables the plugin"
 assert_contains "$calls" "caret prewarm" "--from-local prewarms via caret prewarm"
