@@ -20,6 +20,11 @@ test("the compare control is disabled for a single-version review", async ({ dae
   // disabled (greyed out) rather than hidden.
   await expect(page.locator(".compare-picker")).toBeVisible();
   await expect(page.getByRole("button", { name: "Compare versions" })).toBeDisabled();
+
+  // The native title is gone: the disabled toggle explains itself through a
+  // shadcn Tooltip on its span-wrapped trigger (a disabled button can't hover).
+  await page.locator('.compare-picker [data-slot="tooltip-trigger"]').hover();
+  await expect(page.getByText("No other versions to compare yet")).toBeVisible();
 });
 
 test("entering compare mode diffs a chosen non-default pair", async ({ daemon, page }) => {
@@ -34,7 +39,9 @@ test("entering compare mode diffs a chosen non-default pair", async ({ daemon, p
 
   // Default pair is current (v3) vs previous (v2); pick a non-default pair:
   // base = v3, target = v1, so the diff spans the alpha→gamma change.
-  await page.locator(".target-select").selectOption("1");
+  // The target picker is a shadcn Select: open its trigger, then choose v1.
+  await page.getByLabel("Target version").click();
+  await page.getByRole("option", { name: "v1" }).click();
 
   // Both ends of the chosen pair are visible (Playwright pierces the library's
   // shadow root for text).
@@ -55,11 +62,11 @@ test("toggling split↔unified switches layout in place without a remount", asyn
   const pre = page.locator(".diffview pre").first();
   await expect(pre).toHaveAttribute("data-diff-type", "split");
 
-  await page.getByRole("button", { name: "Unified" }).click();
+  await page.getByRole("radio", { name: "Unified" }).click();
   // Same element, new layout — switched via setOptions, not recreated.
   await expect(pre).toHaveAttribute("data-diff-type", "single");
 
-  await page.getByRole("button", { name: "Split" }).click();
+  await page.getByRole("radio", { name: "Split" }).click();
   await expect(pre).toHaveAttribute("data-diff-type", "split");
 });
 
@@ -83,7 +90,7 @@ test("toggling layout preserves the diff scroll position", async ({ daemon, page
   const before = await view.evaluate((el) => el.scrollTop);
 
   // Switch layout in place (setOptions, not a remount); the scroll offset holds.
-  await page.getByRole("button", { name: "Unified" }).click();
+  await page.getByRole("radio", { name: "Unified" }).click();
   await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "single");
   expect(await view.evaluate((el) => el.scrollTop)).toBe(before);
 });
@@ -137,7 +144,7 @@ test("the chosen layout persists across a reload", async ({ daemon, page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Compare versions" }).click();
   await expect(page.getByText("gamma line three")).toBeVisible();
-  await page.getByRole("button", { name: "Unified" }).click();
+  await page.getByRole("radio", { name: "Unified" }).click();
   await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "single");
 
   await page.reload();
@@ -159,11 +166,11 @@ test("toggling bars↔classic switches gutter indicators in place without a remo
   const pre = page.locator(".diffview pre").first();
   await expect(pre).toHaveAttribute("data-indicators", "bars");
 
-  await page.getByRole("button", { name: "+/−" }).click();
+  await page.getByRole("radio", { name: "+/−" }).click();
   // Same element, new indicators — switched via setOptions, not recreated.
   await expect(pre).toHaveAttribute("data-indicators", "classic");
 
-  await page.getByRole("button", { name: "Bars" }).click();
+  await page.getByRole("radio", { name: "Bars" }).click();
   await expect(pre).toHaveAttribute("data-indicators", "bars");
 });
 
@@ -172,7 +179,7 @@ test("the chosen gutter indicators persist across a reload", async ({ daemon, pa
   await page.goto("/");
   await page.getByRole("button", { name: "Compare versions" }).click();
   await expect(page.getByText("gamma line three")).toBeVisible();
-  await page.getByRole("button", { name: "+/−" }).click();
+  await page.getByRole("radio", { name: "+/−" }).click();
   await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-indicators", "classic");
 
   await page.reload();
