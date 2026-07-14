@@ -17,6 +17,13 @@ function click(root: ParentNode, selector: string): void {
   (root.querySelector(selector) as HTMLElement).click();
 }
 
+// The Discard confirmation portals to document.body (anchor mode, viewport-aware —
+// the same path the Request Changes dialog uses), so it is reached from the
+// document, not the mount target.
+function clickDoc(selector: string): void {
+  (document.querySelector(selector) as HTMLElement).click();
+}
+
 // Set the CodeMirror editor's text the way a keystroke would (real typing is
 // e2e). findFromDOM returns the live view; dispatching a change fires its update
 // listener, so the host's onInput — and thus the edit draft — updates exactly as
@@ -47,13 +54,20 @@ describe("SourceAnnotationCard collapse", () => {
   test("renders collapsed (a chip) when not focused", () => {
     const { target } = render(SourceAnnotationCard, base({ focused: false }));
     expect(target.querySelector(".chip")).not.toBeNull();
-    expect(target.querySelector(".body")).toBeNull();
+    // Collapsed: no expanded actions, and the one-line preview stands in for the
+    // body (which stays mounted at row height 0 for the grid reveal).
+    expect(target.querySelector(".card.expanded")).toBeNull();
+    expect(target.querySelector(".actions")).toBeNull();
+    expect(target.querySelector(".preview")).not.toBeNull();
   });
 
   test("renders expanded when focused", () => {
     const { target } = render(SourceAnnotationCard, base({ focused: true }));
-    expect(target.querySelector(".body")).not.toBeNull();
+    expect(target.querySelector(".card.expanded")).not.toBeNull();
     expect(target.querySelector(".comment")?.textContent?.trim()).toBe("needs work");
+    // Expanded drops the preview and reveals the Edit / Discard actions.
+    expect(target.querySelector(".preview")).toBeNull();
+    expect(target.querySelector(".actions")).not.toBeNull();
   });
 
   test("clicking the collapsed chip expands the card without persisting", () => {
@@ -67,7 +81,7 @@ describe("SourceAnnotationCard collapse", () => {
     flush();
     expect(focused.last()).toBe("a1");
     expect(edited).toBe(false);
-    expect(target.querySelector(".body")).not.toBeNull();
+    expect(target.querySelector(".card.expanded")).not.toBeNull();
   });
 
   test("an expanded card can collapse back to a chip via its toggle (UI-only)", () => {
@@ -76,11 +90,33 @@ describe("SourceAnnotationCard collapse", () => {
       SourceAnnotationCard,
       base({ focused: true, onEdit: () => (edited = true) }),
     );
-    click(target, ".collapse");
+    // The whole header line is the toggle now (no separate collapse control):
+    // clicking the trigger collapses the card back to its chip.
+    click(target, ".chip");
     flush();
-    expect(target.querySelector(".body")).toBeNull();
+    expect(target.querySelector(".card.expanded")).toBeNull();
     expect(target.querySelector(".chip")).not.toBeNull();
     expect(edited).toBe(false);
+  });
+
+  test("clicking the comment body (not a button) collapses the expanded card", () => {
+    const { target, flush } = render(SourceAnnotationCard, base({ focused: true }));
+    expect(target.querySelector(".card.expanded")).not.toBeNull();
+    // The whole surface is the toggle: clicking anywhere that isn't an action —
+    // here, the rendered comment itself — collapses the card back to a chip.
+    click(target, ".comment");
+    flush();
+    expect(target.querySelector(".card.expanded")).toBeNull();
+  });
+
+  test("clicking an action button does not toggle the card", () => {
+    // Edit sits in the actions cluster, so its click opens the editor rather
+    // than collapsing the card out from under the reviewer.
+    const { target, flush } = render(SourceAnnotationCard, base({ focused: true }));
+    click(target, ".edit");
+    flush();
+    expect(target.querySelector(".card.expanded")).not.toBeNull();
+    expect(target.querySelector(".cm-content")).not.toBeNull();
   });
 });
 
@@ -169,7 +205,7 @@ describe("SourceAnnotationCard state indicator", () => {
 
   test("the same state affordance shows in the expanded header", () => {
     const { target } = render(SourceAnnotationCard, stated("approved", { focused: true }));
-    const headState = target.querySelector(".body header .state");
+    const headState = target.querySelector(".head .state");
     expect(headState?.classList.contains("state-accepted")).toBe(true);
     expect(headState?.textContent?.trim()).toBe("Accepted");
   });
@@ -203,11 +239,11 @@ describe("SourceAnnotationCard edit/delete", () => {
     );
     click(target, ".danger");
     flush();
-    // The confirm pops out of the delete link; nothing is deleted yet.
-    expect(target.querySelector(".confirm-popover")).not.toBeNull();
+    // The confirm pops out of the Discard button; nothing is deleted yet.
+    expect(document.querySelector(".confirm-popover")).not.toBeNull();
     expect(deleted.last()).toBeUndefined();
     // Confirming deletes, and the original click never focused the card.
-    click(target, ".confirm-popover .confirm");
+    clickDoc(".confirm-popover .confirm");
     flush();
     expect(deleted.last()).toBe("a1");
     expect(focused).toBe(false);
@@ -221,10 +257,10 @@ describe("SourceAnnotationCard edit/delete", () => {
     );
     click(target, ".danger");
     flush();
-    click(target, ".confirm-popover .cancel");
+    clickDoc(".confirm-popover .cancel");
     flush();
     expect(deleted.last()).toBeUndefined();
-    expect(target.querySelector(".confirm-popover")).toBeNull();
+    expect(document.querySelector(".confirm-popover")).toBeNull();
   });
 
   test("edit opens the editor seeded with the current comment", () => {

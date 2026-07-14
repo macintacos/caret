@@ -75,7 +75,10 @@ describe("SourceAnnotationThread stacked comments", () => {
       SourceAnnotationThread,
       base({ annotations: two, focusedAnnotation: "b" }),
     );
-    expect(target.querySelector('[data-annotation-card="b"] .body')).not.toBeNull();
+    // Only the matching card expands; the other stays a collapsed chip. (The body
+    // is always mounted for the grid reveal, so expansion is the .expanded class.)
+    expect(target.querySelector('[data-annotation-card="b"].card.expanded')).not.toBeNull();
+    expect(target.querySelector('[data-annotation-card="a"].card.expanded')).toBeNull();
     expect(target.querySelector('[data-annotation-card="a"] .chip')).not.toBeNull();
   });
 
@@ -87,10 +90,9 @@ describe("SourceAnnotationThread stacked comments", () => {
     );
     (target.querySelector('[data-annotation-card="a"] .danger') as HTMLElement).click();
     flush();
-    // Delete now confirms first (EXC-749); confirm to fire onDelete.
-    (
-      target.querySelector('[data-annotation-card="a"] .confirm-popover .confirm') as HTMLElement
-    ).click();
+    // Delete now confirms first (EXC-749); confirm to fire onDelete. The confirm
+    // bubble portals to document.body (anchor mode), so it's reached from there.
+    (document.querySelector(".confirm-popover .confirm") as HTMLElement).click();
     expect(deleted.last()).toBe("a");
   });
 
