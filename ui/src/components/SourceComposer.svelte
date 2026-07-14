@@ -9,7 +9,14 @@
   // MarkdownEditor (the swappable
   // CodeMirror boundary): it styles markdown as you type, auto-grows, owns the
   // autofocus/preventScroll guard, and reports the chords back here.
+  //
+  // The chrome is composed from shadcn primitives (EXC-765): a Card-style surface,
+  // Buttons for Keep / Discard / Comment (Comment is the one amber primary), and a
+  // Kbd for the ⌘↵ hint. The editor stays MarkdownEditor.
   import { untrack } from "svelte";
+  import { Button } from "$lib/components/ui/button/index.js";
+  import { Card } from "$lib/components/ui/card/index.js";
+  import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { rangeLabel } from "../lib/diffview/commenting.ts";
   import ConfirmPopover from "./ConfirmPopover.svelte";
   import Icon from "./Icon.svelte";
@@ -88,7 +95,7 @@
   }
 </script>
 
-<div class="composer" role="dialog" aria-label="Add a comment" tabindex="-1">
+<Card class="composer" role="dialog" aria-label="Add a comment" tabindex={-1}>
   <p class="label metric">{label}</p>
   <MarkdownEditor
     value={initial}
@@ -100,10 +107,13 @@
     onCancelChord={requestDiscard}
   />
   <div class="row">
-    <button class="keep" type="button" onclick={keep} disabled={!canKeep}>Keep for later</button>
+    <Button variant="ghost" class="keep" onclick={keep} disabled={!canKeep}>Keep for later</Button>
     <span class="discard-wrap">
-      <button class="ghost" type="button" onclick={requestDiscard} aria-keyshortcuts="Escape"
-        >Discard</button
+      <Button
+        variant="secondary"
+        class="float-chip ghost"
+        onclick={requestDiscard}
+        aria-keyshortcuts="Escape">Discard</Button
       >
       {#if confirming}
         <ConfirmPopover
@@ -116,27 +126,24 @@
         />
       {/if}
     </span>
-    <button
-      class="solid"
-      type="button"
-      onclick={submit}
-      aria-keyshortcuts="Meta+Enter Control+Enter"
-    >
+    <Button onclick={submit} aria-keyshortcuts="Meta+Enter Control+Enter">
       Comment
-      <span class="kbd" aria-hidden="true">
+      <Kbd class="kbd" aria-hidden="true">
         <Icon name="command" size={12} /><Icon name="corner-down-left" size={12} />
-      </span>
-    </button>
+      </Kbd>
+    </Button>
   </div>
-</div>
+</Card>
 
 <style>
-  /* Inline within the library's annotation row — see SourceAnnotationCard's .card. */
-  .composer {
+  /* Inline within the library's annotation row — a Card reshaped to caret's tight
+     inline padding and raised shadow (see SourceAnnotationCard's .body). The
+     compound [data-slot] selector (0,2,0) outranks the copied Card's utilities. */
+  :global([data-slot="card"].composer) {
+    display: block;
     max-width: min(46rem, 100%);
     margin: 0.4rem 0 0.55rem;
     padding: 0.7rem 0.75rem 0.6rem;
-    background: var(--paper-raised);
     border: 1px solid var(--rule-strong);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
@@ -168,54 +175,27 @@
     position: relative;
     display: inline-flex;
   }
-  .keep,
-  .ghost,
-  .solid {
-    border-radius: var(--radius);
-    font-size: var(--text-sm);
-    font-weight: 600;
-    padding: 0.35rem 0.75rem;
-  }
-  /* Tertiary: the deliberate "stash for later" opt-in. Borderless and faint so it
-     never competes with the ghost Discard or the solid Comment — the quietest
-     control in the row. */
-  .keep {
-    background: transparent;
+  /* Keep for later is the deliberate "stash for later" opt-in — the quietest
+     control in the row, so its ghost Button drops to the faint ink until hovered.
+     Discard (neutral float-chip) and Comment (the one amber primary) carry more
+     weight, keeping the stash from competing with them. */
+  :global([data-slot="button"].keep) {
     color: var(--ink-faint);
-    border: 1px solid transparent;
   }
-  .keep:hover:not(:disabled) {
+  :global([data-slot="button"].keep:hover:not(:disabled)) {
     color: var(--ink-soft);
   }
-  .keep:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-  .ghost {
-    background: transparent;
-    color: var(--ink-soft);
-    border: 1px solid var(--rule);
-  }
-  .ghost:hover {
-    color: var(--ink);
-    border-color: var(--rule-strong);
-  }
-  .solid {
-    background: var(--accent);
-    color: var(--accent-ink);
-    border: 1px solid var(--accent);
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-  }
-  .solid:hover {
-    background: var(--accent-bright);
-  }
-  .kbd {
-    display: inline-flex;
-    align-items: center;
+  /* The ⌘↵ hint on the Comment button: a Kbd stripped of its keycap ground so the
+     two glyphs read as a quiet inline shortcut on the amber fill rather than a
+     sunk chip fighting it. */
+  :global([data-slot="kbd"].kbd) {
+    height: auto;
+    min-width: 0;
+    padding: 0;
     gap: 0.15rem;
-    opacity: 0.8;
+    background: transparent;
+    color: inherit;
+    opacity: 0.85;
   }
   @keyframes reveal {
     from {
