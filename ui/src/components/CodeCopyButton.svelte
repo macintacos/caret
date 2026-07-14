@@ -6,6 +6,8 @@
   // confirmation, then swaps back. It sits in the .diff-plan light DOM (a sibling of
   // the diff surface), so — unlike the motionless shadow render surface — it may
   // animate; the app.css reduced-motion kill-switch collapses it for that preference.
+  import { Button } from "$lib/components/ui/button/index.js";
+  import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import Icon from "./Icon.svelte";
 
   interface Props {
@@ -43,23 +45,46 @@
   $effect(() => () => clearTimeout(timer));
 </script>
 
-<button
-  type="button"
-  class="code-copy"
-  style="top: {top}px; left: {left}px;"
-  aria-label={copied ? "Copied" : "Copy code"}
-  onpointerdown={(event) => event.stopPropagation()}
-  onclick={onClick}
->
-  {#key copied}
-    <span class="glyph" class:done={copied}>
-      <Icon name={copied ? "check" : "copy"} size={14} />
-    </span>
-  {/key}
-</button>
+<!-- The affordance is a shadcn Button (icon size) wrapped in a shadcn Tooltip,
+     following the TopBar precedent. The button stays the absolutely-positioned
+     element (inline top/left set by DiffPlanView), so its `.code-copy` surface is
+     molded in place. `{...props}` from the tooltip trigger is spread first so the
+     explicit handlers/label below win. -->
+<Tooltip.Provider delayDuration={300}>
+  <Tooltip.Root>
+    <Tooltip.Trigger>
+      {#snippet child({ props })}
+        <Button
+          {...props}
+          variant="outline"
+          size="icon"
+          type="button"
+          class="code-copy"
+          style="top: {top}px; left: {left}px;"
+          aria-label={copied ? "Copied" : "Copy code"}
+          onpointerdown={(event) => event.stopPropagation()}
+          onclick={onClick}
+        >
+          {#key copied}
+            <span class="glyph" class:done={copied}>
+              <Icon name={copied ? "check" : "copy"} size={14} />
+            </span>
+          {/key}
+        </Button>
+      {/snippet}
+    </Tooltip.Trigger>
+    <Tooltip.Content>{copied ? "Copied" : "Copy code"}</Tooltip.Content>
+  </Tooltip.Root>
+</Tooltip.Provider>
 
 <style>
-  .code-copy {
+  /* `.code-copy` is handed to <Button>, so it carries no Svelte scope hash and is
+     styled via :global. These unlayered rules mold the Button's surface in place —
+     they beat the Button recipe's layered Tailwind utilities, so the resting chip
+     is caret's paper-raised affordance, not the shadcn outline variant. The
+     unlayered box-shadow also suppresses the Button's focus ring, so focus is shown
+     by the explicit outline below. */
+  :global(.code-copy) {
     position: absolute;
     /* Anchored at the block's top-right corner; translate insets it just inside. */
     transform: translate(calc(-100% - 0.4rem), 0.4rem);
@@ -79,12 +104,12 @@
     animation: code-copy-in var(--dur-fast) var(--ease-out);
   }
 
-  .code-copy:hover {
+  :global(.code-copy:hover) {
     color: var(--ink);
     background: var(--paper);
   }
 
-  .code-copy:focus-visible {
+  :global(.code-copy:focus-visible) {
     outline: 2px solid var(--accent-bright);
     outline-offset: 2px;
   }
@@ -100,7 +125,9 @@
     animation: code-copy-pop var(--dur-fast) var(--ease-out);
   }
 
-  @keyframes code-copy-in {
+  /* Global keyframe: referenced from the :global(.code-copy) rule above, so it
+     can't be Svelte-scoped or the name would mismatch and the fade wouldn't play. */
+  @keyframes -global-code-copy-in {
     from {
       opacity: 0;
     }

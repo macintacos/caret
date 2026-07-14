@@ -206,8 +206,14 @@
     z-index: 60;
     max-width: min(72ch, 90vw);
     overflow: hidden;
-    background: var(--paper-raised);
-    border: 1px solid var(--rule-strong);
+    /* The card paints on the shadcn popover surface (bridged: --popover =
+       --paper-raised, --border = --rule), so this hover card reads as one family
+       with the app's other floating panels (menus, dropdowns). The panel radius
+       (--radius-lg, 10px) and card shadow are already the kit's; only the border
+       softens from --rule-strong to the popover hairline. */
+    background: var(--popover);
+    color: var(--popover-foreground);
+    border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
     /* Hidden until measured + placed at final size (see the `shown` gate). Revealed
@@ -239,7 +245,7 @@
     padding: 0.05rem 0.4rem;
     border-radius: var(--radius);
     background: var(--ink-soft);
-    color: var(--paper-raised);
+    color: var(--popover);
     font-weight: 700;
     font-size: var(--text-2xs);
     letter-spacing: 0.09em;
@@ -322,7 +328,7 @@
     padding: 0 0.7rem;
     text-align: right;
     color: var(--ink-faint);
-    background: var(--paper-raised);
+    background: var(--popover);
     border-right: 1px solid var(--rule);
     user-select: none;
     white-space: pre;
