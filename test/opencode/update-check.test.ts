@@ -107,16 +107,18 @@ test("resolveCaretVersion reads the sibling package.json when the marker is a pl
   ).toBe("1.2.3");
 });
 
-test("resolveCaretVersion degrades to 0.0.0 when the package.json is unreadable", () => {
-  expect(
-    resolveCaretVersion({
-      marker: "__CARET_VERSION__",
-      importMetaUrl: "file:///pkg/opencode/caret.plugin.ts",
-      readFile: () => {
-        throw new Error("nope");
-      },
-    }),
-  ).toBe("0.0.0");
+test("resolveCaretVersion degrades to an unparseable sentinel when the package.json is unreadable (never nags)", () => {
+  const v = resolveCaretVersion({
+    marker: "__CARET_VERSION__",
+    importMetaUrl: "file:///pkg/opencode/caret.plugin.ts",
+    readFile: () => {
+      throw new Error("nope");
+    },
+  });
+  expect(v).toBe("unknown");
+  // The whole point of the sentinel: an unreadable version must NOT trigger a
+  // spurious "update available (you have 0.0.0)" toast.
+  expect(updateToastBody(v, { version: "9.9.9", url: "https://x" })).toBeNull();
 });
 
 // --- resolveCaretBin ---

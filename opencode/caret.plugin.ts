@@ -53,7 +53,9 @@ export function resolveCaretBin(opts: {
 
 /** The plugin's own caret version, for the update check. A substituted marker wins
  * (file-deploy); else read it from the package.json shipped beside this module (the
- * array install). "0.0.0" when neither is available, so a broken read never nags. */
+ * array install). "unknown" when neither is available — deliberately UNPARSEABLE so
+ * `isNewer` compares false and a broken read stays silent ("0.0.0" would parse and
+ * nag "update available (you have 0.0.0)" on every start). */
 export function resolveCaretVersion(opts: {
   marker: string;
   importMetaUrl: string;
@@ -63,9 +65,9 @@ export function resolveCaretVersion(opts: {
   try {
     const raw = opts.readFile(fileURLToPath(new URL("../package.json", opts.importMetaUrl)));
     const v = (JSON.parse(raw) as { version?: unknown }).version;
-    return typeof v === "string" ? v : "0.0.0";
+    return typeof v === "string" ? v : "unknown";
   } catch {
-    return "0.0.0";
+    return "unknown";
   }
 }
 

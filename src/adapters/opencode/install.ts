@@ -63,6 +63,9 @@ function readCaretInPluginArray(dir: string): boolean | "unknown" {
     if (cfg === undefined || cfg === null) continue;
     sawConfig = true;
     const arr = cfg.plugin;
+    // Loose "caret" substring on purpose (a diagnostics probe, not the exact writer
+    // match): also surfaces a dev/local caret entry (a `bun link` path or a pinned
+    // `@macintacos/caret@x`), so discovery reports "configured" for those too.
     if (Array.isArray(arr) && arr.some((e) => typeof e === "string" && e.includes("caret"))) {
       return true;
     }

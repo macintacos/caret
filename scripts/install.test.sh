@@ -405,25 +405,25 @@ fi
 # (EXC-339) caret installs into Claude Code and/or OpenCode. CARET_AGENTS pins the
 # target(s) non-interactively; each target contributes only its own register step,
 # so an opencode-only install never runs `claude plugin install`, and vice versa.
-# The OpenCode register routes through the tested `caret install-opencode`.
+# The OpenCode register routes through the tested `caret install --target opencode`.
 oc_only="$(CARET_DRY_RUN=1 CARET_AGENTS=opencode "$bash_bin" "$script" 2>&1)"
-assert_contains "$oc_only" "install-opencode" "CARET_AGENTS=opencode plans the OpenCode install"
+assert_contains "$oc_only" "install --target opencode" "CARET_AGENTS=opencode plans the OpenCode install"
 assert_absent "$oc_only" "claude plugin install" "CARET_AGENTS=opencode skips the Claude register"
 
 cc_only="$(CARET_DRY_RUN=1 CARET_AGENTS=claude "$bash_bin" "$script" 2>&1)"
 assert_contains "$cc_only" "claude plugin install" "CARET_AGENTS=claude plans the Claude install"
-assert_absent "$cc_only" "install-opencode" "CARET_AGENTS=claude skips the OpenCode register"
+assert_absent "$cc_only" "install --target opencode" "CARET_AGENTS=claude skips the OpenCode register"
 
 both_agents="$(CARET_DRY_RUN=1 CARET_AGENTS=claude,opencode "$bash_bin" "$script" 2>&1)"
 assert_contains "$both_agents" "claude plugin install" "CARET_AGENTS=claude,opencode plans the Claude install"
-assert_contains "$both_agents" "install-opencode" "CARET_AGENTS=claude,opencode plans the OpenCode install"
+assert_contains "$both_agents" "install --target opencode" "CARET_AGENTS=claude,opencode plans the OpenCode install"
 
 # --- consolidated section + correct OpenCode demo hint (EXC-661) --------------
 # The progress now renders under one "Installing caret" section, and the footer
 # points OpenCode users at /caret:demo (its namespaced command), not the stale
 # /demo. Both only surface on a real run — dry-run renders print_plan, not the
 # summary — so drive a synthetic --from-local install into BOTH agents. The
-# OpenCode register shells out to "$REPO_DIR/bin/caret install-opencode", so seed
+# OpenCode register shells out to "$REPO_DIR/bin/caret install --target opencode", so seed
 # a bin/caret stub alongside the daemon's bin/caret-native.
 read -r ROOT STUBS HOME_DIR LOG < <(make_success_fixture)
 write_claude_stub "$STUBS" "$LOG"

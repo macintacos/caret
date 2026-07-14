@@ -16,15 +16,24 @@ function pluginArray(text: string): unknown[] {
   return Array.isArray(cfg?.plugin) ? cfg.plugin : [];
 }
 
-/** Add `pkg` to the config's `plugin` array, returning the new config text. Creates
- * the array (and an object body) when absent. Idempotent: an already-present entry
- * returns the text unchanged. */
+/** Add `pkg` to the config's `plugin` array, returning the new config text. Appends
+ * to an existing array (idempotent — an already-present entry returns the text
+ * unchanged), and sets a fresh `["<pkg>"]` array when `plugin` is absent OR present
+ * but not an array (a malformed config — replacing it is safer than array-inserting
+ * into a non-array, which jsonc-parser throws on). */
 export function addPluginToConfigText(existing: string | null, pkg: string): string {
   const text = existing ?? "{}\n";
-  const arr = pluginArray(text);
-  if (arr.includes(pkg)) return text;
-  const path: JSONPath = ["plugin", arr.length];
-  const edits = modify(text, path, pkg, { isArrayInsertion: true, formattingOptions: FORMATTING });
+  const current = (parse(text) as { plugin?: unknown } | undefined)?.plugin;
+  if (Array.isArray(current)) {
+    if (current.includes(pkg)) return text;
+    const path: JSONPath = ["plugin", current.length];
+    const edits = modify(text, path, pkg, {
+      isArrayInsertion: true,
+      formattingOptions: FORMATTING,
+    });
+    return applyEdits(text, edits);
+  }
+  const edits = modify(text, ["plugin"], [pkg], { formattingOptions: FORMATTING });
   return applyEdits(text, edits);
 }
 
@@ -39,9 +48,4 @@ export function removePluginFromConfigText(existing: string, pkg: string): strin
   const next = arr.filter((e) => e !== pkg);
   const edits = modify(existing, ["plugin"], next, { formattingOptions: FORMATTING });
   return applyEdits(existing, edits);
-}
-
-/** Whether caret's entry is present in the config's `plugin` array. */
-export function hasPlugin(text: string, pkg: string): boolean {
-  return pluginArray(text).includes(pkg);
 }

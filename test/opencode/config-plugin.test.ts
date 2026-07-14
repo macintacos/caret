@@ -29,6 +29,15 @@ test("add is idempotent (re-adding leaves the text unchanged)", () => {
   expect(twice).toBe(once);
 });
 
+test("add replaces a malformed non-array plugin value instead of throwing", () => {
+  expect(JSON.parse(addPluginToConfigText(JSON.stringify({ plugin: "oops" }), PKG))).toEqual({
+    plugin: [PKG],
+  });
+  expect(JSON.parse(addPluginToConfigText(JSON.stringify({ plugin: {} }), PKG))).toEqual({
+    plugin: [PKG],
+  });
+});
+
 test("add preserves comments in a jsonc config", () => {
   const src = ["{", "  // my opencode config", '  "plugin": ["opencode-wakatime"]', "}", ""].join(
     "\n",
