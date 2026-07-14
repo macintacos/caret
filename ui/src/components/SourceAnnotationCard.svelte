@@ -126,10 +126,11 @@
   }
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 <!-- The card-wide click is a pointer affordance; the chip <button> below is the
      keyboard-accessible control (aria-expanded, Enter/Space), so this needs no
-     key handler of its own. -->
+     key handler of its own. In runes mode svelte-ignore codes are comma-separated
+     (a space stops parsing), so both codes need the comma to take effect. -->
+<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div
   class="card"
   class:focused
