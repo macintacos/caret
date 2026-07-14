@@ -70,6 +70,65 @@
   // Newest first reads most naturally in a picker — the current version is the
   // default base and sits at the top.
   const ordered = $derived([...versions].sort((a, b) => b.version - a.version));
+
+  // Sliding pill for the segmented ToggleGroups: instead of each option painting
+  // its own background, one shared pill rides behind the options and animates to
+  // whichever is active. A CSS transform/width transition is inherently
+  // interruptible — clicking a third option mid-slide smoothly redirects the pill
+  // from wherever it is — and it wears the --ease-spring easing for a damped-spring
+  // settle. mountSlider injects the pill and keeps it aligned to the active
+  // [data-state="on"] option via measurement (options are content-sized, so a
+  // pure-CSS index offset wouldn't line up). Reduced motion is handled by the
+  // global #app guard, which zeroes the transition so the pill just snaps.
+  let layoutTrack = $state<HTMLElement | null>(null);
+  let indicatorsTrack = $state<HTMLElement | null>(null);
+
+  function mountSlider(node: HTMLElement) {
+    const pill = document.createElement("span");
+    pill.className = "seg-pill";
+    pill.setAttribute("aria-hidden", "true");
+    node.prepend(pill);
+
+    const sync = () => {
+      const active = node.querySelector<HTMLElement>('[data-state="on"]');
+      if (!active) {
+        pill.style.opacity = "0";
+        return;
+      }
+      const nb = node.getBoundingClientRect();
+      const ab = active.getBoundingClientRect();
+      pill.style.width = `${ab.width}px`;
+      pill.style.height = `${ab.height}px`;
+      pill.style.transform = `translate(${ab.left - nb.left}px, ${ab.top - nb.top}px)`;
+      pill.style.opacity = "1";
+    };
+
+    // Place the pill on the initial selection without animating in from the corner.
+    pill.style.transition = "none";
+    let raf = requestAnimationFrame(() => {
+      sync();
+      raf = requestAnimationFrame(() => {
+        pill.style.transition = "";
+      });
+    });
+
+    // bits-ui flips data-state on the options when the value changes; re-measure
+    // then, and on any resize (font load, window resize).
+    const mo = new MutationObserver(sync);
+    mo.observe(node, { attributes: true, attributeFilter: ["data-state"], subtree: true });
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(sync) : null;
+    ro?.observe(node);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      mo.disconnect();
+      ro?.disconnect();
+      pill.remove();
+    };
+  }
+
+  $effect(() => (layoutTrack ? mountSlider(layoutTrack) : undefined));
+  $effect(() => (indicatorsTrack ? mountSlider(indicatorsTrack) : undefined));
 </script>
 
 <!-- A version picker, reused for both base and target. It is the same DropdownMenu
@@ -185,6 +244,7 @@
         type="single"
         size="sm"
         aria-label="Diff layout"
+        bind:ref={layoutTrack}
         bind:value={
           () => diffStyle, (v) => { if (v) onSetDiffStyle(v as DiffStyle); }
         }
@@ -201,6 +261,7 @@
         type="single"
         size="sm"
         aria-label="Diff indicators"
+        bind:ref={indicatorsTrack}
         bind:value={
           () => diffIndicators, (v) => { if (v) onSetDiffIndicators(v as DiffIndicators); }
         }
@@ -339,17 +400,39 @@
 
   /* Segmented layout/indicator controls read as one recessed track with a lifted
      pill on the active option — neutral, borderless, no amber. The track is sized
-     to --ctl-h so it matches the compare Button and the version pickers; the
-     active pill rides the bar's raised paper out of the sunk track, inactive
-     options stay quiet ink-soft. */
+     to --ctl-h so it matches the compare Button and the version pickers. The
+     active fill is NOT painted per-option; one shared .seg-pill (injected by
+     mountSlider) rides behind the options and slides to the active one, so the
+     selection animates. position: relative anchors that pill. */
   .compare-picker :global([data-slot="toggle-group"]) {
+    position: relative;
     gap: 2px;
     height: var(--ctl-h);
     padding: 2px;
     background: var(--paper-sunk);
     border-radius: var(--radius);
   }
+  /* The sliding active-option pill. Its transform + width animate with the
+     damped-spring easing; the transition redirects mid-slide when a new option is
+     clicked, so rapid switches stay fluid. Sits behind the option labels (z-index
+     below the position: relative items). The #app reduced-motion guard zeroes the
+     transition, so under reduced motion it simply snaps. */
+  .compare-picker :global(.seg-pill) {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 0;
+    opacity: 0;
+    border-radius: calc(var(--radius) - 2px);
+    background: var(--chip);
+    pointer-events: none;
+    transition:
+      transform var(--dur-base) var(--ease-spring),
+      width var(--dur-base) var(--ease-spring);
+  }
   .compare-picker :global([data-slot="toggle-group-item"]) {
+    position: relative;
+    z-index: 1;
     height: 100%;
     min-width: 0;
     border: 0;
@@ -363,7 +446,6 @@
     color: var(--ink);
   }
   .compare-picker :global([data-slot="toggle-group-item"][data-state="on"]) {
-    background: var(--chip);
     color: var(--ink);
   }
 

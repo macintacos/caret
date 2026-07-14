@@ -77,6 +77,16 @@
   --dur-base: 180ms;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  /* A damped-spring easing (linear() curve, ~6% overshoot then settle) for
+     controls that slide between discrete positions — the segmented-control pill.
+     Paired with --dur-base, it reads as a springy snap, not a bounce. Modern
+     browsers only (Chrome 113+, Safari 17.2+, Firefox 112+); older ones fall back
+     to a plain ease. */
+  --ease-spring: linear(
+    0, 0.008, 0.031, 0.068, 0.117, 0.177, 0.246, 0.324, 0.407, 0.496, 0.587, 0.679,
+    0.769, 0.855, 0.935, 1.006, 1.049, 1.065, 1.062, 1.049, 1.031, 1.014, 1.001,
+    0.993, 0.991, 0.994, 0.998, 1
+  );
 
   /* caret-dark palette — the default (EXC-730). These color tokens are the
      static first-paint / no-JS fallback; the source of truth is
