@@ -207,6 +207,7 @@
       >
         <ToggleGroup.Item value="bars">Bars</ToggleGroup.Item>
         <ToggleGroup.Item value="classic">+/−</ToggleGroup.Item>
+        <ToggleGroup.Item value="both">Both</ToggleGroup.Item>
       </ToggleGroup.Root>
     </div>
   {/if}

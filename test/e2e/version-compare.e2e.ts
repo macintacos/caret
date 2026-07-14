@@ -154,7 +154,7 @@ test("the chosen layout persists across a reload", async ({ daemon, page }) => {
   await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "single");
 });
 
-test("toggling bars↔classic switches gutter indicators in place without a remount", async ({
+test("toggling bars↔classic↔both switches gutter indicators in place without a remount", async ({
   daemon,
   page,
 }) => {
@@ -171,8 +171,15 @@ test("toggling bars↔classic switches gutter indicators in place without a remo
   // Same element, new indicators — switched via setOptions, not recreated.
   await expect(pre).toHaveAttribute("data-indicators", "classic");
 
+  // "Both" drives the library at bars (so the gutter bars stay) while caret's host
+  // flag overlays the +/- glyphs — a combined mode the library has no value for.
+  await page.getByRole("radio", { name: "Both" }).click();
+  await expect(pre).toHaveAttribute("data-indicators", "bars");
+  await expect(page.locator('.diffview[data-caret-indicators="both"]')).toBeAttached();
+
   await page.getByRole("radio", { name: "Bars" }).click();
   await expect(pre).toHaveAttribute("data-indicators", "bars");
+  await expect(page.locator('.diffview[data-caret-indicators="both"]')).toHaveCount(0);
 });
 
 test("the chosen gutter indicators persist across a reload", async ({ daemon, page }) => {

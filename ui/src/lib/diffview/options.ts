@@ -99,7 +99,11 @@ export function toFileDiffOptions(options: SourceDiffViewOptions): SourceDiffVie
   return {
     ...sharedOptions(options),
     diffStyle: options.diffStyle,
-    diffIndicators: options.diffIndicators,
+    // The library only knows "bars"/"classic"/"none". caret's "both" drives it at
+    // "bars" (the gutter bars) and overlays the +/- glyphs itself via the host's
+    // data-caret-indicators="both" flag (SourceDiffView) + the matching rules in
+    // coreStyles.ts, so the two cues show at once.
+    diffIndicators: options.diffIndicators === "both" ? "bars" : options.diffIndicators,
     // Pin the compare header to the top of the scroll viewport. The library
     // renders a default file header for every diff; left to scroll, the version
     // pair and the +N/-N counts leave view the moment the reviewer scrolls a long

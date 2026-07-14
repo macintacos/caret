@@ -23,6 +23,11 @@ describe("readDiffIndicators", () => {
     expect(readDiffIndicators()).toBe("bars");
   });
 
+  test('returns the stored "both" value', () => {
+    localStorage.setItem(DIFF_INDICATORS_KEY, "both");
+    expect(readDiffIndicators()).toBe("both");
+  });
+
   test("fails safe to bars when localStorage throws", () => {
     const original = globalThis.localStorage;
     Object.defineProperty(globalThis, "localStorage", {

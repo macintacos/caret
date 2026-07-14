@@ -15,10 +15,12 @@ export interface SourceDocument {
 /** Layout for a two-document diff: side-by-side or stacked. */
 export type DiffStyle = "split" | "unified";
 
-/** Gutter change markers for a diff: the inherited vertical bars, or the classic
- * +/- glyphs many reviewers prefer. (The library also offers "none"; caret has no
- * use for hiding the markers, so it isn't surfaced.) */
-export type DiffIndicators = "bars" | "classic";
+/** Gutter change markers for a diff: the inherited vertical bars, the classic
+ * +/- glyphs many reviewers prefer, or "both" — the bars and the glyphs together.
+ * The library only knows "bars"/"classic"/"none"; "both" is caret's own: it drives
+ * the library at "bars" and overlays the glyphs itself (see toFileDiffOptions and
+ * the [data-caret-indicators="both"] rules in coreStyles.ts). */
+export type DiffIndicators = "bars" | "classic" | "both";
 
 /** Line annotation on a single-document view. */
 export type SourceLineAnnotation = LineAnnotation;

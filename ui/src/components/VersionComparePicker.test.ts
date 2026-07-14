@@ -120,13 +120,24 @@ describe("VersionComparePicker indicators toggle", () => {
   });
 
   test("clicking an indicators option reports it", () => {
-    const onSetDiffIndicators = capture<"bars" | "classic">();
+    const onSetDiffIndicators = capture<"bars" | "classic" | "both">();
     const { target } = render(VersionComparePicker, {
       ...baseProps,
       onSetDiffIndicators: onSetDiffIndicators.cb,
     });
     radio(target, "+/−").click();
     expect(onSetDiffIndicators.last()).toBe("classic");
+  });
+
+  // The combined bars+glyphs option (EXC-764 follow-up).
+  test("clicking Both reports the combined mode", () => {
+    const onSetDiffIndicators = capture<"bars" | "classic" | "both">();
+    const { target } = render(VersionComparePicker, {
+      ...baseProps,
+      onSetDiffIndicators: onSetDiffIndicators.cb,
+    });
+    radio(target, "Both").click();
+    expect(onSetDiffIndicators.last()).toBe("both");
   });
 });
 

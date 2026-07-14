@@ -79,4 +79,12 @@
   });
 </script>
 
-<div bind:this={container} class="diffview"></div>
+<!-- data-caret-indicators="both" is caret's own flag for the combined bars+glyphs
+     marker mode (the library has no "both"): it drives the library at "bars" and
+     the [data-caret-indicators="both"] rules in coreStyles.ts overlay the +/-
+     glyphs. Set on the shadow host so :host(...) reaches it from inside. -->
+<div
+  bind:this={container}
+  class="diffview"
+  data-caret-indicators={options.diffIndicators === "both" ? "both" : undefined}
+></div>
