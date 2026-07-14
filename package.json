@@ -4,6 +4,10 @@
   "license": "MIT",
   "type": "module",
   "description": "A Claude Code plugin that replaces the terminal plan-approval prompt with a local web UI for inline review, annotation, and approval.",
+  "main": "./opencode/index.ts",
+  "exports": {
+    ".": "./opencode/index.ts"
+  },
   "homepage": "https://github.com/macintacos/caret",
   "repository": {
     "type": "git",
@@ -29,7 +33,6 @@
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^20.9.0",
-    "@opencode-ai/plugin": "^1.16.2",
     "@playwright/test": "^1.60.0",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
     "@tailwindcss/vite": "^4.3.2",
@@ -55,10 +58,12 @@
     "@commander-js/extra-typings": "^15.0.0",
     "@internationalized/date": "^3.12.2",
     "@lezer/highlight": "^1.2.3",
+    "@opencode-ai/plugin": "^1.16.2",
     "@pierre/diffs": "1.2.7",
     "bits-ui": "^2.18.1",
     "clsx": "^2.1.1",
     "commander": "^15.0.0",
+    "jsonc-parser": "^3.3.1",
     "marked": "^18.0.4",
     "pino": "^10.3.1",
     "prettier": "3.8.3",
