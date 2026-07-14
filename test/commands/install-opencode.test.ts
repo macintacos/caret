@@ -44,6 +44,14 @@ test("install is idempotent (re-adding leaves the config unchanged)", () => {
   expect(readFileSync(configJson(), "utf-8")).toBe(first);
 });
 
+test("install leaves the config untouched when caret is already pinned to a version", () => {
+  // A user who hard-coded `@macintacos/caret@0.4.0` must not get a duplicate bare entry.
+  writeFileSync(configJson(), JSON.stringify({ plugin: [`${CARET_PACKAGE}@0.4.0`] }, null, 2));
+  const before = readFileSync(configJson(), "utf-8");
+  install();
+  expect(readFileSync(configJson(), "utf-8")).toBe(before);
+});
+
 test("install preserves a user's existing plugins and other config keys", () => {
   writeFileSync(
     configJson(),

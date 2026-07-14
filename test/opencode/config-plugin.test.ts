@@ -29,6 +29,23 @@ test("add is idempotent (re-adding leaves the text unchanged)", () => {
   expect(twice).toBe(once);
 });
 
+test("add is a no-op when caret is already present with a pinned version", () => {
+  // A user who pinned `@macintacos/caret@0.4.0` must not get a duplicate bare entry.
+  const src = JSON.stringify({ plugin: [`${PKG}@0.4.0`] }, null, 2);
+  expect(addPluginToConfigText(src, PKG)).toBe(src);
+});
+
+test("add is a no-op for a pinned caret entry alongside other plugins", () => {
+  const src = JSON.stringify({ plugin: ["opencode-wakatime", `${PKG}@1.2.3`] }, null, 2);
+  expect(addPluginToConfigText(src, PKG)).toBe(src);
+});
+
+test("remove drops a pinned caret entry too, preserving other plugins", () => {
+  const src = JSON.stringify({ plugin: ["opencode-wakatime", `${PKG}@0.4.0`] }, null, 2);
+  const out = removePluginFromConfigText(src, PKG);
+  expect(JSON.parse(out).plugin).toEqual(["opencode-wakatime"]);
+});
+
 test("add replaces a malformed non-array plugin value instead of throwing", () => {
   expect(JSON.parse(addPluginToConfigText(JSON.stringify({ plugin: "oops" }), PKG))).toEqual({
     plugin: [PKG],

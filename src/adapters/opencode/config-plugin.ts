@@ -16,16 +16,41 @@ function pluginArray(text: string): unknown[] {
   return Array.isArray(cfg?.plugin) ? cfg.plugin : [];
 }
 
+/** The package name of a plugin specifier, dropping any pinned version — so a
+ * bare `@macintacos/caret` and a pinned `@macintacos/caret@0.4.0` share one name.
+ * Mirrors how OpenCode's `parsePluginSpecifier` splits a specifier into
+ * `{ pkg, version }`: for a scoped name the version is the `@` AFTER the `/`; for an
+ * unscoped name it is the first `@`. Non-npm entries (a `bun link` path) have no such
+ * `@` and return unchanged. */
+function packageName(spec: string): string {
+  if (spec.startsWith("@")) {
+    const slash = spec.indexOf("/");
+    if (slash === -1) return spec; // malformed scoped name — treat the whole as the name
+    const at = spec.indexOf("@", slash + 1);
+    return at === -1 ? spec : spec.slice(0, at);
+  }
+  const at = spec.indexOf("@");
+  return at === -1 ? spec : spec.slice(0, at);
+}
+
+/** Whether a `plugin` array entry names `pkg` — matching a version-pinned entry
+ * (`<pkg>@x.y.z`) as well as the bare name, so caret is recognized as present
+ * regardless of how the user pinned it. */
+function entryNames(entry: unknown, pkg: string): boolean {
+  return typeof entry === "string" && packageName(entry) === packageName(pkg);
+}
+
 /** Add `pkg` to the config's `plugin` array, returning the new config text. Appends
  * to an existing array (idempotent — an already-present entry returns the text
- * unchanged), and sets a fresh `["<pkg>"]` array when `plugin` is absent OR present
- * but not an array (a malformed config — replacing it is safer than array-inserting
- * into a non-array, which jsonc-parser throws on). */
+ * unchanged, INCLUDING a version-pinned `<pkg>@x.y.z` entry, so a user's pin is kept
+ * and never duplicated), and sets a fresh `["<pkg>"]` array when `plugin` is absent OR
+ * present but not an array (a malformed config — replacing it is safer than
+ * array-inserting into a non-array, which jsonc-parser throws on). */
 export function addPluginToConfigText(existing: string | null, pkg: string): string {
   const text = existing ?? "{}\n";
   const current = (parse(text) as { plugin?: unknown } | undefined)?.plugin;
   if (Array.isArray(current)) {
-    if (current.includes(pkg)) return text;
+    if (current.some((e) => entryNames(e, pkg))) return text;
     const path: JSONPath = ["plugin", current.length];
     const edits = modify(text, path, pkg, {
       isArrayInsertion: true,
@@ -38,14 +63,16 @@ export function addPluginToConfigText(existing: string | null, pkg: string): str
 }
 
 /** Remove `pkg` from the config's `plugin` array, returning the new config text.
- * Returns the text unchanged when the entry isn't present. Replaces the whole array
- * with the filtered list rather than deleting the one element — jsonc-parser's
- * array-element deletion mishandles a trailing element's comma — which keeps sibling
- * keys and comments intact (only an unusual in-array comment would be lost). */
+ * Removes a version-pinned `<pkg>@x.y.z` entry as well as the bare name (symmetric
+ * with add's idempotency). Returns the text unchanged when no entry names `pkg`.
+ * Replaces the whole array with the filtered list rather than deleting the one
+ * element — jsonc-parser's array-element deletion mishandles a trailing element's
+ * comma — which keeps sibling keys and comments intact (only an unusual in-array
+ * comment would be lost). */
 export function removePluginFromConfigText(existing: string, pkg: string): string {
   const arr = pluginArray(existing);
-  if (!arr.includes(pkg)) return existing;
-  const next = arr.filter((e) => e !== pkg);
+  if (!arr.some((e) => entryNames(e, pkg))) return existing;
+  const next = arr.filter((e) => !entryNames(e, pkg));
   const edits = modify(existing, ["plugin"], next, { formattingOptions: FORMATTING });
   return applyEdits(existing, edits);
 }
