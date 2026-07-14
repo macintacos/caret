@@ -37,18 +37,51 @@ const CARET_OVERRIDES = `
   /* Single source for the gutter→content seam width (EXC-664). The content inset
      that opens the seam and the selected-band pull that fills it must move
      together, so they share one named value rather than coupled literals. */
-  :host { --caret-seam: 24px; }
+  :host { --caret-seam: 20px; }
   [data-content] { padding-inline-start: var(--caret-seam); }
   [data-utility-button] {
-    margin-right: calc(1ch - 1lh - 0.85rem);
+    margin-right: calc(1ch - 1lh - 0.5rem);
     background-color: var(--accent);
     color: var(--accent-ink);
+    /* Raised, softened comment affordance: rounder corners and a layered drop
+       shadow (a tight contact shadow plus a wider ambient one) lift the "+" off
+       the diff surface, with a top-edge inset highlight for the bevel. Static (no
+       transition) — this sheet isn't in the motion.test chrome set, but keeping it
+       still avoids surprises. */
+    border-radius: var(--radius);
+    box-shadow:
+      0 1px 1.5px #0000003d,
+      0 2px 5px #0000004d,
+      inset 0 1px 0 #ffffff4d;
   }
   [data-utility-button]:hover { background-color: var(--accent-bright); }
   [data-utility-button]:focus-visible {
     background-color: var(--accent-bright);
     outline: 2px solid var(--accent-bright);
     outline-offset: 2px;
+  }
+
+  /* Multi-line selection affordance (GitHub-style). During a click-drag range
+     select, the library renders the "+" button only in the row under the pointer
+     (the one it flags [data-hovered]); the other selected rows would otherwise
+     show nothing in the seam. Give each of those a faded accent tick centered in
+     the "+" lane, so the whole range reads as one selection and it's clear the
+     button rides with the pointer. Scoped to :not([data-hovered]) so it never
+     doubles up with the real button on the active row. */
+  [data-gutter] > [data-column-number][data-selected-line]:not([data-hovered]) {
+    position: relative;
+  }
+  [data-gutter] > [data-column-number][data-selected-line]:not([data-hovered])::after {
+    content: "";
+    position: absolute;
+    top: 22%;
+    bottom: 22%;
+    right: calc(var(--caret-seam) / -2 - 1.5px);
+    width: 3px;
+    border-radius: var(--radius);
+    background-color: var(--accent);
+    opacity: 0.45;
+    pointer-events: none;
   }
 
   /* EXC-692: a fenced code block reads as a slightly-indented, darker, rounded
@@ -213,12 +246,98 @@ const CARET_OVERRIDES = `
      through, reading as a card over the background rather than as more band. Line
      numbers are always shown, so the gutter never collapses and the content's left
      corners never need rounding. */
-  [data-content] > [data-line][data-selected-line] {
+  /* Continuous row band across the seam (EXC-664 generalized). The pull that made
+     the drag-select amber band unbroken is shared by EVERY row that carries a
+     background band: the drag-select selection ([data-selected-line]), the pointer
+     hover grey ([data-hovered]), and the add/del change tint
+     ([data-line-type=change-*]). Without it each band stops at the content
+     column's inset and the surface-colored gutter divider, leaving a gap at the
+     "+" lane. Two moves per banded row: (1) pull the content line cell left across
+     the shared --caret-seam with a negative margin and re-add the inset as padding
+     so the line's background covers the seam while its text never moves; (2) clear
+     the gutter number column's 2px divider (painted in the surface color, so on a
+     tinted row it reads as a gap) — a transparent border lets the cell's own band
+     show through, joining the two halves. Rounding stays selection-only (below),
+     so change/hover bands read square and multi-row change blocks stay continuous.
+     The base [data-line] inline padding is 1ch; when a glyph lane is shown
+     (classic or caret's "both" indicators) it is 2ch, handled by the override. */
+  [data-content]
+    > [data-line]:is(
+      [data-selected-line],
+      [data-hovered],
+      [data-line-type="change-addition"],
+      [data-line-type="change-deletion"]
+    ) {
     margin-inline-start: calc(-1 * var(--caret-seam));
     padding-inline-start: calc(1ch + var(--caret-seam));
   }
-  [data-gutter] > [data-column-number][data-selected-line] {
+  [data-indicators="classic"]
+    [data-content]
+    > [data-line]:is(
+      [data-selected-line],
+      [data-hovered],
+      [data-line-type="change-addition"],
+      [data-line-type="change-deletion"]
+    ),
+  :host([data-caret-indicators="both"])
+    [data-content]
+    > [data-line]:is(
+      [data-selected-line],
+      [data-hovered],
+      [data-line-type="change-addition"],
+      [data-line-type="change-deletion"]
+    ) {
+    padding-inline-start: calc(2ch + var(--caret-seam));
+  }
+  [data-gutter]
+    > [data-column-number]:is(
+      [data-selected-line],
+      [data-hovered],
+      [data-line-type="change-addition"],
+      [data-line-type="change-deletion"]
+    ) {
     border-right-color: transparent;
+  }
+
+  /* Combined markers — caret's "both" indicators (the library has no such mode).
+     The library is driven at "bars", so the gutter bars already render; here caret
+     overlays the classic +/- glyphs in the content column so both cues show at
+     once. This mirrors the library's own classic-glyph rules — a 2ch inline lane
+     on every content line, plus a positioned ::before carrying + / - on the
+     add/del change rows — scoped to the host flag so it never leaks into bars or
+     classic mode. The glyph sits at the content line's inline-start; on change
+     rows the seam-fill pull above moves that origin across the seam, so the glyph
+     reads as sitting in the "+" lane — the same placement classic mode gets. */
+  :host([data-caret-indicators="both"]) [data-content] [data-line] {
+    padding-inline-start: 2ch;
+  }
+  :host([data-caret-indicators="both"])
+    [data-content]
+    :is([data-line], [data-no-newline])[data-line-type="change-addition"]::before,
+  :host([data-caret-indicators="both"])
+    [data-content]
+    :is([data-line], [data-no-newline])[data-line-type="change-deletion"]::before {
+    content: "";
+    width: 1ch;
+    height: 1lh;
+    display: inline-block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  :host([data-caret-indicators="both"])
+    [data-content]
+    :is([data-line], [data-no-newline])[data-line-type="change-addition"]::before {
+    content: "+";
+    color: var(--diffs-addition-base);
+  }
+  :host([data-caret-indicators="both"])
+    [data-content]
+    :is([data-line], [data-no-newline])[data-line-type="change-deletion"]::before {
+    content: "-";
+    color: var(--diffs-deletion-base);
   }
   [data-gutter]
     > [data-column-number][data-selected-line]:not(

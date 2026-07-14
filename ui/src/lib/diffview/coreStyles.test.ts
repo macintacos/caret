@@ -93,24 +93,48 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
     });
   }
 
-  test("fills the gutter→content seam so the band is continuous", () => {
+  test("fills the gutter→content seam so every banded row is continuous", () => {
     // The seam width is named once and reused — the content inset, the pull
     // margin, and the re-inset padding all reference --caret-seam, so they cannot
-    // drift out of step (no repeated 24px literal).
-    expect(overrideDecls).toMatch(/--caret-seam:\s*24px/);
-    expect(overrideDecls).not.toMatch(/-24px/);
+    // drift out of step (no repeated seam literal).
+    expect(overrideDecls).toMatch(/--caret-seam:\s*20px/);
+    expect(overrideDecls).not.toMatch(/-20px/);
     expect(overrideDecls).toMatch(/padding-inline-start:\s*var\(--caret-seam\)/);
-    // Each selected content code-line cell is pulled across the seam with a
-    // negative inline-start margin (the shared --caret-seam); scoped to [data-line]
-    // so an inline annotation/composer row caught in the selection is never shifted.
-    expect(overrideDecls).toMatch(
-      /\[data-content\]\s*>\s*\[data-line\]\[data-selected-line\]\s*\{[^}]*margin-inline-start:\s*calc\(-1 \* var\(--caret-seam\)\)/,
+    // The seam-fill pull is shared by every row that carries a background band —
+    // the drag-select selection, the pointer hover, and the add/del change rows —
+    // so each banded content code-line cell is pulled across the seam with a
+    // negative --caret-seam margin (the inset re-added as padding, text unmoved).
+    const BANDED = ["data-selected-line", "data-hovered", "change-addition", "change-deletion"];
+    const pull = overrideDecls.match(
+      /\[data-content\]\s*>\s*\[data-line\]:is\(([\s\S]*?)\)\s*\{([\s\S]*?)\}/,
     );
-    // The gutter column's per-row divider is dropped for selected line rows so the
-    // two halves join with no 2px gap.
-    expect(overrideDecls).toMatch(
-      /\[data-gutter\]\s*>\s*\[data-column-number\]\[data-selected-line\]\s*\{[^}]*border-right-color:\s*transparent/,
+    expect(pull).not.toBeNull();
+    for (const state of BANDED) expect(pull![1]).toContain(state);
+    expect(pull![2]).toMatch(/margin-inline-start:\s*calc\(-1 \* var\(--caret-seam\)\)/);
+    // Glyph-lane modes (classic / caret "both") inset the line by 2ch instead of
+    // 1ch, so a banded row in those modes re-adds 2ch + the seam.
+    expect(overrideDecls).toMatch(/padding-inline-start:\s*calc\(2ch \+ var\(--caret-seam\)\)/);
+    // The gutter column's per-row divider is dropped for the same banded rows so
+    // the two halves join with no 2px gap.
+    const border = overrideDecls.match(
+      /\[data-gutter\]\s*>\s*\[data-column-number\]:is\(([\s\S]*?)\)\s*\{([\s\S]*?)\}/,
     );
+    expect(border).not.toBeNull();
+    for (const state of BANDED) expect(border![1]).toContain(state);
+    expect(border![2]).toMatch(/border-right-color:\s*transparent/);
+  });
+
+  test("marks non-pointer selected rows with a faded tick in the + lane", () => {
+    // During a drag range-select the library renders the "+" only on the pointer
+    // row ([data-hovered]); the rest of the range gets a faded ::after tick so the
+    // whole selection reads as one. Scoped to :not([data-hovered]) so it never
+    // doubles with the real button on the active row.
+    const marker = overrideDecls.match(
+      /\[data-column-number\]\[data-selected-line\]:not\(\[data-hovered\]\)::after\s*\{([\s\S]*?)\}/,
+    );
+    expect(marker).not.toBeNull();
+    expect(marker![1]).toMatch(/background-color:\s*var\(--accent\)/);
+    expect(marker![1]).toMatch(/opacity:/);
   });
 
   test("excludes the composer/annotation row from the band", () => {
@@ -129,6 +153,23 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
     expect(overrideDecls).toMatch(
       /\[data-content\]\s*>\s*\[data-line-annotation\]\[data-selected-line\][^{]*\{[^}]*background-color:\s*transparent/,
     );
+  });
+});
+
+// EXC-764 follow-up: the library has no "bars + glyphs" mode, so caret's "both"
+// indicators drive it at "bars" and this sheet overlays the classic +/- glyphs,
+// scoped to the host flag (SourceDiffView sets data-caret-indicators="both").
+describe('the combined "both" indicators overlay', () => {
+  test("overlays the +/- glyphs on change rows via the host flag", () => {
+    // Scoped to the host flag so bars/classic mode never grow the glyphs.
+    expect(overrideDecls).toMatch(/:host\(\[data-caret-indicators="both"\]\)/);
+    // A 2ch inline lane opens on every content line to seat the glyph.
+    expect(overrideDecls).toMatch(
+      /:host\(\[data-caret-indicators="both"\]\)\s*\[data-content\]\s*\[data-line\]\s*\{[^}]*padding-inline-start:\s*2ch/,
+    );
+    // The + and - glyphs are painted on the add/del change rows.
+    expect(overrideDecls).toMatch(/change-addition"\]::before\s*\{[^}]*content:\s*"\+"/);
+    expect(overrideDecls).toMatch(/change-deletion"\]::before\s*\{[^}]*content:\s*"-"/);
   });
 });
 

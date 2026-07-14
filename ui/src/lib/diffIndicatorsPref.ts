@@ -15,7 +15,11 @@ import { enumLocalStoragePref } from "./enumLocalStoragePref.ts";
 /** localStorage key holding the remembered gutter indicators. */
 export const DIFF_INDICATORS_KEY = "caret.diffIndicators";
 
-const pref = enumLocalStoragePref<DiffIndicators>(DIFF_INDICATORS_KEY, ["bars", "classic"], "bars");
+const pref = enumLocalStoragePref<DiffIndicators>(
+  DIFF_INDICATORS_KEY,
+  ["bars", "classic", "both"],
+  "bars",
+);
 
 /** Read the remembered indicators, defaulting to "bars" on a missing, unrecognized,
  * or unreadable value. */

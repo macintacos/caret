@@ -171,6 +171,12 @@ describe("toFileDiffOptions", () => {
     });
   });
 
+  // The library has no "both" mode; caret drives it at "bars" (so the gutter bars
+  // render) and overlays the +/- glyphs itself via the host flag + coreStyles.
+  test('maps caret "both" indicators to the library\'s "bars"', () => {
+    expect(toFileDiffOptions({ diffIndicators: "both" }).diffIndicators).toBe("bars");
+  });
+
   test("pins hunkSeparators and expandUnchanged so a library default flip can't drift them", () => {
     // The collapsed-context band IS the line-info separator: caret themes its
     // surface through the FND --diffs-bg-separator-override bridge in app.css, so
