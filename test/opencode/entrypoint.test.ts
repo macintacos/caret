@@ -6,8 +6,8 @@
 // (a bare specifier resolves the package's `exports["."]`; the plugin's runtime
 // import must be a real dependency so OpenCode's `bun install` provides it).
 
-import { readFileSync } from "node:fs";
 import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
 const pkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf-8")) as {
   exports?: Record<string, unknown>;
