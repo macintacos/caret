@@ -96,9 +96,9 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
   test("fills the gutter→content seam so every banded row is continuous", () => {
     // The seam width is named once and reused — the content inset, the pull
     // margin, and the re-inset padding all reference --caret-seam, so they cannot
-    // drift out of step (no repeated 24px literal).
-    expect(overrideDecls).toMatch(/--caret-seam:\s*24px/);
-    expect(overrideDecls).not.toMatch(/-24px/);
+    // drift out of step (no repeated seam literal).
+    expect(overrideDecls).toMatch(/--caret-seam:\s*20px/);
+    expect(overrideDecls).not.toMatch(/-20px/);
     expect(overrideDecls).toMatch(/padding-inline-start:\s*var\(--caret-seam\)/);
     // The seam-fill pull is shared by every row that carries a background band —
     // the drag-select selection, the pointer hover, and the add/del change rows —
@@ -122,6 +122,19 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
     expect(border).not.toBeNull();
     for (const state of BANDED) expect(border![1]).toContain(state);
     expect(border![2]).toMatch(/border-right-color:\s*transparent/);
+  });
+
+  test("marks non-pointer selected rows with a faded tick in the + lane", () => {
+    // During a drag range-select the library renders the "+" only on the pointer
+    // row ([data-hovered]); the rest of the range gets a faded ::after tick so the
+    // whole selection reads as one. Scoped to :not([data-hovered]) so it never
+    // doubles with the real button on the active row.
+    const marker = overrideDecls.match(
+      /\[data-column-number\]\[data-selected-line\]:not\(\[data-hovered\]\)::after\s*\{([\s\S]*?)\}/,
+    );
+    expect(marker).not.toBeNull();
+    expect(marker![1]).toMatch(/background-color:\s*var\(--accent\)/);
+    expect(marker![1]).toMatch(/opacity:/);
   });
 
   test("excludes the composer/annotation row from the band", () => {

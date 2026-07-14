@@ -37,22 +37,51 @@ const CARET_OVERRIDES = `
   /* Single source for the gutter→content seam width (EXC-664). The content inset
      that opens the seam and the selected-band pull that fills it must move
      together, so they share one named value rather than coupled literals. */
-  :host { --caret-seam: 24px; }
+  :host { --caret-seam: 20px; }
   [data-content] { padding-inline-start: var(--caret-seam); }
   [data-utility-button] {
-    margin-right: calc(1ch - 1lh - 0.65rem);
+    margin-right: calc(1ch - 1lh - 0.5rem);
     background-color: var(--accent);
     color: var(--accent-ink);
-    /* Raised: a soft drop shadow lifts the "+" off the diff surface, with a faint
-       top-edge highlight for the bevel. Static (no transition) — this sheet isn't
-       in the motion.test chrome set, but keeping it still avoids surprises. */
-    box-shadow: 0 1px 2px #00000059, inset 0 1px 0 #ffffff3d;
+    /* Raised, softened comment affordance: rounder corners and a layered drop
+       shadow (a tight contact shadow plus a wider ambient one) lift the "+" off
+       the diff surface, with a top-edge inset highlight for the bevel. Static (no
+       transition) — this sheet isn't in the motion.test chrome set, but keeping it
+       still avoids surprises. */
+    border-radius: var(--radius);
+    box-shadow:
+      0 1px 1.5px #0000003d,
+      0 2px 5px #0000004d,
+      inset 0 1px 0 #ffffff4d;
   }
   [data-utility-button]:hover { background-color: var(--accent-bright); }
   [data-utility-button]:focus-visible {
     background-color: var(--accent-bright);
     outline: 2px solid var(--accent-bright);
     outline-offset: 2px;
+  }
+
+  /* Multi-line selection affordance (GitHub-style). During a click-drag range
+     select, the library renders the "+" button only in the row under the pointer
+     (the one it flags [data-hovered]); the other selected rows would otherwise
+     show nothing in the seam. Give each of those a faded accent tick centered in
+     the "+" lane, so the whole range reads as one selection and it's clear the
+     button rides with the pointer. Scoped to :not([data-hovered]) so it never
+     doubles up with the real button on the active row. */
+  [data-gutter] > [data-column-number][data-selected-line]:not([data-hovered]) {
+    position: relative;
+  }
+  [data-gutter] > [data-column-number][data-selected-line]:not([data-hovered])::after {
+    content: "";
+    position: absolute;
+    top: 22%;
+    bottom: 22%;
+    right: calc(var(--caret-seam) / -2 - 1.5px);
+    width: 3px;
+    border-radius: var(--radius);
+    background-color: var(--accent);
+    opacity: 0.45;
+    pointer-events: none;
   }
 
   /* EXC-692: a fenced code block reads as a slightly-indented, darker, rounded
