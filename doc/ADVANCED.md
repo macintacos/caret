@@ -122,13 +122,13 @@ raise `review.timeout_s` (up to just under 3900 s) if you want a longer window.
 ### The OpenCode adapter
 
 OpenCode has no `ExitPlanMode` hook to intercept, so caret wires in as an
-**in-process plugin** rather than a command hook. The plugin (deployed to your OpenCode
-plugin dir) registers a `caret_review_plan` tool and steers the Plan agent to call it; the
-tool's `execute()` spawns `caret review` (`CARET_AGENT=opencode`), blocks on your decision
-in the browser, and returns an approval or a change request (the reviewer feedback,
-without the plan echoed back) the agent revises and resubmits. The whole daemon/review
-pipeline is reused unchanged — the plugin is the OpenCode-side counterpart to Claude's
-`hooks.json`.
+**in-process plugin** rather than a command hook. The plugin (shipped in the
+`@macintacos/caret` package) registers a `caret_review_plan` tool and steers the Plan
+agent to call it; the tool's `execute()` spawns `caret review` (`CARET_AGENT=opencode`),
+blocks on your decision in the browser, and returns an approval or a change request (the
+reviewer feedback, without the plan echoed back) the agent revises and resubmits. The
+whole daemon/review pipeline is reused unchanged — the plugin is the OpenCode-side
+counterpart to Claude's `hooks.json`.
 
 OpenCode doesn't fire plugin hooks for subagent tool calls, so caret restricts the review
 tool to primary agents (`experimental.primary_tools` + per-agent `permission`) and
@@ -136,13 +136,18 @@ re-checks the caller in the tool body — a planning agent can't slip an unrevie
 past you through a subagent. The same **fail-safe = deny** rule holds: a spawn failure, an
 unparseable decision, or a timeout all return `deny`.
 
-caret installs into OpenCode (and updates) via the script installer, or directly with
-`caret install-opencode`; alongside the plugin it writes a config-dir `package.json` so
-OpenCode installs the plugin's `@opencode-ai/plugin` dependency on its next start (restart
-OpenCode once after installing). The `/caret:demo`, `/caret:discovery`, and `/caret:debug`
-commands work as they do in Claude Code. See
-[`agents/opencode-integration.md`](agents/opencode-integration.md) for the design and the
-dependency-manifest rationale.
+caret installs into OpenCode as a `plugin` array entry: `caret install --target opencode`
+adds `@macintacos/caret` to your OpenCode config's `plugin` array (comment-preserving, via
+`jsonc-parser`) and deploys the `/caret:*` command files, or you can add the array entry
+by hand. On its next start OpenCode installs the package and its `@opencode-ai/plugin`
+dependency into its own cache and loads it — caret writes no config-dir manifest and runs
+no `bun install` itself. The plugin resolves the caret binary and its own version at
+runtime from the package it ships in (an env override, `CARET_OPENCODE_BIN`, still wins),
+and on load it checks caret's latest GitHub release and toasts an update nudge when you're
+behind (`CARET_OPENCODE_NO_UPDATE_CHECK` opts out). `caret install --target claude`
+registers caret with Claude Code through its plugin CLI, and `--target opencode,claude`
+does both agents at once. See
+[`agents/opencode-integration.md`](agents/opencode-integration.md) for the design.
 
 ### Desktop notifications
 

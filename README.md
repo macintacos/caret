@@ -52,22 +52,37 @@ claude plugin marketplace remove caret
 
 ### OpenCode
 
-caret also installs into [OpenCode](https://opencode.ai), as an auto-loaded plugin. The
-script installer detects OpenCode (and, if you also have Claude Code, asks which to
-install into — or set `CARET_AGENTS`):
+caret installs into [OpenCode](https://opencode.ai) as a first-class
+[plugin](https://opencode.ai/docs/plugins/): add its package to your OpenCode `plugin`
+array and restart OpenCode once.
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/install.sh \
-  | CARET_AGENTS=opencode bash
+```jsonc
+// ~/.config/opencode/opencode.json
+{ "plugin": ["@macintacos/caret"] }
 ```
 
-The installer drops a `caret.ts` plugin plus the `/caret:demo`, `/caret:discovery`, and
-`/caret:debug` commands into your OpenCode config dir, along with a `package.json` for its
-one dependency (`@opencode-ai/plugin`) — it never touches your existing `plugin` config
-array. **Restart OpenCode once** after installing (plugins load at startup), then
-`/caret:demo` works. Approving or requesting changes flows back exactly as in Claude Code.
-**Update** by re-running the installer; **uninstall** with
-`caret install-opencode --uninstall` (which also removes that `package.json` entry). See
+On its next start OpenCode installs `@macintacos/caret` (and its one dependency) into its
+own cache and loads it — no separate caret install, though it still needs
+[`bun`](https://bun.sh) on your `PATH`. From then on, when OpenCode's Plan agent presents
+a plan, caret opens it for review just as it does for Claude Code.
+
+Prefer a command — or want the `/caret:demo`, `/caret:discovery`, and `/caret:debug` slash
+commands too? If you have the caret binary (from the [script installer](#claude-code) or
+npm), run:
+
+```sh
+caret install --target opencode        # or --target opencode,claude to install both agents
+```
+
+That adds the array entry for you and drops the command files into your OpenCode config
+dir. The script installer does the same non-interactively (`CARET_AGENTS=opencode`); you
+no longer need it for a one-time install.
+
+**Update**: caret checks its
+[latest release](https://github.com/macintacos/caret/releases) at OpenCode startup and
+toasts you when a newer version is available; to take it, repin the array entry (or clear
+OpenCode's plugin cache) and restart. **Uninstall**:
+`caret install --target opencode --uninstall`, or just remove the array entry. See
 [`doc/ADVANCED.md`](doc/ADVANCED.md#the-opencode-adapter) for how the integration works.
 
 ## Using caret
