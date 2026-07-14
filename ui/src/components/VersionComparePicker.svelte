@@ -8,8 +8,19 @@
   // shown-but-disabled keeps the affordance discoverable (EXC-664). All state is
   // owned by the parent (the compare state factory); this component is
   // presentational and reports changes through callback props.
+  //
+  // The controls are composed from the shadcn-svelte catalog (EXC-764): the two
+  // version pickers are Selects, the layout/indicator segmented controls are
+  // single-select ToggleGroups (each option a role="radio"), the enter/exit
+  // control is a Toggle, and the disabled-state explanation is a Tooltip. The
+  // caret skin (amber-wash selection, hairline borders) is applied over the
+  // catalog defaults through the shadcn↔caret token bridge — no raw colors.
   import type { PlanVersion } from "@core/types";
   import type { DiffIndicators, DiffStyle } from "../lib/diffview/types.ts";
+  import * as Select from "$lib/components/ui/select/index.js";
+  import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
+  import { Toggle } from "$lib/components/ui/toggle/index.js";
+  import * as Tooltip from "$lib/components/ui/tooltip/index.js";
 
   interface Props {
     /** Every stored plan version, oldest first. */
@@ -54,95 +65,104 @@
 </script>
 
 <div class="compare-picker">
-  <button
-    type="button"
-    class="compare-toggle"
-    class:on={comparing}
-    disabled={!canCompare}
-    aria-pressed={comparing}
-    title={canCompare ? undefined : "No other versions to compare yet"}
-    onclick={() => onSetComparing(!comparing)}
-  >
-    Compare versions
-  </button>
+  {#if canCompare}
+    <Toggle
+      variant="outline"
+      size="sm"
+      class="compare-toggle"
+      bind:pressed={() => comparing, (v) => onSetComparing(v)}
+    >
+      Compare versions
+    </Toggle>
+  {:else}
+    <!-- Nothing to compare: shown-but-disabled (EXC-664). A disabled button
+         swallows pointer events, so the "why" tooltip hangs off a span-wrapped
+         trigger rather than the button itself. -->
+    <Tooltip.Provider delayDuration={0}>
+      <Tooltip.Root>
+        <Tooltip.Trigger>
+          {#snippet child({ props })}
+            <span {...props} class="compare-toggle-wrap">
+              <Toggle variant="outline" size="sm" class="compare-toggle" disabled pressed={false}>
+                Compare versions
+              </Toggle>
+            </span>
+          {/snippet}
+        </Tooltip.Trigger>
+        <Tooltip.Content>No other versions to compare yet</Tooltip.Content>
+      </Tooltip.Root>
+    </Tooltip.Provider>
+  {/if}
 
   {#if comparing}
     <div class="pair">
-      <label class="field">
+      <div class="field">
         <span class="lbl">Base</span>
-        <select
-          class="base-select metric"
-          value={String(baseVersion)}
-          onchange={(e) => onSelectBase(Number(e.currentTarget.value))}
+        <Select.Root
+          type="single"
+          bind:value={
+            () => String(baseVersion), (v) => { if (v) onSelectBase(Number(v)); }
+          }
         >
-          {#each ordered as v (v.version)}
-            <option value={String(v.version)}>v{v.version}</option>
-          {/each}
-        </select>
-      </label>
+          <Select.Trigger size="sm" aria-label="Base version">v{baseVersion}</Select.Trigger>
+          <Select.Content>
+            {#each ordered as v (v.version)}
+              <Select.Item value={String(v.version)} label={`v${v.version}`}>v{v.version}</Select.Item>
+            {/each}
+          </Select.Content>
+        </Select.Root>
+      </div>
 
       <span class="arrow" aria-hidden="true">→</span>
 
-      <label class="field">
+      <div class="field">
         <span class="lbl">Target</span>
-        <select
-          class="target-select metric"
-          value={String(targetVersion)}
-          onchange={(e) => onSelectTarget(Number(e.currentTarget.value))}
+        <Select.Root
+          type="single"
+          bind:value={
+            () => String(targetVersion), (v) => { if (v) onSelectTarget(Number(v)); }
+          }
         >
-          {#each ordered as v (v.version)}
-            <option value={String(v.version)}>v{v.version}</option>
-          {/each}
-        </select>
-      </label>
+          <Select.Trigger size="sm" aria-label="Target version">v{targetVersion}</Select.Trigger>
+          <Select.Content>
+            {#each ordered as v (v.version)}
+              <Select.Item value={String(v.version)} label={`v${v.version}`}>v{v.version}</Select.Item>
+            {/each}
+          </Select.Content>
+        </Select.Root>
+      </div>
     </div>
 
     <div class="controls">
-      <div class="segmented" role="group" aria-label="Diff layout">
-        <button
-          type="button"
-          data-style="split"
-          class:active={diffStyle === "split"}
-          aria-pressed={diffStyle === "split"}
-          onclick={() => onSetDiffStyle("split")}
-        >
-          Split
-        </button>
-        <button
-          type="button"
-          data-style="unified"
-          class:active={diffStyle === "unified"}
-          aria-pressed={diffStyle === "unified"}
-          onclick={() => onSetDiffStyle("unified")}
-        >
-          Unified
-        </button>
-      </div>
+      <ToggleGroup.Root
+        type="single"
+        variant="outline"
+        size="sm"
+        aria-label="Diff layout"
+        bind:value={
+          () => diffStyle, (v) => { if (v) onSetDiffStyle(v as DiffStyle); }
+        }
+      >
+        <ToggleGroup.Item value="split">Split</ToggleGroup.Item>
+        <ToggleGroup.Item value="unified">Unified</ToggleGroup.Item>
+      </ToggleGroup.Root>
 
       <!-- Gutter change markers: vertical bars (the inherited default) or the
            classic +/- glyphs many reviewers prefer. The glyphs inherit caret's
            ok/danger hue through the diffview bridge, so this only chooses the
            affordance, not the color. -->
-      <div class="segmented" role="group" aria-label="Diff indicators">
-        <button
-          type="button"
-          data-indicators="bars"
-          class:active={diffIndicators === "bars"}
-          aria-pressed={diffIndicators === "bars"}
-          onclick={() => onSetDiffIndicators("bars")}
-        >
-          Bars
-        </button>
-        <button
-          type="button"
-          data-indicators="classic"
-          class:active={diffIndicators === "classic"}
-          aria-pressed={diffIndicators === "classic"}
-          onclick={() => onSetDiffIndicators("classic")}
-        >
-          +/−
-        </button>
-      </div>
+      <ToggleGroup.Root
+        type="single"
+        variant="outline"
+        size="sm"
+        aria-label="Diff indicators"
+        bind:value={
+          () => diffIndicators, (v) => { if (v) onSetDiffIndicators(v as DiffIndicators); }
+        }
+      >
+        <ToggleGroup.Item value="bars">Bars</ToggleGroup.Item>
+        <ToggleGroup.Item value="classic">+/−</ToggleGroup.Item>
+      </ToggleGroup.Root>
     </div>
   {/if}
 </div>
@@ -157,34 +177,33 @@
     font-size: var(--text-base);
   }
 
-  /* The mode toggle echoes the topbar's accent treatment: a quiet bordered
-     button that fills with the accent wash once compare mode is on. */
-  .compare-toggle {
-    background: transparent;
+  /* The catalog Toggle brings the bordered chip shape; the caret skin recolors
+     it: quiet at rest, amber wash once compare mode is on, greyed when there is
+     nothing to compare. Scoped under .compare-picker so these token rules win
+     over the component's own bridged utilities. */
+  .compare-picker :global(.compare-toggle) {
+    border-color: var(--rule-strong);
     color: var(--ink);
-    border: 1px solid var(--rule-strong);
-    border-radius: var(--radius);
-    padding: 0.35rem 0.75rem;
-    font-size: var(--text-sm);
+    padding-inline: 0.75rem;
     font-weight: 600;
     white-space: nowrap;
   }
-  .compare-toggle:hover:not(:disabled) {
+  .compare-picker :global(.compare-toggle:hover:not(:disabled)) {
+    background: transparent;
     border-color: var(--accent);
     color: var(--accent);
   }
-  .compare-toggle.on {
+  .compare-picker :global(.compare-toggle[data-state="on"]) {
     background: var(--accent-wash);
     border-color: var(--accent);
     color: var(--accent);
   }
-  /* Nothing to compare: greyed out and inert, but still visible so the
-     affordance is discoverable (EXC-664). */
-  .compare-toggle:disabled {
+  .compare-picker :global(.compare-toggle:disabled) {
     color: var(--ink-faint);
     border-color: var(--rule);
-    opacity: 0.55;
-    cursor: not-allowed;
+  }
+  .compare-toggle-wrap {
+    display: inline-flex;
   }
 
   .pair {
@@ -203,17 +222,6 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
-  .field select {
-    background: var(--paper);
-    color: var(--ink);
-    border: 1px solid var(--rule-strong);
-    border-radius: var(--radius);
-    padding: 0.25rem 0.4rem;
-    font-size: var(--text-sm);
-  }
-  .field select:hover {
-    border-color: var(--accent);
-  }
   .arrow {
     color: var(--ink-faint);
   }
@@ -225,6 +233,14 @@
     align-items: center;
     gap: 0.6rem;
     margin-left: auto;
+  }
+
+  /* The active segment carries the amber selection wash — the same "amber marks
+     the selection" language the diff view and menus use — so the current choice
+     reads distinct from one merely hovered. */
+  .compare-picker :global([data-slot="toggle-group-item"][data-state="on"]) {
+    background: var(--accent-wash);
+    color: var(--accent);
   }
 
   /* Entering compare mode reveals the pickers + display toggles with a quick,
@@ -244,34 +260,5 @@
       opacity: 1;
       transform: translateX(0);
     }
-  }
-
-  /* Segmented control. The active segment carries the accent fill, mirroring the
-     primary-action emphasis used elsewhere in the shell. Shared by the
-     split/unified and bars/+/- toggles. */
-  .segmented {
-    display: inline-flex;
-    border: 1px solid var(--rule-strong);
-    border-radius: var(--radius);
-    overflow: hidden;
-  }
-  .segmented button {
-    background: var(--paper);
-    color: var(--ink-soft);
-    border: none;
-    padding: 0.3rem 0.7rem;
-    font-size: var(--text-sm);
-    font-weight: 600;
-  }
-  .segmented button + button {
-    border-left: 1px solid var(--rule-strong);
-  }
-  .segmented button:hover:not(.active) {
-    color: var(--ink);
-    background: var(--paper-sunk);
-  }
-  .segmented button.active {
-    background: var(--accent);
-    color: var(--accent-ink);
   }
 </style>
