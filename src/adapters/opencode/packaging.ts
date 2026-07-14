@@ -6,7 +6,7 @@
 // keys off — so it is depth-independent (works whether this module runs from
 // source, the bundle, or the compiled binary).
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 /** caret's root dir (the one containing opencode/ and bin/). dev/bundle: argv[1]
@@ -28,9 +28,7 @@ export function resolveCaretRoot(): string {
 }
 
 export interface OpencodePackaging {
-  /** The plugin source (opencode/caret.plugin.ts), markers UNsubstituted. */
-  pluginSource: string;
-  /** The caret shim the plugin spawns for `caret review`. */
+  /** The caret shim the deployed command files invoke (their `__CARET_BIN__`). */
   binPath: string;
   /** Command files (basename + contents) from opencode/commands/, if any. */
   commands: { name: string; contents: string }[];
@@ -38,7 +36,6 @@ export interface OpencodePackaging {
 
 /** Read caret's OpenCode packaging from the resolved root. */
 export function loadOpencodePackaging(root: string = resolveCaretRoot()): OpencodePackaging {
-  const pluginSource = readFileSync(join(root, "opencode", "caret.plugin.ts"), "utf-8");
   const binPath = join(root, "bin", "caret");
   const commandsDir = join(root, "opencode", "commands");
   let commands: { name: string; contents: string }[] = [];
@@ -48,8 +45,8 @@ export function loadOpencodePackaging(root: string = resolveCaretRoot()): Openco
       .sort()
       .map((f) => ({ name: f, contents: readFileSync(join(commandsDir, f), "utf-8") }));
   } catch {
-    // No command files shipped (or unreadable) — the plugin alone is a valid install.
+    // No command files shipped (or unreadable) — the array entry alone is a valid install.
     commands = [];
   }
-  return { pluginSource, binPath, commands };
+  return { binPath, commands };
 }

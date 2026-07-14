@@ -1,78 +1,24 @@
-// The WRITE side of caret's OpenCode install: render the plugin (substitute its
-// install-time markers) and deploy / uninstall caret's files in OpenCode's config
-// dir. caret installs as auto-loaded FILES (a plugin file + command files) and
-// NEVER mutates the user's `plugin` config array — an existing array of
-// third-party plugins is untouched. Idempotent (re-deploy overwrites in place) and
-// dry-run aware. Pure of any path resolution (callers pass absolute paths via
-// paths.ts) so it is unit-testable against a temp dir.
+// The file-write side of caret's OpenCode install: substitute the command files'
+// install-time marker and deploy / uninstall them in OpenCode's command dir. caret
+// itself installs as a `plugin` array entry (@macintacos/caret; the array edit lives
+// in config-plugin.ts) — OpenCode installs the package + its deps — but the
+// `/caret:*` command files aren't array-installable, so they still ship as files.
+// Idempotent (re-deploy overwrites in place) and dry-run aware. Pure of any path
+// resolution (callers pass absolute paths via paths.ts) so it is unit-testable
+// against a temp dir.
 
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-/** Substitute a deployed template's install-time markers (`__CARET_VERSION__`,
- * `__CARET_BIN__`) with the resolved caret version and the caret binary path —
- * applied to the plugin source and to the command files. Pure. The replacements
- * use a function replacer so the substituted value is taken LITERALLY: a binary
- * path or version containing `$&` / `$$` / `$\`` (legal in a filesystem path)
- * must not be reinterpreted as a `String.replace` substitution pattern. */
+/** Substitute a command file's install-time marker (`__CARET_BIN__`, e.g. in
+ * discovery.md) with the running caret binary's path (and `__CARET_VERSION__` when
+ * present). Pure. The replacements use a function replacer so the substituted value
+ * is taken LITERALLY: a binary path containing `$&` / `$$` / `$\`` (legal in a
+ * filesystem path) must not be reinterpreted as a `String.replace` pattern. */
 export function renderPlugin(source: string, opts: { version: string; binPath: string }): string {
   return source
     .replaceAll("__CARET_VERSION__", () => opts.version)
     .replaceAll("__CARET_BIN__", () => opts.binPath);
-}
-
-/** Merge caret's plugin dependency into an existing config-dir package.json text
- * (or create a fresh one when `existing` is null), returning the new file text.
- * caret OWNS only its one `dependencies` key — every other key, and any other
- * dependency the user declared, is preserved. Idempotent: re-running pins the same
- * version. Throws if `existing` is non-null but not valid JSON (the caller skips
- * the manifest and warns rather than clobbering a file it can't understand). */
-export function addPluginDependency(existing: string | null, pkg: string, version: string): string {
-  const obj = existing === null ? {} : (JSON.parse(existing) as Record<string, unknown>);
-  const deps = isObject(obj.dependencies) ? obj.dependencies : {};
-  obj.dependencies = { ...deps, [pkg]: version };
-  return `${JSON.stringify(obj, null, 2)}\n`;
-}
-
-/** Remove caret's plugin dependency from an existing config-dir package.json text,
- * returning the new file text — or `null` to signal the caller should DELETE the
- * file (caret's dependency was the only thing in it). Only caret's `dependencies`
- * entry is touched; other dependencies and other top-level keys are preserved (and
- * keep the file alive). Returns the text unchanged when caret's dep isn't present.
- * `existing === null` (no file) returns null (nothing to remove). Throws on invalid
- * JSON, like its counterpart. */
-export function removePluginDependency(existing: string | null, pkg: string): string | null {
-  if (existing === null) return null;
-  const obj = JSON.parse(existing) as Record<string, unknown>;
-  // Caret's dep isn't here — return the text VERBATIM so the caller sees a no-op
-  // (and the user's exact formatting is never disturbed).
-  if (!isObject(obj.dependencies) || !(pkg in obj.dependencies)) return existing;
-  delete obj.dependencies[pkg];
-  if (Object.keys(obj.dependencies).length === 0) delete obj.dependencies;
-  if (Object.keys(obj).length === 0) return null; // caret-owned-only — remove the file
-  return `${JSON.stringify(obj, null, 2)}\n`;
-}
-
-function isObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-
-/** Strip every `export` keyword except `export default` from the plugin source.
- *
- * OpenCode's plugin loader iterates a plugin module's exports (`Object.values`)
- * and throws "Plugin export is not a function" on the FIRST export that is not a
- * Plugin (a function, or a `{ server }` object) — one bad export rejects the whole
- * module. caret's plugin SOURCE additionally exports constants (`CARET_PLUGIN_VERSION`,
- * `REVIEW_TOOL`, `PLANNING_AGENTS`) and pure helpers so `test/opencode/` can unit-test
- * them; deployed verbatim, those non-function exports make OpenCode reject the plugin.
- *
- * So the DEPLOYED artifact must export only its plugin function. This drops the
- * `export ` keyword off every declaration except `export default`, leaving them as
- * module-private locals — the default plugin's runtime behaviour is unchanged (it
- * still references them by name). Applied only to the deployed plugin file, never to
- * the repo source the tests import. */
-export function stripNonDefaultExports(source: string): string {
-  return source.replace(/^([ \t]*)export (?!default\b)/gm, "$1");
 }
 
 export interface DeployFile {

@@ -430,14 +430,16 @@ if [ "$WANT_CLAUDE" -eq 1 ]; then
 fi
 
 # --- register: OpenCode ------------------------------------------------------
-# caret installs into OpenCode as auto-loaded files via its own tested subcommand
-# (the file/JSON logic lives in TS, not bash): it drops the plugin + command files
-# into OpenCode's config dir and never touches the user's `plugin` config array.
-# Routed through run(), so CARET_DRY_RUN previews the exact command; step()
-# captures its output and shows it only on failure, so the ✓ line speaks for it.
+# caret installs into OpenCode as a first-class `plugin` array entry
+# (@macintacos/caret) plus its command files, via its own tested subcommand (the
+# config/JSON logic lives in TS, not bash): it adds the array entry — OpenCode
+# installs the package + its deps on its next start — and drops the `/caret:*`
+# command files into OpenCode's config dir. Routed through run(), so CARET_DRY_RUN
+# previews the exact command; step() captures its output and shows it only on
+# failure, so the ✓ line speaks for it.
 if [ "$WANT_OPENCODE" -eq 1 ]; then
-  step "Installing the caret OpenCode plugin + commands" \
-    run "$REPO_DIR/bin/caret" install-opencode
+  step "Installing caret into OpenCode (plugin array + commands)" \
+    run "$REPO_DIR/bin/caret" install --target opencode
 fi
 
 # --- daemon cycle (--from-local only) ---------------------------------------
