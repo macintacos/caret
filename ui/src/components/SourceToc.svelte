@@ -5,6 +5,8 @@
   // default (trees.software-inspired); the filter input also drives keyboard
   // navigation over the visible rows. Self-gates on shouldShowToc.
   import { filterHeadings, shouldShowToc, type TocHeading } from "../lib/toc.ts";
+  import { Input } from "$lib/components/ui/input/index.js";
+  import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
 
   interface Props {
     /** Headings extracted from the plan source, in document order. */
@@ -66,7 +68,7 @@
 
 {#if shouldShowToc(headings)}
   <nav class="source-toc" aria-label="Plan contents">
-    <input
+    <Input
       class="toc-filter"
       type="text"
       placeholder="Filter headings…"
@@ -74,25 +76,27 @@
       bind:value={query}
       onkeydown={onKeydown}
     />
-    <ul class="toc-list">
-      {#each visible as h, i (h.line)}
-        <li>
-          <button
-            type="button"
-            class="toc-row lvl-{h.level}"
-            class:active={h.line === activeLine}
-            class:cursor={i === cursor}
-            aria-current={h.line === activeLine ? "location" : undefined}
-            onclick={() => jump(h.line)}
-          >
-            {h.text}
-          </button>
-        </li>
-      {/each}
-      {#if visible.length === 0}
-        <li class="toc-empty">No matches</li>
-      {/if}
-    </ul>
+    <ScrollArea class="toc-scroll">
+      <ul class="toc-list">
+        {#each visible as h, i (h.line)}
+          <li>
+            <button
+              type="button"
+              class="toc-row lvl-{h.level}"
+              class:active={h.line === activeLine}
+              class:cursor={i === cursor}
+              aria-current={h.line === activeLine ? "location" : undefined}
+              onclick={() => jump(h.line)}
+            >
+              {h.text}
+            </button>
+          </li>
+        {/each}
+        {#if visible.length === 0}
+          <li class="toc-empty">No matches</li>
+        {/if}
+      </ul>
+    </ScrollArea>
   </nav>
 {/if}
 
@@ -108,30 +112,25 @@
     box-sizing: border-box;
     background: var(--paper-raised);
     border-right: 1px solid var(--rule);
-    overflow-y: auto;
     min-height: 0;
   }
 
-  .toc-filter {
+  /* The filter is the shadcn Input molded to the rail: its surface, border, and
+     focus ring come from the Input recipe (bridged tokens — border reads --input,
+     the focus ring reads --ring), so only pinning and the rail's compact voice are
+     set here. The class is handed to <Input>, so it carries no scope hash and is
+     reached via :global under the scoped nav. */
+  .source-toc :global(.toc-filter) {
     flex: 0 0 auto;
-    font-family: var(--font-sans);
+    height: 2rem;
     font-size: var(--text-sm);
-    color: var(--ink);
-    background: var(--paper);
-    border: 1px solid var(--rule);
-    border-radius: var(--radius);
-    padding: 0.34rem 0.5rem;
-    outline: none;
-    transition:
-      border-color var(--dur-fast) var(--ease-out),
-      box-shadow var(--dur-fast) var(--ease-out);
   }
-  .toc-filter::placeholder {
-    color: var(--ink-faint);
-  }
-  .toc-filter:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 2px var(--accent-wash);
+
+  /* The list scrolls inside the shadcn ScrollArea; the filter above it stays
+     pinned. The ScrollArea Root fills the remaining rail height. */
+  .source-toc :global(.toc-scroll) {
+    flex: 1 1 auto;
+    min-height: 0;
   }
 
   .toc-list {
