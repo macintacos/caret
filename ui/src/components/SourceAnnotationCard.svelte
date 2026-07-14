@@ -6,7 +6,16 @@
   // expanded it shows the full comment (rendered markdown) with edit and delete.
   // Editing uses MarkdownEditor (the swappable CodeMirror boundary). Collapse
   // state is UI-only — owned here, seeded from focus, never written to disk.
+  //
+  // The chrome is composed from shadcn primitives (EXC-765): the expanded surface
+  // is a Card, the collapsed surface a secondary Button, the lifecycle indicator a
+  // Badge, and the header/footer actions Buttons. caret's tight inline layout —
+  // the state-hued left rail, the compact padding, the opacity-only reveal — is
+  // re-applied over the copied source via :global(.hook) rules below.
   import type { LineAnnotation } from "@core/types";
+  import { Badge } from "$lib/components/ui/badge/index.js";
+  import { Button } from "$lib/components/ui/button/index.js";
+  import { Card } from "$lib/components/ui/card/index.js";
   import { commentState } from "../lib/commentState.ts";
   import { renderMarkdown } from "../lib/markdown.ts";
   import ConfirmPopover from "./ConfirmPopover.svelte";
@@ -103,22 +112,23 @@
   data-state={stateView.status}
 >
   {#if expanded}
-    <div class="body">
+    <Card class="body">
       <header>
         <span class="head">
           <span class="ref">{label}</span>
-          <span class="state state-{stateView.tone}">
+          <Badge variant="outline" class="state state-{stateView.tone}">
             <span class="dot" aria-hidden="true"></span>{stateView.label}
-          </span>
+          </Badge>
         </span>
-        <button
+        <Button
+          variant="ghost"
+          size="icon-xs"
           class="collapse"
-          type="button"
           aria-label="Collapse comment"
           onclick={() => (override = false)}
         >
           <Icon name="chevron-down" size={14} />
-        </button>
+        </Button>
       </header>
       {#if editing}
         <MarkdownEditor
@@ -130,22 +140,23 @@
           onCancelChord={cancelEdit}
         />
         <footer>
-          <button class="link save" type="button" onclick={save}>save</button>
-          <button class="link cancel" type="button" onclick={cancelEdit}>cancel</button>
+          <Button variant="ghost" size="sm" class="save" onclick={save}>save</Button>
+          <Button variant="ghost" size="sm" class="cancel" onclick={cancelEdit}>cancel</Button>
         </footer>
       {:else}
         <!-- renderedComment is sanitized HTML from renderMarkdown (see lib/markdown.ts). -->
         <div class="comment">{@html renderedComment}</div>
         <footer>
-          <button class="link edit" type="button" onclick={startEdit}>edit</button>
+          <Button variant="ghost" size="sm" class="edit" onclick={startEdit}>edit</Button>
           <span class="delete-wrap">
-            <button
-              class="link danger"
-              type="button"
+            <Button
+              variant="destructive"
+              size="sm"
+              class="danger"
               onclick={(e) => {
                 e.stopPropagation();
                 confirming = true;
-              }}>delete</button
+              }}>delete</Button
             >
             {#if confirming}
               <ConfirmPopover
@@ -159,15 +170,15 @@
           </span>
         </footer>
       {/if}
-    </div>
+    </Card>
   {:else}
-    <button class="chip" type="button" onclick={focusCard}>
+    <Button variant="secondary" class="chip" onclick={focusCard}>
       <span class="ref">{label}</span>
-      <span class="state state-{stateView.tone}">
+      <Badge variant="outline" class="state state-{stateView.tone}">
         <span class="dot" aria-hidden="true"></span>{stateView.label}
-      </span>
+      </Badge>
       <span class="preview">{annotation.comment}</span>
-    </button>
+    </Button>
   {/if}
 </div>
 
@@ -190,27 +201,27 @@
   .card[data-state="expired"] {
     --state-accent: var(--ink-faint);
   }
-  /* The chip: a compact, monospace line tag with a clamped one-line preview. */
-  .chip {
+
+  /* The collapsed chip: a secondary Button reshaped into a compact, left-aligned
+     line tag with a clamped one-line preview and the state-hued left rail. The
+     compound [data-slot] selector (0,2,0) outranks the copied Button's utility
+     classes so these caret overrides win. */
+  :global([data-slot="button"].chip) {
     display: flex;
-    align-items: baseline;
-    gap: 0.45rem;
     width: 100%;
-    text-align: left;
+    height: auto;
+    align-items: baseline;
+    justify-content: flex-start;
+    gap: 0.45rem;
     padding: 0.3rem 0.55rem;
-    background: var(--paper-raised);
-    border: 1px solid var(--rule);
+    text-align: left;
+    font-weight: 400;
     border-left: 3px solid var(--state-accent);
     border-radius: var(--radius);
-    cursor: pointer;
-    transition: border-color var(--dur-fast) var(--ease-out);
-    /* Collapse (body -> chip) fades the newly-mounted chip in. See @keyframes
-       reveal: opacity only, so the swap reads as a considered reveal and the
-       annotation row's height is never driven by a transform. */
+    /* Collapse (body -> chip) fades the newly-mounted chip in — opacity only, so
+       the swap reads as a considered reveal and the annotation row's height is
+       never driven by a transform. */
     animation: reveal var(--dur-fast) var(--ease-out);
-  }
-  .chip:hover {
-    border-color: var(--rule-strong);
   }
   .preview {
     flex: 1 1 auto;
@@ -221,9 +232,13 @@
     font-size: var(--text-base);
     color: var(--ink-soft);
   }
-  .body {
+
+  /* The expanded body: a Card reshaped to caret's tight inline padding, the raised
+     shadow, and the state-hued 3px left rail (focused → the state hue, otherwise a
+     quiet rule). */
+  :global([data-slot="card"].body) {
+    display: block;
     padding: 0.6rem 0.7rem 0.55rem;
-    background: var(--paper-raised);
     border: 1px solid var(--rule-strong);
     border-left: 3px solid var(--rule-strong);
     border-radius: var(--radius-lg);
@@ -233,7 +248,7 @@
        composer's open. */
     animation: reveal var(--dur-fast) var(--ease-out);
   }
-  .card.focused .body {
+  .card.focused :global([data-slot="card"].body) {
     border-left-color: var(--state-accent);
   }
   header {
@@ -258,14 +273,14 @@
     color: var(--ink-soft);
     flex: none;
   }
-  /* The per-comment state affordance: a small colored dot plus a quiet label. The
-     dot carries the hue (state-driven); the label stays neutral so the indicator
-     reads as chrome, not a second accent. Shown collapsed and expanded alike. */
-  .state {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
+  /* The per-comment state affordance: an outline Badge carrying a small colored
+     dot plus a quiet label. The dot carries the hue (state-driven, via the
+     inherited --state-accent); the label stays neutral so the indicator reads as
+     chrome, not a second accent. Shown collapsed and expanded alike. */
+  :global(.state) {
     flex: none;
+    gap: 0.3rem;
+    padding: 0.05rem 0.4rem;
     font-size: var(--text-2xs);
     font-weight: 600;
     letter-spacing: 0.02em;
@@ -277,18 +292,6 @@
     height: 0.45rem;
     border-radius: 50%;
     background: var(--state-accent);
-  }
-  .collapse {
-    display: inline-flex;
-    padding: 0.1rem;
-    color: var(--ink-faint);
-    background: none;
-    border: none;
-    border-radius: var(--radius);
-    cursor: pointer;
-  }
-  .collapse:hover {
-    color: var(--ink);
   }
   /* The saved comment, rendered from markdown (renderMarkdown -> sanitized HTML).
      The child element rules are :global because the markup is injected via
@@ -370,7 +373,7 @@
   }
   footer {
     display: flex;
-    gap: 0.75rem;
+    gap: 0.5rem;
     margin-top: 0.4rem;
   }
   /* Positioning context for the delete confirmation, so it anchors to the link
@@ -379,23 +382,8 @@
     position: relative;
     display: inline-flex;
   }
-  .link {
-    background: none;
-    border: none;
-    padding: 0;
-    font-size: var(--text-sm);
-    color: var(--ink-soft);
-    cursor: pointer;
-    transition: color var(--dur-fast) var(--ease-out);
-  }
-  .link:hover {
-    color: var(--ink);
-  }
-  .link.danger:hover {
-    color: var(--accent);
-  }
   /* One motion for the chip<->body swap. Because expand/collapse is an {#if}
-     swap between two different subtrees, a bare transition can't bridge them;
+     swap between two different subtrees, a bare cross-fade can't bridge them;
      the entering subtree fades in instead. Opacity only — never a transform —
      so the card never changes the library-reserved annotation row's measured
      height and never jumps the scroll container. The single global
