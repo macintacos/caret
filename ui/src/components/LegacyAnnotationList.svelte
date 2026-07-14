@@ -4,7 +4,12 @@
   // quoted passage rather than a {startLine, endLine}, so they cannot be placed
   // on a source line and are listed below the view instead. Per the union compat
   // contract they always load and render, but never expose edit or delete.
+  //
+  // The container stays a plain full-bleed footer section (a Card's contained,
+  // rounded frame would fight the below-the-view framing); the count adopts a
+  // shadcn Badge (EXC-765), matching the count-chip pattern used elsewhere.
   import type { LegacyAnnotation } from "@core/types";
+  import { Badge } from "$lib/components/ui/badge/index.js";
 
   interface Props {
     annotations: LegacyAnnotation[];
@@ -16,7 +21,7 @@
   <section class="legacy-list" aria-label="Unanchored comments">
     <header class="head">
       <span class="eyebrow">Unanchored comments</span>
-      <span class="count">{annotations.length}</span>
+      <Badge variant="outline" class="count">{annotations.length}</Badge>
     </header>
     <p class="note">These comments predate line anchoring and are shown read-only.</p>
     {#each annotations as a (a.id)}
@@ -47,8 +52,12 @@
     text-transform: uppercase;
     color: var(--ink-soft);
   }
-  .count {
-    font-size: var(--text-xs);
+  /* The tally: an outline Badge kept quiet and tabular so a growing count reads
+     as chrome beside the eyebrow, not a second accent. */
+  :global([data-slot="badge"].count) {
+    padding: 0.05rem 0.4rem;
+    font-size: var(--text-2xs);
+    font-variant-numeric: tabular-nums;
     color: var(--ink-faint);
   }
   .note {
