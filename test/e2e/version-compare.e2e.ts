@@ -39,9 +39,10 @@ test("entering compare mode diffs a chosen non-default pair", async ({ daemon, p
 
   // Default pair is current (v3) vs previous (v2); pick a non-default pair:
   // base = v3, target = v1, so the diff spans the alpha→gamma change.
-  // The target picker is a shadcn Select: open its trigger, then choose v1.
+  // The target picker reuses the ThemePicker's DropdownMenu: open its trigger,
+  // then choose the v1 radio item.
   await page.getByLabel("Target version").click();
-  await page.getByRole("option", { name: "v1" }).click();
+  await page.getByRole("menuitemradio", { name: "v1" }).click();
 
   // Both ends of the chosen pair are visible (Playwright pierces the library's
   // shadow root for text).

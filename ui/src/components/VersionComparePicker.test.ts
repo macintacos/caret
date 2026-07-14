@@ -61,7 +61,7 @@ describe("VersionComparePicker visibility", () => {
     expect(toggle).not.toBeNull();
     expect(toggle!.disabled).toBe(true);
     // Nothing to compare yet, so the base/target pickers stay hidden.
-    expect(target.querySelector('[data-slot="select-trigger"]')).toBeNull();
+    expect(target.querySelector(".vpick")).toBeNull();
   });
 
   test("a disabled toggle does not enter compare mode on click", () => {
@@ -79,15 +79,16 @@ describe("VersionComparePicker visibility", () => {
 });
 
 describe("VersionComparePicker pair selection", () => {
-  // The base/target pickers are shadcn Selects; the trigger shows the current
-  // version and carries an accessible label. The portalled option list is a
-  // bits-ui overlay, so choosing a version is covered in the e2e spec.
+  // The base/target pickers reuse the ThemePicker's DropdownMenu; the trigger
+  // (.vpick) shows the current version and carries an accessible label. The
+  // portalled radio menu is a bits-ui overlay, so choosing a version is covered
+  // in the e2e spec.
   test("shows a labelled trigger for each side reflecting the selected pair", () => {
     const { target } = render(VersionComparePicker, baseProps);
     const base = target.querySelector<HTMLElement>('[aria-label="Base version"]');
     const tgt = target.querySelector<HTMLElement>('[aria-label="Target version"]');
-    expect(base?.getAttribute("data-slot")).toBe("select-trigger");
-    expect(tgt?.getAttribute("data-slot")).toBe("select-trigger");
+    expect(base?.classList.contains("vpick")).toBe(true);
+    expect(tgt?.classList.contains("vpick")).toBe(true);
     expect(base!.textContent).toContain("v3");
     expect(tgt!.textContent).toContain("v2");
   });
