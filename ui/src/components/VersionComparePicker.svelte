@@ -12,14 +12,16 @@
   // The controls are composed from the shadcn-svelte catalog (EXC-764): the two
   // version pickers are Selects, the layout/indicator segmented controls are
   // single-select ToggleGroups (each option a role="radio"), the enter/exit
-  // control is a Toggle, and the disabled-state explanation is a Tooltip. The
-  // caret skin (amber-wash selection, hairline borders) is applied over the
-  // catalog defaults through the shadcn↔caret token bridge — no raw colors.
+  // control is a Button toggle, and the disabled-state explanation is a Tooltip.
+  // They wear the topbar's neutral float-chip surface language (soft --chip fill,
+  // no border, ink-soft label brightening to ink) rather than a bordered look —
+  // amber stays brand-reserved for the topbar's Approve primary. All colors ride
+  // the shadcn↔caret token bridge; no raw colors.
   import type { PlanVersion } from "@core/types";
   import type { DiffIndicators, DiffStyle } from "../lib/diffview/types.ts";
+  import { Button } from "$lib/components/ui/button/index.js";
   import * as Select from "$lib/components/ui/select/index.js";
   import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
-  import { Toggle } from "$lib/components/ui/toggle/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
 
   interface Props {
@@ -66,14 +68,15 @@
 
 <div class="compare-picker">
   {#if canCompare}
-    <Toggle
-      variant="outline"
+    <Button
+      variant="secondary"
       size="sm"
-      class="compare-toggle"
-      bind:pressed={() => comparing, (v) => onSetComparing(v)}
+      class="compare-toggle float-chip"
+      aria-pressed={comparing}
+      onclick={() => onSetComparing(!comparing)}
     >
       Compare versions
-    </Toggle>
+    </Button>
   {:else}
     <!-- Nothing to compare: shown-but-disabled (EXC-664). A disabled button
          swallows pointer events, so the "why" tooltip hangs off a span-wrapped
@@ -83,9 +86,15 @@
         <Tooltip.Trigger>
           {#snippet child({ props })}
             <span {...props} class="compare-toggle-wrap">
-              <Toggle variant="outline" size="sm" class="compare-toggle" disabled pressed={false}>
+              <Button
+                variant="secondary"
+                size="sm"
+                class="compare-toggle float-chip"
+                disabled
+                aria-pressed={false}
+              >
                 Compare versions
-              </Toggle>
+              </Button>
             </span>
           {/snippet}
         </Tooltip.Trigger>
@@ -104,7 +113,9 @@
             () => String(baseVersion), (v) => { if (v) onSelectBase(Number(v)); }
           }
         >
-          <Select.Trigger size="sm" aria-label="Base version">v{baseVersion}</Select.Trigger>
+          <Select.Trigger size="sm" class="float-chip metric" aria-label="Base version"
+            >v{baseVersion}</Select.Trigger
+          >
           <Select.Content>
             {#each ordered as v (v.version)}
               <Select.Item value={String(v.version)} label={`v${v.version}`}>v{v.version}</Select.Item>
@@ -123,7 +134,9 @@
             () => String(targetVersion), (v) => { if (v) onSelectTarget(Number(v)); }
           }
         >
-          <Select.Trigger size="sm" aria-label="Target version">v{targetVersion}</Select.Trigger>
+          <Select.Trigger size="sm" class="float-chip metric" aria-label="Target version"
+            >v{targetVersion}</Select.Trigger
+          >
           <Select.Content>
             {#each ordered as v (v.version)}
               <Select.Item value={String(v.version)} label={`v${v.version}`}>v{v.version}</Select.Item>
@@ -136,7 +149,6 @@
     <div class="controls">
       <ToggleGroup.Root
         type="single"
-        variant="outline"
         size="sm"
         aria-label="Diff layout"
         bind:value={
@@ -153,7 +165,6 @@
            affordance, not the color. -->
       <ToggleGroup.Root
         type="single"
-        variant="outline"
         size="sm"
         aria-label="Diff indicators"
         bind:value={
@@ -177,34 +188,16 @@
     font-size: var(--text-base);
   }
 
-  /* The catalog Toggle brings the bordered chip shape; the caret skin recolors
-     it: quiet at rest, amber wash once compare mode is on, greyed when there is
-     nothing to compare. Scoped under .compare-picker so these token rules win
-     over the component's own bridged utilities. */
+  /* Neutral controls follow the topbar's float-chip language: .float-chip
+     (app.css) supplies the resting + hover skin (soft --chip fill, no border,
+     ink-soft label brightening to full ink). The compare toggle adds a pressed
+     state that brightens like an open dropdown trigger while compare mode is on. */
   .compare-picker :global(.compare-toggle) {
-    border-color: var(--rule-strong);
-    color: var(--ink);
-    padding-inline: 0.75rem;
-    font-weight: 600;
     white-space: nowrap;
   }
-  .compare-picker :global(.compare-toggle:hover:not(:disabled)) {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-  /* Neutralize the outline variant's chip-hover fill, but only while the toggle
-     is off — an on toggle keeps its amber wash when hovered. */
-  .compare-picker :global(.compare-toggle:not([data-state="on"]):hover:not(:disabled)) {
-    background: transparent;
-  }
-  .compare-picker :global(.compare-toggle[data-state="on"]) {
-    background: var(--accent-wash);
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-  .compare-picker :global(.compare-toggle:disabled) {
-    color: var(--ink-faint);
-    border-color: var(--rule);
+  .compare-picker :global(.compare-toggle[aria-pressed="true"]:not(:disabled)) {
+    background: var(--chip-hover);
+    color: var(--ink);
   }
   .compare-toggle-wrap {
     display: inline-flex;
@@ -230,6 +223,13 @@
     color: var(--ink-faint);
   }
 
+  /* Version pickers wear the same float-chip skin as the topbar's dropdown
+     triggers (ReviewSwitcher): .float-chip supplies the fill + label tones; drop
+     the catalog trigger's border so it reads as a soft chip, not a boxed field. */
+  .compare-picker :global([data-slot="select-trigger"]) {
+    border: 0;
+  }
+
   /* The display-option cluster (layout + indicators), pushed to the trailing edge
      of the bar so the version pickers stay left and the toggles read as a group. */
   .controls {
@@ -239,12 +239,28 @@
     margin-left: auto;
   }
 
-  /* The active segment carries the amber selection wash — the same "amber marks
-     the selection" language the diff view and menus use — so the current choice
-     reads distinct from one merely hovered. */
+  /* Segmented layout/indicator controls read as one recessed track with a lifted
+     pill on the active option — neutral, borderless, no amber (the topbar keeps
+     amber brand-reserved for Approve). The active pill rides the bar's raised
+     paper out of the sunk track; inactive options stay quiet ink-soft. */
+  .compare-picker :global([data-slot="toggle-group"]) {
+    gap: 2px;
+    padding: 2px;
+    background: var(--paper-sunk);
+    border-radius: var(--radius);
+  }
+  .compare-picker :global([data-slot="toggle-group-item"]) {
+    border: 0;
+    background: transparent;
+    color: var(--ink-soft);
+    border-radius: calc(var(--radius) - 2px);
+  }
+  .compare-picker :global([data-slot="toggle-group-item"]:hover:not([data-state="on"])) {
+    color: var(--ink);
+  }
   .compare-picker :global([data-slot="toggle-group-item"][data-state="on"]) {
-    background: var(--accent-wash);
-    color: var(--accent);
+    background: var(--chip);
+    color: var(--ink);
   }
 
   /* Entering compare mode reveals the pickers + display toggles with a quick,
