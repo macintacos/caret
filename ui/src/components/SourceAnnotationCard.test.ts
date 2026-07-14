@@ -98,6 +98,26 @@ describe("SourceAnnotationCard collapse", () => {
     expect(target.querySelector(".chip")).not.toBeNull();
     expect(edited).toBe(false);
   });
+
+  test("clicking the comment body (not a button) collapses the expanded card", () => {
+    const { target, flush } = render(SourceAnnotationCard, base({ focused: true }));
+    expect(target.querySelector(".card.expanded")).not.toBeNull();
+    // The whole surface is the toggle: clicking anywhere that isn't an action —
+    // here, the rendered comment itself — collapses the card back to a chip.
+    click(target, ".comment");
+    flush();
+    expect(target.querySelector(".card.expanded")).toBeNull();
+  });
+
+  test("clicking an action button does not toggle the card", () => {
+    // Edit sits in the actions cluster, so its click opens the editor rather
+    // than collapsing the card out from under the reviewer.
+    const { target, flush } = render(SourceAnnotationCard, base({ focused: true }));
+    click(target, ".edit");
+    flush();
+    expect(target.querySelector(".card.expanded")).not.toBeNull();
+    expect(target.querySelector(".cm-content")).not.toBeNull();
+  });
 });
 
 describe("SourceAnnotationCard rendered comment", () => {

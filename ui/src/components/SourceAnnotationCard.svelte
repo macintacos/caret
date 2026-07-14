@@ -91,6 +91,21 @@
     else editing = false;
   }
 
+  // The whole card is the toggle surface, so the entire comment reads as one
+  // clickable thing (EXC-765). The chip button stays the keyboard control; this
+  // is the pointer convenience layer over it, and it bows out for the three
+  // things a click there doesn't mean "toggle": the Edit/Discard actions (their
+  // own jobs), a link in the rendered comment (it navigates), and a click that
+  // just finished a text selection (the reviewer is copying, not collapsing).
+  function handleCardClick(e: MouseEvent) {
+    if (editing) return;
+    const target = e.target as Element | null;
+    if (target?.closest(".actions") || target?.closest("a")) return;
+    const selection = window.getSelection();
+    if (selection && !selection.isCollapsed) return;
+    toggle();
+  }
+
   function startEdit() {
     editing = true;
     expanded = true;
@@ -111,6 +126,10 @@
   }
 </script>
 
+<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+<!-- The card-wide click is a pointer affordance; the chip <button> below is the
+     keyboard-accessible control (aria-expanded, Enter/Space), so this needs no
+     key handler of its own. -->
 <div
   class="card"
   class:focused
@@ -118,6 +137,7 @@
   class:expanded
   data-annotation-card={annotation.id}
   data-state={stateView.status}
+  onclick={handleCardClick}
 >
   {#if editing}
     <!-- Editing IS the composer: same Card, same editor, only Save/Cancel differ
@@ -140,7 +160,6 @@
         class="chip"
         aria-expanded={expanded}
         aria-label={expanded ? "Collapse comment" : "Expand comment"}
-        onclick={toggle}
       >
         <Icon name="chevron-down" size={12} />
         <span class="ref">{label}</span>
@@ -215,6 +234,8 @@
        its box would change the row's measured height and fight the preventScroll
        guard. The global reduced-motion rule in app.css collapses it. */
     animation: reveal var(--dur-fast) var(--ease-out);
+    /* The hover lift (below) eases in and out rather than snapping. */
+    transition: background-color var(--dur-fast) var(--ease-out);
   }
   .card[data-state="approved"] {
     --state-accent: var(--ok);
@@ -240,6 +261,17 @@
     border-radius: 0;
     background: none;
     box-shadow: none;
+  }
+  /* The whole card toggles, so it advertises itself as clickable: a pointer
+     cursor and a subtle background lift on hover (EXC-765). The chip stays
+     transparent (its `background: none` outranks the ghost hover utilities), so
+     the lift reads across the whole surface, not just the header. Editing hands
+     the surface to the composer, which owns its own interactions — it opts out. */
+  .card:not(.editing) {
+    cursor: pointer;
+  }
+  .card:not(.editing):hover {
+    background: var(--chip);
   }
 
   /* The always-visible header line: the toggle trigger (grows) plus the per-card
