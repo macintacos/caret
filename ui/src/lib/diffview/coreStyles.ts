@@ -40,9 +40,13 @@ const CARET_OVERRIDES = `
   :host { --caret-seam: 24px; }
   [data-content] { padding-inline-start: var(--caret-seam); }
   [data-utility-button] {
-    margin-right: calc(1ch - 1lh - 0.85rem);
+    margin-right: calc(1ch - 1lh - 0.65rem);
     background-color: var(--accent);
     color: var(--accent-ink);
+    /* Raised: a soft drop shadow lifts the "+" off the diff surface, with a faint
+       top-edge highlight for the bevel. Static (no transition) — this sheet isn't
+       in the motion.test chrome set, but keeping it still avoids surprises. */
+    box-shadow: 0 1px 2px #00000059, inset 0 1px 0 #ffffff3d;
   }
   [data-utility-button]:hover { background-color: var(--accent-bright); }
   [data-utility-button]:focus-visible {
