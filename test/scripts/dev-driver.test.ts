@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { PLAN_REJECTED_MESSAGE } from "../../src/config/constants.ts";
 import { runReview } from "../../src/review/orchestrate.ts";
 import { setLogLevel } from "../../src/lib/log.ts";
-import { hasUntaggedCodeBlock } from "../../src/plan-format.ts";
+import { hasUntaggedCodeBlock } from "../../src/plan/format.ts";
 import {
   assertDevEnv,
   bootstrapReview,

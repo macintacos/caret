@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "../../src/plan-format.ts";
+import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "../../src/plan/format.ts";
 
 // A bare fence (no info string) renders unhighlighted → violation.
 test("a bare fenced code block is untagged", () => {

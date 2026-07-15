@@ -11,8 +11,8 @@
 
 import * as markdownPlugin from "prettier/plugins/markdown";
 import { format } from "prettier/standalone";
-import { type CaretLogger, noopLogger } from "./lib/log.ts";
-import { errorMessage } from "./lib/types.ts";
+import { type CaretLogger, noopLogger } from "../lib/log.ts";
+import { errorMessage } from "../lib/types.ts";
 
 /** Inputs above this byte count skip formatting and are stored raw. */
 export const MAX_FORMAT_BYTES = 1024 * 1024;

@@ -11,7 +11,7 @@
 import { VANITY_HOST } from "../daemon/guards.ts";
 import { type ErrorContext, logDebug, logError, logInfo, shortId } from "../lib/log.ts";
 import { logFile } from "../config/paths.ts";
-import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "../plan-format.ts";
+import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "../plan/format.ts";
 import { type Decision, errorMessage, type PlanInput } from "../lib/types.ts";
 
 /** A fail-safe deny the core constructs when an unreviewed plan must never ship.

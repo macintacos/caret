@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { formatPlanMarkdown } from "../../src/plan-markdown.ts";
+import { formatPlanMarkdown } from "../../src/plan/markdown.ts";
 import { newReviewId, routeIncomingPlan } from "../../src/review/threading.ts";
 import { createStore, type Store } from "../../src/review/store.ts";
 import { currentVersion, type PlanInput, type Review } from "../../src/lib/types.ts";

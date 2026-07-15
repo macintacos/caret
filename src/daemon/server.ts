@@ -10,7 +10,7 @@ import { deriveIdleTimeoutSec } from "../config/constants.ts";
 import { createDecisions } from "../review/decisions.ts";
 import { type CaretLogger, noopLogger, shortId } from "../lib/log.ts";
 import { ensureStateDir, prefsFile } from "../config/paths.ts";
-import { readFileExcerpt, resolveFileInCwd } from "../plan-files.ts";
+import { readFileExcerpt, resolveFileInCwd } from "../plan/excerpt.ts";
 import { type ApproveModeSet, readApproveMode, writeApproveMode } from "../config/prefs.ts";
 import { routeIncomingPlan } from "../review/threading.ts";
 import { DEFAULTS } from "../config/settings.ts";

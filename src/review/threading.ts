@@ -9,8 +9,8 @@
 
 import { randomBytes } from "node:crypto";
 import { type CaretLogger, noopLogger, shortId } from "../lib/log.ts";
-import { writeCanonicalPlanFile } from "../plan-file.ts";
-import { formatPlanMarkdown } from "../plan-markdown.ts";
+import { writeCanonicalPlanFile } from "../plan/canonical-file.ts";
+import { formatPlanMarkdown } from "../plan/markdown.ts";
 import type { Store } from "./store.ts";
 import type { PlanInput, Review, RouteResult } from "../lib/types.ts";
 

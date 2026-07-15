@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { expireAbandoned, runReview } from "../../src/review/orchestrate.ts";
 import { setLogLevel } from "../../src/lib/log.ts";
 import { logFile } from "../../src/config/paths.ts";
-import { PLAN_FORMAT_DENY_MESSAGE } from "../../src/plan-format.ts";
+import { PLAN_FORMAT_DENY_MESSAGE } from "../../src/plan/format.ts";
 import type { Decision, PlanInput } from "../../src/lib/types.ts";
 import { ndjsonRecords } from "../support/ndjson.ts";
 import { setupTempStateDir } from "../support/env.ts";

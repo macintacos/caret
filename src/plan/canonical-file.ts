@@ -13,7 +13,7 @@
 // file so a malformed path can never make caret clobber something else, and the
 // error log never carries the path or plan text.
 import { existsSync, statSync, writeFileSync } from "node:fs";
-import type { CaretLogger } from "./lib/log.ts";
+import type { CaretLogger } from "../lib/log.ts";
 
 /**
  * Overwrite `planFilePath` with the canonical plan text. No-op when the path is
