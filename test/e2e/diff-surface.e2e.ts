@@ -341,6 +341,85 @@ test("creating a single-line annotation from the gutter persists it line-anchore
   expect(ann).toMatchObject({ startLine: 3, endLine: 3, comment: "Quantify the cold cost here." });
 });
 
+test("Tab nests the current list item in the comment composer", async ({ daemon, page }) => {
+  // Tab on a list line runs indentMore against the four-space indentUnit, so the
+  // marker shifts one level right (a nested list item), rather than tabbing focus
+  // out of the editor. The item follows a first line so submit's trim (which
+  // strips only the whole-comment edges) can't hide the indent.
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const plus = await revealGutterPlus(page, 3);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer.locator(".cm-editor")).toBeVisible();
+  await page.keyboard.type("Note");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("- item");
+  await page.keyboard.press("Tab");
+  await composer.getByRole("button", { name: "Comment" }).click();
+
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.[0]?.comment)
+    .toBe("Note\n    - item");
+});
+
+test("Tab inserts four spaces outside a list in the comment composer", async ({ daemon, page }) => {
+  // Off a list line Tab inserts four literal spaces at the cursor (the "just
+  // enter four spaces" fallback), still without moving focus out of the editor.
+  // Text on both sides keeps the run off the whole-comment edges submit trims.
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const plus = await revealGutterPlus(page, 3);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer.locator(".cm-editor")).toBeVisible();
+  await page.keyboard.type("a");
+  await page.keyboard.press("Tab");
+  await page.keyboard.type("b");
+  await composer.getByRole("button", { name: "Comment" }).click();
+
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.[0]?.comment)
+    .toBe("a    b");
+});
+
+test("Tab indents every line of a multi-line selection", async ({ daemon, page }) => {
+  // Highlighting several lines and pressing Tab indents them all (indentMore over
+  // the selection) rather than replacing the highlight with a single tab. A
+  // leading unselected line keeps the indented block off the trimmed edges.
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const plus = await revealGutterPlus(page, 3);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer.locator(".cm-editor")).toBeVisible();
+  await page.keyboard.type("Head");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("one");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("two");
+  // Select up from the end of "two" into "one" — a two-line highlight.
+  await page.keyboard.press("Shift+ArrowUp");
+  await page.keyboard.press("Tab");
+  await composer.getByRole("button", { name: "Comment" }).click();
+
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.[0]?.comment)
+    .toBe("Head\n    one\n    two");
+});
+
 test("typing in a composer opened while another is open keeps the caret in place (EXC-780)", async ({
   daemon,
   page,
