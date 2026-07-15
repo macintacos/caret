@@ -10,23 +10,26 @@
 // that turns any thrown error into a typed JSON error on stdout. This discipline
 // is deliberately scoped to the release group and does not lean on the tasks
 // CLI's top-level catch, which prints plain stderr and would break the JSON
-// contract. The scripts/release/* step modules own the pipeline; this file only
-// wires the command tree and injects the real collaborators.
+// contract. The sibling step modules under ./steps/ own the pipeline; this file
+// only wires the command tree and injects the real collaborators.
 
 import type { Command } from "@commander-js/extra-typings";
-import { createProgram } from "../../src/program.ts";
-import { errorResult, type ReleaseError } from "../release/contract.ts";
-import { createGit } from "../release/git.ts";
-import { createGitHub } from "../release/github.ts";
-import { createNpm } from "../release/npm.ts";
-import { baseline, compute, type Deps, finalize, GuardError, prepare } from "../release/steps.ts";
-import { isBumpLevel } from "../release/version.ts";
+import { createProgram } from "../../../src/program.ts";
+import { errorResult, type ReleaseError } from "./contract.ts";
+import { createGit } from "./git.ts";
+import { createGitHub } from "./github.ts";
+import { createNpm } from "./npm.ts";
+import { createRumdl } from "./rumdl.ts";
+import { baseline, compute, type Deps, finalize, GuardError, prepare } from "./steps.ts";
+import { isBumpLevel } from "./version.ts";
 
+/** The production Deps: real git/gh/npm/rumdl collaborators plus fs/clock seams. */
 function realDeps(): Deps {
   return {
     git: createGit(),
     github: createGitHub(),
     npm: createNpm(),
+    rumdl: createRumdl(),
     fs: {
       read: (path) => Bun.file(path).text(),
       write: async (path, contents) => {
@@ -39,10 +42,12 @@ function realDeps(): Deps {
   };
 }
 
+/** Print one step result (or ReleaseError) as a lone JSON object on stdout. */
 function emit(result: unknown): void {
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
 
+/** Emit a ReleaseError on stdout and exit non-zero. */
 function fail(error: ReleaseError): never {
   emit(error);
   process.exit(1);
@@ -76,6 +81,7 @@ function requireGo(command: string, opts: { dryRun?: boolean; yes?: boolean }): 
   }
 }
 
+/** Validate the bump arg, failing with BAD_BUMP on anything but patch|minor|major. */
 function requireBump(bump: string): "patch" | "minor" | "major" {
   if (!isBumpLevel(bump)) {
     fail(errorResult("BAD_BUMP", `Invalid bump ${JSON.stringify(bump)}; use patch|minor|major.`));
@@ -134,9 +140,13 @@ export function buildReleaseCommand(deps: Deps = realDeps()): Command {
     .description("phase 2: tag merged trunk and publish the GitHub Release")
     .option("--dry-run", "preview without mutating")
     .option("--yes", "confirm the mutation")
+    .option(
+      "--summary <text>",
+      "human summary prepended above the changelog notes on the GitHub Release",
+    )
     .action(async (opts) => {
       requireGo("finalize", opts);
-      await emitStep(() => finalize(deps, { dryRun: opts.dryRun ?? false }));
+      await emitStep(() => finalize(deps, { dryRun: opts.dryRun ?? false, summary: opts.summary }));
     });
 
   return program;

@@ -16,6 +16,7 @@ export interface ManifestVersion {
 
 const VERSION_KEY = /"version"\s*:\s*"([^"]*)"/g;
 
+/** Escape regex metacharacters so a literal string is safe inside a RegExp. */
 function escapeRegExp(literal: string): string {
   return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

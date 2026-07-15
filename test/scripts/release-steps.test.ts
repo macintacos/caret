@@ -4,8 +4,14 @@
 // `test/support/release-harness.ts`; each records mutating calls so we can assert
 // exactly what would (or would not) run.
 import { expect, test } from "bun:test";
-import type { ErrorCode } from "../../scripts/release/contract.ts";
-import { baseline, compute, finalize, GuardError, prepare } from "../../scripts/release/steps.ts";
+import type { ErrorCode } from "../../scripts/tasks/release/contract.ts";
+import {
+  baseline,
+  compute,
+  finalize,
+  GuardError,
+  prepare,
+} from "../../scripts/tasks/release/steps.ts";
 import {
   CHANGELOG,
   type HarnessOptions,
@@ -430,4 +436,67 @@ test("finalize reuses an existing GitHub release", async () => {
   const r = await finalize(deps, { dryRun: false });
   expect(calls).not.toContain("releaseCreate:v0.1.0");
   expect(r.releaseUrl).toBe("https://github.com/macintacos/caret/releases/tag/v0.1.0");
+});
+
+// --- finalize: summary + reflow ---------------------------------------------
+
+test("finalize prepends the --summary above the reflowed changelog notes", async () => {
+  const { deps, calls, releases } = makeReleaseHarness(FINALIZE_OPTS);
+  await finalize(deps, { dryRun: false, summary: "Ships the widget." });
+  expect(calls).toContain("releaseCreate:v0.1.0");
+  expect(calls).toContain("reflow"); // the body went through rumdl
+  const notes = releases.get("v0.1.0")?.notes ?? "";
+  expect(notes).toContain("Ships the widget."); // summary at the top
+  expect(notes).toContain("- A thing."); // changelog-scraped content remains
+  expect(notes.indexOf("Ships the widget.")).toBeLessThan(notes.indexOf("- A thing."));
+});
+
+test("finalize reflows the changelog notes even without a summary", async () => {
+  const { deps, calls, releases } = makeReleaseHarness(FINALIZE_OPTS);
+  await finalize(deps, { dryRun: false });
+  expect(calls).toContain("reflow");
+  const notes = releases.get("v0.1.0")?.notes ?? "";
+  expect(notes).toContain("- A thing.");
+  expect(notes).not.toContain("Ships"); // no summary was supplied
+});
+
+test("finalize with a summary refreshes the notes of a reused release", async () => {
+  const { deps, calls, releases } = makeReleaseHarness({
+    ...FINALIZE_OPTS,
+    tags: ["v0.0.1", "v0.1.0"],
+    remoteTags: ["v0.0.1", "v0.1.0"],
+    releases: { "v0.1.0": { url: "https://github.com/macintacos/caret/releases/tag/v0.1.0" } },
+  });
+  await finalize(deps, { dryRun: false, summary: "Resumed and summarized." });
+  expect(calls).not.toContain("releaseCreate:v0.1.0"); // reused, not recreated
+  expect(calls).toContain("releaseEdit:v0.1.0"); // notes refreshed in place
+  expect(releases.get("v0.1.0")?.notes).toContain("Resumed and summarized.");
+});
+
+test("finalize dry-run with a summary edits nothing", async () => {
+  const { deps, calls } = makeReleaseHarness(FINALIZE_OPTS);
+  await finalize(deps, { dryRun: true, summary: "Would-be summary." });
+  expect(calls).not.toContain("releaseCreate:v0.1.0");
+  expect(calls).not.toContain("releaseEdit:v0.1.0");
+  expect(calls).not.toContain("reflow");
+});
+
+test("finalize without a summary leaves a reused release's notes untouched", async () => {
+  // The no-clobber invariant: a summary-less resume must never rewrite the notes,
+  // so a summary a prior run published survives. Dropping the summary guard in
+  // finalize would fail this (reuse would releaseEdit with the bare changelog).
+  const { deps, calls, releases } = makeReleaseHarness({
+    ...FINALIZE_OPTS,
+    tags: ["v0.0.1", "v0.1.0"],
+    remoteTags: ["v0.0.1", "v0.1.0"],
+    releases: {
+      "v0.1.0": {
+        url: "https://github.com/macintacos/caret/releases/tag/v0.1.0",
+        notes: "Prior summary the operator published.",
+      },
+    },
+  });
+  await finalize(deps, { dryRun: false }); // no summary
+  expect(calls).not.toContain("releaseEdit:v0.1.0");
+  expect(releases.get("v0.1.0")?.notes).toBe("Prior summary the operator published.");
 });

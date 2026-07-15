@@ -5,7 +5,7 @@ import {
   nextVersion,
   tagName,
   versionFromTag,
-} from "../../scripts/release/version.ts";
+} from "../../scripts/tasks/release/version.ts";
 
 test("nextVersion bumps patch/minor/major from the baseline", () => {
   expect(nextVersion("0.0.1", "patch")).toBe("0.0.2");

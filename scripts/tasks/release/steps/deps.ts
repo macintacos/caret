@@ -5,6 +5,7 @@
 import type { GitOps } from "../git.ts";
 import type { GitHubOps } from "../github.ts";
 import type { NpmOps } from "../npm.ts";
+import type { RumdlOps } from "../rumdl.ts";
 
 /** Read/write/exists over the working tree; injected for testability. */
 export interface FsOps {
@@ -22,6 +23,7 @@ export interface Deps {
   git: GitOps;
   github: GitHubOps;
   npm: NpmOps;
+  rumdl: RumdlOps;
   fs: FsOps;
   io: Io;
   /** Clock seam: the current instant, injected so `compute`'s date is testable. */

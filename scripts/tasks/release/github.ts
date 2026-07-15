@@ -29,6 +29,8 @@ export interface GitHubOps {
   /** The release for a tag, or null if none exists. */
   releaseView(tag: string): Promise<{ url: string } | null>;
   releaseCreate(opts: { tag: string; title: string; notes: string }): Promise<{ url: string }>;
+  /** Replace the notes body of an existing release (leaves the title alone). */
+  releaseEdit(opts: { tag: string; notes: string }): Promise<void>;
 }
 
 /** PR number from a `.../pull/<n>` URL, or 0 if it can't be parsed. */
@@ -81,6 +83,10 @@ export function createGitHub(): GitHubOps {
         await $`gh release create ${tag} --title ${title} --notes ${notes}`.text()
       ).trim();
       return { url };
+    },
+
+    async releaseEdit({ tag, notes }) {
+      await $`gh release edit ${tag} --notes ${notes}`.quiet();
     },
   };
 }

@@ -205,6 +205,11 @@ On a real merge failure (merge conflict, branch protection, not mergeable, auth)
 need to switch back to trunk first. The publish-safety gates are a clean working tree and
 the `NOT_MERGED` check that the bump is actually on trunk, not the working branch.
 
+The GitHub Release notes are this version's changelog section, reflowed with `rumdl` to
+single-line paragraphs (the on-disk changelog is hard-wrapped, which renders as awkward
+mid-sentence breaks on GitHub). Pass `--summary` (step 2) to prepend a short human digest
+above that changelog content.
+
 After tagging and creating the GitHub Release, `finalize` builds the run-from-source
 bundle and **publishes the plugin to npm** (`@macintacos/caret`), because the
 marketplace's plugin source is an npm source — that publish is what makes
@@ -231,11 +236,18 @@ with the operator before continuing; do not run `finalize --yes`.
 ### 2. Run finalize
 
 The version gate (Phase 1 step 2) already authorized this — no separate confirmation.
+
+First author a **one- or two-sentence release summary**: a plain-language digest of what
+this release delivers, drawn from the changelog you wrote in Phase 1 (not a re-listing of
+the categories — the changelog already carries that detail). `finalize` prepends it above
+the changelog notes and reflows the whole body, so the GitHub Release opens with a
+readable summary. Pass it verbatim through `--summary`.
+
 Provided the dry-run probe returned `ok: true`, run:
 
 ```sh
-bun scripts/tasks/cli.ts release finalize --yes      # real
-bun scripts/tasks/cli.ts release finalize --dry-run  # dry run
+bun scripts/tasks/cli.ts release finalize --yes --summary "<one- or two-sentence summary>"   # real
+bun scripts/tasks/cli.ts release finalize --dry-run --summary "<summary>"                     # dry run
 ```
 
 Parse the result and report the `releaseUrl` and whether `npmPublished` is true. The

@@ -13,7 +13,7 @@
 // (This replaces the old MISE_TASK_SKIP=build-ui dedupe of the mise `depends`
 // edge, which is gone now that build/test are single multi-target tasks.)
 //
-// DI mirrors scripts/tasks/release.ts: the spawn collaborator is injected so
+// DI mirrors scripts/tasks/release/command.ts: the spawn collaborator is injected so
 // test/scripts/preflight.test.ts can drive the DAG without running real tasks.
 // The tasks CLI's `preflight` subcommand (scripts/tasks/cli.ts) is the entry
 // point — it parses the --json flags and calls runPreflightCli, which wires the
@@ -125,7 +125,7 @@ const DEPENDENT = ["test e2e", "build bin"] as const;
 const TASK_ORDER = [...IMMEDIATE, ...DEPENDENT];
 
 // Bumpable integer so machine consumers detect a breaking shape change,
-// mirroring scripts/release/contract.ts.
+// mirroring scripts/tasks/release/contract.ts.
 const SCHEMA_VERSION = 1;
 
 // Shared by the human summary and the --json output so the remediation text
