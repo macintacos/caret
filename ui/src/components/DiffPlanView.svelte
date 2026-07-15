@@ -923,6 +923,17 @@
     background: var(--paper);
   }
 
+  /* Scroll-beyond-last-line room (EXC-772): an in-flow spacer below the plan
+     lets the reader scroll a third of a viewport past the end, so the last line
+     can rest ~2/3 down the window instead of pinned to the bottom. A block
+     ::after (not the container's own padding-bottom, which pre-2024 Chrome and
+     Safari clip from the scrollable area) reliably extends scrollHeight. */
+  .diff-plan::after {
+    content: '';
+    display: block;
+    height: 33.333vh;
+  }
+
   /* The zero-height sticky rail that carries the live readout. Sticky to the top
      of the scroll viewport, but with no height so it never reflows the line grid
      (the readout positions absolutely within it). */
