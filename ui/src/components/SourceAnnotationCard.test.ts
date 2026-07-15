@@ -57,11 +57,45 @@ describe("SourceAnnotationCard collapse", () => {
   test("renders collapsed (a chip) when not focused", () => {
     const { target } = render(SourceAnnotationCard, base({ focused: false }));
     expect(target.querySelector(".chip")).not.toBeNull();
-    // Collapsed: no expanded actions, and the one-line preview stands in for the
-    // body (which stays mounted at row height 0 for the grid reveal).
+    // Collapsed: the one-line preview stands in for the body (which stays mounted
+    // at row height 0 for the grid reveal), and the Edit / Discard actions are
+    // reachable without expanding first.
     expect(target.querySelector(".card.expanded")).toBeNull();
-    expect(target.querySelector(".actions")).toBeNull();
     expect(target.querySelector(".preview")).not.toBeNull();
+    expect(target.querySelector(".actions")).not.toBeNull();
+  });
+
+  test("a collapsed card exposes Edit and Discard without expanding", () => {
+    const { target } = render(SourceAnnotationCard, base({ focused: false }));
+    expect(target.querySelector(".card.expanded")).toBeNull();
+    expect(target.querySelector(".actions .edit")).not.toBeNull();
+    expect(target.querySelector(".actions .danger")).not.toBeNull();
+  });
+
+  test("Edit from a collapsed card opens the editor and expands it", () => {
+    const { target, flush } = render(SourceAnnotationCard, base({ focused: false }));
+    click(target, ".edit");
+    flush();
+    expect(target.querySelector(".cm-content")).not.toBeNull();
+    expect(target.querySelector(".card.expanded")).not.toBeNull();
+  });
+
+  test("Discard from a collapsed card confirms, then deletes via the shared path", () => {
+    const deleted = capture<string>();
+    const { target, flush } = render(
+      SourceAnnotationCard,
+      base({ focused: false, onDelete: deleted.cb }),
+    );
+    // Same confirm bubble and code path as the expanded Discard: nothing deleted
+    // until the reviewer confirms, and the card never has to expand first.
+    click(target, ".danger");
+    flush();
+    expect(document.querySelector(".confirm-popover")).not.toBeNull();
+    expect(deleted.last()).toBeUndefined();
+    clickDoc(".confirm-popover .confirm");
+    flush();
+    expect(deleted.last()).toBe("a1");
+    expect(target.querySelector(".card.expanded")).toBeNull();
   });
 
   test("renders expanded when focused", () => {

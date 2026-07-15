@@ -153,9 +153,10 @@
     />
   {:else}
     <div class="head">
-      <!-- The whole header line toggles the card; the chevron rotates with the
-           open state. Collapsed it carries the one-line preview; expanded the
-           preview drops and Edit / Discard tuck in at the right. -->
+      <!-- The chip toggles the card; the chevron rotates with the open state.
+           Collapsed it carries the one-line preview; expanded the preview drops.
+           Edit / Discard tuck in at the right in both states, so a saved comment
+           can be revised or dropped without expanding it first. -->
       <Button
         variant="ghost"
         class="chip"
@@ -171,32 +172,30 @@
           <span class="preview">{annotation.comment}</span>
         {/if}
       </Button>
-      {#if expanded}
-        <div class="actions">
-          <Button variant="ghost" size="sm" class="edit" onclick={startEdit}>Edit</Button>
-          <span class="discard-wrap">
-            <Button
-              variant="ghost"
-              size="sm"
-              class="danger"
-              onclick={(e) => {
-                confirmAnchor = e.currentTarget as HTMLElement;
-                confirming = true;
-              }}>Discard</Button
-            >
-            {#if confirming}
-              <ConfirmPopover
-                question="Discard this comment?"
-                confirmLabel="Discard"
-                align="start"
-                anchor={confirmAnchor ?? undefined}
-                onConfirm={confirmDelete}
-                onCancel={() => (confirming = false)}
-              />
-            {/if}
-          </span>
-        </div>
-      {/if}
+      <div class="actions">
+        <Button variant="ghost" size="sm" class="edit" onclick={startEdit}>Edit</Button>
+        <span class="discard-wrap">
+          <Button
+            variant="ghost"
+            size="sm"
+            class="danger"
+            onclick={(e) => {
+              confirmAnchor = e.currentTarget as HTMLElement;
+              confirming = true;
+            }}>Discard</Button
+          >
+          {#if confirming}
+            <ConfirmPopover
+              question="Discard this comment?"
+              confirmLabel="Discard"
+              align="start"
+              anchor={confirmAnchor ?? undefined}
+              onConfirm={confirmDelete}
+              onCancel={() => (confirming = false)}
+            />
+          {/if}
+        </span>
+      </div>
     </div>
     <!-- The comment body, revealed by a grid-template-rows height animation (see
          .body-wrap below). It stays mounted collapsed (height 0), so the animation
