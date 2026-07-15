@@ -14,8 +14,8 @@
 // hook wiring (which agent event triggers it) lives in the command + adapter
 // layer, keeping this core agent-agnostic.
 
-import { type ErrorContext, logDebug, logInfo } from "./lib/log.ts";
-import type { PlanInput, ClientReview } from "./lib/types.ts";
+import { type ErrorContext, logDebug, logInfo } from "../lib/log.ts";
+import type { PlanInput, ClientReview } from "../lib/types.ts";
 
 export interface ReconcileDeps {
   /** Normalize the agent's raw post-approval hook stdin into a core PlanInput.

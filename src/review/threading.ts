@@ -8,11 +8,11 @@
 // so a plan after an approval is provably a fresh thread.
 
 import { randomBytes } from "node:crypto";
-import { type CaretLogger, noopLogger, shortId } from "./lib/log.ts";
-import { writeCanonicalPlanFile } from "./plan-file.ts";
-import { formatPlanMarkdown } from "./plan-markdown.ts";
+import { type CaretLogger, noopLogger, shortId } from "../lib/log.ts";
+import { writeCanonicalPlanFile } from "../plan-file.ts";
+import { formatPlanMarkdown } from "../plan-markdown.ts";
 import type { Store } from "./store.ts";
-import type { PlanInput, Review, RouteResult } from "./lib/types.ts";
+import type { PlanInput, Review, RouteResult } from "../lib/types.ts";
 
 /** A fresh, opaque review id. Short and URL-safe (base64url of 8 random bytes,
  * ~11 chars, 64 bits) so the `?review=<id>` URL stays within OpenCode's ~54-col

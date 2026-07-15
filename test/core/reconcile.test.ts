@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { runReconcile } from "../../src/reconcile.ts";
+import { runReconcile } from "../../src/review/reconcile.ts";
 import type { ClientReview, PlanInput } from "../../src/lib/types.ts";
 import { setupTempStateDir } from "../support/env.ts";
 

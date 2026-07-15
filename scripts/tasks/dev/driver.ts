@@ -14,7 +14,7 @@
 // scripts/tasks/dev/protocol.ts.
 
 import { expireReview, longPoll, postReview, waitForHealth } from "../../../src/daemon/client.ts";
-import { type ReviewDeps, runReview } from "../../../src/review.ts";
+import { type ReviewDeps, runReview } from "../../../src/review/orchestrate.ts";
 import { claudeAdapter } from "../../../src/adapters/claude/index.ts";
 import { NEVER_IDLE_MS } from "../../../src/config/constants.ts";
 import {

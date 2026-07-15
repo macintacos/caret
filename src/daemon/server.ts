@@ -7,14 +7,14 @@ import { renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { type DaemonLock, IDENTITY, isCompiledBinary } from "../lib/build-id.ts";
 import { deriveIdleTimeoutSec } from "../config/constants.ts";
-import { createDecisions } from "../decisions.ts";
+import { createDecisions } from "../review/decisions.ts";
 import { type CaretLogger, noopLogger, shortId } from "../lib/log.ts";
 import { ensureStateDir, prefsFile } from "../config/paths.ts";
 import { readFileExcerpt, resolveFileInCwd } from "../plan-files.ts";
 import { type ApproveModeSet, readApproveMode, writeApproveMode } from "../config/prefs.ts";
-import { routeIncomingPlan } from "../reviews.ts";
+import { routeIncomingPlan } from "../review/threading.ts";
 import { DEFAULTS } from "../config/settings.ts";
-import type { Store } from "../store.ts";
+import type { Store } from "../review/store.ts";
 import type { UiAssets } from "../ui-assets.ts";
 import { MAX_BODY_BYTES, parseUiLogBatch } from "../ui-log-bridge.ts";
 import {
@@ -115,7 +115,6 @@ export interface CaretServer {
   port: number;
   stop(): void;
 }
-
 
 /** The createServer options resolved against their defaults once, so the route
  * handlers and lifecycle close over a single config object instead of a dozen

@@ -12,7 +12,7 @@ import { httpHealth } from "../../src/daemon/client.ts";
 import { ensureDaemon } from "../../src/daemon/lifecycle.ts";
 import { createServer } from "../../src/daemon/server.ts";
 import { formatPlanMarkdown } from "../../src/plan-markdown.ts";
-import { createStore } from "../../src/store.ts";
+import { createStore } from "../../src/review/store.ts";
 import { ndjsonRecords } from "../support/ndjson.ts";
 import { freePort } from "../support/net.ts";
 import { until } from "../support/poll.ts";

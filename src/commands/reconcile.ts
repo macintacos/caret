@@ -12,7 +12,7 @@
 import { selectAdapter } from "../adapters/index.ts";
 import { listReviews, resolveReview } from "../daemon/client.ts";
 import { logDebug, logWarn, setLogLevel, setRedact } from "../lib/log.ts";
-import { type ReconcileDeps, runReconcile } from "../reconcile.ts";
+import { type ReconcileDeps, runReconcile } from "../review/reconcile.ts";
 import { getPort, loadSettings } from "../config/settings.ts";
 import type { AgentAdapter } from "../adapters/adapter.ts";
 import { warnInvalidEnvVars } from "./boot.ts";

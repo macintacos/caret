@@ -13,7 +13,7 @@ import {
   type CaretServer,
   type CreateServerOptions,
 } from "../../src/daemon/server.ts";
-import { createStore, type Store } from "../../src/store.ts";
+import { createStore, type Store } from "../../src/review/store.ts";
 
 /** Options forwarded to createServer, minus the store (bootDaemon owns it). */
 export type BootOptions = Omit<CreateServerOptions, "store">;

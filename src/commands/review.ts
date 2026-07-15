@@ -12,7 +12,7 @@ import { expireReview, longPoll, postReview } from "../daemon/client.ts";
 import { ensureDaemon, prodEnsureDeps } from "../daemon/lifecycle.ts";
 import { logError, logWarn, setLogLevel, setRedact } from "../lib/log.ts";
 import { logFile } from "../config/paths.ts";
-import { expireAbandoned, type ReviewDeps, runReview } from "../review.ts";
+import { expireAbandoned, type ReviewDeps, runReview } from "../review/orchestrate.ts";
 import { loadSettings, reviewTimeoutMs, type Settings } from "../config/settings.ts";
 import type { Decision, PlanInput } from "../lib/types.ts";
 import { warnInvalidEnvVars } from "./boot.ts";
