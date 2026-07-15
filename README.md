@@ -87,7 +87,7 @@ prefer not to hand-edit the config? Run the published package's installer, which
 array entry and drops the command files for you:
 
 ```sh
-bunx @macintacos/caret@latest install --target opencode
+bunx --no-cache @macintacos/caret@latest install --target opencode
 ```
 
 The [one-shot installer](#install) above does the same as part of its run (and its
@@ -102,7 +102,7 @@ caret and restart — `rm -rf ~/.cache/opencode/node_modules/@macintacos/caret` 
 OpenCode reinstall the latest on its next start. (Prefer to control the version yourself?
 Pin it in the array — `"@macintacos/caret@<version>"` — and bump that when you want to
 move.) **Uninstall**: remove the array entry, or run
-`bunx @macintacos/caret@latest install --target opencode --uninstall`. See
+`bunx --no-cache @macintacos/caret@latest install --target opencode --uninstall`. See
 [`doc/ADVANCED.md`](doc/ADVANCED.md#the-opencode-adapter) for how the integration works.
 
 ## Using caret
