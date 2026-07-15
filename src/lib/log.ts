@@ -73,7 +73,7 @@ const pinoOpts = {
  * Errors are serialized here (errWithCause) rather
  * than via a pino serializer so the scrub can cover message/stack/cause —
  * pino's own `redact` option can't rewrite substrings inside those strings,
- * walk an unbounded cause chain, or hot-toggle (see src/redact.ts). */
+ * walk an unbounded cause chain, or hot-toggle (see src/redact/node.ts). */
 function wrap(
   logger: pino.Logger,
   liveLevel: () => LogLevel,

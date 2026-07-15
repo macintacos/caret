@@ -1,5 +1,5 @@
 // Repo-relative `path:line` of a log call site, for the record's `caller`
-// field (EXC-451) — e.g. `src/daemon.ts:295`. Split out from the emit path so
+// field (EXC-451) — e.g. `src/daemon/server.ts:295`. Split out from the emit path so
 // the V8-stack parsing and PKG_ROOT/sourcemap normalization can be pinned by
 // focused boundary tests independently of the loggers.
 //
