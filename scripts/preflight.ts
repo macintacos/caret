@@ -125,7 +125,7 @@ const DEPENDENT = ["test e2e", "build bin"] as const;
 const TASK_ORDER = [...IMMEDIATE, ...DEPENDENT];
 
 // Bumpable integer so machine consumers detect a breaking shape change,
-// mirroring scripts/release/contract.ts.
+// mirroring scripts/tasks/release/contract.ts.
 const SCHEMA_VERSION = 1;
 
 // Shared by the human summary and the --json output so the remediation text

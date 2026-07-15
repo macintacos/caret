@@ -10,17 +10,17 @@
 // that turns any thrown error into a typed JSON error on stdout. This discipline
 // is deliberately scoped to the release group and does not lean on the tasks
 // CLI's top-level catch, which prints plain stderr and would break the JSON
-// contract. The scripts/release/* step modules own the pipeline; this file only
-// wires the command tree and injects the real collaborators.
+// contract. The sibling step modules under ./steps/ own the pipeline; this file
+// only wires the command tree and injects the real collaborators.
 
 import type { Command } from "@commander-js/extra-typings";
-import { createProgram } from "../../src/program.ts";
-import { errorResult, type ReleaseError } from "../release/contract.ts";
-import { createGit } from "../release/git.ts";
-import { createGitHub } from "../release/github.ts";
-import { createNpm } from "../release/npm.ts";
-import { baseline, compute, type Deps, finalize, GuardError, prepare } from "../release/steps.ts";
-import { isBumpLevel } from "../release/version.ts";
+import { createProgram } from "../../../src/program.ts";
+import { errorResult, type ReleaseError } from "./contract.ts";
+import { createGit } from "./git.ts";
+import { createGitHub } from "./github.ts";
+import { createNpm } from "./npm.ts";
+import { baseline, compute, type Deps, finalize, GuardError, prepare } from "./steps.ts";
+import { isBumpLevel } from "./version.ts";
 
 function realDeps(): Deps {
   return {

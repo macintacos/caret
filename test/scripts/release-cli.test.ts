@@ -14,8 +14,8 @@
 // error into JSON-on-stdout.
 
 import { describe, expect, test } from "bun:test";
-import { buildReleaseCommand } from "../../scripts/tasks/release.ts";
-import type { Deps } from "../../scripts/release/steps.ts";
+import { buildReleaseCommand } from "../../scripts/tasks/release/command.ts";
+import type { Deps } from "../../scripts/tasks/release/steps.ts";
 import { makeReleaseHarness } from "../support/release-harness.ts";
 
 const CLI = "scripts/tasks/cli.ts";
