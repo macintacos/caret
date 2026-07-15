@@ -35,8 +35,6 @@ function props(over: Partial<{ path: string; line: number }> = {}) {
     path: over.path ?? "src/cache.ts",
     line: over.line,
     anchor,
-    onKeepAlive: () => {},
-    onDismiss: () => {},
   };
 }
 

@@ -38,6 +38,7 @@
   } from "../lib/diffview/commenting.ts";
   import { dismissDragHint, isDragHintDismissed } from "../lib/diffview/dragHint.ts";
   import { buildFileRefLayer, type FileRefSpan, type FileRefSpanMap } from "../lib/diffview/fileRefs.ts";
+  import { createHoverIntent } from "../lib/diffview/hoverIntent.ts";
   import { resolveFileRefs } from "../lib/api.ts";
   import { buildLinkLayer } from "../lib/diffview/links.ts";
   import { readDiffStyle, writeDiffStyle } from "../lib/diffStylePref.ts";
@@ -258,32 +259,72 @@
   });
 
   // The file reference the pointer is over, plus the token rect the preview
-  // anchors to. A short dismiss delay lets the pointer travel from the token into
-  // the preview card without it vanishing; entering the token or the card cancels
-  // it (onKeepAlive → cancelDismiss).
+  // anchors to. Opening the preview arms the hover-intent tracker below, which owns
+  // dismissal: it keeps the card open while the pointer heads toward it and closes
+  // it only on a conclusive stop outside it (EXC-799).
   let hoveredFileRef = $state<{ path: string; line?: number; anchor: DOMRect } | undefined>();
-  let dismissTimer: ReturnType<typeof setTimeout> | undefined;
-  function cancelDismiss(): void {
-    if (dismissTimer !== undefined) {
-      clearTimeout(dismissTimer);
-      dismissTimer = undefined;
-    }
-  }
   function showFileRef(ref: FileRefSpan, tokenElement: HTMLElement): void {
-    cancelDismiss();
     hoveredFileRef = {
       path: ref.path,
       line: ref.line,
       anchor: tokenElement.getBoundingClientRect(),
     };
   }
-  function scheduleDismiss(): void {
-    cancelDismiss();
-    dismissTimer = setTimeout(() => {
+
+  // Trajectory-aware hover intent (EXC-799): while a preview is open, sample the
+  // pointer and let the tracker decide keep-vs-dismiss from its projected path.
+  // Runs only while a ref is hovered; the listener + timers are torn down when the
+  // preview closes or the hovered ref switches (the effect re-runs). Sampling is
+  // coalesced to one frame so it never sits on the input path.
+  $effect(() => {
+    const ref = hoveredFileRef;
+    if (ref === undefined) return;
+    const intent = createHoverIntent({
+      anchorRect: () => ref.anchor,
+      cardRect: () =>
+        document.querySelector("[data-file-preview]")?.getBoundingClientRect() ?? null,
+      onDismiss: () => {
+        hoveredFileRef = undefined;
+      },
+      setTimer: (fn, ms) => window.setTimeout(fn, ms),
+      clearTimer: (h) => {
+        window.clearTimeout(h);
+      },
+    });
+    // Seed from the anchor's centre — the pointer sits on the token at open.
+    intent.seed(
+      { x: (ref.anchor.left + ref.anchor.right) / 2, y: (ref.anchor.top + ref.anchor.bottom) / 2 },
+      performance.now(),
+    );
+    let raf = 0;
+    let lastX = 0;
+    let lastY = 0;
+    const flush = () => {
+      raf = 0;
+      intent.sample({ x: lastX, y: lastY }, performance.now());
+    };
+    const onMove = (e: PointerEvent) => {
+      lastX = e.clientX;
+      lastY = e.clientY;
+      if (raf === 0) raf = requestAnimationFrame(flush);
+    };
+    window.addEventListener("pointermove", onMove, { passive: true });
+    // Escape dismisses the open preview at once, and destroys the tracker up front
+    // so its pending grace/idle timers can't fire after the card is gone (EXC-799).
+    // The teardown below also destroys — destroy() is idempotent.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      intent.destroy();
       hoveredFileRef = undefined;
-      dismissTimer = undefined;
-    }, 140);
-  }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("keydown", onKey);
+      cancelAnimationFrame(raf);
+      intent.destroy();
+    };
+  });
 
   const baseText = $derived(compare.planFor(review.versions, compareStore.baseVersion));
   const targetText = $derived(compare.planFor(review.versions, compareStore.targetVersion));
@@ -728,7 +769,6 @@
         links={linkLayer.spans}
         {fileRefs}
         onFileRefEnter={showFileRef}
-        onFileRefLeave={scheduleDismiss}
         annotations={sourceAnnotations}
         options={readerOptions}
         {gutter}
@@ -769,8 +809,6 @@
           path={hoveredFileRef.path}
           line={hoveredFileRef.line}
           anchor={hoveredFileRef.anchor}
-          onKeepAlive={cancelDismiss}
-          onDismiss={scheduleDismiss}
         />
       {/if}
       <!-- Saved comments and the open composer are projected into the library's
@@ -883,6 +921,17 @@
     min-height: 0;
     overflow: auto;
     background: var(--paper);
+  }
+
+  /* Scroll-beyond-last-line room (EXC-772): an in-flow spacer below the plan
+     lets the reader scroll a third of a viewport past the end, so the last line
+     can rest ~2/3 down the window instead of pinned to the bottom. A block
+     ::after (not the container's own padding-bottom, which pre-2024 Chrome and
+     Safari clip from the scrollable area) reliably extends scrollHeight. */
+  .diff-plan::after {
+    content: '';
+    display: block;
+    height: 33.333vh;
   }
 
   /* The zero-height sticky rail that carries the live readout. Sticky to the top
