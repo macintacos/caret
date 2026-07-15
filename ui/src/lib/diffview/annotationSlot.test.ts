@@ -86,6 +86,9 @@ describe("slotInto", () => {
     expect(node.slot).toBe("annotation-7");
     expect(node.dataset.annotationSlot).toBe("");
     expect(node.style.whiteSpace).toBe("normal");
+    // Prose, not code: the node also opts out of the code column's monospace
+    // font so a rendered-markdown comment reads as sans-serif prose (EXC-802).
+    expect(node.style.fontFamily).toBe("var(--font-sans)");
     expect(node.parentElement).toBe(host);
   });
 
