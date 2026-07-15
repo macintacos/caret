@@ -34,8 +34,13 @@ async function parseDevArgs(args: string[]): Promise<RunDevOptions> {
 }
 
 describe("tasks CLI: dev command", () => {
-  test("defaults: num-versions 3, notify false, persist false", async () => {
-    expect(await parseDevArgs([])).toEqual({ numVersions: 3, notify: false, persist: false });
+  test("defaults: num-versions 3, notify false, persist false, fresh false", async () => {
+    expect(await parseDevArgs([])).toEqual({
+      numVersions: 3,
+      notify: false,
+      persist: false,
+      fresh: false,
+    });
   });
 
   test("parses --num-versions", async () => {
@@ -43,6 +48,7 @@ describe("tasks CLI: dev command", () => {
       numVersions: 5,
       notify: false,
       persist: false,
+      fresh: false,
     });
   });
 
@@ -51,6 +57,7 @@ describe("tasks CLI: dev command", () => {
       numVersions: 3,
       notify: true,
       persist: false,
+      fresh: false,
     });
   });
 
@@ -59,6 +66,7 @@ describe("tasks CLI: dev command", () => {
       numVersions: 7,
       notify: true,
       persist: false,
+      fresh: false,
     });
   });
 
@@ -69,6 +77,16 @@ describe("tasks CLI: dev command", () => {
       port: 40000,
       stateDir: "/tmp/x",
       persist: true,
+      fresh: false,
+    });
+  });
+
+  test("parses --fresh", async () => {
+    expect(await parseDevArgs(["--fresh"])).toEqual({
+      numVersions: 3,
+      notify: false,
+      persist: false,
+      fresh: true,
     });
   });
 });
