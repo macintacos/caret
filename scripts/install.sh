@@ -57,6 +57,7 @@ WANT_CLAUDE=0
 WANT_OPENCODE=0
 REPO_DIR=""
 REF_DESC=""
+VERSION=""
 PLAN=()
 SPIN_PID=""
 SPIN_LABEL=""
@@ -351,8 +352,9 @@ resolve_local_checkout() {
 run_dev_install() {
   require git "install git, then re-run"
   resolve_local_checkout
+  VERSION="$REF_DESC"
 
-  section "Installing caret"
+  section "Installing caret $VERSION"
   step "Reusing the freshly built checkout at $REPO_DIR ($REF_DESC) — no rebuild" :
   run cd "$REPO_DIR"
   # Reuse mode (EXC-555): `mise run build` already produced the artifacts;
@@ -379,6 +381,18 @@ run_dev_install() {
   step "Prewarming the fresh build's daemon" prewarm_daemon
 }
 
+# The version `@latest` resolves to on the registry — for display only. Best-effort:
+# one read-only lookup, falling back to the literal "latest" when curl is missing or
+# offline. Never fatal, never blocks the install (the `@latest` install is unchanged).
+resolve_published_version() {
+  local encoded="${PACKAGE//\//%2F}" v=""
+  if command -v curl >/dev/null 2>&1; then
+    v="$(curl -fsSL --max-time 5 "https://registry.npmjs.org/-/package/${encoded}/dist-tags" 2>/dev/null |
+      grep -o '"latest":"[^"]*"' | head -1 | cut -d'"' -f4)"
+  fi
+  printf '%s' "${v:-latest}"
+}
+
 # The end-user install (the curl one-liner). No clone, no compile: register the
 # public plugin with Claude Code and hand OpenCode the published package. `bun` is
 # needed for the OpenCode step (bunx) and to run the caret bundle at hook time.
@@ -387,7 +401,10 @@ run_user_install() {
     require bun "install Bun from https://bun.sh, then re-run"
   fi
 
-  section "Installing caret"
+  # Skip the registry lookup in dry-run — the section is silent and print_plan,
+  # not the version banner, speaks for that mode; no reason to touch the network.
+  if [ "$DRY_RUN" -eq 0 ]; then VERSION="$(resolve_published_version)"; fi
+  section "Installing caret $VERSION"
 
   if [ "$WANT_CLAUDE" -eq 1 ]; then
     # The CLI form of the README's `/plugin marketplace add macintacos/caret` +
@@ -411,11 +428,11 @@ run_user_install() {
 print_summary() {
   echo
   if [ "$WANT_CLAUDE" -eq 1 ] && [ "$WANT_OPENCODE" -eq 1 ]; then
-    info "caret installed for Claude Code + OpenCode. Restart each, then try /caret:demo."
+    info "caret $VERSION installed for Claude Code + OpenCode. Restart each, then try /caret:demo."
   elif [ "$WANT_OPENCODE" -eq 1 ]; then
-    info "caret installed for OpenCode. Restart OpenCode, then try /caret:demo."
+    info "caret $VERSION installed for OpenCode. Restart OpenCode, then try /caret:demo."
   else
-    info "caret installed for Claude Code. Restart Claude Code (or run /reload-plugins), then try /caret:demo."
+    info "caret $VERSION installed for Claude Code. Restart Claude Code (or run /reload-plugins), then try /caret:demo."
   fi
 }
 

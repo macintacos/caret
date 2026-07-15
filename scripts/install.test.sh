@@ -51,7 +51,7 @@ assert_contains "$out" "DRY RUN" "announces dry-run mode"
 assert_contains "$out" "published caret" "reports the published-package source"
 assert_contains "$out" "claude plugin marketplace add macintacos/caret" "plan adds the public marketplace"
 assert_contains "$out" "claude plugin install caret@caret" "plan installs the published plugin"
-assert_contains "$out" "bunx @macintacos/caret@latest install --target opencode" "plan installs OpenCode via bunx"
+assert_contains "$out" "bunx --no-cache @macintacos/caret@latest install --target opencode" "plan installs OpenCode via bunx"
 assert_contains "$out" "nothing was changed" "ends with the no-change closer"
 assert_absent "$out" "git clone" "default path never clones"
 assert_absent "$out" "bun install" "default path never installs build deps"
@@ -216,7 +216,7 @@ fi
 assert_contains "$ok_out" "✓" "success path prints ✓ glyphs"
 assert_absent "$ok_out" "✗" "success path prints no ✗ glyph"
 assert_contains "$ok_out" "Registering the caret marketplace" "success path shows the register step"
-assert_contains "$ok_out" "caret installed" "success path ends with the installed line"
+assert_contains "$ok_out" "installed for" "success path ends with the installed line"
 rm -rf "$ROOT" "$STUBS" "$HOME_DIR"
 
 # marketplace add → update fallback: add exits 1, so update must run.
