@@ -1464,6 +1464,15 @@ test("a created annotation shows an inline card that doesn't overlay the code", 
   // between the code lines rather than covering them.
   expect(await card.evaluate((el) => getComputedStyle(el).position)).toBe("static");
   expect(await card.evaluate((el) => el.closest("[data-annotation-slot]") != null)).toBe(true);
+
+  // The rendered-markdown prose reads as sans-serif, not the code column's
+  // monospace: the card is projected into the diffs library's monospace
+  // annotation row, and slotInto opts the projected node out of --font-mono, so
+  // the comment resolves --font-sans (Geist), not Berkeley Mono (EXC-802).
+  const commentFont = await card
+    .locator(".comment")
+    .evaluate((el) => getComputedStyle(el).fontFamily);
+  expect(commentFont).toMatch(/^Geist/);
 });
 
 test("two comments on the same line render as one ordered thread", async ({ daemon, page }) => {
