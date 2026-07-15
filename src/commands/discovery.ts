@@ -8,9 +8,9 @@
 import { existsSync } from "node:fs";
 import { release } from "node:os";
 import { selectAdapter } from "../adapters/index.ts";
-import { isCompiledBinary, VERSION } from "../build-id.ts";
-import { httpHealth } from "../daemon-client.ts";
-import { isPidAlive, readDaemonLock } from "../daemon-lifecycle.ts";
+import { isCompiledBinary, VERSION } from "../lib/build-id.ts";
+import { httpHealth } from "../daemon/client.ts";
+import { isPidAlive, readDaemonLock } from "../daemon/lifecycle.ts";
 import {
   collectReport,
   type DiscoveryDeps,
@@ -20,8 +20,8 @@ import {
   renderReport,
   type Report,
 } from "../discovery.ts";
-import { configFile, daemonLogFile, logFile } from "../paths.ts";
-import { scrubValue } from "../redact.ts";
+import { configFile, daemonLogFile, logFile } from "../config/paths.ts";
+import { scrubValue } from "../redact/node.ts";
 import {
   getPort,
   heartbeatMs,
@@ -29,7 +29,7 @@ import {
   loadSettings,
   reviewTimeoutMs,
   type Settings,
-} from "../settings.ts";
+} from "../config/settings.ts";
 
 /** Production probes for the discovery report (EXC-464): the same primitives
  * the review path already uses (httpHealth, readDaemonLock, isPidAlive), the

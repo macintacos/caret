@@ -1,4 +1,4 @@
-// The UI asset resolver's disk-enumeration source (src/ui-assets.ts
+// The UI asset resolver's disk-enumeration source (src/ui/assets.ts
 // assetsFromDist): the dev/e2e path that serves ui/dist/ off disk when no embed
 // manifest is present, and the absent-dir case that degrades to the daemon's
 // placeholder. The embedded-manifest source is exercised end-to-end by the
@@ -7,7 +7,7 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assetsFromDist } from "../../src/ui-assets.ts";
+import { assetsFromDist } from "../../src/ui/assets.ts";
 
 function fakeDist(files: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), "caret-ui-dist-"));

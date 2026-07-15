@@ -1,6 +1,6 @@
 import "../../test-mount.ts";
 import { afterEach, describe, expect, test } from "bun:test";
-import type { ClientReview, PlanVersion } from "@core/types";
+import type { ClientReview, PlanVersion } from "@core/lib/types";
 import { until } from "../../../test/support/poll.ts";
 import { logCapture } from "../../test-helpers.ts";
 import { render } from "../../test-mount.ts";

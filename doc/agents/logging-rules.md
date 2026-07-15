@@ -5,10 +5,10 @@ writes through the second — sharing one record shape
 (`{"level":30,"time":...,"step":"x","msg":"...",...}`):
 
 - **Hook processes** (the short-lived `caret review` hook) call
-  `logDebug/logInfo/logWarn/logError(step, msg, extra?)` from `src/log.ts`, which append
-  to `caret.log`.
-- **The daemon** holds a `CaretLogger` built by `createDaemonLogger` (`src/log.ts`) and
-  writes NDJSON to stderr, which `spawnDaemon` redirects into `daemon.log`.
+  `logDebug/logInfo/logWarn/logError(step, msg, extra?)` from `src/lib/log.ts`, which
+  append to `caret.log`.
+- **The daemon** holds a `CaretLogger` built by `createDaemonLogger` (`src/lib/log.ts`)
+  and writes NDJSON to stderr, which `spawnDaemon` redirects into `daemon.log`.
 - **The browser UI** has no sink of its own: `uiLog` (`ui/src/lib/log.ts`) batches events
   to the daemon's `POST /api/logs` (EXC-445), which writes them through the daemon's
   `CaretLogger` — they land in `daemon.log` tagged `source: "ui"`, with leveling and
@@ -74,7 +74,7 @@ Concretely:
 
 - Messages are **lowercase, factual, present tense**: `"review created: <id8>"`,
   `"plan rejected"`. Review ids in messages are truncated to their first 8 chars via
-  `shortId` (`src/log.ts`) — the full id rides in the record's `reviewId` field.
+  `shortId` (`src/lib/log.ts`) — the full id rides in the record's `reviewId` field.
 - `step` is a **short fixed lowercase token** naming the operation (`review`, `resolve`,
   `decision`, `idle`, `listen`, `settings`, `signal`, `store`, `prefs`, `draft`, `env`,
   `ui`, `poll`, `render`, `prewarm`, `retire`, `spawn`, `request`, `fatal`). Reuse an
@@ -86,7 +86,7 @@ Concretely:
   is already set; the explicit value winning is how bridged browser events stay `"ui"`
   through the daemon's logger.
 - Hook and daemon records carry a `caller` field — the emitting call site as a
-  repo-relative `file:line`, stamped by `wrap()` in `src/log.ts` (EXC-451). Bridged UI
+  repo-relative `file:line`, stamped by `wrap()` in `src/lib/log.ts` (EXC-451). Bridged UI
   records carry none. It is best-effort: the field is omitted if the stack can't be parsed
   (e.g. an unmapped compiled binary).
 - `extra` keys must **not collide** with the record's own fields: `level`, `time`, `msg`,
@@ -97,16 +97,16 @@ Concretely:
 **Never log identifiable data.**
 
 - **Plan, prompt, and feedback bodies are structurally censored.** The `DENY_KEYS` set in
-  `src/redact-core.ts` censors `plan`, `prompt`, and `feedback` values unconditionally —
+  `src/redact/core.ts` censors `plan`, `prompt`, and `feedback` values unconditionally —
   toggle or no toggle. Never log them under any key.
 - **New identifying keys must be added to `DENY_KEYS` explicitly.** Matching is exact-key
   only, so a hostname, user, email, or similar identifying key you introduce will leak
   until you add it to the set. `DENY_KEYS` and the censoring graph-walk live **once** in
-  `src/redact-core.ts` — a browser-safe pure-TS module both runtimes import: the
-  daemon/hook side via `src/redact.ts` (which adds the home-path string scrub and applies
-  it at write time) and the browser side via the `@core` alias in `ui/src/lib/log.ts`
-  (which censors before the dev console mirror). A new key added there covers both sides
-  at once.
+  `src/redact/core.ts` — a browser-safe pure-TS module both runtimes import: the
+  daemon/hook side via `src/redact/node.ts` (which adds the home-path string scrub and
+  applies it at write time) and the browser side via the `@core` alias in
+  `ui/src/lib/log.ts` (which censors before the dev console mirror). A new key added there
+  covers both sides at once.
 - **Day-to-day logs are raw.** `[logging].redact` defaults to `false`. `caret redact`
   produces shareable `*.redacted.log` copies after the fact, and `redact = true` scrubs
   (home paths → `~`, usernames in foreign home paths censored) at write time. Write every
@@ -133,7 +133,7 @@ Logs live under `$XDG_STATE_HOME/caret` (default `~/.local/state/caret`):
 
 `caret.log` is created `0600`, inside a `0700` state dir; `daemon.log` is a plain
 append-mode redirect. The `0700` state dir is enforced by `ensureStateDir()`
-(`src/paths.ts`), which every mkdir-of-stateDir site routes through (log, store, prefs,
-lock, spawn) — it chmods an already existing dir, so the mode holds regardless of which
-caller creates the dir first (EXC-539). Writes are synchronous, so a record logged just
-before `process.exit` (fail-safe and signal paths) is durable.
+(`src/config/paths.ts`), which every mkdir-of-stateDir site routes through (log, store,
+prefs, lock, spawn) — it chmods an already existing dir, so the mode holds regardless of
+which caller creates the dir first (EXC-539). Writes are synchronous, so a record logged
+just before `process.exit` (fail-safe and signal paths) is durable.

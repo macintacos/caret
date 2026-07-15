@@ -7,7 +7,7 @@
 // escalation shape stabilizes and is live-verified, additional variants get
 // declared here and rendered as Codex modes in feedback.ts.
 
-import type { ApproveVariant } from "../../types.ts";
+import type { ApproveVariant } from "../../lib/types.ts";
 
 /**
  * Codex's declared approve variants, in display order — a single plain approve.

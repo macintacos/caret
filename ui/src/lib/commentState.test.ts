@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isUnresolved, type ReviewStatus } from "@core/types";
+import { isUnresolved, type ReviewStatus } from "@core/lib/types";
 import { commentState } from "./commentState.ts";
 
 // commentState maps a comment's ReviewStatus onto the card's quiet dot+label. The

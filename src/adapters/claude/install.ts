@@ -6,7 +6,7 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { readJsonFileSync } from "../../json-file.ts";
+import { readJsonFileSync } from "../../lib/json-file.ts";
 import type { InstallProbe } from "../adapter.ts";
 
 /** The Claude Code config dir: CLAUDE_CONFIG_DIR override, else ~/.claude. */

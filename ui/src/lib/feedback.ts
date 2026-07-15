@@ -8,7 +8,7 @@
 // reference into the stored plan version, so the agent can find the feedback even
 // when its own line numbering differs.
 
-import { type Annotation, isLegacyAnnotation, isLineAnnotation } from "@core/types";
+import { type Annotation, isLegacyAnnotation, isLineAnnotation } from "@core/lib/types";
 import { type ComposerScratch, rangeLabel } from "./diffview/commenting.ts";
 
 /** Collapses any run of whitespace (incl. newlines) to a single space. */

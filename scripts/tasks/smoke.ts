@@ -23,8 +23,8 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
-import { isPidAlive } from "../../src/daemon-lifecycle.ts";
-import { readJsonFileSync } from "../../src/json-file.ts";
+import { isPidAlive } from "../../src/daemon/lifecycle.ts";
+import { readJsonFileSync } from "../../src/lib/json-file.ts";
 import { runForward } from "./lib/exec.ts";
 import { installCleanupHandlers } from "./lib/signals.ts";
 import { probeServedUi } from "./lib/smoke-probe.ts";

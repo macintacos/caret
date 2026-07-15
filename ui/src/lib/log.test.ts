@@ -99,7 +99,7 @@ describe("uiLog buffering and flush", () => {
     expect(original.nested.feedback).toBe("f");
   });
 
-  test("values beyond the depth cap are replaced, like src/redact.ts walk", () => {
+  test("values beyond the depth cap are replaced, like src/redact/node.ts walk", () => {
     // A DENY_KEYS body nested past MAX_DEPTH must not ride through uncensored —
     // the daemon's scrubValue replaces it with "<depth-capped>", and the dev
     // mirror must never print what redaction would scrub.
@@ -134,7 +134,7 @@ describe("uiLog buffering and flush", () => {
     expect(batchEvents(cap.calls[0]!)[0]!.extra).toEqual({ value: [1, 2] });
   });
 
-  test("a cyclic extra is cut off as <cyclic>, like src/redact.ts walk", () => {
+  test("a cyclic extra is cut off as <cyclic>, like src/redact/node.ts walk", () => {
     const a: Record<string, unknown> = {};
     a.self = a;
     uiLog.info("ui", "m", a);
@@ -164,7 +164,7 @@ describe("uiLog buffering and flush", () => {
   test("a poisoned extra never propagates out of uiLog or flush", () => {
     // An extra whose value access throws — censor reads it via Object.entries,
     // so a facade that didn't swallow would surface this into the UI. The
-    // guarantee (carried from src/log.ts's wrap): a logging failure degrades to
+    // guarantee (carried from src/lib/log.ts's wrap): a logging failure degrades to
     // a silent no-op, never a thrown error that destabilizes the page.
     const poisoned = {
       get boom(): never {

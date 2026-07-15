@@ -2,7 +2,7 @@
 // Claude's hook wire protocol — the PermissionRequest decision JSON on stdout —
 // and is the composition point the CLI selects to talk to the agent.
 
-import type { Decision, PlanInput } from "../../types.ts";
+import type { Decision, PlanInput } from "../../lib/types.ts";
 import type { AgentAdapter, InstallProbe } from "../adapter.ts";
 import { APPROVE_VARIANTS } from "./approve.ts";
 import { fatalDenyLine, toHookOutput } from "./feedback.ts";

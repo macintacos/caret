@@ -6,7 +6,7 @@
   // owns open/close, Escape, outside-click, and focus.
   import { shortCwd } from "../lib/cwd.ts";
   import { stripTitleLinks } from "../lib/title.ts";
-  import type { ClientReview } from "@core/types";
+  import type { ClientReview } from "@core/lib/types";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";

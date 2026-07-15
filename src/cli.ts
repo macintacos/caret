@@ -4,9 +4,9 @@
 //
 // This file is only the composition point: it assembles the Commander tree and
 // threads each subcommand's parsed options into its run function (the actions in
-// src/commands/). The review orchestration core (src/review.ts), daemon
-// takeover/lifecycle (src/daemon-lifecycle.ts), the HTTP client
-// (src/daemon-client.ts), and build/commit fingerprinting (src/build-id.ts) live
+// src/commands/). The review orchestration core (src/review/orchestrate.ts), daemon
+// takeover/lifecycle (src/daemon/lifecycle.ts), the HTTP client
+// (src/daemon/client.ts), and build/commit fingerprinting (src/lib/build-id.ts) live
 // in their own modules and are imported by the commands.
 //
 // FAIL-SAFE = DENY: shipping an unreviewed plan is the one outcome we never
@@ -15,7 +15,7 @@
 
 import type { Command } from "@commander-js/extra-typings";
 import { fatalDeny } from "./adapters/index.ts";
-import { VERSION } from "./build-id.ts";
+import { VERSION } from "./lib/build-id.ts";
 import { runDaemon } from "./commands/daemon.ts";
 import { runDiscoverySubcommand } from "./commands/discovery.ts";
 import { runInstallSubcommand } from "./commands/install.ts";
@@ -23,9 +23,9 @@ import { runPrewarm } from "./commands/prewarm.ts";
 import { runReconcileSubcommand } from "./commands/reconcile.ts";
 import { runRedactSubcommand } from "./commands/redact.ts";
 import { runReviewSubcommand } from "./commands/review.ts";
-import { logError } from "./log.ts";
-import { logFile } from "./paths.ts";
-import { createProgram, runProgram } from "./program.ts";
+import { logError } from "./lib/log.ts";
+import { logFile } from "./config/paths.ts";
+import { createProgram, runProgram } from "./lib/program.ts";
 
 // The CLI command tree (EXC-472). Each subcommand's action threads its parsed
 // options into the run functions, replacing the former process.argv reads. The

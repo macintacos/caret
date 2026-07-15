@@ -1,8 +1,8 @@
 // State/config directory and file-path resolution. Every path under caret's two
 // XDG roots is resolved here, lazily, so tests can override XDG_STATE_HOME /
 // XDG_CONFIG_HOME per-case. (The CARET_* tunables and their accessors live in
-// src/settings.ts since EXC-430; daemon identity/build fingerprinting lives in
-// src/build-id.ts.)
+// src/config/settings.ts since EXC-430; daemon identity/build fingerprinting lives in
+// src/lib/build-id.ts.)
 
 import { chmodSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
@@ -33,7 +33,7 @@ export function configDir(): string {
   return xdgDir("XDG_CONFIG_HOME", ".config");
 }
 
-/** User-editable settings file (see src/settings.ts). Single source of truth
+/** User-editable settings file (see src/config/settings.ts). Single source of truth
  * for the path. */
 export function configFile(): string {
   return `${configDir()}/config.toml`;

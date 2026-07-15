@@ -1,8 +1,8 @@
 // Node-side redaction for shareable logs (EXC-399). Two consumers share it: the
-// live [logging].redact switch (src/log.ts scrubs at emit time) and the
+// live [logging].redact switch (src/lib/log.ts scrubs at emit time) and the
 // after-the-fact `caret redact` subcommand (redactLogText/redactLogFiles),
 // which a future feedback-submission UI can also call. The value-graph walk and
-// the DENY_KEYS denylist live in src/redact-core.ts (browser-safe, shared with
+// the DENY_KEYS denylist live in src/redact/core.ts (browser-safe, shared with
 // the UI side); this module adds the node-only string scrub (home paths) and
 // the NDJSON file round-trips.
 //
@@ -14,8 +14,8 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { daemonLogFile, logFile } from "./paths.ts";
-import { CENSOR, scrubGraph } from "./redact-core.ts";
+import { daemonLogFile, logFile } from "../config/paths.ts";
+import { CENSOR, scrubGraph } from "./core.ts";
 
 /** Foreign home paths (another user's, or Linux logs read on macOS): drop only
  * the username segment, keep the shape and sub-path for debuggability. */

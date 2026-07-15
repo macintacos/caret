@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
-import { PLAN_REJECTED_MESSAGE } from "../../src/constants.ts";
-import { runReview } from "../../src/review.ts";
-import { setLogLevel } from "../../src/log.ts";
-import { hasUntaggedCodeBlock } from "../../src/plan-format.ts";
+import { PLAN_REJECTED_MESSAGE } from "../../src/config/constants.ts";
+import { runReview } from "../../src/review/orchestrate.ts";
+import { setLogLevel } from "../../src/lib/log.ts";
+import { hasUntaggedCodeBlock } from "../../src/plan/format.ts";
 import {
   assertDevEnv,
   bootstrapReview,
@@ -107,7 +107,7 @@ test("the seeded fixture has no untagged code blocks", () => {
 // ---- extraPlan ----
 
 test("extraPlan retitles the h1 so the extra review is distinguishable", () => {
-  // Review titles derive from the plan's first heading (src/reviews.ts), so
+  // Review titles derive from the plan's first heading (src/review/threading.ts), so
   // the retitle is what the switcher and the notification body display.
   const out = extraPlan("# Widget Cache Refactor\n\nbody", 2);
   expect(out).toStartWith("# Widget Cache Refactor — extra 2\n");

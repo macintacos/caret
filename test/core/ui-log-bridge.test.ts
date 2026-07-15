@@ -8,7 +8,7 @@ import {
   RESERVED_KEYS,
   sanitizeString,
   STEP_RE,
-} from "../../src/ui-log-bridge.ts";
+} from "../../src/ui/log-bridge.ts";
 
 // The browser-safe trust-boundary parser for POST /api/logs (EXC-445). The
 // daemon's route exercises this end-to-end over HTTP in daemon.test.ts; these

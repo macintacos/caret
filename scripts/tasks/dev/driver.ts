@@ -2,23 +2,28 @@
 // Deterministic dev driver: plays the agent's side of the caret protocol so
 // `mise run dev` shows a fake plan that survives request-changes / approve
 // round-trips — no real Claude session, no LLM. Every submission goes through
-// the real hook logic (runReview from src/review.ts) in-process, so format
+// the real hook logic (runReview from src/review/orchestrate.ts) in-process, so format
 // validation, posting, long-polling, decision handling, and hook logging
 // (caret.log in the dev state dir) all run exactly as in production. On
 // request-changes it appends a "Revision N" section quoting the reviewer's
 // feedback and resubmits; on approve it re-seeds a fresh v1. The
-// revision-threading contract lives in src/reviews.ts.
+// revision-threading contract lives in src/review/threading.ts.
 //
 // This module owns the dev wiring (devReviewDeps) and the long-running
 // supervision loops; the pure protocol state machine it drives lives in
 // scripts/tasks/dev/protocol.ts.
 
-import { expireReview, longPoll, postReview, waitForHealth } from "../../../src/daemon-client.ts";
-import { type ReviewDeps, runReview } from "../../../src/review.ts";
+import { expireReview, longPoll, postReview, waitForHealth } from "../../../src/daemon/client.ts";
+import { type ReviewDeps, runReview } from "../../../src/review/orchestrate.ts";
 import { claudeAdapter } from "../../../src/adapters/claude/index.ts";
-import { NEVER_IDLE_MS } from "../../../src/constants.ts";
-import { DEFAULT_PORT, devSeeder, loadSettings, type Settings } from "../../../src/settings.ts";
-import type { ClientReview } from "../../../src/types.ts";
+import { NEVER_IDLE_MS } from "../../../src/config/constants.ts";
+import {
+  DEFAULT_PORT,
+  devSeeder,
+  loadSettings,
+  type Settings,
+} from "../../../src/config/settings.ts";
+import type { ClientReview } from "../../../src/lib/types.ts";
 import {
   appendRevision,
   bootstrapPlans,

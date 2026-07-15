@@ -64,14 +64,14 @@ export function assetsFromDist(distDir: string): UiAssets | undefined {
  * source tree, then a dist tree beside the binary. */
 export async function loadUiAssets(): Promise<UiAssets | undefined> {
   try {
-    const mod = await import("./ui-manifest.generated.ts");
+    const mod = await import("../ui-manifest.generated.ts");
     if (mod.UI_MANIFEST && Object.keys(mod.UI_MANIFEST).length > 0) {
       return fromPathMap(mod.UI_MANIFEST);
     }
   } catch {
     // No generated manifest (dev / fresh checkout) — fall through.
   }
-  const srcDist = fileURLToPath(new URL("../ui/dist", import.meta.url));
+  const srcDist = fileURLToPath(new URL("../../ui/dist", import.meta.url));
   const fromSrc = assetsFromDist(srcDist);
   if (fromSrc) return fromSrc;
   const besideDist = join(dirname(process.execPath), "ui");

@@ -13,7 +13,7 @@ function asText(haystack: unknown): string {
  * Assert none of `secrets` appears anywhere in `haystack`.
  *
  * Plan/prompt/feedback/draft bodies and identifying paths are structurally
- * censored before they reach a log (src/redact.ts), so a body string surfacing
+ * censored before they reach a log (src/redact/node.ts), so a body string surfacing
  * in a captured log, discovery report, or daemon wire payload is a redaction
  * leak. This folds the scattered `expect(...).not.toContain(secret)` checks into
  * one named assertion.

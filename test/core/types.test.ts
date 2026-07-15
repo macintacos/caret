@@ -6,7 +6,7 @@ import {
   isLineAnnotation,
   type Review,
   toClientReview,
-} from "../../src/types.ts";
+} from "../../src/lib/types.ts";
 
 const line: Annotation = { id: "l1", startLine: 3, endLine: 5, comment: "tighten" };
 const legacy: Annotation = {

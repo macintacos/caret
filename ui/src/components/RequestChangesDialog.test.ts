@@ -1,7 +1,7 @@
 import "../../test-mount.ts";
 
 import { describe, expect, test } from "bun:test";
-import type { Annotation } from "@core/types";
+import type { Annotation } from "@core/lib/types";
 import type { ComponentProps } from "svelte";
 import type { ComposerScratch } from "../lib/diffview/commenting.ts";
 import { capture, flushUntil, render } from "../../test-mount.ts";

@@ -5,7 +5,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_PORT } from "../../src/constants.ts";
+import { DEFAULT_PORT } from "../../src/config/constants.ts";
 import {
   DAEMON_DIED,
   discoverPort,
@@ -136,7 +136,7 @@ test("discoverPort throws after exhausting the attempt budget", async () => {
 
 // ---- CLI consumption of the [dev] settings (EXC-558) ----
 // The task delegates port/state-dir resolution to dev-env.ts, which now sources
-// them from src/settings.ts (CARET_DEV_* > [dev] key > default). Drive the real
+// them from src/config/settings.ts (CARET_DEV_* > [dev] key > default). Drive the real
 // CLI as a subprocess with an isolated XDG_CONFIG_HOME so config and env both
 // exercise the consumption the bash task relies on.
 

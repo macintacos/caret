@@ -1,6 +1,6 @@
 import "../../test-mount.ts";
 import { describe, expect, test } from "bun:test";
-import type { LegacyAnnotation } from "@core/types";
+import type { LegacyAnnotation } from "@core/lib/types";
 import { render } from "../../test-mount.ts";
 import LegacyAnnotationList from "./LegacyAnnotationList.svelte";
 

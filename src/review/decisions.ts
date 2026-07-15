@@ -6,8 +6,8 @@
 // This is a factory (not a module singleton) so each daemon owns its own
 // registry and tests stay isolated.
 
-import { type CaretLogger, noopLogger, shortId } from "./log.ts";
-import type { Decision } from "./types.ts";
+import { type CaretLogger, noopLogger, shortId } from "../lib/log.ts";
+import type { Decision } from "../lib/types.ts";
 
 export interface DecisionRegistry {
   /** Await the decision for a review; resolves when resolveDecision is called. */

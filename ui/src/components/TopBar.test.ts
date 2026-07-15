@@ -1,6 +1,6 @@
 import "../../test-mount.ts";
 import { describe, expect, test } from "bun:test";
-import type { ApproveVariant, ClientReview } from "@core/types";
+import type { ApproveVariant, ClientReview } from "@core/lib/types";
 import { capture, render } from "../../test-mount.ts";
 import TopBar from "./TopBar.svelte";
 

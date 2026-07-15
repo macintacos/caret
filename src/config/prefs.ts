@@ -7,9 +7,9 @@
 
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { type CaretLogger, noopLogger } from "./log.ts";
+import { type CaretLogger, noopLogger } from "../lib/log.ts";
 import { ensureStateDir, prefsFile } from "./paths.ts";
-import type { ApproveVariantId } from "./types.ts";
+import type { ApproveVariantId } from "../lib/types.ts";
 
 /** The recognized approve-variant ids and the one to fall back to. The daemon
  * derives both from the active adapter's declared variants (the default is the

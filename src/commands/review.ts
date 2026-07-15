@@ -8,13 +8,13 @@
 
 import type { AgentAdapter } from "../adapters/adapter.ts";
 import { selectAdapter } from "../adapters/index.ts";
-import { expireReview, longPoll, postReview } from "../daemon-client.ts";
-import { ensureDaemon, prodEnsureDeps } from "../daemon-lifecycle.ts";
-import { logError, logWarn, setLogLevel, setRedact } from "../log.ts";
-import { logFile } from "../paths.ts";
-import { expireAbandoned, type ReviewDeps, runReview } from "../review.ts";
-import { loadSettings, reviewTimeoutMs, type Settings } from "../settings.ts";
-import type { Decision, PlanInput } from "../types.ts";
+import { expireReview, longPoll, postReview } from "../daemon/client.ts";
+import { ensureDaemon, prodEnsureDeps } from "../daemon/lifecycle.ts";
+import { logError, logWarn, setLogLevel, setRedact } from "../lib/log.ts";
+import { logFile } from "../config/paths.ts";
+import { expireAbandoned, type ReviewDeps, runReview } from "../review/orchestrate.ts";
+import { loadSettings, reviewTimeoutMs, type Settings } from "../config/settings.ts";
+import type { Decision, PlanInput } from "../lib/types.ts";
 import { warnInvalidEnvVars } from "./boot.ts";
 
 /** Select the platform's URL-opening argv: darwin `open`, win32 `cmd /c start`,

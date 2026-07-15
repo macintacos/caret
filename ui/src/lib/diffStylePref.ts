@@ -2,7 +2,7 @@
 //
 // This is a pure browser display preference (split vs. unified diff layout) with
 // no security surface and no cross-process consumer, so it lives in localStorage
-// rather than the daemon's machine-global prefs (src/prefs.ts) — that file is a
+// rather than the daemon's machine-global prefs (src/config/prefs.ts) — that file is a
 // 0600 store beside plan bodies for the opaque approve-variant token, written
 // only on the decision path, and a layout toggle belongs nowhere near it.
 //

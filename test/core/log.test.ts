@@ -3,7 +3,7 @@ import { readFileSync, statSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { callerLocation, parseCaller } from "../../src/caller-location.ts";
+import { callerLocation, parseCaller } from "../../src/lib/caller-location.ts";
 import {
   createDaemonLogger,
   type ErrorContext,
@@ -14,8 +14,8 @@ import {
   resetHookLogger,
   setLogLevel,
   setRedact,
-} from "../../src/log.ts";
-import { daemonLogFile, logFile } from "../../src/paths.ts";
+} from "../../src/lib/log.ts";
+import { daemonLogFile, logFile } from "../../src/config/paths.ts";
 import { setupTempStateDir } from "../support/env.ts";
 import { ndjsonRecords } from "../support/ndjson.ts";
 
@@ -226,8 +226,8 @@ test("an explicit extra.source wins over the logger's own tag", () => {
 // --- caller location (EXC-451) ---
 
 // Stack-captured repo-relative `path:line` of the emitting call site. The
-// regex pins the file to this test (so we know the frame walk skipped src/log.ts
-// and landed on the real caller) and the trailing line number.
+// regex pins the file to this test (so we know the frame walk skipped
+// src/lib/log.ts and landed on the real caller) and the trailing line number.
 const CALLER = /^test\/core\/log\.test\.ts:\d+$/;
 
 test("hook records carry the caller location", () => {
@@ -459,8 +459,8 @@ function frame(rel: string, line: number): string {
 }
 
 test("parseCaller: an absolute frame under the package root becomes repo-relative", () => {
-  const stack = ["Error", frame("src/daemon.ts", 295)].join("\n");
-  expect(parseCaller(stack, ROOT)).toBe("src/daemon.ts:295");
+  const stack = ["Error", frame("src/daemon/server.ts", 295)].join("\n");
+  expect(parseCaller(stack, ROOT)).toBe("src/daemon/server.ts:295");
 });
 
 test("parseCaller: a compiled-binary (already-relative) frame passes through unchanged", () => {
@@ -481,21 +481,21 @@ test("parseCaller: skips the logging-machinery frames and lands on the first ext
   // caller; the walk must skip both and return the external frame.
   const stack = [
     "Error",
-    frame("src/caller-location.ts", 60),
-    frame("src/log.ts", 145),
-    frame("src/review.ts", 88),
+    frame("src/lib/caller-location.ts", 60),
+    frame("src/lib/log.ts", 145),
+    frame("src/review/orchestrate.ts", 88),
   ].join("\n");
-  expect(parseCaller(stack, ROOT)).toBe("src/review.ts:88");
+  expect(parseCaller(stack, ROOT)).toBe("src/review/orchestrate.ts:88");
 });
 
 test("parseCaller: an anonymous (parenless) frame is parsed too", () => {
-  const stack = ["Error", `    at ${ROOT}/src/store.ts:12:34`].join("\n");
-  expect(parseCaller(stack, ROOT)).toBe("src/store.ts:12");
+  const stack = ["Error", `    at ${ROOT}/src/review/store.ts:12:34`].join("\n");
+  expect(parseCaller(stack, ROOT)).toBe("src/review/store.ts:12");
 });
 
 test("parseCaller: a leading file:// scheme is stripped", () => {
-  const stack = ["Error", `    at someFn (file://${ROOT}/src/prefs.ts:5:1)`].join("\n");
-  expect(parseCaller(stack, ROOT)).toBe("src/prefs.ts:5");
+  const stack = ["Error", `    at someFn (file://${ROOT}/src/config/prefs.ts:5:1)`].join("\n");
+  expect(parseCaller(stack, ROOT)).toBe("src/config/prefs.ts:5");
 });
 
 test("parseCaller: runtime-internal frames (pathless, node:) are never the caller", () => {
@@ -504,17 +504,17 @@ test("parseCaller: runtime-internal frames (pathless, node:) are never the calle
     "    at native:7:39",
     "    at someFn ([eval]:1:30)",
     "    at node:internal/process/task_queues:95:5",
-    frame("src/settings.ts", 17),
+    frame("src/config/settings.ts", 17),
   ].join("\n");
-  expect(parseCaller(stack, ROOT)).toBe("src/settings.ts:17");
+  expect(parseCaller(stack, ROOT)).toBe("src/config/settings.ts:17");
 });
 
 test("parseCaller: an unparseable/exhausted stack yields undefined (field omitted)", () => {
   // Only the Error header and machinery frames — no external frame to take.
   const onlyInternal = [
     "Error: boom",
-    frame("src/log.ts", 145),
-    frame("src/caller-location.ts", 60),
+    frame("src/lib/log.ts", 145),
+    frame("src/lib/caller-location.ts", 60),
   ].join("\n");
   expect(parseCaller(onlyInternal, ROOT)).toBeUndefined();
   // A stack of pure garbage matches no FRAME and falls through to undefined.

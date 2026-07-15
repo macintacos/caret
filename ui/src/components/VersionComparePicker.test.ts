@@ -1,6 +1,6 @@
 import "../../test-mount.ts";
 import { describe, expect, test } from "bun:test";
-import type { PlanVersion } from "@core/types";
+import type { PlanVersion } from "@core/lib/types";
 import { capture, render } from "../../test-mount.ts";
 
 import VersionComparePicker from "./VersionComparePicker.svelte";

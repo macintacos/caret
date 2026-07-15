@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readJsonFile, readJsonFileSync } from "../../src/json-file.ts";
+import { readJsonFile, readJsonFileSync } from "../../src/lib/json-file.ts";
 
 let dir: string;
 

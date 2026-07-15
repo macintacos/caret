@@ -5,8 +5,8 @@
 // is a plain unit test. The long-running supervision loops that drive these
 // live in scripts/tasks/dev/driver.ts.
 
-import { PLAN_REJECTED_MESSAGE } from "../../../src/constants.ts";
-import type { Decision } from "../../../src/types.ts";
+import { PLAN_REJECTED_MESSAGE } from "../../../src/config/constants.ts";
+import type { Decision } from "../../../src/lib/types.ts";
 
 /** Session id for the single dev review; stable for the process lifetime so a
  * revision threads into the same review instead of forking a new one, but
@@ -25,7 +25,7 @@ export function hookStdin(plan: string, sessionId = DEV_SESSION): string {
  * is fenced as `text` with a fence longer than any backtick run it contains, so
  * hostile feedback (untagged fences, indented code) can neither break out nor
  * introduce an untagged block — the plan-format gate would insta-reject the
- * revision (src/plan-format.ts). */
+ * revision (src/plan/format.ts). */
 export function appendRevision(plan: string, feedback: string, n: number): string {
   const runs = feedback.match(/`+/g) ?? [];
   const fence = "`".repeat(Math.max(3, ...runs.map((r) => r.length + 1)));
@@ -124,7 +124,7 @@ export function nextPlan(
 
 /** Retitle the fake plan's h1 so an extra review is distinguishable from the
  * primary one in the switcher and in the notification body (review titles
- * derive from the plan's first heading, src/reviews.ts). */
+ * derive from the plan's first heading, src/review/threading.ts). */
 export function extraPlan(plan: string, n: number): string {
   return plan.replace(/^# .*$/m, (title) => `${title} — extra ${n}`);
 }

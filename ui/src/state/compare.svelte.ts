@@ -10,7 +10,7 @@
 // mode is annotation-free by contract (annotations belong to the single-version
 // view).
 
-import type { PlanVersion } from "@core/types";
+import type { PlanVersion } from "@core/lib/types";
 import type { DiffIndicators, DiffStyle } from "../lib/diffview/types.ts";
 
 /** Reactive fields the host component owns and the factory mutates through

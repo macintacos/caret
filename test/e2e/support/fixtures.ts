@@ -16,8 +16,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type ChildProcess, spawn } from "node:child_process";
 import { expect, type Page, test as base } from "@playwright/test";
-import { waitForHealth } from "../../../src/daemon-client.ts";
-import type { ClientReview, DraftBody, PlanInput, RouteResult } from "../../../src/types.ts";
+import { waitForHealth } from "../../../src/daemon/client.ts";
+import type { ClientReview, DraftBody, PlanInput, RouteResult } from "../../../src/lib/types.ts";
 import { FIXTURE_PLAN } from "./fixture-plan.ts";
 
 export interface Daemon {

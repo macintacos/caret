@@ -1,9 +1,9 @@
 // Browser-side logger facade. Buffers UI log events and POSTs them in batches
 // to the daemon's POST /api/logs (fire-and-forget). The daemon merges them into
-// the same NDJSON timeline as the hook/daemon sinks (see src/log.ts) so a human
+// the same NDJSON timeline as the hook/daemon sinks (see src/lib/log.ts) so a human
 // or /caret:debug can reconstruct what the UI did alongside the backend.
 //
-// Two invariants carried from src/log.ts's wrap(), adapted for the browser:
+// Two invariants carried from src/lib/log.ts's wrap(), adapted for the browser:
 // transport is non-essential and NEVER throws into the UI (every public entry
 // is wrapped by safe() and swallows; a failed POST drops the batch silently),
 // and call sites must NOT put load-bearing side effects in log arguments — an
@@ -12,12 +12,12 @@
 // This module starts nothing at import time: startLogBridge() installs the
 // flush timer and pagehide handler, and returns a stop function.
 
-import { scrubGraph, shortId } from "@core/redact-core";
-import { MAX_EVENTS, MAX_MSG_LEN, STEP_RE } from "@core/ui-log-bridge";
+import { scrubGraph, shortId } from "@core/redact/core";
+import { MAX_EVENTS, MAX_MSG_LEN, STEP_RE } from "@core/ui/log-bridge";
 
 export { shortId };
 
-// Mirror of src/log.ts's LogLevel — the wire contract's level field.
+// Mirror of src/lib/log.ts's LogLevel — the wire contract's level field.
 type LogLevel = "debug" | "info" | "warn" | "error";
 
 // Coherent with the endpoint's caps: BUFFER_MAX == the endpoint's MAX_EVENTS so

@@ -7,7 +7,7 @@ import {
   EXCERPT_RADIUS,
   readFileExcerpt,
   resolveFileInCwd,
-} from "../../src/plan-files.ts";
+} from "../../src/plan/excerpt.ts";
 
 // plan-files.ts resolves a plan's filename reference to a real file *inside the
 // review's cwd* (the daemon's source of truth is the review record, never the

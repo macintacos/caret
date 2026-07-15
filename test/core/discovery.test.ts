@@ -14,9 +14,9 @@ import {
   type Report,
   tallyReviews,
 } from "../../src/discovery.ts";
-import { reviewsDir } from "../../src/paths.ts";
-import { scrubValue } from "../../src/redact.ts";
-import { DEFAULTS } from "../../src/settings.ts";
+import { reviewsDir } from "../../src/config/paths.ts";
+import { scrubValue } from "../../src/redact/node.ts";
+import { DEFAULTS } from "../../src/config/settings.ts";
 import { setupTempStateDir } from "../support/env.ts";
 import { expectNeverLogsBody } from "../support/redaction.ts";
 

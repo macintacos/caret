@@ -1,8 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { ensureDaemon, retireDaemon } from "../../src/daemon-lifecycle.ts";
-import { setLogLevel } from "../../src/log.ts";
-import { logFile } from "../../src/paths.ts";
+import { ensureDaemon, retireDaemon } from "../../src/daemon/lifecycle.ts";
+import { setLogLevel } from "../../src/lib/log.ts";
+import { logFile } from "../../src/config/paths.ts";
 import { ndjsonRecords } from "../support/ndjson.ts";
 import { setupTempStateDir } from "../support/env.ts";
 

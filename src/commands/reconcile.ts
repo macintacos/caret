@@ -1,6 +1,6 @@
 // `caret reconcile`: the ExitPlanMode PostToolUse hook. When a plan is approved,
 // this fires and reconciles a terminal approval (one made in the agent interface,
-// not caret's UI) into the daemon — see src/reconcile.ts. Wires the production
+// not caret's UI) into the daemon — see src/review/reconcile.ts. Wires the production
 // deps: the active adapter's stdin parser and the daemon HTTP client, pointed at
 // the already-running daemon's loopback port (it never spawns one).
 //
@@ -10,10 +10,10 @@
 // a stray decision line can't reach Claude's PostToolUse channel.
 
 import { selectAdapter } from "../adapters/index.ts";
-import { listReviews, resolveReview } from "../daemon-client.ts";
-import { logDebug, logWarn, setLogLevel, setRedact } from "../log.ts";
-import { type ReconcileDeps, runReconcile } from "../reconcile.ts";
-import { getPort, loadSettings } from "../settings.ts";
+import { listReviews, resolveReview } from "../daemon/client.ts";
+import { logDebug, logWarn, setLogLevel, setRedact } from "../lib/log.ts";
+import { type ReconcileDeps, runReconcile } from "../review/reconcile.ts";
+import { getPort, loadSettings } from "../config/settings.ts";
 import type { AgentAdapter } from "../adapters/adapter.ts";
 import { warnInvalidEnvVars } from "./boot.ts";
 

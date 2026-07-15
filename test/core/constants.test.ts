@@ -4,8 +4,8 @@ import {
   deriveIdleTimeoutSec,
   IDLE_TIMEOUT_HEADROOM_S,
   MAX_HEARTBEAT_MS,
-} from "../../src/constants.ts";
-import { DEFAULTS } from "../../src/settings.ts";
+} from "../../src/config/constants.ts";
+import { DEFAULTS } from "../../src/config/settings.ts";
 
 // The falsifiable invariant the transport audit asks for (EXC-533): the
 // Bun.serve socket idleTimeout, derived from the resolved heartbeat, must always

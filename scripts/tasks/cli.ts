@@ -17,12 +17,12 @@
 // task module is a sibling in this directory (scripts/tasks/*.ts, plus the
 // multi-file dev task in scripts/tasks/dev/); code shared across tasks lives in
 // scripts/tasks/lib/. Each action is injectable so tests drive the real parsing
-// without spawning the tools. It reuses createProgram from src/program.ts so all
+// without spawning the tools. It reuses createProgram from src/lib/program.ts so all
 // caret CLIs share the same name/description/help conventions.
 
 import { InvalidArgumentError } from "@commander-js/extra-typings";
 import { type JsonArgs, runPreflightCli } from "../../scripts/preflight.ts";
-import { createProgram } from "../../src/program.ts";
+import { createProgram } from "../../src/lib/program.ts";
 import { runBuild, runBuildBin, runBuildBundle, runBuildUi } from "./build.ts";
 import { DEFAULT_NUM_VERSIONS, parsePositiveInt } from "./dev/protocol.ts";
 import { type RunDevOptions, runDev } from "./dev/run.ts";

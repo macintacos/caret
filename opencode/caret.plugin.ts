@@ -171,7 +171,7 @@ export function deniedMessage(feedback: string): string {
 }
 
 /** Extract caret's review URL from the child's stderr text. Core writes
- * `caret: review this plan at <url>\n` (src/review.ts); both ends are caret-owned,
+ * `caret: review this plan at <url>\n` (src/review/orchestrate.ts); both ends are caret-owned,
  * so this regex is coupled to that one line by design. The trailing `\s` match
  * means a stderr chunk cut off mid-URL (before the newline) yields nothing rather
  * than a truncated URL — the match only fires once the whole line has arrived. */
@@ -303,7 +303,7 @@ export function shouldCheckForUpdate(lastCheckMs: number | null, nowMs: number):
  * caret's state dir ($XDG_STATE_HOME/caret or ~/.local/state/caret), matching where
  * caret keeps its other small machine-global markers (prefs.json). Pure so the
  * location is testable; the plugin stays self-contained and cannot import
- * src/paths.ts, so the convention is mirrored here by hand. */
+ * src/config/paths.ts, so the convention is mirrored here by hand. */
 export function updateCheckCachePath(
   env: Record<string, string | undefined>,
   home: string,

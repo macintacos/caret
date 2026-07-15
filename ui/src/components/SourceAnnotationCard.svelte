@@ -21,7 +21,7 @@
   // reveal. caret's tight inline layout — the state-hued left rail, compact
   // padding, opacity-only mount reveal — rides the :global(.hook) rules below.
   import { untrack } from "svelte";
-  import type { LineAnnotation } from "@core/types";
+  import type { LineAnnotation } from "@core/lib/types";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { commentState } from "../lib/commentState.ts";

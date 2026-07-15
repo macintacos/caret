@@ -1,6 +1,6 @@
 import "../../test-setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
-import type { Annotation, ApproveVariantId, ResolveBody } from "@core/types";
+import type { Annotation, ApproveVariantId, ResolveBody } from "@core/lib/types";
 import { createResolve, HttpError, isNetworkFailure, type ResolveStore } from "./resolve.svelte.ts";
 
 interface SubmitCall {

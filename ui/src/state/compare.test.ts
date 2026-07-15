@@ -1,6 +1,6 @@
 import "../../test-setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
-import type { PlanVersion } from "@core/types";
+import type { PlanVersion } from "@core/lib/types";
 import type { DiffIndicators, DiffStyle } from "../lib/diffview/types.ts";
 import { type CompareStore, createCompare } from "./compare.svelte.ts";
 

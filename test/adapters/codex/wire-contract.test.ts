@@ -12,8 +12,8 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { codexAdapter } from "../../../src/adapters/codex/index.ts";
-import { runReview } from "../../../src/review.ts";
-import type { Decision } from "../../../src/types.ts";
+import { runReview } from "../../../src/review/orchestrate.ts";
+import type { Decision } from "../../../src/lib/types.ts";
 import { setupTempStateDir } from "../../support/env.ts";
 
 const FIXTURE = join(import.meta.dir, "fixtures", "permission-request-stdin.json");

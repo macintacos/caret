@@ -1,12 +1,12 @@
 // Browser-safe redaction core (EXC-399, EXC-445): the value-graph walk, the
 // DENY_KEYS denylist, and shortId — shared by both runtimes. The daemon/hook
-// side (src/redact.ts, src/log.ts) and the browser side (ui/src/lib/log.ts via
+// side (src/redact/node.ts, src/lib/log.ts) and the browser side (ui/src/lib/log.ts via
 // the @core alias) import from here, so the denylist and the algorithm live in
 // ONE place rather than drifting between two hand-mirrored copies.
 //
 // Pure TS with no node imports, so it bundles into the browser UI as well as
 // the compiled bun binary (target architecture §5). Node-only concerns — home
-// path scrubbing, NDJSON file round-trips — stay in src/redact.ts and ride in
+// path scrubbing, NDJSON file round-trips — stay in src/redact/node.ts and ride in
 // through the optional per-string transform below.
 
 export const CENSOR = "<redacted>";

@@ -4,7 +4,7 @@
 // hands it raw hook stdin and gets back a core `PlanInput`. The dependency runs
 // one way: an adapter imports core types, never the reverse.
 
-import type { ApproveVariant, Decision, PlanInput } from "../types.ts";
+import type { ApproveVariant, Decision, PlanInput } from "../lib/types.ts";
 
 export type { ApproveVariant };
 

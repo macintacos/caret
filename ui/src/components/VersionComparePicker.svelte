@@ -21,7 +21,7 @@
   // primary; here it appears only as the --accent-wash "active-state" marker (the
   // ThemePicker/diff-selection language) on the pressed compare toggle. All colors
   // ride the shadcn↔caret token bridge; no raw colors.
-  import type { PlanVersion } from "@core/types";
+  import type { PlanVersion } from "@core/lib/types";
   import type { DiffIndicators, DiffStyle } from "../lib/diffview/types.ts";
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";

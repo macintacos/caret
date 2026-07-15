@@ -1,7 +1,7 @@
 <script lang="ts">
   import { approveLabel } from "../lib/approve.ts";
   import { shortCwd } from "../lib/cwd.ts";
-  import type { ApproveVariant, ApproveVariantId, ClientReview } from "@core/types";
+  import type { ApproveVariant, ApproveVariantId, ClientReview } from "@core/lib/types";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";

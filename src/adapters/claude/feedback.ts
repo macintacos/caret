@@ -31,7 +31,7 @@
 //      coupling pinned by test/adapters/claude/hooks-timeout.test.ts) so caret's
 //      own fail-safe deny always emits before Claude could kill the hook.
 
-import type { ApproveVariantId, Behavior } from "../../types.ts";
+import type { ApproveVariantId, Behavior } from "../../lib/types.ts";
 import { type SetModeName, setModeFor } from "./approve.ts";
 
 export interface PermissionDecision {

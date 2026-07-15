@@ -8,7 +8,7 @@
 // on every id:version change, while the draft seeds on an id change only.
 
 import { putDraft } from "../lib/api.ts";
-import type { Annotation, ClientReview, PersistedScratch } from "@core/types";
+import type { Annotation, ClientReview, PersistedScratch } from "@core/lib/types";
 import { isNetworkFailure } from "./resolve.svelte.ts";
 
 const SAVE_DEBOUNCE_MS = 500;

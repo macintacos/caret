@@ -9,7 +9,7 @@
   // line) without it dismissing (DiffPlanView keeps it alive while inside).
   import { getFileExcerpt } from "../lib/api.ts";
   import { highlightExcerpt } from "../lib/diffview/highlight.ts";
-  import type { FileExcerpt } from "@core/types";
+  import type { FileExcerpt } from "@core/lib/types";
 
   interface Props {
     reviewId: string;

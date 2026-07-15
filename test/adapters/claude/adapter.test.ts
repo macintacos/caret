@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { claudeAdapter } from "../../../src/adapters/claude/index.ts";
 import { toHookOutput } from "../../../src/adapters/claude/feedback.ts";
-import type { Decision } from "../../../src/types.ts";
+import type { Decision } from "../../../src/lib/types.ts";
 
 test("emitDecision serializes a deny to the Claude PermissionRequest JSON", () => {
   const decision: Decision = { behavior: "deny", feedback: "tighten scope", decidedAt: 1 };

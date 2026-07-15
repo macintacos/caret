@@ -8,7 +8,7 @@
   // The container stays a plain full-bleed footer section (a Card's contained,
   // rounded frame would fight the below-the-view framing); the count adopts a
   // shadcn Badge (EXC-765), matching the count-chip pattern used elsewhere.
-  import type { LegacyAnnotation } from "@core/types";
+  import type { LegacyAnnotation } from "@core/lib/types";
   import { Badge } from "$lib/components/ui/badge/index.js";
 
   interface Props {
