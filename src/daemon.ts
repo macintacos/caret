@@ -727,7 +727,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     const existing = store.get(id);
     // Only a pending review can be resolved — guards against a double resolve
     // diverging the store from the decision the hook received.
-    if (!existing || existing.status !== "pending") return notFound();
+    if (existing?.status !== "pending") return notFound();
     const decision: Decision = {
       behavior: body.behavior === "deny" ? "deny" : "allow",
       feedback: body.feedback,
@@ -783,7 +783,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     clearDecision(id);
     const existing = store.get(id);
     // Only a pending review can expire; resolved ones are already terminal.
-    if (!existing || existing.status !== "pending") return notFound();
+    if (existing?.status !== "pending") return notFound();
     await store.expire(id);
     log.info("review", `review expired: ${shortId(id)}`, {
       reviewId: id,
