@@ -2,7 +2,7 @@
 // (EXC-399). Human-facing output, not hook JSON — it prints each written path or
 // says nothing was found, and reports failures to stderr with a non-zero exit.
 
-import { redactLogFiles } from "../redact.ts";
+import { redactLogFiles } from "../redact/node.ts";
 
 export function runRedactSubcommand(): void {
   // Scrub the state-dir logs into shareable *.redacted.log siblings (EXC-399).

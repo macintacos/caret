@@ -12,7 +12,7 @@ import {
   resolveCommit,
   VERSION,
 } from "../../src/lib/build-id.ts";
-import type { UiAssets } from "../../src/ui-assets.ts";
+import type { UiAssets } from "../../src/ui/assets.ts";
 
 // A UiAssets handle over real temp files, so buildHash reads bytes through
 // Bun.file exactly as it does in production. `paths` is sorted to match the

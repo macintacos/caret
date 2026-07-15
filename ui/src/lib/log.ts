@@ -12,8 +12,8 @@
 // This module starts nothing at import time: startLogBridge() installs the
 // flush timer and pagehide handler, and returns a stop function.
 
-import { scrubGraph, shortId } from "@core/redact-core";
-import { MAX_EVENTS, MAX_MSG_LEN, STEP_RE } from "@core/ui-log-bridge";
+import { scrubGraph, shortId } from "@core/redact/core";
+import { MAX_EVENTS, MAX_MSG_LEN, STEP_RE } from "@core/ui/log-bridge";
 
 export { shortId };
 

@@ -33,7 +33,7 @@ import { createServer } from "../../../src/daemon/server.ts";
 import { createDaemonLogger } from "../../../src/lib/log.ts";
 import { prefsFile, reviewsDir } from "../../../src/config/paths.ts";
 import { createStore } from "../../../src/review/store.ts";
-import { loadUiAssets } from "../../../src/ui-assets.ts";
+import { loadUiAssets } from "../../../src/ui/assets.ts";
 
 // Refuse to run without an isolated state dir — never fall back to the real
 // ~/.local/state/caret (same posture as assertDevEnv in scripts/tasks/dev/driver.ts).

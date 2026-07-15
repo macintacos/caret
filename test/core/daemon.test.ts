@@ -9,7 +9,7 @@ import { isClientLive, LIVE_CLIENT_WINDOW_MS } from "../../src/daemon/guards.ts"
 import { createDaemonLogger } from "../../src/lib/log.ts";
 import { formatPlanMarkdown } from "../../src/plan/markdown.ts";
 import type { Store } from "../../src/review/store.ts";
-import type { UiAssets } from "../../src/ui-assets.ts";
+import type { UiAssets } from "../../src/ui/assets.ts";
 import { type BootOptions, bootDaemon, type TestDaemon } from "../support/daemon.ts";
 import { recordingLog } from "../support/recording-log.ts";
 import { expectNeverLogsBody } from "../support/redaction.ts";

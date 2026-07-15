@@ -14,8 +14,8 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { daemonLogFile, logFile } from "./config/paths.ts";
-import { CENSOR, scrubGraph } from "./redact-core.ts";
+import { daemonLogFile, logFile } from "../config/paths.ts";
+import { CENSOR, scrubGraph } from "./core.ts";
 
 /** Foreign home paths (another user's, or Linux logs read on macOS): drop only
  * the username segment, keep the shape and sub-path for debuggability. */

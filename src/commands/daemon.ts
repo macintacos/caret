@@ -13,7 +13,7 @@ import { createDaemonLogger } from "../lib/log.ts";
 import { configFile, daemonLock, reviewsDir, stateDir } from "../config/paths.ts";
 import { getPort, heartbeatMs, idleMs, settings, watchSettings } from "../config/settings.ts";
 import { createStore } from "../review/store.ts";
-import { loadUiAssets } from "../ui-assets.ts";
+import { loadUiAssets } from "../ui/assets.ts";
 import { warnInvalidEnvVars } from "./boot.ts";
 
 export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {

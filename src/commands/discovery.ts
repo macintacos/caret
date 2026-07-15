@@ -21,7 +21,7 @@ import {
   type Report,
 } from "../discovery.ts";
 import { configFile, daemonLogFile, logFile } from "../config/paths.ts";
-import { scrubValue } from "../redact.ts";
+import { scrubValue } from "../redact/node.ts";
 import {
   getPort,
   heartbeatMs,

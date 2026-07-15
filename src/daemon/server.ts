@@ -15,8 +15,8 @@ import { type ApproveModeSet, readApproveMode, writeApproveMode } from "../confi
 import { routeIncomingPlan } from "../review/threading.ts";
 import { DEFAULTS } from "../config/settings.ts";
 import type { Store } from "../review/store.ts";
-import type { UiAssets } from "../ui-assets.ts";
-import { MAX_BODY_BYTES, parseUiLogBatch } from "../ui-log-bridge.ts";
+import type { UiAssets } from "../ui/assets.ts";
+import { MAX_BODY_BYTES, parseUiLogBatch } from "../ui/log-bridge.ts";
 import {
   type ApproveVariant,
   currentVersion,
