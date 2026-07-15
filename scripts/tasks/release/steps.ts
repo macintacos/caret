@@ -22,6 +22,7 @@ export {
 export type { Deps, FsOps, Io } from "./steps/deps.ts";
 export { finalize } from "./steps/finalize.ts";
 export { createNpm, type NpmOps } from "./npm.ts";
+export { createRumdl, type RumdlOps } from "./rumdl.ts";
 export {
   assertBranch,
   assertCleanTree,

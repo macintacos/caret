@@ -8,6 +8,7 @@
 import type { GitOps, RawCommit } from "../../scripts/tasks/release/git.ts";
 import type { GitHubOps, PullRequestSummary } from "../../scripts/tasks/release/github.ts";
 import type { NpmOps } from "../../scripts/tasks/release/npm.ts";
+import type { RumdlOps } from "../../scripts/tasks/release/rumdl.ts";
 import type { Deps, FsOps } from "../../scripts/tasks/release/steps.ts";
 
 /** A package.json / plugin.json body carrying just the version field tests assert on. */
@@ -93,6 +94,9 @@ export interface ReleaseHarness {
   calls: string[];
   files: Map<string, string>;
   state: HarnessState;
+  /** The GitHub releases the fake knows about, keyed by tag; `notes` is captured
+   * from the last releaseCreate/releaseEdit so a test can assert the published body. */
+  releases: Map<string, { url: string; notes?: string }>;
 }
 
 /** The default working tree: all three manifests synced at the baseline version. */
@@ -219,7 +223,9 @@ export function makeReleaseHarness(opts: HarnessOptions = {}): ReleaseHarness {
   };
 
   const prs = opts.prs ?? [];
-  const releases = new Map(Object.entries(opts.releases ?? {}));
+  const releases = new Map<string, { url: string; notes?: string }>(
+    Object.entries(opts.releases ?? {}),
+  );
   const github: GitHubOps = {
     async available() {
       return opts.available ?? true;
@@ -242,11 +248,16 @@ export function makeReleaseHarness(opts: HarnessOptions = {}): ReleaseHarness {
     async releaseView(tag) {
       return releases.get(tag) ?? null;
     },
-    async releaseCreate({ tag }) {
+    async releaseCreate({ tag, notes }) {
       calls.push(`releaseCreate:${tag}`);
       const url = `https://github.com/macintacos/caret/releases/tag/${tag}`;
-      releases.set(tag, { url });
+      releases.set(tag, { url, notes });
       return { url };
+    },
+    async releaseEdit({ tag, notes }) {
+      calls.push(`releaseEdit:${tag}`);
+      const existing = releases.get(tag);
+      releases.set(tag, { url: existing?.url ?? "", notes });
     },
   };
 
@@ -260,13 +271,25 @@ export function makeReleaseHarness(opts: HarnessOptions = {}): ReleaseHarness {
     },
   };
 
+  // A passthrough reflow: it records the call and returns the input unchanged, so
+  // a test can assert both that finalize reflowed and what body it handed over
+  // (the notes captured by the release fake equal the composed input). The real
+  // rumdl collapsing is pinned separately in release-rumdl.test.ts.
+  const rumdl: RumdlOps = {
+    async reflow(markdown) {
+      calls.push("reflow");
+      return markdown;
+    },
+  };
+
   const deps: Deps = {
     git,
     github,
     npm,
+    rumdl,
     fs,
     io: { log: () => {} },
     now: () => new Date(opts.now ?? "2026-06-02T00:00:00Z"),
   };
-  return { deps, calls, files, state };
+  return { deps, calls, files, state, releases };
 }

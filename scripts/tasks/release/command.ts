@@ -19,6 +19,7 @@ import { errorResult, type ReleaseError } from "./contract.ts";
 import { createGit } from "./git.ts";
 import { createGitHub } from "./github.ts";
 import { createNpm } from "./npm.ts";
+import { createRumdl } from "./rumdl.ts";
 import { baseline, compute, type Deps, finalize, GuardError, prepare } from "./steps.ts";
 import { isBumpLevel } from "./version.ts";
 
@@ -27,6 +28,7 @@ function realDeps(): Deps {
     git: createGit(),
     github: createGitHub(),
     npm: createNpm(),
+    rumdl: createRumdl(),
     fs: {
       read: (path) => Bun.file(path).text(),
       write: async (path, contents) => {
@@ -134,9 +136,13 @@ export function buildReleaseCommand(deps: Deps = realDeps()): Command {
     .description("phase 2: tag merged trunk and publish the GitHub Release")
     .option("--dry-run", "preview without mutating")
     .option("--yes", "confirm the mutation")
+    .option(
+      "--summary <text>",
+      "human summary prepended above the changelog notes on the GitHub Release",
+    )
     .action(async (opts) => {
       requireGo("finalize", opts);
-      await emitStep(() => finalize(deps, { dryRun: opts.dryRun ?? false }));
+      await emitStep(() => finalize(deps, { dryRun: opts.dryRun ?? false, summary: opts.summary }));
     });
 
   return program;

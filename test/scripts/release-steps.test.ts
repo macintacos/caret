@@ -437,3 +437,46 @@ test("finalize reuses an existing GitHub release", async () => {
   expect(calls).not.toContain("releaseCreate:v0.1.0");
   expect(r.releaseUrl).toBe("https://github.com/macintacos/caret/releases/tag/v0.1.0");
 });
+
+// --- finalize: summary + reflow ---------------------------------------------
+
+test("finalize prepends the --summary above the reflowed changelog notes", async () => {
+  const { deps, calls, releases } = makeReleaseHarness(FINALIZE_OPTS);
+  await finalize(deps, { dryRun: false, summary: "Ships the widget." });
+  expect(calls).toContain("releaseCreate:v0.1.0");
+  expect(calls).toContain("reflow"); // the body went through rumdl
+  const notes = releases.get("v0.1.0")?.notes ?? "";
+  expect(notes).toContain("Ships the widget."); // summary at the top
+  expect(notes).toContain("- A thing."); // changelog-scraped content remains
+  expect(notes.indexOf("Ships the widget.")).toBeLessThan(notes.indexOf("- A thing."));
+});
+
+test("finalize reflows the changelog notes even without a summary", async () => {
+  const { deps, calls, releases } = makeReleaseHarness(FINALIZE_OPTS);
+  await finalize(deps, { dryRun: false });
+  expect(calls).toContain("reflow");
+  const notes = releases.get("v0.1.0")?.notes ?? "";
+  expect(notes).toContain("- A thing.");
+  expect(notes).not.toContain("Ships"); // no summary was supplied
+});
+
+test("finalize with a summary refreshes the notes of a reused release", async () => {
+  const { deps, calls, releases } = makeReleaseHarness({
+    ...FINALIZE_OPTS,
+    tags: ["v0.0.1", "v0.1.0"],
+    remoteTags: ["v0.0.1", "v0.1.0"],
+    releases: { "v0.1.0": { url: "https://github.com/macintacos/caret/releases/tag/v0.1.0" } },
+  });
+  await finalize(deps, { dryRun: false, summary: "Resumed and summarized." });
+  expect(calls).not.toContain("releaseCreate:v0.1.0"); // reused, not recreated
+  expect(calls).toContain("releaseEdit:v0.1.0"); // notes refreshed in place
+  expect(releases.get("v0.1.0")?.notes).toContain("Resumed and summarized.");
+});
+
+test("finalize dry-run with a summary edits nothing", async () => {
+  const { deps, calls } = makeReleaseHarness(FINALIZE_OPTS);
+  await finalize(deps, { dryRun: true, summary: "Would-be summary." });
+  expect(calls).not.toContain("releaseCreate:v0.1.0");
+  expect(calls).not.toContain("releaseEdit:v0.1.0");
+  expect(calls).not.toContain("reflow");
+});
