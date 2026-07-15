@@ -3,10 +3,7 @@
 // create path reads to decide whether the hook should foreground a browser tab.
 // Split out of server.ts so the pure guard logic stays unit-testable on its own.
 
-/** The vanity host the hook opens the review UI under (EXC-426). Resolves to
- * loopback per RFC 6761 (mDNSResponder system-wide; Chrome/Firefox special-case
- * it internally), so the 127.0.0.1 bind needs no change. */
-export const VANITY_HOST = "caret.localhost";
+import { VANITY_HOST } from "../config/constants.ts";
 
 /** How recently a UI tab must have polled GET /api/reviews to count as a live
  * client (EXC-559, EXC-562). It must comfortably exceed the browser's

@@ -5,6 +5,13 @@
 /** Default daemon port — the [daemon].port schema default (EXC-430). */
 export const DEFAULT_PORT = 42718;
 
+/** The vanity host the hook opens the review UI under (EXC-426). Resolves to
+ * loopback per RFC 6761 (mDNSResponder system-wide; Chrome/Firefox special-case
+ * it internally), so the 127.0.0.1 bind needs no change. Shared here because
+ * both the daemon's cross-origin guard (which allows it) and review
+ * orchestration (which opens it) reference the one host. */
+export const VANITY_HOST = "caret.localhost";
+
 /**
  * Sent verbatim as the deny feedback when the reviewer clicks Reject (EXC-685):
  * a concise signal that the plan was rejected and the agent should wait for the
