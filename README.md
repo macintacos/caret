@@ -15,10 +15,7 @@ Want to develop caret rather than use it? Start with [CONTRIBUTING.md](CONTRIBUT
 
 ## Screenshots
 
-<!-- TODO(EXC-666): review-UI screenshots — plan view + inline annotation,
-request-changes flow, multi-session switcher. -->
-
-_Review-UI screenshots coming soon._
+![caret review UI with an inline annotation, both themes](doc/assets/caret-review-ui.png)
 
 ## Install
 
