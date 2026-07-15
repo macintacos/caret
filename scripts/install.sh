@@ -398,10 +398,13 @@ run_user_install() {
 
   # OpenCode: run the published package's tested installer via bunx — it adds the
   # `@macintacos/caret` array entry and drops the `/caret:*` command files.
-  # `@latest` so a re-run re-resolves the newest package.
+  # `--no-cache` forces bunx to re-resolve `@latest` against the registry rather
+  # than a stale cached manifest: a manifest cached before 0.4.0 resolves to a
+  # version with no `bin`, so bunx fails with "could not determine executable to
+  # run for package @macintacos/caret".
   if [ "$WANT_OPENCODE" -eq 1 ]; then
     step "Installing caret into OpenCode (plugin array + commands)" \
-      run bunx "${PACKAGE}@latest" install --target opencode
+      run bunx --no-cache "${PACKAGE}@latest" install --target opencode
   fi
 }
 
