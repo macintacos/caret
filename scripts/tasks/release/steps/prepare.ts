@@ -19,6 +19,7 @@ import {
 import type { Deps } from "./deps.ts";
 import { assertBranch, assertCleanTree, assertRepoAndGh, GuardError } from "./guards.ts";
 
+/** The release PR body: a "What changed" summary and a "What to test" checklist. */
 function prBody(version: string, title: string): string {
   return [
     "## What changed",

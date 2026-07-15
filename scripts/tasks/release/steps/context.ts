@@ -78,6 +78,11 @@ export interface ReleaseContext {
   headSha: string;
 }
 
+/**
+ * Assemble the ReleaseContext for compute/prepare: resolve the previous/next
+ * versions and tags from the latest release tag (never an agent-supplied value),
+ * read the current synced manifest version, and reject if the target tag exists.
+ */
 export async function gatherContext(
   deps: Deps,
   bump: BumpLevel,

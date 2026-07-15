@@ -23,6 +23,7 @@ import { createRumdl } from "./rumdl.ts";
 import { baseline, compute, type Deps, finalize, GuardError, prepare } from "./steps.ts";
 import { isBumpLevel } from "./version.ts";
 
+/** The production Deps: real git/gh/npm/rumdl collaborators plus fs/clock seams. */
 function realDeps(): Deps {
   return {
     git: createGit(),
@@ -41,10 +42,12 @@ function realDeps(): Deps {
   };
 }
 
+/** Print one step result (or ReleaseError) as a lone JSON object on stdout. */
 function emit(result: unknown): void {
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
 
+/** Emit a ReleaseError on stdout and exit non-zero. */
 function fail(error: ReleaseError): never {
   emit(error);
   process.exit(1);
@@ -78,6 +81,7 @@ function requireGo(command: string, opts: { dryRun?: boolean; yes?: boolean }): 
   }
 }
 
+/** Validate the bump arg, failing with BAD_BUMP on anything but patch|minor|major. */
 function requireBump(bump: string): "patch" | "minor" | "major" {
   if (!isBumpLevel(bump)) {
     fail(errorResult("BAD_BUMP", `Invalid bump ${JSON.stringify(bump)}; use patch|minor|major.`));

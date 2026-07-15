@@ -18,6 +18,7 @@ export class GuardError extends Error {
   }
 }
 
+/** Assert we're in a repo with `gh` available; return the repo slug and default branch. */
 export async function assertRepoAndGh(
   deps: Deps,
 ): Promise<{ repoSlug: string; defaultBranch: string }> {
@@ -33,6 +34,7 @@ export async function assertRepoAndGh(
   };
 }
 
+/** Assert the current branch is the default branch or an allowed prefix; return it. */
 export async function assertBranch(
   deps: Deps,
   defaultBranch: string,
@@ -57,6 +59,7 @@ export async function offendingPaths(deps: Deps, allowed: string[]): Promise<str
     .filter((path) => path !== "" && !allowed.includes(path));
 }
 
+/** Raise DIRTY_TREE if the working tree has changes outside the `allowed` paths. */
 export async function assertCleanTree(deps: Deps, allowed: string[] = []): Promise<void> {
   const offending = await offendingPaths(deps, allowed);
   if (offending.length > 0) {
