@@ -14,3 +14,8 @@ exists only in code is undiscoverable; `doc/ADVANCED.md` is the configuration re
 - **Hot-reload.** If the setting is read live, note its hot-reload semantics — the
   settings service re-reads `config.toml` on change, so daemon-held settings take effect
   without a restart.
+- **Browser-persisted UI settings.** A user-facing setting the UI persists in the browser
+  (localStorage — e.g. theme, first-run onboarding, diff-view prefs) is not a
+  `config.toml` key. Register its key in `KNOWN_PREF_KEYS` (`ui/src/lib/prefs.ts`) so
+  `mise run dev --fresh` resets it — that flag reproduces a brand-new-user session, and a
+  setting missing from the registry silently survives the reset.
