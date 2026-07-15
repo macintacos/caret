@@ -8,16 +8,12 @@ slots in without touching core internals; blur it and agent vocabulary leaks eve
 
 - **`src/` is the tool-agnostic core, grouped by domain.** The core knows reviews, plans,
   and decisions; it does **not** know any agent's wire protocol. It is organized into
-  cohesive domain directories: `src/daemon/` (the HTTP server plus its extracted request
-  `schemas`/origin `guards`, `lifecycle`, and `client`), `src/review/` (`orchestrate`,
-  revision `threading`, `store`, `decisions`, `reconcile`), `src/plan/` (`canonical-file`,
-  `excerpt`, `format`, `markdown`), `src/redact/` (`core`, `node`), `src/ui/` (`assets`
-  and the browser `log-bridge`), `src/config/` (`settings`, `prefs`, `paths`,
-  `constants`), and `src/lib/` (cross-cutting foundation — `types`, `log`, `json-file`,
-  `caller-location`, `program`, `build-id`). `src/cli.ts` (the `bun build --compile`
-  entrypoint) and `src/discovery.ts` (the standalone diagnostics feature) stay at the
-  root, beside the gitignored generated UI manifest. There is deliberately no `src/core/`
-  bucket — the domain directories **are** the core.
+  cohesive domain directories (`daemon/`, `review/`, `plan/`, `redact/`, `ui/`, `config/`,
+  `lib/`); [`../ADVANCED.md`](../ADVANCED.md) § Layout describes what each one holds.
+  `src/cli.ts` (the `bun build --compile` entrypoint) and `src/discovery.ts` (the
+  standalone diagnostics feature) stay at the root, beside the gitignored generated UI
+  manifest. There is deliberately no `src/core/` bucket — the domain directories **are**
+  the core.
 - **`src/adapters/<tool>/` implements one agent tool.** `src/adapters/adapter.ts` declares
   the `AgentAdapter` interface; `src/adapters/index.ts` is the registry that maps a tool
   id to its adapter and resolves the active one (by explicit id, then `CARET_AGENT`, then
