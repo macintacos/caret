@@ -7,7 +7,7 @@
 // least speculative of the three adapters (no foreign wire format to model).
 // Selectable via CARET_AGENT=opencode; Claude stays the default.
 
-import type { Decision, PlanInput } from "../../types.ts";
+import type { Decision, PlanInput } from "../../lib/types.ts";
 import type { AgentAdapter, InstallProbe } from "../adapter.ts";
 import { APPROVE_VARIANTS } from "./approve.ts";
 import { fatalDenyLine, toWireDecision } from "./feedback.ts";

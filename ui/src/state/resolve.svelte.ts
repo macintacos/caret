@@ -8,8 +8,8 @@
 
 import { getApproveMode, HttpError, resolveReview } from "../lib/api.ts";
 import { formatFeedback } from "../lib/feedback.ts";
-import { PLAN_REJECTED_MESSAGE } from "@core/constants";
-import type { Annotation, ApproveVariantId } from "@core/types";
+import { PLAN_REJECTED_MESSAGE } from "@core/config/constants";
+import type { Annotation, ApproveVariantId } from "@core/lib/types";
 
 export { HttpError };
 

@@ -3,7 +3,7 @@ import { readFileSync, statSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { callerLocation, parseCaller } from "../../src/caller-location.ts";
+import { callerLocation, parseCaller } from "../../src/lib/caller-location.ts";
 import {
   createDaemonLogger,
   type ErrorContext,
@@ -14,8 +14,8 @@ import {
   resetHookLogger,
   setLogLevel,
   setRedact,
-} from "../../src/log.ts";
-import { daemonLogFile, logFile } from "../../src/paths.ts";
+} from "../../src/lib/log.ts";
+import { daemonLogFile, logFile } from "../../src/config/paths.ts";
 import { setupTempStateDir } from "../support/env.ts";
 import { ndjsonRecords } from "../support/ndjson.ts";
 
@@ -226,8 +226,8 @@ test("an explicit extra.source wins over the logger's own tag", () => {
 // --- caller location (EXC-451) ---
 
 // Stack-captured repo-relative `path:line` of the emitting call site. The
-// regex pins the file to this test (so we know the frame walk skipped src/log.ts
-// and landed on the real caller) and the trailing line number.
+// regex pins the file to this test (so we know the frame walk skipped
+// src/lib/log.ts and landed on the real caller) and the trailing line number.
 const CALLER = /^test\/core\/log\.test\.ts:\d+$/;
 
 test("hook records carry the caller location", () => {
@@ -481,8 +481,8 @@ test("parseCaller: skips the logging-machinery frames and lands on the first ext
   // caller; the walk must skip both and return the external frame.
   const stack = [
     "Error",
-    frame("src/caller-location.ts", 60),
-    frame("src/log.ts", 145),
+    frame("src/lib/caller-location.ts", 60),
+    frame("src/lib/log.ts", 145),
     frame("src/review.ts", 88),
   ].join("\n");
   expect(parseCaller(stack, ROOT)).toBe("src/review.ts:88");
@@ -513,8 +513,8 @@ test("parseCaller: an unparseable/exhausted stack yields undefined (field omitte
   // Only the Error header and machinery frames — no external frame to take.
   const onlyInternal = [
     "Error: boom",
-    frame("src/log.ts", 145),
-    frame("src/caller-location.ts", 60),
+    frame("src/lib/log.ts", 145),
+    frame("src/lib/caller-location.ts", 60),
   ].join("\n");
   expect(parseCaller(onlyInternal, ROOT)).toBeUndefined();
   // A stack of pure garbage matches no FRAME and falls through to undefined.

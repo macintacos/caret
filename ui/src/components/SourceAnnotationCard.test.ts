@@ -1,7 +1,7 @@
 import "../../test-mount.ts";
 import { EditorView } from "@codemirror/view";
 import { describe, expect, test } from "bun:test";
-import type { LineAnnotation } from "@core/types";
+import type { LineAnnotation } from "@core/lib/types";
 import { capture, render } from "../../test-mount.ts";
 import SourceAnnotationCard from "./SourceAnnotationCard.svelte";
 

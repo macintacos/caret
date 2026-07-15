@@ -21,12 +21,12 @@
 import { readdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { InstallProbe } from "./adapters/adapter.ts";
-import type { DaemonLock } from "./build-id.ts";
-import { readJsonFileSync } from "./json-file.ts";
-import { shortId } from "./log.ts";
-import { reviewsDir } from "./paths.ts";
-import type { Settings } from "./settings.ts";
-import { errorMessage, type HealthIdentity } from "./types.ts";
+import type { DaemonLock } from "./lib/build-id.ts";
+import { readJsonFileSync } from "./lib/json-file.ts";
+import { shortId } from "./lib/log.ts";
+import { reviewsDir } from "./config/paths.ts";
+import type { Settings } from "./config/settings.ts";
+import { errorMessage, type HealthIdentity } from "./lib/types.ts";
 
 // ---------------------------------------------------------------------------
 // Injected probe shapes

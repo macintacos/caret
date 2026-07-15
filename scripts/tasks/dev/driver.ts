@@ -16,9 +16,14 @@
 import { expireReview, longPoll, postReview, waitForHealth } from "../../../src/daemon-client.ts";
 import { type ReviewDeps, runReview } from "../../../src/review.ts";
 import { claudeAdapter } from "../../../src/adapters/claude/index.ts";
-import { NEVER_IDLE_MS } from "../../../src/constants.ts";
-import { DEFAULT_PORT, devSeeder, loadSettings, type Settings } from "../../../src/settings.ts";
-import type { ClientReview } from "../../../src/types.ts";
+import { NEVER_IDLE_MS } from "../../../src/config/constants.ts";
+import {
+  DEFAULT_PORT,
+  devSeeder,
+  loadSettings,
+  type Settings,
+} from "../../../src/config/settings.ts";
+import type { ClientReview } from "../../../src/lib/types.ts";
 import {
   appendRevision,
   bootstrapPlans,

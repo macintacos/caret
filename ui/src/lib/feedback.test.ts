@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Annotation } from "@core/types";
+import type { Annotation } from "@core/lib/types";
 import type { ComposerScratch } from "./diffview/commenting.ts";
 import {
   commentIndex,

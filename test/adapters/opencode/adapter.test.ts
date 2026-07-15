@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { toWireDecision } from "../../../src/adapters/opencode/feedback.ts";
 import { opencodeAdapter } from "../../../src/adapters/opencode/index.ts";
-import type { Decision } from "../../../src/types.ts";
+import type { Decision } from "../../../src/lib/types.ts";
 
 test("emitDecision serializes a deny to the caret OpenCode decision JSON", () => {
   const decision: Decision = { behavior: "deny", feedback: "tighten scope", decidedAt: 1 };

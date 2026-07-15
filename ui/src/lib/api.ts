@@ -11,7 +11,7 @@ import type {
   HealthIdentity,
   PersistedScratch,
   ResolveBody,
-} from "@core/types";
+} from "@core/lib/types";
 
 /** Thrown when the daemon responded with a non-2xx status — distinct from a
  * network failure (the daemon is up, so it's not a connection problem). */

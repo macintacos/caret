@@ -4,7 +4,13 @@
 // resolve one. Each is a thin wrapper over the daemon's HTTP surface, kept plain
 // (no client abstraction) so the call sites read as the requests they are.
 
-import type { ClientReview, Decision, HealthIdentity, PlanInput, ResolveBody } from "./types.ts";
+import type {
+  ClientReview,
+  Decision,
+  HealthIdentity,
+  PlanInput,
+  ResolveBody,
+} from "./lib/types.ts";
 
 /** Parsed /api/health body — the shared HealthIdentity shape (every field
  * absent on a pre-fix daemon). */

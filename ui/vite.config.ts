@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
-import { DEFAULT_PORT } from "../src/constants.ts";
+import { DEFAULT_PORT } from "../src/config/constants.ts";
 
 // A standard multi-asset build: Vite emits dist/index.html plus content-hashed
 // dist/assets/* (JS + CSS). The binary embeds each asset by URL path via a

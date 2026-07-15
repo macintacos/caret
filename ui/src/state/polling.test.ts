@@ -2,7 +2,7 @@ import "../../test-setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { type LogCapture, logCapture } from "../../test-helpers.ts";
 import { flush } from "../lib/log.ts";
-import type { ClientReview } from "@core/types";
+import type { ClientReview } from "@core/lib/types";
 import { createReviewSelection, type SelectionStore, startPolling } from "./polling.svelte.ts";
 
 // Shared URL-routing fetch double (test-helpers.ts): /api/logs POSTs are

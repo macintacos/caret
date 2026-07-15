@@ -22,7 +22,7 @@
 // pending annotation already added to the working copy. A scratch was never
 // added; its line marker reads "Resume", an action, not the "Draft" state.
 
-import type { PersistedScratch } from "@core/types";
+import type { PersistedScratch } from "@core/lib/types";
 
 /** The 1-based, inclusive line anchor a submit produces. */
 export interface CreatedAnchor {

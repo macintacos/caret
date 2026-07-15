@@ -1,6 +1,6 @@
 import "../../test-mount.ts";
 import { describe, expect, test } from "bun:test";
-import type { LineAnnotation } from "@core/types";
+import type { LineAnnotation } from "@core/lib/types";
 import { capture, render } from "../../test-mount.ts";
 import SourceAnnotationThread from "./SourceAnnotationThread.svelte";
 

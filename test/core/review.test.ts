@@ -1,10 +1,10 @@
 import { afterEach, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { expireAbandoned, runReview } from "../../src/review.ts";
-import { setLogLevel } from "../../src/log.ts";
-import { logFile } from "../../src/paths.ts";
+import { setLogLevel } from "../../src/lib/log.ts";
+import { logFile } from "../../src/config/paths.ts";
 import { PLAN_FORMAT_DENY_MESSAGE } from "../../src/plan-format.ts";
-import type { Decision, PlanInput } from "../../src/types.ts";
+import type { Decision, PlanInput } from "../../src/lib/types.ts";
 import { ndjsonRecords } from "../support/ndjson.ts";
 import { setupTempStateDir } from "../support/env.ts";
 

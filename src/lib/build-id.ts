@@ -12,8 +12,8 @@
 // shows). See src/adapters/claude/ for the decision JSON this produces.
 
 import { createHash } from "node:crypto";
-import pkg from "../package.json" with { type: "json" };
-import { loadUiAssets, type UiAssets } from "./ui-assets.ts";
+import pkg from "../../package.json" with { type: "json" };
+import { loadUiAssets, type UiAssets } from "../ui-assets.ts";
 
 /** The shipped version, read from package.json (one of the release-synced
  * manifests) at build time so it stays honest across releases. Hardcoding it was

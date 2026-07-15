@@ -8,7 +8,7 @@ import {
   ensureStateDir,
   reviewsDir,
   stateDir,
-} from "../../src/paths.ts";
+} from "../../src/config/paths.ts";
 import { setupTempStateDir, withEnv } from "../support/env.ts";
 
 // The CARET_* accessor and invalidEnvVars tests live in settings.test.ts with

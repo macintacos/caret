@@ -3,7 +3,7 @@
 // `approveVariants`); this module only picks the variants to render and derives
 // the primary button's label, with a colocated unit test for the label logic.
 
-import type { ApproveVariant, ApproveVariantId } from "@core/types";
+import type { ApproveVariant, ApproveVariantId } from "@core/lib/types";
 
 export type { ApproveVariant, ApproveVariantId };
 

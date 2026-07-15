@@ -2,9 +2,9 @@
 // hook — best-effort, it never blocks or denies.
 
 import { ensureDaemon, prodEnsureDeps } from "../daemon-lifecycle.ts";
-import { logDebug } from "../log.ts";
-import { loadSettings } from "../settings.ts";
-import { errorMessage } from "../types.ts";
+import { logDebug } from "../lib/log.ts";
+import { loadSettings } from "../config/settings.ts";
+import { errorMessage } from "../lib/types.ts";
 
 export async function runPrewarm(): Promise<void> {
   // Best-effort warm start; never blocks or denies (it's a PostToolUse hook).

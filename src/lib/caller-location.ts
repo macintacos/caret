@@ -10,12 +10,12 @@
 
 import { dirname } from "node:path";
 
-// Package root, computed once: this module lives in <root>/src, so the root is
-// the parent of its dir. parseCaller() strips a leading "<root>/" off captured
-// frames to yield repo-relative paths (src/cli.ts, test/log.test.ts) — see
-// EXC-451. import.meta.dir is the directory of THIS file, resolved through Bun's
-// sourcemap remap so the compiled binary agrees.
-export const PKG_ROOT = dirname(import.meta.dir);
+// Package root, computed once: this module lives in <root>/src/lib, so the root
+// is two levels up from its dir. parseCaller() strips a leading "<root>/" off
+// captured frames to yield repo-relative paths (src/cli.ts, test/log.test.ts) —
+// see EXC-451. import.meta.dir is the directory of THIS file, resolved through
+// Bun's sourcemap remap so the compiled binary agrees.
+export const PKG_ROOT = dirname(dirname(import.meta.dir));
 
 // A Bun stack frame, either named or anonymous (verified shapes):
 //   `    at fnName (/abs/path.ts:12:34)`  and  `    at /abs/path.ts:12:34`
@@ -26,7 +26,7 @@ export const FRAME = /^\s*at (?:.* \()?(?:file:\/\/)?(.+):(\d+):\d+\)?$/;
 // The logging machinery's own modules: their frames sit between `new Error()`
 // and the real caller, so the walk skips them by path suffix (depth varies by
 // entry path, so suffix-match beats a fixed skip count).
-const INTERNAL_SUFFIXES = ["src/caller-location.ts", "src/log.ts"];
+const INTERNAL_SUFFIXES = ["src/lib/caller-location.ts", "src/lib/log.ts"];
 
 /** Walk `stack`'s frames (a `new Error().stack` string), skipping the Error
  * header and the logging machinery's own frames, and return the first external

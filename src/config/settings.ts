@@ -20,12 +20,12 @@ import { z } from "zod";
 // EXC-558: the one dev-vs-compiled signal, reused to gate the [dev] table inert
 // in a prod build. Cycle-free: build-id imports only ui-assets/crypto/pkg, and
 // paths.ts (already imported below) itself imports build-id.
-import { isCompiledBinary } from "./build-id.ts";
+import { isCompiledBinary } from "../lib/build-id.ts";
 // Re-exported so existing `from "./settings.ts"` import sites keep working; the
 // literal lives in the node-free constants module so ui/vite.config.ts can read
 // it without pulling in this module's node-only dependency chain (EXC-504).
 import { DEFAULT_PORT, HOOK_TIMEOUT_S, MAX_HEARTBEAT_MS } from "./constants.ts";
-import { logError } from "./log.ts";
+import { logError } from "../lib/log.ts";
 import { configFile } from "./paths.ts";
 
 export { DEFAULT_PORT };

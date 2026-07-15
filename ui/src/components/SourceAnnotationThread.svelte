@@ -12,7 +12,7 @@
   // The framing is a shadcn Card (EXC-765) with a Separator dividing each pair of
   // stacked comments; caret's compact padding is re-applied over the copied source
   // via the :global(.thread) rule below.
-  import type { LineAnnotation } from "@core/types";
+  import type { LineAnnotation } from "@core/lib/types";
   import { Card } from "$lib/components/ui/card/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
   import SourceAnnotationCard from "./SourceAnnotationCard.svelte";

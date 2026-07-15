@@ -13,7 +13,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { claudeAdapter } from "../../../src/adapters/claude/index.ts";
 import { runReconcile } from "../../../src/reconcile.ts";
-import type { ClientReview } from "../../../src/types.ts";
+import type { ClientReview } from "../../../src/lib/types.ts";
 import { setupTempStateDir } from "../../support/env.ts";
 
 const FIXTURE = join(import.meta.dir, "fixtures", "exit-plan-mode-posttooluse-stdin.json");

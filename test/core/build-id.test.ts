@@ -11,7 +11,7 @@ import {
   isCompiledBinary,
   resolveCommit,
   VERSION,
-} from "../../src/build-id.ts";
+} from "../../src/lib/build-id.ts";
 import type { UiAssets } from "../../src/ui-assets.ts";
 
 // A UiAssets handle over real temp files, so buildHash reads bytes through

@@ -54,7 +54,7 @@
     type ClientReview,
     isLegacyAnnotation,
     isLineAnnotation,
-  } from "@core/types";
+  } from "@core/lib/types";
   import SourceComposer from "./SourceComposer.svelte";
   import SourceScratchMarker from "./SourceScratchMarker.svelte";
   import SourceAnnotationThread from "./SourceAnnotationThread.svelte";

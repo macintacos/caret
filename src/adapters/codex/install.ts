@@ -24,7 +24,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
 import { parse as parseToml } from "smol-toml";
-import { readJsonFileSync } from "../../json-file.ts";
+import { readJsonFileSync } from "../../lib/json-file.ts";
 import type { InstallProbe } from "../adapter.ts";
 
 /** The Codex CLI config dir: CODEX_HOME override, else ~/.codex. */

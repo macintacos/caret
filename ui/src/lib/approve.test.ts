@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ApproveVariant } from "@core/types";
+import type { ApproveVariant } from "@core/lib/types";
 import { approveLabel, approveVariants, WIRE_FALLBACK } from "./approve.ts";
 
 describe("approveVariants", () => {

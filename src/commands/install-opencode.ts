@@ -26,7 +26,7 @@ import {
   opencodeConfigDir,
   resolveConfigFile,
 } from "../adapters/opencode/paths.ts";
-import { VERSION } from "../build-id.ts";
+import { VERSION } from "../lib/build-id.ts";
 
 /** Injection seam for tests: override the config dir and packaging so the target
  * can run against a temp dir without resolving the real caret root. */

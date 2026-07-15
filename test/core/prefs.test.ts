@@ -3,7 +3,7 @@ import { statSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type ApproveModeSet, readApproveMode, writeApproveMode } from "../../src/prefs.ts";
+import { type ApproveModeSet, readApproveMode, writeApproveMode } from "../../src/config/prefs.ts";
 import { recordingLog } from "../support/recording-log.ts";
 
 let dir: string;

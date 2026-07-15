@@ -7,7 +7,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { VERSION } from "../../src/build-id.ts";
+import { VERSION } from "../../src/lib/build-id.ts";
 import { httpHealth } from "../../src/daemon-client.ts";
 import { ensureDaemon } from "../../src/daemon-lifecycle.ts";
 import { createServer } from "../../src/daemon.ts";

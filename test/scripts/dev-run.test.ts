@@ -8,8 +8,8 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { NEVER_IDLE_MS } from "../../src/constants.ts";
-import { DEFAULTS } from "../../src/settings.ts";
+import { NEVER_IDLE_MS } from "../../src/config/constants.ts";
+import { DEFAULTS } from "../../src/config/settings.ts";
 import type { DriverOptions } from "../../scripts/tasks/dev/driver.ts";
 import { DAEMON_DIED } from "../../scripts/tasks/dev/dev-env.ts";
 import {

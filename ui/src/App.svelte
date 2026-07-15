@@ -20,7 +20,7 @@
   import { readThemeId, THEMES, type ThemeId } from "./lib/theme.ts";
   import { changeTheme } from "./lib/themeWipe.ts";
   import type { ComposerScratch } from "./lib/diffview/commenting.ts";
-  import type { ApproveVariant, ApproveVariantId, Annotation, PersistedScratch } from "@core/types";
+  import type { ApproveVariant, ApproveVariantId, Annotation, PersistedScratch } from "@core/lib/types";
 
   import * as Alert from "$lib/components/ui/alert/index.js";
   import UnsentCommentsDialog from "./components/UnsentCommentsDialog.svelte";

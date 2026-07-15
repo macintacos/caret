@@ -4,7 +4,7 @@
 // is no parallel comment-state set — and an absent state reads as "pending" (a
 // freshly-created working draft, or an on-disk record predating the field).
 
-import type { ReviewStatus } from "@core/types";
+import type { ReviewStatus } from "@core/lib/types";
 
 /** The display tone of a comment state, keyed to the card's CSS:
  * - "draft"    → an unsubmitted/unresolved working comment (amber, brand-active)

@@ -5,7 +5,7 @@
 // caret.log) share the loop while keeping their distinct loggers; each emits
 // under the "env" step at warn level.
 
-import { invalidEnvVars } from "../settings.ts";
+import { invalidEnvVars } from "../config/settings.ts";
 
 /** Warn once per invalid CARET_* env var through the given sink. The sink emits
  * the message under whichever logger the caller holds. */

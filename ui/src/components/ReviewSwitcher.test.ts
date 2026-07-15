@@ -1,6 +1,6 @@
 import "../../test-mount.ts";
 import { describe, expect, test } from "bun:test";
-import type { ClientReview } from "@core/types";
+import type { ClientReview } from "@core/lib/types";
 import { render } from "../../test-mount.ts";
 import ReviewSwitcher from "./ReviewSwitcher.svelte";
 

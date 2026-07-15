@@ -5,10 +5,10 @@
 
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { readJsonFile } from "./json-file.ts";
-import { ensureStateDir } from "./paths.ts";
-import { type CaretLogger, noopLogger, shortId } from "./log.ts";
-import { currentVersion, isUnresolved, type Review } from "./types.ts";
+import { readJsonFile } from "./lib/json-file.ts";
+import { ensureStateDir } from "./config/paths.ts";
+import { type CaretLogger, noopLogger, shortId } from "./lib/log.ts";
+import { currentVersion, isUnresolved, type Review } from "./lib/types.ts";
 
 export interface Store {
   create(review: Review): Promise<void>;

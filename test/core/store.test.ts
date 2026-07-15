@@ -3,9 +3,9 @@ import { chmodSync, mkdirSync, statSync } from "node:fs";
 import { copyFile, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { reviewsDir, stateDir } from "../../src/paths.ts";
+import { reviewsDir, stateDir } from "../../src/config/paths.ts";
 import { createStore, type Store } from "../../src/store.ts";
-import type { Annotation, Review } from "../../src/types.ts";
+import type { Annotation, Review } from "../../src/lib/types.ts";
 import { recordingLog } from "../support/recording-log.ts";
 import { setupTempStateDir } from "../support/env.ts";
 

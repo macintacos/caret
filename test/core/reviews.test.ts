@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { formatPlanMarkdown } from "../../src/plan-markdown.ts";
 import { newReviewId, routeIncomingPlan } from "../../src/reviews.ts";
 import { createStore, type Store } from "../../src/store.ts";
-import { currentVersion, type PlanInput, type Review } from "../../src/types.ts";
+import { currentVersion, type PlanInput, type Review } from "../../src/lib/types.ts";
 import { recordingLog } from "../support/recording-log.ts";
 
 let dir: string;

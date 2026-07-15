@@ -10,7 +10,7 @@
 
 import { getHealth, listReviews } from "../lib/api.ts";
 import { uiLog } from "../lib/log.ts";
-import type { ClientReview, HealthIdentity } from "@core/types";
+import type { ClientReview, HealthIdentity } from "@core/lib/types";
 import { deepLinkId, setUrl } from "./deepLink.ts";
 
 // Re-check the daemon's identity every Nth successful poll: a same-port

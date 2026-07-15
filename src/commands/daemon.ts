@@ -6,12 +6,12 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, unlinkSync } from "node:fs";
 import { selectAdapter } from "../adapters/index.ts";
-import { currentBuildId, currentCommit } from "../build-id.ts";
+import { currentBuildId, currentCommit } from "../lib/build-id.ts";
 import { isAddrInUse } from "../daemon-lifecycle.ts";
 import { type CaretServer, createServer } from "../daemon.ts";
-import { createDaemonLogger } from "../log.ts";
-import { configFile, daemonLock, reviewsDir, stateDir } from "../paths.ts";
-import { getPort, heartbeatMs, idleMs, settings, watchSettings } from "../settings.ts";
+import { createDaemonLogger } from "../lib/log.ts";
+import { configFile, daemonLock, reviewsDir, stateDir } from "../config/paths.ts";
+import { getPort, heartbeatMs, idleMs, settings, watchSettings } from "../config/settings.ts";
 import { createStore } from "../store.ts";
 import { loadUiAssets } from "../ui-assets.ts";
 import { warnInvalidEnvVars } from "./boot.ts";

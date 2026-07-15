@@ -9,10 +9,10 @@
 // death) becomes a deny Decision — runReview never throws.
 
 import { VANITY_HOST } from "./daemon.ts";
-import { type ErrorContext, logDebug, logError, logInfo, shortId } from "./log.ts";
-import { logFile } from "./paths.ts";
+import { type ErrorContext, logDebug, logError, logInfo, shortId } from "./lib/log.ts";
+import { logFile } from "./config/paths.ts";
 import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "./plan-format.ts";
-import { type Decision, errorMessage, type PlanInput } from "./types.ts";
+import { type Decision, errorMessage, type PlanInput } from "./lib/types.ts";
 
 /** A fail-safe deny the core constructs when an unreviewed plan must never ship.
  * The reason rides in `feedback`; the adapter renders it to the tool's deny wire

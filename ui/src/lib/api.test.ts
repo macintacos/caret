@@ -12,7 +12,7 @@ import {
   resolveReview,
 } from "./api.ts";
 import { flush } from "./log.ts";
-import type { Annotation, FileExcerpt, ResolveBody } from "@core/types";
+import type { Annotation, FileExcerpt, ResolveBody } from "@core/lib/types";
 
 // Shared URL-routing fetch double (test-helpers.ts): /api/logs POSTs are
 // captured; the review/prefs endpoints answer from the per-test `respond` so

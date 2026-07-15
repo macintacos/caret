@@ -14,9 +14,9 @@
 
 import pino from "pino";
 import { callerLocation } from "./caller-location.ts";
-import { ensureStateDir, logFile } from "./paths.ts";
-import { shortId } from "./redact-core.ts";
-import { scrubString, scrubValue } from "./redact.ts";
+import { ensureStateDir, logFile } from "../config/paths.ts";
+import { shortId } from "../redact-core.ts";
+import { scrubString, scrubValue } from "../redact.ts";
 import { errorMessage } from "./types.ts";
 
 // Re-exported so the daemon/hook/store/discovery call sites import their

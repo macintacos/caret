@@ -28,10 +28,10 @@
 // handshake can't be corrupted. The fixture owns the ephemeral XDG_STATE_HOME
 // and tears it down after the test.
 
-import { NEVER_IDLE_MS } from "../../../src/constants.ts";
+import { NEVER_IDLE_MS } from "../../../src/config/constants.ts";
 import { createServer } from "../../../src/daemon.ts";
-import { createDaemonLogger } from "../../../src/log.ts";
-import { prefsFile, reviewsDir } from "../../../src/paths.ts";
+import { createDaemonLogger } from "../../../src/lib/log.ts";
+import { prefsFile, reviewsDir } from "../../../src/config/paths.ts";
 import { createStore } from "../../../src/store.ts";
 import { loadUiAssets } from "../../../src/ui-assets.ts";
 
