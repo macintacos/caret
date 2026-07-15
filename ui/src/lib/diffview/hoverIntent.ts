@@ -45,6 +45,28 @@ export function speed(vel: Vector): number {
   return Math.hypot(vel.x, vel.y);
 }
 
+/** The card's hit region grown toward the anchor so the sliver of empty space
+ * between the token and the card counts as "safe": a pointer resting there keeps
+ * the preview open instead of falling between two targets and dismissing. Only the
+ * edge facing the token moves — a card below the token has its top pulled up to the
+ * token's bottom, a card above has its bottom pushed down to the token's top. A card
+ * that already overlaps the token (or a null anchor) is returned unchanged. This
+ * safe area exists only while the preview is open, since it is derived from the two
+ * live rects. */
+export function bridgeToAnchor(card: Rect, anchor: Rect | null): Rect {
+  if (anchor === null) return card;
+  // Build the result explicitly rather than spreading `card`: in production it is
+  // a live DOMRect whose edges are prototype getters, not own-enumerable props, so
+  // `{ ...card }` would silently drop left/right/bottom and yield a broken rect.
+  if (card.top >= anchor.bottom) {
+    return { left: card.left, top: anchor.bottom, right: card.right, bottom: card.bottom };
+  }
+  if (card.bottom <= anchor.top) {
+    return { left: card.left, top: card.top, right: card.right, bottom: anchor.top };
+  }
+  return card;
+}
+
 export interface HoverIntentOptions {
   /** How far ahead the pointer is projected (ms). Default 250. */
   lookaheadMs?: number;
@@ -107,11 +129,18 @@ export function createHoverIntent(deps: HoverIntentDeps): HoverIntent {
     }
   }
 
+  // The card's live box grown to bridge the gap to the token (the safe area), or
+  // null before the card paints. Both the resting hit-test and the projected-path
+  // test read this, so the sliver between token and card keeps the preview open.
+  function safeRect(): Rect | null {
+    const card = deps.cardRect();
+    return card === null ? null : bridgeToAnchor(card, deps.anchorRect());
+  }
   function onTarget(p: Point): boolean {
-    return pointInRect(p, deps.anchorRect()) || pointInRect(p, deps.cardRect());
+    return pointInRect(p, deps.anchorRect()) || pointInRect(p, safeRect());
   }
   function aiming(p: Point, vel: Vector): boolean {
-    const card = deps.cardRect();
+    const card = safeRect();
     return (
       card !== null && speed(vel) > stopSpeed && pointInRect(project(p, vel, lookaheadMs), card)
     );

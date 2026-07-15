@@ -1,6 +1,7 @@
 import "../../../test-setup.ts";
 import { describe, expect, test } from "bun:test";
 import {
+  bridgeToAnchor,
   createHoverIntent,
   type HoverIntentDeps,
   pointInRect,
@@ -16,7 +17,8 @@ import {
 // exercised deterministically without a browser or a real clock.
 
 // A token near the top; a preview card below it, with a bare gap (y 116..130)
-// between them — the region the fixed 140ms timer used to dismiss mid-crossing.
+// between them. The safe-area bridge grows the card up to the token's bottom so a
+// rest in that sliver keeps the preview open, not just a pass-through (EXC-799).
 const TOKEN: Rect = { left: 100, top: 100, right: 160, bottom: 116 };
 const CARD: Rect = { left: 100, top: 130, right: 340, bottom: 280 };
 
@@ -88,6 +90,34 @@ describe("geometry", () => {
   });
 });
 
+describe("safe-area bridge (bridgeToAnchor)", () => {
+  test("a card below the token grows up to the token's bottom, closing the gap", () => {
+    expect(bridgeToAnchor(CARD, TOKEN)).toEqual({ left: 100, top: 116, right: 340, bottom: 280 });
+  });
+
+  test("a card above the token grows down to the token's top", () => {
+    const above: Rect = { left: 100, top: 40, right: 340, bottom: 90 };
+    expect(bridgeToAnchor(above, TOKEN)).toEqual({ left: 100, top: 40, right: 340, bottom: 100 });
+  });
+
+  test("a card overlapping the token (no gap) is returned unchanged", () => {
+    const overlap: Rect = { left: 100, top: 110, right: 340, bottom: 280 };
+    expect(bridgeToAnchor(overlap, TOKEN)).toEqual(overlap);
+  });
+
+  test("a null anchor leaves the card unchanged", () => {
+    expect(bridgeToAnchor(CARD, null)).toEqual(CARD);
+  });
+
+  test("keeps all four edges when the card is a live DOMRect, not a plain object", () => {
+    // Production feeds getBoundingClientRect()'s DOMRect, whose edges are prototype
+    // getters (not own-enumerable), so a `{ ...card }` spread silently drops
+    // left/right/bottom and the hit-test collapses. This guards that regression.
+    const card = new DOMRect(100, 130, 240, 150); // left 100, top 130, right 340, bottom 280
+    expect(bridgeToAnchor(card, TOKEN)).toEqual({ left: 100, top: 116, right: 340, bottom: 280 });
+  });
+});
+
 describe("keeping the preview open", () => {
   test("aiming across the gap and resting on the card never dismisses", () => {
     const { hi, clock, box } = build();
@@ -118,18 +148,29 @@ describe("keeping the preview open", () => {
     clock.advanceTo(1000);
     expect(box.dismissed).toBe(0);
   });
-});
 
-describe("dismissing the preview", () => {
-  test("stopping in the gap after aiming dismisses one idle-window later", () => {
+  test("resting in the gap between token and card keeps it open (the safe bridge)", () => {
     const { hi, clock, box } = build();
     hi.seed({ x: 130, y: 108 }, 0);
     clock.advanceTo(100);
-    hi.sample({ x: 150, y: 124 }, 100); // in the gap, aiming into the card -> idle armed at 200
+    hi.sample({ x: 130, y: 123 }, 100); // parked in the sliver (y 116..130), on the bridge
+    clock.advanceTo(1200); // well past idle and grace — the bridge holds it
+    expect(box.dismissed).toBe(0);
+  });
+});
+
+describe("dismissing the preview", () => {
+  test("aiming toward the card from outside, then stopping short, dismisses one idle-window later", () => {
+    const { hi, clock, box } = build();
+    hi.seed({ x: 130, y: 108 }, 0);
+    clock.advanceTo(50);
+    hi.sample({ x: 70, y: 200 }, 50); // off the left flank of the card (and its bridge)
+    clock.advanceTo(100);
+    hi.sample({ x: 90, y: 200 }, 100); // still left of it but moving right into it -> idle armed at 200
     clock.advanceTo(199);
     expect(box.dismissed).toBe(0); // still within the idle window
     clock.advanceTo(200);
-    expect(box.dismissed).toBe(1); // stopped outside the card -> dismissed
+    expect(box.dismissed).toBe(1); // stopped short, outside every target -> dismissed
   });
 
   test("a decisive move away dismisses a grace-window after leaving, even while still moving", () => {

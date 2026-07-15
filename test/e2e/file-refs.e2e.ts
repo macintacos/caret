@@ -152,9 +152,10 @@ test("the preview stays open while the pointer rests on the card, then dismisses
     await expect(preview).toBeVisible();
 
     // Rest the pointer on the card itself, then wait well past IDLE_MS (100ms).
-    const box = await preview.boundingBox();
-    if (box === null) throw new Error("preview has no bounding box");
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    // hover() moves to the card's centre only once it is stable — its actionability
+    // check waits out the pop-in animation (EXC-799), so the pointer lands on the
+    // settled card, not a frame mid-scale.
+    await preview.hover();
     // A fixed wait is the deliberate exception here: this is a persistence check
     // (the card must NOT disappear across the idle window), which a web-first
     // auto-retrying assertion cannot express — there is no state to poll toward.
@@ -164,6 +165,38 @@ test("the preview stays open while the pointer rests on the card, then dismisses
     // A stop far from the card is conclusive — the preview dismisses.
     await page.mouse.move(0, 0);
     await expect(preview).toHaveCount(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("pressing Escape dismisses the open preview", async ({ daemon, page }) => {
+  // Escape is the keyboard escape hatch out of the hover preview (EXC-799): while it
+  // is open, one Escape closes it (and cancels the tracker's pending grace/idle
+  // timers). The pointer stays parked on the token, so the tracker never dismisses
+  // on its own — only Escape does.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
+    });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+    await page.locator("[data-file-ref]").first().hover();
+
+    const preview = page.locator("[data-file-preview]");
+    await expect(preview).toBeVisible();
+
+    // Retry Escape until it lands: right after the view gains focus, Safe Mode
+    // (safeMode.ts) swallows keystrokes for a short window, so a single immediate
+    // press can be eaten. toPass polls the web-first assertion — no fixed sleep.
+    await expect(async () => {
+      await page.keyboard.press("Escape");
+      await expect(preview).toHaveCount(0, { timeout: 500 });
+    }).toPass({ timeout: 5_000 });
   } finally {
     await proj.cleanup();
   }

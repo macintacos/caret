@@ -104,9 +104,19 @@
   // Fixed (viewport) placement: prefer above the token, flipping below when the
   // card wouldn't fit. Seeded offscreen so it never flashes at the wrong spot
   // before the effect measures the content height and positions it.
-  let placement = $state<{ left: number; top?: number; bottom?: number }>({
+  let placement = $state<{
+    left: number;
+    top?: number;
+    bottom?: number;
+    // Whether the card landed above the token (else below) and where the token sits
+    // across the card — together they origin the pop-in at the filename.
+    above: boolean;
+    originX: number;
+  }>({
     left: -9999,
     top: -9999,
+    above: false,
+    originX: 0,
   });
   // Gates the fade-in: the card stays hidden (offscreen, opacity 0) until its
   // FINAL content is measured and placed, then reveals once. Without this the card
@@ -124,10 +134,13 @@
     if (node === undefined) return;
     const rect = node.getBoundingClientRect();
     const left = Math.max(MARGIN, Math.min(anchor.left, window.innerWidth - rect.width - MARGIN));
-    placement =
-      anchor.top > rect.height + GAP
-        ? { left, bottom: window.innerHeight - anchor.top + GAP }
-        : { left, top: anchor.bottom + GAP };
+    const above = anchor.top > rect.height + GAP;
+    // The token's horizontal centre as an offset within the card, so the pop-in
+    // origins at the filename (clamped to the card when the card was shifted to fit).
+    const originX = Math.max(0, Math.min(rect.width, anchor.left + anchor.width / 2 - left));
+    placement = above
+      ? { left, bottom: window.innerHeight - anchor.top + GAP, above, originX }
+      : { left, top: anchor.bottom + GAP, above, originX };
     shown = true;
   });
 
@@ -154,11 +167,13 @@
   bind:this={el}
   class="file-preview"
   class:fp-shown={shown}
+  class:fp-above={placement.above}
   data-file-preview
   role="tooltip"
   style:left="{placement.left}px"
   style:top={placement.top === undefined ? null : `${placement.top}px`}
   style:bottom={placement.bottom === undefined ? null : `${placement.bottom}px`}
+  style:--fp-origin-x="{placement.originX}px"
 >
   <div class="fp-header">
     <span class="fp-badge">Preview</span>
@@ -218,7 +233,15 @@
   }
   .file-preview.fp-shown {
     opacity: 1;
-    animation: fp-in var(--dur-fast) var(--ease-out);
+    animation: fp-pop var(--dur-fast) var(--ease-out);
+    /* Spring from where the card meets the token: x tracks the filename (--fp-origin-x),
+       y sits on the card's near edge — top by default (card below the token), flipped
+       to bottom when it landed above — so it reads as popping off the name, not scaling
+       from its own centre. */
+    transform-origin: var(--fp-origin-x, 50%) top;
+  }
+  .file-preview.fp-above.fp-shown {
+    transform-origin: var(--fp-origin-x, 50%) bottom;
   }
   /* Path on the left, line range pushed to the right — the same reading order as
      a "path:line" reference. */
@@ -343,14 +366,14 @@
     color: var(--ink-soft);
     font-size: var(--text-2xs);
   }
-  @keyframes fp-in {
+  @keyframes fp-pop {
     from {
       opacity: 0;
-      transform: translateY(2px);
+      transform: scale(0.96);
     }
     to {
       opacity: 1;
-      transform: translateY(0);
+      transform: scale(1);
     }
   }
 </style>

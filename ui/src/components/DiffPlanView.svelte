@@ -309,8 +309,18 @@
       if (raf === 0) raf = requestAnimationFrame(flush);
     };
     window.addEventListener("pointermove", onMove, { passive: true });
+    // Escape dismisses the open preview at once, and destroys the tracker up front
+    // so its pending grace/idle timers can't fire after the card is gone (EXC-799).
+    // The teardown below also destroys — destroy() is idempotent.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      intent.destroy();
+      hoveredFileRef = undefined;
+    };
+    window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("keydown", onKey);
       cancelAnimationFrame(raf);
       intent.destroy();
     };
