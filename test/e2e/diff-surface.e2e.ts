@@ -1785,6 +1785,37 @@ test("editing a saved comment focuses the editor so the caret tracks typing", as
   await expect(card.locator(".cm-content")).toHaveText("aaaaaaaaXY");
 });
 
+test("a rendered inline comment shows list markers (ordered and unordered)", async ({
+  daemon,
+  page,
+}) => {
+  // Regression: Tailwind Preflight resets lists to list-style: none, which
+  // stripped the bullets/numbers from rendered-markdown comments. The .comment
+  // list rules restore disc/decimal — and this only shows up with the full
+  // stylesheet, so it is verified in the browser rather than under happy-dom.
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    annotations: [
+      {
+        id: "ann-list",
+        startLine: 7,
+        endLine: 8,
+        comment: "Intro\n\n- one\n- two\n\n1. first\n2. second",
+      },
+    ],
+  });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  const card = page.locator("[data-annotation-card]");
+  await card.locator(".chip").click();
+  await expect(card.locator(".body")).toBeVisible();
+
+  const ul = await card.locator(".comment ul").evaluate((el) => getComputedStyle(el).listStyleType);
+  const ol = await card.locator(".comment ol").evaluate((el) => getComputedStyle(el).listStyleType);
+  expect(ul).toBe("disc");
+  expect(ol).toBe("decimal");
+});
+
 // ----- Interaction regressions -----
 
 test("clicking a line near the top opens its composer without jumping the scroll", async ({

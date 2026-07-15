@@ -396,7 +396,10 @@
   .body {
     overflow: hidden;
     min-height: 0;
-    padding: 0 0.5rem;
+    /* A touch more left inset than the header chip so the rendered comment reads
+       as an indented block under its line reference rather than crowding the
+       card's edge. */
+    padding: 0 0.6rem 0 0.9rem;
   }
   .card.expanded .body {
     /* The bottom breathing room folds in only while open, so a collapsed card's
@@ -455,6 +458,16 @@
   .comment :global(ol) {
     margin: 0 0 0.5em;
     padding-left: 1.3em;
+  }
+  /* Tailwind Preflight resets lists to list-style: none, which drops the
+     markers; restore them so ordered and unordered lists read as lists. The
+     markers sit in the padding-left reserved above (list-style-position: outside
+     is the default). */
+  .comment :global(ul) {
+    list-style: disc;
+  }
+  .comment :global(ol) {
+    list-style: decimal;
   }
   .comment :global(li) {
     margin: 0.1em 0;
