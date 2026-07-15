@@ -26,7 +26,9 @@
 // test/opencode/.
 
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Hooks, type Plugin, tool } from "@opencode-ai/plugin";
 
@@ -221,11 +223,16 @@ function showToast(client: ToastClient, body: ToastBody): void {
 
 // --- version-check toast (EXC-794) -----------------------------------------
 
-/** caret's latest-release endpoint. Unauthenticated GitHub API (60 req/hr/IP is
- * ample for one check per OpenCode start, so no cache). */
+/** caret's latest-release endpoint. Unauthenticated GitHub API — throttled to at
+ * most once a day (see UPDATE_CHECK_INTERVAL_MS), so it never approaches the
+ * 60 req/hr/IP limit. */
 const LATEST_RELEASE_URL = "https://api.github.com/repos/macintacos/caret/releases/latest";
 /** How long the update nudge stays up — long enough to read the link. */
-const UPDATE_TOAST_MS = 12_000;
+const UPDATE_TOAST_MS = 5_000;
+/** Minimum gap between update checks. The nudge is a convenience, not a security
+ * fix, so checking once a day is plenty — and it keeps the network hit off every
+ * OpenCode start. The last-check time is persisted in a small throttle file. */
+const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60_000;
 
 /** Semver triple `[major, minor, patch]`, or null when `v` is not `X.Y.Z` (an
  * optional leading `v` is stripped; trailing prerelease/build metadata ignored). */
@@ -286,21 +293,78 @@ type FetchLike = (
   init?: { headers?: Record<string, string> },
 ) => Promise<{ ok: boolean; json: () => Promise<unknown> }>;
 
+/** True when the last check is old enough (or absent) to check again. Pure so the
+ * 24h throttle is unit-testable without a clock or the filesystem. */
+export function shouldCheckForUpdate(lastCheckMs: number | null, nowMs: number): boolean {
+  return lastCheckMs === null || nowMs - lastCheckMs >= UPDATE_CHECK_INTERVAL_MS;
+}
+
+/** Absolute path of the throttle file holding the last-check epoch-ms. Lives under
+ * caret's state dir ($XDG_STATE_HOME/caret or ~/.local/state/caret), matching where
+ * caret keeps its other small machine-global markers (prefs.json). Pure so the
+ * location is testable; the plugin stays self-contained and cannot import
+ * src/paths.ts, so the convention is mirrored here by hand. */
+export function updateCheckCachePath(
+  env: Record<string, string | undefined>,
+  home: string,
+): string {
+  const base = env.XDG_STATE_HOME?.trim() || `${home}/.local/state`;
+  return `${base}/caret/opencode-update-check`;
+}
+
+/** The throttle seam: read the last-check epoch-ms (null when never / unreadable),
+ * and persist a new one. Injected so realUpdateChecker's throttle is testable
+ * without touching disk. */
+type UpdateCache = { read: () => number | null; write: (epochMs: number) => void };
+
+/** File-backed UpdateCache. Read tolerates a missing or garbage file (→ null, so
+ * the check runs); write is best-effort — a failure just means we check again next
+ * start rather than crashing plugin load. */
+function fileUpdateCache(path: string): UpdateCache {
+  return {
+    read: () => {
+      try {
+        const n = Number.parseInt(readFileSync(path, "utf-8").trim(), 10);
+        return Number.isFinite(n) ? n : null;
+      } catch {
+        return null;
+      }
+    },
+    write: (epochMs) => {
+      try {
+        mkdirSync(dirname(path), { recursive: true });
+        writeFileSync(path, String(epochMs));
+      } catch {
+        // best-effort — a throttle-file write must never disrupt load.
+      }
+    },
+  };
+}
+
 /** Best-effort startup update check: fetch caret's latest GitHub release and, if it
- * is newer than this plugin's version, toast a nudge with a link. Never throws and
- * never blocks plugin load — a network error, a non-200, an unusable body, or the
- * `CARET_OPENCODE_NO_UPDATE_CHECK` opt-out all resolve silently. `fetchImpl`/`url`
- * are injected so it is unit-testable without the network. */
+ * is newer than this plugin's version, toast a nudge with a link. Throttled to at
+ * most once a day via the injected cache — the check time is stamped up front, so
+ * even an offline/failed start backs off a full day rather than hitting the network
+ * on every restart. Never throws and never blocks plugin load — a network error, a
+ * non-200, an unusable body, the throttle, or the `CARET_OPENCODE_NO_UPDATE_CHECK`
+ * opt-out all resolve silently. `fetchImpl`/`url`/`now`/`cache` are injected so it is
+ * unit-testable without the network or the filesystem. */
 export async function realUpdateChecker(
   client: ToastClient,
   opts: {
     currentVersion: string;
     env: Record<string, string | undefined>;
     fetchImpl: FetchLike;
+    now: () => number;
+    cache: UpdateCache;
     url?: string;
   },
 ): Promise<void> {
   if (opts.env.CARET_OPENCODE_NO_UPDATE_CHECK) return;
+  const nowMs = opts.now();
+  if (!shouldCheckForUpdate(opts.cache.read(), nowMs)) return;
+  // Stamp the check up front so a failed/offline check still backs off a day.
+  opts.cache.write(nowMs);
   try {
     const res = await opts.fetchImpl(opts.url ?? LATEST_RELEASE_URL, {
       headers: { "user-agent": "caret-opencode-plugin", accept: "application/vnd.github+json" },
@@ -563,6 +627,8 @@ const CaretPlugin: Plugin = createCaretPlugin({
       }),
       env: process.env,
       fetchImpl: fetch,
+      now: () => Date.now(),
+      cache: fileUpdateCache(updateCheckCachePath(process.env, homedir())),
     });
   },
 });

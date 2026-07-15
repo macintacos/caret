@@ -14,6 +14,8 @@ import {
   realUpdateChecker,
   resolveCaretBin,
   resolveCaretVersion,
+  shouldCheckForUpdate,
+  updateCheckCachePath,
   updateToastBody,
 } from "../../opencode/caret.plugin.ts";
 
@@ -77,6 +79,7 @@ test("updateToastBody returns a nudge when behind, null when current", () => {
   expect(body?.message).toContain("0.4.0");
   expect(body?.message).toContain("0.3.0");
   expect(body?.message).toContain("https://x");
+  expect(body?.duration).toBe(5_000);
   expect(updateToastBody("0.4.0", { version: "0.4.0", url: "https://x" })).toBeNull();
 });
 
@@ -140,21 +143,71 @@ test("resolveCaretBin: env override wins, then marker, then package-relative bin
   );
 });
 
+// --- shouldCheckForUpdate (24h throttle, pure) ---
+
+const DAY_MS = 24 * 60 * 60_000;
+const NOW = 1_700_000_000_000;
+const fixedNow = () => NOW;
+
+test("shouldCheckForUpdate throttles to at most once a day", () => {
+  expect(shouldCheckForUpdate(null, NOW)).toBe(true); // never checked
+  expect(shouldCheckForUpdate(NOW - 60_000, NOW)).toBe(false); // a minute ago
+  expect(shouldCheckForUpdate(NOW - 23 * 60 * 60_000, NOW)).toBe(false); // 23h ago
+  expect(shouldCheckForUpdate(NOW - DAY_MS, NOW)).toBe(true); // exactly a day ago
+  expect(shouldCheckForUpdate(NOW - 2 * DAY_MS, NOW)).toBe(true); // long ago
+});
+
+// --- updateCheckCachePath (throttle-file location, pure) ---
+
+test("updateCheckCachePath honors XDG_STATE_HOME, else ~/.local/state", () => {
+  expect(updateCheckCachePath({ XDG_STATE_HOME: "/xdg/state" }, "/home/me")).toBe(
+    "/xdg/state/caret/opencode-update-check",
+  );
+  expect(updateCheckCachePath({}, "/home/me")).toBe(
+    "/home/me/.local/state/caret/opencode-update-check",
+  );
+});
+
 // --- realUpdateChecker (best-effort) ---
 
 function jsonResponse(body: unknown, ok = true): Response {
   return { ok, json: async () => body } as unknown as Response;
 }
 
-test("realUpdateChecker toasts when a newer release exists", async () => {
+// An in-memory throttle cache + fixed clock so these tests never touch disk.
+// `last` seeds the stored last-check time (null = never checked); `writes` records
+// every timestamp realUpdateChecker stamps.
+function memCache(last: number | null = null): {
+  cache: { read: () => number | null; write: (t: number) => void };
+  writes: number[];
+} {
+  const store: { value: number | null } = { value: last };
+  const writes: number[] = [];
+  return {
+    cache: {
+      read: () => store.value,
+      write: (t: number) => {
+        store.value = t;
+        writes.push(t);
+      },
+    },
+    writes,
+  };
+}
+
+test("realUpdateChecker toasts when a newer release exists, and stamps the check", async () => {
   const { client, toasts } = recordingClient();
+  const { cache, writes } = memCache(null);
   await realUpdateChecker(client, {
     currentVersion: "0.3.0",
     env: {},
     fetchImpl: async () => jsonResponse({ tag_name: "v0.4.0", html_url: "https://x/0.4.0" }),
+    now: fixedNow,
+    cache,
   });
   expect(toasts).toHaveLength(1);
   expect(toasts[0]?.message).toContain("0.4.0");
+  expect(writes).toEqual([NOW]);
 });
 
 test("realUpdateChecker is silent when already current", async () => {
@@ -163,6 +216,8 @@ test("realUpdateChecker is silent when already current", async () => {
     currentVersion: "0.4.0",
     env: {},
     fetchImpl: async () => jsonResponse({ tag_name: "v0.4.0", html_url: "https://x" }),
+    now: fixedNow,
+    cache: memCache(null).cache,
   });
   expect(toasts).toHaveLength(0);
 });
@@ -173,6 +228,8 @@ test("realUpdateChecker is silent on a non-200 or a fetch error", async () => {
     currentVersion: "0.3.0",
     env: {},
     fetchImpl: async () => jsonResponse({ tag_name: "v0.4.0" }, false),
+    now: fixedNow,
+    cache: memCache(null).cache,
   });
   await realUpdateChecker(client, {
     currentVersion: "0.3.0",
@@ -180,12 +237,15 @@ test("realUpdateChecker is silent on a non-200 or a fetch error", async () => {
     fetchImpl: async () => {
       throw new Error("offline");
     },
+    now: fixedNow,
+    cache: memCache(null).cache,
   });
   expect(toasts).toHaveLength(0);
 });
 
-test("realUpdateChecker respects the CARET_OPENCODE_NO_UPDATE_CHECK opt-out", async () => {
+test("realUpdateChecker respects the CARET_OPENCODE_NO_UPDATE_CHECK opt-out (and never stamps)", async () => {
   const { client, toasts } = recordingClient();
+  const { cache, writes } = memCache(null);
   let fetched = false;
   await realUpdateChecker(client, {
     currentVersion: "0.3.0",
@@ -194,9 +254,58 @@ test("realUpdateChecker respects the CARET_OPENCODE_NO_UPDATE_CHECK opt-out", as
       fetched = true;
       return jsonResponse({ tag_name: "v0.4.0" });
     },
+    now: fixedNow,
+    cache,
   });
   expect(fetched).toBe(false);
   expect(toasts).toHaveLength(0);
+  expect(writes).toEqual([]);
+});
+
+test("realUpdateChecker skips the network when it checked within the last day", async () => {
+  const { client, toasts } = recordingClient();
+  let fetched = false;
+  await realUpdateChecker(client, {
+    currentVersion: "0.3.0",
+    env: {},
+    fetchImpl: async () => {
+      fetched = true;
+      return jsonResponse({ tag_name: "v0.4.0", html_url: "https://x" });
+    },
+    now: fixedNow,
+    cache: memCache(NOW - 60_000).cache, // checked a minute ago
+  });
+  expect(fetched).toBe(false);
+  expect(toasts).toHaveLength(0);
+});
+
+test("realUpdateChecker checks again once a day has passed", async () => {
+  const { client, toasts } = recordingClient();
+  const { cache, writes } = memCache(NOW - 25 * 60 * 60_000); // 25h ago
+  await realUpdateChecker(client, {
+    currentVersion: "0.3.0",
+    env: {},
+    fetchImpl: async () => jsonResponse({ tag_name: "v0.4.0", html_url: "https://x/0.4.0" }),
+    now: fixedNow,
+    cache,
+  });
+  expect(toasts).toHaveLength(1);
+  expect(writes).toEqual([NOW]);
+});
+
+test("realUpdateChecker stamps the check even when the fetch fails, so it backs off a day", async () => {
+  const { client } = recordingClient();
+  const { cache, writes } = memCache(null);
+  await realUpdateChecker(client, {
+    currentVersion: "0.3.0",
+    env: {},
+    fetchImpl: async () => {
+      throw new Error("offline");
+    },
+    now: fixedNow,
+    cache,
+  });
+  expect(writes).toEqual([NOW]);
 });
 
 // --- checkUpdate wiring ---
