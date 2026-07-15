@@ -1,22 +1,20 @@
 // Shared OpenCode config-dir + packaging-path resolution for caret's OpenCode
-// integration. The install probe (install.ts) and the deploy/uninstall writer
-// (deploy.ts, via the install subcommand) resolve WHERE caret's plugin and command
-// files live through this single module, so the reader and the writer can never
-// disagree about a path.
+// integration. caret installs into OpenCode as a first-class `plugin` array entry
+// (@macintacos/caret) plus its command files; the install writer (install-opencode)
+// and the discovery probe (install.ts) resolve WHERE those live through this single
+// module, so the reader and the writer can never disagree about a path.
 
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-/** caret's deployed OpenCode plugin filename. Deployed as TypeScript — OpenCode
- * loads `.ts` plugins directly (its loader scans `{plugin,plugins}/*.{ts,js}`). */
-export const PLUGIN_FILENAME = "caret.ts";
+/** caret's npm package — the entry users add to OpenCode's `plugin` array. Its
+ * package entrypoint (package.json `exports`) IS the OpenCode plugin, so a bare
+ * specifier loads it; OpenCode installs it and its deps into its own cache. */
+export const CARET_PACKAGE = "@macintacos/caret";
 
-/** OpenCode's auto-loaded plugin dir name. OpenCode scans both `plugins/` and
- * (for backwards compatibility) `plugin/`; caret uses the canonical plural form. */
-export const PLUGIN_DIRNAME = "plugins";
-
-/** OpenCode's command dir name. OpenCode scans both `commands/` and
- * (for backwards compatibility) `command/`; caret uses the canonical plural form. */
+/** OpenCode's command dir name. OpenCode scans both `commands/` and (for backwards
+ * compatibility) `command/`; caret uses the canonical plural form. */
 export const COMMAND_DIRNAME = "commands";
 
 /** caret namespaces its OpenCode commands so they read as caret's, not built-ins.
@@ -31,34 +29,11 @@ export function namespacedCommandFilename(sourceName: string): string {
   return `${COMMAND_NAMESPACE}${sourceName}`;
 }
 
-/** Config filenames OpenCode may use in its config dir. The install probe scans
- * EVERY one for a manual caret plugin entry (see `install.ts`), so order doesn't
- * mask a later file. `config.json` is the global-dir form seen in practice;
- * `opencode.json[c]` are the documented forms. */
-export const CONFIG_FILENAMES = ["config.json", "opencode.json", "opencode.jsonc"] as const;
-
-/** caret's deployed plugin imports `@opencode-ai/plugin` (for `tool.schema`'s zod;
- * `tool()` itself is identity). OpenCode loads a local plugin file but does NOT
- * bundle that import for it — for a local plugin using an npm package it expects a
- * `package.json` in the config dir and runs `bun install` at startup to provide it.
- * caret writes that manifest at install time (see `deploy.ts`). */
-export const OPENCODE_PLUGIN_DEP = "@opencode-ai/plugin";
-
-/** The version caret pins the deployed plugin's `@opencode-ai/plugin` dependency to.
- * Pinned to an OLDER, already-published version on purpose: OpenCode's startup
- * installer resolves against a date-capped snapshot, so its own current version
- * (e.g. 1.17.x) can fail to resolve ("No matching version … with a date before …").
- * An older exact pin sidesteps that. Keep ≈ the devDependency in package.json;
- * `tool`/`tool.schema` and the hook names caret uses are stable across these. */
-export const OPENCODE_PLUGIN_DEP_VERSION = "1.16.2";
-
-/** The package.json OpenCode reads to install a local plugin's npm dependencies. */
-export const PACKAGE_JSON_FILENAME = "package.json";
-
-/** Absolute path to the config dir's package.json (caret's dependency manifest). */
-export function packageJsonPath(configDir: string): string {
-  return join(configDir, PACKAGE_JSON_FILENAME);
-}
+/** Config filenames OpenCode may use in its config dir, in the order caret prefers
+ * to WRITE (jsonc first — OpenCode's documented primary form, edited in place so a
+ * commented config survives; then json; then the legacy global `config.json`). The
+ * discovery probe scans every one, so order doesn't mask a later file for reads. */
+export const CONFIG_FILENAMES = ["opencode.jsonc", "opencode.json", "config.json"] as const;
 
 /** The OpenCode config dir: OPENCODE_CONFIG_DIR override, else
  * $XDG_CONFIG_HOME/opencode, else ~/.config/opencode. */
@@ -69,12 +44,27 @@ export function opencodeConfigDir(): string {
   return join(xdg || join(homedir(), ".config"), "opencode");
 }
 
-/** Absolute path to caret's deployed plugin file under a config dir. */
-export function pluginFilePath(configDir: string): string {
-  return join(configDir, PLUGIN_DIRNAME, PLUGIN_FILENAME);
+/** The config file caret edits to add/remove its `plugin` array entry: the first
+ * existing candidate (jsonc preferred), else `opencode.json` to create when the dir
+ * has no config yet. */
+export function resolveConfigFile(configDir: string): string {
+  for (const name of CONFIG_FILENAMES) {
+    const p = join(configDir, name);
+    if (existsSync(p)) return p;
+  }
+  return join(configDir, "opencode.json");
 }
 
 /** Absolute path to OpenCode's command dir under a config dir. */
 export function commandDir(configDir: string): string {
   return join(configDir, COMMAND_DIRNAME);
+}
+
+/** OpenCode's plugin cache dir for caret's package — where OpenCode `bun install`s
+ * an array plugin. Respects XDG_CACHE_HOME, else ~/.cache. The discovery probe reads
+ * caret's installed version from the package.json here. */
+export function opencodeCachePackageDir(pkg: string = CARET_PACKAGE): string {
+  const xdg = process.env.XDG_CACHE_HOME?.trim();
+  const base = xdg || join(homedir(), ".cache");
+  return join(base, "opencode", "node_modules", pkg);
 }

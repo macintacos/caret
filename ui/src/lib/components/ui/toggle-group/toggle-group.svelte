@@ -32,10 +32,20 @@
 		...restProps
 	}: ToggleGroupPrimitive.RootProps & ToggleVariants & { spacing?: number } = $props();
 
+	// Getters, not snapshots: the item reads ctx.variant/size/spacing in reactive
+	// template positions, so passing the raw props would freeze the context at its
+	// initial value (the state_referenced_locally warning) and items would never
+	// track a parent prop change. Getters keep the context live.
 	setToggleGroupCtx({
-		variant,
-		size,
-		spacing,
+		get variant() {
+			return variant;
+		},
+		get size() {
+			return size;
+		},
+		get spacing() {
+			return spacing;
+		},
 	});
 </script>
 

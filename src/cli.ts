@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // caret hook CLI. Subcommands: daemon | prewarm | review | reconcile | redact |
-// discovery | install-opencode.
+// discovery | install.
 //
 // This file is only the composition point: it assembles the Commander tree and
 // threads each subcommand's parsed options into its run function (the actions in
@@ -18,7 +18,7 @@ import { fatalDeny } from "./adapters/index.ts";
 import { VERSION } from "./build-id.ts";
 import { runDaemon } from "./commands/daemon.ts";
 import { runDiscoverySubcommand } from "./commands/discovery.ts";
-import { runInstallOpencodeSubcommand } from "./commands/install-opencode.ts";
+import { runInstallSubcommand } from "./commands/install.ts";
 import { runPrewarm } from "./commands/prewarm.ts";
 import { runReconcileSubcommand } from "./commands/reconcile.ts";
 import { runRedactSubcommand } from "./commands/redact.ts";
@@ -34,7 +34,7 @@ import { createProgram, runProgram } from "./program.ts";
 function buildProgram(): Command {
   const program = createProgram(
     "caret",
-    "caret hook CLI: daemon | prewarm | review | reconcile | redact | discovery | install-opencode",
+    "caret hook CLI: daemon | prewarm | review | reconcile | redact | discovery | install",
   ).version(VERSION);
 
   program
@@ -72,12 +72,17 @@ function buildProgram(): Command {
     .action((opts) => runDiscoverySubcommand({ json: opts.json ?? false }));
 
   program
-    .command("install-opencode")
-    .description("install (or with --uninstall, remove) caret's OpenCode plugin + commands")
-    .option("--uninstall", "remove caret's OpenCode files instead of installing them")
+    .command("install")
+    .description("install caret into a coding agent (--target opencode,claude)")
+    .requiredOption(
+      "--target <targets>",
+      "comma-separated agents to install into: opencode, claude, or opencode,claude",
+    )
+    .option("--uninstall", "remove caret from the target(s) instead of installing")
     .option("--dry-run", "print what would change without writing")
     .action((opts) =>
-      runInstallOpencodeSubcommand({
+      runInstallSubcommand({
+        target: opts.target,
         uninstall: opts.uninstall ?? false,
         dryRun: opts.dryRun ?? false,
       }),

@@ -14,10 +14,12 @@
         "@commander-js/extra-typings": "^15.0.0",
         "@internationalized/date": "^3.12.2",
         "@lezer/highlight": "^1.2.3",
+        "@opencode-ai/plugin": "^1.16.2",
         "@pierre/diffs": "1.2.7",
         "bits-ui": "^2.18.1",
         "clsx": "^2.1.1",
         "commander": "^15.0.0",
+        "jsonc-parser": "^3.3.1",
         "marked": "^18.0.4",
         "pino": "^10.3.1",
         "prettier": "3.8.3",
@@ -31,7 +33,6 @@
       },
       "devDependencies": {
         "@happy-dom/global-registrator": "^20.9.0",
-        "@opencode-ai/plugin": "^1.16.2",
         "@playwright/test": "^1.60.0",
         "@sveltejs/vite-plugin-svelte": "^7.1.2",
         "@tailwindcss/vite": "^4.3.2",
@@ -427,6 +428,8 @@
     "jiti": ["jiti@2.7.0", "", { "bin": { "jiti": "lib/jiti-cli.mjs" } }, "sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ=="],
 
     "joycon": ["joycon@3.1.1", "", {}, "sha512-34wB/Y7MW7bzjKRjUKTa46I2Z7eV62Rkhva+KkopW7Qvv/OSWBqvkSY7vusOPrNuZcUG3tApvdVgNB8POj3SPw=="],
+
+    "jsonc-parser": ["jsonc-parser@3.3.1", "", {}, "sha512-HUgH65KyejrUFPvHFPbqOY0rsFip3Bo5wb4ngvdi1EpCYWUQDC5V+Y7mZws+DLkr4M//zQJoanu1SP+87Dv1oQ=="],
 
     "kubernetes-types": ["kubernetes-types@1.30.0", "", {}, "sha512-Dew1okvhM/SQcIa2rcgujNndZwU8VnSapDgdxlYoB84ZlpAD43U6KLAFqYo17ykSFGHNPrg0qry0bP+GJd9v7Q=="],
 

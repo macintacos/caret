@@ -22,8 +22,24 @@ _Review-UI screenshots coming soon._
 
 ## Install
 
-caret needs [`bun`](https://bun.sh) on your `PATH` — it runs from a `bun` bundle — plus
-the [`claude`](https://claude.com/claude-code) CLI you already have.
+caret needs [`bun`](https://bun.sh) on your `PATH` — it runs from a `bun` bundle.
+
+The quickest path is the one-shot installer. It registers the _published_ caret with
+whichever agents you have — [Claude Code](https://claude.com/claude-code) and/or
+[OpenCode](https://opencode.ai) — installing prebuilt artifacts, with no `git clone` and
+no compile step:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/install.sh | bash
+```
+
+It detects which agents are present and installs into each (into both when both are
+there). Set `CARET_AGENTS=claude` or `CARET_AGENTS=claude,opencode` to choose
+non-interactively, or `CARET_DRY_RUN=1` to preview the exact commands without changing
+anything. Restart the agent afterward, then try `/caret:demo`.
+
+Prefer to run the steps yourself? The per-agent instructions below are exactly what the
+installer automates.
 
 ### Claude Code
 
@@ -52,22 +68,41 @@ claude plugin marketplace remove caret
 
 ### OpenCode
 
-caret also installs into [OpenCode](https://opencode.ai), as an auto-loaded plugin. The
-script installer detects OpenCode (and, if you also have Claude Code, asks which to
-install into — or set `CARET_AGENTS`):
+caret installs into [OpenCode](https://opencode.ai) as a first-class
+[plugin](https://opencode.ai/docs/plugins/): add its package to your OpenCode `plugin`
+array and restart OpenCode once.
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/install.sh \
-  | CARET_AGENTS=opencode bash
+```jsonc
+// ~/.config/opencode/opencode.json
+{ "plugin": ["@macintacos/caret"] }
 ```
 
-The installer drops a `caret.ts` plugin plus the `/caret:demo`, `/caret:discovery`, and
-`/caret:debug` commands into your OpenCode config dir, along with a `package.json` for its
-one dependency (`@opencode-ai/plugin`) — it never touches your existing `plugin` config
-array. **Restart OpenCode once** after installing (plugins load at startup), then
-`/caret:demo` works. Approving or requesting changes flows back exactly as in Claude Code.
-**Update** by re-running the installer; **uninstall** with
-`caret install-opencode --uninstall` (which also removes that `package.json` entry). See
+On its next start OpenCode installs `@macintacos/caret` (and its one dependency) into its
+own cache and loads it — no separate caret install, though it still needs
+[`bun`](https://bun.sh) on your `PATH`. From then on, when OpenCode's Plan agent presents
+a plan, caret opens it for review just as it does for Claude Code.
+
+Want the `/caret:demo`, `/caret:discovery`, and `/caret:debug` slash commands too — or
+prefer not to hand-edit the config? Run the published package's installer, which adds the
+array entry and drops the command files for you:
+
+```sh
+bunx @macintacos/caret@latest install --target opencode
+```
+
+The [one-shot installer](#install) above does the same as part of its run (and its
+`CARET_AGENTS=opencode,claude` covers both agents at once). If you already have the caret
+binary on your `PATH` — from `npm i -g @macintacos/caret`, say —
+`caret install --target opencode` works too.
+
+**Update**: caret checks its
+[latest release](https://github.com/macintacos/caret/releases) at OpenCode startup and
+toasts you when a newer version is available. To take it, delete OpenCode's cached copy of
+caret and restart — `rm -rf ~/.cache/opencode/node_modules/@macintacos/caret` makes
+OpenCode reinstall the latest on its next start. (Prefer to control the version yourself?
+Pin it in the array — `"@macintacos/caret@<version>"` — and bump that when you want to
+move.) **Uninstall**: remove the array entry, or run
+`bunx @macintacos/caret@latest install --target opencode --uninstall`. See
 [`doc/ADVANCED.md`](doc/ADVANCED.md#the-opencode-adapter) for how the integration works.
 
 ## Using caret

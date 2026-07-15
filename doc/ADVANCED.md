@@ -9,32 +9,32 @@ install it, and basic usage, start there.
 
 ## Build from source
 
-Prefer a platform-native compiled binary over the `bun` bundle? The build-from-source
-installer clones caret at its latest release (the newest `vX.Y.Z` tag), compiles the
-binary for your platform, and registers it with your agent(s) — no `claude --plugin-dir`.
-It needs [`git`](https://git-scm.com) and [`bun`](https://bun.sh) on your `PATH`; it
-detects Claude Code and/or OpenCode and installs into the one(s) present (the
-[`claude`](https://claude.com/claude-code) CLI is required only for the Claude target —
-set `CARET_AGENTS=claude,opencode` to choose non-interactively):
+The [install methods in the README](../README.md#install) ship prebuilt artifacts — the
+`bun` bundle behind the plugin, and the published `@macintacos/caret` package — so you
+never need a compiler to _use_ caret; `scripts/install.sh` just registers those with your
+agents. Build from source only when you want the platform-native compiled binary
+(`bin/caret-native`, which the entrypoint shim prefers when it is present) or you are
+hacking on caret itself. It uses the `mise` toolchain from a checkout:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/install.sh | bash
+git clone https://github.com/macintacos/caret.git
+cd caret
+mise run build            # compile bin/caret-native + build the UI
+mise run build --install  # …then install THIS local build into your detected agent(s)
 ```
 
-Set `CARET_DRY_RUN=1` and the installer runs the same read-only detection — tool checks,
-release-tag lookup, clone-vs-update — then prints the exact commands it would run and
-changes nothing:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/install.sh | CARET_DRY_RUN=1 bash
-```
+`mise run build --install` is the dev loop: it registers the freshly built checkout with
+Claude Code (via a private dev marketplace) and OpenCode and cycles the daemon — see
+[Development](#development) below and [CONTRIBUTING.md](../CONTRIBUTING.md). It needs
+[`git`](https://git-scm.com) and [`bun`](https://bun.sh); the
+[`claude`](https://claude.com/claude-code) CLI is required only for the Claude target.
 
 ## How it works
 
 Claude Code's hooks invoke `bin/caret`, a small entrypoint shim that runs caret's
 subcommands. The shim execs the platform-native compiled binary (`bin/caret-native`) when
-a build-from-source install produced one, and otherwise runs the `bun` bundle
-(`dist/cli.js`) that the marketplace install ships.
+a `mise run build` produced one, and otherwise runs the `bun` bundle (`dist/cli.js`) that
+the marketplace and npm installs ship.
 
 ### Architecture: tool-agnostic core + agent adapter
 
@@ -122,13 +122,13 @@ raise `review.timeout_s` (up to just under 3900 s) if you want a longer window.
 ### The OpenCode adapter
 
 OpenCode has no `ExitPlanMode` hook to intercept, so caret wires in as an
-**in-process plugin** rather than a command hook. The plugin (deployed to your OpenCode
-plugin dir) registers a `caret_review_plan` tool and steers the Plan agent to call it; the
-tool's `execute()` spawns `caret review` (`CARET_AGENT=opencode`), blocks on your decision
-in the browser, and returns an approval or a change request (the reviewer feedback,
-without the plan echoed back) the agent revises and resubmits. The whole daemon/review
-pipeline is reused unchanged — the plugin is the OpenCode-side counterpart to Claude's
-`hooks.json`.
+**in-process plugin** rather than a command hook. The plugin (shipped in the
+`@macintacos/caret` package) registers a `caret_review_plan` tool and steers the Plan
+agent to call it; the tool's `execute()` spawns `caret review` (`CARET_AGENT=opencode`),
+blocks on your decision in the browser, and returns an approval or a change request (the
+reviewer feedback, without the plan echoed back) the agent revises and resubmits. The
+whole daemon/review pipeline is reused unchanged — the plugin is the OpenCode-side
+counterpart to Claude's `hooks.json`.
 
 OpenCode doesn't fire plugin hooks for subagent tool calls, so caret restricts the review
 tool to primary agents (`experimental.primary_tools` + per-agent `permission`) and
@@ -136,13 +136,21 @@ re-checks the caller in the tool body — a planning agent can't slip an unrevie
 past you through a subagent. The same **fail-safe = deny** rule holds: a spawn failure, an
 unparseable decision, or a timeout all return `deny`.
 
-caret installs into OpenCode (and updates) via the script installer, or directly with
-`caret install-opencode`; alongside the plugin it writes a config-dir `package.json` so
-OpenCode installs the plugin's `@opencode-ai/plugin` dependency on its next start (restart
-OpenCode once after installing). The `/caret:demo`, `/caret:discovery`, and `/caret:debug`
-commands work as they do in Claude Code. See
-[`agents/opencode-integration.md`](agents/opencode-integration.md) for the design and the
-dependency-manifest rationale.
+caret installs into OpenCode as a `plugin` array entry: `caret install --target opencode`
+adds `@macintacos/caret` to your OpenCode config's `plugin` array (comment-preserving, via
+`jsonc-parser`) and deploys the `/caret:*` command files, or you can add the array entry
+by hand. On its next start OpenCode installs the package and its `@opencode-ai/plugin`
+dependency into its own cache and loads it — caret writes no config-dir manifest and runs
+no `bun install` itself. The plugin resolves the caret binary and its own version at
+runtime from the package it ships in (an env override, `CARET_OPENCODE_BIN`, still wins),
+and on load it checks caret's latest GitHub release and toasts an update nudge when you're
+behind (`CARET_OPENCODE_NO_UPDATE_CHECK` opts out). To take an update, delete OpenCode's
+cached copy (`~/.cache/opencode/node_modules/@macintacos/caret`) and restart, or pin
+`"@macintacos/caret@<version>"` in the array and bump it. `caret install --target claude`
+registers caret with Claude Code through its plugin CLI, `--target opencode,claude` does
+both agents at once, `--uninstall` reverses any target, and `--dry-run` previews the
+changes without writing. See
+[`agents/opencode-integration.md`](agents/opencode-integration.md) for the design.
 
 ### Desktop notifications
 
@@ -502,7 +510,7 @@ ui/                 Svelte 5 multi-asset SPA (Vite) embedded into the binary via
 hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode + PostToolUse/ExitPlanMode) — Claude-adapter packaging
 commands/           /caret:demo · /caret:debug · /caret:discovery — Claude-adapter packaging (agent-specific behavioral prose)
 test/               core/ (tool-agnostic suites) · adapters/claude/ + adapters/codex/ (per-adapter suites + fixtures) · scripts/ (release + dev tooling) · support/ (shared scaffolding)
-scripts/            install.sh (build + register via the native plugin system)
+scripts/            install.sh (register the published plugin with each agent; --from-local builds+installs a checkout)
 ```
 
 The polished diff/compare viewer for plan versions is a planned fast-follow.

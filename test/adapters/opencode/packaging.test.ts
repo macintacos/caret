@@ -22,17 +22,16 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-test("loadOpencodePackaging reads the plugin source, bin path, and sorted command files", () => {
+test("loadOpencodePackaging reads the bin path and sorted command files", () => {
   const pkg = loadOpencodePackaging(root);
-  expect(pkg.pluginSource).toContain("__CARET_VERSION__");
   expect(pkg.binPath).toBe(join(root, "bin", "caret"));
   expect(pkg.commands.map((c) => c.name)).toEqual(["demo.md", "discovery.md"]);
   expect(pkg.commands[0]?.contents).toContain("demo");
 });
 
-test("loadOpencodePackaging tolerates a missing commands dir (plugin alone is valid)", async () => {
+test("loadOpencodePackaging tolerates a missing commands dir (the array entry alone is valid)", async () => {
   await rm(join(root, "opencode", "commands"), { recursive: true, force: true });
   const pkg = loadOpencodePackaging(root);
   expect(pkg.commands).toEqual([]);
-  expect(pkg.pluginSource).toContain("plugin body");
+  expect(pkg.binPath).toBe(join(root, "bin", "caret"));
 });

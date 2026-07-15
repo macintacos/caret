@@ -4,114 +4,92 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { OpencodePackaging } from "../../src/adapters/opencode/packaging.ts";
-import {
-  OPENCODE_PLUGIN_DEP,
-  OPENCODE_PLUGIN_DEP_VERSION,
-  packageJsonPath,
-  pluginFilePath,
-} from "../../src/adapters/opencode/paths.ts";
-import { runInstallOpencodeSubcommand } from "../../src/commands/install-opencode.ts";
+import { CARET_PACKAGE } from "../../src/adapters/opencode/paths.ts";
+import { runInstallOpencodeTarget } from "../../src/commands/install-opencode.ts";
 
-// A stub packaging so the subcommand never resolves the real caret root. The source
-// carries non-default exports (like the real plugin) so the strip step is exercised.
+// Stub packaging so the target never resolves the real caret root. Only the command
+// files + bin path matter now (caret itself installs as a `plugin` array entry).
 const PACKAGING: OpencodePackaging = {
-  pluginSource: [
-    `export const CARET_PLUGIN_VERSION = "__CARET_VERSION__";`,
-    `export const BIN = "__CARET_BIN__";`,
-    `const CaretPlugin = () => ({});`,
-    `export default CaretPlugin;`,
-    ``,
-  ].join("\n"),
   binPath: "/opt/caret/bin/caret",
   commands: [{ name: "demo.md", contents: "run __CARET_BIN__" }],
 };
 
 let dir: string;
-let depInstallCalls: string[];
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "caret-install-oc-"));
-  depInstallCalls = [];
 });
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-// Stub the dependency installer so tests never shell out to a real `bun install`.
-const stubInstall = (configDir: string) => {
-  depInstallCalls.push(configDir);
-  return { ok: true, detail: "" };
-};
-
 function install(uninstall = false, dryRun = false) {
-  runInstallOpencodeSubcommand(
-    { uninstall, dryRun },
-    { configDir: dir, packaging: PACKAGING, installDeps: stubInstall },
-  );
+  runInstallOpencodeTarget({ uninstall, dryRun }, { configDir: dir, packaging: PACKAGING });
 }
+const configJson = () => join(dir, "opencode.json");
+const commandFile = () => join(dir, "commands", "caret:demo.md");
 
-test("install writes a package.json declaring caret's plugin dependency (the load fix)", () => {
+test("install adds caret to the plugin array (creating opencode.json) and deploys namespaced commands", () => {
   install();
-  const pkgPath = packageJsonPath(dir);
-  expect(existsSync(pkgPath)).toBe(true);
-  expect(JSON.parse(readFileSync(pkgPath, "utf-8"))).toEqual({
-    dependencies: { [OPENCODE_PLUGIN_DEP]: OPENCODE_PLUGIN_DEP_VERSION },
-  });
-  // The plugin + command files also land; commands are namespaced (`/caret:demo`).
-  expect(existsSync(pluginFilePath(dir))).toBe(true);
-  expect(existsSync(join(dir, "commands", "caret:demo.md"))).toBe(true);
+  expect(JSON.parse(readFileSync(configJson(), "utf-8")).plugin).toEqual([CARET_PACKAGE]);
+  expect(existsSync(commandFile())).toBe(true);
   expect(existsSync(join(dir, "commands", "demo.md"))).toBe(false);
+  // The command's __CARET_BIN__ marker is substituted with the running caret binary.
+  expect(readFileSync(commandFile(), "utf-8")).toBe("run /opt/caret/bin/caret");
 });
 
-test("install is idempotent (re-running leaves the manifest unchanged)", () => {
+test("install is idempotent (re-adding leaves the config unchanged)", () => {
   install();
-  const first = readFileSync(packageJsonPath(dir), "utf-8");
+  const first = readFileSync(configJson(), "utf-8");
   install();
-  expect(readFileSync(packageJsonPath(dir), "utf-8")).toBe(first);
+  expect(readFileSync(configJson(), "utf-8")).toBe(first);
 });
 
-test("install merges into a pre-existing package.json without clobbering user deps", () => {
-  writeFileSync(packageJsonPath(dir), JSON.stringify({ dependencies: { shescape: "^2.1.0" } }));
+test("install leaves the config untouched when caret is already pinned to a version", () => {
+  // A user who hard-coded `@macintacos/caret@0.4.0` must not get a duplicate bare entry.
+  writeFileSync(configJson(), JSON.stringify({ plugin: [`${CARET_PACKAGE}@0.4.0`] }, null, 2));
+  const before = readFileSync(configJson(), "utf-8");
   install();
-  expect(JSON.parse(readFileSync(packageJsonPath(dir), "utf-8"))).toEqual({
-    dependencies: { shescape: "^2.1.0", [OPENCODE_PLUGIN_DEP]: OPENCODE_PLUGIN_DEP_VERSION },
+  expect(readFileSync(configJson(), "utf-8")).toBe(before);
+});
+
+test("install preserves a user's existing plugins and other config keys", () => {
+  writeFileSync(
+    configJson(),
+    JSON.stringify({ theme: "dark", plugin: ["opencode-wakatime"] }, null, 2),
+  );
+  install();
+  expect(JSON.parse(readFileSync(configJson(), "utf-8"))).toEqual({
+    theme: "dark",
+    plugin: ["opencode-wakatime", CARET_PACKAGE],
   });
 });
 
-test("uninstall removes a caret-owned manifest entirely", () => {
+test("install edits an existing opencode.jsonc in place, preserving comments", () => {
+  const jsonc = join(dir, "opencode.jsonc");
+  writeFileSync(jsonc, ["{", "  // my config", '  "plugin": []', "}", ""].join("\n"));
   install();
-  install(true);
-  expect(existsSync(packageJsonPath(dir))).toBe(false);
-  expect(existsSync(pluginFilePath(dir))).toBe(false);
+  expect(existsSync(configJson())).toBe(false); // did not create a second config file
+  const out = readFileSync(jsonc, "utf-8");
+  expect(out).toContain("// my config");
+  expect(out).toContain(CARET_PACKAGE);
 });
 
-test("uninstall strips only caret's dep, preserving a user's package.json", () => {
-  writeFileSync(packageJsonPath(dir), JSON.stringify({ dependencies: { shescape: "^2.1.0" } }));
+test("uninstall removes caret's array entry and the command files", () => {
   install();
   install(true);
-  expect(JSON.parse(readFileSync(packageJsonPath(dir), "utf-8"))).toEqual({
-    dependencies: { shescape: "^2.1.0" },
-  });
+  expect(JSON.parse(readFileSync(configJson(), "utf-8")).plugin).toEqual([]);
+  expect(existsSync(commandFile())).toBe(false);
+});
+
+test("uninstall preserves a user's other plugins", () => {
+  writeFileSync(configJson(), JSON.stringify({ plugin: ["opencode-wakatime"] }, null, 2));
+  install();
+  install(true);
+  expect(JSON.parse(readFileSync(configJson(), "utf-8")).plugin).toEqual(["opencode-wakatime"]);
 });
 
 test("dry-run install writes nothing", () => {
   install(false, true);
-  expect(existsSync(packageJsonPath(dir))).toBe(false);
-  expect(existsSync(pluginFilePath(dir))).toBe(false);
-});
-
-test("install runs the dependency installer once; dry-run and uninstall do not", () => {
-  install();
-  expect(depInstallCalls).toEqual([dir]); // installed the dep into the config dir
-  depInstallCalls = [];
-  install(false, true); // dry-run previews, installs nothing
-  expect(depInstallCalls).toEqual([]);
-  install(true); // uninstall removes, installs nothing
-  expect(depInstallCalls).toEqual([]);
-});
-
-test("the deployed plugin exports only `export default` (OpenCode loads only Plugin exports)", () => {
-  install();
-  const deployed = readFileSync(pluginFilePath(dir), "utf-8");
-  const exportLines = deployed.split("\n").filter((l) => /^\s*export\b/.test(l));
-  expect(exportLines).toEqual(["export default CaretPlugin;"]);
+  expect(existsSync(configJson())).toBe(false);
+  expect(existsSync(commandFile())).toBe(false);
 });

@@ -32,4 +32,4 @@ rather than treating it as a failure of this command.
 If the command exits non-zero, no report could be produced at all: present the exit code
 and stderr instead, and suggest `/caret:debug` for log-side diagnosis. If the binary
 itself is missing (a source checkout that has never been built), say so and point at
-`scripts/install.sh` or `mise run build`.
+`mise run build` (or `mise run build --install`).

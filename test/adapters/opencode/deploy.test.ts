@@ -3,16 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  addPluginDependency,
-  deployFiles,
-  removeFiles,
-  removePluginDependency,
-  renderPlugin,
-  stripNonDefaultExports,
-} from "../../../src/adapters/opencode/deploy.ts";
-import { readOpencodeInstallState } from "../../../src/adapters/opencode/install.ts";
-import { pluginFilePath } from "../../../src/adapters/opencode/paths.ts";
+import { deployFiles, removeFiles, renderPlugin } from "../../../src/adapters/opencode/deploy.ts";
 
 test("renderPlugin substitutes the version and bin markers (all occurrences)", () => {
   const out = renderPlugin(`v="__CARET_VERSION__"; bin="__CARET_BIN__"; again="__CARET_BIN__"`, {
@@ -25,100 +16,12 @@ test("renderPlugin substitutes the version and bin markers (all occurrences)", (
 test("renderPlugin substitutes values literally even when they contain $-sequences", () => {
   // A filesystem path may legally contain `$&`, `$$`, `$\``; a plain string
   // replacement would reinterpret those as String.replace substitution patterns
-  // and corrupt the deployed binary path.
+  // and corrupt the deployed binary path in a command file.
   const out = renderPlugin(`bin="__CARET_BIN__"; v="__CARET_VERSION__"`, {
     version: "1.0$$beta",
     binPath: "/home/a$&b/bin/caret",
   });
   expect(out).toBe(`bin="/home/a$&b/bin/caret"; v="1.0$$beta"`);
-});
-
-test("stripNonDefaultExports drops every export keyword except `export default`", () => {
-  const src = [
-    `export const A = "x";`,
-    `export interface I { a: number }`,
-    `export type T = string;`,
-    `export function f() {}`,
-    `  export async function g() {}`,
-    `const P = () => {};`,
-    `export default P;`,
-  ].join("\n");
-  expect(stripNonDefaultExports(src)).toBe(
-    [
-      `const A = "x";`,
-      `interface I { a: number }`,
-      `type T = string;`,
-      `function f() {}`,
-      `  async function g() {}`,
-      `const P = () => {};`,
-      `export default P;`,
-    ].join("\n"),
-  );
-});
-
-test("rendering+stripping the REAL plugin source leaves only `export default` (opencode ik invariant)", () => {
-  // OpenCode's loader iterates Object.values(module) and throws "Plugin export is not
-  // a function" on the first non-Plugin export, so the deployed file must export only
-  // its plugin function. Prove the real source, once rendered+stripped, does.
-  const src = readFileSync(join(import.meta.dir, "../../../opencode/caret.plugin.ts"), "utf-8");
-  const deployed = stripNonDefaultExports(
-    renderPlugin(src, { version: "1.2.3", binPath: "/b/caret" }),
-  );
-  const exportLines = deployed.split("\n").filter((l) => /^\s*export\b/.test(l));
-  expect(exportLines).toEqual(["export default CaretPlugin;"]);
-});
-
-const DEP = "@opencode-ai/plugin";
-const VER = "1.16.2";
-
-test("addPluginDependency creates a fresh manifest when none exists", () => {
-  expect(addPluginDependency(null, DEP, VER)).toBe(
-    `{\n  "dependencies": {\n    "${DEP}": "${VER}"\n  }\n}\n`,
-  );
-});
-
-test("addPluginDependency merges into existing deps and preserves other keys", () => {
-  const existing = JSON.stringify({ $schema: "x", dependencies: { shescape: "^2.1.0" } });
-  const out = JSON.parse(addPluginDependency(existing, DEP, VER));
-  expect(out).toEqual({ $schema: "x", dependencies: { shescape: "^2.1.0", [DEP]: VER } });
-});
-
-test("addPluginDependency is idempotent (re-pins the same version)", () => {
-  const once = addPluginDependency(null, DEP, VER);
-  expect(addPluginDependency(once, DEP, VER)).toBe(once);
-  // A stale version is overwritten to caret's pin.
-  const stale = JSON.stringify({ dependencies: { [DEP]: "0.0.1" } });
-  expect(JSON.parse(addPluginDependency(stale, DEP, VER)).dependencies[DEP]).toBe(VER);
-});
-
-test("addPluginDependency throws on invalid JSON (caller skips rather than clobbering)", () => {
-  expect(() => addPluginDependency("{ not json", DEP, VER)).toThrow();
-});
-
-test("removePluginDependency returns null to delete a caret-owned-only manifest", () => {
-  const owned = addPluginDependency(null, DEP, VER);
-  expect(removePluginDependency(owned, DEP)).toBeNull();
-  expect(removePluginDependency(null, DEP)).toBeNull();
-});
-
-test("removePluginDependency removes only caret's dep, preserving user content", () => {
-  const existing = JSON.stringify({
-    $schema: "x",
-    dependencies: { shescape: "^2.1.0", [DEP]: VER },
-  });
-  const out = JSON.parse(removePluginDependency(existing, DEP) as string);
-  expect(out).toEqual({ $schema: "x", dependencies: { shescape: "^2.1.0" } });
-});
-
-test("removePluginDependency keeps a file that has other top-level keys after pruning empty deps", () => {
-  const existing = JSON.stringify({ $schema: "x", dependencies: { [DEP]: VER } });
-  const out = JSON.parse(removePluginDependency(existing, DEP) as string);
-  expect(out).toEqual({ $schema: "x" }); // empty `dependencies` pruned, file kept
-});
-
-test("removePluginDependency returns the text verbatim when caret's dep is absent (no-op)", () => {
-  const existing = `{"dependencies":{"shescape":"^2.1.0"}}`;
-  expect(removePluginDependency(existing, DEP)).toBe(existing);
 });
 
 let dir: string;
@@ -130,7 +33,7 @@ afterEach(async () => {
 });
 
 test("deployFiles writes files, creating parent dirs, and is idempotent", () => {
-  const path = join(dir, "plugin", "caret.ts");
+  const path = join(dir, "commands", "caret:demo.md");
   const r1 = deployFiles([{ path, contents: "A" }], { dryRun: false });
   expect(r1.paths).toEqual([path]);
   expect(readFileSync(path, "utf-8")).toBe("A");
@@ -140,7 +43,7 @@ test("deployFiles writes files, creating parent dirs, and is idempotent", () => 
 });
 
 test("deployFiles in dry-run reports paths but writes nothing", () => {
-  const path = join(dir, "plugin", "caret.ts");
+  const path = join(dir, "commands", "caret:demo.md");
   const r = deployFiles([{ path, contents: "A" }], { dryRun: true });
   expect(r.dryRun).toBe(true);
   expect(r.paths).toEqual([path]);
@@ -148,8 +51,8 @@ test("deployFiles in dry-run reports paths but writes nothing", () => {
 });
 
 test("removeFiles removes/reports only files that exist; dry-run leaves them", async () => {
-  const path = join(dir, "plugin", "caret.ts");
-  await mkdir(join(dir, "plugin"), { recursive: true });
+  const path = join(dir, "commands", "caret:demo.md");
+  await mkdir(join(dir, "commands"), { recursive: true });
   await writeFile(path, "A");
   const dry = removeFiles([path], { dryRun: true });
   expect(dry.paths).toEqual([path]); // existing file previewed
@@ -160,27 +63,4 @@ test("removeFiles removes/reports only files that exist; dry-run leaves them", a
   // A target that was never installed is reported as removed-nothing, not a lie.
   const missing = removeFiles([join(dir, "nope")], { dryRun: false });
   expect(missing.paths).toEqual([]);
-});
-
-test("a rendered plugin's version is read back by the install probe (render <-> probe agree)", () => {
-  const configDir = join(dir, "opencode");
-  const rendered = renderPlugin(`const CARET_PLUGIN_VERSION = "__CARET_VERSION__";\n`, {
-    version: "9.9.9",
-    binPath: "/b",
-  });
-  deployFiles([{ path: pluginFilePath(configDir), contents: rendered }], { dryRun: false });
-  const saved = process.env.OPENCODE_CONFIG_DIR;
-  const savedXdg = process.env.XDG_CONFIG_HOME;
-  process.env.OPENCODE_CONFIG_DIR = configDir;
-  delete process.env.XDG_CONFIG_HOME;
-  try {
-    const probe = readOpencodeInstallState();
-    expect(probe.pluginVersion).toBe("9.9.9");
-    expect(probe.pluginEnabled).toBe(true);
-  } finally {
-    if (saved === undefined) delete process.env.OPENCODE_CONFIG_DIR;
-    else process.env.OPENCODE_CONFIG_DIR = saved;
-    if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
-    else process.env.XDG_CONFIG_HOME = savedXdg;
-  }
 });

@@ -2,18 +2,19 @@
 
 Load this when working on caret's OpenCode support — the adapter
 (`src/adapters/opencode/`), the plugin (`opencode/`), or the install path
-(`caret install-opencode`, `scripts/install.sh`). It records the spike EXC-339 ran (a
-review of OpenCode's plugin docs + source against what caret does in Claude Code) so the
-"is this even possible, and how" reasoning is not lost.
+(`caret install --target opencode`, `scripts/install.sh`). It records the spike EXC-339
+ran (a review of OpenCode's plugin docs + source against what caret does in Claude Code)
+so the "is this even possible, and how" reasoning is not lost.
 
 ## The headline: OpenCode is plugin-shaped, not command-hook-shaped
 
 caret's Claude (and modelled Codex) adapters share a command-hook shape: the agent runs
 `caret review`, pipes a hook payload on stdin, and reads a decision JSON on stdout (see
 `architecture-rules.md` § the adapter axis). OpenCode does **not** fit that mold. It loads
-an **in-process JS/TS plugin** — a module under `{plugin,plugins}/*.{ts,js}` in a config
-dir — that registers tools and mutates config inside OpenCode's own Bun runtime. There is
-no per-event command hook to hang `caret review` off.
+an **in-process JS/TS plugin** — an npm package in the config's `plugin` array (how caret
+installs; see § Distribution choice) or a module file under `{plugin,plugins}/` in a
+config dir — that registers tools and mutates config inside OpenCode's own Bun runtime.
+There is no per-event command hook to hang `caret review` off.
 
 Crucially, **OpenCode has no `ExitPlanMode` equivalent to intercept.** It ships a stable
 Plan agent and an experimental, CLI-only `plan_exit` tool, but neither is a robust,
@@ -84,96 +85,111 @@ string" shape before writing, so it can't corrupt a user's config.
   `readOpencodeInstallState` (a read-only probe of OpenCode's config dir). Registered in
   `src/adapters/index.ts`; selectable via `CARET_AGENT=opencode`. Claude stays the
   default.
-- **Packaging (`opencode/`)** — the deployable plugin (`caret.plugin.ts`) and command
-  files (`commands/*.md`), with `__CARET_VERSION__` / `__CARET_BIN__` markers substituted
-  at install time.
-- **Install (`caret install-opencode` + `scripts/install.sh`)** — drops caret's plugin and
-  command files as auto-loaded **files** into OpenCode's config dir,
-  **plus a `package.json`** declaring the plugin's one npm dependency (see § The
-  dependency manifest), and **never mutates the user's `plugin` config array**, so a
-  pre-existing array of third-party plugins is untouched. The `package.json` is
-  merge-safe: caret owns only its single `dependencies` entry and `--uninstall` removes
-  just that (deleting the file only when caret's dep was the only thing in it). `paths.ts`
-  is the single source of truth both the probe (reader) and the deploy (writer) resolve
-  through.
+- **Packaging (`opencode/`)** — the plugin (`caret.plugin.ts`), its package entrypoint
+  (`index.ts`, see § The export surface), and command files (`commands/*.md`). The plugin
+  ships in the `@macintacos/caret` npm package and resolves its binary and version at
+  runtime from that package (§ Runtime resolution + update check); only the command files
+  still carry a substituted `__CARET_BIN__` marker.
+- **Install (`caret install --target opencode` + `scripts/install.sh`)** — adds
+  `@macintacos/caret` to the user's OpenCode `plugin` array (comment-preserving, via
+  `jsonc-parser` in `config-plugin.ts`) and deploys the `/caret:*` command **files**;
+  `--uninstall` reverses both. OpenCode itself installs the package and its deps into its
+  cache on the next start — caret writes no config-dir manifest and runs no `bun install`.
+  `caret install --target claude` registers caret with Claude Code via its plugin CLI, and
+  the orchestrator (`src/commands/install.ts`) parses `--target` (a comma list of
+  `opencode`/`claude`). `paths.ts` is the single source of truth both the probe (reader)
+  and the writer resolve through.
 
-## Distribution choice
+## Distribution choice (amended by EXC-794)
 
-The plugin is shipped as a single self-contained `.ts` file (OpenCode loads `.ts`
-directly) that imports only `node:child_process` and `@opencode-ai/plugin`. `src/` never
-imports `@opencode-ai/plugin` (it is caret's only `devDependency`, for typecheck/tests
-only), so the compiled caret binary stays lean — caret installs that dependency into
-OpenCode's config dir at install time (see § The dependency manifest). Using OpenCode's
-own `tool.schema` (zod) is deliberate: zod schemas are not cross-instance-compatible, so
-the tool's `plan` arg must be declared with OpenCode's zod, not a bundled copy.
+caret installs into OpenCode as a first-class `plugin` array entry —
+`plugin: ["@macintacos/caret"]` — which OpenCode `bun install`s (package + deps) into its
+own cache and loads. The **package entrypoint is the plugin** (`package.json` `exports`
+`.` → `opencode/index.ts`), so a **bare** specifier loads it: Bun's dynamic `import()`
+does not support subpath imports, and OpenCode's `parsePluginSpecifier` yields only
+`{ pkg, version }`, so a `@macintacos/caret/opencode` subpath is not viable. The plugin's
+runtime import (`@opencode-ai/plugin`, for `tool.schema`'s zod — zod is not
+cross-instance-compatible, so the `plan` arg must use OpenCode's zod) is a real
+`dependency` now, so OpenCode's install provides it. The compiled caret binary stays lean
+regardless: `src/` never imports `@opencode-ai/plugin`, so the bundler doesn't pull it in.
 
-This was chosen over (a) a `permission.ask` per-edit gate (wrong semantic), (b)
-re-implementing the daemon round-trip in the plugin (duplication), and (c) publishing a
-second npm package + mutating the user's `plugin` array (heavier, and publish is a release
-step).
+**EXC-794 amended the original decision.** The spike had rejected option (c) — "publishing
+a second npm package + mutating the user's `plugin` array" — as too heavy. But caret
+already publishes `@macintacos/caret`, so the array path needs **no second package**: that
+one package's entrypoint is the OpenCode plugin, and it ships the whole caret runtime
+(`bin/caret`, `dist/`, `ui/dist/`), so an array install is self-contained. This retired
+the file-deploy machinery (the config-dir manifest, the caret-run `bun install`, and
+`stripNonDefaultExports`). The other two rejected options still stand: (a) a
+`permission.ask` per-edit gate (wrong semantic) and (b) re-implementing the daemon
+round-trip in the plugin (duplication).
 
-## The dependency manifest (how the plugin's import resolves)
+## Runtime resolution + update check (EXC-794)
 
-A local plugin file is not magically given its npm imports. OpenCode's contract for a
-plugin that imports an npm package is: declare it in a
-**`package.json` in the config dir**, which a `bun install` then fetches. So
-`caret install-opencode` writes that manifest (pinning `@opencode-ai/plugin`) and
-**runs `bun install` in the config dir itself** — best-effort, degrading to a printed
-instruction if `bun` is absent.
+The array install has no marker-substitution step, so the plugin resolves what it needs at
+runtime from the package it ships in:
 
-**Why caret installs it rather than letting OpenCode.** OpenCode does run a startup
-"background dependency install", but in practice it pins `@opencode-ai/plugin` to its OWN
-version (e.g. `1.17.7`) and resolves against a **date-capped registry snapshot**, so that
-version can fail to resolve —
-`"No matching version found for @opencode-ai/plugin@1.17.7 with a date before <date>"` —
-leaving the import unresolvable and the plugin unloaded (the agent then reports it has no
-`caret_review_plan` tool). This was a live EXC-339 bug. caret's own `bun install` of the
-pinned manifest sidesteps the date-cap; the manifest pins an
-**older, already-published exact version** (`OPENCODE_PLUGIN_DEP_VERSION` in `paths.ts`).
-A version skew between the pinned `@opencode-ai/plugin` and the running OpenCode is fine:
-`tool()` is an identity function, `tool.schema` is just zod, and the hook names caret uses
-are stable.
+- **Binary** (`resolveCaretBin`): `CARET_OPENCODE_BIN` env override → a substituted marker
+  (only the retired file-deploy set one) → `new URL("../bin/caret", import.meta.url)` (the
+  `bin/caret` shim shipped beside the plugin in the package).
+- **Version** (`resolveCaretVersion`): a substituted marker if present → the sibling
+  `../package.json`'s `version`. Used by the update check.
+- **Update check** (`realUpdateChecker`, wired only into the production default export):
+  on load, fetch caret's latest GitHub release and toast a nudge when the running version
+  is behind. Best-effort — a network error, a non-200, or the
+  `CARET_OPENCODE_NO_UPDATE_CHECK` opt-out is silent. An inline semver compare keeps the
+  plugin self-contained.
 
-A fresh install still needs **one OpenCode restart** (plugins load at startup). The
-npm-package distribution (publish + add to the `plugin` array) remains the documented
-hardening path if this approach ever proves insufficient on a target OpenCode version.
+**How deps resolve now (vs. the retired manifest).** OpenCode installs the array package
+and its declared `dependencies` into its cache, so `@opencode-ai/plugin` resolves because
+caret's `package.json` declares it as a real dependency — no config-dir `package.json`
+manifest and no caret-run `bun install`. The old manifest existed to sidestep a live
+EXC-339 bug: OpenCode's startup dependency install pinned `@opencode-ai/plugin` to its OWN
+version against a **date-capped registry snapshot** and could fail to resolve
+(`"No matching version found … with a date before <date>"`), so caret wrote its own pinned
+manifest. Installing the package as a normal array entry sidesteps that path entirely (a
+version skew between the pinned `@opencode-ai/plugin` and the running OpenCode is
+harmless: `tool()` is identity, `tool.schema` is just zod, the hook names are stable). A
+fresh install still needs **one OpenCode restart** (packages install/load at startup).
 
 ## The export surface: a plugin module may export ONLY Plugin functions
 
 OpenCode's plugin loader iterates a module's exports (`Object.values(mod)`) and throws
 `TypeError("Plugin export is not a function")` on the FIRST export it cannot coerce to a
 Plugin (a function, or a `{ server }` object) — one bad export rejects the whole module.
-caret's plugin SOURCE exports constants (`CARET_PLUGIN_VERSION`, `REVIEW_TOOL`,
-`PLANNING_AGENTS`) and pure helpers so `test/opencode/` can unit-test them; deployed
-verbatim, the first string export made OpenCode reject the plugin and the tool never
-registered (a second live EXC-339 bug, surfaced by the OpenCode log line
+caret's plugin SOURCE (`caret.plugin.ts`) exports constants (`CARET_PLUGIN_VERSION`,
+`REVIEW_TOOL`, `PLANNING_AGENTS`) and pure helpers so `test/opencode/` can unit-test them,
+so it can't be OpenCode's entrypoint directly — the first non-Plugin export would reject
+it (a live EXC-339 bug, log line
 `failed to load plugin … "Plugin export is not a function"`).
 
-So the install step renders the source and then
-**strips every `export` keyword except `export default`** (`stripNonDefaultExports` in
-`deploy.ts`), leaving the helpers as module-private locals — the deployed artifact exports
-only its default Plugin function, its runtime behaviour unchanged. A test replicates
-OpenCode's loader invariant against the real rendered source.
+So the package's entrypoint is a tiny dedicated re-export, `opencode/index.ts`:
+`export { default } from "./caret.plugin.ts"` — its module namespace is exactly
+`{ default }`, so `Object.values` yields only the Plugin function, and `package.json`
+`exports` `.` points at it. (Before EXC-794 the file-deploy path instead stripped every
+non-default export at deploy time via `stripNonDefaultExports`; the re-export entrypoint
+isolates the invariant without a build step.) `test/opencode/entrypoint.test.ts` asserts
+it.
 
 ## Verified vs. follow-up
 
 **Verified in this repo (unit + integration tests, no live OpenCode required):** the
-adapter's parse/emit/probe/fatal-deny, the plugin's pure logic + the tool's `execute()`
-through a stubbed spawn runner (approve / deny / subagent-refusal), the config-hook
-restriction, `renderPlugin` ↔ install-probe agreement, and the installer's per-target
-register selection (dry-run).
+adapter's parse/emit/probe/fatal-deny; the plugin's pure logic + the tool's `execute()`
+through a stubbed spawn runner (approve / deny / subagent-refusal); the config-hook
+restriction; the entrypoint's `Object.values`-single-Plugin invariant; the config-array
+editor (add/remove, comment-preserving); `--target` parsing + dispatch; the `claude`
+target's CLI command sequence; the runtime bin/version resolvers; and the update check
+(toasts when behind, silent on error / opt-out).
 
-**Confirmed against a live OpenCode (1.17.x):** that a local plugin file resolves
-`@opencode-ai/plugin` only when the config-dir `package.json` manifest is present (its
-absence was the load failure documented in § The dependency manifest), and that with the
-manifest in place the plugin loads, registers `caret_review_plan`, and applies its config
-hook.
+**Confirmed against a live OpenCode (1.17.x) — pre-EXC-794 (file-deploy path):** that a
+local plugin file resolves `@opencode-ai/plugin` only when a config-dir `package.json`
+manifest is present. The array install's live round-trip (below) supersedes this.
 
-**Documented manual follow-up (needs a live OpenCode + a model provider):** a real
-in-OpenCode agentic round-trip — confirming the exact `ctx`/`tool`/`config` shapes against
-the installed OpenCode version and that the planning steer actually routes the Plan agent
-to `caret_review_plan` end-to-end. This mirrors the Codex adapter's live-contract
-follow-up (EXC-549) and the upgrade story tracked in EXC-383.
+**Documented manual follow-up (needs a live OpenCode + a model provider):** the array
+install's live round-trip — add `@macintacos/caret` to a real OpenCode `plugin` array (or
+run `caret install --target opencode`), restart 1.17.x, and confirm the package resolves,
+`caret_review_plan` registers, the planning steer routes the Plan agent to it end-to-end,
+and the update toast fires when the plugin is behind. This mirrors the Codex adapter's
+live-contract follow-up (EXC-549) and the upgrade story tracked in EXC-383.
 
 ## Sources
 

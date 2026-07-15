@@ -15,20 +15,63 @@
 // config hook restricts the tool to primary agents (experimental.primary_tools +
 // per-agent permission), and the tool body re-checks the caller — defense in depth.
 //
-// This file is deployed verbatim (with the two __CARET_*__ markers substituted) by
-// `caret install-opencode` into OpenCode's auto-loaded plugin dir, so it is
-// self-contained: its only imports are node:child_process and @opencode-ai/plugin
-// (the latter resolved by OpenCode at runtime). Live in-OpenCode verification of
-// the exact ctx/tool/config shapes against the installed OpenCode version is a
-// documented follow-up; the pure logic below is covered by test/opencode/.
+// This file runs in-process inside OpenCode. It ships in the @macintacos/caret npm
+// package; OpenCode loads it when the package is in the user's `plugin` array, and
+// it resolves its own binary and version at runtime from that package. (The legacy
+// file-deploy path substitutes the two __CARET_*__ markers instead.) It stays
+// self-contained: its only imports are node builtins (child_process, fs, url) and
+// @opencode-ai/plugin (resolved by OpenCode at runtime). Live in-OpenCode
+// verification of the exact ctx/tool/config shapes against the installed OpenCode
+// version is a documented follow-up; the pure logic below is covered by
+// test/opencode/.
 
 import { spawn } from "node:child_process";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { type Hooks, type Plugin, tool } from "@opencode-ai/plugin";
 
-/** Install-time markers: `caret install-opencode` rewrites these string literals
- * with the resolved caret version and binary path before deploying this file. */
+/** Install-time markers. The legacy file-deploy path substituted these with the
+ * resolved caret version and binary path; the array install leaves them as
+ * placeholders, so the resolvers below fall back to the package that ships this
+ * file. */
 export const CARET_PLUGIN_VERSION = "__CARET_VERSION__";
 const CARET_BIN = "__CARET_BIN__";
+
+/** The caret binary the review tool spawns. Env override wins; then a substituted
+ * marker (an absolute path, from the legacy file-deploy path); else the binary that
+ * ships beside this module in the npm package (the array install). */
+export function resolveCaretBin(opts: {
+  env: Record<string, string | undefined>;
+  marker: string;
+  importMetaUrl: string;
+}): string {
+  const override = opts.env.CARET_OPENCODE_BIN?.trim();
+  if (override) return override;
+  if (opts.marker !== "__CARET_BIN__") return opts.marker;
+  return fileURLToPath(new URL("../bin/caret", opts.importMetaUrl));
+}
+
+/** The plugin's own caret version, for the update check. A substituted marker wins
+ * (file-deploy); else read it from the package.json shipped beside this module (the
+ * array install). "unknown" when neither is available — deliberately UNPARSEABLE so
+ * `isNewer` compares false and a broken read stays silent ("0.0.0" would parse and
+ * nag "update available (you have 0.0.0)" on every start). */
+export function resolveCaretVersion(opts: {
+  marker: string;
+  importMetaUrl: string;
+  readFile: (path: string) => string;
+}): string {
+  if (opts.marker !== "__CARET_VERSION__") return opts.marker;
+  try {
+    const raw = opts.readFile(fileURLToPath(new URL("../package.json", opts.importMetaUrl)));
+    const v = (JSON.parse(raw) as { version?: unknown }).version;
+    return typeof v === "string" ? v : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
 
 /** The plan-review tool the Plan agent calls. */
 export const REVIEW_TOOL = "caret_review_plan";
@@ -178,6 +221,164 @@ function showToast(client: ToastClient, body: ToastBody): void {
   }
 }
 
+// --- version-check toast (EXC-794) -----------------------------------------
+
+/** caret's latest-release endpoint. Unauthenticated GitHub API — throttled to at
+ * most once a day (see UPDATE_CHECK_INTERVAL_MS), so it never approaches the
+ * 60 req/hr/IP limit. */
+const LATEST_RELEASE_URL = "https://api.github.com/repos/macintacos/caret/releases/latest";
+/** How long the update nudge stays up — long enough to read the link. */
+const UPDATE_TOAST_MS = 5_000;
+/** Minimum gap between update checks. The nudge is a convenience, not a security
+ * fix, so checking once a day is plenty — and it keeps the network hit off every
+ * OpenCode start. The last-check time is persisted in a small throttle file. */
+const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60_000;
+
+/** Semver triple `[major, minor, patch]`, or null when `v` is not `X.Y.Z` (an
+ * optional leading `v` is stripped; trailing prerelease/build metadata ignored). */
+function parseVersionTriple(v: string): [number, number, number] | null {
+  const m = v
+    .trim()
+    .replace(/^v/, "")
+    .match(/^(\d+)\.(\d+)\.(\d+)/);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+
+/** True when `latest` is a strictly higher semver than `current`. Inline (no semver
+ * dep) so the deployed plugin stays self-contained; an unparseable version on
+ * either side compares false, so the check never nags on something it can't read. */
+export function isNewer(latest: string, current: string): boolean {
+  const a = parseVersionTriple(latest);
+  const b = parseVersionTriple(current);
+  if (!a || !b) return false;
+  const [a0, a1, a2] = a;
+  const [b0, b1, b2] = b;
+  if (a0 !== b0) return a0 > b0;
+  if (a1 !== b1) return a1 > b1;
+  return a2 > b2;
+}
+
+/** The version (v-stripped) and release-page URL from GitHub's /releases/latest
+ * JSON, or null when the shape is unusable. */
+export function parseLatestRelease(json: unknown): { version: string; url: string } | null {
+  if (typeof json !== "object" || json === null) return null;
+  const o = json as { tag_name?: unknown; html_url?: unknown };
+  if (typeof o.tag_name !== "string") return null;
+  const url =
+    typeof o.html_url === "string"
+      ? o.html_url
+      : "https://github.com/macintacos/caret/releases/latest";
+  return { version: o.tag_name.replace(/^v/, ""), url };
+}
+
+/** The update-available toast body, or null when the user is already current. */
+export function updateToastBody(
+  current: string,
+  latest: { version: string; url: string },
+): ToastBody | null {
+  if (!isNewer(latest.version, current)) return null;
+  return {
+    title: "caret update available",
+    message: `caret ${latest.version} is available (you have ${current}). ${latest.url}`,
+    variant: "info",
+    duration: UPDATE_TOAST_MS,
+  };
+}
+
+/** The slice of `fetch` the update check needs — narrow so a test can pass a plain
+ * stub without reconstructing `fetch`'s `preconnect` sibling. The global `fetch`
+ * (and Bun's) is assignable to it. */
+type FetchLike = (
+  url: string,
+  init?: { headers?: Record<string, string> },
+) => Promise<{ ok: boolean; json: () => Promise<unknown> }>;
+
+/** True when the last check is old enough (or absent) to check again. Pure so the
+ * 24h throttle is unit-testable without a clock or the filesystem. */
+export function shouldCheckForUpdate(lastCheckMs: number | null, nowMs: number): boolean {
+  return lastCheckMs === null || nowMs - lastCheckMs >= UPDATE_CHECK_INTERVAL_MS;
+}
+
+/** Absolute path of the throttle file holding the last-check epoch-ms. Lives under
+ * caret's state dir ($XDG_STATE_HOME/caret or ~/.local/state/caret), matching where
+ * caret keeps its other small machine-global markers (prefs.json). Pure so the
+ * location is testable; the plugin stays self-contained and cannot import
+ * src/paths.ts, so the convention is mirrored here by hand. */
+export function updateCheckCachePath(
+  env: Record<string, string | undefined>,
+  home: string,
+): string {
+  const base = env.XDG_STATE_HOME?.trim() || `${home}/.local/state`;
+  return `${base}/caret/opencode-update-check`;
+}
+
+/** The throttle seam: read the last-check epoch-ms (null when never / unreadable),
+ * and persist a new one. Injected so realUpdateChecker's throttle is testable
+ * without touching disk. */
+type UpdateCache = { read: () => number | null; write: (epochMs: number) => void };
+
+/** File-backed UpdateCache. Read tolerates a missing or garbage file (→ null, so
+ * the check runs); write is best-effort — a failure just means we check again next
+ * start rather than crashing plugin load. */
+function fileUpdateCache(path: string): UpdateCache {
+  return {
+    read: () => {
+      try {
+        const n = Number.parseInt(readFileSync(path, "utf-8").trim(), 10);
+        return Number.isFinite(n) ? n : null;
+      } catch {
+        return null;
+      }
+    },
+    write: (epochMs) => {
+      try {
+        mkdirSync(dirname(path), { recursive: true });
+        writeFileSync(path, String(epochMs));
+      } catch {
+        // best-effort — a throttle-file write must never disrupt load.
+      }
+    },
+  };
+}
+
+/** Best-effort startup update check: fetch caret's latest GitHub release and, if it
+ * is newer than this plugin's version, toast a nudge with a link. Throttled to at
+ * most once a day via the injected cache — the check time is stamped up front, so
+ * even an offline/failed start backs off a full day rather than hitting the network
+ * on every restart. Never throws and never blocks plugin load — a network error, a
+ * non-200, an unusable body, the throttle, or the `CARET_OPENCODE_NO_UPDATE_CHECK`
+ * opt-out all resolve silently. `fetchImpl`/`url`/`now`/`cache` are injected so it is
+ * unit-testable without the network or the filesystem. */
+export async function realUpdateChecker(
+  client: ToastClient,
+  opts: {
+    currentVersion: string;
+    env: Record<string, string | undefined>;
+    fetchImpl: FetchLike;
+    now: () => number;
+    cache: UpdateCache;
+    url?: string;
+  },
+): Promise<void> {
+  if (opts.env.CARET_OPENCODE_NO_UPDATE_CHECK) return;
+  const nowMs = opts.now();
+  if (!shouldCheckForUpdate(opts.cache.read(), nowMs)) return;
+  // Stamp the check up front so a failed/offline check still backs off a day.
+  opts.cache.write(nowMs);
+  try {
+    const res = await opts.fetchImpl(opts.url ?? LATEST_RELEASE_URL, {
+      headers: { "user-agent": "caret-opencode-plugin", accept: "application/vnd.github+json" },
+    });
+    if (!res.ok) return;
+    const latest = parseLatestRelease(await res.json());
+    if (!latest) return;
+    const body = updateToastBody(opts.currentVersion, latest);
+    if (body) showToast(client, body);
+  } catch {
+    // best-effort — an update nudge must never disrupt the session.
+  }
+}
+
 /** The planning-prompt steer appended to the system array so the Plan agent
  * submits its plan to caret instead of calling the native plan_exit. */
 export function planningSteer(): string {
@@ -316,16 +517,24 @@ const nodeSpawnRunner: SpawnRunner = (bin, env, stdin, onStderr) =>
 // The plugin
 // ---------------------------------------------------------------------------
 
-/** Build the caret OpenCode plugin. The DI seam (bin/run) keeps the tool's
- * execute() unit-testable; the default export wires the production runner. */
-export function createCaretPlugin(opts: { bin?: string; run?: SpawnRunner } = {}): Plugin {
-  const bin = opts.bin ?? process.env.CARET_OPENCODE_BIN ?? CARET_BIN;
+/** Build the caret OpenCode plugin. The DI seam (bin/run/checkUpdate) keeps the
+ * tool's execute() and the startup update check unit-testable; the default export
+ * wires the production runner and update checker. */
+export function createCaretPlugin(
+  opts: { bin?: string; run?: SpawnRunner; checkUpdate?: (client: ToastClient) => void } = {},
+): Plugin {
+  const bin =
+    opts.bin ??
+    resolveCaretBin({ env: process.env, marker: CARET_BIN, importMetaUrl: import.meta.url });
   const run = opts.run ?? nodeSpawnRunner;
 
   return async (input) => {
     // OpenCode gives every plugin its SDK client; caret uses it to surface the
     // review link as a toast (EXC-691). Narrowed structurally for skew-safety.
     const client = (input as { client?: ToastClient }).client;
+    // Best-effort startup update nudge (EXC-794); fire-and-forget so it never
+    // delays plugin load. Only the production default export wires this.
+    if (opts.checkUpdate) opts.checkUpdate(client);
     const hooks: Hooks = {
       // Restrict the review tool to primary agents + allow/deny per agent.
       config: async (config) => {
@@ -406,6 +615,21 @@ export function createCaretPlugin(opts: { bin?: string; run?: SpawnRunner } = {}
   };
 }
 
-/** The deployed plugin OpenCode auto-loads (bare default-export function). */
-const CaretPlugin: Plugin = createCaretPlugin();
+/** The plugin OpenCode loads (bare default-export function). Wires the production
+ * update checker: on load, check caret's latest release and toast if behind. */
+const CaretPlugin: Plugin = createCaretPlugin({
+  checkUpdate: (client) => {
+    void realUpdateChecker(client, {
+      currentVersion: resolveCaretVersion({
+        marker: CARET_PLUGIN_VERSION,
+        importMetaUrl: import.meta.url,
+        readFile: (p) => readFileSync(p, "utf-8"),
+      }),
+      env: process.env,
+      fetchImpl: fetch,
+      now: () => Date.now(),
+      cache: fileUpdateCache(updateCheckCachePath(process.env, homedir())),
+    });
+  },
+});
 export default CaretPlugin;
