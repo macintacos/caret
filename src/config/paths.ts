@@ -34,9 +34,19 @@ export function configDir(): string {
 }
 
 /** User-editable settings file (see src/config/settings.ts). Single source of truth
- * for the path. */
+ * for the path. CARET_CONFIG_FILE overrides it outright — the dev task points that
+ * at config.dev.toml (and, under --fresh, at a nonexistent path so loadSettings
+ * falls back to defaults), keeping `mise run dev` fully isolated from the
+ * production config. A blank value counts as unset. */
 export function configFile(): string {
-  return `${configDir()}/config.toml`;
+  return process.env.CARET_CONFIG_FILE || `${configDir()}/config.toml`;
+}
+
+/** Dev-only settings file: $XDG_CONFIG_HOME/caret/config.dev.toml. The dev task
+ * points CARET_CONFIG_FILE here so `mise run dev` reads its own config, never the
+ * user's production config.toml (EXC-781). */
+export function devConfigFile(): string {
+  return `${configDir()}/config.dev.toml`;
 }
 
 /** Machine-global UI prefs (last-used approve mode). One shared file under

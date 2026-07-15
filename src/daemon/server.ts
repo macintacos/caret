@@ -279,6 +279,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       stateDir,
       instanceId,
       isDev: !isCompiledBinary(),
+      // Only the dev --fresh boot sets CARET_FRESH; production omits the field
+      // entirely so the wire stays byte-identical there (EXC-781).
+      ...(process.env.CARET_FRESH === "1" ? { fresh: true } : {}),
       ...(approveVariants ? { approveVariants: [...approveVariants] } : {}),
     };
     return Response.json(body);

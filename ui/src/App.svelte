@@ -17,9 +17,9 @@
     coveredLineCount,
     pendingItems,
   } from "./lib/feedback.ts";
-  import { readThemeId, THEMES, type ThemeId } from "./lib/theme.ts";
+  import { applyTheme, DEFAULT_THEME_ID, readThemeId, THEMES, type ThemeId } from "./lib/theme.ts";
   import { changeTheme } from "./lib/themeWipe.ts";
-  import { shouldShowOnboarding } from "./lib/prefs.ts";
+  import { clearKnownPrefs, shouldShowOnboarding } from "./lib/prefs.ts";
   import type { ComposerScratch } from "./lib/diffview/commenting.ts";
   import type { ApproveVariant, ApproveVariantId, Annotation, PersistedScratch } from "@core/lib/types";
 
@@ -184,6 +184,17 @@
         isDev = h.isDev ?? false;
         version = h.version;
         commit = h.commit;
+        // Dev --fresh (EXC-781): reset the browser to a brand-new-user session —
+        // clear saved UI prefs, drop to the default theme (main.ts already applied
+        // whatever was stored before this probe resolved, so re-apply here), and
+        // re-open first-run onboarding.
+        if (h.fresh) {
+          clearKnownPrefs();
+          applyTheme(DEFAULT_THEME_ID);
+          themeId = DEFAULT_THEME_ID;
+          showOnboarding =
+            typeof Notification !== "undefined" && shouldShowOnboarding(Notification.permission);
+        }
       })
       .catch(() => selection.setConnected(false));
 

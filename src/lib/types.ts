@@ -293,6 +293,11 @@ export interface HealthIdentity {
    * the npm bundle — reports false; `mise run dev`, the e2e harness, and a manual
    * `bun src/cli.ts` report true. */
   isDev?: boolean;
+  /** True when the daemon was launched by `mise run dev --fresh` (EXC-781): the
+   * UI resets its saved preferences (theme, onboarding) on boot to reproduce a
+   * brand-new-user session. Present only in that dev mode; a production daemon
+   * (CARET_FRESH unset) omits it entirely. */
+  fresh?: boolean;
   /** The active adapter's declared approve variants, in display order — the wire
    * channel that lets the UI render its approve split-button from the adapter's
    * capability instead of hard-coding tool mode names. Optional: a daemon that

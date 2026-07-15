@@ -57,6 +57,26 @@ test("childEnvFor isolates state and never idles; pins CARET_PORT only when fixe
   expect(eph.CARET_PORT).toBe(process.env.CARET_PORT);
 });
 
+test("childEnvFor threads the dev config path, and CARET_FRESH only when fresh", () => {
+  // Normal dev: the daemon child reads config.dev.toml, and CARET_FRESH is absent.
+  const normal = childEnvFor(
+    "/tmp/world",
+    { kind: "ephemeral" },
+    { configFile: "/cfg/config.dev.toml" },
+  );
+  expect(normal.CARET_CONFIG_FILE).toBe("/cfg/config.dev.toml");
+  expect(normal.CARET_FRESH).toBeUndefined();
+  // --fresh: config points at a nonexistent path (→ defaults) and CARET_FRESH=1
+  // signals the UI to reset its saved prefs.
+  const fresh = childEnvFor(
+    "/tmp/world",
+    { kind: "ephemeral" },
+    { configFile: "/nope.toml", fresh: true },
+  );
+  expect(fresh.CARET_CONFIG_FILE).toBe("/nope.toml");
+  expect(fresh.CARET_FRESH).toBe("1");
+});
+
 // ---- makeCleanup ----
 
 function fakeKillable() {
