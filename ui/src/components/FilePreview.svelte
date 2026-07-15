@@ -6,7 +6,8 @@
   // it can't deliver. The excerpt centers on the reference's line when it carries
   // one, else the file's head. Chrome echoes the link tooltip's card language;
   // pointer-events stay on so the reader can move onto the card (to scroll a long
-  // line) without it dismissing (DiffPlanView keeps it alive while inside).
+  // line) — DiffPlanView's hover-intent tracker reads this card's rect and keeps
+  // the preview alive while the pointer is on it or heading toward it (EXC-799).
   import { getFileExcerpt } from "../lib/api.ts";
   import { highlightExcerpt } from "../lib/diffview/highlight.ts";
   import type { FileExcerpt } from "@core/lib/types";
@@ -19,12 +20,8 @@
     line?: number;
     /** Viewport rect of the hovered token, for anchoring. */
     anchor: DOMRect;
-    /** Pointer entered the card — keep it open. */
-    onKeepAlive: () => void;
-    /** Pointer left the card — dismiss it. */
-    onDismiss: () => void;
   }
-  let { reviewId, path, line, anchor, onKeepAlive, onDismiss }: Props = $props();
+  let { reviewId, path, line, anchor }: Props = $props();
 
   // One rendered source line: its real file line number, plus either the
   // highlighted token HTML (shiki) or the raw text (plain fallback).
@@ -162,8 +159,6 @@
   style:left="{placement.left}px"
   style:top={placement.top === undefined ? null : `${placement.top}px`}
   style:bottom={placement.bottom === undefined ? null : `${placement.bottom}px`}
-  onmouseenter={onKeepAlive}
-  onmouseleave={onDismiss}
 >
   <div class="fp-header">
     <span class="fp-badge">Preview</span>
