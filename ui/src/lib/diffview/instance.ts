@@ -7,7 +7,7 @@
 // is injected: components supply the real File/FileDiff constructors, tests a
 // recording fake.
 
-import { ensureCoreStyles } from "./coreStyles.ts";
+import { ensureCoreStyles } from "$lib/diffview/coreStyles.ts";
 
 /** The slice of a @pierre/diffs File/FileDiff instance the controller uses.
  * The real classes satisfy it structurally. */

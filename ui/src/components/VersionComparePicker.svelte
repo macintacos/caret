@@ -22,13 +22,13 @@
   // ThemePicker/diff-selection language) on the pressed compare toggle. All colors
   // ride the shadcn↔caret token bridge; no raw colors.
   import type { PlanVersion } from "@core/lib/types";
-  import type { DiffIndicators, DiffStyle } from "../lib/diffview/types.ts";
+  import type { DiffIndicators, DiffStyle } from "$lib/diffview/types.ts";
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
-  import Icon from "./Icon.svelte";
+  import Icon from "@/components/Icon.svelte";
 
   interface Props {
     /** Every stored plan version, oldest first. */

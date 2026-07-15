@@ -9,11 +9,11 @@
 // throws so the review path fails safe (the caller turns the throw into a deny) —
 // selection must never silently pick the wrong tool's wire shape.
 
-import { fatalDenyLine } from "./claude/feedback.ts";
-import { claudeAdapter } from "./claude/index.ts";
-import { codexAdapter } from "./codex/index.ts";
-import { opencodeAdapter } from "./opencode/index.ts";
-import type { AgentAdapter } from "./adapter.ts";
+import type { AgentAdapter } from "@/adapters/adapter.ts";
+import { fatalDenyLine } from "@/adapters/claude/feedback.ts";
+import { claudeAdapter } from "@/adapters/claude/index.ts";
+import { codexAdapter } from "@/adapters/codex/index.ts";
+import { opencodeAdapter } from "@/adapters/opencode/index.ts";
 
 /** The adapter selected when no id is given — the Claude adapter, so the existing
  * Claude plugin packaging keeps working unchanged. */

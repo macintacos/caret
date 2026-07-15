@@ -1,6 +1,7 @@
 import "../../../test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
-import { lineAtReadingZone, scrollToLine, SCROLL_OFFSET_TOP } from "./scroll.ts";
+
+import { lineAtReadingZone, SCROLL_OFFSET_TOP, scrollToLine } from "$lib/diffview/scroll.ts";
 
 // @pierre/diffs renders each source line as a <div data-line="N"> inside the
 // container's shadow root. scrollToLine finds that row and scrolls the nearest

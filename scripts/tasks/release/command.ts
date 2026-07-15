@@ -14,14 +14,22 @@
 // only wires the command tree and injects the real collaborators.
 
 import type { Command } from "@commander-js/extra-typings";
-import { createProgram } from "../../../src/lib/program.ts";
-import { errorResult, type ReleaseError } from "./contract.ts";
-import { createGit } from "./git.ts";
-import { createGitHub } from "./github.ts";
-import { createNpm } from "./npm.ts";
-import { createRumdl } from "./rumdl.ts";
-import { baseline, compute, type Deps, finalize, GuardError, prepare } from "./steps.ts";
-import { isBumpLevel } from "./version.ts";
+
+import { createProgram } from "@/lib/program.ts";
+import { errorResult, type ReleaseError } from "@/tasks/release/contract.ts";
+import { createGit } from "@/tasks/release/git.ts";
+import { createGitHub } from "@/tasks/release/github.ts";
+import { createNpm } from "@/tasks/release/npm.ts";
+import { createRumdl } from "@/tasks/release/rumdl.ts";
+import {
+  baseline,
+  compute,
+  type Deps,
+  finalize,
+  GuardError,
+  prepare,
+} from "@/tasks/release/steps.ts";
+import { isBumpLevel } from "@/tasks/release/version.ts";
 
 /** The production Deps: real git/gh/npm/rumdl collaborators plus fs/clock seams. */
 function realDeps(): Deps {

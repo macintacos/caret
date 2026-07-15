@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test";
+
 import {
   type BumpLevel,
   isBumpLevel,
   nextVersion,
   tagName,
   versionFromTag,
-} from "../../scripts/tasks/release/version.ts";
+} from "@/tasks/release/version.ts";
 
 test("nextVersion bumps patch/minor/major from the baseline", () => {
   expect(nextVersion("0.0.1", "patch")).toBe("0.0.2");

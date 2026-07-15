@@ -1,5 +1,6 @@
 import "../../../test-setup.ts";
 import { describe, expect, test } from "bun:test";
+
 import {
   bridgeToAnchor,
   createHoverIntent,
@@ -8,7 +9,7 @@ import {
   project,
   type Rect,
   speed,
-} from "./hoverIntent.ts";
+} from "$lib/diffview/hoverIntent.ts";
 
 // The hover-intent controller is a pure pointer state machine (mirroring
 // lineDrag.ts): while the file preview is open it decides whether the pointer is

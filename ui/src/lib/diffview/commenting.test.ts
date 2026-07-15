@@ -1,5 +1,6 @@
 import "../../../test-setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
+
 import {
   type ComposerScratch,
   type CreatedAnchor,
@@ -7,7 +8,7 @@ import {
   normalizeRange,
   rangeLabel,
   scratchKey,
-} from "./commenting.ts";
+} from "$lib/diffview/commenting.ts";
 
 // The source-view gutter commenting controller is a pure state machine over the
 // @pierre/diffs gutter utility: a SelectedLineRange opens it, submit/cancel

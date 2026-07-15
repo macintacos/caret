@@ -2,9 +2,9 @@
 // v0.0.1 so the first real release has a range to bump from. Idempotent — a
 // no-op once the tag exists locally or on the remote.
 
-import { BASELINE_TAG, type BaselineResult } from "./context.ts";
-import type { Deps } from "./deps.ts";
-import { GuardError } from "./guards.ts";
+import { BASELINE_TAG, type BaselineResult } from "@/tasks/release/steps/context.ts";
+import type { Deps } from "@/tasks/release/steps/deps.ts";
+import { GuardError } from "@/tasks/release/steps/guards.ts";
 
 /** One-time bootstrap: tag the repository's initial commit as v0.0.1. Idempotent. */
 export async function baseline(deps: Deps, opts: { dryRun: boolean }): Promise<BaselineResult> {

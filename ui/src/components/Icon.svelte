@@ -5,19 +5,19 @@
   // small registry means a dynamic import would buy nothing. The SVGs stay
   // verbatim: sizing is CSS on the wrapper (overriding the files' width/height
   // attributes), and color rides on stroke="currentColor" from the parent's `color`.
-  import bell from "../icons/bell.svg?raw";
-  import bellOff from "../icons/bell-off.svg?raw";
-  import check from "../icons/check.svg?raw";
-  import chevronDown from "../icons/chevron-down.svg?raw";
-  import circleQuestionMark from "../icons/circle-question-mark.svg?raw";
-  import command from "../icons/command.svg?raw";
-  import copy from "../icons/copy.svg?raw";
-  import cornerDownLeft from "../icons/corner-down-left.svg?raw";
-  import cornerUpLeft from "../icons/corner-up-left.svg?raw";
-  import file from "../icons/file.svg?raw";
-  import settings from "../icons/settings.svg?raw";
-  import unplug from "../icons/unplug.svg?raw";
-  import type { IconName } from "../lib/icons.ts";
+  import bell from "@/icons/bell.svg?raw";
+  import bellOff from "@/icons/bell-off.svg?raw";
+  import check from "@/icons/check.svg?raw";
+  import chevronDown from "@/icons/chevron-down.svg?raw";
+  import circleQuestionMark from "@/icons/circle-question-mark.svg?raw";
+  import command from "@/icons/command.svg?raw";
+  import copy from "@/icons/copy.svg?raw";
+  import cornerDownLeft from "@/icons/corner-down-left.svg?raw";
+  import cornerUpLeft from "@/icons/corner-up-left.svg?raw";
+  import file from "@/icons/file.svg?raw";
+  import settings from "@/icons/settings.svg?raw";
+  import unplug from "@/icons/unplug.svg?raw";
+  import type { IconName } from "$lib/icons.ts";
 
   const SVGS: Record<IconName, string> = {
     bell,

@@ -1,6 +1,7 @@
 import "../../test-setup.ts";
 import { describe, expect, test } from "bun:test";
-import { renderMarkdown } from "./markdown.ts";
+
+import { renderMarkdown } from "$lib/markdown.ts";
 
 // renderMarkdown turns a stored comment's markdown source into sanitized HTML
 // for the annotation-card display. The composer stores literal markdown; this is

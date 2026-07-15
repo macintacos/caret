@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { highlightExcerpt } from "./highlight.ts";
+
+import { highlightExcerpt } from "$lib/diffview/highlight.ts";
 
 // Thin glue over shiki; the full visual render is covered by e2e. These pin the
 // contract: highlighted HTML for a known grammar, plain fallback otherwise.

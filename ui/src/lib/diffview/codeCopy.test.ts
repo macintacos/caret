@@ -1,6 +1,7 @@
 import "../../../test-setup.ts";
 import { describe, expect, test } from "bun:test";
-import { codeBlockAtPoint, copyAnchor, type RectReader } from "./codeCopy.ts";
+
+import { codeBlockAtPoint, copyAnchor, type RectReader } from "$lib/diffview/codeCopy.ts";
 
 // A host with a shadow root of [data-content] > [data-line] rows, matching the
 // @pierre/diffs structure codeCopy reads.

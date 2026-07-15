@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { APPROVE_VARIANTS, setModeFor } from "../../../src/adapters/claude/approve.ts";
+
+import { APPROVE_VARIANTS, setModeFor } from "@/adapters/claude/approve.ts";
 
 test("the two accept variants map to their Claude session setMode names", () => {
   expect(setModeFor("acceptEdits")).toBe("acceptEdits");

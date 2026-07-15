@@ -64,7 +64,7 @@ export function assetsFromDist(distDir: string): UiAssets | undefined {
  * source tree, then a dist tree beside the binary. */
 export async function loadUiAssets(): Promise<UiAssets | undefined> {
   try {
-    const mod = await import("../ui-manifest.generated.ts");
+    const mod = await import("@/ui-manifest.generated.ts");
     if (mod.UI_MANIFEST && Object.keys(mod.UI_MANIFEST).length > 0) {
       return fromPathMap(mod.UI_MANIFEST);
     }

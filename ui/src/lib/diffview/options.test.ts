@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { toFileDiffOptions, toFileOptions } from "./options.ts";
+
+import { toFileDiffOptions, toFileOptions } from "$lib/diffview/options.ts";
 
 // The option mapping always emits a complete library option object from the
 // current caret options, so passing its output to setOptions is a faithful

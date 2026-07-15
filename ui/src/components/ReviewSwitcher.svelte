@@ -4,13 +4,13 @@
   // and a count Badge, and whose items list each plan's title + abbreviated cwd.
   // The hand-rolled listbox + click-away scrim it replaced are gone — bits-ui
   // owns open/close, Escape, outside-click, and focus.
-  import { shortCwd } from "../lib/cwd.ts";
-  import { stripTitleLinks } from "../lib/title.ts";
+  import { shortCwd } from "$lib/cwd.ts";
+  import { stripTitleLinks } from "$lib/title.ts";
   import type { ClientReview } from "@core/lib/types";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
-  import Icon from "./Icon.svelte";
+  import Icon from "@/components/Icon.svelte";
 
   interface Props {
     reviews: ClientReview[];

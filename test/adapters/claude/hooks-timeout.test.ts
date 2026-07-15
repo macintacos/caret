@@ -23,8 +23,9 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HOOK_TIMEOUT_S } from "../../../src/config/constants.ts";
-import { DEFAULTS, loadSettings } from "../../../src/config/settings.ts";
+
+import { HOOK_TIMEOUT_S } from "@/config/constants.ts";
+import { DEFAULTS, loadSettings } from "@/config/settings.ts";
 
 // hooks/hooks.json sits at the repo root, two dirs up from src/, four up from here.
 const HOOKS_JSON = join(import.meta.dir, "../../../hooks/hooks.json");

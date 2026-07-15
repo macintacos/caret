@@ -9,7 +9,7 @@
 // when its own line numbering differs.
 
 import { type Annotation, isLegacyAnnotation, isLineAnnotation } from "@core/lib/types";
-import { type ComposerScratch, rangeLabel } from "./diffview/commenting.ts";
+import { type ComposerScratch, rangeLabel } from "$lib/diffview/commenting.ts";
 
 /** Collapses any run of whitespace (incl. newlines) to a single space. */
 function flatten(text: string): string {

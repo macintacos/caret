@@ -1,10 +1,11 @@
 import "../../test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
+
 import {
   DIFF_INDICATORS_KEY,
   readDiffIndicators,
   writeDiffIndicators,
-} from "./diffIndicatorsPref.ts";
+} from "$lib/diffIndicatorsPref.ts";
 
 afterEach(() => localStorage.clear());
 

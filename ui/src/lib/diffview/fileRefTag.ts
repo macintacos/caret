@@ -6,7 +6,7 @@
 // data-file-ref. The library repaints rows (async highlight, content-key
 // recreate), so the caller re-runs this via a MutationObserver.
 
-import type { FileRefSpanMap } from "./fileRefs.ts";
+import type { FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 
 const FILE_REF_ATTR = "data-file-ref";
 

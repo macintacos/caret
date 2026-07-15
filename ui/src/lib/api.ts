@@ -1,7 +1,6 @@
 // Same-origin JSON API client. All paths are relative `/api/...`; in dev the
 // Vite proxy forwards them to the daemon on :42718.
 
-import { shortId, uiLog } from "./log.ts";
 import type {
   Annotation,
   ApproveVariantId,
@@ -12,6 +11,7 @@ import type {
   PersistedScratch,
   ResolveBody,
 } from "@core/lib/types";
+import { shortId, uiLog } from "$lib/log.ts";
 
 /** Thrown when the daemon responded with a non-2xx status — distinct from a
  * network failure (the daemon is up, so it's not a connection problem). */

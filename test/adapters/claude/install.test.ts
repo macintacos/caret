@@ -2,7 +2,8 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readClaudeInstallState } from "../../../src/adapters/claude/install.ts";
+
+import { readClaudeInstallState } from "@/adapters/claude/install.ts";
 
 // Point CLAUDE_CONFIG_DIR at a throwaway temp dir so the probe reads disposable
 // state, never the real ~/.claude. The prior value is restored after each test.

@@ -2,8 +2,10 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { EXCERPT_RADIUS } from "../../src/plan/excerpt.ts";
-import type { FileExcerpt } from "../../src/lib/types.ts";
+
+import type { FileExcerpt } from "@/lib/types.ts";
+import { EXCERPT_RADIUS } from "@/plan/excerpt.ts";
+
 import { bootDaemon, type TestDaemon } from "../support/daemon.ts";
 
 // The two review-scoped file routes back the plan view's filename hover (EXC-687).

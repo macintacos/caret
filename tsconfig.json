@@ -10,11 +10,24 @@
   "compilerOptions": {
     "resolveJsonModule": true,
     "types": ["bun"],
-    // `@core/*` resolves to the tool-agnostic core in src/ (paths are relative
-    // to this config's dir). The UI imports the wire contract (src/lib/types.ts)
-    // through this alias; the root program shares it so `bun test` resolves the
-    // ui unit suite's imports identically (EXC-507).
-    "paths": { "@core/*": ["./src/*"] }
+    // `@/*` is the app-code alias: it resolves to this program's source root,
+    // src/ (the daemon core). Every module the app owns imports its siblings
+    // through it instead of a `../../` relative dance. `@core/*` also resolves to
+    // src/*, but is reserved for the cross-boundary import from the browser UI
+    // (see ui/tsconfig.json); the root program keeps the mapping so `bun test`
+    // resolves the ui unit suite's `@core` imports identically (EXC-507).
+    //
+    // `@/tasks/*` grafts the dev/release tooling in scripts/tasks/ onto the same
+    // `@/` namespace so those modules import each other by alias too. It is a
+    // longer prefix than `@/*`, and TypeScript/bun match the most-specific prefix,
+    // so `@/tasks/x` → scripts/tasks/x while `@/x` → src/x. (scripts/ shares this
+    // program rather than owning a tsconfig — it is node/bun code tsc checks
+    // alongside src and test, not a separate build like ui/.)
+    "paths": {
+      "@/tasks/*": ["./scripts/tasks/*"],
+      "@/*": ["./src/*"],
+      "@core/*": ["./src/*"]
+    }
   },
   "include": ["src/**/*.ts", "scripts/**/*.ts", "test/**/*.ts", "opencode/**/*.ts", "*.ts"],
   "exclude": ["node_modules", "bin", "ui", "spike"]

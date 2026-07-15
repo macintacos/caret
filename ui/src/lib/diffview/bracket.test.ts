@@ -1,6 +1,7 @@
 import "../../../test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
-import { bracketBox, type RectReader } from "./bracket.ts";
+
+import { bracketBox, type RectReader } from "$lib/diffview/bracket.ts";
 
 // bracketBox computes a comment-span rail's box from the shadow `[data-line]`
 // rows the source view paints, in the scroll container's content frame. happy-dom

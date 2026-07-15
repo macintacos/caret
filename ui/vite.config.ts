@@ -1,7 +1,9 @@
 import { fileURLToPath } from "node:url";
+
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
+
 import { DEFAULT_PORT } from "../src/config/constants.ts";
 
 // A standard multi-asset build: Vite emits dist/index.html plus content-hashed
@@ -50,6 +52,12 @@ export default defineConfig({
     // (shiki/core, shiki/langs/*, shiki/engine/*, shiki/bundle/full) keep
     // resolving to the real package — only the bare barrel is redirected.
     alias: [
+      // `@/*` → ui/src/*, the app-code alias UI modules import their own siblings
+      // through. The regexp anchors on the `@/` boundary so it matches `@/x` only
+      // — never `@core/x` or a scoped package like `@scope/pkg` — and so is
+      // order-independent against the entries below. Mirrors the ui/tsconfig
+      // `@/*` mapping so svelte-check, the vite build, and bun test agree.
+      { find: /^@\//, replacement: `${fileURLToPath(new URL("./src", import.meta.url))}/` },
       { find: "@core", replacement: fileURLToPath(new URL("../src", import.meta.url)) },
       // `$lib` → ui/src/lib, the import prefix shadcn-svelte's copied components
       // and components.json assume. Mirrors the @core mapping; the matching

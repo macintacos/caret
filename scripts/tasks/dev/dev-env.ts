@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 // Non-supervisory logic for the `mise run dev` task: the port-mode decision,
 // the daemon-lock port discovery (with the dev-specific stateDir guard), and a
 // constants bridge — so the bash task can stay thin process-supervision glue
@@ -11,13 +12,13 @@
 //   dev-env.ts discover-port <lock> <world> <daemonPid> → "<port>"
 // Any error exits non-zero with a message on stderr; the task aborts loudly.
 
-import type { DaemonLock } from "../../../src/lib/build-id.ts";
-import { DEFAULT_PORT, NEVER_IDLE_MS } from "../../../src/config/constants.ts";
-import { isPidAlive } from "../../../src/daemon/lifecycle.ts";
-import { readJsonFileSync } from "../../../src/lib/json-file.ts";
+import { DEFAULT_PORT, NEVER_IDLE_MS } from "@/config/constants.ts";
 // EXC-558: dev port/state-dir resolve through settings (CARET_DEV_* > [dev] key
 // > default); the bash task passes no port arg — port-mode/state-dir read here.
-import { devPort, devStateDir, loadSettings } from "../../../src/config/settings.ts";
+import { devPort, devStateDir, loadSettings } from "@/config/settings.ts";
+import { isPidAlive } from "@/daemon/lifecycle.ts";
+import type { DaemonLock } from "@/lib/build-id.ts";
+import { readJsonFileSync } from "@/lib/json-file.ts";
 
 /** Decide how the dev daemon binds its port from the already-resolved dev port
  * (CARET_DEV_PORT > [dev].port, via devPort). Unset → ephemeral (an OS-assigned

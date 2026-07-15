@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
+
 import type { ApproveVariant } from "@core/lib/types";
-import { approveLabel, approveVariants, WIRE_FALLBACK } from "./approve.ts";
+import { approveLabel, approveVariants, WIRE_FALLBACK } from "$lib/approve.ts";
 
 describe("approveVariants", () => {
   test("returns the declared set when present and non-empty", () => {

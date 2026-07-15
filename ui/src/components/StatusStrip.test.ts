@@ -1,7 +1,9 @@
 import "../../test-mount.ts";
 import { describe, expect, test } from "bun:test";
+
+import StatusStrip from "@/components/StatusStrip.svelte";
+
 import { render } from "../../test-mount.ts";
-import StatusStrip from "./StatusStrip.svelte";
 
 // EXC-763: the StatusStrip readout is rebuilt on shadcn primitives (Badge for
 // the revision pill, Separator for the metric dividers, Tooltip for the hover

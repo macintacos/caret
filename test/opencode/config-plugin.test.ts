@@ -5,10 +5,11 @@
 // entries, other keys, and comments survive.
 
 import { expect, test } from "bun:test";
+
 import {
   addPluginToConfigText,
   removePluginFromConfigText,
-} from "../../src/adapters/opencode/config-plugin.ts";
+} from "@/adapters/opencode/config-plugin.ts";
 
 const PKG = "@macintacos/caret";
 

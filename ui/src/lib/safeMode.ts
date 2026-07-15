@@ -8,7 +8,7 @@
 // Framework-agnostic and unit-tested in isolation; App.svelte wires it to a
 // `window` target and reflects `onChange` into reactive state.
 
-import { uiLog } from "./log.ts";
+import { uiLog } from "$lib/log.ts";
 
 export interface SafeModeOptions {
   /** Event source to guard — `window` in the app. */

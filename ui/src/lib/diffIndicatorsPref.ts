@@ -9,8 +9,8 @@
 // owns the never-throw fail-safe: a blocked or unavailable localStorage degrades
 // to the default rather than breaking the view.
 
-import type { DiffIndicators } from "./diffview/types.ts";
-import { enumLocalStoragePref } from "./enumLocalStoragePref.ts";
+import type { DiffIndicators } from "$lib/diffview/types.ts";
+import { enumLocalStoragePref } from "$lib/enumLocalStoragePref.ts";
 
 /** localStorage key holding the remembered gutter indicators. */
 export const DIFF_INDICATORS_KEY = "caret.diffIndicators";

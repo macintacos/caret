@@ -8,11 +8,11 @@ import {
   compareUrl,
   parseCommitMeta,
   SCHEMA_VERSION,
-} from "../contract.ts";
-import type { BumpLevel } from "../version.ts";
-import { gatherContext, MANIFESTS } from "./context.ts";
-import type { Deps } from "./deps.ts";
-import { assertBranch, assertCleanTree, assertRepoAndGh } from "./guards.ts";
+} from "@/tasks/release/contract.ts";
+import { gatherContext, MANIFESTS } from "@/tasks/release/steps/context.ts";
+import type { Deps } from "@/tasks/release/steps/deps.ts";
+import { assertBranch, assertCleanTree, assertRepoAndGh } from "@/tasks/release/steps/guards.ts";
+import type { BumpLevel } from "@/tasks/release/version.ts";
 
 /** Read-only: computes the next version + commit range. Never mutates anything. */
 export async function compute(deps: Deps, opts: { bump: BumpLevel }): Promise<ComputeResult> {

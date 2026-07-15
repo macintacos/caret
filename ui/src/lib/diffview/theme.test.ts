@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { caretDiffTheme, registerCaretDiffThemes } from "./theme.ts";
+
+import { caretDiffTheme, registerCaretDiffThemes } from "$lib/diffview/theme.ts";
 
 // The bridge selects caret's own Shiki themes for the diff view so its
 // highlighting matches caret's code blocks exactly, and registers them into

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
+
 import {
   configDir,
   configFile,
@@ -9,7 +10,8 @@ import {
   ensureStateDir,
   reviewsDir,
   stateDir,
-} from "../../src/config/paths.ts";
+} from "@/config/paths.ts";
+
 import { setupTempStateDir, withEnv } from "../support/env.ts";
 
 // The CARET_* accessor and invalidEnvVars tests live in settings.test.ts with

@@ -9,9 +9,15 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+
 import { parse as parseJsonc } from "jsonc-parser";
-import type { InstallProbe } from "../adapter.ts";
-import { CONFIG_FILENAMES, opencodeCachePackageDir, opencodeConfigDir } from "./paths.ts";
+
+import type { InstallProbe } from "@/adapters/adapter.ts";
+import {
+  CONFIG_FILENAMES,
+  opencodeCachePackageDir,
+  opencodeConfigDir,
+} from "@/adapters/opencode/paths.ts";
 
 /** Best-effort read of caret's OpenCode install state. Every miss degrades to
  * "unknown". Reads ONLY caret's own cache package / the user's plugin array. */

@@ -14,8 +14,8 @@
 // Also exports bellPresentation, the pure permission → badge mapping consumed
 // by NotifyBell.svelte — kept here because bun:test can't compile .svelte.
 
-import type { IconName } from "./icons.ts";
-import { shortId, uiLog } from "./log.ts";
+import type { IconName } from "$lib/icons.ts";
+import { shortId, uiLog } from "$lib/log.ts";
 
 /** Minimal surface the notifier needs from a constructed Notification. The
  * show/error events are the only display feedback the platform offers: a

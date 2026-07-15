@@ -2,7 +2,8 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readCodexInstallState } from "../../../src/adapters/codex/install.ts";
+
+import { readCodexInstallState } from "@/adapters/codex/install.ts";
 
 // Point CODEX_HOME at a throwaway temp dir so the probe reads disposable state,
 // never the real ~/.codex. The prior value is restored after each test.

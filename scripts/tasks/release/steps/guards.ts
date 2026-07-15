@@ -3,9 +3,9 @@
 // manifest-sync check. Each raises a typed GuardError so the CLI can surface a
 // machine-readable ErrorCode in its JSON contract.
 
-import type { ErrorCode } from "../contract.ts";
-import { assertInSync } from "../manifest.ts";
-import type { Deps } from "./deps.ts";
+import type { ErrorCode } from "@/tasks/release/contract.ts";
+import { assertInSync } from "@/tasks/release/manifest.ts";
+import type { Deps } from "@/tasks/release/steps/deps.ts";
 
 /** A guard rejection carrying the machine-readable ErrorCode for the contract. */
 export class GuardError extends Error {

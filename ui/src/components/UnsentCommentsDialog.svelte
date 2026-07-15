@@ -1,10 +1,10 @@
 <script lang="ts">
-  import type { PendingItem } from "../lib/feedback.ts";
-  import type { IconName } from "../lib/icons.ts";
+  import type { PendingItem } from "$lib/feedback.ts";
+  import type { IconName } from "$lib/icons.ts";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Textarea } from "$lib/components/ui/textarea/index.js";
-  import Icon from "./Icon.svelte";
-  import Modal from "./Modal.svelte";
+  import Icon from "@/components/Icon.svelte";
+  import Modal from "@/components/Modal.svelte";
 
   interface Props {
     /** The unsent feedback a plain confirm would leave behind — the general-comment

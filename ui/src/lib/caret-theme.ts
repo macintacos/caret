@@ -1,5 +1,6 @@
 import type { ThemeRegistrationRaw } from "shiki/core";
-import { type Theme, THEMES } from "./theme.ts";
+
+import { THEMES, type Theme } from "$lib/theme.ts";
 
 // Custom shiki themes that mirror caret's neutral palette so highlighted code
 // reads like a typeset listing rather than a generic editor theme: mostly ink,

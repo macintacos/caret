@@ -1,8 +1,8 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button/index.js";
-  import type { ThemeId } from "../lib/theme.ts";
-  import Modal from "./Modal.svelte";
-  import ThemePicker from "./ThemePicker.svelte";
+  import type { ThemeId } from "$lib/theme.ts";
+  import Modal from "@/components/Modal.svelte";
+  import ThemePicker from "@/components/ThemePicker.svelte";
 
   interface Props {
     /** The theme currently applied — drives the picker's selected value + label. */

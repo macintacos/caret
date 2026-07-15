@@ -4,25 +4,25 @@
   // (instance.ts); this component only binds the container and feeds prop
   // changes through sync().
   import { File, type FileContents } from "@pierre/diffs";
-  import { createDiffViewLifecycle } from "./instance.ts";
-  import { createLineDrag } from "./lineDrag.ts";
-  import { shouldCommentOnLineClick } from "./annotationSlot.ts";
-  import type { FileRefSpan, FileRefSpanMap } from "./fileRefs.ts";
-  import { tagFileRefTokens } from "./fileRefTag.ts";
-  import { type ComposedTokenHandlers, composeTokenHandlers } from "./linkInteractions.ts";
-  import { type LinkSpanMap, openLinkInNewTab } from "./links.ts";
-  import { type SourceViewGutter, type SourceViewLibOptions, toFileOptions } from "./options.ts";
-  import { scrollToLine } from "./scroll.ts";
-  import { type CodeBlockRange, codeBlockRanges, tagCodeBlockRows } from "./codeBlocks.ts";
-  import { syncCodeBlockCards } from "./codeBlockScroll.ts";
-  import { preloadFenceLanguages, scanFenceLanguages } from "./languages.ts";
-  import { registerCaretDiffThemes } from "./theme.ts";
+  import { createDiffViewLifecycle } from "$lib/diffview/instance.ts";
+  import { createLineDrag } from "$lib/diffview/lineDrag.ts";
+  import { shouldCommentOnLineClick } from "$lib/diffview/annotationSlot.ts";
+  import type { FileRefSpan, FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
+  import { tagFileRefTokens } from "$lib/diffview/fileRefTag.ts";
+  import { type ComposedTokenHandlers, composeTokenHandlers } from "$lib/diffview/linkInteractions.ts";
+  import { type LinkSpanMap, openLinkInNewTab } from "$lib/diffview/links.ts";
+  import { type SourceViewGutter, type SourceViewLibOptions, toFileOptions } from "$lib/diffview/options.ts";
+  import { scrollToLine } from "$lib/diffview/scroll.ts";
+  import { type CodeBlockRange, codeBlockRanges, tagCodeBlockRows } from "$lib/diffview/codeBlocks.ts";
+  import { syncCodeBlockCards } from "$lib/diffview/codeBlockScroll.ts";
+  import { preloadFenceLanguages, scanFenceLanguages } from "$lib/diffview/languages.ts";
+  import { registerCaretDiffThemes } from "$lib/diffview/theme.ts";
   import type {
     SourceDocument,
     SourceLineAnnotation,
     SourceViewApi,
     SourceViewOptions,
-  } from "./types.ts";
+  } from "$lib/diffview/types.ts";
 
   // Teach the library's highlighter caret's themes before the first render
   // selects them. Idempotent, so calling it from each wrapper is safe.

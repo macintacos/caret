@@ -1,12 +1,13 @@
 import "../../../test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
+
 import {
   annotationSlotName,
   groupAnnotationsByLine,
   shouldCommentOnLineClick,
   slotInto,
   toLineAnnotations,
-} from "./annotationSlot.ts";
+} from "$lib/diffview/annotationSlot.ts";
 
 afterEach(() => {
   document.body.replaceChildren();

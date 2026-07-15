@@ -1,44 +1,44 @@
 <script lang="ts">
-  import { getHealth } from "./lib/api.ts";
-  import { approveVariants } from "./lib/approve.ts";
-  import { createPlanNotifier } from "./lib/notify.ts";
-  import { installUiGoneBeacon } from "./lib/presence.ts";
-  import { createSafeModeGuard } from "./lib/safeMode.ts";
-  import { createAutosave } from "./state/autosave.svelte.ts";
+  import { getHealth } from "$lib/api.ts";
+  import { approveVariants } from "$lib/approve.ts";
+  import { createPlanNotifier } from "$lib/notify.ts";
+  import { installUiGoneBeacon } from "$lib/presence.ts";
+  import { createSafeModeGuard } from "$lib/safeMode.ts";
+  import { createAutosave } from "@/state/autosave.svelte.ts";
   import {
     createReviewSelection,
     startPolling,
     type SelectionStore,
-  } from "./state/polling.svelte.ts";
-  import { createResolve, type ResolveStore } from "./state/resolve.svelte.ts";
+  } from "@/state/polling.svelte.ts";
+  import { createResolve, type ResolveStore } from "@/state/resolve.svelte.ts";
   import {
     type CommentIndexEntry,
     commentIndex,
     coveredLineCount,
     pendingItems,
-  } from "./lib/feedback.ts";
-  import { applyTheme, DEFAULT_THEME_ID, readThemeId, THEMES, type ThemeId } from "./lib/theme.ts";
-  import { changeTheme } from "./lib/themeWipe.ts";
+  } from "$lib/feedback.ts";
+  import { applyTheme, DEFAULT_THEME_ID, readThemeId, THEMES, type ThemeId } from "$lib/theme.ts";
+  import { changeTheme } from "$lib/themeWipe.ts";
   import {
     clearKnownPrefs,
     freshResetApplied,
     markFreshResetApplied,
     shouldShowOnboarding,
-  } from "./lib/prefs.ts";
-  import type { ComposerScratch } from "./lib/diffview/commenting.ts";
+  } from "$lib/prefs.ts";
+  import type { ComposerScratch } from "$lib/diffview/commenting.ts";
   import type { ApproveVariant, ApproveVariantId, Annotation, PersistedScratch } from "@core/lib/types";
 
   import * as Alert from "$lib/components/ui/alert/index.js";
-  import UnsentCommentsDialog from "./components/UnsentCommentsDialog.svelte";
-  import CommentNavigator from "./components/CommentNavigator.svelte";
-  import DiffPlanView from "./components/DiffPlanView.svelte";
-  import EmptyState from "./components/EmptyState.svelte";
-  import OnboardingDialog from "./components/OnboardingDialog.svelte";
-  import RequestChangesDialog from "./components/RequestChangesDialog.svelte";
-  import SettingsDialog from "./components/SettingsDialog.svelte";
-  import StatusStrip from "./components/StatusStrip.svelte";
-  import TopBar from "./components/TopBar.svelte";
-  import VersionBadge from "./components/VersionBadge.svelte";
+  import UnsentCommentsDialog from "@/components/UnsentCommentsDialog.svelte";
+  import CommentNavigator from "@/components/CommentNavigator.svelte";
+  import DiffPlanView from "@/components/DiffPlanView.svelte";
+  import EmptyState from "@/components/EmptyState.svelte";
+  import OnboardingDialog from "@/components/OnboardingDialog.svelte";
+  import RequestChangesDialog from "@/components/RequestChangesDialog.svelte";
+  import SettingsDialog from "@/components/SettingsDialog.svelte";
+  import StatusStrip from "@/components/StatusStrip.svelte";
+  import TopBar from "@/components/TopBar.svelte";
+  import VersionBadge from "@/components/VersionBadge.svelte";
 
   // ----- Reactive backing state -----
   // `daemonChanged`: set when the daemon behind the port is replaced (its

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { REFERENCE_WIDTH_PX } from "./layout.ts";
+
+import { REFERENCE_WIDTH_PX } from "$lib/layout.ts";
 
 // playwright.config.ts derives its e2e viewport width from REFERENCE_WIDTH_PX
 // (with headroom) so the e2e layout tracks the reference width instead of being

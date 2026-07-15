@@ -4,8 +4,8 @@
 // it owns the shadow root and adopts that stylesheet here — without it the
 // content column collapses to zero width and only the line-number gutter shows.
 
-import fileIconRaw from "../../icons/file.svg?raw";
-import { DIFFS_CORE_STYLES } from "./diffsCoreStyles.ts";
+import fileIconRaw from "@/icons/file.svg?raw";
+import { DIFFS_CORE_STYLES } from "$lib/diffview/diffsCoreStyles.ts";
 
 // The vendored Lucide `file` glyph as a CSS mask source (EXC-687). Rendered as a
 // mask rather than an <img> so it takes the ink color of the surrounding text via

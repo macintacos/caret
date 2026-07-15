@@ -10,8 +10,10 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { APPROVE_VARIANTS } from "../../../src/adapters/claude/approve.ts";
-import { type ApproveModeSet, readApproveMode } from "../../../src/config/prefs.ts";
+
+import { APPROVE_VARIANTS } from "@/adapters/claude/approve.ts";
+import { type ApproveModeSet, readApproveMode } from "@/config/prefs.ts";
+
 import { bootDaemon, type TestDaemon } from "../../support/daemon.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures");

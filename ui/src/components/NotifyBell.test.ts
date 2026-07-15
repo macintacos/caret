@@ -1,7 +1,9 @@
 import "../../test-mount.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+
+import NotifyBell from "@/components/NotifyBell.svelte";
+
 import { render } from "../../test-mount.ts";
-import NotifyBell from "./NotifyBell.svelte";
 
 // bellPresentation() (the permission→icon/tone/title mapping) is covered in
 // notify.test.ts; this suite covers NotifyBell's DOM wiring of that mapping and

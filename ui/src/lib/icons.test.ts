@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ICON_NAMES } from "./icons.ts";
+
+import { ICON_NAMES } from "$lib/icons.ts";
 
 // The vendored-icon contract (EXC-395): ui/src/icons/ holds ONLY verbatim
 // Lucide SVGs, in 1:1 correspondence with ICON_NAMES. These tests gate the
@@ -31,9 +32,7 @@ describe("vendored icon set", () => {
   // composition key ↔ stem must be the identity over ICON_NAMES.
   test("Icon.svelte wires every registry name to its own SVG", () => {
     const src = readFileSync(join(import.meta.dir, "../components/Icon.svelte"), "utf8");
-    const importPairs = [
-      ...src.matchAll(/import (\w+) from "\.\.\/icons\/([a-z0-9-]+)\.svg\?raw"/g),
-    ];
+    const importPairs = [...src.matchAll(/import (\w+) from "@\/icons\/([a-z0-9-]+)\.svg\?raw"/g)];
     expect(importPairs.length).toBe(ICON_NAMES.length);
     const stemByIdent = new Map(importPairs.map((m) => [m[1], m[2]]));
     const start = src.indexOf("const SVGS");

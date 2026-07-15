@@ -2,7 +2,8 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readOpencodeInstallState } from "../../../src/adapters/opencode/install.ts";
+
+import { readOpencodeInstallState } from "@/adapters/opencode/install.ts";
 
 // Point OPENCODE_CONFIG_DIR + XDG_CACHE_HOME at throwaway temp dirs so the probe
 // reads disposable state, never the real ~/.config/opencode or ~/.cache/opencode.

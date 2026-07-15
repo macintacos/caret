@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
-import { runReconcile } from "../../src/review/reconcile.ts";
-import type { ClientReview, PlanInput } from "../../src/lib/types.ts";
+
+import type { ClientReview, PlanInput } from "@/lib/types.ts";
+import { runReconcile } from "@/review/reconcile.ts";
+
 import { setupTempStateDir } from "../support/env.ts";
 
 // Point the state dir at a throwaway temp dir so reconcile's best-effort log

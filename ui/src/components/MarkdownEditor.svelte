@@ -11,7 +11,7 @@
   import { EditorState } from "@codemirror/state";
   import { EditorView } from "@codemirror/view";
   import { untrack } from "svelte";
-  import { markdownExtensions } from "../lib/markdownEditor.ts";
+  import { markdownExtensions } from "$lib/markdownEditor.ts";
 
   interface Props {
     /** Initial markdown, seeded once at mount (a resumed scratch restores here). */

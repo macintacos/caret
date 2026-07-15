@@ -5,11 +5,11 @@
 // assert exactly what would (or would not) run. It lives in test/support/ (not a
 // *.test.ts file) so bun test never collects it as a suite; release-steps.test.ts
 // and the per-step test files consume it.
-import type { GitOps, RawCommit } from "../../scripts/tasks/release/git.ts";
-import type { GitHubOps, PullRequestSummary } from "../../scripts/tasks/release/github.ts";
-import type { NpmOps } from "../../scripts/tasks/release/npm.ts";
-import type { RumdlOps } from "../../scripts/tasks/release/rumdl.ts";
-import type { Deps, FsOps } from "../../scripts/tasks/release/steps.ts";
+import type { GitOps, RawCommit } from "@/tasks/release/git.ts";
+import type { GitHubOps, PullRequestSummary } from "@/tasks/release/github.ts";
+import type { NpmOps } from "@/tasks/release/npm.ts";
+import type { RumdlOps } from "@/tasks/release/rumdl.ts";
+import type { Deps, FsOps } from "@/tasks/release/steps.ts";
 
 /** A package.json / plugin.json body carrying just the version field tests assert on. */
 export const pkg = (v: string) => `{\n  "name": "caret",\n  "version": "${v}"\n}\n`;

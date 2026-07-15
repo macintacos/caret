@@ -5,6 +5,15 @@ runes, but the orchestration logic — polling, autosave, the resolve flow — l
 components as plain, unit-testable factories. App.svelte is a thin shell that wires them
 together.
 
+## Imports
+
+UI modules import their own siblings through the **`@/` alias**
+(`@/state/polling.svelte.ts`, `@/components/TopBar.svelte`) — `@/` is `ui/src/`. The
+`ui/src/lib/` directory keeps its idiomatic **`$lib`** prefix (shadcn-svelte's
+convention), and the shared core is reached through **`@core`**. All three sit together in
+the import grouping; relative paths are only for files with no alias. The full convention
+— and how Biome auto-groups imports — lives in `typescript-rules.md`.
+
 ## State modules are plain factories, not runes-in-.svelte.ts
 
 Shared/orchestration state lives in `ui/src/state/` (polling, autosave, render memo,

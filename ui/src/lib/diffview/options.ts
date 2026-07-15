@@ -8,9 +8,10 @@ import type {
   LineAnnotation,
   SelectedLineRange,
 } from "@pierre/diffs";
-import type { ComposedTokenHandlers } from "./linkInteractions.ts";
-import { caretDiffTheme } from "./theme.ts";
-import type { SourceDiffViewOptions, SourceViewOptions } from "./types.ts";
+
+import type { ComposedTokenHandlers } from "$lib/diffview/linkInteractions.ts";
+import { caretDiffTheme } from "$lib/diffview/theme.ts";
+import type { SourceDiffViewOptions, SourceViewOptions } from "$lib/diffview/types.ts";
 
 /** The gutter-utility opt-in plus its callbacks, supplied by a view that lets
  * the reviewer comment on a line. `renderAnnotation` builds the inline DOM for

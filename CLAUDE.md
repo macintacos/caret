@@ -31,7 +31,7 @@ digraph caret_rules_router {
 
     "Working on caret" -> "What does the change touch?";
     "What does the change touch?" -> "Load doc/agents/architecture-rules.md" [label="core/adapter boundary, daemon routing, @core shared modules"];
-    "What does the change touch?" -> "Load doc/agents/typescript-rules.md" [label="TS module shape: DI, file-split seams, zod boundaries, helpers"];
+    "What does the change touch?" -> "Load doc/agents/typescript-rules.md" [label="TS module shape: DI, file-split seams, zod boundaries, helpers, import aliases (@/)"];
     "What does the change touch?" -> "Load doc/agents/svelte-rules.md" [label="Svelte UI in ui/: components, runes, state factories, CSS tokens"];
     "What does the change touch?" -> "Load doc/agents/shadcn-rules.md" [label="composing UI from shadcn-svelte components: compose-first norm, token bridge, icon swap, what stays custom"];
     "What does the change touch?" -> "Load doc/agents/browser-testing.md" [label="testing browser behavior: e2e vs. unit, the e2e harness"];

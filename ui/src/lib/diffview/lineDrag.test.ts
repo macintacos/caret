@@ -1,7 +1,8 @@
 import "../../../test-setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
-import type { PendingComposer } from "./commenting.ts";
-import { createLineDrag, type LineDrag, type LineDragPointer } from "./lineDrag.ts";
+
+import type { PendingComposer } from "$lib/diffview/commenting.ts";
+import { createLineDrag, type LineDrag, type LineDragPointer } from "$lib/diffview/lineDrag.ts";
 
 // The content-drag controller is a pure pointer state machine: a non-Shift drag
 // across the code body selects a line range and, on release, commits it (the host

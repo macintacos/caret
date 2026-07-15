@@ -23,7 +23,7 @@
 //      Codex's permission-escalation shape is stable and live-verified. See
 //      approve.ts for the single-variant rationale.
 
-import type { ApproveVariantId, Behavior } from "../../lib/types.ts";
+import type { ApproveVariantId, Behavior } from "@/lib/types.ts";
 
 export interface CodexDecision {
   behavior: Behavior;

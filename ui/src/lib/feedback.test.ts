@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
+
 import type { Annotation } from "@core/lib/types";
-import type { ComposerScratch } from "./diffview/commenting.ts";
+import type { ComposerScratch } from "$lib/diffview/commenting.ts";
 import {
   commentIndex,
   coveredLineCount,
@@ -11,7 +12,7 @@ import {
   pendingItems,
   pendingLineCount,
   sourceLines,
-} from "./feedback.ts";
+} from "$lib/feedback.ts";
 
 // A synthetic plan whose lines are individually identifiable, so a quoted block
 // is unambiguous. Line numbers are 1-based: line 1 is "# Title", line 3 is the

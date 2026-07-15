@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { codexAdapter } from "../../../src/adapters/codex/index.ts";
-import { toHookOutput } from "../../../src/adapters/codex/feedback.ts";
-import type { Decision } from "../../../src/lib/types.ts";
+
+import { toHookOutput } from "@/adapters/codex/feedback.ts";
+import { codexAdapter } from "@/adapters/codex/index.ts";
+import type { Decision } from "@/lib/types.ts";
 
 test("emitDecision serializes a deny to the Codex PermissionRequest JSON", () => {
   const decision: Decision = { behavior: "deny", feedback: "tighten scope", decidedAt: 1 };

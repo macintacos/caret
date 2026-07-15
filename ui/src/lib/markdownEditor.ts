@@ -14,12 +14,13 @@ import {
   Decoration,
   type DecorationSet,
   EditorView,
-  ViewPlugin,
   keymap,
   placeholder,
+  ViewPlugin,
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
-import { isCancelKey, isSubmitChord } from "./keys.ts";
+
+import { isCancelKey, isSubmitChord } from "$lib/keys.ts";
 
 export interface MarkdownEditorOptions {
   placeholder: string;

@@ -3,7 +3,9 @@ import { readFileSync, statSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { callerLocation, parseCaller } from "../../src/lib/caller-location.ts";
+
+import { daemonLogFile, logFile } from "@/config/paths.ts";
+import { callerLocation, parseCaller } from "@/lib/caller-location.ts";
 import {
   createDaemonLogger,
   type ErrorContext,
@@ -14,8 +16,8 @@ import {
   resetHookLogger,
   setLogLevel,
   setRedact,
-} from "../../src/lib/log.ts";
-import { daemonLogFile, logFile } from "../../src/config/paths.ts";
+} from "@/lib/log.ts";
+
 import { setupTempStateDir } from "../support/env.ts";
 import { ndjsonRecords } from "../support/ndjson.ts";
 

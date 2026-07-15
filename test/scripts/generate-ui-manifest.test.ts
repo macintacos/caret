@@ -5,9 +5,10 @@
 // these tests pin its URL mapping, enumeration completeness, and emitted-module
 // shape without a real build.
 import { expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import {
   enumerateDist,
   type ManifestEntry,

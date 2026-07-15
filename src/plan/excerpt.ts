@@ -8,7 +8,8 @@
 
 import { type Dirent, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import type { FileExcerpt } from "../lib/types.ts";
+
+import type { FileExcerpt } from "@/lib/types.ts";
 
 // The preview is deliberately a small snippet: it must fit in the hover card
 // without vertical scrolling, so it never reads as the whole file. These windows

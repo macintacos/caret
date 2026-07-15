@@ -9,13 +9,13 @@
 // stdout, and any error (bad adapter selector, unreadable stdin) is swallowed so
 // a stray decision line can't reach Claude's PostToolUse channel.
 
-import { selectAdapter } from "../adapters/index.ts";
-import { listReviews, resolveReview } from "../daemon/client.ts";
-import { logDebug, logWarn, setLogLevel, setRedact } from "../lib/log.ts";
-import { type ReconcileDeps, runReconcile } from "../review/reconcile.ts";
-import { getPort, loadSettings } from "../config/settings.ts";
-import type { AgentAdapter } from "../adapters/adapter.ts";
-import { warnInvalidEnvVars } from "./boot.ts";
+import type { AgentAdapter } from "@/adapters/adapter.ts";
+import { selectAdapter } from "@/adapters/index.ts";
+import { warnInvalidEnvVars } from "@/commands/boot.ts";
+import { getPort, loadSettings } from "@/config/settings.ts";
+import { listReviews, resolveReview } from "@/daemon/client.ts";
+import { logDebug, logWarn, setLogLevel, setRedact } from "@/lib/log.ts";
+import { type ReconcileDeps, runReconcile } from "@/review/reconcile.ts";
 
 export function prodReconcileDeps(baseUrl: string, adapter: AgentAdapter): ReconcileDeps {
   return {

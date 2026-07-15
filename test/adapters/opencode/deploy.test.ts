@@ -3,7 +3,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { deployFiles, removeFiles, renderPlugin } from "../../../src/adapters/opencode/deploy.ts";
+
+import { deployFiles, removeFiles, renderPlugin } from "@/adapters/opencode/deploy.ts";
 
 test("renderPlugin substitutes the version and bin markers (all occurrences)", () => {
   const out = renderPlugin(`v="__CARET_VERSION__"; bin="__CARET_BIN__"; again="__CARET_BIN__"`, {

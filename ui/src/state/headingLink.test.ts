@@ -1,6 +1,7 @@
 import "../../test-setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { headingSlug, setHeadingSlug, takeHeadingSlug } from "./headingLink.ts";
+
+import { headingSlug, setHeadingSlug, takeHeadingSlug } from "@/state/headingLink.ts";
 
 // Set the URL's query params directly. happy-dom's base is about:blank and
 // rejects a bare relative path, so build the href off the current location

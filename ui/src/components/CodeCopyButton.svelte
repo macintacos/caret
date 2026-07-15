@@ -8,7 +8,7 @@
   // animate; the app.css reduced-motion kill-switch collapses it for that preference.
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
-  import Icon from "./Icon.svelte";
+  import Icon from "@/components/Icon.svelte";
 
   interface Props {
     /** The code to copy (fence markers already stripped). */

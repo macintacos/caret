@@ -4,7 +4,7 @@
 // which is a documented future variant, not built here. The single `default`
 // variant is deliberate, mirroring the codex rationale (see codex/approve.ts).
 
-import type { ApproveVariant } from "../../lib/types.ts";
+import type { ApproveVariant } from "@/lib/types.ts";
 
 /**
  * OpenCode's declared approve variants, in display order — a single plain approve.

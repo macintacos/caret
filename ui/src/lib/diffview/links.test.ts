@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { buildLinkLayer, openLinkInNewTab } from "./links.ts";
+
+import { buildLinkLayer, openLinkInNewTab } from "$lib/diffview/links.ts";
 
 // buildLinkLayer is the pure transform: plan source text -> display text +
 // a per-line span map of clickable link ranges. It is strictly per-line — it

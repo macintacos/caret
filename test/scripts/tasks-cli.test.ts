@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { JsonArgs } from "../../scripts/preflight.ts";
+
 import {
   buildBinArtifacts,
   buildBinCompileCommand,
@@ -8,14 +8,16 @@ import {
   buildUiCommand,
   ensureUi,
   shouldBuildUi,
-} from "../../scripts/tasks/build.ts";
-import { type TaskActions, buildProgram } from "../../scripts/tasks/cli.ts";
-import type { RunDevOptions } from "../../scripts/tasks/dev/run.ts";
-import { formatCommand } from "../../scripts/tasks/format.ts";
-import { lintCommand } from "../../scripts/tasks/lint.ts";
-import { setupCommands } from "../../scripts/tasks/setup.ts";
-import { smokePlan } from "../../scripts/tasks/smoke.ts";
-import { e2eCommand, testCommand } from "../../scripts/tasks/test.ts";
+} from "@/tasks/build.ts";
+import { buildProgram, type TaskActions } from "@/tasks/cli.ts";
+import type { RunDevOptions } from "@/tasks/dev/run.ts";
+import { formatCommand } from "@/tasks/format.ts";
+import { lintCommand } from "@/tasks/lint.ts";
+import { setupCommands } from "@/tasks/setup.ts";
+import { smokePlan } from "@/tasks/smoke.ts";
+import { e2eCommand, testCommand } from "@/tasks/test.ts";
+
+import type { JsonArgs } from "../../scripts/preflight.ts";
 
 // The actions are injectable, so these drive the real commander tree (parsing,
 // defaults, coercion, passthrough) and capture what it would hand each run

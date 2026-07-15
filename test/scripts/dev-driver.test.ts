@@ -1,16 +1,17 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
-import { PLAN_REJECTED_MESSAGE } from "../../src/config/constants.ts";
-import { runReview } from "../../src/review/orchestrate.ts";
-import { setLogLevel } from "../../src/lib/log.ts";
-import { hasUntaggedCodeBlock } from "../../src/plan/format.ts";
+
+import { PLAN_REJECTED_MESSAGE } from "@/config/constants.ts";
+import { setLogLevel } from "@/lib/log.ts";
+import { hasUntaggedCodeBlock } from "@/plan/format.ts";
+import { runReview } from "@/review/orchestrate.ts";
 import {
   assertDevEnv,
   bootstrapReview,
   devReviewDeps,
   runExtraReview,
   runExtraSeeder,
-} from "../../scripts/tasks/dev/driver.ts";
+} from "@/tasks/dev/driver.ts";
 import {
   appendRevision,
   bootstrapPlans,
@@ -21,7 +22,8 @@ import {
   nextPlan,
   parseNumVersions,
   parsePositiveInt,
-} from "../../scripts/tasks/dev/protocol.ts";
+} from "@/tasks/dev/protocol.ts";
+
 import { bootDaemon, type TestDaemon } from "../support/daemon.ts";
 import { setupTempStateDir } from "../support/env.ts";
 import { waitFor } from "../support/poll.ts";

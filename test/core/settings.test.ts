@@ -3,7 +3,8 @@ import { unlinkSync, utimesSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MAX_HEARTBEAT_MS } from "../../src/config/constants.ts";
+
+import { MAX_HEARTBEAT_MS } from "@/config/constants.ts";
 import {
   createSettings,
   DEFAULT_PORT,
@@ -20,7 +21,8 @@ import {
   type Settings,
   settings,
   watchSettings,
-} from "../../src/config/settings.ts";
+} from "@/config/settings.ts";
+
 import { withEnv } from "../support/env.ts";
 
 let dir: string;

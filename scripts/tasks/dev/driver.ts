@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 // Deterministic dev driver: plays the agent's side of the caret protocol so
 // `mise run dev` shows a fake plan that survives request-changes / approve
 // round-trips — no real Claude session, no LLM. Every submission goes through
@@ -13,17 +14,12 @@
 // supervision loops; the pure protocol state machine it drives lives in
 // scripts/tasks/dev/protocol.ts.
 
-import { expireReview, longPoll, postReview, waitForHealth } from "../../../src/daemon/client.ts";
-import { type ReviewDeps, runReview } from "../../../src/review/orchestrate.ts";
-import { claudeAdapter } from "../../../src/adapters/claude/index.ts";
-import { NEVER_IDLE_MS } from "../../../src/config/constants.ts";
-import {
-  DEFAULT_PORT,
-  devSeeder,
-  loadSettings,
-  type Settings,
-} from "../../../src/config/settings.ts";
-import type { ClientReview } from "../../../src/lib/types.ts";
+import { claudeAdapter } from "@/adapters/claude/index.ts";
+import { NEVER_IDLE_MS } from "@/config/constants.ts";
+import { DEFAULT_PORT, devSeeder, loadSettings, type Settings } from "@/config/settings.ts";
+import { expireReview, longPoll, postReview, waitForHealth } from "@/daemon/client.ts";
+import type { ClientReview } from "@/lib/types.ts";
+import { type ReviewDeps, runReview } from "@/review/orchestrate.ts";
 import {
   appendRevision,
   bootstrapPlans,
@@ -34,7 +30,7 @@ import {
   hookStdin,
   nextPlan,
   parseNumVersions,
-} from "./protocol.ts";
+} from "@/tasks/dev/protocol.ts";
 
 const log = (msg: string) => process.stderr.write(`[caret dev driver] ${msg}\n`);
 

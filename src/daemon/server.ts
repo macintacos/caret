@@ -5,18 +5,28 @@
 
 import { renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { type DaemonLock, IDENTITY, isCompiledBinary } from "../lib/build-id.ts";
-import { deriveIdleTimeoutSec } from "../config/constants.ts";
-import { createDecisions } from "../review/decisions.ts";
-import { type CaretLogger, noopLogger, shortId } from "../lib/log.ts";
-import { ensureStateDir, prefsFile } from "../config/paths.ts";
-import { readFileExcerpt, resolveFileInCwd } from "../plan/excerpt.ts";
-import { type ApproveModeSet, readApproveMode, writeApproveMode } from "../config/prefs.ts";
-import { routeIncomingPlan } from "../review/threading.ts";
-import { DEFAULTS } from "../config/settings.ts";
-import type { Store } from "../review/store.ts";
-import type { UiAssets } from "../ui/assets.ts";
-import { MAX_BODY_BYTES, parseUiLogBatch } from "../ui/log-bridge.ts";
+
+import { deriveIdleTimeoutSec } from "@/config/constants.ts";
+import { ensureStateDir, prefsFile } from "@/config/paths.ts";
+import { type ApproveModeSet, readApproveMode, writeApproveMode } from "@/config/prefs.ts";
+import { DEFAULTS } from "@/config/settings.ts";
+import {
+  isClientLive,
+  isCrossOrigin,
+  isSafeMethod,
+  LIVE_CLIENT_WINDOW_MS,
+} from "@/daemon/guards.ts";
+import {
+  DraftBodySchema,
+  FileRefsBodySchema,
+  MAX_FILE_REFS,
+  malformedLineAnchor,
+  PlanInputSchema,
+  parseBody,
+  ResolveBodySchema,
+} from "@/daemon/schemas.ts";
+import { type DaemonLock, IDENTITY, isCompiledBinary } from "@/lib/build-id.ts";
+import { type CaretLogger, noopLogger, shortId } from "@/lib/log.ts";
 import {
   type ApproveVariant,
   currentVersion,
@@ -27,17 +37,13 @@ import {
   type ResolveBody,
   type RouteResult,
   toClientReview,
-} from "../lib/types.ts";
-import { isClientLive, isCrossOrigin, isSafeMethod, LIVE_CLIENT_WINDOW_MS } from "./guards.ts";
-import {
-  DraftBodySchema,
-  FileRefsBodySchema,
-  malformedLineAnchor,
-  MAX_FILE_REFS,
-  parseBody,
-  PlanInputSchema,
-  ResolveBodySchema,
-} from "./schemas.ts";
+} from "@/lib/types.ts";
+import { readFileExcerpt, resolveFileInCwd } from "@/plan/excerpt.ts";
+import { createDecisions } from "@/review/decisions.ts";
+import type { Store } from "@/review/store.ts";
+import { routeIncomingPlan } from "@/review/threading.ts";
+import type { UiAssets } from "@/ui/assets.ts";
+import { MAX_BODY_BYTES, parseUiLogBatch } from "@/ui/log-bridge.ts";
 
 const PLACEHOLDER_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>caret</title></head><body><div id="app">caret daemon — UI not built yet</div></body></html>`;
 

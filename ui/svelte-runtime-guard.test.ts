@@ -5,6 +5,7 @@
 // happy-dom), so it never registers DOM globals that would leak across the
 // single bun-test process into the daemon suite's real fetch.
 import { describe, expect, test } from "bun:test";
+
 import {
   assertSvelteClientRuntime,
   BARE_INVOCATION_MESSAGE,

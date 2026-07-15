@@ -1,6 +1,7 @@
 import "../../test-setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { installUiGoneBeacon, UI_GONE_PATH } from "./presence.ts";
+
+import { installUiGoneBeacon, UI_GONE_PATH } from "$lib/presence.ts";
 
 let target: EventTarget;
 let teardowns: Array<() => void>;

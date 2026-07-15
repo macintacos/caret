@@ -13,8 +13,9 @@
 // file so a malformed path can never make caret clobber something else, and the
 // error log never carries the path or plan text.
 import { appendFileSync, existsSync, statSync, writeFileSync } from "node:fs";
-import type { CaretLogger } from "../lib/log.ts";
-import { reviewerNotesSection } from "./reviewer-notes.ts";
+
+import type { CaretLogger } from "@/lib/log.ts";
+import { reviewerNotesSection } from "@/plan/reviewer-notes.ts";
 
 /**
  * The shared, security-relevant guard for writing the agent's plan file: only an

@@ -17,11 +17,11 @@
 // wire shape), approve.ts (the single plain-approve variant), and install.ts
 // (the ~/.codex probe) for the per-surface provisional notes.
 
-import type { Decision, PlanInput } from "../../lib/types.ts";
-import type { AgentAdapter, InstallProbe } from "../adapter.ts";
-import { APPROVE_VARIANTS } from "./approve.ts";
-import { fatalDenyLine, toHookOutput } from "./feedback.ts";
-import { readCodexInstallState } from "./install.ts";
+import type { AgentAdapter, InstallProbe } from "@/adapters/adapter.ts";
+import { APPROVE_VARIANTS } from "@/adapters/codex/approve.ts";
+import { fatalDenyLine, toHookOutput } from "@/adapters/codex/feedback.ts";
+import { readCodexInstallState } from "@/adapters/codex/install.ts";
+import type { Decision, PlanInput } from "@/lib/types.ts";
 
 /** The shape of the PermissionRequest hook stdin Codex is modeled to pipe to
  * `caret review`. PROVISIONAL (EXC-532): the field names are docs-based, not

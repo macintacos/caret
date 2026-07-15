@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { appendReviewerNotes, reviewerNotesSection } from "../../src/plan/reviewer-notes.ts";
+
+import { appendReviewerNotes, reviewerNotesSection } from "@/plan/reviewer-notes.ts";
 
 // Reviewer notes on an approval are appended to the plan the agent works from,
 // as a clearly-labeled trailing section, so the agent folds them into its work

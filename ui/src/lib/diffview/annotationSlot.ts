@@ -8,7 +8,7 @@
 //
 // This module is the single owner of that slot-name contract; the components just
 // supply the card/composer DOM and the line it anchors to.
-import type { SourceLineAnnotation } from "./types.ts";
+import type { SourceLineAnnotation } from "$lib/diffview/types.ts";
 
 /** Slot name the library assigns the annotation row for a 1-based source line.
  * Mirrors the library's getLineAnnotationName for the single-document view. */

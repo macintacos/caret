@@ -5,12 +5,12 @@
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { Textarea } from "$lib/components/ui/textarea/index.js";
-  import { type ComposerScratch, rangeLabel } from "../lib/diffview/commenting.ts";
-  import { formatFeedback, pendingInline, pendingLineCount, sourceLines } from "../lib/feedback.ts";
-  import { isSubmitChord } from "../lib/keys.ts";
-  import ConfirmPopover from "./ConfirmPopover.svelte";
-  import Icon from "./Icon.svelte";
-  import Modal from "./Modal.svelte";
+  import { type ComposerScratch, rangeLabel } from "$lib/diffview/commenting.ts";
+  import { formatFeedback, pendingInline, pendingLineCount, sourceLines } from "$lib/feedback.ts";
+  import { isSubmitChord } from "$lib/keys.ts";
+  import ConfirmPopover from "@/components/ConfirmPopover.svelte";
+  import Icon from "@/components/Icon.svelte";
+  import Modal from "@/components/Modal.svelte";
 
   interface Props {
     annotations: Annotation[];

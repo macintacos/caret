@@ -3,15 +3,15 @@
   // FileDiff class. Same shape as SourceView.svelte — the controller
   // (instance.ts) owns the imperative lifecycle.
   import { type FileContents, FileDiff } from "@pierre/diffs";
-  import { createDiffViewLifecycle } from "./instance.ts";
-  import { preloadFenceLanguages, scanFenceLanguages } from "./languages.ts";
-  import { type SourceDiffViewLibOptions, toFileDiffOptions } from "./options.ts";
-  import { registerCaretDiffThemes } from "./theme.ts";
+  import { createDiffViewLifecycle } from "$lib/diffview/instance.ts";
+  import { preloadFenceLanguages, scanFenceLanguages } from "$lib/diffview/languages.ts";
+  import { type SourceDiffViewLibOptions, toFileDiffOptions } from "$lib/diffview/options.ts";
+  import { registerCaretDiffThemes } from "$lib/diffview/theme.ts";
   import type {
     SourceDiffLineAnnotation,
     SourceDiffViewOptions,
     SourceDocument,
-  } from "./types.ts";
+  } from "$lib/diffview/types.ts";
 
   // Teach the library's highlighter caret's themes before the first render
   // selects them. Idempotent, so calling it from each wrapper is safe.

@@ -21,17 +21,19 @@
 // caret CLIs share the same name/description/help conventions.
 
 import { InvalidArgumentError } from "@commander-js/extra-typings";
+
+import { createProgram } from "@/lib/program.ts";
+import { runBuild, runBuildBin, runBuildBundle, runBuildUi } from "@/tasks/build.ts";
+import { DEFAULT_NUM_VERSIONS, parsePositiveInt } from "@/tasks/dev/protocol.ts";
+import { type RunDevOptions, runDev } from "@/tasks/dev/run.ts";
+import { runFormat } from "@/tasks/format.ts";
+import { runLint } from "@/tasks/lint.ts";
+import { buildReleaseCommand } from "@/tasks/release/command.ts";
+import { runSetup } from "@/tasks/setup.ts";
+import { runSmoke, runSmokeBin, runSmokeBundle } from "@/tasks/smoke.ts";
+import { runTest, runTestE2e } from "@/tasks/test.ts";
+
 import { type JsonArgs, runPreflightCli } from "../../scripts/preflight.ts";
-import { createProgram } from "../../src/lib/program.ts";
-import { runBuild, runBuildBin, runBuildBundle, runBuildUi } from "./build.ts";
-import { DEFAULT_NUM_VERSIONS, parsePositiveInt } from "./dev/protocol.ts";
-import { type RunDevOptions, runDev } from "./dev/run.ts";
-import { runFormat } from "./format.ts";
-import { runLint } from "./lint.ts";
-import { buildReleaseCommand } from "./release/command.ts";
-import { runSetup } from "./setup.ts";
-import { runSmoke, runSmokeBin, runSmokeBundle } from "./smoke.ts";
-import { runTest, runTestE2e } from "./test.ts";
 
 /** The action behind each subcommand. Injectable so tests assert the parsed
  * options/args without spawning the real tools; production wires the run

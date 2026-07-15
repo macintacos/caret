@@ -5,8 +5,8 @@
 // is a plain unit test. The long-running supervision loops that drive these
 // live in scripts/tasks/dev/driver.ts.
 
-import { PLAN_REJECTED_MESSAGE } from "../../../src/config/constants.ts";
-import type { Decision } from "../../../src/lib/types.ts";
+import { PLAN_REJECTED_MESSAGE } from "@/config/constants.ts";
+import type { Decision } from "@/lib/types.ts";
 
 /** Session id for the single dev review; stable for the process lifetime so a
  * revision threads into the same review instead of forking a new one, but

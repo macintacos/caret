@@ -1,6 +1,7 @@
 import "../../../test-setup.ts";
 import { describe, expect, test } from "bun:test";
-import { codeBlockRanges, codeBlockText, tagCodeBlockRows } from "./codeBlocks.ts";
+
+import { codeBlockRanges, codeBlockText, tagCodeBlockRows } from "$lib/diffview/codeBlocks.ts";
 
 // codeBlockRanges classifies which lines of a rendered plan belong to a fenced
 // code block, so the source view can decorate those rows as a panel (EXC-692).

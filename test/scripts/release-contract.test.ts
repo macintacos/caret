@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test";
+
 import {
   type ComputeResult,
-  SCHEMA_VERSION,
   compareUrl,
   errorResult,
   parseCommitMeta,
-} from "../../scripts/tasks/release/contract.ts";
+  SCHEMA_VERSION,
+} from "@/tasks/release/contract.ts";
 
 test("errorResult builds the ok:false payload shape", () => {
   expect(errorResult("NO_BASELINE", "no tags yet")).toEqual({

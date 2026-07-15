@@ -3,7 +3,7 @@
 // rejection. The skill parses (never scrapes) this, so the "agent never invents
 // the version" guarantee rests on a typed payload. All builders here are pure.
 
-import type { BumpLevel } from "./version.ts";
+import type { BumpLevel } from "@/tasks/release/version.ts";
 
 /** Bumped whenever the payload shape changes incompatibly. */
 export const SCHEMA_VERSION = 1;

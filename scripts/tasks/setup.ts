@@ -4,7 +4,7 @@
 // chromium` fetches the Chromium binary the e2e suite drives. Steps run in
 // order and the first failure aborts (matching the former task's `set -e`).
 
-import { runForward } from "./lib/exec.ts";
+import { runForward } from "@/tasks/lib/exec.ts";
 
 /** The commands `setup` runs, in order. */
 export function setupCommands(): string[][] {

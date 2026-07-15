@@ -2,7 +2,7 @@
 // the resulting working-tree changes unstaged. Extra args (e.g. specific paths)
 // are forwarded to `hk fix`.
 
-import { execAndExit } from "./lib/exec.ts";
+import { execAndExit } from "@/tasks/lib/exec.ts";
 
 /** The argv `format` runs, plus forwarded args. */
 export function formatCommand(args: string[]): string[] {

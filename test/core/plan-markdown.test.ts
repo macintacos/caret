@@ -3,7 +3,9 @@
 // wrapped, fences verbatim, idempotent) and the never-throw fallback envelope
 // (oversize or unparseable input comes back raw with exactly one warn).
 import { expect, test } from "bun:test";
-import { MAX_FORMAT_BYTES, formatPlanMarkdown } from "../../src/plan/markdown.ts";
+
+import { formatPlanMarkdown, MAX_FORMAT_BYTES } from "@/plan/markdown.ts";
+
 import { recordingLog } from "../support/recording-log.ts";
 
 const LONG_PROSE =
