@@ -126,6 +126,46 @@ test("hovering a real reference reveals a highlighted excerpt centered on its li
   }
 });
 
+test("the preview stays open while the pointer rests on the card, then dismisses on a stop away from it", async ({
+  daemon,
+  page,
+}) => {
+  // The hover-intent tracker (EXC-799) owns dismissal from a single window
+  // pointermove listener, reading the card's live rect. This exercises that wiring
+  // end-to-end: a pointer that comes to rest on the card must survive well past the
+  // idle-stop window, and a stop far from the card must then dismiss. The
+  // velocity-sensitive "aiming across the gap" logic is covered deterministically by
+  // the hoverIntent unit tests; synthetic pointer speed is not reliable here.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
+    });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+    await page.locator("[data-file-ref]").first().hover();
+
+    const preview = page.locator("[data-file-preview]");
+    await expect(preview).toBeVisible();
+
+    // Rest the pointer on the card itself, then wait well past IDLE_MS (100ms).
+    const box = await preview.boundingBox();
+    if (box === null) throw new Error("preview has no bounding box");
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForTimeout(400);
+    await expect(preview).toBeVisible();
+
+    // A stop far from the card is conclusive — the preview dismisses.
+    await page.mouse.move(0, 0);
+    await expect(preview).toHaveCount(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
 test("the preview shows only a bounded snippet, never a scrollable full file", async ({
   daemon,
   page,
