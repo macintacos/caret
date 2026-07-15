@@ -17,6 +17,33 @@ import type { CaretLogger } from "../lib/log.ts";
 import { reviewerNotesSection } from "./reviewer-notes.ts";
 
 /**
+ * The shared, security-relevant guard for writing the agent's plan file: only an
+ * existing regular `.md` file is touched (a malformed path can never make caret
+ * clobber something else), and every failure is swallowed with a logged `.code`
+ * (never the path or plan text). `write` performs the fs op inside the guard.
+ * The path is the agent's own planFilePath — it runs as this user and already
+ * wrote the file, so following a symlink grants no access it lacks; the guard is
+ * about not clobbering a non-plan path, not a privilege boundary. Never throws.
+ */
+function guardedPlanFileWrite(
+  planFilePath: string,
+  log: Pick<CaretLogger, "warn">,
+  failMsg: string,
+  write: (path: string) => void,
+): void {
+  try {
+    if (!planFilePath.endsWith(".md")) return;
+    if (!existsSync(planFilePath) || !statSync(planFilePath).isFile()) return;
+    write(planFilePath);
+  } catch (err) {
+    // An fs error's `.code` (e.g. EACCES) is safe to log; the path and plan text
+    // must never reach a log record.
+    const code = (err as { code?: string } | null)?.code;
+    log.warn("review", failMsg, code ? { code } : {});
+  }
+}
+
+/**
  * Overwrite `planFilePath` with the canonical plan text. No-op when the path is
  * absent (agents without a plan file) or fails the safety guard (must be an
  * existing regular `.md` file). Never throws.
@@ -27,28 +54,18 @@ export function writeCanonicalPlanFile(
   log: CaretLogger,
 ): void {
   if (!planFilePath) return;
-  try {
-    // The path is the agent's own planFilePath: it runs as this user and already
-    // wrote this file, so following a symlink here grants no access it lacks —
-    // the guard is about not clobbering a non-plan path, not a privilege boundary.
-    if (!planFilePath.endsWith(".md")) return;
-    if (!existsSync(planFilePath) || !statSync(planFilePath).isFile()) return;
-    writeFileSync(planFilePath, canonical);
-  } catch (err) {
-    // The path and plan text must never reach a log record; an fs error's
-    // `.code` (e.g. EACCES) is safe and enough to diagnose.
-    const code = (err as { code?: string } | null)?.code;
-    log.warn("review", "plan file canonicalize failed", code ? { code } : {});
-  }
+  guardedPlanFileWrite(planFilePath, log, "plan file canonicalize failed", (p) =>
+    writeFileSync(p, canonical),
+  );
 }
 
 /**
  * Append the reviewer's approval notes to the agent's plan file as a trailing,
  * clearly-labeled section, so the plan of record the agent reads carries them on
- * an approval (EXC-791). Shares writeCanonicalPlanFile's surgical guards (an
- * existing regular `.md` file) — the file already holds the canonical plan, so
- * this only adds the section. A blank note or absent path is a no-op. Never
- * throws: notes are a convenience, and losing them must not fail the review.
+ * an approval (EXC-791). Shares writeCanonicalPlanFile's surgical guards via
+ * guardedPlanFileWrite — the file already holds the canonical plan, so this only
+ * adds the section. A blank note or absent path is a no-op. Never throws: notes
+ * are a convenience, and losing them must not fail the review.
  */
 export function appendReviewerNotesToPlanFile(
   planFilePath: string | undefined,
@@ -57,12 +74,7 @@ export function appendReviewerNotesToPlanFile(
 ): void {
   const section = reviewerNotesSection(notes);
   if (!planFilePath || section === "") return;
-  try {
-    if (!planFilePath.endsWith(".md")) return;
-    if (!existsSync(planFilePath) || !statSync(planFilePath).isFile()) return;
-    appendFileSync(planFilePath, section);
-  } catch (err) {
-    const code = (err as { code?: string } | null)?.code;
-    log.warn("review", "plan file notes append failed", code ? { code } : {});
-  }
+  guardedPlanFileWrite(planFilePath, log, "plan file notes append failed", (p) =>
+    appendFileSync(p, section),
+  );
 }
