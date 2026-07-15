@@ -67,6 +67,11 @@
   // `version` and degrades when `commit` is absent.
   let version = $state<string | undefined>(undefined);
   let commit = $state<string | undefined>(undefined);
+  // The active adapter's id (EXC-791), read once from the health probe — the
+  // environment the UI adapts to (e.g. an OpenCode session). Undefined until the
+  // probe lands or for a daemon that predates the field; passed to the TopBar,
+  // which exposes it as data-source.
+  let source = $state<string | undefined>(undefined);
   let work = $state<{
     annotations: Annotation[];
     generalCommentDraft: string;
@@ -189,6 +194,7 @@
         isDev = h.isDev ?? false;
         version = h.version;
         commit = h.commit;
+        source = h.source;
         // Dev --fresh (EXC-781): reset the browser to a brand-new-user session —
         // clear saved UI prefs, drop to the default theme (main.ts already applied
         // whatever was stored before this probe resolved, so re-apply here), and
@@ -310,6 +316,7 @@
     approveMode={resolve.approveMode}
     {variants}
     {isDev}
+    {source}
     {pendingCount}
     onSelect={selection.selectReview}
     {onApprove}

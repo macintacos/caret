@@ -34,6 +34,11 @@ export interface InstallProbe {
  * renderer.
  */
 export interface AgentAdapter {
+  /** The tool id this adapter implements — its registry key in
+   * `src/adapters/index.ts`, and the "source" the daemon publishes on
+   * `/api/health` so the UI can adapt to the active environment (EXC-791). */
+  readonly id: string;
+
   /** The approve variants this adapter offers, in display order. */
   readonly approveVariants: readonly ApproveVariant[];
 

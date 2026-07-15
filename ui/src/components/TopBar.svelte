@@ -24,6 +24,11 @@
     variants: ApproveVariant[];
     /** True when the daemon runs from source; shows the "local build" badge. */
     isDev?: boolean;
+    /** The active adapter's id ("claude" | "opencode" | …), the environment the
+     * UI adapts to (EXC-791). Exposed as data-source on the topbar so styling or
+     * tooling can key off it; the approve control's shape is driven by the
+     * variant count, not this. Absent until the health probe lands. */
+    source?: string;
     /** How much unsent feedback is queued — the general-comment draft, committed
      * inline comments, and retained-but-unsent composer scratches (App.svelte's
      * shared pendingCount). Surfaced as a count on the Request-changes button so
@@ -46,6 +51,7 @@
     approveMode,
     variants,
     isDev = false,
+    source,
     pendingCount,
     onSelect,
     onApprove,
@@ -55,7 +61,7 @@
   }: Props = $props();
 </script>
 
-<header class="topbar">
+<header class="topbar" data-source={source}>
   <div class="lead">
     <span class="brand" title="caret">
       <span class="brand-caret" aria-hidden="true">^</span>caret
@@ -105,26 +111,35 @@
         {/if}
       </Button>
 
-      <!-- Approve split-button (SplitButton): the primary approves in the
-           remembered mode; the toggle opens the variant menu. Seamless at rest,
-           each half hovers independently — mechanics live in SplitButton.svelte.
-           The menu rows stay here (approve-specific) and render into the
-           component's portal, where this component's scoped .v-* styles still
+      <!-- Approve control. With a single variant the approve is binary (e.g. an
+           OpenCode session, EXC-791), so there is nothing to choose between: a
+           plain amber button, matching the split-button's primary half. With more
+           than one variant it is the split-button — the primary approves in the
+           remembered mode and the toggle opens the variant menu (mechanics in
+           SplitButton.svelte). The menu rows stay here (approve-specific) and
+           render into the component's portal, where the scoped .v-* styles still
            reach them because the scope hash rides the elements. -->
-      <SplitButton onclick={() => onApprove(approveMode)} optionsLabel="Approve options" disabled={busy}>
-        <Icon name="check" size={14} />
-        {approveLabel(approveMode, variants)}
-        {#snippet menu()}
-          {#each variants as v (v.id)}
-            <DropdownMenu.Item class="approve-variant" onSelect={() => onApprove(v.id)}>
-              <span class="v-col">
-                <span class="v-label">{v.label}</span>
-                {#if v.description}<span class="v-note">{v.description}</span>{/if}
-              </span>
-            </DropdownMenu.Item>
-          {/each}
-        {/snippet}
-      </SplitButton>
+      {#if variants.length <= 1}
+        <Button variant="default" class="approve" onclick={() => onApprove(approveMode)} disabled={busy}>
+          <Icon name="check" size={14} />
+          {approveLabel(approveMode, variants)}
+        </Button>
+      {:else}
+        <SplitButton onclick={() => onApprove(approveMode)} optionsLabel="Approve options" disabled={busy}>
+          <Icon name="check" size={14} />
+          {approveLabel(approveMode, variants)}
+          {#snippet menu()}
+            {#each variants as v (v.id)}
+              <DropdownMenu.Item class="approve-variant" onSelect={() => onApprove(v.id)}>
+                <span class="v-col">
+                  <span class="v-label">{v.label}</span>
+                  {#if v.description}<span class="v-note">{v.description}</span>{/if}
+                </span>
+              </DropdownMenu.Item>
+            {/each}
+          {/snippet}
+        </SplitButton>
+      {/if}
     </div>
   {/if}
 

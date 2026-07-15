@@ -92,6 +92,55 @@ describe("TopBar render", () => {
   });
 });
 
+describe("TopBar single-variant approve (EXC-791)", () => {
+  // OpenCode declares a single approve variant, so its approve is binary — a
+  // plain button rather than a split-button with a variant dropdown.
+  const oneVariant: ApproveVariant[] = [{ id: "default", label: "Approve" }];
+
+  test("renders a plain approve button (no split toggle) for a single variant", () => {
+    const { target } = render(TopBar, { ...baseProps, variants: oneVariant });
+    const approve = target.querySelector(".approve");
+    expect(approve).not.toBeNull();
+    expect(approve!.textContent).toContain("Approve");
+    // No split-button parts: nothing to choose between.
+    expect(target.querySelector(".split-toggle")).toBeNull();
+    expect(target.querySelector(".split-primary")).toBeNull();
+  });
+
+  test("the plain approve button approves in the remembered mode", () => {
+    const approved = capture<string>();
+    const { target } = render(TopBar, {
+      ...baseProps,
+      variants: oneVariant,
+      approveMode: "default",
+      onApprove: approved.cb,
+    });
+    (target.querySelector(".approve") as HTMLElement).click();
+    expect(approved.last()).toBe("default");
+  });
+
+  test("busy disables the plain approve button", () => {
+    const { target } = render(TopBar, { ...baseProps, variants: oneVariant, busy: true });
+    expect((target.querySelector(".approve") as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  test("keeps the split-button when multiple variants are offered", () => {
+    const { target } = render(TopBar, baseProps);
+    expect(target.querySelector(".split-toggle")).not.toBeNull();
+    expect(target.querySelector(".approve")).toBeNull();
+  });
+
+  test("publishes the active adapter source as a data attribute on the topbar", () => {
+    const { target } = render(TopBar, { ...baseProps, source: "opencode" });
+    expect(target.querySelector(".topbar")!.getAttribute("data-source")).toBe("opencode");
+  });
+
+  test("omits the source attribute when none is provided", () => {
+    const { target } = render(TopBar, baseProps);
+    expect(target.querySelector(".topbar")!.hasAttribute("data-source")).toBe(false);
+  });
+});
+
 describe("TopBar dev badge", () => {
   test("hides the local-build badge by default", () => {
     const { target } = render(TopBar, baseProps);

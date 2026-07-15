@@ -303,6 +303,11 @@ export interface HealthIdentity {
    * capability instead of hard-coding tool mode names. Optional: a daemon that
    * predates this field omits it, and the UI falls back to its built-in set. */
   approveVariants?: ApproveVariant[];
+  /** The active adapter's id — "claude" | "opencode" | "codex" — the "source"
+   * the UI adapts to (EXC-791): e.g. an OpenCode session, whose single approve
+   * variant renders a plain button rather than a split-button. Optional: a
+   * daemon that predates the field, or declares none, omits it. */
+  source?: string;
 }
 
 /** Returns the current (latest) version of a review. */

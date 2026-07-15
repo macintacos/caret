@@ -79,6 +79,9 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
       stateDir: stateDir(),
       instanceId: randomUUID().slice(0, 8),
       approveVariants: adapter.approveVariants,
+      // The active adapter's id, published on /api/health so the UI can adapt to
+      // the environment (EXC-791).
+      source: adapter.id,
       log,
     });
   } catch (e) {

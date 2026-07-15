@@ -20,12 +20,22 @@ afterEach(() => {
 });
 
 function expectAdapterShape(a: AgentAdapter): void {
+  expect(typeof a.id).toBe("string");
   expect(Array.isArray(a.approveVariants)).toBe(true);
   expect(typeof a.parseHookInput).toBe("function");
   expect(typeof a.emitDecision).toBe("function");
   expect(typeof a.fatalDenyLine).toBe("function");
   expect(typeof a.readInstallState).toBe("function");
 }
+
+// Each adapter self-declares its id, and it must match the registry key it is
+// selected by — the id is the "source" the daemon publishes on /api/health
+// (EXC-791), so a mismatch would mislabel the environment in the UI.
+test("each adapter's id matches its registry key", () => {
+  for (const id of agentIds()) {
+    expect(selectAdapter(id).id).toBe(id);
+  }
+});
 
 test("the default agent is registered and selectable", () => {
   expect(agentIds()).toContain(DEFAULT_AGENT);
