@@ -13,7 +13,7 @@
 // supervision loops; the pure protocol state machine it drives lives in
 // scripts/tasks/dev/protocol.ts.
 
-import { expireReview, longPoll, postReview, waitForHealth } from "../../../src/daemon-client.ts";
+import { expireReview, longPoll, postReview, waitForHealth } from "../../../src/daemon/client.ts";
 import { type ReviewDeps, runReview } from "../../../src/review.ts";
 import { claudeAdapter } from "../../../src/adapters/claude/index.ts";
 import { NEVER_IDLE_MS } from "../../../src/config/constants.ts";

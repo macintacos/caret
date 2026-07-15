@@ -9,8 +9,8 @@ import { existsSync } from "node:fs";
 import { release } from "node:os";
 import { selectAdapter } from "../adapters/index.ts";
 import { isCompiledBinary, VERSION } from "../lib/build-id.ts";
-import { httpHealth } from "../daemon-client.ts";
-import { isPidAlive, readDaemonLock } from "../daemon-lifecycle.ts";
+import { httpHealth } from "../daemon/client.ts";
+import { isPidAlive, readDaemonLock } from "../daemon/lifecycle.ts";
 import {
   collectReport,
   type DiscoveryDeps,

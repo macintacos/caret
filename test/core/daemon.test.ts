@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { APPROVE_VARIANTS } from "../../src/adapters/claude/approve.ts";
 import { VERSION } from "../../src/lib/build-id.ts";
-import { isClientLive, LIVE_CLIENT_WINDOW_MS } from "../../src/daemon.ts";
+import { isClientLive, LIVE_CLIENT_WINDOW_MS } from "../../src/daemon/guards.ts";
 import { createDaemonLogger } from "../../src/lib/log.ts";
 import { formatPlanMarkdown } from "../../src/plan-markdown.ts";
 import type { Store } from "../../src/store.ts";

@@ -8,7 +8,7 @@
 // allow. Every abnormal path (bad stdin, unreachable daemon, timeout, daemon
 // death) becomes a deny Decision — runReview never throws.
 
-import { VANITY_HOST } from "./daemon.ts";
+import { VANITY_HOST } from "./daemon/guards.ts";
 import { type ErrorContext, logDebug, logError, logInfo, shortId } from "./lib/log.ts";
 import { logFile } from "./config/paths.ts";
 import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "./plan-format.ts";

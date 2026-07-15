@@ -29,7 +29,7 @@
 // and tears it down after the test.
 
 import { NEVER_IDLE_MS } from "../../../src/config/constants.ts";
-import { createServer } from "../../../src/daemon.ts";
+import { createServer } from "../../../src/daemon/server.ts";
 import { createDaemonLogger } from "../../../src/lib/log.ts";
 import { prefsFile, reviewsDir } from "../../../src/config/paths.ts";
 import { createStore } from "../../../src/store.ts";

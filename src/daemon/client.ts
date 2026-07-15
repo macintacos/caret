@@ -10,7 +10,7 @@ import type {
   HealthIdentity,
   PlanInput,
   ResolveBody,
-} from "./lib/types.ts";
+} from "../lib/types.ts";
 
 /** Parsed /api/health body — the shared HealthIdentity shape (every field
  * absent on a pre-fix daemon). */

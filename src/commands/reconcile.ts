@@ -10,7 +10,7 @@
 // a stray decision line can't reach Claude's PostToolUse channel.
 
 import { selectAdapter } from "../adapters/index.ts";
-import { listReviews, resolveReview } from "../daemon-client.ts";
+import { listReviews, resolveReview } from "../daemon/client.ts";
 import { logDebug, logWarn, setLogLevel, setRedact } from "../lib/log.ts";
 import { type ReconcileDeps, runReconcile } from "../reconcile.ts";
 import { getPort, loadSettings } from "../config/settings.ts";

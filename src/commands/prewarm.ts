@@ -1,7 +1,7 @@
 // `caret prewarm`: warm-start the daemon ahead of the first review. A PostToolUse
 // hook — best-effort, it never blocks or denies.
 
-import { ensureDaemon, prodEnsureDeps } from "../daemon-lifecycle.ts";
+import { ensureDaemon, prodEnsureDeps } from "../daemon/lifecycle.ts";
 import { logDebug } from "../lib/log.ts";
 import { loadSettings } from "../config/settings.ts";
 import { errorMessage } from "../lib/types.ts";

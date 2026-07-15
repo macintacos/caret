@@ -16,7 +16,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NEVER_IDLE_MS } from "../../../src/config/constants.ts";
-import { isPidAlive } from "../../../src/daemon-lifecycle.ts";
+import { isPidAlive } from "../../../src/daemon/lifecycle.ts";
 import { devPort, devStateDir, loadSettings, type Settings } from "../../../src/config/settings.ts";
 import { installCleanupHandlers } from "../lib/signals.ts";
 import { type DriverOptions, run as runDriverEntry } from "./driver.ts";

@@ -8,8 +8,8 @@
 
 import type { AgentAdapter } from "../adapters/adapter.ts";
 import { selectAdapter } from "../adapters/index.ts";
-import { expireReview, longPoll, postReview } from "../daemon-client.ts";
-import { ensureDaemon, prodEnsureDeps } from "../daemon-lifecycle.ts";
+import { expireReview, longPoll, postReview } from "../daemon/client.ts";
+import { ensureDaemon, prodEnsureDeps } from "../daemon/lifecycle.ts";
 import { logError, logWarn, setLogLevel, setRedact } from "../lib/log.ts";
 import { logFile } from "../config/paths.ts";
 import { expireAbandoned, type ReviewDeps, runReview } from "../review.ts";
