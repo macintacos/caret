@@ -52,6 +52,37 @@ export function shouldShowOnboarding(permission: NotificationPermission): boolea
   return !hasOnboarded() && permission === "default";
 }
 
+// sessionStorage key recording which daemon boot the dev `--fresh` reset has
+// already run for. sessionStorage (per-tab), NOT localStorage and NOT a
+// KNOWN_PREF_KEYS entry: it is a session control marker, not a user preference,
+// so clearKnownPrefs() must never touch it.
+const FRESH_APPLIED_KEY = "caret.freshApplied";
+
+/** Whether the dev `--fresh` browser reset has already run for this daemon boot.
+ * The daemon reports `fresh: true` on every `/api/health` for its whole life, so
+ * without this guard every page reload would re-clear prefs and re-open
+ * onboarding — "Maybe later" would never stick. Keyed on the daemon's per-boot
+ * instanceId so a new `mise run dev --fresh` boot (new instanceId) resets again,
+ * while reloads of the same session do not. Fail-safe: an unreadable store
+ * reports not-applied, so the reset still runs. */
+export function freshResetApplied(instanceId: string | undefined): boolean {
+  try {
+    return sessionStorage.getItem(FRESH_APPLIED_KEY) === (instanceId ?? "");
+  } catch {
+    return false;
+  }
+}
+
+/** Record that the `--fresh` reset ran for this daemon boot. A storage failure is
+ * swallowed (the reset may run again on the next load — harmless). */
+export function markFreshResetApplied(instanceId: string | undefined): void {
+  try {
+    sessionStorage.setItem(FRESH_APPLIED_KEY, instanceId ?? "");
+  } catch {
+    // Storage unavailable — the reset may repeat next load; not worth failing over.
+  }
+}
+
 /** Remove every known UI preference, returning the browser to a new-user state.
  * Used by the dev `--fresh` boot; fail-safe per key. */
 export function clearKnownPrefs(): void {

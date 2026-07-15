@@ -19,7 +19,12 @@
   } from "./lib/feedback.ts";
   import { applyTheme, DEFAULT_THEME_ID, readThemeId, THEMES, type ThemeId } from "./lib/theme.ts";
   import { changeTheme } from "./lib/themeWipe.ts";
-  import { clearKnownPrefs, shouldShowOnboarding } from "./lib/prefs.ts";
+  import {
+    clearKnownPrefs,
+    freshResetApplied,
+    markFreshResetApplied,
+    shouldShowOnboarding,
+  } from "./lib/prefs.ts";
   import type { ComposerScratch } from "./lib/diffview/commenting.ts";
   import type { ApproveVariant, ApproveVariantId, Annotation, PersistedScratch } from "@core/lib/types";
 
@@ -187,13 +192,17 @@
         // Dev --fresh (EXC-781): reset the browser to a brand-new-user session —
         // clear saved UI prefs, drop to the default theme (main.ts already applied
         // whatever was stored before this probe resolved, so re-apply here), and
-        // re-open first-run onboarding.
-        if (h.fresh) {
+        // re-open first-run onboarding. Once per daemon boot only (keyed on
+        // instanceId): the daemon reports fresh on every /api/health for its whole
+        // life, so without this guard each reload would re-clear the onboarded flag
+        // and "Maybe later" would never stick.
+        if (h.fresh && !freshResetApplied(h.instanceId)) {
           clearKnownPrefs();
           applyTheme(DEFAULT_THEME_ID);
           themeId = DEFAULT_THEME_ID;
           showOnboarding =
             typeof Notification !== "undefined" && shouldShowOnboarding(Notification.permission);
+          markFreshResetApplied(h.instanceId);
         }
       })
       .catch(() => selection.setConnected(false));

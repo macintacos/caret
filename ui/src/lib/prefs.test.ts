@@ -4,15 +4,20 @@ import { DIFF_INDICATORS_KEY } from "./diffIndicatorsPref.ts";
 import { DIFF_STYLE_KEY } from "./diffStylePref.ts";
 import {
   clearKnownPrefs,
+  freshResetApplied,
   hasOnboarded,
   KNOWN_PREF_KEYS,
+  markFreshResetApplied,
   markOnboarded,
   ONBOARDED_KEY,
   shouldShowOnboarding,
 } from "./prefs.ts";
 import { THEME_KEY } from "./theme.ts";
 
-afterEach(() => localStorage.clear());
+afterEach(() => {
+  localStorage.clear();
+  sessionStorage.clear();
+});
 
 describe("KNOWN_PREF_KEYS", () => {
   test("covers every user-facing UI setting key", () => {
@@ -87,6 +92,35 @@ describe("clearKnownPrefs", () => {
       expect(() => clearKnownPrefs()).not.toThrow();
     } finally {
       Object.defineProperty(globalThis, "localStorage", { configurable: true, value: original });
+    }
+  });
+});
+
+describe("freshResetApplied / markFreshResetApplied", () => {
+  test("false until marked for a boot, true after — so --fresh resets once per boot", () => {
+    expect(freshResetApplied("boot-a")).toBe(false);
+    markFreshResetApplied("boot-a");
+    expect(freshResetApplied("boot-a")).toBe(true);
+  });
+
+  test("a different daemon instanceId reads as not-applied, so a new --fresh boot resets again", () => {
+    markFreshResetApplied("boot-a");
+    expect(freshResetApplied("boot-b")).toBe(false);
+  });
+
+  test("fails safe to not-applied when sessionStorage throws (the reset still runs)", () => {
+    const original = globalThis.sessionStorage;
+    Object.defineProperty(globalThis, "sessionStorage", {
+      configurable: true,
+      get() {
+        throw new Error("blocked");
+      },
+    });
+    try {
+      expect(freshResetApplied("boot-a")).toBe(false);
+      expect(() => markFreshResetApplied("boot-a")).not.toThrow();
+    } finally {
+      Object.defineProperty(globalThis, "sessionStorage", { configurable: true, value: original });
     }
   });
 });
