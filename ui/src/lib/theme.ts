@@ -78,22 +78,27 @@ const darkTokens: Record<ColorToken, string> = {
   "--shadow-card": "0 1px 2px #00000066, 0 10px 30px #00000080",
 };
 
+// The neutral surfaces and ink carry a subtle warm (brown-ish) undertone so the
+// light theme reads as a sibling to caret-dark rather than a cool grey (EXC-776):
+// each grey has R > G > B instead of a flat R = G = B. The warmth stays subtle —
+// no perceptible yellow/orange cast — and preserves the prior luminance ordering
+// (raised > paper > sunk) and text contrast. theme.test.ts pins R > B on these.
 const lightTokens: Record<ColorToken, string> = {
-  "--paper": "#fafafa",
-  "--paper-raised": "#ffffff",
-  "--paper-sunk": "#f4f4f4",
-  "--ink": "#171717",
-  "--ink-soft": "#555555",
-  "--ink-faint": "#868686",
-  "--rule": "#0000001a",
-  "--rule-strong": "#00000029",
+  "--paper": "#faf9f5",
+  "--paper-raised": "#fffdf8",
+  "--paper-sunk": "#f4f1ea",
+  "--ink": "#1c1714",
+  "--ink-soft": "#57504a",
+  "--ink-faint": "#8a827a",
+  "--rule": "#1c17141a",
+  "--rule-strong": "#1c171429",
   "--accent": "#c2410c",
   "--accent-bright": "#ea580c",
   "--accent-wash": "#ec7c381f",
   "--accent-ink": "#fff7ed",
   "--mark": "#ec7c3824",
   "--mark-active": "#ec7c3847",
-  "--mark-orphan": "#70707029",
+  "--mark-orphan": "#78706829",
   "--ok": "#15803d",
   "--danger": "#b91c1c",
   "--attention": "#7c3aed",
