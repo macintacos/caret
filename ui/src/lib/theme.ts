@@ -41,6 +41,7 @@ export type ColorToken =
   | "--mark-orphan"
   | "--ok"
   | "--danger"
+  | "--attention"
   | "--shadow-card";
 
 export interface Theme {
@@ -73,6 +74,7 @@ const darkTokens: Record<ColorToken, string> = {
   "--mark-orphan": "#9b9b9b29",
   "--ok": "#4ade80",
   "--danger": "#f87171",
+  "--attention": "#a78bfa",
   "--shadow-card": "0 1px 2px #00000066, 0 10px 30px #00000080",
 };
 
@@ -94,6 +96,7 @@ const lightTokens: Record<ColorToken, string> = {
   "--mark-orphan": "#70707029",
   "--ok": "#15803d",
   "--danger": "#b91c1c",
+  "--attention": "#7c3aed",
   "--shadow-card": "0 1px 2px #0000000f, 0 8px 24px #00000014",
 };
 

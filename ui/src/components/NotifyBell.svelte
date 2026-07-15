@@ -72,6 +72,9 @@
                   <Icon name={presentation.overlay} size={9} />
                 </span>
               {/if}
+              {#if presentation.dot}
+                <span class="dot tone-{presentation.dot}" aria-hidden="true"></span>
+              {/if}
             </span>
           </Button>
         {/snippet}
@@ -97,6 +100,23 @@
   }
   .tone-muted {
     color: var(--ink-faint);
+  }
+  .tone-attention {
+    color: var(--attention);
+  }
+  /* Filled status dot pinned to the bell's top-right for the decided states
+     (granted → --ok, denied → --danger). A paper ring lifts it off the bell
+     strokes, matching the undecided overlay. Its fill comes from tone-{dot} on
+     this element (background: currentColor), independent of the neutral bell. */
+  .dot {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 0 1.5px var(--paper);
   }
   /* Small glyph pinned to the bell's top-right. A paper-toned ring lifts it off
      the bell strokes so the two icons stay legible; the overlay is decorative

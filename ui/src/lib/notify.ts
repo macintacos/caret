@@ -236,14 +236,19 @@ export function fireTestNotification(): boolean {
 
 // ----- Permission bell badge mapping -----
 
-export type BellTone = "ok" | "danger" | "muted";
+export type BellTone = "ok" | "danger" | "muted" | "attention";
 
 export interface BellPresentation {
   /** Base icon. */
   icon: IconName;
   /** Small icon overlaid at the base icon's top-right (undecided state). */
   overlay?: IconName;
+  /** Color of the base icon (and the overlay glyph, when present). */
   tone: BellTone;
+  /** A small filled status dot pinned to the bell's top-right, colored by this
+   * tone. The at-a-glance signal for the decided states (granted → ok, denied
+   * → danger); absent in the undecided state, which carries the `?` overlay. */
+  dot?: BellTone;
   /** Tooltip explaining the current state. */
   title: string;
   /** Whether a click should call Notification.requestPermission(). */
@@ -252,13 +257,17 @@ export interface BellPresentation {
   canTest: boolean;
 }
 
-/** Pure permission → badge presentation mapping for NotifyBell.svelte. */
+/** Pure permission → badge presentation mapping for NotifyBell.svelte. The bell
+ * itself stays neutral chrome for the decided states so the colored status dot
+ * is the signal; the undecided state is the one invitation to act, so it tints
+ * `attention` (subtle purple) and shows the `?` glyph instead of a dot. */
 export function bellPresentation(permission: NotificationPermission): BellPresentation {
   switch (permission) {
     case "granted":
       return {
         icon: "bell",
-        tone: "ok",
+        tone: "muted",
+        dot: "ok",
         title: "Desktop notifications on — click to send a test notification",
         canRequest: false,
         canTest: true,
@@ -266,7 +275,8 @@ export function bellPresentation(permission: NotificationPermission): BellPresen
     case "denied":
       return {
         icon: "bell-off",
-        tone: "danger",
+        tone: "muted",
+        dot: "danger",
         title: "Notifications blocked — re-enable them in your browser's site settings",
         canRequest: false,
         canTest: false,
@@ -275,7 +285,7 @@ export function bellPresentation(permission: NotificationPermission): BellPresen
       return {
         icon: "bell",
         overlay: "circle-question-mark",
-        tone: "muted",
+        tone: "attention",
         title: "Enable desktop notifications for new plans",
         canRequest: true,
         canTest: false,
