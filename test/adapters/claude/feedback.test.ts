@@ -50,6 +50,33 @@ test("allow + acceptEdits carries both updatedInput and updatedPermissions", () 
   });
 });
 
+test("allow with reviewer notes folds them into the echoed plan (EXC-791)", () => {
+  const out = toHookOutput(
+    { behavior: "allow", feedback: "use the retry helper" },
+    { plan: "# P\n\nbody\n", planFilePath: "/x.md" },
+  );
+  const decision = out.hookSpecificOutput.decision;
+  expect(decision.behavior).toBe("allow");
+  const updated = decision.updatedInput as { plan: string; planFilePath: string };
+  // The plan of record the agent proceeds with now carries the note, below the
+  // original plan; planFilePath is preserved.
+  expect(updated.plan.startsWith("# P\n\nbody\n")).toBe(true);
+  expect(updated.plan).toContain("## Notes from the user");
+  expect(updated.plan).toContain("use the retry helper");
+  expect(updated.planFilePath).toBe("/x.md");
+});
+
+test("allow with a blank note leaves the echoed plan unchanged", () => {
+  const out = toHookOutput({ behavior: "allow", feedback: "   " }, { plan: "# P" });
+  expect(out.hookSpecificOutput.decision.updatedInput).toEqual({ plan: "# P" });
+});
+
+test("allow with notes but no echoed plan stays a bare allow", () => {
+  // Nothing to fold into on the wire (the plan-file append is the other channel).
+  const out = toHookOutput({ behavior: "allow", feedback: "note" });
+  expect(out.hookSpecificOutput.decision).toEqual({ behavior: "allow" });
+});
+
 test("deny ignores any tool_input echo", () => {
   const out = toHookOutput({ behavior: "deny", feedback: "no" }, { plan: "# P" });
   expect(out.hookSpecificOutput.decision).toEqual({ behavior: "deny", message: "no" });

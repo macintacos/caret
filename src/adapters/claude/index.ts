@@ -34,6 +34,7 @@ function toolInputEcho(input: PlanInput | undefined): Record<string, unknown> | 
 }
 
 export const claudeAdapter: AgentAdapter = {
+  id: "claude",
   approveVariants: APPROVE_VARIANTS,
 
   parseHookInput(stdin: string): PlanInput {

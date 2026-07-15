@@ -26,6 +26,7 @@ interface HookStdin {
 }
 
 export const opencodeAdapter: AgentAdapter = {
+  id: "opencode",
   approveVariants: APPROVE_VARIANTS,
 
   parseHookInput(stdin: string): PlanInput {

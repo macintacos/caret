@@ -36,6 +36,7 @@ interface HookStdin {
 }
 
 export const codexAdapter: AgentAdapter = {
+  id: "codex",
   approveVariants: APPROVE_VARIANTS,
 
   parseHookInput(stdin: string): PlanInput {

@@ -26,10 +26,12 @@ export interface DecisionInput {
 
 export function toWireDecision(input: DecisionInput): OpencodeDecision {
   if (input.behavior === "allow") {
-    // OpenCode v1 exposes a single plain approve; an acceptMode escalates nothing
-    // (mirrors codex) — a plan-agent → build-agent switch variant is a documented
-    // future addition, so an approve renders a bare allow.
-    return { behavior: "allow" };
+    // Reviewer notes on an approval (EXC-791) ride the allow so the plugin can
+    // surface them to the agent; a blank/absent note leaves a bare allow. An
+    // acceptMode still escalates nothing (mirrors codex) — a plan-agent →
+    // build-agent switch variant is a documented future addition.
+    const notes = input.feedback?.trim();
+    return notes ? { behavior: "allow", feedback: notes } : { behavior: "allow" };
   }
   return { behavior: "deny", feedback: input.feedback?.trim() || "Plan changes requested." };
 }

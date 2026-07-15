@@ -194,6 +194,20 @@ test("GET /api/health reports isDev as a boolean", async () => {
   expect(typeof body.isDev).toBe("boolean");
 });
 
+// ---- active adapter "source" in health (EXC-791) ----
+
+test("GET /api/health publishes the active adapter source when provided", async () => {
+  await boot({ source: "opencode" });
+  const body = (await (await fetch(`${base}/api/health`)).json()) as { source?: string };
+  expect(body.source).toBe("opencode");
+});
+
+test("GET /api/health omits source when the daemon declares none", async () => {
+  await boot();
+  const body = (await (await fetch(`${base}/api/health`)).json()) as { source?: string };
+  expect(body.source).toBeUndefined();
+});
+
 test("the lock file is written on bind with pid/port/build/version", async () => {
   const lockPath = join(dir, "daemon.lock");
   await boot({ lockPath, buildId: "build-abc" });

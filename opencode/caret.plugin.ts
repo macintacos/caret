@@ -126,7 +126,11 @@ export function parseDecision(stdout: string): CaretDecision {
       .at(-1) ?? "";
   try {
     const d = JSON.parse(line) as { behavior?: unknown; feedback?: unknown };
-    if (d.behavior === "allow") return { behavior: "allow" };
+    if (d.behavior === "allow") {
+      // Reviewer notes (EXC-791) ride the allow; surface them to the agent below.
+      const notes = typeof d.feedback === "string" ? d.feedback.trim() : "";
+      return notes ? { behavior: "allow", feedback: notes } : { behavior: "allow" };
+    }
     if (d.behavior === "deny") {
       return {
         behavior: "deny",
@@ -149,9 +153,26 @@ export function isPlanningAgent(agent: string | undefined): boolean {
   return agent !== undefined && (PLANNING_AGENTS as readonly string[]).includes(agent);
 }
 
-/** Tool result returned to the agent on approval. */
-export function approvedMessage(): string {
-  return "caret: the user APPROVED this plan. Proceed with the implementation as planned.";
+/** Tool result returned to the agent on approval. Optional reviewer notes
+ * (EXC-791) are folded in as a clearly-labeled section the agent incorporates as
+ * it implements — the plan is already approved, so no re-planning round. The
+ * OpenCode agent holds the plan in its own tool args (there is no plan file to
+ * append to), so this tool result is the delivery channel. */
+export function approvedMessage(notes?: string): string {
+  const base = "caret: the user APPROVED this plan. Proceed with the implementation as planned.";
+  const trimmed = notes?.trim();
+  if (!trimmed) return base;
+  return [
+    "caret: the user APPROVED this plan.",
+    "",
+    "They added notes to fold into your work — incorporate them as you implement; no need to re-plan:",
+    "",
+    "## Notes from the user",
+    "",
+    trimmed,
+    "",
+    "Proceed with the implementation.",
+  ].join("\n");
 }
 
 /** Tool result returned to the agent on a change request: the reviewer feedback
@@ -605,7 +626,7 @@ export function createCaretPlugin(
               );
             }
             return decision.behavior === "allow"
-              ? approvedMessage()
+              ? approvedMessage(decision.feedback)
               : deniedMessage(decision.feedback ?? "Plan changes requested.");
           },
         }),

@@ -1,25 +1,99 @@
-// Approve: approving resolves the review — observable in the UI (the review
-// leaves the pending set) and via the API (the list no longer carries it). With
-// pending inline comments, approve first routes through a guard so the comments
-// are never silently dropped.
+// Approve: approving ALWAYS routes through an "are you sure?" confirmation
+// (EXC-791) — even with nothing queued — observable in the UI (the review leaves
+// the pending set) and via the API (the list no longer carries it). The confirm
+// is a dismissible dialog: Enter confirms; Escape, the Cancel button, and a click
+// outside all dismiss. With pending inline comments it additionally previews what
+// a plain approve would silently drop.
 
 import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
 
-test("approving resolves the review in UI and API", async ({ daemon, page }) => {
+// The approve confirmation is a role="dialog" (dismissible on outside click,
+// EXC-791) titled "Approve this plan?" — named so the locator never collides with
+// the Request-changes dialog, which is also role="dialog".
+const APPROVE_CONFIRM = { name: "Approve this plan?" } as const;
+
+test("approving opens a confirmation and resolves on confirm (UI and API)", async ({
+  daemon,
+  page,
+}) => {
   const id = await daemon.seed();
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
 
-  // Primary approve button ("Approve" in the remembered default mode); exact
-  // match so the split-toggle's "Approve options" doesn't collide.
+  // Approve no longer resolves straight through: it opens a bare "are you sure?"
+  // confirm (nothing queued, so no pending-comment warning).
   await page.getByRole("button", { name: "Approve", exact: true }).click();
+  const confirm = page.getByRole("dialog", APPROVE_CONFIRM);
+  await expect(confirm).toBeVisible();
+  await expect(confirm).not.toContainText("won't be sent");
+  // Still pending until confirmed.
+  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
 
-  // UI: the pending set is empty.
+  // Confirming resolves the review (the bare confirm button reads "Approve").
+  await confirm.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
+  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).not.toContain(id);
+});
+
+test("Enter confirms the bare approve dialog", async ({ daemon, page }) => {
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(page.getByRole("dialog", APPROVE_CONFIRM)).toBeVisible();
+
+  // The confirm action is focused on open, so a bare Enter activates it.
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
+  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).not.toContain(id);
+});
+
+test("a reviewer note rides the approval to the agent's decision (EXC-791)", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  const confirm = page.getByRole("dialog", APPROVE_CONFIRM);
+  await expect(confirm).toBeVisible();
+
+  // Type into the optional notes field, then confirm.
+  await confirm.getByRole("textbox", { name: /notes for the agent/i }).fill("use the retry helper");
+  await confirm.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
 
-  // API: GET /api/reviews no longer lists the id (an allow removes the review
-  // from the pending set).
-  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).not.toContain(id);
+  // The decision the hook long-polls for carries the note as feedback — the wire
+  // proof the note reached the agent side.
+  await expect
+    .poll(async () => {
+      const res = await fetch(`${daemon.url}/api/reviews/${encodeURIComponent(id)}/decision`);
+      return ((await res.json()) as { behavior: string; feedback?: string }).feedback;
+    })
+    .toBe("use the retry helper");
+});
+
+test("clicking outside dismisses the approve dialog and leaves the review pending", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  const confirm = page.getByRole("dialog", APPROVE_CONFIRM);
+  await expect(confirm).toBeVisible();
+
+  // A click on the backdrop (top-left corner, off the centered panel) dismisses —
+  // the approve confirm is a dialog, not an alertdialog (EXC-791).
+  await page.mouse.click(5, 5);
+  await expect(confirm).toBeHidden();
+  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
 });
 
 test("a pending inline comment guards approve and routes to request-changes intact", async ({
@@ -35,8 +109,8 @@ test("a pending inline comment guards approve and routes to request-changes inta
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
 
-  // Approve now opens a confirmation naming the count — it does NOT resolve.
-  const guard = page.getByRole("alertdialog");
+  // Approve opens a confirmation naming the count — it does NOT resolve.
+  const guard = page.getByRole("dialog", APPROVE_CONFIRM);
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(guard).toBeVisible();
   await expect(guard).toContainText("1 pending comment");
@@ -78,7 +152,7 @@ test("an uncommitted composer scratch guards approve (EXC-745)", async ({ daemon
 
   // Approve must open the guard, not resolve: an uncommitted scratch is unsent
   // inline work that a plain approve would silently drop.
-  const guard = page.getByRole("alertdialog");
+  const guard = page.getByRole("dialog", APPROVE_CONFIRM);
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(guard).toBeVisible();
   await expect(guard).toContainText("1 pending comment");
@@ -100,7 +174,7 @@ test("a lone general-comment draft guards approve (EXC-742)", async ({ daemon, p
 
   // Approve must open the guard, not resolve: the unsent general comment is
   // feedback a plain approve would leave behind.
-  const guard = page.getByRole("alertdialog");
+  const guard = page.getByRole("dialog", APPROVE_CONFIRM);
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(guard).toBeVisible();
   await expect(guard).toContainText("1 pending comment");
@@ -121,7 +195,7 @@ test("'Approve anyway' on the guard resolves as an allow", async ({ daemon, page
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
 
-  const guard = page.getByRole("alertdialog");
+  const guard = page.getByRole("dialog", APPROVE_CONFIRM);
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(guard).toBeVisible();
 
@@ -141,7 +215,7 @@ test("Enter confirms the approve guard, resolving it as an allow", async ({ daem
   await expect(page.locator(".diff-plan")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
-  const guard = page.getByRole("alertdialog");
+  const guard = page.getByRole("dialog", APPROVE_CONFIRM);
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(guard).toBeVisible();
 
@@ -165,7 +239,7 @@ test("Escape dismisses the approve guard and leaves the review pending", async (
   await expect(page.locator(".diff-plan")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
-  const guard = page.getByRole("alertdialog");
+  const guard = page.getByRole("dialog", APPROVE_CONFIRM);
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(guard).toBeVisible();
   await page.keyboard.press("Escape");
@@ -188,7 +262,7 @@ test("Cancel dismisses the approve guard and leaves the review pending", async (
   await expect(page.locator(".diff-plan")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
-  const guard = page.getByRole("alertdialog");
+  const guard = page.getByRole("dialog", APPROVE_CONFIRM);
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(guard).toBeVisible();
 

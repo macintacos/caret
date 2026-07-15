@@ -98,6 +98,10 @@ export interface CreateServerOptions {
    * (default) means the field is absent from the health body and the UI uses its
    * built-in fallback set. */
   approveVariants?: readonly ApproveVariant[];
+  /** The active adapter's id (e.g. "claude" | "opencode"), published in
+   * /api/health as `source` so the UI can adapt to the environment — e.g. an
+   * OpenCode session (EXC-791). Omitted (default) drops the field from the body. */
+  source?: string;
   /** Leveled lifecycle logger (see log.ts CaretLogger); defaults to a no-op so
    * tests stay quiet. Lifecycle events log at info, handler failures at error. */
   log?: CaretLogger;
@@ -133,6 +137,7 @@ interface ResolvedOptions {
   stateDir: string | undefined;
   instanceId: string | undefined;
   approveVariants: readonly ApproveVariant[] | undefined;
+  source: string | undefined;
   log: CaretLogger;
 }
 
@@ -151,6 +156,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     stateDir: opts.stateDir,
     instanceId: opts.instanceId,
     approveVariants: opts.approveVariants,
+    source: opts.source,
     log: opts.log ?? noopLogger,
   };
 }
@@ -177,7 +183,7 @@ function matchIdRoute(path: string): IdRoute | null {
 export function createServer(opts: CreateServerOptions): CaretServer {
   const cfg = resolveOptions(opts);
   const { store, idle, heartbeat, assets, onShutdown, routePlan, prefsPath, log } = cfg;
-  const { buildId, commit, stateDir, instanceId, approveVariants, lockPath } = cfg;
+  const { buildId, commit, stateDir, instanceId, approveVariants, source, lockPath } = cfg;
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount } = createDecisions(log);
 
   // The set of approve-variant ids the resolve route and prefs persistence gate
@@ -283,6 +289,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // entirely so the wire stays byte-identical there (EXC-781).
       ...(process.env.CARET_FRESH === "1" ? { fresh: true } : {}),
       ...(approveVariants ? { approveVariants: [...approveVariants] } : {}),
+      // The active adapter's id (EXC-791): the "source" the UI adapts to (e.g.
+      // OpenCode's single-variant approve). Absent when the daemon declares none.
+      ...(source ? { source } : {}),
     };
     return Response.json(body);
   }

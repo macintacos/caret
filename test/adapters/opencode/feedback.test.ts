@@ -17,6 +17,19 @@ test("approve with an acceptMode still emits a plain allow (no escalation in v1)
   });
 });
 
+test("approve with reviewer notes carries them on the allow (EXC-791)", () => {
+  // Both ends of the wire are caret-owned, so the notes ride the allow for the
+  // plugin to surface to the agent.
+  expect(toWireDecision({ behavior: "allow", feedback: "use the retry helper" })).toEqual({
+    behavior: "allow",
+    feedback: "use the retry helper",
+  });
+});
+
+test("approve with a blank note stays a bare allow", () => {
+  expect(toWireDecision({ behavior: "allow", feedback: "   " })).toEqual({ behavior: "allow" });
+});
+
 test("deny carries the feedback verbatim", () => {
   expect(toWireDecision({ behavior: "deny", feedback: "Fix the bug" })).toEqual({
     behavior: "deny",

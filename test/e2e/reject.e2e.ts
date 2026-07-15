@@ -88,3 +88,25 @@ test("Escape dismisses the reject guard and leaves the review pending", async ({
   // The review is untouched.
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
 });
+
+test("a backdrop click does NOT dismiss the reject guard (deliberate verdict, EXC-685)", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  await page.getByRole("button", { name: "Reject", exact: true }).click();
+  const guard = page.getByRole("alertdialog");
+  await expect(guard).toBeVisible();
+
+  // Unlike the approve confirm (which dismisses on a click outside, EXC-791), a
+  // reject is a deliberate verdict: an alertdialog whose backdrop does NOT dismiss.
+  // The guard survives the outside click and still rejects — proof it stayed open.
+  await page.mouse.click(5, 5);
+  await expect(guard).toBeVisible();
+  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
+  await guard.getByRole("button", { name: "Reject", exact: true }).click();
+  await expect.poll(async () => (await daemon.getReview(id)).body?.decision?.behavior).toBe("deny");
+});

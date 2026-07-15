@@ -75,6 +75,25 @@ describe("approve", () => {
     expect(store.busy).toBe(false);
   });
 
+  test("submits reviewer notes as feedback on the allow (EXC-791)", async () => {
+    const store = makeStore();
+    const resolve = build(store);
+    await resolve.approve("default", "use the retry helper");
+    expect(submits).toEqual([
+      {
+        id: "r1",
+        body: { behavior: "allow", acceptMode: "default", feedback: "use the retry helper" },
+      },
+    ]);
+  });
+
+  test("omits a blank note from the allow body", async () => {
+    const store = makeStore();
+    const resolve = build(store);
+    await resolve.approve("default", "   ");
+    expect(submits).toEqual([{ id: "r1", body: { behavior: "allow", acceptMode: "default" } }]);
+  });
+
   test("flushes the pending draft before submitting", async () => {
     const store = makeStore();
     const resolve = build(store);

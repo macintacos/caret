@@ -31,6 +31,7 @@
 //      coupling pinned by test/adapters/claude/hooks-timeout.test.ts) so caret's
 //      own fail-safe deny always emits before Claude could kill the hook.
 
+import { appendReviewerNotes } from "../../plan/reviewer-notes.ts";
 import type { ApproveVariantId, Behavior } from "../../lib/types.ts";
 import { type SetModeName, setModeFor } from "./approve.ts";
 
@@ -67,8 +68,14 @@ export function toHookOutput(
   if (input.behavior === "allow") {
     const decision: PermissionDecision = { behavior: "allow" };
     // Echo tool_input first so the guard (see file header) never drops the allow.
+    // Reviewer notes on an approval (EXC-791) ride here: they are appended to the
+    // echoed plan so the plan of record the agent proceeds with carries them.
     if (updatedInput) {
-      decision.updatedInput = updatedInput;
+      const notes = input.feedback?.trim();
+      decision.updatedInput =
+        notes && typeof updatedInput.plan === "string"
+          ? { ...updatedInput, plan: appendReviewerNotes(updatedInput.plan, notes) }
+          : updatedInput;
     }
     const mode = setModeFor(input.acceptMode);
     if (mode) {

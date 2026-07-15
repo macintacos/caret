@@ -67,6 +67,11 @@
   // `version` and degrades when `commit` is absent.
   let version = $state<string | undefined>(undefined);
   let commit = $state<string | undefined>(undefined);
+  // The active adapter's id (EXC-791), read once from the health probe — the
+  // environment the UI adapts to (e.g. an OpenCode session). Undefined until the
+  // probe lands or for a daemon that predates the field; passed to the TopBar,
+  // which exposes it as data-source.
+  let source = $state<string | undefined>(undefined);
   let work = $state<{
     annotations: Annotation[];
     generalCommentDraft: string;
@@ -189,6 +194,7 @@
         isDev = h.isDev ?? false;
         version = h.version;
         commit = h.commit;
+        source = h.source;
         // Dev --fresh (EXC-781): reset the browser to a brand-new-user session —
         // clear saved UI prefs, drop to the default theme (main.ts already applied
         // whatever was stored before this probe resolved, so re-apply here), and
@@ -265,16 +271,19 @@
   $effect(() => installUiGoneBeacon({ target: window }));
 
   function onApprove(mode: ApproveVariantId) {
-    // Approving never sends inline comments, so pending ones would be silently
-    // lost. Guard the approve with a confirmation when any are non-blank; with
-    // none, approve fires straight through as before.
-    if (pendingCount > 0) pendingApproveMode = mode;
-    else void resolve.approve(mode);
+    // Approve always routes through a confirmation (EXC-791): even with nothing
+    // queued, a stray click must not ship the plan. Park the chosen mode; the
+    // guard (UnsentCommentsDialog) additionally previews any pending comments a
+    // plain approve would drop.
+    pendingApproveMode = mode;
   }
-  function approveAnyway() {
+  function approveAnyway(notes: string) {
+    // `notes` is the optional reviewer note from the confirm dialog (EXC-791); it
+    // rides the allow as feedback and reaches the agent. resolve.approve omits a
+    // blank note.
     const mode = pendingApproveMode;
     pendingApproveMode = null;
-    if (mode) void resolve.approve(mode);
+    if (mode) void resolve.approve(mode, notes);
   }
   function onReject() {
     // Reject always confirms (EXC-685): consistent whether or not comments are
@@ -307,6 +316,7 @@
     approveMode={resolve.approveMode}
     {variants}
     {isDev}
+    {source}
     {pendingCount}
     onSelect={selection.selectReview}
     {onApprove}
@@ -399,6 +409,8 @@
     action="Approve"
     consequence="Approving accepts the plan and starts the agent's work."
     icon="check"
+    kind="dialog"
+    showNotes
     onConfirm={approveAnyway}
     onRequestChanges={divertToRequestChanges}
     onCancel={() => (pendingApproveMode = null)}
