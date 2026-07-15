@@ -1753,6 +1753,38 @@ test("editing an inline card rewrites the comment and persists it", async ({ dae
     .toBe("Revised note with more detail.");
 });
 
+test("editing a saved comment focuses the editor so the caret tracks typing", async ({
+  daemon,
+  page,
+}) => {
+  // Regression: editing a saved comment mounts CodeMirror inside the already
+  // slot-projected annotation container, where getRootNode() resolves to the
+  // diffs library's ShadowRoot. CM gates focus on root.activeElement ===
+  // contentDOM, but the slotted light-DOM content is focus-tracked at the
+  // document level, so that check never matched — hasFocus stayed false, the
+  // .cm-focused class that renders the caret was never applied, and typing left
+  // the caret invisible/stuck. Passing root: document (see MarkdownEditor) points
+  // CM at where the slotted content's focus actually lives.
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+
+  await createAnnotation(page, 3, "aaaaaaaa");
+  const card = page.locator("[data-annotation-card]");
+  await card.getByRole("button", { name: "Edit" }).click();
+
+  // CM only renders the caret while it believes it is focused, so the fix shows
+  // up as the .cm-focused class landing on the mounted editor.
+  await expect(card.locator(".cm-editor.cm-focused")).toBeVisible();
+
+  // And the caret tracks input: End jumps to the end, and real keystrokes append
+  // there in order (a stuck caret would scramble or prepend them).
+  await page.keyboard.press("End");
+  await page.keyboard.type("XY");
+  await expect(card.locator(".cm-content")).toHaveText("aaaaaaaaXY");
+});
+
 // ----- Interaction regressions -----
 
 test("clicking a line near the top opens its composer without jumping the scroll", async ({
