@@ -422,10 +422,10 @@ claude --plugin-dir ./    # load caret's hooks for this session only
 
 The `.mise/tasks/*` file tasks are thin forwarders to a single
 [Commander](https://github.com/tj/commander.js) CLI at `scripts/tasks/cli.ts` — the same
-scaffolding (`src/program.ts`) as the product CLI (`src/cli.ts`). Each task file is one
-line: `.mise/tasks/dev` is just `exec bun scripts/tasks/cli.ts dev "$@"`, so the CLI owns
-every flag's parsing, validation, defaults, and `--help`, and the task stays trivial. Each
-forwarder sets `#MISE raw_args=true` so mise hands every argument — including a bare
+scaffolding (`src/lib/program.ts`) as the product CLI (`src/cli.ts`). Each task file is
+one line: `.mise/tasks/dev` is just `exec bun scripts/tasks/cli.ts dev "$@"`, so the CLI
+owns every flag's parsing, validation, defaults, and `--help`, and the task stays trivial.
+Each forwarder sets `#MISE raw_args=true` so mise hands every argument — including a bare
 `--help` — straight to the CLI instead of intercepting it, so `mise run dev --help` shows
 a subcommand's real flags with no `--` separator.
 
@@ -499,11 +499,14 @@ following the checklist in `agents/icon-rules.md` and adding a row to
 ## Layout
 
 ```text
-src/                tool-agnostic core (flat): cli.ts (Commander tree) · review.ts (review orchestration)
-                    daemon.ts (Bun.serve) · daemon-lifecycle.ts · daemon-client.ts · store.ts · reviews.ts (revision threading)
-                    decisions.ts · prefs.ts · log.ts (leveled NDJSON) · caller-location.ts · redact.ts · redact-core.ts (browser-safe)
-                    settings.ts (config.toml) · constants.ts · paths.ts · build-id.ts (VERSION/identity/lock) · types.ts (wire contract)
-                    json-file.ts · plan-format.ts · ui-assets.ts (resolves the embedded UI for the daemon to serve) · ui-log-bridge.ts (/api/logs) · program.ts (shared CLI scaffolding)
+src/                tool-agnostic core, grouped by domain · cli.ts (Commander tree) · discovery.ts (caret discovery report)
+src/daemon/         server.ts (Bun.serve) · schemas.ts (request-body zod) · guards.ts (origin/CSRF/liveness) · lifecycle.ts · client.ts
+src/review/         orchestrate.ts (review orchestration) · threading.ts (revision threading) · store.ts · decisions.ts · reconcile.ts
+src/plan/           canonical-file.ts (on-disk plan) · excerpt.ts (file-ref excerpts) · format.ts (fenced-block validation) · markdown.ts (reflow)
+src/redact/         core.ts (browser-safe DENY_KEYS walk) · node.ts (home-path scrub)
+src/ui/             assets.ts (resolves the embedded UI for the daemon to serve) · log-bridge.ts (/api/logs)
+src/config/         settings.ts (config.toml) · prefs.ts · paths.ts · constants.ts (browser-safe)
+src/lib/            types.ts (wire contract) · log.ts (leveled NDJSON) · caller-location.ts · json-file.ts · build-id.ts (VERSION/identity/lock) · program.ts (shared CLI scaffolding)
 src/commands/       per-subcommand entrypoints (one file per subcommand)
 src/adapters/       adapter.ts (AgentAdapter interface) · index.ts (registry + CARET_AGENT selection) · claude/ (Claude Code adapter, default) · codex/ (OpenAI Codex CLI adapter, default-off + provisional)
 ui/                 Svelte 5 multi-asset SPA (Vite) embedded into the binary via the build-generated asset manifest, served by the daemon by URL path · src/state/ runes state modules · src/icons/ vendored Lucide SVGs

@@ -107,7 +107,7 @@ test("the seeded fixture has no untagged code blocks", () => {
 // ---- extraPlan ----
 
 test("extraPlan retitles the h1 so the extra review is distinguishable", () => {
-  // Review titles derive from the plan's first heading (src/reviews.ts), so
+  // Review titles derive from the plan's first heading (src/review/threading.ts), so
   // the retitle is what the switcher and the notification body display.
   const out = extraPlan("# Widget Cache Refactor\n\nbody", 2);
   expect(out).toStartWith("# Widget Cache Refactor — extra 2\n");

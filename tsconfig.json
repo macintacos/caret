@@ -11,7 +11,7 @@
     "resolveJsonModule": true,
     "types": ["bun"],
     // `@core/*` resolves to the tool-agnostic core in src/ (paths are relative
-    // to this config's dir). The UI imports the wire contract (src/types.ts)
+    // to this config's dir). The UI imports the wire contract (src/lib/types.ts)
     // through this alias; the root program shares it so `bun test` resolves the
     // ui unit suite's imports identically (EXC-507).
     "paths": { "@core/*": ["./src/*"] }

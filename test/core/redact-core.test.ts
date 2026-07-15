@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { CENSOR, DENY_KEYS, MAX_DEPTH, scrubGraph, shortId } from "../../src/redact/core.ts";
 
 // The shared browser-safe core: DENY_KEYS, the parameterized scrub walk, and
-// shortId. Both runtimes route through these — src/redact.ts (with the home-path
+// shortId. Both runtimes route through these — src/redact/node.ts (with the home-path
 // string transform wired in) and ui/src/lib/log.ts (no transform, censor-only).
 
 test("exports the shared constants", () => {

@@ -1,4 +1,4 @@
-// The UI asset resolver's disk-enumeration source (src/ui-assets.ts
+// The UI asset resolver's disk-enumeration source (src/ui/assets.ts
 // assetsFromDist): the dev/e2e path that serves ui/dist/ off disk when no embed
 // manifest is present, and the absent-dir case that degrades to the daemon's
 // placeholder. The embedded-manifest source is exercised end-to-end by the

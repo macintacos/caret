@@ -4,9 +4,9 @@
 //
 // This file is only the composition point: it assembles the Commander tree and
 // threads each subcommand's parsed options into its run function (the actions in
-// src/commands/). The review orchestration core (src/review.ts), daemon
-// takeover/lifecycle (src/daemon-lifecycle.ts), the HTTP client
-// (src/daemon-client.ts), and build/commit fingerprinting (src/build-id.ts) live
+// src/commands/). The review orchestration core (src/review/orchestrate.ts), daemon
+// takeover/lifecycle (src/daemon/lifecycle.ts), the HTTP client
+// (src/daemon/client.ts), and build/commit fingerprinting (src/lib/build-id.ts) live
 // in their own modules and are imported by the commands.
 //
 // FAIL-SAFE = DENY: shipping an unreviewed plan is the one outcome we never

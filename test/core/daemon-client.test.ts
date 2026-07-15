@@ -1,4 +1,4 @@
-// Unit coverage for the consolidated health probe in src/daemon-client.ts:
+// Unit coverage for the consolidated health probe in src/daemon/client.ts:
 // waitForHealth — the bounded health-wait the out-of-process callers (the dev
 // driver, the e2e fixture) share. Driven against a real in-process server so
 // the probe exercises the actual httpHealth fetch, with an injected sleep so no

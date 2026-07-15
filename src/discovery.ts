@@ -7,8 +7,8 @@
 //
 //   - Every side effect is injected (DiscoveryDeps), so collectReport is a pure
 //     function of its deps and the whole document is unit-testable with fakes —
-//     the same dependency-injection pattern src/review.ts uses for runReview.
-//   - The report is built FLAT on purpose. src/redact.ts caps recursion at depth
+//     the same dependency-injection pattern src/review/orchestrate.ts uses for runReview.
+//   - The report is built FLAT on purpose. src/redact/node.ts caps recursion at depth
 //     6 (deeper values become "<depth-capped>"); keeping every leaf shallow
 //     (the deepest is processes.items[i].field at depth 4) means the CLI caller's
 //     scrubValue(report, true) never clips a value. Sections that would nest —

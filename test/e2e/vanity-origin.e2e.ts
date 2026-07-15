@@ -2,7 +2,7 @@
 // http://localhost:<port>. Chromium computes the Origin / Sec-Fetch-Site headers
 // itself, so a mutating POST (approve, deny) carries the caret.localhost origin
 // the browser derives — which must pass the daemon's same-origin guard
-// (isCrossOrigin, src/daemon.ts). A 403 cross-origin block would fail these
+// (isCrossOrigin, src/daemon/guards.ts). A 403 cross-origin block would fail these
 // flows, so this is committed real-browser e2e, not a unit test. Chromium
 // special-cases *.localhost to loopback, so caret.localhost reaches the per-test
 // fixture daemon bound on 127.0.0.1.

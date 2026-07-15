@@ -6,10 +6,18 @@ slots in without touching core internals; blur it and agent vocabulary leaks eve
 
 ## The two layers
 
-- **`src/` is the flat core.** daemon, store, reviews, decisions, settings, log, redact,
-  paths, prefs, plan-format, types — all at the top level, no `src/core/` directory. The
-  core knows reviews, plans, and decisions; it does **not** know any agent's wire
-  protocol.
+- **`src/` is the tool-agnostic core, grouped by domain.** The core knows reviews, plans,
+  and decisions; it does **not** know any agent's wire protocol. It is organized into
+  cohesive domain directories: `src/daemon/` (the HTTP server plus its extracted request
+  `schemas`/origin `guards`, `lifecycle`, and `client`), `src/review/` (`orchestrate`,
+  revision `threading`, `store`, `decisions`, `reconcile`), `src/plan/` (`canonical-file`,
+  `excerpt`, `format`, `markdown`), `src/redact/` (`core`, `node`), `src/ui/` (`assets`
+  and the browser `log-bridge`), `src/config/` (`settings`, `prefs`, `paths`,
+  `constants`), and `src/lib/` (cross-cutting foundation — `types`, `log`, `json-file`,
+  `caller-location`, `program`, `build-id`). `src/cli.ts` (the `bun build --compile`
+  entrypoint) and `src/discovery.ts` (the standalone diagnostics feature) stay at the
+  root, beside the gitignored generated UI manifest. There is deliberately no `src/core/`
+  bucket — the domain directories **are** the core.
 - **`src/adapters/<tool>/` implements one agent tool.** `src/adapters/adapter.ts` declares
   the `AgentAdapter` interface; `src/adapters/index.ts` is the registry that maps a tool
   id to its adapter and resolves the active one (by explicit id, then `CARET_AGENT`, then
@@ -29,9 +37,9 @@ an adapter.
 - **Composition is the only exception.** The wiring points — `src/cli.ts` and
   `src/commands/*` — select the active adapter and thread it in (e.g.
   `runReviewSubcommand` hands the adapter's `parseHookInput` to `runReview` as a
-  `ReviewDeps` field). Core modules like `review.ts` take the capability as an injected
-  dependency, so they name no adapter. A `from "./adapters/` import in a non-composition
-  core module is the smell.
+  `ReviewDeps` field). Core modules like `review/orchestrate.ts` take the capability as an
+  injected dependency, so they name no adapter. A `from "./adapters/` import in a
+  non-composition core module is the smell.
 - **The emission seam lives at the composition layer, not the core.** `runReview` returns
   a tool-agnostic `Decision` (its fail-safe denies are `Decision`s the core constructs);
   the wiring point renders it to the agent's wire string with `adapter.emitDecision` at
@@ -92,15 +100,16 @@ documented future ship step, not built here.
 ## Browser-safe shared modules
 
 Some modules are imported by **both** runtimes — the compiled bun binary and the browser
-UI bundle (the UI reaches them through the `@core/*` alias: `src/types.ts`,
-`constants.ts`, `redact-core.ts`, `ui-log-bridge.ts`). Every such module is
-**pure TS with zero node imports**.
+UI bundle (the UI reaches them through the `@core/*` alias: `src/lib/types.ts`,
+`config/constants.ts`, `redact/core.ts`, `ui/log-bridge.ts`). Every such module is
+**pure TS with zero node imports** — the node-free property is per-module, so a
+browser-safe file can sit in a domain directory beside node-only siblings.
 
 The reason is the browser bundle: a `node:*` import in a `@core`-shared module either
 breaks the Vite build (node builtins have no browser equivalent) or drags the daemon's
 node dependency chain into the browser. So the split is deliberate: the shared
-algorithm/constants/types stay pure (e.g. `redact-core.ts` holds the `DENY_KEYS` walk),
-and node-only concerns layer on top in a non-shared module (e.g. `redact.ts` adds the
+algorithm/constants/types stay pure (e.g. `redact/core.ts` holds the `DENY_KEYS` walk),
+and node-only concerns layer on top in a non-shared module (e.g. `redact/node.ts` adds the
 home-path file scrub). Before importing a `src/` module from `ui/`, confirm it is
 node-free — or extract the node-free part.
 
@@ -109,7 +118,7 @@ content-hashed `dist/assets/*` (JS + CSS), which the build embeds into the binar
 a generated manifest. `scripts/generate-ui-manifest.ts` enumerates `ui/dist/` into a
 gitignored module of `with { type: "file" }` imports (`src/ui-manifest.generated.ts`) that
 `bun build --compile` inlines, mapping each request URL path to its embedded file;
-`src/ui-assets.ts` resolves that asset set and the daemon serves each asset by URL path
+`src/ui/assets.ts` resolves that asset set and the daemon serves each asset by URL path
 with per-path MIME and cache headers. Dynamic `import()` in the browser bundle is fine —
 the node-free invariant above is the only constraint a shared `@core` module owes.
 
@@ -128,13 +137,13 @@ happens to have open.
   read-confidentiality block) asserts no route family ever emits an `Access-Control-*`
   header, so a future permissive-CORS "fix" fails loudly instead of silently exposing plan
   bodies. Never add a CORS-grant header.
-- **The CSRF guard gates only non-safe methods.** `isCrossOrigin(req)` (`src/daemon.ts`)
-  rejects a state-changing request from a foreign Origin; safe methods (GET/HEAD, via
-  `isSafeMethod`) are let through, because the SOP already protects reads and a foreign
-  GET can't exfiltrate the response. The guard tests the verb through `isSafeMethod`, not
-  a POST/PUT allowlist, so a future mutating verb (DELETE/PATCH) is CSRF-protected by
-  default. A same-origin browser sends a loopback Origin (allowed) and a hook/CLI sends no
-  Origin (allowed); a foreign page's write is the only thing blocked.
+- **The CSRF guard gates only non-safe methods.** `isCrossOrigin(req)`
+  (`src/daemon/guards.ts`) rejects a state-changing request from a foreign Origin; safe
+  methods (GET/HEAD, via `isSafeMethod`) are let through, because the SOP already protects
+  reads and a foreign GET can't exfiltrate the response. The guard tests the verb through
+  `isSafeMethod`, not a POST/PUT allowlist, so a future mutating verb (DELETE/PATCH) is
+  CSRF-protected by default. A same-origin browser sends a loopback Origin (allowed) and a
+  hook/CLI sends no Origin (allowed); a foreign page's write is the only thing blocked.
 - **No preflight handler exists or is needed.** A same-origin request sends no `OPTIONS`
   preflight, and a cross-origin preflight would be denied by the browser before any
   request body is sent (no advertised CORS headers).

@@ -5,14 +5,17 @@ layout tells you which layer a suite belongs to without opening it. `bun test` c
 `**/*.test.ts` repo-wide, so a suite lands in the runner from anywhere under `test/` — the
 directories are a legibility contract for humans, not a collection filter.
 
-- **`test/core/`** — the tool-agnostic core suites, named for the `src/` module they cover
-  (store, reviews, decisions, daemon, daemon-lifecycle, settings, log, redact, …). A core
-  suite must **not encode Claude assumptions**: no hardcoded `acceptEdits`/`auto` mode
-  literals, no PermissionRequest `hookSpecificOutput` shape, no `caret@caret` plugin
-  probing. Where core code takes an adapter capability (the approve-variant set,
-  `parseHookInput`), the test **injects it as a dependency** rather than reaching into
-  `src/adapters/`. A future second adapter inherits `test/core/` unchanged as proof of
-  agent-independence — that inheritance is the invariant these rules protect.
+- **`test/core/`** — the tool-agnostic core suites, named for the `src/` module they
+  cover. `src/` groups the core into domain directories (`daemon/`, `review/`, `plan/`, …)
+  while `test/core/` stays flat, so a suite's compound name tracks its module rather than
+  mirroring the directory (`daemon`, `daemon-lifecycle`, `review-threading`,
+  `plan-format`, `redact-core`, `settings`, `log`, `store`, …). A core suite must
+  **not encode Claude assumptions**: no hardcoded `acceptEdits`/`auto` mode literals, no
+  PermissionRequest `hookSpecificOutput` shape, no `caret@caret` plugin probing. Where
+  core code takes an adapter capability (the approve-variant set, `parseHookInput`), the
+  test **injects it as a dependency** rather than reaching into `src/adapters/`. A future
+  second adapter inherits `test/core/` unchanged as proof of agent-independence — that
+  inheritance is the invariant these rules protect.
 - **`test/adapters/claude/`** — the Claude-Code adapter suites: the adapter contract,
   decision emission (PermissionRequest/`setMode`), approve-variant mapping, the install
   probe, and the pre-epic back-compat fixtures (Claude `acceptMode` vocabulary). Anything

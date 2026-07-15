@@ -1,6 +1,6 @@
 // `caret reconcile`: the ExitPlanMode PostToolUse hook. When a plan is approved,
 // this fires and reconciles a terminal approval (one made in the agent interface,
-// not caret's UI) into the daemon — see src/reconcile.ts. Wires the production
+// not caret's UI) into the daemon — see src/review/reconcile.ts. Wires the production
 // deps: the active adapter's stdin parser and the daemon HTTP client, pointed at
 // the already-running daemon's loopback port (it never spawns one).
 //

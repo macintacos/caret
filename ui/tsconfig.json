@@ -8,7 +8,7 @@
     "types": ["bun", "svelte"],
     // `@core/*` resolves to the tool-agnostic core in src/ (paths are relative
     // to this config's dir, so one level up). The UI imports the wire contract
-    // (src/types.ts) through this alias rather than a hand-kept mirror; the vite
+    // (src/lib/types.ts) through this alias rather than a hand-kept mirror; the vite
     // alias and root tsconfig mirror this mapping so svelte-check, the
     // vite build, and bun test agree (EXC-507).
     // `$lib/*` → ui/src/lib/*, the import prefix shadcn-svelte's copied

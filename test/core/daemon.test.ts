@@ -1060,7 +1060,7 @@ describe("UI serving", () => {
 
 // ---- routing fallthrough (the dispatcher's default response) ----
 //
-// The route table in src/daemon.ts branches on method+path and falls through to
+// The route table in src/daemon/server.ts branches on method+path and falls through to
 // notFound() for everything else: there is no 405. Pinning these edges makes the
 // contract a future client or second adapter exercises explicit rather than
 // incidental — every unmatched request is a uniform 404 "not found".
@@ -1678,7 +1678,7 @@ test("POST /api/logs drops a client-forged extra.caller", async () => {
     },
   ]);
   const extra = recs.find((r) => r.msg === "forge caller")?.extra as Record<string, unknown>;
-  // caller is a structural field stamped by src/log.ts; a client-sent one is a
+  // caller is a structural field stamped by src/lib/log.ts; a client-sent one is a
   // forgery and must be stripped, while the innocent key survives and source forced.
   expect(extra.caller).toBeUndefined();
   expect(extra.keep).toBe("me");

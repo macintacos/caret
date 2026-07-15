@@ -35,11 +35,11 @@ Extract a helper **only on genuine repetition with identical semantics**, and ke
 bespoke when the semantics differ.
 
 - **Extract on identical semantics:** `errorMessage(err)` (the one
-  `err instanceof Error ? err.message : String(err)` coercion, in `src/types.ts` so the
-  browser can import it too), `readJsonFile`/`readJsonFileSync` (the "any failure → null"
-  parse, `src/json-file.ts`), and cross-cutting constants (`src/constants.ts`). A repeated
-  expression with one meaning becomes one named helper; grep should find zero hand-rolled
-  copies left.
+  `err instanceof Error ? err.message : String(err)` coercion, in `src/lib/types.ts` so
+  the browser can import it too), `readJsonFile`/`readJsonFileSync` (the "any failure →
+  null" parse, `src/lib/json-file.ts`), and cross-cutting constants
+  (`src/config/constants.ts`). A repeated expression with one meaning becomes one named
+  helper; grep should find zero hand-rolled copies left.
 - **Keep bespoke when semantics differ:** `prefs.ts`'s `readApproveMode` keeps its own
   try/catch because it must distinguish ENOENT (a normal first run, logged calmly) from
   other read failures — which is exactly what `readJsonFile`'s any-failure→null collapse

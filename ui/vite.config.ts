@@ -34,7 +34,7 @@ export default defineConfig({
   ],
   resolve: {
     // `@core/*` resolves to the tool-agnostic core in src/, so the UI imports
-    // the wire contract (src/types.ts) directly. Type-only imports erase at
+    // the wire contract (src/lib/types.ts) directly. Type-only imports erase at
     // build, keeping the browser bundle free of node-only code; the matching
     // tsconfig `paths` mappings keep svelte-check and bun test in step (EXC-507).
     //
