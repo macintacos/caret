@@ -21,6 +21,30 @@
   );
   let presentation = $derived(bellPresentation(permission));
 
+  // Keep the badge truthful when permission changes outside this button — the
+  // first-run onboarding modal's Enable, or the browser's own site settings. The
+  // Permissions API's change event is the trigger; we re-read the authoritative
+  // Notification.permission (the value the notifier gates on at fire time) rather
+  // than the PermissionStatus.state, which headless engines can diverge from.
+  $effect(() => {
+    const perms = navigator.permissions;
+    if (!supported || !perms?.query) return;
+    let status: PermissionStatus | undefined;
+    const sync = () => {
+      permission = Notification.permission;
+    };
+    perms
+      .query({ name: "notifications" as PermissionName })
+      .then((s) => {
+        status = s;
+        s.addEventListener("change", sync);
+      })
+      .catch(() => {
+        // Some engines reject a notifications permission query — nothing to sync.
+      });
+    return () => status?.removeEventListener("change", sync);
+  });
+
   async function handleClick() {
     // Granted: fire a test notification — the one-click answer to "is it
     // caret's logic or the OS suppressing the toast?" (a granted notification

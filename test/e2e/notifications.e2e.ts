@@ -133,8 +133,15 @@ test("clicking the granted bell fires a test notification", async ({ daemon, pag
   );
 });
 
-test("undecided permission shows the muted, requestable badge", async ({ daemon, page }) => {
+test("undecided permission shows the attention-tinted, requestable badge", async ({
+  daemon,
+  page,
+}) => {
   await page.addInitScript(initStub, "default");
+  // Suppress the first-run onboarding modal (EXC-781) so this asserts the bell in
+  // isolation — otherwise the modal opens over an undecided permission and inerts
+  // the topbar behind it. The onboarding flow has its own test below.
+  await page.addInitScript(() => localStorage.setItem("caret.onboarded", "1"));
   await daemon.seed();
   await page.goto("/");
 
@@ -149,4 +156,22 @@ test("undecided permission shows the muted, requestable badge", async ({ daemon,
   await expect(tip).toBeHidden();
   await bell.hover();
   await expect(tip).toBeVisible();
+});
+
+test("first-run onboarding invites a new user to enable notifications", async ({
+  daemon,
+  page,
+}) => {
+  // A brand-new user: undecided permission and no onboarded flag → the modal opens.
+  await page.addInitScript(initStub, "default");
+  await daemon.seed();
+  await page.goto("/");
+
+  const enable = page.getByRole("button", { name: "Enable notifications" });
+  await expect(enable).toBeVisible();
+  // "Maybe later" records onboarding as seen and returns to the app; the bell
+  // (now reachable) still reflects the undecided state.
+  await page.getByRole("button", { name: "Maybe later" }).click();
+  await expect(enable).toBeHidden();
+  await expect(page.getByRole("button", { name: "Notifications: default" })).toBeVisible();
 });

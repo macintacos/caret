@@ -19,6 +19,7 @@
   } from "./lib/feedback.ts";
   import { readThemeId, THEMES, type ThemeId } from "./lib/theme.ts";
   import { changeTheme } from "./lib/themeWipe.ts";
+  import { shouldShowOnboarding } from "./lib/prefs.ts";
   import type { ComposerScratch } from "./lib/diffview/commenting.ts";
   import type { ApproveVariant, ApproveVariantId, Annotation, PersistedScratch } from "@core/lib/types";
 
@@ -27,6 +28,7 @@
   import CommentNavigator from "./components/CommentNavigator.svelte";
   import DiffPlanView from "./components/DiffPlanView.svelte";
   import EmptyState from "./components/EmptyState.svelte";
+  import OnboardingDialog from "./components/OnboardingDialog.svelte";
   import RequestChangesDialog from "./components/RequestChangesDialog.svelte";
   import SettingsDialog from "./components/SettingsDialog.svelte";
   import StatusStrip from "./components/StatusStrip.svelte";
@@ -89,6 +91,13 @@
   let themeId = $state<ThemeId>(readThemeId());
   const scheme = $derived(THEMES[themeId].scheme);
   let showSettings = $state(false);
+  // First-run onboarding (EXC-781): opens once for a brand-new user whose
+  // notification permission is still undecided. Guarded on Notification support
+  // so a browser without the API never shows a modal that can't enable anything.
+  // The dev --fresh boot re-evaluates this after clearing prefs (health handler).
+  let showOnboarding = $state(
+    typeof Notification !== "undefined" && shouldShowOnboarding(Notification.permission),
+  );
   function selectTheme(id: ThemeId) {
     changeTheme(id);
     themeId = id;
@@ -433,6 +442,12 @@
     onSelect={selectTheme}
     onClose={() => (showSettings = false)}
   />
+{/if}
+
+<!-- First-run onboarding: a one-time invite to enable desktop notifications,
+     gated on a brand-new user (see showOnboarding above). -->
+{#if showOnboarding}
+  <OnboardingDialog onClose={() => (showOnboarding = false)} />
 {/if}
 
 <style>
