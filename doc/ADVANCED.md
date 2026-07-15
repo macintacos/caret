@@ -440,7 +440,7 @@ tasks lives in `scripts/tasks/lib/`: `exec.ts` (the `runForward` / `execAndExit`
 helpers), `signals.ts` (the cleanup-on-exit/signal wiring the supervising tasks share),
 and `smoke-probe.ts` (the over-the-wire UI probe both smoke targets run). Every
 subcommand's parsing contract is unit-tested in `test/scripts/tasks-cli.test.ts`. The
-`release` subcommand group lives in `scripts/tasks/release.ts` and keeps its own
+`release` subcommand group lives in `scripts/tasks/release/command.ts` and keeps its own
 JSON-on-stdout error discipline (Commander help/errors to stderr, a typed JSON result per
 action) so `/release-caret` can parse it, independent of the CLI's plain-stderr top-level
 handling. The `preflight` gate is a CLI subcommand too, but unlike the passthrough tasks

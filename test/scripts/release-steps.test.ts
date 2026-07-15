@@ -480,3 +480,23 @@ test("finalize dry-run with a summary edits nothing", async () => {
   expect(calls).not.toContain("releaseEdit:v0.1.0");
   expect(calls).not.toContain("reflow");
 });
+
+test("finalize without a summary leaves a reused release's notes untouched", async () => {
+  // The no-clobber invariant: a summary-less resume must never rewrite the notes,
+  // so a summary a prior run published survives. Dropping the summary guard in
+  // finalize would fail this (reuse would releaseEdit with the bare changelog).
+  const { deps, calls, releases } = makeReleaseHarness({
+    ...FINALIZE_OPTS,
+    tags: ["v0.0.1", "v0.1.0"],
+    remoteTags: ["v0.0.1", "v0.1.0"],
+    releases: {
+      "v0.1.0": {
+        url: "https://github.com/macintacos/caret/releases/tag/v0.1.0",
+        notes: "Prior summary the operator published.",
+      },
+    },
+  });
+  await finalize(deps, { dryRun: false }); // no summary
+  expect(calls).not.toContain("releaseEdit:v0.1.0");
+  expect(releases.get("v0.1.0")?.notes).toBe("Prior summary the operator published.");
+});

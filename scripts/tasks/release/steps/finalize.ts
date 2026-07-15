@@ -135,14 +135,20 @@ export async function finalize(
   if (existing !== null) {
     deps.io.log(`Release ${tag} already exists; reusing it.`);
     releaseUrl = existing.url;
-    // Refresh the notes when a summary is supplied (idempotent — regenerated from
-    // the changelog, so re-running never stacks the summary on itself).
-    if (opts.summary && !opts.dryRun) {
-      await deps.github.releaseEdit({
-        tag,
-        notes: await composeReleaseNotes(deps, opts.summary, changelogNotes),
-      });
-      deps.io.log(`Refreshed ${tag} release notes.`);
+    // Refresh the notes only when a summary is supplied (idempotent — regenerated
+    // from the changelog, so re-running never stacks the summary on itself). A
+    // summary-less resume leaves the existing notes untouched, so an operator's
+    // prior summary is never clobbered.
+    if (opts.summary) {
+      if (opts.dryRun) {
+        deps.io.log(`Would refresh ${tag} release notes.`);
+      } else {
+        await deps.github.releaseEdit({
+          tag,
+          notes: await composeReleaseNotes(deps, opts.summary, changelogNotes),
+        });
+        deps.io.log(`Refreshed ${tag} release notes.`);
+      }
     }
   } else if (opts.dryRun) {
     deps.io.log(`Would tag ${trunkSha} as ${tag}, push it, and create "${title}".`);

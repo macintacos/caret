@@ -56,7 +56,7 @@ export interface GitOptions {
 /** Controls for the gh fake — availability and PR/release fixtures. */
 export interface GitHubOptions {
   prs?: PullRequestSummary[];
-  releases?: Record<string, { url: string }>;
+  releases?: Record<string, { url: string; notes?: string }>;
   available?: boolean;
 }
 

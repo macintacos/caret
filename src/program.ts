@@ -1,6 +1,6 @@
 // Shared Commander scaffolding for caret's CLIs: the product CLI (src/cli.ts) and
 // the dev/build/release tasks CLI (scripts/tasks/cli.ts, whose release subcommand
-// group in scripts/tasks/release.ts reuses createProgram too). All build a
+// group in scripts/tasks/release/command.ts reuses createProgram too). All build a
 // Commander tree with the same name/description/help conventions. Error handling
 // diverges per CLI: src/cli.ts runs behind runProgram's fail-safe deny (below),
 // while the release group scopes its own JSON-on-stdout handling per action.
