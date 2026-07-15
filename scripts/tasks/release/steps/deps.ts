@@ -2,10 +2,10 @@
 // dependencies (git, gh, fs, the clock) are passed in so each step is
 // unit-testable with fakes; cli.ts wires the real ones.
 
-import type { GitOps } from "../git.ts";
-import type { GitHubOps } from "../github.ts";
-import type { NpmOps } from "../npm.ts";
-import type { RumdlOps } from "../rumdl.ts";
+import type { GitOps } from "@/tasks/release/git.ts";
+import type { GitHubOps } from "@/tasks/release/github.ts";
+import type { NpmOps } from "@/tasks/release/npm.ts";
+import type { RumdlOps } from "@/tasks/release/rumdl.ts";
 
 /** Read/write/exists over the working tree; injected for testability. */
 export interface FsOps {

@@ -3,7 +3,7 @@
 // not here — this only proves the read commands parse correctly.
 import { expect, test } from "bun:test";
 
-import { createGit, splitPorcelain } from "../../scripts/tasks/release/git.ts";
+import { createGit, splitPorcelain } from "@/tasks/release/git.ts";
 
 const git = createGit();
 const SHA = /^[0-9a-f]{40}$/;

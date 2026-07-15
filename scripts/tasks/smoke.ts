@@ -26,10 +26,9 @@ import type { Subprocess } from "bun";
 
 import { isPidAlive } from "@/daemon/lifecycle.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
-
-import { runForward } from "./lib/exec.ts";
-import { installCleanupHandlers } from "./lib/signals.ts";
-import { probeServedUi } from "./lib/smoke-probe.ts";
+import { runForward } from "@/tasks/lib/exec.ts";
+import { installCleanupHandlers } from "@/tasks/lib/signals.ts";
+import { probeServedUi } from "@/tasks/lib/smoke-probe.ts";
 
 // --- smoke (umbrella) -------------------------------------------------------
 

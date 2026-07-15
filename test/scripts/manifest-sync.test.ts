@@ -9,8 +9,8 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { assertInSync, extractVersion } from "../../scripts/tasks/release/manifest.ts";
-import { MANIFESTS } from "../../scripts/tasks/release/steps/context.ts";
+import { assertInSync, extractVersion } from "@/tasks/release/manifest.ts";
+import { MANIFESTS } from "@/tasks/release/steps/context.ts";
 
 // MANIFESTS holds repo-root-relative paths; this suite lives at test/scripts/,
 // two levels below the root, so resolve against import.meta.dir to read the

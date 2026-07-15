@@ -53,8 +53,10 @@
   // between each: runtime built-ins (node:/bun:), third-party packages, then our
   // own app code, then any leftover relative paths. `@core` denotes a scoped
   // package to Biome (no slash after `@`), so it is excluded from the package
-  // group (`!@core/**`) and folded in with the app-code aliases (`@/`, `$lib`)
-  // where it belongs — the shadowing fix. Bare/side-effect imports stay put
+  // group (`!@core/**`) and folded in with the app-code aliases (`@/`, `@/tasks`,
+  // `$lib`) where it belongs — the shadowing fix. `@/tasks` needs no such carve-out:
+  // it starts with `@/`, so `:ALIAS:` already groups it with the app code.
+  // Bare/side-effect imports stay put
   // (sortBareImports defaults off) so CSS and polyfill order is preserved.
   "assist": {
     "actions": {

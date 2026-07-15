@@ -14,7 +14,7 @@
 
 import { mkdirSync, rmSync } from "node:fs";
 
-import { execAndExit, runForward } from "./lib/exec.ts";
+import { execAndExit, runForward } from "@/tasks/lib/exec.ts";
 
 // --- build ui ---------------------------------------------------------------
 // The Svelte UI built with Vite into ui/dist. It runs from the `ui/` workspace

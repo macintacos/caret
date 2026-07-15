@@ -6,7 +6,7 @@
 
 import { expect, test } from "bun:test";
 
-import { createRumdl } from "../../scripts/tasks/release/rumdl.ts";
+import { createRumdl } from "@/tasks/release/rumdl.ts";
 
 // The reflow shells out to `mise x rumdl`, whose cold start can take a moment on
 // a busy machine; give it the same generous budget the CLI subprocess tests use.

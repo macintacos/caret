@@ -5,19 +5,24 @@
 // PR, skipping or no-oping rather than crashing. The body below sequences the
 // sub-phases; each is a named helper so the flow reads as its phases.
 
-import { composeReleaseTitle, findSection } from "../changelog.ts";
-import type { PrState } from "../github.ts";
-import { editVersion, extractVersion } from "../manifest.ts";
-import type { BumpLevel } from "../version.ts";
+import { composeReleaseTitle, findSection } from "@/tasks/release/changelog.ts";
+import type { PrState } from "@/tasks/release/github.ts";
+import { editVersion, extractVersion } from "@/tasks/release/manifest.ts";
 import {
   CHANGELOG_PATH,
   gatherContext,
   MANIFESTS,
   type PrepareResult,
   type ReleaseContext,
-} from "./context.ts";
-import type { Deps } from "./deps.ts";
-import { assertBranch, assertCleanTree, assertRepoAndGh, GuardError } from "./guards.ts";
+} from "@/tasks/release/steps/context.ts";
+import type { Deps } from "@/tasks/release/steps/deps.ts";
+import {
+  assertBranch,
+  assertCleanTree,
+  assertRepoAndGh,
+  GuardError,
+} from "@/tasks/release/steps/guards.ts";
+import type { BumpLevel } from "@/tasks/release/version.ts";
 
 /** The release PR body: a "What changed" summary and a "What to test" checklist. */
 function prBody(version: string, title: string): string {

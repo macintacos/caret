@@ -20,16 +20,15 @@ import { NEVER_IDLE_MS } from "@/config/constants.ts";
 import { devConfigFile } from "@/config/paths.ts";
 import { devPort, devStateDir, loadSettings, type Settings } from "@/config/settings.ts";
 import { isPidAlive } from "@/daemon/lifecycle.ts";
-
-import { installCleanupHandlers } from "../lib/signals.ts";
 import {
   type DiscoverPortDeps,
   type PortMode,
   readDevLockPort,
   discoverPort as realDiscoverPort,
   resolvePortMode,
-} from "./dev-env.ts";
-import { type DriverOptions, run as runDriverEntry } from "./driver.ts";
+} from "@/tasks/dev/dev-env.ts";
+import { type DriverOptions, run as runDriverEntry } from "@/tasks/dev/driver.ts";
+import { installCleanupHandlers } from "@/tasks/lib/signals.ts";
 
 export interface RunDevOptions {
   /** How many versions the primary dev review opens with (commander-defaulted). */

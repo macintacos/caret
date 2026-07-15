@@ -20,7 +20,6 @@ import { DEFAULT_PORT, devSeeder, loadSettings, type Settings } from "@/config/s
 import { expireReview, longPoll, postReview, waitForHealth } from "@/daemon/client.ts";
 import type { ClientReview } from "@/lib/types.ts";
 import { type ReviewDeps, runReview } from "@/review/orchestrate.ts";
-
 import {
   appendRevision,
   bootstrapPlans,
@@ -31,7 +30,7 @@ import {
   hookStdin,
   nextPlan,
   parseNumVersions,
-} from "./protocol.ts";
+} from "@/tasks/dev/protocol.ts";
 
 const log = (msg: string) => process.stderr.write(`[caret dev driver] ${msg}\n`);
 

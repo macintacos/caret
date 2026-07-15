@@ -5,12 +5,21 @@
 // optional human summary above the changelog section, reflowed to single-line
 // paragraphs so they render cleanly on GitHub.
 
-import { composeReleaseTitle, findSection, findTopReleasedVersion } from "../changelog.ts";
-import { extractVersion } from "../manifest.ts";
-import { tagName } from "../version.ts";
-import { CHANGELOG_PATH, type FinalizeResult, MANIFESTS } from "./context.ts";
-import type { Deps } from "./deps.ts";
-import { assertCleanTree, assertRepoAndGh, GuardError, syncedVersion } from "./guards.ts";
+import {
+  composeReleaseTitle,
+  findSection,
+  findTopReleasedVersion,
+} from "@/tasks/release/changelog.ts";
+import { extractVersion } from "@/tasks/release/manifest.ts";
+import { CHANGELOG_PATH, type FinalizeResult, MANIFESTS } from "@/tasks/release/steps/context.ts";
+import type { Deps } from "@/tasks/release/steps/deps.ts";
+import {
+  assertCleanTree,
+  assertRepoAndGh,
+  GuardError,
+  syncedVersion,
+} from "@/tasks/release/steps/guards.ts";
+import { tagName } from "@/tasks/release/version.ts";
 
 /** The finalized release derived from `origin/<defaultBranch>`: the merged HEAD to
  * tag, the version/tag/title, and the changelog section body used as release notes. */

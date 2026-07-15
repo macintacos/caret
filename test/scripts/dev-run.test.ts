@@ -11,9 +11,8 @@ import { join } from "node:path";
 
 import { NEVER_IDLE_MS } from "@/config/constants.ts";
 import { DEFAULTS } from "@/config/settings.ts";
-
-import { DAEMON_DIED } from "../../scripts/tasks/dev/dev-env.ts";
-import type { DriverOptions } from "../../scripts/tasks/dev/driver.ts";
+import { DAEMON_DIED } from "@/tasks/dev/dev-env.ts";
+import type { DriverOptions } from "@/tasks/dev/driver.ts";
 import {
   childEnvFor,
   type DevDeps,
@@ -22,7 +21,7 @@ import {
   planStateDir,
   runDev,
   type SpawnedChild,
-} from "../../scripts/tasks/dev/run.ts";
+} from "@/tasks/dev/run.ts";
 
 // ---- planStateDir ----
 

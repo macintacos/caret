@@ -5,8 +5,8 @@
 
 import { existsSync } from "node:fs";
 
-import { ensureUi } from "./build.ts";
-import { execAndExit } from "./lib/exec.ts";
+import { ensureUi } from "@/tasks/build.ts";
+import { execAndExit } from "@/tasks/lib/exec.ts";
 
 // --- test unit --------------------------------------------------------------
 // `--conditions browser` selects svelte's client runtime entry so the UI

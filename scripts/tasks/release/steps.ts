@@ -6,10 +6,10 @@
 // version is always derived from the latest tag — never from an agent-supplied
 // value — so the "agent never invents the version" guarantee holds.
 
-export { createNpm, type NpmOps } from "./npm.ts";
-export { createRumdl, type RumdlOps } from "./rumdl.ts";
-export { baseline } from "./steps/baseline.ts";
-export { compute } from "./steps/compute.ts";
+export { createNpm, type NpmOps } from "@/tasks/release/npm.ts";
+export { createRumdl, type RumdlOps } from "@/tasks/release/rumdl.ts";
+export { baseline } from "@/tasks/release/steps/baseline.ts";
+export { compute } from "@/tasks/release/steps/compute.ts";
 export {
   BASELINE_TAG,
   type BaselineResult,
@@ -20,9 +20,9 @@ export {
   type PrepareResult,
   type ReleaseContext,
   readSyncedVersion,
-} from "./steps/context.ts";
-export type { Deps, FsOps, Io } from "./steps/deps.ts";
-export { finalize } from "./steps/finalize.ts";
+} from "@/tasks/release/steps/context.ts";
+export type { Deps, FsOps, Io } from "@/tasks/release/steps/deps.ts";
+export { finalize } from "@/tasks/release/steps/finalize.ts";
 export {
   assertBranch,
   assertCleanTree,
@@ -30,5 +30,5 @@ export {
   GuardError,
   offendingPaths,
   syncedVersion,
-} from "./steps/guards.ts";
-export { prepare } from "./steps/prepare.ts";
+} from "@/tasks/release/steps/guards.ts";
+export { prepare } from "@/tasks/release/steps/prepare.ts";

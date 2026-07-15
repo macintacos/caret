@@ -5,14 +5,9 @@
 // exactly what would (or would not) run.
 import { expect, test } from "bun:test";
 
-import type { ErrorCode } from "../../scripts/tasks/release/contract.ts";
-import {
-  baseline,
-  compute,
-  finalize,
-  GuardError,
-  prepare,
-} from "../../scripts/tasks/release/steps.ts";
+import type { ErrorCode } from "@/tasks/release/contract.ts";
+import { baseline, compute, finalize, GuardError, prepare } from "@/tasks/release/steps.ts";
+
 import {
   CHANGELOG,
   type HarnessOptions,

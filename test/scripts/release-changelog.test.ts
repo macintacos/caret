@@ -5,7 +5,7 @@ import {
   findSection,
   findTopReleasedVersion,
   parseHeading,
-} from "../../scripts/tasks/release/changelog.ts";
+} from "@/tasks/release/changelog.ts";
 
 const CHANGELOG = `# Changelog
 

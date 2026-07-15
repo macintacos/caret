@@ -4,10 +4,10 @@
 // "agent never invents the version" guarantee holds; readSyncedVersion reads the
 // manifests' current version, raising MANIFEST_DRIFT on disagreement.
 
-import { extractVersion } from "../manifest.ts";
-import { type BumpLevel, nextVersion, tagName, versionFromTag } from "../version.ts";
-import type { Deps } from "./deps.ts";
-import { GuardError, syncedVersion } from "./guards.ts";
+import { extractVersion } from "@/tasks/release/manifest.ts";
+import type { Deps } from "@/tasks/release/steps/deps.ts";
+import { GuardError, syncedVersion } from "@/tasks/release/steps/guards.ts";
+import { type BumpLevel, nextVersion, tagName, versionFromTag } from "@/tasks/release/version.ts";
 
 /** The baseline tag placed on the repository's initial commit. */
 export const BASELINE_TAG = "v0.0.1";

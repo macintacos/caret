@@ -38,9 +38,14 @@ resolves to the current program's source root — `src/` for the root (bun) prog
 carries the mapping in its own `tsconfig.json` (`paths`), and the UI mirrors it in
 `ui/vite.config.ts` so svelte-check, the vite build, and `bun test` agree.
 
-Two aliases stay reserved for the boundaries they name, and both sit **beside** `@/` in
-the import grouping (they are app code, not third-party):
+Three more aliases sit **beside** `@/` in the import grouping (they are app code, not
+third-party):
 
+- **`@/tasks/*`** — the dev/release tooling in `scripts/tasks/`, grafted onto the `@/`
+  namespace by a longer-prefix `paths` entry in the shared root `tsconfig.json`
+  (`@/tasks/x` → `scripts/tasks/x`, matched ahead of `@/x` → `src/x`). `scripts/` has no
+  tsconfig of its own — it is node code tsc checks alongside `src`/`test`, not a separate
+  build like `ui/` — so the alias lives in the same config as `@/`.
 - **`@core/*`** — the browser UI reaching across into the tool-agnostic core (the wire
   contract and other node-free shared modules). UI-only; the root program uses `@/`. See
   `architecture-rules.md`.
@@ -48,18 +53,19 @@ the import grouping (they are app code, not third-party):
   components and `components.json` assume. See `svelte-rules.md` / `shadcn-rules.md`.
 
 A relative import (`./x`, `../x`) is correct **only when the target has no alias** — code
-outside a program's source root: a test reaching its `test/support/*` harness, a
-`scripts/` module importing a `scripts/` sibling, `opencode/` internals. Those stay
-relative; everything that resolves inside a source root uses `@/`.
+outside every alias's root: a test reaching its `test/support/*` harness, a
+`scripts/`-root utility like `scripts/preflight.ts` (which sits above `scripts/tasks/`, so
+`@/tasks/` doesn't cover it), `opencode/` internals. Those stay relative; everything that
+resolves inside a source root uses its alias.
 
 Biome's `organizeImports` (configured in `biome.jsonc`) sorts and groups every `.ts`
 file's imports into blocks, blank-line separated: runtime built-ins (`node:`/`bun:`),
-third-party packages, app code (`@/`, `$lib`, `@core`), then any leftover relative paths.
-It is applied by `mise run format` and gated read-only by `mise run lint` — so ordering is
-mechanical, never hand-maintained. (`.svelte` files carry the `@/` aliases but Biome does
-not reorder them; it doesn't parse Svelte.) `@core` looks like a scoped npm package to
-Biome, so the config carves it out of the package group explicitly — don't remove that
-carve-out.
+third-party packages, app code (`@/`, `@/tasks`, `$lib`, `@core`), then any leftover
+relative paths. It is applied by `mise run format` and gated read-only by `mise run lint`
+— so ordering is mechanical, never hand-maintained. (`.svelte` files carry the `@/`
+aliases but Biome does not reorder them; it doesn't parse Svelte.) `@core` looks like a
+scoped npm package to Biome, so the config carves it out of the package group explicitly —
+don't remove that carve-out.
 
 ## Shared-helper policy
 

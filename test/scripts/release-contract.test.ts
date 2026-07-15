@@ -6,7 +6,7 @@ import {
   errorResult,
   parseCommitMeta,
   SCHEMA_VERSION,
-} from "../../scripts/tasks/release/contract.ts";
+} from "@/tasks/release/contract.ts";
 
 test("errorResult builds the ok:false payload shape", () => {
   expect(errorResult("NO_BASELINE", "no tags yet")).toEqual({
