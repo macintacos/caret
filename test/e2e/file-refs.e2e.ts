@@ -155,6 +155,9 @@ test("the preview stays open while the pointer rests on the card, then dismisses
     const box = await preview.boundingBox();
     if (box === null) throw new Error("preview has no bounding box");
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    // A fixed wait is the deliberate exception here: this is a persistence check
+    // (the card must NOT disappear across the idle window), which a web-first
+    // auto-retrying assertion cannot express — there is no state to poll toward.
     await page.waitForTimeout(400);
     await expect(preview).toBeVisible();
 
