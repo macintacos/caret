@@ -114,6 +114,10 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
       "persistent dev state dir (overrides CARET_DEV_STATE_DIR / [dev].state_dir)",
     )
     .option("--persist", "keep the ephemeral state dir on exit instead of wiping it")
+    .option(
+      "--fresh",
+      "boot as a brand-new user: ignore config.dev.toml (use built-in defaults) and reset the UI's saved preferences",
+    )
     .action(async (opts) => {
       await actions.dev({
         numVersions: opts.numVersions,
@@ -121,6 +125,7 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
         port: opts.port,
         stateDir: opts.stateDir,
         persist: opts.persist ?? false,
+        fresh: opts.fresh ?? false,
       });
     });
 

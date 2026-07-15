@@ -57,6 +57,26 @@ test("childEnvFor isolates state and never idles; pins CARET_PORT only when fixe
   expect(eph.CARET_PORT).toBe(process.env.CARET_PORT);
 });
 
+test("childEnvFor threads the dev config path, and CARET_FRESH only when fresh", () => {
+  // Normal dev: the daemon child reads config.dev.toml, and CARET_FRESH is absent.
+  const normal = childEnvFor(
+    "/tmp/world",
+    { kind: "ephemeral" },
+    { configFile: "/cfg/config.dev.toml" },
+  );
+  expect(normal.CARET_CONFIG_FILE).toBe("/cfg/config.dev.toml");
+  expect(normal.CARET_FRESH).toBeUndefined();
+  // --fresh: config points at a nonexistent path (→ defaults) and CARET_FRESH=1
+  // signals the UI to reset its saved prefs.
+  const fresh = childEnvFor(
+    "/tmp/world",
+    { kind: "ephemeral" },
+    { configFile: "/nope.toml", fresh: true },
+  );
+  expect(fresh.CARET_CONFIG_FILE).toBe("/nope.toml");
+  expect(fresh.CARET_FRESH).toBe("1");
+});
+
 // ---- makeCleanup ----
 
 function fakeKillable() {
@@ -205,6 +225,12 @@ describe("runDev supervision", () => {
       // The in-process driver sees the isolated dev state dir — its hook logging
       // (runReview → caret.log) would otherwise escape to ~/.local/state/caret.
       expect(xdgAtDriver).toBe(calls[0]?.env?.XDG_STATE_HOME);
+
+      // The daemon child reads the dev config (config.dev.toml), not the
+      // production config.toml, and — not being a --fresh run — carries no
+      // CARET_FRESH (EXC-781).
+      expect(calls[0]?.env?.CARET_CONFIG_FILE).toMatch(/\/caret\/config\.dev\.toml$/);
+      expect(calls[0]?.env?.CARET_FRESH).toBeUndefined();
 
       // Teardown killed every child and exited with vite's code.
       expect(children.every((c) => c.killed >= 1)).toBe(true);

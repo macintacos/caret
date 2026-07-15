@@ -52,29 +52,33 @@ afterEach(() => {
 });
 
 describe("NotifyBell presentation wiring", () => {
-  test("undecided: muted tone, request title, question-mark overlay", () => {
+  test("undecided: attention tone, request title, question-mark overlay, no dot", () => {
     const { target } = render(NotifyBell, {});
     const bell = target.querySelector(".bell")!;
-    expect(target.querySelector(".stack")!.classList.contains("tone-muted")).toBe(true);
+    expect(target.querySelector(".stack")!.classList.contains("tone-attention")).toBe(true);
     expect(bell.getAttribute("aria-label")).toBe("Notifications: default");
-    // overlay present (two stacked icons), bell base + question-mark.
+    // overlay present (two stacked icons), bell base + question-mark; no status dot.
     expect(target.querySelector(".overlay")).not.toBeNull();
+    expect(target.querySelector(".dot")).toBeNull();
   });
 
-  test("granted: ok tone, no overlay, not aria-disabled (test is a real click)", () => {
+  test("granted: neutral bell + green dot, no overlay, not aria-disabled (test is a real click)", () => {
     installNotification("granted");
     const { target } = render(NotifyBell, {});
     const bell = target.querySelector(".bell")!;
-    expect(target.querySelector(".stack")!.classList.contains("tone-ok")).toBe(true);
+    // Neutral bell chrome; the green status dot is the on-state signal.
+    expect(target.querySelector(".stack")!.classList.contains("tone-muted")).toBe(true);
+    expect(target.querySelector(".dot")!.classList.contains("tone-ok")).toBe(true);
     expect(target.querySelector(".overlay")).toBeNull();
     expect(bell.getAttribute("aria-disabled")).toBeNull();
   });
 
-  test("denied: danger tone, aria-disabled (read-only state)", () => {
+  test("denied: neutral bell + red dot, aria-disabled (read-only state)", () => {
     installNotification("denied");
     const { target } = render(NotifyBell, {});
     const bell = target.querySelector(".bell")!;
-    expect(target.querySelector(".stack")!.classList.contains("tone-danger")).toBe(true);
+    expect(target.querySelector(".stack")!.classList.contains("tone-muted")).toBe(true);
+    expect(target.querySelector(".dot")!.classList.contains("tone-danger")).toBe(true);
     expect(bell.getAttribute("aria-disabled")).toBe("true");
   });
 

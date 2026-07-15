@@ -157,10 +157,12 @@ changes without writing. See
 When a new plan lands while caret is in the background — tab hidden or window unfocused —
 the page fires a desktop notification; clicking it focuses the tab and opens that review
 (a notification click is a user gesture, the one focus path browsers reliably allow). The
-bell badge in the top bar shows the current permission — granted, blocked, or undecided —
-requests it on click when undecided, and
-**sends a test notification on click when granted**. Page-context only, no service worker:
-the tab must be open.
+bell badge in the top bar shows the current permission with a distinct indicator — a green
+dot when granted, a red dot when blocked, and a subtle-purple "?" when undecided. It
+requests permission on click when undecided, and
+**sends a test notification on click when granted**. On a first-ever run, an onboarding
+modal introduces desktop notifications and offers to enable them. Page-context only, no
+service worker: the tab must be open.
 
 Grants are **per-origin** (scheme + host + port). The installed build opens the review UI
 at the vanity origin `http://caret.localhost:42718`, which is a different origin from
@@ -194,9 +196,11 @@ printed to stderr is the fallback.
 ### Config file
 
 caret reads optional settings from `$XDG_CONFIG_HOME/caret/config.toml` when
-`XDG_CONFIG_HOME` is set, otherwise `~/.config/caret/config.toml`. This lives deliberately
-apart from the state dir so your config survives `mise run dev`, which wipes
-`XDG_STATE_HOME`.
+`XDG_CONFIG_HOME` is set, otherwise `~/.config/caret/config.toml`. `mise run dev` reads a
+separate `config.dev.toml` in the same directory instead (it points `CARET_CONFIG_FILE` at
+that file), so a dev instance never reads or writes your production config — and its state
+and logs are already isolated under an ephemeral `XDG_STATE_HOME`. `CARET_CONFIG_FILE`
+overrides the config path outright for any invocation.
 
 The file is TOML, and both it and every key are optional — a missing file or a missing key
 falls back to defaults. An invalid file never crashes caret: it keeps the last valid
@@ -242,12 +246,14 @@ timeout_s = 3600
 ```
 
 The `[dev]` table holds **dev-only** settings for `mise run dev`: a fixed daemon port, a
-persistent state dir, and the recurring extra-review notification seeder. It is
-**ignored in a production build** — its only consumers are the dev tooling
-(`mise run dev`, `scripts/tasks/dev/*`), which never ship in the compiled binary, and the
-settings layer build-gates it so `[dev]` resolves to inert defaults in a prod build
-regardless of `config.toml`. These keys are **captured at startup** when `mise run dev`
-boots (not hot-reloaded); the matching `CARET_DEV_*` environment variables override them.
+persistent state dir, and the recurring extra-review notification seeder. Put it in
+`config.dev.toml` (the config `mise run dev` reads — see [Config file](#config-file)), not
+the production `config.toml`. It is **ignored in a production build** — its only consumers
+are the dev tooling (`mise run dev`, `scripts/tasks/dev/*`), which never ship in the
+compiled binary, and the settings layer build-gates it so `[dev]` resolves to inert
+defaults in a prod build regardless of `config.toml`. These keys are
+**captured at startup** when `mise run dev` boots (not hot-reloaded); the matching
+`CARET_DEV_*` environment variables override them.
 
 | Key                      | Default | Purpose                                                                                   |
 | ------------------------ | ------- | ----------------------------------------------------------------------------------------- |
@@ -283,9 +289,11 @@ to the config file, then the default.
 | `CARET_HEARTBEAT_MS` | `daemon.heartbeat_ms` | `8000`           | Decision long-poll heartbeat window (ms). The socket `idleTimeout` derives from it, so values ≥ 250000 are invalid. |
 | `CARET_AGENT`        | —                     | `claude`         | Which coding-agent adapter to drive. `claude` (default) or `codex` (provisional, default-off — see below). |
 | `XDG_STATE_HOME`     | —                     | `~/.local/state` | Unresolved reviews persist under `$XDG_STATE_HOME/caret/reviews/` and rehydrate on restart. |
+| `CARET_CONFIG_FILE`  | —                     | `config.toml`    | Absolute path to the settings file, overriding the default `config.toml` location. `mise run dev` sets it to `config.dev.toml`; `--fresh` sets it to a nonexistent path so dev boots from built-in defaults. |
 | `CARET_DEV_PORT`         | `dev.port`            | —                | **Dev-only.** Fixed `mise run dev` daemon port; unset → ephemeral. Must differ from `42718`. |
 | `CARET_DEV_STATE_DIR`    | `dev.state_dir`       | —                | **Dev-only.** Persistent `mise run dev` state dir; unset → ephemeral. |
 | `CARET_DEV_NEW_REVIEW_MS` | `dev.notify.interval_ms` | —             | **Dev-only.** Extra-review seeder cadence override (ms); a positive value also arms the seeder. Unset → cadence falls to `[dev.notify].interval_ms` (`15000`), and arming is governed by `--notify` / `[dev.notify].enabled`. |
+| `CARET_FRESH`            | —                     | —                | **Dev-only.** Set to `1` by `mise run dev --fresh`; surfaced in `/api/health` so the UI resets its saved preferences (theme, first-run onboarding) on boot. |
 | `CARET_PREFLIGHT_JOBS`   | —                     | CPU count        | **Preflight-only.** Max `mise run preflight` tasks in flight; a positive int. Lower it (e.g. `1`) to serialize the gate on a constrained or stacked host. Invalid/unset → the host's CPU count. |
 | `CARET_E2E_WORKERS`      | —                     | `50%` of cores   | **Preflight-only.** Playwright e2e worker count (each drives a Chromium tree + daemon); a positive int. Lower it to shrink the e2e footprint on a constrained or stacked host. Unset → half the cores. |
 
@@ -390,18 +398,29 @@ and the pending cap come from `[dev.notify]` (`interval_ms` / `max_pending`), an
 state at boot either way. One notification gotcha: browser notification grants are
 per-origin **including the port**, so when an orphaned dev server squats Vite's port and a
 new session auto-increments to the next one, the UI lands on a fresh origin whose
-permission is back to "default" — the bell shows the muted "?" again and new plans log
+permission is back to "default" — the bell shows the "?" again and new plans log
 `plan notification skipped (permission)`. Re-grant via the bell, or kill the straggler
 holding the port (`lsof -nP -iTCP:5173 -sTCP:LISTEN`). Everything is reaped on Ctrl-C, and
-the dev daemon never reads or writes a globally-installed caret's reviews. To pin a fixed
-dev port instead, set `CARET_DEV_PORT` (or `[dev].port` in `config.toml`) to any free port
-other than `42718` (the production default); this skips `--ephemeral` and binds that port,
-so only one such session can run at a time. Likewise, set `CARET_DEV_STATE_DIR` (or
-`[dev].state_dir`) to keep dev state across restarts instead of the ephemeral default. The
-same three knobs are also `mise run dev` flags — `--port <n>`, `--state-dir <dir>`, and
-`--persist` — which take precedence over the environment variables and the `[dev]` config;
-`--persist` keeps even the ephemeral default state dir on exit (so you can inspect its
-`caret.log`) rather than wiping it.
+the dev daemon never reads or writes a globally-installed caret's reviews or config — it
+reads `config.dev.toml`, not your production `config.toml` (see
+[Config file](#config-file)). To pin a fixed dev port instead, set `CARET_DEV_PORT` (or
+`[dev].port` in `config.dev.toml`) to any free port other than `42718` (the production
+default); this skips `--ephemeral` and binds that port, so only one such session can run
+at a time. Likewise, set `CARET_DEV_STATE_DIR` (or `[dev].state_dir`) to keep dev state
+across restarts instead of the ephemeral default. The same three knobs are also
+`mise run dev` flags — `--port <n>`, `--state-dir <dir>`, and `--persist` — which take
+precedence over the environment variables and the `[dev]` config; `--persist` keeps even
+the ephemeral default state dir on exit (so you can inspect its `caret.log`) rather than
+wiping it.
+
+`mise run dev --fresh` boots as a brand-new user: it ignores `config.dev.toml` (booting
+from built-in defaults) and, via `CARET_FRESH`, tells the UI to clear its saved
+preferences — theme back to the default, and first-run onboarding shown again — so you can
+re-test the new-user experience. It cannot reset the browser's own notification permission
+(no page-level API), but the dev origin is already separate from the installed build, so
+that permission is independent regardless. Every user-facing UI setting that persists in
+the browser registers its key in `KNOWN_PREF_KEYS` (`ui/src/lib/prefs.ts`) so `--fresh`
+resets it — add new settings there.
 
 `mise run test e2e` runs the Playwright specs in `test/e2e/` against an isolated daemon
 that serves the built `ui/dist/` artifact on an OS-assigned port with ephemeral state, so

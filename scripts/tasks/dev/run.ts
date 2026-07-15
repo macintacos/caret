@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NEVER_IDLE_MS } from "../../../src/config/constants.ts";
 import { isPidAlive } from "../../../src/daemon/lifecycle.ts";
+import { devConfigFile } from "../../../src/config/paths.ts";
 import { devPort, devStateDir, loadSettings, type Settings } from "../../../src/config/settings.ts";
 import { installCleanupHandlers } from "../lib/signals.ts";
 import { type DriverOptions, run as runDriverEntry } from "./driver.ts";
@@ -43,6 +44,10 @@ export interface RunDevOptions {
   /** --persist: keep the state dir on exit even when it is the ephemeral default
    * (a named dir is always kept). */
   persist: boolean;
+  /** --fresh: boot as a brand-new user — ignore config.dev.toml (use built-in
+   * defaults) and tell the UI (via CARET_FRESH) to clear its saved preferences.
+   * Optional; absent counts as not-fresh. */
+  fresh?: boolean;
 }
 
 /** The daemon argv, adding `--ephemeral` only in ephemeral port mode (a fixed
@@ -56,13 +61,22 @@ export function daemonCommand(portMode: PortMode): string[] {
  * process.env because Bun.spawn snapshots it at startup and ignores later
  * mutations, so the overrides must be passed explicitly to each child. In
  * ephemeral mode CARET_PORT is filled in after port discovery. */
-export function childEnvFor(stateDirPath: string, portMode: PortMode): Record<string, string> {
+export function childEnvFor(
+  stateDirPath: string,
+  portMode: PortMode,
+  extra: { configFile?: string; fresh?: boolean } = {},
+): Record<string, string> {
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
     XDG_STATE_HOME: stateDirPath,
     CARET_IDLE_MS: String(NEVER_IDLE_MS),
   };
   if (portMode.kind === "fixed") env.CARET_PORT = String(portMode.port);
+  // The daemon child reads its own dev config (config.dev.toml, or a nonexistent
+  // path under --fresh); CARET_FRESH surfaces through /api/health so the UI resets
+  // its saved preferences. Both are omitted in normal (non-dev) contexts (EXC-781).
+  if (extra.configFile) env.CARET_CONFIG_FILE = extra.configFile;
+  if (extra.fresh) env.CARET_FRESH = "1";
   return env;
 }
 
@@ -132,7 +146,7 @@ export function makeCleanup(
 
 /** The effects runDev performs, injected so the supervision is testable. */
 export interface DevDeps {
-  loadSettings: () => Settings;
+  loadSettings: (file?: string) => Settings;
   spawn: SpawnFn;
   discoverPort: (deps: DiscoverPortDeps) => Promise<number>;
   /** Run the protocol driver in-process (never resolves under normal operation;
@@ -168,7 +182,15 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
     await deps.spawn(["bun", "install"], { stdout: "inherit", stderr: "inherit" }).exited;
   }
 
-  const settings = deps.loadSettings();
+  // Dev reads its own config.dev.toml, never the user's production config.toml
+  // (EXC-781). --fresh instead boots from built-in defaults by pointing at a path
+  // that does not exist (loadSettings falls back to DEFAULTS on a missing file),
+  // and CARET_FRESH tells the UI to reset its saved preferences. The daemon child
+  // inherits the same choice through childEnv below.
+  const configFilePath = opts.fresh
+    ? join(tmpdir(), "caret-dev-fresh-no-config.toml")
+    : devConfigFile();
+  const settings = deps.loadSettings(configFilePath);
 
   // Port mode (EXC-461): ephemeral by default (OS-assigned, discovered from the
   // daemon's lock, so any number of sessions coexist); a fixed port pins it
@@ -193,7 +215,10 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
   }
   const persistState = !wipeOnExit;
 
-  const childEnv = childEnvFor(stateDirPath, portMode);
+  const childEnv = childEnvFor(stateDirPath, portMode, {
+    configFile: configFilePath,
+    fresh: opts.fresh,
+  });
 
   // A persistent dir may hold a stale lock from a crashed run; the boot writes
   // its own, so clear it first or port discovery would read the stale port.
@@ -236,7 +261,9 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
       daemonAlive: () => isPidAlive(daemon.pid),
     });
     childEnv.CARET_PORT = String(port);
-    console.log(`caret dev: port=${port} state=${stateDirPath} persistent=${persistState ? 1 : 0}`);
+    console.log(
+      `caret dev: port=${port} state=${stateDirPath} config=${configFilePath} fresh=${opts.fresh ? 1 : 0} persistent=${persistState ? 1 : 0}`,
+    );
 
     // Driver: seeds the fake plan and plays the agent's protocol side, in this
     // same process. Its options arrive already parsed (commander), so there is no

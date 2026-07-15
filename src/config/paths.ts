@@ -27,16 +27,27 @@ export function reviewsDir(): string {
 }
 
 /** Root config dir: $XDG_CONFIG_HOME/caret or ~/.config/caret. Read lazily so
- * tests can override XDG_CONFIG_HOME per-case. Deliberately separate from
- * stateDir(): config survives `mise run dev` wiping XDG_STATE_HOME. */
+ * tests can override XDG_CONFIG_HOME per-case. Separate from stateDir(), which
+ * `mise run dev` isolates and wipes; which file inside this dir is read is
+ * configFile()'s call — dev points CARET_CONFIG_FILE at config.dev.toml. */
 export function configDir(): string {
   return xdgDir("XDG_CONFIG_HOME", ".config");
 }
 
 /** User-editable settings file (see src/config/settings.ts). Single source of truth
- * for the path. */
+ * for the path. CARET_CONFIG_FILE overrides it outright — the dev task points that
+ * at config.dev.toml (and, under --fresh, at a nonexistent path so loadSettings
+ * falls back to defaults), keeping `mise run dev` fully isolated from the
+ * production config. A blank value counts as unset. */
 export function configFile(): string {
-  return `${configDir()}/config.toml`;
+  return process.env.CARET_CONFIG_FILE || `${configDir()}/config.toml`;
+}
+
+/** Dev-only settings file: $XDG_CONFIG_HOME/caret/config.dev.toml. The dev task
+ * points CARET_CONFIG_FILE here so `mise run dev` reads its own config, never the
+ * user's production config.toml (EXC-781). */
+export function devConfigFile(): string {
+  return `${configDir()}/config.dev.toml`;
 }
 
 /** Machine-global UI prefs (last-used approve mode). One shared file under

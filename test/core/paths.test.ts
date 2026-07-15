@@ -5,6 +5,7 @@ import {
   configDir,
   configFile,
   daemonLock,
+  devConfigFile,
   ensureStateDir,
   reviewsDir,
   stateDir,
@@ -44,9 +45,26 @@ test("configDir falls back to ~/.config/caret when XDG_CONFIG_HOME is unset", ()
 });
 
 test("configFile resolves config.toml under configDir", () => {
-  withEnv({ XDG_CONFIG_HOME: "/tmp/caret-xdg-config-test" }, () => {
+  withEnv({ CARET_CONFIG_FILE: undefined, XDG_CONFIG_HOME: "/tmp/caret-xdg-config-test" }, () => {
     expect(configFile()).toBe(`${configDir()}/config.toml`);
     expect(configFile()).toBe("/tmp/caret-xdg-config-test/caret/config.toml");
+  });
+});
+
+test("configFile honors CARET_CONFIG_FILE, treating a blank value as unset", () => {
+  // The dev task points this at config.dev.toml (and, under --fresh, at a
+  // nonexistent path so loadSettings falls back to defaults).
+  withEnv({ CARET_CONFIG_FILE: "/tmp/caret-alt/config.dev.toml" }, () => {
+    expect(configFile()).toBe("/tmp/caret-alt/config.dev.toml");
+  });
+  withEnv({ CARET_CONFIG_FILE: "", XDG_CONFIG_HOME: "/tmp/caret-xdg-config-test" }, () => {
+    expect(configFile()).toBe("/tmp/caret-xdg-config-test/caret/config.toml");
+  });
+});
+
+test("devConfigFile resolves config.dev.toml under configDir", () => {
+  withEnv({ XDG_CONFIG_HOME: "/tmp/caret-xdg-config-test" }, () => {
+    expect(devConfigFile()).toBe("/tmp/caret-xdg-config-test/caret/config.dev.toml");
   });
 });
 

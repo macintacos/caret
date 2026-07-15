@@ -328,11 +328,13 @@ describe("defaultClaim (Web Locks seam)", () => {
 });
 
 describe("bellPresentation", () => {
-  test("granted maps to bell + ok tone, testable but not requestable", () => {
+  test("granted maps to a neutral bell + green status dot, testable but not requestable", () => {
     const p = bellPresentation("granted");
     expect(p.icon).toBe("bell");
     expect(p.overlay).toBeUndefined();
-    expect(p.tone).toBe("ok");
+    // The bell stays neutral chrome; the green corner dot is the on-state signal.
+    expect(p.tone).toBe("muted");
+    expect(p.dot).toBe("ok");
     expect(p.canRequest).toBe(false);
     // Granted's click affordance is the diagnosis path: fire a test
     // notification so "caret vs the OS" resolves in one click.
@@ -340,20 +342,24 @@ describe("bellPresentation", () => {
     expect(p.title).toContain("test notification");
   });
 
-  test("denied maps to bell-off + danger tone, inert", () => {
+  test("denied maps to a neutral bell-off + red status dot, inert", () => {
     const p = bellPresentation("denied");
     expect(p.icon).toBe("bell-off");
     expect(p.overlay).toBeUndefined();
-    expect(p.tone).toBe("danger");
+    expect(p.tone).toBe("muted");
+    expect(p.dot).toBe("danger");
     expect(p.canRequest).toBe(false);
     expect(p.canTest).toBe(false);
   });
 
-  test("default maps to the muted bell + question overlay, requestable", () => {
+  test("default maps to the attention bell + question overlay, requestable, no dot", () => {
     const p = bellPresentation("default");
     expect(p.icon).toBe("bell");
     expect(p.overlay).toBe("circle-question-mark");
-    expect(p.tone).toBe("muted");
+    // The undecided state is the one invitation to act — it tints purple to
+    // draw the eye, and carries the `?` glyph rather than a plain status dot.
+    expect(p.tone).toBe("attention");
+    expect(p.dot).toBeUndefined();
     expect(p.canRequest).toBe(true);
     expect(p.canTest).toBe(false);
   });

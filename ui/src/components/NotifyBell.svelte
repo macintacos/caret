@@ -21,6 +21,37 @@
   );
   let presentation = $derived(bellPresentation(permission));
 
+  // Keep the badge truthful when permission changes outside this button — the
+  // first-run onboarding modal's Enable, or the browser's own site settings. The
+  // Permissions API's change event is the trigger; we re-read the authoritative
+  // Notification.permission (the value the notifier gates on at fire time) rather
+  // than the PermissionStatus.state, which headless engines can diverge from.
+  $effect(() => {
+    const perms = navigator.permissions;
+    if (!supported || !perms?.query) return;
+    let status: PermissionStatus | undefined;
+    let cancelled = false;
+    const sync = () => {
+      permission = Notification.permission;
+    };
+    perms
+      .query({ name: "notifications" as PermissionName })
+      .then((s) => {
+        // The effect may have torn down while the query was in flight; don't
+        // attach a listener the cleanup already ran past.
+        if (cancelled) return;
+        status = s;
+        s.addEventListener("change", sync);
+      })
+      .catch(() => {
+        // Some engines reject a notifications permission query — nothing to sync.
+      });
+    return () => {
+      cancelled = true;
+      status?.removeEventListener("change", sync);
+    };
+  });
+
   async function handleClick() {
     // Granted: fire a test notification — the one-click answer to "is it
     // caret's logic or the OS suppressing the toast?" (a granted notification
@@ -72,6 +103,9 @@
                   <Icon name={presentation.overlay} size={9} />
                 </span>
               {/if}
+              {#if presentation.dot}
+                <span class="dot tone-{presentation.dot}" aria-hidden="true"></span>
+              {/if}
             </span>
           </Button>
         {/snippet}
@@ -97,6 +131,23 @@
   }
   .tone-muted {
     color: var(--ink-faint);
+  }
+  .tone-attention {
+    color: var(--attention);
+  }
+  /* Filled status dot pinned to the bell's top-right for the decided states
+     (granted → --ok, denied → --danger). A paper ring lifts it off the bell
+     strokes, matching the undecided overlay. Its fill comes from tone-{dot} on
+     this element (background: currentColor), independent of the neutral bell. */
+  .dot {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 0 1.5px var(--paper);
   }
   /* Small glyph pinned to the bell's top-right. A paper-toned ring lifts it off
      the bell strokes so the two icons stay legible; the overlay is decorative
