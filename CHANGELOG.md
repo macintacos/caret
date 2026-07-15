@@ -7,6 +7,33 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-15 - The Plugin Path Release
+
+### Added
+
+- **OpenCode plugin-array install.** caret now installs into OpenCode as a first-class npm
+  plugin: a bare `plugin: ["@macintacos/caret"]` entry in the OpenCode config, with
+  `caret install --target opencode` editing that array (comment-preserving) while OpenCode
+  fetches the published package itself. The plugin resolves its own binary and version at
+  runtime, so it works when loaded straight from npm (#236).
+- **Startup update nudge for OpenCode.** On load, the OpenCode plugin checks caret's
+  latest GitHub release and toasts a nudge when your install is behind — best-effort and
+  silent on error, with a `CARET_OPENCODE_NO_UPDATE_CHECK` opt-out (#236).
+
+### Changed
+
+- **Unified install command.** `caret install-opencode` is replaced by
+  `caret install --target <opencode,claude,both>` (with `--uninstall` and `--dry-run`
+  retained); the `claude` target drives the `claude` plugin CLI to add, install, and
+  enable the marketplace plugin (#236).
+
+### Removed
+
+- **OpenCode plugin file-deploy machinery.** The old file-deploy install path — copying
+  plugin files, writing a config-dir `package.json` manifest, and stripping non-default
+  exports — is retired now that OpenCode installs the single published package directly
+  (#236).
+
 ## [0.3.0] - 2026-07-14 - The Reforged Release
 
 ### Added
@@ -327,7 +354,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Review decisions are delivered via a bounded poll, fixing missed or delayed decision
   delivery.
 
-[Unreleased]: https://github.com/macintacos/caret/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/macintacos/caret/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/macintacos/caret/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/macintacos/caret/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/macintacos/caret/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/macintacos/caret/compare/v0.1.2...v0.1.3
