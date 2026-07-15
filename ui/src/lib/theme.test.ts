@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import {
   applyTheme,
+  type ColorToken,
   DEFAULT_THEME_ID,
   readThemeId,
   THEME_IDS,
@@ -63,6 +64,32 @@ describe("THEMES", () => {
     expect(THEMES["caret-light"].tokens["--paper"]).not.toBe(
       THEMES["caret-dark"].tokens["--paper"],
     );
+  });
+
+  // EXC-776: the light theme's neutral surfaces and ink must lean warm (brown-ish),
+  // a sibling to caret-dark, rather than the cool pure greys they started as. A pure
+  // grey has R === B; warm means R > B. Only the neutral tokens are held to this —
+  // the accent and semantic hues carry their own color on purpose.
+  test("caret-light neutral greys lean warm (red channel exceeds blue)", () => {
+    const NEUTRALS: ColorToken[] = [
+      "--paper",
+      "--paper-raised",
+      "--paper-sunk",
+      "--ink",
+      "--ink-soft",
+      "--ink-faint",
+    ];
+    const tokens = THEMES["caret-light"].tokens;
+    for (const token of NEUTRALS) {
+      const hex = tokens[token];
+      const rgb = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+      expect(rgb, `${token} should be 6-digit hex, got ${hex}`).not.toBeNull();
+      const [, r, , b] = rgb!;
+      expect(
+        Number.parseInt(r!, 16),
+        `${token} (${hex}) red channel must exceed blue (warm, not cool)`,
+      ).toBeGreaterThan(Number.parseInt(b!, 16));
+    }
   });
 
   test("caret-dark mirrors the app.css :root fallback exactly", async () => {
