@@ -220,10 +220,42 @@ test("an --ephemeral daemon binds an OS port and records identity in the lock", 
       service?: string;
       stateDir?: string;
       instanceId?: string;
+      fresh?: boolean;
     };
     expect(h.service).toBe("caret");
     expect(h.stateDir).toBe(lock.stateDir);
     expect(h.instanceId).toBe(lock.instanceId);
+    // Without CARET_FRESH (the production case) the fresh field is omitted entirely.
+    expect(h.fresh).toBeUndefined();
+  } finally {
+    proc.kill("SIGKILL");
+    await proc.exited;
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
+// EXC-781: `mise run dev --fresh` sets CARET_FRESH=1 on the daemon child; the UI
+// reads this field from /api/health to reset its saved preferences on boot.
+test("a daemon started with CARET_FRESH=1 reports fresh in /api/health", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-fresh-"));
+  const lockPath = join(stateHome, "caret", "daemon.lock");
+  const proc = Bun.spawn([process.execPath, "src/cli.ts", "daemon", "--ephemeral"], {
+    env: {
+      ...process.env,
+      XDG_STATE_HOME: stateHome,
+      CARET_PORT: "",
+      CARET_IDLE_MS: "600000",
+      CARET_FRESH: "1",
+    },
+    stdio: ["ignore", "ignore", "ignore"],
+  });
+  try {
+    await untilLockWritten(proc, lockPath);
+    const lock = JSON.parse(await Bun.file(lockPath).text()) as { port: number };
+    const h = (await (await fetch(`http://127.0.0.1:${lock.port}/api/health`)).json()) as {
+      fresh?: boolean;
+    };
+    expect(h.fresh).toBe(true);
   } finally {
     proc.kill("SIGKILL");
     await proc.exited;

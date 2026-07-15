@@ -15,9 +15,9 @@
   }
   let { onClose }: Props = $props();
 
-  // Both paths record onboarding as seen so it never reappears, then close. The
-  // bell re-reads Notification.permission on the permission-change event, so a
-  // grant here turns it green without a reload.
+  // Both paths record onboarding as seen so it never reappears, then close. Where
+  // the Permissions API fires a change event, the bell re-reads
+  // Notification.permission and reflects a grant made here without a reload.
   function dismiss() {
     markOnboarded();
     onClose();

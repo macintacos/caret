@@ -30,19 +30,26 @@
     const perms = navigator.permissions;
     if (!supported || !perms?.query) return;
     let status: PermissionStatus | undefined;
+    let cancelled = false;
     const sync = () => {
       permission = Notification.permission;
     };
     perms
       .query({ name: "notifications" as PermissionName })
       .then((s) => {
+        // The effect may have torn down while the query was in flight; don't
+        // attach a listener the cleanup already ran past.
+        if (cancelled) return;
         status = s;
         s.addEventListener("change", sync);
       })
       .catch(() => {
         // Some engines reject a notifications permission query — nothing to sync.
       });
-    return () => status?.removeEventListener("change", sync);
+    return () => {
+      cancelled = true;
+      status?.removeEventListener("change", sync);
+    };
   });
 
   async function handleClick() {

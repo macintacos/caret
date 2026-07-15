@@ -27,8 +27,9 @@ export function reviewsDir(): string {
 }
 
 /** Root config dir: $XDG_CONFIG_HOME/caret or ~/.config/caret. Read lazily so
- * tests can override XDG_CONFIG_HOME per-case. Deliberately separate from
- * stateDir(): config survives `mise run dev` wiping XDG_STATE_HOME. */
+ * tests can override XDG_CONFIG_HOME per-case. Separate from stateDir(), which
+ * `mise run dev` isolates and wipes; which file inside this dir is read is
+ * configFile()'s call — dev points CARET_CONFIG_FILE at config.dev.toml. */
 export function configDir(): string {
   return xdgDir("XDG_CONFIG_HOME", ".config");
 }

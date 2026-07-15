@@ -226,6 +226,12 @@ describe("runDev supervision", () => {
       // (runReview → caret.log) would otherwise escape to ~/.local/state/caret.
       expect(xdgAtDriver).toBe(calls[0]?.env?.XDG_STATE_HOME);
 
+      // The daemon child reads the dev config (config.dev.toml), not the
+      // production config.toml, and — not being a --fresh run — carries no
+      // CARET_FRESH (EXC-781).
+      expect(calls[0]?.env?.CARET_CONFIG_FILE).toMatch(/\/caret\/config\.dev\.toml$/);
+      expect(calls[0]?.env?.CARET_FRESH).toBeUndefined();
+
       // Teardown killed every child and exited with vite's code.
       expect(children.every((c) => c.killed >= 1)).toBe(true);
       expect(exitCode).toBe(0);
