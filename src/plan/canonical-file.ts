@@ -12,8 +12,9 @@
 // agent's own planFilePath); it is still guarded to an existing regular `.md`
 // file so a malformed path can never make caret clobber something else, and the
 // error log never carries the path or plan text.
-import { existsSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, statSync, writeFileSync } from "node:fs";
 import type { CaretLogger } from "../lib/log.ts";
+import { reviewerNotesSection } from "./reviewer-notes.ts";
 
 /**
  * Overwrite `planFilePath` with the canonical plan text. No-op when the path is
@@ -38,5 +39,30 @@ export function writeCanonicalPlanFile(
     // `.code` (e.g. EACCES) is safe and enough to diagnose.
     const code = (err as { code?: string } | null)?.code;
     log.warn("review", "plan file canonicalize failed", code ? { code } : {});
+  }
+}
+
+/**
+ * Append the reviewer's approval notes to the agent's plan file as a trailing,
+ * clearly-labeled section, so the plan of record the agent reads carries them on
+ * an approval (EXC-791). Shares writeCanonicalPlanFile's surgical guards (an
+ * existing regular `.md` file) — the file already holds the canonical plan, so
+ * this only adds the section. A blank note or absent path is a no-op. Never
+ * throws: notes are a convenience, and losing them must not fail the review.
+ */
+export function appendReviewerNotesToPlanFile(
+  planFilePath: string | undefined,
+  notes: string,
+  log: Pick<CaretLogger, "warn">,
+): void {
+  const section = reviewerNotesSection(notes);
+  if (!planFilePath || section === "") return;
+  try {
+    if (!planFilePath.endsWith(".md")) return;
+    if (!existsSync(planFilePath) || !statSync(planFilePath).isFile()) return;
+    appendFileSync(planFilePath, section);
+  } catch (err) {
+    const code = (err as { code?: string } | null)?.code;
+    log.warn("review", "plan file notes append failed", code ? { code } : {});
   }
 }

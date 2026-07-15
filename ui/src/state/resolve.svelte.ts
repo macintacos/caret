@@ -56,7 +56,10 @@ export interface Resolve {
   /** Read the remembered approve variant once on load. A failure leaves the
    * current default, matching the daemon's fail-safe. */
   loadApproveMode: () => void;
-  approve: (mode: ApproveVariantId) => Promise<void>;
+  /** Approve the plan. Optional `notes` ride the allow as feedback (EXC-791): the
+   * reviewer's free-text note, delivered to the agent to fold into its work. A
+   * blank note is omitted. */
+  approve: (mode: ApproveVariantId, notes?: string) => Promise<void>;
   requestChanges: (generalComment: string) => Promise<void>;
   /** Deny the plan with a concise "rejected — wait for the user" message and no
    * inline comments (EXC-685). Otherwise identical to requestChanges. */
@@ -81,13 +84,20 @@ export function createResolve(store: ResolveStore, deps: ResolveDeps): Resolve {
         .catch(() => {});
     },
 
-    async approve(mode) {
+    async approve(mode, notes) {
       const id = deps.activeId();
       if (!id) return;
       store.busy = true;
       await deps.flushPending();
+      // Optional reviewer notes ride the allow as feedback (EXC-791); a blank note
+      // is omitted so a bare approve stays a bare allow.
+      const feedback = notes?.trim();
       try {
-        await submit(id, { behavior: "allow", acceptMode: mode });
+        await submit(id, {
+          behavior: "allow",
+          acceptMode: mode,
+          ...(feedback ? { feedback } : {}),
+        });
         store.approveMode = mode; // remember locally so the next plan defaults to it
         deps.afterResolve(id);
       } catch (err) {

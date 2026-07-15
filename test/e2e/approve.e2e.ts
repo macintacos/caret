@@ -50,6 +50,33 @@ test("Enter confirms the bare approve dialog", async ({ daemon, page }) => {
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).not.toContain(id);
 });
 
+test("a reviewer note rides the approval to the agent's decision (EXC-791)", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  const confirm = page.getByRole("dialog", APPROVE_CONFIRM);
+  await expect(confirm).toBeVisible();
+
+  // Type into the optional notes field, then confirm.
+  await confirm.getByRole("textbox", { name: /notes for the agent/i }).fill("use the retry helper");
+  await confirm.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
+
+  // The decision the hook long-polls for carries the note as feedback — the wire
+  // proof the note reached the agent side.
+  await expect
+    .poll(async () => {
+      const res = await fetch(`${daemon.url}/api/reviews/${encodeURIComponent(id)}/decision`);
+      return ((await res.json()) as { behavior: string; feedback?: string }).feedback;
+    })
+    .toBe("use the retry helper");
+});
+
 test("clicking outside dismisses the approve dialog and leaves the review pending", async ({
   daemon,
   page,

@@ -47,7 +47,10 @@ export function toHookOutput(input: DecisionInput): HookOutput {
   if (input.behavior === "allow") {
     // No mode escalation is emitted: Codex's permission-escalation fields are
     // reserved/fail-closed today (see the file header), so an approve — with or
-    // without an acceptMode — renders a plain allow.
+    // without an acceptMode — renders a plain allow. Reviewer notes (EXC-791,
+    // carried on input.feedback for an allow) are likewise dropped: Codex's
+    // PermissionRequest allow has no documented agent-facing message channel (only
+    // deny does), so there is nowhere to fold them until that shape is live-verified.
     return {
       hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "allow" } },
     };

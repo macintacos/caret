@@ -12,6 +12,7 @@ import { expireReview, longPoll, postReview } from "../daemon/client.ts";
 import { ensureDaemon, prodEnsureDeps } from "../daemon/lifecycle.ts";
 import { logError, logWarn, setLogLevel, setRedact } from "../lib/log.ts";
 import { logFile } from "../config/paths.ts";
+import { appendReviewerNotesToPlanFile } from "../plan/canonical-file.ts";
 import { expireAbandoned, type ReviewDeps, runReview } from "../review/orchestrate.ts";
 import { loadSettings, reviewTimeoutMs, type Settings } from "../config/settings.ts";
 import type { Decision, PlanInput } from "../lib/types.ts";
@@ -122,6 +123,14 @@ export async function runReviewSubcommand(): Promise<void> {
     posted = { baseUrl, id };
   };
   const out = await runReview(stdin, deps);
+  // Fold an approval's reviewer notes onto the agent's plan of record (EXC-791)
+  // before emitting the decision, so the agent reads them when it proceeds. The
+  // guard on planFilePath scopes this to agents with a plan file (Claude); the
+  // Claude wire echo carries the notes too, and OpenCode surfaces them via its
+  // tool result. Best-effort and never fatal.
+  if (out.behavior === "allow" && out.feedback && hookInput?.planFilePath) {
+    appendReviewerNotesToPlanFile(hookInput.planFilePath, out.feedback, { warn: logWarn });
+  }
   respond(out);
   process.exit(0);
 }

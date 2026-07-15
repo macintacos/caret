@@ -59,6 +59,17 @@ test("parseDecision uses the LAST json line (ignores stray earlier output)", () 
   expect(parseDecision(`some noise\n{"behavior":"allow"}\n`)).toEqual({ behavior: "allow" });
 });
 
+test("parseDecision preserves reviewer notes on an allow (EXC-791)", () => {
+  expect(parseDecision(`{"behavior":"allow","feedback":"use the retry helper"}`)).toEqual({
+    behavior: "allow",
+    feedback: "use the retry helper",
+  });
+});
+
+test("parseDecision drops a blank note on an allow", () => {
+  expect(parseDecision(`{"behavior":"allow","feedback":"  "}`)).toEqual({ behavior: "allow" });
+});
+
 test("parseDecision fails safe to a deny on unparseable output", () => {
   const d = parseDecision("not json at all");
   expect(d.behavior).toBe("deny");
@@ -82,6 +93,19 @@ test("isPlanningAgent allows the plan agent only", () => {
 
 test("approvedMessage tells the agent to proceed", () => {
   expect(approvedMessage().toLowerCase()).toContain("approv");
+});
+
+test("approvedMessage folds reviewer notes into the proceed message (EXC-791)", () => {
+  const msg = approvedMessage("use the retry helper");
+  expect(msg.toLowerCase()).toContain("approv");
+  expect(msg).toContain("## Notes from the user");
+  expect(msg).toContain("use the retry helper");
+  // The plan is already approved — the agent folds the notes in without re-planning.
+  expect(msg.toLowerCase()).toContain("no need to re-plan");
+});
+
+test("approvedMessage without notes stays the bare proceed message", () => {
+  expect(approvedMessage()).not.toContain("Notes from the user");
 });
 
 test("deniedMessage carries the feedback and resubmit instruction, without echoing the plan", () => {

@@ -271,10 +271,13 @@
     // plain approve would drop.
     pendingApproveMode = mode;
   }
-  function approveAnyway() {
+  function approveAnyway(notes: string) {
+    // `notes` is the optional reviewer note from the confirm dialog (EXC-791); it
+    // rides the allow as feedback and reaches the agent. resolve.approve omits a
+    // blank note.
     const mode = pendingApproveMode;
     pendingApproveMode = null;
-    if (mode) void resolve.approve(mode);
+    if (mode) void resolve.approve(mode, notes);
   }
   function onReject() {
     // Reject always confirms (EXC-685): consistent whether or not comments are
@@ -400,6 +403,7 @@
     consequence="Approving accepts the plan and starts the agent's work."
     icon="check"
     kind="dialog"
+    showNotes
     onConfirm={approveAnyway}
     onRequestChanges={divertToRequestChanges}
     onCancel={() => (pendingApproveMode = null)}

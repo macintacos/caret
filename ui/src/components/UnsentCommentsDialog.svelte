@@ -2,6 +2,7 @@
   import type { PendingItem } from "../lib/feedback.ts";
   import type { IconName } from "../lib/icons.ts";
   import { Button } from "$lib/components/ui/button/index.js";
+  import { Textarea } from "$lib/components/ui/textarea/index.js";
   import Icon from "./Icon.svelte";
   import Modal from "./Modal.svelte";
 
@@ -24,7 +25,13 @@
      * alertdialog guard whose backdrop click does not dismiss (a verdict is
      * deliberate, EXC-685). */
     kind?: "dialog" | "confirm";
-    onConfirm: () => void;
+    /** Show an optional free-text notes field whose value is handed to onConfirm
+     * (EXC-791). Approve turns this on so the reviewer can pass the agent a note
+     * to fold into its work; Reject leaves it off. */
+    showNotes?: boolean;
+    /** Confirm the verdict. `notes` carries the notes field's text when shown
+     * (empty string otherwise); the caller decides whether to forward it. */
+    onConfirm: (notes: string) => void;
     onRequestChanges: () => void;
     onCancel: () => void;
   }
@@ -34,10 +41,15 @@
     consequence,
     icon,
     kind = "confirm",
+    showNotes = false,
     onConfirm,
     onRequestChanges,
     onCancel,
   }: Props = $props();
+
+  // The optional reviewer note (EXC-791), local to the dialog and handed to
+  // onConfirm on confirm. Only rendered — and only meaningful — when showNotes.
+  let notes = $state("");
 
   // With queued comments the dialog previews them and guards against dropping
   // them; with none it's a bare confirmation. The count drives the "won't be
@@ -90,6 +102,21 @@
     </ul>
   {/if}
 
+  {#if showNotes}
+    <!-- Optional note handed to the agent on approval (EXC-791): distinct from the
+         unsent inline comments above (which a plain approve drops) — this text IS
+         sent, folded into the plan the agent works from, with no re-planning. -->
+    <label class="field">
+      <span class="lbl">Notes for the agent <span class="optional">(optional)</span></span>
+      <Textarea
+        value={notes}
+        oninput={(e) => (notes = e.currentTarget.value)}
+        rows={3}
+        placeholder="Anything the agent should fold into the work — no re-planning needed."
+      />
+    </label>
+  {/if}
+
   {#snippet footer()}
     <Button variant="secondary" class="float-chip" onclick={onCancel}>Cancel</Button>
     {#if hasComments}
@@ -98,7 +125,7 @@
         Request changes
       </Button>
     {/if}
-    <Button bind:ref={confirmEl} onclick={onConfirm}>
+    <Button bind:ref={confirmEl} onclick={() => onConfirm(notes)}>
       {#if icon}<Icon name={icon} size={14} />{/if}
       {hasComments ? `${action} anyway` : action}
     </Button>
@@ -153,5 +180,28 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
     white-space: pre-wrap;
+  }
+
+  /* Optional reviewer-notes field (EXC-791). Reuses the request-changes form
+     treatment (the eyebrow-style label over a token-styled Textarea) so the two
+     dialogs read as one system; the top margin sets it off from the description
+     or the comments preview above it. */
+  .field {
+    display: block;
+    margin-top: 1rem;
+  }
+  .lbl {
+    display: block;
+    font-size: var(--text-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 0.4rem;
+  }
+  .optional {
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--ink-faint);
+    font-weight: 400;
   }
 </style>

@@ -18,6 +18,11 @@ test("approve with an acceptMode still emits a plain allow (escalation dropped)"
   expect(out.hookSpecificOutput.decision).toEqual({ behavior: "allow" });
 });
 
+test("allow drops reviewer notes — Codex has no allow-side agent channel (EXC-791)", () => {
+  const out = toHookOutput({ behavior: "allow", feedback: "use the retry helper" });
+  expect(out.hookSpecificOutput.decision).toEqual({ behavior: "allow" });
+});
+
 test("deny carries the feedback in decision.message", () => {
   const out = toHookOutput({ behavior: "deny", feedback: "Fix the bug" });
   expect(out.hookSpecificOutput.decision).toEqual({
