@@ -24,9 +24,13 @@ test("approve under caret.localhost resolves the review", async ({ daemon, page 
   await page.goto(`${vanityOrigin(daemon.url)}/?review=${id}`);
   await expect(page.locator(".diff-plan")).toBeVisible();
 
-  // The mutating POST /api/reviews/:id/resolve carries the browser-computed
-  // caret.localhost origin; no 403 means the guard allowed it.
+  // Approve opens a confirmation (EXC-791); confirming it issues the mutating
+  // POST /api/reviews/:id/resolve, which carries the browser-computed
+  // caret.localhost origin — no 403 means the guard allowed it.
   await page.getByRole("button", { name: "Approve", exact: true }).click();
+  const confirm = page.getByRole("dialog", { name: "Approve this plan?" });
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole("button", { name: "Approve", exact: true }).click();
 
   await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).not.toContain(id);

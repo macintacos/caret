@@ -265,11 +265,11 @@
   $effect(() => installUiGoneBeacon({ target: window }));
 
   function onApprove(mode: ApproveVariantId) {
-    // Approving never sends inline comments, so pending ones would be silently
-    // lost. Guard the approve with a confirmation when any are non-blank; with
-    // none, approve fires straight through as before.
-    if (pendingCount > 0) pendingApproveMode = mode;
-    else void resolve.approve(mode);
+    // Approve always routes through a confirmation (EXC-791): even with nothing
+    // queued, a stray click must not ship the plan. Park the chosen mode; the
+    // guard (UnsentCommentsDialog) additionally previews any pending comments a
+    // plain approve would drop.
+    pendingApproveMode = mode;
   }
   function approveAnyway() {
     const mode = pendingApproveMode;
@@ -399,6 +399,7 @@
     action="Approve"
     consequence="Approving accepts the plan and starts the agent's work."
     icon="check"
+    kind="dialog"
     onConfirm={approveAnyway}
     onRequestChanges={divertToRequestChanges}
     onCancel={() => (pendingApproveMode = null)}

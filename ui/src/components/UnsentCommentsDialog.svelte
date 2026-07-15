@@ -19,11 +19,25 @@
     consequence: string;
     /** Optional glyph for the confirm button (omit for a text-only action). */
     icon?: IconName;
+    /** The Modal role, forwarded through. Approve passes "dialog" so a click
+     * outside dismisses (EXC-791); Reject keeps the default "confirm" — an
+     * alertdialog guard whose backdrop click does not dismiss (a verdict is
+     * deliberate, EXC-685). */
+    kind?: "dialog" | "confirm";
     onConfirm: () => void;
     onRequestChanges: () => void;
     onCancel: () => void;
   }
-  let { items, action, consequence, icon, onConfirm, onRequestChanges, onCancel }: Props = $props();
+  let {
+    items,
+    action,
+    consequence,
+    icon,
+    kind = "confirm",
+    onConfirm,
+    onRequestChanges,
+    onCancel,
+  }: Props = $props();
 
   // With queued comments the dialog previews them and guards against dropping
   // them; with none it's a bare confirmation. The count drives the "won't be
@@ -38,11 +52,13 @@
   let confirmEl = $state<HTMLElement | null>(null);
 </script>
 
-<!-- Composes the shared Modal as a confirm guard (kind="confirm": role="alertdialog",
-     no backdrop dismiss — a verdict is deliberate; Escape still cancels). App gates
-     this with {#if}, so it mounts open; the buttons route to the existing callbacks. -->
+<!-- Composes the shared Modal. The role is caller-chosen (`kind`): Reject keeps the
+     default confirm guard (role="alertdialog", no backdrop dismiss — a verdict is
+     deliberate; Escape still cancels, EXC-685); Approve passes "dialog" so a click
+     outside also dismisses (EXC-791). App gates this with {#if}, so it mounts open;
+     the buttons route to the existing callbacks. -->
 <Modal
-  kind="confirm"
+  {kind}
   open
   eyebrow={action}
   title="{action} this plan?"

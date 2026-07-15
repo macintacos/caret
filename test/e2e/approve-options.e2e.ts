@@ -18,9 +18,13 @@ test("the options menu approves the review in a chosen variant", async ({ daemon
   await expect(page.getByRole("menuitem", { name: "Approve & accept edits" })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Approve & auto mode" })).toBeVisible();
 
-  // Picking a variant resolves the review (no pending comments to guard), the
-  // same allow path the primary button takes.
+  // Picking a variant now opens the approval confirmation (EXC-791); confirming
+  // resolves the review on that variant's allow path — the same path the primary
+  // button takes.
   await page.getByRole("menuitem", { name: "Approve & auto mode" }).click();
+  const confirm = page.getByRole("dialog", { name: "Approve this plan?" });
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).not.toContain(id);
 });
