@@ -4,7 +4,7 @@
   // the view to a line rather than a slug. Filtering hides non-matching rows by
   // default (trees.software-inspired); the filter input also drives keyboard
   // navigation over the visible rows. Self-gates on shouldShowToc.
-  import { filterHeadings, shouldShowToc, type TocHeading } from "../lib/toc.ts";
+  import { filterHeadings, shouldShowToc, type TocHeading } from "$lib/toc.ts";
   import { Input } from "$lib/components/ui/input/index.js";
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
 

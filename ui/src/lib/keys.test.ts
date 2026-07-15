@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { isCancelKey, isSubmitChord } from "./keys.ts";
+
+import { isCancelKey, isSubmitChord } from "$lib/keys.ts";
 
 /** Build a minimal KeyboardEvent-shaped object for the predicates under test. */
 function key(k: string, mods: { metaKey?: boolean; ctrlKey?: boolean } = {}): KeyboardEvent {

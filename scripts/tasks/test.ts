@@ -4,6 +4,7 @@
 // the unit suite, preserving today's `mise run test == unit` behaviour.
 
 import { existsSync } from "node:fs";
+
 import { ensureUi } from "./build.ts";
 import { execAndExit } from "./lib/exec.ts";
 

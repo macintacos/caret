@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { CENSOR, DENY_KEYS, MAX_DEPTH, scrubGraph, shortId } from "../../src/redact/core.ts";
+
+import { CENSOR, DENY_KEYS, MAX_DEPTH, scrubGraph, shortId } from "@/redact/core.ts";
 
 // The shared browser-safe core: DENY_KEYS, the parameterized scrub walk, and
 // shortId. Both runtimes route through these — src/redact/node.ts (with the home-path

@@ -1,9 +1,12 @@
 import "../../test-mount.ts";
-import { EditorView } from "@codemirror/view";
 import { describe, expect, test } from "bun:test";
+
+import { EditorView } from "@codemirror/view";
+
 import type { LineAnnotation } from "@core/lib/types";
+import SourceAnnotationCard from "@/components/SourceAnnotationCard.svelte";
+
 import { capture, render } from "../../test-mount.ts";
-import SourceAnnotationCard from "./SourceAnnotationCard.svelte";
 
 // SourceAnnotationCard is the collapsible inline card for the source-view
 // surface. Component units cover its collapsed/expanded render, the saved comment

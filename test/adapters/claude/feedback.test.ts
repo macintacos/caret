@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { denyOutput, toHookOutput } from "../../../src/adapters/claude/feedback.ts";
+
+import { denyOutput, toHookOutput } from "@/adapters/claude/feedback.ts";
 
 test("plain approve emits behavior=allow with no updatedPermissions", () => {
   const out = toHookOutput({ behavior: "allow" });

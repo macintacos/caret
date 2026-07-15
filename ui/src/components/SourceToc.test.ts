@@ -1,8 +1,10 @@
 import "../../test-mount.ts";
 import { describe, expect, test } from "bun:test";
-import type { TocHeading } from "../lib/toc.ts";
+
+import SourceToc from "@/components/SourceToc.svelte";
+import type { TocHeading } from "$lib/toc.ts";
+
 import { capture, render } from "../../test-mount.ts";
-import SourceToc from "./SourceToc.svelte";
 
 const headings: TocHeading[] = [
   { level: 1, text: "Context", line: 1 },

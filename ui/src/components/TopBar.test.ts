@@ -1,8 +1,10 @@
 import "../../test-mount.ts";
 import { describe, expect, test } from "bun:test";
+
 import type { ApproveVariant, ClientReview } from "@core/lib/types";
+import TopBar from "@/components/TopBar.svelte";
+
 import { capture, render } from "../../test-mount.ts";
-import TopBar from "./TopBar.svelte";
 
 // EXC-760: the TopBar is rebuilt on shadcn primitives (Button / Badge /
 // DropdownMenu / Tooltip / Separator). This suite covers the synchronous

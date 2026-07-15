@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
+
 import { isUnresolved, type ReviewStatus } from "@core/lib/types";
-import { commentState } from "./commentState.ts";
+import { commentState } from "$lib/commentState.ts";
 
 // commentState maps a comment's ReviewStatus onto the card's quiet dot+label. The
 // suite pins the per-status presentation, the absent-defaults-to-pending rule, and

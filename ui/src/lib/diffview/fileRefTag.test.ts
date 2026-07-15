@@ -1,7 +1,8 @@
 import "../../../test-setup.ts";
 import { beforeEach, expect, test } from "bun:test";
-import { tagFileRefTokens } from "./fileRefTag.ts";
-import type { FileRefSpan, FileRefSpanMap } from "./fileRefs.ts";
+
+import type { FileRefSpan, FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
+import { tagFileRefTokens } from "$lib/diffview/fileRefTag.ts";
 
 // tagFileRefTokens marks the token span that begins each resolved file reference
 // with data-file-ref, so the override sheet can render the file icon before it.

@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import pkg from "../../package.json" with { type: "json" };
+
 import {
   buildHash,
   buildKind,
@@ -11,8 +11,10 @@ import {
   isCompiledBinary,
   resolveCommit,
   VERSION,
-} from "../../src/lib/build-id.ts";
-import type { UiAssets } from "../../src/ui/assets.ts";
+} from "@/lib/build-id.ts";
+import type { UiAssets } from "@/ui/assets.ts";
+
+import pkg from "../../package.json" with { type: "json" };
 
 // A UiAssets handle over real temp files, so buildHash reads bytes through
 // Bun.file exactly as it does in production. `paths` is sorted to match the

@@ -1,8 +1,9 @@
 import "../../test-setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
+
 import type { Annotation, ClientReview, PersistedScratch } from "@core/lib/types";
-import { type AutosaveStore, createAutosave } from "./autosave.svelte.ts";
-import { HttpError } from "./resolve.svelte.ts";
+import { type AutosaveStore, createAutosave } from "@/state/autosave.svelte.ts";
+import { HttpError } from "@/state/resolve.svelte.ts";
 
 // One recorded PUT /draft call.
 interface SaveCall {

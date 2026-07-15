@@ -3,9 +3,14 @@
 import "../../../test-setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import type { FileRefSpanMap } from "./fileRefs.ts";
-import { composeTokenHandlers, createLinkHandlers, hitTestSpan } from "./linkInteractions.ts";
-import type { LinkSpan, LinkSpanMap } from "./links.ts";
+
+import type { FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
+import {
+  composeTokenHandlers,
+  createLinkHandlers,
+  hitTestSpan,
+} from "$lib/diffview/linkInteractions.ts";
+import type { LinkSpan, LinkSpanMap } from "$lib/diffview/links.ts";
 
 // linkInteractions turns a per-line link span map into the token-event handlers
 // the @pierre/diffs File view accepts (onTokenClick / onTokenEnter /

@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
+
 import { createHighlighterCore } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
-import { caretDark, caretLight } from "./caret-theme.ts";
-import { type ColorToken, type ThemeId, THEMES } from "./theme.ts";
+
+import { caretDark, caretLight } from "$lib/caret-theme.ts";
+import { type ColorToken, THEMES, type ThemeId } from "$lib/theme.ts";
 
 // caret-theme.ts derives its two shiki palettes from the THEMES color tokens in
 // theme.ts (EXC-730) — the single source of truth for every color the UI paints.

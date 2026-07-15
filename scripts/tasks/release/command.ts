@@ -14,7 +14,9 @@
 // only wires the command tree and injects the real collaborators.
 
 import type { Command } from "@commander-js/extra-typings";
-import { createProgram } from "../../../src/lib/program.ts";
+
+import { createProgram } from "@/lib/program.ts";
+
 import { errorResult, type ReleaseError } from "./contract.ts";
 import { createGit } from "./git.ts";
 import { createGitHub } from "./github.ts";

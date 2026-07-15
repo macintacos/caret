@@ -6,17 +6,17 @@
 // the agent's wire string here. The signal handlers below deny to fail safe if
 // the process is killed before a decision is written.
 
-import type { AgentAdapter } from "../adapters/adapter.ts";
-import { selectAdapter } from "../adapters/index.ts";
-import { expireReview, longPoll, postReview } from "../daemon/client.ts";
-import { ensureDaemon, prodEnsureDeps } from "../daemon/lifecycle.ts";
-import { logError, logWarn, setLogLevel, setRedact } from "../lib/log.ts";
-import { logFile } from "../config/paths.ts";
-import { appendReviewerNotesToPlanFile } from "../plan/canonical-file.ts";
-import { expireAbandoned, type ReviewDeps, runReview } from "../review/orchestrate.ts";
-import { loadSettings, reviewTimeoutMs, type Settings } from "../config/settings.ts";
-import type { Decision, PlanInput } from "../lib/types.ts";
-import { warnInvalidEnvVars } from "./boot.ts";
+import type { AgentAdapter } from "@/adapters/adapter.ts";
+import { selectAdapter } from "@/adapters/index.ts";
+import { warnInvalidEnvVars } from "@/commands/boot.ts";
+import { logFile } from "@/config/paths.ts";
+import { loadSettings, reviewTimeoutMs, type Settings } from "@/config/settings.ts";
+import { expireReview, longPoll, postReview } from "@/daemon/client.ts";
+import { ensureDaemon, prodEnsureDeps } from "@/daemon/lifecycle.ts";
+import { logError, logWarn, setLogLevel, setRedact } from "@/lib/log.ts";
+import type { Decision, PlanInput } from "@/lib/types.ts";
+import { appendReviewerNotesToPlanFile } from "@/plan/canonical-file.ts";
+import { expireAbandoned, type ReviewDeps, runReview } from "@/review/orchestrate.ts";
 
 /** Select the platform's URL-opening argv: darwin `open`, win32 `cmd /c start`,
  * anything else `xdg-open`. caret is macOS-first — the non-darwin branches ship

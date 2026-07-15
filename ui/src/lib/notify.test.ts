@@ -1,7 +1,7 @@
 import "../../test-setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { type LogCapture, logCapture } from "../../test-helpers.ts";
-import { flush } from "./log.ts";
+
+import { flush } from "$lib/log.ts";
 import {
   bellPresentation,
   createPlanNotifier,
@@ -9,7 +9,9 @@ import {
   fireTestNotification,
   type NotificationHandle,
   type PlanNotifierOptions,
-} from "./notify.ts";
+} from "$lib/notify.ts";
+
+import { type LogCapture, logCapture } from "../../test-helpers.ts";
 
 // A recording notify double: captures every construction and returns a handle
 // whose onclick the module assigns, so tests can both count firings and drive

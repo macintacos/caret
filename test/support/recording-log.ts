@@ -1,7 +1,7 @@
 // A CaretLogger that records every emit for assertions — the daemon-side
 // counterpart of the NDJSON-file readers the hook-side tests use. It lives in
 // test/support/ (not a *.test.ts file) so bun test never collects it as a suite.
-import type { CaretLogger } from "../../src/lib/log.ts";
+import type { CaretLogger } from "@/lib/log.ts";
 
 export interface RecordedEmit {
   level: "debug" | "info" | "warn" | "error";

@@ -15,19 +15,21 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { NEVER_IDLE_MS } from "../../../src/config/constants.ts";
-import { isPidAlive } from "../../../src/daemon/lifecycle.ts";
-import { devConfigFile } from "../../../src/config/paths.ts";
-import { devPort, devStateDir, loadSettings, type Settings } from "../../../src/config/settings.ts";
+
+import { NEVER_IDLE_MS } from "@/config/constants.ts";
+import { devConfigFile } from "@/config/paths.ts";
+import { devPort, devStateDir, loadSettings, type Settings } from "@/config/settings.ts";
+import { isPidAlive } from "@/daemon/lifecycle.ts";
+
 import { installCleanupHandlers } from "../lib/signals.ts";
-import { type DriverOptions, run as runDriverEntry } from "./driver.ts";
 import {
   type DiscoverPortDeps,
-  discoverPort as realDiscoverPort,
   type PortMode,
   readDevLockPort,
+  discoverPort as realDiscoverPort,
   resolvePortMode,
 } from "./dev-env.ts";
+import { type DriverOptions, run as runDriverEntry } from "./driver.ts";
 
 export interface RunDevOptions {
   /** How many versions the primary dev review opens with (commander-defaulted). */

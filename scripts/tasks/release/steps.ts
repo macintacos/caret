@@ -6,6 +6,8 @@
 // version is always derived from the latest tag — never from an agent-supplied
 // value — so the "agent never invents the version" guarantee holds.
 
+export { createNpm, type NpmOps } from "./npm.ts";
+export { createRumdl, type RumdlOps } from "./rumdl.ts";
 export { baseline } from "./steps/baseline.ts";
 export { compute } from "./steps/compute.ts";
 export {
@@ -21,8 +23,6 @@ export {
 } from "./steps/context.ts";
 export type { Deps, FsOps, Io } from "./steps/deps.ts";
 export { finalize } from "./steps/finalize.ts";
-export { createNpm, type NpmOps } from "./npm.ts";
-export { createRumdl, type RumdlOps } from "./rumdl.ts";
 export {
   assertBranch,
   assertCleanTree,

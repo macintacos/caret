@@ -16,7 +16,7 @@
 // A press with no movement is left alone (no commit), so the single-line
 // click-to-comment path (SourceView.handleLineClick) still fires on release.
 
-import { normalizeRange, type PendingComposer } from "./commenting.ts";
+import { normalizeRange, type PendingComposer } from "$lib/diffview/commenting.ts";
 
 /** The minimal slice of a PointerEvent the controller reads (a real PointerEvent satisfies it). */
 export interface LineDragPointer {

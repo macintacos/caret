@@ -1,8 +1,9 @@
 import { mount } from "svelte";
-import App from "./App.svelte";
-import "./app.css";
-import { startLogBridge, uiLog } from "./lib/log.ts";
-import { applyTheme, readThemeId } from "./lib/theme.ts";
+
+import App from "@/App.svelte";
+import "@/app.css";
+import { startLogBridge, uiLog } from "$lib/log.ts";
+import { applyTheme, readThemeId } from "$lib/theme.ts";
 
 // Apply the saved theme before the first paint so there's no flash of the app.css
 // default when the two differ (EXC-730). No wipe at boot — that's only for a

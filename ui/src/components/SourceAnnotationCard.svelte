@@ -24,11 +24,11 @@
   import type { LineAnnotation } from "@core/lib/types";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
-  import { commentState } from "../lib/commentState.ts";
-  import { renderMarkdown } from "../lib/markdown.ts";
-  import ConfirmPopover from "./ConfirmPopover.svelte";
-  import Icon from "./Icon.svelte";
-  import SourceComposer from "./SourceComposer.svelte";
+  import { commentState } from "$lib/commentState.ts";
+  import { renderMarkdown } from "$lib/markdown.ts";
+  import ConfirmPopover from "@/components/ConfirmPopover.svelte";
+  import Icon from "@/components/Icon.svelte";
+  import SourceComposer from "@/components/SourceComposer.svelte";
 
   interface Props {
     annotation: LineAnnotation;

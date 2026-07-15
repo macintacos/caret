@@ -3,9 +3,10 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { OpencodePackaging } from "../../src/adapters/opencode/packaging.ts";
-import { CARET_PACKAGE } from "../../src/adapters/opencode/paths.ts";
-import { runInstallOpencodeTarget } from "../../src/commands/install-opencode.ts";
+
+import type { OpencodePackaging } from "@/adapters/opencode/packaging.ts";
+import { CARET_PACKAGE } from "@/adapters/opencode/paths.ts";
+import { runInstallOpencodeTarget } from "@/commands/install-opencode.ts";
 
 // Stub packaging so the target never resolves the real caret root. Only the command
 // files + bin path matter now (caret itself installs as a `plugin` array entry).

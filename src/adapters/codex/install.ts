@@ -20,12 +20,14 @@
 //                        manual); false when the file parses but holds none,
 //                        "unknown" when unreadable.
 
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { readFileSync } from "node:fs";
+
 import { parse as parseToml } from "smol-toml";
-import { readJsonFileSync } from "../../lib/json-file.ts";
-import type { InstallProbe } from "../adapter.ts";
+
+import type { InstallProbe } from "@/adapters/adapter.ts";
+import { readJsonFileSync } from "@/lib/json-file.ts";
 
 /** The Codex CLI config dir: CODEX_HOME override, else ~/.codex. */
 function codexConfigDir(): string {

@@ -3,7 +3,8 @@
 // leniency rationale for each schema stays with it below.
 
 import { z } from "zod";
-import type { Behavior, DraftBody, PlanInput, ResolveBody } from "../lib/types.ts";
+
+import type { Behavior, DraftBody, PlanInput, ResolveBody } from "@/lib/types.ts";
 
 // Request-body schemas at the browser trust boundary. They are deliberately
 // lenient — a malformed body degrades to the schema's fallback rather than

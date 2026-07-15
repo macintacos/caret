@@ -20,49 +20,49 @@
   // gutter, and annotations belong to the single-version view only — compare mode
   // is a clean read-only diff with none of them.
   import { untrack } from "svelte";
-  import SourceView from "../lib/diffview/SourceView.svelte";
-  import SourceDiffView from "../lib/diffview/SourceDiffView.svelte";
+  import SourceView from "$lib/diffview/SourceView.svelte";
+  import SourceDiffView from "$lib/diffview/SourceDiffView.svelte";
   import {
     groupAnnotationsByLine,
     slotInto,
     toLineAnnotations,
-  } from "../lib/diffview/annotationSlot.ts";
-  import { type BracketSpan, bracketLayer } from "../lib/diffview/bracket.ts";
-  import { type CodeBlockRange, codeBlockRanges, codeBlockText } from "../lib/diffview/codeBlocks.ts";
-  import { codeBlockAtPoint, copyAnchor } from "../lib/diffview/codeCopy.ts";
+  } from "$lib/diffview/annotationSlot.ts";
+  import { type BracketSpan, bracketLayer } from "$lib/diffview/bracket.ts";
+  import { type CodeBlockRange, codeBlockRanges, codeBlockText } from "$lib/diffview/codeBlocks.ts";
+  import { codeBlockAtPoint, copyAnchor } from "$lib/diffview/codeCopy.ts";
   import {
     type ComposerScratch,
     createSourceCommenting,
     normalizeRange,
     rangeLabel,
-  } from "../lib/diffview/commenting.ts";
-  import { dismissDragHint, isDragHintDismissed } from "../lib/diffview/dragHint.ts";
-  import { buildFileRefLayer, type FileRefSpan, type FileRefSpanMap } from "../lib/diffview/fileRefs.ts";
-  import { createHoverIntent } from "../lib/diffview/hoverIntent.ts";
-  import { resolveFileRefs } from "../lib/api.ts";
-  import { buildLinkLayer } from "../lib/diffview/links.ts";
-  import { readDiffStyle, writeDiffStyle } from "../lib/diffStylePref.ts";
-  import { readDiffIndicators, writeDiffIndicators } from "../lib/diffIndicatorsPref.ts";
-  import { type CompareStore, createCompare } from "../state/compare.svelte.ts";
-  import { setHeadingSlug, takeHeadingSlug } from "../state/headingLink.ts";
-  import VersionComparePicker from "./VersionComparePicker.svelte";
-  import type { SourceViewGutter } from "../lib/diffview/options.ts";
-  import type { SourceViewApi, SourceViewOptions } from "../lib/diffview/types.ts";
-  import { activeHeadingLine, extractHeadings, lineForSlug, slugForLine } from "../lib/toc.ts";
-  import { lineAtReadingZone } from "../lib/diffview/scroll.ts";
+  } from "$lib/diffview/commenting.ts";
+  import { dismissDragHint, isDragHintDismissed } from "$lib/diffview/dragHint.ts";
+  import { buildFileRefLayer, type FileRefSpan, type FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
+  import { createHoverIntent } from "$lib/diffview/hoverIntent.ts";
+  import { resolveFileRefs } from "$lib/api.ts";
+  import { buildLinkLayer } from "$lib/diffview/links.ts";
+  import { readDiffStyle, writeDiffStyle } from "$lib/diffStylePref.ts";
+  import { readDiffIndicators, writeDiffIndicators } from "$lib/diffIndicatorsPref.ts";
+  import { type CompareStore, createCompare } from "@/state/compare.svelte.ts";
+  import { setHeadingSlug, takeHeadingSlug } from "@/state/headingLink.ts";
+  import VersionComparePicker from "@/components/VersionComparePicker.svelte";
+  import type { SourceViewGutter } from "$lib/diffview/options.ts";
+  import type { SourceViewApi, SourceViewOptions } from "$lib/diffview/types.ts";
+  import { activeHeadingLine, extractHeadings, lineForSlug, slugForLine } from "$lib/toc.ts";
+  import { lineAtReadingZone } from "$lib/diffview/scroll.ts";
   import {
     type Annotation,
     type ClientReview,
     isLegacyAnnotation,
     isLineAnnotation,
   } from "@core/lib/types";
-  import SourceComposer from "./SourceComposer.svelte";
-  import SourceScratchMarker from "./SourceScratchMarker.svelte";
-  import SourceAnnotationThread from "./SourceAnnotationThread.svelte";
-  import LegacyAnnotationList from "./LegacyAnnotationList.svelte";
-  import SourceToc from "./SourceToc.svelte";
-  import CodeCopyButton from "./CodeCopyButton.svelte";
-  import FilePreview from "./FilePreview.svelte";
+  import SourceComposer from "@/components/SourceComposer.svelte";
+  import SourceScratchMarker from "@/components/SourceScratchMarker.svelte";
+  import SourceAnnotationThread from "@/components/SourceAnnotationThread.svelte";
+  import LegacyAnnotationList from "@/components/LegacyAnnotationList.svelte";
+  import SourceToc from "@/components/SourceToc.svelte";
+  import CodeCopyButton from "@/components/CodeCopyButton.svelte";
+  import FilePreview from "@/components/FilePreview.svelte";
 
   interface Props {
     /** The review whose current plan version is rendered. */

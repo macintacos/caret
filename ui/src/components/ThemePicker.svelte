@@ -8,7 +8,7 @@
   // control reads the same across the app.
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
-  import { type Theme, type ThemeId, THEME_IDS, THEMES } from "../lib/theme.ts";
+  import { type Theme, type ThemeId, THEME_IDS, THEMES } from "$lib/theme.ts";
   import { untrack } from "svelte";
 
   interface Props {

@@ -13,11 +13,12 @@
 // they emit regardless of the configured level for free.
 
 import pino from "pino";
-import { callerLocation } from "./caller-location.ts";
-import { ensureStateDir, logFile } from "../config/paths.ts";
-import { shortId } from "../redact/core.ts";
-import { scrubString, scrubValue } from "../redact/node.ts";
-import { errorMessage } from "./types.ts";
+
+import { ensureStateDir, logFile } from "@/config/paths.ts";
+import { callerLocation } from "@/lib/caller-location.ts";
+import { errorMessage } from "@/lib/types.ts";
+import { shortId } from "@/redact/core.ts";
+import { scrubString, scrubValue } from "@/redact/node.ts";
 
 // Re-exported so the daemon/hook/store/discovery call sites import their
 // message helper from the logging module alongside the loggers themselves.

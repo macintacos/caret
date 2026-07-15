@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
+
 import {
   type ComputeResult,
-  SCHEMA_VERSION,
   compareUrl,
   errorResult,
   parseCommitMeta,
+  SCHEMA_VERSION,
 } from "../../scripts/tasks/release/contract.ts";
 
 test("errorResult builds the ok:false payload shape", () => {

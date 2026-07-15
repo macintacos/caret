@@ -2,7 +2,8 @@
 // the injected target runners.
 
 import { afterEach, expect, test } from "bun:test";
-import { parseTargets, runInstallSubcommand } from "../../src/commands/install.ts";
+
+import { parseTargets, runInstallSubcommand } from "@/commands/install.ts";
 
 test("parseTargets accepts a single target, both, and dedupes/preserves order", () => {
   expect(parseTargets("opencode")).toEqual({ targets: ["opencode"] });

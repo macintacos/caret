@@ -28,12 +28,12 @@
 // handshake can't be corrupted. The fixture owns the ephemeral XDG_STATE_HOME
 // and tears it down after the test.
 
-import { NEVER_IDLE_MS } from "../../../src/config/constants.ts";
-import { createServer } from "../../../src/daemon/server.ts";
-import { createDaemonLogger } from "../../../src/lib/log.ts";
-import { prefsFile, reviewsDir } from "../../../src/config/paths.ts";
-import { createStore } from "../../../src/review/store.ts";
-import { loadUiAssets } from "../../../src/ui/assets.ts";
+import { NEVER_IDLE_MS } from "@/config/constants.ts";
+import { prefsFile, reviewsDir } from "@/config/paths.ts";
+import { createServer } from "@/daemon/server.ts";
+import { createDaemonLogger } from "@/lib/log.ts";
+import { createStore } from "@/review/store.ts";
+import { loadUiAssets } from "@/ui/assets.ts";
 
 // Refuse to run without an isolated state dir — never fall back to the real
 // ~/.local/state/caret (same posture as assertDevEnv in scripts/tasks/dev/driver.ts).

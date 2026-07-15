@@ -8,8 +8,8 @@
   // pointer-events stay on so the reader can move onto the card (to scroll a long
   // line) — DiffPlanView's hover-intent tracker reads this card's rect and keeps
   // the preview alive while the pointer is on it or heading toward it (EXC-799).
-  import { getFileExcerpt } from "../lib/api.ts";
-  import { highlightExcerpt } from "../lib/diffview/highlight.ts";
+  import { getFileExcerpt } from "$lib/api.ts";
+  import { highlightExcerpt } from "$lib/diffview/highlight.ts";
   import type { FileExcerpt } from "@core/lib/types";
 
   interface Props {

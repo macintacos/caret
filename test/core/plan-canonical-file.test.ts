@@ -2,10 +2,9 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  appendReviewerNotesToPlanFile,
-  writeCanonicalPlanFile,
-} from "../../src/plan/canonical-file.ts";
+
+import { appendReviewerNotesToPlanFile, writeCanonicalPlanFile } from "@/plan/canonical-file.ts";
+
 import { recordingLog } from "../support/recording-log.ts";
 
 // writeCanonicalPlanFile mirrors caret's canonical plan text back onto the

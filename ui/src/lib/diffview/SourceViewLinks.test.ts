@@ -1,9 +1,11 @@
 import "../../../test-mount.ts";
 import { describe, expect, test } from "bun:test";
+
+import { buildLinkLayer } from "$lib/diffview/links.ts";
+import SourceView from "$lib/diffview/SourceView.svelte";
+
 import { until } from "../../../../test/support/poll.ts";
 import { render } from "../../../test-mount.ts";
-import { buildLinkLayer } from "./links.ts";
-import SourceView from "./SourceView.svelte";
 
 // Component-level wiring for the opt-in link layer on SourceView. The pointer
 // pipeline that turns a real token click into onTokenClick lives in the

@@ -26,13 +26,19 @@ import "package://github.com/jdx/hk/releases/download/v1.50.0/hk@1.50.0#/Builtin
 
 // Formatters — rewrite files into canonical form.
 local formatters = new Mapping<String, Step> {
-  ["Web(Format)      [[biome]]"] = new Step {
+  ["Web(Format+Imports) [[biome]]"] = new Step {
     glob = List("**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.json", "**/*.jsonc")
+    // `biome check` (not `biome format`) so this step also applies the
+    // organizeImports assist action configured in biome.jsonc — import grouping
+    // is a formatting concern and rides with the formatter. `--linter-enabled=false`
+    // keeps lint rules (and their autofixes) out of the format pass; the read-only
+    // Web(Lint) step below owns those. So `mise run format` reflows + regroups
+    // imports, and `mise run lint` fails on an unformatted OR mis-ordered file.
     // hk's glob is broader than biome.jsonc's `files.includes`, so a staged file
     // can land outside biome's scope; --no-errors-on-unmatched lets it no-op
     // instead of failing the hook.
-    check = "biome format --no-errors-on-unmatched {{ files }}"
-    fix = "biome format --write --no-errors-on-unmatched {{ files }}"
+    check = "biome check --linter-enabled=false --no-errors-on-unmatched {{ files }}"
+    fix = "biome check --write --linter-enabled=false --no-errors-on-unmatched {{ files }}"
   }
 
   // rumdl owns Markdown — one native binary for both format and lint. The format

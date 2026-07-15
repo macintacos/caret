@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { shortCwd } from "./cwd.ts";
+
+import { shortCwd } from "$lib/cwd.ts";
 
 describe("shortCwd", () => {
   test("shows a one-segment path in full", () => {

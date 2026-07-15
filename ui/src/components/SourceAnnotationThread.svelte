@@ -15,7 +15,7 @@
   import type { LineAnnotation } from "@core/lib/types";
   import { Card } from "$lib/components/ui/card/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
-  import SourceAnnotationCard from "./SourceAnnotationCard.svelte";
+  import SourceAnnotationCard from "@/components/SourceAnnotationCard.svelte";
 
   interface Props {
     /** The comments on this line, in thread (display) order. */

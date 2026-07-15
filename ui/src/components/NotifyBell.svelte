@@ -6,11 +6,11 @@
   // EXC-760: composed from the shadcn Button (ghost icon) with the state help
   // text moved off a native `title=` onto a shadcn Tooltip. The bell's live
   // state stays announced via aria-label; the tooltip carries the hover hint.
-  import { uiLog } from "../lib/log.ts";
-  import { bellPresentation, fireTestNotification } from "../lib/notify.ts";
+  import { uiLog } from "$lib/log.ts";
+  import { bellPresentation, fireTestNotification } from "$lib/notify.ts";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
-  import Icon from "./Icon.svelte";
+  import Icon from "@/components/Icon.svelte";
 
   // The Notification API may be absent (older browsers, insecure contexts) — the
   // whole component renders nothing then.

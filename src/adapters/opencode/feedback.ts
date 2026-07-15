@@ -11,7 +11,7 @@
 // The plugin renders an allow into "proceed with the build agent" and a deny into
 // the tool-result string the model revises against (see the opencode/ packaging).
 
-import type { ApproveVariantId, Behavior } from "../../lib/types.ts";
+import type { ApproveVariantId, Behavior } from "@/lib/types.ts";
 
 export interface OpencodeDecision {
   behavior: Behavior;

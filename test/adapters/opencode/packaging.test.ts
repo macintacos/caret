@@ -2,7 +2,8 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadOpencodePackaging } from "../../../src/adapters/opencode/packaging.ts";
+
+import { loadOpencodePackaging } from "@/adapters/opencode/packaging.ts";
 
 // loadOpencodePackaging is tested with an explicit root (the resolveCaretRoot
 // argv/execPath detection is exercised by the install.sh integration + manual

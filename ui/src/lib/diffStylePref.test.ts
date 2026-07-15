@@ -1,6 +1,7 @@
 import "../../test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
-import { DIFF_STYLE_KEY, readDiffStyle, writeDiffStyle } from "./diffStylePref.ts";
+
+import { DIFF_STYLE_KEY, readDiffStyle, writeDiffStyle } from "$lib/diffStylePref.ts";
 
 afterEach(() => localStorage.clear());
 

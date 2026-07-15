@@ -1,10 +1,12 @@
 import "../../../test-mount.ts";
 import { describe, expect, test } from "bun:test";
+
+import SourceDiffView from "$lib/diffview/SourceDiffView.svelte";
+import type { SourceDiffViewOptions, SourceDocument } from "$lib/diffview/types.ts";
+
 import { until } from "../../../../test/support/poll.ts";
 import { render } from "../../../test-mount.ts";
 import { reactiveProps } from "../../../test-props.svelte.ts";
-import SourceDiffView from "./SourceDiffView.svelte";
-import type { SourceDiffViewOptions, SourceDocument } from "./types.ts";
 
 // Real-library diff rendering under happy-dom; see SourceView.test.ts for the
 // shadow-root + async-paint conventions these assertions follow.

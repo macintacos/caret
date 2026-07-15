@@ -1,7 +1,9 @@
 import "../../test-mount.ts";
 import { describe, expect, test } from "bun:test";
+
+import Icon from "@/components/Icon.svelte";
+
 import { render } from "../../test-mount.ts";
-import Icon from "./Icon.svelte";
 
 // icons.test.ts gates the registry↔directory↔Icon.svelte wiring; this suite
 // covers only the render contract: the a11y label/aria-hidden split and sizing.

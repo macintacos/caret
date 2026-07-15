@@ -7,7 +7,8 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assetsFromDist } from "../../src/ui/assets.ts";
+
+import { assetsFromDist } from "@/ui/assets.ts";
 
 function fakeDist(files: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), "caret-ui-dist-"));

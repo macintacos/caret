@@ -5,6 +5,7 @@
 // the config, not just the wiring the fake-driven finalize tests cover.
 
 import { expect, test } from "bun:test";
+
 import { createRumdl } from "../../scripts/tasks/release/rumdl.ts";
 
 // The reflow shells out to `mise x rumdl`, whose cold start can take a moment on

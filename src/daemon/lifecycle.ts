@@ -7,12 +7,13 @@
 
 import { openSync, unlinkSync } from "node:fs";
 import { normalize } from "node:path";
-import { buildKind, currentBuildId, type DaemonLock, VERSION } from "../lib/build-id.ts";
-import { type HealthBody, httpHealth } from "./client.ts";
-import { readJsonFileSync } from "../lib/json-file.ts";
-import { logDebug, logWarn } from "../lib/log.ts";
-import { daemonLock, daemonLogFile, ensureStateDir, stateDir } from "../config/paths.ts";
-import { getPort, type Settings } from "../config/settings.ts";
+
+import { daemonLock, daemonLogFile, ensureStateDir, stateDir } from "@/config/paths.ts";
+import { getPort, type Settings } from "@/config/settings.ts";
+import { type HealthBody, httpHealth } from "@/daemon/client.ts";
+import { buildKind, currentBuildId, type DaemonLock, VERSION } from "@/lib/build-id.ts";
+import { readJsonFileSync } from "@/lib/json-file.ts";
+import { logDebug, logWarn } from "@/lib/log.ts";
 
 export interface EnsureDeps {
   baseUrl: string;

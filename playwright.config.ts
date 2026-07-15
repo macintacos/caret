@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+
 import { REFERENCE_WIDTH_PX } from "./ui/src/lib/layout.ts";
 
 // EXC-587: worker cap from CARET_E2E_WORKERS — a positive int, else the "50%"

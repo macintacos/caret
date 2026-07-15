@@ -2,7 +2,8 @@
 // injected, so these assert the exact commands issued without spawning `claude`.
 
 import { expect, test } from "bun:test";
-import { type ClaudeRunner, runInstallClaudeTarget } from "../../src/commands/install-claude.ts";
+
+import { type ClaudeRunner, runInstallClaudeTarget } from "@/commands/install-claude.ts";
 
 // A runner that records every `claude` invocation and returns a scripted result.
 function recorder(result: ReturnType<ClaudeRunner> = { ok: true, detail: "" }): {

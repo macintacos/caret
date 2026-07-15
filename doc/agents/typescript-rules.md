@@ -29,6 +29,38 @@ rather than slept through.
   merely because it crossed a line count. A subcommand entrypoint goes in `src/commands/`;
   the logic it calls goes in the core module it belongs to.
 
+## Import conventions
+
+App-owned code imports through the **`@/` alias**, never a `../../` relative dance. `@/`
+resolves to the current program's source root — `src/` for the root (bun) program,
+`ui/src/` for the browser program — so `@/lib/log.ts`, `@/review/store.ts`, and
+`@/state/polling.svelte.ts` mean the same file from anywhere in that program. Each program
+carries the mapping in its own `tsconfig.json` (`paths`), and the UI mirrors it in
+`ui/vite.config.ts` so svelte-check, the vite build, and `bun test` agree.
+
+Two aliases stay reserved for the boundaries they name, and both sit **beside** `@/` in
+the import grouping (they are app code, not third-party):
+
+- **`@core/*`** — the browser UI reaching across into the tool-agnostic core (the wire
+  contract and other node-free shared modules). UI-only; the root program uses `@/`. See
+  `architecture-rules.md`.
+- **`$lib`** — the UI's `ui/src/lib/` directory, the prefix shadcn-svelte's copied
+  components and `components.json` assume. See `svelte-rules.md` / `shadcn-rules.md`.
+
+A relative import (`./x`, `../x`) is correct **only when the target has no alias** — code
+outside a program's source root: a test reaching its `test/support/*` harness, a
+`scripts/` module importing a `scripts/` sibling, `opencode/` internals. Those stay
+relative; everything that resolves inside a source root uses `@/`.
+
+Biome's `organizeImports` (configured in `biome.jsonc`) sorts and groups every `.ts`
+file's imports into blocks, blank-line separated: runtime built-ins (`node:`/`bun:`),
+third-party packages, app code (`@/`, `$lib`, `@core`), then any leftover relative paths.
+It is applied by `mise run format` and gated read-only by `mise run lint` — so ordering is
+mechanical, never hand-maintained. (`.svelte` files carry the `@/` aliases but Biome does
+not reorder them; it doesn't parse Svelte.) `@core` looks like a scoped npm package to
+Biome, so the config carves it out of the package group explicitly — don't remove that
+carve-out.
+
 ## Shared-helper policy
 
 Extract a helper **only on genuine repetition with identical semantics**, and keep sites

@@ -3,7 +3,7 @@
 // create path reads to decide whether the hook should foreground a browser tab.
 // Split out of server.ts so the pure guard logic stays unit-testable on its own.
 
-import { VANITY_HOST } from "../config/constants.ts";
+import { VANITY_HOST } from "@/config/constants.ts";
 
 /** How recently a UI tab must have polled GET /api/reviews to count as a live
  * client (EXC-559, EXC-562). It must comfortably exceed the browser's

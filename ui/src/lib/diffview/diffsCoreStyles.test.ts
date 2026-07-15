@@ -4,9 +4,10 @@
 // that stylesheet, this fails — regenerate diffsCoreStyles.ts from the library's
 // dist/style.js default export.
 
-import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
-import { DIFFS_CORE_STYLES } from "./diffsCoreStyles.ts";
+import { join } from "node:path";
+
+import { DIFFS_CORE_STYLES } from "$lib/diffview/diffsCoreStyles.ts";
 
 describe("diffs core styles", () => {
   test("carries the structural grid the content column depends on", () => {

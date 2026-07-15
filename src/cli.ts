@@ -14,18 +14,19 @@
 // daemon death) emits a deny — never an allow.
 
 import type { Command } from "@commander-js/extra-typings";
-import { fatalDeny } from "./adapters/index.ts";
-import { VERSION } from "./lib/build-id.ts";
-import { runDaemon } from "./commands/daemon.ts";
-import { runDiscoverySubcommand } from "./commands/discovery.ts";
-import { runInstallSubcommand } from "./commands/install.ts";
-import { runPrewarm } from "./commands/prewarm.ts";
-import { runReconcileSubcommand } from "./commands/reconcile.ts";
-import { runRedactSubcommand } from "./commands/redact.ts";
-import { runReviewSubcommand } from "./commands/review.ts";
-import { logError } from "./lib/log.ts";
-import { logFile } from "./config/paths.ts";
-import { createProgram, runProgram } from "./lib/program.ts";
+
+import { fatalDeny } from "@/adapters/index.ts";
+import { runDaemon } from "@/commands/daemon.ts";
+import { runDiscoverySubcommand } from "@/commands/discovery.ts";
+import { runInstallSubcommand } from "@/commands/install.ts";
+import { runPrewarm } from "@/commands/prewarm.ts";
+import { runReconcileSubcommand } from "@/commands/reconcile.ts";
+import { runRedactSubcommand } from "@/commands/redact.ts";
+import { runReviewSubcommand } from "@/commands/review.ts";
+import { logFile } from "@/config/paths.ts";
+import { VERSION } from "@/lib/build-id.ts";
+import { logError } from "@/lib/log.ts";
+import { createProgram, runProgram } from "@/lib/program.ts";
 
 // The CLI command tree (EXC-472). Each subcommand's action threads its parsed
 // options into the run functions, replacing the former process.argv reads. The

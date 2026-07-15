@@ -7,7 +7,7 @@
   // modal: clicking a row leaves it open so the reviewer can walk the list while the
   // plan scrolls behind it, and it dismisses only on Escape, the close button, or a
   // re-toggle. Mirrors the SourceToc contents pane's filter-then-jump idiom.
-  import { type CommentIndexEntry, filterComments, highlightMatches } from "../lib/feedback.ts";
+  import { type CommentIndexEntry, filterComments, highlightMatches } from "$lib/feedback.ts";
 
   interface Props {
     /** Whether the navigator is shown. The status strip's tally button toggles it. */

@@ -10,7 +10,7 @@
   // elements). The title stays a real <h2> — the correct heading semantics, and
   // the anchor 8 e2e specs locate via getByRole("heading", …).
   import { Empty, EmptyHeader, EmptyMedia } from "$lib/components/ui/empty/index.js";
-  import Icon from "./Icon.svelte";
+  import Icon from "@/components/Icon.svelte";
 
   let { connected = true }: { connected?: boolean } = $props();
 </script>

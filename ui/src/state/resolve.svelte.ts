@@ -6,10 +6,10 @@
 // approve). A daemon non-2xx (already resolved/removed elsewhere) still
 // advances; only a genuine network failure flips the connection offline.
 
-import { getApproveMode, HttpError, resolveReview } from "../lib/api.ts";
-import { formatFeedback } from "../lib/feedback.ts";
 import { PLAN_REJECTED_MESSAGE } from "@core/config/constants";
 import type { Annotation, ApproveVariantId } from "@core/lib/types";
+import { getApproveMode, HttpError, resolveReview } from "$lib/api.ts";
+import { formatFeedback } from "$lib/feedback.ts";
 
 export { HttpError };
 

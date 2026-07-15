@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import {
   activeHeadingLine,
   extractHeadings,
@@ -7,7 +8,7 @@ import {
   shouldShowToc,
   slugForLine,
   type TocHeading,
-} from "./toc.ts";
+} from "$lib/toc.ts";
 
 describe("extractHeadings", () => {
   test("collects ATX headings with their level, text, and 1-based line", () => {

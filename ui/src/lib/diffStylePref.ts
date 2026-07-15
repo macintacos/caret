@@ -10,8 +10,8 @@
 // owns the never-throw fail-safe: a blocked or unavailable localStorage degrades
 // to the default rather than breaking the view.
 
-import type { DiffStyle } from "./diffview/types.ts";
-import { enumLocalStoragePref } from "./enumLocalStoragePref.ts";
+import type { DiffStyle } from "$lib/diffview/types.ts";
+import { enumLocalStoragePref } from "$lib/enumLocalStoragePref.ts";
 
 /** localStorage key holding the remembered diff layout. */
 export const DIFF_STYLE_KEY = "caret.diffStyle";

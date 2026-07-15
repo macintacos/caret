@@ -8,7 +8,7 @@
   import type { Snippet } from "svelte";
   import { Button, type ButtonVariant } from "$lib/components/ui/button/index.js";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
-  import Icon from "./Icon.svelte";
+  import Icon from "@/components/Icon.svelte";
 
   interface Props {
     /** Primary (left) content — a label, optionally a leading icon. */

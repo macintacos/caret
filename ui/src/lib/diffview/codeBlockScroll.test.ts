@@ -1,13 +1,14 @@
 import "../../../test-setup.ts";
 import { describe, expect, test } from "bun:test";
-import type { CodeBlockRange } from "./codeBlocks.ts";
+
 import {
   CARD_ATTR,
   GUTTER_CARD_ATTR,
   type MetricsReader,
   type RowMetrics,
   syncCodeBlockCards,
-} from "./codeBlockScroll.ts";
+} from "$lib/diffview/codeBlockScroll.ts";
+import type { CodeBlockRange } from "$lib/diffview/codeBlocks.ts";
 
 // EXC-729: a fenced code block renders as independent [data-line] rows (no wrapper), and
 // EXC-692 caps each at a reading width, so an over-wide line broke out of the panel. The fix

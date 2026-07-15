@@ -11,8 +11,9 @@
 // This is the single owner of the fenced-language @pierre/diffs imports, mirroring
 // how theme.ts owns the theme registration.
 import { preloadHighlighter } from "@pierre/diffs";
-import { bundledLanguages } from "./shiki-bundle.ts";
-import { caretDiffTheme } from "./theme.ts";
+
+import { bundledLanguages } from "$lib/diffview/shiki-bundle.ts";
+import { caretDiffTheme } from "$lib/diffview/theme.ts";
 
 // The grammars the shiki bundle can resolve (canonical shiki names). markdown is
 // the plan source language itself; the rest are the fenced-code grammars.

@@ -21,8 +21,10 @@
 // caret CLIs share the same name/description/help conventions.
 
 import { InvalidArgumentError } from "@commander-js/extra-typings";
+
+import { createProgram } from "@/lib/program.ts";
+
 import { type JsonArgs, runPreflightCli } from "../../scripts/preflight.ts";
-import { createProgram } from "../../src/lib/program.ts";
 import { runBuild, runBuildBin, runBuildBundle, runBuildUi } from "./build.ts";
 import { DEFAULT_NUM_VERSIONS, parsePositiveInt } from "./dev/protocol.ts";
 import { type RunDevOptions, runDev } from "./dev/run.ts";

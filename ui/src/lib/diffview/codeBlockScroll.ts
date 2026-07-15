@@ -19,7 +19,7 @@
 // re-run cannot re-trigger that observer. happy-dom reports 0 for every layout metric, so
 // overflow is read through an injectable `read`.
 
-import type { CodeBlockRange } from "./codeBlocks.ts";
+import type { CodeBlockRange } from "$lib/diffview/codeBlocks.ts";
 
 /** Marks a block's scroll card; its value is the block's 1-based start line, the key that
  * ties it to its block for idempotent reuse and for the card's coreStyles.ts styling. */

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { cn } from "./utils.ts";
+
+import { cn } from "$lib/utils.ts";
 
 describe("cn", () => {
   test("joins truthy class values, drops falsy ones", () => {

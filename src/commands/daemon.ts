@@ -5,16 +5,17 @@
 
 import { randomUUID } from "node:crypto";
 import { existsSync, unlinkSync } from "node:fs";
-import { selectAdapter } from "../adapters/index.ts";
-import { currentBuildId, currentCommit } from "../lib/build-id.ts";
-import { isAddrInUse } from "../daemon/lifecycle.ts";
-import { type CaretServer, createServer } from "../daemon/server.ts";
-import { createDaemonLogger } from "../lib/log.ts";
-import { configFile, daemonLock, reviewsDir, stateDir } from "../config/paths.ts";
-import { getPort, heartbeatMs, idleMs, settings, watchSettings } from "../config/settings.ts";
-import { createStore } from "../review/store.ts";
-import { loadUiAssets } from "../ui/assets.ts";
-import { warnInvalidEnvVars } from "./boot.ts";
+
+import { selectAdapter } from "@/adapters/index.ts";
+import { warnInvalidEnvVars } from "@/commands/boot.ts";
+import { configFile, daemonLock, reviewsDir, stateDir } from "@/config/paths.ts";
+import { getPort, heartbeatMs, idleMs, settings, watchSettings } from "@/config/settings.ts";
+import { isAddrInUse } from "@/daemon/lifecycle.ts";
+import { type CaretServer, createServer } from "@/daemon/server.ts";
+import { currentBuildId, currentCommit } from "@/lib/build-id.ts";
+import { createDaemonLogger } from "@/lib/log.ts";
+import { createStore } from "@/review/store.ts";
+import { loadUiAssets } from "@/ui/assets.ts";
 
 export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   // Leveled NDJSON to stderr (spawnDaemon redirects it into daemon.log). The

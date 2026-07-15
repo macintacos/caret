@@ -8,12 +8,8 @@
 // runs under the Playwright/node runner, binds an OS-assigned port for parallel
 // workers, and serves the built ui/dist/ tree (index plus its hashed assets) —
 // a hermetic createServer-with-explicit-opts posture this module does not replace.
-import {
-  createServer,
-  type CaretServer,
-  type CreateServerOptions,
-} from "../../src/daemon/server.ts";
-import { createStore, type Store } from "../../src/review/store.ts";
+import { type CaretServer, type CreateServerOptions, createServer } from "@/daemon/server.ts";
+import { createStore, type Store } from "@/review/store.ts";
 
 /** Options forwarded to createServer, minus the store (bootDaemon owns it). */
 export type BootOptions = Omit<CreateServerOptions, "store">;

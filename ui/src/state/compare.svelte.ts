@@ -11,7 +11,7 @@
 // view).
 
 import type { PlanVersion } from "@core/lib/types";
-import type { DiffIndicators, DiffStyle } from "../lib/diffview/types.ts";
+import type { DiffIndicators, DiffStyle } from "$lib/diffview/types.ts";
 
 /** Reactive fields the host component owns and the factory mutates through
  * getters. Base is the reference version (default: the current version) and

@@ -1,8 +1,10 @@
 import "../../test-mount.ts";
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
+
+import EmptyState from "@/components/EmptyState.svelte";
+
 import { render } from "../../test-mount.ts";
-import EmptyState from "./EmptyState.svelte";
 
 describe("EmptyState", () => {
   test("connected (default): shows the listening copy, no warning", () => {

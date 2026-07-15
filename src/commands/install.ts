@@ -6,8 +6,8 @@
 // runners are injectable so dispatch can be tested without touching a real config dir
 // or the `claude` CLI.
 
-import { runInstallClaudeTarget } from "./install-claude.ts";
-import { runInstallOpencodeTarget } from "./install-opencode.ts";
+import { runInstallClaudeTarget } from "@/commands/install-claude.ts";
+import { runInstallOpencodeTarget } from "@/commands/install-opencode.ts";
 
 const KNOWN_TARGETS = ["opencode", "claude"] as const;
 export type InstallTarget = (typeof KNOWN_TARGETS)[number];

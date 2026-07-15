@@ -1,7 +1,9 @@
 import "../../test-mount.ts";
 import { describe, expect, test } from "bun:test";
+
+import DevBadge from "@/components/DevBadge.svelte";
+
 import { render } from "../../test-mount.ts";
-import DevBadge from "./DevBadge.svelte";
 
 describe("DevBadge", () => {
   test("renders nothing for a real (compiled) build", () => {

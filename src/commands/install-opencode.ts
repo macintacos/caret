@@ -8,25 +8,26 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+
 import {
   addPluginToConfigText,
   removePluginFromConfigText,
-} from "../adapters/opencode/config-plugin.ts";
+} from "@/adapters/opencode/config-plugin.ts";
 import {
   type DeployFile,
   deployFiles,
   removeFiles,
   renderPlugin,
-} from "../adapters/opencode/deploy.ts";
-import { loadOpencodePackaging, type OpencodePackaging } from "../adapters/opencode/packaging.ts";
+} from "@/adapters/opencode/deploy.ts";
+import { loadOpencodePackaging, type OpencodePackaging } from "@/adapters/opencode/packaging.ts";
 import {
   CARET_PACKAGE,
   commandDir,
   namespacedCommandFilename,
   opencodeConfigDir,
   resolveConfigFile,
-} from "../adapters/opencode/paths.ts";
-import { VERSION } from "../lib/build-id.ts";
+} from "@/adapters/opencode/paths.ts";
+import { VERSION } from "@/lib/build-id.ts";
 
 /** Injection seam for tests: override the config dir and packaging so the target
  * can run against a temp dir without resolving the real caret root. */

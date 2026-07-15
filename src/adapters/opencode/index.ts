@@ -7,11 +7,11 @@
 // least speculative of the three adapters (no foreign wire format to model).
 // Selectable via CARET_AGENT=opencode; Claude stays the default.
 
-import type { Decision, PlanInput } from "../../lib/types.ts";
-import type { AgentAdapter, InstallProbe } from "../adapter.ts";
-import { APPROVE_VARIANTS } from "./approve.ts";
-import { fatalDenyLine, toWireDecision } from "./feedback.ts";
-import { readOpencodeInstallState } from "./install.ts";
+import type { AgentAdapter, InstallProbe } from "@/adapters/adapter.ts";
+import { APPROVE_VARIANTS } from "@/adapters/opencode/approve.ts";
+import { fatalDenyLine, toWireDecision } from "@/adapters/opencode/feedback.ts";
+import { readOpencodeInstallState } from "@/adapters/opencode/install.ts";
+import type { Decision, PlanInput } from "@/lib/types.ts";
 
 /** The caret-defined review envelope the OpenCode plugin pipes to `caret review`.
  * Mirrors the snake_case session/cwd convention the Claude/Codex parsers use so the

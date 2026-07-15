@@ -15,7 +15,7 @@
   // itself `fixed` against the anchor element, so it escapes the modal body's
   // overflow and clamps inside the viewport — flipping above the trigger when it
   // would run off the bottom, and shifting horizontally off any edge (EXC-762).
-  import { isCancelKey } from "../lib/keys.ts";
+  import { isCancelKey } from "$lib/keys.ts";
 
   interface Props {
     /** The yes/no question, e.g. "Discard this comment?". Also the aria-label. */

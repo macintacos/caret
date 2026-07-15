@@ -5,9 +5,9 @@
   // still undecided. Composes the shared Modal shell (the SettingsDialog analog);
   // this file is only the copy + the two actions.
   import { Button } from "$lib/components/ui/button/index.js";
-  import { uiLog } from "../lib/log.ts";
-  import { markOnboarded } from "../lib/prefs.ts";
-  import Modal from "./Modal.svelte";
+  import { uiLog } from "$lib/log.ts";
+  import { markOnboarded } from "$lib/prefs.ts";
+  import Modal from "@/components/Modal.svelte";
 
   interface Props {
     /** Dismiss the modal — App flips its {#if} gate. */

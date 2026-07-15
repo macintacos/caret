@@ -3,7 +3,8 @@ import { readFileSync, statSync } from "node:fs";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { redactLogFiles, redactLogText, scrubString, scrubValue } from "../../src/redact/node.ts";
+
+import { redactLogFiles, redactLogText, scrubString, scrubValue } from "@/redact/node.ts";
 
 const home = homedir();
 

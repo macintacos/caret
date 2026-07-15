@@ -5,8 +5,8 @@
 // so the popover reads like the plan view's own code. Grammars load lazily and
 // cache; anything that can't highlight falls back to plain text. Never throws.
 
-import { caretDark, caretLight } from "../caret-theme.ts";
-import { createHighlighter } from "./shiki-bundle.ts";
+import { caretDark, caretLight } from "$lib/caret-theme.ts";
+import { createHighlighter } from "$lib/diffview/shiki-bundle.ts";
 
 type Highlighter = Awaited<ReturnType<typeof createHighlighter>>;
 

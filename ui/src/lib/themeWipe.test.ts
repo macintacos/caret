@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { ThemeId } from "./theme.ts";
-import { changeTheme } from "./themeWipe.ts";
+
+import type { ThemeId } from "$lib/theme.ts";
+import { changeTheme } from "$lib/themeWipe.ts";
 
 // changeTheme decides whether to wrap the theme swap in a View Transitions
 // "wipe" or apply it instantly. The decision is unit-testable through injected

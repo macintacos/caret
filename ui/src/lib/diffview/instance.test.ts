@@ -1,10 +1,11 @@
 import "../../../test-setup.ts";
 import { describe, expect, test } from "bun:test";
+
 import {
   createDiffViewLifecycle,
   type DiffViewInstance,
   type DiffViewSyncProps,
-} from "./instance.ts";
+} from "$lib/diffview/instance.ts";
 
 // The lifecycle contract under a recording fake factory: one instance per
 // content identity, option updates as full-replacement setOptions + rerender,

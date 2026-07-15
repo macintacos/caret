@@ -30,6 +30,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+
 import { type Hooks, type Plugin, tool } from "@opencode-ai/plugin";
 
 /** Install-time markers. The legacy file-deploy path substituted these with the

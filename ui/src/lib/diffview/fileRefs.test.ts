@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { buildFileRefLayer, type FileRefSpan } from "./fileRefs.ts";
+
+import { buildFileRefLayer, type FileRefSpan } from "$lib/diffview/fileRefs.ts";
 
 // buildFileRefLayer is the pure detection half of the filename-hover feature
 // (EXC-687): it scans a plan's display source for path-shaped tokens *inside
@@ -79,7 +80,12 @@ describe("exclusions", () => {
   });
 
   test("does not detect references inside a fenced code block", () => {
-    const text = ["```ts", "import x from './foo.ts'", "```", "but `foo.ts` in prose"].join("\n");
+    const text = [
+      "```ts",
+      "import x from '$lib/diffview/foo.ts'",
+      "```",
+      "but `foo.ts` in prose",
+    ].join("\n");
     const map = buildFileRefLayer(text);
     // The fenced lines (1–3) are skipped; only the prose line 4's code span scans.
     expect(map.has(2)).toBe(false);

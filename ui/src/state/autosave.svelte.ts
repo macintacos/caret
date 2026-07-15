@@ -7,9 +7,9 @@
 // the wrong review. Seeding is guarded twice over: the annotation copy reloads
 // on every id:version change, while the draft seeds on an id change only.
 
-import { putDraft } from "../lib/api.ts";
 import type { Annotation, ClientReview, PersistedScratch } from "@core/lib/types";
-import { isNetworkFailure } from "./resolve.svelte.ts";
+import { isNetworkFailure } from "@/state/resolve.svelte.ts";
+import { putDraft } from "$lib/api.ts";
 
 const SAVE_DEBOUNCE_MS = 500;
 

@@ -2,11 +2,11 @@
 // Claude's hook wire protocol — the PermissionRequest decision JSON on stdout —
 // and is the composition point the CLI selects to talk to the agent.
 
-import type { Decision, PlanInput } from "../../lib/types.ts";
-import type { AgentAdapter, InstallProbe } from "../adapter.ts";
-import { APPROVE_VARIANTS } from "./approve.ts";
-import { fatalDenyLine, toHookOutput } from "./feedback.ts";
-import { readClaudeInstallState } from "./install.ts";
+import type { AgentAdapter, InstallProbe } from "@/adapters/adapter.ts";
+import { APPROVE_VARIANTS } from "@/adapters/claude/approve.ts";
+import { fatalDenyLine, toHookOutput } from "@/adapters/claude/feedback.ts";
+import { readClaudeInstallState } from "@/adapters/claude/install.ts";
+import type { Decision, PlanInput } from "@/lib/types.ts";
 
 /** The shape of the PermissionRequest/ExitPlanMode hook stdin Claude Code pipes
  * to `caret review`. Every field is optional: a payload missing any of them

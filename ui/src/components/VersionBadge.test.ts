@@ -1,7 +1,9 @@
 import "../../test-mount.ts";
 import { describe, expect, test } from "bun:test";
+
+import VersionBadge from "@/components/VersionBadge.svelte";
+
 import { render } from "../../test-mount.ts";
-import VersionBadge from "./VersionBadge.svelte";
 
 describe("VersionBadge", () => {
   test("renders the version with the last 6 chars of the commit", () => {

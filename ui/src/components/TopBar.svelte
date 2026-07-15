@@ -1,18 +1,18 @@
 <script lang="ts">
-  import { approveLabel } from "../lib/approve.ts";
-  import { shortCwd } from "../lib/cwd.ts";
+  import { approveLabel } from "$lib/approve.ts";
+  import { shortCwd } from "$lib/cwd.ts";
   import type { ApproveVariant, ApproveVariantId, ClientReview } from "@core/lib/types";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
-  import DevBadge from "./DevBadge.svelte";
-  import Icon from "./Icon.svelte";
-  import NotifyBell from "./NotifyBell.svelte";
-  import ReviewSwitcher from "./ReviewSwitcher.svelte";
-  import SplitButton from "./SplitButton.svelte";
-  import VersionLabel from "./VersionLabel.svelte";
+  import DevBadge from "@/components/DevBadge.svelte";
+  import Icon from "@/components/Icon.svelte";
+  import NotifyBell from "@/components/NotifyBell.svelte";
+  import ReviewSwitcher from "@/components/ReviewSwitcher.svelte";
+  import SplitButton from "@/components/SplitButton.svelte";
+  import VersionLabel from "@/components/VersionLabel.svelte";
 
   interface Props {
     reviews: ClientReview[];

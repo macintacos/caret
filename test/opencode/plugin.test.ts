@@ -7,6 +7,9 @@
 // spawn runner (no real OpenCode, no real `caret review` process).
 
 import { expect, test } from "bun:test";
+
+import type { PluginInput, ToolContext } from "@opencode-ai/plugin";
+
 import {
   applyCaretConfig,
   approvedMessage,
@@ -22,7 +25,6 @@ import {
   runReviewViaCaret,
   type SpawnRunner,
 } from "../../opencode/caret.plugin.ts";
-import type { PluginInput, ToolContext } from "@opencode-ai/plugin";
 
 // --- buildEnvelope / planTitle ---
 

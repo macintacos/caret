@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { toWireDecision } from "../../../src/adapters/opencode/feedback.ts";
-import { opencodeAdapter } from "../../../src/adapters/opencode/index.ts";
-import type { Decision } from "../../../src/lib/types.ts";
+
+import { toWireDecision } from "@/adapters/opencode/feedback.ts";
+import { opencodeAdapter } from "@/adapters/opencode/index.ts";
+import type { Decision } from "@/lib/types.ts";
 
 test("emitDecision serializes a deny to the caret OpenCode decision JSON", () => {
   const decision: Decision = { behavior: "deny", feedback: "tighten scope", decidedAt: 1 };

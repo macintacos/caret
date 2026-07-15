@@ -7,12 +7,14 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { VERSION } from "../../src/lib/build-id.ts";
-import { httpHealth } from "../../src/daemon/client.ts";
-import { ensureDaemon } from "../../src/daemon/lifecycle.ts";
-import { createServer } from "../../src/daemon/server.ts";
-import { formatPlanMarkdown } from "../../src/plan/markdown.ts";
-import { createStore } from "../../src/review/store.ts";
+
+import { httpHealth } from "@/daemon/client.ts";
+import { ensureDaemon } from "@/daemon/lifecycle.ts";
+import { createServer } from "@/daemon/server.ts";
+import { VERSION } from "@/lib/build-id.ts";
+import { formatPlanMarkdown } from "@/plan/markdown.ts";
+import { createStore } from "@/review/store.ts";
+
 import { ndjsonRecords } from "../support/ndjson.ts";
 import { freePort } from "../support/net.ts";
 import { until } from "../support/poll.ts";

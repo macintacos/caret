@@ -4,6 +4,7 @@
 // `test/support/release-harness.ts`; each records mutating calls so we can assert
 // exactly what would (or would not) run.
 import { expect, test } from "bun:test";
+
 import type { ErrorCode } from "../../scripts/tasks/release/contract.ts";
 import {
   baseline,

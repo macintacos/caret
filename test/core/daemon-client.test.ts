@@ -4,7 +4,8 @@
 // the probe exercises the actual httpHealth fetch, with an injected sleep so no
 // real time passes.
 import { afterEach, expect, test } from "bun:test";
-import { waitForHealth } from "../../src/daemon/client.ts";
+
+import { waitForHealth } from "@/daemon/client.ts";
 
 const servers: Array<{ stop(): void }> = [];
 afterEach(() => {

@@ -7,7 +7,7 @@
 // absolutely-positioned button scrolls with the rows. The rect reader is injected
 // so the math unit-tests without real layout (happy-dom returns all-zero rects).
 
-import type { CodeBlockRange } from "./codeBlocks.ts";
+import type { CodeBlockRange } from "$lib/diffview/codeBlocks.ts";
 
 /** Reads an element's viewport rect. Injectable for tests. */
 export type RectReader = (el: HTMLElement) => {

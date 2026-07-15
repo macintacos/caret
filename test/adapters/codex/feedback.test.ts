@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { denyOutput, toHookOutput } from "../../../src/adapters/codex/feedback.ts";
+
+import { denyOutput, toHookOutput } from "@/adapters/codex/feedback.ts";
 
 test("plain approve emits behavior=allow with no escalation fields", () => {
   const out = toHookOutput({ behavior: "allow" });

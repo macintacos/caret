@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { browserOpenCmd } from "../../src/commands/review.ts";
+
+import { browserOpenCmd } from "@/commands/review.ts";
 
 // browserOpenCmd is the pure platform→argv selection extracted from openBrowser
 // so the branch choice is testable without spawning (the spawn-and-swallow stays

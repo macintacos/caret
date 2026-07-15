@@ -2,12 +2,13 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import {
   EXCERPT_HEAD_LINES,
   EXCERPT_RADIUS,
   readFileExcerpt,
   resolveFileInCwd,
-} from "../../src/plan/excerpt.ts";
+} from "@/plan/excerpt.ts";
 
 // plan-files.ts resolves a plan's filename reference to a real file *inside the
 // review's cwd* (the daemon's source of truth is the review record, never the

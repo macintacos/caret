@@ -5,7 +5,7 @@
 // auto mode. Keeping the declaration and the mapping colocated means the wire
 // tokens, button labels, and emitted permissions can't drift apart.
 
-import type { ApproveVariant } from "../../lib/types.ts";
+import type { ApproveVariant } from "@/lib/types.ts";
 
 /** The two Claude session modes an approve can switch into. The plain approve
  * (id "default") changes no mode, so it isn't a SetModeName. */

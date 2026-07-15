@@ -17,9 +17,11 @@
 // are real-browser behaviors that stay e2e per doc/agents/browser-testing.md.
 import "../../test-setup.ts";
 import { expect, test } from "bun:test";
-import { render } from "../../test-mount.ts";
+
 import { Button } from "$lib/components/ui/button/index.js";
-import DialogFixture from "./shadcn-dialog-fixture.svelte";
+import DialogFixture from "$lib/shadcn-dialog-fixture.svelte";
+
+import { render } from "../../test-mount.ts";
 
 /** Flush effects and advance timer ticks until `done()` holds (or a bounded
  * number of tries elapses) — bits-ui's portal/presence mounts its content on a

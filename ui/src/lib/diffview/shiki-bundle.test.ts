@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
+
 import { bundledLanguages as fullShikiBundle } from "shiki/bundle/full";
-import { bundledLanguages, bundledThemes } from "./shiki-bundle.ts";
+
+import { bundledLanguages, bundledThemes } from "$lib/diffview/shiki-bundle.ts";
 
 // EXC-665: caret bundles shiki's FULL grammar set, so every language an agent can
 // tag a fenced code block with highlights in the plan review UI — not just a

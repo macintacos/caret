@@ -1,9 +1,15 @@
 import "../../test-setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { type LogCapture, logCapture } from "../../test-helpers.ts";
-import { flush } from "../lib/log.ts";
+
 import type { ClientReview } from "@core/lib/types";
-import { createReviewSelection, type SelectionStore, startPolling } from "./polling.svelte.ts";
+import {
+  createReviewSelection,
+  type SelectionStore,
+  startPolling,
+} from "@/state/polling.svelte.ts";
+import { flush } from "$lib/log.ts";
+
+import { type LogCapture, logCapture } from "../../test-helpers.ts";
 
 // Shared URL-routing fetch double (test-helpers.ts): /api/logs POSTs are
 // captured; the review/health endpoints answer from the per-test `respond`.

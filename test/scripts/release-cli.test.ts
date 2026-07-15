@@ -14,6 +14,7 @@
 // error into JSON-on-stdout.
 
 import { describe, expect, test } from "bun:test";
+
 import { buildReleaseCommand } from "../../scripts/tasks/release/command.ts";
 import type { Deps } from "../../scripts/tasks/release/steps.ts";
 import { makeReleaseHarness } from "../support/release-harness.ts";

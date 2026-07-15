@@ -1,9 +1,6 @@
 import { expect, test } from "bun:test";
-import {
-  denyDecision,
-  fatalDenyLine,
-  toWireDecision,
-} from "../../../src/adapters/opencode/feedback.ts";
+
+import { denyDecision, fatalDenyLine, toWireDecision } from "@/adapters/opencode/feedback.ts";
 
 test("plain approve emits behavior=allow with no extra fields", () => {
   expect(toWireDecision({ behavior: "allow" })).toEqual({ behavior: "allow" });

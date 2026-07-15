@@ -1,10 +1,12 @@
 import "../../../test-mount.ts";
 import { describe, expect, test } from "bun:test";
+
+import SourceView from "$lib/diffview/SourceView.svelte";
+import type { SourceDocument, SourceViewOptions } from "$lib/diffview/types.ts";
+
 import { until } from "../../../../test/support/poll.ts";
 import { render } from "../../../test-mount.ts";
 import { reactiveProps } from "../../../test-props.svelte.ts";
-import SourceView from "./SourceView.svelte";
-import type { SourceDocument, SourceViewOptions } from "./types.ts";
 
 // Mounts the real library under happy-dom: @pierre/diffs renders into a
 // shadow root attached to the wrapper's container div, so these assertions

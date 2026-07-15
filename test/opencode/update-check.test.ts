@@ -6,7 +6,9 @@
 // through injected env / fetch / file-read / client — no network, no real files.
 
 import { expect, test } from "bun:test";
+
 import type { PluginInput } from "@opencode-ai/plugin";
+
 import {
   createCaretPlugin,
   isNewer,

@@ -11,7 +11,8 @@
 // highlighters use the same pure-JS regex engine, so this duplicates a theme
 // registration, never the WASM engine.
 import { registerCustomTheme } from "@pierre/diffs";
-import { caretDark, caretLight } from "../caret-theme.ts";
+
+import { caretDark, caretLight } from "$lib/caret-theme.ts";
 
 /** Registers a named theme into the library's shared highlighter. Derived from
  * the library's own signature so the loader's resolved theme type stays in

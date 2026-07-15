@@ -1,9 +1,11 @@
 import "../../test-mount.ts";
 
 import { describe, expect, test } from "bun:test";
+
+import SettingsDialog from "@/components/SettingsDialog.svelte";
+import { THEMES } from "$lib/theme.ts";
+
 import { flushUntil, render } from "../../test-mount.ts";
-import { THEMES } from "../lib/theme.ts";
-import SettingsDialog from "./SettingsDialog.svelte";
 
 const baseProps = {
   current: "caret-dark" as const,

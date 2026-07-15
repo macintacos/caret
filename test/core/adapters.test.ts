@@ -5,8 +5,9 @@
 // test/adapters/claude/, not here (test-layout: no agent vocabulary in core).
 
 import { afterEach, expect, test } from "bun:test";
-import type { AgentAdapter } from "../../src/adapters/adapter.ts";
-import { agentIds, DEFAULT_AGENT, fatalDeny, selectAdapter } from "../../src/adapters/index.ts";
+
+import type { AgentAdapter } from "@/adapters/adapter.ts";
+import { agentIds, DEFAULT_AGENT, fatalDeny, selectAdapter } from "@/adapters/index.ts";
 
 // A second registered id proves selection resolves more than one adapter. The id
 // is a registry key, not agent wire vocabulary, so it stays clear of the

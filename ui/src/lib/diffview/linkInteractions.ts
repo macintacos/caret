@@ -6,8 +6,8 @@
 // line number, so this stays correct as the library virtualizes rows in and
 // out. The URL-open effect is injected so the layer is unit-testable.
 
-import type { FileRefSpan, FileRefSpanMap } from "./fileRefs.ts";
-import type { LinkSpan, LinkSpanMap } from "./links.ts";
+import type { FileRefSpan, FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
+import type { LinkSpan, LinkSpanMap } from "$lib/diffview/links.ts";
 
 /** The slice of @pierre/diffs' TokenEventBase the click handler reads. */
 interface TokenClickProps {

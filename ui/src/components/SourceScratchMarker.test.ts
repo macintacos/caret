@@ -1,7 +1,9 @@
 import "../../test-mount.ts";
 import { describe, expect, test } from "bun:test";
+
+import SourceScratchMarker from "@/components/SourceScratchMarker.svelte";
+
 import { render } from "../../test-mount.ts";
-import SourceScratchMarker from "./SourceScratchMarker.svelte";
 
 // SourceScratchMarker is the quiet, pre-card line affordance for a retained but
 // unsubmitted composer draft (a "scratch"). Clicking it resumes the composer

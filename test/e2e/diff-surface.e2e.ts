@@ -6,6 +6,7 @@
 // with no scroll reset.
 
 import type { Locator, Page } from "@playwright/test";
+
 import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
 
 // A plan tall enough to scroll the source view past one viewport.

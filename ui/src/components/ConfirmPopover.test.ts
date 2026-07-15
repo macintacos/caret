@@ -1,8 +1,10 @@
 import "../../test-mount.ts";
 
 import { describe, expect, test } from "bun:test";
+
+import ConfirmPopover from "@/components/ConfirmPopover.svelte";
+
 import { render } from "../../test-mount.ts";
-import ConfirmPopover from "./ConfirmPopover.svelte";
 
 const baseProps = {
   question: "Discard this comment?",

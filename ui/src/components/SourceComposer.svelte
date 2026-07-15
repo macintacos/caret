@@ -17,10 +17,10 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import { Card } from "$lib/components/ui/card/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
-  import { rangeLabel } from "../lib/diffview/commenting.ts";
-  import ConfirmPopover from "./ConfirmPopover.svelte";
-  import Icon from "./Icon.svelte";
-  import MarkdownEditor from "./MarkdownEditor.svelte";
+  import { rangeLabel } from "$lib/diffview/commenting.ts";
+  import ConfirmPopover from "@/components/ConfirmPopover.svelte";
+  import Icon from "@/components/Icon.svelte";
+  import MarkdownEditor from "@/components/MarkdownEditor.svelte";
 
   interface Props {
     /** First annotated line (1-based, inclusive). */

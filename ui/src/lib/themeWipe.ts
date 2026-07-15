@@ -8,7 +8,7 @@
 // for reduced motion, get an instant swap. The decision is behind injected deps
 // so it is unit-testable without a real browser (see themeWipe.test.ts).
 
-import { applyTheme, type ThemeId } from "./theme.ts";
+import { applyTheme, type ThemeId } from "$lib/theme.ts";
 
 /** A page whose View Transitions support we probe without hard-typing the API
  * (it isn't in every TS DOM lib). */

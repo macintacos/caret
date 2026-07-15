@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { stripTitleLinks } from "./title.ts";
+
+import { stripTitleLinks } from "$lib/title.ts";
 
 describe("stripTitleLinks", () => {
   test("leaves a link-free title unchanged", () => {

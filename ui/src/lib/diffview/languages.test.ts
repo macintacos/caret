@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { scanFenceLanguages } from "./languages.ts";
+
+import { scanFenceLanguages } from "$lib/diffview/languages.ts";
 
 // scanFenceLanguages is the gate between an agent's free-form fence tags and the
 // shiki grammar bundle: only canonical, bundled grammar names should reach the

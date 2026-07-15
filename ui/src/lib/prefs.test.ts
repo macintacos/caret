@@ -1,7 +1,8 @@
 import "../../test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
-import { DIFF_INDICATORS_KEY } from "./diffIndicatorsPref.ts";
-import { DIFF_STYLE_KEY } from "./diffStylePref.ts";
+
+import { DIFF_INDICATORS_KEY } from "$lib/diffIndicatorsPref.ts";
+import { DIFF_STYLE_KEY } from "$lib/diffStylePref.ts";
 import {
   clearKnownPrefs,
   freshResetApplied,
@@ -11,8 +12,8 @@ import {
   markOnboarded,
   ONBOARDED_KEY,
   shouldShowOnboarding,
-} from "./prefs.ts";
-import { THEME_KEY } from "./theme.ts";
+} from "$lib/prefs.ts";
+import { THEME_KEY } from "$lib/theme.ts";
 
 afterEach(() => {
   localStorage.clear();

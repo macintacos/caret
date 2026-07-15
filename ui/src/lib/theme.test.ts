@@ -1,5 +1,6 @@
 import "../../test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
+
 import {
   applyTheme,
   DEFAULT_THEME_ID,
@@ -8,7 +9,7 @@ import {
   THEME_KEY,
   THEMES,
   type ThemeId,
-} from "./theme.ts";
+} from "$lib/theme.ts";
 
 afterEach(() => {
   localStorage.clear();

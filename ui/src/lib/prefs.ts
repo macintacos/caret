@@ -9,9 +9,9 @@
 // Read/write are fail-safe like enumLocalStoragePref.ts: a blocked or unavailable
 // localStorage degrades rather than throwing.
 
-import { DIFF_INDICATORS_KEY } from "./diffIndicatorsPref.ts";
-import { DIFF_STYLE_KEY } from "./diffStylePref.ts";
-import { THEME_KEY } from "./theme.ts";
+import { DIFF_INDICATORS_KEY } from "$lib/diffIndicatorsPref.ts";
+import { DIFF_STYLE_KEY } from "$lib/diffStylePref.ts";
+import { THEME_KEY } from "$lib/theme.ts";
 
 /** localStorage key: has the first-run onboarding been seen (dismissed or acted on). */
 export const ONBOARDED_KEY = "caret.onboarded";

@@ -5,7 +5,9 @@
 // Imported as ../../test-mount.ts by the component tests.
 import "./test-setup.ts";
 import { afterEach } from "bun:test";
+
 import { type Component, flushSync, mount, unmount } from "svelte";
+
 import { assertSvelteClientRuntime } from "./svelte-runtime-guard.ts";
 
 // Guard the bare-invocation footgun before any component mounts: only this

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import type { JsonArgs } from "../../scripts/preflight.ts";
 import {
   buildBinArtifacts,
@@ -9,7 +10,7 @@ import {
   ensureUi,
   shouldBuildUi,
 } from "../../scripts/tasks/build.ts";
-import { type TaskActions, buildProgram } from "../../scripts/tasks/cli.ts";
+import { buildProgram, type TaskActions } from "../../scripts/tasks/cli.ts";
 import type { RunDevOptions } from "../../scripts/tasks/dev/run.ts";
 import { formatCommand } from "../../scripts/tasks/format.ts";
 import { lintCommand } from "../../scripts/tasks/lint.ts";

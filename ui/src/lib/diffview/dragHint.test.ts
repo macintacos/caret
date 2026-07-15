@@ -1,6 +1,7 @@
 import "../../../test-setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
-import { dismissDragHint, isDragHintDismissed } from "./dragHint.ts";
+
+import { dismissDragHint, isDragHintDismissed } from "$lib/diffview/dragHint.ts";
 
 // The drag-to-comment hint shows once, then stays dismissed across loads. The
 // persistence is a pure localStorage seam (the view owns when to render it), so

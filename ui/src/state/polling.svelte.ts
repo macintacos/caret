@@ -8,10 +8,10 @@
 // resolve. The working-copy reload is driven reactively off the derived active
 // review (App.svelte), not from here.
 
-import { getHealth, listReviews } from "../lib/api.ts";
-import { uiLog } from "../lib/log.ts";
 import type { ClientReview, HealthIdentity } from "@core/lib/types";
-import { deepLinkId, setUrl } from "./deepLink.ts";
+import { deepLinkId, setUrl } from "@/state/deepLink.ts";
+import { getHealth, listReviews } from "$lib/api.ts";
+import { uiLog } from "$lib/log.ts";
 
 // Re-check the daemon's identity every Nth successful poll: a same-port
 // takeover by a newer build can complete between 2s polls without a single
