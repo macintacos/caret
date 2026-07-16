@@ -126,8 +126,9 @@
   {/if}
 
   <!-- Always-visible permission badge + settings, pinned right in both layouts:
-       when a review is active `.context` (flex: 1) eats the slack; with no
-       review the slot's own margin-left pushes it right. -->
+       when a review is active `.actions`'s margin-left:auto eats the slack and
+       carries this cluster right with it; with no review the slot's own
+       margin-left pushes it right. -->
   <div class="bell-slot">
     <NotifyBell />
     <Button variant="secondary" size="icon" class="settings float-chip" aria-label="Settings" onclick={onOpenSettings}>
@@ -180,8 +181,9 @@
   .actions.busy {
     pointer-events: none;
   }
-  /* Pins the bell + settings cluster to the right edge when no review is active
-     (`.context`'s flex:1 handles the active layout; here auto resolves to 0). */
+  /* Pins the bell + settings cluster to the right edge when no review is active;
+     when active, `.actions`'s margin-left:auto eats the slack and this margin
+     resolves to 0. */
   .bell-slot {
     display: inline-flex;
     align-items: center;
