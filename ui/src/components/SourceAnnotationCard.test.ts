@@ -42,6 +42,15 @@ function chord(root: ParentNode, key: string, mods: Partial<KeyboardEventInit> =
   );
 }
 
+// The second-stage Escape lands on the composer card itself (target === the card),
+// which is how onCardKeydown distinguishes it from an Escape bubbling up from the
+// still-focused editor.
+function escapeCard(root: ParentNode): void {
+  (root.querySelector("[role='dialog']") as HTMLElement).dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+  );
+}
+
 function base(over: Record<string, unknown> = {}) {
   return {
     annotation,
@@ -364,7 +373,7 @@ describe("SourceAnnotationCard edit/delete", () => {
     expect(called).toBe(false);
   });
 
-  test("Escape cancels the edit without saving", () => {
+  test("Escape blurs the field first, keeping the editor open and unsaved", () => {
     let called = false;
     const { target, flush } = render(
       SourceAnnotationCard,
@@ -372,10 +381,29 @@ describe("SourceAnnotationCard edit/delete", () => {
     );
     click(target, ".edit");
     flush();
-    setEditorText(target, "discarded");
+    setEditorText(target, "changed");
+    // First Escape (from the editor) blurs without dismissing: still editing, and
+    // nothing saved yet.
     chord(target, "Escape");
     flush();
     expect(called).toBe(false);
+    expect(target.querySelector(".cm-content")).not.toBeNull();
+  });
+
+  test("a second Escape (on the card) saves the edit and closes", () => {
+    const edited = capture<{ id: string; comment: string }>();
+    const { target, flush } = render(
+      SourceAnnotationCard,
+      base({ focused: true, onEdit: (id: string, comment: string) => edited.cb({ id, comment }) }),
+    );
+    click(target, ".edit");
+    flush();
+    setEditorText(target, "saved via escape");
+    chord(target, "Escape"); // blur into the card
+    flush();
+    escapeCard(target); // dismiss: for an edit that commits the current text
+    flush();
+    expect(edited.last()).toEqual({ id: "a1", comment: "saved via escape" });
     expect(target.querySelector(".cm-content")).toBeNull();
   });
 });

@@ -420,6 +420,70 @@ test("Tab indents every line of a multi-line selection", async ({ daemon, page }
     .toBe("Head\n    one\n    two");
 });
 
+test("Escape blurs the edit editor, then a second Escape saves the change", async ({
+  daemon,
+  page,
+}) => {
+  // Two-stage Escape: the first press unfocuses the field (still editing, nothing
+  // saved); the second — now on the composer card — commits the edit, the way
+  // clicking away would.
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "original" }],
+  });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+
+  const card = page.locator("[data-annotation-card]");
+  await card.getByRole("button", { name: "Edit" }).click();
+  const editor = card.locator(".cm-editor");
+  await expect(editor.and(page.locator(".cm-focused"))).toBeVisible();
+  await waitPastSafeModeGrace(page);
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.type("revised");
+
+  await page.keyboard.press("Escape");
+  await expect(card.locator(".cm-editor.cm-focused")).toHaveCount(0);
+  await expect(editor).toBeVisible(); // still editing, not dismissed
+  expect((await daemon.getReview(id)).body?.annotations?.[0]?.comment).toBe("original");
+
+  await page.keyboard.press("Escape");
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.[0]?.comment)
+    .toBe("revised");
+});
+
+test("Escape blurs the composer, then a second Escape keeps the draft", async ({
+  daemon,
+  page,
+}) => {
+  // In create mode the second Escape keeps the draft for later (a resumable
+  // scratch) rather than discarding it — the non-destructive "clicked away" path.
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const plus = await revealGutterPlus(page, 3);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer.locator(".cm-editor")).toBeVisible();
+  await page.keyboard.type("keep me for later");
+
+  await page.keyboard.press("Escape");
+  await expect(composer.locator(".cm-editor.cm-focused")).toHaveCount(0);
+  await expect(composer).toBeVisible(); // still open, not dismissed
+
+  await page.keyboard.press("Escape");
+  await expect(composer).toHaveCount(0); // dismissed
+  await expect(page.getByRole("button", { name: "Resume unsent comment" })).toBeVisible();
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.composerScratches?.length ?? 0)
+    .toBe(1);
+});
+
 test("typing in a composer opened while another is open keeps the caret in place (EXC-780)", async ({
   daemon,
   page,
@@ -761,7 +825,10 @@ test("dismissing the composer clears the line-selection highlight", async ({ dae
   await expect(composer).toBeVisible();
   expect(await selectedLineCount()).toBeGreaterThan(0);
 
+  // Two-stage Escape: the first blurs the field into the card, the second
+  // dismisses the (empty) composer.
   await composerInput(composer).press("Escape");
+  await page.keyboard.press("Escape");
   await expect(composer).toHaveCount(0);
 
   await expect.poll(selectedLineCount).toBe(0);
@@ -1059,7 +1126,10 @@ test("dismissing an empty composer with Escape leaves no residue", async ({ daem
 
   const composer = page.getByRole("dialog", { name: "Add a comment" });
   await expect(composer).toBeVisible();
+  // Two-stage Escape: the first blurs into the card, the second dismisses. An
+  // empty box has nothing to keep, so dismissing leaves no residue.
   await composerInput(composer).press("Escape");
+  await page.keyboard.press("Escape");
 
   // The composer is gone, no scratch marker appears, and nothing was persisted.
   await expect(composer).toHaveCount(0);
@@ -1106,34 +1176,6 @@ test("Keep for later retains a returnable Resume marker", async ({ daemon, page 
   // Nothing is persisted — a scratch is in-memory only, not a created annotation.
   await expect
     .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
-    .toBe(0);
-});
-
-test("Escape discards a typed draft, leaving no Resume marker", async ({ daemon, page }) => {
-  // Esc is discard, not stash: a typed draft dismissed with Escape drops
-  // entirely — no Resume marker, nothing persisted. Keeping a draft for later (a
-  // returnable marker) is the separate, explicit "Keep for later" button.
-  const id = await daemon.seed();
-  await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
-  await waitPastSafeModeGrace(page);
-
-  const plus = await revealGutterPlus(page, 3);
-  await plus.click();
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
-  await composerInput(composer).fill("abandon this draft");
-  await composerInput(composer).click();
-  await page.keyboard.press("Escape");
-  // A typed draft can't be un-discarded, so Escape now asks to confirm first
-  // (EXC-749); confirm to drop it.
-  await page.locator(".confirm-popover .confirm").click();
-
-  // The composer closes with no scratch marker, and nothing was persisted.
-  await expect(composer).toHaveCount(0);
-  await expect(scratchMarker(page)).toHaveCount(0);
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.composerScratches?.length ?? 0)
     .toBe(0);
 });
 
