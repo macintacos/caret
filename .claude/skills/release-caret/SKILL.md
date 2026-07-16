@@ -243,6 +243,27 @@ the categories — the changelog already carries that detail). `finalize` prepen
 the changelog notes and reflows the whole body, so the GitHub Release opens with a
 readable summary. Pass it verbatim through `--summary`.
 
+Write it tight and direct, the way the changelog entries themselves read. Lead with
+`caret <version>` and a plain verb for what the release does — *adds*, *ships*, *fixes* —
+then name the headline changes concretely, by what they are and what they now do. If a
+second batch of changes is worth calling out, attach it as a second sentence stated just
+as plainly (`It also …: a, b, c`); where a change's point isn't self-evident, pin it with
+an em-dash or a `so` clause. Keep the register even and professional — the summary reports
+what shipped, so it needs no launch framing to sell it. The release *theme* belongs in the
+title; keep it — and any metaphor or filler clause written only to sound like an
+announcement — out of the summary prose.
+
+Given the v0.5.0 changelog, this reads in the right register:
+
+> caret 0.5.0 adds first-run onboarding, a notification bell that flags a waiting plan and
+> clears once you open it, and a confirmation step before you approve. It also polishes
+> the review surface: steadier hover previews, a refined inline comment card, warmer
+> light-theme greys, and room to scroll past the end of a plan.
+
+The wordier alternative — opening on a metaphor ("rolls out the welcome mat") and closing
+on a frame that carries no information ("a round of polish … rounds it out") — is what to
+avoid.
+
 Provided the dry-run probe returned `ok: true`, run:
 
 ```sh
