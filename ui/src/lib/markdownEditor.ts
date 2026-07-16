@@ -5,11 +5,17 @@
 // the editor engine means replacing this file and the component together; the
 // composer, the annotation-card edit field, and the saved-comment render path
 // stay untouched.
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import {
+  defaultKeymap,
+  history,
+  historyKeymap,
+  indentLess,
+  indentMore,
+} from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
-import { HighlightStyle, syntaxHighlighting, syntaxTree } from "@codemirror/language";
+import { HighlightStyle, indentUnit, syntaxHighlighting, syntaxTree } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
-import { type Extension, Prec, type Range } from "@codemirror/state";
+import { type EditorState, type Extension, Prec, type Range } from "@codemirror/state";
 import {
   Decoration,
   type DecorationSet,
@@ -189,6 +195,45 @@ const theme = EditorView.theme({
   },
 });
 
+// One indent level. Four spaces so a list nest (indentMore, which reads this
+// facet) and the "just enter four spaces" fallback below are the same width.
+const INDENT_UNIT = "    ";
+
+// A list-item line: optional leading indent, then a bullet (-, *, +) or an
+// ordered marker (1. / 1)), then whitespace. When the cursor is on such a line,
+// Tab nests the item; anywhere else it inserts literal spaces. (Wrapped
+// continuation lines of a list item — rare in a review comment — are treated as
+// non-list and get spaces.)
+const LIST_LINE = /^\s*(?:[-*+]|\d+[.)])\s/;
+
+/** Whether any selection head sits on a markdown list-item line — the signal for
+ * Tab to nest the item rather than insert spaces. Exported for unit tests. */
+export function cursorInList(state: EditorState): boolean {
+  return state.selection.ranges.some((range) => LIST_LINE.test(state.doc.lineAt(range.head).text));
+}
+
+// Tab indents (indentMore, using the four-space indentUnit) when there is a
+// selection — every line the selection touches shifts one level right, so
+// highlighting several lines and pressing Tab indents them all — or when an empty
+// cursor sits in a list (nesting that item). An empty cursor outside a list just
+// inserts four literal spaces. Shift-Tab outdents so an indent can come back out.
+// Capturing Tab means it no longer tabs focus out of the editor — a deliberate
+// trade for in-field list editing; Esc still dismisses the composer.
+const indentKeymap = keymap.of([
+  {
+    key: "Tab",
+    run: (view) => {
+      const { state } = view;
+      if (state.selection.ranges.some((range) => !range.empty) || cursorInList(state)) {
+        return indentMore(view);
+      }
+      view.dispatch(state.replaceSelection(INDENT_UNIT));
+      return true;
+    },
+    shift: indentLess,
+  },
+]);
+
 /** The extension stack for a comment-composer markdown editor. */
 export function markdownExtensions(opts: MarkdownEditorOptions): Extension[] {
   return [
@@ -200,6 +245,7 @@ export function markdownExtensions(opts: MarkdownEditorOptions): Extension[] {
     syntaxHighlighting(highlightStyle),
     codeHighlighter,
     EditorView.lineWrapping,
+    indentUnit.of(INDENT_UNIT),
     placeholder(opts.placeholder),
     opts.ariaLabel ? EditorView.contentAttributes.of({ "aria-label": opts.ariaLabel }) : [],
     // Chords first, so Esc/⌘-Enter are intercepted before default keys.
@@ -220,6 +266,8 @@ export function markdownExtensions(opts: MarkdownEditorOptions): Extension[] {
         },
       }),
     ),
+    // Tab indent/outdent, before the default keymap (which leaves Tab unbound).
+    indentKeymap,
     keymap.of([...defaultKeymap, ...historyKeymap]),
     theme,
     EditorView.updateListener.of((u) => {

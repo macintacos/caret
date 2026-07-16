@@ -42,6 +42,15 @@ function chord(root: ParentNode, key: string, mods: Partial<KeyboardEventInit> =
   );
 }
 
+// The second-stage Escape lands on the composer card itself (target === the card),
+// which is how onCardKeydown distinguishes it from an Escape bubbling up from the
+// still-focused editor.
+function escapeCard(root: ParentNode): void {
+  (root.querySelector("[role='dialog']") as HTMLElement).dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+  );
+}
+
 function base(over: Record<string, unknown> = {}) {
   return {
     annotation,
@@ -57,11 +66,45 @@ describe("SourceAnnotationCard collapse", () => {
   test("renders collapsed (a chip) when not focused", () => {
     const { target } = render(SourceAnnotationCard, base({ focused: false }));
     expect(target.querySelector(".chip")).not.toBeNull();
-    // Collapsed: no expanded actions, and the one-line preview stands in for the
-    // body (which stays mounted at row height 0 for the grid reveal).
+    // Collapsed: the one-line preview stands in for the body (which stays mounted
+    // at row height 0 for the grid reveal), and the Edit / Discard actions are
+    // reachable without expanding first.
     expect(target.querySelector(".card.expanded")).toBeNull();
-    expect(target.querySelector(".actions")).toBeNull();
     expect(target.querySelector(".preview")).not.toBeNull();
+    expect(target.querySelector(".actions")).not.toBeNull();
+  });
+
+  test("a collapsed card exposes Edit and Discard without expanding", () => {
+    const { target } = render(SourceAnnotationCard, base({ focused: false }));
+    expect(target.querySelector(".card.expanded")).toBeNull();
+    expect(target.querySelector(".actions .edit")).not.toBeNull();
+    expect(target.querySelector(".actions .danger")).not.toBeNull();
+  });
+
+  test("Edit from a collapsed card opens the editor and expands it", () => {
+    const { target, flush } = render(SourceAnnotationCard, base({ focused: false }));
+    click(target, ".edit");
+    flush();
+    expect(target.querySelector(".cm-content")).not.toBeNull();
+    expect(target.querySelector(".card.expanded")).not.toBeNull();
+  });
+
+  test("Discard from a collapsed card confirms, then deletes via the shared path", () => {
+    const deleted = capture<string>();
+    const { target, flush } = render(
+      SourceAnnotationCard,
+      base({ focused: false, onDelete: deleted.cb }),
+    );
+    // Same confirm bubble and code path as the expanded Discard: nothing deleted
+    // until the reviewer confirms, and the card never has to expand first.
+    click(target, ".danger");
+    flush();
+    expect(document.querySelector(".confirm-popover")).not.toBeNull();
+    expect(deleted.last()).toBeUndefined();
+    clickDoc(".confirm-popover .confirm");
+    flush();
+    expect(deleted.last()).toBe("a1");
+    expect(target.querySelector(".card.expanded")).toBeNull();
   });
 
   test("renders expanded when focused", () => {
@@ -266,6 +309,16 @@ describe("SourceAnnotationCard edit/delete", () => {
     expect(document.querySelector(".confirm-popover")).toBeNull();
   });
 
+  test("Discard renders as a trash icon with an accessible label", () => {
+    const { target } = render(SourceAnnotationCard, base({ focused: true }));
+    const discard = target.querySelector(".actions .danger");
+    // The word "Discard" is gone; the affordance is the trash icon plus a label
+    // that keeps the control named for assistive tech.
+    expect(discard?.getAttribute("aria-label")).toBe("Discard comment");
+    expect(discard?.querySelector("svg")).not.toBeNull();
+    expect(discard?.textContent?.trim()).toBe("");
+  });
+
   test("edit opens the editor seeded with the current comment", () => {
     const { target, flush } = render(SourceAnnotationCard, base({ focused: true }));
     click(target, ".edit");
@@ -330,7 +383,7 @@ describe("SourceAnnotationCard edit/delete", () => {
     expect(called).toBe(false);
   });
 
-  test("Escape cancels the edit without saving", () => {
+  test("Escape blurs the field first, keeping the editor open and unsaved", () => {
     let called = false;
     const { target, flush } = render(
       SourceAnnotationCard,
@@ -338,10 +391,29 @@ describe("SourceAnnotationCard edit/delete", () => {
     );
     click(target, ".edit");
     flush();
-    setEditorText(target, "discarded");
+    setEditorText(target, "changed");
+    // First Escape (from the editor) blurs without dismissing: still editing, and
+    // nothing saved yet.
     chord(target, "Escape");
     flush();
     expect(called).toBe(false);
+    expect(target.querySelector(".cm-content")).not.toBeNull();
+  });
+
+  test("a second Escape (on the card) saves the edit and closes", () => {
+    const edited = capture<{ id: string; comment: string }>();
+    const { target, flush } = render(
+      SourceAnnotationCard,
+      base({ focused: true, onEdit: (id: string, comment: string) => edited.cb({ id, comment }) }),
+    );
+    click(target, ".edit");
+    flush();
+    setEditorText(target, "saved via escape");
+    chord(target, "Escape"); // blur into the card
+    flush();
+    escapeCard(target); // dismiss: for an edit that commits the current text
+    flush();
+    expect(edited.last()).toEqual({ id: "a1", comment: "saved via escape" });
     expect(target.querySelector(".cm-content")).toBeNull();
   });
 });

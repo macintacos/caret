@@ -341,6 +341,149 @@ test("creating a single-line annotation from the gutter persists it line-anchore
   expect(ann).toMatchObject({ startLine: 3, endLine: 3, comment: "Quantify the cold cost here." });
 });
 
+test("Tab nests the current list item in the comment composer", async ({ daemon, page }) => {
+  // Tab on a list line runs indentMore against the four-space indentUnit, so the
+  // marker shifts one level right (a nested list item), rather than tabbing focus
+  // out of the editor. The item follows a first line so submit's trim (which
+  // strips only the whole-comment edges) can't hide the indent.
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const plus = await revealGutterPlus(page, 3);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer.locator(".cm-editor")).toBeVisible();
+  await page.keyboard.type("Note");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("- item");
+  await page.keyboard.press("Tab");
+  await composer.getByRole("button", { name: "Comment" }).click();
+
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.[0]?.comment)
+    .toBe("Note\n    - item");
+});
+
+test("Tab inserts four spaces outside a list in the comment composer", async ({ daemon, page }) => {
+  // Off a list line Tab inserts four literal spaces at the cursor (the "just
+  // enter four spaces" fallback), still without moving focus out of the editor.
+  // Text on both sides keeps the run off the whole-comment edges submit trims.
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const plus = await revealGutterPlus(page, 3);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer.locator(".cm-editor")).toBeVisible();
+  await page.keyboard.type("a");
+  await page.keyboard.press("Tab");
+  await page.keyboard.type("b");
+  await composer.getByRole("button", { name: "Comment" }).click();
+
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.[0]?.comment)
+    .toBe("a    b");
+});
+
+test("Tab indents every line of a multi-line selection", async ({ daemon, page }) => {
+  // Highlighting several lines and pressing Tab indents them all (indentMore over
+  // the selection) rather than replacing the highlight with a single tab. A
+  // leading unselected line keeps the indented block off the trimmed edges.
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const plus = await revealGutterPlus(page, 3);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer.locator(".cm-editor")).toBeVisible();
+  await page.keyboard.type("Head");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("one");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("two");
+  // Select up from the end of "two" into "one" — a two-line highlight.
+  await page.keyboard.press("Shift+ArrowUp");
+  await page.keyboard.press("Tab");
+  await composer.getByRole("button", { name: "Comment" }).click();
+
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.[0]?.comment)
+    .toBe("Head\n    one\n    two");
+});
+
+test("Escape blurs the edit editor, then a second Escape saves the change", async ({
+  daemon,
+  page,
+}) => {
+  // Two-stage Escape: the first press unfocuses the field (still editing, nothing
+  // saved); the second — now on the composer card — commits the edit, the way
+  // clicking away would.
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "original" }],
+  });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+
+  const card = page.locator("[data-annotation-card]");
+  await card.getByRole("button", { name: "Edit" }).click();
+  const editor = card.locator(".cm-editor");
+  await expect(editor.and(page.locator(".cm-focused"))).toBeVisible();
+  await waitPastSafeModeGrace(page);
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.type("revised");
+
+  await page.keyboard.press("Escape");
+  await expect(card.locator(".cm-editor.cm-focused")).toHaveCount(0);
+  await expect(editor).toBeVisible(); // still editing, not dismissed
+  expect((await daemon.getReview(id)).body?.annotations?.[0]?.comment).toBe("original");
+
+  await page.keyboard.press("Escape");
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.[0]?.comment)
+    .toBe("revised");
+});
+
+test("Escape blurs the composer, then a second Escape keeps the draft", async ({
+  daemon,
+  page,
+}) => {
+  // In create mode the second Escape keeps the draft for later (a resumable
+  // scratch) rather than discarding it — the non-destructive "clicked away" path.
+  const id = await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const plus = await revealGutterPlus(page, 3);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer.locator(".cm-editor")).toBeVisible();
+  await page.keyboard.type("keep me for later");
+
+  await page.keyboard.press("Escape");
+  await expect(composer.locator(".cm-editor.cm-focused")).toHaveCount(0);
+  await expect(composer).toBeVisible(); // still open, not dismissed
+
+  await page.keyboard.press("Escape");
+  await expect(composer).toHaveCount(0); // dismissed
+  await expect(page.getByRole("button", { name: "Resume unsent comment" })).toBeVisible();
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.composerScratches?.length ?? 0)
+    .toBe(1);
+});
+
 test("typing in a composer opened while another is open keeps the caret in place (EXC-780)", async ({
   daemon,
   page,
@@ -682,7 +825,10 @@ test("dismissing the composer clears the line-selection highlight", async ({ dae
   await expect(composer).toBeVisible();
   expect(await selectedLineCount()).toBeGreaterThan(0);
 
+  // Two-stage Escape: the first blurs the field into the card, the second
+  // dismisses the (empty) composer.
   await composerInput(composer).press("Escape");
+  await page.keyboard.press("Escape");
   await expect(composer).toHaveCount(0);
 
   await expect.poll(selectedLineCount).toBe(0);
@@ -980,7 +1126,10 @@ test("dismissing an empty composer with Escape leaves no residue", async ({ daem
 
   const composer = page.getByRole("dialog", { name: "Add a comment" });
   await expect(composer).toBeVisible();
+  // Two-stage Escape: the first blurs into the card, the second dismisses. An
+  // empty box has nothing to keep, so dismissing leaves no residue.
   await composerInput(composer).press("Escape");
+  await page.keyboard.press("Escape");
 
   // The composer is gone, no scratch marker appears, and nothing was persisted.
   await expect(composer).toHaveCount(0);
@@ -1027,34 +1176,6 @@ test("Keep for later retains a returnable Resume marker", async ({ daemon, page 
   // Nothing is persisted — a scratch is in-memory only, not a created annotation.
   await expect
     .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
-    .toBe(0);
-});
-
-test("Escape discards a typed draft, leaving no Resume marker", async ({ daemon, page }) => {
-  // Esc is discard, not stash: a typed draft dismissed with Escape drops
-  // entirely — no Resume marker, nothing persisted. Keeping a draft for later (a
-  // returnable marker) is the separate, explicit "Keep for later" button.
-  const id = await daemon.seed();
-  await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
-  await waitPastSafeModeGrace(page);
-
-  const plus = await revealGutterPlus(page, 3);
-  await plus.click();
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
-  await composerInput(composer).fill("abandon this draft");
-  await composerInput(composer).click();
-  await page.keyboard.press("Escape");
-  // A typed draft can't be un-discarded, so Escape now asks to confirm first
-  // (EXC-749); confirm to drop it.
-  await page.locator(".confirm-popover .confirm").click();
-
-  // The composer closes with no scratch marker, and nothing was persisted.
-  await expect(composer).toHaveCount(0);
-  await expect(scratchMarker(page)).toHaveCount(0);
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.composerScratches?.length ?? 0)
     .toBe(0);
 });
 
@@ -1464,6 +1585,15 @@ test("a created annotation shows an inline card that doesn't overlay the code", 
   // between the code lines rather than covering them.
   expect(await card.evaluate((el) => getComputedStyle(el).position)).toBe("static");
   expect(await card.evaluate((el) => el.closest("[data-annotation-slot]") != null)).toBe(true);
+
+  // The rendered-markdown prose reads as sans-serif, not the code column's
+  // monospace: the card is projected into the diffs library's monospace
+  // annotation row, and slotInto opts the projected node out of --font-mono, so
+  // the comment resolves --font-sans (Geist), not Berkeley Mono (EXC-802).
+  const commentFont = await card
+    .locator(".comment")
+    .evaluate((el) => getComputedStyle(el).fontFamily);
+  expect(commentFont).toMatch(/^Geist/);
 });
 
 test("two comments on the same line render as one ordered thread", async ({ daemon, page }) => {
@@ -1674,6 +1804,25 @@ test("the composer reveal and the card swap share one opacity-only token transit
   expect(cardMotion.transform).toBe("none");
 });
 
+test("the saved card's trash Discard wobbles on hover", async ({ daemon, page }) => {
+  // A saved comment's Discard is a trash icon; hovering it plays a small one-shot
+  // wobble as a wink of polish. Assert the animation is WIRED — its name resolves
+  // while hovered — rather than trying to catch a frame. The keyframes are declared
+  // -global-, so the computed name is the verbatim "trash-shake" (unhashed), and the
+  // global reduced-motion rule would collapse only its duration, never the name.
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await createAnnotation(page, 3, "Whimsy, please.");
+
+  const discard = page.locator("[data-annotation-card]").getByRole("button", { name: "Discard" });
+  await discard.hover();
+  const iconAnimation = await discard
+    .locator(".icon")
+    .evaluate((el) => getComputedStyle(el).animationName);
+  expect(iconAnimation).toBe("trash-shake");
+});
+
 test("deleting an inline card removes the annotation", async ({ daemon, page }) => {
   const id = await daemon.seed();
   await page.goto("/");
@@ -1742,6 +1891,69 @@ test("editing an inline card rewrites the comment and persists it", async ({ dae
   await expect
     .poll(async () => (await daemon.getReview(id)).body?.annotations?.[0]?.comment)
     .toBe("Revised note with more detail.");
+});
+
+test("editing a saved comment focuses the editor so the caret tracks typing", async ({
+  daemon,
+  page,
+}) => {
+  // Regression: editing a saved comment mounts CodeMirror inside the already
+  // slot-projected annotation container, where getRootNode() resolves to the
+  // diffs library's ShadowRoot. CM gates focus on root.activeElement ===
+  // contentDOM, but the slotted light-DOM content is focus-tracked at the
+  // document level, so that check never matched — hasFocus stayed false, the
+  // .cm-focused class that renders the caret was never applied, and typing left
+  // the caret invisible/stuck. Passing root: document (see MarkdownEditor) points
+  // CM at where the slotted content's focus actually lives.
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+
+  await createAnnotation(page, 3, "aaaaaaaa");
+  const card = page.locator("[data-annotation-card]");
+  await card.getByRole("button", { name: "Edit" }).click();
+
+  // CM only renders the caret while it believes it is focused, so the fix shows
+  // up as the .cm-focused class landing on the mounted editor.
+  await expect(card.locator(".cm-editor.cm-focused")).toBeVisible();
+
+  // And the caret tracks input: End jumps to the end, and real keystrokes append
+  // there in order (a stuck caret would scramble or prepend them).
+  await page.keyboard.press("End");
+  await page.keyboard.type("XY");
+  await expect(card.locator(".cm-content")).toHaveText("aaaaaaaaXY");
+});
+
+test("a rendered inline comment shows list markers (ordered and unordered)", async ({
+  daemon,
+  page,
+}) => {
+  // Regression: Tailwind Preflight resets lists to list-style: none, which
+  // stripped the bullets/numbers from rendered-markdown comments. The .comment
+  // list rules restore disc/decimal — and this only shows up with the full
+  // stylesheet, so it is verified in the browser rather than under happy-dom.
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    annotations: [
+      {
+        id: "ann-list",
+        startLine: 7,
+        endLine: 8,
+        comment: "Intro\n\n- one\n- two\n\n1. first\n2. second",
+      },
+    ],
+  });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  const card = page.locator("[data-annotation-card]");
+  await card.locator(".chip").click();
+  await expect(card.locator(".body")).toBeVisible();
+
+  const ul = await card.locator(".comment ul").evaluate((el) => getComputedStyle(el).listStyleType);
+  const ol = await card.locator(".comment ol").evaluate((el) => getComputedStyle(el).listStyleType);
+  expect(ul).toBe("disc");
+  expect(ol).toBe("decimal");
 });
 
 // ----- Interaction regressions -----

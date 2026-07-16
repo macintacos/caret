@@ -88,8 +88,11 @@ export interface SlotIntoParams {
 export function slotInto(node: HTMLElement, params: SlotIntoParams) {
   node.dataset.annotationSlot = "";
   // Annotation content is prose, not code — opt out of the code column's
-  // white-space: pre so it wraps normally.
+  // white-space: pre so it wraps normally, and its monospace font so a
+  // rendered-markdown comment reads as sans-serif prose (EXC-802). Inline code
+  // and .metric atoms re-assert --font-mono themselves, so they stay monospace.
   node.style.whiteSpace = "normal";
+  node.style.fontFamily = "var(--font-sans)";
   let placedIn: HTMLElement | undefined;
 
   const place = (p: SlotIntoParams) => {

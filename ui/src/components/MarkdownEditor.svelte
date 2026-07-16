@@ -47,6 +47,14 @@
     const seed = untrack(() => value);
     const view = new EditorView({
       parent: host,
+      // The composer is slot-projected into the diffs library's shadow DOM, so
+      // CodeMirror's default root (getRootNode() → that ShadowRoot) doesn't match
+      // where the slotted light-DOM content is focus-tracked (the document). CM
+      // gates focus on root.activeElement === contentDOM, so a mismatched root
+      // leaves it never focused — no visible caret, and typing desyncs. This bit
+      // the edit-a-saved-comment path, where CM mounts inside the already-placed
+      // container; anchoring the root at the document keeps focus detection right.
+      root: document,
       state: EditorState.create({
         doc: seed,
         extensions: markdownExtensions({

@@ -54,6 +54,14 @@ function key(content: HTMLElement, k: string, mods: Partial<KeyboardEventInit> =
   );
 }
 
+// The second-stage Escape lands on the composer card itself (target === the card),
+// how onCardKeydown tells it apart from an Escape bubbling from the focused editor.
+function escapeCard(target: HTMLElement) {
+  (target.querySelector("[role='dialog']") as HTMLElement).dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+  );
+}
+
 describe("SourceComposer label", () => {
   test("renders the range label", () => {
     const { target } = mount({ startLine: 5, endLine: 5 });
@@ -132,20 +140,36 @@ describe("SourceComposer keyboard chords", () => {
     expect(submitted).toEqual(["via chord"]);
   });
 
-  test("Escape confirms before discarding a non-empty draft", () => {
-    const { target, content, flush, discardCount } = mount({ initial: "abandon me" });
+  test("the first Escape blurs the field without dismissing the draft", () => {
+    const { target, content, flush, discardCount, keptWith } = mount({ initial: "abandon me" });
     key(content, "Escape");
     flush();
-    expect(confirmPopover(target)).not.toBeNull();
+    // Only a blur: no confirm, nothing kept or discarded yet.
+    expect(confirmPopover(target)).toBeNull();
+    expect(discardCount()).toBe(0);
+    expect(keptWith).toHaveLength(0);
+  });
+
+  test("a second Escape (on the card) keeps a non-empty draft for later", () => {
+    const { target, content, flush, discardCount, keptWith } = mount({ initial: "abandon me" });
+    key(content, "Escape"); // blur into the card
+    flush();
+    escapeCard(target); // dismiss like clicking away — a new draft is kept, not dropped
+    flush();
+    expect(keptWith).toEqual(["abandon me"]);
     expect(discardCount()).toBe(0);
   });
 
-  test("Escape on an empty composer discards immediately", () => {
-    const { target, content, flush, discardCount } = mount();
+  test("a second Escape on an empty composer keeps nothing and drops no draft", () => {
+    const { target, content, flush, discardCount, keptWith } = mount();
     key(content, "Escape");
     flush();
-    expect(discardCount()).toBe(1);
-    expect(confirmPopover(target)).toBeNull();
+    escapeCard(target);
+    flush();
+    // Empty box: keep() hands back "" (the host stores no scratch), and nothing is
+    // force-discarded.
+    expect(keptWith).toEqual([""]);
+    expect(discardCount()).toBe(0);
   });
 
   test("a bare Enter does not submit", () => {

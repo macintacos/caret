@@ -91,6 +91,10 @@
   // Whether the "are you sure?" confirmation is showing over the Discard button.
   let confirming = $state(false);
 
+  // The composer surface, focused when the first Escape blurs the editor so the
+  // card can catch the second Escape (see the two-stage Escape below).
+  let cardEl = $state<HTMLElement | null>(null);
+
   function submit() {
     onSubmit(comment);
   }
@@ -98,7 +102,7 @@
   // Dropping a non-empty draft loses typed text with no undo, so it routes
   // through a confirmation (EXC-749). An empty box has nothing to lose, so it
   // discards at once — no nag for the "clicked a line, changed my mind" case.
-  // The create-mode Discard button and the create-mode Esc chord enter here.
+  // The create-mode Discard button enters here.
   function requestDiscard() {
     if (canKeep) confirming = true;
     else onDiscard();
@@ -109,24 +113,38 @@
     onDiscard();
   }
 
-  // The Esc chord: in "edit" it plainly reverts (Cancel — the saved comment
-  // stays, so there is nothing to lose that a confirm would guard); in "create"
-  // it routes through the discard confirmation like the Discard button.
-  function cancelChord() {
-    if (isEdit) onDiscard();
-    else requestDiscard();
-  }
-
   function keep() {
     onKeep?.(comment);
+  }
+
+  // Two-stage Escape: the first Escape, fired from the focused editor, blurs the
+  // field into this card WITHOUT dismissing — so a stray keypress can't nuke work
+  // in progress. Focus lands on the card (tabindex -1), whose keydown catches the
+  // SECOND Escape and commits the way clicking away would: an edit saves its
+  // changes, a new draft is kept for later (never silently discarded). Two
+  // presses to leave, never one.
+  function blurToCard() {
+    cardEl?.focus({ preventScroll: true });
+  }
+  function dismiss() {
+    if (isEdit) submit();
+    else keep();
+  }
+  // Only when the card ITSELF holds focus (the second Escape) do we dismiss — an
+  // Escape bubbling up from the still-focused editor (the first press) carries the
+  // editor as its target, not the card, and must be ignored here.
+  function onCardKeydown(e: KeyboardEvent) {
+    if (e.key === "Escape" && e.target === e.currentTarget) dismiss();
   }
 </script>
 
 <Card
+  bind:ref={cardEl}
   class="composer"
   role="dialog"
   aria-label={isEdit ? "Edit comment" : "Add a comment"}
   tabindex={-1}
+  onkeydown={onCardKeydown}
 >
   <p class="label metric">{label}</p>
   <MarkdownEditor
@@ -136,7 +154,7 @@
     autofocus
     onInput={(text) => (comment = text)}
     onSubmitChord={submit}
-    onCancelChord={cancelChord}
+    onCancelChord={blurToCard}
   />
   <div class="row">
     {#if isEdit}
@@ -152,12 +170,7 @@
     {:else}
       <Button variant="ghost" class="keep" onclick={keep} disabled={!canKeep}>Keep for later</Button>
       <span class="discard-wrap">
-        <Button
-          variant="secondary"
-          class="float-chip ghost"
-          onclick={requestDiscard}
-          aria-keyshortcuts="Escape">Discard</Button
-        >
+        <Button variant="secondary" class="float-chip ghost" onclick={requestDiscard}>Discard</Button>
         {#if confirming}
           <ConfirmPopover
             question="Discard this comment?"
