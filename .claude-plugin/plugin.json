@@ -1,6 +1,6 @@
 {
   "name": "caret",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Review, annotate, and approve Claude Code plans in a local web UI.",
   "author": { "name": "macintacos" },
   "homepage": "https://github.com/macintacos/caret",
