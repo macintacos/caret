@@ -143,6 +143,9 @@
     onOffline: () => selection.setConnected(false),
     clearGeneralComment: () => autosave.clearGeneralComment(),
   });
+  // EXC-427 desktop-plan notifier, lifted to component scope so the EXC-815
+  // dismiss-on-open effect below shares the instance the poll feeds.
+  const notifier = createPlanNotifier({ onSelect: selection.selectReview });
   let active = $derived(selection.active);
   // The variants the split-button renders: the declared set when present, else
   // the built-in fallback.
@@ -213,7 +216,6 @@
       })
       .catch(() => selection.setConnected(false));
 
-    const notifier = createPlanNotifier({ onSelect: selection.selectReview });
     const stop = startPolling(
       (incoming) => {
         selection.setConnected(true);
@@ -229,6 +231,28 @@
       () => selection.markDaemonChanged(),
     );
     return stop;
+  });
+
+  // ----- Dismiss a plan's desktop notification once its plan is on screen (EXC-815) -----
+  // When the user opens a plan — selects it, or returns to a tab where the poll
+  // auto-selected it in the background — close the desktop notification we fired
+  // for it. Presence-gated inside notifier.opened(): mergeReviews auto-selects
+  // the first pending review even while the user is away, so poking opened() on
+  // every activeId change would otherwise dismiss a toast the away user never
+  // saw. Depend on activeId (a stable string), not `active` (a fresh object each
+  // poll), so the listeners re-arm only on a real selection change. isAway() is
+  // not reactive, hence the focus/visibility pokes for the return-to-tab case.
+  $effect(() => {
+    const id = selection.activeId;
+    if (!id) return;
+    const poke = () => notifier.opened(id);
+    poke();
+    window.addEventListener("focus", poke);
+    document.addEventListener("visibilitychange", poke);
+    return () => {
+      window.removeEventListener("focus", poke);
+      document.removeEventListener("visibilitychange", poke);
+    };
   });
 
   // ----- Remembered approve mode (read once on load) -----
