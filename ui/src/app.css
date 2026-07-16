@@ -317,6 +317,22 @@ body {
   }
 }
 
+/* ----- Width foundation (EXC-806) -----
+   Shared breakpoint substrate for the responsive effort (parent EXC-770). The
+   values are single-sourced in lib/layout.ts (node-free, importable by the e2e
+   config) and mirrored here as tokens; layout.test.ts pins the two in sync.
+   Their own :root — like --chip below — because they're layout substrate, not
+   theme-contract tokens, so they stay out of the palette block theme.test.ts
+   pins. CAVEAT: @media conditions cannot read var(), so the surface tickets
+   (EXC-807–814) write these px literals in their media queries; these tokens are
+   the canonical source those literals must match. --w-min is the exception — it's
+   consumed directly by the .shell floor below. */
+:root {
+  --w-min: 480px;
+  --w-tight: 640px;
+  --w-narrow: 960px;
+}
+
 /* ----- App shell: plan + annotation-gutter grid ----- */
 /* Keep .shell, #app, and body free of `transform` / `filter` / `perspective` /
    `will-change`: any of those establishes a containing block for the fixed TOC
@@ -328,6 +344,14 @@ body {
      (App.svelte pins each child to its row). */
   grid-template-rows: auto auto 1fr;
   height: 100%;
+  /* Supported-minimum floor: below --w-min the shell overflows the viewport and
+     the window scrolls horizontally rather than collapsing the layout further.
+     min-width is safe under the transform/containment caveat above — it
+     establishes no containing block, so the fixed TOC rail's pin still holds
+     (container-type would not, which is why the substrate is tokens + a floor,
+     not a query container). No visual change at current widths: --w-min sits far
+     below any real viewport. */
+  min-width: var(--w-min);
 }
 
 /* ----- Shared atoms ----- */
