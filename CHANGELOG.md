@@ -7,6 +7,49 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-16 - The Welcome Mat Release
+
+### Added
+
+- **First-run onboarding and notification bell states.** A new reviewer is greeted by a
+  first-run onboarding dialog, and the notification bell now carries explicit states —
+  idle versus a dot that draws attention when a plan is waiting. Local dev gained a
+  `--fresh` boot that isolates its config so onboarding and preferences can be exercised
+  from a clean slate (#246).
+- **Confirm before approving.** Approving a plan now asks for confirmation first through a
+  modal, so a stray click can't ship an approval you didn't mean (#247).
+- **Scroll past the end of the plan.** The plan view now lets you scroll beyond the last
+  line, so the bottom of a plan no longer sits pinned against the window edge while you
+  read or comment (#245).
+
+### Changed
+
+- **Notifications clear when you open their plan.** Opening a plan now dismisses its
+  lingering desktop notification, so the bell and your notification tray stay in sync with
+  what you've actually looked at (#251).
+- **Steadier file-preview hover.** The filename-reference hover preview gained a
+  trajectory grace period, so the preview no longer flickers away when your pointer
+  briefly clips its edge on the way in (#244).
+- **Refined inline comment card.** Inline comment cards now render their prose in
+  sans-serif, focus the edit caret when you start editing, and keep their actions
+  collapsed until you need them (#250).
+- **Warmer light theme.** The caret light theme's neutral greys were warmed for a softer,
+  less clinical reading surface (#249).
+- **Installer shows the version.** `install.sh` now prints the caret version at the start
+  and finish of a run (7e40db1).
+- **src/ reorganized into domain directories.** The flat `src/` tree was reorganized into
+  domain directories, with the layout docs rewritten to describe each directory by purpose
+  rather than by file list (#242, #243).
+- **Adopted the `@/` import alias.** The codebase moved onto the `@/` import alias and
+  turned on Biome's import organization (#248).
+- **Looser tool pins.** The mise tool pins were loosened and the lockfile refreshed
+  (#241).
+- **README hero screenshot.** The README now leads with a review-UI hero screenshot
+  (#240).
+- **Reflowed release notes.** GitHub Release notes are reflowed to single-line paragraphs
+  and prefaced with a short summary, and the release code was relocated alongside the rest
+  of the tasks CLI (#239).
+
 ## [0.4.1] - 2026-07-15 - The Fresh Resolution Release
 
 ### Fixed
@@ -363,7 +406,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Review decisions are delivered via a bounded poll, fixing missed or delayed decision
   delivery.
 
-[Unreleased]: https://github.com/macintacos/caret/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/macintacos/caret/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/macintacos/caret/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/macintacos/caret/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/macintacos/caret/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/macintacos/caret/compare/v0.2.0...v0.3.0
