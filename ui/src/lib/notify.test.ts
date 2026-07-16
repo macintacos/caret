@@ -187,6 +187,35 @@ describe("createPlanNotifier", () => {
     notifier.observe([review("a")]);
     expect(fired).toHaveLength(1);
   });
+
+  // EXC-815: returning to caret dismisses EVERY outstanding plan toast, not just
+  // the active plan's — once the user is looking at caret, every desktop alert is
+  // redundant. Gated on presence: mergeReviews auto-selects while away, and a
+  // toast the away user never saw must never be closed out from under them.
+  test("dismissAllIfPresent() dismisses every fired notification when present", () => {
+    const { notifier, fired } = makeNotifier();
+    notifier.observe([]);
+    notifier.observe([review("a"), review("b")]); // away + granted → both fire
+    expect(fired).toHaveLength(2);
+    away = false; // user is back on the tab
+    notifier.dismissAllIfPresent();
+    expect(fired[0]!.handle.closed).toBe(1);
+    expect(fired[1]!.handle.closed).toBe(1);
+  });
+
+  test("dismissAllIfPresent() leaves notifications alone while the user is away", () => {
+    const { notifier, fired } = makeNotifier();
+    notifier.observe([]);
+    notifier.observe([review("a")]); // fires while away
+    notifier.dismissAllIfPresent(); // mergeReviews auto-selected it while still away
+    expect(fired[0]!.handle.closed).toBe(0);
+  });
+
+  test("dismissAllIfPresent() is a no-op with nothing outstanding", () => {
+    const { notifier } = makeNotifier();
+    away = false;
+    expect(() => notifier.dismissAllIfPresent()).not.toThrow();
+  });
 });
 
 // EXC-733: two open caret tabs each run their own notifier with a private

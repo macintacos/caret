@@ -143,6 +143,9 @@
     onOffline: () => selection.setConnected(false),
     clearGeneralComment: () => autosave.clearGeneralComment(),
   });
+  // EXC-427 desktop-plan notifier. Component-scoped so both consumers — the poll
+  // (observe) and the EXC-815 dismiss-on-open effect below — share one instance.
+  const notifier = createPlanNotifier({ onSelect: selection.selectReview });
   let active = $derived(selection.active);
   // The variants the split-button renders: the declared set when present, else
   // the built-in fallback.
@@ -213,7 +216,6 @@
       })
       .catch(() => selection.setConnected(false));
 
-    const notifier = createPlanNotifier({ onSelect: selection.selectReview });
     const stop = startPolling(
       (incoming) => {
         selection.setConnected(true);
@@ -229,6 +231,26 @@
       () => selection.markDaemonChanged(),
     );
     return stop;
+  });
+
+  // ----- Dismiss plan notifications once the user is back in caret (EXC-815) -----
+  // Toasts fire only while the user is away; the moment they return — focus the
+  // window or the tab becomes visible — every one is redundant (the bell and
+  // switcher show these plans), so close them all. The presence gate lives in
+  // notifier.dismissAllIfPresent(): mergeReviews auto-selects while away, so a
+  // toast the away user never saw must never be closed out from under them.
+  // isAway() is not reactive, hence the focus/visibility listeners; this effect
+  // reads no reactive state, so it runs once and keeps its listeners for the
+  // component's life.
+  $effect(() => {
+    const dismiss = () => notifier.dismissAllIfPresent();
+    dismiss();
+    window.addEventListener("focus", dismiss);
+    document.addEventListener("visibilitychange", dismiss);
+    return () => {
+      window.removeEventListener("focus", dismiss);
+      document.removeEventListener("visibilitychange", dismiss);
+    };
   });
 
   // ----- Remembered approve mode (read once on load) -----
