@@ -181,14 +181,20 @@
   .actions.busy {
     pointer-events: none;
   }
-  /* Pins the bell + settings cluster to the right edge when no review is active;
-     when active, `.actions`'s margin-left:auto eats the slack and this margin
-     resolves to 0. */
+  /* Pins the bell + settings cluster to the right edge. With no review active it
+     is the only right-side group, so its own margin-left:auto pushes it right.
+     When a review IS active, `.actions` already owns an auto margin — two auto
+     margins in one flex row split the free space and strand the bell cluster
+     mid-row, so the override below zeroes this one and both groups ride the
+     single `.actions` margin to the right edge together. */
   .bell-slot {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
     margin-left: auto;
+  }
+  .actions + .bell-slot {
+    margin-left: 0;
   }
 
   /* Reject warms to danger on hover — the one place red belongs in the row. */
