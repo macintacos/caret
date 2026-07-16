@@ -143,8 +143,8 @@
     onOffline: () => selection.setConnected(false),
     clearGeneralComment: () => autosave.clearGeneralComment(),
   });
-  // EXC-427 desktop-plan notifier, lifted to component scope so the EXC-815
-  // dismiss-on-open effect below shares the instance the poll feeds.
+  // EXC-427 desktop-plan notifier. Component-scoped so both consumers — the poll
+  // (observe) and the EXC-815 dismiss-on-open effect below — share one instance.
   const notifier = createPlanNotifier({ onSelect: selection.selectReview });
   let active = $derived(selection.active);
   // The variants the split-button renders: the declared set when present, else
