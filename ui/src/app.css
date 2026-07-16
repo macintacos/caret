@@ -329,8 +329,8 @@ body {
    consumed directly by the .shell floor below. */
 :root {
   --w-min: 480px;
-  --w-narrow: 960px;
   --w-tight: 640px;
+  --w-narrow: 960px;
 }
 
 /* ----- App shell: plan + annotation-gutter grid ----- */
