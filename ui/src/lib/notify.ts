@@ -62,10 +62,10 @@ export interface PlanNotifier {
    * calls fire one notification per genuinely-new id when the user is away
    * and permission is granted, then prune the set to the incoming ids. */
   observe: (reviews: PlanReviewLike[]) => void;
-  /** The user opened this plan (selected it, or refocused a tab where it was
-   * auto-selected). Dismiss its desktop notification when the user is present
-   * (EXC-815) — never while away, or it would close a toast they never saw. */
-  opened: (id: string) => void;
+  /** The user returned to caret (focused it, or it became visible). Dismiss
+   * every outstanding plan notification when the user is present (EXC-815) —
+   * never while away, or it would close a toast they never saw. */
+  dismissAllIfPresent: () => void;
 }
 
 // The carrot is the brand pun (caret → 🥕) — and an emoji survives the OS
@@ -231,12 +231,16 @@ export function createPlanNotifier(opts: PlanNotifierOptions): PlanNotifier {
         else void won.then((w) => (w ? fire(r) : skipDuplicate(r)));
       }
     },
-    opened(id) {
-      // The user has this plan on screen. Dismiss its desktop toast — but only
-      // if they're actually present: mergeReviews auto-selects the first pending
-      // review even while away, and closing a toast an away user never saw is
-      // worse than leaving it. isAway() is the notifier's single presence gate.
-      if (!isAway()) dismiss(id);
+    dismissAllIfPresent() {
+      // The user is back in caret. Every toast we fired while they were away is
+      // now redundant — the bell and switcher already show these plans — so
+      // close them all, not just the active plan's (a toast can be for a
+      // background plan another is selected over). Gated on presence:
+      // mergeReviews auto-selects while away, and closing a toast the away user
+      // never saw is worse than leaving it. isAway() is the single presence gate.
+      if (isAway()) return;
+      for (const handle of handles.values()) handle.close();
+      handles.clear();
     },
   };
 }

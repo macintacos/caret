@@ -233,25 +233,23 @@
     return stop;
   });
 
-  // ----- Dismiss a plan's desktop notification once its plan is on screen (EXC-815) -----
-  // When the user opens a plan — selects it, or returns to a tab where the poll
-  // auto-selected it in the background — close the desktop notification we fired
-  // for it. Presence-gated inside notifier.opened(): mergeReviews auto-selects
-  // the first pending review even while the user is away, so poking opened() on
-  // every activeId change would otherwise dismiss a toast the away user never
-  // saw. Depend on activeId (a stable string), not `active` (a fresh object each
-  // poll), so the listeners re-arm only on a real selection change. isAway() is
-  // not reactive, hence the focus/visibility pokes for the return-to-tab case.
+  // ----- Dismiss plan notifications once the user is back in caret (EXC-815) -----
+  // Toasts fire only while the user is away; the moment they return — focus the
+  // window or the tab becomes visible — every one is redundant (the bell and
+  // switcher show these plans), so close them all. The presence gate lives in
+  // notifier.dismissAllIfPresent(): mergeReviews auto-selects while away, so a
+  // toast the away user never saw must never be closed out from under them.
+  // isAway() is not reactive, hence the focus/visibility listeners; this effect
+  // reads no reactive state, so it runs once and keeps its listeners for the
+  // component's life.
   $effect(() => {
-    const id = selection.activeId;
-    if (!id) return;
-    const poke = () => notifier.opened(id);
-    poke();
-    window.addEventListener("focus", poke);
-    document.addEventListener("visibilitychange", poke);
+    const dismiss = () => notifier.dismissAllIfPresent();
+    dismiss();
+    window.addEventListener("focus", dismiss);
+    document.addEventListener("visibilitychange", dismiss);
     return () => {
-      window.removeEventListener("focus", poke);
-      document.removeEventListener("visibilitychange", poke);
+      window.removeEventListener("focus", dismiss);
+      document.removeEventListener("visibilitychange", dismiss);
     };
   });
 
