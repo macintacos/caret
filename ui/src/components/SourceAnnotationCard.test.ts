@@ -309,6 +309,16 @@ describe("SourceAnnotationCard edit/delete", () => {
     expect(document.querySelector(".confirm-popover")).toBeNull();
   });
 
+  test("Discard renders as a trash icon with an accessible label", () => {
+    const { target } = render(SourceAnnotationCard, base({ focused: true }));
+    const discard = target.querySelector(".actions .danger");
+    // The word "Discard" is gone; the affordance is the trash icon plus a label
+    // that keeps the control named for assistive tech.
+    expect(discard?.getAttribute("aria-label")).toBe("Discard comment");
+    expect(discard?.querySelector("svg")).not.toBeNull();
+    expect(discard?.textContent?.trim()).toBe("");
+  });
+
   test("edit opens the editor seeded with the current comment", () => {
     const { target, flush } = render(SourceAnnotationCard, base({ focused: true }));
     click(target, ".edit");

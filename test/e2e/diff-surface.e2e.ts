@@ -1804,6 +1804,25 @@ test("the composer reveal and the card swap share one opacity-only token transit
   expect(cardMotion.transform).toBe("none");
 });
 
+test("the saved card's trash Discard wobbles on hover", async ({ daemon, page }) => {
+  // A saved comment's Discard is a trash icon; hovering it plays a small one-shot
+  // wobble as a wink of polish. Assert the animation is WIRED — its name resolves
+  // while hovered — rather than trying to catch a frame. The keyframes are declared
+  // -global-, so the computed name is the verbatim "trash-shake" (unhashed), and the
+  // global reduced-motion rule would collapse only its duration, never the name.
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await createAnnotation(page, 3, "Whimsy, please.");
+
+  const discard = page.locator("[data-annotation-card]").getByRole("button", { name: "Discard" });
+  await discard.hover();
+  const iconAnimation = await discard
+    .locator(".icon")
+    .evaluate((el) => getComputedStyle(el).animationName);
+  expect(iconAnimation).toBe("trash-shake");
+});
+
 test("deleting an inline card removes the annotation", async ({ daemon, page }) => {
   const id = await daemon.seed();
   await page.goto("/");

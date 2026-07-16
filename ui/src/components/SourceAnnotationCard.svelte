@@ -179,11 +179,14 @@
             variant="ghost"
             size="sm"
             class="danger"
+            aria-label="Discard comment"
             onclick={(e) => {
               confirmAnchor = e.currentTarget as HTMLElement;
               confirming = true;
-            }}>Discard</Button
+            }}
           >
+            <Icon name="trash-2" size={14} />
+          </Button>
           {#if confirming}
             <ConfirmPopover
               question="Discard this comment?"
@@ -364,13 +367,39 @@
     padding: 0.2rem 0.45rem;
     font-size: var(--text-xs);
   }
-  /* Discard is the one destructive action; it takes caret's danger red on hover so
-     the consequence reads before the click, resting quiet the rest of the time. */
+  /* Discard is the one destructive action, now a trash icon rather than a word:
+     squared padding so the icon button reads as a target, caret's danger red on
+     hover so the consequence reads before the click, quiet the rest of the time. */
   :global([data-slot="button"].danger) {
+    padding: 0.25rem 0.3rem;
     color: var(--ink-faint);
   }
   :global([data-slot="button"].danger:hover) {
     color: var(--danger);
+  }
+  /* On hover the trash icon does a quick, subtle wobble — a wink of whimsy that
+     previews the destructive action without nagging. It plays once per hover-enter
+     (not looping) and is deliberately small. The keyframes are declared -global- so
+     the name still resolves from inside the :global() hover selector (Svelte only
+     rewrites animation names for component-scoped rules); the global reduced-motion
+     rule in app.css ([data-slot] *) collapses it to a static frame when the OS asks. */
+  :global([data-slot="button"].danger:hover .icon) {
+    animation: trash-shake var(--dur-base) var(--ease-out);
+  }
+  @keyframes -global-trash-shake {
+    0%,
+    100% {
+      transform: rotate(0deg);
+    }
+    25% {
+      transform: rotate(-8deg);
+    }
+    50% {
+      transform: rotate(6deg);
+    }
+    75% {
+      transform: rotate(-4deg);
+    }
   }
   /* Anchors the Discard confirmation to its button (see ConfirmPopover). */
   .discard-wrap {
