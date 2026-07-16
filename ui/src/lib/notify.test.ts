@@ -187,6 +187,33 @@ describe("createPlanNotifier", () => {
     notifier.observe([review("a")]);
     expect(fired).toHaveLength(1);
   });
+
+  // EXC-815: opening a plan dismisses its desktop toast, but only when the user
+  // is actually present — mergeReviews auto-selects while away, so dismissing on
+  // a mere selection change would kill a toast the away user never saw.
+  test("opened() dismisses a fired notification when the user is present", () => {
+    const { notifier, fired } = makeNotifier();
+    notifier.observe([]);
+    notifier.observe([review("a")]); // away (default) + granted → fires
+    expect(fired).toHaveLength(1);
+    away = false; // user is back on the tab
+    notifier.opened("a");
+    expect(fired[0]!.handle.closed).toBe(1);
+  });
+
+  test("opened() leaves the notification alone while the user is away", () => {
+    const { notifier, fired } = makeNotifier();
+    notifier.observe([]);
+    notifier.observe([review("a")]); // fires while away
+    notifier.opened("a"); // mergeReviews auto-selected it while still away
+    expect(fired[0]!.handle.closed).toBe(0);
+  });
+
+  test("opened() for an id with no live notification is a no-op", () => {
+    const { notifier } = makeNotifier();
+    away = false;
+    expect(() => notifier.opened("nope")).not.toThrow();
+  });
 });
 
 // EXC-733: two open caret tabs each run their own notifier with a private

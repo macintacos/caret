@@ -62,6 +62,10 @@ export interface PlanNotifier {
    * calls fire one notification per genuinely-new id when the user is away
    * and permission is granted, then prune the set to the incoming ids. */
   observe: (reviews: PlanReviewLike[]) => void;
+  /** The user opened this plan (selected it, or refocused a tab where it was
+   * auto-selected). Dismiss its desktop notification when the user is present
+   * (EXC-815) — never while away, or it would close a toast they never saw. */
+  opened: (id: string) => void;
 }
 
 // The carrot is the brand pun (caret → 🥕) — and an emoji survives the OS
@@ -139,6 +143,18 @@ export function createPlanNotifier(opts: PlanNotifierOptions): PlanNotifier {
   const focus = opts.focus ?? (() => window.focus());
   const claim = opts.claim ?? defaultClaim;
 
+  // Fired toasts still on screen, keyed by review id (EXC-815). Retained so
+  // opened() / onclick can close one after the fact — a bare new Notification()
+  // handle is otherwise lost the moment fire() returns.
+  const handles = new Map<string, NotificationHandle>();
+
+  // Close a fired toast and forget it. Used by opened() (presence-gated) and by
+  // onclick (unconditional — a click is an explicit dismiss).
+  const dismiss = (id: string) => {
+    handles.get(id)?.close();
+    handles.delete(id);
+  };
+
   // Fire the desktop toast for one genuinely-new review and wire its display /
   // click feedback. The body renders on the user's own desktop — never log it.
   const fire = (r: PlanReviewLike) => {
@@ -147,6 +163,7 @@ export function createPlanNotifier(opts: PlanNotifierOptions): PlanNotifier {
       uiLog.warn("ui", `plan notification unavailable: ${shortId(r.id)}`, { reviewId: r.id });
       return;
     }
+    handles.set(r.id, handle);
     uiLog.info("ui", `plan notification fired: ${shortId(r.id)}`, { reviewId: r.id });
     // Display feedback: the OS suppressing a granted notification is silent at
     // the constructor — only these events tell the truth.
@@ -158,7 +175,7 @@ export function createPlanNotifier(opts: PlanNotifierOptions): PlanNotifier {
       uiLog.debug("ui", `plan notification clicked: ${shortId(r.id)}`, { reviewId: r.id });
       focus();
       opts.onSelect(r.id);
-      handle.close();
+      dismiss(r.id);
     };
   };
 
@@ -213,6 +230,13 @@ export function createPlanNotifier(opts: PlanNotifierOptions): PlanNotifier {
         else if (won === false) skipDuplicate(r);
         else void won.then((w) => (w ? fire(r) : skipDuplicate(r)));
       }
+    },
+    opened(id) {
+      // The user has this plan on screen. Dismiss its desktop toast — but only
+      // if they're actually present: mergeReviews auto-selects the first pending
+      // review even while away, and closing a toast an away user never saw is
+      // worse than leaving it. isAway() is the notifier's single presence gate.
+      if (!isAway()) dismiss(id);
     },
   };
 }
