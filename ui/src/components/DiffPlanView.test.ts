@@ -181,6 +181,23 @@ describe("DiffPlanView version compare", () => {
     expect(target.querySelector(".pair")).toBeNull();
   });
 
+  // EXC-807: the working-directory path lives in the compare row now, shown
+  // right-aligned while not comparing and dropped once compare mode is on.
+  test("shows the working-directory path in the compare row when not comparing", () => {
+    const { target } = render(DiffPlanView, props({ review: reviewFixture() }));
+    const cwd = target.querySelector(".control-row .cwd");
+    expect(cwd).not.toBeNull();
+    expect(cwd!.textContent).toContain("/tmp/p");
+  });
+
+  test("hides the working-directory path in compare mode", async () => {
+    const { target } = render(DiffPlanView, props({ review: multiVersionFixture(3) }));
+    expect(target.querySelector(".control-row .cwd")).not.toBeNull();
+    target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
+    await until(() => target.querySelector(".control-row .cwd") == null);
+    expect(target.querySelector(".control-row .cwd")).toBeNull();
+  });
+
   test("entering compare mode renders a diff between the default version pair", async () => {
     const { target } = render(DiffPlanView, props({ review: multiVersionFixture(3) }));
     target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();

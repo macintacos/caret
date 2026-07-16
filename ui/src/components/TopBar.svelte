@@ -1,12 +1,10 @@
 <script lang="ts">
   import { approveLabel } from "$lib/approve.ts";
-  import { shortCwd } from "$lib/cwd.ts";
   import type { ApproveVariant, ApproveVariantId, ClientReview } from "@core/lib/types";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
-  import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import DevBadge from "@/components/DevBadge.svelte";
   import Icon from "@/components/Icon.svelte";
   import NotifyBell from "@/components/NotifyBell.svelte";
@@ -75,22 +73,6 @@
   </div>
 
   {#if active}
-    <!-- Full cwd on hover; the row itself shows the abbreviated path. -->
-    <Tooltip.Provider delayDuration={0}>
-      <Tooltip.Root>
-        <Tooltip.Trigger>
-          {#snippet child({ props })}
-            <!-- The cwd is non-interactive display text; the tooltip is a
-                 pointer-hover enhancement over the always-visible abbreviated path.
-                 No tabindex — a nonnegative tabindex on a non-interactive element is
-                 itself an a11y anti-pattern (svelte a11y_no_noninteractive_tabindex). -->
-            <div {...props} class="context mono">{shortCwd(active.cwd)}</div>
-          {/snippet}
-        </Tooltip.Trigger>
-        <Tooltip.Content>{active.cwd}</Tooltip.Content>
-      </Tooltip.Root>
-    </Tooltip.Provider>
-
     <div class="actions" class:busy>
       <!-- Same quiet floating-chip as Request changes (soft fill, ink-soft label),
            differentiated only by warming to danger on hover. Reject always routes
@@ -186,15 +168,6 @@
     font-family: var(--font-mono);
     color: var(--accent);
     margin-right: 0.05em;
-  }
-  .context {
-    flex: 1;
-    text-align: center;
-    color: var(--ink-faint);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    cursor: default;
   }
   .actions {
     display: flex;
