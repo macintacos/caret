@@ -87,6 +87,10 @@ describe("VersionComparePicker compare icon", () => {
     const { target } = render(VersionComparePicker, baseProps);
     const toggle = target.querySelector<HTMLButtonElement>(".compare-toggle");
     expect(toggle!.querySelector(".icon svg")).not.toBeNull();
+    // The icon is decorative, so it adds no text: the accessible name (which
+    // the e2e getByRole selectors depend on) stays exactly "Compare versions".
+    // A stray label= on the Icon would break this at unit speed.
+    expect(toggle!.textContent?.trim()).toBe("Compare versions");
   });
 
   test("the disabled toggle also renders the compare icon", () => {
