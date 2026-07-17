@@ -187,13 +187,13 @@
   </DropdownMenu.Root>
 {/snippet}
 
-<!-- The toggle's label + trailing git-compare glyph (EXC-808). Shared by the
+<!-- The toggle's leading git-compare glyph + label (EXC-808). Shared by the
      enabled and disabled buttons so the affordance stays identical; the icon is
      decorative (aria-hidden via Icon.svelte), so the button's accessible name
      stays "Compare versions" and inherits the button's currentColor. Spacing is
      the Button's own gap. -->
 {#snippet compareLabel()}
-  Compare versions<Icon name="git-compare" size={14} />
+  <Icon name="git-compare" size={14} />Compare versions
 {/snippet}
 
 <div class="compare-picker">
