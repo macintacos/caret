@@ -220,3 +220,59 @@ describe("TopBar reject", () => {
     expect(target.querySelector(".reject")).toBeNull();
   });
 });
+
+describe("TopBar overflow menu (EXC-810)", () => {
+  // Below --w-narrow the secondary actions collapse into a "More actions"
+  // overflow DropdownMenu. The trigger stays in the DOM at every width (CSS
+  // toggles its visibility) and carries the pending count so it stays visible
+  // when Request changes moves into the menu. The trigger renders synchronously
+  // (only DropdownMenu's portalled Content is deferred); the menu's items and
+  // the width-driven visibility swap are real-browser behavior, covered in
+  // test/e2e/topbar-overflow.e2e.ts per doc/agents/browser-testing.md.
+
+  test("renders the overflow trigger with an accessible name when a review is active", () => {
+    const { target } = render(TopBar, baseProps);
+    const trigger = target.querySelector(".overflow-trigger") as HTMLButtonElement;
+    expect(trigger).not.toBeNull();
+    expect(trigger.getAttribute("aria-label")).toBe("More actions");
+  });
+
+  test("hides the overflow trigger when no review is active", () => {
+    const { target } = render(TopBar, { ...baseProps, active: null });
+    expect(target.querySelector(".overflow-trigger")).toBeNull();
+  });
+
+  test("surfaces the pending-comment count on the overflow trigger", () => {
+    const { target } = render(TopBar, { ...baseProps, pendingCount: 4 });
+    const count = target.querySelector(".overflow-trigger .count");
+    expect(count).not.toBeNull();
+    expect(count!.textContent).toContain("4");
+  });
+
+  test("hides the overflow-trigger count when none are pending", () => {
+    const { target } = render(TopBar, { ...baseProps, pendingCount: 0 });
+    expect(target.querySelector(".overflow-trigger .count")).toBeNull();
+  });
+
+  test("folds the pending count into the overflow trigger's accessible name", () => {
+    // The trigger's own aria-label replaces its subtree for naming, so the
+    // count must ride the label — not just the (aria-hidden) visual badge — or a
+    // screen reader loses it when the row collapses.
+    const { target } = render(TopBar, { ...baseProps, pendingCount: 3 });
+    const trigger = target.querySelector(".overflow-trigger") as HTMLButtonElement;
+    expect(trigger.getAttribute("aria-label")).toContain("3");
+  });
+
+  test("wraps the inline split-button approve in a hideable slot", () => {
+    // The slot is what CSS hides ≤ --w-tight so Approve moves into the overflow
+    // menu; the split control lives inside it.
+    const { target } = render(TopBar, baseProps);
+    expect(target.querySelector(".approve-slot .split-primary")).not.toBeNull();
+  });
+
+  test("wraps the inline plain approve in a hideable slot", () => {
+    const oneVariant: ApproveVariant[] = [{ id: "default", label: "Approve" }];
+    const { target } = render(TopBar, { ...baseProps, variants: oneVariant });
+    expect(target.querySelector(".approve-slot .approve")).not.toBeNull();
+  });
+});

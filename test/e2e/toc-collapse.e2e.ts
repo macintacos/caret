@@ -11,7 +11,7 @@
 
 import { expect, test } from "./support/fixtures.ts";
 
-const TOGGLE = "Toggle plan contents";
+const TOGGLE = "Toggle sidebar";
 
 test("the toggle is always present and collapses the rail at wide width", async ({
   daemon,

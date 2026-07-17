@@ -749,7 +749,7 @@
               {...props}
               type="button"
               class="toc-toggle float-chip"
-              aria-label="Toggle plan contents"
+              aria-label="Toggle sidebar"
               aria-expanded={tocShown}
               aria-controls="plan-toc"
               onclick={toggleToc}
@@ -758,7 +758,7 @@
             </button>
           {/snippet}
         </Tooltip.Trigger>
-        <Tooltip.Content>{tocShown ? "Hide plan contents" : "Show plan contents"}</Tooltip.Content>
+        <Tooltip.Content>{tocShown ? "Hide sidebar" : "Show sidebar"}</Tooltip.Content>
       </Tooltip.Root>
     </Tooltip.Provider>
   {/if}

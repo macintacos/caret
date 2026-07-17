@@ -75,7 +75,21 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    /* Cap the title at wide widths, but let flex shrink it below that when the
+       topbar controls need room (min-width:0 lets a flex item shrink past its
+       content). The lead is flex:1 and the controls flex-shrink:0, so the title
+       is what gives — truncating instead of pushing controls off-screen. */
     max-width: 46vw;
+    min-width: 0;
+  }
+  /* At narrow widths cap the title tighter so the right-hand controls always fit.
+     The single-review label already flex-truncates below this; the multi-review
+     trigger is a shadcn Button (shrink-0) that won't, so the cap is what bounds
+     it there. */
+  @media (max-width: 639px) {
+    .title {
+      max-width: 40vw;
+    }
   }
   .chev {
     display: inline-flex;
