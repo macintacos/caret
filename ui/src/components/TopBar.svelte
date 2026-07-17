@@ -93,6 +93,52 @@
         {/if}
       </Button>
 
+      <!-- Below --w-narrow the Reject + Request-changes buttons above collapse
+           into this "More actions" overflow menu (their inline buttons hide via
+           CSS); Approve and the bell stay visible. The trigger carries the
+           pending count so it stays visible once Request changes is in the menu.
+           Hidden above --w-narrow, so the wide layout is unchanged. -->
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger>
+          {#snippet child({ props })}
+            <Button
+              {...props}
+              variant="secondary"
+              size="icon"
+              class="overflow-trigger float-chip"
+              aria-label="More actions"
+              disabled={busy}
+            >
+              <Icon name="ellipsis" size={16} />
+              {#if pendingCount > 0}
+                <Badge
+                  variant="secondary"
+                  class="count metric overflow-count"
+                  aria-label="{pendingCount} pending comment{pendingCount === 1 ? '' : 's'}"
+                >
+                  {pendingCount}
+                </Badge>
+              {/if}
+            </Button>
+          {/snippet}
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end">
+          <!-- Defer the open past this menu's close: Request changes is a
+               dismissible dialog (Modal kind="dialog"), and the closing menu's
+               own interact-outside would dismiss a dialog opened on the same
+               tick. Reject is an alertdialog (ignores outside-interaction), so it
+               fires directly. -->
+          <DropdownMenu.Item onSelect={() => setTimeout(onRequestChanges, 0)}>
+            <Icon name="corner-up-left" size={14} />
+            Request changes
+            {#if pendingCount > 0}
+              <Badge variant="secondary" class="count metric">{pendingCount}</Badge>
+            {/if}
+          </DropdownMenu.Item>
+          <DropdownMenu.Item variant="destructive" onSelect={() => onReject()}>Reject</DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+
       <!-- Approve control. With a single variant the approve is binary (e.g. an
            OpenCode session, EXC-791), so there is nothing to choose between: a
            plain amber button, matching the split-button's primary half. With more
@@ -104,12 +150,12 @@
       {#if variants.length <= 1}
         <Button variant="default" class="approve" onclick={() => onApprove(approveMode)} disabled={busy}>
           <Icon name="check" size={14} />
-          {approveLabel(approveMode, variants)}
+          <span class="approve-label">{approveLabel(approveMode, variants)}</span>
         </Button>
       {:else}
         <SplitButton onclick={() => onApprove(approveMode)} optionsLabel="Approve options" disabled={busy}>
           <Icon name="check" size={14} />
-          {approveLabel(approveMode, variants)}
+          <span class="approve-label">{approveLabel(approveMode, variants)}</span>
           {#snippet menu()}
             {#each variants as v (v.id)}
               <DropdownMenu.Item class="approve-variant" onSelect={() => onApprove(v.id)}>
@@ -217,5 +263,48 @@
   .v-note {
     color: var(--ink-faint);
     font-size: var(--text-xs);
+  }
+
+  /* ----- Narrow-width consolidation (EXC-810) ----- */
+  /* Below --w-narrow the Reject + Request-changes buttons collapse into the
+     overflow menu; above it the trigger is hidden, so the wide layout is
+     unchanged. The px literals mirror lib/layout.ts's NARROW_WIDTH_PX (960) and
+     TIGHT_WIDTH_PX (640) minus one — @media can't read the --w-* tokens. */
+  .actions :global(.overflow-trigger) {
+    display: none;
+    position: relative;
+  }
+  @media (max-width: 959px) {
+    .actions :global(.reject),
+    .actions :global(.request) {
+      display: none;
+    }
+    .actions :global(.overflow-trigger) {
+      display: inline-flex;
+    }
+  }
+  /* Pending count pinned to the trigger's top-right corner, lifted off the
+     ellipsis with a paper ring (the NotifyBell dot pattern). Neutral, not amber
+     — amber stays reserved for the Approve primary. */
+  .actions :global(.overflow-count) {
+    position: absolute;
+    top: -5px;
+    right: -6px;
+    padding: 0 0.3rem;
+    box-shadow: 0 0 0 1.5px var(--paper-raised);
+    pointer-events: none;
+  }
+  /* At the tightest widths the Approve label clips to sr-only, so the primary
+     shrinks to its amber check icon while keeping its accessible name (the
+     split-button chevron stays). */
+  @media (max-width: 639px) {
+    .approve-label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
   }
 </style>
