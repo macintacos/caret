@@ -736,10 +736,10 @@
 <div class="control-row">
   <!-- Contents toggle (EXC-809): always available when the single-version surface
        has a ToC to toggle, so the reviewer can hide the outline at any width. A
-       float-chip icon button matching the compare control's chrome; when the rail
-       is open it carries the same --accent-wash active marker the "Compare
-       versions" toggle uses (see the .toc-toggle rule), and collapsed drops back to
-       the resting float-chip. -->
+       float-chip icon button matching the compare control's chrome, with its
+       colour logic inverted from that control: a collapsed rail carries the
+       --accent-wash marker to advertise the hidden outline, and an open rail drops
+       back to the resting float-chip (see the .toc-toggle rule). -->
   {#if !showDiff && hasToc}
     <Tooltip.Provider delayDuration={0}>
       <Tooltip.Root>
@@ -961,21 +961,23 @@
   /* The control bar above the surface. Carries the bar chrome (raised paper,
      hairline rule) for the version-compare picker: the "Compare versions" toggle
      sits at the left, and (in compare mode) the layout / indicator toggles are
-     pushed to the right edge. */
+     pushed to the right edge. The left padding is the rail's inner padding
+     (SourceToc's 0.75rem), not the row's usual clamp inset, so the first control
+     (the contents toggle) left-aligns with the filter input directly below it —
+     both then sit 0.75rem from the shared surface edge. */
   .control-row {
     display: flex;
     align-items: center;
     gap: 0.85rem;
-    padding: 0.5rem clamp(1rem, 3vw, 2rem);
+    padding: 0.5rem clamp(1rem, 3vw, 2rem) 0.5rem 0.75rem;
     border-bottom: 1px solid var(--rule);
     background: var(--paper-raised);
   }
 
-  /* The narrow-width contents toggle (EXC-809): a neutral float-chip icon button
-     sized to the compare row's control height (1.75rem). .float-chip (app.css)
-     owns the fill and the ink-soft→ink hover/expanded skin — so an open rail
-     reads as a quiet active state — leaving only the box and centering here.
-     flex: none keeps it from shrinking as the row tightens. */
+  /* The narrow-width contents toggle (EXC-809): a float-chip icon button sized to
+     the compare row's control height (1.75rem). The two states below invert the
+     compare toggle's colour logic (see there) — the box and centering are all
+     that's set here. flex: none keeps it from shrinking as the row tightens. */
   .toc-toggle {
     flex: none;
     display: inline-flex;
@@ -987,14 +989,24 @@
     border-radius: var(--radius);
     cursor: pointer;
   }
-  /* Open state carries the compare toggle's active marker (--accent-wash), so an
-     expanded rail reads like an enabled "Compare versions" view; collapsed drops
-     back to the resting float-chip. The .control-row prefix lifts specificity over
-     app.css's neutral button.float-chip[aria-expanded="true"] brightening. Mirrors
-     VersionComparePicker's .compare-toggle[aria-pressed="true"]. */
-  .control-row .toc-toggle[aria-expanded="true"]:not(:disabled),
-  .control-row .toc-toggle[aria-expanded="true"]:not(:disabled):hover {
+  /* Inverted from the compare toggle on purpose: a HIDDEN rail (aria-expanded
+     false) wears the amber active marker (--accent-wash) to advertise the tucked-
+     away outline, while a SHOWN rail drops to the resting float-chip so the open,
+     expected state reads quiet. The .control-row prefix lifts specificity over
+     app.css's neutral button.float-chip[aria-expanded="true"] brightening (which
+     would otherwise light up the shown state); each state keeps a :hover variant
+     so the button still responds to the pointer. */
+  .control-row .toc-toggle[aria-expanded="false"]:not(:disabled),
+  .control-row .toc-toggle[aria-expanded="false"]:not(:disabled):hover {
     background: var(--accent-wash);
+    color: var(--ink);
+  }
+  .control-row .toc-toggle[aria-expanded="true"]:not(:disabled) {
+    background: var(--chip);
+    color: var(--ink-soft);
+  }
+  .control-row .toc-toggle[aria-expanded="true"]:not(:disabled):hover {
+    background: var(--chip-hover);
     color: var(--ink);
   }
   /* The compare picker now owns the bar: it spans the row so the "Compare

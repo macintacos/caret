@@ -29,6 +29,17 @@ test("the toggle is always present and collapses the rail at wide width", async 
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
   await expect(rail).not.toHaveCSS("width", "0px");
 
+  // The toggle left-aligns with the rail's filter input directly below it
+  // (EXC-809 follow-up): the control row's left padding is the rail's inner
+  // padding, so the first control and the filter share one left edge.
+  const filter = page.getByLabel("Filter headings");
+  await expect(filter).toBeVisible();
+  const toggleBox = await toggle.boundingBox();
+  const filterBox = await filter.boundingBox();
+  expect(toggleBox).not.toBeNull();
+  expect(filterBox).not.toBeNull();
+  expect(Math.abs(toggleBox!.x - filterBox!.x)).toBeLessThanOrEqual(1);
+
   // Collapsing zeroes the rail lane so the plan reclaims the full width.
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
