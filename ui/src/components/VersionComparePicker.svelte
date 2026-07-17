@@ -187,6 +187,15 @@
   </DropdownMenu.Root>
 {/snippet}
 
+<!-- The toggle's label + trailing git-compare glyph (EXC-808). Shared by the
+     enabled and disabled buttons so the affordance stays identical; the icon is
+     decorative (aria-hidden via Icon.svelte), so the button's accessible name
+     stays "Compare versions" and inherits the button's currentColor. Spacing is
+     the Button's own gap. -->
+{#snippet compareLabel()}
+  Compare versions<Icon name="git-compare" size={14} />
+{/snippet}
+
 <div class="compare-picker">
   {#if canCompare}
     <Button
@@ -196,7 +205,7 @@
       aria-pressed={comparing}
       onclick={() => onSetComparing(!comparing)}
     >
-      Compare versions
+      {@render compareLabel()}
     </Button>
   {:else}
     <!-- Nothing to compare: shown-but-disabled (EXC-664). A disabled button
@@ -214,7 +223,7 @@
                 disabled
                 aria-pressed={false}
               >
-                Compare versions
+                {@render compareLabel()}
               </Button>
             </span>
           {/snippet}
