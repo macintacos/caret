@@ -14,6 +14,7 @@ import {
   shouldShowOnboarding,
 } from "$lib/prefs.ts";
 import { THEME_KEY } from "$lib/theme.ts";
+import { TOC_OPEN_KEY } from "$lib/tocPref.ts";
 
 afterEach(() => {
   localStorage.clear();
@@ -25,6 +26,7 @@ describe("KNOWN_PREF_KEYS", () => {
     expect(KNOWN_PREF_KEYS).toContain(THEME_KEY);
     expect(KNOWN_PREF_KEYS).toContain(DIFF_INDICATORS_KEY);
     expect(KNOWN_PREF_KEYS).toContain(DIFF_STYLE_KEY);
+    expect(KNOWN_PREF_KEYS).toContain(TOC_OPEN_KEY);
     expect(KNOWN_PREF_KEYS).toContain(ONBOARDED_KEY);
   });
 });

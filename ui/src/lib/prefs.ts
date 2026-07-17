@@ -12,6 +12,7 @@
 import { DIFF_INDICATORS_KEY } from "$lib/diffIndicatorsPref.ts";
 import { DIFF_STYLE_KEY } from "$lib/diffStylePref.ts";
 import { THEME_KEY } from "$lib/theme.ts";
+import { TOC_OPEN_KEY } from "$lib/tocPref.ts";
 
 /** localStorage key: has the first-run onboarding been seen (dismissed or acted on). */
 export const ONBOARDED_KEY = "caret.onboarded";
@@ -22,6 +23,7 @@ export const KNOWN_PREF_KEYS: readonly string[] = [
   THEME_KEY,
   DIFF_INDICATORS_KEY,
   DIFF_STYLE_KEY,
+  TOC_OPEN_KEY,
   ONBOARDED_KEY,
 ];
 

@@ -51,7 +51,8 @@
   import type { SourceViewGutter } from "$lib/diffview/options.ts";
   import type { SourceViewApi, SourceViewOptions } from "$lib/diffview/types.ts";
   import { activeHeadingLine, extractHeadings, lineForSlug, shouldShowToc, slugForLine } from "$lib/toc.ts";
-  import { NARROW_WIDTH_PX, TIGHT_WIDTH_PX } from "$lib/layout.ts";
+  import { TIGHT_WIDTH_PX } from "$lib/layout.ts";
+  import { readTocOpen, writeTocOpen } from "$lib/tocPref.ts";
   import { lineAtReadingZone } from "$lib/diffview/scroll.ts";
   import {
     type Annotation,
@@ -541,61 +542,28 @@
     setHeadingSlug(showDiff ? null : slug);
   });
 
-  // Responsive ToC rail (EXC-809). The fixed 15rem rail crushes the plan column
-  // at narrow widths, so the EXC-806 foundation breakpoints gate it: below
-  // --w-narrow a control-row toggle appears, and below --w-tight the rail
-  // auto-collapses so the plan column gets the full width. The thresholds come
-  // from layout.ts (single-sourced with the --w-* tokens) and are read through
-  // matchMedia so the rail reacts to live viewport changes; the guard keeps the
-  // happy-dom unit env (which has no matchMedia) on the wide default.
-  // "below px" as a media query: a --w-* token names the low end of its regime,
-  // so the rail is narrow/tight strictly under it (max-width: px - 1).
-  const belowQuery = (px: number): string => `(max-width: ${px - 1}px)`;
-  function matchesUnder(px: number): boolean {
-    return typeof matchMedia === "function" && matchMedia(belowQuery(px)).matches;
-  }
-  let narrow = $state(matchesUnder(NARROW_WIDTH_PX));
-  let tight = $state(matchesUnder(TIGHT_WIDTH_PX));
-  $effect(() => {
-    if (typeof matchMedia !== "function") return;
-    const nq = matchMedia(belowQuery(NARROW_WIDTH_PX));
-    const tq = matchMedia(belowQuery(TIGHT_WIDTH_PX));
-    const sync = () => {
-      narrow = nq.matches;
-      tight = tq.matches;
-    };
-    nq.addEventListener("change", sync);
-    tq.addEventListener("change", sync);
-    return () => {
-      nq.removeEventListener("change", sync);
-      tq.removeEventListener("change", sync);
-    };
-  });
-
-  // The reviewer's explicit collapse choice, or null to follow the width default
-  // (rail shown from --w-tight up, collapsed below it). Wide always shows, so the
-  // override only bites in the toggle regime; it clears when the layout returns
-  // to wide so a narrow-width collapse never lingers once there's room again.
-  let tocOverride = $state<boolean | null>(null);
-  const tocShown = $derived(!narrow || (tocOverride ?? !tight));
-  $effect(() => {
-    if (!narrow) tocOverride = null;
-  });
+  // Collapsible ToC rail (EXC-809). The toggle is always available (whenever the
+  // plan has a contents pane), and the reviewer's open/collapsed choice persists
+  // across plans and reloads (tocPref.ts). Absent a saved choice, the first load
+  // defaults by width — collapsed below --w-tight so a narrow window isn't
+  // crushed, open otherwise. That width default is read ONCE at mount, so a later
+  // resize never yanks the rail away from a reviewer mid-read; only their toggle
+  // (or a saved choice) changes it. The matchMedia guard keeps the happy-dom unit
+  // env (no matchMedia) on the open default.
+  const tocDefaultOpen = !(
+    typeof matchMedia === "function" &&
+    matchMedia(`(max-width: ${TIGHT_WIDTH_PX - 1}px)`).matches
+  );
+  let tocPref = $state<boolean | null>(readTocOpen());
+  const tocShown = $derived(tocPref ?? tocDefaultOpen);
 
   // The toggle only earns a place when there is a contents pane to toggle — the
   // same >=2-heading gate SourceToc self-applies (toc.ts § shouldShowToc).
   const hasToc = $derived(shouldShowToc(headings));
 
   function toggleToc(): void {
-    tocOverride = !tocShown;
-  }
-
-  // Jump the source view to a heading's line. At tight widths, return to the
-  // collapsed default afterwards so the reader lands on the full-width plan
-  // rather than behind the rail they just used.
-  function jumpToc(line: number): void {
-    api?.scrollToLine(line);
-    if (tight) tocOverride = null;
+    tocPref = !tocShown;
+    writeTocOpen(tocPref);
   }
 
   // Reactive mirror of the controller's pending target, so the composer renders
@@ -766,12 +734,13 @@
      always shown; its toggle disables itself when there are no other versions to
      compare (EXC-664). -->
 <div class="control-row">
-  <!-- Narrow-width contents toggle (EXC-809): shown only below --w-narrow and
-       only when the single-version surface has a ToC to toggle. A neutral
-       float-chip icon button matching the compare control's chrome; the
-       float-chip skin brightens on aria-expanded, so an open rail reads as a
-       quiet active state without spending amber (reserved for Approve). -->
-  {#if narrow && !showDiff && hasToc}
+  <!-- Contents toggle (EXC-809): always available when the single-version surface
+       has a ToC to toggle, so the reviewer can hide the outline at any width. A
+       float-chip icon button matching the compare control's chrome; when the rail
+       is open it carries the same --accent-wash active marker the "Compare
+       versions" toggle uses (see the .toc-toggle rule), and collapsed drops back to
+       the resting float-chip. -->
+  {#if !showDiff && hasToc}
     <Tooltip.Provider delayDuration={0}>
       <Tooltip.Root>
         <Tooltip.Trigger>
@@ -828,9 +797,9 @@
 <div class="diff-surface">
   <!-- The contents pane and gutter composer are the single-version surface only.
        Compare mode is a clean diff with no ToC, no gutter, no annotations. -->
-  {#if !showDiff}
+  {#if !showDiff && hasToc}
     <div id="plan-toc" class="toc-rail" class:collapsed={!tocShown}>
-      <SourceToc {headings} {activeLine} onJump={jumpToc} />
+      <SourceToc {headings} {activeLine} onJump={(line) => api?.scrollToLine(line)} />
     </div>
   {/if}
   <div class="diff-plan" bind:this={scrollEl} onmouseenter={showDragHint} role="presentation">
@@ -1018,6 +987,16 @@
     border-radius: var(--radius);
     cursor: pointer;
   }
+  /* Open state carries the compare toggle's active marker (--accent-wash), so an
+     expanded rail reads like an enabled "Compare versions" view; collapsed drops
+     back to the resting float-chip. The .control-row prefix lifts specificity over
+     app.css's neutral button.float-chip[aria-expanded="true"] brightening. Mirrors
+     VersionComparePicker's .compare-toggle[aria-pressed="true"]. */
+  .control-row .toc-toggle[aria-expanded="true"]:not(:disabled),
+  .control-row .toc-toggle[aria-expanded="true"]:not(:disabled):hover {
+    background: var(--accent-wash);
+    color: var(--ink);
+  }
   /* The compare picker now owns the bar: it spans the row so the "Compare
      versions" toggle sits at the left, and its display toggles (margin-left: auto,
      in compare mode) reach the right edge. */
@@ -1062,17 +1041,28 @@
     overflow: hidden;
   }
 
-  /* The ToC rail wrapper is layout-transparent (display: contents) so SourceToc's
-     own .source-toc stays the direct flex child at its 15rem width. Collapsing
-     hides the whole lane and .diff-plan (flex: 1) reclaims the full width — the
-     narrow-width behavior, with the wide layout unchanged (EXC-809). Hiding via
-     display:none (not unmounting) preserves the rail's filter and the parent's
-     active-line tracking across a collapse round-trip. */
+  /* The ToC rail lane (EXC-809). A fixed 15rem flex lane whose width animates to 0
+     on collapse, so the flex row reflows every frame and .diff-plan (flex: 1)
+     slides in to fill the space rather than jumping. overflow: hidden clips the
+     rail as the lane narrows (a wipe, not a squish) — the inner .source-toc is
+     pinned to its full width below so it stays put while the lane closes over it.
+     Collapsing by width (not display:none / unmount) keeps the rail's filter and
+     the parent's active-line tracking intact across a round-trip. The global #app
+     reduced-motion guard zeroes the transition, so it snaps when the OS asks. */
   .toc-rail {
-    display: contents;
+    flex: none;
+    display: flex;
+    width: 15rem;
+    overflow: hidden;
+    transition: width var(--dur-base) var(--ease-out);
   }
   .toc-rail.collapsed {
-    display: none;
+    width: 0;
+  }
+  /* Pin the rail to its full width so the animating lane clips it rather than
+     flex-shrinking its content; the flex parent stretches it to full height. */
+  .toc-rail > :global(.source-toc) {
+    flex: 0 0 15rem;
   }
 
   /* Fills the content row and scrolls on its own; the SourceView renders its
