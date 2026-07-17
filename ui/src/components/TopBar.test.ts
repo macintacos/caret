@@ -254,6 +254,15 @@ describe("TopBar overflow menu (EXC-810)", () => {
     expect(target.querySelector(".overflow-trigger .count")).toBeNull();
   });
 
+  test("folds the pending count into the overflow trigger's accessible name", () => {
+    // The trigger's own aria-label replaces its subtree for naming, so the
+    // count must ride the label — not just the (aria-hidden) visual badge — or a
+    // screen reader loses it when the row collapses.
+    const { target } = render(TopBar, { ...baseProps, pendingCount: 3 });
+    const trigger = target.querySelector(".overflow-trigger") as HTMLButtonElement;
+    expect(trigger.getAttribute("aria-label")).toContain("3");
+  });
+
   test("wraps the split-button approve label so it can collapse at tight widths", () => {
     const { target } = render(TopBar, baseProps);
     const label = target.querySelector(".split-primary .approve-label");

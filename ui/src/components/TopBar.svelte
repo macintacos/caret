@@ -106,16 +106,15 @@
               variant="secondary"
               size="icon"
               class="overflow-trigger float-chip"
-              aria-label="More actions"
+              aria-label={pendingCount > 0 ? `More actions, ${pendingCount} pending` : "More actions"}
               disabled={busy}
             >
               <Icon name="ellipsis" size={16} />
               {#if pendingCount > 0}
-                <Badge
-                  variant="secondary"
-                  class="count metric overflow-count"
-                  aria-label="{pendingCount} pending comment{pendingCount === 1 ? '' : 's'}"
-                >
+                <!-- Visual only: the trigger's own aria-label carries the count
+                     (an element's aria-label replaces its subtree for naming, so
+                     a label here would never be announced). -->
+                <Badge variant="secondary" class="count metric overflow-count" aria-hidden="true">
                   {pendingCount}
                 </Badge>
               {/if}
@@ -132,7 +131,13 @@
             <Icon name="corner-up-left" size={14} />
             Request changes
             {#if pendingCount > 0}
-              <Badge variant="secondary" class="count metric">{pendingCount}</Badge>
+              <Badge
+                variant="secondary"
+                class="count metric"
+                aria-label="{pendingCount} pending comment{pendingCount === 1 ? '' : 's'}"
+              >
+                {pendingCount}
+              </Badge>
             {/if}
           </DropdownMenu.Item>
           <DropdownMenu.Item variant="destructive" onSelect={() => onReject()}>Reject</DropdownMenu.Item>
