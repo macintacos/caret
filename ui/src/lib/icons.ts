@@ -13,6 +13,7 @@ export const ICON_NAMES = [
   "corner-up-left",
   "file",
   "git-compare",
+  "panel-left",
   "settings",
   "trash-2",
   "unplug",

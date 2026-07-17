@@ -50,7 +50,9 @@
   import VersionComparePicker from "@/components/VersionComparePicker.svelte";
   import type { SourceViewGutter } from "$lib/diffview/options.ts";
   import type { SourceViewApi, SourceViewOptions } from "$lib/diffview/types.ts";
-  import { activeHeadingLine, extractHeadings, lineForSlug, slugForLine } from "$lib/toc.ts";
+  import { activeHeadingLine, extractHeadings, lineForSlug, shouldShowToc, slugForLine } from "$lib/toc.ts";
+  import { TIGHT_WIDTH_PX } from "$lib/layout.ts";
+  import { readTocOpen, writeTocOpen } from "$lib/tocPref.ts";
   import { lineAtReadingZone } from "$lib/diffview/scroll.ts";
   import {
     type Annotation,
@@ -65,6 +67,7 @@
   import SourceToc from "@/components/SourceToc.svelte";
   import CodeCopyButton from "@/components/CodeCopyButton.svelte";
   import FilePreview from "@/components/FilePreview.svelte";
+  import Icon from "@/components/Icon.svelte";
 
   interface Props {
     /** The review whose current plan version is rendered. */
@@ -539,6 +542,30 @@
     setHeadingSlug(showDiff ? null : slug);
   });
 
+  // Collapsible ToC rail (EXC-809). The toggle is always available (whenever the
+  // plan has a contents pane), and the reviewer's open/collapsed choice persists
+  // across plans and reloads (tocPref.ts). Absent a saved choice, the first load
+  // defaults by width — collapsed below --w-tight so a narrow window isn't
+  // crushed, open otherwise. That width default is read ONCE at mount, so a later
+  // resize never yanks the rail away from a reviewer mid-read; only their toggle
+  // (or a saved choice) changes it. The matchMedia guard keeps the happy-dom unit
+  // env (no matchMedia) on the open default.
+  const tocDefaultOpen = !(
+    typeof matchMedia === "function" &&
+    matchMedia(`(max-width: ${TIGHT_WIDTH_PX - 1}px)`).matches
+  );
+  let tocPref = $state<boolean | null>(readTocOpen());
+  const tocShown = $derived(tocPref ?? tocDefaultOpen);
+
+  // The toggle only earns a place when there is a contents pane to toggle — the
+  // same >=2-heading gate SourceToc self-applies (toc.ts § shouldShowToc).
+  const hasToc = $derived(shouldShowToc(headings));
+
+  function toggleToc(): void {
+    tocPref = !tocShown;
+    writeTocOpen(tocPref);
+  }
+
   // Reactive mirror of the controller's pending target, so the composer renders
   // when it opens or closes. The controller owns the state machine; this is the
   // view's read of it.
@@ -707,6 +734,34 @@
      always shown; its toggle disables itself when there are no other versions to
      compare (EXC-664). -->
 <div class="control-row">
+  <!-- Contents toggle (EXC-809): always available when the single-version surface
+       has a ToC to toggle, so the reviewer can hide the outline at any width. A
+       float-chip icon button matching the compare control's chrome, with its
+       colour logic inverted from that control: a collapsed rail carries the
+       --accent-wash marker to advertise the hidden outline, and an open rail drops
+       back to the resting float-chip (see the .toc-toggle rule). -->
+  {#if !showDiff && hasToc}
+    <Tooltip.Provider delayDuration={0}>
+      <Tooltip.Root>
+        <Tooltip.Trigger>
+          {#snippet child({ props })}
+            <button
+              {...props}
+              type="button"
+              class="toc-toggle float-chip"
+              aria-label="Toggle plan contents"
+              aria-expanded={tocShown}
+              aria-controls="plan-toc"
+              onclick={toggleToc}
+            >
+              <Icon name="panel-left" size={14} />
+            </button>
+          {/snippet}
+        </Tooltip.Trigger>
+        <Tooltip.Content>{tocShown ? "Hide plan contents" : "Show plan contents"}</Tooltip.Content>
+      </Tooltip.Root>
+    </Tooltip.Provider>
+  {/if}
   <VersionComparePicker
     versions={review.versions}
     comparing={compareStore.comparing}
@@ -742,8 +797,10 @@
 <div class="diff-surface">
   <!-- The contents pane and gutter composer are the single-version surface only.
        Compare mode is a clean diff with no ToC, no gutter, no annotations. -->
-  {#if !showDiff}
-    <SourceToc {headings} {activeLine} onJump={(line) => api?.scrollToLine(line)} />
+  {#if !showDiff && hasToc}
+    <div id="plan-toc" class="toc-rail" class:collapsed={!tocShown}>
+      <SourceToc {headings} {activeLine} onJump={(line) => api?.scrollToLine(line)} />
+    </div>
   {/if}
   <div class="diff-plan" bind:this={scrollEl} onmouseenter={showDragHint} role="presentation">
     {#if showDiff}
@@ -904,14 +961,53 @@
   /* The control bar above the surface. Carries the bar chrome (raised paper,
      hairline rule) for the version-compare picker: the "Compare versions" toggle
      sits at the left, and (in compare mode) the layout / indicator toggles are
-     pushed to the right edge. */
+     pushed to the right edge. The left padding is the rail's inner padding
+     (SourceToc's 0.75rem), not the row's usual clamp inset, so the first control
+     (the contents toggle) left-aligns with the filter input directly below it —
+     both then sit 0.75rem from the shared surface edge. */
   .control-row {
     display: flex;
     align-items: center;
     gap: 0.85rem;
-    padding: 0.5rem clamp(1rem, 3vw, 2rem);
+    padding: 0.5rem clamp(1rem, 3vw, 2rem) 0.5rem 0.75rem;
     border-bottom: 1px solid var(--rule);
     background: var(--paper-raised);
+  }
+
+  /* The narrow-width contents toggle (EXC-809): a float-chip icon button sized to
+     the compare row's control height (1.75rem). The two states below invert the
+     compare toggle's colour logic (see there) — the box and centering are all
+     that's set here. flex: none keeps it from shrinking as the row tightens. */
+  .toc-toggle {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
+  /* Inverted from the compare toggle on purpose: a HIDDEN rail (aria-expanded
+     false) wears the amber active marker (--accent-wash) to advertise the tucked-
+     away outline, while a SHOWN rail drops to the resting float-chip so the open,
+     expected state reads quiet. The .control-row prefix lifts specificity over
+     app.css's neutral button.float-chip[aria-expanded="true"] brightening (which
+     would otherwise light up the shown state); each state keeps a :hover variant
+     so the button still responds to the pointer. */
+  .control-row .toc-toggle[aria-expanded="false"]:not(:disabled),
+  .control-row .toc-toggle[aria-expanded="false"]:not(:disabled):hover {
+    background: var(--accent-wash);
+    color: var(--ink);
+  }
+  .control-row .toc-toggle[aria-expanded="true"]:not(:disabled) {
+    background: var(--chip);
+    color: var(--ink-soft);
+  }
+  .control-row .toc-toggle[aria-expanded="true"]:not(:disabled):hover {
+    background: var(--chip-hover);
+    color: var(--ink);
   }
   /* The compare picker now owns the bar: it spans the row so the "Compare
      versions" toggle sits at the left, and its display toggles (margin-left: auto,
@@ -955,6 +1051,30 @@
     display: flex;
     min-height: 0;
     overflow: hidden;
+  }
+
+  /* The ToC rail lane (EXC-809). A fixed 15rem flex lane whose width animates to 0
+     on collapse, so the flex row reflows every frame and .diff-plan (flex: 1)
+     slides in to fill the space rather than jumping. overflow: hidden clips the
+     rail as the lane narrows (a wipe, not a squish) — the inner .source-toc is
+     pinned to its full width below so it stays put while the lane closes over it.
+     Collapsing by width (not display:none / unmount) keeps the rail's filter and
+     the parent's active-line tracking intact across a round-trip. The global #app
+     reduced-motion guard zeroes the transition, so it snaps when the OS asks. */
+  .toc-rail {
+    flex: none;
+    display: flex;
+    width: 15rem;
+    overflow: hidden;
+    transition: width var(--dur-base) var(--ease-out);
+  }
+  .toc-rail.collapsed {
+    width: 0;
+  }
+  /* Pin the rail to its full width so the animating lane clips it rather than
+     flex-shrinking its content; the flex parent stretches it to full height. */
+  .toc-rail > :global(.source-toc) {
+    flex: 0 0 15rem;
   }
 
   /* Fills the content row and scrolls on its own; the SourceView renders its

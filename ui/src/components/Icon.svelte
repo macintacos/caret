@@ -16,6 +16,7 @@
   import cornerUpLeft from "@/icons/corner-up-left.svg?raw";
   import file from "@/icons/file.svg?raw";
   import gitCompare from "@/icons/git-compare.svg?raw";
+  import panelLeft from "@/icons/panel-left.svg?raw";
   import settings from "@/icons/settings.svg?raw";
   import trash2 from "@/icons/trash-2.svg?raw";
   import unplug from "@/icons/unplug.svg?raw";
@@ -33,6 +34,7 @@
     "corner-up-left": cornerUpLeft,
     file,
     "git-compare": gitCompare,
+    "panel-left": panelLeft,
     settings,
     "trash-2": trash2,
     unplug,
