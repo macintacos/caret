@@ -68,3 +68,37 @@ test("narrow width shows the rail by default; the toggle collapses it", async ({
   await expect(toc).toBeHidden();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 });
+
+test("a seeded comment card fits within the plan column at narrow width", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    annotations: [
+      {
+        id: "ann-1",
+        startLine: 7,
+        endLine: 8,
+        comment:
+          "A comment long enough to wrap across a couple of lines once the plan column is squeezed to a narrow width.",
+      },
+    ],
+  });
+  await page.setViewportSize({ width: 500, height: 900 });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  // The inline comment card (SourceAnnotationThread) caps at min(46rem, 100%), so
+  // the comment never overflows its plan column even when the column is squeezed —
+  // EXC-809 criterion 2. Measured on the comment text (which the capped card
+  // bounds) in viewport coordinates, so the shadow-projected card and its
+  // light-DOM container are directly comparable.
+  const comment = page.getByText("A comment long enough to wrap").first();
+  await expect(comment).toBeVisible();
+  const commentBox = await comment.boundingBox();
+  const planBox = await page.locator(".diff-plan").boundingBox();
+  expect(commentBox).not.toBeNull();
+  expect(planBox).not.toBeNull();
+  expect(commentBox!.x + commentBox!.width).toBeLessThanOrEqual(planBox!.x + planBox!.width + 1);
+});
