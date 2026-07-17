@@ -50,7 +50,8 @@
   import VersionComparePicker from "@/components/VersionComparePicker.svelte";
   import type { SourceViewGutter } from "$lib/diffview/options.ts";
   import type { SourceViewApi, SourceViewOptions } from "$lib/diffview/types.ts";
-  import { activeHeadingLine, extractHeadings, lineForSlug, slugForLine } from "$lib/toc.ts";
+  import { activeHeadingLine, extractHeadings, lineForSlug, shouldShowToc, slugForLine } from "$lib/toc.ts";
+  import { NARROW_WIDTH_PX, TIGHT_WIDTH_PX } from "$lib/layout.ts";
   import { lineAtReadingZone } from "$lib/diffview/scroll.ts";
   import {
     type Annotation,
@@ -65,6 +66,7 @@
   import SourceToc from "@/components/SourceToc.svelte";
   import CodeCopyButton from "@/components/CodeCopyButton.svelte";
   import FilePreview from "@/components/FilePreview.svelte";
+  import Icon from "@/components/Icon.svelte";
 
   interface Props {
     /** The review whose current plan version is rendered. */
@@ -539,6 +541,63 @@
     setHeadingSlug(showDiff ? null : slug);
   });
 
+  // Responsive ToC rail (EXC-809). The fixed 15rem rail crushes the plan column
+  // at narrow widths, so the EXC-806 foundation breakpoints gate it: below
+  // --w-narrow a control-row toggle appears, and below --w-tight the rail
+  // auto-collapses so the plan column gets the full width. The thresholds come
+  // from layout.ts (single-sourced with the --w-* tokens) and are read through
+  // matchMedia so the rail reacts to live viewport changes; the guard keeps the
+  // happy-dom unit env (which has no matchMedia) on the wide default.
+  // "below px" as a media query: a --w-* token names the low end of its regime,
+  // so the rail is narrow/tight strictly under it (max-width: px - 1).
+  const belowQuery = (px: number): string => `(max-width: ${px - 1}px)`;
+  function matchesUnder(px: number): boolean {
+    return typeof matchMedia === "function" && matchMedia(belowQuery(px)).matches;
+  }
+  let narrow = $state(matchesUnder(NARROW_WIDTH_PX));
+  let tight = $state(matchesUnder(TIGHT_WIDTH_PX));
+  $effect(() => {
+    if (typeof matchMedia !== "function") return;
+    const nq = matchMedia(belowQuery(NARROW_WIDTH_PX));
+    const tq = matchMedia(belowQuery(TIGHT_WIDTH_PX));
+    const sync = () => {
+      narrow = nq.matches;
+      tight = tq.matches;
+    };
+    nq.addEventListener("change", sync);
+    tq.addEventListener("change", sync);
+    return () => {
+      nq.removeEventListener("change", sync);
+      tq.removeEventListener("change", sync);
+    };
+  });
+
+  // The reviewer's explicit collapse choice, or null to follow the width default
+  // (rail shown from --w-tight up, collapsed below it). Wide always shows, so the
+  // override only bites in the toggle regime; it clears when the layout returns
+  // to wide so a narrow-width collapse never lingers once there's room again.
+  let tocOverride = $state<boolean | null>(null);
+  const tocShown = $derived(!narrow || (tocOverride ?? !tight));
+  $effect(() => {
+    if (!narrow) tocOverride = null;
+  });
+
+  // The toggle only earns a place when there is a contents pane to toggle — the
+  // same >=2-heading gate SourceToc self-applies (toc.ts § shouldShowToc).
+  const hasToc = $derived(shouldShowToc(headings));
+
+  function toggleToc(): void {
+    tocOverride = !tocShown;
+  }
+
+  // Jump the source view to a heading's line. At tight widths, return to the
+  // collapsed default afterwards so the reader lands on the full-width plan
+  // rather than behind the rail they just used.
+  function jumpToc(line: number): void {
+    api?.scrollToLine(line);
+    if (tight) tocOverride = null;
+  }
+
   // Reactive mirror of the controller's pending target, so the composer renders
   // when it opens or closes. The controller owns the state machine; this is the
   // view's read of it.
@@ -707,6 +766,33 @@
      always shown; its toggle disables itself when there are no other versions to
      compare (EXC-664). -->
 <div class="control-row">
+  <!-- Narrow-width contents toggle (EXC-809): shown only below --w-narrow and
+       only when the single-version surface has a ToC to toggle. A neutral
+       float-chip icon button matching the compare control's chrome; the
+       float-chip skin brightens on aria-expanded, so an open rail reads as a
+       quiet active state without spending amber (reserved for Approve). -->
+  {#if narrow && !showDiff && hasToc}
+    <Tooltip.Provider delayDuration={0}>
+      <Tooltip.Root>
+        <Tooltip.Trigger>
+          {#snippet child({ props })}
+            <button
+              {...props}
+              type="button"
+              class="toc-toggle float-chip"
+              aria-label="Toggle plan contents"
+              aria-expanded={tocShown}
+              aria-controls="plan-toc"
+              onclick={toggleToc}
+            >
+              <Icon name="panel-left" size={14} />
+            </button>
+          {/snippet}
+        </Tooltip.Trigger>
+        <Tooltip.Content>{tocShown ? "Hide plan contents" : "Show plan contents"}</Tooltip.Content>
+      </Tooltip.Root>
+    </Tooltip.Provider>
+  {/if}
   <VersionComparePicker
     versions={review.versions}
     comparing={compareStore.comparing}
@@ -743,7 +829,9 @@
   <!-- The contents pane and gutter composer are the single-version surface only.
        Compare mode is a clean diff with no ToC, no gutter, no annotations. -->
   {#if !showDiff}
-    <SourceToc {headings} {activeLine} onJump={(line) => api?.scrollToLine(line)} />
+    <div id="plan-toc" class="toc-rail" class:collapsed={!tocShown}>
+      <SourceToc {headings} {activeLine} onJump={jumpToc} />
+    </div>
   {/if}
   <div class="diff-plan" bind:this={scrollEl} onmouseenter={showDragHint} role="presentation">
     {#if showDiff}
@@ -913,6 +1001,23 @@
     border-bottom: 1px solid var(--rule);
     background: var(--paper-raised);
   }
+
+  /* The narrow-width contents toggle (EXC-809): a neutral float-chip icon button
+     sized to the compare row's control height (1.75rem). .float-chip (app.css)
+     owns the fill and the ink-soft→ink hover/expanded skin — so an open rail
+     reads as a quiet active state — leaving only the box and centering here.
+     flex: none keeps it from shrinking as the row tightens. */
+  .toc-toggle {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
   /* The compare picker now owns the bar: it spans the row so the "Compare
      versions" toggle sits at the left, and its display toggles (margin-left: auto,
      in compare mode) reach the right edge. */
@@ -955,6 +1060,19 @@
     display: flex;
     min-height: 0;
     overflow: hidden;
+  }
+
+  /* The ToC rail wrapper is layout-transparent (display: contents) so SourceToc's
+     own .source-toc stays the direct flex child at its 15rem width. Collapsing
+     hides the whole lane and .diff-plan (flex: 1) reclaims the full width — the
+     narrow-width behavior, with the wide layout unchanged (EXC-809). Hiding via
+     display:none (not unmounting) preserves the rail's filter and the parent's
+     active-line tracking across a collapse round-trip. */
+  .toc-rail {
+    display: contents;
+  }
+  .toc-rail.collapsed {
+    display: none;
   }
 
   /* Fills the content row and scrolls on its own; the SourceView renders its
