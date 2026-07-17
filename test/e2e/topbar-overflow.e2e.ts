@@ -77,17 +77,28 @@ test("narrow: the reject action still resolves from the overflow menu", async ({
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).not.toContain(id);
 });
 
-test("narrow: the topbar fits with no horizontal overflow", async ({ daemon, page }) => {
-  await daemon.seed();
+test("the right-hand controls stay on-screen across a width sweep", async ({ daemon, page }) => {
+  // Regression: the topbar (a grid item of .shell) defaulted to min-width:auto, so
+  // it grew its track to fit content — the flex row never felt shrink pressure, the
+  // title held its 46vw cap, and Settings/bell/⋯ overflowed off-screen. min-width:0
+  // pins the topbar to the viewport so the title truncates and the controls stay.
+  await daemon.seed({
+    plan: `# ${"caret dev — markdown rendering stress test ".repeat(2)}\n\n## Section\n\nBody.\n`,
+  });
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
-  await page.setViewportSize({ width: 500, height: 800 });
 
-  // The header no longer forces the app wide: its content fits its own width.
-  const { scrollWidth, clientWidth } = await page
-    .locator(".topbar")
-    .evaluate((el) => ({ scrollWidth: el.scrollWidth, clientWidth: el.clientWidth }));
-  expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+  for (const width of [1100, 1000, 900, 800, 720, 640, 560, 500, 480]) {
+    await page.setViewportSize({ width, height: 400 });
+    const { settingsRight, docScrollWidth } = await page.evaluate(() => ({
+      settingsRight: document.querySelector(".settings")!.getBoundingClientRect().right,
+      docScrollWidth: document.documentElement.scrollWidth,
+    }));
+    // Settings (the rightmost, pinned control) stays fully within the viewport...
+    expect(settingsRight, `settings on-screen at ${width}px`).toBeLessThanOrEqual(width);
+    // ...and the header never forces a horizontal scroll.
+    expect(docScrollWidth, `no horizontal overflow at ${width}px`).toBeLessThanOrEqual(width);
+  }
 });
 
 test("tight: Approve moves into the overflow menu", async ({ daemon, page }) => {

@@ -222,6 +222,12 @@
     background: var(--paper-raised);
     position: relative;
     z-index: 30;
+    /* As a grid item of .shell the default min-width:auto lets the topbar expand
+       its track to fit content, so the flex row below never feels shrink pressure
+       and the title stays at its 46vw cap while the right-hand controls overflow
+       off-screen. min-width:0 pins the topbar to the viewport, so the lead
+       shrinks and the title truncates instead (the controls are flex-shrink:0). */
+    min-width: 0;
   }
   /* Takes the row's free space and yields it first: when the controls need room
      the lead shrinks and the plan title (ReviewSwitcher .title) truncates, rather
