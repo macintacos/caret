@@ -40,6 +40,8 @@
   import { buildFileRefLayer, type FileRefSpan, type FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
   import { createHoverIntent } from "$lib/diffview/hoverIntent.ts";
   import { resolveFileRefs } from "$lib/api.ts";
+  import { shortCwd } from "$lib/cwd.ts";
+  import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import { buildLinkLayer } from "$lib/diffview/links.ts";
   import { readDiffStyle, writeDiffStyle } from "$lib/diffStylePref.ts";
   import { readDiffIndicators, writeDiffIndicators } from "$lib/diffIndicatorsPref.ts";
@@ -719,6 +721,22 @@
     onSetDiffStyle={compare.setDiffStyle}
     onSetDiffIndicators={compare.setDiffIndicators}
   />
+  {#if !compareStore.comparing}
+    <!-- Working-directory path (relocated from the TopBar, EXC-807). Full cwd on
+         hover; the row shows the abbreviated path. Right-aligned by the
+         compare-picker's flex:1, and dropped in compare mode so the picker's own
+         display toggles reclaim the right edge. -->
+    <Tooltip.Provider delayDuration={0}>
+      <Tooltip.Root>
+        <Tooltip.Trigger>
+          {#snippet child({ props })}
+            <div {...props} class="cwd mono">{shortCwd(review.cwd)}</div>
+          {/snippet}
+        </Tooltip.Trigger>
+        <Tooltip.Content>{review.cwd}</Tooltip.Content>
+      </Tooltip.Root>
+    </Tooltip.Provider>
+  {/if}
 </div>
 
 <div class="diff-surface">
@@ -900,6 +918,19 @@
      in compare mode) reach the right edge. */
   .control-row :global(.compare-picker) {
     flex: 1;
+  }
+  /* The working-directory path, relocated from the TopBar (EXC-807). The
+     compare-picker's flex:1 pushes it to the row's right edge; it shrinks to an
+     ellipsis on narrow widths (the tooltip still carries the full path). Muted
+     .mono chrome, matching its former TopBar treatment. */
+  .cwd {
+    flex: 0 1 auto;
+    min-width: 0;
+    color: var(--ink-faint);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: default;
   }
 
   /* The contents pane and source view share one row; the pane is a fixed-width

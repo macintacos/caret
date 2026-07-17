@@ -1,12 +1,10 @@
 <script lang="ts">
   import { approveLabel } from "$lib/approve.ts";
-  import { shortCwd } from "$lib/cwd.ts";
   import type { ApproveVariant, ApproveVariantId, ClientReview } from "@core/lib/types";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
-  import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import DevBadge from "@/components/DevBadge.svelte";
   import Icon from "@/components/Icon.svelte";
   import NotifyBell from "@/components/NotifyBell.svelte";
@@ -75,22 +73,6 @@
   </div>
 
   {#if active}
-    <!-- Full cwd on hover; the row itself shows the abbreviated path. -->
-    <Tooltip.Provider delayDuration={0}>
-      <Tooltip.Root>
-        <Tooltip.Trigger>
-          {#snippet child({ props })}
-            <!-- The cwd is non-interactive display text; the tooltip is a
-                 pointer-hover enhancement over the always-visible abbreviated path.
-                 No tabindex — a nonnegative tabindex on a non-interactive element is
-                 itself an a11y anti-pattern (svelte a11y_no_noninteractive_tabindex). -->
-            <div {...props} class="context mono">{shortCwd(active.cwd)}</div>
-          {/snippet}
-        </Tooltip.Trigger>
-        <Tooltip.Content>{active.cwd}</Tooltip.Content>
-      </Tooltip.Root>
-    </Tooltip.Provider>
-
     <div class="actions" class:busy>
       <!-- Same quiet floating-chip as Request changes (soft fill, ink-soft label),
            differentiated only by warming to danger on hover. Reject always routes
@@ -144,8 +126,9 @@
   {/if}
 
   <!-- Always-visible permission badge + settings, pinned right in both layouts:
-       when a review is active `.context` (flex: 1) eats the slack; with no
-       review the slot's own margin-left pushes it right. -->
+       when a review is active `.actions`'s margin-left:auto eats the slack and
+       carries this cluster right with it; with no review the slot's own
+       margin-left pushes it right. -->
   <div class="bell-slot">
     <NotifyBell />
     <Button variant="secondary" size="icon" class="settings float-chip" aria-label="Settings" onclick={onOpenSettings}>
@@ -187,15 +170,6 @@
     color: var(--accent);
     margin-right: 0.05em;
   }
-  .context {
-    flex: 1;
-    text-align: center;
-    color: var(--ink-faint);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    cursor: default;
-  }
   .actions {
     display: flex;
     align-items: center;
@@ -207,13 +181,20 @@
   .actions.busy {
     pointer-events: none;
   }
-  /* Pins the bell + settings cluster to the right edge when no review is active
-     (`.context`'s flex:1 handles the active layout; here auto resolves to 0). */
+  /* Pins the bell + settings cluster to the right edge. With no review active it
+     is the only right-side group, so its own margin-left:auto pushes it right.
+     When a review IS active, `.actions` already owns an auto margin — two auto
+     margins in one flex row split the free space and strand the bell cluster
+     mid-row, so the override below zeroes this one and both groups ride the
+     single `.actions` margin to the right edge together. */
   .bell-slot {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
     margin-left: auto;
+  }
+  .actions + .bell-slot {
+    margin-left: 0;
   }
 
   /* Reject warms to danger on hover — the one place red belongs in the row. */

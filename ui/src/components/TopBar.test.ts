@@ -37,6 +37,14 @@ const baseProps = {
 };
 
 describe("TopBar render", () => {
+  // EXC-807: the working-directory path moved out of the header into the compare
+  // row, so the topbar no longer renders it.
+  test("does not render the working-directory path", () => {
+    const { target } = render(TopBar, baseProps);
+    expect(target.querySelector(".context")).toBeNull();
+    expect(target.textContent).not.toContain("/home/u/proj/app");
+  });
+
   test("renders the brand and, with an active review, the action buttons", () => {
     const { target } = render(TopBar, baseProps);
     expect(target.querySelector(".brand")!.textContent).toContain("caret");
