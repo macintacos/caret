@@ -931,6 +931,22 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     cursor: default;
+    /* Returning to plan review (leaving compare mode) re-mounts the path, so it
+       reveals with the same quick slide-in the compare controls use when
+       entering (VersionComparePicker's compare-reveal, EXC-808) — the switch now
+       reads symmetric in both directions. The global #app reduced-motion guard
+       zeroes it. */
+    animation: cwd-reveal var(--dur-base) var(--ease-out);
+  }
+  @keyframes cwd-reveal {
+    from {
+      opacity: 0;
+      transform: translateX(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
   }
 
   /* The contents pane and source view share one row; the pane is a fixed-width

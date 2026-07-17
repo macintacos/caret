@@ -79,6 +79,41 @@ describe("VersionComparePicker visibility", () => {
   });
 });
 
+describe("VersionComparePicker compare icon", () => {
+  // EXC-808: the toggle carries a leading git-compare glyph so it reads as a
+  // compare affordance. Icon.svelte wraps the vendored SVG in a decorative
+  // (aria-hidden) .icon span, so the button's accessible name is unchanged.
+  test("the enabled toggle renders the compare icon, leading the label", () => {
+    const { target } = render(VersionComparePicker, baseProps);
+    const toggle = target.querySelector<HTMLButtonElement>(".compare-toggle");
+    expect(toggle!.querySelector(".icon svg")).not.toBeNull();
+    // The icon is decorative, so it adds no text: the accessible name (which
+    // the e2e getByRole selectors depend on) stays exactly "Compare versions".
+    // A stray label= on the Icon would break this at unit speed.
+    expect(toggle!.textContent?.trim()).toBe("Compare versions");
+    // EXC-808: the icon leads the label (sits to its left), so it precedes the
+    // "Compare versions" text in DOM order.
+    const kids = [...toggle!.childNodes];
+    const iconIdx = kids.findIndex(
+      (n) => n.nodeType === 1 && (n as Element).classList.contains("icon"),
+    );
+    const labelIdx = kids.findIndex((n) => n.textContent?.includes("Compare"));
+    expect(iconIdx).toBeGreaterThanOrEqual(0);
+    expect(iconIdx).toBeLessThan(labelIdx);
+  });
+
+  test("the disabled toggle also renders the compare icon", () => {
+    const { target } = render(VersionComparePicker, {
+      ...baseProps,
+      versions: versions(1),
+      comparing: false,
+      canCompare: false,
+    });
+    const toggle = target.querySelector<HTMLButtonElement>(".compare-toggle");
+    expect(toggle!.querySelector(".icon svg")).not.toBeNull();
+  });
+});
+
 describe("VersionComparePicker pair selection", () => {
   // The base/target pickers reuse the ThemePicker's DropdownMenu; the trigger
   // (.vpick) shows the current version and carries an accessible label. The
