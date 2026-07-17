@@ -95,9 +95,10 @@
 
       <!-- Below --w-narrow the Reject + Request-changes buttons above collapse
            into this "More actions" overflow menu (their inline buttons hide via
-           CSS); Approve and the bell stay visible. The trigger carries the
-           pending count so it stays visible once Request changes is in the menu.
-           Hidden above --w-narrow, so the wide layout is unchanged. -->
+           CSS); below --w-tight Approve joins them too, leaving only ⋯ + bell +
+           settings on the right. The trigger carries the pending count so it
+           stays visible once Request changes is in the menu. Hidden above
+           --w-narrow, so the wide layout is unchanged. -->
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
           {#snippet child({ props })}
@@ -122,6 +123,22 @@
           {/snippet}
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end">
+          <!-- Approve joins the menu at the tightest widths (the inline Approve
+               control below hides ≤ --w-tight); these rows are CSS-hidden above
+               that width. The remembered/default variant leads. -->
+          {#each variants as v (v.id)}
+            <!-- Deferred like Request changes below: the approve confirm is a
+                 dismissible dialog (Modal kind="dialog"), so it must open after
+                 this menu has closed or the menu's interact-outside dismisses it. -->
+            <DropdownMenu.Item class="overflow-approve" onSelect={() => setTimeout(() => onApprove(v.id), 0)}>
+              <Icon name="check" size={14} />
+              <span class="v-col">
+                <span class="v-label">{v.label}</span>
+                {#if v.description}<span class="v-note">{v.description}</span>{/if}
+              </span>
+            </DropdownMenu.Item>
+          {/each}
+          <DropdownMenu.Separator class="overflow-approve-sep" />
           <!-- Defer the open past this menu's close: Request changes is a
                dismissible dialog (Modal kind="dialog"), and the closing menu's
                own interact-outside would dismiss a dialog opened on the same
@@ -151,28 +168,32 @@
            remembered mode and the toggle opens the variant menu (mechanics in
            SplitButton.svelte). The menu rows stay here (approve-specific) and
            render into the component's portal, where the scoped .v-* styles still
-           reach them because the scope hash rides the elements. -->
-      {#if variants.length <= 1}
-        <Button variant="default" class="approve" onclick={() => onApprove(approveMode)} disabled={busy}>
-          <Icon name="check" size={14} />
-          <span class="approve-label">{approveLabel(approveMode, variants)}</span>
-        </Button>
-      {:else}
-        <SplitButton onclick={() => onApprove(approveMode)} optionsLabel="Approve options" disabled={busy}>
-          <Icon name="check" size={14} />
-          <span class="approve-label">{approveLabel(approveMode, variants)}</span>
-          {#snippet menu()}
-            {#each variants as v (v.id)}
-              <DropdownMenu.Item class="approve-variant" onSelect={() => onApprove(v.id)}>
-                <span class="v-col">
-                  <span class="v-label">{v.label}</span>
-                  {#if v.description}<span class="v-note">{v.description}</span>{/if}
-                </span>
-              </DropdownMenu.Item>
-            {/each}
-          {/snippet}
-        </SplitButton>
-      {/if}
+           reach them because the scope hash rides the elements. Wrapped in a slot
+           so the whole control hides ≤ --w-tight, where the approve options move
+           into the overflow menu above. -->
+      <div class="approve-slot">
+        {#if variants.length <= 1}
+          <Button variant="default" class="approve" onclick={() => onApprove(approveMode)} disabled={busy}>
+            <Icon name="check" size={14} />
+            {approveLabel(approveMode, variants)}
+          </Button>
+        {:else}
+          <SplitButton onclick={() => onApprove(approveMode)} optionsLabel="Approve options" disabled={busy}>
+            <Icon name="check" size={14} />
+            {approveLabel(approveMode, variants)}
+            {#snippet menu()}
+              {#each variants as v (v.id)}
+                <DropdownMenu.Item class="approve-variant" onSelect={() => onApprove(v.id)}>
+                  <span class="v-col">
+                    <span class="v-label">{v.label}</span>
+                    {#if v.description}<span class="v-note">{v.description}</span>{/if}
+                  </span>
+                </DropdownMenu.Item>
+              {/each}
+            {/snippet}
+          </SplitButton>
+        {/if}
+      </div>
     </div>
   {/if}
 
@@ -202,11 +223,15 @@
     position: relative;
     z-index: 30;
   }
+  /* Takes the row's free space and yields it first: when the controls need room
+     the lead shrinks and the plan title (ReviewSwitcher .title) truncates, rather
+     than pushing the right-hand controls off-screen. */
   .lead {
     display: flex;
     align-items: center;
     gap: 0.75rem;
     min-width: 0;
+    flex: 1 1 auto;
   }
   .brand {
     font-family: var(--font-display);
@@ -226,6 +251,8 @@
     align-items: center;
     gap: 0.6rem;
     margin-left: auto;
+    /* Never shrink — the lead truncates first, so the controls stay full-size. */
+    flex-shrink: 0;
   }
   /* Buttons carry their own disabled dimming (shadcn disabled:opacity-50); this
      just hardens the whole cluster against clicks while a verdict is in flight. */
@@ -243,6 +270,8 @@
     align-items: center;
     gap: 0.35rem;
     margin-left: auto;
+    /* Bell + Settings stay visible at every width — the lead truncates first. */
+    flex-shrink: 0;
   }
   .actions + .bell-slot {
     margin-left: 0;
@@ -299,17 +328,21 @@
     box-shadow: 0 0 0 1.5px var(--paper-raised);
     pointer-events: none;
   }
-  /* At the tightest widths the Approve label clips to sr-only, so the primary
-     shrinks to its amber check icon while keeping its accessible name (the
-     split-button chevron stays). */
+  /* At/below --w-tight the inline Approve control hides and the approve options
+     move into the overflow menu, so the header keeps only ⋯ + bell + settings on
+     the right and the plan title truncates to fit. */
   @media (max-width: 639px) {
-    .approve-label {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      overflow: hidden;
-      clip-path: inset(50%);
-      white-space: nowrap;
+    .approve-slot {
+      display: none;
+    }
+  }
+  /* The approve rows live in the overflow menu but only belong there ≤ --w-tight;
+     above it the inline Approve control shows them, so hide the menu copies.
+     :global() because the rows are prop-classed and portalled out of scope. */
+  @media (min-width: 640px) {
+    :global(.overflow-approve),
+    :global(.overflow-approve-sep) {
+      display: none;
     }
   }
 </style>

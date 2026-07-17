@@ -17,8 +17,8 @@ test("wide: secondaries are inline and the overflow menu is hidden", async ({ da
   await expect(page.locator(".reject")).toBeVisible();
   await expect(page.locator(".request")).toBeVisible();
   await expect(page.locator(".overflow-trigger")).toBeHidden();
-  // The Approve label reads in full at wide width.
-  await expect(page.locator(".split-primary .approve-label")).toBeVisible();
+  // The Approve control reads inline at wide width.
+  await expect(page.locator(".approve-slot .split-primary")).toBeVisible();
 });
 
 test("narrow: secondaries collapse into the overflow menu, count preserved", async ({
@@ -90,18 +90,46 @@ test("narrow: the topbar fits with no horizontal overflow", async ({ daemon, pag
   expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
 });
 
-test("tight: the Approve label collapses to an icon while the control stays", async ({
-  daemon,
-  page,
-}) => {
-  await daemon.seed();
+test("tight: Approve moves into the overflow menu", async ({ daemon, page }) => {
+  const id = await daemon.seed();
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
   await page.setViewportSize({ width: 600, height: 800 }); // below --w-tight (640)
 
-  // The label is clipped to sr-only (1px), so the primary shrinks to its icon...
-  const box = await page.locator(".split-primary .approve-label").boundingBox();
-  expect(box?.width ?? 99).toBeLessThanOrEqual(1);
-  // ...but the Approve control itself stays visible (its amber check icon).
-  await expect(page.locator(".split-primary")).toBeVisible();
+  // The inline Approve control is gone; only ⋯ + bell + settings remain right.
+  await expect(page.locator(".approve-slot")).toBeHidden();
+
+  // Approve — with its variants — is reachable in the overflow menu, and
+  // approving from there resolves the review through the confirm dialog.
+  await page.getByRole("button", { name: "More actions" }).click();
+  await expect(page.getByRole("menuitem", { name: "Approve & accept edits" })).toBeVisible();
+  await page.getByRole("menuitem", { name: "Approve & auto mode" }).click();
+  const confirm = page.getByRole("dialog", { name: "Approve this plan?" });
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
+  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).not.toContain(id);
+});
+
+test("narrow: bell and settings stay visible while a long title truncates", async ({
+  daemon,
+  page,
+}) => {
+  // A long plan title that would otherwise crowd the right-hand controls.
+  await daemon.seed({
+    plan: `# ${"Extremely long plan title that would overflow the narrow header ".repeat(3)}\n\n## Section\n\nBody.\n`,
+  });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await page.setViewportSize({ width: 500, height: 800 });
+
+  // Every right-hand control stays on screen...
+  await expect(page.getByRole("button", { name: "More actions" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Settings" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Notifications/ })).toBeVisible();
+  // ...and the header does not overflow — the title truncated to make room.
+  const { scrollWidth, clientWidth } = await page
+    .locator(".topbar")
+    .evaluate((el) => ({ scrollWidth: el.scrollWidth, clientWidth: el.clientWidth }));
+  expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
 });

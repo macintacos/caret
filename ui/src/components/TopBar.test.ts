@@ -263,18 +263,16 @@ describe("TopBar overflow menu (EXC-810)", () => {
     expect(trigger.getAttribute("aria-label")).toContain("3");
   });
 
-  test("wraps the split-button approve label so it can collapse at tight widths", () => {
+  test("wraps the inline split-button approve in a hideable slot", () => {
+    // The slot is what CSS hides ≤ --w-tight so Approve moves into the overflow
+    // menu; the split control lives inside it.
     const { target } = render(TopBar, baseProps);
-    const label = target.querySelector(".split-primary .approve-label");
-    expect(label).not.toBeNull();
-    expect(label!.textContent).toContain("Approve");
+    expect(target.querySelector(".approve-slot .split-primary")).not.toBeNull();
   });
 
-  test("wraps the plain approve label so it can collapse at tight widths", () => {
+  test("wraps the inline plain approve in a hideable slot", () => {
     const oneVariant: ApproveVariant[] = [{ id: "default", label: "Approve" }];
     const { target } = render(TopBar, { ...baseProps, variants: oneVariant });
-    const label = target.querySelector(".approve .approve-label");
-    expect(label).not.toBeNull();
-    expect(label!.textContent).toContain("Approve");
+    expect(target.querySelector(".approve-slot .approve")).not.toBeNull();
   });
 });
