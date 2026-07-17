@@ -14,6 +14,7 @@
   import copy from "@/icons/copy.svg?raw";
   import cornerDownLeft from "@/icons/corner-down-left.svg?raw";
   import cornerUpLeft from "@/icons/corner-up-left.svg?raw";
+  import ellipsis from "@/icons/ellipsis.svg?raw";
   import file from "@/icons/file.svg?raw";
   import gitCompare from "@/icons/git-compare.svg?raw";
   import panelLeft from "@/icons/panel-left.svg?raw";
@@ -32,6 +33,7 @@
     copy,
     "corner-down-left": cornerDownLeft,
     "corner-up-left": cornerUpLeft,
+    ellipsis,
     file,
     "git-compare": gitCompare,
     "panel-left": panelLeft,
