@@ -464,6 +464,25 @@ a:focus-visible,
   outline-offset: 2px;
 }
 
+/* Pointer (hand) cursor on interactive controls. Tailwind v4's Preflight no longer
+   sets it on <button>, and the shadcn Button recipe adds none, so buttons and menu
+   actions would show the default arrow — restore the affordance app-wide so every
+   button and menu action reads as clickable. Disabled buttons carry
+   pointer-events:none (recipe), so their cursor falls through to what's beneath;
+   aria-disabled controls opt out explicitly. */
+button,
+[role="button"],
+[role="menuitem"],
+[role="menuitemradio"],
+[role="menuitemcheckbox"],
+[role="option"],
+summary {
+  cursor: pointer;
+}
+[aria-disabled="true"] {
+  cursor: default;
+}
+
 /* The theme/font bridge for @pierre/diffs (EXC-578). This is the single place
    caret's design tokens reach the diff view's --diffs-* custom properties. The
    diffview wrapper renders the library into a shadow root on .diffview. The

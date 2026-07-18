@@ -26,6 +26,7 @@ under the ISC license.
 | `settings` | [ui/src/icons/settings.svg](ui/src/icons/settings.svg) | [settings.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/settings.svg) |
 | `trash-2` | [ui/src/icons/trash-2.svg](ui/src/icons/trash-2.svg) | [trash-2.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/trash-2.svg) |
 | `unplug` | [ui/src/icons/unplug.svg](ui/src/icons/unplug.svg) | [unplug.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/unplug.svg) |
+| `x` | [ui/src/icons/x.svg](ui/src/icons/x.svg) | [x.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/x.svg) |
 
 The verbatim Lucide `LICENSE` text, as published at the `1.17.0` tag, follows:
 

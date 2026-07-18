@@ -77,7 +77,10 @@
       <!-- Same quiet floating-chip as Request changes (soft fill, ink-soft label),
            differentiated only by warming to danger on hover. Reject always routes
            through a confirm dialog, so the resting button stays low-key. -->
-      <Button variant="secondary" class="reject float-chip" onclick={onReject} disabled={busy}>Reject</Button>
+      <Button variant="secondary" class="reject float-chip" onclick={onReject} disabled={busy}>
+        <Icon name="x" size={14} />
+        Reject
+      </Button>
 
       <Button variant="secondary" class="request float-chip" onclick={onRequestChanges} disabled={busy}>
         <Icon name="corner-up-left" size={14} />
@@ -157,7 +160,10 @@
               </Badge>
             {/if}
           </DropdownMenu.Item>
-          <DropdownMenu.Item variant="destructive" onSelect={() => onReject()}>Reject</DropdownMenu.Item>
+          <DropdownMenu.Item variant="destructive" onSelect={() => onReject()}>
+            <Icon name="x" size={14} />
+            Reject
+          </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Root>
 
@@ -288,6 +294,14 @@
     background: var(--danger);
     color: var(--paper);
   }
+  /* The X glyph reads danger-red at rest (the reject affordance); on hover the chip
+     fills with danger, so the glyph flips to the paper ink to stay legible on it. */
+  .actions :global(.reject .icon) {
+    color: var(--danger);
+  }
+  .actions :global(.reject:not(:disabled):hover .icon) {
+    color: inherit;
+  }
 
   /* Approve-menu variant rows stack a label over its description. Scoped styles
      ride the elements into the portal (the hash travels on the class). */
@@ -304,23 +318,65 @@
     color: var(--ink-faint);
     font-size: var(--text-xs);
   }
+  /* The approve options carry the check as a selection cue, not a bullet: reserve
+     its slot on every row (visibility, not display, so the label never shifts) and
+     reveal it only on the highlighted (hovered/keyboard-focused) row. */
+  :global(.overflow-approve .icon) {
+    visibility: hidden;
+  }
+  :global(.overflow-approve[data-highlighted] .icon) {
+    visibility: visible;
+  }
 
   /* ----- Narrow-width consolidation (EXC-810) ----- */
   /* Below --w-narrow the Reject + Request-changes buttons collapse into the
      overflow menu; above it the trigger is hidden, so the wide layout is
      unchanged. The px literals mirror lib/layout.ts's NARROW_WIDTH_PX (960) and
      TIGHT_WIDTH_PX (640) minus one — @media can't read the --w-* tokens. */
+  /* Fluid collapse (EXC-813): a control appearing across these breakpoints fades +
+     scales in (@starting-style gives it its from-state, and this runs once on first
+     mount too). The reverse — fading OUT — is deliberately instant: a hiding control
+     kept in flow to animate would keep stealing width mid-collapse and transiently
+     shove the bell/gear off-screen, defeating the narrow-width collapse. So display
+     flips immediately (no allow-discrete) and only the enter animates. background-
+     color/color stay in the list so the chip's own hover transition survives this
+     override; the global reduced-motion rule in app.css collapses it to one frame. */
+  .actions :global(.reject),
+  .actions :global(.request),
+  .actions :global(.overflow-trigger),
+  .approve-slot {
+    transition:
+      opacity var(--dur-base) var(--ease-out),
+      transform var(--dur-base) var(--ease-out),
+      background-color var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out);
+  }
+  @starting-style {
+    .actions :global(.reject),
+    .actions :global(.request),
+    .actions :global(.overflow-trigger),
+    .approve-slot {
+      opacity: 0;
+      transform: scale(0.94);
+    }
+  }
   .actions :global(.overflow-trigger) {
     display: none;
+    opacity: 0;
+    transform: scale(0.94);
     position: relative;
   }
   @media (max-width: 959px) {
     .actions :global(.reject),
     .actions :global(.request) {
       display: none;
+      opacity: 0;
+      transform: scale(0.94);
     }
     .actions :global(.overflow-trigger) {
       display: inline-flex;
+      opacity: 1;
+      transform: none;
     }
   }
   /* Pending count pinned to the trigger's top-right corner, lifted off the
@@ -340,6 +396,14 @@
   @media (max-width: 639px) {
     .approve-slot {
       display: none;
+      opacity: 0;
+      transform: scale(0.94);
+    }
+    /* Collapsed to just ⋯, it's an icon button like the bell + gear beside it, so
+       tuck it into their 0.35rem rhythm — the topbar's own 1rem gap would otherwise
+       strand ⋯ further from the bell than the bell sits from the gear. */
+    .actions + .bell-slot {
+      margin-left: calc(0.35rem - 1rem);
     }
   }
   /* The approve rows live in the overflow menu but only belong there ≤ --w-tight;

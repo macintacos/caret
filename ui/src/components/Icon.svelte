@@ -21,6 +21,7 @@
   import settings from "@/icons/settings.svg?raw";
   import trash2 from "@/icons/trash-2.svg?raw";
   import unplug from "@/icons/unplug.svg?raw";
+  import x from "@/icons/x.svg?raw";
   import type { IconName } from "$lib/icons.ts";
 
   const SVGS: Record<IconName, string> = {
@@ -40,6 +41,7 @@
     settings,
     "trash-2": trash2,
     unplug,
+    x,
   };
 
   interface Props {

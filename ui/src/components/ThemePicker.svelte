@@ -213,7 +213,7 @@
     border-radius: var(--radius);
     font-size: var(--text-sm);
     color: var(--ink-soft);
-    cursor: default;
+    cursor: pointer;
     outline: none;
   }
   :global(.theme-menu .theme-item[aria-checked="true"]) {
