@@ -175,10 +175,12 @@
   // diff is forced to unified (EXC-811). This overrides the rendered layout only —
   // the persisted diffStyle preference is never written, so widening back above
   // the breakpoint restores the reviewer's split choice. The matchMedia guard
-  // keeps the happy-dom unit env (no matchMedia) on the wide default; the effect
-  // re-arms on resize so crossing the breakpoint flips the layout live. The px
-  // literal mirrors NARROW_WIDTH_PX (layout.ts) — @media/matchMedia can't read the
-  // --w-* token — matching TopBar's narrow-consolidation query (EXC-810).
+  // defends any DOM env lacking matchMedia; the happy-dom unit env provides one
+  // that reports no match, so units stay on the wide default either way. The
+  // effect subscribes once and its listener flips the layout live when a resize
+  // crosses the breakpoint. The px literal mirrors NARROW_WIDTH_PX (layout.ts) —
+  // @media/matchMedia can't read the --w-* token — matching TopBar's
+  // narrow-consolidation query (EXC-810).
   let narrow = $state(
     typeof matchMedia === "function" &&
       matchMedia(`(max-width: ${NARROW_WIDTH_PX - 1}px)`).matches,
