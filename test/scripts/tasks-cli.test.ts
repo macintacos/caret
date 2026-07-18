@@ -36,9 +36,9 @@ async function parseDevArgs(args: string[]): Promise<RunDevOptions> {
 }
 
 describe("tasks CLI: dev command", () => {
-  test("defaults: num-versions 3, notify false, persist false, fresh false", async () => {
+  test("defaults: num-versions 4, notify false, persist false, fresh false", async () => {
     expect(await parseDevArgs([])).toEqual({
-      numVersions: 3,
+      numVersions: 4,
       notify: false,
       persist: false,
       fresh: false,
@@ -56,7 +56,7 @@ describe("tasks CLI: dev command", () => {
 
   test("parses --notify", async () => {
     expect(await parseDevArgs(["--notify"])).toEqual({
-      numVersions: 3,
+      numVersions: 4,
       notify: true,
       persist: false,
       fresh: false,
@@ -74,7 +74,7 @@ describe("tasks CLI: dev command", () => {
 
   test("parses --port, --state-dir, and --persist", async () => {
     expect(await parseDevArgs(["--port", "40000", "--state-dir", "/tmp/x", "--persist"])).toEqual({
-      numVersions: 3,
+      numVersions: 4,
       notify: false,
       port: 40000,
       stateDir: "/tmp/x",
@@ -85,7 +85,7 @@ describe("tasks CLI: dev command", () => {
 
   test("parses --fresh", async () => {
     expect(await parseDevArgs(["--fresh"])).toEqual({
-      numVersions: 3,
+      numVersions: 4,
       notify: false,
       persist: false,
       fresh: true,

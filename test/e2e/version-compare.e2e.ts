@@ -377,3 +377,54 @@ test("clicking the expand pill reveals the collapsed context", async ({ daemon, 
   // count of rendered shared-middle lines strictly grew.
   await expect.poll(visibleContextCount).toBeGreaterThan(before);
 });
+
+// Responsive compare layout (EXC-811). Below --w-narrow (960px) the split
+// side-by-side diff can't fit two code columns, so the compare view is forced to
+// unified and the now-meaningless Split/Unified toggle is removed. This is
+// viewport-driven library-option state — only the browser can decide it — so it
+// lives here rather than in a component unit (browser-testing.md).
+
+test("forces unified and drops the layout toggle below --w-narrow", async ({ daemon, page }) => {
+  // A narrow viewport (< 960); the persisted layout preference is still split.
+  await page.setViewportSize({ width: 800, height: 900 });
+  await daemon.seedVersions(3, [V1, V2, V3]);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Compare versions" }).click();
+  await expect(page.getByText("gamma line three")).toBeVisible();
+
+  // Split's two columns can't fit, so the diff renders unified ("single") even
+  // though split is the stored preference — the library marks unified as "single".
+  await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "single");
+  // The layout choice is gone (there is nothing to pick at this width)…
+  await expect(page.getByRole("radio", { name: "Split" })).toHaveCount(0);
+  await expect(page.getByRole("radio", { name: "Unified" })).toHaveCount(0);
+  // …while the gutter-marker toggle stays (it works in a unified diff).
+  await expect(page.getByRole("radio", { name: "Bars" })).toBeVisible();
+});
+
+test("crossing --w-narrow forces unified then restores the split preference", async ({
+  daemon,
+  page,
+}) => {
+  // Fixture viewport is wide (1600), so the stored split preference applies.
+  await daemon.seedVersions(3, [V1, V2, V3]);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Compare versions" }).click();
+  await expect(page.getByText("gamma line three")).toBeVisible();
+
+  // The same <pre> element throughout — the layout switches in place (setOptions),
+  // it is never recreated by a width change.
+  const pre = page.locator(".diffview pre").first();
+  await expect(pre).toHaveAttribute("data-diff-type", "split");
+
+  // Below the breakpoint: forced to unified, and the layout toggle drops out.
+  await page.setViewportSize({ width: 800, height: 900 });
+  await expect(pre).toHaveAttribute("data-diff-type", "single");
+  await expect(page.getByRole("radio", { name: "Split" })).toHaveCount(0);
+
+  // Back above it: the preference was never overwritten, so split returns and the
+  // toggle reappears.
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await expect(pre).toHaveAttribute("data-diff-type", "split");
+  await expect(page.getByRole("radio", { name: "Split" })).toBeVisible();
+});

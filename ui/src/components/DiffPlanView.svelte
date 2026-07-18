@@ -51,7 +51,7 @@
   import type { SourceViewGutter } from "$lib/diffview/options.ts";
   import type { SourceViewApi, SourceViewOptions } from "$lib/diffview/types.ts";
   import { activeHeadingLine, extractHeadings, lineForSlug, shouldShowToc, slugForLine } from "$lib/toc.ts";
-  import { TIGHT_WIDTH_PX } from "$lib/layout.ts";
+  import { NARROW_WIDTH_PX, TIGHT_WIDTH_PX } from "$lib/layout.ts";
   import { readTocOpen, writeTocOpen } from "$lib/tocPref.ts";
   import { lineAtReadingZone } from "$lib/diffview/scroll.ts";
   import {
@@ -170,6 +170,34 @@
 
   const canCompare = $derived(compare.canCompare(review.versions));
   const showDiff = $derived(canCompare && compareStore.comparing);
+
+  // Below --w-narrow, split's two side-by-side columns can't fit, so the compare
+  // diff is forced to unified (EXC-811). This overrides the rendered layout only —
+  // the persisted diffStyle preference is never written, so widening back above
+  // the breakpoint restores the reviewer's split choice. The matchMedia guard
+  // defends any DOM env lacking matchMedia; the happy-dom unit env provides one
+  // that reports no match, so units stay on the wide default either way. The
+  // effect subscribes once and its listener flips the layout live when a resize
+  // crosses the breakpoint. The px literal mirrors NARROW_WIDTH_PX (layout.ts) —
+  // @media/matchMedia can't read the --w-* token — matching TopBar's
+  // narrow-consolidation query (EXC-810).
+  let narrow = $state(
+    typeof matchMedia === "function" &&
+      matchMedia(`(max-width: ${NARROW_WIDTH_PX - 1}px)`).matches,
+  );
+  $effect(() => {
+    if (typeof matchMedia !== "function") return;
+    const mql = matchMedia(`(max-width: ${NARROW_WIDTH_PX - 1}px)`);
+    narrow = mql.matches;
+    const onChange = (e: MediaQueryListEvent) => {
+      narrow = e.matches;
+    };
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  });
+  // The layout the compare view actually renders: forced unified when narrow,
+  // otherwise the reviewer's stored preference.
+  const effectiveDiffStyle = $derived(narrow ? "unified" : compareStore.diffStyle);
 
   // Reader affordances applied to both the single-version source view and the
   // compare diff are fixed (EXC-664): long lines scroll (never wrap) and the
@@ -770,6 +798,7 @@
     targetVersion={compareStore.targetVersion}
     diffStyle={compareStore.diffStyle}
     diffIndicators={compareStore.diffIndicators}
+    layoutLocked={narrow}
     onSetComparing={compare.setComparing}
     onSelectBase={compare.setBase}
     onSelectTarget={compare.setTarget}
@@ -822,7 +851,7 @@
         contentKey={diffContentKey}
         options={{
           ...readerOptions,
-          diffStyle: compareStore.diffStyle,
+          diffStyle: effectiveDiffStyle,
           diffIndicators: compareStore.diffIndicators,
         }}
       />

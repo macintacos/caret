@@ -14,9 +14,10 @@ import {
 } from "@/tasks/dev/driver.ts";
 import {
   appendRevision,
-  bootstrapPlans,
   DEFAULT_NUM_VERSIONS,
+  DEMO_EDIT_GROUPS,
   DEV_SESSION,
+  demoVersions,
   extraPlan,
   hookStdin,
   nextPlan,
@@ -29,9 +30,21 @@ import { setupTempStateDir } from "../support/env.ts";
 import { waitFor } from "../support/poll.ts";
 import { expectNeverLogsBody } from "../support/redaction.ts";
 
-// The v1 fixture the driver seeds — read independently here so the assertions
-// don't lean on the driver's own loader.
+// The final ("current") demo plan the driver seeds — read independently here so
+// the assertions don't lean on the driver's own loader.
 const PLAN_V1 = await Bun.file(`${import.meta.dir}/../../scripts/tasks/dev/fake-plan.md`).text();
+
+// Lines that differ positionally between two same-shaped texts — lets a test
+// assert a change is narrowly targeted (no lines added or removed, one rewritten).
+function differingLines(a: string, b: string): string[] {
+  const la = a.split("\n");
+  const lb = b.split("\n");
+  const out: string[] = [];
+  for (let i = 0; i < Math.max(la.length, lb.length); i++) {
+    if (la[i] !== lb[i]) out.push(lb[i] ?? la[i] ?? "");
+  }
+  return out;
+}
 
 // Point the state dir at the per-test temp dir so the hook logging that
 // runReview performs lands in a disposable caret.log, not the real one — the
@@ -142,31 +155,58 @@ test("appendRevision never introduces untagged code blocks, even for hostile fee
   expect(out).toContain("an even longer fence");
 });
 
-// ---- bootstrapPlans ----
+// ---- demoVersions ----
 
-test("bootstrapPlans returns the v1 plan plus one entry per requested revision", () => {
-  const plans = bootstrapPlans(PLAN_V1, 2);
-  expect(plans).toHaveLength(3);
-  expect(plans[0]).toBe(PLAN_V1);
+test("demoVersions returns exactly count plans, oldest first, ending at the final plan", () => {
+  const plans = demoVersions(PLAN_V1, 4);
+  expect(plans).toHaveLength(4);
+  // The newest version — the "current" plan the reviewer lands on — is the final
+  // plan verbatim; only the earlier drafts differ (EXC-811).
+  expect(plans[3]).toBe(PLAN_V1);
 });
 
-test("bootstrapPlans threads each revision onto the previous, so versions grow", () => {
-  const plans = bootstrapPlans(PLAN_V1, 2);
-  // Each step keeps the prior text and adds the next Revision heading.
-  expect(plans[1]).toStartWith(PLAN_V1.trimEnd());
-  expect(plans[1]).toContain("## Revision 1");
-  expect(plans[2]).toStartWith(plans[1]!.trimEnd());
-  expect(plans[2]).toContain("## Revision 1");
-  expect(plans[2]).toContain("## Revision 2");
+test("demoVersions makes every consecutive pair a non-empty, varied diff (not append-only)", () => {
+  const plans = demoVersions(PLAN_V1, 4);
+  // No two adjacent versions are equal — each edit group actually lands.
+  for (let i = 1; i < plans.length; i++) {
+    expect(plans[i]).not.toBe(plans[i - 1]);
+  }
+  // Unlike the old append-only bootstrap, an earlier draft is NOT a prefix of a
+  // later one: the drafts change text in place rather than only appending.
+  expect(plans[3]!.startsWith(plans[0]!.trimEnd())).toBe(false);
 });
 
-test("bootstrapPlans with zero revisions is just the v1 plan", () => {
-  expect(bootstrapPlans(PLAN_V1, 0)).toEqual([PLAN_V1]);
+test("demoVersions makes the default (current vs previous) pair a single targeted change", () => {
+  const plans = demoVersions(PLAN_V1, 4);
+  const current = plans[3] as string;
+  const previous = plans[2] as string;
+  // The one authored group-0 edit: 92% (final) ← 88% (previous draft).
+  expect(current).toContain("92%");
+  expect(current).not.toContain("88%");
+  expect(previous).toContain("88%");
+  expect(previous).not.toContain("92%");
+  // …and it really is a single line-level change between the two versions.
+  expect(differingLines(previous, current)).toHaveLength(1);
 });
 
-test("bootstrapPlans never introduces untagged code blocks", () => {
-  for (const plan of bootstrapPlans(PLAN_V1, 2)) {
+test("demoVersions with count 1 is just the final plan", () => {
+  expect(demoVersions(PLAN_V1, 1)).toEqual([PLAN_V1]);
+});
+
+test("demoVersions never introduces untagged code blocks", () => {
+  for (const plan of demoVersions(PLAN_V1, DEFAULT_NUM_VERSIONS)) {
     expect(hasUntaggedCodeBlock(plan)).toBe(false);
+  }
+});
+
+// Fixture-drift guard: every reverse edit must still match fake-plan.md, or the
+// diff it produces silently flattens to empty. Fails loudly if the fixture is
+// edited out from under an edit's `from` span.
+test("every DEMO_EDIT_GROUPS `from` span still exists in the fixture", () => {
+  for (const group of DEMO_EDIT_GROUPS) {
+    for (const { from } of group) {
+      expect(PLAN_V1.includes(from)).toBe(true);
+    }
   }
 });
 
@@ -182,8 +222,8 @@ test("parsePositiveInt accepts positive integers and names the flag on error", (
 
 // ---- parseNumVersions (--num-versions dev flag) ----
 
-test("parseNumVersions defaults to three versions when the flag is absent", () => {
-  expect(DEFAULT_NUM_VERSIONS).toBe(3);
+test("parseNumVersions defaults to four versions when the flag is absent", () => {
+  expect(DEFAULT_NUM_VERSIONS).toBe(4);
   expect(parseNumVersions(["bun", "driver.ts"])).toBe(DEFAULT_NUM_VERSIONS);
 });
 
@@ -309,21 +349,28 @@ test("a revision round-trips through the real runReview hook path and logs to ca
   expect(log).toContain(DEV_SESSION);
 });
 
-test("bootstrapReview grows the primary review to several versions before the loop", async () => {
+test("bootstrapReview grows the primary review to several varied versions before the loop", async () => {
   await boot();
   const deps = devReviewDeps(base);
   const state = await bootstrapReview(base, PLAN_V1, deps);
   const review = d.store.bySession(DEV_SESSION)[0];
   expect(review).toBeDefined();
-  // Two bootstrap revisions threaded onto v1 → three versions, enough for the
-  // version-compare picker to offer a non-default pair.
-  expect(review!.versions).toHaveLength(3);
+  // Default is four versions — the final plan plus three earlier drafts, one per
+  // kind of diff, enough for every flavor to show in the version-compare picker.
+  expect(review!.versions).toHaveLength(4);
+  // Diff variety, not append-only: the newest version carries the final's
+  // targeted value (92%) while the previous draft still carries the earlier one
+  // (88%), so comparing them shows a real in-place change, not appended text.
+  const plans = review!.versions.map((v) => v.plan);
+  expect(plans.at(-1)).toContain("92%");
+  expect(plans.at(-1)).not.toContain("88%");
+  expect(plans.at(-2)).toContain("88%");
   // The review is left rejected; the interactive loop re-pends it by appending
   // its own next revision from the returned state. The returned plan carries that
   // next revision so the loop's first post is a fresh version, not a duplicate.
   expect(review!.status).toBe("rejected");
-  expect(state.revision).toBe(3);
-  expect(state.plan).toContain("## Revision 3");
+  expect(state.revision).toBe(4);
+  expect(state.plan).toContain("## Revision 4");
 });
 
 test("bootstrapReview honors an explicit --num-versions count", async () => {
