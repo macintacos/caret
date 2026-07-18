@@ -1001,6 +1001,13 @@
     padding: 0.5rem clamp(1rem, 3vw, 2rem) 0.5rem 0.75rem;
     border-bottom: 1px solid var(--rule);
     background: var(--paper-raised);
+    /* As a .shell grid item this row defaults to min-width:auto, which floors it
+       at its content's intrinsic width — so a long .cwd would push the whole app
+       past the MIN_APP_WIDTH_PX (480) floor instead of ellipsising. min-width:0
+       lets the row shrink so the .cwd's own overflow:ellipsis takes over — the
+       same automatic-minimum footgun the topbar's min-width:0 fix addressed
+       (EXC-810/EXC-814). */
+    min-width: 0;
   }
 
   /* The narrow-width contents toggle (EXC-809): a float-chip icon button sized to
