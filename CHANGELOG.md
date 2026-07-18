@@ -7,6 +7,30 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-18 - The Fits Anywhere Release
+
+### Added
+
+- **Collapsible table-of-contents rail.** The plan's table of contents became a
+  collapsible rail that folds away at narrow widths, reclaiming reading room when the
+  review surface is docked in a slim column (#256).
+- **Icon on the Compare versions button.** The Compare versions button now carries an icon
+  (#255).
+
+### Changed
+
+- **Responsive review UI at narrow widths.** The review surface was reworked to stay
+  usable at narrow widths, so caret fits docked in a slim column beside your editor. A
+  narrow-width audit and the width foundation landed first (#253), then each region was
+  reshaped in turn: the working-directory path moved onto the compare row (#254), the
+  TopBar controls consolidated (#257), the version-compare bar and diff layout went
+  responsive (#258), the pinned chrome now stacks (#259), and dialogs and overlays fit to
+  narrow widths (#260) — closed out by a cohesion pass and an end-to-end regression
+  guarding the narrow-width behavior (#261).
+- **Adjusted demo plan.** The `/caret:demo` plan's contents were tweaked (0dec29b).
+- **Developer tooling.** `mise run format` gained a Tailwind canonical-class step
+  (a16e3f8), and a `ui/package.json` stub lets shadcn-svelte's CLI run (1d0fa2c).
+
 ## [0.5.0] - 2026-07-16 - The Welcome Mat Release
 
 ### Added
@@ -406,7 +430,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Review decisions are delivered via a bounded poll, fixing missed or delayed decision
   delivery.
 
-[Unreleased]: https://github.com/macintacos/caret/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/macintacos/caret/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/macintacos/caret/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/macintacos/caret/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/macintacos/caret/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/macintacos/caret/compare/v0.3.0...v0.4.0
