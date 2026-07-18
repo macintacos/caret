@@ -41,6 +41,20 @@ local formatters = new Mapping<String, Step> {
     fix = "biome check --write --linter-enabled=false --no-errors-on-unmatched {{ files }}"
   }
 
+  // Canonicalize Tailwind classes in the Svelte UI (`data-[disabled]:opacity-50`
+  // -> `data-disabled:opacity-50`) via Tailwind v4's design-system API — the same
+  // suggestion the editor LSP surfaces. `--css` points it at this project's theme.
+  // The tool's `--check` reports suggestions but always exits 0, which forces two
+  // choices: `mise run lint` can't gate on canonicity (format-only, by design), and
+  // `check_first = false` is required or hk's check-then-fix would see exit-0 and
+  // never rewrite.
+  ["Tailwind(Canonical) [[laststance]]"] = new Step {
+    glob = List("ui/src/**/*.svelte")
+    check_first = false
+    check = "bunx tailwind-suggest-canonical-classes --check --css ./ui/src/app.css {{ files }}"
+    fix = "bunx tailwind-suggest-canonical-classes --css ./ui/src/app.css {{ files }}"
+  }
+
   // rumdl owns Markdown — one native binary for both format and lint. The format
   // step runs `rumdl fmt` (applies fixes, formatter-style exit codes — won't fail on
   // leftover lint); the Markdown(Lint) step below enforces read-only `rumdl check`.
