@@ -34,11 +34,25 @@ const baseProps = {
 // role="radio" whose accessible name is its visible label, and the active one
 // carries data-state="on". Find one by its label.
 function radio(target: Element, name: string): HTMLButtonElement {
-  const el = [...target.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
-    (r) => r.textContent?.trim() === name,
-  );
+  const el = findRadio(target, name);
   if (!el) throw new Error(`no radio labelled "${name}"`);
   return el;
+}
+
+// Like `radio`, but returns null instead of throwing when the option is absent —
+// for asserting a toggle group is gone entirely (EXC-811 layoutLocked).
+function findRadio(target: Element, name: string): HTMLButtonElement | null {
+  return (
+    [...target.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
+      (r) => r.textContent?.trim() === name,
+    ) ?? null
+  );
+}
+
+// Presence as a boolean, so a failing assertion prints `true`/`false` rather than
+// a whole happy-dom node (whose circular getters serialize pathologically slowly).
+function hasRadio(target: Element, name: string): boolean {
+  return findRadio(target, name) != null;
 }
 
 describe("VersionComparePicker visibility", () => {
@@ -145,6 +159,28 @@ describe("VersionComparePicker layout toggle", () => {
     });
     radio(target, "Unified").click();
     expect(onSetDiffStyle.last()).toBe("unified");
+  });
+});
+
+// EXC-811: below --w-narrow the parent forces the diff to unified (split's two
+// columns can't fit), so it locks the Split/Unified choice off — there's nothing
+// to pick. The layout toggle is removed entirely; the Bars/+−/Both marker toggle
+// stays, since markers still make sense in a unified diff.
+describe("VersionComparePicker layoutLocked", () => {
+  test("removes the layout toggle but keeps the marker toggle when locked", () => {
+    const { target } = render(VersionComparePicker, { ...baseProps, layoutLocked: true });
+    expect(hasRadio(target, "Split")).toBe(false);
+    expect(hasRadio(target, "Unified")).toBe(false);
+    // The gutter-marker toggle is unaffected — it works in a unified diff.
+    expect(hasRadio(target, "Bars")).toBe(true);
+    expect(hasRadio(target, "+/−")).toBe(true);
+    expect(hasRadio(target, "Both")).toBe(true);
+  });
+
+  test("shows the layout toggle by default (unlocked)", () => {
+    const { target } = render(VersionComparePicker, baseProps);
+    expect(hasRadio(target, "Split")).toBe(true);
+    expect(hasRadio(target, "Unified")).toBe(true);
   });
 });
 

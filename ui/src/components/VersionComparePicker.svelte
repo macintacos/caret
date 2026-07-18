@@ -45,6 +45,11 @@
     diffStyle: DiffStyle;
     /** Active gutter change markers. */
     diffIndicators: DiffIndicators;
+    /** When the parent forces unified (below --w-narrow, where split's two
+     * columns can't fit), the Split/Unified toggle is removed — there's nothing
+     * to pick. The Bars/+−/Both marker toggle stays; markers work in a unified
+     * diff. Defaults false (the wide-width layout is unchanged). */
+    layoutLocked?: boolean;
     onSetComparing: (comparing: boolean) => void;
     onSelectBase: (version: number) => void;
     onSelectTarget: (version: number) => void;
@@ -60,6 +65,7 @@
     targetVersion,
     diffStyle,
     diffIndicators,
+    layoutLocked = false,
     onSetComparing,
     onSelectBase,
     onSelectTarget,
@@ -249,18 +255,23 @@
     </div>
 
     <div class="controls">
-      <ToggleGroup.Root
-        type="single"
-        size="sm"
-        aria-label="Diff layout"
-        bind:ref={layoutTrack}
-        bind:value={
-          () => diffStyle, (v) => { if (v) onSetDiffStyle(v as DiffStyle); }
-        }
-      >
-        <ToggleGroup.Item value="split">Split</ToggleGroup.Item>
-        <ToggleGroup.Item value="unified">Unified</ToggleGroup.Item>
-      </ToggleGroup.Root>
+      <!-- The layout choice is only offered when the parent isn't forcing unified.
+           Below --w-narrow split can't fit, so the toggle is removed rather than
+           left as a dead control (EXC-811). -->
+      {#if !layoutLocked}
+        <ToggleGroup.Root
+          type="single"
+          size="sm"
+          aria-label="Diff layout"
+          bind:ref={layoutTrack}
+          bind:value={
+            () => diffStyle, (v) => { if (v) onSetDiffStyle(v as DiffStyle); }
+          }
+        >
+          <ToggleGroup.Item value="split">Split</ToggleGroup.Item>
+          <ToggleGroup.Item value="unified">Unified</ToggleGroup.Item>
+        </ToggleGroup.Root>
+      {/if}
 
       <!-- Gutter change markers: vertical bars (the inherited default) or the
            classic +/- glyphs many reviewers prefer. The glyphs inherit caret's
@@ -292,6 +303,11 @@
     --ctl-h: 1.75rem;
     display: flex;
     align-items: center;
+    /* Wrap only when the row genuinely overflows: a no-op at wide widths (so the
+       one-line bar and its toggles are unchanged), but at the narrow floor the
+       pickers + marker toggle drop to a second line instead of overflowing the
+       surface (EXC-811). */
+    flex-wrap: wrap;
     gap: 0.85rem;
     min-height: var(--ctl-h);
     font-size: var(--text-base);
