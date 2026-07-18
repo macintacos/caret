@@ -17,6 +17,9 @@
   // TopBar cwd tooltip. The strip stays a quiet pinned pill: content-floating
   // chrome recedes until looked at, so it keeps its own hairline surface rather
   // than the topbar's louder .float-chip fill.
+  //
+  // EXC-812: at ≤ --w-tight the strip hides while the comment navigator is open —
+  // it yields the crowded bottom-right corner to the navigator's full-bleed sheet.
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
@@ -47,7 +50,7 @@
 </script>
 
 {#if active}
-  <aside class="status-strip metric" aria-label="Plan review status">
+  <aside class="status-strip metric" class:nav-open={commentsOpen} aria-label="Plan review status">
     <Tooltip.Provider delayDuration={0}>
       <!-- The comment tally is the trigger for the comment navigator, so it is a
            real toggle button (aria-expanded) rather than an inert readout. -->
@@ -134,6 +137,16 @@
   .status-strip:hover {
     opacity: 1;
     border-color: var(--rule-strong);
+  }
+  /* At ≤ --w-tight the strip yields to the open comment navigator (EXC-812): the
+     navigator's header already carries the count + close, so the tally-toggle is
+     redundant while it's open, and the strip would only crowd the full-bleed
+     sheet. The px literal mirrors lib/layout.ts's TIGHT_WIDTH_PX (640) minus one —
+     @media can't read the --w-* token. Wide widths keep the strip visible. */
+  @media (max-width: 639px) {
+    .status-strip.nav-open {
+      display: none;
+    }
   }
   .stat {
     display: inline-flex;

@@ -7,6 +7,9 @@
   // modal: clicking a row leaves it open so the reviewer can walk the list while the
   // plan scrolls behind it, and it dismisses only on Escape, the close button, or a
   // re-toggle. Mirrors the SourceToc contents pane's filter-then-jump idiom.
+  //
+  // EXC-812: at ≤ --w-tight it widens to a full-bleed bottom sheet so the pinned
+  // chrome reads as an intentional narrow-width surface instead of a cramped card.
   import { type CommentIndexEntry, filterComments, highlightMatches } from "$lib/feedback.ts";
 
   interface Props {
@@ -123,6 +126,18 @@
     box-shadow: var(--shadow-card);
     overflow: hidden;
     animation: nav-open var(--dur-base) var(--ease-out);
+  }
+  /* At ≤ --w-tight the navigator unpins from the right corner and widens to a
+     full-bleed bottom sheet (EXC-812) — it stays at bottom: 2.9rem, clearing the
+     VersionBadge row, and may sit over the ToC rail (intended). The px literal
+     mirrors lib/layout.ts's TIGHT_WIDTH_PX (640) minus one — @media can't read the
+     --w-* token. Wide widths keep the right-docked 21rem card. */
+  @media (max-width: 639px) {
+    .comment-navigator {
+      left: 0.7rem;
+      right: 0.7rem;
+      width: auto;
+    }
   }
   /* One-shot rise-and-fade on open; neutralized by the global #app reduced-motion
      rule. Opacity + a small translate only — no layout thrash. */
