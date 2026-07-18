@@ -22,10 +22,10 @@ import type { ClientReview } from "@/lib/types.ts";
 import { type ReviewDeps, runReview } from "@/review/orchestrate.ts";
 import {
   appendRevision,
-  bootstrapPlans,
   DEFAULT_NUM_VERSIONS,
   DEV_SESSION,
   type DriverState,
+  demoVersions,
   extraPlan,
   hookStdin,
   nextPlan,
@@ -158,20 +158,22 @@ async function denyPendingReview(base: string, feedback: string): Promise<void> 
 
 /** Grow the primary dev review to several versions before the interactive loop,
  * so `mise run dev` always shows a multi-version review (the version-compare
- * picker is hidden below two versions). Each bootstrap plan is submitted through
- * the real hook (runReview) and denied, so the next threads on as a new version;
- * the review ends rejected at the final bootstrap version. The returned state
- * already carries the *next* revision, so the interactive loop's first post
- * appends a fresh version (re-pending the review) rather than re-submitting the
- * last bootstrap plan as a duplicate. */
+ * picker is hidden below two versions). The plans are `demoVersions(finalPlan,
+ * numVersions)`: earlier drafts first, `finalPlan` last, diffing in varied ways
+ * (EXC-811). Each is submitted through the real hook (runReview) and denied, so
+ * the next threads on as a new version; the review ends rejected on `finalPlan`,
+ * the "current" version the reviewer lands on. The returned state already carries
+ * the *next* revision, so the interactive loop's first post appends a fresh
+ * version (re-pending the review) rather than re-submitting `finalPlan` as a
+ * duplicate. */
 export async function bootstrapReview(
   base: string,
-  v1: string,
+  finalPlan: string,
   deps: ReviewDeps,
   numVersions: number = DEFAULT_NUM_VERSIONS,
 ): Promise<DriverState> {
-  // numVersions counts v1 itself, so the bootstrap threads one fewer revision.
-  const plans = bootstrapPlans(v1, numVersions - 1);
+  // demoVersions returns exactly numVersions plans, oldest first, ending at finalPlan.
+  const plans = demoVersions(finalPlan, numVersions);
   for (let i = 0; i < plans.length; i++) {
     // runReview blocks on the decision long-poll; the deny is what unblocks it.
     const reviewing = runReview(hookStdin(plans[i] as string), deps);
@@ -211,7 +213,9 @@ export interface DriverOptions {
  * already parsed rather than being re-read from argv. */
 export async function run(opts: DriverOptions): Promise<void> {
   const { base, numVersions, notify, settings } = opts;
-  const v1 = await Bun.file(`${import.meta.dir}/fake-plan.md`).text();
+  // The canonical demo plan: the bootstrap's final ("current") version, the plan
+  // a fresh reseed starts from, and the base each extra review is retitled from.
+  const basePlan = await Bun.file(`${import.meta.dir}/fake-plan.md`).text();
   const deps = devReviewDeps(base);
   // Extra-review seeder (EXC-427), OFF by default: when armed it seeds a
   // genuinely-new review — fresh session, fresh review id — every interval
@@ -230,7 +234,7 @@ export async function run(opts: DriverOptions): Promise<void> {
   if (seeder.enabled) {
     log(`extra-review seeder armed: a new review every ${seeder.intervalMs}ms`);
     void runExtraSeeder(seeder.intervalMs, {
-      seed: (n) => runExtraReview(`${DEV_SESSION}-extra-${n}`, extraPlan(v1, n), deps),
+      seed: (n) => runExtraReview(`${DEV_SESSION}-extra-${n}`, extraPlan(basePlan, n), deps),
       maxPending: seeder.maxPending,
     }).catch((err) => log(`extra-review seeder stopped: ${err}`));
   } else {
@@ -241,11 +245,11 @@ export async function run(opts: DriverOptions): Promise<void> {
   // Grow the primary review to several versions up front so the version-compare
   // picker has something to compare the moment the UI opens; the loop resumes
   // from the bootstrapped (rejected) review, appending its next revision.
-  let state: DriverState = await bootstrapReview(base, v1, deps, numVersions);
+  let state: DriverState = await bootstrapReview(base, basePlan, deps, numVersions);
   for (;;) {
     // Never throws: every abnormal path inside runReview becomes a deny.
     const out = await runReview(hookStdin(state.plan), deps);
-    const next = nextPlan(state, out, v1);
+    const next = nextPlan(state, out, basePlan);
     if (next.action === "wait") {
       // Reject (EXC-685): the agent waits for the user's next message instead of
       // re-presenting. Stop the primary loop — the daemon and UI stay up (run.ts

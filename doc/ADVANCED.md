@@ -478,7 +478,7 @@ build their artifact (via the tasks CLI) before smoking it. `scripts/preflight.t
 were consolidated into single multi-target `build`/`test`/`smoke` tasks.
 
 `mise run dev` takes `--num-versions <n>` (how many versions the primary dev review opens
-with; default 3, a positive integer), `--notify` (arm the extra-review seeder), and
+with; default 4, a positive integer), `--notify` (arm the extra-review seeder), and
 `--port` / `--state-dir` / `--persist` (the port, state dir, and state-persistence
 overrides described under Configuration above). Its orchestration — resolve the port mode
 and state dir (`scripts/tasks/dev/dev-env.ts`), spawn the daemon, pino-pretty, and Vite,

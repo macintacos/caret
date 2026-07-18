@@ -45,10 +45,12 @@ export function appendRevision(plan: string, feedback: string, n: number): strin
   ].join("\n");
 }
 
-/** Default number of versions the primary dev review opens with — v1 plus two
- * synthetic revisions, enough for the version-compare picker to offer a
- * non-default pair. Overridable via `mise run dev --num-versions <n>`. */
-export const DEFAULT_NUM_VERSIONS = 3;
+/** Default number of versions the primary dev review opens with — the final plan
+ * plus three earlier drafts, one per kind of diff `demoVersions` produces (a
+ * single targeted change, a few mid-sentence rewrites, and many scattered
+ * changes), so the version-compare picker has all three flavors to show at a
+ * glance. Overridable via `mise run dev --num-versions <n>`. */
+export const DEFAULT_NUM_VERSIONS = 4;
 
 /** Resolve the `--num-versions <n>` dev flag from argv: how many versions the
  * primary dev review should open with. Absent → DEFAULT_NUM_VERSIONS; a value
@@ -73,22 +75,75 @@ export function parseNumVersions(argv: string[]): number {
   return parsePositiveInt(argv[i + 1], "--num-versions");
 }
 
+/** A single reverse edit: an exact span of the FINAL plan (`from`) and the earlier
+ * DRAFT wording (`to`) that replaces it when walking back to a prior version. */
+interface DemoEdit {
+  from: string;
+  to: string;
+}
+
+/** The demo review's version history, expressed as reverse edits from the final
+ * plan (fake-plan.md). Ordered NEWEST-first: applying group 0 to the final yields
+ * the second-newest version, group 1 that yields the next, and so on. Each group
+ * is a distinct KIND of change so the compare view has variety to render (EXC-811)
+ * instead of the old append-only diffs — and because the groups run newest-first,
+ * the default compare pair (current vs. previous) is the smallest, cleanest diff
+ * while older pairs get progressively larger:
+ *   0. a single targeted change (one table cell),
+ *   1. a few mid-sentence rewrites,
+ *   2. many scattered word changes across the file,
+ *   3. a further scattered pass (only reached at higher --num-versions).
+ * Every `from` must exist verbatim in fake-plan.md; the dev-driver unit suite
+ * asserts this, so a future edit to the fixture that strands one fails loudly
+ * rather than silently flattening a diff back to empty. */
+const DEMO_EDITS: readonly (readonly DemoEdit[])[] = [
+  [{ from: "92%", to: "88%" }],
+  [
+    { from: "show up at a glance", to: "are obvious at a glance" },
+    { from: "often rendered close to body size", to: "usually rendered near body size" },
+    { from: "there is nothing to approve here", to: "there is nothing here to approve" },
+  ],
+  [
+    { from: "strict allowlist", to: "tight allowlist" },
+    { from: "comfortable vertical rhythm", to: "even vertical rhythm" },
+    { from: "awkward characters", to: "tricky characters" },
+    { from: "the deepest rung", to: "the final rung" },
+    { from: "stripped by DOMPurify", to: "removed by DOMPurify" },
+  ],
+  [
+    { from: "A deliberately **wide** table", to: "A very **wide** table" },
+    { from: "run well past the panel's width", to: "run far past the panel's width" },
+    { from: "A paragraph that is simply long", to: "A paragraph that is merely long" },
+  ],
+];
+
+/** The DEMO_EDITS groups exposed for the unit suite's fixture-drift guard. */
+export const DEMO_EDIT_GROUPS = DEMO_EDITS;
+
+/** Rewrite each `from` span to its `to` draft wording. Plain global replacement;
+ * every `from` is a prose span (never inside a code fence), so the drafts stay
+ * valid plans the format gate accepts. */
+function applyDemoEdits(plan: string, edits: readonly DemoEdit[]): string {
+  return edits.reduce((acc, { from, to }) => acc.split(from).join(to), plan);
+}
+
 /** The sequence of plans the dev bootstrap submits to grow the primary review to
  * several versions before the interactive loop, so `mise run dev` always shows a
- * multi-version review (the version-compare picker needs one). The first entry is
- * v1; each subsequent entry threads one more synthetic revision onto the prior,
- * mirroring what a reviewer deny + resubmit would produce. With `revisions` of n
- * the result has n+1 entries (versions v1..v(n+1)). The synthetic feedback is
- * fenced exactly as appendRevision fences real feedback, so the plan-format gate
- * accepts each step. */
-export function bootstrapPlans(v1: string, revisions: number): string[] {
-  const plans = [v1];
-  for (let n = 1; n <= revisions; n++) {
-    plans.push(
-      appendRevision(plans[n - 1] as string, `Bootstrap revision ${n} for the dev review.`, n),
-    );
+ * multi-version review (the version-compare picker needs one). The LAST entry is
+ * `final` verbatim — the polished "current" plan the reviewer lands on — and each
+ * earlier entry is a DRAFT produced by applying DEMO_EDITS outward from it, so
+ * consecutive versions diff in varied ways instead of only appending (EXC-811).
+ * With `count` of n the result has n entries (versions v1..vn), oldest first. */
+export function demoVersions(final: string, count: number): string[] {
+  const versions = [final];
+  for (let i = 0; i < count - 1; i++) {
+    const edits = DEMO_EDITS[i];
+    // Past the authored groups (an unusually large --num-versions), repeat the
+    // oldest draft rather than inventing edits — the extra pair just shows no diff.
+    const older = edits ? applyDemoEdits(versions[0] as string, edits) : (versions[0] as string);
+    versions.unshift(older);
   }
-  return plans;
+  return versions;
 }
 
 /** Driver-side submission state: the plan to (re)submit and how many revision
