@@ -1,0 +1,6 @@
+{
+  "name": "caret-ui",
+  "type": "module",
+  "private": true,
+  "description": "Stub manifest so shadcn-svelte's CLI (which reads a package.json beside components.json) resolves from ui/. The real manifest is the repo-root package.json and deps live there, so run: bunx shadcn-svelte@latest add <name> --no-deps. `type: module` mirrors the root so files under ui/ stay ESM. See doc/agents/shadcn-rules.md."
+}
