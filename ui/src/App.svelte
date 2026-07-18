@@ -4,6 +4,7 @@
   import { createPlanNotifier } from "$lib/notify.ts";
   import { installUiGoneBeacon } from "$lib/presence.ts";
   import { createSafeModeGuard } from "$lib/safeMode.ts";
+  import { createShortcutDispatcher, EDITOR_SHORTCUTS, shortcuts } from "$lib/shortcuts/index.ts";
   import { createAutosave } from "@/state/autosave.svelte.ts";
   import {
     createReviewSelection,
@@ -282,6 +283,21 @@
       window.removeEventListener("focus", rearm);
       document.removeEventListener("visibilitychange", onVisible);
       guard.destroy();
+    };
+  });
+
+  // ----- Keyboard shortcuts (EXC-786) -----
+  // Stand up the global shortcut dispatcher on window and register the existing
+  // editor chords as read-only entries — they surface in the help modal while
+  // the composer keeps owning ⌘/Ctrl+Enter and Esc on focus. Mount-once: reads
+  // no reactive state, returns its teardown. Downstream tickets register their
+  // own shortcuts into the same `shortcuts` singleton.
+  $effect(() => {
+    const unregister = EDITOR_SHORTCUTS.map((entry) => shortcuts.register(entry));
+    const dispatcher = createShortcutDispatcher({ target: window, registry: shortcuts });
+    return () => {
+      for (const off of unregister) off();
+      dispatcher.destroy();
     };
   });
 
