@@ -58,3 +58,43 @@ test("every enabled button and menu action shows the pointer cursor", async ({ d
   expect(items.length).toBeGreaterThan(0);
   expect(items.filter((i) => i.cursor !== "pointer")).toEqual([]);
 });
+
+test("compare-versions controls and version options show the pointer cursor", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seedVersions(3, ["# Plan\n\nalpha\n", "# Plan\n\nbeta\n", "# Plan\n\ngamma\n"]);
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await page.getByRole("button", { name: "Compare versions" }).click();
+
+  // Every interactive control in the compare bar: the version chips plus the
+  // segmented layout/indicator toggles.
+  const bar = await page.$$eval(".compare-picker button", (els) =>
+    els
+      .filter((el) => {
+        const e = el as HTMLButtonElement;
+        return !e.disabled && e.getAttribute("aria-disabled") !== "true" && e.offsetParent !== null;
+      })
+      .map((el) => ({
+        label: (el.textContent || el.getAttribute("aria-label") || "").trim().slice(0, 30),
+        cursor: getComputedStyle(el).cursor,
+      })),
+  );
+  expect(bar.length).toBeGreaterThan(3);
+  expect(bar.filter((b) => b.cursor !== "pointer")).toEqual([]);
+
+  // The version options inside a picker's dropdown.
+  await page.getByLabel("Target version").click();
+  await expect(page.getByRole("menuitemradio", { name: "v1" })).toBeVisible();
+  const options = await page.$$eval("[role=menuitemradio]", (els) =>
+    els
+      .filter((el) => (el as HTMLElement).offsetParent !== null)
+      .map((el) => ({
+        label: (el.textContent || "").trim().slice(0, 30),
+        cursor: getComputedStyle(el).cursor,
+      })),
+  );
+  expect(options.length).toBeGreaterThan(0);
+  expect(options.filter((o) => o.cursor !== "pointer")).toEqual([]);
+});

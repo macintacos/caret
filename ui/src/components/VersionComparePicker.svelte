@@ -397,7 +397,7 @@
     border-radius: var(--radius);
     font-size: var(--text-sm);
     color: var(--ink-soft);
-    cursor: default;
+    cursor: pointer;
     outline: none;
   }
   :global(.vmenu .vitem[data-highlighted]) {
