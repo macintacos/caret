@@ -144,3 +144,25 @@ test("narrow: bell and settings stay visible while a long title truncates", asyn
     .evaluate((el) => ({ scrollWidth: el.scrollWidth, clientWidth: el.clientWidth }));
   expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
 });
+
+test("the overflow Reject glyph is red like its label", async ({ daemon, page }) => {
+  // The destructive menu row's leading X should read the same danger red as its
+  // label — a real-rendering (computed color) check, so it's an e2e. caret's Icon
+  // nests the svg in a span, which the shadcn base rule tints muted; the fix makes
+  // the destructive variant reach that nested glyph.
+  await daemon.seed();
+  await page.setViewportSize({ width: 500, height: 800 });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  await page.getByRole("button", { name: "More actions" }).click();
+  const reject = page.getByRole("menuitem", { name: "Reject" });
+  await expect(reject).toBeVisible();
+  const { labelColor, glyphColor } = await reject.evaluate((el) => ({
+    labelColor: getComputedStyle(el).color,
+    glyphColor: getComputedStyle(el.querySelector("svg") as SVGElement).color,
+  }));
+  // The glyph matches the red label, not the muted-foreground grey the base rule
+  // gives other menu icons.
+  expect(glyphColor).toBe(labelColor);
+});
