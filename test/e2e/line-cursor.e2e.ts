@@ -28,10 +28,15 @@ const PLAN = [
   "",
 ].join("\n\n");
 
-// The cursor marker: SourceView tags the focused content row data-caret-cursor.
+// The cursor marker: SourceView tags BOTH cells of the focused row
+// data-caret-cursor — the content cell and its gutter cell. Read the line from
+// the content cell (it carries data-line); the gutter cell carries the bar.
 // Playwright's CSS engine pierces the library's open shadow root, so a plain
-// descendant selector reaches it.
-const cursor = (page: Page) => page.locator(".diffview [data-caret-cursor]");
+// descendant selector reaches them.
+const cursor = (page: Page) =>
+  page.locator(".diffview [data-content] [data-line][data-caret-cursor]");
+const cursorBar = (page: Page) =>
+  page.locator(".diffview [data-gutter] [data-column-number][data-caret-cursor]");
 
 const lineOf = async (page: Page): Promise<number> =>
   Number((await cursor(page).getAttribute("data-line")) ?? -1);
@@ -80,9 +85,9 @@ test("j/k place and step the cursor, it reads as distinct, and Esc clears it", a
   await page.keyboard.press("k");
   await expectCursorLine(page, start);
 
-  // The cursor row carries the left-bar treatment (a box-shadow the plain and
-  // hovered rows never get) — the visual distinction from the hover-+.
-  const boxShadow = await cursor(page).evaluate((el) => getComputedStyle(el).boxShadow);
+  // The cursor's gutter cell carries the left-bar treatment (a box-shadow the
+  // plain and hovered rows never get) — the visual distinction from the hover-+.
+  const boxShadow = await cursorBar(page).evaluate((el) => getComputedStyle(el).boxShadow);
   expect(boxShadow).not.toBe("none");
 
   // Esc clears the cursor (no composer open, so the global clear fires).

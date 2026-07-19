@@ -132,11 +132,43 @@ function cursorLine(host: HTMLElement): string | null {
   return host.querySelector("[data-caret-cursor]")?.getAttribute("data-line") ?? null;
 }
 
+// A gutter + content grid, like the library's shadow root: each line has a gutter
+// cell (data-column-number) and a content cell (data-line).
+function grid(...lines: number[]): HTMLElement {
+  const host = document.createElement("div");
+  const gutter = document.createElement("div");
+  gutter.setAttribute("data-gutter", "");
+  const content = document.createElement("div");
+  content.setAttribute("data-content", "");
+  for (const n of lines) {
+    const g = document.createElement("div");
+    g.setAttribute("data-column-number", String(n));
+    gutter.appendChild(g);
+    const c = document.createElement("div");
+    c.setAttribute("data-line", String(n));
+    content.appendChild(c);
+  }
+  host.append(gutter, content);
+  return host;
+}
+
 test("tagCursorRow marks exactly the cursor line", () => {
   const host = rows(1, 2, 3);
   tagCursorRow(host, 2);
   expect(cursorLine(host)).toBe("2");
   expect(host.querySelectorAll("[data-caret-cursor]").length).toBe(1);
+});
+
+test("tagCursorRow marks both the content cell and its gutter cell", () => {
+  const host = grid(1, 2, 3);
+  tagCursorRow(host, 2);
+  expect(host.querySelector("[data-line][data-caret-cursor]")?.getAttribute("data-line")).toBe("2");
+  expect(
+    host
+      .querySelector("[data-column-number][data-caret-cursor]")
+      ?.getAttribute("data-column-number"),
+  ).toBe("2");
+  expect(host.querySelectorAll("[data-caret-cursor]").length).toBe(2);
 });
 
 test("tagCursorRow moves the tag off the old line", () => {

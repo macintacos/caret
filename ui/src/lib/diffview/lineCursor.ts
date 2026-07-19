@@ -80,11 +80,13 @@ export function resolveCursorLine(motion: CursorMotion, ctx: CursorContext): num
 }
 
 /**
- * Marks the shadow row for `line` with `data-caret-cursor` (clearing any prior
- * one) so the override sheet paints the cursor band; `null` — or a line with no
- * rendered row — clears the cursor. A no-op when `root` is null. Attribute
- * writes only (like `tagFileRefTokens`), so it never re-triggers a mutation
- * observer watching the shadow root for node changes.
+ * Marks both cells of the cursor row with `data-caret-cursor` (clearing any prior
+ * one) so the override sheet paints the row band and cursor bar: the content cell
+ * (`[data-line="N"]`) and its gutter cell (`[data-column-number="N"]`, whose value
+ * is the line number) — mirroring the library's own `[data-selected-line]`, which
+ * it sets on both. `null` — or a line with no rendered row — clears the cursor. A
+ * no-op when `root` is null. Attribute writes only (like `tagFileRefTokens`), so it
+ * never re-triggers a mutation observer watching the shadow root for node changes.
  */
 export function tagCursorRow(root: ParentNode | null, line: number | null): void {
   if (root == null) return;
@@ -92,5 +94,7 @@ export function tagCursorRow(root: ParentNode | null, line: number | null): void
     el.removeAttribute("data-caret-cursor");
   }
   if (line == null) return;
-  root.querySelector(`[data-line="${line}"]`)?.setAttribute("data-caret-cursor", "");
+  for (const sel of [`[data-line="${line}"]`, `[data-column-number="${line}"]`]) {
+    root.querySelector(sel)?.setAttribute("data-caret-cursor", "");
+  }
 }
