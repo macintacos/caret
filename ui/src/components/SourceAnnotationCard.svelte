@@ -456,7 +456,13 @@
   }
   .comment :global(a) {
     color: var(--accent);
-    text-decoration: underline;
+    text-decoration: underline dotted;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
+  .comment :global(a:hover) {
+    color: var(--accent-bright);
+    text-decoration-style: solid;
   }
   .comment :global(strong) {
     font-weight: 700;
