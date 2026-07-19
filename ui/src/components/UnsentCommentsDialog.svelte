@@ -2,7 +2,9 @@
   import type { PendingItem } from "$lib/feedback.ts";
   import type { IconName } from "$lib/icons.ts";
   import { Button } from "$lib/components/ui/button/index.js";
+  import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { Textarea } from "$lib/components/ui/textarea/index.js";
+  import { isSubmitChord } from "$lib/keys.ts";
   import Icon from "@/components/Icon.svelte";
   import Modal from "@/components/Modal.svelte";
 
@@ -62,6 +64,17 @@
   // the confirm action on open (via Modal's onOpenAutoFocus) so a bare Enter
   // activates it, rather than letting bits-ui land focus on Cancel.
   let confirmEl = $state<HTMLElement | null>(null);
+
+  // ⌘↵/Ctrl+Enter confirms from anywhere the chord can land, matching the comment
+  // composer's submit chord. The confirm button carries it for the on-open focus;
+  // the notes field carries it for when the reviewer is mid-note (a bare Enter
+  // there is a newline). preventDefault stops a focused button's native click from
+  // double-firing onConfirm.
+  function onKey(e: KeyboardEvent) {
+    if (!isSubmitChord(e)) return;
+    e.preventDefault();
+    onConfirm(notes);
+  }
 </script>
 
 <!-- Composes the shared Modal. The role is caller-chosen (`kind`): Reject keeps the
@@ -112,6 +125,7 @@
       <Textarea
         value={notes}
         oninput={(e) => (notes = e.currentTarget.value)}
+        onkeydown={onKey}
         rows={3}
         placeholder="Anything the agent should fold into the work — no re-planning needed."
       />
@@ -126,9 +140,17 @@
         Request changes
       </Button>
     {/if}
-    <Button bind:ref={confirmEl} onclick={() => onConfirm(notes)}>
+    <Button
+      bind:ref={confirmEl}
+      onclick={() => onConfirm(notes)}
+      onkeydown={onKey}
+      aria-keyshortcuts="Meta+Enter Control+Enter"
+    >
       {#if icon}<Icon name={icon} size={14} />{/if}
       {hasComments ? `${action} anyway` : action}
+      <Kbd aria-hidden="true">
+        <Icon name="command" size={12} /><Icon name="corner-down-left" size={12} />
+      </Kbd>
     </Button>
   {/snippet}
 </Modal>
