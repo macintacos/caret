@@ -11,6 +11,7 @@
   // EXC-812: at ≤ --w-tight it widens to a full-bleed bottom sheet so the pinned
   // chrome reads as an intentional narrow-width surface instead of a cramped card.
   import { type CommentIndexEntry, filterComments, highlightMatches } from "$lib/feedback.ts";
+  import { Kbd } from "$lib/components/ui/kbd/index.js";
 
   interface Props {
     /** Whether the navigator is shown. The status strip's tally button toggles it. */
@@ -23,8 +24,11 @@
     onReveal: (entry: CommentIndexEntry) => void;
     /** Close the navigator (Escape or the close button). */
     onClose: () => void;
+    /** Whether the shortcut-hint key caps are shown (EXC-826/EXC-792). When off,
+     * the footer key legend hides; the keys themselves still work. */
+    showShortcutHints: boolean;
   }
-  let { open, comments, activeId, onReveal, onClose }: Props = $props();
+  let { open, comments, activeId, onReveal, onClose, showShortcutHints }: Props = $props();
 
   let query = $state("");
   const visible = $derived(filterComments(comments, query));
@@ -156,6 +160,19 @@
           </li>
         {/each}
       </ul>
+    {/if}
+
+    {#if showShortcutHints}
+      <!-- The in-view key legend (EXC-792), rendered as shadcn Kbd caps and gated
+           on the shortcut-hints setting like the app's other hints. Shift+C — the
+           summon key — rides the status-strip tally that opens the panel, so it is
+           taught there rather than repeated inside the open view. -->
+      <footer class="nav-hints" aria-hidden="true">
+        <span class="nav-hint"><Kbd class="kbd-sm">j</Kbd><Kbd class="kbd-sm">k</Kbd> move</span>
+        <span class="nav-hint"><Kbd class="kbd-sm">↵</Kbd> reveal</span>
+        <span class="nav-hint"><Kbd class="kbd-sm">/</Kbd> search</span>
+        <span class="nav-hint"><Kbd class="kbd-sm">Esc</Kbd> close</span>
+      </footer>
     {/if}
   </aside>
 {/if}
@@ -367,5 +384,24 @@
     text-align: center;
     font-size: var(--text-sm);
     color: var(--ink-faint);
+  }
+
+  /* The in-view key legend (EXC-792): a quiet footer band of Kbd caps below the
+     list, set off by a hairline like the header. The mono/ink-faint voice keeps
+     it a legend, not a control, so amber stays reserved for the active comment. */
+  .nav-hints {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.6rem;
+    padding: 0.45rem 0.7rem;
+    border-top: 1px solid var(--rule);
+    font-size: var(--text-2xs);
+    color: var(--ink-faint);
+  }
+  .nav-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
   }
 </style>

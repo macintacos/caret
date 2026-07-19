@@ -525,6 +525,7 @@
   activeId={autosave.focusedAnnotation}
   onReveal={revealComment}
   onClose={() => (showComments = false)}
+  {showShortcutHints}
 />
 
 {#if pendingApproveMode !== null && active}

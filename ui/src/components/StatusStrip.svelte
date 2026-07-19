@@ -21,6 +21,7 @@
   // de-collision (the strip yielding to the navigator) is gone — the navigator
   // now docks above the bar rather than sharing the bottom-right corner.
   import { Badge } from "$lib/components/ui/badge/index.js";
+  import { Kbd, KbdGroup } from "$lib/components/ui/kbd/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
 
@@ -32,6 +33,7 @@
     connected,
     commentsOpen = false,
     onToggleComments,
+    showShortcutHints = false,
   }: {
     active: boolean;
     pendingCount: number;
@@ -42,6 +44,8 @@
     commentsOpen?: boolean;
     /** Toggle the comment navigator. The comment tally is its trigger. */
     onToggleComments?: () => void;
+    /** Whether the ⇧C shortcut-hint cap is shown on the tally (EXC-826/EXC-792). */
+    showShortcutHints?: boolean;
   } = $props();
 
   // Only worth showing the lines tally once a line-anchored comment covers source
@@ -59,10 +63,16 @@
         class="stat comments-toggle"
         aria-expanded={commentsOpen}
         aria-controls="comment-navigator"
+        aria-keyshortcuts="Shift+C"
         onclick={onToggleComments}
       >
         <span class="num" class:has={pendingCount > 0}>{pendingCount}</span>
         <span class="label">{pendingCount === 1 ? "comment" : "comments"}</span>
+        {#if showShortcutHints}
+          <KbdGroup class="comments-key" aria-hidden="true">
+            <Kbd class="kbd-sm">⇧</Kbd><Kbd class="kbd-sm">C</Kbd>
+          </KbdGroup>
+        {/if}
       </button>
       {#if showCovered}
         <Separator orientation="vertical" decorative style="height: 0.9em; min-height: 0" />
@@ -146,6 +156,12 @@
   .comments-toggle:focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
+  }
+  /* The ⇧C summon-key cap on the tally (EXC-792): centered against the
+     baseline-set count/label. Rides KbdGroup's root (no scope hash → :global,
+     bounded under the scoped strip). */
+  .status-strip :global(.comments-key) {
+    align-self: center;
   }
   .num {
     font-weight: 600;

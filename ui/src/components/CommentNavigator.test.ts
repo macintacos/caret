@@ -22,6 +22,7 @@ const base = {
   activeId: null,
   onReveal: () => {},
   onClose: () => {},
+  showShortcutHints: false,
 };
 
 describe("CommentNavigator", () => {
@@ -58,6 +59,17 @@ describe("CommentNavigator", () => {
     const { target } = render(CommentNavigator, { ...base, onClose: () => (closed += 1) });
     target.querySelector<HTMLButtonElement>(".nav-close")!.click();
     expect(closed).toBe(1);
+  });
+
+  test("renders the shortcut-key legend as Kbd caps only when hints are enabled", () => {
+    const off = render(CommentNavigator, base); // showShortcutHints: false
+    expect(off.target.querySelector(".nav-hints")).toBeNull();
+
+    const on = render(CommentNavigator, { ...base, showShortcutHints: true });
+    const hints = on.target.querySelector(".nav-hints");
+    expect(hints).not.toBeNull();
+    // The keys render as shadcn Kbd caps (data-slot=kbd), not plain text.
+    expect(hints!.querySelector("[data-slot='kbd']")).not.toBeNull();
   });
 
   test("shows an empty message when there are no comments", () => {

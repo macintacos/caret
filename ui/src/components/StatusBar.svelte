@@ -57,6 +57,7 @@
       {connected}
       {commentsOpen}
       {onToggleComments}
+      {showShortcutHints}
     />
     {#if showShortcutHints}
       <KeyboardHelpButton onOpen={onOpenHelp} />
