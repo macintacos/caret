@@ -20,7 +20,7 @@ describe("CANONICAL_KEYMAP", () => {
 
   test("reserves the parent keymap's bindings", () => {
     const sigs = new Set(CANONICAL_KEYMAP.map((e) => specSignature(e.keys)));
-    for (const sig of ["j", "k", "g g", "] ]", "a", "r", "?", "ctrl+d"]) {
+    for (const sig of ["j", "k", "g g", "] ]", "a", "r", "?", "ctrl+d", ","]) {
       expect(sigs.has(sig)).toBe(true);
     }
   });

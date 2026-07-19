@@ -419,6 +419,42 @@ button.float-chip[aria-expanded="true"]:not(:disabled) {
   color: var(--ink-faint);
 }
 
+/* Keycap: every Kbd renders as a small physical key, consistent across surfaces
+   (the topbar a/r caps, the composer's ⌘↵, the ? affordance, the help modal).
+   The fill is a translucent tint of currentColor over the container, so the key
+   picks up its container's own colour — a light key on the amber Approve button,
+   a grey key on a neutral chip, an ink key on the help modal's paper. A hairline
+   border, a top-lit gradient, and a 1px bottom lip give it depth; the glyph is
+   set in the plan-view mono (--font-mono, the diff view's Berkeley Mono). */
+[data-slot="kbd"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2em;
+  min-width: 1.5em;
+  padding: 0.15em 0.4em;
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  font-weight: 500;
+  line-height: 1.4;
+  color: inherit;
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-radius: 0.3em;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, currentColor 8%, transparent),
+    color-mix(in srgb, currentColor 17%, transparent)
+  );
+  box-shadow: 0 1px 0 color-mix(in srgb, currentColor 25%, transparent);
+}
+/* A more compact keycap for dense chrome (the status-bar ? sits beside a 15px
+   glyph): a smaller glyph and tighter box, same keycap treatment otherwise. */
+[data-slot="kbd"].kbd-sm {
+  font-size: 0.68em;
+  min-width: 1.2em;
+  padding: 0.08em 0.28em;
+}
+
 button {
   cursor: pointer;
 }

@@ -716,6 +716,48 @@
     writeTocOpen(tocPref);
   }
 
+  // The compare-toggle + contents-filter shortcuts (EXC-789), live entries over
+  // EXC-786's reservations. Registered while the single-version view is mounted
+  // (i.e. an active review), so they no-op with no review; the enabled guards
+  // mirror each control's own availability — `d` toggles compare only when there
+  // are versions to compare, `/` focuses the filter only when the ToC is shown.
+  // Mount-once: the closures read compareStore/showDiff/hasToc live at dispatch,
+  // so a version or view change never churns the registry.
+  $effect(() => {
+    const reserved = new Map(CANONICAL_KEYMAP.map((e) => [e.id, e] as const));
+    const offs: Array<() => void> = [];
+    const toggleDiff = reserved.get("actions.toggleDiff");
+    if (toggleDiff != null) {
+      offs.push(
+        shortcuts.register({
+          ...toggleDiff,
+          run: () => compare.setComparing(!compareStore.comparing),
+          enabled: () => canCompare,
+        }),
+      );
+    }
+    const focusFilter = reserved.get("actions.focusFilter");
+    if (focusFilter != null) {
+      offs.push(
+        shortcuts.register({
+          ...focusFilter,
+          // Reveal the rail if the reviewer collapsed it, then focus the filter.
+          run: () => {
+            if (!tocShown) {
+              tocPref = true;
+              writeTocOpen(true);
+            }
+            document.querySelector<HTMLInputElement>("#plan-toc input.toc-filter")?.focus();
+          },
+          enabled: () => !showDiff && hasToc,
+        }),
+      );
+    }
+    return () => {
+      for (const off of offs) off();
+    };
+  });
+
   // Reactive mirror of the controller's pending target, so the composer renders
   // when it opens or closes. The controller owns the state machine; this is the
   // view's read of it.

@@ -10,6 +10,7 @@
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
+  import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
   import DevBadge from "@/components/DevBadge.svelte";
   import Icon from "@/components/Icon.svelte";
@@ -88,7 +89,13 @@
         Reject
       </Button>
 
-      <Button variant="secondary" class="request float-chip" onclick={onRequestChanges} disabled={busy}>
+      <Button
+        variant="secondary"
+        class="request float-chip"
+        onclick={onRequestChanges}
+        disabled={busy}
+        aria-keyshortcuts="r"
+      >
         <Icon name="corner-up-left" size={14} />
         Request changes
         {#if pendingCount > 0}
@@ -100,6 +107,7 @@
             {pendingCount}
           </Badge>
         {/if}
+        <Kbd aria-hidden="true">r</Kbd>
       </Button>
 
       <!-- Below --w-narrow the Reject + Request-changes buttons above collapse
@@ -145,6 +153,11 @@
                 <span class="v-label">{v.label}</span>
                 {#if v.description}<span class="v-note">{v.description}</span>{/if}
               </span>
+              <!-- Only the remembered variant carries the `a` cap — it's the row
+                   the `a` shortcut (onApprove(approveMode)) actually fires. -->
+              {#if v.id === approveMode}
+                <Kbd class="menu-key" aria-hidden="true">a</Kbd>
+              {/if}
             </DropdownMenu.Item>
           {/each}
           <DropdownMenu.Separator class="overflow-approve-sep" />
@@ -165,6 +178,7 @@
                 {pendingCount}
               </Badge>
             {/if}
+            <Kbd class="menu-key" aria-hidden="true">r</Kbd>
           </DropdownMenu.Item>
           <DropdownMenu.Item variant="destructive" onSelect={() => onReject()}>
             <Icon name="x" size={14} />
@@ -185,14 +199,27 @@
            into the overflow menu above. -->
       <div class="approve-slot">
         {#if variants.length <= 1}
-          <Button variant="default" class="approve" onclick={() => onApprove(approveMode)} disabled={busy}>
+          <Button
+            variant="default"
+            class="approve"
+            onclick={() => onApprove(approveMode)}
+            disabled={busy}
+            aria-keyshortcuts="a"
+          >
             <Icon name="check" size={14} />
             {approveLabel(approveMode, variants)}
+            <Kbd aria-hidden="true">a</Kbd>
           </Button>
         {:else}
-          <SplitButton onclick={() => onApprove(approveMode)} optionsLabel="Approve options" disabled={busy}>
+          <SplitButton
+            onclick={() => onApprove(approveMode)}
+            optionsLabel="Approve options"
+            keyshortcuts="a"
+            disabled={busy}
+          >
             <Icon name="check" size={14} />
             {approveLabel(approveMode, variants)}
+            <Kbd aria-hidden="true">a</Kbd>
             {#snippet menu()}
               {#each variants as v (v.id)}
                 <DropdownMenu.Item class="approve-variant" onSelect={() => onApprove(v.id)}>
@@ -215,7 +242,14 @@
        margin-left pushes it right. -->
   <div class="bell-slot">
     <NotifyBell />
-    <Button variant="secondary" size="icon" class="settings float-chip" aria-label="Settings" onclick={onOpenSettings}>
+    <Button
+      variant="secondary"
+      size="icon"
+      class="settings float-chip"
+      aria-label="Settings"
+      aria-keyshortcuts=","
+      onclick={onOpenSettings}
+    >
       <Icon name="settings" size={16} />
     </Button>
   </div>
@@ -332,6 +366,11 @@
   }
   :global(.overflow-approve[data-highlighted] .icon) {
     visibility: visible;
+  }
+  /* The shortcut cap on an overflow-menu row is pushed to the row's right edge.
+     :global because the rows portal out of scope (like the .overflow-* rules). */
+  :global([data-slot="kbd"].menu-key) {
+    margin-left: auto;
   }
 
   /* ----- Narrow-width consolidation (EXC-810) ----- */

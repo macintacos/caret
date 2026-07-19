@@ -15,7 +15,7 @@
 
 <button type="button" class="kbd-help" aria-label="Keyboard shortcuts" onclick={onOpen}>
   <Icon name="keyboard" size={15} />
-  <Kbd>?</Kbd>
+  <Kbd class="kbd-sm">?</Kbd>
 </button>
 
 <style>

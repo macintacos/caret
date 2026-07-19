@@ -346,7 +346,7 @@
     <Button variant="secondary" class="float-chip" onclick={onCancel}>Cancel</Button>
     <Button onclick={submit} disabled={!preview} aria-keyshortcuts="Meta+Enter Control+Enter">
       Send for revision
-      <Kbd class="send-kbd" aria-hidden="true">
+      <Kbd aria-hidden="true">
         <Icon name="command" size={12} /><Icon name="corner-down-left" size={12} />
       </Kbd>
     </Button>
@@ -704,12 +704,4 @@
     }
   }
 
-  /* The ⌘↵ cap rides inside the filled Send button, so it sheds the Kbd chip's own
-     light fill and inherits the button ink — subtle glyphs on the amber, not a
-     light box punched into it. */
-  :global(.send-kbd) {
-    background: transparent;
-    color: inherit;
-    opacity: 0.8;
-  }
 </style>

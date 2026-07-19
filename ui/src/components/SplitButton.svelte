@@ -20,6 +20,8 @@
     onclick: () => void;
     /** Accessible name for the options toggle. */
     optionsLabel: string;
+    /** aria-keyshortcuts advertised on the primary half (e.g. the Approve key). */
+    keyshortcuts?: string;
     disabled?: boolean;
     /** shadcn Button variant worn by both halves. */
     variant?: ButtonVariant;
@@ -36,6 +38,7 @@
     menu,
     onclick,
     optionsLabel,
+    keyshortcuts,
     disabled = false,
     variant = "default",
     hoverBg = "var(--accent-bright)",
@@ -45,7 +48,7 @@
 </script>
 
 <div class="split" style="--split-hover-bg: {hoverBg}">
-  <Button {variant} class="split-primary" {onclick} {disabled}>
+  <Button {variant} class="split-primary" {onclick} {disabled} aria-keyshortcuts={keyshortcuts}>
     {@render children()}
   </Button>
   <DropdownMenu.Root>

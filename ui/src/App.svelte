@@ -12,7 +12,12 @@
   import { createPlanNotifier } from "$lib/notify.ts";
   import { installUiGoneBeacon } from "$lib/presence.ts";
   import { createSafeModeGuard } from "$lib/safeMode.ts";
-  import { createShortcutDispatcher, EDITOR_SHORTCUTS, shortcuts } from "$lib/shortcuts/index.ts";
+  import {
+    CANONICAL_KEYMAP,
+    createShortcutDispatcher,
+    EDITOR_SHORTCUTS,
+    shortcuts,
+  } from "$lib/shortcuts/index.ts";
   import { createAutosave } from "@/state/autosave.svelte.ts";
   import {
     createReviewSelection,
@@ -317,10 +322,36 @@
         showHelp = !showHelp;
       },
     });
+    // The review-verdict + chrome shortcuts (EXC-789). Each reads its keys/label
+    // from EXC-786's canonical reservation and adds the live run + enabled here,
+    // routing through the SAME guarded path as its TopBar button — `a` is never a
+    // raw approve, always onApprove's unsent-comments guard. The two verdict
+    // actions gate on an active, not-busy review (matching the buttons' disabled
+    // state); Settings is persistent chrome (EXC-730), reachable with no review.
+    const reserved = new Map(CANONICAL_KEYMAP.map((e) => [e.id, e] as const));
+    const action = (id: string, run: () => void, enabled?: () => boolean) => {
+      const base = reserved.get(id);
+      return base ? shortcuts.register({ ...base, run, enabled }) : () => {};
+    };
+    const canAct = () => active != null && !resolve.busy;
+    const unregisterActions = [
+      action("actions.approve", () => onApprove(resolve.approveMode), canAct),
+      action(
+        "actions.requestChanges",
+        () => {
+          showDialog = true;
+        },
+        canAct,
+      ),
+      action("actions.settings", () => {
+        showSettings = true;
+      }),
+    ];
     const dispatcher = createShortcutDispatcher({ target: window, registry: shortcuts });
     return () => {
       for (const off of unregister) off();
       unregisterHelp();
+      for (const off of unregisterActions) off();
       dispatcher.destroy();
     };
   });

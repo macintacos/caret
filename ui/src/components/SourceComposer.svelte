@@ -163,7 +163,7 @@
       <Button variant="ghost" class="cancel" onclick={onDiscard}>Cancel</Button>
       <Button class="save" onclick={submit} aria-keyshortcuts="Meta+Enter Control+Enter">
         Save
-        <Kbd class="kbd" aria-hidden="true">
+        <Kbd aria-hidden="true">
           <Icon name="command" size={12} /><Icon name="corner-down-left" size={12} />
         </Kbd>
       </Button>
@@ -184,7 +184,7 @@
       </span>
       <Button onclick={submit} aria-keyshortcuts="Meta+Enter Control+Enter">
         Comment
-        <Kbd class="kbd" aria-hidden="true">
+        <Kbd aria-hidden="true">
           <Icon name="command" size={12} /><Icon name="corner-down-left" size={12} />
         </Kbd>
       </Button>
@@ -241,18 +241,6 @@
   }
   :global([data-slot="button"].keep:hover:not(:disabled)) {
     color: var(--ink-soft);
-  }
-  /* The ⌘↵ hint on the Comment button: a Kbd stripped of its keycap ground so the
-     two glyphs read as a quiet inline shortcut on the amber fill rather than a
-     sunk chip fighting it. */
-  :global([data-slot="kbd"].kbd) {
-    height: auto;
-    min-width: 0;
-    padding: 0;
-    gap: 0.15rem;
-    background: transparent;
-    color: inherit;
-    opacity: 0.85;
   }
   @keyframes reveal {
     from {
