@@ -120,6 +120,16 @@ describe("createShortcutDispatcher", () => {
     expect(gg.calls()).toBe(1);
   });
 
+  test("does not complete a bare sequence once an editing context takes focus", () => {
+    const gg = spyEntry("top", [{ key: "g" }, { key: "g" }]);
+    registry.register(gg.entry);
+    mount();
+    keydown("g"); // buffers while not editing
+    editing = true;
+    keydown("g"); // focus now in a field — the second key must not complete it
+    expect(gg.calls()).toBe(0);
+  });
+
   test("destroy() removes the listener", () => {
     const a = spyEntry("approve", [{ key: "a" }]);
     registry.register(a.entry);

@@ -63,6 +63,10 @@ export function matchKeydown(
       }
     }
   }
+  // Single-chord entries are matched before sequence buffering, so a single-key
+  // shortcut preempts (shadows) any sequence sharing its first key. The canonical
+  // keymap avoids this (gg/]]/[[ have no lone g/]/[ binding); a downstream author
+  // registering a single-key next to a reserved sequence must mind the overlap.
   for (const entry of entries) {
     const only = entry.keys[0];
     if (entry.keys.length === 1 && only && chordMatches(only, e)) {

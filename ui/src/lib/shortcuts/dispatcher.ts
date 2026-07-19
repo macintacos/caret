@@ -65,9 +65,15 @@ export function createShortcutDispatcher(opts: ShortcutDispatcherOptions): Short
     // Only dispatchable entries fire; display-only entries (the editor chords)
     // live in the registry for the help modal, never for dispatch.
     let entries = registry.list().filter((entry) => entry.run);
-    // Single-key shortcuts do not fire while a text field or the composer is
-    // focused — that surface keeps owning its own keys.
-    if (isEditingContext()) entries = entries.filter((entry) => !isBareSpec(entry.keys));
+    // Single-key (bare) shortcuts do not fire while a text field or the composer
+    // is focused — that surface keeps owning its own keys.
+    if (isEditingContext()) {
+      entries = entries.filter((entry) => !isBareSpec(entry.keys));
+      // Drop a pending bare sequence so its second key can't complete inside the
+      // focused field (matchKeydown completes from the buffer, bypassing the
+      // filter above).
+      if (seq?.candidates.every((c) => isBareSpec(c.keys))) seq = null;
+    }
     const { entry, state } = matchKeydown(seq, e, entries, now(), timeoutMs);
     seq = state;
     if (entry && entry.enabled?.() !== false) {

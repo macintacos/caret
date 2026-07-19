@@ -108,8 +108,8 @@ describe("specSignature", () => {
     expect(specSignature([{ key: "a" }])).not.toBe(specSignature([{ key: "b" }]));
   });
   test("modifier order does not affect the signature", () => {
-    expect(specSignature([{ key: "Enter", mods: ["mod", "shift"] }])).toBe(
-      specSignature([{ key: "Enter", mods: ["shift", "mod"] }]),
+    expect(specSignature([{ key: "Enter", mods: ["ctrl", "alt"] }])).toBe(
+      specSignature([{ key: "Enter", mods: ["alt", "ctrl"] }]),
     );
   });
 });

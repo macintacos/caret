@@ -5,9 +5,12 @@
 
 import { uiLog } from "$lib/log.ts";
 
-/** A modifier a chord can require. `mod` = ⌘ on macOS, Ctrl elsewhere — the same
- * platform-agnostic rule `keys.ts`'s `isSubmitChord` uses (`metaKey || ctrlKey`). */
-export type Mod = "mod" | "ctrl" | "meta" | "shift" | "alt";
+/** A command modifier a chord can require. `mod` = ⌘ on macOS, Ctrl elsewhere —
+ * the same platform-agnostic rule `keys.ts`'s `isSubmitChord` uses
+ * (`metaKey || ctrlKey`). Shift is deliberately absent: a shifted key is matched
+ * by its shifted `key` value (`V`, `?`, `G`), never a modifier flag — so the
+ * matcher and the caps stay in agreement about what a chord fires on. */
+export type Mod = "mod" | "ctrl" | "meta" | "alt";
 
 /** One key press: a `KeyboardEvent.key` value plus any required modifiers. `key`
  * is matched case-sensitively, so shifted characters (`V`, `G`, `?`) match the
@@ -59,14 +62,6 @@ export function specSignature(spec: KeySpec): string {
   return spec.map(chordSignature).join(" ");
 }
 
-const MOD_CAP: Record<Mod, string> = {
-  mod: "⌘", // platform glyph resolved below for the bare "mod" case
-  meta: "⌘",
-  ctrl: "Ctrl",
-  shift: "⇧",
-  alt: "⌥",
-};
-
 const KEY_CAP: Record<string, string> = {
   Enter: "↵",
   Escape: "Esc",
@@ -83,9 +78,16 @@ function isMac(): boolean {
 }
 
 function modCap(mod: Mod): string {
-  if (mod === "mod") return isMac() ? "⌘" : "Ctrl";
-  if (mod === "alt") return isMac() ? "⌥" : "Alt";
-  return MOD_CAP[mod];
+  switch (mod) {
+    case "mod":
+      return isMac() ? "⌘" : "Ctrl";
+    case "meta":
+      return "⌘";
+    case "ctrl":
+      return "Ctrl";
+    case "alt":
+      return isMac() ? "⌥" : "Alt";
+  }
 }
 
 /** Render a key spec to display caps: one cap-list per chord, ready to map onto
