@@ -340,6 +340,8 @@
     // raw approve, always onApprove's unsent-comments guard. The two verdict
     // actions gate on an active, not-busy review (matching the buttons' disabled
     // state); Settings is persistent chrome (EXC-730), reachable with no review.
+    // Shift+C toggles the comment navigator (EXC-792), gated on an active review
+    // like the status-strip tally that also toggles it.
     const reserved = new Map(CANONICAL_KEYMAP.map((e) => [e.id, e] as const));
     const action = (id: string, run: () => void, enabled?: () => boolean) => {
       const base = reserved.get(id);
@@ -358,6 +360,13 @@
       action("actions.settings", () => {
         showSettings = true;
       }),
+      action(
+        "actions.toggleComments",
+        () => {
+          showComments = !showComments;
+        },
+        () => active != null,
+      ),
     ];
     const dispatcher = createShortcutDispatcher({ target: window, registry: shortcuts });
     return () => {

@@ -97,6 +97,16 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
     label: "Focus contents filter",
   },
   { id: "actions.settings", keys: [{ key: "," }], group: "actions", label: "Open settings" },
+  {
+    // EXC-792: summons the comment navigator. Keyed "C" (a bare shifted key —
+    // the case-sensitive matcher fires on it without a modifier flag, like V/G).
+    // Its cap is set to ⇧ C explicitly, not the bare "C" V/G derive, so it can't
+    // be misread as the lowercase-c comment-line shortcut it sits beside.
+    id: "actions.toggleComments",
+    keys: [{ key: "C", cap: ["⇧", "C"] }],
+    group: "actions",
+    label: "Toggle comments",
+  },
   // Help
   { id: "help.show", keys: [{ key: "?" }], group: "help", label: "Show shortcuts" },
   // Editor (existing) — the read-only chords, registered live for the help modal.
