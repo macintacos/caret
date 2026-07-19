@@ -48,10 +48,18 @@ test("Shift+C summons the navigator, focuses the list, and advertises its shortc
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
   await expect(nav.locator(".nav-item").first()).toBeFocused();
 
+  // Space reveals the focused comment (native button activation, like Enter) and
+  // keeps the panel open.
+  await page.keyboard.press("Space");
+  await expect(page.locator('[data-annotation-card="ann-1"]')).toHaveClass(/focused/);
+  await expect(nav).toBeVisible();
+
   // Esc dismisses (the documented close; a toggle-close via Shift+C is captured
-  // while the panel holds focus, so Esc is the way out).
+  // while the panel holds focus, so Esc is the way out) and returns focus to the
+  // summon tally (WAI-ARIA dismissable pattern).
   await page.keyboard.press("Escape");
   await expect(nav).toBeHidden();
+  await expect(toggle).toBeFocused();
 });
 
 test("j/k walk the rows; Enter reveals without dismissing; / drops into search", async ({

@@ -8,6 +8,11 @@
   // plan scrolls behind it, and it dismisses only on Escape, the close button, or a
   // re-toggle. Mirrors the SourceToc contents pane's filter-then-jump idiom.
   //
+  // EXC-792: keyboard-driven too — Shift+C summons it (the status-strip tally
+  // advertises the key), j/k walk the rows, Enter reveals a comment while the
+  // panel stays open, / focuses the search field, Esc dismisses. While a row holds
+  // focus the panel captures the keyboard so the plan's own shortcuts don't fire.
+  //
   // EXC-812: at ≤ --w-tight it widens to a full-bleed bottom sheet so the pinned
   // chrome reads as an intentional narrow-width surface instead of a cramped card.
   import { type CommentIndexEntry, filterComments, highlightMatches } from "$lib/feedback.ts";
@@ -41,12 +46,23 @@
   // the list is empty (nothing to walk, but "/" still reaches search). Runs on
   // the open transition (and when the panel's elements mount); revealing a
   // comment doesn't re-run it, so focus is never yanked mid-navigation. On close,
-  // clear the query so it reopens clean.
+  // clear the query so it reopens clean and — if the panel had been open — return
+  // focus to the tally that summoned it (WAI-ARIA dismissable pattern), so a
+  // keyboard close (Esc) doesn't strand focus on document.body. The flag keeps
+  // that restore off the initial mount, where open is already false.
+  let hadFocus = false;
   $effect(() => {
     if (!open) {
+      if (hadFocus) {
+        hadFocus = false;
+        (document.querySelector(".comments-toggle") as HTMLElement | null)?.focus({
+          preventScroll: true,
+        });
+      }
       query = "";
       return;
     }
+    hadFocus = true;
     const revealed = (asideEl?.querySelector(".nav-item.active") ?? null) as HTMLElement | null;
     (revealed ?? rows()[0] ?? searchEl)?.focus({ preventScroll: true });
   });
@@ -55,12 +71,15 @@
   function rows(): HTMLButtonElement[] {
     return asideEl ? ([...asideEl.querySelectorAll(".nav-item")] as HTMLButtonElement[]) : [];
   }
-  // Move roving focus by `delta` from the focused row, clamped to the ends.
+  // Move roving focus by `delta` from the focused row, clamped to the ends. When
+  // focus isn't on a row yet (e.g. the close button), either direction enters the
+  // list at the top rather than skipping the first row.
   function focusRelative(delta: number): void {
     const list = rows();
     if (list.length === 0) return;
     const cur = list.indexOf(document.activeElement as HTMLButtonElement);
-    list[Math.min(Math.max((cur < 0 ? 0 : cur) + delta, 0), list.length - 1)]?.focus();
+    const next = cur < 0 ? 0 : Math.min(Math.max(cur + delta, 0), list.length - 1);
+    list[next]?.focus();
   }
 
   // Keyboard-drive the open navigator (EXC-792). Escape dismisses wherever focus
