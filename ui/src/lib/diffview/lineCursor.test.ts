@@ -8,10 +8,19 @@ import {
   tagCursorRow,
 } from "$lib/diffview/lineCursor.ts";
 
-// A 10-line document with headings on lines 1, 4, 8; a 4-line half-page; the
-// reading position (seed) at line 3. Individual tests override fields as needed.
+// A 10-line document with headings on lines 1, 4, 8; blank lines on 2, 5, 9; a
+// 4-line half-page; the reading position (seed) at line 3. Individual tests
+// override fields as needed.
 function ctx(over: Partial<CursorContext> = {}): CursorContext {
-  return { cursor: 3, lineCount: 10, headingLines: [1, 4, 8], halfPage: 4, seed: 3, ...over };
+  return {
+    cursor: 3,
+    lineCount: 10,
+    headingLines: [1, 4, 8],
+    blankLines: [2, 5, 9],
+    halfPage: 4,
+    seed: 3,
+    ...over,
+  };
 }
 
 function resolve(motion: CursorMotion, over: Partial<CursorContext> = {}): number {
@@ -56,6 +65,29 @@ test("heading motions stay put when there is no heading in that direction", () =
 test("heading motions are a no-op when the document has no headings", () => {
   expect(resolve("nextHeading", { headingLines: [] })).toBe(3);
   expect(resolve("prevHeading", { headingLines: [] })).toBe(3);
+});
+
+test("blank-line motions move to the next / previous blank line", () => {
+  expect(resolve("nextBlank", { cursor: 3 })).toBe(5);
+  expect(resolve("nextBlank", { cursor: 5 })).toBe(9);
+  expect(resolve("prevBlank", { cursor: 5 })).toBe(2);
+  expect(resolve("prevBlank", { cursor: 3 })).toBe(2);
+});
+
+test("blank-line motions stay put when there is no blank in that direction", () => {
+  expect(resolve("nextBlank", { cursor: 9 })).toBe(9);
+  expect(resolve("prevBlank", { cursor: 2 })).toBe(2);
+  expect(resolve("prevBlank", { cursor: 1 })).toBe(1);
+});
+
+test("blank-line motions are a no-op when the document has no blank lines", () => {
+  expect(resolve("nextBlank", { blankLines: [] })).toBe(3);
+  expect(resolve("prevBlank", { blankLines: [] })).toBe(3);
+});
+
+test("a null cursor honors blank-line motions from the reading position", () => {
+  expect(resolve("nextBlank", { cursor: null, seed: 3 })).toBe(5);
+  expect(resolve("prevBlank", { cursor: null, seed: 6 })).toBe(5);
 });
 
 test("a null cursor reveals at the reading position for relative motions", () => {

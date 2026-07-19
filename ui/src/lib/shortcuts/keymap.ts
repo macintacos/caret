@@ -60,6 +60,8 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
     group: "motion",
     label: "Previous heading",
   },
+  { id: "motion.nextBlank", keys: [{ key: "}" }], group: "motion", label: "Next blank line" },
+  { id: "motion.prevBlank", keys: [{ key: "{" }], group: "motion", label: "Previous blank line" },
   // Commenting
   { id: "commenting.comment", keys: [{ key: "c" }], group: "commenting", label: "Comment line" },
   {

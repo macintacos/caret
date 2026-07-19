@@ -7,7 +7,8 @@
 // source view paints.
 
 /** A vim-style cursor motion. Relative motions step from the current line;
- * absolute motions (top/bottom/heading jumps) ignore it. */
+ * absolute motions (top/bottom, heading jumps, blank-line jumps) resolve to a
+ * target line regardless of where the cursor sits. */
 export type CursorMotion =
   | "down"
   | "up"
@@ -16,7 +17,9 @@ export type CursorMotion =
   | "top"
   | "bottom"
   | "nextHeading"
-  | "prevHeading";
+  | "prevHeading"
+  | "nextBlank"
+  | "prevBlank";
 
 /** Inputs for resolving a motion to a target line. */
 export interface CursorContext {
@@ -26,6 +29,9 @@ export interface CursorContext {
   lineCount: number;
   /** Heading source lines in ascending order (from `extractHeadings`). */
   headingLines: number[];
+  /** Blank (empty or whitespace-only) source lines in ascending order — the
+   * paragraph boundaries `}` / `{` jump between. */
+  blankLines: number[];
   /** Lines a half-page motion (`Ctrl+d` / `Ctrl+u`) covers. */
   halfPage: number;
   /** Where to reveal the cursor when it is unplaced and a relative motion fires
@@ -66,6 +72,10 @@ export function resolveCursorLine(motion: CursorMotion, ctx: CursorContext): num
       return clamp(ctx.headingLines.find((h) => h > base) ?? base);
     case "prevHeading":
       return clamp([...ctx.headingLines].reverse().find((h) => h < base) ?? base);
+    case "nextBlank":
+      return clamp(ctx.blankLines.find((b) => b > base) ?? base);
+    case "prevBlank":
+      return clamp([...ctx.blankLines].reverse().find((b) => b < base) ?? base);
   }
 }
 

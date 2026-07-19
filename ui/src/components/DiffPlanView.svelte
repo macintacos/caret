@@ -590,6 +590,8 @@
     "motion.bottom": "bottom",
     "motion.nextHeading": "nextHeading",
     "motion.prevHeading": "prevHeading",
+    "motion.nextBlank": "nextBlank",
+    "motion.prevBlank": "prevBlank",
   };
 
   // Lines the cursor may occupy: the rendered plan text (what the view paints),
@@ -598,6 +600,17 @@
     const text = linkLayer.text;
     const n = text.split("\n").length;
     return Math.max(1, text.endsWith("\n") ? n - 1 : n);
+  }
+
+  // The blank (empty or whitespace-only) source lines the `{` / `}` motions jump
+  // between — the plan's paragraph boundaries. Read from the same rendered text
+  // as the line count, capped to real rows so a trailing newline is not a target.
+  function cursorBlankLines(): number[] {
+    const count = cursorLineCount();
+    return linkLayer.text
+      .split("\n")
+      .slice(0, count)
+      .flatMap((line, i) => (line.trim() === "" ? [i + 1] : []));
   }
 
   // Half-page size from the scroller height over a rendered row's height, with a
@@ -618,6 +631,7 @@
       cursor: cursorLine,
       lineCount: cursorLineCount(),
       headingLines: headings.map((h) => h.line),
+      blankLines: cursorBlankLines(),
       halfPage: cursorHalfPage(),
       seed: topVisibleLine() ?? 1,
     });

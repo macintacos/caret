@@ -1,5 +1,5 @@
 // Focused-line cursor + vim motion in the plan (EXC-788). The cursor, its
-// motion (j/k, Ctrl+d/u, gg/G, ]]/[[), click-to-relocate, Esc-to-clear, and
+// motion (j/k, Ctrl+d/u, gg/G, ]]/[[, }/{), click-to-relocate, Esc-to-clear, and
 // scroll-into-view are all real-browser keyboard/scroll behavior, so they live
 // here rather than in a unit (browser-testing.md). Every motion is driven with a
 // REAL keystroke — never fill()/click() shortcuts — and the cursor line is read
@@ -154,4 +154,32 @@ test("]] and [[ jump between headings, and a line click relocates the cursor", a
   // coherent). Clicking a line also opens its composer; the cursor tracks it.
   await page.locator('.diffview [data-content] [data-line="3"]').click();
   await expectCursorLine(page, 3);
+});
+
+test("} and { jump the cursor between blank (paragraph-boundary) lines", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: PLAN });
+  await page.goto("/");
+  await loadPlan(page);
+
+  // From the top, } advances to the next blank line, then to a later one. Line
+  // numbers come from the DOM (the plan is reflowed on ingest). "}" is a shifted
+  // key; press("}") holds Shift → event.key "}" (as press("G") does for G).
+  await page.keyboard.press("g");
+  await page.keyboard.press("g");
+  await expectCursorLine(page, 1);
+  await page.keyboard.press("}");
+  const firstBlank = await readCursorLine(page, 1);
+  expect(firstBlank).toBeGreaterThan(1);
+
+  await page.keyboard.press("}");
+  const secondBlank = await readCursorLine(page, firstBlank);
+  expect(secondBlank).toBeGreaterThan(firstBlank);
+
+  // { steps back to the previous blank line (the two } jumps are consecutive
+  // blanks, so the reverse lands on the first).
+  await page.keyboard.press("{");
+  await expectCursorLine(page, firstBlank);
 });
