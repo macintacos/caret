@@ -33,8 +33,21 @@ const PLAN = [
 // descendant selector reaches it.
 const cursor = (page: Page) => page.locator(".diffview [data-caret-cursor]");
 
-async function cursorLine(page: Page): Promise<number> {
-  return Number(await cursor(page).getAttribute("data-line"));
+const lineOf = async (page: Page): Promise<number> =>
+  Number((await cursor(page).getAttribute("data-line")) ?? -1);
+
+// Assert the cursor rests on an exact line, web-first (auto-retries until the
+// effect flush settles the marker).
+async function expectCursorLine(page: Page, line: number): Promise<void> {
+  await expect(cursor(page)).toHaveAttribute("data-line", String(line));
+}
+
+// Read the cursor line once it has settled to a value other than `notLine` — so
+// a relative capture waits out the effect flush instead of racing it. Defaults
+// to -1 (i.e. wait for the marker to exist and carry any line).
+async function readCursorLine(page: Page, notLine = -1): Promise<number> {
+  await expect.poll(() => lineOf(page)).not.toBe(notLine);
+  return lineOf(page);
 }
 
 async function loadPlan(page: Page): Promise<void> {
@@ -59,13 +72,13 @@ test("j/k place and step the cursor, it reads as distinct, and Esc clears it", a
   // j reveals the cursor at the reading position; the marker carries its line.
   await page.keyboard.press("j");
   await expect(cursor(page)).toHaveCount(1);
-  const start = await cursorLine(page);
+  const start = await readCursorLine(page);
 
   // j steps down one line, k steps back to where it was.
   await page.keyboard.press("j");
-  expect(await cursorLine(page)).toBe(start + 1);
+  await expectCursorLine(page, start + 1);
   await page.keyboard.press("k");
-  expect(await cursorLine(page)).toBe(start);
+  await expectCursorLine(page, start);
 
   // The cursor row carries the left-bar treatment (a box-shadow the plain and
   // hovered rows never get) — the visual distinction from the hover-+.
@@ -88,24 +101,26 @@ test("gg/G and half-page motions move the cursor and scroll it into view", async
   // gg goes to the top.
   await page.keyboard.press("g");
   await page.keyboard.press("g");
-  expect(await cursorLine(page)).toBe(1);
+  await expectCursorLine(page, 1);
 
   // G goes to the last rendered line and scrolls it into view.
   const last = Number(
     await page.locator(".diffview [data-content] [data-line]").last().getAttribute("data-line"),
   );
   await page.keyboard.press("G"); // uppercase key holds Shift → event.key "G"
-  expect(await cursorLine(page)).toBe(last);
+  await expectCursorLine(page, last);
   await expect(cursor(page)).toBeInViewport();
 
   // Ctrl+d jumps down more than one line from the top; Ctrl+u brings it back up.
   await page.keyboard.press("g");
   await page.keyboard.press("g");
+  await expectCursorLine(page, 1);
   await page.keyboard.press("Control+d");
-  const afterHalf = await cursorLine(page);
+  const afterHalf = await readCursorLine(page, 1);
   expect(afterHalf).toBeGreaterThan(2);
   await page.keyboard.press("Control+u");
-  expect(await cursorLine(page)).toBeLessThan(afterHalf);
+  const afterUp = await readCursorLine(page, afterHalf);
+  expect(afterUp).toBeLessThan(afterHalf);
 });
 
 test("]] and [[ jump between headings, and a line click relocates the cursor", async ({
@@ -120,22 +135,23 @@ test("]] and [[ jump between headings, and a line click relocates the cursor", a
   // to Charlie; [[ steps back to Bravo. Line numbers come from the DOM.
   await page.keyboard.press("g");
   await page.keyboard.press("g");
+  await expectCursorLine(page, 1);
   await page.keyboard.press("]");
   await page.keyboard.press("]");
-  const bravo = await cursorLine(page);
+  const bravo = await readCursorLine(page, 1);
   expect(bravo).toBeGreaterThan(1);
 
   await page.keyboard.press("]");
   await page.keyboard.press("]");
-  const charlie = await cursorLine(page);
+  const charlie = await readCursorLine(page, bravo);
   expect(charlie).toBeGreaterThan(bravo);
 
   await page.keyboard.press("[");
   await page.keyboard.press("[");
-  expect(await cursorLine(page)).toBe(bravo);
+  await expectCursorLine(page, bravo);
 
   // A line click relocates the cursor to the clicked line (keyboard + mouse stay
   // coherent). Clicking a line also opens its composer; the cursor tracks it.
   await page.locator('.diffview [data-content] [data-line="3"]').click();
-  expect(await cursorLine(page)).toBe(3);
+  await expectCursorLine(page, 3);
 });

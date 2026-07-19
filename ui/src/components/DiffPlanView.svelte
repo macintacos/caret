@@ -521,6 +521,15 @@
   // so the override sheet paints the cursor band.
   let cursorLine = $state<number | null>(null);
 
+  // Drop the cursor when the rendered content changes (a new version or a review
+  // switch) so a later motion never steps from a line that belonged to the prior
+  // plan. contentKey short-circuits on an unchanged poll tick, so this fires only
+  // on a real switch, not every 2s poll re-delivering the same version.
+  $effect(() => {
+    void contentKey;
+    cursorLine = null;
+  });
+
   // Recompute the active heading from the source line at the top of the reading
   // zone, throttled with rAF so a scroll burst settles into one read. The view
   // paints each line as <div data-line="N"> in a shadow root; lineAtReadingZone
