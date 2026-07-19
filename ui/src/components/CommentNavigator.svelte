@@ -105,16 +105,16 @@
 {/if}
 
 <style>
-  /* Viewport-pinned, docked just above the status strip (bottom-right). position:
-     fixed keeps it out of the shell grid — a root sibling of .shell like the strip
-     itself — so it never disturbs the layout or the fixed Toc rail's containing
-     block. z-index sits above the strip (40) and Toc rail (30), below the modal
-     scrim (100) and safe-mode toast (200). A quiet paper-raised card: the strip's
-     own vocabulary, grown into a small panel. */
+  /* Viewport-pinned, docked just above the bottom status bar (EXC-787). position:
+     fixed keeps it out of the shell grid — a root sibling of .shell — so it never
+     disturbs the layout or the ToC rail's containing block. z-index sits above the
+     Toc rail (30), below the modal scrim (100) and safe-mode toast (200). A quiet
+     paper-raised card. The bottom offset clears the status bar (its height token
+     plus a small gap). */
   .comment-navigator {
     position: fixed;
     right: 0.7rem;
-    bottom: 2.9rem;
+    bottom: calc(var(--status-bar-h) + 0.5rem);
     z-index: 45;
     display: flex;
     flex-direction: column;
@@ -128,8 +128,8 @@
     animation: nav-open var(--dur-base) var(--ease-out);
   }
   /* At ≤ --w-tight the navigator unpins from the right corner and widens to a
-     full-bleed bottom sheet (EXC-812) — it stays at bottom: 2.9rem, clearing the
-     VersionBadge row, and may sit over the ToC rail (intended). The px literal
+     full-bleed bottom sheet (EXC-812) — it keeps the base bottom offset, clearing
+     the status bar, and may sit over the ToC rail (intended). The px literal
      mirrors lib/layout.ts's TIGHT_WIDTH_PX (640) minus one — @media can't read the
      --w-* token. Wide widths keep the right-docked 21rem card. */
   @media (max-width: 639px) {

@@ -331,6 +331,9 @@ body {
   --w-min: 480px;
   --w-tight: 640px;
   --w-narrow: 960px;
+  /* Bottom status-bar height (EXC-787), consumed by StatusBar and by the
+     CommentNavigator that docks above it — named once so the two stay in sync. */
+  --status-bar-h: 1.75rem;
 }
 
 /* ----- App shell: plan + annotation-gutter grid ----- */
@@ -339,10 +342,10 @@ body {
    rail (Toc.svelte `.toc`) and would break its viewport pin. */
 .shell {
   display: grid;
-  /* Rows: TopBar | optional daemon-replaced banner | content. The middle row
-     collapses to 0 when the banner is absent; content keeps the 1fr regardless
-     (App.svelte pins each child to its row). */
-  grid-template-rows: auto auto 1fr;
+  /* Rows: TopBar | optional daemon-replaced banner | content | bottom status bar
+     (EXC-787). The middle row collapses to 0 when the banner is absent; content
+     keeps the 1fr regardless (App.svelte pins each child to its row). */
+  grid-template-rows: auto auto 1fr auto;
   height: 100%;
   /* Supported-minimum floor: below --w-min the shell overflows the viewport and
      the window scrolls horizontally rather than collapsing the layout further.

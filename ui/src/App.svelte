@@ -37,9 +37,9 @@
   import OnboardingDialog from "@/components/OnboardingDialog.svelte";
   import RequestChangesDialog from "@/components/RequestChangesDialog.svelte";
   import SettingsDialog from "@/components/SettingsDialog.svelte";
-  import StatusStrip from "@/components/StatusStrip.svelte";
+  import ShortcutsHelp from "@/components/ShortcutsHelp.svelte";
+  import StatusBar from "@/components/StatusBar.svelte";
   import TopBar from "@/components/TopBar.svelte";
-  import VersionBadge from "@/components/VersionBadge.svelte";
 
   // ----- Reactive backing state -----
   // `daemonChanged`: set when the daemon behind the port is replaced (its
@@ -81,6 +81,9 @@
   }>({ annotations: [], generalCommentDraft: "", composerScratches: [], focusedAnnotation: null });
 
   let showDialog = $state(false);
+  // Whether the keyboard shortcuts help modal is open (EXC-787). Toggled by the
+  // ? key (registered below) and opened by the status bar's keyboard button.
+  let showHelp = $state(false);
   // Whether the comment navigator is open (toggled by the status strip's comment
   // tally). The reveal action DiffPlanView hands up on mount, used to scroll the
   // plan to a navigated comment's line; undefined until the source view paints.
@@ -294,9 +297,22 @@
   // own shortcuts into the same `shortcuts` singleton.
   $effect(() => {
     const unregister = EDITOR_SHORTCUTS.map((entry) => shortcuts.register(entry));
+    // The ? key toggles the shortcuts help modal (EXC-787). A live entry (with a
+    // run) replaces EXC-786's reserved help.show by id, so the dispatcher fires it
+    // and the modal lists it alongside the rest.
+    const unregisterHelp = shortcuts.register({
+      id: "help.show",
+      keys: [{ key: "?" }],
+      group: "help",
+      label: "Show shortcuts",
+      run: () => {
+        showHelp = !showHelp;
+      },
+    });
     const dispatcher = createShortcutDispatcher({ target: window, registry: shortcuts });
     return () => {
       for (const off of unregister) off();
+      unregisterHelp();
       dispatcher.destroy();
     };
   });
@@ -406,33 +422,31 @@
   {:else}
     <EmptyState connected={selection.connected} />
   {/if}
+
+  <!-- The bottom status bar (EXC-787): the row-4 grid child consolidating the
+       build/version badge (left), the plan-review status (right, when active),
+       and the keyboard ? affordance (far right). A grid child, so it reserves
+       space at the bottom; the CommentNavigator docks just above it. -->
+  <StatusBar
+    {version}
+    {commit}
+    {isDev}
+    active={active !== null}
+    {pendingCount}
+    {coveredLines}
+    reviewVersion={active?.version ?? 1}
+    connected={selection.connected}
+    commentsOpen={showComments}
+    onToggleComments={() => (showComments = !showComments)}
+    onOpenHelp={() => (showHelp = true)}
+  />
 </div>
 
-<!-- Viewport-pinned build badge (EXC-561). A root sibling of .shell, not inside
-     the grid, so it's always visible regardless of review state; self-gates on
-     `version` until the health probe lands. -->
-<VersionBadge {version} {commit} {isDev} />
-
-<!-- Persistent plan-review status strip. A root sibling of .shell (the
-     VersionBadge pattern), never a grid child, so the shell's grid-template-rows
-     and the fixed Toc rail's containing block stay untouched. Self-gates on an
-     active review; reports the same pending-comment state the request-changes
-     dialog and approve guard read. -->
-<StatusStrip
-  active={active !== null}
-  {pendingCount}
-  {coveredLines}
-  version={active?.version ?? 1}
-  connected={selection.connected}
-  commentsOpen={showComments}
-  onToggleComments={() => (showComments = !showComments)}
-/>
-
 <!-- The comment navigator: a searchable index of the plan's inline comments,
-     docked above the status strip. Another root sibling of .shell, gated on an
-     active review so it disappears with the strip that toggles it. Reveals a
-     comment by focusing it (the source view highlights + expands the card) and
-     scrolling the plan to its line. -->
+     docked above the bottom status bar. A root sibling of .shell, gated on an
+     active review; its toggle is the bar's comment tally. Reveals a comment by
+     focusing it (the source view highlights + expands the card) and scrolling
+     the plan to its line. -->
 <CommentNavigator
   open={active !== null && showComments}
   {comments}
@@ -520,18 +534,28 @@
   <OnboardingDialog onClose={() => (showOnboarding = false)} />
 {/if}
 
+<!-- Keyboard shortcuts help (EXC-787): the ? key toggles it, the status bar's
+     keyboard button opens it. Reads the live registry (shortcuts.list()) at
+     open, so it grows as later tickets register. -->
+{#if showHelp}
+  <ShortcutsHelp entries={shortcuts.list()} onClose={() => (showHelp = false)} />
+{/if}
+
 <style>
-  /* Pin the shell's three direct children to their grid rows (app.css declares
-     `auto auto 1fr`): TopBar, the optional banner, then content. Explicit
-     placement keeps content on the 1fr row whether or not the banner is
-     present — without it, an absent banner would let content drift off 1fr.
-     `:global` because TopBar and the content elements render their own roots. */
+  /* Pin the shell's direct children to their grid rows (app.css declares
+     `auto auto 1fr auto`): TopBar, the optional banner, content, then the bottom
+     status bar. Explicit placement keeps content on the 1fr row whether or not
+     the banner is present — without it, an absent banner would let content drift
+     off 1fr. `:global` because these children render their own roots. */
   .shell > :global(.topbar) {
     grid-row: 1;
   }
   .shell > :global(.diff-plan),
   .shell > :global(.empty) {
     grid-row: 3;
+  }
+  .shell > :global(.status-bar) {
+    grid-row: 4;
   }
 
   /* Persistent, dismissible banner shown when the daemon behind the port was

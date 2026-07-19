@@ -1,5 +1,5 @@
 <script lang="ts">
-  // EXC-561: an always-visible build badge pinned to the bottom-left corner so
+  // EXC-561: an always-visible build badge in the bottom status bar so
   // the running build is unambiguous (handy when verifying an install or filing a
   // bug against a revision). `version`, `commit`, and `isDev` all come from the
   // single /api/health probe App.svelte already runs; the commit is shown as its
@@ -18,8 +18,8 @@
   // Tooltip (matching the TopBar cwd tooltip), and the pill wears the tabular
   // .metric badge vocabulary. It stays a real <button> — click-to-copy needs
   // button semantics, which the shadcn Badge (span/anchor only) can't give — and
-  // keeps its quiet content-floating surface rather than the topbar's louder
-  // .float-chip fill.
+  // reads as a flat metric segment in the status bar rather than the topbar's
+  // louder .float-chip fill.
   import { onDestroy } from "svelte";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
 
@@ -91,19 +91,12 @@
 {/if}
 
 <style>
-  /* Quiet, viewport-pinned build tag. The mono family and tabular figures come
-     from the .metric atom (technical-metadata type policy, EXC-376); pill
-     language matches DevBadge / VersionLabel. Muted at rest, brightening on
-     hover so it stays out of the way until looked at. position: fixed makes DOM
-     placement irrelevant — App renders it as a root sibling. z-index sits above
-     the Toc rail (30) and below the modal scrim (100) and safe-mode toast
-     (200). It's a button (EXC-664: click-to-copy), so the button chrome is reset
-     back to the pill. */
+  /* Quiet build tag: a flat status-bar segment (EXC-787). The mono family and
+     tabular figures come from the .metric atom (EXC-376); muted at rest,
+     brightening on hover so it stays out of the way until looked at. It's a
+     button (EXC-664: click-to-copy), reset to the bar's flat metric type;
+     StatusBar lays it out, so it no longer self-pins. */
   .version-badge {
-    position: fixed;
-    left: 0.7rem;
-    bottom: 0.6rem;
-    z-index: 40;
     display: inline-flex;
     align-items: center;
     appearance: none;
@@ -112,27 +105,21 @@
     letter-spacing: 0.02em;
     line-height: var(--leading-none);
     color: var(--ink-soft);
-    background: var(--paper-raised);
-    border: 1px solid var(--rule);
-    border-radius: 99px;
-    padding: 0.22rem 0.55rem;
-    opacity: 0.62;
+    background: none;
+    border: none;
+    border-radius: var(--radius);
+    padding: 0.15rem 0.35rem;
     transition:
-      opacity var(--dur-fast) var(--ease-out),
       color var(--dur-fast) var(--ease-out),
-      background-color var(--dur-fast) var(--ease-out),
-      border-color var(--dur-fast) var(--ease-out);
+      background-color var(--dur-fast) var(--ease-out);
   }
   .version-badge:hover {
-    opacity: 1;
-    border-color: var(--rule-strong);
+    color: var(--ink);
   }
-  /* Click feedback: the pill briefly fills with the accent wash and takes the
-     accent hue — an unmistakable "copied" flash that reverts after COPIED_MS. */
+  /* Click feedback: the segment briefly takes the accent wash + hue — an
+     unmistakable "copied" flash that reverts after COPIED_MS. */
   .version-badge.copied {
-    opacity: 1;
     color: var(--accent);
     background: var(--accent-wash);
-    border-color: var(--accent);
   }
 </style>

@@ -43,18 +43,16 @@ describe("EmptyState", () => {
     }
   });
 
-  // The hint pill's surface and border draw the SAME tokens as the VersionBadge
-  // pill, so the empty screen and the populated chrome are provably one system.
-  // Asserted against the CSS source (the type-scale/css-bridge suites prove "one
-  // system" invariants this way) so a future drift on either pill fails the unit
-  // suite rather than only showing visually.
-  test("the hint pill shares VersionBadge's surface + border tokens", async () => {
+  // The hint pill keeps its own quiet floating-pill surface — paper-raised fill +
+  // hairline border — the discoverability-hint vocabulary the empty screen shares
+  // with the other floating pills (the safe-mode toast, the comment navigator). It
+  // no longer couples to VersionBadge, which moved into the flat status bar
+  // (EXC-787) and dropped its pill surface. Asserted against the CSS source so a
+  // drift fails the unit suite rather than only showing visually.
+  test("the hint pill keeps its floating-pill surface + border tokens", async () => {
     const hintRule = ruleBody(await componentCss("EmptyState.svelte"), ".hint");
-    const badgeRule = ruleBody(await componentCss("VersionBadge.svelte"), ".version-badge");
     expect(hintRule).toContain("background: var(--paper-raised);");
-    expect(badgeRule).toContain("background: var(--paper-raised);");
     expect(hintRule).toContain("border: 1px solid var(--rule);");
-    expect(badgeRule).toContain("border: 1px solid var(--rule);");
   });
 
   // The amber ^ glyph is the hero of this screen and must survive the elevate:
