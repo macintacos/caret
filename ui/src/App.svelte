@@ -39,6 +39,7 @@
     markFreshResetApplied,
     shouldShowOnboarding,
   } from "$lib/prefs.ts";
+  import { readShortcutHints, writeShortcutHints } from "$lib/shortcutHintsPref.ts";
   import type { ComposerScratch } from "$lib/diffview/commenting.ts";
   import type { ApproveVariant, ApproveVariantId, Annotation, PersistedScratch } from "@core/lib/types";
 
@@ -128,6 +129,16 @@
   function selectTheme(id: ThemeId) {
     changeTheme(id);
     themeId = id;
+  }
+  // Shortcut-hint affordances (EXC-826). A persisted, live toggle: App owns the
+  // reactive flag and threads it to the surfaces that show discoverability chrome
+  // (the TopBar key-cap hints, the status-bar keyboard button, the V-mode chip),
+  // so flipping it in Settings hides/shows them in place. The ? help modal stays
+  // reachable by keyboard regardless.
+  let showShortcutHints = $state(readShortcutHints());
+  function setShortcutHints(show: boolean) {
+    writeShortcutHints(show);
+    showShortcutHints = show;
   }
 
   // The source view's retained-but-unsent composer drafts ("scratches"), mirrored
@@ -226,6 +237,7 @@
           clearKnownPrefs();
           applyTheme(DEFAULT_THEME_ID);
           themeId = DEFAULT_THEME_ID;
+          showShortcutHints = readShortcutHints();
           showOnboarding =
             typeof Notification !== "undefined" && shouldShowOnboarding(Notification.permission);
           markFreshResetApplied(h.instanceId);
@@ -563,6 +575,8 @@
   <SettingsDialog
     current={themeId}
     onSelect={selectTheme}
+    {showShortcutHints}
+    onToggleShortcutHints={setShortcutHints}
     onClose={() => (showSettings = false)}
   />
 {/if}

@@ -5,12 +5,14 @@ import { describe, expect, test } from "bun:test";
 import SettingsDialog from "@/components/SettingsDialog.svelte";
 import { THEMES } from "$lib/theme.ts";
 
-import { flushUntil, render } from "../../test-mount.ts";
+import { capture, flushUntil, render } from "../../test-mount.ts";
 
 const baseProps = {
   current: "caret-dark" as const,
   onSelect: () => {},
   onClose: () => {},
+  showShortcutHints: true,
+  onToggleShortcutHints: () => {},
 };
 
 // bits-ui Dialog portals its content to document.body on a deferred tick, so
@@ -38,6 +40,35 @@ describe("SettingsDialog render", () => {
     // theme's label (the open menu + options are portalled interaction, e2e-only).
     const trigger = document.body.querySelector("button[aria-label='Theme']");
     expect(trigger?.textContent).toContain(THEMES["caret-light"].label);
+  });
+});
+
+describe("SettingsDialog shortcut hints", () => {
+  const switchEl = () => document.body.querySelector("[data-slot='switch']");
+
+  test("renders a switch reflecting showShortcutHints (on)", async () => {
+    const { flush } = render(SettingsDialog, { ...baseProps, showShortcutHints: true });
+    await flushUntil(flush, mounted);
+    expect(switchEl()?.getAttribute("data-state")).toBe("checked");
+  });
+
+  test("renders the switch off when showShortcutHints is false", async () => {
+    const { flush } = render(SettingsDialog, { ...baseProps, showShortcutHints: false });
+    await flushUntil(flush, mounted);
+    expect(switchEl()?.getAttribute("data-state")).toBe("unchecked");
+  });
+
+  test("toggling the switch fires onToggleShortcutHints with the new value", async () => {
+    const changed = capture<boolean>();
+    const { flush } = render(SettingsDialog, {
+      ...baseProps,
+      showShortcutHints: true,
+      onToggleShortcutHints: changed.cb,
+    });
+    await flushUntil(flush, mounted);
+    (switchEl() as HTMLButtonElement).click();
+    flush();
+    expect(changed.last()).toBe(false);
   });
 });
 
