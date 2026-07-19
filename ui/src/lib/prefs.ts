@@ -11,6 +11,7 @@
 
 import { DIFF_INDICATORS_KEY } from "$lib/diffIndicatorsPref.ts";
 import { DIFF_STYLE_KEY } from "$lib/diffStylePref.ts";
+import { SHORTCUT_HINTS_KEY } from "$lib/shortcutHintsPref.ts";
 import { THEME_KEY } from "$lib/theme.ts";
 import { TOC_OPEN_KEY } from "$lib/tocPref.ts";
 
@@ -24,6 +25,7 @@ export const KNOWN_PREF_KEYS: readonly string[] = [
   DIFF_INDICATORS_KEY,
   DIFF_STYLE_KEY,
   TOC_OPEN_KEY,
+  SHORTCUT_HINTS_KEY,
   ONBOARDED_KEY,
 ];
 

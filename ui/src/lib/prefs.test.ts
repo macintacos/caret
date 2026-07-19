@@ -13,6 +13,7 @@ import {
   ONBOARDED_KEY,
   shouldShowOnboarding,
 } from "$lib/prefs.ts";
+import { SHORTCUT_HINTS_KEY } from "$lib/shortcutHintsPref.ts";
 import { THEME_KEY } from "$lib/theme.ts";
 import { TOC_OPEN_KEY } from "$lib/tocPref.ts";
 
@@ -28,6 +29,7 @@ describe("KNOWN_PREF_KEYS", () => {
     expect(KNOWN_PREF_KEYS).toContain(DIFF_STYLE_KEY);
     expect(KNOWN_PREF_KEYS).toContain(TOC_OPEN_KEY);
     expect(KNOWN_PREF_KEYS).toContain(ONBOARDED_KEY);
+    expect(KNOWN_PREF_KEYS).toContain(SHORTCUT_HINTS_KEY);
   });
 });
 

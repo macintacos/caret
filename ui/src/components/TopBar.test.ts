@@ -34,6 +34,7 @@ const baseProps = {
   onRequestChanges: () => {},
   onReject: () => {},
   onOpenSettings: () => {},
+  showShortcutHints: true,
 };
 
 describe("TopBar render", () => {
@@ -54,6 +55,13 @@ describe("TopBar render", () => {
     const toggle = target.querySelector(".split-toggle") as HTMLButtonElement;
     expect(toggle).not.toBeNull();
     expect(toggle.getAttribute("aria-label")).toBe("Approve options");
+  });
+
+  test("shows inline key-cap hints by default, hides them when shortcut hints are off", () => {
+    const on = render(TopBar, baseProps);
+    expect(on.target.querySelectorAll("[data-slot='kbd']").length).toBeGreaterThan(0);
+    const off = render(TopBar, { ...baseProps, showShortcutHints: false });
+    expect(off.target.querySelectorAll("[data-slot='kbd']").length).toBe(0);
   });
 
   test("with no active review, hides actions but keeps the bell slot", () => {

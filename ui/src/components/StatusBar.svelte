@@ -26,6 +26,9 @@
     onToggleComments?: () => void;
     // Keyboard-shortcuts affordance (far right).
     onOpenHelp: () => void;
+    /** Whether the shortcut-hint affordances are shown (EXC-826). When off, the
+     * keyboard button hides; the ? shortcut still opens the help modal. */
+    showShortcutHints: boolean;
   }
   let {
     version,
@@ -39,6 +42,7 @@
     commentsOpen = false,
     onToggleComments,
     onOpenHelp,
+    showShortcutHints,
   }: Props = $props();
 </script>
 
@@ -54,7 +58,9 @@
       {commentsOpen}
       {onToggleComments}
     />
-    <KeyboardHelpButton onOpen={onOpenHelp} />
+    {#if showShortcutHints}
+      <KeyboardHelpButton onOpen={onOpenHelp} />
+    {/if}
   </div>
 </footer>
 

@@ -18,6 +18,7 @@ const base = {
   commentsOpen: false,
   onToggleComments: () => {},
   onOpenHelp: () => {},
+  showShortcutHints: true,
 };
 
 const keyboardButton = (root: ParentNode) =>
@@ -42,6 +43,12 @@ describe("StatusBar", () => {
     });
     keyboardButton(target)?.click();
     expect(opened).toBe(true);
+  });
+
+  test("hides the keyboard button when shortcut hints are off", () => {
+    const { target } = render(StatusBar, { ...base, showShortcutHints: false });
+    // Boolean-ise the absence check — a bare toBeNull() on a stray node hangs bun.
+    expect(keyboardButton(target) === null).toBe(true);
   });
 
   test("with no active review the status segment drops but version + keyboard stay", () => {
