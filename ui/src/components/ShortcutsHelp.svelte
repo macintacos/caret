@@ -54,7 +54,7 @@
   title="Shortcuts"
   onDismiss={onClose}
   onOpenAutoFocus={focusDialog}
-  contentClass="sm:max-w-xl"
+  contentClass="shortcuts-content"
 >
   {#snippet description()}
     Search by action or keys; click a row to run it.
@@ -116,6 +116,16 @@
 {/snippet}
 
 <style>
+  /* Cap the dialog to a sensible reading measure — the shadcn default widens to
+     calc(100% - 2rem), which stretches this single-column list uncomfortably at
+     desktop widths. The class rides the portalled dialog content (no scope hash →
+     :global); caret's unlayered component CSS beats shadcn's layered
+     max-w-[calc(100%-2rem)] utility, and min() keeps it inside a narrow viewport.
+     Authored here as caret CSS, not a Tailwind class: app.css scans only
+     lib/components/ui, so a utility in this chrome file would never be emitted. */
+  :global(.shortcuts-content) {
+    max-width: min(32rem, calc(100vw - 2rem));
+  }
   .help {
     display: flex;
     flex-direction: column;
