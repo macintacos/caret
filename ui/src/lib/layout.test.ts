@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { join } from "node:path";
 
+import { readAppCss } from "$lib/appCss.ts";
 import {
   MIN_APP_WIDTH_PX,
   NARROW_WIDTH_PX,
@@ -36,7 +36,7 @@ describe("reference width ↔ playwright viewport", () => {
 // the mirror is the drift risk this suite guards: it asserts each CSS token equals
 // its TS constant, mirroring the layout↔config coupling above and the
 // css-bridge / motion token-pinning tests.
-const appCss = await Bun.file(join(import.meta.dir, "..", "app.css")).text();
+const appCss = readAppCss();
 
 describe("width foundation tokens ↔ app.css", () => {
   test("the breakpoint constants form a coherent floor < tight < narrow < reference ramp", () => {

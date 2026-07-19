@@ -1,6 +1,7 @@
 import "../../test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { readAppCss } from "$lib/appCss.ts";
 import {
   applyTheme,
   type ColorToken,
@@ -22,8 +23,6 @@ afterEach(() => {
 // The color custom properties app.css declares in :root — the exhaustive set a
 // theme must supply. Parsed from the first :root block so a token added to
 // app.css without a matching THEMES entry (or vice versa) fails here.
-const APP_CSS = new URL("../app.css", import.meta.url).pathname;
-
 function readFirstRootTokens(css: string): Record<string, string> {
   const body = css.match(/:root\s*\{([^}]*)\}/)?.[1];
   if (body === undefined) throw new Error("app.css :root block not found");
@@ -96,8 +95,8 @@ describe("THEMES", () => {
     }
   });
 
-  test("caret-dark mirrors the app.css :root fallback exactly", async () => {
-    const root = readFirstRootTokens(await Bun.file(APP_CSS).text());
+  test("caret-dark mirrors the app.css :root fallback exactly", () => {
+    const root = readFirstRootTokens(readAppCss());
     for (const [name, value] of Object.entries(THEMES["caret-dark"].tokens)) {
       expect(root[name], `app.css :root ${name}`).toBe(value);
     }

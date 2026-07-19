@@ -1,0 +1,91 @@
+/* ── shadcn-svelte design tokens → caret bridge (EXC-758) ──────────────────────
+   The semantic layer shadcn components read (--background, --primary, --border,
+   …), bridged to caret's THEMES tokens so copied components paint on caret's
+   palette and retint in lockstep with theme switches — the same single-source
+   pattern the .diffview → --diffs-* rule uses. shadcn-bridge.test.ts pins this
+   contract, mirroring diffview/css-bridge.test.ts.
+
+   ONE flat block, no [data-theme="dark"] override: caret's color tokens are
+   written inline on :root by applyTheme() (lib/theme.ts) for the active scheme,
+   and app.css's static :root fallback (above) is caret-dark. So a var(--paper)
+   here resolves to the correct scheme at runtime and to caret-dark at first
+   paint — which both kills the first-paint light-on-dark flash the stub risked
+   AND makes a separate dark block redundant (the tokens it would reference
+   already flip). Scheme lives entirely in the caret operands, exactly as it does
+   for the .diffview bridge — no @media, no per-scheme block.
+
+   --primary carries caret's amber accent — the primary action's fill. Amber
+   reaches shadcn surfaces in just two controlled spots: this fill and --ring
+   (the focus outline, matching caret's global :focus-visible). shadcn's OTHER
+   accent — a neutral hover/active wash — collides with caret's --accent (amber),
+   so it is deliberately NOT declared here (that would clobber caret amber
+   app-wide and break the
+   first-:root guard in theme.test.ts). It is set as a neutral --color-accent in
+   @theme inline below. --radius likewise stays caret-owned; the radius ramp below
+   is single-sourced from caret's two radius roles. */
+:root {
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper-raised);
+  --card-foreground: var(--ink);
+  --popover: var(--paper-raised);
+  --popover-foreground: var(--ink);
+  --primary: var(--accent);
+  --primary-foreground: var(--accent-ink);
+  --secondary: var(--paper-raised);
+  --secondary-foreground: var(--ink);
+  --muted: var(--paper-sunk);
+  --muted-foreground: var(--ink-soft);
+  --accent-foreground: var(--ink);
+  --destructive: var(--danger);
+  /* High-contrast ink on the red fill; --accent-ink flips opposite --danger in
+     both schemes (dark ink on light-red / warm-white on dark-red). */
+  --destructive-foreground: var(--accent-ink);
+  --border: var(--rule);
+  --input: var(--rule-strong);
+  --ring: var(--accent-bright);
+}
+
+/* @theme inline: map shadcn's semantic vars onto Tailwind's color / radius / font
+   utility scales without emitting a second :root layer. Colors ride the bridged
+   --background/--primary/… above, so they resolve to caret tokens. Radius is
+   single-sourced from caret's two radius roles — controls at --radius (6px, the
+   Button's rounded-lg), panels at --radius-lg (10px, the Dialog's rounded-xl).
+   Fonts point at caret's stacks so any font-sans/font-mono utility resolves to
+   Geist / Berkeley Mono, not Tailwind's built-in defaults. */
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: var(--radius-lg);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  /* shadcn's neutral hover/active wash — NOT caret amber (that's --color-primary).
+     A neutral grey mixed off the RAISED paper (the --popover surface menus render
+     on) toward ink — matching --chip-hover's formula (paper-raised + 15% ink), the
+     brightness the topbar's .float-chip buttons hover to, so a menu/select highlight
+     reads at the same strength as every other neutral control (the old 6%-off-paper
+     wash was too faint to register). Kept a self-contained color-mix rather than a
+     var(--chip-hover) reference so the bridge block stays self-describing (a pinned
+     contract in shadcn-bridge.test.ts); the operands flip per scheme, so it reads
+     right in both without a second block. */
+  --color-accent: color-mix(in lab, var(--paper-raised), var(--ink) 15%);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}

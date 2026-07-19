@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 
+import { readAppCss } from "$lib/appCss.ts";
+
 // caret's motion vocabulary lives in app.css: a small set of functional
 // duration/easing tokens for one-shot chrome reveals, plus a single global
 // prefers-reduced-motion rule that neutralizes movement for the light-DOM app
@@ -9,7 +11,7 @@ import { join } from "node:path";
 // fails the unit suite rather than only showing as motion under reduced-motion.
 
 const uiDir = join(import.meta.dir, "..");
-const appCss = await Bun.file(join(uiDir, "app.css")).text();
+const appCss = readAppCss();
 const composer = await Bun.file(join(uiDir, "components/SourceComposer.svelte")).text();
 const emptyState = await Bun.file(join(uiDir, "components/EmptyState.svelte")).text();
 

@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 
+import { readAppCss } from "$lib/appCss.ts";
+
 // caret's chrome font sizing flows from one named scale declared in app.css: a
 // set of --text-* steps with paired --leading-* tokens. This suite pins that
 // the scale exists, that the shared atoms and the diff-view bridge draw from it,
@@ -10,7 +12,7 @@ import { join } from "node:path";
 // fragmenting the scale again.
 
 const UI_SRC = join(import.meta.dir, "..");
-const appCss = await Bun.file(join(UI_SRC, "app.css")).text();
+const appCss = readAppCss();
 
 // The documented type-scale steps and their rem values, in ascending order.
 const TEXT_STEPS: Record<string, string> = {

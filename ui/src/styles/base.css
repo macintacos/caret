@@ -1,0 +1,168 @@
+/* Global reset, document base, motion guards, and the form-control baseline.
+   @imported by app.css after the token/bridge blocks. */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: var(--leading-normal);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+#app {
+  height: 100%;
+}
+
+/* The single global reduced-motion guard for the chrome. When the OS asks for
+   reduced motion, every animation and transition under it collapses to a near-
+   zero, single static frame — so no chrome component can forget to honor the
+   preference on its own. animation-iteration-count: 1 resolves an infinite
+   ambient animation (the safe-mode pulse, EmptyState float) to one frame instead
+   of letting it loop invisibly. Authored unlayered so it wins over any component
+   @layer.
+   Two real anchors, never a bare `*`: (1) #app and its descendants — the light-
+   DOM chrome; (2) [data-slot] and its descendants — the shadcn surfaces bits-ui
+   PORTALS to document.body (dialogs, dropdown menus, tooltips, popovers), which
+   mount OUTSIDE #app and whose tw-animate-css enter/exit (fade/zoom/slide) ships
+   no reduced-motion guard of its own, so the #app anchor alone would let them
+   still animate. data-slot is stamped on every copied shadcn component, so it is
+   the portal-safe hook; anchoring to it (not a bare universal) keeps the rule
+   from bleeding past caret's own surfaces.
+   Reach: light-DOM ONLY (both the #app tree and the body-level portal). The
+   @pierre/diffs diff view renders into a Shadow DOM (.diffview's shadow root), a
+   separate tree neither selector can pierce — its own reduced-motion handling
+   stays the library's concern. The JS-side mirror for scroll behavior (CSS
+   cannot gate ScrollBehavior) lives in lib/diffview/scroll.ts's
+   prefersReducedMotion(). */
+@media (prefers-reduced-motion: reduce) {
+  #app,
+  #app *,
+  #app *::before,
+  #app *::after,
+  [data-slot],
+  [data-slot] *,
+  [data-slot] *::before,
+  [data-slot] *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* The theme-switch "wipe" (EXC-730). changeTheme() (lib/themeWipe.ts) runs the
+   palette swap inside document.startViewTransition, so the browser snapshots the
+   whole page — the light-DOM chrome AND the shadow-DOM diff view, as pixels — and
+   animates between the old and new themes. The new snapshot wipes in from the left
+   over the old (which is held static beneath it); a directional sweep reads as a
+   deliberate "restyled everything" gesture rather than a cross-fade. 0.45s is a
+   one-off, larger than the chrome's ≤200ms one-shot vocabulary on purpose — a
+   full-viewport sweep needs the extra time to read, the same way the ambient
+   animations keep their own longer literals. These pseudo-elements live on the
+   document root, outside #app, so the reduced-motion guard above can't reach them:
+   changeTheme already skips the transition under reduced motion, and the media
+   query below is the belt-and-suspenders CSS half. */
+::view-transition-old(root) {
+  animation: none;
+}
+::view-transition-new(root) {
+  animation: theme-wipe 0.45s var(--ease-out);
+}
+@keyframes theme-wipe {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
+
+button {
+  cursor: pointer;
+}
+
+/* Form controls default to sans (they don't inherit font-family from <body>);
+   mono is opt-in (.mono or an explicit font-family). This rule also re-asserts
+   the pre-Tailwind typographic baseline: Preflight (@layer base) resets controls
+   to `font: inherit`, which pulls caret's chrome buttons up to the body's 15px
+   reading size and 1.55 line-height — visibly taller than their UA baseline (it
+   grew the TopBar ~6px). We restore chrome defaults here, kept IN @layer base so
+   it wins over Preflight (declared after it) yet still loses to shadcn's own
+   utility classes in @layer utilities — so the copied components size themselves.
+   Controls that set their own size/leading (the toc filter, the dialog
+   selects/textarea) override this via their unlayered component styles. */
+@layer base {
+  /* Bridge Tailwind v4's default border color to caret's rule token. v4 changed
+     the `border` utility's fallback color to `currentColor` (v3 defaulted to a
+     grey), and shadcn-svelte's own base rule — `* { @apply border-border }` — was
+     never copied when caret hand-bridged the tokens. Without it, every copied
+     component that writes a bare `border` / `border-t` (the dialog panels, footers,
+     the select/menu popovers) painted a hairline in the INK color — a bright near-
+     white line on caret-dark. Restoring shadcn's default makes those borders resolve
+     to --border (= --rule, a ~10% hairline). caret's own chrome always sets an
+     explicit border-color, so this only reaches the shadcn tree. */
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-border);
+  }
+
+  textarea,
+  input,
+  select,
+  button {
+    font-family: var(--font-sans);
+    line-height: normal;
+  }
+
+  /* Chrome buttons that set no explicit size (e.g. TopBar's .reject) relied on
+     the UA button font (~13.3px); restore a chrome size so Preflight's inherited
+     15px doesn't enlarge them. Buttons with their own font-size still win. */
+  button {
+    font-size: var(--text-base);
+  }
+}
+
+button:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: 2px;
+}
+
+/* Pointer (hand) cursor on interactive controls. Tailwind v4's Preflight no longer
+   sets it on <button>, and the shadcn Button recipe adds none, so buttons and menu
+   actions would show the default arrow — restore the affordance app-wide so every
+   button and menu action reads as clickable. Disabled buttons carry
+   pointer-events:none (recipe), so their cursor falls through to what's beneath;
+   aria-disabled controls opt out explicitly. */
+button,
+[role="button"],
+[role="menuitem"],
+[role="menuitemradio"],
+[role="menuitemcheckbox"],
+[role="option"],
+summary {
+  cursor: pointer;
+}
+[aria-disabled="true"] {
+  cursor: default;
+}
