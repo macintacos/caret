@@ -72,6 +72,30 @@ export function scrollToLine(container: HTMLElement, line: number): boolean {
 }
 
 /**
+ * Scrolls the source view so the row for 1-based `line` is visible, but only when
+ * it is not already fully within the reading viewport — so stepping the line
+ * cursor (`j`/`k`) never yanks the view the way a bare `scrollToLine` (which always
+ * parks the row near the top) would on every keystroke. An off-screen row — above
+ * the reading zone or below the container's bottom — delegates to `scrollToLine`
+ * (parking it near the top). Returns whether a matching row was found.
+ */
+export function scrollLineIntoView(container: HTMLElement, line: number): boolean {
+  const row = container.shadowRoot?.querySelector<HTMLElement>(`[data-line="${line}"]`);
+  if (row == null) return false;
+  const scroller = nearestScrollParent(container);
+  // No identifiable scroll container: defer to scrollToLine's own fallback.
+  if (scroller == null) return scrollToLine(container, line);
+  const rowRect = row.getBoundingClientRect();
+  const hostRect = scroller.getBoundingClientRect();
+  // Visible = the row's top clears the same reading-zone offset a parked heading
+  // rests at, and its bottom is inside the container. Otherwise scroll it in.
+  const fullyVisible =
+    rowRect.top >= hostRect.top + SCROLL_OFFSET_TOP && rowRect.bottom <= hostRect.bottom;
+  if (fullyVisible) return true;
+  return scrollToLine(container, line);
+}
+
+/**
  * The 1-based line of the row occupying the reading zone — the first row (in
  * document order) whose bottom edge clears `containerTop + SCROLL_OFFSET_TOP` by
  * more than READING_ZONE_SLOP. Probing at that offset (rather than the container's

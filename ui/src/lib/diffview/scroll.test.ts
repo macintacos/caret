@@ -1,7 +1,12 @@
 import "../../../test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { lineAtReadingZone, SCROLL_OFFSET_TOP, scrollToLine } from "$lib/diffview/scroll.ts";
+import {
+  lineAtReadingZone,
+  SCROLL_OFFSET_TOP,
+  scrollLineIntoView,
+  scrollToLine,
+} from "$lib/diffview/scroll.ts";
 
 // @pierre/diffs renders each source line as a <div data-line="N"> inside the
 // container's shadow root. scrollToLine finds that row and scrolls the nearest
@@ -132,5 +137,87 @@ describe("lineAtReadingZone", () => {
       { line: 2, bottom: PARK - 2 },
     ];
     expect(lineAtReadingZone(rows, TOP)).toBe(null);
+  });
+});
+
+// scrollLineIntoView is scrollToLine's "only if off-screen" wrapper for cursor
+// motion: it no-ops when the row is already visible and otherwise delegates.
+// happy-dom has no layout, so each test stubs the row/scroller rects to drive
+// the visibility decision (the same DOMRect space getBoundingClientRect reads).
+describe("scrollLineIntoView", () => {
+  function rect(top: number, bottom: number): DOMRect {
+    return {
+      top,
+      bottom,
+      left: 0,
+      right: 0,
+      width: 0,
+      height: bottom - top,
+      x: 0,
+      y: top,
+      toJSON() {},
+    } as DOMRect;
+  }
+
+  /** A scroller (top 100, bottom 500) wrapping a shadow host with the given rows. */
+  function harnessWithRects(lines: number[]): {
+    host: HTMLElement;
+    scrollCalls: ScrollToOptions[];
+  } {
+    const scroller = document.createElement("div");
+    scroller.style.overflowY = "auto";
+    scroller.getBoundingClientRect = () => rect(100, 500);
+    const host = document.createElement("div");
+    const root = host.attachShadow({ mode: "open" });
+    for (const n of lines) {
+      const row = document.createElement("div");
+      row.setAttribute("data-line", String(n));
+      root.append(row);
+    }
+    const scrollCalls: ScrollToOptions[] = [];
+    scroller.scrollTo = ((opts: ScrollToOptions) =>
+      scrollCalls.push(opts)) as typeof scroller.scrollTo;
+    scroller.append(host);
+    document.body.append(scroller);
+    return { host, scrollCalls };
+  }
+
+  function stubRow(host: HTMLElement, line: number, top: number, bottom: number): void {
+    const row = host.shadowRoot?.querySelector<HTMLElement>(`[data-line="${line}"]`);
+    if (row != null) row.getBoundingClientRect = () => rect(top, bottom);
+  }
+
+  test("does not scroll when the row is already fully in view", () => {
+    const { host, scrollCalls } = harnessWithRects([1, 5, 9]);
+    stubRow(host, 5, 200, 218); // inside [100 + offset, 500]
+    expect(scrollLineIntoView(host, 5)).toBe(true);
+    expect(scrollCalls.length).toBe(0);
+  });
+
+  test("scrolls when the row sits below the viewport", () => {
+    const { host, scrollCalls } = harnessWithRects([1, 5, 9]);
+    stubRow(host, 5, 600, 618);
+    expect(scrollLineIntoView(host, 5)).toBe(true);
+    expect(scrollCalls.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("scrolls when the row sits above the reading zone", () => {
+    const { host, scrollCalls } = harnessWithRects([1, 5, 9]);
+    stubRow(host, 5, 104, 122); // top above the park line (100 + SCROLL_OFFSET_TOP)
+    expect(SCROLL_OFFSET_TOP).toBeGreaterThan(0);
+    expect(scrollLineIntoView(host, 5)).toBe(true);
+    expect(scrollCalls.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("returns false when the requested line is not rendered", () => {
+    const { host, scrollCalls } = harnessWithRects([1, 2, 3]);
+    expect(scrollLineIntoView(host, 99)).toBe(false);
+    expect(scrollCalls.length).toBe(0);
+  });
+
+  test("returns false when the container has no shadow root", () => {
+    const el = document.createElement("div");
+    document.body.append(el);
+    expect(scrollLineIntoView(el, 1)).toBe(false);
   });
 });
