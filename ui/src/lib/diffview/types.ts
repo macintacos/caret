@@ -34,6 +34,10 @@ export interface SourceViewApi {
    * Returns whether a matching row was found — false (a no-op) when the line is
    * outside the rendered range or the view has not painted yet. */
   scrollToLine(line: number): boolean;
+  /** Scrolls the 1-based source line into view only when it is not already fully
+   * visible — the "don't yank on every keystroke" variant used to keep the
+   * keyboard cursor visible (EXC-788). Returns whether a matching row was found. */
+  scrollLineIntoView(line: number): boolean;
   /** The view's host element (the shadow host). Light-DOM children projected
    * into its annotation slots render inline within the library's reserved rows
    * (see annotationSlot.ts). */

@@ -50,6 +50,8 @@
   import VersionComparePicker from "@/components/VersionComparePicker.svelte";
   import type { SourceViewGutter } from "$lib/diffview/options.ts";
   import type { SourceViewApi, SourceViewOptions } from "$lib/diffview/types.ts";
+  import { CANONICAL_KEYMAP, defaultIsEditingContext, shortcuts } from "$lib/shortcuts/index.ts";
+  import { type CursorMotion, resolveCursorLine } from "$lib/diffview/lineCursor.ts";
   import { activeHeadingLine, extractHeadings, lineForSlug, shouldShowToc, slugForLine } from "$lib/toc.ts";
   import { NARROW_WIDTH_PX, TIGHT_WIDTH_PX } from "$lib/layout.ts";
   import { readTocOpen, writeTocOpen } from "$lib/tocPref.ts";
@@ -513,6 +515,12 @@
   // read the topmost visible line.
   let scrollEl = $state<HTMLElement | undefined>();
 
+  // The keyboard line cursor (EXC-788): the focused line the vim motion moves and
+  // a line click relocates. Single-version view only — compare mode is a
+  // read-only diff with no cursor. Passed to SourceView, which tags its shadow row
+  // so the override sheet paints the cursor band.
+  let cursorLine = $state<number | null>(null);
+
   // Recompute the active heading from the source line at the top of the reading
   // zone, throttled with rAF so a scroll burst settles into one read. The view
   // paints each line as <div data-line="N"> in a shadow root; lineAtReadingZone
@@ -557,6 +565,100 @@
     return () => {
       cancelAnimationFrame(raf);
       el.removeEventListener("scroll", onScroll);
+    };
+  });
+
+  // ----- Keyboard line cursor + vim motion (EXC-788) -----
+  // Each reserved motion binding (keymap.ts) maps to a cursor motion; registering
+  // with the SAME id upgrades the display-only reservation to a live entry, so the
+  // help modal shows the keys and the global dispatcher fires them.
+  const CURSOR_MOTIONS: Record<string, CursorMotion> = {
+    "motion.down": "down",
+    "motion.up": "up",
+    "motion.halfPageDown": "halfDown",
+    "motion.halfPageUp": "halfUp",
+    "motion.top": "top",
+    "motion.bottom": "bottom",
+    "motion.nextHeading": "nextHeading",
+    "motion.prevHeading": "prevHeading",
+  };
+
+  // Lines the cursor may occupy: the rendered plan text (what the view paints),
+  // trailing newline trimmed so `G` lands on a real row.
+  function cursorLineCount(): number {
+    const text = linkLayer.text;
+    const n = text.split("\n").length;
+    return Math.max(1, text.endsWith("\n") ? n - 1 : n);
+  }
+
+  // Half-page size from the scroller height over a rendered row's height, with a
+  // constant fallback before the view paints. Measured per motion — cheap at
+  // keyboard cadence.
+  function cursorHalfPage(): number {
+    const rowH =
+      scrollEl
+        ?.querySelector(".diffview")
+        ?.shadowRoot?.querySelector<HTMLElement>("[data-line]")
+        ?.getBoundingClientRect().height ?? 0;
+    if (scrollEl == null || rowH <= 0) return 10;
+    return Math.max(1, Math.floor(scrollEl.clientHeight / rowH / 2));
+  }
+
+  function moveCursor(motion: CursorMotion): void {
+    const next = resolveCursorLine(motion, {
+      cursor: cursorLine,
+      lineCount: cursorLineCount(),
+      headingLines: headings.map((h) => h.line),
+      halfPage: cursorHalfPage(),
+      seed: topVisibleLine() ?? 1,
+    });
+    cursorLine = next;
+    // ponytail: scrollLineIntoView parks an off-screen target near the top; edge
+    // j/k that push past the viewport bottom jump-to-top rather than scroll one
+    // line. Upgrade path: a bottom-margin scroll if that reads abruptly.
+    api?.scrollLineIntoView(next);
+  }
+
+  // Register the live motion + Esc-clear shortcuts while the single-version view is
+  // up; teardown unregisters them, so motion is gone in compare mode. Depends only
+  // on showDiff — the closures read cursorLine/headings/api live at dispatch, so a
+  // cursor move never re-runs this effect (which would churn the registry).
+  // Ctrl+d/Ctrl+u are non-bare, so the dispatcher does not suppress them in an
+  // editing context; the enabled guard does, so half-page motions don't fire while
+  // the composer is focused.
+  $effect(() => {
+    if (showDiff) return;
+    const reserved = new Map(CANONICAL_KEYMAP.map((e) => [e.id, e] as const));
+    const offs: Array<() => void> = [];
+    for (const [id, motion] of Object.entries(CURSOR_MOTIONS)) {
+      const base = reserved.get(id);
+      if (base == null) continue;
+      offs.push(
+        shortcuts.register({
+          ...base,
+          run: () => moveCursor(motion),
+          enabled: () => !defaultIsEditingContext(),
+        }),
+      );
+    }
+    // Esc clears the cursor, gated on a placed cursor so it neither shadows other
+    // Esc handlers nor preventDefaults when there is nothing to clear. A focused
+    // editor keeps Esc regardless (the dispatcher suppresses bare keys in an
+    // editing context). EXC-789's commenting.clear may later reconcile Esc.
+    offs.push(
+      shortcuts.register({
+        id: "motion.clearCursor",
+        keys: [{ key: "Escape", cap: "Esc" }],
+        group: "motion",
+        label: "Clear cursor",
+        enabled: () => cursorLine != null,
+        run: () => {
+          cursorLine = null;
+        },
+      }),
+    );
+    return () => {
+      for (const off of offs) off();
     };
   });
 
@@ -645,6 +747,7 @@
   function openRange(start: number, end: number): void {
     commenting.cancel(liveText); // retain any in-progress text; no-op when closed
     commenting.open({ start, end });
+    cursorLine = end; // a line click relocates the cursor (keyboard + mouse coherent)
   }
   function resumeScratch(key: string): void {
     commenting.cancel(liveText); // retain the open composer's text before switching
@@ -887,6 +990,7 @@
           dragRange = range ?? undefined;
         }}
         selectedRange={pending ?? null}
+        {cursorLine}
       />
       <!-- The comment-span bracket overlay: rounded gutter rails marking each
            comment's covered lines. It layers over the .diff-plan scroll content

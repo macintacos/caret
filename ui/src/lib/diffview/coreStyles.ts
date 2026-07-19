@@ -61,6 +61,22 @@ const CARET_OVERRIDES = `
     outline-offset: 2px;
   }
 
+  /* EXC-788: the focused-line cursor. SourceView tags the content row the
+     keyboard cursor sits on (j/k, Ctrl+d/u, gg/G, ]]/[[) with data-caret-cursor;
+     a solid left bar — the caret ^ motif — is the marker, with a faint neutral
+     band reinforcing the row. Deliberately NON-amber (amber stays reserved for
+     the selection band) and content-column only (NOT the full-width row band the
+     grey hover-+ paints), so the three affordances read distinct: bar = cursor,
+     "+" = hover, amber band = selection. No transition — the diff surface swaps
+     state instantly (svelte-rules § Motion). :not([data-selected-line]) yields an
+     amber-selected line to selection; declared before the code-block rules so a
+     cursor on a fenced line keeps its panel fill (the code rules set only
+     background-color, so the box-shadow bar still shows over the panel). */
+  [data-content] [data-line][data-caret-cursor]:not([data-selected-line]) {
+    background-color: color-mix(in lab, var(--paper), var(--ink) 7%);
+    box-shadow: inset 2px 0 0 0 var(--ink);
+  }
+
   /* Multi-line selection affordance (GitHub-style). During a click-drag range
      select, the library renders the "+" button only in the row under the pointer
      (the one it flags [data-hovered]); the other selected rows would otherwise

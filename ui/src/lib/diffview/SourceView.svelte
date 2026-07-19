@@ -12,7 +12,8 @@
   import { type ComposedTokenHandlers, composeTokenHandlers } from "$lib/diffview/linkInteractions.ts";
   import { type LinkSpanMap, openLinkInNewTab } from "$lib/diffview/links.ts";
   import { type SourceViewGutter, type SourceViewLibOptions, toFileOptions } from "$lib/diffview/options.ts";
-  import { scrollToLine } from "$lib/diffview/scroll.ts";
+  import { scrollLineIntoView, scrollToLine } from "$lib/diffview/scroll.ts";
+  import { tagCursorRow } from "$lib/diffview/lineCursor.ts";
   import { type CodeBlockRange, codeBlockRanges, tagCodeBlockRows } from "$lib/diffview/codeBlocks.ts";
   import { syncCodeBlockCards } from "$lib/diffview/codeBlockScroll.ts";
   import { preloadFenceLanguages, scanFenceLanguages } from "$lib/diffview/languages.ts";
@@ -81,6 +82,11 @@
      * when caret's composer closes; mirroring the composer range here (and clearing
      * on close) keeps the highlight tied to the composer's lifetime. */
     selectedRange?: { startLine: number; endLine: number } | null;
+    /** The 1-based line the keyboard cursor sits on, tagged data-caret-cursor on
+     * its shadow row so the override sheet paints the cursor band (EXC-788). null
+     * clears it. Distinct from selectedRange: the cursor is a persistent, neutral
+     * focus marker, not the amber composer selection. */
+    cursorLine?: number | null;
   }
 
   let {
@@ -99,6 +105,7 @@
     onLineRangeComment,
     onLineRangePreview,
     selectedRange = null,
+    cursorLine = null,
   }: Props = $props();
 
   // The container div is component markup, so the instance must not remove
@@ -120,7 +127,11 @@
     if (container == null || notified) return;
     notified = true;
     const el = container;
-    onReady?.({ scrollToLine: (line) => scrollToLine(el, line), host: el });
+    onReady?.({
+      scrollToLine: (line) => scrollToLine(el, line),
+      scrollLineIntoView: (line) => scrollLineIntoView(el, line),
+      host: el,
+    });
   });
 
   // All token-handler composition lives in composeTokenHandlers — the single
@@ -312,6 +323,18 @@
     return rangesMemo.ranges;
   });
 
+  // The keyboard cursor's line (EXC-788). Mirrored into a plain (non-reactive)
+  // let so the repaint observer's tag() below re-applies the cursor tag after a
+  // library row rewrite WITHOUT re-arming the observer on every cursor move —
+  // reading a rune there would re-run that effect (and disconnect/reconnect the
+  // MutationObserver) on each j/k. This reactive effect owns applying a move; the
+  // observer's tag() only re-applies the mirror after a repaint.
+  let cursorMirror: number | null = null;
+  $effect(() => {
+    cursorMirror = cursorLine;
+    tagCursorRow(container?.shadowRoot ?? null, cursorLine);
+  });
+
   // A stable empty map for the "no file references" case, so the tagging pass
   // still clears any prior icons without allocating each repaint.
   const EMPTY_FILE_REFS: FileRefSpanMap = new Map();
@@ -336,6 +359,9 @@
       // Always run — the clear-stale pass lives inside tagFileRefTokens, so a
       // populated→empty transition still drops the prior icons.
       tagFileRefTokens(root, refs ?? EMPTY_FILE_REFS);
+      // Re-apply the cursor tag after a repaint from the non-reactive mirror
+      // (the reactive effect above owns applying a move).
+      tagCursorRow(root, cursorMirror);
     };
     const schedule = () => {
       cancelAnimationFrame(raf);
