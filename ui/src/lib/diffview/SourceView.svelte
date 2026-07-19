@@ -12,7 +12,7 @@
   import { type ComposedTokenHandlers, composeTokenHandlers } from "$lib/diffview/linkInteractions.ts";
   import { type LinkSpanMap, openLinkInNewTab } from "$lib/diffview/links.ts";
   import { type SourceViewGutter, type SourceViewLibOptions, toFileOptions } from "$lib/diffview/options.ts";
-  import { scrollLineIntoView, scrollToLine } from "$lib/diffview/scroll.ts";
+  import { followCursorLine, scrollToLine } from "$lib/diffview/scroll.ts";
   import { tagCursorRow } from "$lib/diffview/lineCursor.ts";
   import { type CodeBlockRange, codeBlockRanges, tagCodeBlockRows } from "$lib/diffview/codeBlocks.ts";
   import { syncCodeBlockCards } from "$lib/diffview/codeBlockScroll.ts";
@@ -129,7 +129,7 @@
     const el = container;
     onReady?.({
       scrollToLine: (line) => scrollToLine(el, line),
-      scrollLineIntoView: (line) => scrollLineIntoView(el, line),
+      followCursorLine: (line) => followCursorLine(el, line),
       host: el,
     });
   });

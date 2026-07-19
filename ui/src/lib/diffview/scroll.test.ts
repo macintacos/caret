@@ -2,9 +2,11 @@ import "../../../test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import {
+  CURSOR_SCROLLOFF,
+  followCursorLine,
+  followScrollDelta,
   lineAtReadingZone,
   SCROLL_OFFSET_TOP,
-  scrollLineIntoView,
   scrollToLine,
 } from "$lib/diffview/scroll.ts";
 
@@ -140,11 +142,45 @@ describe("lineAtReadingZone", () => {
   });
 });
 
-// scrollLineIntoView is scrollToLine's "only if off-screen" wrapper for cursor
-// motion: it no-ops when the row is already visible and otherwise delegates.
-// happy-dom has no layout, so each test stubs the row/scroller rects to drive
-// the visibility decision (the same DOMRect space getBoundingClientRect reads).
-describe("scrollLineIntoView", () => {
+// followCursorLine keeps the keyboard cursor within a scrolloff band of the
+// viewport edges: it scrolls by the exact overshoot (one row at a time under a
+// held j/k) rather than yanking the row to the top, so the cursor never leaves
+// the screen and the view follows it with no jump. followScrollDelta is the
+// pure geometry; followCursorLine measures the row + scroller and applies it.
+// happy-dom has no layout, so the DOM tests stub the rects (the same DOMRect
+// space getBoundingClientRect reads).
+describe("followScrollDelta", () => {
+  // A 600px-tall viewport [100, 700] with 20px rows and scrolloff 5 → 100px
+  // margins, so the comfortable band the cursor is kept inside is [200, 600].
+  const base = { rowHeight: 20, viewTop: 100, viewBottom: 700, scrolloff: 5 };
+
+  test("does not scroll when the row sits comfortably inside the band", () => {
+    expect(followScrollDelta({ ...base, rowTop: 300, rowBottom: 320 })).toBe(0);
+  });
+
+  test("scrolls down by the overshoot when the row passes the bottom margin", () => {
+    // rowBottom 610 is 10px past the 600 bottom bound → scroll down 10.
+    expect(followScrollDelta({ ...base, rowTop: 590, rowBottom: 610 })).toBe(10);
+  });
+
+  test("scrolls up by the overshoot when the row passes the top margin", () => {
+    // rowTop 150 is 50px above the 200 top bound → scroll up 50.
+    expect(followScrollDelta({ ...base, rowTop: 150, rowBottom: 170 })).toBe(-50);
+  });
+
+  test("follows one row at a time — a row one step past the bound scrolls one row, not a page", () => {
+    // The whole-page yank this replaces would scroll ~600px; the follow scrolls
+    // exactly one row-height (20) when the cursor steps one row past the bound.
+    expect(followScrollDelta({ ...base, rowTop: 600, rowBottom: 620 })).toBe(20);
+  });
+
+  test("treats the band edges as inclusive — no scroll with the row exactly on a bound", () => {
+    expect(followScrollDelta({ ...base, rowTop: 200, rowBottom: 220 })).toBe(0); // on the top bound
+    expect(followScrollDelta({ ...base, rowTop: 580, rowBottom: 600 })).toBe(0); // on the bottom bound
+  });
+});
+
+describe("followCursorLine", () => {
   function rect(top: number, bottom: number): DOMRect {
     return {
       top,
@@ -159,14 +195,11 @@ describe("scrollLineIntoView", () => {
     } as DOMRect;
   }
 
-  /** A scroller (top 100, bottom 500) wrapping a shadow host with the given rows. */
-  function harnessWithRects(lines: number[]): {
-    host: HTMLElement;
-    scrollCalls: ScrollToOptions[];
-  } {
+  /** A scroller (top 100, bottom 700 → 600px tall) wrapping a shadow host. */
+  function harness(lines: number[]): { host: HTMLElement; scrollBys: ScrollToOptions[] } {
     const scroller = document.createElement("div");
     scroller.style.overflowY = "auto";
-    scroller.getBoundingClientRect = () => rect(100, 500);
+    scroller.getBoundingClientRect = () => rect(100, 700);
     const host = document.createElement("div");
     const root = host.attachShadow({ mode: "open" });
     for (const n of lines) {
@@ -174,12 +207,12 @@ describe("scrollLineIntoView", () => {
       row.setAttribute("data-line", String(n));
       root.append(row);
     }
-    const scrollCalls: ScrollToOptions[] = [];
-    scroller.scrollTo = ((opts: ScrollToOptions) =>
-      scrollCalls.push(opts)) as typeof scroller.scrollTo;
+    const scrollBys: ScrollToOptions[] = [];
+    scroller.scrollBy = ((opts: ScrollToOptions) =>
+      scrollBys.push(opts)) as typeof scroller.scrollBy;
     scroller.append(host);
     document.body.append(scroller);
-    return { host, scrollCalls };
+    return { host, scrollBys };
   }
 
   function stubRow(host: HTMLElement, line: number, top: number, bottom: number): void {
@@ -187,37 +220,44 @@ describe("scrollLineIntoView", () => {
     if (row != null) row.getBoundingClientRect = () => rect(top, bottom);
   }
 
-  test("does not scroll when the row is already fully in view", () => {
-    const { host, scrollCalls } = harnessWithRects([1, 5, 9]);
-    stubRow(host, 5, 200, 218); // inside [100 + offset, 500]
-    expect(scrollLineIntoView(host, 5)).toBe(true);
-    expect(scrollCalls.length).toBe(0);
+  test("scrolls by the follow delta, instantly, when the row passes the bottom band", () => {
+    const { host, scrollBys } = harness([1, 5, 9]);
+    stubRow(host, 5, 650, 670); // below the [200,600] band (margin CURSOR_SCROLLOFF*20)
+    expect(followCursorLine(host, 5)).toBe(true);
+    expect(scrollBys.length).toBe(1);
+    expect(scrollBys[0]?.top).toBe(670 - (700 - CURSOR_SCROLLOFF * 20)); // overshoot past bottom bound
+    expect(scrollBys[0]?.behavior).toBe("auto"); // instant — no smooth lag under held motion
   });
 
-  test("scrolls when the row sits below the viewport", () => {
-    const { host, scrollCalls } = harnessWithRects([1, 5, 9]);
-    stubRow(host, 5, 600, 618);
-    expect(scrollLineIntoView(host, 5)).toBe(true);
-    expect(scrollCalls.length).toBeGreaterThanOrEqual(1);
-  });
-
-  test("scrolls when the row sits above the reading zone", () => {
-    const { host, scrollCalls } = harnessWithRects([1, 5, 9]);
-    stubRow(host, 5, 104, 122); // top above the park line (100 + SCROLL_OFFSET_TOP)
-    expect(SCROLL_OFFSET_TOP).toBeGreaterThan(0);
-    expect(scrollLineIntoView(host, 5)).toBe(true);
-    expect(scrollCalls.length).toBeGreaterThanOrEqual(1);
+  test("does not scroll when the row is comfortably inside the band", () => {
+    const { host, scrollBys } = harness([1, 5, 9]);
+    stubRow(host, 5, 300, 320);
+    expect(followCursorLine(host, 5)).toBe(true);
+    expect(scrollBys.length).toBe(0);
   });
 
   test("returns false when the requested line is not rendered", () => {
-    const { host, scrollCalls } = harnessWithRects([1, 2, 3]);
-    expect(scrollLineIntoView(host, 99)).toBe(false);
-    expect(scrollCalls.length).toBe(0);
+    const { host, scrollBys } = harness([1, 2, 3]);
+    expect(followCursorLine(host, 99)).toBe(false);
+    expect(scrollBys.length).toBe(0);
   });
 
   test("returns false when the container has no shadow root", () => {
     const el = document.createElement("div");
     document.body.append(el);
-    expect(scrollLineIntoView(el, 1)).toBe(false);
+    expect(followCursorLine(el, 1)).toBe(false);
+  });
+
+  test("falls back to the row's scrollIntoView when there is no scroll container", () => {
+    const host = document.createElement("div");
+    const root = host.attachShadow({ mode: "open" });
+    const row = document.createElement("div");
+    row.setAttribute("data-line", "5");
+    root.append(row);
+    document.body.append(host);
+    let scrolledIntoView = false;
+    row.scrollIntoView = () => (scrolledIntoView = true);
+    expect(followCursorLine(host, 5)).toBe(true);
+    expect(scrolledIntoView).toBe(true);
   });
 });

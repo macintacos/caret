@@ -120,11 +120,23 @@ describe("tagCodeBlockRows", () => {
     expect(rowAttrs(root, 5)).toEqual({ code: false, start: false, end: false });
   });
 
-  test("never tags the gutter number cells", () => {
-    const root = buildContent(3);
-    tagCodeBlockRows(root, [{ start: 1, end: 3 }]);
-    const numbers = root.querySelectorAll("[data-column-number]");
-    for (const n of numbers) expect(n.hasAttribute("data-code-line")).toBe(false);
+  // The gutter number cells carry data-code-line too (start/end stay content-only)
+  // so the focused-line cursor and hover band can brighten the gutter half to match
+  // the content on a code row — CSS can't relate a gutter cell to its content
+  // sibling across the two grid columns, so the tag is the bridge.
+  const gutterCode = (root: HTMLElement, line: number) =>
+    root
+      .querySelector(`[data-gutter] > [data-column-number="${line}"]`)
+      ?.hasAttribute("data-code-line");
+
+  test("tags the gutter number cell of each code line, and only those", () => {
+    const root = buildContent(5);
+    tagCodeBlockRows(root, [{ start: 2, end: 4 }]);
+    expect(gutterCode(root, 1)).toBe(false);
+    expect(gutterCode(root, 2)).toBe(true);
+    expect(gutterCode(root, 3)).toBe(true);
+    expect(gutterCode(root, 4)).toBe(true);
+    expect(gutterCode(root, 5)).toBe(false);
   });
 
   test("clears stale tags when the ranges change", () => {
@@ -136,6 +148,9 @@ describe("tagCodeBlockRows", () => {
     expect(rowAttrs(root, 2)).toEqual({ code: false, start: false, end: false });
     expect(rowAttrs(root, 4)).toEqual({ code: true, start: true, end: false });
     expect(rowAttrs(root, 5)).toEqual({ code: true, start: false, end: true });
+    // The gutter tags track the same way (line 1 cleared, line 4 marked).
+    expect(gutterCode(root, 1)).toBe(false);
+    expect(gutterCode(root, 4)).toBe(true);
   });
 
   test("tags rows even when a scroll card has moved them out of direct-child position", () => {

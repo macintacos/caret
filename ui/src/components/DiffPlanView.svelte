@@ -636,10 +636,7 @@
       seed: topVisibleLine() ?? 1,
     });
     cursorLine = next;
-    // ponytail: scrollLineIntoView parks an off-screen target near the top; edge
-    // j/k that push past the viewport bottom jump-to-top rather than scroll one
-    // line. Upgrade path: a bottom-margin scroll if that reads abruptly.
-    api?.scrollLineIntoView(next);
+    api?.followCursorLine(next);
   }
 
   // Register the live motion + Esc-clear shortcuts while the single-version view is
