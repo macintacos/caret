@@ -1,4 +1,12 @@
 <script lang="ts">
+  // The app shell: the composition root that wires caret's state factories to the
+  // review surface. It runs the /api/health probe (version, commit, isDev,
+  // source), drives review selection + polling, autosave, and resolve
+  // (approve variants / reject / request changes), and owns the top-level dialogs
+  // — request-changes, settings, onboarding, and the unsent-comments guard — plus
+  // theme, safe mode, the keyboard-shortcut dispatcher, and the UI-gone presence
+  // beacon. The behaviors themselves live in $lib/* and @/state/*; this file only
+  // holds them together and lays out the TopBar + DiffPlanView.
   import { getHealth } from "$lib/api.ts";
   import { approveVariants } from "$lib/approve.ts";
   import { createPlanNotifier } from "$lib/notify.ts";

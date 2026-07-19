@@ -1,4 +1,10 @@
 <script lang="ts">
+  // The top bar: the review's primary chrome. Holds the brand wordmark, the
+  // local-build DevBadge, the ReviewSwitcher, the per-plan VersionLabel, the
+  // NotifyBell, and the approve / reject / request-changes / settings controls
+  // (approve is a SplitButton over the adapter-declared variants). Presentation
+  // only — every action is a callback prop resolved by App.svelte, and the
+  // approve control's shape is driven by the variant count, not the adapter id.
   import { approveLabel } from "$lib/approve.ts";
   import type { ApproveVariant, ApproveVariantId, ClientReview } from "@core/lib/types";
   import { Badge } from "$lib/components/ui/badge/index.js";
