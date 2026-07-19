@@ -136,6 +136,39 @@ test("a pending inline comment guards approve and routes to request-changes inta
   expect(feedback).toContain("explain the cold cost");
 });
 
+test("the approve guard fits its three-button footer without a horizontal scrollbar", async ({
+  daemon,
+  page,
+}) => {
+  // With a pending comment the guard's footer carries three buttons (Cancel ·
+  // Request changes · Approve anyway). At the shadcn Dialog default (max-w-sm,
+  // 384px) they overflowed, and the shell's overflow-y-auto forces overflow-x to
+  // compute to auto — so the surplus width became a horizontal scrollbar and the
+  // modal read as clipped/cutout. The guard is widened (guard-content) so the row
+  // fits; the invariant is that its content never scrolls horizontally. A layout
+  // fact only the browser can decide, so this is an e2e (doc/agents/browser-testing.md).
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain the cold cost" }],
+  });
+
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  const guard = page.getByRole("dialog", APPROVE_CONFIRM);
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(guard).toBeVisible();
+  // All three footer buttons are present — the overflow only occurs with the full row.
+  await expect(guard.getByRole("button", { name: "Cancel" })).toBeVisible();
+  await expect(guard.getByRole("button", { name: "Request changes" })).toBeVisible();
+  await expect(guard.getByRole("button", { name: "Approve anyway" })).toBeVisible();
+
+  // No horizontal overflow: scrollWidth never exceeds the visible box (1px slack for
+  // sub-pixel rounding). Before the fix this was ~12px over.
+  const overflow = await guard.evaluate((el) => el.scrollWidth - el.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
+});
+
 test("an uncommitted composer scratch guards approve (EXC-745)", async ({ daemon, page }) => {
   const id = await daemon.seed();
   // Seed a retained-but-unsent composer scratch the same way the UI's autosave

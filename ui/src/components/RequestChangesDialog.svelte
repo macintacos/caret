@@ -360,7 +360,9 @@
      :global rule sets the width directly. Specificity (0,2,0) beats the vendored
      `.sm:max-w-sm` (0,1,0); min() keeps the small-screen inset. */
   :global([data-slot="dialog-content"].rcd-content) {
-    max-width: min(900px, calc(100% - 2rem));
+    /* Shared --confirm-dialog-width token (app.css) so this and the approve/reject
+       guard (UnsentCommentsDialog's .guard-content) track one width. */
+    max-width: min(var(--confirm-dialog-width), calc(100% - 2rem));
     /* Cap the height so a long inline-comment list can't push the modal past the
        screen (it clipped at top and bottom before). The content is a header /
        body / footer grid; pinning the outer rows to auto and the body to 1fr lets

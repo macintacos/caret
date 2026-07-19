@@ -334,6 +334,11 @@ body {
   /* Bottom status-bar height (EXC-787), consumed by StatusBar and by the
      CommentNavigator that docks above it — named once so the two stay in sync. */
   --status-bar-h: 1.75rem;
+  /* Shared max-width of the review's confirm surfaces — the approve/reject guard
+     (UnsentCommentsDialog) and the Request Changes dialog — so the two read as one
+     width and update together. Each rule caps it with min(…, calc(100% - 2rem)) to
+     keep the small-screen inset. */
+  --confirm-dialog-width: 40rem;
 }
 
 /* ----- App shell: plan + annotation-gutter grid ----- */
