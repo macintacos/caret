@@ -110,6 +110,9 @@
      * view so its shiki highlighting follows the selected theme (EXC-730). Omitted
      * leaves the library following the system preference. */
     scheme?: "light" | "dark";
+    /** Whether the shortcut-hint affordances are shown (EXC-826); gates the V-mode
+     * "c comment · Esc cancel" chip. Defaults to shown; the shortcut still fires. */
+    showShortcutHints?: boolean;
   }
 
   let {
@@ -124,6 +127,7 @@
     onExposeScratchActions,
     onExposeReveal,
     scheme,
+    showShortcutHints = true,
   }: Props = $props();
 
   // Line-anchored annotations render inline in the source view's per-line
@@ -1234,7 +1238,7 @@
            bottom-pinned chip names the two keys — c commits the selection to a
            comment, Esc cancels — rendered as shadcn Kbd keycaps. Shares the
            drag-hint's chip chrome; the amber selection band already shows the range. -->
-      {#if visualAnchor != null}
+      {#if visualAnchor != null && showShortcutHints}
         <div class="visual-hint" role="note">
           Selecting lines — <Kbd class="kbd-sm">c</Kbd> comment · <Kbd class="kbd-sm">Esc</Kbd> cancel
         </div>

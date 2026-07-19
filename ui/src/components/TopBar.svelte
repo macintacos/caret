@@ -48,6 +48,9 @@
     /** Open the Settings modal (theme switching). Persistent chrome, like the
      * bell — reachable whether or not a review is active (EXC-730). */
     onOpenSettings: () => void;
+    /** Whether the shortcut-hint key-cap hints are shown (EXC-826). When off, the
+     * inline a/r caps hide; the shortcuts themselves still fire. */
+    showShortcutHints: boolean;
   }
   let {
     reviews,
@@ -63,6 +66,7 @@
     onRequestChanges,
     onReject,
     onOpenSettings,
+    showShortcutHints,
   }: Props = $props();
 </script>
 
@@ -107,7 +111,7 @@
             {pendingCount}
           </Badge>
         {/if}
-        <Kbd aria-hidden="true">r</Kbd>
+        {#if showShortcutHints}<Kbd aria-hidden="true">r</Kbd>{/if}
       </Button>
 
       <!-- Below --w-narrow the Reject + Request-changes buttons above collapse
@@ -155,7 +159,7 @@
               </span>
               <!-- Only the remembered variant carries the `a` cap — it's the row
                    the `a` shortcut (onApprove(approveMode)) actually fires. -->
-              {#if v.id === approveMode}
+              {#if v.id === approveMode && showShortcutHints}
                 <Kbd class="menu-key" aria-hidden="true">a</Kbd>
               {/if}
             </DropdownMenu.Item>
@@ -178,7 +182,7 @@
                 {pendingCount}
               </Badge>
             {/if}
-            <Kbd class="menu-key" aria-hidden="true">r</Kbd>
+            {#if showShortcutHints}<Kbd class="menu-key" aria-hidden="true">r</Kbd>{/if}
           </DropdownMenu.Item>
           <DropdownMenu.Item variant="destructive" onSelect={() => onReject()}>
             <Icon name="x" size={14} />
@@ -208,7 +212,7 @@
           >
             <Icon name="check" size={14} />
             {approveLabel(approveMode, variants)}
-            <Kbd aria-hidden="true">a</Kbd>
+            {#if showShortcutHints}<Kbd aria-hidden="true">a</Kbd>{/if}
           </Button>
         {:else}
           <SplitButton
@@ -219,7 +223,7 @@
           >
             <Icon name="check" size={14} />
             {approveLabel(approveMode, variants)}
-            <Kbd aria-hidden="true">a</Kbd>
+            {#if showShortcutHints}<Kbd aria-hidden="true">a</Kbd>{/if}
             {#snippet menu()}
               {#each variants as v (v.id)}
                 <DropdownMenu.Item class="approve-variant" onSelect={() => onApprove(v.id)}>

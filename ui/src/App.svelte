@@ -428,6 +428,7 @@
     onRequestChanges={() => (showDialog = true)}
     {onReject}
     onOpenSettings={() => (showSettings = true)}
+    {showShortcutHints}
   />
 
   {#if selection.daemonChanged}
@@ -469,6 +470,7 @@
       }}
       onExposeScratchActions={(a) => (scratchActions = a)}
       onExposeReveal={(r) => (revealLine = r)}
+      {showShortcutHints}
     />
   {:else}
     <EmptyState connected={selection.connected} />
@@ -490,6 +492,7 @@
     commentsOpen={showComments}
     onToggleComments={() => (showComments = !showComments)}
     onOpenHelp={() => (showHelp = true)}
+    {showShortcutHints}
   />
 </div>
 
