@@ -10,6 +10,8 @@ import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
 
 const keyboardButton = "button[aria-label='Keyboard shortcuts']";
 const topbarHints = ".topbar [data-slot='kbd']";
+// The ⇧C cap the status-strip comment tally advertises (EXC-792).
+const tallyKey = ".comments-toggle [data-slot='kbd']";
 
 // A short multi-line plan so the cursor can move and enter V-mode.
 const PLAN = ["# Alpha", "Alpha one.", "Alpha two.", "Alpha three.", ""].join("\n\n");
@@ -22,9 +24,11 @@ test("the Settings toggle hides the shortcut affordances live and persists", asy
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
 
-  // Default on: the keyboard button and the TopBar key-cap hints are shown.
+  // Default on: the keyboard button, the TopBar key-cap hints, and the comment
+  // tally's ⇧C cap are all shown.
   await expect(page.locator(keyboardButton)).toBeVisible();
   await expect(page.locator(topbarHints).first()).toBeVisible();
+  await expect(page.locator(tallyKey).first()).toBeVisible();
 
   // Open Settings; the switch reads on.
   await page.getByRole("button", { name: "Settings" }).click();
@@ -37,6 +41,7 @@ test("the Settings toggle hides the shortcut affordances live and persists", asy
   await expect(toggle).not.toBeChecked();
   await expect(page.locator(keyboardButton)).toBeHidden();
   await expect(page.locator(topbarHints)).toHaveCount(0);
+  await expect(page.locator(tallyKey)).toHaveCount(0);
 
   // Toggling back on brings them straight back.
   await toggle.click();

@@ -15,6 +15,7 @@
   import {
     CANONICAL_KEYMAP,
     createShortcutDispatcher,
+    defaultIsEditingContext,
     EDITOR_SHORTCUTS,
     shortcuts,
   } from "$lib/shortcuts/index.ts";
@@ -340,6 +341,8 @@
     // raw approve, always onApprove's unsent-comments guard. The two verdict
     // actions gate on an active, not-busy review (matching the buttons' disabled
     // state); Settings is persistent chrome (EXC-730), reachable with no review.
+    // Shift+C toggles the comment navigator (EXC-792), gated on an active review
+    // like the status-strip tally that also toggles it.
     const reserved = new Map(CANONICAL_KEYMAP.map((e) => [e.id, e] as const));
     const action = (id: string, run: () => void, enabled?: () => boolean) => {
       const base = reserved.get(id);
@@ -358,8 +361,23 @@
       action("actions.settings", () => {
         showSettings = true;
       }),
+      action(
+        "actions.toggleComments",
+        () => {
+          showComments = !showComments;
+        },
+        () => active != null,
+      ),
     ];
-    const dispatcher = createShortcutDispatcher({ target: window, registry: shortcuts });
+    const dispatcher = createShortcutDispatcher({
+      target: window,
+      registry: shortcuts,
+      // The open comment navigator owns the keyboard while it holds focus
+      // (EXC-792) — like a text field or the composer — so plan motion (j/k) and
+      // the verdict keys don't fire while the reviewer walks the comment list.
+      isEditingContext: () =>
+        defaultIsEditingContext() || document.activeElement?.closest("#comment-navigator") != null,
+    });
     return () => {
       for (const off of unregister) off();
       unregisterHelp();
@@ -507,6 +525,7 @@
   activeId={autosave.focusedAnnotation}
   onReveal={revealComment}
   onClose={() => (showComments = false)}
+  {showShortcutHints}
 />
 
 {#if pendingApproveMode !== null && active}

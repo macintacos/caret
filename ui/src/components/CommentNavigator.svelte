@@ -8,9 +8,15 @@
   // plan scrolls behind it, and it dismisses only on Escape, the close button, or a
   // re-toggle. Mirrors the SourceToc contents pane's filter-then-jump idiom.
   //
+  // EXC-792: keyboard-driven too — Shift+C summons it (the status-strip tally
+  // advertises the key), j/k walk the rows, Enter reveals a comment while the
+  // panel stays open, / focuses the search field, Esc dismisses. While a row holds
+  // focus the panel captures the keyboard so the plan's own shortcuts don't fire.
+  //
   // EXC-812: at ≤ --w-tight it widens to a full-bleed bottom sheet so the pinned
   // chrome reads as an intentional narrow-width surface instead of a cramped card.
   import { type CommentIndexEntry, filterComments, highlightMatches } from "$lib/feedback.ts";
+  import { Kbd } from "$lib/components/ui/kbd/index.js";
 
   interface Props {
     /** Whether the navigator is shown. The status strip's tally button toggles it. */
@@ -23,32 +29,105 @@
     onReveal: (entry: CommentIndexEntry) => void;
     /** Close the navigator (Escape or the close button). */
     onClose: () => void;
+    /** Whether the shortcut-hint key caps are shown (EXC-826/EXC-792). When off,
+     * the footer key legend hides; the keys themselves still work. */
+    showShortcutHints: boolean;
   }
-  let { open, comments, activeId, onReveal, onClose }: Props = $props();
+  let { open, comments, activeId, onReveal, onClose, showShortcutHints }: Props = $props();
 
   let query = $state("");
   const visible = $derived(filterComments(comments, query));
 
-  // Focus the search field when the navigator opens so the reviewer can filter
-  // straight away; clear the query on close so it reopens clean.
   let searchEl = $state<HTMLInputElement | null>(null);
+  let asideEl = $state<HTMLElement | null>(null);
+
+  // On open, move focus INTO the list so j/k navigate straight away (EXC-792) —
+  // the revealed row if one is shown, else the first row; the search field when
+  // the list is empty (nothing to walk, but "/" still reaches search). Runs on
+  // the open transition (and when the panel's elements mount); revealing a
+  // comment doesn't re-run it, so focus is never yanked mid-navigation. On close,
+  // clear the query so it reopens clean and — if the panel had been open — return
+  // focus to the tally that summoned it (WAI-ARIA dismissable pattern), so a
+  // keyboard close (Esc) doesn't strand focus on document.body. The flag keeps
+  // that restore off the initial mount, where open is already false.
+  let hadFocus = false;
   $effect(() => {
-    if (open) searchEl?.focus({ preventScroll: true });
-    else query = "";
+    if (!open) {
+      if (hadFocus) {
+        hadFocus = false;
+        (document.querySelector(".comments-toggle") as HTMLElement | null)?.focus({
+          preventScroll: true,
+        });
+      }
+      query = "";
+      return;
+    }
+    hadFocus = true;
+    const revealed = (asideEl?.querySelector(".nav-item.active") ?? null) as HTMLElement | null;
+    (revealed ?? rows()[0] ?? searchEl)?.focus({ preventScroll: true });
   });
 
-  // Escape dismisses the open navigator, wherever focus sits (the panel or the
-  // plan behind it). A window listener gated on `open` keeps it inert when closed
-  // and avoids a keyboard handler on the non-interactive panel element.
-  function onWindowKeydown(e: KeyboardEvent) {
-    if (open && e.key === "Escape") onClose();
+  // The row buttons in filtered order — the roving-focus targets for j/k.
+  function rows(): HTMLButtonElement[] {
+    return asideEl ? ([...asideEl.querySelectorAll(".nav-item")] as HTMLButtonElement[]) : [];
+  }
+  // Move roving focus by `delta` from the focused row, clamped to the ends. When
+  // focus isn't on a row yet (e.g. the close button), either direction enters the
+  // list at the top rather than skipping the first row.
+  function focusRelative(delta: number): void {
+    const list = rows();
+    if (list.length === 0) return;
+    const cur = list.indexOf(document.activeElement as HTMLButtonElement);
+    const next = cur < 0 ? 0 : Math.min(Math.max(cur + delta, 0), list.length - 1);
+    list[next]?.focus();
+  }
+
+  // Keyboard-drive the open navigator (EXC-792). Escape dismisses wherever focus
+  // sits (the panel or the plan behind it — unchanged). While focus is inside the
+  // panel: from a row, j/k (or ↑/↓) move the roving focus and "/" jumps to the
+  // search field; Enter/Space fall through to the row's native activation, which
+  // reveals the comment WITHOUT moving focus, so the plan highlights while the
+  // panel stays open. In the search field, Enter hands focus back to the list so
+  // j/k resume on the filtered results. The dispatcher treats a focused navigator
+  // as an editing context (App.svelte), so the plan's own j/k and the a/r verdict
+  // keys stay suppressed while the reviewer walks the list — the panel owns the
+  // keyboard, exactly as a text field or the composer does.
+  function onWindowKeydown(e: KeyboardEvent): void {
+    if (!open) return;
+    if (e.key === "Escape") {
+      onClose();
+      return;
+    }
+    if (!asideEl?.contains(document.activeElement)) return;
+    if (document.activeElement === searchEl) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        rows()[0]?.focus();
+      }
+      return;
+    }
+    if (e.key === "j" || e.key === "ArrowDown") {
+      e.preventDefault();
+      focusRelative(1);
+    } else if (e.key === "k" || e.key === "ArrowUp") {
+      e.preventDefault();
+      focusRelative(-1);
+    } else if (e.key === "/") {
+      e.preventDefault();
+      searchEl?.focus();
+    }
   }
 </script>
 
 <svelte:window onkeydown={onWindowKeydown} />
 
 {#if open}
-  <aside id="comment-navigator" class="comment-navigator" aria-label="Comments in this plan">
+  <aside
+    bind:this={asideEl}
+    id="comment-navigator"
+    class="comment-navigator"
+    aria-label="Comments in this plan"
+  >
     <header class="nav-head">
       <span class="nav-title metric">Comments</span>
       <span class="nav-count metric">{comments.length}</span>
@@ -100,6 +179,19 @@
           </li>
         {/each}
       </ul>
+    {/if}
+
+    {#if showShortcutHints}
+      <!-- The in-view key legend (EXC-792), rendered as shadcn Kbd caps and gated
+           on the shortcut-hints setting like the app's other hints. Shift+C — the
+           summon key — rides the status-strip tally that opens the panel, so it is
+           taught there rather than repeated inside the open view. -->
+      <footer class="nav-hints" aria-hidden="true">
+        <span class="nav-hint"><Kbd class="kbd-sm">j</Kbd><Kbd class="kbd-sm">k</Kbd> move</span>
+        <span class="nav-hint"><Kbd class="kbd-sm">↵</Kbd> reveal</span>
+        <span class="nav-hint"><Kbd class="kbd-sm">/</Kbd> search</span>
+        <span class="nav-hint"><Kbd class="kbd-sm">Esc</Kbd> close</span>
+      </footer>
     {/if}
   </aside>
 {/if}
@@ -311,5 +403,24 @@
     text-align: center;
     font-size: var(--text-sm);
     color: var(--ink-faint);
+  }
+
+  /* The in-view key legend (EXC-792): a quiet footer band of Kbd caps below the
+     list, set off by a hairline like the header. The mono/ink-faint voice keeps
+     it a legend, not a control, so amber stays reserved for the active comment. */
+  .nav-hints {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.6rem;
+    padding: 0.45rem 0.7rem;
+    border-top: 1px solid var(--rule);
+    font-size: var(--text-2xs);
+    color: var(--ink-faint);
+  }
+  .nav-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
   }
 </style>

@@ -139,6 +139,19 @@ describe("StatusStrip", () => {
     );
   });
 
+  // EXC-792: the tally is the summon control for the comment navigator (Shift+C),
+  // so it advertises the shortcut for a11y and shows a ⇧C Kbd cap when hints are on.
+  test("advertises Shift+C and shows the ⇧C cap only when hints are enabled", () => {
+    const off = render(StatusStrip, { ...base, pendingCount: 2 });
+    const btn = off.target.querySelector<HTMLButtonElement>("button.comments-toggle")!;
+    expect(btn.getAttribute("aria-keyshortcuts")).toBe("Shift+C");
+    expect(btn.querySelector("[data-slot='kbd']")).toBeNull();
+
+    const on = render(StatusStrip, { ...base, pendingCount: 2, showShortcutHints: true });
+    const onBtn = on.target.querySelector<HTMLButtonElement>("button.comments-toggle")!;
+    expect(onBtn.querySelector("[data-slot='kbd']")).not.toBeNull();
+  });
+
   test("clicking the comment tally fires onToggleComments", () => {
     let toggled = 0;
     const { target } = render(StatusStrip, {

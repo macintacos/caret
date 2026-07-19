@@ -24,6 +24,19 @@ describe("CANONICAL_KEYMAP", () => {
       expect(sigs.has(sig)).toBe(true);
     }
   });
+
+  test("reserves Shift+C for the comment navigator, rendered as ⇧ C caps", () => {
+    // EXC-792: summons the comment navigator. Keyed "C" (a bare shifted key, no
+    // command modifier), and its cap is set explicitly to ⇧ C — unlike V/G's
+    // bare-letter caps — so it can't be misread as the lowercase-c comment-line
+    // shortcut it sits beside.
+    const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.toggleComments");
+    if (!entry) throw new Error("actions.toggleComments missing");
+    expect(entry.group).toBe("actions");
+    expect(entry.label).toBe("Toggle comments");
+    expect(specSignature(entry.keys)).toBe("C");
+    expect(keyCaps(entry.keys)).toEqual([["⇧", "C"]]);
+  });
 });
 
 describe("EDITOR_SHORTCUTS", () => {
