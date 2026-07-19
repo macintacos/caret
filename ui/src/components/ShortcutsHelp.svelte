@@ -32,6 +32,17 @@
     entry.run?.();
     onClose();
   }
+
+  // Don't autofocus the search input: ? toggles this modal, and a focused input
+  // would swallow the ? (the shared dispatcher yields to editing contexts). Focus
+  // the dialog content instead, so ? and Esc both dismiss while focus stays
+  // trapped in the modal.
+  function focusDialog(e: Event): void {
+    e.preventDefault();
+    // bits-ui invokes this with a synthetic event (no currentTarget), so reach the
+    // just-mounted content by slot — only one dialog is open at a time.
+    document.querySelector<HTMLElement>("[data-slot='dialog-content']")?.focus();
+  }
 </script>
 
 <Modal
@@ -40,6 +51,7 @@
   eyebrow="Keyboard"
   title="Shortcuts"
   onDismiss={onClose}
+  onOpenAutoFocus={focusDialog}
   contentClass="sm:max-w-xl"
 >
   {#snippet description()}
