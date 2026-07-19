@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { join } from "node:path";
+
+import { readAppCss } from "$lib/appCss.ts";
 
 // The caret↔shadcn-svelte bridge lives in exactly one place: the shadcn semantic
 // token block (`--background`, `--primary`, `--border`, …) plus the `@theme inline`
@@ -15,7 +16,7 @@ import { join } from "node:path";
 // caret tokens, which applyTheme() writes inline). A drift fails the unit suite
 // rather than only showing as a visual mismatch on a placed shadcn component.
 
-const appCss = await Bun.file(join(import.meta.dir, "../app.css")).text();
+const appCss = readAppCss();
 
 const stripComments = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, "");
 

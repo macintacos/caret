@@ -1,0 +1,104 @@
+/* caret design tokens — the caret-dark :root fallback. @imported first by
+   app.css so its palette is the first :root block (theme.test.ts pins it). */
+:root {
+  /* Type */
+  --font-display: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-mono: "Berkeley Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Type scale. One named ramp the chrome sizes against, so density tunes from a
+     single lever instead of scattered literals. Steps are rem, so they resolve
+     against the root (no html font-size override → 1rem = 16px); the 15px set on
+     <body> below is an absolute-px reading base, NOT the rem origin. Steps sit
+     ~one step apart; --text-sm (≈12.48px) is the .mono inline-chrome size,
+     --text-base (≈13.12px) the diff-view size (a crisper step above .mono),
+     --text-2xs the .eyebrow size, --text-lg the comfortable reading size. A
+     chrome font-size picks the nearest step; genuine display/glyph one-offs
+     (EmptyState's hero glyph, a dialog title) stay literal with a justification.
+     The --leading-* tokens are role-keyed (not one-per-step): --none for
+     single-line badges/glyphs, --tight for dense multi-line labels, --snug for
+     comment/annotation body copy, --normal for base reading text (it matches the
+     body line-height below, so the body and the diff view share it). */
+  --text-2xs: 0.65rem;
+  --text-xs: 0.7rem;
+  --text-sm: 0.78rem;
+  --text-base: 0.82rem;
+  --text-md: 0.9rem;
+  --text-lg: 1rem;
+  --text-xl: 1.15rem;
+
+  --leading-none: 1;
+  --leading-tight: 1.3;
+  --leading-snug: 1.45;
+  --leading-normal: 1.55;
+
+  /* Motion. A small functional vocabulary for the chrome's ONE-SHOT reveals:
+     two durations and two easings, so a reveal tunes from a single lever instead
+     of scattered literals. --dur-fast (120ms) is for micro-reveals — the inline
+     composer pop, the drag readout/hint slide; --dur-base (180ms) is for an
+     entering surface a step larger, like a dialog rise. Both stay ≤200ms so the
+     chrome reads quick, never sluggish. --ease-out is the ENTER curve (a soft
+     decelerate-in — content settling into place); --ease-in is the EXIT curve
+     (an accelerate-out for content leaving), kept paired so scripted exits read
+     as the inverse of their entrance.
+     Ambient/infinite animations are deliberately EXEMPT: the safe-mode pulse
+     (1.2s) and EmptyState float (4s) breathe on their own bespoke durations and
+     must not borrow these one-shot tokens — a 120ms loop would strobe. They keep
+     their literals; only one-shot reveals draw from here. */
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  /* A damped-spring easing (linear() curve, ~6% overshoot then settle) for
+     controls that slide between discrete positions — the segmented-control pill.
+     Paired with --dur-base, it reads as a springy snap, not a bounce. Modern
+     browsers only (Chrome 113+, Safari 17.2+, Firefox 112+); older ones fall back
+     to a plain ease. */
+  --ease-spring: linear(
+    0, 0.008, 0.031, 0.068, 0.117, 0.177, 0.246, 0.324, 0.407, 0.496, 0.587, 0.679,
+    0.769, 0.855, 0.935, 1.006, 1.049, 1.065, 1.062, 1.049, 1.031, 1.014, 1.001,
+    0.993, 0.991, 0.994, 0.998, 1
+  );
+
+  /* caret-dark palette — the default (EXC-730). These color tokens are the
+     static first-paint / no-JS fallback; the source of truth is
+     THEMES["caret-dark"] in lib/theme.ts, whose applyTheme() writes them (and
+     the caret-light set) as inline :root properties to switch palettes at
+     runtime. theme.test.ts pins this :root block equal to THEMES["caret-dark"]
+     so the two never drift. The UI no longer follows prefers-color-scheme;
+     scheme is an explicit user choice, defaulting here to caret-dark. */
+  --paper: #0a0a0a;
+  --paper-raised: #171717;
+  --paper-sunk: #131313;
+  --ink: #fafafa;
+  --ink-soft: #a1a1a1;
+  --ink-faint: #737373;
+  --rule: #ffffff1a;
+  --rule-strong: #ffffff29;
+
+  /* Caret amber accent */
+  --accent: #fb923c;
+  --accent-bright: #fdba74;
+  --accent-wash: #ec7c3829;
+  --accent-ink: #0a0a0a;
+
+  /* Annotation highlight */
+  --mark: #f3953c2e;
+  --mark-active: #f3953c57;
+  --mark-orphan: #9b9b9b29;
+
+  --ok: #4ade80;
+  --danger: #f87171;
+  --attention: #a78bfa;
+  --shadow-card: 0 1px 2px #00000066, 0 10px 30px #00000080;
+
+  /* Radius roles, shared by the shell chrome and the source-view surface so the
+     two read as one system: --radius tags interactive controls (buttons,
+     inputs, the switcher trigger, menu rows), --radius-lg floats panels (menus,
+     dialogs, annotation cards), and a 99px pill is reserved for true badges
+     (the review count, version pills, the build tag). */
+  --radius: 6px;
+  --radius-lg: 10px;
+
+  color-scheme: dark;
+}

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { join } from "node:path";
+
+import { readAppCss } from "$lib/appCss.ts";
 
 // The caret↔@pierre/diffs bridge lives in exactly one place: a single .diffview
 // rule in ui/src/app.css that maps caret's design tokens onto the @pierre/diffs
@@ -8,7 +9,7 @@ import { join } from "node:path";
 // absence of hardcoded hex — so a drift fails the unit suite rather than only
 // showing as a visual mismatch in the diff view's shadow DOM.
 
-const appCss = await Bun.file(join(import.meta.dir, "../../app.css")).text();
+const appCss = readAppCss();
 
 // Extract the body of the single .diffview rule.
 function diffviewRule(css: string): string {
