@@ -1,4 +1,9 @@
 <script lang="ts">
+  // The Request Changes dialog: where the reviewer composes the general comment
+  // and reviews the queued inline annotations and retained scratches before
+  // feedback is submitted to the agent. A controlled view — its editable state
+  // (general comment, scratches) lives in App.svelte so it survives the dialog
+  // unmounting on Cancel / Escape / scrim.
   import { type Annotation, isLineAnnotation, type LineAnnotation } from "@core/lib/types";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";

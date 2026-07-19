@@ -85,6 +85,8 @@ export async function expireReview(baseUrl: string, id: string): Promise<void> {
   if (!res.ok && res.status !== 404) throw new Error(`POST /expire failed: ${res.status}`);
 }
 
+/** Poll once for the decision. Null on a 204 heartbeat (still pending) so the
+ * caller re-polls; the settled Decision otherwise. */
 export async function longPoll(baseUrl: string, id: string): Promise<Decision | null> {
   const res = await fetch(`${baseUrl}/api/reviews/${id}/decision`);
   if (res.status === 204) return null; // heartbeat: still pending — re-poll
