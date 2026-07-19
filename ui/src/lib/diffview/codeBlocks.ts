@@ -96,8 +96,9 @@ function tagFenceToken(row: Element): void {
  * the opening line's language tag and `data-code-fence` on the closing line's
  * markers. The library owns these rows and repaints them, so this is re-run after
  * every repaint (see SourceView.svelte); it is idempotent and clears rows and
- * tokens no longer in a block. Only content rows are touched — the gutter number
- * cells keep their default styling.
+ * tokens no longer in a block. Content rows carry the panel tags (`data-code-line`
+ * + start/end); the gutter number cells get only `data-code-line`, so the cursor
+ * and hover band can brighten the gutter half to match the content on a code row.
  */
 export function tagCodeBlockRows(root: ParentNode, ranges: CodeBlockRange[]): void {
   const startLines = new Set(ranges.map((r) => r.start));
@@ -122,5 +123,14 @@ export function tagCodeBlockRows(root: ParentNode, ranges: CodeBlockRange[]): vo
     row.toggleAttribute("data-code-end", code && endLines.has(n));
     if (code && startLines.has(n)) tagLanguageToken(row);
     if (code && endLines.has(n)) tagFenceToken(row);
+  }
+  // Also tag each code line's gutter number cell (line numbers only, no
+  // start/end): the panel stays content-only, but the tag lets the focused-line
+  // cursor and hover band brighten the gutter half to match the content on a code
+  // row (coreStyles.ts) — CSS can't relate a gutter cell to its content sibling
+  // across the two grid columns, so the tag is the only bridge.
+  for (const cell of root.querySelectorAll<HTMLElement>("[data-gutter] [data-column-number]")) {
+    const n = Number(cell.getAttribute("data-column-number"));
+    cell.toggleAttribute("data-code-line", Number.isFinite(n) && inCode(n));
   }
 }

@@ -71,6 +71,64 @@ export function scrollToLine(container: HTMLElement, line: number): boolean {
   return true;
 }
 
+/** Rows the follow keeps between the keyboard cursor and each viewport edge — a
+ * vim-style `scrolloff`. Stepping the cursor into this margin scrolls the view
+ * with it (one row per keystroke) instead of letting the cursor reach the edge. */
+export const CURSOR_SCROLLOFF = 5;
+
+/**
+ * The vertical scroll delta (px) that keeps the cursor row at least `scrolloff`
+ * row-heights from the top and bottom of the reading viewport: negative scrolls
+ * up, positive down, `0` when the row already sits comfortably inside the band.
+ * Pure geometry (no DOM) so it is directly unit-testable. Because a motion steps
+ * the cursor one row, the delta is one row-height at the edge — the view follows
+ * the cursor by a line rather than yanking it to the top on every keystroke.
+ */
+export function followScrollDelta(g: {
+  rowTop: number;
+  rowBottom: number;
+  rowHeight: number;
+  viewTop: number;
+  viewBottom: number;
+  scrolloff: number;
+}): number {
+  const margin = g.scrolloff * g.rowHeight;
+  const topBound = g.viewTop + margin;
+  const bottomBound = g.viewBottom - margin;
+  if (g.rowTop < topBound) return g.rowTop - topBound; // above the band → scroll up
+  if (g.rowBottom > bottomBound) return g.rowBottom - bottomBound; // below the band → scroll down
+  return 0;
+}
+
+/**
+ * Scrolls the source view just enough to keep the row for 1-based `line` inside a
+ * `CURSOR_SCROLLOFF`-row band of the viewport edges — the keyboard cursor's
+ * follow scroll. Unlike `scrollToLine` (which always parks the row near the top),
+ * it scrolls by the exact overshoot and only once the cursor reaches the margin,
+ * so a held `j`/`k` scrolls the view one row at a time and the cursor never
+ * leaves the screen. Instant (never smooth) so the follow keeps pace with the
+ * keystrokes. Returns whether a matching row was found.
+ */
+export function followCursorLine(container: HTMLElement, line: number): boolean {
+  const row = container.shadowRoot?.querySelector<HTMLElement>(`[data-line="${line}"]`);
+  if (row == null) return false;
+  const scroller = nearestScrollParent(container);
+  // No identifiable scroll container: defer to scrollToLine's own fallback.
+  if (scroller == null) return scrollToLine(container, line);
+  const rowRect = row.getBoundingClientRect();
+  const hostRect = scroller.getBoundingClientRect();
+  const delta = followScrollDelta({
+    rowTop: rowRect.top,
+    rowBottom: rowRect.bottom,
+    rowHeight: rowRect.height,
+    viewTop: hostRect.top,
+    viewBottom: hostRect.bottom,
+    scrolloff: CURSOR_SCROLLOFF,
+  });
+  if (delta !== 0) scroller.scrollBy({ top: delta, behavior: "auto" });
+  return true;
+}
+
 /**
  * The 1-based line of the row occupying the reading zone — the first row (in
  * document order) whose bottom edge clears `containerTop + SCROLL_OFFSET_TOP` by

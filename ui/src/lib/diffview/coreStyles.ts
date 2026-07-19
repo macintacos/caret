@@ -61,6 +61,27 @@ const CARET_OVERRIDES = `
     outline-offset: 2px;
   }
 
+  /* EXC-788: the focused-line cursor. SourceView tags BOTH cells of the row the
+     keyboard cursor sits on (j/k, Ctrl+d/u, gg/G, ]]/[[, }/{) — the content
+     [data-line] and its gutter [data-column-number], mirroring the library's own
+     [data-selected-line] — with data-caret-cursor. A faint neutral band
+     illuminates the whole row, and a solid bar hangs off the gutter's far-left
+     edge (left of the line number) as the caret marker. Deliberately NON-amber
+     (amber stays reserved for the selection band), so the three affordances read
+     distinct: bar + row band = cursor, "+" = hover, amber band = selection. No
+     transition — the diff surface swaps state instantly (svelte-rules § Motion).
+     :not([data-selected-line]) yields a selected line to the amber band; declared
+     before the code-block rules so a cursor on a fenced line keeps its panel fill.
+     The band joins across the gutter→content seam through the shared seam-fill
+     :is() groups below, which list data-caret-cursor alongside hover/selection. */
+  [data-gutter] > [data-column-number][data-caret-cursor]:not([data-selected-line]) {
+    background-color: color-mix(in lab, var(--paper), var(--ink) 7%);
+    box-shadow: inset 3px 0 0 0 var(--ink);
+  }
+  [data-content] [data-line][data-caret-cursor]:not([data-selected-line]) {
+    background-color: color-mix(in lab, var(--paper), var(--ink) 7%);
+  }
+
   /* Multi-line selection affordance (GitHub-style). During a click-drag range
      select, the library renders the "+" button only in the row under the pointer
      (the one it flags [data-hovered]); the other selected rows would otherwise
@@ -225,6 +246,44 @@ const CARET_OVERRIDES = `
     top: -0.12em;
   }
 
+  /* EXC-788: a banded row — the focused-line cursor OR a pointer hover — ON a
+     fenced code line. The code-panel fill above is same-specificity-but-later than
+     the base cursor/hover bands, so on a code row the band dies at the seam: the
+     content cell keeps the flat panel fill (hover), or the gutter cell keeps the
+     dim base cursor tint (cursor), so the row reads half-banded. Re-assert the band
+     on BOTH columns as a brighter step OF the panel — paper-sunk + ink 9%, ~one
+     prose-cursor step (+2.8 L) above the panel base — so a focused/hovered code row
+     lifts within the block the way a prose row lifts off the surface: visible over
+     the syntax colors, panel identity intact, cursor and hover consistent (the caret
+     bar vs the "+" still tell them apart). The content arm is a descendant combinator
+     so it also covers an overflowing block's rows (moved into [data-code-card]); the
+     gutter arm needs its number cell tagged data-code-line (tagCodeBlockRows), since
+     CSS can't relate a gutter cell to its content sibling across the two grid
+     columns. Placed after the card rules so it beats the card's transparent fill on
+     source order. Yields to the amber selection; the +/- change tints never reach
+     the panel (it is single-version only). */
+  [data-content] [data-line][data-code-line]:is([data-hovered], [data-caret-cursor]):not([data-selected-line]),
+  [data-gutter] > [data-column-number][data-code-line]:is([data-hovered], [data-caret-cursor]):not([data-selected-line]) {
+    background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 9%);
+  }
+  /* Fill the gutter→content seam on a banded code row so the band reads continuous
+     across it, like a non-code row does. A non-code banded row pulls its content
+     cell left across --caret-seam (the seam-fill group below) to cover the seam;
+     a code row can't — its panel inset (margin-inline-start: 0.75rem, on top of the
+     content column's --caret-seam) overrides that pull, so the strip between the
+     banded gutter cell and the inset band stays unpainted. A left box-shadow paints
+     exactly that strip (width = the two insets, --caret-seam + 0.75rem) WITHOUT
+     moving the cell or its code text, and without fighting the panel's
+     overflow-x: clip / max-width the way a negative margin would. Same band color as
+     the fill; the gutter's own divider is already cleared to transparent for banded
+     rows (seam-fill group), so gutter band + this strip + content band read as one.
+     Fitting-block rows only ([data-content] > …); an overflowing block's card owns
+     its own inset. Yields to the amber selection via the shared :not guard. */
+  [data-content] > [data-line][data-code-line]:is([data-hovered], [data-caret-cursor]):not([data-selected-line]) {
+    box-shadow: calc(-1 * (var(--caret-seam) + 0.75rem)) 0 0 0
+      color-mix(in lab, var(--paper-sunk), var(--ink) 9%);
+  }
+
   /* EXC-664: the drag-to-comment selection reads as ONE continuous amber band
      spanning the gutter and content columns, with a tighter corner than before
      (--radius, down from --radius-lg). The amber is the library's per-cell
@@ -266,7 +325,8 @@ const CARET_OVERRIDES = `
       [data-selected-line],
       [data-hovered],
       [data-line-type="change-addition"],
-      [data-line-type="change-deletion"]
+      [data-line-type="change-deletion"],
+      [data-caret-cursor]
     ) {
     margin-inline-start: calc(-1 * var(--caret-seam));
     padding-inline-start: calc(1ch + var(--caret-seam));
@@ -294,7 +354,8 @@ const CARET_OVERRIDES = `
       [data-selected-line],
       [data-hovered],
       [data-line-type="change-addition"],
-      [data-line-type="change-deletion"]
+      [data-line-type="change-deletion"],
+      [data-caret-cursor]
     ) {
     border-right-color: transparent;
   }
