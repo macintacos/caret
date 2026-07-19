@@ -130,6 +130,8 @@ test("V + j selects a line range that c comments and ⌘Enter submits", async ({
   const composer = composerOf(page);
   await expect(composer).toBeVisible();
   await expect(composer.locator(".label")).toHaveText("Lines 1–3");
+  // Committing the range exits visual mode, so the affordance hint is gone.
+  await expect(page.locator(".visual-hint")).toHaveCount(0);
 
   const input = composerInput(composer);
   await expect(input).toBeFocused();
@@ -160,11 +162,16 @@ test("Esc in visual mode clears the selection without commenting and keeps the c
   await page.keyboard.press("j");
   await expectCursorLine(page, 2);
   await expect(selectedLines(page)).toHaveCount(2);
+  // The visual-mode affordance hint is up, its two keys rendered as Kbd keycaps.
+  const hint = page.locator(".visual-hint");
+  await expect(hint).toBeVisible();
+  await expect(hint.locator("[data-slot='kbd']")).toHaveCount(2);
 
-  // Esc exits visual mode: the selection band clears, no composer opens, and the
-  // cursor stays where it was (a second Esc would clear the cursor).
+  // Esc exits visual mode: the selection band and the hint clear, no composer
+  // opens, and the cursor stays where it was (a second Esc would clear the cursor).
   await page.keyboard.press("Escape");
   await expect(selectedLines(page)).toHaveCount(0);
+  await expect(hint).toHaveCount(0);
   await expect(composerOf(page)).toHaveCount(0);
   await expectCursorLine(page, 2);
 });

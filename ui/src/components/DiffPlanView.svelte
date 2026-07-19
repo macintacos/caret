@@ -42,6 +42,7 @@
   import { resolveFileRefs } from "$lib/api.ts";
   import { shortCwd } from "$lib/cwd.ts";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
+  import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { buildLinkLayer } from "$lib/diffview/links.ts";
   import { readDiffStyle, writeDiffStyle } from "$lib/diffStylePref.ts";
   import { readDiffIndicators, writeDiffIndicators } from "$lib/diffIndicatorsPref.ts";
@@ -1219,6 +1220,15 @@
       {#if hintVisible}
         <div class="drag-hint" role="note">Drag across lines to comment on a range — hold Shift to select text.</div>
       {/if}
+      <!-- Visual line-select affordance (EXC-790): while V mode is active, a quiet
+           bottom-pinned chip names the two keys — c commits the selection to a
+           comment, Esc cancels — rendered as shadcn Kbd keycaps. Shares the
+           drag-hint's chip chrome; the amber selection band already shows the range. -->
+      {#if visualAnchor != null}
+        <div class="visual-hint" role="note">
+          Selecting lines — <Kbd class="kbd-sm">c</Kbd> comment · <Kbd class="kbd-sm">Esc</Kbd> cancel
+        </div>
+      {/if}
     {/if}
   </div>
 </div>
@@ -1411,10 +1421,13 @@
     animation: readout-in var(--dur-fast) var(--ease-out);
   }
 
-  /* The one-time discoverability hint. Sticky at the bottom of the viewport so it
-     reads as ambient guidance rather than blocking the gutter it describes. Quiet
-     paper-raised chrome — it is a nudge, not the amber action affordance. */
-  .drag-hint {
+  /* The one-time drag hint and the visual-select affordance hint share one chip:
+     sticky at the bottom of the viewport so each reads as ambient guidance rather
+     than blocking the surface it describes, in quiet paper-raised chrome — a nudge,
+     not the amber action affordance. The visual-hint's inline Kbd keycaps flow in
+     the sentence, picking up the chip's ink-soft colour. */
+  .drag-hint,
+  .visual-hint {
     position: sticky;
     bottom: 0.5rem;
     left: 0;
