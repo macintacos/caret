@@ -11,6 +11,9 @@ import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
 const keyboardButton = "button[aria-label='Keyboard shortcuts']";
 const topbarHints = ".topbar [data-slot='kbd']";
 
+// A short multi-line plan so the cursor can move and enter V-mode.
+const PLAN = ["# Alpha", "Alpha one.", "Alpha two.", "Alpha three.", ""].join("\n\n");
+
 test("the Settings toggle hides the shortcut affordances live and persists", async ({
   daemon,
   page,
@@ -52,4 +55,35 @@ test("the Settings toggle hides the shortcut affordances live and persists", asy
   await waitPastSafeModeGrace(page);
   await page.keyboard.press("?");
   await expect(page.locator("[data-slot='dialog-content']")).toBeVisible();
+});
+
+test("with hints off, V-mode still selects lines but the hint chip stays hidden", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
+
+  // Turn shortcut hints off, then close Settings so keystrokes reach the plan.
+  await page.getByRole("button", { name: "Settings" }).click();
+  const toggle = page.getByRole("switch", { name: "Shortcut hints" });
+  await toggle.click();
+  await expect(toggle).not.toBeChecked();
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByRole("dialog", { name: "Settings" })).toBeHidden();
+
+  // Enter V-mode (gg → V → j): the shortcut itself is NOT gated, so the amber
+  // selection band still spans two lines — but the "c comment · Esc cancel" chip
+  // is suppressed because hints are off.
+  await waitPastSafeModeGrace(page);
+  await page.keyboard.press("g");
+  await page.keyboard.press("g");
+  await page.keyboard.press("V");
+  await page.keyboard.press("j");
+  await expect(
+    page.locator(".diffview [data-content] [data-line][data-selected-line]"),
+  ).toHaveCount(2);
+  await expect(page.locator(".visual-hint")).toHaveCount(0);
 });

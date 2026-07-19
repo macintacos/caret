@@ -38,12 +38,13 @@
   <div class="field field-toggle">
     <span class="field-text">
       <span class="field-label" id="shortcut-hints-label">Shortcut hints</span>
-      <span class="field-desc">Show key-cap hints and the keyboard button.</span>
+      <span class="field-desc" id="shortcut-hints-desc">Show key-cap hints and the keyboard button.</span>
     </span>
     <Switch
       checked={showShortcutHints}
       onCheckedChange={onToggleShortcutHints}
       aria-labelledby="shortcut-hints-label"
+      aria-describedby="shortcut-hints-desc"
     />
   </div>
 
