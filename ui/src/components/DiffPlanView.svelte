@@ -521,13 +521,29 @@
   // so the override sheet paints the cursor band.
   let cursorLine = $state<number | null>(null);
 
-  // Drop the cursor when the rendered content changes (a new version or a review
-  // switch) so a later motion never steps from a line that belonged to the prior
-  // plan. contentKey short-circuits on an unchanged poll tick, so this fires only
-  // on a real switch, not every 2s poll re-delivering the same version.
+  // The visual line-select anchor (EXC-790): the fixed end of a `V` selection. The
+  // motions move `cursorLine` as usual; the span from the anchor to the cursor is
+  // the live selection. null when not in visual mode.
+  let visualAnchor = $state<number | null>(null);
+
+  // The live visual selection, ascending — mirrored into SourceView's amber band
+  // through `selectedRange` while visual mode is active, so extending it with j/k
+  // grows the highlight in step.
+  const visualSelection = $derived(
+    visualAnchor != null && cursorLine != null
+      ? normalizeRange({ start: visualAnchor, end: cursorLine })
+      : undefined,
+  );
+
+  // Drop the cursor (and any visual selection) when the rendered content changes (a
+  // new version or a review switch) so a later motion never steps from a line that
+  // belonged to the prior plan. contentKey short-circuits on an unchanged poll tick,
+  // so this fires only on a real switch, not every 2s poll re-delivering the same
+  // version.
   $effect(() => {
     void contentKey;
     cursorLine = null;
+    visualAnchor = null;
   });
 
   // Recompute the active heading from the source line at the top of the reading
@@ -639,7 +655,43 @@
     api?.followCursorLine(next);
   }
 
-  // Register the live motion + Esc-clear shortcuts while the single-version view is
+  // Comment the cursor line (EXC-790): open the composer on the cursor line, or —
+  // in visual mode — over the whole anchored selection, exiting visual mode as it
+  // opens. Reuses openRange, so an in-progress composer's text is retained and the
+  // cursor tracks the anchored line; seeds an unplaced cursor at the reading
+  // position, mirroring the motions.
+  function commentCursorLine(): void {
+    if (visualAnchor != null) {
+      const { startLine, endLine } = normalizeRange({
+        start: visualAnchor,
+        end: cursorLine ?? visualAnchor,
+      });
+      visualAnchor = null;
+      openRange(startLine, endLine);
+    } else {
+      const line = cursorLine ?? topVisibleLine() ?? 1;
+      openRange(line, line);
+    }
+  }
+
+  // Enter visual line-select (EXC-790): anchor the selection at the cursor (seeded
+  // at the reading position when unplaced), so j/k then extend the span.
+  function enterVisualMode(): void {
+    const anchor = cursorLine ?? topVisibleLine() ?? 1;
+    cursorLine = anchor;
+    visualAnchor = anchor;
+    api?.followCursorLine(anchor);
+  }
+
+  // Esc reconciliation (EXC-790, superseding EXC-788's motion.clearCursor): exit
+  // visual mode if active (keeping the cursor), otherwise clear the cursor. One
+  // handler, because the dispatcher fires only the first matching Escape entry.
+  function clearSelectionOrCursor(): void {
+    if (visualAnchor != null) visualAnchor = null;
+    else cursorLine = null;
+  }
+
+  // Register the live motion + commenting shortcuts while the single-version view is
   // up; teardown unregisters them, so motion is gone in compare mode. Depends only
   // on showDiff — the closures read cursorLine/headings/api live at dispatch, so a
   // cursor move never re-runs this effect (which would churn the registry).
@@ -661,22 +713,45 @@
         }),
       );
     }
-    // Esc clears the cursor, gated on a placed cursor so it neither shadows other
-    // Esc handlers nor preventDefaults when there is nothing to clear. A focused
-    // editor keeps Esc regardless (the dispatcher suppresses bare keys in an
-    // editing context). EXC-789's commenting.clear may later reconcile Esc.
-    offs.push(
-      shortcuts.register({
-        id: "motion.clearCursor",
-        keys: [{ key: "Escape", cap: "Esc" }],
-        group: "motion",
-        label: "Clear cursor",
-        enabled: () => cursorLine != null,
-        run: () => {
-          cursorLine = null;
-        },
-      }),
-    );
+    // Commenting on the focused line / a keyboard-selected range (EXC-790): live
+    // entries over EXC-786's reservations, registered in this same effect so they
+    // share its compare-mode gating (unregistered once showDiff) and editing-context
+    // guard. c comments the cursor line (or, in visual mode, the whole selection);
+    // V enters visual line-select; Esc reconciles the two Escapes — exit visual mode
+    // if active, else clear the cursor (superseding EXC-788's motion.clearCursor).
+    const commentBase = reserved.get("commenting.comment");
+    if (commentBase != null) {
+      offs.push(
+        shortcuts.register({
+          ...commentBase,
+          run: commentCursorLine,
+          enabled: () => !defaultIsEditingContext(),
+        }),
+      );
+    }
+    const visualBase = reserved.get("commenting.visualLine");
+    if (visualBase != null) {
+      offs.push(
+        shortcuts.register({
+          ...visualBase,
+          run: enterVisualMode,
+          enabled: () => !defaultIsEditingContext(),
+        }),
+      );
+    }
+    // Gated on something to clear so Esc neither shadows other Esc handlers nor
+    // preventDefaults with nothing to do; a focused editor keeps Esc regardless
+    // (the dispatcher suppresses bare keys in an editing context).
+    const clearBase = reserved.get("commenting.clear");
+    if (clearBase != null) {
+      offs.push(
+        shortcuts.register({
+          ...clearBase,
+          run: clearSelectionOrCursor,
+          enabled: () => visualAnchor != null || cursorLine != null,
+        }),
+      );
+    }
     return () => {
       for (const off of offs) off();
     };
@@ -1051,7 +1126,7 @@
           if (range != null) retireDragHint();
           dragRange = range ?? undefined;
         }}
-        selectedRange={pending ?? null}
+        selectedRange={pending ?? visualSelection ?? null}
         {cursorLine}
       />
       <!-- The comment-span bracket overlay: rounded gutter rails marking each
