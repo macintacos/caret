@@ -29,26 +29,82 @@
   let query = $state("");
   const visible = $derived(filterComments(comments, query));
 
-  // Focus the search field when the navigator opens so the reviewer can filter
-  // straight away; clear the query on close so it reopens clean.
   let searchEl = $state<HTMLInputElement | null>(null);
+  let asideEl = $state<HTMLElement | null>(null);
+
+  // On open, move focus INTO the list so j/k navigate straight away (EXC-792) —
+  // the revealed row if one is shown, else the first row; the search field when
+  // the list is empty (nothing to walk, but "/" still reaches search). Runs on
+  // the open transition (and when the panel's elements mount); revealing a
+  // comment doesn't re-run it, so focus is never yanked mid-navigation. On close,
+  // clear the query so it reopens clean.
   $effect(() => {
-    if (open) searchEl?.focus({ preventScroll: true });
-    else query = "";
+    if (!open) {
+      query = "";
+      return;
+    }
+    const revealed = (asideEl?.querySelector(".nav-item.active") ?? null) as HTMLElement | null;
+    (revealed ?? rows()[0] ?? searchEl)?.focus({ preventScroll: true });
   });
 
-  // Escape dismisses the open navigator, wherever focus sits (the panel or the
-  // plan behind it). A window listener gated on `open` keeps it inert when closed
-  // and avoids a keyboard handler on the non-interactive panel element.
-  function onWindowKeydown(e: KeyboardEvent) {
-    if (open && e.key === "Escape") onClose();
+  // The row buttons in filtered order — the roving-focus targets for j/k.
+  function rows(): HTMLButtonElement[] {
+    return asideEl ? ([...asideEl.querySelectorAll(".nav-item")] as HTMLButtonElement[]) : [];
+  }
+  // Move roving focus by `delta` from the focused row, clamped to the ends.
+  function focusRelative(delta: number): void {
+    const list = rows();
+    if (list.length === 0) return;
+    const cur = list.indexOf(document.activeElement as HTMLButtonElement);
+    list[Math.min(Math.max((cur < 0 ? 0 : cur) + delta, 0), list.length - 1)]?.focus();
+  }
+
+  // Keyboard-drive the open navigator (EXC-792). Escape dismisses wherever focus
+  // sits (the panel or the plan behind it — unchanged). While focus is inside the
+  // panel: from a row, j/k (or ↑/↓) move the roving focus and "/" jumps to the
+  // search field; Enter/Space fall through to the row's native activation, which
+  // reveals the comment WITHOUT moving focus, so the plan highlights while the
+  // panel stays open. In the search field, Enter hands focus back to the list so
+  // j/k resume on the filtered results. The dispatcher treats a focused navigator
+  // as an editing context (App.svelte), so the plan's own j/k and the a/r verdict
+  // keys stay suppressed while the reviewer walks the list — the panel owns the
+  // keyboard, exactly as a text field or the composer does.
+  function onWindowKeydown(e: KeyboardEvent): void {
+    if (!open) return;
+    if (e.key === "Escape") {
+      onClose();
+      return;
+    }
+    if (!asideEl?.contains(document.activeElement)) return;
+    if (document.activeElement === searchEl) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        rows()[0]?.focus();
+      }
+      return;
+    }
+    if (e.key === "j" || e.key === "ArrowDown") {
+      e.preventDefault();
+      focusRelative(1);
+    } else if (e.key === "k" || e.key === "ArrowUp") {
+      e.preventDefault();
+      focusRelative(-1);
+    } else if (e.key === "/") {
+      e.preventDefault();
+      searchEl?.focus();
+    }
   }
 </script>
 
 <svelte:window onkeydown={onWindowKeydown} />
 
 {#if open}
-  <aside id="comment-navigator" class="comment-navigator" aria-label="Comments in this plan">
+  <aside
+    bind:this={asideEl}
+    id="comment-navigator"
+    class="comment-navigator"
+    aria-label="Comments in this plan"
+  >
     <header class="nav-head">
       <span class="nav-title metric">Comments</span>
       <span class="nav-count metric">{comments.length}</span>

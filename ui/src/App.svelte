@@ -15,6 +15,7 @@
   import {
     CANONICAL_KEYMAP,
     createShortcutDispatcher,
+    defaultIsEditingContext,
     EDITOR_SHORTCUTS,
     shortcuts,
   } from "$lib/shortcuts/index.ts";
@@ -368,7 +369,15 @@
         () => active != null,
       ),
     ];
-    const dispatcher = createShortcutDispatcher({ target: window, registry: shortcuts });
+    const dispatcher = createShortcutDispatcher({
+      target: window,
+      registry: shortcuts,
+      // The open comment navigator owns the keyboard while it holds focus
+      // (EXC-792) — like a text field or the composer — so plan motion (j/k) and
+      // the verdict keys don't fire while the reviewer walks the comment list.
+      isEditingContext: () =>
+        defaultIsEditingContext() || document.activeElement?.closest("#comment-navigator") != null,
+    });
     return () => {
       for (const off of unregister) off();
       unregisterHelp();
