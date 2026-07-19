@@ -1,6 +1,6 @@
 <script lang="ts">
   // The comment navigator: a pinned, searchable index of the plan's inline
-  // comments, docked just above the status strip (bottom-right) so it stays out of
+  // comments, docked just above the bottom status bar so it stays out of
   // the plan's way. The strip's comment tally is its toggle. Each row jumps the
   // source view to that comment's line and highlights it; the search field filters
   // the list by comment text (never the plan text). It is persistent chrome, not a

@@ -40,8 +40,10 @@
   function focusDialog(e: Event): void {
     e.preventDefault();
     // bits-ui invokes this with a synthetic event (no currentTarget), so reach the
-    // just-mounted content by slot — only one dialog is open at a time.
-    document.querySelector<HTMLElement>("[data-slot='dialog-content']")?.focus();
+    // content by slot. Take the LAST match: this modal portals after any modal
+    // already open (e.g. Settings), so the newest dialog-content is ours.
+    const contents = document.querySelectorAll<HTMLElement>("[data-slot='dialog-content']");
+    contents[contents.length - 1]?.focus();
   }
 </script>
 

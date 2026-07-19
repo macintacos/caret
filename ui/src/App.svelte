@@ -63,7 +63,7 @@
   // it, so this stays false.
   let isDev = $state(false);
   // The running build's version + commit (EXC-561), read once from the same
-  // health probe to feed the bottom-left VersionBadge. Undefined until the probe
+  // health probe to feed the VersionBadge in the status bar. Undefined until the probe
   // lands (or for a daemon predating the fields); the badge self-gates on
   // `version` and degrades when `commit` is absent.
   let version = $state<string | undefined>(undefined);
