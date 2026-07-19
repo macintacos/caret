@@ -96,6 +96,7 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
     group: "actions",
     label: "Focus contents filter",
   },
+  { id: "actions.settings", keys: [{ key: "," }], group: "actions", label: "Open settings" },
   // Help
   { id: "help.show", keys: [{ key: "?" }], group: "help", label: "Show shortcuts" },
   // Editor (existing) — the read-only chords, registered live for the help modal.
