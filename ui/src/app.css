@@ -447,6 +447,13 @@ button.float-chip[aria-expanded="true"]:not(:disabled) {
   );
   box-shadow: 0 1px 0 color-mix(in srgb, currentColor 25%, transparent);
 }
+/* A more compact keycap for dense chrome (the status-bar ? sits beside a 15px
+   glyph): a smaller glyph and tighter box, same keycap treatment otherwise. */
+[data-slot="kbd"].kbd-sm {
+  font-size: 0.68em;
+  min-width: 1.2em;
+  padding: 0.08em 0.28em;
+}
 
 button {
   cursor: pointer;

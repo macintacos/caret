@@ -15,7 +15,7 @@
 
 <button type="button" class="kbd-help" aria-label="Keyboard shortcuts" onclick={onOpen}>
   <Icon name="keyboard" size={15} />
-  <Kbd>?</Kbd>
+  <Kbd class="kbd-sm">?</Kbd>
 </button>
 
 <style>
@@ -41,13 +41,5 @@
   .kbd-help:focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
-  }
-  /* The status-bar ? cap sits beside a 15px glyph in a dense bar, so it wears a
-     more compact keycap than the base — smaller glyph, tighter box — without
-     changing the keycap elsewhere. */
-  .kbd-help :global([data-slot="kbd"]) {
-    font-size: 0.68em;
-    min-width: 1.2em;
-    padding: 0.08em 0.28em;
   }
 </style>
