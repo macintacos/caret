@@ -675,9 +675,14 @@
     }
   }
 
-  // Enter visual line-select (EXC-790): anchor the selection at the cursor (seeded
-  // at the reading position when unplaced), so j/k then extend the span.
+  // Toggle visual line-select (EXC-790): on entry, anchor the selection at the
+  // cursor (seeded at the reading position when unplaced) so j/k then extend the
+  // span; pressing V again exits, as vim's V does, keeping the cursor placed.
   function enterVisualMode(): void {
+    if (visualAnchor != null) {
+      visualAnchor = null;
+      return;
+    }
     const anchor = cursorLine ?? topVisibleLine() ?? 1;
     cursorLine = anchor;
     visualAnchor = anchor;
@@ -749,7 +754,7 @@
         shortcuts.register({
           ...clearBase,
           run: clearSelectionOrCursor,
-          enabled: () => visualAnchor != null || cursorLine != null,
+          enabled: () => cursorLine != null,
         }),
       );
     }
@@ -955,11 +960,16 @@
     renderAnnotation: () => undefined,
   };
 
-  // The live preview text, suppressed once the composer opens (its label takes
-  // over) so the readout and composer never disagree or stack.
-  const dragReadout = $derived(
-    dragRange && pending == null ? rangeLabel(dragRange.startLine, dragRange.endLine) : undefined,
-  );
+  // The live range readout, driving both the mouse-drag preview and the keyboard
+  // visual-select span (EXC-790): whichever is active, "Lines X–Y" is announced
+  // through the aria-live rail below, so a keyboard reviewer hears the selection
+  // grow as j/k extend it — parity with the drag path. Suppressed once the composer
+  // opens (its own label takes over) so the readout and composer never stack.
+  const rangeReadout = $derived.by(() => {
+    if (pending != null) return undefined;
+    const range = visualSelection ?? dragRange;
+    return range ? rangeLabel(range.startLine, range.endLine) : undefined;
+  });
 
   // One library line annotation per anchored line — the saved comments, the open
   // composer, and every retained scratch draft — so the library reserves an
@@ -1097,16 +1107,16 @@
         }}
       />
     {:else}
-      <!-- Live drag readout: a zero-height sticky rail rendered first so it pins to
+      <!-- Live range readout: a zero-height sticky rail rendered first so it pins to
            the top of the scroll viewport from scroll position 0 without reflowing
            the line grid (the absolutely-positioned readout inside it takes no flow
-           space). It stays visible as the selection — and any auto-scroll — move
-           during the drag. Reads the same ascending range the composer label will,
-           and is gone the instant the drag releases or the composer opens. aria-live
-           so a reader hears the range grow. -->
-      <div class="drag-readout-rail" aria-hidden={dragReadout == null}>
-        {#if dragReadout}
-          <div class="drag-readout metric" role="status" aria-live="polite">{dragReadout}</div>
+           space). It stays visible as the selection — mouse drag or keyboard visual
+           select — and any auto-scroll move. Reads the same ascending range the
+           composer label will, and is gone the instant the gesture ends or the
+           composer opens. aria-live so a reader hears the range grow. -->
+      <div class="drag-readout-rail" aria-hidden={rangeReadout == null}>
+        {#if rangeReadout}
+          <div class="drag-readout metric" role="status" aria-live="polite">{rangeReadout}</div>
         {/if}
       </div>
       <SourceView

@@ -124,6 +124,9 @@ test("V + j selects a line range that c comments and ⌘Enter submits", async ({
   await expectCursorLine(page, 3);
   // The visual selection mirrors into the amber band: three selected rows.
   await expect(selectedLines(page)).toHaveCount(3);
+  // The aria-live range readout announces the span (keyboard parity with the
+  // mouse-drag readout).
+  await expect(page.locator(".drag-readout")).toHaveText("Lines 1–3");
 
   // c opens a range composer over the selection; its label reads the span.
   await page.keyboard.press("c");
@@ -172,6 +175,26 @@ test("Esc in visual mode clears the selection without commenting and keeps the c
   await page.keyboard.press("Escape");
   await expect(selectedLines(page)).toHaveCount(0);
   await expect(hint).toHaveCount(0);
+  await expect(composerOf(page)).toHaveCount(0);
+  await expectCursorLine(page, 2);
+});
+
+test("V again toggles out of visual line-select without commenting", async ({ daemon, page }) => {
+  await daemon.seed({ plan: PLAN });
+  await page.goto("/");
+  await loadPlan(page);
+
+  await page.keyboard.press("g");
+  await page.keyboard.press("g");
+  await expectCursorLine(page, 1);
+  await page.keyboard.press("V");
+  await page.keyboard.press("j");
+  await expect(selectedLines(page)).toHaveCount(2);
+
+  // A second V exits visual mode (vim parity): the selection clears, no composer
+  // opens, and the cursor stays put.
+  await page.keyboard.press("V");
+  await expect(selectedLines(page)).toHaveCount(0);
   await expect(composerOf(page)).toHaveCount(0);
   await expectCursorLine(page, 2);
 });
