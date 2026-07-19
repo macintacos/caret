@@ -163,7 +163,7 @@
       <Button variant="ghost" class="cancel" onclick={onDiscard}>Cancel</Button>
       <Button class="save" onclick={submit} aria-keyshortcuts="Meta+Enter Control+Enter">
         Save
-        <Kbd class="kbd-hint" aria-hidden="true">
+        <Kbd aria-hidden="true">
           <Icon name="command" size={12} /><Icon name="corner-down-left" size={12} />
         </Kbd>
       </Button>
@@ -184,7 +184,7 @@
       </span>
       <Button onclick={submit} aria-keyshortcuts="Meta+Enter Control+Enter">
         Comment
-        <Kbd class="kbd-hint" aria-hidden="true">
+        <Kbd aria-hidden="true">
           <Icon name="command" size={12} /><Icon name="corner-down-left" size={12} />
         </Kbd>
       </Button>

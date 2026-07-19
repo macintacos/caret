@@ -107,7 +107,7 @@
             {pendingCount}
           </Badge>
         {/if}
-        <Kbd class="kbd-hint" aria-hidden="true">r</Kbd>
+        <Kbd aria-hidden="true">r</Kbd>
       </Button>
 
       <!-- Below --w-narrow the Reject + Request-changes buttons above collapse
@@ -202,7 +202,7 @@
           >
             <Icon name="check" size={14} />
             {approveLabel(approveMode, variants)}
-            <Kbd class="kbd-hint" aria-hidden="true">a</Kbd>
+            <Kbd aria-hidden="true">a</Kbd>
           </Button>
         {:else}
           <SplitButton
@@ -213,7 +213,7 @@
           >
             <Icon name="check" size={14} />
             {approveLabel(approveMode, variants)}
-            <Kbd class="kbd-hint" aria-hidden="true">a</Kbd>
+            <Kbd aria-hidden="true">a</Kbd>
             {#snippet menu()}
               {#each variants as v (v.id)}
                 <DropdownMenu.Item class="approve-variant" onSelect={() => onApprove(v.id)}>
