@@ -10,6 +10,7 @@
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
+  import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
   import DevBadge from "@/components/DevBadge.svelte";
   import Icon from "@/components/Icon.svelte";
@@ -88,7 +89,13 @@
         Reject
       </Button>
 
-      <Button variant="secondary" class="request float-chip" onclick={onRequestChanges} disabled={busy}>
+      <Button
+        variant="secondary"
+        class="request float-chip"
+        onclick={onRequestChanges}
+        disabled={busy}
+        aria-keyshortcuts="r"
+      >
         <Icon name="corner-up-left" size={14} />
         Request changes
         {#if pendingCount > 0}
@@ -100,6 +107,7 @@
             {pendingCount}
           </Badge>
         {/if}
+        <Kbd class="key-hint" aria-hidden="true">r</Kbd>
       </Button>
 
       <!-- Below --w-narrow the Reject + Request-changes buttons above collapse
@@ -185,14 +193,27 @@
            into the overflow menu above. -->
       <div class="approve-slot">
         {#if variants.length <= 1}
-          <Button variant="default" class="approve" onclick={() => onApprove(approveMode)} disabled={busy}>
+          <Button
+            variant="default"
+            class="approve"
+            onclick={() => onApprove(approveMode)}
+            disabled={busy}
+            aria-keyshortcuts="a"
+          >
             <Icon name="check" size={14} />
             {approveLabel(approveMode, variants)}
+            <Kbd class="key-hint" aria-hidden="true">a</Kbd>
           </Button>
         {:else}
-          <SplitButton onclick={() => onApprove(approveMode)} optionsLabel="Approve options" disabled={busy}>
+          <SplitButton
+            onclick={() => onApprove(approveMode)}
+            optionsLabel="Approve options"
+            keyshortcuts="a"
+            disabled={busy}
+          >
             <Icon name="check" size={14} />
             {approveLabel(approveMode, variants)}
+            <Kbd class="key-hint" aria-hidden="true">a</Kbd>
             {#snippet menu()}
               {#each variants as v (v.id)}
                 <DropdownMenu.Item class="approve-variant" onSelect={() => onApprove(v.id)}>
@@ -215,7 +236,14 @@
        margin-left pushes it right. -->
   <div class="bell-slot">
     <NotifyBell />
-    <Button variant="secondary" size="icon" class="settings float-chip" aria-label="Settings" onclick={onOpenSettings}>
+    <Button
+      variant="secondary"
+      size="icon"
+      class="settings float-chip"
+      aria-label="Settings"
+      aria-keyshortcuts=","
+      onclick={onOpenSettings}
+    >
       <Icon name="settings" size={16} />
     </Button>
   </div>
@@ -276,6 +304,18 @@
      just hardens the whole cluster against clicks while a verdict is in flight. */
   .actions.busy {
     pointer-events: none;
+  }
+  /* The single-letter shortcut cap riding inside Approve / Request changes: a Kbd
+     stripped of its keycap ground so it reads as a quiet inline hint on the fill
+     rather than a sunk chip fighting it — the same treatment SourceComposer's ⌘↵
+     hint uses (one visual language). */
+  .actions :global([data-slot="kbd"].key-hint) {
+    height: auto;
+    min-width: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    opacity: 0.7;
   }
   /* Pins the bell + settings cluster to the right edge. With no review active it
      is the only right-side group, so its own margin-left:auto pushes it right.

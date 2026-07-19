@@ -73,6 +73,7 @@
       type="text"
       placeholder="Filter headings…"
       aria-label="Filter headings"
+      aria-keyshortcuts="/"
       bind:value={query}
       onkeydown={onKeydown}
     />

@@ -209,6 +209,7 @@
       size="sm"
       class="compare-toggle float-chip"
       aria-pressed={comparing}
+      aria-keyshortcuts="d"
       onclick={() => onSetComparing(!comparing)}
     >
       {@render compareLabel()}
