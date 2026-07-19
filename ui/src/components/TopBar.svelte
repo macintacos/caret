@@ -153,6 +153,11 @@
                 <span class="v-label">{v.label}</span>
                 {#if v.description}<span class="v-note">{v.description}</span>{/if}
               </span>
+              <!-- Only the remembered variant carries the `a` cap — it's the row
+                   the `a` shortcut (onApprove(approveMode)) actually fires. -->
+              {#if v.id === approveMode}
+                <Kbd class="menu-key" aria-hidden="true">a</Kbd>
+              {/if}
             </DropdownMenu.Item>
           {/each}
           <DropdownMenu.Separator class="overflow-approve-sep" />
@@ -173,6 +178,7 @@
                 {pendingCount}
               </Badge>
             {/if}
+            <Kbd class="menu-key" aria-hidden="true">r</Kbd>
           </DropdownMenu.Item>
           <DropdownMenu.Item variant="destructive" onSelect={() => onReject()}>
             <Icon name="x" size={14} />
@@ -360,6 +366,11 @@
   }
   :global(.overflow-approve[data-highlighted] .icon) {
     visibility: visible;
+  }
+  /* The shortcut cap on an overflow-menu row is pushed to the row's right edge.
+     :global because the rows portal out of scope (like the .overflow-* rules). */
+  :global([data-slot="kbd"].menu-key) {
+    margin-left: auto;
   }
 
   /* ----- Narrow-width consolidation (EXC-810) ----- */
