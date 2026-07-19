@@ -74,6 +74,7 @@
   open
   eyebrow={action}
   title="{action} this plan?"
+  contentClass="guard-content"
   onDismiss={onCancel}
   onOpenAutoFocus={(e) => {
     e.preventDefault();
@@ -133,6 +134,25 @@
 </Modal>
 
 <style>
+  /* Widen the guard past the shadcn Dialog default. The three-button footer (Cancel
+     · Request changes · Approve/Reject anyway) does not fit the dialog-content
+     default max-w-sm (384px), and the shell's overflow-y-auto forces overflow-x to
+     compute to auto — so the surplus width became a horizontal scrollbar that read
+     as the modal being clipped. contentClass rides through Modal to the portalled
+     content, but app.css scans only lib/components/ui for Tailwind, so a max-w
+     utility written here would never be generated — this plain :global rule sets the
+     width directly (the rcd-content pattern). Specificity (0,2,0) beats the vendored
+     `.sm:max-w-sm` / `.sm:max-w-lg` (0,1,0); min() keeps the small-screen inset. Both
+     slots so the approve (Dialog) and reject (AlertDialog) guards read as one width.
+     The width itself is the shared --confirm-dialog-width token (app.css), so this
+     and the Request Changes dialog track one value. */
+  :global(
+    [data-slot="dialog-content"].guard-content,
+    [data-slot="alert-dialog-content"].guard-content
+  ) {
+    max-width: min(var(--confirm-dialog-width), calc(100% - 2rem));
+  }
+
   /* Preview of the unsent feedback: a quiet sunk container — no accent (reserved
      for actions), muted ink, hairline row dividers — reading as "here's what you'd
      leave behind". Height-capped and scrollable so a long queue never grows the
