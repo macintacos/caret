@@ -1,6 +1,6 @@
 <script lang="ts">
-  // A persistent, low-profile plan-review status strip: a viewport-pinned root
-  // sibling of .shell (the VersionBadge pattern), reporting the live metadata of
+  // A persistent, low-profile plan-review status readout: a flat row of segments
+  // in the bottom status bar (EXC-787), reporting the live metadata of
   // the plan under review in the mono/tabular technical voice. It reads the same
   // pending-comment state RequestChangesDialog and the approve guard consume, so
   // it is the always-on answer to "how many comments am I about to send".
@@ -14,12 +14,12 @@
   // Separators (the TopBar cluster's divider), the ^vN revision is a Badge
   // reusing VersionLabel's amber-^ idiom, and the revision + connection carry
   // their hover hints on shadcn Tooltips (replacing native title=), matching the
-  // TopBar cwd tooltip. The strip stays a quiet pinned pill: content-floating
-  // chrome recedes until looked at, so it keeps its own hairline surface rather
-  // than the topbar's louder .float-chip fill.
+  // TopBar cwd tooltip. The readout stays quiet flat segments in the status bar,
+  // receding until looked at, rather than the topbar's louder .float-chip fill.
   //
-  // EXC-812: at ≤ --w-tight the strip hides while the comment navigator is open —
-  // it yields the crowded bottom-right corner to the navigator's full-bleed sheet.
+  // EXC-787: moved into the full-width status bar, so EXC-812's corner
+  // de-collision (the strip yielding to the navigator) is gone — the navigator
+  // now docks above the bar rather than sharing the bottom-right corner.
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
@@ -50,7 +50,7 @@
 </script>
 
 {#if active}
-  <aside class="status-strip metric" class:nav-open={commentsOpen} aria-label="Plan review status">
+  <aside class="status-strip metric" aria-label="Plan review status">
     <Tooltip.Provider delayDuration={0}>
       <!-- The comment tally is the trigger for the comment navigator, so it is a
            real toggle button (aria-expanded) rather than an inert readout. -->
@@ -106,18 +106,10 @@
 {/if}
 
 <style>
-  /* Viewport-pinned status strip. position: fixed makes DOM placement
-     irrelevant — App renders it as a root sibling of .shell, never a grid child,
-     so it never disturbs the shell's grid-template-rows or the fixed Toc rail's
-     containing block. Sits bottom-right (the build VersionBadge owns bottom-left)
-     so the two status affordances don't collide. z-index matches VersionBadge:
-     above the Toc rail (30), below the modal scrim (100) and safe-mode toast
-     (200). The mono family + tabular figures come from the .metric atom. */
+  /* A flat, low-profile row of status-bar segments (EXC-787). StatusBar lays it
+     out; it no longer self-pins. The mono family + tabular figures come from the
+     .metric atom. */
   .status-strip {
-    position: fixed;
-    right: 0.7rem;
-    bottom: 0.6rem;
-    z-index: 40;
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
@@ -125,28 +117,6 @@
     letter-spacing: 0.02em;
     line-height: var(--leading-none);
     color: var(--ink-soft);
-    background: var(--paper-raised);
-    border: 1px solid var(--rule);
-    border-radius: 99px;
-    padding: 0.28rem 0.7rem;
-    opacity: 0.78;
-    transition:
-      opacity var(--dur-fast) var(--ease-out),
-      border-color var(--dur-fast) var(--ease-out);
-  }
-  .status-strip:hover {
-    opacity: 1;
-    border-color: var(--rule-strong);
-  }
-  /* At ≤ --w-tight the strip yields to the open comment navigator (EXC-812): the
-     navigator's header already carries the count + close, so the tally-toggle is
-     redundant while it's open, and the strip would only crowd the full-bleed
-     sheet. The px literal mirrors lib/layout.ts's TIGHT_WIDTH_PX (640) minus one —
-     @media can't read the --w-* token. Wide widths keep the strip visible. */
-  @media (max-width: 639px) {
-    .status-strip.nav-open {
-      display: none;
-    }
   }
   .stat {
     display: inline-flex;
