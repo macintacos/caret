@@ -419,6 +419,20 @@ button.float-chip[aria-expanded="true"]:not(:disabled) {
   color: var(--ink-faint);
 }
 
+/* Inline shortcut cap: a Kbd stripped of its keycap ground so a shortcut hint
+   reads as a quiet inline glyph riding a button's fill rather than a sunk chip
+   fighting it. Shared by the composer's ⌘↵ Save/Comment hint and the topbar's
+   a/r caps (one visual language across the surfaces that advertise a key). */
+[data-slot="kbd"].kbd-hint {
+  height: auto;
+  min-width: 0;
+  padding: 0;
+  gap: 0.15rem;
+  background: transparent;
+  color: inherit;
+  opacity: 0.85;
+}
+
 button {
   cursor: pointer;
 }

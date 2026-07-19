@@ -107,7 +107,7 @@
             {pendingCount}
           </Badge>
         {/if}
-        <Kbd class="key-hint" aria-hidden="true">r</Kbd>
+        <Kbd class="kbd-hint" aria-hidden="true">r</Kbd>
       </Button>
 
       <!-- Below --w-narrow the Reject + Request-changes buttons above collapse
@@ -202,7 +202,7 @@
           >
             <Icon name="check" size={14} />
             {approveLabel(approveMode, variants)}
-            <Kbd class="key-hint" aria-hidden="true">a</Kbd>
+            <Kbd class="kbd-hint" aria-hidden="true">a</Kbd>
           </Button>
         {:else}
           <SplitButton
@@ -213,7 +213,7 @@
           >
             <Icon name="check" size={14} />
             {approveLabel(approveMode, variants)}
-            <Kbd class="key-hint" aria-hidden="true">a</Kbd>
+            <Kbd class="kbd-hint" aria-hidden="true">a</Kbd>
             {#snippet menu()}
               {#each variants as v (v.id)}
                 <DropdownMenu.Item class="approve-variant" onSelect={() => onApprove(v.id)}>
@@ -304,18 +304,6 @@
      just hardens the whole cluster against clicks while a verdict is in flight. */
   .actions.busy {
     pointer-events: none;
-  }
-  /* The single-letter shortcut cap riding inside Approve / Request changes: a Kbd
-     stripped of its keycap ground so it reads as a quiet inline hint on the fill
-     rather than a sunk chip fighting it — the same treatment SourceComposer's ⌘↵
-     hint uses (one visual language). */
-  .actions :global([data-slot="kbd"].key-hint) {
-    height: auto;
-    min-width: 0;
-    padding: 0;
-    background: transparent;
-    color: inherit;
-    opacity: 0.7;
   }
   /* Pins the bell + settings cluster to the right edge. With no review active it
      is the only right-side group, so its own margin-left:auto pushes it right.
