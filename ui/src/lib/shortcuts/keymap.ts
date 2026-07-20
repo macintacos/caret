@@ -91,11 +91,19 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
     label: "Toggle compare/diff",
   },
   {
-    id: "actions.focusFilter",
+    // EXC-832: / opens a vim-style full-text search of the plan, repurposed from
+    // EXC-789's focus-contents-filter — this ticket owns /. The ToC filter keeps no
+    // keybinding for now (parks EXC-793).
+    id: "actions.search",
     keys: [{ key: "/" }],
     group: "actions",
-    label: "Focus contents filter",
+    label: "Search plan",
   },
+  // EXC-832: cycle to the next / previous search match (wrapping), registered live
+  // only while a committed search HUD is up. n derives its bare capital cap from its
+  // case; N is a bare shifted key (shift + capital), the same shape as V/G.
+  { id: "actions.searchNext", keys: [{ key: "n" }], group: "actions", label: "Next match" },
+  { id: "actions.searchPrev", keys: [{ key: "N" }], group: "actions", label: "Previous match" },
   { id: "actions.settings", keys: [{ key: "," }], group: "actions", label: "Open settings" },
   {
     // EXC-792: summons the comment navigator. Keyed "C" (a bare shifted key —
