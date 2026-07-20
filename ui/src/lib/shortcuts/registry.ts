@@ -90,14 +90,26 @@ function modCap(mod: Mod): string {
   }
 }
 
+/** The display caps for a bare key glyph. A single A–Z letter renders as its
+ * physical cap: a lowercase (unshifted) key as its bare capital (`j` → `J`), an
+ * uppercase (shifted) key as the shift token plus the capital (`V` →
+ * `["shift", "V"]`) — "shift" draws the global shift icon (caps.ts), so the case
+ * of `key` is what encodes shift. Every other key keeps its literal glyph, via
+ * KEY_CAP for the named specials (`Enter` → `↵`). */
+function capsForKey(key: string): string[] {
+  if (/^[a-z]$/.test(key)) return [key.toUpperCase()];
+  if (/^[A-Z]$/.test(key)) return ["shift", key];
+  return [KEY_CAP[key] ?? key];
+}
+
 /** Render a key spec to display caps: one cap-list per chord, ready to map onto
  * `KbdGroup` → `Kbd`. An explicit `cap` on a chord wins; otherwise the caps are
- * its modifier glyphs followed by the key glyph. The help modal (EXC-787) styles
- * the final look; this only fixes the glyph strings. */
+ * its modifier glyphs followed by the key's own caps (see `capsForKey`). The help
+ * modal (EXC-787) styles the final look; this only fixes the glyph strings. */
 export function keyCaps(spec: KeySpec): string[][] {
   return spec.map((c) => {
     if (c.cap !== undefined) return Array.isArray(c.cap) ? c.cap : [c.cap];
-    return [...(c.mods ?? []).map(modCap), KEY_CAP[c.key] ?? c.key];
+    return [...(c.mods ?? []).map(modCap), ...capsForKey(c.key)];
   });
 }
 

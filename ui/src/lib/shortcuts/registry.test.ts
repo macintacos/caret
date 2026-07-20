@@ -86,14 +86,24 @@ describe("createShortcutRegistry collision detection", () => {
 
 describe("keyCaps", () => {
   test("a two-key sequence yields one cap-list per chord", () => {
-    expect(keyCaps([{ key: "g" }, { key: "g" }])).toEqual([["g"], ["g"]]);
+    expect(keyCaps([{ key: "g" }, { key: "g" }])).toEqual([["G"], ["G"]]);
+  });
+  test("an unshifted letter renders as its bare capital", () => {
+    expect(keyCaps([{ key: "j" }])).toEqual([["J"]]);
+    expect(keyCaps([{ key: "r" }])).toEqual([["R"]]);
+  });
+  test("a shifted letter renders as the shift token plus the capital", () => {
+    // The shifted key is stored uppercase; "shift" is the token caps.ts renders as
+    // the global shift icon, so V/G read as ⇧V / ⇧G rather than a bare capital.
+    expect(keyCaps([{ key: "V" }])).toEqual([["shift", "V"]]);
+    expect(keyCaps([{ key: "G" }])).toEqual([["shift", "G"]]);
   });
   test("a cap override wins over derivation", () => {
     expect(keyCaps([{ key: "Escape", cap: "Esc" }])).toEqual([["Esc"]]);
     expect(keyCaps([{ key: "Enter", mods: ["mod"], cap: ["⌘", "↵"] }])).toEqual([["⌘", "↵"]]);
   });
-  test("a ctrl chord derives platform-independent caps", () => {
-    expect(keyCaps([{ key: "d", mods: ["ctrl"] }])).toEqual([["Ctrl", "d"]]);
+  test("a ctrl chord derives platform-independent caps, its letter capitalized", () => {
+    expect(keyCaps([{ key: "d", mods: ["ctrl"] }])).toEqual([["Ctrl", "D"]]);
   });
   test("a plain symbol key renders as itself", () => {
     expect(keyCaps([{ key: "?" }])).toEqual([["?"]]);

@@ -49,6 +49,18 @@ describe("CANONICAL_KEYMAP", () => {
     expect(specSignature(entry.keys)).toBe("\\");
     expect(keyCaps(entry.keys)).toEqual([["\\"]]);
   });
+
+  test("derives shift + letter caps for the bare shifted vim keys (no cap override)", () => {
+    // EXC-831: V and G are bare shifted keys (uppercase key, no command modifier and
+    // no explicit cap); keyCaps derives the shift affordance from the key's case, so
+    // they render as the shift icon + the capital — the same shape toggleComments
+    // spells out by hand.
+    const visual = CANONICAL_KEYMAP.find((e) => e.id === "commenting.visualLine");
+    const bottom = CANONICAL_KEYMAP.find((e) => e.id === "motion.bottom");
+    if (!visual || !bottom) throw new Error("V/G keymap entries missing");
+    expect(keyCaps(visual.keys)).toEqual([["shift", "V"]]);
+    expect(keyCaps(bottom.keys)).toEqual([["shift", "G"]]);
+  });
 });
 
 describe("EDITOR_SHORTCUTS", () => {
