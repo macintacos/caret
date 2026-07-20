@@ -466,11 +466,11 @@ const CARET_OVERRIDES = `
      here, in the override sheet adopted into the same shadow root the highlighted
      ranges live in, because ::highlight() resolves against the tree scope of the
      text it paints (not the document). Both read the amber accent through the theme
-     bridge (palette unchanged): the underlay is the translucent --accent-wash so
-     the syntax colors stay legible beneath it, and the current match is solid
-     --accent with readable --accent-ink. */
+     bridge (palette unchanged): the underlay is a half-transparent --accent so
+     every match is easy to spot in both themes while the syntax colors stay legible
+     beneath it, and the current match is solid --accent with readable --accent-ink. */
   ::highlight(caret-search) {
-    background-color: var(--accent-wash);
+    background-color: color-mix(in lab, var(--accent), transparent 50%);
   }
   ::highlight(caret-search-current) {
     background-color: var(--accent);

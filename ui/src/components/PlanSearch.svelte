@@ -64,25 +64,27 @@
 
 <div class="plan-search" role="search">
   <span class="search-slash mono" aria-hidden="true">/</span>
-  <Input
-    bind:ref={field}
-    bind:value={query}
-    class="search-input"
-    type="text"
-    placeholder="Search plan…"
-    aria-label="Search plan"
-    autocomplete="off"
-    spellcheck="false"
-    onkeydown={onKeydown}
-  />
-  <span
-    class="search-count metric"
-    class:has-matches={hasMatches}
-    aria-live="polite"
-    aria-label="{current} of {matchCount} matches"
-  >
-    {current} / {matchCount}
-  </span>
+  <div class="search-field">
+    <Input
+      bind:ref={field}
+      bind:value={query}
+      class="search-input"
+      type="text"
+      placeholder="Search plan…"
+      aria-label="Search plan"
+      autocomplete="off"
+      spellcheck="false"
+      onkeydown={onKeydown}
+    />
+    <span
+      class="search-count metric"
+      class:has-matches={hasMatches}
+      aria-live="polite"
+      aria-label="{current} of {matchCount} matches"
+    >
+      {current} / {matchCount}
+    </span>
+  </div>
   <button
     type="button"
     class="search-step float-chip"
@@ -113,7 +115,7 @@
      drag-readout uses; the global #app reduced-motion guard zeroes it. */
   .plan-search {
     display: inline-flex;
-    align-items: center;
+    align-items: start;
     gap: 0.35rem;
     padding: 0.3rem 0.4rem 0.3rem 0.55rem;
     background: color-mix(in lab, var(--paper-raised), transparent 6%);
@@ -132,7 +134,17 @@
   .search-slash {
     color: var(--ink-faint);
     font-size: var(--text-sm);
+    /* Center the glyph against the input row now the pill top-aligns its items
+       (align-items: start) so the counter can hang below the field. */
+    line-height: 1.65rem;
     user-select: none;
+  }
+
+  /* Input over its counter: a two-row column so the counter can live below the field
+     (see .search-count) instead of inline, keeping the pill's width fixed. */
+  .search-field {
+    display: flex;
+    flex-direction: column;
   }
 
   /* The shadcn Input molded into the chip: transparent, borderless, unshadowed, so
@@ -155,10 +167,13 @@
     box-shadow: none;
   }
 
-  /* The counter is the pill's one amber moment: tabular figures (via .metric) so the
-     digits don't reflow as n/N cycles, amber while there are matches to stand on and
-     a quiet faint tone when there are none. */
+  /* The counter sits BELOW the input, right-aligned under it, so a changing total (or
+     a single↔double-digit count) never reflows the pill's width. Tabular figures (via
+     .metric) keep the digits from shifting as n/N cycles; the pill's one amber moment
+     while there are matches to stand on, a quiet faint tone when there are none. */
   .search-count {
+    text-align: right;
+    margin-top: 0.1rem;
     font-size: var(--text-xs);
     color: var(--ink-faint);
     white-space: nowrap;
