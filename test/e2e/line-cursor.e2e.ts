@@ -80,7 +80,7 @@ async function loadPlan(page: Page): Promise<void> {
   await waitPastSafeModeGrace(page);
 }
 
-test("j/k place and step the cursor, it reads as distinct, and Esc clears it", async ({
+test("j/k place and step the cursor, it reads as distinct, and Esc leaves it placed", async ({
   daemon,
   page,
 }) => {
@@ -107,9 +107,12 @@ test("j/k place and step the cursor, it reads as distinct, and Esc clears it", a
   const boxShadow = await cursorBar(page).evaluate((el) => getComputedStyle(el).boxShadow);
   expect(boxShadow).not.toBe("none");
 
-  // Esc clears the cursor (no composer open, so the global clear fires).
+  // Esc never clears the cursor (EXC-834): with no composer open and no visual
+  // selection there is nothing to clear, so the reader keeps their place. Mash it.
   await page.keyboard.press("Escape");
-  await expect(cursor(page)).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await expectCursorLine(page, start);
 });
 
 test("gg/G and half-page motions move the cursor and scroll it into view", async ({
