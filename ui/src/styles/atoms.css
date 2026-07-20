@@ -79,6 +79,13 @@ button.float-chip[aria-expanded="true"]:not(:disabled) {
   font-family: var(--font-mono);
   font-size: 0.8em;
   font-weight: 500;
+  /* Real keys are lettered in caps: uppercase every glyph so no Kbd can show a
+     lowercase letter, whatever a caller passes — the topbar/nav literal caps,
+     keyCaps output, and KbdCap text alike. Icons are SVGs, so both this and the
+     tracking below skip them; the letter-spacing widens the alphanumerics a hair
+     for legibility without touching the shift glyph. */
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   line-height: 1.4;
   color: inherit;
   border: 1px solid color-mix(in srgb, currentColor 28%, transparent);

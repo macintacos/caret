@@ -100,9 +100,10 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
   {
     // EXC-792: summons the comment navigator. Keyed "C" (a bare shifted key —
     // the case-sensitive matcher fires on it without a modifier flag, like V/G).
-    // Its cap is the typed ["shift", "C"] — "shift" draws the global shift icon
-    // (caps.ts), and the explicit cap (not the bare "C" V/G derive) keeps it from
-    // being misread as the lowercase-c comment-line shortcut it sits beside.
+    // Its cap is ["shift", "C"] — "shift" draws the global shift icon (caps.ts).
+    // Since EXC-831, a bare uppercase key derives that same shift + capital from
+    // its case (as V/G do), so this explicit cap now matches the derive; it is
+    // kept per the "cap overrides win" contract.
     id: "actions.toggleComments",
     keys: [{ key: "C", cap: ["shift", "C"] }],
     group: "actions",
