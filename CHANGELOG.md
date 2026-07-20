@@ -7,6 +7,45 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-20 - The Keyboard-First Release
+
+### Added
+
+- **Keyboard-driven review.** The review surface became operable from the keyboard end to
+  end. A shortcut registry and global dispatcher landed as the foundation (#263), then a
+  focused-line cursor with vim-style motion over the plan (#266), keyboard shortcuts for
+  the review actions and chrome (#267), commenting on the focused line without reaching
+  for the mouse (#268), and keyboard navigation through the comment viewer (#270).
+- **Shortcuts help modal and status bar.** A help modal lists every shortcut and a bottom
+  status bar surfaces the ones in reach (#264). `cmd+enter` confirms the approve/reject
+  dialog (e24567c), and `\` toggles the sidebar (#271).
+- **Vim-style `/` search over the plan.** Press `/` to search the plan text and jump
+  between matches, the way you would in vim (#274).
+- **Toggle for shortcut hints.** A settings toggle shows or hides the inline shortcut
+  hints (#269), and the compare toggle now advertises its `d` shortcut (f65a322).
+
+### Changed
+
+- **Redesigned shortcuts help modal.** The help modal was reworked wider and multi-column,
+  with `/`-to-search across the shortcut list (#276).
+- **Keycaps flattened toward GitHub's look.** The `Kbd` keycaps were flattened toward
+  GitHub's style (82a10e9), letter caps now render as capitals (#272), and `Shift` renders
+  as an icon (e39a071).
+- **Softer review chrome.** The focus ring was softened to a subtle accent (8986fc9), the
+  approve split-button seam tightened (393c944), and the review confirm-dialog widths were
+  widened and unified (#265).
+- **Styled links and a marked dev tab.** Links got a light styling pass (fa813f1), and the
+  dev tab is now marked with a carrot favicon (ab042be).
+- **Developer tooling.** `app.css` was split into `styles/` partials (fc6edfa), long
+  shadcn class strings were grouped into commented, concern-grouped chunks (#273), and
+  missing component purpose headers plus a `longPoll` null-return doc were filled in
+  (decb393).
+
+### Fixed
+
+- **Esc resets the plan line cursor.** Pressing Esc now clears the focused-line cursor in
+  the plan, which it previously left stranded (#275).
+
 ## [0.6.0] - 2026-07-18 - The Fits Anywhere Release
 
 ### Added
@@ -430,7 +469,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Review decisions are delivered via a bounded poll, fixing missed or delayed decision
   delivery.
 
-[Unreleased]: https://github.com/macintacos/caret/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/macintacos/caret/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/macintacos/caret/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/macintacos/caret/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/macintacos/caret/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/macintacos/caret/compare/v0.4.0...v0.4.1
