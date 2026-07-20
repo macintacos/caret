@@ -37,6 +37,17 @@ describe("CANONICAL_KEYMAP", () => {
     expect(specSignature(entry.keys)).toBe("C");
     expect(keyCaps(entry.keys)).toEqual([["⇧", "C"]]);
   });
+
+  test("reserves \\ for the sidebar toggle in the Actions group, rendered as a \\ cap", () => {
+    // EXC-830: toggles the plan's ToC rail (the sidebar). A bare backslash, no
+    // command modifier — the cap derives straight from the key, no explicit override.
+    const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.toggleSidebar");
+    if (!entry) throw new Error("actions.toggleSidebar missing");
+    expect(entry.group).toBe("actions");
+    expect(entry.label).toBe("Toggle sidebar");
+    expect(specSignature(entry.keys)).toBe("\\");
+    expect(keyCaps(entry.keys)).toEqual([["\\"]]);
+  });
 });
 
 describe("EDITOR_SHORTCUTS", () => {
