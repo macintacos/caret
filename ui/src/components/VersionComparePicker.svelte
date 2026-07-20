@@ -26,6 +26,7 @@
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
+  import { Kbd } from "$lib/components/ui/kbd/index.js";
   import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import Icon from "@/components/Icon.svelte";
@@ -50,6 +51,10 @@
      * to pick. The Bars/+−/Both marker toggle stays; markers work in a unified
      * diff. Defaults false (the wide-width layout is unchanged). */
     layoutLocked?: boolean;
+    /** Whether to render the `d` keyboard-shortcut hint on the compare toggle,
+     * gated on the app's shortcut-hints setting like the other hints. Defaults
+     * false (the hint is opt-in via the parent). */
+    showShortcutHints?: boolean;
     onSetComparing: (comparing: boolean) => void;
     onSelectBase: (version: number) => void;
     onSelectTarget: (version: number) => void;
@@ -66,6 +71,7 @@
     diffStyle,
     diffIndicators,
     layoutLocked = false,
+    showShortcutHints = false,
     onSetComparing,
     onSelectBase,
     onSelectTarget,
@@ -213,6 +219,12 @@
       onclick={() => onSetComparing(!comparing)}
     >
       {@render compareLabel()}
+      <!-- The `d` shortcut toggles compare mode; the cap teaches it. Only on the
+           enabled toggle (the disabled one has no shortcut), aria-hidden so the
+           button's accessible name stays "Compare versions". -->
+      {#if showShortcutHints}
+        <Kbd class="kbd-sm shortcut-cap" aria-hidden="true">d</Kbd>
+      {/if}
     </Button>
   {:else}
     <!-- Nothing to compare: shown-but-disabled (EXC-664). A disabled button
@@ -329,6 +341,11 @@
   }
   .compare-picker :global(.compare-toggle[aria-pressed="true"]:not(:disabled):hover) {
     background: var(--accent-wash);
+  }
+  /* Nudge the `d` shortcut cap a hair further right of the label than the
+     button's own gap gives it. */
+  .compare-picker :global(.compare-toggle .shortcut-cap) {
+    margin-inline-start: 0.15rem;
   }
   .compare-toggle-wrap {
     display: inline-flex;

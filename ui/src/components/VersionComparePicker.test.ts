@@ -116,6 +116,23 @@ describe("VersionComparePicker compare icon", () => {
     expect(iconIdx).toBeLessThan(labelIdx);
   });
 
+  test("shows the `d` shortcut cap on the enabled toggle when hints are on", () => {
+    const { target } = render(VersionComparePicker, { ...baseProps, showShortcutHints: true });
+    const toggle = target.querySelector<HTMLButtonElement>(".compare-toggle");
+    const cap = [...toggle!.querySelectorAll("kbd")].find((k) => k.textContent === "d");
+    expect(cap != null).toBe(true);
+    // The cap is aria-hidden, so it stays out of the button's accessible name,
+    // which remains "Compare versions" (the e2e getByRole selectors depend on it).
+    expect(cap?.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  test("hides the `d` shortcut cap when hints are off", () => {
+    const { target } = render(VersionComparePicker, baseProps);
+    const toggle = target.querySelector<HTMLButtonElement>(".compare-toggle");
+    const hasCap = [...toggle!.querySelectorAll("kbd")].some((k) => k.textContent === "d");
+    expect(hasCap).toBe(false);
+  });
+
   test("the disabled toggle also renders the compare icon", () => {
     const { target } = render(VersionComparePicker, {
       ...baseProps,

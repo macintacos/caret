@@ -1054,6 +1054,7 @@
     diffStyle={compareStore.diffStyle}
     diffIndicators={compareStore.diffIndicators}
     layoutLocked={narrow}
+    {showShortcutHints}
     onSetComparing={compare.setComparing}
     onSelectBase={compare.setBase}
     onSelectTarget={compare.setTarget}
