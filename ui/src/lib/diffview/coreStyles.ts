@@ -459,6 +459,23 @@ const CARET_OVERRIDES = `
     -webkit-mask: ${FILE_ICON_MASK} no-repeat center / contain;
     mask: ${FILE_ICON_MASK} no-repeat center / contain;
   }
+
+  /* EXC-832: the vim / search highlights. searchHighlight.ts registers two named
+     CSS Custom Highlights over the rendered rows — every non-current match in
+     "caret-search", the active match in "caret-search-current". They are styled
+     here, in the override sheet adopted into the same shadow root the highlighted
+     ranges live in, because ::highlight() resolves against the tree scope of the
+     text it paints (not the document). Both read the amber accent through the theme
+     bridge (palette unchanged): the underlay is the translucent --accent-wash so
+     the syntax colors stay legible beneath it, and the current match is solid
+     --accent with readable --accent-ink. */
+  ::highlight(caret-search) {
+    background-color: var(--accent-wash);
+  }
+  ::highlight(caret-search-current) {
+    background-color: var(--accent);
+    color: var(--accent-ink);
+  }
 `;
 
 // Constructable sheets shared across every view's shadow root, the override
