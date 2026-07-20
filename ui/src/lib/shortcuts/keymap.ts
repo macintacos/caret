@@ -107,6 +107,9 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
     group: "actions",
     label: "Toggle comments",
   },
+  // EXC-830: toggles the plan's ToC rail (the sidebar). A bare backslash with no
+  // command modifier; the cap derives straight from the key (no override needed).
+  { id: "actions.toggleSidebar", keys: [{ key: "\\" }], group: "actions", label: "Toggle sidebar" },
   // Help
   { id: "help.show", keys: [{ key: "?" }], group: "help", label: "Show shortcuts" },
   // Editor (existing) — the read-only chords, registered live for the help modal.
