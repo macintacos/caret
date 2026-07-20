@@ -126,3 +126,29 @@ test("slash focuses the contents filter", async ({ daemon, page }) => {
   await page.keyboard.press("/");
   await expect(filter).toBeFocused();
 });
+
+test("backslash toggles the sidebar rail", async ({ daemon, page }) => {
+  // EXC-830: `\` fires the same toggleToc the sidebar float-chip runs. The rail
+  // collapses by animating its lane width to 0 (not display:none), so the state
+  // reads off the toggle's aria-expanded plus the #plan-toc lane width — mirroring
+  // toc-collapse.e2e.ts. The fixture viewport is wide, so the rail starts open.
+  await daemon.seed({ plan: PLAN });
+  await page.goto("/");
+  await loadPlan(page);
+
+  const toggle = page.getByRole("button", { name: "Toggle sidebar" });
+  const rail = page.locator("#plan-toc");
+  await expect(toggle).toHaveAttribute("aria-keyshortcuts", "\\");
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(rail).not.toHaveCSS("width", "0px");
+
+  // `\` collapses the rail…
+  await page.keyboard.press("\\");
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(rail).toHaveCSS("width", "0px");
+
+  // …and `\` again reopens it.
+  await page.keyboard.press("\\");
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(rail).not.toHaveCSS("width", "0px");
+});

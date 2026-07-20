@@ -838,6 +838,19 @@
         }),
       );
     }
+    // `\` toggles the ToC rail (EXC-830), the same toggleToc the float-chip runs.
+    // Same guard as the button's `{#if !showDiff && hasToc}` (and focusFilter's):
+    // inert in compare mode or when the plan has no contents pane.
+    const toggleSidebar = reserved.get("actions.toggleSidebar");
+    if (toggleSidebar != null) {
+      offs.push(
+        shortcuts.register({
+          ...toggleSidebar,
+          run: toggleToc,
+          enabled: () => !showDiff && hasToc,
+        }),
+      );
+    }
     return () => {
       for (const off of offs) off();
     };
@@ -1033,6 +1046,7 @@
               type="button"
               class="toc-toggle float-chip"
               aria-label="Toggle sidebar"
+              aria-keyshortcuts={"\\"}
               aria-expanded={tocShown}
               aria-controls="plan-toc"
               onclick={toggleToc}
@@ -1041,7 +1055,9 @@
             </button>
           {/snippet}
         </Tooltip.Trigger>
-        <Tooltip.Content>{tocShown ? "Hide sidebar" : "Show sidebar"}</Tooltip.Content>
+        <Tooltip.Content>
+          {tocShown ? "Hide sidebar" : "Show sidebar"} <Kbd class="kbd-sm">\</Kbd>
+        </Tooltip.Content>
       </Tooltip.Root>
     </Tooltip.Provider>
   {/if}
