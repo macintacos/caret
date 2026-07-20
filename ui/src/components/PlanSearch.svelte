@@ -24,6 +24,10 @@
      * NOT grab focus on mount — an n/N resume reopens as a blurred HUD so bare n/N keep
      * reaching the global dispatcher, while `/` open/reopen lets the parent focus it. */
     committed?: boolean;
+    /** Whether the pill is animating closed — plays the collapse-back-to-the-chip
+     * keyframe (the reverse of the open expand). The parent keeps the pill mounted for
+     * the animation's duration, then unmounts it (DiffPlanView owns that timer). */
+    closing?: boolean;
     /** Commit the search (Enter): the parent moves the line cursor to the nearest
      * match and returns focus to the plan, keeping this pill as a HUD. */
     oncommit: () => void;
@@ -40,6 +44,7 @@
     matchCount,
     currentIndex,
     committed = false,
+    closing = false,
     oncommit,
     onnext,
     onprev,
@@ -76,7 +81,7 @@
   });
 </script>
 
-<div class="plan-search" role="search">
+<div class="plan-search" class:closing role="search">
   <div class="search-row">
     <span class="search-slash mono" aria-hidden="true">/</span>
     <Input
@@ -155,6 +160,24 @@
     to {
       opacity: 1;
       transform: scale(1);
+    }
+  }
+  /* Closing reverses the expand: the pill collapses back toward the top-right chip
+     while DiffPlanView keeps it mounted for one --dur-base, then unmounts it and the
+     chip reappears. `forwards` holds the shrunk/faded end frame until that unmount so it
+     can't flash back to full size; exit easing (--ease-in) mirrors the enter --ease-out.
+     Higher specificity than the base rule, so this animation wins while closing. */
+  .plan-search.closing {
+    animation: search-collapse var(--dur-base) var(--ease-in) forwards;
+  }
+  @keyframes search-collapse {
+    from {
+      opacity: 1;
+      transform: scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: scale(0.92);
     }
   }
 

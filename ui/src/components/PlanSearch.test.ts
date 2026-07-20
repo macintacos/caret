@@ -54,6 +54,14 @@ describe("PlanSearch", () => {
     expect([next, prev, closed]).toEqual([1, 1, 1]);
   });
 
+  test("the closing prop toggles the collapse-back animation class", () => {
+    const open = render(PlanSearch, base);
+    // Boolean, not toBeNull, per the happy-dom circular-node serialization hang.
+    expect(open.target.querySelector(".plan-search.closing") !== null).toBe(false);
+    const closing = render(PlanSearch, { ...base, closing: true });
+    expect(closing.target.querySelector(".plan-search.closing") !== null).toBe(true);
+  });
+
   test("Enter commits and Escape closes from the focused field", () => {
     let committed = 0;
     let closed = 0;

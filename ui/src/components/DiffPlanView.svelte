@@ -560,6 +560,13 @@
   // it prefilled (EXC-832 follow-up) and n/N can resume it while the pill is closed.
   // Held separately from searchQuery so a content switch (resetSearch) never clears it.
   let lastQuery = $state("");
+  // While closing, the pill stays mounted playing its collapse-back-to-the-chip
+  // animation; a timer (matching --dur-base) then unmounts it. happy-dom fires no
+  // animationend, so a timer — not that event — drives the teardown.
+  let searchClosing = $state(false);
+  let closeTimer: ReturnType<typeof setTimeout> | undefined;
+  // Must match PlanSearch's search-collapse duration (--dur-base = 180ms).
+  const CLOSE_ANIM_MS = 180;
   const searchMatches = $derived(
     searchQuery === "" ? [] : findMatches(linkLayer.text.split("\n"), searchQuery),
   );
@@ -756,26 +763,51 @@
     el?.select();
   }
   function openSearch(): void {
+    cancelClose();
     searchOpen = true;
     searchCommitted = false;
     searchQuery = lastQuery;
     searchIndex = -1;
     focusSearchField();
   }
-  // Reset the search state without touching focus — used on a content switch.
+  // Cancel a pending close animation — reopening (`/` or n/N) mid-collapse.
+  function cancelClose(): void {
+    if (closeTimer !== undefined) {
+      clearTimeout(closeTimer);
+      closeTimer = undefined;
+    }
+    searchClosing = false;
+  }
+  // Reset the search state without touching focus — used on a content switch. Also
+  // cancels an in-flight close, so a version change during the collapse tears down
+  // cleanly rather than leaving a stale timer to fire against the new content.
   function resetSearch(): void {
+    cancelClose();
     searchOpen = false;
     searchCommitted = false;
     searchQuery = "";
     searchIndex = -1;
   }
-  // Dismiss the pill: clearing the query empties the match set (which clears the
-  // highlights), the cursor stays where it landed, and blurring the field returns
-  // focus to the plan.
+  // Dismiss the pill. Blur now so focus returns to the plan and the highlights/cursor
+  // stay where they landed. When Show Hints is on there's a "/ to search" chip to
+  // collapse back into, so keep the pill mounted for one --dur-base playing its collapse
+  // animation, then unmount it (the chip reappears). With hints off there's no chip, so
+  // close immediately. Clearing the query (in resetSearch) empties the match set, which
+  // clears the highlights.
   function closeSearch(): void {
-    resetSearch();
     (document.activeElement as HTMLElement | null)?.blur();
+    if (!showShortcutHints) {
+      resetSearch();
+      return;
+    }
+    if (closeTimer !== undefined) clearTimeout(closeTimer);
+    searchClosing = true;
+    closeTimer = setTimeout(resetSearch, CLOSE_ANIM_MS);
   }
+  // Clear a pending close timer if the view unmounts mid-collapse.
+  $effect(() => () => {
+    if (closeTimer !== undefined) clearTimeout(closeTimer);
+  });
   // Move the line cursor to the match at searchIndex and scroll it into view.
   function revealMatch(): void {
     const m = searchMatches[searchIndex];
@@ -1243,6 +1275,7 @@
           matchCount={searchMatches.length}
           currentIndex={searchIndex}
           committed={searchCommitted}
+          closing={searchClosing}
           oncommit={commitSearch}
           onnext={() => stepSearch(1)}
           onprev={() => stepSearch(-1)}
