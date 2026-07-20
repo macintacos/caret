@@ -144,7 +144,7 @@ button {
 button:focus-visible,
 a:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid var(--accent-bright);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 

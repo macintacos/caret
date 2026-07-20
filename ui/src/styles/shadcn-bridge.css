@@ -43,7 +43,10 @@
   --destructive-foreground: var(--accent-ink);
   --border: var(--rule);
   --input: var(--rule-strong);
-  --ring: var(--accent-bright);
+  /* Focus ring: a softened, translucent accent (a subtle hint, not a loud solid
+     frame) — flips per scheme with --accent-bright. caret's global :focus-visible
+     and the diffview share this same token. */
+  --ring: color-mix(in oklab, var(--accent-bright), transparent 70%);
 }
 
 /* @theme inline: map shadcn's semantic vars onto Tailwind's color / radius / font

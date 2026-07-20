@@ -53,7 +53,8 @@ const EXPECTED: Record<string, string> = {
   "--destructive-foreground": "--accent-ink",
   "--border": "--rule",
   "--input": "--rule-strong",
-  "--ring": "--accent-bright",
+  // --ring is asserted separately: it softens --accent-bright rather than
+  // bridging to it bare (see the color-mix test below).
 };
 
 describe("the shadcn semantic :root → caret token bridge", () => {
@@ -69,6 +70,15 @@ describe("the shadcn semantic :root → caret token bridge", () => {
       expect(decls).toMatch(new RegExp(`${shadcnVar}:\\s*var\\(${caretToken}\\);`));
     });
   }
+
+  test("softens --ring to a translucent --accent-bright (subtle focus ring, both schemes)", () => {
+    // The focus ring reads as a subtle hint, not a loud solid frame. It stays a
+    // derivation of caret's --accent-bright (so it flips per scheme), just softened
+    // with transparency — caret's global :focus-visible and the diffview share it.
+    expect(decls).toMatch(
+      /--ring:\s*color-mix\(in oklab,\s*var\(--accent-bright\),\s*transparent \d+%\);/,
+    );
+  });
 
   test("uses no hardcoded hex or oklch — every value is a caret token", () => {
     expect(decls).not.toMatch(/#[0-9a-fA-F]{3,8}/);

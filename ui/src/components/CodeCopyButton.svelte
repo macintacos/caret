@@ -110,7 +110,7 @@
   }
 
   :global(.code-copy:focus-visible) {
-    outline: 2px solid var(--accent-bright);
+    outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
 
