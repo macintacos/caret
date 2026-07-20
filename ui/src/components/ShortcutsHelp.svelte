@@ -20,6 +20,9 @@
   let { entries, onClose }: Props = $props();
 
   let query = $state("");
+  // The search input element, bound so the `/`-to-focus handler below can move
+  // focus into it.
+  let searchInput = $state<HTMLInputElement | null>(null);
   // Filter first, then group: an empty group (all its rows filtered out) drops
   // away, so a search collapses to only the sections that still match.
   const groups = $derived(groupShortcuts(filterShortcuts(entries, query)));
@@ -46,6 +49,23 @@
     const contents = document.querySelectorAll<HTMLElement>("[data-slot='dialog-content']");
     contents[contents.length - 1]?.focus();
   }
+
+  // EXC-835: while the modal is open, `/` focuses the search input instead of
+  // falling through to the global plan-search binding (actions.search). Capture
+  // phase so the preventDefault lands before the bubble-phase global dispatcher
+  // (dispatcher.ts), which yields on defaultPrevented — the modal traps focus on
+  // the dialog content (not an input), so isEditingContext() wouldn't otherwise
+  // suppress the global `/`. Once the input owns focus, `/` types normally.
+  $effect(() => {
+    function onKeydown(e: KeyboardEvent): void {
+      if (e.key !== "/" || e.defaultPrevented) return;
+      if (document.activeElement === searchInput) return;
+      e.preventDefault();
+      searchInput?.focus();
+    }
+    window.addEventListener("keydown", onKeydown, { capture: true });
+    return () => window.removeEventListener("keydown", onKeydown, { capture: true });
+  });
 </script>
 
 <Modal
@@ -62,13 +82,22 @@
   {/snippet}
 
   <div class="help">
-    <Input
-      type="text"
-      class="help-search"
-      placeholder="Search shortcuts…"
-      aria-label="Search shortcuts"
-      bind:value={query}
-    />
+    <!-- The search field carries a trailing `/` Kbd cap (EXC-835): `/` focuses it
+         (the input is not autofocused). The cap renders through the same shadcn
+         Kbd as every other cap, pinned to the input's right edge. -->
+    <div class="help-search-field">
+      <Input
+        type="text"
+        class="help-search"
+        placeholder="Search shortcuts…"
+        aria-label="Search shortcuts"
+        bind:value={query}
+        bind:ref={searchInput}
+      />
+      <!-- Decorative hint only; the field's aria-label already names it, so hide
+           the lone "/" glyph from screen readers. -->
+      <Kbd class="help-search-hint" aria-hidden="true">/</Kbd>
+    </div>
 
     {#if groups.length === 0}
       <p class="help-empty">No shortcuts match your search.</p>
@@ -121,28 +150,52 @@
 {/snippet}
 
 <style>
-  /* Cap the dialog to a sensible reading measure — the shadcn default widens to
-     calc(100% - 2rem), which stretches this single-column list uncomfortably at
-     desktop widths. The class rides the portalled dialog content (no scope hash →
-     :global); caret's unlayered component CSS beats shadcn's layered
-     max-w-[calc(100%-2rem)] utility, and min() keeps it inside a narrow viewport.
-     Authored here as caret CSS, not a Tailwind class: app.css scans only
-     lib/components/ui, so a utility in this chrome file would never be emitted. */
+  /* Cap the dialog to a roomy measure that fits the multi-column keymap (EXC-835)
+     — the shadcn default widens to calc(100% - 2rem), and 56rem gives the ~3
+     columns below room to breathe without running edge to edge. The class rides
+     the portalled dialog content (no scope hash → :global); caret's unlayered
+     component CSS beats shadcn's layered max-w-[calc(100%-2rem)] utility, and
+     min() keeps it inside a narrow viewport. Authored here as caret CSS, not a
+     Tailwind class: app.css scans only lib/components/ui, so a utility in this
+     chrome file would never be emitted. */
   :global(.shortcuts-content) {
-    max-width: min(32rem, calc(100vw - 2rem));
+    max-width: min(56rem, calc(100vw - 2rem));
   }
   .help {
     display: flex;
     flex-direction: column;
     gap: 1rem;
   }
-  /* The grouped sections. The dialog content scrolls as a whole (shadcn
-     dialog-content is max-height + overflow-y-auto), so a long keymap stays
-     reachable without a nested scroller. */
+  /* The search field anchors the trailing `/` hint cap (EXC-835). */
+  .help-search-field {
+    position: relative;
+  }
+  /* Pad the input so typed text never slides under the pinned cap. */
+  .help-search-field :global(input) {
+    padding-right: 2.5rem;
+  }
+  /* Pin the `/` cap to the input's right edge. The shadcn Kbd already sets
+     pointer-events:none, so clicks fall through to the input. The class rides the
+     Kbd root (no scope hash → :global), bounded under the scoped field. */
+  .help-search-field :global(.help-search-hint) {
+    position: absolute;
+    top: 50%;
+    right: 0.5rem;
+    transform: translateY(-50%);
+  }
+  /* The grouped sections flow across up to three newspaper columns (EXC-835) so
+     the whole keymap fits at a glance; the count drops as the viewport narrows.
+     The dialog content still scrolls as a whole (shadcn dialog-content is
+     max-height + overflow-y-auto) if the keymap ever outgrows the height. */
   .help-groups {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
+    columns: 16rem 3;
+    column-gap: 1.5rem;
+  }
+  .help-group {
+    /* Keep each group whole — never split its rows across a column boundary. */
+    break-inside: avoid;
+    /* Vertical rhythm between stacked groups (column-gap is horizontal only). */
+    margin-bottom: 1rem;
   }
   .help-group-title {
     /* rides the global .eyebrow atom (uppercase, ink-soft); this only spaces it. */
