@@ -738,16 +738,17 @@
   }
 
   // Esc reconciliation (EXC-790, superseding EXC-788's motion.clearCursor): close the
-  // search HUD if open (EXC-832), else exit visual mode if active (keeping the cursor),
-  // else clear the cursor. One handler, because the dispatcher fires only the first
-  // matching Escape entry — layering the three Esc meanings in priority order.
+  // search HUD if open (EXC-832), else exit visual mode if active. Esc never clears the
+  // line cursor (EXC-834) — the reader keeps their place no matter how many times they
+  // press it; a content switch still clears the cursor via the $effect above, not Esc.
+  // One handler, because the dispatcher fires only the first matching Escape entry —
+  // layering the two Esc meanings in priority order.
   function clearSelectionOrCursor(): void {
     if (searchOpen) {
       closeSearch();
       return;
     }
     if (visualAnchor != null) visualAnchor = null;
-    else cursorLine = null;
   }
 
   // ----- Plan search actions (EXC-832) -----
@@ -902,7 +903,7 @@
         shortcuts.register({
           ...clearBase,
           run: clearSelectionOrCursor,
-          enabled: () => searchOpen || cursorLine != null,
+          enabled: () => searchOpen || visualAnchor != null,
         }),
       );
     }

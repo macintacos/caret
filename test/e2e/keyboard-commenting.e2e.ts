@@ -171,11 +171,14 @@ test("Esc in visual mode clears the selection without commenting and keeps the c
   await expect(hint.locator("[data-slot='kbd']")).toHaveCount(2);
 
   // Esc exits visual mode: the selection band and the hint clear, no composer
-  // opens, and the cursor stays where it was (a second Esc would clear the cursor).
+  // opens, and the cursor stays where it was. A second Esc has nothing to clear,
+  // so it leaves the cursor exactly where it is (EXC-834).
   await page.keyboard.press("Escape");
   await expect(selectedLines(page)).toHaveCount(0);
   await expect(hint).toHaveCount(0);
   await expect(composerOf(page)).toHaveCount(0);
+  await expectCursorLine(page, 2);
+  await page.keyboard.press("Escape");
   await expectCursorLine(page, 2);
 });
 
