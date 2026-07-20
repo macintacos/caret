@@ -131,6 +131,26 @@ test("n / N cycle matches, wrapping back to the start after a full loop", async 
   await expect(cursor(page)).toHaveAttribute("data-line", String(start));
 });
 
+test("/ over a committed search reopens a fresh, focused, empty query", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: PLAN });
+  await page.goto("/");
+  await loadPlan(page);
+
+  await page.keyboard.press("/");
+  await page.keyboard.type("widget");
+  await page.keyboard.press("Enter");
+  await expect(field(page)).not.toBeFocused();
+
+  // The vim reflex: / after a commit starts a fresh, focused, empty search — never a
+  // dead unfocused HUD (n/N disabled and the field unfocused).
+  await page.keyboard.press("/");
+  await expect(field(page)).toBeFocused();
+  await expect(field(page)).toHaveValue("");
+});
+
 test("smartcase: an uppercase letter narrows the match set", async ({ daemon, page }) => {
   await daemon.seed({ plan: PLAN });
   await page.goto("/");

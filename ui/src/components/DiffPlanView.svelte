@@ -555,13 +555,16 @@
     searchQuery === "" ? [] : findMatches(linkLayer.text.split("\n"), searchQuery),
   );
 
-  // While typing (open, not committed), keep the current match tracking the nearest
-  // one to the reading position, so the counter and the strong highlight follow the
-  // query live. Once committed, n/N own the index and this effect stands down.
+  // Re-track the current match to the nearest one at the reading position whenever the
+  // QUERY changes — while typing, and when the field is edited after a commit — so the
+  // counter and the strong highlight follow the query live. The cursor / reading
+  // position is read UNTRACKED so this re-runs only on a query change (searchMatches
+  // gets a new reference), never when n/N move the cursor: same query → same matches
+  // reference → this stays put and the stepped index survives.
   $effect(() => {
     const matches = searchMatches;
-    if (!searchOpen || searchCommitted) return;
-    searchIndex = nearestMatchIndex(matches, cursorLine ?? topVisibleLine() ?? 1);
+    if (!searchOpen) return;
+    searchIndex = untrack(() => nearestMatchIndex(matches, cursorLine ?? topVisibleLine() ?? 1));
   });
 
   // Drop the cursor (and any visual selection) when the rendered content changes (a
@@ -732,10 +735,17 @@
   }
 
   // ----- Plan search actions (EXC-832) -----
-  // `/` opens the pill ready to type (PlanSearch focuses its own field on mount).
+  // `/` opens a fresh, empty search focused ready to type (the vim reflex). On the
+  // FIRST open the pill isn't mounted yet, so this focus is a no-op and PlanSearch's
+  // own mount-focus lands the caret; on a REOPEN over a committed HUD the pill is
+  // already mounted (mount-focus won't re-fire), so focusing here is what keeps `/`
+  // after a commit from stranding the user in an unfocused, un-committed HUD.
   function openSearch(): void {
     searchOpen = true;
     searchCommitted = false;
+    searchQuery = "";
+    searchIndex = -1;
+    document.querySelector<HTMLInputElement>("input[aria-label='Search plan']")?.focus();
   }
   // Reset the search state without touching focus — used on a content switch.
   function resetSearch(): void {
@@ -929,8 +939,8 @@
       );
     }
     // `\` toggles the ToC rail (EXC-830), the same toggleToc the float-chip runs.
-    // Same guard as the button's `{#if !showDiff && hasToc}` (and focusFilter's):
-    // inert in compare mode or when the plan has no contents pane.
+    // Same guard as the toggle button's `{#if !showDiff && hasToc}`: inert in
+    // compare mode or when the plan has no contents pane.
     const toggleSidebar = reserved.get("actions.toggleSidebar");
     if (toggleSidebar != null) {
       offs.push(
