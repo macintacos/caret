@@ -63,8 +63,8 @@
 </script>
 
 <div class="plan-search" role="search">
-  <span class="search-slash mono" aria-hidden="true">/</span>
-  <div class="search-field">
+  <div class="search-row">
+    <span class="search-slash mono" aria-hidden="true">/</span>
     <Input
       bind:ref={field}
       bind:value={query}
@@ -76,108 +76,111 @@
       spellcheck="false"
       onkeydown={onKeydown}
     />
-    <span
-      class="search-count metric"
-      class:has-matches={hasMatches}
-      aria-live="polite"
-      aria-label="{current} of {matchCount} matches"
+    <button
+      type="button"
+      class="search-step float-chip"
+      aria-label="Previous match"
+      disabled={!hasMatches}
+      onclick={onprev}
     >
-      {current} / {matchCount}
-    </span>
+      <span class="chev-up"><Icon name="chevron-down" size={14} /></span>
+    </button>
+    <button
+      type="button"
+      class="search-step float-chip"
+      aria-label="Next match"
+      disabled={!hasMatches}
+      onclick={onnext}
+    >
+      <Icon name="chevron-down" size={14} />
+    </button>
+    <button
+      type="button"
+      class="search-close float-chip"
+      aria-label="Close search"
+      onclick={onclose}
+    >
+      <Icon name="x" size={14} />
+    </button>
   </div>
-  <button
-    type="button"
-    class="search-step float-chip"
-    aria-label="Previous match"
-    disabled={!hasMatches}
-    onclick={onprev}
+  <span
+    class="search-count metric"
+    class:has-matches={hasMatches}
+    aria-live="polite"
+    aria-label="{current} of {matchCount} matches"
   >
-    <span class="chev-up"><Icon name="chevron-down" size={14} /></span>
-  </button>
-  <button
-    type="button"
-    class="search-step float-chip"
-    aria-label="Next match"
-    disabled={!hasMatches}
-    onclick={onnext}
-  >
-    <Icon name="chevron-down" size={14} />
-  </button>
-  <button type="button" class="search-close float-chip" aria-label="Close search" onclick={onclose}>
-    <Icon name="x" size={14} />
-  </button>
+    {current} / {matchCount}
+  </span>
 </div>
 
 <style>
-  /* The HUD pill: caret's float-chip surface (paper-raised nudged translucent so
-     the plan reads faintly through it — a HUD, not a modal), lifted with the shared
-     card shadow and the larger chip radius. Enters with the same quick slide the
+  /* The HUD pill: caret's float-chip surface (paper-raised nudged translucent so the
+     plan reads faintly through it — a HUD, not a modal), lifted with the shared card
+     shadow and the larger chip radius. The controls row sits on top; the
+     current-of-total counter sits below it, right-aligned to the pill's edge, so a
+     changing total never reflows the row's width. Enters with the same quick slide the
      drag-readout uses; the global #app reduced-motion guard zeroes it. */
   .plan-search {
     display: inline-flex;
-    align-items: start;
-    gap: 0.35rem;
-    padding: 0.3rem 0.4rem 0.3rem 0.55rem;
+    flex-direction: column;
+    gap: 0.1rem;
+    padding: 0.3rem 0.4rem;
     background: color-mix(in lab, var(--paper-raised), transparent 6%);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
     animation: search-in var(--dur-fast) var(--ease-out);
   }
-  /* Focus lives on the pill (the field's own border/ring is stripped below), a quiet
-     neutral ring — no amber spent on focus; amber is reserved for the counter. */
-  .plan-search:focus-within {
-    box-shadow:
-      var(--shadow-card),
-      inset 0 0 0 1px var(--rule-strong);
+
+  /* The controls row: the leading glyph, the field, then the step / close chips. */
+  .search-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
   }
 
   .search-slash {
     color: var(--ink-faint);
     font-size: var(--text-sm);
-    /* Center the glyph against the input row now the pill top-aligns its items
-       (align-items: start) so the counter can hang below the field. */
-    line-height: 1.65rem;
     user-select: none;
   }
 
-  /* Input over its counter: a two-row column so the counter can live below the field
-     (see .search-count) instead of inline, keeping the pill's width fixed. */
-  .search-field {
-    display: flex;
-    flex-direction: column;
-  }
-
-  /* The shadcn Input molded into the chip: transparent, borderless, unshadowed, so
-     the pill is the surface. Its border/ring/height/padding come from the Input
-     recipe; only the blend-into-the-chip overrides live here (reached via :global
-     under the scoped root, since the class is handed to <Input>). */
+  /* The shadcn Input given its own recessed field surface, so it reads as distinct
+     from the pill — a step off --paper-raised toward --paper-sunk, which recedes in
+     both themes (a touch darker on dark paper, a warm grey on light), with a hairline
+     rule and the chip radius. Its height/font come from the Input recipe; the
+     field-look overrides live here (reached via :global under the scoped root, since
+     the class is handed to <Input>). */
   .plan-search :global(.search-input) {
-    height: 1.65rem;
+    height: 1.75rem;
     width: 12rem;
-    border: none;
-    background: transparent;
+    border: 1px solid var(--rule);
+    background: var(--paper-sunk);
     box-shadow: none;
-    border-radius: 0;
-    padding: 0 0.15rem;
+    border-radius: var(--radius);
+    padding: 0 0.5rem;
     font-size: var(--text-sm);
   }
+  /* Dark paper's raised→sunk step is small, so drop the field to the base --paper
+     there for a clearer recess; light's --paper-sunk already reads distinct. */
+  :global(:root[data-theme="dark"]) .plan-search :global(.search-input) {
+    background: var(--paper);
+  }
   .plan-search :global(.search-input:focus-visible) {
-    border: none;
     outline: none;
     box-shadow: none;
+    border-color: var(--rule-strong);
   }
 
-  /* The counter sits BELOW the input, right-aligned under it, so a changing total (or
-     a single↔double-digit count) never reflows the pill's width. Tabular figures (via
-     .metric) keep the digits from shifting as n/N cycles; the pill's one amber moment
-     while there are matches to stand on, a quiet faint tone when there are none. */
+  /* The counter sits BELOW the row, right-aligned to the pill's edge, so a changing
+     total (or a single↔double-digit count) never reflows the row's width. Tabular
+     figures (via .metric) keep the digits from shifting as n/N cycles; the pill's one
+     amber moment while there are matches to stand on, a quiet faint tone when none. */
   .search-count {
     text-align: right;
-    margin-top: 0.1rem;
     font-size: var(--text-xs);
     color: var(--ink-faint);
     white-space: nowrap;
-    padding: 0 0.15rem;
+    padding: 0 0.2rem;
   }
   .search-count.has-matches {
     color: var(--accent);
