@@ -27,7 +27,14 @@
 			variant: ctx.variant || variant,
 			size: ctx.size || size,
 		}),
-		"w-auto min-w-0 shrink-0 px-3 focus:z-10 focus-visible:z-10 data-[spacing=0]:rounded-none data-[spacing=0]:shadow-none data-[spacing=0]:first:rounded-l-md data-[spacing=0]:last:rounded-r-md data-[spacing=0]:data-[variant=outline]:border-l-0 data-[spacing=0]:data-[variant=outline]:first:border-l",
+		// Layout + spacing
+		"w-auto min-w-0 shrink-0 px-3",
+		// Focus stacking
+		"focus:z-10 focus-visible:z-10",
+		// Joined (spacing=0) shape
+		"data-[spacing=0]:rounded-none data-[spacing=0]:shadow-none data-[spacing=0]:first:rounded-l-md data-[spacing=0]:last:rounded-r-md",
+		// Joined (spacing=0) outline seams
+		"data-[spacing=0]:data-[variant=outline]:border-l-0 data-[spacing=0]:data-[variant=outline]:first:border-l",
 		className
 	)}
 	{value}

@@ -14,8 +14,11 @@
 	bind:this={ref}
 	data-slot="kbd"
 	class={cn(
+		// Layout
 		"pointer-events-none w-fit select-none",
+		// Leading icon
 		"[&_svg:not([class*='size-'])]:size-3",
+		// Inside a tooltip
 		"in-data-[slot=tooltip-content]:bg-background/20 in-data-[slot=tooltip-content]:text-background dark:in-data-[slot=tooltip-content]:bg-background/10",
 		className
 	)}
