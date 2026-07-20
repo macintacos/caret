@@ -1,0 +1,70 @@
+import "../../test-mount.ts";
+import { describe, expect, test } from "bun:test";
+
+import PlanSearch from "@/components/PlanSearch.svelte";
+
+import { render } from "../../test-mount.ts";
+
+const base = {
+  query: "foo",
+  matchCount: 3,
+  currentIndex: 0,
+  oncommit: () => {},
+  onnext: () => {},
+  onprev: () => {},
+  onclose: () => {},
+};
+
+function input(target: HTMLElement): HTMLInputElement {
+  return target.querySelector<HTMLInputElement>("input[aria-label='Search plan']")!;
+}
+
+describe("PlanSearch", () => {
+  test("renders the query in the input and the current-of-total counter", () => {
+    const { target } = render(PlanSearch, base);
+    expect(input(target).value).toBe("foo");
+    // currentIndex is 0-based; the counter reads 1-based.
+    expect(target.querySelector(".search-count")?.textContent?.replace(/\s+/g, "")).toBe("1/3");
+  });
+
+  test("counter reads 0 / 0 with no matches, and prev/next are disabled", () => {
+    const { target } = render(PlanSearch, { ...base, matchCount: 0, currentIndex: -1 });
+    expect(target.querySelector(".search-count")?.textContent?.replace(/\s+/g, "")).toBe("0/0");
+    expect(target.querySelector<HTMLButtonElement>("[aria-label='Next match']")?.disabled).toBe(
+      true,
+    );
+    expect(target.querySelector<HTMLButtonElement>("[aria-label='Previous match']")?.disabled).toBe(
+      true,
+    );
+  });
+
+  test("the step and close buttons fire their callbacks", () => {
+    let next = 0;
+    let prev = 0;
+    let closed = 0;
+    const { target } = render(PlanSearch, {
+      ...base,
+      onnext: () => next++,
+      onprev: () => prev++,
+      onclose: () => closed++,
+    });
+    target.querySelector<HTMLButtonElement>("[aria-label='Next match']")?.click();
+    target.querySelector<HTMLButtonElement>("[aria-label='Previous match']")?.click();
+    target.querySelector<HTMLButtonElement>("[aria-label='Close search']")?.click();
+    expect([next, prev, closed]).toEqual([1, 1, 1]);
+  });
+
+  test("Enter commits and Escape closes from the focused field", () => {
+    let committed = 0;
+    let closed = 0;
+    const { target } = render(PlanSearch, {
+      ...base,
+      oncommit: () => committed++,
+      onclose: () => closed++,
+    });
+    const el = input(target);
+    el.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    el.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect([committed, closed]).toEqual([1, 1]);
+  });
+});
