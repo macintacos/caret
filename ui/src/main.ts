@@ -10,6 +10,11 @@ import { applyTheme, readThemeId } from "$lib/theme.ts";
 // user-initiated switch (lib/themeWipe.ts).
 applyTheme(readThemeId());
 
+// Mark the browser tab in dev so it's distinguishable from an installed build.
+// `import.meta.env.DEV` is true only under `vite` (mise run dev); the embedded
+// prod build ships it false, so the tab keeps its plain title there.
+if (import.meta.env.DEV) document.title = document.title.replace("caret", "caret (dev)");
+
 const target = document.getElementById("app");
 if (!target) throw new Error("#app mount target not found");
 
