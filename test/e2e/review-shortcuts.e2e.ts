@@ -114,17 +114,20 @@ test("d toggles the compare/diff view when there are multiple versions", async (
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
 });
 
-test("slash focuses the contents filter", async ({ daemon, page }) => {
+test("slash opens the plan search, not the contents filter (EXC-832)", async ({ daemon, page }) => {
   await daemon.seed({ plan: PLAN });
   await page.goto("/");
   await loadPlan(page);
 
+  // EXC-832 repurposed / from focusing the ToC filter (EXC-789) to opening a vim-style
+  // plan search; the filter keeps no keybinding now (parks EXC-793). The full search
+  // flow lives in plan-search.e2e.ts — here we only pin the key's new owner.
   const filter = page.getByLabel("Filter headings");
-  await expect(filter).toHaveAttribute("aria-keyshortcuts", "/");
-  await expect(filter).not.toBeFocused();
+  await expect(filter).not.toHaveAttribute("aria-keyshortcuts", "/");
 
   await page.keyboard.press("/");
-  await expect(filter).toBeFocused();
+  await expect(page.locator(".plan-search")).toBeVisible();
+  await expect(filter).not.toBeFocused();
 });
 
 test("backslash toggles the sidebar rail", async ({ daemon, page }) => {
