@@ -27,10 +27,10 @@ describe("CANONICAL_KEYMAP", () => {
 
   test("reserves Shift+C for the comment navigator, rendered as shift + C caps", () => {
     // EXC-792: summons the comment navigator. Keyed "C" (a bare shifted key, no
-    // command modifier), and its cap is the typed ["shift", "C"] — unlike V/G's
-    // bare-letter caps — so it can't be misread as the lowercase-c comment-line
-    // shortcut it sits beside. "shift" is the token that draws the global shift
-    // icon (caps.ts); it stays a plain string here, resolved at render.
+    // command modifier); its cap is ["shift", "C"] — the shift token (caps.ts's
+    // global shift icon) plus the capital. Since EXC-831, V/G derive the same
+    // shift + capital from their case, so C reads consistently with them. "shift"
+    // stays a plain string here, resolved to the icon at render.
     const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.toggleComments");
     if (!entry) throw new Error("actions.toggleComments missing");
     expect(entry.group).toBe("actions");
