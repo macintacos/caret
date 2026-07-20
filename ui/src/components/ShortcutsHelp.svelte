@@ -7,7 +7,8 @@
   import { Input } from "$lib/components/ui/input/index.js";
   import { Kbd, KbdGroup } from "$lib/components/ui/kbd/index.js";
   import { filterShortcuts, groupShortcuts } from "$lib/shortcuts/help.ts";
-  import { keyCaps, type ShortcutEntry } from "$lib/shortcuts/index.ts";
+  import { isKbdKey, keyCaps, type ShortcutEntry } from "$lib/shortcuts/index.ts";
+  import KbdCap from "@/components/KbdCap.svelte";
   import Modal from "@/components/Modal.svelte";
 
   interface Props {
@@ -105,12 +106,16 @@
 </Modal>
 
 <!-- One chord's caps render as adjacent Kbds; a two-key sequence (gg, ]]) is two
-     chords, so its caps sit side by side. keyCaps already resolves the display
-     glyphs (⌘, Esc, ↵), so this only lays them out. -->
+     chords, so its caps sit side by side. keyCaps resolves the glyph strings;
+     isKbdKey routes the known keys (letters, shift) through the typed KbdCap
+     renderer — so the shift key draws the global icon — while the rest (⌘, Esc,
+     ↵) render as their own glyph text. -->
 {#snippet caps(entry: ShortcutEntry)}
   <KbdGroup class="help-caps">
     {#each keyCaps(entry.keys) as chordCaps}
-      {#each chordCaps as cap}<Kbd>{cap}</Kbd>{/each}
+      {#each chordCaps as cap}<Kbd
+          >{#if isKbdKey(cap)}<KbdCap key={cap} />{:else}{cap}{/if}</Kbd
+        >{/each}
     {/each}
   </KbdGroup>
 {/snippet}

@@ -140,8 +140,9 @@ describe("StatusStrip", () => {
   });
 
   // EXC-792: the tally is the summon control for the comment navigator (Shift+C),
-  // so it advertises the shortcut for a11y and shows a ⇧C Kbd cap when hints are on.
-  test("advertises Shift+C and shows the ⇧C cap only when hints are enabled", () => {
+  // so it advertises the shortcut for a11y and shows a single Shift+C key cap —
+  // the global shift icon (not a ⇧ glyph) plus C — when hints are on.
+  test("advertises Shift+C and shows the shift-icon + C cap only when hints are enabled", () => {
     const off = render(StatusStrip, { ...base, pendingCount: 2 });
     const btn = off.target.querySelector<HTMLButtonElement>("button.comments-toggle")!;
     expect(btn.getAttribute("aria-keyshortcuts")).toBe("Shift+C");
@@ -149,7 +150,13 @@ describe("StatusStrip", () => {
 
     const on = render(StatusStrip, { ...base, pendingCount: 2, showShortcutHints: true });
     const onBtn = on.target.querySelector<HTMLButtonElement>("button.comments-toggle")!;
-    expect(onBtn.querySelector("[data-slot='kbd']")).not.toBeNull();
+    const cap = onBtn.querySelector("[data-slot='kbd']")!;
+    expect(cap).not.toBeNull();
+    // The shift half is the shared icon (Icon renders a labelled .icon wrapper),
+    // never the ⇧ character; the letter stays plain text.
+    expect(cap.querySelector(".icon")!.getAttribute("aria-label")).toBe("Shift");
+    expect(cap.textContent).toContain("C");
+    expect(cap.textContent).not.toContain("⇧");
   });
 
   test("clicking the comment tally fires onToggleComments", () => {

@@ -25,17 +25,18 @@ describe("CANONICAL_KEYMAP", () => {
     }
   });
 
-  test("reserves Shift+C for the comment navigator, rendered as ⇧ C caps", () => {
+  test("reserves Shift+C for the comment navigator, rendered as shift + C caps", () => {
     // EXC-792: summons the comment navigator. Keyed "C" (a bare shifted key, no
-    // command modifier), and its cap is set explicitly to ⇧ C — unlike V/G's
+    // command modifier), and its cap is the typed ["shift", "C"] — unlike V/G's
     // bare-letter caps — so it can't be misread as the lowercase-c comment-line
-    // shortcut it sits beside.
+    // shortcut it sits beside. "shift" is the token that draws the global shift
+    // icon (caps.ts); it stays a plain string here, resolved at render.
     const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.toggleComments");
     if (!entry) throw new Error("actions.toggleComments missing");
     expect(entry.group).toBe("actions");
     expect(entry.label).toBe("Toggle comments");
     expect(specSignature(entry.keys)).toBe("C");
-    expect(keyCaps(entry.keys)).toEqual([["⇧", "C"]]);
+    expect(keyCaps(entry.keys)).toEqual([["shift", "C"]]);
   });
 
   test("reserves \\ for the sidebar toggle in the Actions group, rendered as a \\ cap", () => {

@@ -5,6 +5,7 @@
   // small registry means a dynamic import would buy nothing. The SVGs stay
   // verbatim: sizing is CSS on the wrapper (overriding the files' width/height
   // attributes), and color rides on stroke="currentColor" from the parent's `color`.
+  import arrowBigUp from "@/icons/arrow-big-up.svg?raw";
   import bell from "@/icons/bell.svg?raw";
   import bellOff from "@/icons/bell-off.svg?raw";
   import check from "@/icons/check.svg?raw";
@@ -26,6 +27,7 @@
   import type { IconName } from "$lib/icons.ts";
 
   const SVGS: Record<IconName, string> = {
+    "arrow-big-up": arrowBigUp,
     bell,
     "bell-off": bellOff,
     check,

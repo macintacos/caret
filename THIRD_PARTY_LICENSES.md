@@ -10,6 +10,7 @@ under the ISC license.
 
 | Icon | Vendored path | Upstream |
 | --- | --- | --- |
+| `arrow-big-up` | [ui/src/icons/arrow-big-up.svg](ui/src/icons/arrow-big-up.svg) | [arrow-big-up.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/arrow-big-up.svg) |
 | `bell` | [ui/src/icons/bell.svg](ui/src/icons/bell.svg) | [bell.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/bell.svg) |
 | `bell-off` | [ui/src/icons/bell-off.svg](ui/src/icons/bell-off.svg) | [bell-off.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/bell-off.svg) |
 | `check` | [ui/src/icons/check.svg](ui/src/icons/check.svg) | [check.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/check.svg) |

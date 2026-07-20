@@ -2,6 +2,7 @@
 // ui/src/icons/<name>.svg (EXC-395); icons.test.ts enforces the bijection and
 // per-file invariants. Adding an icon: see doc/agents/icon-rules.md.
 export const ICON_NAMES = [
+  "arrow-big-up",
   "bell",
   "bell-off",
   "check",

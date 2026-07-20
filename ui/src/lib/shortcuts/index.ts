@@ -1,5 +1,6 @@
 import { createShortcutRegistry } from "$lib/shortcuts/registry.ts";
 
+export * from "$lib/shortcuts/caps.ts";
 export * from "$lib/shortcuts/dispatcher.ts";
 export * from "$lib/shortcuts/keymap.ts";
 export * from "$lib/shortcuts/match.ts";

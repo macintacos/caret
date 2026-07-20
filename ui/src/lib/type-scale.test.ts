@@ -116,6 +116,10 @@ const EXEMPT: Record<string, string[]> = {
   // The Settings dialog title shares that same display step, so the app's modals
   // read as one vocabulary (EXC-730).
   "SettingsDialog.svelte": ["1.35rem"],
+  // The Shift+C key cap sizes its glyph relative to the dense status-strip text
+  // (a keycap one-off, not a type-scale step), so it carries a raw em rather than
+  // a --text-* token.
+  "StatusStrip.svelte": ["0.9em"],
 };
 
 describe("chrome components reference the scale, not raw font-size literals", () => {

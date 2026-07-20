@@ -21,9 +21,10 @@
   // de-collision (the strip yielding to the navigator) is gone — the navigator
   // now docks above the bar rather than sharing the bottom-right corner.
   import { Badge } from "$lib/components/ui/badge/index.js";
-  import { Kbd, KbdGroup } from "$lib/components/ui/kbd/index.js";
+  import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
+  import KbdCap from "@/components/KbdCap.svelte";
 
   let {
     active,
@@ -44,7 +45,7 @@
     commentsOpen?: boolean;
     /** Toggle the comment navigator. The comment tally is its trigger. */
     onToggleComments?: () => void;
-    /** Whether the ⇧C shortcut-hint cap is shown on the tally (EXC-826/EXC-792). */
+    /** Whether the Shift+C shortcut-hint cap is shown on the tally (EXC-826/EXC-792). */
     showShortcutHints?: boolean;
   } = $props();
 
@@ -69,9 +70,11 @@
         <span class="num" class:has={pendingCount > 0}>{pendingCount}</span>
         <span class="label">{pendingCount === 1 ? "comment" : "comments"}</span>
         {#if showShortcutHints}
-          <KbdGroup class="comments-key" aria-hidden="true">
-            <Kbd class="kbd-sm">⇧</Kbd><Kbd class="kbd-sm">C</Kbd>
-          </KbdGroup>
+          <!-- One combined key: the global shift icon then C, both typed KbdCaps
+               (see caps.ts) so the shift glyph is the shared icon, never a ⇧ char. -->
+          <Kbd class="comments-key kbd-sm" aria-hidden="true"
+            ><KbdCap key="shift" size={8} /><KbdCap key="C" /></Kbd
+          >
         {/if}
       </button>
       {#if showCovered}
@@ -135,8 +138,14 @@
   }
   /* The comment tally doubles as the navigator's trigger, so it is a real button;
      strip the native chrome back to the strip's inline text and add a quiet
-     underline-on-hover + focus ring so it reads as activatable without shouting. */
+     underline-on-hover + focus ring so it reads as activatable without shouting.
+     align-items overrides .stat's baseline: this tally alone carries the taller
+     Shift+C key cap, and on a baseline row that cap drags the shared baseline
+     down, sinking "N comments" ~1px below the strip's other segments. Centering
+     the row keeps the count level with them — and, at these sizes, lands the C on
+     the count's baseline too (verified in-browser), so it reads as one line. */
   .comments-toggle {
+    align-items: center;
     margin: 0;
     padding: 0;
     background: none;
@@ -157,11 +166,13 @@
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
-  /* The ⇧C summon-key cap on the tally (EXC-792): centered against the
-     baseline-set count/label. Rides KbdGroup's root (no scope hash → :global,
-     bounded under the scoped strip). */
+  /* The Shift+C summon-key cap on the tally (EXC-792): the font-size lifts the C
+     off .kbd-sm's tiny 0.68em so it meets the shift icon (KbdCap size) closer to
+     one scale. Vertical placement is the toggle's align-items: center (above), so
+     the cap needs no align-self of its own. Rides the Kbd root (no scope hash →
+     :global, bounded under the scoped strip). */
   .status-strip :global(.comments-key) {
-    align-self: center;
+    font-size: 0.9em;
   }
   .num {
     font-weight: 600;
