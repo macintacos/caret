@@ -561,12 +561,12 @@
   // Held separately from searchQuery so a content switch (resetSearch) never clears it.
   let lastQuery = $state("");
   // While closing, the pill stays mounted playing its collapse-back-to-the-chip
-  // animation; a timer (matching --dur-base) then unmounts it. happy-dom fires no
+  // animation; a timer (matching --dur-fast) then unmounts it. happy-dom fires no
   // animationend, so a timer — not that event — drives the teardown.
   let searchClosing = $state(false);
   let closeTimer: ReturnType<typeof setTimeout> | undefined;
-  // Must match PlanSearch's search-collapse duration (--dur-base = 180ms).
-  const CLOSE_ANIM_MS = 180;
+  // Must match PlanSearch's search-collapse duration (--dur-fast = 120ms).
+  const CLOSE_ANIM_MS = 120;
   const searchMatches = $derived(
     searchQuery === "" ? [] : findMatches(linkLayer.text.split("\n"), searchQuery),
   );
@@ -790,7 +790,7 @@
   }
   // Dismiss the pill. Blur now so focus returns to the plan and the highlights/cursor
   // stay where they landed. When Show Hints is on there's a "/ to search" chip to
-  // collapse back into, so keep the pill mounted for one --dur-base playing its collapse
+  // collapse back into, so keep the pill mounted for one --dur-fast playing its collapse
   // animation, then unmount it (the chip reappears). With hints off there's no chip, so
   // close immediately. Clearing the query (in resetSearch) empties the match set, which
   // clears the highlights.

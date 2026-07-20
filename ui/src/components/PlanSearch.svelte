@@ -162,13 +162,14 @@
       transform: scale(1);
     }
   }
-  /* Closing reverses the expand: the pill collapses back toward the top-right chip
-     while DiffPlanView keeps it mounted for one --dur-base, then unmounts it and the
-     chip reappears. `forwards` holds the shrunk/faded end frame until that unmount so it
-     can't flash back to full size; exit easing (--ease-in) mirrors the enter --ease-out.
-     Higher specificity than the base rule, so this animation wins while closing. */
+  /* Closing reverses the expand, but quicker (--dur-fast, vs the open's --dur-base) for a
+     snappy dismiss: the pill collapses back toward the top-right chip while DiffPlanView
+     keeps it mounted for one --dur-fast, then unmounts it and the chip reappears.
+     `forwards` holds the shrunk/faded end frame until that unmount so it can't flash back
+     to full size; exit easing (--ease-in) mirrors the enter --ease-out. Higher
+     specificity than the base rule, so this animation wins while closing. */
   .plan-search.closing {
-    animation: search-collapse var(--dur-base) var(--ease-in) forwards;
+    animation: search-collapse var(--dur-fast) var(--ease-in) forwards;
   }
   @keyframes search-collapse {
     from {
