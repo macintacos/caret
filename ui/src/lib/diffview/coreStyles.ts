@@ -57,7 +57,7 @@ const CARET_OVERRIDES = `
   [data-utility-button]:hover { background-color: var(--accent-bright); }
   [data-utility-button]:focus-visible {
     background-color: var(--accent-bright);
-    outline: 2px solid var(--accent-bright);
+    outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
 
