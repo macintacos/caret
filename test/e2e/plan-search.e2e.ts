@@ -1,10 +1,12 @@
 // Vim-style `/` search over the plan text (EXC-832). Opening the pill, live match
 // highlighting (painted via the CSS Custom Highlight API, which can't run in
 // happy-dom), Enter-commit moving the line cursor, n/N cycling with wrap, smartcase,
-// and Esc-to-dismiss are all real-browser keyboard/highlight behavior, so they live
-// here rather than in a unit (browser-testing.md). Every action is a REAL keystroke;
-// line numbers are read from the DOM (the plan is reflowed on ingest), never
-// hardcoded. waitPastSafeModeGrace is mandatory before the first keystroke.
+// Esc-to-dismiss, remembering the last committed query (reopening prefilled/selected),
+// resuming a closed search with n/N from the cursor, and the "/ to search" discovery
+// hint chip are all real-browser keyboard/highlight behavior, so they live here rather
+// than in a unit (browser-testing.md). Every action is a REAL keystroke; line numbers
+// are read from the DOM (the plan is reflowed on ingest), never hardcoded.
+// waitPastSafeModeGrace is mandatory before the first keystroke.
 
 import type { Page } from "@playwright/test";
 
@@ -97,11 +99,13 @@ test("Enter commits: the cursor lands on a match and the pill persists as a HUD"
   await page.keyboard.press("Enter");
 
   // The line cursor lands on a row containing the query; the pill stays as a HUD and
-  // focus returns to the plan (the field is blurred so n/N fire globally).
+  // focus returns to the plan (the field is blurred so n/N fire globally). The field is
+  // read-only in the committed HUD so a click can't desync the counter (re-edit via /).
   await expect(cursor(page)).toHaveCount(1);
   expect(((await cursor(page).textContent()) ?? "").toLowerCase()).toContain("widget");
   await expect(pill(page)).toBeVisible();
   await expect(field(page)).not.toBeFocused();
+  await expect(field(page)).toHaveJSProperty("readOnly", true);
 });
 
 test("n / N cycle matches, wrapping back to the start after a full loop", async ({
@@ -131,7 +135,7 @@ test("n / N cycle matches, wrapping back to the start after a full loop", async 
   await expect(cursor(page)).toHaveAttribute("data-line", String(start));
 });
 
-test("/ over a committed search reopens a fresh, focused, empty query", async ({
+test("/ reopens the previous committed search, prefilled and selected", async ({
   daemon,
   page,
 }) => {
@@ -144,11 +148,86 @@ test("/ over a committed search reopens a fresh, focused, empty query", async ({
   await page.keyboard.press("Enter");
   await expect(field(page)).not.toBeFocused();
 
-  // The vim reflex: / after a commit starts a fresh, focused, empty search — never a
-  // dead unfocused HUD (n/N disabled and the field unfocused).
+  // Committing remembers the query: reopening with / brings it back focused, prefilled
+  // with "widget", and with the whole value selected so typing replaces it (like a
+  // browser find). Escaping (never committing) does NOT remember — see smartcase below.
   await page.keyboard.press("/");
   await expect(field(page)).toBeFocused();
-  await expect(field(page)).toHaveValue("");
+  await expect(field(page)).toHaveValue("widget");
+  await expect(field(page)).toHaveJSProperty("readOnly", false);
+  const selection = await field(page).evaluate((el: HTMLInputElement) => [
+    el.selectionStart,
+    el.selectionEnd,
+  ]);
+  expect(selection).toEqual([0, "widget".length]);
+});
+
+test("n resumes a closed search from the cursor, reopening the pill as a HUD", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: PLAN });
+  await page.goto("/");
+  await loadPlan(page);
+
+  // Commit a search, then Esc to dismiss the pill entirely.
+  await page.keyboard.press("/");
+  await page.keyboard.type("widget");
+  await expect.poll(async () => (await counter(page)).total).toBeGreaterThan(1);
+  await page.keyboard.press("Enter");
+  await expect(cursor(page)).toHaveCount(1);
+  const committed = await cursorLine(page);
+  await page.keyboard.press("Escape");
+  await expect(pill(page)).toHaveCount(0);
+  await expect.poll(async () => (await highlightSizes(page)).all).toBe(0);
+
+  // With the pill closed, n resumes the remembered search: the pill returns as a HUD
+  // (field NOT refocused, so bare keys keep flowing), the highlights repaint, and the
+  // cursor advances to the next match from where it sat.
+  await page.keyboard.press("n");
+  await expect(pill(page)).toBeVisible();
+  await expect(field(page)).not.toBeFocused();
+  await expect(cursor(page)).toHaveCount(1);
+  await expect(cursor(page)).not.toHaveAttribute("data-line", String(committed));
+  await expect.poll(async () => (await highlightSizes(page)).current).toBe(1);
+});
+
+test("the '/ to search' hint shows with hints on, and / swaps it for the pill", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: PLAN });
+  await page.goto("/");
+  await loadPlan(page);
+
+  // Show Hints is on by default: the discovery chip sits in the dock, naming the key.
+  const hint = page.locator(".search-hint");
+  await expect(hint).toBeVisible();
+  await expect(hint).toContainText("/");
+  await expect(hint).toContainText("to search");
+  await expect(pill(page)).toHaveCount(0);
+
+  // Pressing / swaps the chip for the search pill; Esc swaps it back.
+  await page.keyboard.press("/");
+  await expect(pill(page)).toBeVisible();
+  await expect(hint).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(pill(page)).toHaveCount(0);
+  await expect(hint).toBeVisible();
+});
+
+test("the hint is hidden when Show Hints is off, but / still opens search", async ({
+  daemon,
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem("caret.shortcutHints", "off"));
+  await daemon.seed({ plan: PLAN });
+  await page.goto("/");
+  await loadPlan(page);
+
+  await expect(page.locator(".search-hint")).toHaveCount(0);
+  await page.keyboard.press("/");
+  await expect(pill(page)).toBeVisible();
 });
 
 test("smartcase: an uppercase letter narrows the match set", async ({ daemon, page }) => {

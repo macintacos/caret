@@ -54,7 +54,12 @@
   import type { SourceViewApi, SourceViewOptions } from "$lib/diffview/types.ts";
   import { CANONICAL_KEYMAP, defaultIsEditingContext, shortcuts } from "$lib/shortcuts/index.ts";
   import { type CursorMotion, resolveCursorLine } from "$lib/diffview/lineCursor.ts";
-  import { findMatches, nearestMatchIndex, stepIndex } from "$lib/diffview/planSearch.ts";
+  import {
+    findMatches,
+    matchStepFromLine,
+    nearestMatchIndex,
+    stepIndex,
+  } from "$lib/diffview/planSearch.ts";
   import { activeHeadingLine, extractHeadings, lineForSlug, shouldShowToc, slugForLine } from "$lib/toc.ts";
   import { NARROW_WIDTH_PX, TIGHT_WIDTH_PX } from "$lib/layout.ts";
   import { readTocOpen, writeTocOpen } from "$lib/tocPref.ts";
@@ -551,19 +556,23 @@
   let searchCommitted = $state(false);
   let searchQuery = $state("");
   let searchIndex = $state(-1);
+  // The last COMMITTED (Enter) query, remembered for the session so `/` reopens with
+  // it prefilled (EXC-832 follow-up) and n/N can resume it while the pill is closed.
+  // Held separately from searchQuery so a content switch (resetSearch) never clears it.
+  let lastQuery = $state("");
   const searchMatches = $derived(
     searchQuery === "" ? [] : findMatches(linkLayer.text.split("\n"), searchQuery),
   );
 
   // Re-track the current match to the nearest one at the reading position whenever the
-  // QUERY changes — while typing, and when the field is edited after a commit — so the
-  // counter and the strong highlight follow the query live. The cursor / reading
-  // position is read UNTRACKED so this re-runs only on a query change (searchMatches
-  // gets a new reference), never when n/N move the cursor: same query → same matches
-  // reference → this stays put and the stepped index survives.
+  // QUERY changes while the field is being edited (search open, not yet committed) — so
+  // the counter and the strong highlight follow the query live as you type or reopen.
+  // Gated on !searchCommitted so a resume seed (n/N with the pill closed sets the query
+  // AND commits) is not clobbered back to "nearest"; the cursor / reading position is
+  // read UNTRACKED so a same-query n/N step (same matches reference) never re-runs this.
   $effect(() => {
     const matches = searchMatches;
-    if (!searchOpen) return;
+    if (!searchOpen || searchCommitted) return;
     searchIndex = untrack(() => nearestMatchIndex(matches, cursorLine ?? topVisibleLine() ?? 1));
   });
 
@@ -735,17 +744,23 @@
   }
 
   // ----- Plan search actions (EXC-832) -----
-  // `/` opens a fresh, empty search focused ready to type (the vim reflex). On the
-  // FIRST open the pill isn't mounted yet, so this focus is a no-op and PlanSearch's
-  // own mount-focus lands the caret; on a REOPEN over a committed HUD the pill is
-  // already mounted (mount-focus won't re-fire), so focusing here is what keeps `/`
-  // after a commit from stranding the user in an unfocused, un-committed HUD.
+  // `/` opens the search prefilled with the last committed query and its text
+  // selected, so it comes right back where you left it, yet typing immediately
+  // replaces it (like browser find). On the FIRST open the pill isn't mounted yet, so
+  // this focus/select is a no-op and PlanSearch's own mount step lands the caret and
+  // selection; on a REOPEN over a committed HUD the pill is already mounted (its mount
+  // step won't re-fire), so focusing/selecting here is what brings the field forward.
+  function focusSearchField(): void {
+    const el = document.querySelector<HTMLInputElement>("input[aria-label='Search plan']");
+    el?.focus();
+    el?.select();
+  }
   function openSearch(): void {
     searchOpen = true;
     searchCommitted = false;
-    searchQuery = "";
+    searchQuery = lastQuery;
     searchIndex = -1;
-    document.querySelector<HTMLInputElement>("input[aria-label='Search plan']")?.focus();
+    focusSearchField();
   }
   // Reset the search state without touching focus — used on a content switch.
   function resetSearch(): void {
@@ -768,17 +783,31 @@
     cursorLine = m.line;
     api?.followCursorLine(m.line);
   }
-  // Enter commits: land the cursor on the nearest match, keep the pill as a HUD, and
-  // blur the field so bare n/N/Esc fire globally. No matches → nothing to commit.
+  // Enter commits: remember the query for the session (so `/` reopens it and n/N can
+  // resume it), land the cursor on the nearest match, keep the pill as a HUD, and blur
+  // the field so bare n/N/Esc fire globally. No matches → nothing to commit.
   function commitSearch(): void {
     if (searchMatches.length === 0) return;
+    lastQuery = searchQuery;
     searchIndex = nearestMatchIndex(searchMatches, cursorLine ?? topVisibleLine() ?? 1);
     revealMatch();
     searchCommitted = true;
     (document.activeElement as HTMLElement | null)?.blur();
   }
-  // n / N step through matches with wrap, moving the cursor to each.
+  // n / N. While a search is up (typing or committed HUD) they step the current index
+  // with wrap. With the pill CLOSED but a remembered query, they RESUME it: restore the
+  // query, re-show the pill as a committed HUD, and seed the match from the cursor's
+  // reading position (matchStepFromLine — next/previous relative to where you are).
   function stepSearch(delta: number): void {
+    if (!searchOpen) {
+      if (lastQuery === "") return;
+      searchQuery = lastQuery;
+      searchOpen = true;
+      searchCommitted = true;
+      searchIndex = matchStepFromLine(searchMatches, cursorLine ?? topVisibleLine() ?? 1, delta);
+      revealMatch();
+      return;
+    }
     if (searchMatches.length === 0) return;
     searchIndex = stepIndex(searchMatches.length, searchIndex, delta);
     revealMatch();
@@ -916,15 +945,18 @@
         }),
       );
     }
-    // n / N cycle matches, live only while a search is committed — the field is
-    // blurred then, so these bare keys reach the global dispatcher.
+    // n / N cycle matches, live while a search is committed (the field is blurred
+    // then, so these bare keys reach the global dispatcher) OR when a remembered query
+    // exists so they can RESUME a closed search from the cursor. Single-version only,
+    // and never while an editor is focused.
     const searchNext = reserved.get("actions.searchNext");
     if (searchNext != null) {
       offs.push(
         shortcuts.register({
           ...searchNext,
           run: () => stepSearch(1),
-          enabled: () => searchCommitted && !defaultIsEditingContext(),
+          enabled: () =>
+            !showDiff && !defaultIsEditingContext() && (searchCommitted || lastQuery !== ""),
         }),
       );
     }
@@ -934,7 +966,8 @@
         shortcuts.register({
           ...searchPrev,
           run: () => stepSearch(-1),
-          enabled: () => searchCommitted && !defaultIsEditingContext(),
+          enabled: () =>
+            !showDiff && !defaultIsEditingContext() && (searchCommitted || lastQuery !== ""),
         }),
       );
     }
@@ -1196,20 +1229,31 @@
 </div>
 
 <div class="diff-surface">
-  <!-- The vim `/` search HUD (EXC-832), docked top-right of the plan (single-version
-       only). Absolutely positioned within .diff-surface so it stays put over the
-       scrolling plan rather than scrolling with it. -->
-  {#if searchOpen && !showDiff}
+  <!-- The vim `/` search dock (EXC-832), top-right of the plan (single-version only).
+       Absolutely positioned within .diff-surface so it stays put over the scrolling
+       plan. Holds either the "/ to search" hint chip (Show Hints on) or the open search
+       pill; pressing `/` swaps the chip for the pill, which expands from this same
+       top-right corner (its CSS enter animation), reading as the chip growing into the
+       field. Esc/✕ swaps back to the chip. -->
+  {#if !showDiff}
     <div class="search-dock">
-      <PlanSearch
-        bind:query={searchQuery}
-        matchCount={searchMatches.length}
-        currentIndex={searchIndex}
-        oncommit={commitSearch}
-        onnext={() => stepSearch(1)}
-        onprev={() => stepSearch(-1)}
-        onclose={closeSearch}
-      />
+      {#if searchOpen}
+        <PlanSearch
+          bind:query={searchQuery}
+          matchCount={searchMatches.length}
+          currentIndex={searchIndex}
+          committed={searchCommitted}
+          oncommit={commitSearch}
+          onnext={() => stepSearch(1)}
+          onprev={() => stepSearch(-1)}
+          onclose={closeSearch}
+        />
+      {:else if showShortcutHints}
+        <div class="search-hint" role="note">
+          <Kbd class="kbd-sm">/</Kbd>
+          <span>to search</span>
+        </div>
+      {/if}
     </div>
   {/if}
   <!-- The contents pane and gutter composer are the single-version surface only.
@@ -1491,14 +1535,41 @@
     position: relative;
   }
 
-  /* The search pill's dock: pinned to the top-right of the plan area, clear of the
-     scrollbar, above the plan's own sticky rails (drag readout/hints are z-index 3).
-     It sits outside the .diff-plan scroller so it never scrolls with the content. */
+  /* The search dock: pinned to the top-right of the plan area, clear of the scrollbar,
+     above the plan's own sticky rails (drag readout/hints are z-index 3). It sits
+     outside the .diff-plan scroller so it never scrolls with the content. Right-anchored
+     so the hint chip and the (wider) search pill grow from the same corner. */
   .search-dock {
     position: absolute;
     top: 0.5rem;
     right: 0.85rem;
     z-index: 4;
+  }
+
+  /* The "/ to search" discovery chip (EXC-832): the collapsed state of the search pill,
+     wearing the same float-chip surface so `/` reads as expanding this chip into the
+     field. Shown only with the Show Hints setting on; fades in on mount. */
+  .search-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.6rem;
+    background: color-mix(in lab, var(--paper-raised), transparent 6%);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    color: var(--ink-soft);
+    font-size: var(--text-sm);
+    white-space: nowrap;
+    user-select: none;
+    animation: search-hint-in var(--dur-fast) var(--ease-out);
+  }
+  @keyframes search-hint-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 
   /* The ToC rail lane (EXC-809). A fixed 15rem flex lane whose width animates to 0

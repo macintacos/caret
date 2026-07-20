@@ -55,6 +55,26 @@ export function nearestMatchIndex(matches: SearchMatch[], fromLine: number): num
 }
 
 /**
+ * The match to step to from a cursor `fromLine` when RESUMING a remembered search
+ * with n/N (the pill closed, so there is no live index to step from — the current
+ * reading position is the seed instead). `delta > 0` (n) picks the first match
+ * strictly after `fromLine`, wrapping to the first; `delta < 0` (N) picks the last
+ * match strictly before it, wrapping to the last. Strict (not "at or after") so a
+ * cursor sitting on a match steps to the adjacent one, as vim's n/N do. Returns -1
+ * with no matches. Line-granular: multiple matches on the cursor's own line are
+ * skipped on this first step (the cursor is line-based), then n/N step within-line.
+ */
+export function matchStepFromLine(matches: SearchMatch[], fromLine: number, delta: number): number {
+  if (matches.length === 0) return -1;
+  if (delta >= 0) {
+    const at = matches.findIndex((m) => m.line > fromLine);
+    return at === -1 ? 0 : at;
+  }
+  const at = matches.findLastIndex((m) => m.line < fromLine);
+  return at === -1 ? matches.length - 1 : at;
+}
+
+/**
  * Step `index` by `delta` (n = +1, N = -1) with wraparound over `count` items.
  * Returns -1 for an empty set.
  */

@@ -1,7 +1,12 @@
 import "../../../test-setup.ts";
 import { describe, expect, test } from "bun:test";
 
-import { findMatches, nearestMatchIndex, stepIndex } from "$lib/diffview/planSearch.ts";
+import {
+  findMatches,
+  matchStepFromLine,
+  nearestMatchIndex,
+  stepIndex,
+} from "$lib/diffview/planSearch.ts";
 
 describe("findMatches", () => {
   test("empty query yields no matches", () => {
@@ -64,6 +69,41 @@ describe("nearestMatchIndex", () => {
 
   test("returns -1 with no matches", () => {
     expect(nearestMatchIndex([], 1)).toBe(-1);
+  });
+});
+
+describe("matchStepFromLine", () => {
+  const matches = [
+    { line: 2, startCol: 0, endCol: 1 },
+    { line: 5, startCol: 0, endCol: 1 },
+    { line: 9, startCol: 0, endCol: 1 },
+  ];
+
+  test("n (delta +1): the first match strictly after the line", () => {
+    expect(matchStepFromLine(matches, 3, 1)).toBe(1); // 5 is the next
+    expect(matchStepFromLine(matches, 5, 1)).toBe(2); // on a match → step to 9
+    expect(matchStepFromLine(matches, 1, 1)).toBe(0);
+  });
+
+  test("n wraps to the first match when none follow", () => {
+    expect(matchStepFromLine(matches, 9, 1)).toBe(0);
+    expect(matchStepFromLine(matches, 10, 1)).toBe(0);
+  });
+
+  test("N (delta -1): the last match strictly before the line", () => {
+    expect(matchStepFromLine(matches, 6, -1)).toBe(1); // 5 is the previous
+    expect(matchStepFromLine(matches, 5, -1)).toBe(0); // on a match → step to 2
+    expect(matchStepFromLine(matches, 10, -1)).toBe(2);
+  });
+
+  test("N wraps to the last match when none precede", () => {
+    expect(matchStepFromLine(matches, 2, -1)).toBe(2);
+    expect(matchStepFromLine(matches, 1, -1)).toBe(2);
+  });
+
+  test("returns -1 with no matches", () => {
+    expect(matchStepFromLine([], 1, 1)).toBe(-1);
+    expect(matchStepFromLine([], 1, -1)).toBe(-1);
   });
 });
 

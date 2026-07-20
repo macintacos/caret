@@ -6,6 +6,7 @@
   // stays visible underneath. The pill renders only the surface; DiffPlanView owns
   // the search state, the highlight, and the cursor/commit behaviour, reaching them
   // through these callbacks.
+  import { untrack } from "svelte";
   import Icon from "@/components/Icon.svelte";
   import { Input } from "$lib/components/ui/input/index.js";
 
@@ -17,6 +18,12 @@
     matchCount: number;
     /** 0-based index of the current (active) match, or -1 when there is none. */
     currentIndex: number;
+    /** Whether the search is committed — the pill is a passive HUD, not being edited.
+     * Drives two things: the field is read-only (a click can't then desync the counter
+     * from a stale index; re-edit is via `/`, which sets this false), and the pill does
+     * NOT grab focus on mount — an n/N resume reopens as a blurred HUD so bare n/N keep
+     * reaching the global dispatcher, while `/` open/reopen lets the parent focus it. */
+    committed?: boolean;
     /** Commit the search (Enter): the parent moves the line cursor to the nearest
      * match and returns focus to the plan, keeping this pill as a HUD. */
     oncommit: () => void;
@@ -32,6 +39,7 @@
     query = $bindable(),
     matchCount,
     currentIndex,
+    committed = false,
     oncommit,
     onnext,
     onprev,
@@ -55,10 +63,16 @@
     }
   }
 
-  // `/` opens the pill ready to type: focus the field once it mounts.
+  // `/` opens the pill ready to type: focus the field once it mounts and select any
+  // prefilled query (the remembered last search), so typing replaces it like browser
+  // find. select() is a no-op on an empty field (a fresh, never-run search). Skipped when
+  // the pill opens committed (an n/N resume), where it returns as a blurred HUD.
+  // `committed` is read UNTRACKED so this stays a mount-once effect keyed on `field`.
   let field = $state<HTMLInputElement | null>(null);
   $effect(() => {
+    if (untrack(() => committed)) return;
     field?.focus();
+    field?.select();
   });
 </script>
 
@@ -74,6 +88,7 @@
       aria-label="Search plan"
       autocomplete="off"
       spellcheck="false"
+      readonly={committed}
       onkeydown={onKeydown}
     />
     <button
@@ -118,8 +133,9 @@
      plan reads faintly through it — a HUD, not a modal), lifted with the shared card
      shadow and the larger chip radius. The controls row sits on top; the
      current-of-total counter sits below it, right-aligned to the pill's edge, so a
-     changing total never reflows the row's width. Enters with the same quick slide the
-     drag-readout uses; the global #app reduced-motion guard zeroes it. */
+     changing total never reflows the row's width. On open it expands from the top-right
+     corner — where the "/ to search" chip sat (DiffPlanView's dock) — so `/` reads as
+     the chip growing into the field; the global #app reduced-motion guard zeroes it. */
   .plan-search {
     display: inline-flex;
     flex-direction: column;
@@ -128,7 +144,18 @@
     background: color-mix(in lab, var(--paper-raised), transparent 6%);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
-    animation: search-in var(--dur-fast) var(--ease-out);
+    transform-origin: top right;
+    animation: search-expand var(--dur-base) var(--ease-out);
+  }
+  @keyframes search-expand {
+    from {
+      opacity: 0;
+      transform: scale(0.92);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
   }
 
   /* The controls row: the leading glyph, the field, then the step / close chips. */
@@ -212,16 +239,5 @@
   .chev-up {
     display: inline-flex;
     transform: rotate(180deg);
-  }
-
-  @keyframes search-in {
-    from {
-      opacity: 0;
-      transform: translateY(-3px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
   }
 </style>
