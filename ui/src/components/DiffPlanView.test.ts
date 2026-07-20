@@ -4,6 +4,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import type { ClientReview, PlanVersion } from "@core/lib/types";
 import DiffPlanView from "@/components/DiffPlanView.svelte";
 import { type ComposerScratch, scratchKey } from "$lib/diffview/commenting.ts";
+import { shortcuts } from "$lib/shortcuts/index.ts";
 
 import { until } from "../../../test/support/poll.ts";
 import { logCapture } from "../../test-helpers.ts";
@@ -532,5 +533,49 @@ describe("DiffPlanView scratch rehydration", () => {
     expect(reported).toEqual([
       { key: scratchKey(3, 3), startLine: 3, endLine: 3, text: "live scratch" },
     ]);
+  });
+});
+
+describe("DiffPlanView plan search (EXC-832)", () => {
+  // The registered `/` entry opens the pill; the dispatcher (App.svelte-wired) is
+  // not mounted here, so drive the action directly off the registry, the same way
+  // the real keydown path would. The highlight paint + cursor jump are real-browser
+  // behavior covered by the e2e; here we assert the light-DOM wiring: the pill
+  // opens, the query drives the counter, and closing removes it.
+  async function openSearch(target: HTMLElement) {
+    await until(() => shortcuts.list().some((e) => e.id === "actions.search"));
+    shortcuts
+      .list()
+      .find((e) => e.id === "actions.search")
+      ?.run?.();
+    await until(() => target.querySelector(".plan-search") != null);
+  }
+
+  test("/ owns search, and the focus-filter binding is gone", async () => {
+    const { target } = render(DiffPlanView, props());
+    await openSearch(target);
+    expect(target.querySelector(".plan-search")).not.toBeNull();
+    expect(shortcuts.list().some((e) => e.id === "actions.focusFilter")).toBe(false);
+  });
+
+  test("typing a query drives the match counter", async () => {
+    const review = reviewFixture({ currentPlan: "# Title\n\nalpha beta alpha\n\nalpha gamma\n" });
+    const { target } = render(DiffPlanView, props({ review }));
+    await openSearch(target);
+    const field = target.querySelector<HTMLInputElement>("input[aria-label='Search plan']")!;
+    field.value = "alpha";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    const counted = await until(
+      () => target.querySelector(".search-count")?.textContent?.replace(/\s+/g, "") === "1/3",
+    );
+    expect(counted).toBe(true);
+  });
+
+  test("closing the pill removes it", async () => {
+    const { target } = render(DiffPlanView, props());
+    await openSearch(target);
+    target.querySelector<HTMLButtonElement>("[aria-label='Close search']")?.click();
+    const gone = await until(() => target.querySelector(".plan-search") == null);
+    expect(gone).toBe(true);
   });
 });

@@ -61,6 +61,35 @@ describe("CANONICAL_KEYMAP", () => {
     expect(keyCaps(visual.keys)).toEqual([["shift", "V"]]);
     expect(keyCaps(bottom.keys)).toEqual([["shift", "G"]]);
   });
+
+  test("owns / for plan search (EXC-832), repointed from the ToC filter", () => {
+    // EXC-832 repurposes / from "focus contents filter" (EXC-789) to a vim-style
+    // full-text search of the plan; the focus-filter binding is gone, and the ToC
+    // filter keeps no keybinding for now (parks EXC-793).
+    const search = CANONICAL_KEYMAP.find((e) => e.id === "actions.search");
+    if (!search) throw new Error("actions.search missing");
+    expect(search.group).toBe("actions");
+    expect(search.label).toBe("Search plan");
+    expect(specSignature(search.keys)).toBe("/");
+    expect(CANONICAL_KEYMAP.some((e) => e.id === "actions.focusFilter")).toBe(false);
+  });
+
+  test("reserves n / N to cycle search matches (EXC-832)", () => {
+    // n / N step to the next / previous match once a search is committed. n derives
+    // its bare capital cap from its case; N is a bare shifted key (shift + capital),
+    // the same shape as V/G.
+    const next = CANONICAL_KEYMAP.find((e) => e.id === "actions.searchNext");
+    const prev = CANONICAL_KEYMAP.find((e) => e.id === "actions.searchPrev");
+    if (!next || !prev) throw new Error("search n/N keymap entries missing");
+    expect(next.group).toBe("actions");
+    expect(prev.group).toBe("actions");
+    expect(next.label).toBe("Next match");
+    expect(prev.label).toBe("Previous match");
+    expect(specSignature(next.keys)).toBe("n");
+    expect(specSignature(prev.keys)).toBe("N");
+    expect(keyCaps(next.keys)).toEqual([["N"]]);
+    expect(keyCaps(prev.keys)).toEqual([["shift", "N"]]);
+  });
 });
 
 describe("EDITOR_SHORTCUTS", () => {

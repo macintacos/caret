@@ -14,6 +14,8 @@
   import { type SourceViewGutter, type SourceViewLibOptions, toFileOptions } from "$lib/diffview/options.ts";
   import { followCursorLine, scrollToLine } from "$lib/diffview/scroll.ts";
   import { tagCursorRow } from "$lib/diffview/lineCursor.ts";
+  import { clearSearchHighlights, paintSearchHighlights } from "$lib/diffview/searchHighlight.ts";
+  import type { SearchMatch } from "$lib/diffview/planSearch.ts";
   import { type CodeBlockRange, codeBlockRanges, tagCodeBlockRows } from "$lib/diffview/codeBlocks.ts";
   import { syncCodeBlockCards } from "$lib/diffview/codeBlockScroll.ts";
   import { preloadFenceLanguages, scanFenceLanguages } from "$lib/diffview/languages.ts";
@@ -87,6 +89,13 @@
      * clears it. Distinct from selectedRange: the cursor is a persistent, neutral
      * focus marker, not the amber composer selection. */
     cursorLine?: number | null;
+    /** The vim `/` search matches to highlight (EXC-832): 0-based-column spans over
+     * the rendered source, painted via the CSS Custom Highlight API in the repaint
+     * pass. Empty or omitted clears the highlights. */
+    searchMatches?: SearchMatch[];
+    /** Index of the current (active) match within `searchMatches` — painted with the
+     * strong highlight while the others get the dim underlay. -1 (default) = none. */
+    currentMatchIndex?: number;
   }
 
   let {
@@ -106,6 +115,8 @@
     onLineRangePreview,
     selectedRange = null,
     cursorLine = null,
+    searchMatches,
+    currentMatchIndex = -1,
   }: Props = $props();
 
   // The container div is component markup, so the instance must not remove
@@ -335,6 +346,24 @@
     tagCursorRow(container?.shadowRoot ?? null, cursorLine);
   });
 
+  // The vim `/` search highlights (EXC-832), the same non-reactive-mirror pattern as
+  // the cursor above: this reactive effect paints on every match/index change, and
+  // the repaint observer's tag() re-applies from the mirror after a library row
+  // rewrite — without re-arming this effect (or the observer) on each keystroke.
+  // paintSearchHighlights clears-then-sets internally, so this stays self-cleaning.
+  let searchMirror: SearchMatch[] = [];
+  let searchIndexMirror = -1;
+  $effect(() => {
+    searchMirror = searchMatches ?? [];
+    searchIndexMirror = currentMatchIndex;
+    const root = container?.shadowRoot;
+    if (root != null) paintSearchHighlights(root, searchMirror, searchIndexMirror);
+  });
+
+  // Clear the document-global search highlights when this view unmounts (compare
+  // toggle, review switch) so they don't linger over a torn-down shadow root.
+  $effect(() => () => clearSearchHighlights());
+
   // A stable empty map for the "no file references" case, so the tagging pass
   // still clears any prior icons without allocating each repaint.
   const EMPTY_FILE_REFS: FileRefSpanMap = new Map();
@@ -362,6 +391,9 @@
       // Re-apply the cursor tag after a repaint from the non-reactive mirror
       // (the reactive effect above owns applying a move).
       tagCursorRow(root, cursorMirror);
+      // Re-paint the search highlights too: the CSS Custom Highlight ranges point at
+      // the old rows the repaint just replaced, so rebuild them against the fresh DOM.
+      paintSearchHighlights(root, searchMirror, searchIndexMirror);
     };
     const schedule = () => {
       cancelAnimationFrame(raf);
