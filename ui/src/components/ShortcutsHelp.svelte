@@ -94,7 +94,9 @@
         bind:value={query}
         bind:ref={searchInput}
       />
-      <Kbd class="help-search-hint">/</Kbd>
+      <!-- Decorative hint only; the field's aria-label already names it, so hide
+           the lone "/" glyph from screen readers. -->
+      <Kbd class="help-search-hint" aria-hidden="true">/</Kbd>
     </div>
 
     {#if groups.length === 0}
