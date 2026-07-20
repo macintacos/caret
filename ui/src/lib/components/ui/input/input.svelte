@@ -31,7 +31,7 @@
 			"rounded-md border border-input bg-transparent dark:bg-input/30 shadow-xs",
 			// Spacing + type
 			"px-3 pt-1.5 text-sm font-medium",
-			// Selection + placeholder
+			// Selection, placeholder + ring offset
 			"selection:bg-primary selection:text-primary-foreground placeholder:text-muted-foreground ring-offset-background",
 			// Motion
 			"transition-[color,box-shadow] outline-none",
@@ -59,7 +59,7 @@
 			"rounded-md border border-input bg-background dark:bg-input/30 shadow-xs",
 			// Spacing + type
 			"px-3 py-1 text-base md:text-sm",
-			// Selection + placeholder
+			// Selection, placeholder + ring offset
 			"selection:bg-primary selection:text-primary-foreground placeholder:text-muted-foreground ring-offset-background",
 			// Motion
 			"transition-[color,box-shadow] outline-none",
