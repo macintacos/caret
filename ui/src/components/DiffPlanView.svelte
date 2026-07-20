@@ -49,10 +49,12 @@
   import { type CompareStore, createCompare } from "@/state/compare.svelte.ts";
   import { setHeadingSlug, takeHeadingSlug } from "@/state/headingLink.ts";
   import VersionComparePicker from "@/components/VersionComparePicker.svelte";
+  import PlanSearch from "@/components/PlanSearch.svelte";
   import type { SourceViewGutter } from "$lib/diffview/options.ts";
   import type { SourceViewApi, SourceViewOptions } from "$lib/diffview/types.ts";
   import { CANONICAL_KEYMAP, defaultIsEditingContext, shortcuts } from "$lib/shortcuts/index.ts";
   import { type CursorMotion, resolveCursorLine } from "$lib/diffview/lineCursor.ts";
+  import { findMatches, nearestMatchIndex, stepIndex } from "$lib/diffview/planSearch.ts";
   import { activeHeadingLine, extractHeadings, lineForSlug, shouldShowToc, slugForLine } from "$lib/toc.ts";
   import { NARROW_WIDTH_PX, TIGHT_WIDTH_PX } from "$lib/layout.ts";
   import { readTocOpen, writeTocOpen } from "$lib/tocPref.ts";
@@ -540,15 +542,38 @@
       : undefined,
   );
 
+  // ----- Plan search (/) (EXC-832) -----
+  // The vim `/` full-text search of the plan content: the pill's open/committed
+  // state, the live query, and the derived match set + current index. Matches are
+  // computed over the SAME rendered text the cursor uses (linkLayer.text), so a
+  // match's line maps straight onto the line cursor and its shadow-row highlight.
+  let searchOpen = $state(false);
+  let searchCommitted = $state(false);
+  let searchQuery = $state("");
+  let searchIndex = $state(-1);
+  const searchMatches = $derived(
+    searchQuery === "" ? [] : findMatches(linkLayer.text.split("\n"), searchQuery),
+  );
+
+  // While typing (open, not committed), keep the current match tracking the nearest
+  // one to the reading position, so the counter and the strong highlight follow the
+  // query live. Once committed, n/N own the index and this effect stands down.
+  $effect(() => {
+    const matches = searchMatches;
+    if (!searchOpen || searchCommitted) return;
+    searchIndex = nearestMatchIndex(matches, cursorLine ?? topVisibleLine() ?? 1);
+  });
+
   // Drop the cursor (and any visual selection) when the rendered content changes (a
   // new version or a review switch) so a later motion never steps from a line that
   // belonged to the prior plan. contentKey short-circuits on an unchanged poll tick,
   // so this fires only on a real switch, not every 2s poll re-delivering the same
-  // version.
+  // version. A new version also invalidates the search, so reset it too.
   $effect(() => {
     void contentKey;
     cursorLine = null;
     visualAnchor = null;
+    resetSearch();
   });
 
   // Recompute the active heading from the source line at the top of the reading
@@ -693,12 +718,60 @@
     api?.followCursorLine(anchor);
   }
 
-  // Esc reconciliation (EXC-790, superseding EXC-788's motion.clearCursor): exit
-  // visual mode if active (keeping the cursor), otherwise clear the cursor. One
-  // handler, because the dispatcher fires only the first matching Escape entry.
+  // Esc reconciliation (EXC-790, superseding EXC-788's motion.clearCursor): close the
+  // search HUD if open (EXC-832), else exit visual mode if active (keeping the cursor),
+  // else clear the cursor. One handler, because the dispatcher fires only the first
+  // matching Escape entry — layering the three Esc meanings in priority order.
   function clearSelectionOrCursor(): void {
+    if (searchOpen) {
+      closeSearch();
+      return;
+    }
     if (visualAnchor != null) visualAnchor = null;
     else cursorLine = null;
+  }
+
+  // ----- Plan search actions (EXC-832) -----
+  // `/` opens the pill ready to type (PlanSearch focuses its own field on mount).
+  function openSearch(): void {
+    searchOpen = true;
+    searchCommitted = false;
+  }
+  // Reset the search state without touching focus — used on a content switch.
+  function resetSearch(): void {
+    searchOpen = false;
+    searchCommitted = false;
+    searchQuery = "";
+    searchIndex = -1;
+  }
+  // Dismiss the pill: clearing the query empties the match set (which clears the
+  // highlights), the cursor stays where it landed, and blurring the field returns
+  // focus to the plan.
+  function closeSearch(): void {
+    resetSearch();
+    (document.activeElement as HTMLElement | null)?.blur();
+  }
+  // Move the line cursor to the match at searchIndex and scroll it into view.
+  function revealMatch(): void {
+    const m = searchMatches[searchIndex];
+    if (m == null) return;
+    cursorLine = m.line;
+    api?.followCursorLine(m.line);
+  }
+  // Enter commits: land the cursor on the nearest match, keep the pill as a HUD, and
+  // blur the field so bare n/N/Esc fire globally. No matches → nothing to commit.
+  function commitSearch(): void {
+    if (searchMatches.length === 0) return;
+    searchIndex = nearestMatchIndex(searchMatches, cursorLine ?? topVisibleLine() ?? 1);
+    revealMatch();
+    searchCommitted = true;
+    (document.activeElement as HTMLElement | null)?.blur();
+  }
+  // n / N step through matches with wrap, moving the cursor to each.
+  function stepSearch(delta: number): void {
+    if (searchMatches.length === 0) return;
+    searchIndex = stepIndex(searchMatches.length, searchIndex, delta);
+    revealMatch();
   }
 
   // Register the live motion + commenting shortcuts while the single-version view is
@@ -758,7 +831,7 @@
         shortcuts.register({
           ...clearBase,
           run: clearSelectionOrCursor,
-          enabled: () => cursorLine != null,
+          enabled: () => searchOpen || cursorLine != null,
         }),
       );
     }
@@ -801,13 +874,13 @@
     writeTocOpen(tocPref);
   }
 
-  // The compare-toggle + contents-filter shortcuts (EXC-789), live entries over
-  // EXC-786's reservations. Registered while the single-version view is mounted
-  // (i.e. an active review), so they no-op with no review; the enabled guards
-  // mirror each control's own availability — `d` toggles compare only when there
-  // are versions to compare, `/` focuses the filter only when the ToC is shown.
-  // Mount-once: the closures read compareStore/showDiff/hasToc live at dispatch,
-  // so a version or view change never churns the registry.
+  // The compare-toggle + plan-search shortcuts, live entries over EXC-786's
+  // reservations. Registered while the single-version view is mounted (i.e. an active
+  // review), so they no-op with no review; the enabled guards mirror each control's
+  // own availability — `d` toggles compare only when there are versions to compare,
+  // `/` opens search only in the single-version plan view, and n/N cycle only while a
+  // search is committed. Mount-once: the closures read compareStore/showDiff/search*
+  // live at dispatch, so a version or view change never churns the registry.
   $effect(() => {
     const reserved = new Map(CANONICAL_KEYMAP.map((e) => [e.id, e] as const));
     const offs: Array<() => void> = [];
@@ -821,20 +894,37 @@
         }),
       );
     }
-    const focusFilter = reserved.get("actions.focusFilter");
-    if (focusFilter != null) {
+    // `/` opens the plan search (EXC-832), repurposed from EXC-789's focus-filter.
+    // Plan-content only; not gated on the ToC — search needs no rail.
+    const search = reserved.get("actions.search");
+    if (search != null) {
       offs.push(
         shortcuts.register({
-          ...focusFilter,
-          // Reveal the rail if the reviewer collapsed it, then focus the filter.
-          run: () => {
-            if (!tocShown) {
-              tocPref = true;
-              writeTocOpen(true);
-            }
-            document.querySelector<HTMLInputElement>("#plan-toc input.toc-filter")?.focus();
-          },
-          enabled: () => !showDiff && hasToc,
+          ...search,
+          run: openSearch,
+          enabled: () => !showDiff,
+        }),
+      );
+    }
+    // n / N cycle matches, live only while a search is committed — the field is
+    // blurred then, so these bare keys reach the global dispatcher.
+    const searchNext = reserved.get("actions.searchNext");
+    if (searchNext != null) {
+      offs.push(
+        shortcuts.register({
+          ...searchNext,
+          run: () => stepSearch(1),
+          enabled: () => searchCommitted && !defaultIsEditingContext(),
+        }),
+      );
+    }
+    const searchPrev = reserved.get("actions.searchPrev");
+    if (searchPrev != null) {
+      offs.push(
+        shortcuts.register({
+          ...searchPrev,
+          run: () => stepSearch(-1),
+          enabled: () => searchCommitted && !defaultIsEditingContext(),
         }),
       );
     }
@@ -1096,6 +1186,22 @@
 </div>
 
 <div class="diff-surface">
+  <!-- The vim `/` search HUD (EXC-832), docked top-right of the plan (single-version
+       only). Absolutely positioned within .diff-surface so it stays put over the
+       scrolling plan rather than scrolling with it. -->
+  {#if searchOpen && !showDiff}
+    <div class="search-dock">
+      <PlanSearch
+        bind:query={searchQuery}
+        matchCount={searchMatches.length}
+        currentIndex={searchIndex}
+        oncommit={commitSearch}
+        onnext={() => stepSearch(1)}
+        onprev={() => stepSearch(-1)}
+        onclose={closeSearch}
+      />
+    </div>
+  {/if}
   <!-- The contents pane and gutter composer are the single-version surface only.
        Compare mode is a clean diff with no ToC, no gutter, no annotations. -->
   {#if !showDiff && hasToc}
@@ -1160,6 +1266,8 @@
         }}
         selectedRange={pending ?? visualSelection ?? null}
         {cursorLine}
+        {searchMatches}
+        currentMatchIndex={searchIndex}
       />
       <!-- The comment-span bracket overlay: rounded gutter rails marking each
            comment's covered lines. It layers over the .diff-plan scroll content
@@ -1369,6 +1477,18 @@
     display: flex;
     min-height: 0;
     overflow: hidden;
+    /* Positioning context for the search dock (EXC-832), which floats over the plan. */
+    position: relative;
+  }
+
+  /* The search pill's dock: pinned to the top-right of the plan area, clear of the
+     scrollbar, above the plan's own sticky rails (drag readout/hints are z-index 3).
+     It sits outside the .diff-plan scroller so it never scrolls with the content. */
+  .search-dock {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.85rem;
+    z-index: 4;
   }
 
   /* The ToC rail lane (EXC-809). A fixed 15rem flex lane whose width animates to 0
