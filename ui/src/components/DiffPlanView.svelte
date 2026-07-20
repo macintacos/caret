@@ -872,8 +872,8 @@
     // entries over EXC-786's reservations, registered in this same effect so they
     // share its compare-mode gating (unregistered once showDiff) and editing-context
     // guard. c comments the cursor line (or, in visual mode, the whole selection);
-    // V enters visual line-select; Esc reconciles the two Escapes — exit visual mode
-    // if active, else clear the cursor (superseding EXC-788's motion.clearCursor).
+    // V enters visual line-select; Esc closes search / exits visual mode but never
+    // clears the line cursor (EXC-834, narrowing EXC-790's Esc reconciliation).
     const commentBase = reserved.get("commenting.comment");
     if (commentBase != null) {
       offs.push(
