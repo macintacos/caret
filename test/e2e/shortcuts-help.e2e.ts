@@ -62,3 +62,36 @@ test("the search narrows the listed shortcuts", async ({ daemon, page }) => {
   await expect(dialog).toContainText("Cancel editing");
   await expect(dialog).not.toContainText("Submit comment");
 });
+
+test("/ focuses the search input without typing a slash; the field shows a / hint", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const dialog = page.locator("[data-slot='dialog-content']");
+  const search = page.getByLabel("Search shortcuts");
+
+  // ? opens the modal with focus on the dialog content — the input is not
+  // autofocused (:37-40), so ? and Esc keep toggling the modal.
+  await page.keyboard.press("?");
+  await expect(dialog).toBeVisible();
+
+  // A / hint cap sits in the search field, advertising the shortcut.
+  await expect(page.locator(".help-search-hint")).toBeVisible();
+
+  // / moves focus into the search input and is NOT typed — the modal's local
+  // handler wins over the global plan-search binding and preventDefaults, so no
+  // stray "/" lands in the field.
+  await page.keyboard.press("/");
+  await expect(search).toBeFocused();
+  await expect(search).toHaveValue("");
+
+  // Once focused, typing filters the list normally.
+  await page.keyboard.type("cancel");
+  await expect(dialog).toContainText("Cancel editing");
+  await expect(dialog).not.toContainText("Submit comment");
+});
