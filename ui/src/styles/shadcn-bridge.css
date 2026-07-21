@@ -41,6 +41,10 @@
   /* High-contrast ink on the red fill; --accent-ink flips opposite --danger in
      both schemes (dark ink on light-red / warm-white on dark-red). */
   --destructive-foreground: var(--accent-ink);
+  /* Success bridges to caret's --ok green (a THEMES token), so an
+     `Alert variant="success"` retints on theme switch like every other variant.
+     No shadcn stock name for it — added here alongside --destructive (EXC-850). */
+  --success: var(--ok);
   --border: var(--rule);
   --input: var(--rule-strong);
   /* Focus ring: a softened, translucent accent (a subtle hint, not a loud solid
@@ -88,6 +92,8 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  /* Emits the text-success / border-success utilities the Alert success variant uses. */
+  --color-success: var(--success);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

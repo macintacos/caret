@@ -51,6 +51,9 @@ const EXPECTED: Record<string, string> = {
   "--accent-foreground": "--ink",
   "--destructive": "--danger",
   "--destructive-foreground": "--accent-ink",
+  // Success is caret's --ok green, bridged so `Alert variant="success"` (EXC-850)
+  // paints on the palette and retints on theme switch like every other variant.
+  "--success": "--ok",
   "--border": "--rule",
   "--input": "--rule-strong",
   // --ring is asserted separately: it softens --accent-bright rather than
@@ -100,6 +103,10 @@ describe("the shadcn @theme inline map", () => {
 
   test("--color-primary rides caret's amber via var(--primary) (→ var(--accent))", () => {
     expect(decls).toMatch(/--color-primary:\s*var\(--primary\);/);
+  });
+
+  test("bridges --color-success to var(--success) (→ caret's --ok), for Alert's success variant", () => {
+    expect(decls).toMatch(/--color-success:\s*var\(--success\);/);
   });
 
   test("--color-accent is a neutral color-mix, never caret's amber var(--accent)", () => {
