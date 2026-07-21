@@ -418,13 +418,12 @@
     { range: CodeBlockRange; text: string; top: number; left: number } | undefined
   >();
 
-  // Track the hovered code block from pointer moves — and, for a stationary cursor,
-  // from scrolls (EXC-836) — over the scroll container (the rows live in the
-  // SourceView's shadow root; codeCopy.ts does the hit-test + the content-coordinate
-  // anchor). rAF-throttled, and the anchor is recomputed only when the hovered block
-  // changes (it is the block's own top-right, independent of where in the block the
-  // pointer sits), so hovering does not thrash layout. The button is a light-DOM
-  // child of .diff-plan, so it scrolls with the rows for free.
+  // Track the hovered code block from pointer moves over the scroll container (the
+  // rows live in the SourceView's shadow root; codeCopy.ts does the hit-test + the
+  // content-coordinate anchor). rAF-throttled, and the anchor is recomputed only when
+  // the hovered block changes (it is the block's own top-right, independent of where
+  // in the block the pointer sits), so hovering does not thrash layout. The button is
+  // a light-DOM child of .diff-plan, so it scrolls with the rows for free.
   $effect(() => {
     const scroller = scrollEl;
     const el = host;
@@ -437,10 +436,6 @@
     let raf = 0;
     let lastX = 0;
     let lastY = 0;
-    // Whether the pointer is currently over the scroller — set on pointermove, cleared
-    // on pointerleave. Gates the scroll re-anchor below so a programmatic scroll (a vim
-    // motion) with the pointer away can't resurrect a stale button (EXC-836).
-    let inside = false;
     const update = () => {
       raf = 0;
       const range = codeBlockAtPoint(el, ranges, lastX, lastY);
@@ -457,27 +452,72 @@
           : { range, text: block.text, top: anchor.top, left: anchor.left };
     };
     const onMove = (event: PointerEvent) => {
-      inside = true;
       lastX = event.clientX;
       lastY = event.clientY;
       if (raf === 0) raf = requestAnimationFrame(update);
     };
-    // CSS :hover never re-fires when the container scrolls under a still pointer, so the
-    // button would stay glued to the block that scrolled away. Re-run the same hit-test
-    // at the retained pointer coords on scroll (only while the pointer is inside), reusing
-    // the rAF throttle and update()'s same-block bail so a scroll burst costs at most one
-    // hit-test per frame and re-anchors only when a different block comes under the cursor.
-    const onScroll = () => {
-      if (inside && raf === 0) raf = requestAnimationFrame(update);
-    };
     const onLeave = () => {
-      inside = false;
       cancelAnimationFrame(raf);
       raf = 0;
       hoveredCopy = undefined;
     };
     scroller.addEventListener("pointermove", onMove);
     scroller.addEventListener("pointerleave", onLeave);
+    return () => {
+      cancelAnimationFrame(raf);
+      scroller.removeEventListener("pointermove", onMove);
+      scroller.removeEventListener("pointerleave", onLeave);
+    };
+  });
+
+  // Re-hover the row under a stationary cursor as the plan scrolls (EXC-836). The
+  // browser re-evaluates hover only on pointer MOVE, never on scroll, and the
+  // @pierre/diffs view drives its row highlight (data-hovered) and gutter "+" off its
+  // own pointermove — not CSS :hover — with no scroll listener of its own. So scrolling
+  // the plan under a still pointer leaves both glued to the row that scrolled away.
+  // Re-fire the real gesture: on scroll, synthesize a pointermove at the retained cursor
+  // position into the row now beneath it. The library re-hovers that row (highlight +
+  // "+"), and the composed event bubbles out to .diff-plan so the code-block copy effect
+  // above re-anchors too — one re-fire drives every hover-dependent affordance.
+  // rAF-throttled, and gated on pointer presence so a programmatic scroll (a vim j/k
+  // motion) with the pointer away can't resurrect a stale hover.
+  $effect(() => {
+    const scroller = scrollEl;
+    const el = host;
+    if (scroller == null || el == null) return;
+    let raf = 0;
+    let lastX = 0;
+    let lastY = 0;
+    let inside = false;
+    const rehover = () => {
+      raf = 0;
+      // Same shadow-root hit-test SourceView.lineAtPoint uses; dispatch on the resolved
+      // row so the library resolves it from the event's composedPath, exactly as a real
+      // move would.
+      const target = el.shadowRoot?.elementFromPoint(lastX, lastY);
+      target?.dispatchEvent(
+        new PointerEvent("pointermove", {
+          bubbles: true,
+          composed: true,
+          clientX: lastX,
+          clientY: lastY,
+          pointerType: "mouse",
+        }),
+      );
+    };
+    const onMove = (event: PointerEvent) => {
+      inside = true;
+      lastX = event.clientX;
+      lastY = event.clientY;
+    };
+    const onLeave = () => {
+      inside = false;
+    };
+    const onScroll = () => {
+      if (inside && raf === 0) raf = requestAnimationFrame(rehover);
+    };
+    scroller.addEventListener("pointermove", onMove, { passive: true });
+    scroller.addEventListener("pointerleave", onLeave, { passive: true });
     scroller.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       cancelAnimationFrame(raf);
