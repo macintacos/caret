@@ -31,6 +31,9 @@ import { isCancelKey, isSubmitChord } from "$lib/keys.ts";
 export interface MarkdownEditorOptions {
   placeholder: string;
   ariaLabel: string;
+  /** Reflected onto the editor's `aria-required` when set — the required-field
+   * signal a dialog's general-comment field carries when it is the only content. */
+  ariaRequired?: boolean;
   /** Live value on every edit. */
   onInput?: (text: string) => void;
   /** ⌘/Ctrl+Enter. */
@@ -247,7 +250,10 @@ export function markdownExtensions(opts: MarkdownEditorOptions): Extension[] {
     EditorView.lineWrapping,
     indentUnit.of(INDENT_UNIT),
     placeholder(opts.placeholder),
-    opts.ariaLabel ? EditorView.contentAttributes.of({ "aria-label": opts.ariaLabel }) : [],
+    EditorView.contentAttributes.of({
+      ...(opts.ariaLabel ? { "aria-label": opts.ariaLabel } : {}),
+      ...(opts.ariaRequired !== undefined ? { "aria-required": String(opts.ariaRequired) } : {}),
+    }),
     // Chords first, so Esc/⌘-Enter are intercepted before default keys.
     Prec.highest(
       EditorView.domEventHandlers({

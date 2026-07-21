@@ -108,3 +108,21 @@ describe("UnsentCommentsDialog render", () => {
     expect(confirm()?.textContent).not.toContain("anyway");
   });
 });
+
+// The optional reviewer note (EXC-791) uses the same live-markdown editor as the
+// inline comment composer (EXC-803), so it parses markdown as the reviewer types.
+describe("UnsentCommentsDialog notes field (EXC-803)", () => {
+  test("hosts the live-markdown editor for the agent note when showNotes is set", async () => {
+    await mount({ ...approveProps, showNotes: true });
+    const editor = q(".cm-content");
+    expect(editor).not.toBeNull();
+    // Its accessible name is what the approve e2e (and a screen reader) locate it by.
+    expect(editor?.getAttribute("aria-label")).toBe("Notes for the agent");
+  });
+
+  test("omits the notes field without showNotes (the reject variant)", async () => {
+    await mount(approveProps);
+    expect(q(".cm-content")).toBeNull();
+    expect(q(".field")).toBeNull();
+  });
+});

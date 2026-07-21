@@ -3,9 +3,9 @@
   import type { IconName } from "$lib/icons.ts";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
-  import { Textarea } from "$lib/components/ui/textarea/index.js";
   import { isSubmitChord } from "$lib/keys.ts";
   import Icon from "@/components/Icon.svelte";
+  import MarkdownEditor from "@/components/MarkdownEditor.svelte";
   import Modal from "@/components/Modal.svelte";
 
   interface Props {
@@ -120,16 +120,20 @@
     <!-- Optional note handed to the agent on approval (EXC-791): distinct from the
          unsent inline comments above (which a plain approve drops) — this text IS
          sent, folded into the plan the agent works from, with no re-planning. -->
-    <label class="field">
+    <div class="field">
       <span class="lbl">Notes for the agent <span class="optional">(optional)</span></span>
-      <Textarea
+      <!-- The same live-markdown composer as the inline comment editor (EXC-803):
+           styles markdown as the reviewer types. ⌘↵ confirms the approval; Esc
+           dismisses the dialog (the editor intercepts both chords). -->
+      <MarkdownEditor
         value={notes}
-        oninput={(e) => (notes = e.currentTarget.value)}
-        onkeydown={onKey}
-        rows={3}
         placeholder="Anything the agent should fold into the work — no re-planning needed."
+        ariaLabel="Notes for the agent"
+        onInput={(t) => (notes = t)}
+        onSubmitChord={() => onConfirm(notes)}
+        onCancelChord={onCancel}
       />
-    </label>
+    </div>
   {/if}
 
   {#snippet footer()}

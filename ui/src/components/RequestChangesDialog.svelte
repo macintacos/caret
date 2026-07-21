@@ -9,12 +9,12 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
-  import { Textarea } from "$lib/components/ui/textarea/index.js";
   import { type ComposerScratch, rangeLabel } from "$lib/diffview/commenting.ts";
   import { formatFeedback, pendingInline, pendingLineCount, sourceLines } from "$lib/feedback.ts";
   import { isSubmitChord } from "$lib/keys.ts";
   import ConfirmPopover from "@/components/ConfirmPopover.svelte";
   import Icon from "@/components/Icon.svelte";
+  import MarkdownEditor from "@/components/MarkdownEditor.svelte";
   import Modal from "@/components/Modal.svelte";
 
   interface Props {
@@ -56,10 +56,6 @@
     onDiscardAnnotation,
     onDraftAnnotation,
   }: Props = $props();
-
-  // The general-comment input, focused on open via the Modal's onOpenAutoFocus
-  // hook (bits-ui owns initial focus; this lands it on the primary input).
-  let textarea = $state<HTMLElement | null>(null);
 
   // Live preview of exactly what the agent will receive.
   let preview = $derived(formatFeedback(annotations, generalComment, planText));
@@ -110,9 +106,11 @@
   }
   // Escape-to-dismiss is owned by bits-ui (Modal's onDismiss → onCancel); this
   // handler carries only caret's own ⌘↵/Ctrl+Enter submit chord, and rides the
-  // body wrapper so it fires wherever focus sits inside the dialog.
+  // body wrapper so it fires wherever focus sits inside the dialog. The
+  // MarkdownEditor already intercepts the chord (and preventDefault's it) when
+  // focus is inside it, so guard on !defaultPrevented to avoid a double submit.
   function onKey(e: KeyboardEvent) {
-    if (isSubmitChord(e)) submit();
+    if (isSubmitChord(e) && !e.defaultPrevented) submit();
   }
 </script>
 
@@ -129,29 +127,31 @@
   contentClass="rcd-content"
   onDismiss={onCancel}
   onOpenAutoFocus={(e) => {
-    // Land focus on the general-comment input rather than bits-ui's default
-    // first-focusable; if the ref isn't bound yet, let bits-ui do its default.
-    if (textarea) {
-      e.preventDefault();
-      textarea.focus();
-    }
+    // MarkdownEditor autofocuses its own contenteditable on mount (with
+    // preventScroll); prevent bits-ui's default first-focusable focus so it
+    // stays on the editor rather than jumping to the first button.
+    e.preventDefault();
   }}
 >
   <div class="body" role="presentation" onkeydown={onKey}>
-    <label class="field">
+    <div class="field">
       <span class="lbl">
         General comment{#if !generalRequired}<span class="optional"> (optional)</span>{/if}
       </span>
-      <Textarea
-        bind:ref={textarea}
+      <!-- The live-markdown composer (the same swap boundary as the inline
+           comment editor): styles markdown as you type. Autofocused on open;
+           ⌘↵ submits and Esc dismisses via the chord callbacks. -->
+      <MarkdownEditor
         value={generalComment}
-        oninput={(e) => onGeneralCommentInput(e.currentTarget.value)}
-        rows={4}
-        required={generalRequired}
-        aria-required={generalRequired}
         placeholder="Describe the overall changes you want…"
+        ariaLabel="General comment"
+        ariaRequired={generalRequired}
+        autofocus
+        onInput={onGeneralCommentInput}
+        onSubmitChord={submit}
+        onCancelChord={onCancel}
       />
-    </label>
+    </div>
 
     <div class="summary" class:empty>
       {#if empty}

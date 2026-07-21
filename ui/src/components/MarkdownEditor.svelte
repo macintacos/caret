@@ -20,6 +20,9 @@
     /** Focus on mount with { preventScroll: true } (the inline-reveal guard). */
     autofocus?: boolean;
     ariaLabel?: string;
+    /** Reflected onto the editor's `aria-required` when set (the required-field
+     * signal a dialog's general-comment field carries). Omitted leaves it off. */
+    ariaRequired?: boolean;
     /** Live value on every edit (and once with the seed at mount). */
     onInput?: (text: string) => void;
     /** ⌘/Ctrl+Enter. */
@@ -32,6 +35,7 @@
     placeholder = "",
     autofocus = false,
     ariaLabel = "",
+    ariaRequired,
     onInput,
     onSubmitChord,
     onCancelChord,
@@ -60,6 +64,7 @@
         extensions: markdownExtensions({
           placeholder: untrack(() => placeholder),
           ariaLabel: untrack(() => ariaLabel),
+          ariaRequired: untrack(() => ariaRequired),
           onInput: (text) => onInput?.(text),
           onSubmitChord: () => onSubmitChord?.(),
           onCancelChord: () => onCancelChord?.(),
