@@ -8,14 +8,14 @@
 // Detection is scoped to inline-code spans (`…`), which is where caret's plans
 // cite files and — decisively — the only place a path renders as its own shiki
 // token: prose is tokenized as one coarse run, so a path inside it has no token
-// boundary to hang the icon on or to hit-test the hover against. A token
+// boundary to hang the icon on or to hit-test a click against. A token
 // qualifies on *shape* only (last path segment ends in a known file extension,
 // optionally trailed by :line[:col]); whether it is a real file is resolved
-// server-side, so a candidate that doesn't exist gets no icon and no hover.
+// server-side, so a candidate that doesn't exist gets no icon and no affordance.
 
 /** A candidate filename reference on a single display line. Columns are 0-based,
  * half-open [startCol, endCol) into the display line's text; endCol includes any
- * trailing `:line[:col]` so a hover anywhere on the reference resolves. */
+ * trailing `:line[:col]` so a click anywhere on the reference resolves. */
 export interface FileRefSpan {
   startCol: number;
   endCol: number;
