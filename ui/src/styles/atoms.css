@@ -88,6 +88,13 @@ button.float-chip[aria-expanded="true"]:not(:disabled) {
   letter-spacing: 0.05em;
   line-height: 1.4;
   color: inherit;
+  /* Flex-centring seats the glyph at the box's vertical middle, which rides a hair
+     above the baseline of the label text the cap pairs with (the topbar a/r caps,
+     the composer ⌘↵, the inline hints) — the box reads as floating high. Drop the
+     whole cap a touch so it seats closer to the neighbouring text baseline. In em
+     so it tracks the cap's own size — it stays proportional under .kbd-sm too. */
+  position: relative;
+  top: 0.05em;
   border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
   border-radius: 0.3em;
   background: color-mix(in srgb, currentColor 12%, transparent);
