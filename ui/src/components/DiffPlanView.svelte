@@ -305,10 +305,11 @@
     return active.size > 0 ? active : undefined;
   });
 
-  // The file reference the pointer is over, plus the token rect the preview
-  // anchors to. Opening the preview arms the hover-intent tracker below, which owns
-  // dismissal: it keeps the card open while the pointer heads toward it and closes
-  // it only on a conclusive stop outside it (EXC-799).
+  // The file reference whose preview is open (opened by clicking its token —
+  // EXC-840), plus the token rect the preview anchors to. Opening the preview
+  // arms the hover-intent tracker below, which owns dismissal: it keeps the card
+  // open while the pointer heads toward it and closes it only on a conclusive
+  // stop outside it (EXC-799).
   let hoveredFileRef = $state<{ path: string; line?: number; anchor: DOMRect } | undefined>();
   function showFileRef(ref: FileRefSpan, tokenElement: HTMLElement): void {
     hoveredFileRef = {
@@ -1395,7 +1396,7 @@
         doc={{ name: "plan.md", text: linkLayer.text }}
         links={linkLayer.spans}
         {fileRefs}
-        onFileRefEnter={showFileRef}
+        onFileRefClick={showFileRef}
         annotations={sourceAnnotations}
         options={readerOptions}
         {gutter}
@@ -1430,9 +1431,10 @@
           <CodeCopyButton text={hoveredCopy.text} top={hoveredCopy.top} left={hoveredCopy.left} />
         {/key}
       {/if}
-      <!-- The filename-reference hover preview (EXC-687): a viewport-fixed card
-           showing the referenced file's excerpt, anchored to the hovered token.
-           Only appears for references the daemon resolved to a real file. -->
+      <!-- The filename-reference preview (EXC-687, click-opened since EXC-840):
+           a viewport-fixed card showing the referenced file's excerpt, anchored
+           to the clicked token. Only appears for references the daemon resolved
+           to a real file. -->
       {#if hoveredFileRef}
         <FilePreview
           reviewId={reviewId}
