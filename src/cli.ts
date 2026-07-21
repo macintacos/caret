@@ -19,6 +19,7 @@ import { fatalDeny } from "@/adapters/index.ts";
 import { runDaemon } from "@/commands/daemon.ts";
 import { runDiscoverySubcommand } from "@/commands/discovery.ts";
 import { runInstallSubcommand } from "@/commands/install.ts";
+import { runInstallRumdlSubcommand } from "@/commands/install-rumdl.ts";
 import { runPrewarm } from "@/commands/prewarm.ts";
 import { runReconcileSubcommand } from "@/commands/reconcile.ts";
 import { runRedactSubcommand } from "@/commands/redact.ts";
@@ -88,6 +89,11 @@ function buildProgram(): Command {
         dryRun: opts.dryRun ?? false,
       }),
     );
+
+  program
+    .command("install-rumdl")
+    .description("download the rumdl plan formatter into caret's state dir")
+    .action(() => runInstallRumdlSubcommand());
 
   return program;
 }

@@ -1,24 +1,27 @@
 // formatPlanMarkdown: the daemon-side canonicalization pass applied to every
-// incoming plan version at ingest. Pins the prettier output contract (prose
-// wrapped, fences verbatim, idempotent) and the never-throw fallback envelope
+// incoming plan version at ingest. Pins the rumdl output contract (prose reflowed
+// to 90 cols, fences verbatim, idempotent) and the never-throw fallback envelope
 // (oversize or unparseable input comes back raw with exactly one warn).
 import { expect, test } from "bun:test";
 
 import { formatPlanMarkdown, MAX_FORMAT_BYTES } from "@/plan/markdown.ts";
+import { rumdlFormatPlan } from "@/plan/rumdl.ts";
 
 import { recordingLog } from "../support/recording-log.ts";
 
 const LONG_PROSE =
   "# Title\n\n" +
   "This paragraph is deliberately written as one very long unwrapped line so that " +
-  "prettier's proseWrap always setting has something to wrap when it normalizes the " +
-  "incoming plan text into its canonical stored representation.\n";
+  "rumdl's MD013 reflow has something to normalize when it rewraps the incoming plan " +
+  "text into its canonical stored representation.\n";
 
-test("wraps long prose lines (proseWrap: always)", async () => {
+test("reflows long prose to the canonical 90-col width (rumdl)", async () => {
   const out = await formatPlanMarkdown(LONG_PROSE);
+  // The default engine is rumdl, so the stored form is exactly rumdl's reflow.
+  expect(out).toBe(await rumdlFormatPlan(LONG_PROSE));
   const lines = out.split("\n");
   expect(lines.length).toBeGreaterThan(3);
-  for (const line of lines) expect(line.length).toBeLessThanOrEqual(80);
+  for (const line of lines) expect(line.length).toBeLessThanOrEqual(90);
 });
 
 test("format(format(text)) === format(text) for representative inputs", async () => {

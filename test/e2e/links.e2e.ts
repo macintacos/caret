@@ -13,11 +13,15 @@
 import { expect, test } from "./support/fixtures.ts";
 
 const SAFE_URL = "https://docs.example.test/widget-cache";
-// An http link (display collapses to its label) and, on a later line, a
-// javascript:-scheme inline link the layer must NOT make clickable.
+// An http link (display collapses to its label), a plain-prose row with no link
+// at all (for the "ordinary token" hover check, kept off any link's line so it's
+// robust to the canonical wrap width), and a javascript:-scheme inline link the
+// layer must NOT make clickable.
 const LINK_PLAN = `# Link Plan
 
 See [the cache docs](${SAFE_URL}) for the warm-restart design.
+
+Plain prose on its own row names the cold-standby token, nothing clickable.
 
 Do not trust [this control](javascript:alert(1)) — it is not a link.
 `;
@@ -138,10 +142,11 @@ test("hovering an ordinary code token reveals no tooltip", async ({ daemon, page
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
 
-  // "warm-restart" is plain prose in the diff body carrying no link span;
-  // hovering it produces no tooltip. Scope to the diff surface so it doesn't
-  // collide with the titlebar, and target the token uniquely.
-  const plain = page.locator(".diffview").getByText("warm-restart", { exact: false });
+  // "cold-standby" is plain prose on a row with no link at all; hovering it
+  // produces no tooltip. Kept off the link's line so the check is about the
+  // hovered token, not line layout under the canonical wrap width. Scope to the
+  // diff surface so it doesn't collide with the titlebar, and target it uniquely.
+  const plain = page.locator(".diffview").getByText("cold-standby", { exact: false });
   await expect(plain.first()).toBeVisible();
   await plain.first().hover();
 

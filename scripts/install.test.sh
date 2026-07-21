@@ -52,6 +52,7 @@ assert_contains "$out" "published caret" "reports the published-package source"
 assert_contains "$out" "claude plugin marketplace add macintacos/caret" "plan adds the public marketplace"
 assert_contains "$out" "claude plugin install caret@caret" "plan installs the published plugin"
 assert_contains "$out" "bunx --no-cache @macintacos/caret@latest install --target opencode" "plan installs OpenCode via bunx"
+assert_contains "$out" "bunx --no-cache @macintacos/caret@latest install-rumdl" "plan eagerly installs rumdl via bunx (EXC-828)"
 assert_contains "$out" "nothing was changed" "ends with the no-change closer"
 assert_absent "$out" "git clone" "default path never clones"
 assert_absent "$out" "bun install" "default path never installs build deps"
@@ -288,6 +289,7 @@ fi
 assert_contains "$fl_dry" "DRY RUN" "--from-local announces dry-run mode"
 assert_contains "$fl_dry" "no rebuild" "--from-local reports artifact reuse (no rebuild)"
 assert_contains "$fl_dry" "prewarm" "--from-local plan cycles the daemon via prewarm"
+assert_contains "$fl_dry" "install-rumdl" "--from-local plan installs rumdl (EXC-828)"
 assert_contains "$fl_dry" "claude plugin install" "--from-local plan still installs the plugin"
 assert_absent "$fl_dry" "bun install" "--from-local plan does not reinstall build deps"
 assert_absent "$fl_dry" "build --compile" "--from-local plan does not recompile the binary"
@@ -312,6 +314,7 @@ assert_contains "$calls" "marketplace add" "--from-local registers a marketplace
 assert_contains "$calls" "caret/dev-marketplace" "--from-local registers the GENERATED dev marketplace (not the public one)"
 assert_contains "$calls" "claude plugin install caret@caret --scope user" "--from-local installs the plugin"
 assert_contains "$calls" "claude plugin enable" "--from-local enables the plugin"
+assert_contains "$calls" "caret install-rumdl" "--from-local runs caret install-rumdl (EXC-828)"
 assert_contains "$calls" "caret prewarm" "--from-local prewarms via caret prewarm"
 # The daemon step is best-effort: prewarm hands off to the fresh build by
 # retiring a retireable daemon, but REUSES an un-retireable legacy daemon (no
@@ -337,6 +340,7 @@ else
   fail "--from-local best-effort failures should not fail the install (rc=$rc)"
 fi
 assert_contains "$(cat "$LOG")" "caret prewarm" "--from-local still attempted the daemon cycle"
+assert_contains "$(cat "$LOG")" "caret install-rumdl" "--from-local rumdl step is best-effort (a failing install-rumdl does not abort)"
 rm -rf "$ROOT" "$STUBS" "$HOME_DIR"
 
 # Missing artifacts: --from-local fails with a clear message instead of silently

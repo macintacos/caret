@@ -5,33 +5,20 @@
 // best-effort: oversized or unparseable input is stored raw with one warn — a
 // plan is never lost to the formatter.
 //
-// Uses prettier's standalone API with an explicit plugins array: no config
-// file discovery, no plugin auto-loading, so the output is a pure function of
-// this module (plus the exact-pinned prettier version).
-
-import * as markdownPlugin from "prettier/plugins/markdown";
-import { format } from "prettier/standalone";
+// The formatter is rumdl (src/plan/rumdl.ts), downloaded into caret's state dir
+// on first use: it reflows prose to caret's 90-col MD013 convention, leaves
+// fenced code verbatim, and is idempotent. `doFormat` stays injectable so tests
+// can pin the failure envelope; a missing/failed rumdl throws and is caught here.
 
 import { type CaretLogger, noopLogger } from "@/lib/log.ts";
 import { errorMessage } from "@/lib/types.ts";
+import { rumdlFormatPlan } from "@/plan/rumdl.ts";
 
 /** Inputs above this byte count skip formatting and are stored raw. */
 export const MAX_FORMAT_BYTES = 1024 * 1024;
 
-async function prettierFormat(text: string): Promise<string> {
-  return format(text, {
-    parser: "markdown",
-    plugins: [markdownPlugin],
-    proseWrap: "always",
-    // Under the standalone API only the plugins passed here exist, so embedded
-    // formatting stays off: fence content passes through byte-for-byte, and no
-    // fence can fail the document over a parser prettier doesn't have.
-    embeddedLanguageFormatting: "off",
-  });
-}
-
 /**
- * Formats plan markdown into its canonical stored form (`proseWrap: "always"`).
+ * Formats plan markdown into its canonical stored form (rumdl's 90-col reflow).
  * Never throws: oversized or unparseable input comes back unchanged, with a
  * single warn on `log`. `doFormat` is injectable so tests can pin the failure
  * envelope deterministically.
@@ -39,7 +26,7 @@ async function prettierFormat(text: string): Promise<string> {
 export async function formatPlanMarkdown(
   plan: string,
   log: CaretLogger = noopLogger,
-  doFormat: (text: string) => Promise<string> = prettierFormat,
+  doFormat: (text: string) => Promise<string> = rumdlFormatPlan,
 ): Promise<string> {
   const bytes = Buffer.byteLength(plan, "utf-8");
   if (bytes > MAX_FORMAT_BYTES) {
@@ -52,7 +39,7 @@ export async function formatPlanMarkdown(
   try {
     return await doFormat(plan);
   } catch (err) {
-    // First line only: prettier parse errors can carry a code frame, and plan
+    // First line only: a formatter error can carry multi-line detail, and plan
     // text must never reach a log record under any key.
     const reason = errorMessage(err).split("\n", 1)[0] ?? "";
     log.warn("review", "plan format failed, storing raw", { reason });

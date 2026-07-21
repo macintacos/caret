@@ -13,4 +13,6 @@
 # detects and rejects with an actionable error rather than the cryptic mount()
 # crash (EXC-537).
 [test]
-preload = ["./ui/test-svelte-preload.ts"]
+# rumdl-preload points the plan formatter (src/plan/rumdl.ts) at the mise-pinned
+# rumdl so tests run offline; svelte-preload compiles .svelte for the UI suite.
+preload = ["./test/support/rumdl-preload.ts", "./ui/test-svelte-preload.ts"]
