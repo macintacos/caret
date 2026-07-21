@@ -8,7 +8,7 @@ import { shortcuts } from "$lib/shortcuts/index.ts";
 
 import { until } from "../../../test/support/poll.ts";
 import { logCapture } from "../../test-helpers.ts";
-import { render } from "../../test-mount.ts";
+import { capture, render } from "../../test-mount.ts";
 import { reactiveProps } from "../../test-props.svelte.ts";
 
 // Default props: no-op handlers and an empty annotation set, so the rendering
@@ -16,6 +16,7 @@ import { reactiveProps } from "../../test-props.svelte.ts";
 function props(over: Record<string, unknown> = {}) {
   return {
     review: reviewFixture(),
+    onCopyCwd: () => {},
     onCreateLineAnnotation: () => {},
     annotations: [],
     focusedAnnotation: null,
@@ -184,11 +185,27 @@ describe("DiffPlanView version compare", () => {
 
   // EXC-807: the working-directory path lives in the compare row now, shown
   // right-aligned while not comparing and dropped once compare mode is on.
+  // EXC-850 made it a click-to-copy button (no hover tooltip).
   test("shows the working-directory path in the compare row when not comparing", () => {
     const { target } = render(DiffPlanView, props({ review: reviewFixture() }));
     const cwd = target.querySelector(".control-row .cwd");
     expect(cwd).not.toBeNull();
     expect(cwd!.textContent).toContain("/tmp/p");
+  });
+
+  test("clicking the working-directory path copies the full absolute path", () => {
+    // Deep enough that the display abbreviates (…/Play/caret) while the copy is
+    // the whole path — proving the two differ (EXC-850).
+    const copied = capture<string>();
+    const deep = "/Users/dev/GitLocal/Play/caret";
+    const { target } = render(
+      DiffPlanView,
+      props({ review: reviewFixture({ cwd: deep }), onCopyCwd: copied.cb }),
+    );
+    const cwd = target.querySelector<HTMLButtonElement>(".control-row button.cwd");
+    expect(cwd?.textContent?.trim()).toBe("…/Play/caret");
+    cwd?.click();
+    expect(copied.last()).toBe(deep);
   });
 
   test("hides the working-directory path in compare mode", async () => {

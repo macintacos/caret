@@ -24,12 +24,17 @@
 </script>
 
 {#if alerts.length > 0}
-  <div class="alert-host" aria-live="polite">
+  <div class="alert-host">
     {#each alerts as a (a.id)}
       {@const icon = ICONS[a.variant]}
+      <!-- role="status" (polite) overrides Alert.Root's default role="alert"
+           (assertive): a copy/save confirmation shouldn't interrupt a screen
+           reader, and it avoids nesting an assertive region — matching the
+           safe-mode toast. The urgent daemon banner keeps the assertive default. -->
       <Alert.Root
         variant={a.variant}
         data-variant={a.variant}
+        role="status"
         class={a.leaving ? "alert-item leaving" : "alert-item"}
       >
         {#if icon}<Icon name={icon} size={16} />{/if}
@@ -54,7 +59,10 @@
     position: fixed;
     right: 1.25rem;
     bottom: calc(var(--status-bar-h) + 1rem);
-    z-index: 90;
+    /* Above the modal scrim (z-100), matching .safe-mode-toast — so an alert
+       raised from inside a dialog (the planned settings-save confirmation) is
+       visible over it rather than trapped behind the scrim. */
+    z-index: 200;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;

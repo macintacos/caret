@@ -459,7 +459,6 @@
     onRequestChanges={() => (showDialog = true)}
     {onReject}
     onOpenSettings={() => (showSettings = true)}
-    {onCopyCwd}
     {showShortcutHints}
   />
 
@@ -502,6 +501,7 @@
       }}
       onExposeScratchActions={(a) => (scratchActions = a)}
       onExposeReveal={(r) => (revealLine = r)}
+      {onCopyCwd}
       {showShortcutHints}
     />
   {:else}

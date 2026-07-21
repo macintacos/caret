@@ -34,6 +34,9 @@ describe("AlertHost", () => {
     const items = target.querySelectorAll(".alert-item");
     expect(items[0]?.getAttribute("data-variant")).toBe("default");
     expect(items[1]?.getAttribute("data-variant")).toBe("success");
+    // Polite, not assertive: role="status" must override Alert.Root's default
+    // role="alert" (a confirmation shouldn't interrupt a screen reader).
+    expect(items[0]?.getAttribute("role")).toBe("status");
   });
 
   test("the dismiss button calls onDismiss with the alert id", () => {

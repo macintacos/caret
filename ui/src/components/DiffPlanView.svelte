@@ -81,6 +81,10 @@
   interface Props {
     /** The review whose current plan version is rendered. */
     review: ClientReview;
+    /** Copy the review's working directory to the clipboard (EXC-850). App.svelte
+     * does the write + fires the success alert; the compare-row path calls this
+     * on click. */
+    onCopyCwd: (cwd: string) => void;
     /** Persist a gutter-created line-anchored annotation. */
     onCreateLineAnnotation: (anchor: {
       startLine: number;
@@ -123,6 +127,7 @@
 
   let {
     review,
+    onCopyCwd,
     onCreateLineAnnotation,
     annotations,
     focusedAnnotation,
@@ -1277,20 +1282,16 @@
     onSetDiffIndicators={compare.setDiffIndicators}
   />
   {#if !compareStore.comparing}
-    <!-- Working-directory path (relocated from the TopBar, EXC-807). Full cwd on
-         hover; the row shows the abbreviated path. Right-aligned by the
+    <!-- Working-directory path (EXC-807 relocated it here from the TopBar; EXC-850
+         makes it click-to-copy). The row shows the abbreviated path and copies the
+         full absolute path on click — no hover popup. Right-aligned by the
          compare-picker's flex:1, and dropped in compare mode so the picker's own
          display toggles reclaim the right edge. -->
-    <Tooltip.Provider delayDuration={0}>
-      <Tooltip.Root>
-        <Tooltip.Trigger>
-          {#snippet child({ props })}
-            <div {...props} class="cwd mono">{shortCwd(review.cwd)}</div>
-          {/snippet}
-        </Tooltip.Trigger>
-        <Tooltip.Content>{review.cwd}</Tooltip.Content>
-      </Tooltip.Root>
-    </Tooltip.Provider>
+    <button
+      type="button"
+      class="cwd mono"
+      aria-label={`Copy path ${review.cwd} to the clipboard`}
+      onclick={() => onCopyCwd(review.cwd)}>{shortCwd(review.cwd)}</button>
   {/if}
 </div>
 
@@ -1571,17 +1572,30 @@
   .cwd {
     flex: 0 1 auto;
     min-width: 0;
+    /* Button reset — it was an inline div until EXC-850 made it click-to-copy;
+       .mono owns the family, so only the size is inherited here. */
+    appearance: none;
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: inherit;
     color: var(--ink-faint);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    cursor: default;
+    /* Brightens on hover to read as clickable — the affordance that replaces the
+       removed full-path tooltip. */
+    cursor: pointer;
+    transition: color var(--dur-fast) var(--ease-out);
     /* Returning to plan review (leaving compare mode) re-mounts the path, so it
        reveals with the same quick slide-in the compare controls use when
        entering (VersionComparePicker's compare-reveal, EXC-808) — the switch now
        reads symmetric in both directions. The global #app reduced-motion guard
        zeroes it. */
     animation: cwd-reveal var(--dur-base) var(--ease-out);
+  }
+  .cwd:hover {
+    color: var(--ink-soft);
   }
   @keyframes cwd-reveal {
     from {

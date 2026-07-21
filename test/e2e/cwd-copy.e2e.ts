@@ -1,6 +1,6 @@
-// Click-to-copy cwd chip + the success alert (EXC-850). Clicking the top-bar
-// path chip copies the FULL absolute path to the clipboard (the chip only shows
-// the abbreviated form) and raises a success toast bottom-right — with no hover
+// Click-to-copy cwd path + the success alert (EXC-850). Clicking the compare-row
+// path copies the FULL absolute path to the clipboard (the row only shows the
+// abbreviated form) and raises a success toast bottom-right — with no hover
 // popup. Clipboard access + toast render + stacking are real-browser behavior,
 // so they are proven here rather than in the happy-dom unit suite (per
 // doc/agents/browser-testing.md); the queue's auto-dismiss timing is unit-tested
@@ -12,7 +12,7 @@ import { expect, test } from "./support/fixtures.ts";
 // carries the whole absolute path — so the test proves the two genuinely differ.
 const CWD = "/Users/dev/GitLocal/Play/caret";
 
-test("clicking the cwd chip copies the absolute path and shows a success alert", async ({
+test("clicking the cwd path copies the absolute path and shows a success alert", async ({
   daemon,
   page,
 }) => {
@@ -22,17 +22,17 @@ test("clicking the cwd chip copies the absolute path and shows a success alert",
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
 
-  const chip = page.locator("button.cwd-chip");
-  await expect(chip).toBeVisible();
-  // The chip shows the abbreviated path, not the full one.
-  await expect(chip).toHaveText("…/Play/caret");
+  const cwd = page.locator(".control-row button.cwd");
+  await expect(cwd).toBeVisible();
+  // The cwd shows the abbreviated path, not the full one.
+  await expect(cwd).toHaveText("…/Play/caret");
 
   // No hover popup — that is the whole point of EXC-850. Hovering surfaces no
   // portalled tooltip.
-  await chip.hover();
+  await cwd.hover();
   await expect(page.locator("[data-slot='tooltip-content']")).toHaveCount(0);
 
-  await chip.click();
+  await cwd.click();
 
   // A success alert appears bottom-right.
   const alert = page.locator(".alert-item[data-variant='success']");
@@ -51,9 +51,9 @@ test("success alerts stack and a dismiss removes one", async ({ daemon, page }) 
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
 
-  const chip = page.locator("button.cwd-chip");
-  await chip.click();
-  await chip.click();
+  const cwd = page.locator(".control-row button.cwd");
+  await cwd.click();
+  await cwd.click();
 
   // Two copies in quick succession stack (oldest on top, newer underneath).
   await expect(page.locator(".alert-item")).toHaveCount(2);
