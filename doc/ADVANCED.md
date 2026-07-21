@@ -290,7 +290,7 @@ to the config file, then the default.
 | `CARET_AGENT`        | —                     | `claude`         | Which coding-agent adapter to drive. `claude` (default) or `codex` (provisional, default-off — see below). |
 | `XDG_STATE_HOME`     | —                     | `~/.local/state` | Unresolved reviews persist under `$XDG_STATE_HOME/caret/reviews/` and rehydrate on restart. |
 | `CARET_CONFIG_FILE`  | —                     | `config.toml`    | Absolute path to the settings file, overriding the default `config.toml` location. `mise run dev` sets it to `config.dev.toml`; `--fresh` sets it to a nonexistent path so dev boots from built-in defaults. |
-| `CARET_RUMDL_BIN`    | —                     | _(downloads)_    | Absolute path to an existing rumdl binary for plan formatting, overriding the on-first-use download of the pinned v0.2.32 into `$XDG_STATE_HOME/caret/rumdl/`. Blank counts as unset. Useful for offline / air-gapped installs or reusing a system rumdl. |
+| `CARET_RUMDL_BIN`    | —                     | _(downloads)_    | Absolute path to an existing rumdl binary for plan formatting, overriding the on-first-use download of the pinned v0.2.37 into `$XDG_STATE_HOME/caret/rumdl/`. Blank counts as unset. Useful for offline / air-gapped installs or reusing a system rumdl. |
 | `CARET_DEV_PORT`         | `dev.port`            | —                | **Dev-only.** Fixed `mise run dev` daemon port; unset → ephemeral. Must differ from `42718`. |
 | `CARET_DEV_STATE_DIR`    | `dev.state_dir`       | —                | **Dev-only.** Persistent `mise run dev` state dir; unset → ephemeral. |
 | `CARET_DEV_NEW_REVIEW_MS` | `dev.notify.interval_ms` | —             | **Dev-only.** Extra-review seeder cadence override (ms); a positive value also arms the seeder. Unset → cadence falls to `[dev.notify].interval_ms` (`15000`), and arming is governed by `--notify` / `[dev.notify].enabled`. |
@@ -302,7 +302,7 @@ to the config file, then the default.
 
 caret canonicalizes every incoming plan by reflowing it to a 90-column MD013 shape with
 [rumdl](https://github.com/rvben/rumdl). rumdl is not a runtime prerequisite: caret
-downloads the pinned binary (v0.2.32) into `$XDG_STATE_HOME/caret/rumdl/` on the first
+downloads the pinned binary (v0.2.37) into `$XDG_STATE_HOME/caret/rumdl/` on the first
 plan of the first session, verifies its checksum, and reuses it afterward — so it behaves
 the same however caret was installed (Claude plugin, OpenCode, or `install.sh`).
 `install.sh` runs `caret install-rumdl` as a best-effort step so the download happens at

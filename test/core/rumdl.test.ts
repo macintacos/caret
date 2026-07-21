@@ -23,11 +23,11 @@ test("rumdlAsset maps each supported platform to its pinned asset + checksum", (
   expect(darwinArm.url).toBe(
     `https://github.com/rvben/rumdl/releases/download/v${RUMDL_VERSION}/rumdl-v${RUMDL_VERSION}-aarch64-apple-darwin.tar.gz`,
   );
-  expect(darwinArm.sha256).toBe("b3c24522bae3e929776cdf88d86fc17e7c504042910da9a8a10f03b5c979c73e");
+  expect(darwinArm.sha256).toBe("ac5f31077c492c3303d27264d8d8840b1279cb5a8cd62f863a2045e1427a6c79");
 
   const linuxX64 = rumdlAsset("linux", "x64");
   expect(linuxX64.url).toContain("x86_64-unknown-linux-musl.tar.gz");
-  expect(linuxX64.sha256).toBe("fdde8e73a5f60254c6a2f43a5c444a08850cef3e85f76edfe6b41016984798d3");
+  expect(linuxX64.sha256).toBe("0999d31c6f1429f0b3b5ed86d3ebb2768e5b4a16b373a51a41a7af2d7eb43b7c");
 });
 
 test("rumdlAsset throws on an unsupported platform", () => {
