@@ -4,12 +4,14 @@
   // anchored to the clicked token. Shown only for references the daemon confirmed are real files
   // (DiffPlanView gates it on the resolved set), so it never promises a preview
   // it can't deliver. The excerpt centers on the reference's line when it carries
-  // one, else the file's head. Chrome echoes the link tooltip's card language;
-  // pointer-events stay on so the reader can move onto the card (to scroll a long
-  // line) — DiffPlanView's hover-intent tracker reads this card's rect and keeps
-  // the preview alive while the pointer is on it or heading toward it (EXC-799).
+  // one, else the file's head. Chrome echoes the link tooltip's card language, and
+  // the header carries an "esc to close" hint — the preview is a click-opened
+  // popover that stays put until dismissed (Escape, or a click outside it;
+  // DiffPlanView owns that). pointer-events stay on so the reader can move onto the
+  // card to scroll a long line or select text in it without dismissing it.
   import { getFileExcerpt } from "$lib/api.ts";
   import { highlightExcerpt } from "$lib/diffview/highlight.ts";
+  import { Kbd } from "$lib/components/ui/kbd/index.js";
   import type { FileExcerpt } from "@core/lib/types";
 
   interface Props {
@@ -178,7 +180,10 @@
   <div class="fp-header">
     <span class="fp-badge">Preview</span>
     <span class="fp-path">{preview.kind === "ready" ? preview.excerpt.path : path}</span>
-    {#if meta}<span class="fp-range">{meta.label}</span>{/if}
+    <span class="fp-header-end">
+      {#if meta}<span class="fp-range">{meta.label}</span>{/if}
+      <span class="fp-hint"><Kbd class="kbd-sm">esc</Kbd> to close</span>
+    </span>
   </div>
   {#if preview.kind === "ready" && meta}
     {#if meta.above > 0}
@@ -277,7 +282,26 @@
     text-overflow: ellipsis;
   }
   .fp-range {
+    color: var(--ink-faint);
+    white-space: nowrap;
+  }
+  /* Range + the esc hint pushed to the header's right edge as one group. */
+  .fp-header-end {
+    display: flex;
+    align-items: baseline;
+    gap: 0.45rem;
     margin-left: auto;
+  }
+  /* The "esc to close" affordance — a quiet recessed chip wrapping the esc keycap,
+     naming the way out of the click-opened preview (EXC-840). Faint ink so it reads
+     as ambient guidance, not a control; the keycap tints off that same faint ink. */
+  .fp-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    padding: 0.1rem 0.4rem;
+    border-radius: var(--radius);
+    background: var(--paper-sunk);
     color: var(--ink-faint);
     white-space: nowrap;
   }

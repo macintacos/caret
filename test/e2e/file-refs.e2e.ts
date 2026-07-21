@@ -3,10 +3,14 @@
 // that resolves to a real file in the review's cwd gets a file icon (its token
 // tagged data-file-ref in the shadow root) and a hover highlight, and CLICKING
 // it opens a syntax-highlighted excerpt popover — hovering alone never does.
-// The resolve + read + shadow-DOM token tagging + real hover/click only exist
-// in a browser against a real daemon reading a real cwd, so they are exercised
-// here; the pure detection, resolution, and excerpt math stay units (fileRefs /
-// fileRefTag / plan-files / api tests).
+// The popover is a click-opened card that stays put: moving the pointer away
+// never dismisses it (EXC-840 dropped EXC-799's hover-intent tracker); it closes
+// only on Escape or a click outside it, and that dismissing click is swallowed so
+// it doesn't also do its normal thing (open a line comment). The resolve + read +
+// shadow-DOM token tagging + real hover/click only exist in a browser against a
+// real daemon reading a real cwd, so they are exercised here; the pure detection,
+// resolution, and excerpt math stay units (fileRefs / fileRefTag / plan-files /
+// api tests).
 //
 // The daemon is a real subprocess reading the local filesystem, so each test
 // writes a synthetic project dir and seeds a review whose cwd points at it. The
@@ -131,29 +135,39 @@ test("clicking a real reference reveals a highlighted excerpt centered on its li
     await expect(preview.locator(".fp-target")).toHaveCount(1);
     await expect(preview.locator(".fp-target .fp-lnum")).toHaveText("42");
 
-    // Leaving dismisses it (after the short travel grace).
+    // The header names the way out — an "esc to close" chip carrying the esc keycap.
+    const hint = preview.locator(".fp-hint");
+    await expect(hint).toContainText("close");
+    await expect(hint.locator("[data-slot='kbd']")).toContainText("esc");
+
+    // Moving the pointer away does NOT dismiss it — the card is a click-opened
+    // popover that stays put (EXC-840 dropped the hover-intent tracker). Park the
+    // pointer far off, give the pointer pipeline a beat, and it is still open.
     await page.mouse.move(0, 0);
-    await expect(preview).toHaveCount(0);
+    const t1 = await page.evaluate(() => performance.now());
+    await page.waitForFunction((t) => performance.now() > t + 300, t1);
+    await expect(preview).toBeVisible();
   } finally {
     await proj.cleanup();
   }
 });
 
-test("the preview stays open while the pointer rests on the card, then dismisses on a stop away from it", async ({
+test("clicking outside the preview dismisses it, swallowing that first click", async ({
   daemon,
   page,
 }) => {
-  // The hover-intent tracker (EXC-799) owns dismissal from a single window
-  // pointermove listener, reading the card's live rect. This exercises that wiring
-  // end-to-end: a pointer that comes to rest on the card must survive well past the
-  // idle-stop window, and a stop far from the card must then dismiss. The
-  // velocity-sensitive "aiming across the gap" logic is covered deterministically by
-  // the hoverIntent unit tests; synthetic pointer speed is not reliable here.
+  // The preview is a click-opened popover: a click anywhere outside it closes it,
+  // and — since it took a click to open — that first outside click is SWALLOWED
+  // (EXC-840). So clicking a plan line while the preview is open only dismisses the
+  // preview; it does NOT also open that line's comment composer. A second click
+  // then opens the composer as usual, proving only the first click was consumed.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
     await daemon.seed({
       cwd: proj.dir,
-      plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
+      // A reference line to open the preview from, and a plain prose line with no
+      // reference — so a click on it can only mean "comment on this line".
+      plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n\nJust some plain prose here.\n",
     });
     await page.goto("/");
     await expect(page.locator(".diff-plan")).toBeVisible();
@@ -164,30 +178,33 @@ test("the preview stays open while the pointer rests on the card, then dismisses
     const preview = page.locator("[data-file-preview]");
     await expect(preview).toBeVisible();
 
-    // Rest the pointer on the card itself, then wait well past IDLE_MS (100ms).
-    // hover() moves to the card's centre only once it is stable — its actionability
-    // check waits out the pop-in animation (EXC-799), so the pointer lands on the
-    // settled card, not a frame mid-scale.
-    await preview.hover();
-    // A fixed wait is the deliberate exception here: this is a persistence check
-    // (the card must NOT disappear across the idle window), which a web-first
-    // auto-retrying assertion cannot express — there is no state to poll toward.
-    await page.waitForTimeout(400);
-    await expect(preview).toBeVisible();
-
-    // A stop far from the card is conclusive — the preview dismisses.
-    await page.mouse.move(0, 0);
+    // First click on the plain line: the preview dismisses…
+    const proseLine = page.locator(".diffview").getByText("Just some plain prose here.", {
+      exact: false,
+    });
+    await proseLine.click();
     await expect(preview).toHaveCount(0);
+
+    // …and that click was swallowed, so no composer opened. No positive event to
+    // await, so give the pipeline a beat then assert it stayed shut.
+    const composer = page.getByRole("dialog", { name: "Add a comment" });
+    const t0 = await page.evaluate(() => performance.now());
+    await page.waitForFunction((t) => performance.now() > t + 300, t0);
+    await expect(composer).toHaveCount(0);
+
+    // With the preview gone, a second click on the same line opens the composer
+    // normally — the swallow was one-shot, tied to the open preview.
+    await proseLine.click();
+    await expect(composer).toBeVisible();
   } finally {
     await proj.cleanup();
   }
 });
 
 test("pressing Escape dismisses the open preview", async ({ daemon, page }) => {
-  // Escape is the keyboard escape hatch out of the preview (EXC-799): while it
-  // is open, one Escape closes it (and cancels the tracker's pending grace/idle
-  // timers). The pointer stays parked on the token, so the tracker never dismisses
-  // on its own — only Escape does.
+  // Escape is the keyboard escape hatch out of the preview (EXC-840): while it is
+  // open, one Escape closes it. The pointer stays parked on the token, and pointer
+  // movement no longer dismisses, so Escape is the only thing that closes it here.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
     await daemon.seed({

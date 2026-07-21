@@ -461,15 +461,21 @@ const CARET_OVERRIDES = `
   }
 
   /* EXC-840: the reference opens its preview on click, so the token reads as a
-     pressable chip — always the pointer cursor, and on hover a neutral ink wash
-     (amber stays selection-reserved) rounded with the interactive-control
-     radius. The swap is instant: the diff surface is motionless by design, so
-     no transition here. The icon sharpens from faint to full ink alongside it. */
+     pressable chip — always the pointer cursor, and on hover a faint amber wash
+     (--accent-wash, the same warm hue as its inline-code text) rounded with the
+     interactive-control radius. Padding gives the wash breathing room so it reads
+     as a chip around the whole reference rather than crowding the glyphs; a
+     matching negative inline margin offsets it so the backticks bracketing the
+     token never shift. The swap is instant: the diff surface is motionless by
+     design, so no transition here. The icon sharpens from faint to full ink
+     alongside it. */
   [data-content] [data-file-ref] {
     cursor: pointer;
+    padding: 0.1em 0.3em;
+    margin-inline: -0.3em;
   }
   [data-content] [data-file-ref]:hover {
-    background-color: color-mix(in lab, var(--ink), transparent 88%);
+    background-color: var(--accent-wash);
     border-radius: var(--radius);
   }
   [data-content] [data-file-ref]:hover::before {
