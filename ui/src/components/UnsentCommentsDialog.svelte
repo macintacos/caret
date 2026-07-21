@@ -65,11 +65,11 @@
   // activates it, rather than letting bits-ui land focus on Cancel.
   let confirmEl = $state<HTMLElement | null>(null);
 
-  // ⌘↵/Ctrl+Enter confirms from anywhere the chord can land, matching the comment
-  // composer's submit chord. The confirm button carries it for the on-open focus;
-  // the notes field carries it for when the reviewer is mid-note (a bare Enter
-  // there is a newline). preventDefault stops a focused button's native click from
-  // double-firing onConfirm.
+  // ⌘↵/Ctrl+Enter confirms from the focused confirm button (the on-open focus, so
+  // a bare Enter activates it). The notes editor routes its own submit chord
+  // through onSubmitChord below, so this handler rides only the button.
+  // preventDefault stops the focused button's native click from double-firing
+  // onConfirm.
   function onKey(e: KeyboardEvent) {
     if (!isSubmitChord(e)) return;
     e.preventDefault();
@@ -229,9 +229,9 @@
   }
 
   /* Optional reviewer-notes field (EXC-791). Reuses the request-changes form
-     treatment (the eyebrow-style label over a token-styled Textarea) so the two
-     dialogs read as one system; the top margin sets it off from the description
-     or the comments preview above it. */
+     treatment (the eyebrow-style label over the token-styled MarkdownEditor) so
+     the two dialogs read as one system; the top margin sets it off from the
+     description or the comments preview above it. */
   .field {
     display: block;
     margin-top: 1rem;

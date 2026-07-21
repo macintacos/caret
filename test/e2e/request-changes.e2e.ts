@@ -29,12 +29,12 @@ test("dialog opens, Escape closes, Cmd/Ctrl+Enter submits a rejection with feedb
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
 
-  // Reopen → type feedback → Cmd/Ctrl+Enter submits.
+  // Reopen → type feedback → Cmd/Ctrl+Enter submits. fill() focuses the editor
+  // and populates it (CodeMirror registers it), leaving focus there so the chord
+  // lands inside the editor.
   await page.getByRole("button", { name: "Request changes" }).click();
   await expect(dialog).toBeVisible();
-  await editor.click();
-  await page.keyboard.type(FEEDBACK);
-  await expect(editor).toContainText(FEEDBACK); // CM input is async
+  await editor.fill(FEEDBACK);
   await page.keyboard.press("ControlOrMeta+Enter");
 
   // UI: the review leaves the pending set.

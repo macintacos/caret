@@ -13,8 +13,9 @@ import { capture, flushUntil, render } from "../../test-mount.ts";
 // Now composed on the shared Modal (bits-ui Dialog): its content portals to
 // document.body on a deferred tick, so structure/render is asserted against the
 // body after an effect+timer flush (the shadcn-foundation verdict). Real-browser
-// interaction — Escape/backdrop dismiss, textarea autofocus, and the Collapsible
-// disclosures expanding — is covered in test/e2e/request-changes.e2e.ts.
+// interaction — Escape/backdrop dismiss, the general-comment editor's autofocus,
+// and the Collapsible disclosures expanding — is covered in
+// test/e2e/request-changes.e2e.ts.
 
 const ann = (id: string, comment: string): Annotation => ({
   id,

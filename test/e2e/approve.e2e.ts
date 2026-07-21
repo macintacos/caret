@@ -62,12 +62,9 @@ test("a reviewer note rides the approval to the agent's decision (EXC-791)", asy
   const confirm = page.getByRole("dialog", APPROVE_CONFIRM);
   await expect(confirm).toBeVisible();
 
-  // Type into the optional notes field (now a CodeMirror textbox — click to
-  // focus, then type real keystrokes), then confirm.
-  const notes = confirm.getByRole("textbox", { name: /notes for the agent/i });
-  await notes.click();
-  await page.keyboard.type("use the retry helper");
-  await expect(notes).toContainText("use the retry helper"); // CM input is async
+  // Type into the optional notes field (a CodeMirror textbox, located by its
+  // accessible name), then confirm.
+  await confirm.getByRole("textbox", { name: /notes for the agent/i }).fill("use the retry helper");
   await confirm.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
 
