@@ -17,19 +17,24 @@ test("dialog opens, Escape closes, Cmd/Ctrl+Enter submits a rejection with feedb
   await waitPastSafeModeGrace(page);
 
   const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
+  // The general comment is now the live-markdown editor (a CodeMirror textbox),
+  // located by its accessible name.
+  const editor = dialog.getByRole("textbox", { name: "General comment" });
 
-  // Open → Escape closes. Anchor on the autofocused textarea before pressing so
-  // the key event reliably originates inside the dialog.
+  // Open → Escape closes. The editor autofocuses on open, so the Escape key
+  // originates inside it (the editor wires Esc → onCancel to dismiss the dialog).
   await page.getByRole("button", { name: "Request changes" }).click();
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator("textarea")).toBeFocused();
+  await expect(editor).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
 
   // Reopen → type feedback → Cmd/Ctrl+Enter submits.
   await page.getByRole("button", { name: "Request changes" }).click();
   await expect(dialog).toBeVisible();
-  await dialog.locator("textarea").fill(FEEDBACK);
+  await editor.click();
+  await page.keyboard.type(FEEDBACK);
+  await expect(editor).toContainText(FEEDBACK); // CM input is async
   await page.keyboard.press("ControlOrMeta+Enter");
 
   // UI: the review leaves the pending set.
