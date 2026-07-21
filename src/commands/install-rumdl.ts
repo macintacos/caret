@@ -6,27 +6,22 @@
 // rumdl on the first plan. The report distinguishes a fresh download from a cached
 // one so the install output (and the idempotency check) reads cleanly.
 
-import { existsSync } from "node:fs";
-
-import { rumdlBin } from "@/config/paths.ts";
 import { ensureRumdl } from "@/plan/rumdl.ts";
 
-/** Injection seams for tests: stub acquisition, the cache check, and the writer so
- * the command runs offline without touching the real state dir. */
+/** Injection seams for tests: stub acquisition and the writer so the command runs
+ * offline without touching the real state dir. */
 export interface InstallRumdlDeps {
-  ensure?: () => Promise<{ bin: string; config: string }>;
-  isPresent?: (bin: string) => boolean;
+  ensure?: () => Promise<{ bin: string; config: string; installed: boolean }>;
   write?: (s: string) => void;
 }
 
 export async function runInstallRumdlSubcommand(deps: InstallRumdlDeps = {}): Promise<void> {
   const ensure = deps.ensure ?? ensureRumdl;
-  const isPresent = deps.isPresent ?? existsSync;
   const write = deps.write ?? ((s: string) => void process.stdout.write(s));
 
-  // Sample the cache before ensure() may download, so the verb reflects what this
-  // run actually did.
-  const cached = isPresent(rumdlBin());
-  const { bin } = await ensure();
-  write(`caret: rumdl ${cached ? "already present" : "installed"} at ${bin}.\n`);
+  // `installed` is ensureRumdl's own signal for "this call downloaded it" — honest
+  // whether the binary was freshly fetched, already cached, or a CARET_RUMDL_BIN
+  // override (no guessing at the cache path the override never populates).
+  const { bin, installed } = await ensure();
+  write(`caret: rumdl ${installed ? "installed" : "already present"} at ${bin}.\n`);
 }

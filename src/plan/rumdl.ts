@@ -13,7 +13,7 @@
 // release module's unbounded width.
 
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -111,9 +111,14 @@ export async function downloadRumdl(
     if ((await tar.exited) !== 0) throw new Error(`rumdl: failed to extract ${asset.url}`);
     const extracted = join(work, "rumdl");
     if (!existsSync(extracted)) throw new Error(`rumdl: binary not found in ${asset.url}`);
+    // Land atomically: copy + chmod a sibling temp file in the destination dir,
+    // then rename into place. A hard kill mid-copy leaves the .tmp, never a
+    // truncated `binPath` that existsSync() would wrongly treat as a good cache.
     mkdirSync(dirname(binPath), { recursive: true });
-    await Bun.write(binPath, Bun.file(extracted));
-    chmodSync(binPath, 0o755);
+    const tmp = `${binPath}.${process.pid}.tmp`;
+    await Bun.write(tmp, Bun.file(extracted));
+    chmodSync(tmp, 0o755);
+    renameSync(tmp, binPath);
     return binPath;
   } finally {
     await rm(work, { recursive: true, force: true });
@@ -126,23 +131,30 @@ export async function downloadRumdl(
 // binary); tests set the override and never enter this path.
 let downloadOnce: Promise<string> | undefined;
 
-/** Ensure rumdl (binary + config) exists under caret's state dir and return both
- * paths. Resolution order: `CARET_RUMDL_BIN` override (blank counts as unset) →
- * cached download → fresh download of the pinned asset. The config is written
+/** Ensure rumdl (binary + config) exists under caret's state dir. Returns the
+ * resolved paths plus whether this call performed the download (`installed`).
+ * Resolution order: `CARET_RUMDL_BIN` override (blank counts as unset) → cached
+ * download → fresh download of the pinned asset. The config is written
  * idempotently on every call so it always tracks the current state dir. */
-export async function ensureRumdl(): Promise<{ bin: string; config: string }> {
+export async function ensureRumdl(): Promise<{ bin: string; config: string; installed: boolean }> {
   ensureStateDir(rumdlDir());
   const config = rumdlConfig();
   writeFileSync(config, RUMDL_CONFIG);
 
   const override = process.env.CARET_RUMDL_BIN?.trim();
-  if (override) return { bin: override, config };
+  if (override) return { bin: override, config, installed: false };
 
   const cached = rumdlBin();
-  if (existsSync(cached)) return { bin: cached, config };
+  if (existsSync(cached)) return { bin: cached, config, installed: false };
 
-  downloadOnce ??= downloadRumdl(cached, rumdlAsset());
-  return { bin: await downloadOnce, config };
+  // Reset the memo on rejection so a transient failure (offline, GitHub
+  // rate-limit) retries on the next format rather than poisoning every later
+  // call with the same rejected promise for the life of the daemon.
+  downloadOnce ??= downloadRumdl(cached, rumdlAsset()).catch((err) => {
+    downloadOnce = undefined;
+    throw err;
+  });
+  return { bin: await downloadOnce, config, installed: true };
 }
 
 /** The default `doFormat` for formatPlanMarkdown: reflow `text` through rumdl's

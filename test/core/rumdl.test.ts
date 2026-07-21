@@ -7,7 +7,7 @@
 // no network.
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -75,6 +75,7 @@ test("downloadRumdl rejects a checksum mismatch without writing the binary", asy
       fakeFetch(buf),
     ),
   ).rejects.toThrow(/checksum/i);
+  expect(existsSync(dest)).toBe(false);
 });
 
 test("rumdlFormatPlan reflows prose to at most 90 columns", async () => {
