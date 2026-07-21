@@ -1131,8 +1131,10 @@ test("the copy button follows the block under a stationary cursor as the plan sc
   await expect(page.getByText("Intro prose above the first block.")).toBeVisible();
 
   const copy = page.getByRole("button", { name: "Copy code" });
-  const scroller = page.locator(".diff-plan");
-  const scrollBy = (dy: number) => scroller.evaluate((el, d) => (el.scrollTop += d), dy);
+  // Scroll with a real mouse wheel at the stationary pointer — the true user gesture.
+  // NOT `el.scrollTop +=`, which fires a scroll event without proving a wheel over the
+  // plan actually routes to `.diff-plan`; wheel deltaY maps 1:1 onto scrollTop here.
+  const wheelBy = (dy: number) => page.mouse.wheel(0, dy);
 
   // Park the cursor on block A's interior code line; the button appears on block A.
   const cursor = await rowPoint(page, "const a = 1;");
@@ -1144,13 +1146,13 @@ test("the copy button follows the block under a stationary cursor as the plan sc
   // button hides — the behavior CSS :hover alone could never produce on scroll.
   const prose = await rowPoint(page, "Middle prose between the blocks.");
   expect(prose).not.toBeNull();
-  await scrollBy(prose!.y - cursor!.y);
+  await wheelBy(prose!.y - cursor!.y);
   await expect(copy).toHaveCount(0);
 
   // Scroll block B under the same stationary cursor: the button re-anchors to it.
   const blockB = await rowPoint(page, "const b = 3;");
   expect(blockB).not.toBeNull();
-  await scrollBy(blockB!.y - cursor!.y);
+  await wheelBy(blockB!.y - cursor!.y);
   await expect(copy).toBeVisible();
 
   // Clicking the re-anchored button copies block B's code — proof it followed to the
