@@ -460,6 +460,22 @@ const CARET_OVERRIDES = `
     mask: ${FILE_ICON_MASK} no-repeat center / contain;
   }
 
+  /* EXC-840: the reference opens its preview on click, so the token reads as a
+     pressable chip — always the pointer cursor, and on hover a neutral ink wash
+     (amber stays selection-reserved) rounded with the interactive-control
+     radius. The swap is instant: the diff surface is motionless by design, so
+     no transition here. The icon sharpens from faint to full ink alongside it. */
+  [data-content] [data-file-ref] {
+    cursor: pointer;
+  }
+  [data-content] [data-file-ref]:hover {
+    background-color: color-mix(in lab, var(--ink), transparent 88%);
+    border-radius: var(--radius);
+  }
+  [data-content] [data-file-ref]:hover::before {
+    background-color: var(--ink);
+  }
+
   /* EXC-832: the vim / search highlights. searchHighlight.ts registers two named
      CSS Custom Highlights over the rendered rows — every non-current match in
      "caret-search", the active match in "caret-search-current". They are styled

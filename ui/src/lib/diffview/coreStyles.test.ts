@@ -359,3 +359,30 @@ describe("the filename-reference icon (EXC-687)", () => {
     expect(iconRule).toMatch(/mask:\s*\$\{FILE_ICON_MASK\}/);
   });
 });
+
+// EXC-840: the file reference opens its preview on click; hover only highlights.
+// The affordance is CSS-only — a neutral ink wash on the tagged token — so the
+// pins here are what keep it from drifting to amber or growing motion.
+describe("the filename-reference hover highlight (EXC-840)", () => {
+  const tokenRule =
+    overrideDecls.match(/\[data-content\]\s*\[data-file-ref\]\s*\{[^}]*\}/)?.[0] ?? "";
+  const hoverRule =
+    overrideDecls.match(/\[data-content\]\s*\[data-file-ref\]:hover\s*\{[^}]*\}/)?.[0] ?? "";
+
+  test("the token always carries the pointer cursor — it is clickable", () => {
+    expect(tokenRule).toContain("cursor: pointer");
+  });
+
+  test("hover paints a neutral ink wash with the control radius, never amber", () => {
+    expect(hoverRule).toMatch(
+      /background-color:\s*color-mix\(in lab, var\(--ink\), transparent \d+%\)/,
+    );
+    expect(hoverRule).toMatch(/border-radius:\s*var\(--radius\)/);
+    expect(hoverRule).not.toContain("--accent");
+  });
+
+  test("the hover swap is instant — the diff surface stays motionless", () => {
+    expect(tokenRule).not.toMatch(/transition|animation/);
+    expect(hoverRule).not.toMatch(/transition|animation/);
+  });
+});

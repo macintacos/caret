@@ -72,6 +72,19 @@ test("marks only references that resolve to a real file", async ({ daemon, page 
     const t0 = await page.evaluate(() => performance.now());
     await page.waitForFunction((t) => performance.now() > t + 300, t0);
     await expect(page.locator("[data-file-preview]")).toHaveCount(0);
+
+    // The hover affordance is the highlight itself: with the pointer parked on
+    // the token, the real :hover state paints the background wash, and the token
+    // carries the pointer cursor signalling it is clickable.
+    const style = await page.evaluate(() => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+      const tok = sh?.querySelector("[data-file-ref]");
+      if (!tok) return null;
+      const cs = getComputedStyle(tok);
+      return { background: cs.backgroundColor, cursor: cs.cursor };
+    });
+    expect(style?.cursor).toBe("pointer");
+    expect(style?.background).not.toBe("rgba(0, 0, 0, 0)");
   } finally {
     await proj.cleanup();
   }
