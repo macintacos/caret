@@ -26,6 +26,23 @@ export function reviewsDir(): string {
   return `${stateDir()}/reviews`;
 }
 
+/** Directory holding the downloaded rumdl binary + its formatting config
+ * (EXC-828). caret owns this dir (off PATH) and installs rumdl into it on first
+ * plan format; ensureStateDir() keeps it at 0700 like the rest of stateDir. */
+export function rumdlDir(): string {
+  return `${stateDir()}/rumdl`;
+}
+
+/** Absolute path to the downloaded rumdl binary. */
+export function rumdlBin(): string {
+  return `${rumdlDir()}/rumdl`;
+}
+
+/** Absolute path to rumdl's formatting-only config, written beside the binary. */
+export function rumdlConfig(): string {
+  return `${rumdlDir()}/rumdl.toml`;
+}
+
 /** Root config dir: $XDG_CONFIG_HOME/caret or ~/.config/caret. Read lazily so
  * tests can override XDG_CONFIG_HOME per-case. Separate from stateDir(), which
  * `mise run dev` isolates and wipes; which file inside this dir is read is
