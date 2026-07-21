@@ -1076,6 +1076,163 @@ test("hovering a code block reveals a copy button that copies the code (EXC-692)
   await expect(page.getByRole("button", { name: "Copy code" })).toBeVisible({ timeout: 3000 });
 });
 
+// Two distinct fenced blocks separated by prose, with trailing filler for scroll room.
+// Block A and block B carry different code so the clipboard proves which block the copy
+// button targets after the plan scrolls under a stationary cursor (EXC-836).
+const SCROLL_COPY_PLAN = `# Scroll Copy Plan
+
+Intro prose above the first block.
+
+\`\`\`ts
+const a = 1;
+const aa = 2;
+\`\`\`
+
+Middle prose between the blocks.
+
+\`\`\`ts
+const b = 3;
+const bb = 4;
+\`\`\`
+
+Closing prose after the second block.
+
+${Array.from({ length: 20 }, (_, i) => `Filler line ${i + 1} giving the surface room to scroll.`).join("\n\n")}
+`;
+
+// The viewport center of the shadow row whose text contains `needle`, or null when no
+// such row is rendered. Used to place the cursor and to compute how far to scroll a row
+// under it.
+async function rowPoint(page: Page, needle: string): Promise<{ x: number; y: number } | null> {
+  return page.evaluate((text) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+    const rows = sh?.querySelectorAll<HTMLElement>("[data-content] > [data-line]") ?? [];
+    for (const row of rows) {
+      if ((row.textContent ?? "").includes(text)) {
+        const r = row.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      }
+    }
+    return null;
+  }, needle);
+}
+
+// The `data-line` of the content row the library currently flags `data-hovered` (its
+// row highlight), or null when nothing is hovered. The library sets `data-hovered` off
+// its own pointermove, not CSS :hover, so this is what a scroll under a still cursor
+// must keep in sync.
+async function hoveredLineNo(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+    const row = sh?.querySelector("[data-content] > [data-line][data-hovered]");
+    return row?.getAttribute("data-line") ?? null;
+  });
+}
+
+// The `data-line` of the content row under a viewport point — the same shadow-root
+// hit-test the fix re-fires on scroll, so the row this reports is exactly the one the
+// re-fired pointermove should hover.
+async function lineNoAt(page: Page, x: number, y: number): Promise<string | null> {
+  return page.evaluate(
+    ({ x, y }) => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+      const el = sh?.elementFromPoint(x, y) ?? null;
+      const row = el?.closest("[data-line]") ?? null;
+      return row?.getAttribute("data-line") ?? null;
+    },
+    { x, y },
+  );
+}
+
+test("the copy button follows the block under a stationary cursor as the plan scrolls (EXC-836)", async ({
+  daemon,
+  page,
+}) => {
+  // CSS :hover doesn't re-fire when the container scrolls under a still pointer, so the
+  // copy button used to stay glued to the block that scrolled away. It must instead
+  // re-anchor to the element now under the pointer: hide over prose, and re-appear
+  // targeting the new block when another block scrolls under the cursor.
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await daemon.seed({ plan: SCROLL_COPY_PLAN });
+  await page.goto("/");
+  await expect(page.getByText("Intro prose above the first block.")).toBeVisible();
+
+  const copy = page.getByRole("button", { name: "Copy code" });
+  // Scroll with a real mouse wheel at the stationary pointer — the true user gesture.
+  // NOT `el.scrollTop +=`, which fires a scroll event without proving a wheel over the
+  // plan actually routes to `.diff-plan`; wheel deltaY maps 1:1 onto scrollTop here.
+  const wheelBy = (dy: number) => page.mouse.wheel(0, dy);
+
+  // Park the cursor on block A's interior code line; the button appears on block A.
+  const cursor = await rowPoint(page, "const a = 1;");
+  expect(cursor).not.toBeNull();
+  await page.mouse.move(cursor!.x, cursor!.y);
+  await expect(copy).toBeVisible();
+
+  // Scroll the middle prose under the stationary cursor: no block is there, so the
+  // button hides — the behavior CSS :hover alone could never produce on scroll.
+  const prose = await rowPoint(page, "Middle prose between the blocks.");
+  expect(prose).not.toBeNull();
+  await wheelBy(prose!.y - cursor!.y);
+  await expect(copy).toHaveCount(0);
+
+  // Scroll block B under the same stationary cursor: the button re-anchors to it.
+  const blockB = await rowPoint(page, "const b = 3;");
+  expect(blockB).not.toBeNull();
+  await wheelBy(blockB!.y - cursor!.y);
+  await expect(copy).toBeVisible();
+
+  // Clicking the re-anchored button copies block B's code — proof it followed to the
+  // block now under the pointer, not the one that was there before the scroll.
+  await copy.click();
+  const clip = await page.evaluate(() => navigator.clipboard.readText());
+  expect(clip).toBe("const b = 3;\nconst bb = 4;");
+});
+
+test("the row highlight and gutter + follow the row under a stationary cursor as the plan scrolls (EXC-836)", async ({
+  daemon,
+  page,
+}) => {
+  // The library drives the row highlight (data-hovered) and the gutter + off its own
+  // pointermove, not CSS :hover, and has no scroll listener — so scrolling the plan
+  // under a still cursor used to leave both glued to the row that scrolled away. They
+  // must instead follow the row now under the pointer, with the mouse never moving.
+  await daemon.seed({ plan: TALL_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("Line 1 of the plan body")).toBeVisible();
+
+  // Park the cursor on a specific content row; the library highlights it and mounts
+  // the + on it.
+  const cursor = await rowPoint(page, "Line 5 of the plan body");
+  expect(cursor).not.toBeNull();
+  await page.mouse.move(cursor!.x, cursor!.y);
+  const before = await lineNoAt(page, cursor!.x, cursor!.y);
+  expect(before).not.toBeNull();
+  await expect.poll(() => hoveredLineNo(page)).toBe(before);
+  await expect(page.locator(".diffview [data-utility-button]")).toBeVisible();
+
+  // Wheel the plan several rows down under the STILL cursor — a real wheel (not
+  // scrollTop=), so this proves the true gesture routes to .diff-plan.
+  await page.mouse.wheel(0, 200);
+
+  // A different content row now sits under the unmoved cursor.
+  await expect.poll(() => lineNoAt(page, cursor!.x, cursor!.y)).not.toBe(before);
+  const after = await lineNoAt(page, cursor!.x, cursor!.y);
+  expect(after).not.toBeNull();
+
+  // The fix: the highlight AND the + re-evaluate on scroll and follow to that row,
+  // with no pointer movement. (RED before the fix: both stay on `before`.)
+  await expect.poll(() => hoveredLineNo(page)).toBe(after);
+  // The + rode with the hover: its vertical center now sits within a row's height of
+  // the cursor, not left behind on the row that scrolled away.
+  const plusY = await page.locator(".diffview [data-utility-button]").evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return r.y + r.height / 2;
+  });
+  expect(Math.abs(plusY - cursor!.y)).toBeLessThan(40);
+});
+
 test("numeric chrome renders with tabular figures end to end", async ({ daemon, page }) => {
   // Tabular figures keep columns of digits aligned. The bridge sets
   // --diffs-font-features to the 'tnum' tag, which the library feeds into

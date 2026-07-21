@@ -470,6 +470,63 @@
     };
   });
 
+  // Re-hover the row under a stationary cursor as the plan scrolls (EXC-836). The
+  // browser re-evaluates hover only on pointer MOVE, never on scroll, and the
+  // @pierre/diffs view drives its row highlight (data-hovered) and gutter "+" off its
+  // own pointermove — not CSS :hover — with no scroll listener of its own. So scrolling
+  // the plan under a still pointer leaves both glued to the row that scrolled away.
+  // Re-fire the real gesture: on scroll, synthesize a pointermove at the retained cursor
+  // position into the row now beneath it. The library re-hovers that row (highlight +
+  // "+"), and the composed event bubbles out to .diff-plan so the code-block copy effect
+  // above re-anchors too — one re-fire drives every hover-dependent affordance.
+  // rAF-throttled, and gated on pointer presence so a programmatic scroll (a vim j/k
+  // motion) with the pointer away can't resurrect a stale hover.
+  $effect(() => {
+    const scroller = scrollEl;
+    const el = host;
+    if (scroller == null || el == null) return;
+    let raf = 0;
+    let lastX = 0;
+    let lastY = 0;
+    let inside = false;
+    const rehover = () => {
+      raf = 0;
+      // Same shadow-root hit-test SourceView.lineAtPoint uses; dispatch on the resolved
+      // row so the library resolves it from the event's composedPath, exactly as a real
+      // move would.
+      const target = el.shadowRoot?.elementFromPoint(lastX, lastY);
+      target?.dispatchEvent(
+        new PointerEvent("pointermove", {
+          bubbles: true,
+          composed: true,
+          clientX: lastX,
+          clientY: lastY,
+          pointerType: "mouse",
+        }),
+      );
+    };
+    const onMove = (event: PointerEvent) => {
+      inside = true;
+      lastX = event.clientX;
+      lastY = event.clientY;
+    };
+    const onLeave = () => {
+      inside = false;
+    };
+    const onScroll = () => {
+      if (inside && raf === 0) raf = requestAnimationFrame(rehover);
+    };
+    scroller.addEventListener("pointermove", onMove, { passive: true });
+    scroller.addEventListener("pointerleave", onLeave, { passive: true });
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      scroller.removeEventListener("pointermove", onMove);
+      scroller.removeEventListener("pointerleave", onLeave);
+      scroller.removeEventListener("scroll", onScroll);
+    };
+  });
+
   // Gates the live `?heading=` mirror until the deep-link restore has consumed any
   // incoming `?heading=`. Without it, the mirror effect (activeLine starts null)
   // could clear the param before onSourceReady reads it, depending on which
