@@ -7,6 +7,29 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-07-21 - The Affordances Release
+
+### Added
+
+- **Click the working-directory path to copy it.** The working-directory path on the
+  compare row is now click-to-copy, backed by a new reusable in-UI alert surface that
+  confirms the copy (#282).
+- **File references open their preview on click.** A filename reference in the plan now
+  highlights as you hover it, and clicking it opens the file preview (#281).
+- **Live-markdown comment editing.** The Request Changes and Approval comment fields
+  became live-markdown editors that style your prose as you type (#280).
+
+### Changed
+
+- **Hover keeps up with a stationary cursor on scroll.** Scrolling with the pointer held
+  still now re-resolves the hover state to whatever moves under the cursor, so the row
+  highlight and file preview no longer go stale (#279).
+- **rumdl formats plans locally.** Plan formatting now downloads and runs a pinned rumdl
+  binary rather than relying on an ambient install, and that binary was bumped to 0.2.37
+  (#278, 06a589f).
+- **Aligned Kbd keycap glyphs.** The `Kbd` keycap was lowered so its glyph sits on the
+  paired label's baseline (872823b).
+
 ## [0.7.0] - 2026-07-20 - The Keyboard-First Release
 
 ### Added
@@ -469,7 +492,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Review decisions are delivered via a bounded poll, fixing missed or delayed decision
   delivery.
 
-[Unreleased]: https://github.com/macintacos/caret/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/macintacos/caret/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/macintacos/caret/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/macintacos/caret/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/macintacos/caret/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/macintacos/caret/compare/v0.4.1...v0.5.0
