@@ -418,12 +418,13 @@
     { range: CodeBlockRange; text: string; top: number; left: number } | undefined
   >();
 
-  // Track the hovered code block from pointer moves over the scroll container (the
-  // rows live in the SourceView's shadow root; codeCopy.ts does the hit-test + the
-  // content-coordinate anchor). rAF-throttled, and the anchor is recomputed only when
-  // the hovered block changes (it is the block's own top-right, independent of where
-  // in the block the pointer sits), so hovering does not thrash layout. The button is
-  // a light-DOM child of .diff-plan, so it scrolls with the rows for free.
+  // Track the hovered code block from pointer moves — and, for a stationary cursor,
+  // from scrolls (EXC-836) — over the scroll container (the rows live in the
+  // SourceView's shadow root; codeCopy.ts does the hit-test + the content-coordinate
+  // anchor). rAF-throttled, and the anchor is recomputed only when the hovered block
+  // changes (it is the block's own top-right, independent of where in the block the
+  // pointer sits), so hovering does not thrash layout. The button is a light-DOM
+  // child of .diff-plan, so it scrolls with the rows for free.
   $effect(() => {
     const scroller = scrollEl;
     const el = host;
@@ -436,6 +437,10 @@
     let raf = 0;
     let lastX = 0;
     let lastY = 0;
+    // Whether the pointer is currently over the scroller — set on pointermove, cleared
+    // on pointerleave. Gates the scroll re-anchor below so a programmatic scroll (a vim
+    // motion) with the pointer away can't resurrect a stale button (EXC-836).
+    let inside = false;
     const update = () => {
       raf = 0;
       const range = codeBlockAtPoint(el, ranges, lastX, lastY);
@@ -452,21 +457,33 @@
           : { range, text: block.text, top: anchor.top, left: anchor.left };
     };
     const onMove = (event: PointerEvent) => {
+      inside = true;
       lastX = event.clientX;
       lastY = event.clientY;
       if (raf === 0) raf = requestAnimationFrame(update);
     };
+    // CSS :hover never re-fires when the container scrolls under a still pointer, so the
+    // button would stay glued to the block that scrolled away. Re-run the same hit-test
+    // at the retained pointer coords on scroll (only while the pointer is inside), reusing
+    // the rAF throttle and update()'s same-block bail so a scroll burst costs at most one
+    // hit-test per frame and re-anchors only when a different block comes under the cursor.
+    const onScroll = () => {
+      if (inside && raf === 0) raf = requestAnimationFrame(update);
+    };
     const onLeave = () => {
+      inside = false;
       cancelAnimationFrame(raf);
       raf = 0;
       hoveredCopy = undefined;
     };
     scroller.addEventListener("pointermove", onMove);
     scroller.addEventListener("pointerleave", onLeave);
+    scroller.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       cancelAnimationFrame(raf);
       scroller.removeEventListener("pointermove", onMove);
       scroller.removeEventListener("pointerleave", onLeave);
+      scroller.removeEventListener("scroll", onScroll);
     };
   });
 
