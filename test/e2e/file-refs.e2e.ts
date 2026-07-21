@@ -152,6 +152,37 @@ test("clicking a real reference reveals a highlighted excerpt centered on its li
   }
 });
 
+test("the preview omits the esc-to-close hint when shortcut hints are off", async ({
+  daemon,
+  page,
+}) => {
+  // The "esc to close" chip is a shortcut-hint affordance, so it follows the same
+  // Settings toggle as the rest of them (showShortcutHints): off means the header
+  // shows the path and range but no keycap hint. Escape still closes the preview —
+  // only the visible hint is gated, not the behavior.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
+    });
+    await page.addInitScript(() => localStorage.setItem("caret.shortcutHints", "off"));
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+    await page.locator("[data-file-ref]").first().click();
+
+    const preview = page.locator("[data-file-preview]");
+    await expect(preview).toBeVisible();
+    await expect(preview).toContainText("src/cache.ts");
+    // The header renders, but with no esc-to-close hint.
+    await expect(preview.locator(".fp-hint")).toHaveCount(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
 test("clicking outside the preview dismisses it, swallowing that first click", async ({
   daemon,
   page,

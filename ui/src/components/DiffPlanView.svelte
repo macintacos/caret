@@ -1416,6 +1416,7 @@
           path={filePreview.path}
           line={filePreview.line}
           anchor={filePreview.anchor}
+          {showShortcutHints}
         />
       {/if}
       <!-- Saved comments and the open composer are projected into the library's

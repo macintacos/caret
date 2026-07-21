@@ -22,8 +22,12 @@
     line?: number;
     /** Viewport rect of the clicked token, for anchoring. */
     anchor: DOMRect;
+    /** Whether the shortcut-hint affordances are shown (EXC-826); gates the
+     * header's "esc to close" chip. Defaults to shown; Escape still closes the
+     * preview regardless. */
+    showShortcutHints?: boolean;
   }
-  let { reviewId, path, line, anchor }: Props = $props();
+  let { reviewId, path, line, anchor, showShortcutHints = true }: Props = $props();
 
   // One rendered source line: its real file line number, plus either the
   // highlighted token HTML (shiki) or the raw text (plain fallback).
@@ -182,7 +186,9 @@
     <span class="fp-path">{preview.kind === "ready" ? preview.excerpt.path : path}</span>
     <span class="fp-header-end">
       {#if meta}<span class="fp-range">{meta.label}</span>{/if}
-      <span class="fp-hint"><Kbd class="kbd-sm">esc</Kbd> to close</span>
+      {#if showShortcutHints}
+        <span class="fp-hint"><Kbd class="kbd-sm">esc</Kbd> to close</span>
+      {/if}
     </span>
   </div>
   {#if preview.kind === "ready" && meta}
