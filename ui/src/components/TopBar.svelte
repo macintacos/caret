@@ -12,6 +12,7 @@
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
+  import CwdChip from "@/components/CwdChip.svelte";
   import DevBadge from "@/components/DevBadge.svelte";
   import Icon from "@/components/Icon.svelte";
   import NotifyBell from "@/components/NotifyBell.svelte";
@@ -48,6 +49,10 @@
     /** Open the Settings modal (theme switching). Persistent chrome, like the
      * bell — reachable whether or not a review is active (EXC-730). */
     onOpenSettings: () => void;
+    /** Copy the active review's working directory to the clipboard (EXC-850).
+     * App.svelte does the clipboard write + fires the success alert; the chip is
+     * presentation only. */
+    onCopyCwd: (cwd: string) => void;
     /** Whether the shortcut-hint key-cap hints are shown (EXC-826). When off, the
      * inline a/r caps hide; the shortcuts themselves still fire. */
     showShortcutHints: boolean;
@@ -66,6 +71,7 @@
     onRequestChanges,
     onReject,
     onOpenSettings,
+    onCopyCwd,
     showShortcutHints,
   }: Props = $props();
 </script>
@@ -80,6 +86,7 @@
     {#if active}
       <ReviewSwitcher {reviews} activeId={active.id} {onSelect} />
       <VersionLabel version={active.version} />
+      <CwdChip cwd={active.cwd} onCopy={onCopyCwd} />
     {/if}
   </div>
 

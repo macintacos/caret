@@ -34,16 +34,26 @@ const baseProps = {
   onRequestChanges: () => {},
   onReject: () => {},
   onOpenSettings: () => {},
+  onCopyCwd: () => {},
   showShortcutHints: true,
 };
 
 describe("TopBar render", () => {
-  // EXC-807: the working-directory path moved out of the header into the compare
-  // row, so the topbar no longer renders it.
-  test("does not render the working-directory path", () => {
-    const { target } = render(TopBar, baseProps);
-    expect(target.querySelector(".context")).toBeNull();
-    expect(target.textContent).not.toContain("/home/u/proj/app");
+  // EXC-850: the working-directory path returns to the header as a click-to-copy
+  // chip (EXC-807 had moved it out). It shows the abbreviated path but copies the
+  // full absolute path — and shows no hover popup (that's the whole point).
+  test("renders the cwd chip that copies the full path on click", () => {
+    const copied = capture<string>();
+    const { target } = render(TopBar, { ...baseProps, onCopyCwd: copied.cb });
+    const chip = target.querySelector("button.cwd-chip");
+    expect(chip?.textContent?.trim()).toBe("…/proj/app");
+    target.querySelector<HTMLButtonElement>("button.cwd-chip")?.click();
+    expect(copied.last()).toBe("/home/u/proj/app");
+  });
+
+  test("hides the cwd chip when no review is active", () => {
+    const { target } = render(TopBar, { ...baseProps, active: null });
+    expect(target.querySelector(".cwd-chip") === null).toBe(true);
   });
 
   test("renders the brand and, with an active review, the action buttons", () => {
