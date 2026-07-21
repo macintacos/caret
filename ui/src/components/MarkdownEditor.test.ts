@@ -146,6 +146,20 @@ describe("MarkdownEditor chords", () => {
   });
 });
 
+describe("MarkdownEditor aria", () => {
+  test("marks the editor aria-required when the prop is set (the required-field signal)", () => {
+    const { target, flush } = render(MarkdownEditor, { ariaRequired: true, onInput: () => {} });
+    flush();
+    expect(target.querySelector(".cm-content")?.getAttribute("aria-required")).toBe("true");
+  });
+
+  test("leaves aria-required off by default", () => {
+    const { target, flush } = render(MarkdownEditor, { onInput: () => {} });
+    flush();
+    expect(target.querySelector(".cm-content")?.hasAttribute("aria-required")).toBe(false);
+  });
+});
+
 describe("MarkdownEditor focus", () => {
   test("autofocus focuses the editor with preventScroll", () => {
     const proto = HTMLElement.prototype;

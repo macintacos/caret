@@ -82,7 +82,7 @@ test("request-changes with a general comment round-trips on the source-view surf
   const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
   await page.getByRole("button", { name: "Request changes" }).click();
   await expect(dialog).toBeVisible();
-  await dialog.locator("textarea").fill(feedback);
+  await dialog.getByRole("textbox", { name: "General comment" }).fill(feedback);
   await page.keyboard.press("ControlOrMeta+Enter");
 
   await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
@@ -1692,7 +1692,9 @@ test("submitting with an unsaved scratch sends only committed comments", async (
   const dialog = await scratchThenOpenDialog(page, 3, "must not be sent unsaved");
 
   // Type a general comment and submit, leaving the scratch unsaved.
-  await dialog.locator("textarea").fill("Please revise the cache section.");
+  await dialog
+    .getByRole("textbox", { name: "General comment" })
+    .fill("Please revise the cache section.");
   await dialog.getByRole("button", { name: "Send for revision" }).click();
   await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
 

@@ -20,6 +20,14 @@
     /** Focus on mount with { preventScroll: true } (the inline-reveal guard). */
     autofocus?: boolean;
     ariaLabel?: string;
+    /** Reflected onto the editor's `aria-required` when set (the required-field
+     * signal a dialog's general-comment field carries). Omitted leaves it off.
+     * ponytail: seeded once at mount like the rest of the config, so a field whose
+     * required-ness flips while the editor is open keeps its mount value (the
+     * reactive disabled-submit guard stays the source of truth). Upgrade to a live
+     * attribute — a contentDOM effect or a CM Compartment — only if a field needs
+     * the signal to toggle mid-edit. */
+    ariaRequired?: boolean;
     /** Live value on every edit (and once with the seed at mount). */
     onInput?: (text: string) => void;
     /** ⌘/Ctrl+Enter. */
@@ -32,6 +40,7 @@
     placeholder = "",
     autofocus = false,
     ariaLabel = "",
+    ariaRequired,
     onInput,
     onSubmitChord,
     onCancelChord,
@@ -60,6 +69,7 @@
         extensions: markdownExtensions({
           placeholder: untrack(() => placeholder),
           ariaLabel: untrack(() => ariaLabel),
+          ariaRequired: untrack(() => ariaRequired),
           onInput: (text) => onInput?.(text),
           onSubmitChord: () => onSubmitChord?.(),
           onCancelChord: () => onCancelChord?.(),

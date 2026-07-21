@@ -3,9 +3,9 @@
   import type { IconName } from "$lib/icons.ts";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
-  import { Textarea } from "$lib/components/ui/textarea/index.js";
   import { isSubmitChord } from "$lib/keys.ts";
   import Icon from "@/components/Icon.svelte";
+  import MarkdownEditor from "@/components/MarkdownEditor.svelte";
   import Modal from "@/components/Modal.svelte";
 
   interface Props {
@@ -65,11 +65,11 @@
   // activates it, rather than letting bits-ui land focus on Cancel.
   let confirmEl = $state<HTMLElement | null>(null);
 
-  // ⌘↵/Ctrl+Enter confirms from anywhere the chord can land, matching the comment
-  // composer's submit chord. The confirm button carries it for the on-open focus;
-  // the notes field carries it for when the reviewer is mid-note (a bare Enter
-  // there is a newline). preventDefault stops a focused button's native click from
-  // double-firing onConfirm.
+  // ⌘↵/Ctrl+Enter confirms from the focused confirm button (the on-open focus, so
+  // a bare Enter activates it). The notes editor routes its own submit chord
+  // through onSubmitChord below, so this handler rides only the button.
+  // preventDefault stops the focused button's native click from double-firing
+  // onConfirm.
   function onKey(e: KeyboardEvent) {
     if (!isSubmitChord(e)) return;
     e.preventDefault();
@@ -120,16 +120,20 @@
     <!-- Optional note handed to the agent on approval (EXC-791): distinct from the
          unsent inline comments above (which a plain approve drops) — this text IS
          sent, folded into the plan the agent works from, with no re-planning. -->
-    <label class="field">
+    <div class="field">
       <span class="lbl">Notes for the agent <span class="optional">(optional)</span></span>
-      <Textarea
+      <!-- The same live-markdown composer as the inline comment editor (EXC-803):
+           styles markdown as the reviewer types. ⌘↵ confirms the approval; Esc
+           dismisses the dialog (the editor intercepts both chords). -->
+      <MarkdownEditor
         value={notes}
-        oninput={(e) => (notes = e.currentTarget.value)}
-        onkeydown={onKey}
-        rows={3}
         placeholder="Anything the agent should fold into the work — no re-planning needed."
+        ariaLabel="Notes for the agent"
+        onInput={(t) => (notes = t)}
+        onSubmitChord={() => onConfirm(notes)}
+        onCancelChord={onCancel}
       />
-    </label>
+    </div>
   {/if}
 
   {#snippet footer()}
@@ -225,9 +229,9 @@
   }
 
   /* Optional reviewer-notes field (EXC-791). Reuses the request-changes form
-     treatment (the eyebrow-style label over a token-styled Textarea) so the two
-     dialogs read as one system; the top margin sets it off from the description
-     or the comments preview above it. */
+     treatment (the eyebrow-style label over the token-styled MarkdownEditor) so
+     the two dialogs read as one system; the top margin sets it off from the
+     description or the comments preview above it. */
   .field {
     display: block;
     margin-top: 1rem;

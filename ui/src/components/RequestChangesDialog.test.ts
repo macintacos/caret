@@ -13,8 +13,9 @@ import { capture, flushUntil, render } from "../../test-mount.ts";
 // Now composed on the shared Modal (bits-ui Dialog): its content portals to
 // document.body on a deferred tick, so structure/render is asserted against the
 // body after an effect+timer flush (the shadcn-foundation verdict). Real-browser
-// interaction — Escape/backdrop dismiss, textarea autofocus, and the Collapsible
-// disclosures expanding — is covered in test/e2e/request-changes.e2e.ts.
+// interaction — Escape/backdrop dismiss, the general-comment editor's autofocus,
+// and the Collapsible disclosures expanding — is covered in
+// test/e2e/request-changes.e2e.ts.
 
 const ann = (id: string, comment: string): Annotation => ({
   id,
@@ -152,12 +153,11 @@ describe("RequestChangesDialog render", () => {
 });
 
 describe("RequestChangesDialog callbacks", () => {
-  test("typing the general comment bubbles up through onGeneralCommentInput", async () => {
+  test("seeds the general comment and reports it through onGeneralCommentInput", async () => {
     const value = capture<string>();
-    await mount({ ...baseProps, onGeneralCommentInput: value.cb });
-    const textarea = q("textarea") as HTMLTextAreaElement;
-    textarea.value = "drafting";
-    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    // The MarkdownEditor reports its seeded value on mount (and on every edit),
+    // so the parent holds the live text from the first frame. Real typing is e2e.
+    await mount({ ...baseProps, generalComment: "drafting", onGeneralCommentInput: value.cb });
     expect(value.last()).toBe("drafting");
   });
 
@@ -175,15 +175,31 @@ describe("RequestChangesDialog callbacks", () => {
     expect(canceled).toBe(true);
   });
 
-  test("Cmd/Ctrl+Enter submits", async () => {
-    const submitted = capture<string>();
-    await mount({ ...baseProps, generalComment: "send me", onSubmit: submitted.cb });
-    // The chord rides the dialog body wrapper; a keydown from the textarea bubbles to it.
-    const textarea = q("textarea") as HTMLTextAreaElement;
-    textarea.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }),
+  test("Cmd/Ctrl+Enter submits exactly once (editor chord, not double-fired via the body handler)", async () => {
+    let calls = 0;
+    let lastArg = "";
+    await mount({
+      ...baseProps,
+      generalComment: "send me",
+      onSubmit: (v) => {
+        calls++;
+        lastArg = v;
+      },
+    });
+    // The editor intercepts the chord and fires onSubmitChord → submit. The body
+    // wrapper's own chord handler is guarded on !e.defaultPrevented, so a keydown
+    // the editor already handled (and preventDefault'd) must not submit twice.
+    const editor = q(".cm-content") as HTMLElement;
+    editor.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
     );
-    expect(submitted.last()).toBe("send me");
+    expect(lastArg).toBe("send me");
+    expect(calls).toBe(1);
   });
 });
 
@@ -310,15 +326,13 @@ describe("general comment optional vs required (EXC-762)", () => {
   test("labels the field optional (and aria-required false) when inline comments will be sent", async () => {
     await mount({ ...baseProps, annotations: [lineAnn("a1", 3, 3, "tighten this")] });
     expect(label()?.textContent).toContain("(optional)");
-    expect(content()?.querySelector("textarea")?.getAttribute("aria-required")).toBe("false");
+    expect(content()?.querySelector(".cm-content")?.getAttribute("aria-required")).toBe("false");
   });
 
   test("drops the optional label and marks the field required when nothing else will be sent", async () => {
     await mount(baseProps);
     expect(label()?.textContent).not.toContain("(optional)");
-    const ta = content()?.querySelector("textarea");
-    expect(ta?.getAttribute("aria-required")).toBe("true");
-    expect(ta?.hasAttribute("required")).toBe(true);
+    expect(content()?.querySelector(".cm-content")?.getAttribute("aria-required")).toBe("true");
   });
 });
 

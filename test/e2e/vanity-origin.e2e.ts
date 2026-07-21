@@ -45,7 +45,7 @@ test("request changes under caret.localhost rejects with feedback", async ({ dae
   const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
   await page.getByRole("button", { name: "Request changes" }).click();
   await expect(dialog).toBeVisible();
-  await dialog.locator("textarea").fill(FEEDBACK);
+  await dialog.getByRole("textbox", { name: "General comment" }).fill(FEEDBACK);
   await page.keyboard.press("ControlOrMeta+Enter");
 
   await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
