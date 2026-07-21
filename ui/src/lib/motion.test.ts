@@ -31,6 +31,7 @@ const chromeComponents = [
   "components/DiffPlanView.svelte",
   "components/VersionComparePicker.svelte",
   "components/UnsentCommentsDialog.svelte",
+  "components/AlertHost.svelte",
 ];
 const chromeSources: Record<string, string> = Object.fromEntries(
   await Promise.all(

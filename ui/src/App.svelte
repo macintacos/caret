@@ -19,6 +19,7 @@
     EDITOR_SHORTCUTS,
     shortcuts,
   } from "$lib/shortcuts/index.ts";
+  import { type AlertStore, createAlerts } from "@/state/alerts.ts";
   import { createAutosave } from "@/state/autosave.svelte.ts";
   import {
     createReviewSelection,
@@ -45,6 +46,7 @@
   import type { ApproveVariant, ApproveVariantId, Annotation, PersistedScratch } from "@core/lib/types";
 
   import * as Alert from "$lib/components/ui/alert/index.js";
+  import AlertHost from "@/components/AlertHost.svelte";
   import UnsentCommentsDialog from "@/components/UnsentCommentsDialog.svelte";
   import CommentNavigator from "@/components/CommentNavigator.svelte";
   import DiffPlanView from "@/components/DiffPlanView.svelte";
@@ -68,6 +70,9 @@
     daemonChanged: false,
   });
   let resStore = $state<ResolveStore>({ approveMode: "default", busy: false });
+  // The in-UI alert/toast queue (EXC-850): App owns the reactive backing store,
+  // createAlerts (below) mutates it, and AlertHost renders it bottom-right.
+  let alertStore = $state<AlertStore>({ alerts: [] });
   // The adapter's declared approve variants, read once from the health probe.
   // Undefined until the probe lands (or for a daemon that predates the field);
   // approveVariants() falls back to the built-in set so the split-button always
@@ -175,6 +180,7 @@
   // EXC-427 desktop-plan notifier. Component-scoped so both consumers — the poll
   // (observe) and the EXC-815 dismiss-on-open effect below — share one instance.
   const notifier = createPlanNotifier({ onSelect: selection.selectReview });
+  const alerts = createAlerts(alertStore);
   let active = $derived(selection.active);
   // The variants the split-button renders: the declared set when present, else
   // the built-in fallback.
@@ -429,6 +435,13 @@
     showDialog = false;
     void resolve.requestChanges(generalComment);
   }
+  // Copy the active review's working directory (EXC-850). The write is optimistic
+  // — the Clipboard API rejects in insecure contexts, where the path is still on
+  // screen to copy by hand — and the success alert reflects the click intent.
+  function onCopyCwd(cwd: string) {
+    void navigator.clipboard?.writeText(cwd).catch(() => {});
+    alerts.push({ variant: "success", message: "Copied path to clipboard" });
+  }
 </script>
 
 <div class="shell">
@@ -488,6 +501,7 @@
       }}
       onExposeScratchActions={(a) => (scratchActions = a)}
       onExposeReveal={(r) => (revealLine = r)}
+      {onCopyCwd}
       {showShortcutHints}
     />
   {:else}
@@ -590,6 +604,10 @@
     </div>
   </div>
 {/if}
+
+<!-- The in-UI alert/toast stack (EXC-850): pinned bottom-right above the status
+     bar, rendering App's alert queue. A root sibling, like the safe-mode toast. -->
+<AlertHost alerts={alertStore.alerts} onDismiss={alerts.dismiss} />
 
 <!-- Settings is persistent chrome (theme switching), reachable whether or not a
      review is active — so it renders at the top level, ungated on `active`. -->
