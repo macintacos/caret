@@ -1,15 +1,17 @@
 <script lang="ts">
-  // The filename-hover preview (EXC-687): a caret-surface card that shows a
-  // syntax-highlighted excerpt of the file a plan references, anchored to the
-  // hovered token. Shown only for references the daemon confirmed are real files
+  // The filename preview (EXC-687, click-opened since EXC-840): a caret-surface
+  // card that shows a syntax-highlighted excerpt of the file a plan references,
+  // anchored to the clicked token. Shown only for references the daemon confirmed are real files
   // (DiffPlanView gates it on the resolved set), so it never promises a preview
   // it can't deliver. The excerpt centers on the reference's line when it carries
-  // one, else the file's head. Chrome echoes the link tooltip's card language;
-  // pointer-events stay on so the reader can move onto the card (to scroll a long
-  // line) — DiffPlanView's hover-intent tracker reads this card's rect and keeps
-  // the preview alive while the pointer is on it or heading toward it (EXC-799).
+  // one, else the file's head. Chrome echoes the link tooltip's card language, and
+  // the header carries an "esc to close" hint — the preview is a click-opened
+  // popover that stays put until dismissed (Escape, or a click outside it;
+  // DiffPlanView owns that). pointer-events stay on so the reader can move onto the
+  // card to scroll a long line or select text in it without dismissing it.
   import { getFileExcerpt } from "$lib/api.ts";
   import { highlightExcerpt } from "$lib/diffview/highlight.ts";
+  import { Kbd } from "$lib/components/ui/kbd/index.js";
   import type { FileExcerpt } from "@core/lib/types";
 
   interface Props {
@@ -18,10 +20,14 @@
     path: string;
     /** 1-based line to center the excerpt on, if the reference carried one. */
     line?: number;
-    /** Viewport rect of the hovered token, for anchoring. */
+    /** Viewport rect of the clicked token, for anchoring. */
     anchor: DOMRect;
+    /** Whether the shortcut-hint affordances are shown (EXC-826); gates the
+     * header's "esc to close" chip. Defaults to shown; Escape still closes the
+     * preview regardless. */
+    showShortcutHints?: boolean;
   }
-  let { reviewId, path, line, anchor }: Props = $props();
+  let { reviewId, path, line, anchor, showShortcutHints = true }: Props = $props();
 
   // One rendered source line: its real file line number, plus either the
   // highlighted token HTML (shiki) or the raw text (plain fallback).
@@ -38,7 +44,7 @@
 
   // Current color scheme, honoring caret's manual data-theme override before the
   // system preference. Read per fetch — a transient popover needn't track a
-  // theme flip that happens mid-hover.
+  // theme flip that happens while it is open.
   function prefersDark(): boolean {
     const attr = document.documentElement.dataset.theme;
     if (attr === "dark") return true;
@@ -73,7 +79,7 @@
   }
 
   // Fetch the excerpt and highlight it. Re-runs when the target reference changes
-  // (DiffPlanView reuses this instance for a newly-hovered reference).
+  // (DiffPlanView reuses this instance for a newly-clicked reference).
   $effect(() => {
     const id = reviewId;
     const p = path;
@@ -121,12 +127,12 @@
   // Gates the fade-in: the card stays hidden (offscreen, opacity 0) until its
   // FINAL content is measured and placed, then reveals once. Without this the card
   // was measured at its tiny "Loading…" height, placed, then leapt to full height —
-  // a visible expansion on first hover. Positioning only ever happens for the
+  // a visible expansion on first open. Positioning only ever happens for the
   // settled (ready/error) card, never the loading one.
   let shown = $state(false);
   $effect(() => {
     // Only position (and reveal) the settled card, never the loading one, so the
-    // first hover appears once at its final size instead of expanding from the tiny
+    // first open appears once at its final size instead of expanding from the tiny
     // loading height. This early return also holds the last position across a
     // ref→ref switch, so the card never jumps (its body may briefly show "Loading…").
     if (preview.kind === "loading") return;
@@ -178,7 +184,12 @@
   <div class="fp-header">
     <span class="fp-badge">Preview</span>
     <span class="fp-path">{preview.kind === "ready" ? preview.excerpt.path : path}</span>
-    {#if meta}<span class="fp-range">{meta.label}</span>{/if}
+    <span class="fp-header-end">
+      {#if meta}<span class="fp-range">{meta.label}</span>{/if}
+      {#if showShortcutHints}
+        <span class="fp-hint"><Kbd class="kbd-sm">esc</Kbd> to close</span>
+      {/if}
+    </span>
   </div>
   {#if preview.kind === "ready" && meta}
     {#if meta.above > 0}
@@ -204,20 +215,20 @@
 </div>
 
 <style>
-  /* A caret-surface hover card echoing the link tooltip's chrome: paper-raised,
-     hairline rule, card shadow. Fixed to the viewport at the hovered token, so it
+  /* A caret-surface preview card echoing the link tooltip's chrome: paper-raised,
+     hairline rule, card shadow. Fixed to the viewport at the clicked token, so it
      escapes the .diff-plan scroll clip; pointer-events stay on so the reader can
      move onto it (to scroll a long line) without it dismissing. */
   .file-preview {
     position: fixed;
     /* Above the top bar (z 30), the review switcher and badges (z 40), so an
        active preview is never occluded by the chrome; below modal dialogs (z 100),
-       which supersede a hover entirely. */
+       which supersede the preview entirely. */
     z-index: 60;
     max-width: min(72ch, 90vw);
     overflow: hidden;
     /* The card paints on the shadcn popover surface (bridged: --popover =
-       --paper-raised, --border = --rule), so this hover card reads as one family
+       --paper-raised, --border = --rule), so this preview card reads as one family
        with the app's other floating panels (menus, dropdowns). The panel radius
        (--radius-lg, 10px) and card shadow are already the kit's; only the border
        softens from --rule-strong to the popover hairline. */
@@ -228,7 +239,7 @@
     box-shadow: var(--shadow-card);
     /* Hidden until measured + placed at final size (see the `shown` gate). Revealed
        once with a single fade-in, so the card never appears at its loading size and
-       then jumps to full height on first hover. */
+       then jumps to full height on first open. */
     opacity: 0;
   }
   .file-preview.fp-shown {
@@ -277,7 +288,26 @@
     text-overflow: ellipsis;
   }
   .fp-range {
+    color: var(--ink-faint);
+    white-space: nowrap;
+  }
+  /* Range + the esc hint pushed to the header's right edge as one group. */
+  .fp-header-end {
+    display: flex;
+    align-items: baseline;
+    gap: 0.45rem;
     margin-left: auto;
+  }
+  /* The "esc to close" affordance — a quiet recessed chip wrapping the esc keycap,
+     naming the way out of the click-opened preview (EXC-840). Faint ink so it reads
+     as ambient guidance, not a control; the keycap tints off that same faint ink. */
+  .fp-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    padding: 0.1rem 0.4rem;
+    border-radius: var(--radius);
+    background: var(--paper-sunk);
     color: var(--ink-faint);
     white-space: nowrap;
   }

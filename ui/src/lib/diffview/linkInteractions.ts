@@ -9,7 +9,7 @@
 import type { FileRefSpan, FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 import type { LinkSpan, LinkSpanMap } from "$lib/diffview/links.ts";
 
-/** The slice of @pierre/diffs' TokenEventBase the click handler reads. */
+/** The slice of @pierre/diffs' TokenEventBase the link click handler reads. */
 interface TokenClickProps {
   lineNumber: number;
   lineCharStart: number;
@@ -17,7 +17,8 @@ interface TokenClickProps {
   tokenText: string;
 }
 
-/** TokenEventBase plus the token element the hover effect decorates. */
+/** TokenEventBase plus the token element the hover effect decorates and the
+ * file-reference click anchors the preview to. */
 interface TokenHoverProps extends TokenClickProps {
   tokenElement: HTMLElement;
 }
@@ -28,19 +29,19 @@ export interface LinkHandlerDeps {
   openUrl(href: string): void;
 }
 
-/** The file-reference hover affordance the composed handlers dispatch to
- * (EXC-687). Hover-only: a file reference has no click action, so a click on one
- * falls through to the normal line-click (opening a comment on its line). */
-export interface FileRefHoverDeps {
-  /** A token starting a resolved file reference was entered — the view reveals
-   * the excerpt popover anchored to `tokenElement`. */
-  onFileRefEnter(ref: FileRefSpan, tokenElement: HTMLElement): void;
-  /** The file-reference token was left — the view dismisses the popover. */
-  onFileRefLeave(): void;
+/** The file-reference click affordance the composed handlers dispatch to
+ * (EXC-687; click-to-open since EXC-840). Hover is CSS-only — the override
+ * sheet highlights the tagged token — so nothing dispatches on enter/leave; a
+ * click on a resolved reference opens the excerpt popover and consumes the
+ * event, so its line does not also open a comment. */
+export interface FileRefClickDeps {
+  /** A token over a resolved file reference was clicked — the view opens the
+   * excerpt popover anchored to `tokenElement`. */
+  onFileRefClick(ref: FileRefSpan, tokenElement: HTMLElement): void;
 }
 
 export interface LinkHandlers {
-  onTokenClick(props: TokenClickProps, event: MouseEvent): void;
+  onTokenClick(props: TokenHoverProps, event: MouseEvent): void;
   onTokenEnter(props: TokenHoverProps, event: PointerEvent): void;
   onTokenLeave(props: TokenHoverProps, event: PointerEvent): void;
 }
@@ -67,10 +68,12 @@ export interface ComposedTokenHandlers {
   handlers: LinkHandlers;
   /** Library options the handlers require (the token-transformer flag). */
   libOptions: TokenLibOptions;
-  /** Whether `event` is the most recent click that landed on a link span. The
-   * library fires onTokenClick (this layer) before onLineClick for the same
-   * event, so a view's row-click handler asks this to stand down on a link
-   * click — the link opens and the line does not also open a comment. */
+  /** Whether `event` is the most recent click consumed by a per-token
+   * affordance — a link span or a file reference. The library fires
+   * onTokenClick (this layer) before onLineClick for the same event, so a
+   * view's row-click handler asks this to stand down on a consumed click —
+   * the link opens (or the preview does) and the line does not also open a
+   * comment. */
   wasLinkClick(event: Event): boolean;
 }
 
@@ -188,13 +191,14 @@ export function createLinkHandlers(spanMap: LinkSpanMap, deps: LinkHandlerDeps):
  * affordance adds its enter/leave/click here, not in the view.
  *
  * Two affordances compose here today: the link layer (click opens the URL, hover
- * shows the tooltip) and the file-reference layer (hover reveals the excerpt
- * popover — see EXC-687). The link's onTokenClick is wrapped to record the event
- * when a click lands on a link span; that recorded event drives wasLinkClick,
- * which a view's row-click handler reads to stand down: the library fires this
- * layer's onTokenClick before onLineClick for the same event, so a clicked link
- * opens and the line it sits on does not also open a comment composer. File
- * references are hover-only, so a click on one falls through to the row click.
+ * shows the tooltip) and the file-reference layer (click opens the excerpt
+ * popover — see EXC-687/EXC-840; its hover highlight is CSS-only in the
+ * override sheet, so enter/leave dispatch nothing for it). onTokenClick records
+ * the event when a click lands on either a link span or a file reference; that
+ * recorded event drives wasLinkClick, which a view's row-click handler reads to
+ * stand down: the library fires this layer's onTokenClick before onLineClick
+ * for the same event, so a clicked link opens (or a clicked reference previews)
+ * and the line it sits on does not also open a comment composer.
  *
  * Returns undefined when neither layer is present — a read-only view then wires
  * no token handlers at all and the library renders plain.
@@ -202,7 +206,7 @@ export function createLinkHandlers(spanMap: LinkSpanMap, deps: LinkHandlerDeps):
 export function composeTokenHandlers(
   spanMap: LinkSpanMap | undefined,
   fileRefs: FileRefSpanMap | undefined,
-  deps: LinkHandlerDeps & Partial<FileRefHoverDeps>,
+  deps: LinkHandlerDeps & Partial<FileRefClickDeps>,
 ): ComposedTokenHandlers | undefined {
   const link = spanMap != null ? createLinkHandlers(spanMap, deps) : undefined;
   const hasFileRefs = fileRefs != null && fileRefs.size > 0;
@@ -217,30 +221,31 @@ export function composeTokenHandlers(
     return spans === undefined ? undefined : hitTestSpan(spans, charStart, charEnd);
   };
 
-  let linkClickEvent: Event | undefined;
+  let consumedClickEvent: Event | undefined;
   return {
     handlers: {
       onTokenEnter(props, event) {
         link?.onTokenEnter(props, event);
-        const ref = fileRefAt(props.lineNumber, props.lineCharStart, props.lineCharEnd);
-        if (ref !== undefined) deps.onFileRefEnter?.(ref, props.tokenElement);
       },
       onTokenLeave(props, event) {
         link?.onTokenLeave(props, event);
-        if (fileRefAt(props.lineNumber, props.lineCharStart, props.lineCharEnd) !== undefined) {
-          deps.onFileRefLeave?.();
-        }
       },
       onTokenClick(props, event) {
+        const ref = fileRefAt(props.lineNumber, props.lineCharStart, props.lineCharEnd);
+        if (ref !== undefined) {
+          consumedClickEvent = event;
+          deps.onFileRefClick?.(ref, props.tokenElement);
+          return;
+        }
         if (link === undefined) return;
         const spans = spanMap?.get(props.lineNumber);
         if (spans != null && hitTestSpan(spans, props.lineCharStart, props.lineCharEnd) != null) {
-          linkClickEvent = event;
+          consumedClickEvent = event;
         }
         link.onTokenClick(props, event);
       },
     },
     libOptions: { useTokenTransformer: true },
-    wasLinkClick: (event) => event === linkClickEvent,
+    wasLinkClick: (event) => event === consumedClickEvent,
   };
 }

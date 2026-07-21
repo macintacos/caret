@@ -359,3 +359,35 @@ describe("the filename-reference icon (EXC-687)", () => {
     expect(iconRule).toMatch(/mask:\s*\$\{FILE_ICON_MASK\}/);
   });
 });
+
+// EXC-840: the file reference opens its preview on click; hover only highlights.
+// The affordance is CSS-only — a faint amber wash on the tagged token, the same
+// warm hue as its inline-code text — so the pins here keep it warm (not grey),
+// roomy (a chip around the reference, no layout shift), and motionless.
+describe("the filename-reference hover highlight (EXC-840)", () => {
+  const tokenRule =
+    overrideDecls.match(/\[data-content\]\s*\[data-file-ref\]\s*\{[^}]*\}/)?.[0] ?? "";
+  const hoverRule =
+    overrideDecls.match(/\[data-content\]\s*\[data-file-ref\]:hover\s*\{[^}]*\}/)?.[0] ?? "";
+
+  test("the token always carries the pointer cursor — it is clickable", () => {
+    expect(tokenRule).toContain("cursor: pointer");
+  });
+
+  test("the token reserves breathing room so the wash reads as a chip, not cramped", () => {
+    // Padding widens the wash out past the glyphs; a matching negative inline
+    // margin offsets it so the surrounding backticks never shift.
+    expect(tokenRule).toMatch(/padding/);
+    expect(tokenRule).toMatch(/margin-inline:\s*-/);
+  });
+
+  test("hover paints the faint amber accent wash with the control radius", () => {
+    expect(hoverRule).toMatch(/background-color:\s*var\(--accent-wash\)/);
+    expect(hoverRule).toMatch(/border-radius:\s*var\(--radius\)/);
+  });
+
+  test("the hover swap is instant — the diff surface stays motionless", () => {
+    expect(tokenRule).not.toMatch(/transition|animation/);
+    expect(hoverRule).not.toMatch(/transition|animation/);
+  });
+});

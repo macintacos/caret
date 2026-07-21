@@ -50,13 +50,12 @@
     /** Opt-in filename-reference layer (EXC-687): per-line spans for the resolved
      * file references in the display text. When present, the token starting each
      * reference is tagged (data-file-ref) so the override sheet draws the file
-     * icon, and hovering it reports up so the host can show the excerpt preview. */
+     * icon and the hover highlight, and clicking it reports up so the host can
+     * show the excerpt preview (EXC-840). */
     fileRefs?: FileRefSpanMap;
-    /** A token starting a file reference was entered, with the token element to
+    /** A token over a file reference was clicked, with the token element to
      * anchor the preview to. */
-    onFileRefEnter?: (ref: FileRefSpan, tokenElement: HTMLElement) => void;
-    /** The file-reference token was left — dismiss the preview. */
-    onFileRefLeave?: () => void;
+    onFileRefClick?: (ref: FileRefSpan, tokenElement: HTMLElement) => void;
     /** Fires once the view's container is bound, handing the parent an
      * imperative API (currently scroll-to-line) that closes over the container.
      * Lets callers jump the view without reaching into the library's DOM. */
@@ -106,8 +105,7 @@
     links,
     openUrl = openLinkInNewTab,
     fileRefs,
-    onFileRefEnter,
-    onFileRefLeave,
+    onFileRefClick,
     onReady,
     gutter,
     onLineComment,
@@ -153,7 +151,7 @@
   // does — a stable `links` reference keeps it referentially stable, so
   // libOptions stays change-detectable by the lifecycle.
   const token = $derived<ComposedTokenHandlers | undefined>(
-    composeTokenHandlers(links, fileRefs, { openUrl, onFileRefEnter, onFileRefLeave }),
+    composeTokenHandlers(links, fileRefs, { openUrl, onFileRefClick }),
   );
 
   const handleLineClick: NonNullable<SourceViewLibOptions["onLineClick"]> = (props) => {

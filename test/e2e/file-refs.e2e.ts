@@ -1,11 +1,16 @@
-// Intelligent hovering over filename references (EXC-687). The plan renders as
-// markdown source through @pierre/diffs; a path-shaped token that resolves to a
-// real file in the review's cwd gets a file icon (its token tagged data-file-ref
-// in the shadow root) and, on hover, a syntax-highlighted excerpt popover. The
-// resolve + read + shadow-DOM token tagging + real hover only exist in a browser
-// against a real daemon reading a real cwd, so they are exercised here; the pure
-// detection, resolution, and excerpt math stay units (fileRefs / fileRefTag /
-// plan-files / api tests).
+// Filename references in the plan (EXC-687, click-to-open since EXC-840). The
+// plan renders as markdown source through @pierre/diffs; a path-shaped token
+// that resolves to a real file in the review's cwd gets a file icon (its token
+// tagged data-file-ref in the shadow root) and a hover highlight, and CLICKING
+// it opens a syntax-highlighted excerpt popover — hovering alone never does.
+// The popover is a click-opened card that stays put: moving the pointer away
+// never dismisses it (EXC-840 dropped EXC-799's hover-intent tracker); it closes
+// only on Escape or a click outside it, and that dismissing click is swallowed so
+// it doesn't also do its normal thing (open a line comment). The resolve + read +
+// shadow-DOM token tagging + real hover/click only exist in a browser against a
+// real daemon reading a real cwd, so they are exercised here; the pure detection,
+// resolution, and excerpt math stay units (fileRefs / fileRefTag / plan-files /
+// api tests).
 //
 // The daemon is a real subprocess reading the local filesystem, so each test
 // writes a synthetic project dir and seeds a review whose cwd points at it. The
@@ -64,21 +69,32 @@ test("marks only references that resolve to a real file", async ({ daemon, page 
     // missing one never does, so the count settles at 1 (not 2).
     await expect.poll(() => fileRefCount(page)).toBe(1);
 
-    // Hovering the missing reference reveals no preview — it gives no impression
-    // of being a link. Target the token in the shadow surface, give the pointer
-    // pipeline a beat, then assert nothing appeared.
-    const ghost = page.locator(".diffview").getByText("src/ghost.ts", { exact: false });
-    await expect(ghost.first()).toBeVisible();
-    await ghost.first().hover();
+    // Hovering a resolved reference reveals no preview — hover is highlight-only
+    // (EXC-840); the preview waits for a click. Give the pointer pipeline a beat,
+    // then assert nothing appeared.
+    await page.locator("[data-file-ref]").first().hover();
     const t0 = await page.evaluate(() => performance.now());
     await page.waitForFunction((t) => performance.now() > t + 300, t0);
     await expect(page.locator("[data-file-preview]")).toHaveCount(0);
+
+    // The hover affordance is the highlight itself: with the pointer parked on
+    // the token, the real :hover state paints the background wash, and the token
+    // carries the pointer cursor signalling it is clickable.
+    const style = await page.evaluate(() => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+      const tok = sh?.querySelector("[data-file-ref]");
+      if (!tok) return null;
+      const cs = getComputedStyle(tok);
+      return { background: cs.backgroundColor, cursor: cs.cursor };
+    });
+    expect(style?.cursor).toBe("pointer");
+    expect(style?.background).not.toBe("rgba(0, 0, 0, 0)");
   } finally {
     await proj.cleanup();
   }
 });
 
-test("hovering a real reference reveals a highlighted excerpt centered on its line", async ({
+test("clicking a real reference reveals a highlighted excerpt centered on its line", async ({
   daemon,
   page,
 }) => {
@@ -91,9 +107,9 @@ test("hovering a real reference reveals a highlighted excerpt centered on its li
     await page.goto("/");
     await expect(page.locator(".diff-plan")).toBeVisible();
 
-    // Wait for the icon (async resolve), then hover the tagged token.
+    // Wait for the icon (async resolve), then click the tagged token.
     await expect.poll(() => fileRefCount(page)).toBe(1);
-    await page.locator("[data-file-ref]").first().hover();
+    await page.locator("[data-file-ref]").first().click();
 
     // The preview appears (light DOM, not the shadow root) with the resolved path
     // and a window centered on line 42 — so the line-42 marker shows and the
@@ -119,63 +135,107 @@ test("hovering a real reference reveals a highlighted excerpt centered on its li
     await expect(preview.locator(".fp-target")).toHaveCount(1);
     await expect(preview.locator(".fp-target .fp-lnum")).toHaveText("42");
 
-    // Leaving dismisses it (after the short travel grace).
+    // The header names the way out — an "esc to close" chip carrying the esc keycap.
+    const hint = preview.locator(".fp-hint");
+    await expect(hint).toContainText("close");
+    await expect(hint.locator("[data-slot='kbd']")).toContainText("esc");
+
+    // Moving the pointer away does NOT dismiss it — the card is a click-opened
+    // popover that stays put (EXC-840 dropped the hover-intent tracker). Park the
+    // pointer far off, give the pointer pipeline a beat, and it is still open.
     await page.mouse.move(0, 0);
-    await expect(preview).toHaveCount(0);
+    const t1 = await page.evaluate(() => performance.now());
+    await page.waitForFunction((t) => performance.now() > t + 300, t1);
+    await expect(preview).toBeVisible();
   } finally {
     await proj.cleanup();
   }
 });
 
-test("the preview stays open while the pointer rests on the card, then dismisses on a stop away from it", async ({
+test("the preview omits the esc-to-close hint when shortcut hints are off", async ({
   daemon,
   page,
 }) => {
-  // The hover-intent tracker (EXC-799) owns dismissal from a single window
-  // pointermove listener, reading the card's live rect. This exercises that wiring
-  // end-to-end: a pointer that comes to rest on the card must survive well past the
-  // idle-stop window, and a stop far from the card must then dismiss. The
-  // velocity-sensitive "aiming across the gap" logic is covered deterministically by
-  // the hoverIntent unit tests; synthetic pointer speed is not reliable here.
+  // The "esc to close" chip is a shortcut-hint affordance, so it follows the same
+  // Settings toggle as the rest of them (showShortcutHints): off means the header
+  // shows the path and range but no keycap hint. Escape still closes the preview —
+  // only the visible hint is gated, not the behavior.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
     await daemon.seed({
       cwd: proj.dir,
       plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
     });
+    await page.addInitScript(() => localStorage.setItem("caret.shortcutHints", "off"));
     await page.goto("/");
     await expect(page.locator(".diff-plan")).toBeVisible();
 
     await expect.poll(() => fileRefCount(page)).toBe(1);
-    await page.locator("[data-file-ref]").first().hover();
+    await page.locator("[data-file-ref]").first().click();
+
+    const preview = page.locator("[data-file-preview]");
+    await expect(preview).toBeVisible();
+    await expect(preview).toContainText("src/cache.ts");
+    // The header renders, but with no esc-to-close hint.
+    await expect(preview.locator(".fp-hint")).toHaveCount(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("clicking outside the preview dismisses it, swallowing that first click", async ({
+  daemon,
+  page,
+}) => {
+  // The preview is a click-opened popover: a click anywhere outside it closes it,
+  // and — since it took a click to open — that first outside click is SWALLOWED
+  // (EXC-840). So clicking a plan line while the preview is open only dismisses the
+  // preview; it does NOT also open that line's comment composer. A second click
+  // then opens the composer as usual, proving only the first click was consumed.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      // A reference line to open the preview from, and a plain prose line with no
+      // reference — so a click on it can only mean "comment on this line".
+      plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n\nJust some plain prose here.\n",
+    });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+    await page.locator("[data-file-ref]").first().click();
 
     const preview = page.locator("[data-file-preview]");
     await expect(preview).toBeVisible();
 
-    // Rest the pointer on the card itself, then wait well past IDLE_MS (100ms).
-    // hover() moves to the card's centre only once it is stable — its actionability
-    // check waits out the pop-in animation (EXC-799), so the pointer lands on the
-    // settled card, not a frame mid-scale.
-    await preview.hover();
-    // A fixed wait is the deliberate exception here: this is a persistence check
-    // (the card must NOT disappear across the idle window), which a web-first
-    // auto-retrying assertion cannot express — there is no state to poll toward.
-    await page.waitForTimeout(400);
-    await expect(preview).toBeVisible();
-
-    // A stop far from the card is conclusive — the preview dismisses.
-    await page.mouse.move(0, 0);
+    // First click on the plain line: the preview dismisses…
+    const proseLine = page.locator(".diffview").getByText("Just some plain prose here.", {
+      exact: false,
+    });
+    await proseLine.click();
     await expect(preview).toHaveCount(0);
+
+    // …and that click was swallowed, so no composer opened. No positive event to
+    // await, so give the pipeline a beat then assert it stayed shut.
+    const composer = page.getByRole("dialog", { name: "Add a comment" });
+    const t0 = await page.evaluate(() => performance.now());
+    await page.waitForFunction((t) => performance.now() > t + 300, t0);
+    await expect(composer).toHaveCount(0);
+
+    // With the preview gone, a second click on the same line opens the composer
+    // normally — the swallow was one-shot, tied to the open preview.
+    await proseLine.click();
+    await expect(composer).toBeVisible();
   } finally {
     await proj.cleanup();
   }
 });
 
 test("pressing Escape dismisses the open preview", async ({ daemon, page }) => {
-  // Escape is the keyboard escape hatch out of the hover preview (EXC-799): while it
-  // is open, one Escape closes it (and cancels the tracker's pending grace/idle
-  // timers). The pointer stays parked on the token, so the tracker never dismisses
-  // on its own — only Escape does.
+  // Escape is the keyboard escape hatch out of the preview (EXC-840): while it is
+  // open, one Escape closes it. The pointer stays parked on the token, and pointer
+  // movement no longer dismisses, so Escape is the only thing that closes it here.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
     await daemon.seed({
@@ -186,7 +246,7 @@ test("pressing Escape dismisses the open preview", async ({ daemon, page }) => {
     await expect(page.locator(".diff-plan")).toBeVisible();
 
     await expect.poll(() => fileRefCount(page)).toBe(1);
-    await page.locator("[data-file-ref]").first().hover();
+    await page.locator("[data-file-ref]").first().click();
 
     const preview = page.locator("[data-file-preview]");
     await expect(preview).toBeVisible();
@@ -218,7 +278,7 @@ test("the preview shows only a bounded snippet, never a scrollable full file", a
     await expect(page.locator(".diff-plan")).toBeVisible();
     await expect.poll(() => fileRefCount(page)).toBe(1);
 
-    await page.locator("[data-file-ref]").first().hover();
+    await page.locator("[data-file-ref]").first().click();
     const preview = page.locator("[data-file-preview]");
     await expect(preview).toBeVisible();
 
@@ -241,7 +301,7 @@ test("the preview shows only a bounded snippet, never a scrollable full file", a
   }
 });
 
-test("the hover preview renders code in the plan view's own font, not the browser default", async ({
+test("the preview renders code in the plan view's own font, not the browser default", async ({
   daemon,
   page,
 }) => {
@@ -253,12 +313,12 @@ test("the hover preview renders code in the plan view's own font, not the browse
   // author rule targets them directly (an inherited family loses to `code {}`).
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nHover `src/cache.ts` here.\n" });
+    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nOpen `src/cache.ts` here.\n" });
     await page.goto("/");
     await expect(page.locator(".diff-plan")).toBeVisible();
     await expect.poll(() => fileRefCount(page)).toBe(1);
 
-    await page.locator("[data-file-ref]").first().hover();
+    await page.locator("[data-file-ref]").first().click();
     await expect(page.locator("[data-file-preview]")).toBeVisible();
 
     // Read the excerpt code's computed font and a plan source line's, across the
@@ -287,16 +347,16 @@ test("the hover preview renders code in the plan view's own font, not the browse
   }
 });
 
-test("the hover preview survives the review poll without repaint churn", async ({
+test("the open preview survives the review poll without repaint churn", async ({
   daemon,
   page,
 }) => {
   // Regression for the periodic hover glitch (EXC-687): the 2s reviews poll hands
   // the view a fresh review object each tick. If file-ref resolution re-runs on
   // that identity churn, it rebuilds the resolved set → the token/options change
-  // reference → the library repaints the whole shadow DOM, rebuilding the hovered
+  // reference → the library repaints the whole shadow DOM, rebuilding the clicked
   // token (and its icon) underneath the pointer. With the fix, an unchanged plan
-  // resolves once, so a parked hover sees no repaint across ticks.
+  // resolves once, so an open preview sees no repaint across ticks.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
     await daemon.seed({
@@ -307,8 +367,7 @@ test("the hover preview survives the review poll without repaint churn", async (
     await expect(page.locator(".diff-plan")).toBeVisible();
     await expect.poll(() => fileRefCount(page)).toBe(1);
 
-    const ref = page.locator(".diffview").getByText("src/cache.ts", { exact: false });
-    await ref.first().hover();
+    await page.locator("[data-file-ref]").first().click();
     await expect(page.locator("[data-file-preview]")).toBeVisible();
 
     // Tag the live file-ref token node with a JS marker, and watch for the preview
@@ -352,17 +411,17 @@ test("the hover preview survives the review poll without repaint churn", async (
   }
 });
 
-test("the hover preview fetches the excerpt once, not on every poll tick", async ({
+test("the open preview fetches the excerpt once, not on every poll tick", async ({
   daemon,
   page,
 }) => {
   // Regression for the second hover glitch: FilePreview's fetch effect must depend
-  // only on the hovered reference, not on the review object identity. Fed the raw
+  // only on the opened reference, not on the review object identity. Fed the raw
   // per-tick `review.id`, its effect re-fired every 2s poll — re-fetching and
   // re-highlighting the excerpt (a loading→ready flash) while the pointer sat still.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nHover `src/cache.ts` here.\n" });
+    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nOpen `src/cache.ts` here.\n" });
     let excerptFetches = 0;
     page.on("request", (req) => {
       if (req.url().includes("/file?")) excerptFetches++;
@@ -371,15 +430,14 @@ test("the hover preview fetches the excerpt once, not on every poll tick", async
     await expect(page.locator(".diff-plan")).toBeVisible();
     await expect.poll(() => fileRefCount(page)).toBe(1);
 
-    const ref = page.locator(".diffview").getByText("src/cache.ts", { exact: false });
-    await ref.first().hover();
+    await page.locator("[data-file-ref]").first().click();
     await expect(page.locator("[data-file-preview]")).toBeVisible();
-    const afterHover = excerptFetches;
+    const afterOpen = excerptFetches;
 
     // Park the pointer across more than two poll ticks: no further excerpt fetches.
     await page.waitForTimeout(5200);
-    expect(excerptFetches).toBe(afterHover);
-    expect(afterHover).toBeLessThanOrEqual(2);
+    expect(excerptFetches).toBe(afterOpen);
+    expect(afterOpen).toBeLessThanOrEqual(2);
   } finally {
     await proj.cleanup();
   }
@@ -396,7 +454,7 @@ test("a reference with no line shows the head of the file", async ({ daemon, pag
     await expect(page.locator(".diff-plan")).toBeVisible();
 
     await expect.poll(() => fileRefCount(page)).toBe(1);
-    await page.locator("[data-file-ref]").first().hover();
+    await page.locator("[data-file-ref]").first().click();
 
     // No line number → the excerpt starts at the top, so the line-1 marker shows
     // and the line-42 marker (past the head window) does not.
@@ -413,6 +471,41 @@ test("a reference with no line shows the head of the file", async ({ daemon, pag
 
     // No reference line → nothing is highlighted (the highlight is a :line cue).
     await expect(preview.locator(".fp-target")).toHaveCount(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("clicking a reference does not also open the line's comment composer", async ({
+  daemon,
+  page,
+}) => {
+  // The read-write source view wires BOTH the file-ref layer and row-click
+  // commenting, so one event reaches the token-click handler (which opens the
+  // preview) and then the line-click handler (which would open a composer). The
+  // composition's consumed-click race makes the line stand down, exactly as it
+  // does for a clicked link (see links.e2e.ts).
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
+    });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+    await page.locator("[data-file-ref]").first().click();
+
+    // The preview opened…
+    await expect(page.locator("[data-file-preview]")).toBeVisible();
+
+    // …and the line it sits on did NOT also open a comment composer. Give any
+    // (incorrect) composer a beat to appear, then assert it never did.
+    const composer = page.getByRole("dialog", { name: "Add a comment" });
+    const t0 = await page.evaluate(() => performance.now());
+    await page.waitForFunction((t) => performance.now() > t + 300, t0);
+    await expect(composer).toHaveCount(0);
   } finally {
     await proj.cleanup();
   }

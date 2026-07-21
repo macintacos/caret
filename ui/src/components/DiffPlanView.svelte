@@ -38,7 +38,6 @@
   } from "$lib/diffview/commenting.ts";
   import { dismissDragHint, isDragHintDismissed } from "$lib/diffview/dragHint.ts";
   import { buildFileRefLayer, type FileRefSpan, type FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
-  import { createHoverIntent } from "$lib/diffview/hoverIntent.ts";
   import { resolveFileRefs } from "$lib/api.ts";
   import { shortCwd } from "$lib/cwd.ts";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
@@ -305,71 +304,48 @@
     return active.size > 0 ? active : undefined;
   });
 
-  // The file reference the pointer is over, plus the token rect the preview
-  // anchors to. Opening the preview arms the hover-intent tracker below, which owns
-  // dismissal: it keeps the card open while the pointer heads toward it and closes
-  // it only on a conclusive stop outside it (EXC-799).
-  let hoveredFileRef = $state<{ path: string; line?: number; anchor: DOMRect } | undefined>();
-  function showFileRef(ref: FileRefSpan, tokenElement: HTMLElement): void {
-    hoveredFileRef = {
+  // The file reference whose preview is open (opened by clicking its token —
+  // EXC-687/EXC-840), plus the token rect the preview anchors to. The preview is
+  // a click-opened popover that stays put — it does not chase the cursor. It
+  // closes only through the dismissal effect below (Escape, or a click away).
+  let filePreview = $state<{ path: string; line?: number; anchor: DOMRect } | undefined>();
+  function openFilePreview(ref: FileRefSpan, tokenElement: HTMLElement): void {
+    filePreview = {
       path: ref.path,
       line: ref.line,
       anchor: tokenElement.getBoundingClientRect(),
     };
   }
 
-  // Trajectory-aware hover intent (EXC-799): while a preview is open, sample the
-  // pointer and let the tracker decide keep-vs-dismiss from its projected path.
-  // Runs only while a ref is hovered; the listener + timers are torn down when the
-  // preview closes or the hovered ref switches (the effect re-runs). Sampling is
-  // coalesced to one frame so it never sits on the input path.
+  // Dismissal (EXC-840, superseding EXC-799's hover-intent tracker): a click-opened
+  // preview stays open until the reader dismisses it — Escape, or a click anywhere
+  // outside the card. Both listen in the CAPTURE phase so they run before the plan's
+  // own handlers, and the outside click is SWALLOWED (stopImmediatePropagation +
+  // preventDefault): the first click only closes the preview and never also opens a
+  // line comment; a second click then does its normal thing. A click inside the card
+  // is left alone, so the reader can still scroll a long excerpt line or select text
+  // in it. No pointer-trajectory tracking remains — moving the cursor away no longer
+  // dismisses.
   $effect(() => {
-    const ref = hoveredFileRef;
-    if (ref === undefined) return;
-    const intent = createHoverIntent({
-      anchorRect: () => ref.anchor,
-      cardRect: () =>
-        document.querySelector("[data-file-preview]")?.getBoundingClientRect() ?? null,
-      onDismiss: () => {
-        hoveredFileRef = undefined;
-      },
-      setTimer: (fn, ms) => window.setTimeout(fn, ms),
-      clearTimer: (h) => {
-        window.clearTimeout(h);
-      },
-    });
-    // Seed from the anchor's centre — the pointer sits on the token at open.
-    intent.seed(
-      { x: (ref.anchor.left + ref.anchor.right) / 2, y: (ref.anchor.top + ref.anchor.bottom) / 2 },
-      performance.now(),
-    );
-    let raf = 0;
-    let lastX = 0;
-    let lastY = 0;
-    const flush = () => {
-      raf = 0;
-      intent.sample({ x: lastX, y: lastY }, performance.now());
-    };
-    const onMove = (e: PointerEvent) => {
-      lastX = e.clientX;
-      lastY = e.clientY;
-      if (raf === 0) raf = requestAnimationFrame(flush);
-    };
-    window.addEventListener("pointermove", onMove, { passive: true });
-    // Escape dismisses the open preview at once, and destroys the tracker up front
-    // so its pending grace/idle timers can't fire after the card is gone (EXC-799).
-    // The teardown below also destroys — destroy() is idempotent.
+    if (filePreview === undefined) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      intent.destroy();
-      hoveredFileRef = undefined;
+      filePreview = undefined;
+      e.preventDefault();
+      e.stopPropagation();
     };
-    window.addEventListener("keydown", onKey);
+    const onClick = (e: MouseEvent) => {
+      const card = document.querySelector("[data-file-preview]");
+      if (card != null && e.composedPath().includes(card)) return;
+      filePreview = undefined;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    };
+    window.addEventListener("keydown", onKey, { capture: true });
+    window.addEventListener("click", onClick, { capture: true });
     return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("keydown", onKey);
-      cancelAnimationFrame(raf);
-      intent.destroy();
+      window.removeEventListener("keydown", onKey, { capture: true });
+      window.removeEventListener("click", onClick, { capture: true });
     };
   });
 
@@ -1395,7 +1371,7 @@
         doc={{ name: "plan.md", text: linkLayer.text }}
         links={linkLayer.spans}
         {fileRefs}
-        onFileRefEnter={showFileRef}
+        onFileRefClick={openFilePreview}
         annotations={sourceAnnotations}
         options={readerOptions}
         {gutter}
@@ -1430,15 +1406,17 @@
           <CodeCopyButton text={hoveredCopy.text} top={hoveredCopy.top} left={hoveredCopy.left} />
         {/key}
       {/if}
-      <!-- The filename-reference hover preview (EXC-687): a viewport-fixed card
-           showing the referenced file's excerpt, anchored to the hovered token.
-           Only appears for references the daemon resolved to a real file. -->
-      {#if hoveredFileRef}
+      <!-- The filename-reference preview (EXC-687, click-opened since EXC-840):
+           a viewport-fixed card showing the referenced file's excerpt, anchored
+           to the clicked token. Only appears for references the daemon resolved
+           to a real file. -->
+      {#if filePreview}
         <FilePreview
           reviewId={reviewId}
-          path={hoveredFileRef.path}
-          line={hoveredFileRef.line}
-          anchor={hoveredFileRef.anchor}
+          path={filePreview.path}
+          line={filePreview.line}
+          anchor={filePreview.anchor}
+          {showShortcutHints}
         />
       {/if}
       <!-- Saved comments and the open composer are projected into the library's
