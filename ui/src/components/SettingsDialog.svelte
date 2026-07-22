@@ -35,6 +35,7 @@
     type SettingEntry,
     type StagedField,
   } from "$lib/settingsRegistry.ts";
+  import AdvancedPane from "@/components/AdvancedPane.svelte";
   import NotificationsPane from "@/components/NotificationsPane.svelte";
   import SettingSelect from "@/components/SettingSelect.svelte";
 
@@ -45,8 +46,12 @@
     onChange: (field: StagedField, value: unknown) => void;
     /** Dismiss (Escape / backdrop). App hides the modal. */
     onClose: () => void;
+    /** Copy a diagnostics block's text (the Advanced pane, EXC-848): App writes the
+     * clipboard and fires the shared success alert. Defaults to a no-op so mounts
+     * without the Advanced pane need not supply it. */
+    onCopyDiagnostic?: (text: string) => void;
   }
-  let { entries, onChange, onClose }: Props = $props();
+  let { entries, onChange, onClose, onCopyDiagnostic = () => {} }: Props = $props();
 
   // Staged fields carry controls; a live pane (Notifications, EXC-847) contributes
   // search-only entries and renders a custom pane instead. A category earns a nav row
@@ -138,11 +143,14 @@
         </header>
 
         {#if selected?.id === "Notifications"}
-          <!-- The first live, read-only pane (EXC-847): browser notification state,
-               not staged fields. ponytail: one id branch suffices for a single live
-               pane — swap for a category→component map when Advanced (EXC-848) adds
-               the second. -->
+          <!-- The live, read-only panes render their own surface instead of staged
+               fields: Notifications (EXC-847) reflects browser notification state,
+               Advanced (EXC-848) the read-only install diagnostics. Two id branches
+               beat a category→component map here — the panes take different props
+               (Advanced needs the copy callback), which a map can't thread. -->
           <NotificationsPane />
+        {:else if selected?.id === "Advanced"}
+          <AdvancedPane {onCopyDiagnostic} />
         {:else}
           {#each paneSections as section, si (si)}
             <div class="section">

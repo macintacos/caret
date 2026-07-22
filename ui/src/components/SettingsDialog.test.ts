@@ -93,6 +93,24 @@ describe("SettingsDialog Notifications pane (EXC-847)", () => {
   });
 });
 
+describe("SettingsDialog Advanced pane (EXC-848)", () => {
+  test("renders an Advanced nav row (its search-only entries earn a nav row)", async () => {
+    const { flush } = render(SettingsDialog, props());
+    await flushUntil(flush, mounted);
+    expect(has("[data-category='Advanced']")).toBe(true);
+  });
+
+  test("selecting Advanced swaps in the read-only diagnostics pane", async () => {
+    const { flush } = render(SettingsDialog, props());
+    await flushUntil(flush, mounted);
+    // Appearance is selected first, so the diagnostics pane isn't mounted yet.
+    expect(has("[data-advanced-pane]")).toBe(false);
+    (document.body.querySelector("[data-category='Advanced']") as HTMLButtonElement).click();
+    flush();
+    expect(has("[data-advanced-pane]")).toBe(true);
+  });
+});
+
 describe("SettingsDialog immediate apply", () => {
   test("toggling the shortcut-hints switch calls onChange with the field and its new value", async () => {
     const calls: Array<{ key: string; value: unknown }> = [];

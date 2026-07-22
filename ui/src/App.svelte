@@ -467,6 +467,13 @@
     void navigator.clipboard?.writeText(cwd).catch(() => {});
     alerts.push({ variant: "success", message: "Copied path to clipboard" });
   }
+  // Copy a diagnostics block from the Settings Advanced pane (EXC-848). Same
+  // optimistic pattern as onCopyCwd: the write may reject in an insecure context
+  // (the block text is still on screen), and the success alert reflects the click.
+  function copyDiagnostics(text: string) {
+    void navigator.clipboard?.writeText(text).catch(() => {});
+    alerts.push({ variant: "success", message: "Copied diagnostics to clipboard" });
+  }
 </script>
 
 <div class="shell">
@@ -642,6 +649,7 @@
     entries={SETTINGS_REGISTRY}
     onChange={applySetting}
     onClose={() => (showSettings = false)}
+    onCopyDiagnostic={copyDiagnostics}
   />
 {/if}
 
