@@ -8,6 +8,7 @@ import {
   defaultClaim,
   fireTestNotification,
   type NotificationHandle,
+  observePermission,
   type PlanNotifierOptions,
 } from "$lib/notify.ts";
 
@@ -636,5 +637,89 @@ describe("fireTestNotification", () => {
     flush();
 
     expect(cap.events().some((e) => e.level === "warn")).toBe(true);
+  });
+});
+
+// observePermission is the shared Permissions-API subscription (EXC-847): both
+// NotifyBell and the settings NotificationsPane use it to stay truthful when the
+// permission changes outside their own request (the browser's site settings, the
+// onboarding modal, the other surface). It reads the live Notification.permission
+// on each change rather than the PermissionStatus.state — the value the notifier
+// gates on at fire time, which headless engines can diverge from.
+describe("observePermission", () => {
+  // A fake PermissionStatus that records the single "change" handler so the test
+  // can fire it and assert the subscription attaches/detaches.
+  function fakePermissionStatus() {
+    let handler: (() => void) | null = null;
+    const status = {
+      addEventListener: (_type: string, h: () => void) => {
+        handler = h;
+      },
+      removeEventListener: (_type: string, h: () => void) => {
+        if (handler === h) handler = null;
+      },
+    } as unknown as PermissionStatus;
+    return { status, fire: () => handler?.(), attached: () => handler !== null };
+  }
+
+  // Install navigator.permissions.query (absent in happy-dom) for the duration of fn.
+  function withPermissionsQuery(
+    query: (opts: { name: string }) => Promise<PermissionStatus>,
+    fn: () => Promise<void>,
+  ): Promise<void> {
+    const nav = globalThis.navigator as unknown as Record<string, unknown>;
+    const saved = Object.getOwnPropertyDescriptor(nav, "permissions");
+    Object.defineProperty(nav, "permissions", { configurable: true, value: { query } });
+    return fn().finally(() => {
+      if (saved) Object.defineProperty(nav, "permissions", saved);
+      else delete nav.permissions;
+    });
+  }
+
+  const flushMicrotasks = async () => {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  };
+
+  test("fires onChange with the live Notification.permission on a change, and stops after cleanup", async () => {
+    const ps = fakePermissionStatus();
+    const seen: NotificationPermission[] = [];
+    // observePermission only READS Notification.permission (it never constructs
+    // one), so a mutable object stub is enough — no constructor needed.
+    const note = { permission: "default" as NotificationPermission };
+    const g = globalThis as Record<string, unknown>;
+    const savedNote = g.Notification;
+    g.Notification = note;
+    try {
+      await withPermissionsQuery(
+        () => Promise.resolve(ps.status),
+        async () => {
+          const cleanup = observePermission((p) => seen.push(p));
+          await flushMicrotasks(); // let query resolve + the change listener attach
+          expect(ps.attached()).toBe(true);
+
+          note.permission = "granted";
+          ps.fire();
+          expect(seen).toEqual(["granted"]);
+
+          cleanup();
+          expect(ps.attached()).toBe(false);
+          note.permission = "denied";
+          ps.fire(); // detached — no further onChange
+          expect(seen).toEqual(["granted"]);
+        },
+      );
+    } finally {
+      g.Notification = savedNote;
+    }
+  });
+
+  test("is an inert no-op when the Notification API is unavailable", () => {
+    const seen: NotificationPermission[] = [];
+    withGlobalNotification(undefined, () => {
+      const cleanup = observePermission((p) => seen.push(p));
+      expect(typeof cleanup).toBe("function");
+      expect(() => cleanup()).not.toThrow();
+    });
+    expect(seen).toEqual([]);
   });
 });

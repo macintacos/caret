@@ -17,6 +17,31 @@ async function openSettings(page: import("@playwright/test").Page) {
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
 }
 
+// Headless Chromium hard-codes Notification.permission to "denied" regardless of the
+// context's grant (see notifications.e2e.ts), so the Notifications pane needs an
+// injected permission. This granted stub also captures its constructions, so the
+// test affordance's live fire is observable.
+type NotesWindow = { __notes: { title: string }[] };
+function initGrantedNotification() {
+  const notes: { title: string }[] = [];
+  (window as unknown as NotesWindow).__notes = notes;
+  class StubNotification {
+    title: string;
+    constructor(title: string) {
+      this.title = title;
+      notes.push(this);
+    }
+    close() {}
+    static get permission() {
+      return "granted";
+    }
+    static requestPermission() {
+      return Promise.resolve("granted");
+    }
+  }
+  (window as { Notification: unknown }).Notification = StubNotification;
+}
+
 test("opens the Appearance pane with theme, hints, and the folded-in Diff view section", async ({
   daemon,
   page,
@@ -126,4 +151,58 @@ test("Esc closes the settings modal", async ({ daemon, page }) => {
   await waitPastSafeModeGrace(page);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeHidden();
+});
+
+test("only the selected category is filled — an unselected nav row is transparent", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  await openSettings(page);
+
+  // Appearance is selected by default; Notifications is not. shadcn's SidebarMenuButton
+  // ships `data-active:bg-sidebar-accent`, and Tailwind matches that variant on the mere
+  // PRESENCE of data-active — Svelte serializes the unselected row as data-active="false"
+  // (attribute present), so without an explicit transparent it wears the grey accent fill
+  // at rest and rivals the amber selection (EXC-847 regression). Assert in a real browser:
+  // the unselected row is transparent, the selected row is not.
+  const unselected = page.locator("[data-category='Notifications']");
+  const selected = page.locator("[data-category='Appearance']");
+  await expect(unselected).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(selected).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+});
+
+test("the Notifications pane reflects the permission and its test affordance fires live", async ({
+  daemon,
+  page,
+}) => {
+  await page.addInitScript(initGrantedNotification);
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  await openSettings(page);
+
+  // Switching to the Notifications category swaps the field pane for the live pane
+  // (the first non-staged pane — a new real-browser flow this shell had no coverage
+  // for). Its header reads Notifications and it reflects the injected grant.
+  await page.locator("[data-category='Notifications']").click();
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await expect(dialog.getByRole("heading", { name: "Notifications" })).toBeVisible();
+  await expect(page.locator("[data-notifications-pane]")).toHaveAttribute(
+    "data-permission",
+    "granted",
+  );
+
+  // Granted → the diagnosis affordance; clicking it constructs exactly one toast
+  // through the live path (the same probe the granted bell offers).
+  await dialog.getByRole("button", { name: "Send a test notification" }).click();
+  await page.waitForFunction(
+    () => (window as unknown as NotesWindow).__notes.length === 1,
+    undefined,
+    { timeout: 5_000 },
+  );
 });

@@ -35,6 +35,7 @@
     type SettingEntry,
     type StagedField,
   } from "$lib/settingsRegistry.ts";
+  import NotificationsPane from "@/components/NotificationsPane.svelte";
   import SettingSelect from "@/components/SettingSelect.svelte";
 
   interface Props {
@@ -47,12 +48,13 @@
   }
   let { entries, onChange, onClose }: Props = $props();
 
-  // Only staged fields carry controls; group by category and keep SETTINGS_CATEGORIES
-  // order, dropping any category with no entries (so an empty category never renders
-  // a nav row).
+  // Staged fields carry controls; a live pane (Notifications, EXC-847) contributes
+  // search-only entries and renders a custom pane instead. A category earns a nav row
+  // when it has ANY registry entry — staged or search-only — in SETTINGS_CATEGORIES
+  // order, dropping an empty category so it never renders an empty nav row.
   const staged = $derived(entries.filter(isStagedField));
   const categories = $derived(
-    SETTINGS_CATEGORIES.filter((c) => staged.some((f) => f.category === c.id)),
+    SETTINGS_CATEGORIES.filter((c) => entries.some((e) => e.category === c.id)),
   );
 
   let selectedId = $state(SETTINGS_CATEGORIES[0]?.id ?? "");
@@ -135,23 +137,31 @@
           <p class="pane-blurb">{selected?.blurb}</p>
         </header>
 
-        {#each paneSections as section, si (si)}
-          <div class="section">
-            {#if section.label}<h3 class="section-head">{section.label}</h3>{/if}
-            <ItemGroup class="fields">
-              {#each section.fields as field, i (field.key)}
-                {#if i > 0}<ItemSeparator />{/if}
-                <Item data-field={field.key} class="setting-item">
-                  <ItemContent>
-                    <ItemTitle class="field-label">{field.label}</ItemTitle>
-                    <ItemDescription>{field.description}</ItemDescription>
-                  </ItemContent>
-                  <ItemActions>{@render control(field)}</ItemActions>
-                </Item>
-              {/each}
-            </ItemGroup>
-          </div>
-        {/each}
+        {#if selected?.id === "Notifications"}
+          <!-- The first live, read-only pane (EXC-847): browser notification state,
+               not staged fields. ponytail: one id branch suffices for a single live
+               pane — swap for a category→component map when Advanced (EXC-848) adds
+               the second. -->
+          <NotificationsPane />
+        {:else}
+          {#each paneSections as section, si (si)}
+            <div class="section">
+              {#if section.label}<h3 class="section-head">{section.label}</h3>{/if}
+              <ItemGroup class="fields">
+                {#each section.fields as field, i (field.key)}
+                  {#if i > 0}<ItemSeparator />{/if}
+                  <Item data-field={field.key} class="setting-item">
+                    <ItemContent>
+                      <ItemTitle class="field-label">{field.label}</ItemTitle>
+                      <ItemDescription>{field.description}</ItemDescription>
+                    </ItemContent>
+                    <ItemActions>{@render control(field)}</ItemActions>
+                  </Item>
+                {/each}
+              </ItemGroup>
+            </div>
+          {/each}
+        {/if}
       </section>
     </div>
   </Dialog.Content>
@@ -210,15 +220,36 @@
   .settings :global(.settings-rail) {
     border-right: 1px solid var(--rule);
   }
-  /* Nav row: quiet --ink-soft at rest, brightening to --ink on hover (the stock
-     --sidebar-accent hover wash → --chip-hover). The SELECTED row is unmistakable —
-     a solid amber rail down its leading edge plus an amber wash and bold ink — the
-     "amber marks the selection" language, overriding shadcn's single faint accent.
-     `position: relative` anchors the rail pseudo-element. */
+  /* Nav rows sit a little apart (the shadcn menu ships gap-0) so a hover tint on
+     one doesn't crowd its neighbor. */
+  .settings :global([data-slot="sidebar-menu"]) {
+    gap: 0.25rem;
+  }
+  /* Nav row: quiet --ink-soft at rest, transparent. The SELECTED row is the single
+     amber-filled row — a solid amber rail down its leading edge plus an amber wash
+     and bold ink ("amber marks the selection") — so selection reads at a glance.
+     `position: relative` anchors the rail pseudo-element.
+
+     `background: transparent` is load-bearing: shadcn's SidebarMenuButton ships
+     `data-active:bg-sidebar-accent`, and Tailwind matches that variant on the
+     PRESENCE of data-active — Svelte serializes isActive={false} as
+     data-active="false" (attribute present), so every unselected row would
+     otherwise wear the grey accent fill at rest. This out-specifies it; the amber
+     selected rule and the hover tint below paint over it where wanted. */
   .settings :global([data-slot="sidebar-menu-button"]) {
     position: relative;
     justify-content: flex-start;
     color: var(--ink-soft);
+    background: transparent;
+  }
+  /* Unselected rows are transparent at rest; on hover they take a subtle,
+     theme-appropriate tint — a faint ink wash, gentler than the app-wide
+     --chip-hover (15% ink) the shadcn button ships, so it never rivals the
+     selection's amber below. */
+  .settings :global([data-slot="sidebar-menu-button"]:not([data-active="true"]):hover),
+  .settings :global([data-slot="sidebar-menu-button"]:not([data-active="true"]):active) {
+    background: color-mix(in lab, var(--ink) 7%, transparent);
+    color: var(--ink);
   }
   .settings :global([data-slot="sidebar-menu-button"][data-active="true"]) {
     background: var(--accent-wash);
