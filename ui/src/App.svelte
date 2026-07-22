@@ -34,14 +34,15 @@
     pendingItems,
   } from "$lib/feedback.ts";
   import { applyTheme, DEFAULT_THEME_ID, readThemeId, THEMES, type ThemeId } from "$lib/theme.ts";
-  import { changeTheme } from "$lib/themeWipe.ts";
   import {
     clearKnownPrefs,
     freshResetApplied,
     markFreshResetApplied,
     shouldShowOnboarding,
   } from "$lib/prefs.ts";
-  import { readShortcutHints, writeShortcutHints } from "$lib/shortcutHintsPref.ts";
+  import { readShortcutHints } from "$lib/shortcutHintsPref.ts";
+  import { isStagedField, SETTINGS_REGISTRY } from "$lib/settingsRegistry.ts";
+  import { createSettingsDraft, type SettingsDraftStore } from "@/state/settingsDraft.ts";
   import type { ComposerScratch } from "$lib/diffview/commenting.ts";
   import type { ApproveVariant, ApproveVariantId, Annotation, PersistedScratch } from "@core/lib/types";
 
@@ -117,11 +118,11 @@
   let pendingReject = $state(false);
   let safeMode = $state(false);
 
-  // Theme (EXC-730). main.ts applies the saved theme before mount (no wipe at
-  // boot); this mirrors the chosen id so the derived scheme reaches the diff view
-  // and the Settings dialog reflects the current selection. Switching runs through
-  // changeTheme (the view-transition wipe), then updates themeId so the reactive
-  // reads follow.
+  // Theme (EXC-730). main.ts applies the saved theme before mount; this mirrors the
+  // chosen id so the derived scheme reaches the diff view and the Settings select
+  // reflects the current theme. A staged theme change commits on Save (the registry
+  // field's applyTheme persists + applies); saveSettings then resyncs themeId so the
+  // reactive reads follow.
   let themeId = $state<ThemeId>(readThemeId());
   const scheme = $derived(THEMES[themeId].scheme);
   let showSettings = $state(false);
@@ -132,19 +133,34 @@
   let showOnboarding = $state(
     typeof Notification !== "undefined" && shouldShowOnboarding(Notification.permission),
   );
-  function selectTheme(id: ThemeId) {
-    changeTheme(id);
-    themeId = id;
-  }
-  // Shortcut-hint affordances (EXC-826). A persisted, live toggle: App owns the
-  // reactive flag and threads it to the surfaces that show discoverability chrome
-  // (the TopBar key-cap hints, the status-bar keyboard button, the V-mode chip),
-  // so flipping it in Settings hides/shows them in place. The ? help modal stays
+  // Shortcut-hint affordances (EXC-826). App owns the reactive flag and threads it
+  // to the surfaces that show discoverability chrome (the TopBar key-cap hints, the
+  // status-bar keyboard button, the V-mode chip); saveSettings resyncs it after a
+  // staged Settings save so flipping it applies in place. The ? help modal stays
   // reachable by keyboard regardless.
   let showShortcutHints = $state(readShortcutHints());
-  function setShortcutHints(show: boolean) {
-    writeShortcutHints(show);
-    showShortcutHints = show;
+
+  // Staged settings (EXC-843). App owns the reactive draft store; the two-pane
+  // Settings dialog stages edits into it and commits on Save. saveSettings persists
+  // every staged write through its registry field, then resyncs the reactive mirrors
+  // other surfaces read — themeId (the diff-view scheme) and showShortcutHints (the
+  // hint chrome) — so theme + hints apply live, and confirms with a success alert.
+  // The diff-view prefs persist here too; their live re-apply is EXC-846.
+  let settingsDraftStore = $state<SettingsDraftStore>({ staged: {} });
+  const settingsDraft = createSettingsDraft(
+    settingsDraftStore,
+    SETTINGS_REGISTRY.filter(isStagedField),
+  );
+  function saveSettings() {
+    settingsDraft.save();
+    themeId = readThemeId();
+    showShortcutHints = readShortcutHints();
+    alerts.push({ variant: "success", message: "Settings saved" });
+  }
+  // A dirty dismiss plainly discards the staged edits — the confirm guard is EXC-844.
+  function dismissSettings() {
+    settingsDraft.discard();
+    showSettings = false;
   }
 
   // The source view's retained-but-unsent composer drafts ("scratches"), mirrored
@@ -613,11 +629,11 @@
      review is active — so it renders at the top level, ungated on `active`. -->
 {#if showSettings}
   <SettingsDialog
-    current={themeId}
-    onSelect={selectTheme}
+    draft={settingsDraft}
+    entries={SETTINGS_REGISTRY}
     {showShortcutHints}
-    onToggleShortcutHints={setShortcutHints}
-    onClose={() => (showSettings = false)}
+    onSave={saveSettings}
+    onClose={dismissSettings}
   />
 {/if}
 
