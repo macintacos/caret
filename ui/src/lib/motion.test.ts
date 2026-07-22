@@ -32,6 +32,7 @@ const chromeComponents = [
   "components/VersionComparePicker.svelte",
   "components/UnsentCommentsDialog.svelte",
   "components/AlertHost.svelte",
+  "components/ThemePreviewCard.svelte",
 ];
 const chromeSources: Record<string, string> = Object.fromEntries(
   await Promise.all(

@@ -143,6 +143,20 @@ test("hovering a theme option previews its palette beside the menu, without appl
   await expect(preview).toHaveAttribute("style", /--accent:\s*#fb923c/i);
 });
 
+test("keyboard-highlighting a theme option previews it too (EXC-753)", async ({ daemon, page }) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  await openSettings(page);
+  await page.getByRole("button", { name: "Theme" }).click();
+
+  // Roving the menu with the keyboard highlights an option (real focus), which surfaces
+  // its preview just like a hover does — the keyboard clause of the acceptance criteria.
+  await page.keyboard.press("ArrowDown");
+  await expect(page.locator("[data-slot='theme-preview']")).toBeVisible();
+});
+
 test("toggling shortcut hints applies immediately and persists", async ({ daemon, page }) => {
   await daemon.seed();
   await page.goto("/");

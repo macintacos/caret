@@ -108,6 +108,19 @@ describe("SettingSelect theme preview (EXC-753)", () => {
     expect(card()?.style.getPropertyValue("--accent")).toBe("#ff8800");
   });
 
+  test("keyboard-highlighting an option (focus) surfaces its preview too", async () => {
+    const { flush } = render(SettingSelect, previewProps);
+    flush();
+    await openMenu(flush);
+    // bits-ui moves real focus onto the highlighted item as you arrow through the
+    // menu; the component's onfocus mirrors onpointerenter, so keyboard roving previews.
+    document.body
+      .querySelector<HTMLElement>("[data-setting-option='c']")
+      ?.dispatchEvent(new FocusEvent("focus"));
+    await flushUntil(flush, () => card() !== null);
+    expect(card()?.style.getPropertyValue("--accent")).toBe("#00ccff");
+  });
+
   test("an option without a preview surfaces no card", async () => {
     const { flush } = render(SettingSelect, previewProps);
     flush();
