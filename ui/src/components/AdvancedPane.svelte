@@ -107,23 +107,24 @@
         <p class="diag-path">{configPath}</p>
       {/if}
 
-      <!-- The sunk-paper block doubles as a mouse target for the "click a block to
-           copy" affordance (EXC-850). It's aria-hidden with tabindex -1 so screen
-           readers and the keyboard use the labelled Copy button above instead of
-           hearing two controls per section. -->
-      <button
+      <!-- The sunk-paper block DISPLAYS the value — a presentational element that
+           stays in the accessibility tree, so a screen reader reads the value like
+           any text. The labelled Copy button above is the keyboard / AT control;
+           the block's own click is a mouse-only convenience for the "click a block
+           to copy" affordance (EXC-850), so its absent key handler is deliberate. -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
         class="diag-block"
         class:is-config={block.key === "config"}
-        aria-hidden="true"
-        tabindex="-1"
-        disabled={!block.available}
+        class:is-unavailable={!block.available}
         onclick={() => block.available && onCopyDiagnostic(block.text)}
       >
         {#if block.key === "daemon"}
           <span class="diag-dot" data-live={block.available}></span>
         {/if}
         <code class="diag-text">{block.available ? block.text : "Unavailable"}</code>
-      </button>
+      </div>
     </div>
   {/each}
 </div>
@@ -206,11 +207,11 @@
       border-color var(--dur-fast) var(--ease-out),
       background-color var(--dur-fast) var(--ease-out);
   }
-  .diag-block:not(:disabled):hover {
+  .diag-block:not(.is-unavailable):hover {
     border-color: var(--rule-strong);
     background: color-mix(in lab, var(--paper-sunk), var(--ink) 4%);
   }
-  .diag-block:disabled {
+  .diag-block.is-unavailable {
     cursor: default;
   }
   /* The config block preserves the TOML's line breaks and caps its height,
@@ -228,7 +229,7 @@
     white-space: pre;
   }
   /* A degraded block reads muted — it's a placeholder, not data. */
-  .diag-block:disabled .diag-text {
+  .diag-block.is-unavailable .diag-text {
     color: var(--ink-faint);
   }
 
