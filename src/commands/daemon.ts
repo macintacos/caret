@@ -9,7 +9,15 @@ import { existsSync, unlinkSync } from "node:fs";
 import { selectAdapter } from "@/adapters/index.ts";
 import { warnInvalidEnvVars } from "@/commands/boot.ts";
 import { configFile, daemonLock, reviewsDir, stateDir } from "@/config/paths.ts";
-import { getPort, heartbeatMs, idleMs, settings, watchSettings } from "@/config/settings.ts";
+import {
+  envOverrides,
+  getPort,
+  heartbeatMs,
+  idleMs,
+  settings,
+  watchSettings,
+} from "@/config/settings.ts";
+import { buildDiagnostics } from "@/daemon/diagnostics.ts";
 import { isAddrInUse } from "@/daemon/lifecycle.ts";
 import { type CaretServer, createServer } from "@/daemon/server.ts";
 import { currentBuildId, currentCommit } from "@/lib/build-id.ts";
@@ -18,6 +26,8 @@ import { createStore } from "@/review/store.ts";
 import { loadUiAssets } from "@/ui/assets.ts";
 
 export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
+  // The daemon's boot time, captured once for the /api/diagnostics uptime (EXC-842).
+  const startedAt = Date.now();
   // Leveled NDJSON to stderr (spawnDaemon redirects it into daemon.log). The
   // level and redact thunks re-read svc.current() per emit, so config.toml
   // edits hot-reload without a restart — and the boot line below doubles as
@@ -83,6 +93,23 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
       // The active adapter's id, published on /api/health so the UI can adapt to
       // the environment (EXC-791).
       source: adapter.id,
+      // Daemon self-diagnostics for the settings Advanced pane (EXC-842). Reads
+      // live settings (settings().current() hot-reloads a config edit) and the
+      // CARET_* env overrides in effect; buildDiagnostics scrubs the settings dump.
+      diagnostics: () =>
+        buildDiagnostics({
+          now: Date.now,
+          startedAt,
+          system: () => ({
+            platform: process.platform,
+            arch: process.arch,
+            runtime: `bun ${Bun.version}`,
+          }),
+          settings: () => settings().current(),
+          configPath: cfg,
+          configExists: () => existsSync(cfg),
+          envOverrides,
+        }),
       log,
     });
   } catch (e) {
