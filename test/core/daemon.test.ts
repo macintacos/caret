@@ -260,6 +260,27 @@ test("GET /api/health omits approveVariants when the adapter declares none", asy
   expect("approveVariants" in body).toBe(false);
 });
 
+// ---- daemon diagnostics endpoint (EXC-842) ----
+
+test("GET /api/diagnostics returns the injected diagnostics body", async () => {
+  const diag = {
+    system: { platform: "linux", arch: "x64", runtime: "bun 1.3.14" },
+    uptimeMs: 1234,
+    settings: { logging: { level: "info" } },
+    config: { path: "/x/config.toml", exists: true, env: [] },
+  };
+  await boot({ diagnostics: () => diag });
+  const res = await fetch(`${base}/api/diagnostics`);
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual(diag);
+});
+
+test("GET /api/diagnostics is 404 when the daemon wires no diagnostics thunk", async () => {
+  await boot();
+  const res = await fetch(`${base}/api/diagnostics`);
+  expect(res.status).toBe(404);
+});
+
 test("the lock file records stateDir and instanceId", async () => {
   const lockPath = join(dir, "daemon.lock");
   await boot({ lockPath, stateDir: "/x/caret", instanceId: "inst123" });
@@ -876,6 +897,12 @@ describe("read-confidentiality posture", () => {
     // Short heartbeat so the /decision long-poll returns its 204 promptly.
     await boot({
       heartbeatMs: 30,
+      diagnostics: () => ({
+        system: { platform: "linux", arch: "x64", runtime: "bun 1.3.14" },
+        uptimeMs: 0,
+        settings: {},
+        config: { path: "/x/config.toml", exists: false, env: [] },
+      }),
       assets: fakeAssets({
         "/index.html": '<!doctype html><html><body><div id="app"></div></body></html>',
         "/assets/index-AB12.js": "export const x = 1;\n",
@@ -898,6 +925,7 @@ describe("read-confidentiality posture", () => {
           }),
       ],
       ["GET /api/prefs", () => fetch(`${base}/api/prefs`)],
+      ["GET /api/diagnostics", () => fetch(`${base}/api/diagnostics`)],
       ["GET / (index)", () => fetch(`${base}/`)],
       ["GET /assets/* (asset)", () => fetch(`${base}/assets/index-AB12.js`)],
       [
@@ -1102,6 +1130,7 @@ describe("routing fallthrough", () => {
       ["DELETE", "/api/reviews"],
       ["GET", "/api/retire"],
       ["POST", "/api/health"],
+      ["POST", "/api/diagnostics"], // /api/diagnostics is GET-only
       ["DELETE", "/api/prefs"],
       ["PUT", `/api/reviews/${id}/resolve`], // /resolve is POST-only
       ["GET", `/api/reviews/${id}/resolve`],

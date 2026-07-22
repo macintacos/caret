@@ -30,6 +30,7 @@ import { type CaretLogger, noopLogger, shortId } from "@/lib/log.ts";
 import {
   type ApproveVariant,
   currentVersion,
+  type DaemonDiagnostics,
   type Decision,
   type DraftBody,
   type HealthIdentity,
@@ -108,6 +109,12 @@ export interface CreateServerOptions {
    * /api/health as `source` so the UI can adapt to the environment — e.g. an
    * OpenCode session (EXC-791). Omitted (default) drops the field from the body. */
   source?: string;
+  /** A thunk returning the daemon self-diagnostics served by GET /api/diagnostics
+   * (EXC-842): system/runtime identity, uptime, the live parsed settings, and the
+   * config path + env overrides. Omitted (default) → the route 404s, so existing
+   * call sites/tests that don't wire it are unaffected. runDaemon wires the prod
+   * thunk, which reads live settings so a config edit hot-reloads. */
+  diagnostics?: () => DaemonDiagnostics;
   /** Leveled lifecycle logger (see log.ts CaretLogger); defaults to a no-op so
    * tests stay quiet. Lifecycle events log at info, handler failures at error. */
   log?: CaretLogger;
@@ -144,6 +151,7 @@ interface ResolvedOptions {
   instanceId: string | undefined;
   approveVariants: readonly ApproveVariant[] | undefined;
   source: string | undefined;
+  diagnostics: (() => DaemonDiagnostics) | undefined;
   log: CaretLogger;
 }
 
@@ -163,6 +171,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     instanceId: opts.instanceId,
     approveVariants: opts.approveVariants,
     source: opts.source,
+    diagnostics: opts.diagnostics,
     log: opts.log ?? noopLogger,
   };
 }
@@ -300,6 +309,17 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       ...(source ? { source } : {}),
     };
     return Response.json(body);
+  }
+
+  // GET /api/diagnostics — the daemon's self-diagnostics for the settings
+  // Advanced pane (EXC-842): system/runtime identity, uptime, the live parsed
+  // settings (scrubbed), and the config path + env overrides in effect. Distinct
+  // from /api/health, a cross-daemon identity probe — this is the local daemon
+  // describing itself to its own UI. With no diagnostics thunk wired (default;
+  // e.g. a bare test daemon) the route 404s, like any absent optional capability.
+  function handleDiagnostics(): Response {
+    if (!cfg.diagnostics) return notFound();
+    return Response.json(cfg.diagnostics());
   }
 
   // POST /api/retire — graceful single-instance retire (EXC-406): a newer caret
@@ -621,6 +641,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // and the catch-all 500; dispatch is pure routing + business logic.
   async function dispatch(req: Request, method: string, path: string): Promise<Response> {
     if (method === "GET" && path === "/api/health") return handleHealth();
+    if (method === "GET" && path === "/api/diagnostics") return handleDiagnostics();
     if (method === "POST" && path === "/api/retire") return handleRetire();
     if (method === "GET" && (path === "/" || path === INDEX_PATH)) return handleIndex();
     if (method === "POST" && path === "/api/reviews") return handleCreateReview(req);

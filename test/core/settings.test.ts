@@ -12,6 +12,7 @@ import {
   devPort,
   devSeeder,
   devStateDir,
+  envOverrides,
   getPort,
   heartbeatMs,
   idleMs,
@@ -378,6 +379,41 @@ test("invalidEnvVars treats empty and whitespace values as unset", () => {
   withEnv({ ...NO_CARET, CARET_PORT: "", CARET_IDLE_MS: "   " }, () => {
     expect(invalidEnvVars()).toEqual([]);
   });
+});
+
+// --- EXC-842: envOverrides — the CARET_* tunables in effect (for /api/diagnostics) ---
+
+test("envOverrides lists a set, valid CARET_* var with its raw value", () => {
+  withEnv({ ...NO_CARET, CARET_PORT: "6000" }, () => {
+    expect(envOverrides()).toEqual([{ name: "CARET_PORT", value: "6000" }]);
+  });
+});
+
+test("envOverrides omits unset and blank vars", () => {
+  withEnv({ ...NO_CARET, CARET_PORT: "", CARET_IDLE_MS: "   " }, () => {
+    expect(envOverrides()).toEqual([]);
+  });
+});
+
+test("envOverrides reports a set-but-invalid var with a null value", () => {
+  // 99999 exceeds the in-schema timeout budget, so it is set-but-unusable.
+  withEnv({ ...NO_CARET, CARET_TIMEOUT: "99999" }, () => {
+    expect(envOverrides()).toEqual([{ name: "CARET_TIMEOUT", value: null }]);
+  });
+});
+
+test("envOverrides preserves ENV_VARS declaration order", () => {
+  withEnv(
+    { CARET_PORT: "6000", CARET_TIMEOUT: "120", CARET_IDLE_MS: "0", CARET_HEARTBEAT_MS: "250" },
+    () => {
+      expect(envOverrides()).toEqual([
+        { name: "CARET_PORT", value: "6000" },
+        { name: "CARET_TIMEOUT", value: "120" },
+        { name: "CARET_IDLE_MS", value: "0" },
+        { name: "CARET_HEARTBEAT_MS", value: "250" },
+      ]);
+    },
+  );
 });
 
 test("an env accessor re-resolves when its raw value changes between calls", () => {

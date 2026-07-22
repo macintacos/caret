@@ -310,6 +310,41 @@ export interface HealthIdentity {
   source?: string;
 }
 
+/**
+ * GET /api/diagnostics body — the daemon self-diagnostics the settings Advanced
+ * pane renders (EXC-842): system/runtime identity, uptime, the live parsed
+ * config.toml settings (scrubbed through redact/core.ts's DENY_KEYS walk), and
+ * the config file path plus the CARET_* env overrides in effect. Distinct from
+ * GET /api/health, which is a cross-daemon identity probe — this is the local
+ * daemon describing itself to its own UI.
+ */
+export interface DaemonDiagnostics {
+  /** OS platform, CPU architecture, and runtime version (e.g. "bun 1.3.14"). */
+  system: { platform: string; arch: string; runtime: string };
+  /** Milliseconds the daemon has been running (now − boot). */
+  uptimeMs: number;
+  /** The live, hot-reloaded parsed settings, scrubbed through the shared
+   * redact/core.ts DENY_KEYS walk (never a second redaction path). An opaque
+   * graph — the pane narrows it. */
+  settings: Record<string, unknown>;
+  config: {
+    /** Resolved config.toml path (configFile()). */
+    path: string;
+    exists: boolean;
+    /** The CARET_* tunables currently set in the environment, in effect over the
+     * file. Empty when none are set. */
+    env: EnvOverride[];
+  };
+}
+
+/** One CARET_* environment override in effect (EXC-842): its name and raw string
+ * value, or a null value when it is set but invalid (ignored — the accessor
+ * falls through to the file value, then the default). */
+export interface EnvOverride {
+  name: string;
+  value: string | null;
+}
+
 /** Returns the current (latest) version of a review. */
 export function currentVersion(review: Review): PlanVersion {
   const v = review.versions[review.versions.length - 1];

@@ -29,6 +29,7 @@ import { configFile } from "@/config/paths.ts";
 // paths.ts (already imported below) itself imports build-id.
 import { isCompiledBinary } from "@/lib/build-id.ts";
 import { logError } from "@/lib/log.ts";
+import type { EnvOverride } from "@/lib/types.ts";
 
 export { DEFAULT_PORT };
 
@@ -315,6 +316,23 @@ function envValue(name: string, schema: z.ZodType<number>): number | null | unde
  * once at boot via its own logger (EXC-444). */
 export function invalidEnvVars(): string[] {
   return ENV_VARS.filter(([name, schema]) => envValue(name, schema) === null).map(([name]) => name);
+}
+
+/** The CARET_* tunables currently set in the environment, in ENV_VARS order,
+ * each with its raw string value — or a null value when set-but-invalid (the
+ * accessor ignores it, falling through to the file value, then the default). An
+ * unset or blank var is omitted. Surfaced by GET /api/diagnostics (EXC-842) so
+ * the settings Advanced pane shows which env overrides are in effect; reuses
+ * ENV_VARS and the same envValue classifier invalidEnvVars uses, so "in effect"
+ * and "flagged invalid" cannot disagree. */
+export function envOverrides(): EnvOverride[] {
+  const out: EnvOverride[] = [];
+  for (const [name, schema] of ENV_VARS) {
+    const raw = process.env[name];
+    if (raw === undefined || raw.trim() === "") continue; // unset/blank → not in effect
+    out.push({ name, value: envValue(name, schema) === null ? null : raw });
+  }
+  return out;
 }
 
 // The four tunable accessors (EXC-430; moved from paths.ts so they can read
