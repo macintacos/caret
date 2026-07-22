@@ -152,6 +152,38 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     label: "Desktop notifications",
     description: "Get alerted when a new plan is ready for review; check the permission state.",
   },
+  // Read-only install diagnostics (EXC-848): one search-only entry per block so
+  // /-search (EXC-845) finds each, and — since the shell renders a category only
+  // when it has ≥1 entry — so the Advanced nav row appears at all. AdvancedPane
+  // fetches and renders the live values; nothing here persists.
+  {
+    kind: "search",
+    key: "advancedVersion",
+    category: "Advanced",
+    label: "Version",
+    description: "The running caret version, build id, and commit.",
+  },
+  {
+    kind: "search",
+    key: "advancedDaemon",
+    category: "Advanced",
+    label: "Daemon status",
+    description: "Whether the daemon is live, its port, and how long it has been running.",
+  },
+  {
+    kind: "search",
+    key: "advancedSystem",
+    category: "Advanced",
+    label: "System",
+    description: "The operating system, architecture, and runtime version.",
+  },
+  {
+    kind: "search",
+    key: "advancedConfig",
+    category: "Advanced",
+    label: "Config",
+    description: "The parsed config file and its path on disk.",
+  },
 ];
 
 /** A sidebar category: its id (matched against SettingEntry.category, and shown as
@@ -169,4 +201,5 @@ export interface SettingCategory {
 export const SETTINGS_CATEGORIES: readonly SettingCategory[] = [
   { id: "Appearance", blurb: "How the interface looks, including the diff view." },
   { id: "Notifications", blurb: "Desktop alerts when a new plan is ready for review." },
+  { id: "Advanced", blurb: "Read-only details about this install. Click a block to copy it." },
 ];

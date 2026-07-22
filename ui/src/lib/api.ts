@@ -5,6 +5,7 @@ import type {
   Annotation,
   ApproveVariantId,
   ClientReview,
+  DaemonDiagnostics,
   FileExcerpt,
   FileRefsResponse,
   HealthIdentity,
@@ -33,6 +34,19 @@ export async function getHealth(): Promise<HealthIdentity> {
     return await json(await fetch("/api/health"));
   } catch (err) {
     uiLog.warn("request", "health probe failed", { reason: String(err) });
+    throw err;
+  }
+}
+
+/** The daemon's self-diagnostics for the settings Advanced pane (EXC-842):
+ * system/runtime identity, uptime, the live parsed settings, and the config path.
+ * Failure is a UI-worthy record (the pane degrades those blocks); a healthy probe
+ * is silent, like getHealth. */
+export async function getDiagnostics(): Promise<DaemonDiagnostics> {
+  try {
+    return await json(await fetch("/api/diagnostics"));
+  } catch (err) {
+    uiLog.warn("request", "diagnostics probe failed", { reason: String(err) });
     throw err;
   }
 }

@@ -107,6 +107,28 @@ describe("Notifications (search-only live pane, EXC-847)", () => {
   });
 });
 
+describe("Advanced (search-only diagnostics pane, EXC-848)", () => {
+  test("Advanced is a sidebar category with a blurb, ordered last", () => {
+    const cat = SETTINGS_CATEGORIES.find((c) => c.id === "Advanced");
+    expect(cat).toBeDefined();
+    expect(cat?.blurb).toBeTruthy();
+    expect(SETTINGS_CATEGORIES[SETTINGS_CATEGORIES.length - 1]?.id).toBe("Advanced");
+  });
+
+  test("contributes only search-only entries — read-only diagnostics, never a field", () => {
+    const entries = SETTINGS_REGISTRY.filter((e) => e.category === "Advanced");
+    expect(entries.length).toBeGreaterThan(0);
+    for (const e of entries) expect(isStagedField(e)).toBe(false);
+  });
+
+  test("surfaces the four diagnostics blocks by label (findable in /-search)", () => {
+    const labels = SETTINGS_REGISTRY.filter((e) => e.category === "Advanced").map((e) => e.label);
+    expect(labels).toEqual(
+      expect.arrayContaining(["Version", "Daemon status", "System", "Config"]),
+    );
+  });
+});
+
 describe("staged fields wrap existing pref modules", () => {
   test("write persists and read reflects it (round-trips through the pref module)", () => {
     for (const field of staged) {
