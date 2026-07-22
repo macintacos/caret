@@ -91,6 +91,32 @@ test("toggling shortcut hints applies immediately and persists", async ({ daemon
   await expect(page.locator(keyboardButton)).toBeHidden();
 });
 
+test("changing the diff Layout in Settings reflows an open compare diff live", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seedVersions(3, [
+    "# Plan\n\nalpha line one\n",
+    "# Plan\n\nbeta line two\n",
+    "# Plan\n\ngamma line three\n",
+  ]);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Compare versions" }).click();
+  // The library renders split as data-diff-type="split" and unified as "single".
+  const pre = page.locator(".diffview pre").first();
+  await expect(pre).toHaveAttribute("data-diff-type", "split");
+
+  // Switch Layout → Unified in Settings: the diff behind the modal reflows at once,
+  // no reload and no in-view picker — the diff prefs honor immediate apply too.
+  await openSettings(page);
+  await page
+    .getByRole("dialog", { name: "Settings" })
+    .getByRole("button", { name: "Layout" })
+    .click();
+  await page.getByRole("menuitemradio", { name: "Unified" }).click();
+  await expect(pre).toHaveAttribute("data-diff-type", "single");
+});
+
 test("Esc closes the settings modal", async ({ daemon, page }) => {
   await daemon.seed();
   await page.goto("/");

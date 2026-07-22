@@ -144,6 +144,11 @@
   // write(), resyncs the reactive mirrors other surfaces read — themeId (the diff-view
   // scheme) and showShortcutHints (the hint chrome) — then confirms with a toast. A
   // failed write raises a PERSISTENT error toast the user must read and dismiss.
+  //
+  // settingsRev bumps on every applied change; DiffPlanView watches it to re-read the
+  // diff-layout/marker prefs into its compare store so an open diff reflows live too
+  // (those prefs live in the view's own store, not a mirror App can resync).
+  let settingsRev = $state(0);
   function applySetting(field: StagedField, value: unknown) {
     try {
       field.write(value);
@@ -163,6 +168,7 @@
     }
     themeId = readThemeId();
     showShortcutHints = readShortcutHints();
+    settingsRev++;
     alerts.push({ variant: "success", message: `${field.label} updated` });
   }
 
@@ -522,6 +528,7 @@
       onExposeReveal={(r) => (revealLine = r)}
       {onCopyCwd}
       {showShortcutHints}
+      {settingsRev}
     />
   {:else}
     <EmptyState connected={selection.connected} />

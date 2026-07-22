@@ -123,6 +123,11 @@
     /** Whether the shortcut-hint affordances are shown (EXC-826); gates the V-mode
      * "c comment · Esc cancel" chip. Defaults to shown; the shortcut still fires. */
     showShortcutHints?: boolean;
+    /** A counter App bumps whenever a Setting is applied (EXC-843). It's the signal
+     * to re-read the persisted diff-layout/marker prefs into the compare store so an
+     * open diff reflows the moment those settings change (they live here, not in a
+     * mirror App can resync). */
+    settingsRev?: number;
   }
 
   let {
@@ -139,6 +144,7 @@
     onExposeReveal,
     scheme,
     showShortcutHints = true,
+    settingsRev = 0,
   }: Props = $props();
 
   // Line-anchored annotations render inline in the source view's per-line
@@ -184,6 +190,18 @@
     } else {
       compare.syncVersions(review.versions);
     }
+  });
+
+  // A Settings change to the diff prefs (App bumps settingsRev) re-reads them into the
+  // reactive compare store, so an open diff reflows live — the immediate-apply promise
+  // reaching the prefs that live in this view's own store rather than an App mirror.
+  // Skipped on the initial mount (settingsRev starts 0; compare.init already seeded
+  // these); the in-view picker mutates the store directly and never bumps settingsRev,
+  // so its choice is never clobbered.
+  $effect(() => {
+    if (settingsRev === 0) return;
+    compareStore.diffStyle = readDiffStyle();
+    compareStore.diffIndicators = readDiffIndicators();
   });
 
   const canCompare = $derived(compare.canCompare(review.versions));

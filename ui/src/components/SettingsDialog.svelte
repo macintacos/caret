@@ -135,7 +135,7 @@
           <p class="pane-blurb">{selected?.blurb}</p>
         </header>
 
-        {#each paneSections as section, si (section.label ?? si)}
+        {#each paneSections as section, si (si)}
           <div class="section">
             {#if section.label}<h3 class="section-head">{section.label}</h3>{/if}
             <ItemGroup class="fields">

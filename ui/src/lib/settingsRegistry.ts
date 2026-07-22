@@ -21,9 +21,8 @@ import type { DiffIndicators, DiffStyle } from "$lib/diffview/types.ts";
 import { readShortcutHints, writeShortcutHints } from "$lib/shortcutHintsPref.ts";
 import { applyTheme, readThemeId, THEME_IDS, THEMES, type ThemeId } from "$lib/theme.ts";
 
-/** How the two-pane shell (EXC-843) renders a staged field's control. The draft
- * store ignores this — it only stages values; the control kind drives rendering
- * and search. */
+/** How the two-pane shell (EXC-843) renders a field's control: the kind drives
+ * both the rendered control and search. */
 export type SettingControl =
   | { kind: "select"; options: readonly { value: string; label: string }[] }
   | { kind: "toggle" };
@@ -61,8 +60,8 @@ export interface SearchOnlyEntry extends SettingEntryBase {
 
 export type SettingEntry = StagedField | SearchOnlyEntry;
 
-/** Narrow a registry entry to a staged field — used to filter search-only entries
- * out before the draft store ever sees them. */
+/** Narrow a registry entry to an editable field — filters search-only entries out
+ * before the shell renders a control. */
 export const isStagedField = (entry: SettingEntry): entry is StagedField => entry.kind === "staged";
 
 /** Define a staged field with its value type checked, erased to StagedField for
