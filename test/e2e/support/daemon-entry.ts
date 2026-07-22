@@ -66,6 +66,20 @@ const server = createServer({
   onShutdown: () => {},
   prefsPath: prefsFile(), // under the ephemeral state dir
   assets,
+  // A synthetic build identity + self-diagnostics so the settings Advanced pane
+  // (EXC-848) has real blocks to render. The prod daemon derives these from the
+  // build (buildId/commit) and the live process/settings; here they are fixed so
+  // the pane's block text is deterministic across machines (advanced.e2e.ts
+  // asserts these exact values — keep the two in sync). The port lives in the
+  // settings graph, not the bound OS port, mirroring how the pane narrows it.
+  buildId: "e2e-build",
+  commit: "e2ecommit0000000",
+  diagnostics: () => ({
+    system: { platform: "darwin", arch: "arm64", runtime: "bun 1.2.19" },
+    uptimeMs: 2 * 3_600_000 + 14 * 60_000,
+    settings: { daemon: { port: 42718 }, review: { timeout_s: 3600 } },
+    config: { path: "/home/e2e/.config/caret/config.toml", exists: true, env: [] },
+  }),
   log,
 });
 
