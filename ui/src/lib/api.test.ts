@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Annotation, FileExcerpt, ResolveBody } from "@core/lib/types";
 import {
   getApproveMode,
+  getDiagnostics,
   getFileExcerpt,
   getHealth,
   getReview,
@@ -271,6 +272,36 @@ describe("getHealth instrumentation", () => {
     expect(warn).toBeDefined();
     expect(warn!.step).toBe("request");
     expect(warn!.msg as string).toContain("health probe failed");
+  });
+});
+
+describe("getDiagnostics instrumentation", () => {
+  const doc = {
+    system: { platform: "darwin", arch: "arm64", runtime: "bun 1.2.19" },
+    uptimeMs: 1000,
+    settings: { daemon: { port: 42718 } },
+    config: { path: "/x/config.toml", exists: true, env: [] },
+  };
+
+  test("returns the diagnostics document on success and emits no record", async () => {
+    respond = () => Promise.resolve(jsonResponse(doc));
+
+    expect(await getDiagnostics()).toEqual(doc);
+    flush();
+
+    expect(cap.events()).toHaveLength(0);
+  });
+
+  test("failure warns at step request and rejects", async () => {
+    respond = () => Promise.reject(new Error("offline"));
+
+    await expect(getDiagnostics()).rejects.toThrow("offline");
+    flush();
+
+    const warn = cap.events().find((r) => r.level === "warn");
+    expect(warn).toBeDefined();
+    expect(warn!.step).toBe("request");
+    expect(warn!.msg as string).toContain("diagnostics probe failed");
   });
 });
 
