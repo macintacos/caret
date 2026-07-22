@@ -1,17 +1,34 @@
 <script lang="ts">
-  // The two-pane Settings shell (EXC-843): a category sidebar (with per-category
-  // dirty dots) left, the selected category's pane right, and a floating save chip
-  // that rises when the draft is dirty. It renders the registry generically — a
-  // SettingSelect for `select` fields, a Switch for `toggle` fields — and stages
-  // every edit into the draft store; nothing persists until Save (theme + shortcut
-  // hints apply live on Save via App's resync; the diff-view live re-apply is
-  // EXC-846). Composes the shadcn Dialog primitive directly rather than Modal.svelte
-  // — Modal's eyebrow/title/footer identity doesn't fit the two-pane + float-chip
-  // layout — keeping a visually-hidden Dialog.Title so the dialog's accessible name
-  // stays "Settings".
-  import { Button } from "$lib/components/ui/button/index.js";
+  // The two-pane Settings shell (EXC-843): a shadcn Sidebar as the category rail
+  // (with per-category dirty dots) left, the selected category's pane right, and a
+  // floating save chip that rises when the draft is dirty. It renders the registry
+  // generically — a SettingSelect for `select` fields, a Switch for `toggle` fields,
+  // each setting grouped into one shadcn Item within an ItemGroup — and stages every
+  // edit into the draft store; nothing persists until Save (theme + shortcut hints
+  // apply live on Save via App's resync; the diff-view live re-apply is EXC-846).
+  //
+  // Two shadcn primitives carry the layout (compose-first, per doc/agents/shadcn-rules):
+  //   • Sidebar (collapsible="none") — the static category rail. The stock component
+  //     folds hover and active into one --sidebar-accent; the rail below re-tints the
+  //     SELECTED row to amber so caret's "amber marks the selection" language holds.
+  //   • Item / ItemGroup — one Item per setting (title + description + control),
+  //     hairline-separated within the group.
+  // The Dialog primitive is composed directly rather than Modal.svelte — Modal's
+  // eyebrow/title/footer identity doesn't fit the two-pane + float-chip layout —
+  // keeping a visually-hidden Dialog.Title so the dialog's accessible name is "Settings".
   import * as Dialog from "$lib/components/ui/dialog/index.js";
+  import {
+    Item,
+    ItemActions,
+    ItemContent,
+    ItemDescription,
+    ItemGroup,
+    ItemSeparator,
+    ItemTitle,
+  } from "$lib/components/ui/item/index.js";
+  import { Button } from "$lib/components/ui/button/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
+  import * as Sidebar from "$lib/components/ui/sidebar/index.js";
   import { Switch } from "$lib/components/ui/switch/index.js";
   import { isStagedField, SETTINGS_CATEGORIES, type SettingEntry, type StagedField } from "$lib/settingsRegistry.ts";
   import type { SettingsDraft } from "@/state/settingsDraft.ts";
@@ -53,16 +70,19 @@
   const categoryDirty = (id: string): boolean =>
     staged.some((f) => f.category === id && dirtyKeys.has(f.key));
 
-  // ⌘/Ctrl+Enter saves while dirty — a capture-phase window listener scoped to the
-  // open modal (the ShortcutsHelp `/` pattern), so it fires even while a control or
-  // the future search input (EXC-845) has focus. Gated on dirty so an empty ⌘↩ no-ops.
+  // ⌘/Ctrl+Enter saves while dirty. A capture-phase window listener (the ShortcutsHelp
+  // `/` pattern) so it fires while any control in the modal has focus — but GUARDED to
+  // events originating inside this modal's own content (`.settings-content`), so it
+  // never swallows a ⌘↩ dispatched in a different dialog. The guard matters for the
+  // shared-window test suite (real app: one modal at a time), where an unguarded
+  // window listener intercepts another dialog's Cmd+Enter. Consumes the chord fully so
+  // a focused Switch/Button doesn't ALSO activate on the Enter and re-stage right after
+  // save() clears the draft. Gated on dirty so an empty ⌘↩ no-ops.
   $effect(() => {
     function onKeydown(e: KeyboardEvent): void {
       if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey) || e.defaultPrevented) return;
       if (!draft.isDirty()) return;
-      // Consume the chord fully (capture phase): stop it reaching the focused control
-      // — a focused Switch/Button would otherwise ALSO activate on the Enter and
-      // re-stage right after save() clears the draft, leaving the chip stuck open.
+      if (!(e.target as Element | null)?.closest?.(".settings-content")) return;
       e.preventDefault();
       e.stopPropagation();
       onSave();
@@ -73,12 +93,10 @@
 
   // Land focus on the dialog content (not the first control), matching ShortcutsHelp:
   // Esc dismisses "with nothing focused", and EXC-845's `/` search relies on focus
-  // resting on the content. Take the LAST dialog-content — this modal portals after
-  // any already-open dialog.
+  // resting on the content.
   function focusDialog(e: Event): void {
     e.preventDefault();
-    const contents = document.querySelectorAll<HTMLElement>("[data-slot='dialog-content']");
-    contents[contents.length - 1]?.focus();
+    document.querySelector<HTMLElement>(".settings-content")?.focus();
   }
 </script>
 
@@ -91,26 +109,31 @@
     <Dialog.Title class="sr-only">Settings</Dialog.Title>
 
     <div class="settings">
-      <nav class="settings-nav" aria-label="Settings categories">
-        <ul class="nav-list">
-          {#each categories as cat (cat.id)}
-            <li>
-              <button
-                type="button"
-                class="nav-item"
-                data-category={cat.id}
-                aria-current={cat.id === selected?.id ? "page" : undefined}
-                onclick={() => (selectedId = cat.id)}
-              >
-                <span class="nav-label">{cat.id}</span>
-                {#if categoryDirty(cat.id)}<span class="dirty-dot" aria-hidden="true"></span>{/if}
-              </button>
-            </li>
-          {/each}
-        </ul>
+      <Sidebar.Root collapsible="none" class="settings-rail">
+        <Sidebar.Content>
+          <Sidebar.Group>
+            <Sidebar.Menu>
+              {#each categories as cat (cat.id)}
+                <Sidebar.MenuItem>
+                  <Sidebar.MenuButton
+                    isActive={cat.id === selected?.id}
+                    data-category={cat.id}
+                    aria-current={cat.id === selected?.id ? "page" : undefined}
+                    onclick={() => (selectedId = cat.id)}
+                  >
+                    <span class="nav-label">{cat.id}</span>
+                    {#if categoryDirty(cat.id)}<span class="dirty-dot" aria-hidden="true"></span>{/if}
+                  </Sidebar.MenuButton>
+                </Sidebar.MenuItem>
+              {/each}
+            </Sidebar.Menu>
+          </Sidebar.Group>
+        </Sidebar.Content>
         <!-- Esc-dismisses hint, pinned bottom-left (mockup). -->
-        <p class="nav-hint"><Kbd aria-hidden="true">esc</Kbd> <span>close</span></p>
-      </nav>
+        <Sidebar.Footer>
+          <p class="nav-hint"><Kbd aria-hidden="true">esc</Kbd> <span>close</span></p>
+        </Sidebar.Footer>
+      </Sidebar.Root>
 
       <section class="settings-pane">
         <header class="pane-head">
@@ -118,19 +141,20 @@
           <p class="pane-blurb">{selected?.blurb}</p>
         </header>
 
-        <div class="fields">
-          {#each paneFields as field (field.key)}
-            <div class="field" data-field={field.key}>
-              <div class="field-text">
-                <span class="field-label">
+        <ItemGroup class="fields">
+          {#each paneFields as field, i (field.key)}
+            {#if i > 0}<ItemSeparator />{/if}
+            <Item data-field={field.key} class="setting-item">
+              <ItemContent>
+                <ItemTitle class="field-label">
                   {field.label}{#if dirtyKeys.has(field.key)}<span class="dirty-dot" aria-hidden="true"></span>{/if}
-                </span>
-                <span class="field-desc">{field.description}</span>
-              </div>
-              <div class="field-control">{@render control(field)}</div>
-            </div>
+                </ItemTitle>
+                <ItemDescription>{field.description}</ItemDescription>
+              </ItemContent>
+              <ItemActions>{@render control(field)}</ItemActions>
+            </Item>
           {/each}
-        </div>
+        </ItemGroup>
 
         {#if dirty}
           <!-- The float-chip: unsaved count, Discard, Save ⌘↩. Rises over the pane
@@ -189,65 +213,38 @@
   /* The two-pane body. A fixed height gives the roomy mockup framing (the pane keeps
      its shape with few fields) and, being taller than a tiny viewport, lets the
      dialog-content cap + scroll rather than clip. Its own overflow is hidden so the
-     rounded corners clip the sidebar fill; the pane scrolls internally when tall. */
+     rounded corners clip the sidebar fill; the pane scrolls internally when tall.
+     --sidebar-width is the single source for the rail column: the grid track AND the
+     shadcn Sidebar's own w-(--sidebar-width) both read it, so they stay in lockstep. */
   .settings {
+    --sidebar-width: 15rem;
     display: grid;
-    grid-template-columns: 15rem 1fr;
+    grid-template-columns: var(--sidebar-width) 1fr;
     height: min(32rem, 80vh);
     min-height: 22rem;
     overflow: hidden;
     border-radius: inherit;
   }
 
-  /* Sidebar: a quiet recessed rail, a hairline off the pane. */
-  .settings-nav {
-    display: flex;
-    flex-direction: column;
-    padding: 0.75rem;
-    background: var(--paper);
+  /* The shadcn Sidebar as the category rail: a hairline off the pane, its rounded
+     inner corners clipped by .settings. The rail surface (--sidebar → --paper) is a
+     shade under the raised pane, reading as recessed. */
+  .settings :global(.settings-rail) {
     border-right: 1px solid var(--rule);
-    overflow-y: auto;
   }
-  .nav-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.1rem;
-    flex: 1;
-  }
-  /* Nav row: label left, dirty dot right. Ink-soft at rest, chip-hover on hover,
-     and an amber wash on the selected row — the "amber marks the selection"
-     language the diff view and pickers use. */
-  .nav-item {
-    display: flex;
-    align-items: center;
+  /* Nav row: quiet --ink-soft at rest, brightening to --ink on hover (the stock
+     --sidebar-accent hover wash → --chip-hover). The SELECTED row is re-tinted to an
+     amber wash — the "amber marks the selection" language the diff view and pickers
+     use — overriding shadcn's single-accent data-active treatment. Label left, dirty
+     dot right. */
+  .settings :global([data-slot="sidebar-menu-button"]) {
     justify-content: space-between;
-    gap: 0.5rem;
-    width: 100%;
-    padding: 0.45rem 0.6rem;
-    border-radius: var(--radius);
-    appearance: none;
-    border: none;
-    background: none;
-    text-align: left;
-    font-size: var(--text-sm);
     color: var(--ink-soft);
-    cursor: pointer;
-    transition: background-color var(--dur-fast) var(--ease-out);
   }
-  .nav-item:hover {
-    background: var(--chip-hover);
-    color: var(--ink);
-  }
-  .nav-item[aria-current="page"] {
+  .settings :global([data-slot="sidebar-menu-button"][data-active="true"]) {
     background: var(--accent-wash);
     color: var(--ink);
-  }
-  .nav-item:focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: -2px;
+    font-weight: inherit;
   }
   .nav-label {
     min-width: 0;
@@ -255,13 +252,13 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* The esc hint, pinned under the nav list. */
+  /* The esc hint, in the sidebar footer. */
   .nav-hint {
     display: flex;
     align-items: center;
     gap: 0.4rem;
-    margin: 0.5rem 0 0;
-    padding: 0 0.2rem;
+    margin: 0;
+    padding: 0 0.35rem;
     font-size: var(--text-xs);
     color: var(--ink-faint);
   }
@@ -294,44 +291,20 @@
     color: var(--ink-soft);
   }
 
-  .fields {
-    display: flex;
-    flex-direction: column;
+  /* One setting = one shadcn Item (text block left, control flush right). Zero the
+     Item's own horizontal padding so rows align to the pane's edge; a hairline
+     ItemSeparator rules between them. The label wears the field's dirty dot. */
+  .settings :global(.fields) {
+    gap: 0;
   }
-  /* One setting: text block left, control flush right. A hairline separates rows;
-     the first row drops its top rule so the header spacing owns the gap. */
-  .field {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1.5rem;
-    padding: 1rem 0;
-    border-top: 1px solid var(--rule);
+  .settings :global(.setting-item) {
+    padding-left: 0;
+    padding-right: 0;
   }
-  .field:first-child {
-    border-top: none;
-    padding-top: 0;
-  }
-  .field-text {
-    display: flex;
-    flex-direction: column;
-    gap: 0.15rem;
-    min-width: 0;
-  }
-  .field-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
+  .settings :global(.setting-item .field-label) {
     font-size: var(--text-sm);
     font-weight: 600;
     color: var(--ink);
-  }
-  .field-desc {
-    font-size: var(--text-xs);
-    color: var(--ink-soft);
-  }
-  .field-control {
-    flex: none;
   }
 
   /* The amber dirty dot on a changed field and its category (and leading the chip

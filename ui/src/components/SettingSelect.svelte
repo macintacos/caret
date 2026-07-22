@@ -1,8 +1,8 @@
 <script lang="ts">
   // A generic staged-setting dropdown (EXC-843): a float-chip trigger showing the
   // current option's label, opening a bits-ui DropdownMenu radio list that commits
-  // and closes on pick. Unlike ThemePicker (live-preview on keyboard nav, theme-
-  // specific swatches), this stages the picked value through onSelect and closes —
+  // and closes on pick. Unlike a live-preview picker that applies each value as you
+  // arrow through it, this stages the picked value through onSelect and closes —
   // the shape the settings draft store wants (stage on pick, apply on Save). One
   // component renders every `select` control in the registry (theme, diff layout,
   // diff markers).
@@ -26,13 +26,12 @@
   }
   let { value, options, onSelect, ariaLabel }: Props = $props();
 
-  let open = $state(false);
   // The trigger shows the current option's label; fall back to the raw value so an
   // unknown value stays visible rather than blanking.
   const triggerLabel = $derived(options.find((o) => o.value === value)?.label ?? value);
 </script>
 
-<DropdownMenu.Root bind:open>
+<DropdownMenu.Root>
   <DropdownMenu.Trigger>
     {#snippet child({ props })}
       <button {...props} type="button" class="trigger float-chip" aria-label={ariaLabel}>

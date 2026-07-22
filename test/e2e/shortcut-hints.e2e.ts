@@ -78,13 +78,15 @@ test("with hints off, V-mode still selects lines but the hint chip stays hidden"
   await expect(toggle).not.toBeChecked();
   await page.locator(".save-chip").getByRole("button", { name: "Save" }).click();
   await expect(page.getByText("Settings saved")).toBeVisible();
+  // Past the safe-mode grace before Escape, or the dismiss keystroke is swallowed
+  // and the modal stays open (the guard window re-arms on the Save interaction).
+  await waitPastSafeModeGrace(page);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeHidden();
 
   // Enter V-mode (gg → V → j): the shortcut itself is NOT gated, so the amber
   // selection band still spans two lines — but the "c comment · Esc cancel" chip
   // is suppressed because hints are off.
-  await waitPastSafeModeGrace(page);
   await page.keyboard.press("g");
   await page.keyboard.press("g");
   await page.keyboard.press("V");

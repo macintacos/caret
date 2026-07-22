@@ -10,7 +10,7 @@
   // presentational and reports changes through callback props.
   //
   // The controls are composed from the shadcn-svelte catalog (EXC-764): the two
-  // version pickers reuse the same bits-ui DropdownMenu the Settings ThemePicker
+  // version pickers reuse the same bits-ui DropdownMenu the Settings SettingSelect
   // uses (soft float-chip trigger, chevron that points right when collapsed and
   // rotates down when open); the layout/indicator segmented controls are
   // single-select ToggleGroups (each option a role="radio"); the enter/exit
@@ -19,7 +19,7 @@
   // fixed height, so the bar reads as one row and never changes height between the
   // resting and comparing views. Amber stays reserved for the topbar's Approve
   // primary; here it appears only as the --accent-wash "active-state" marker (the
-  // ThemePicker/diff-selection language) on the pressed compare toggle. All colors
+  // SettingSelect/diff-selection language) on the pressed compare toggle. All colors
   // ride the shadcn↔caret token bridge; no raw colors.
   import type { PlanVersion } from "@core/lib/types";
   import type { DiffIndicators, DiffStyle } from "$lib/diffview/types.ts";
@@ -144,7 +144,7 @@
 </script>
 
 <!-- A version picker, reused for both base and target. It is the same DropdownMenu
-     the Settings ThemePicker is built on: a float-chip trigger and a portalled
+     the Settings SettingSelect is built on: a float-chip trigger and a portalled
      radio menu that commits-and-closes on pick. The chevron rotation (right when
      collapsed, down when open) rides bits-ui's aria-expanded via CSS, so no local
      open state is needed. -->
@@ -330,7 +330,7 @@
      (app.css) supplies the resting + hover skin (soft --chip fill, no border,
      ink-soft label brightening to full ink). The compare toggle adds a pressed
      state that carries the --accent-wash "active-state" marker (the same amber
-     wash the ThemePicker's active row and the diff selection use) while compare
+     wash the SettingSelect's active row and the diff selection use) while compare
      mode is on, so the mode switch is visible at a glance. */
   .compare-picker :global(.compare-toggle) {
     white-space: nowrap;
@@ -371,7 +371,7 @@
     color: var(--ink-faint);
   }
 
-  /* Version pickers reuse the Settings ThemePicker's DropdownMenu, so the trigger
+  /* Version pickers reuse the Settings SettingSelect's DropdownMenu, so the trigger
      wears the same .float-chip skin as every neutral control. Sized to --ctl-h so
      it lines up with the compare Button and the segmented toggles. */
   .vpick {
@@ -387,7 +387,7 @@
   .vpick-label {
     font-variant-numeric: tabular-nums;
   }
-  /* Mac disclosure affordance (matching ThemePicker): the chevron points RIGHT
+  /* Mac disclosure affordance (matching SettingSelect): the chevron points RIGHT
      while collapsed and rotates DOWN when the menu opens. bits-ui sets
      aria-expanded on the trigger; the global reduced-motion guard in app.css
      neutralizes the rotation. */
@@ -406,7 +406,7 @@
   /* The portalled version menu carries this scope's classes; rows lay out
      [check] [label], with the active version's row highlighted on hover/keyboard
      via --chip-hover and marked with an amber check on --accent — the same
-     language the ThemePicker menu uses. */
+     language the SettingSelect menu uses. */
   :global(.vmenu .vitem) {
     display: flex;
     align-items: center;

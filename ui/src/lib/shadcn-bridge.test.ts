@@ -56,6 +56,20 @@ const EXPECTED: Record<string, string> = {
   "--success": "--ok",
   "--border": "--rule",
   "--input": "--rule-strong",
+  // Sidebar surface tokens (EXC-843): the Settings shell composes shadcn's Sidebar,
+  // whose --sidebar-* semantic vars bridge to caret tokens like every other surface.
+  // The rail is the recessed --paper (a shade below the raised popover pane); its
+  // hover wash rides --chip-hover (the app's neutral highlight) while the SELECTED
+  // row is re-tinted to amber in SettingsDialog.svelte — the "amber marks the
+  // selection" language stock shadcn folds into a single accent.
+  "--sidebar": "--paper",
+  "--sidebar-foreground": "--ink",
+  "--sidebar-primary": "--accent",
+  "--sidebar-primary-foreground": "--accent-ink",
+  "--sidebar-accent": "--chip-hover",
+  "--sidebar-accent-foreground": "--ink",
+  "--sidebar-border": "--rule",
+  "--sidebar-ring": "--ring",
   // --ring is asserted separately: it softens --accent-bright rather than
   // bridging to it bare (see the color-mix test below).
 };
@@ -125,6 +139,17 @@ describe("the shadcn @theme inline map", () => {
 
   test("single-sources the panel radius: --radius-xl references caret's --radius-lg", () => {
     expect(decls).toMatch(/--radius-xl:\s*var\(--radius-lg\);/);
+  });
+
+  test("emits the sidebar color utilities for the settings shell's Sidebar (EXC-843)", () => {
+    expect(decls).toMatch(/--color-sidebar:\s*var\(--sidebar\);/);
+    expect(decls).toMatch(/--color-sidebar-foreground:\s*var\(--sidebar-foreground\);/);
+    expect(decls).toMatch(/--color-sidebar-accent:\s*var\(--sidebar-accent\);/);
+    expect(decls).toMatch(
+      /--color-sidebar-accent-foreground:\s*var\(--sidebar-accent-foreground\);/,
+    );
+    expect(decls).toMatch(/--color-sidebar-border:\s*var\(--sidebar-border\);/);
+    expect(decls).toMatch(/--color-sidebar-ring:\s*var\(--sidebar-ring\);/);
   });
 
   test("uses no hardcoded hex or oklch", () => {
