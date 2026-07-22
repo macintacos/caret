@@ -5,14 +5,25 @@
   // it, this fires onSelect only for the chosen value, then closes — the setting
   // applies immediately on pick. One component renders every `select` control in the
   // registry (theme, diff layout, diff markers).
+  //
+  // Theme preview (EXC-753): when the HIGHLIGHTED option carries `preview` tokens (only
+  // the theme options do), a single abstract ThemePreviewCard floats beside the open
+  // menu, tinted by that option BEFORE it is selected — a palette seen on Caret's own
+  // chrome. It tracks the highlight (pointer or keyboard), portals to document.body to
+  // escape the menu's overflow, and clamps into the viewport. The card paints from the
+  // option's tokens scoped to itself, so hovering never retints the real app.
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
+  import ThemePreviewCard from "@/components/ThemePreviewCard.svelte";
 
   interface Option {
     value: string;
     label: string;
     /** Optional palette preview — CSS colors shown as dots after the label (theme). */
     swatch?: readonly string[];
+    /** Optional full theme token map — when present, highlighting this option floats a
+     * ThemePreviewCard tinted by it beside the menu (EXC-753). */
+    preview?: Record<string, string>;
   }
 
   interface Props {
@@ -30,9 +41,77 @@
   // The trigger shows the current option's label; fall back to the raw value so an
   // unknown value stays visible rather than blanking.
   const triggerLabel = $derived(options.find((o) => o.value === value)?.label ?? value);
+
+  // --- Theme preview (EXC-753) --------------------------------------------------
+  // The open menu and the highlighted option: `highlightedValue` is set on an item's
+  // pointer-enter / focus (covering mouse and keyboard roving) and cleared when the
+  // menu closes, so a single preview card can track the highlight.
+  let menuOpen = $state(false);
+  let highlightedValue = $state<string | null>(null);
+  let menuEl = $state<HTMLElement | null>(null);
+  let cardEl = $state<HTMLElement | null>(null);
+  let posTop = $state<number>();
+  let posLeft = $state<number>();
+
+  const highlighted = $derived(options.find((o) => o.value === highlightedValue));
+  const preview = $derived(highlighted?.preview);
+
+  $effect(() => {
+    if (!menuOpen) highlightedValue = null;
+  });
+
+  const CARD_GAP = 10;
+  const VIEWPORT_MARGIN = 8;
+
+  // Position the card beside the menu: prefer the right side, flip to the left when it
+  // would overflow, then clamp vertically. Fixed coords — the menu portals to body, so
+  // there is no positioned ancestor to lay out against. Undefined until measured; the
+  // card's own reveal keyframe fades from opacity 0 so the pre-measure frame never shows.
+  $effect(() => {
+    if (!preview || !menuEl || !cardEl) return;
+    const m = menuEl.getBoundingClientRect();
+    const c = cardEl.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    let left = m.right + CARD_GAP;
+    if (left + c.width > vw - VIEWPORT_MARGIN) {
+      const leftSide = m.left - CARD_GAP - c.width;
+      left =
+        leftSide >= VIEWPORT_MARGIN
+          ? leftSide
+          : Math.max(VIEWPORT_MARGIN, vw - c.width - VIEWPORT_MARGIN);
+    }
+    posLeft = left;
+    posTop = Math.max(VIEWPORT_MARGIN, Math.min(m.top, vh - c.height - VIEWPORT_MARGIN));
+  });
+
+  // A fixed card can't track a scrolling / resizing anchor, so back the preview out
+  // rather than let it drift away from the menu.
+  $effect(() => {
+    if (!preview) return;
+    const drop = () => (highlightedValue = null);
+    window.addEventListener("scroll", drop, true);
+    window.addEventListener("resize", drop);
+    return () => {
+      window.removeEventListener("scroll", drop, true);
+      window.removeEventListener("resize", drop);
+    };
+  });
+
+  // Portal the card to document.body so the menu's own overflow (Content is
+  // overflow-y-auto) can't clip it. Svelte removes the node on unmount.
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      },
+    };
+  }
 </script>
 
-<DropdownMenu.Root>
+<DropdownMenu.Root bind:open={menuOpen}>
   <DropdownMenu.Trigger>
     {#snippet child({ props })}
       <button {...props} type="button" class="trigger float-chip" aria-label={ariaLabel}>
@@ -59,6 +138,7 @@
   </DropdownMenu.Trigger>
 
   <DropdownMenu.Content
+    bind:ref={menuEl}
     align="end"
     class="setting-menu"
     style="min-width: var(--bits-dropdown-menu-anchor-width)"
@@ -69,6 +149,8 @@
           value={option.value}
           data-setting-option={option.value}
           class="setting-item"
+          onpointerenter={() => (highlightedValue = option.value)}
+          onfocus={() => (highlightedValue = option.value)}
         >
           {#snippet children({ checked })}
             <span class="check" aria-hidden="true">
@@ -104,7 +186,34 @@
   </DropdownMenu.Content>
 </DropdownMenu.Root>
 
+<!-- The single hover preview (EXC-753): portaled beside the menu, tinted by the
+     highlighted theme option. Only theme options carry `preview`, so other selects
+     render nothing here. -->
+{#if menuOpen && preview}
+  <div
+    class="theme-preview-anchor"
+    bind:this={cardEl}
+    use:portal
+    style:top={posTop !== undefined ? `${posTop}px` : null}
+    style:left={posLeft !== undefined ? `${posLeft}px` : null}
+  >
+    <ThemePreviewCard tokens={preview} label={highlighted?.label ?? ""} />
+  </div>
+{/if}
+
 <style>
+  /* The floating preview anchor (EXC-753): portaled to document.body, so it is styled
+     globally. Fixed coords come from the inline styles the positioning effect sets; it
+     rides above the dropdown's portal layer (z-50) and is non-interactive — a preview,
+     not a target, so it never steals a hover from the menu underneath. */
+  :global(.theme-preview-anchor) {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 60;
+    pointer-events: none;
+  }
+
   /* Trigger: a compact select-like control wearing the topbar's floating chip (soft
      fill, no hard border, ink-soft label brightening on hover / while open — the
      .float-chip atom supplies the fill + ink treatment). Sizes to its content and

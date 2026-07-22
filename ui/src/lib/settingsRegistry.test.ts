@@ -166,6 +166,27 @@ describe("theme options carry palette swatches", () => {
   });
 });
 
+describe("theme options carry a full-palette preview (EXC-753)", () => {
+  test("each theme option exposes a preview token map; other selects carry none", () => {
+    const theme = staged.find((f) => f.key === "theme");
+    expect(theme?.control.kind).toBe("select");
+    if (theme?.control.kind === "select") {
+      for (const opt of theme.control.options) {
+        expect(opt.preview).toBeDefined();
+        // The preview is the theme's full token map — at least the surfaces, ink, and
+        // the accent the ThemePreviewCard paints from, as hex values.
+        for (const token of ["--paper", "--paper-raised", "--ink", "--accent"]) {
+          expect(opt.preview?.[token]).toMatch(/^#[0-9a-fA-F]{3,8}$/);
+        }
+      }
+    }
+    const layout = staged.find((f) => f.key === "diffStyle");
+    if (layout?.control.kind === "select") {
+      for (const opt of layout.control.options) expect(opt.preview).toBeUndefined();
+    }
+  });
+});
+
 describe("isStagedField / search-only entries", () => {
   test("isStagedField is true for staged fields and false for a search-only entry", () => {
     const search: SearchOnlyEntry = {
