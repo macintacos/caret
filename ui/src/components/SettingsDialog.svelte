@@ -228,11 +228,19 @@
   /* Nav row: quiet --ink-soft at rest, transparent. The SELECTED row is the single
      amber-filled row — a solid amber rail down its leading edge plus an amber wash
      and bold ink ("amber marks the selection") — so selection reads at a glance.
-     `position: relative` anchors the rail pseudo-element. */
+     `position: relative` anchors the rail pseudo-element.
+
+     `background: transparent` is load-bearing: shadcn's SidebarMenuButton ships
+     `data-active:bg-sidebar-accent`, and Tailwind matches that variant on the
+     PRESENCE of data-active — Svelte serializes isActive={false} as
+     data-active="false" (attribute present), so every unselected row would
+     otherwise wear the grey accent fill at rest. This out-specifies it; the amber
+     selected rule and the hover tint below paint over it where wanted. */
   .settings :global([data-slot="sidebar-menu-button"]) {
     position: relative;
     justify-content: flex-start;
     color: var(--ink-soft);
+    background: transparent;
   }
   /* Unselected rows are transparent at rest; on hover they take a subtle,
      theme-appropriate tint — a faint ink wash, gentler than the app-wide

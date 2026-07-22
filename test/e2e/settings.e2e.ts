@@ -153,6 +153,28 @@ test("Esc closes the settings modal", async ({ daemon, page }) => {
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeHidden();
 });
 
+test("only the selected category is filled — an unselected nav row is transparent", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  await openSettings(page);
+
+  // Appearance is selected by default; Notifications is not. shadcn's SidebarMenuButton
+  // ships `data-active:bg-sidebar-accent`, and Tailwind matches that variant on the mere
+  // PRESENCE of data-active — Svelte serializes the unselected row as data-active="false"
+  // (attribute present), so without an explicit transparent it wears the grey accent fill
+  // at rest and rivals the amber selection (EXC-847 regression). Assert in a real browser:
+  // the unselected row is transparent, the selected row is not.
+  const unselected = page.locator("[data-category='Notifications']");
+  const selected = page.locator("[data-category='Appearance']");
+  await expect(unselected).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(selected).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+});
+
 test("the Notifications pane reflects the permission and its test affordance fires live", async ({
   daemon,
   page,
