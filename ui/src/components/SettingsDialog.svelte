@@ -1,21 +1,21 @@
 <script lang="ts">
   // The two-pane Settings shell (EXC-843): a shadcn Sidebar as the category rail
-  // (with per-category dirty dots) left, the selected category's pane right, and a
-  // floating save chip that rises when the draft is dirty. It renders the registry
-  // generically — a SettingSelect for `select` fields, a Switch for `toggle` fields,
-  // each setting grouped into one shadcn Item within an ItemGroup — and stages every
-  // edit into the draft store; nothing persists until Save (theme + shortcut hints
-  // apply live on Save via App's resync; the diff-view live re-apply is EXC-846).
+  // left, the selected category's pane right. Every edit applies IMMEDIATELY — the
+  // pane calls onChange the moment a control changes and App persists + confirms
+  // with a toast; there is no staged draft, no Save/Discard. A category's fields are
+  // sub-grouped into labelled sections (Diff view lives as a section under
+  // Appearance), each an ItemGroup of shadcn Items.
   //
   // Two shadcn primitives carry the layout (compose-first, per doc/agents/shadcn-rules):
-  //   • Sidebar (collapsible="none") — the static category rail. The stock component
-  //     folds hover and active into one --sidebar-accent; the rail below re-tints the
-  //     SELECTED row to amber so caret's "amber marks the selection" language holds.
+  //   • Sidebar (collapsible="none") — the static category rail. The SELECTED row
+  //     wears a solid amber rail + wash and bold ink (caret's "amber marks the
+  //     selection" language), overriding shadcn's faint single-accent data-active
+  //     treatment so the current pane is unmistakable.
   //   • Item / ItemGroup — one Item per setting (title + description + control),
-  //     hairline-separated within the group.
+  //     hairline-separated within each section group.
   // The Dialog primitive is composed directly rather than Modal.svelte — Modal's
-  // eyebrow/title/footer identity doesn't fit the two-pane + float-chip layout —
-  // keeping a visually-hidden Dialog.Title so the dialog's accessible name is "Settings".
+  // eyebrow/title/footer identity doesn't fit the two-pane layout — keeping a
+  // visually-hidden Dialog.Title so the dialog's accessible name is "Settings".
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import {
     Item,
@@ -26,33 +26,30 @@
     ItemSeparator,
     ItemTitle,
   } from "$lib/components/ui/item/index.js";
-  import { Button } from "$lib/components/ui/button/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
   import { Switch } from "$lib/components/ui/switch/index.js";
-  import { isStagedField, SETTINGS_CATEGORIES, type SettingEntry, type StagedField } from "$lib/settingsRegistry.ts";
-  import type { SettingsDraft } from "@/state/settingsDraft.ts";
+  import {
+    isStagedField,
+    SETTINGS_CATEGORIES,
+    type SettingEntry,
+    type StagedField,
+  } from "$lib/settingsRegistry.ts";
   import SettingSelect from "@/components/SettingSelect.svelte";
 
   interface Props {
-    /** The staged-draft store (App owns the reactive backing store). */
-    draft: SettingsDraft;
-    /** The registry, grouped into categories and rendered by control kind. */
+    /** The registry, grouped into categories/sections and rendered by control kind. */
     entries: readonly SettingEntry[];
-    /** The persisted shortcut-hints setting — gates the Save button's ⌘↩ caps,
-     * matching every other key cap in the app. */
-    showShortcutHints: boolean;
-    /** Commit the draft (App: save + resync + success alert). Keeps the modal open. */
-    onSave: () => void;
-    /** Dismiss (Escape / backdrop). App discards the draft and hides the modal — a
-     * dirty dismiss plainly discards until the guard child lands (EXC-844). */
+    /** Apply a setting's new value now (App: write + resync + confirming toast). */
+    onChange: (field: StagedField, value: unknown) => void;
+    /** Dismiss (Escape / backdrop). App hides the modal. */
     onClose: () => void;
   }
-  let { draft, entries, showShortcutHints, onSave, onClose }: Props = $props();
+  let { entries, onChange, onClose }: Props = $props();
 
-  // Only staged fields carry controls; group them by category and keep the
-  // SETTINGS_CATEGORIES order, dropping any category with no entries (so an empty
-  // "General" never renders a nav row).
+  // Only staged fields carry controls; group by category and keep SETTINGS_CATEGORIES
+  // order, dropping any category with no entries (so an empty category never renders
+  // a nav row).
   const staged = $derived(entries.filter(isStagedField));
   const categories = $derived(
     SETTINGS_CATEGORIES.filter((c) => staged.some((f) => f.category === c.id)),
@@ -62,34 +59,32 @@
   const selected = $derived(categories.find((c) => c.id === selectedId) ?? categories[0]);
   const paneFields = $derived(staged.filter((f) => f.category === selected?.id));
 
-  // Dirty state drives the field + category dots and the chip; derived from the
-  // draft's changes() so it tracks the injected reactive store.
-  const dirtyKeys = $derived(new Set(draft.changes().map((c) => c.key)));
-  const dirtyCount = $derived(draft.dirtyCount());
-  const dirty = $derived(draft.isDirty());
-  const categoryDirty = (id: string): boolean =>
-    staged.some((f) => f.category === id && dirtyKeys.has(f.key));
-
-  // ⌘/Ctrl+Enter saves while dirty. A capture-phase window listener (the ShortcutsHelp
-  // `/` pattern) so it fires while any control in the modal has focus — but GUARDED to
-  // events originating inside this modal's own content (`.settings-content`), so it
-  // never swallows a ⌘↩ dispatched in a different dialog. The guard matters for the
-  // shared-window test suite (real app: one modal at a time), where an unguarded
-  // window listener intercepts another dialog's Cmd+Enter. Consumes the chord fully so
-  // a focused Switch/Button doesn't ALSO activate on the Enter and re-stage right after
-  // save() clears the draft. Gated on dirty so an empty ⌘↩ no-ops.
-  $effect(() => {
-    function onKeydown(e: KeyboardEvent): void {
-      if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey) || e.defaultPrevented) return;
-      if (!draft.isDirty()) return;
-      if (!(e.target as Element | null)?.closest?.(".settings-content")) return;
-      e.preventDefault();
-      e.stopPropagation();
-      onSave();
+  // Sub-group the pane's fields into labelled sections, preserving registry order: a
+  // new group starts whenever the section label changes (sectionless fields lead).
+  const paneSections = $derived.by(() => {
+    const groups: { label: string | undefined; fields: StagedField[] }[] = [];
+    for (const f of paneFields) {
+      const last = groups[groups.length - 1];
+      if (last && last.label === f.section) last.fields.push(f);
+      else groups.push({ label: f.section, fields: [f] });
     }
-    window.addEventListener("keydown", onKeydown, { capture: true });
-    return () => window.removeEventListener("keydown", onKeydown, { capture: true });
+    return groups;
   });
+
+  // A reactive mirror of each field's persisted value so the controls re-render when
+  // a change applies (read() reads localStorage, which Svelte can't track). Seeded
+  // once from read() (the registry is static within a mount, so capturing the initial
+  // `entries` is intentional) and re-seeded per field after each change: on success it
+  // reflects the new value, on a failed write it snaps the control back to unchanged.
+  // svelte-ignore state_referenced_locally
+  let values = $state<Record<string, unknown>>(
+    Object.fromEntries(entries.filter(isStagedField).map((f) => [f.key, f.read()])),
+  );
+
+  function apply(field: StagedField, value: unknown): void {
+    onChange(field, value);
+    values = { ...values, [field.key]: field.read() };
+  }
 
   // Land focus on the dialog content (not the first control), matching ShortcutsHelp:
   // Esc dismisses "with nothing focused", and EXC-845's `/` search relies on focus
@@ -122,7 +117,6 @@
                     onclick={() => (selectedId = cat.id)}
                   >
                     <span class="nav-label">{cat.id}</span>
-                    {#if categoryDirty(cat.id)}<span class="dirty-dot" aria-hidden="true"></span>{/if}
                   </Sidebar.MenuButton>
                 </Sidebar.MenuItem>
               {/each}
@@ -141,39 +135,23 @@
           <p class="pane-blurb">{selected?.blurb}</p>
         </header>
 
-        <ItemGroup class="fields">
-          {#each paneFields as field, i (field.key)}
-            {#if i > 0}<ItemSeparator />{/if}
-            <Item data-field={field.key} class="setting-item">
-              <ItemContent>
-                <ItemTitle class="field-label">
-                  {field.label}{#if dirtyKeys.has(field.key)}<span class="dirty-dot" aria-hidden="true"></span>{/if}
-                </ItemTitle>
-                <ItemDescription>{field.description}</ItemDescription>
-              </ItemContent>
-              <ItemActions>{@render control(field)}</ItemActions>
-            </Item>
-          {/each}
-        </ItemGroup>
-
-        {#if dirty}
-          <!-- The float-chip: unsaved count, Discard, Save ⌘↩. Rises over the pane
-               when dirty (mockup). Discard reverts in place; Save keeps the modal
-               open (App resyncs + toasts). -->
-          <div class="save-chip" role="group" aria-label="Unsaved changes">
-            <span class="chip-count">
-              <span class="dirty-dot" aria-hidden="true"></span>
-              {dirtyCount} unsaved {dirtyCount === 1 ? "change" : "changes"}
-            </span>
-            <Button variant="secondary" class="float-chip chip-discard" onclick={() => draft.discard()}>
-              Discard
-            </Button>
-            <Button class="chip-save" onclick={onSave}>
-              Save
-              {#if showShortcutHints}<span class="save-caps"><Kbd aria-hidden="true">⌘</Kbd><Kbd aria-hidden="true">↩</Kbd></span>{/if}
-            </Button>
+        {#each paneSections as section, si (section.label ?? si)}
+          <div class="section">
+            {#if section.label}<h3 class="section-head">{section.label}</h3>{/if}
+            <ItemGroup class="fields">
+              {#each section.fields as field, i (field.key)}
+                {#if i > 0}<ItemSeparator />{/if}
+                <Item data-field={field.key} class="setting-item">
+                  <ItemContent>
+                    <ItemTitle class="field-label">{field.label}</ItemTitle>
+                    <ItemDescription>{field.description}</ItemDescription>
+                  </ItemContent>
+                  <ItemActions>{@render control(field)}</ItemActions>
+                </Item>
+              {/each}
+            </ItemGroup>
           </div>
-        {/if}
+        {/each}
       </section>
     </div>
   </Dialog.Content>
@@ -182,15 +160,15 @@
 {#snippet control(field: StagedField)}
   {#if field.control.kind === "select"}
     <SettingSelect
-      value={String(draft.value(field.key) ?? "")}
+      value={String(values[field.key] ?? "")}
       options={field.control.options}
-      onSelect={(v) => draft.stage(field.key, v)}
+      onSelect={(v) => apply(field, v)}
       ariaLabel={field.label}
     />
   {:else}
     <Switch
-      checked={draft.value(field.key) === true}
-      onCheckedChange={(v) => draft.stage(field.key, v)}
+      checked={values[field.key] === true}
+      onCheckedChange={(v) => apply(field, v)}
       aria-label={field.label}
     />
   {/if}
@@ -233,18 +211,28 @@
     border-right: 1px solid var(--rule);
   }
   /* Nav row: quiet --ink-soft at rest, brightening to --ink on hover (the stock
-     --sidebar-accent hover wash → --chip-hover). The SELECTED row is re-tinted to an
-     amber wash — the "amber marks the selection" language the diff view and pickers
-     use — overriding shadcn's single-accent data-active treatment. Label left, dirty
-     dot right. */
+     --sidebar-accent hover wash → --chip-hover). The SELECTED row is unmistakable —
+     a solid amber rail down its leading edge plus an amber wash and bold ink — the
+     "amber marks the selection" language, overriding shadcn's single faint accent.
+     `position: relative` anchors the rail pseudo-element. */
   .settings :global([data-slot="sidebar-menu-button"]) {
-    justify-content: space-between;
+    position: relative;
+    justify-content: flex-start;
     color: var(--ink-soft);
   }
   .settings :global([data-slot="sidebar-menu-button"][data-active="true"]) {
     background: var(--accent-wash);
     color: var(--ink);
-    font-weight: inherit;
+    font-weight: 600;
+  }
+  .settings :global([data-slot="sidebar-menu-button"][data-active="true"])::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    width: 0.1875rem;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    background: var(--accent);
   }
   .nav-label {
     min-width: 0;
@@ -263,13 +251,12 @@
     color: var(--ink-faint);
   }
 
-  /* Content pane: the raised popover surface, its own scroll, and the anchor for the
-     floating save chip. */
+  /* Content pane: the raised popover surface, its own scroll. Sections stack with a
+     comfortable gap; each section hugs its own header. */
   .settings-pane {
-    position: relative;
     display: flex;
     flex-direction: column;
-    gap: 1.25rem;
+    gap: 1.5rem;
     padding: 1.5rem 1.75rem;
     overflow-y: auto;
   }
@@ -291,9 +278,25 @@
     color: var(--ink-soft);
   }
 
+  /* A labelled sub-group of settings within the pane (e.g. "Diff view"). The header
+     hugs its ItemGroup; the pane gap separates one section from the next. */
+  .section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .section-head {
+    margin: 0;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+  }
+
   /* One setting = one shadcn Item (text block left, control flush right). Zero the
      Item's own horizontal padding so rows align to the pane's edge; a hairline
-     ItemSeparator rules between them. The label wears the field's dirty dot. */
+     ItemSeparator rules between them. */
   .settings :global(.fields) {
     gap: 0;
   }
@@ -305,57 +308,5 @@
     font-size: var(--text-sm);
     font-weight: 600;
     color: var(--ink);
-  }
-
-  /* The amber dirty dot on a changed field and its category (and leading the chip
-     count). Amber is the app's single accent, reserved for exactly this kind of
-     "here's what changed" signal. */
-  .dirty-dot {
-    flex: none;
-    width: 0.4rem;
-    height: 0.4rem;
-    border-radius: 50%;
-    background: var(--accent);
-  }
-
-  /* The floating save chip: a raised card centered over the bottom of the pane,
-     rising in when the draft turns dirty. */
-  .save-chip {
-    position: absolute;
-    left: 50%;
-    bottom: 1.25rem;
-    transform: translateX(-50%);
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.55rem 0.65rem 0.55rem 1rem;
-    border-radius: calc(var(--radius) + 0.25rem);
-    background: var(--paper-raised);
-    box-shadow: var(--shadow-card);
-    white-space: nowrap;
-    animation: chip-in var(--dur-base) var(--ease-out);
-  }
-  .chip-count {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: var(--text-sm);
-    color: var(--ink-soft);
-  }
-  .save-caps {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.15rem;
-    margin-left: 0.35rem;
-  }
-  @keyframes chip-in {
-    from {
-      opacity: 0;
-      transform: translate(-50%, 0.5rem);
-    }
-    to {
-      opacity: 1;
-      transform: translate(-50%, 0);
-    }
   }
 </style>

@@ -34,8 +34,17 @@ export interface AlertDeps {
 }
 
 export interface Alerts {
-  /** Enqueue an alert; returns its id. Auto-dismisses after `dwellMs`. */
-  push(alert: { variant?: AlertVariant; title?: string; message: string }): number;
+  /**
+   * Enqueue an alert; returns its id. Auto-dismisses after `dwellMs` unless
+   * `persistent` — a persistent alert (a failure the user must read and act on)
+   * arms no dwell timer and stays until it's manually dismissed.
+   */
+  push(alert: {
+    variant?: AlertVariant;
+    title?: string;
+    message: string;
+    persistent?: boolean;
+  }): number;
   /** Begin dismissing an alert now (exit animation, then removal). Idempotent. */
   dismiss(id: number): void;
 }
@@ -68,7 +77,12 @@ export function createAlerts(store: AlertStore, deps: AlertDeps = {}): Alerts {
     schedule(() => remove(id), exitMs);
   }
 
-  function push(alert: { variant?: AlertVariant; title?: string; message: string }): number {
+  function push(alert: {
+    variant?: AlertVariant;
+    title?: string;
+    message: string;
+    persistent?: boolean;
+  }): number {
     const id = nextId++;
     store.alerts = [
       ...store.alerts,
@@ -80,10 +94,13 @@ export function createAlerts(store: AlertStore, deps: AlertDeps = {}): Alerts {
         leaving: false,
       },
     ];
-    dwellCancels.set(
-      id,
-      schedule(() => dismiss(id), dwellMs),
-    );
+    // A persistent alert never auto-dismisses — it waits for the user's click.
+    if (!alert.persistent) {
+      dwellCancels.set(
+        id,
+        schedule(() => dismiss(id), dwellMs),
+      );
+    }
     return id;
   }
 

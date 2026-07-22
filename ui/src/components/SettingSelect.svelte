@@ -1,11 +1,10 @@
 <script lang="ts">
-  // A generic staged-setting dropdown (EXC-843): a float-chip trigger showing the
-  // current option's label, opening a bits-ui DropdownMenu radio list that commits
-  // and closes on pick. Unlike a live-preview picker that applies each value as you
-  // arrow through it, this stages the picked value through onSelect and closes —
-  // the shape the settings draft store wants (stage on pick, apply on Save). One
-  // component renders every `select` control in the registry (theme, diff layout,
-  // diff markers).
+  // A generic setting dropdown (EXC-843): a float-chip trigger showing the current
+  // option's label, opening a bits-ui DropdownMenu radio list that commits and closes
+  // on pick. Unlike a live-preview picker that applies each value as you arrow through
+  // it, this fires onSelect only for the chosen value, then closes — the setting
+  // applies immediately on pick. One component renders every `select` control in the
+  // registry (theme, diff layout, diff markers).
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
 
@@ -15,11 +14,11 @@
   }
 
   interface Props {
-    /** The staged value — the selected radio and the trigger label. */
+    /** The current value — the selected radio and the trigger label. */
     value: string;
     /** The choices, in display order. */
     options: readonly Option[];
-    /** Stage the picked value. bits-ui commits and closes the menu on select. */
+    /** Apply the picked value. bits-ui commits and closes the menu on select. */
     onSelect: (value: string) => void;
     /** Accessible name for the trigger (the field's label). */
     ariaLabel: string;

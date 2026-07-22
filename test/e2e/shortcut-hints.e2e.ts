@@ -1,11 +1,11 @@
 // Shortcut-hints toggle (EXC-826, restaged by EXC-843). A Settings switch (default
 // on) hides the vim-shortcut discoverability chrome — the status bar's keyboard
-// button and the TopBar's inline key-cap hints. Under the two-pane shell the switch
-// STAGES the change; it applies (live + persistently) only on Save. Toggling,
-// staging-vs-applying, persistence across a reload, and the ? keystroke are
-// real-browser behavior (browser-testing.md), so this lives here, not in a unit.
-// The --fresh reset is unit-covered (ui/src/lib/prefs.test.ts: SHORTCUT_HINTS_KEY is
-// a KNOWN_PREF_KEY that clearKnownPrefs removes), like the theme pref.
+// button and the TopBar's inline key-cap hints. Under the immediate-apply shell the
+// switch applies (live + persistently) the moment it's toggled — no Save. Toggling,
+// live apply, persistence across a reload, and the ? keystroke are real-browser
+// behavior (browser-testing.md), so this lives here, not in a unit. The --fresh
+// reset is unit-covered (ui/src/lib/prefs.test.ts: SHORTCUT_HINTS_KEY is a
+// KNOWN_PREF_KEY that clearKnownPrefs removes), like the theme pref.
 
 import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
 
@@ -17,7 +17,7 @@ const tallyKey = ".comments-toggle [data-slot='kbd']";
 // A short multi-line plan so the cursor can move and enter V-mode.
 const PLAN = ["# Alpha", "Alpha one.", "Alpha two.", "Alpha three.", ""].join("\n\n");
 
-test("the Settings toggle stages, and Save hides the shortcut affordances live and persists", async ({
+test("the Settings toggle hides the shortcut affordances live and persists", async ({
   daemon,
   page,
 }) => {
@@ -37,18 +37,15 @@ test("the Settings toggle stages, and Save hides the shortcut affordances live a
   await expect(toggle).toBeVisible();
   await expect(toggle).toBeChecked();
 
-  // Toggling off STAGES it — the affordances stay put until Save (no live apply).
+  // Toggling off applies at once: the affordances hide live and a toast confirms it,
+  // with the modal still open.
   await toggle.click();
   await expect(toggle).not.toBeChecked();
-  await expect(page.locator(keyboardButton)).toBeVisible();
-  await expect(page.locator(topbarHints).first()).toBeVisible();
-
-  // Save applies it: the affordances hide live and the modal stays open.
-  await page.locator(".save-chip").getByRole("button", { name: "Save" }).click();
-  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
+  await expect(page.getByText("Shortcut hints updated")).toBeVisible();
   await expect(page.locator(keyboardButton)).toBeHidden();
   await expect(page.locator(topbarHints)).toHaveCount(0);
   await expect(page.locator(tallyKey)).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
 
   // The choice persists across a reload (browser localStorage), so the affordances
   // stay hidden with no daemon state.
@@ -71,15 +68,15 @@ test("with hints off, V-mode still selects lines but the hint chip stays hidden"
   await expect(page.locator(".diff-plan")).toBeVisible();
   await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
 
-  // Turn shortcut hints off and Save, then Esc to close so keystrokes reach the plan.
+  // Turn shortcut hints off (applies at once), then Esc to close so keystrokes reach
+  // the plan.
   await page.getByRole("button", { name: "Settings" }).click();
   const toggle = page.getByRole("switch", { name: "Shortcut hints" });
   await toggle.click();
   await expect(toggle).not.toBeChecked();
-  await page.locator(".save-chip").getByRole("button", { name: "Save" }).click();
-  await expect(page.getByText("Settings saved")).toBeVisible();
+  await expect(page.getByText("Shortcut hints updated")).toBeVisible();
   // Past the safe-mode grace before Escape, or the dismiss keystroke is swallowed
-  // and the modal stays open (the guard window re-arms on the Save interaction).
+  // and the modal stays open (the guard window re-arms on the toggle interaction).
   await waitPastSafeModeGrace(page);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeHidden();

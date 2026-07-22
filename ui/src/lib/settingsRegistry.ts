@@ -1,17 +1,19 @@
 // The registry of user-facing settings surfaced in the Settings modal (EXC-837),
-// plus the field/control shapes the two-pane shell (EXC-843) renders and the
-// draft store (state/settingsDraft.ts) stages. Each staged field wraps an
-// existing browser-preference module, so its read/write hit the SAME
+// plus the field/control shapes the two-pane shell (EXC-843) renders. Each field
+// wraps an existing browser-preference module, so its read/write hit the SAME
 // localStorage key the pref already owns (theme, shortcut hints, diff
 // style/indicators) — no new keys enter KNOWN_PREF_KEYS and existing users'
-// stored values survive.
+// stored values survive. Editing a setting applies it immediately: the shell
+// calls write() the moment a control changes (App confirms with a toast); there
+// is no staged draft.
 //
-// Panes that show live, non-staged information (Advanced diagnostics,
+// Panes that show live, read-only information (Advanced diagnostics,
 // Notifications) contribute search-only entries: they appear in settings search
-// (EXC-845) but carry no read/write and never contribute dirty state.
+// (EXC-845) but carry no read/write.
 //
-// The category strings here are the initial grouping; the two-pane shell
-// (EXC-843) owns the final sidebar taxonomy and may relabel them.
+// `category` is the sidebar taxonomy (one nav row each); `section` sub-groups a
+// category's fields into labelled blocks within its pane (Diff view lives as a
+// section under Appearance).
 
 import { readDiffIndicators, writeDiffIndicators } from "$lib/diffIndicatorsPref.ts";
 import { readDiffStyle, writeDiffStyle } from "$lib/diffStylePref.ts";
@@ -27,38 +29,32 @@ export type SettingControl =
   | { kind: "toggle" };
 
 interface SettingEntryBase {
-  /** Stable id, unique across the registry; the draft store keys staged values by it. */
+  /** Stable id, unique across the registry; a field's control keys off it. */
   key: string;
-  /** Sidebar category the entry groups under. */
+  /** Sidebar category the entry groups under (one nav row per category). */
   category: string;
+  /** Optional sub-group within the category's pane, rendered as a labelled block
+   * (e.g. "Diff view" under Appearance). Fields with no section render first. */
+  section?: string;
   /** Field label shown beside the control (and searched). */
   label: string;
   /** One-line description under the label (and searched). */
   description: string;
 }
 
-/** A setting the reviewer edits: staged into the draft store, committed on Save. */
+/** A setting the reviewer edits: its control applies immediately via write(). */
 export interface StagedField<V = unknown> extends SettingEntryBase {
   kind: "staged";
   control: SettingControl;
-  /** Current persisted value — also the draft's dirty baseline (staging never
-   * persists, so this stays at the pre-edit value until save()). */
+  /** Current persisted value — the control's displayed value. */
   read: () => V;
-  /** Persist a value. Called by the draft's save() for each changed field. */
+  /** Persist and apply a value, the moment the control changes. May throw to
+   * signal a save failure (App surfaces a persistent error toast). */
   write: (value: V) => void;
-  /** Render a value to a human label for the unsaved-changes confirm (old → new).
-   * Defaults to String(). */
-  describe?: (value: V) => string;
-  /** Fired when a value is staged (including back to baseline) — for live preview
-   * without persisting (theme, EXC-753). MUST NOT write. */
-  onStage?: (value: V) => void;
-  /** Fired for each changed field on discard, with the baseline value — reverts a
-   * live preview. MUST NOT write. */
-  onRevert?: (value: V) => void;
 }
 
 /** A live, read-only entry (Advanced diagnostics, Notifications): searchable but
- * never staged, so it never contributes dirty state. */
+ * never edited. */
 export interface SearchOnlyEntry extends SettingEntryBase {
   kind: "search";
 }
@@ -75,13 +71,6 @@ export function stagedField<V>(def: Omit<StagedField<V>, "kind">): StagedField {
   return { kind: "staged", ...def } as StagedField;
 }
 
-/** Describe a select value as its option label, so the label lives once (in the
- * options) and the confirm preview reuses it. */
-const selectDescribe =
-  (options: readonly { value: string; label: string }[]) =>
-  (value: string): string =>
-    options.find((o) => o.value === value)?.label ?? value;
-
 const themeOptions = THEME_IDS.map((id) => ({ value: id, label: THEMES[id].label }));
 
 const diffStyleOptions = [
@@ -95,9 +84,9 @@ const diffIndicatorOptions = [
   { value: "both", label: "Both" },
 ] as const;
 
-/** Every setting the Settings modal surfaces. Staged fields commit through their
- * pref module's existing localStorage key; search-only entries (contributed by
- * later panes) never stage. */
+/** Every setting the Settings modal surfaces. Each staged field applies through
+ * its pref module's existing localStorage key; search-only entries (contributed
+ * by later panes) never apply. */
 export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
   stagedField<ThemeId>({
     key: "theme",
@@ -106,10 +95,8 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     description: "Color palette for the whole interface.",
     control: { kind: "select", options: themeOptions },
     read: readThemeId,
-    // applyTheme both persists and applies — the commit on Save. The live preview
-    // that applies without persisting is wired by EXC-753 via onStage/onRevert.
+    // applyTheme both persists and applies — the change takes effect immediately.
     write: applyTheme,
-    describe: selectDescribe(themeOptions),
   }),
   stagedField<boolean>({
     key: "shortcutHints",
@@ -119,27 +106,26 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     control: { kind: "toggle" },
     read: readShortcutHints,
     write: writeShortcutHints,
-    describe: (on) => (on ? "Shown" : "Hidden"),
   }),
   stagedField<DiffStyle>({
     key: "diffStyle",
-    category: "Diff view",
+    category: "Appearance",
+    section: "Diff view",
     label: "Layout",
     description: "Side-by-side (split) or stacked (unified) diff layout.",
     control: { kind: "select", options: diffStyleOptions },
     read: readDiffStyle,
     write: writeDiffStyle,
-    describe: selectDescribe(diffStyleOptions),
   }),
   stagedField<DiffIndicators>({
     key: "diffIndicators",
-    category: "Diff view",
+    category: "Appearance",
+    section: "Diff view",
     label: "Change markers",
     description: "Gutter change markers: bars, classic +/− glyphs, or both.",
     control: { kind: "select", options: diffIndicatorOptions },
     read: readDiffIndicators,
     write: writeDiffIndicators,
-    describe: selectDescribe(diffIndicatorOptions),
   }),
 ];
 
@@ -153,9 +139,8 @@ export interface SettingCategory {
 
 /** The ordered sidebar taxonomy (EXC-843). The two-pane shell renders a nav item
  * per category that has at least one registry entry, in this order, and shows the
- * blurb beneath the pane title. Later panes append their categories here — the diff
- * view live reconcile (EXC-846), Notifications (EXC-847), Advanced (EXC-848). */
+ * blurb beneath the pane title. Later panes append their categories here —
+ * Notifications (EXC-847), Advanced (EXC-848). */
 export const SETTINGS_CATEGORIES: readonly SettingCategory[] = [
-  { id: "Appearance", blurb: "How the interface looks." },
-  { id: "Diff view", blurb: "Layout and change markers for the diff." },
+  { id: "Appearance", blurb: "How the interface looks, including the diff view." },
 ];

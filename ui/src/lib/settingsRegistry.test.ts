@@ -59,19 +59,23 @@ describe("SETTINGS_REGISTRY", () => {
 });
 
 describe("SETTINGS_CATEGORIES (the two-pane sidebar taxonomy)", () => {
-  test("Appearance groups the theme and shortcut-hints fields", () => {
+  test("Appearance groups every staged field (Diff view folded in as a section)", () => {
     const appearance = staged.filter((f) => f.category === "Appearance").map((f) => f.key);
     expect(appearance).toContain("theme");
     expect(appearance).toContain("shortcutHints");
+    expect(appearance).toContain("diffStyle");
+    expect(appearance).toContain("diffIndicators");
   });
 
-  test("Diff view groups both diff prefs", () => {
-    const diffView = staged.filter((f) => f.category === "Diff view").map((f) => f.key);
-    expect(diffView).toContain("diffStyle");
-    expect(diffView).toContain("diffIndicators");
+  test("the diff prefs share the 'Diff view' section; the general fields carry none", () => {
+    const byKey = (k: string) => staged.find((f) => f.key === k);
+    expect(byKey("diffStyle")?.section).toBe("Diff view");
+    expect(byKey("diffIndicators")?.section).toBe("Diff view");
+    expect(byKey("theme")?.section).toBeUndefined();
+    expect(byKey("shortcutHints")?.section).toBeUndefined();
   });
 
-  test("every registry category is an ordered SETTINGS_CATEGORIES entry with a blurb", () => {
+  test("every registry category is a SETTINGS_CATEGORIES entry with a blurb", () => {
     const ids = new Set(SETTINGS_CATEGORIES.map((c) => c.id));
     for (const entry of SETTINGS_REGISTRY) {
       expect(ids).toContain(entry.category);
@@ -81,9 +85,8 @@ describe("SETTINGS_CATEGORIES (the two-pane sidebar taxonomy)", () => {
     }
   });
 
-  test("orders Appearance before Diff view", () => {
-    const order = SETTINGS_CATEGORIES.map((c) => c.id);
-    expect(order.indexOf("Appearance")).toBeLessThan(order.indexOf("Diff view"));
+  test("leads with Appearance", () => {
+    expect(SETTINGS_CATEGORIES[0]?.id).toBe("Appearance");
   });
 });
 
@@ -104,24 +107,6 @@ describe("staged fields wrap existing pref modules", () => {
         expect(KNOWN_PREF_KEYS).toContain(key);
       }
     }
-  });
-});
-
-describe("describe renders a value to its confirm-preview label", () => {
-  test("a select field describes each option value as that option's label", () => {
-    for (const field of staged) {
-      if (field.control.kind !== "select") continue;
-      expect(field.describe).toBeDefined();
-      for (const opt of field.control.options) {
-        expect(field.describe?.(opt.value)).toBe(opt.label);
-      }
-    }
-  });
-
-  test("the shortcut-hints toggle describes on/off as Shown/Hidden", () => {
-    const hints = staged.find((f) => f.key === "shortcutHints");
-    expect(hints?.describe?.(true)).toBe("Shown");
-    expect(hints?.describe?.(false)).toBe("Hidden");
   });
 });
 

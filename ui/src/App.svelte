@@ -41,8 +41,7 @@
     shouldShowOnboarding,
   } from "$lib/prefs.ts";
   import { readShortcutHints } from "$lib/shortcutHintsPref.ts";
-  import { isStagedField, SETTINGS_REGISTRY } from "$lib/settingsRegistry.ts";
-  import { createSettingsDraft, type SettingsDraftStore } from "@/state/settingsDraft.ts";
+  import { SETTINGS_REGISTRY, type StagedField } from "$lib/settingsRegistry.ts";
   import type { ComposerScratch } from "$lib/diffview/commenting.ts";
   import type { ApproveVariant, ApproveVariantId, Annotation, PersistedScratch } from "@core/lib/types";
 
@@ -120,9 +119,9 @@
 
   // Theme (EXC-730). main.ts applies the saved theme before mount; this mirrors the
   // chosen id so the derived scheme reaches the diff view and the Settings select
-  // reflects the current theme. A staged theme change commits on Save (the registry
-  // field's applyTheme persists + applies); saveSettings then resyncs themeId so the
-  // reactive reads follow.
+  // reflects the current theme. Picking a theme in Settings applies it immediately
+  // (the registry field's applyTheme persists + applies); applySetting then resyncs
+  // themeId so the reactive reads follow.
   let themeId = $state<ThemeId>(readThemeId());
   const scheme = $derived(THEMES[themeId].scheme);
   let showSettings = $state(false);
@@ -135,32 +134,36 @@
   );
   // Shortcut-hint affordances (EXC-826). App owns the reactive flag and threads it
   // to the surfaces that show discoverability chrome (the TopBar key-cap hints, the
-  // status-bar keyboard button, the V-mode chip); saveSettings resyncs it after a
-  // staged Settings save so flipping it applies in place. The ? help modal stays
-  // reachable by keyboard regardless.
+  // status-bar keyboard button, the V-mode chip); applySetting resyncs it after a
+  // Settings edit so flipping it applies in place. The ? help modal stays reachable
+  // by keyboard regardless.
   let showShortcutHints = $state(readShortcutHints());
 
-  // Staged settings (EXC-843). App owns the reactive draft store; the two-pane
-  // Settings dialog stages edits into it and commits on Save. saveSettings persists
-  // every staged write through its registry field, then resyncs the reactive mirrors
-  // other surfaces read — themeId (the diff-view scheme) and showShortcutHints (the
-  // hint chrome) — so theme + hints apply live, and confirms with a success alert.
-  // The diff-view prefs persist here too; their live re-apply is EXC-846.
-  let settingsDraftStore = $state<SettingsDraftStore>({ staged: {} });
-  const settingsDraft = createSettingsDraft(
-    settingsDraftStore,
-    SETTINGS_REGISTRY.filter(isStagedField),
-  );
-  function saveSettings() {
-    settingsDraft.save();
+  // Settings apply immediately (EXC-843). The two-pane Settings dialog calls this the
+  // moment a control changes: it persists + applies through the registry field's
+  // write(), resyncs the reactive mirrors other surfaces read — themeId (the diff-view
+  // scheme) and showShortcutHints (the hint chrome) — then confirms with a toast. A
+  // failed write raises a PERSISTENT error toast the user must read and dismiss.
+  function applySetting(field: StagedField, value: unknown) {
+    try {
+      field.write(value);
+    } catch (err) {
+      // ponytail: the hint is the write's own message — localStorage prefs can't fail
+      // today, but a future daemon-backed setting throws a helpful one (e.g. "Start
+      // the caret daemon to change this"). Persistent so a failure isn't missed.
+      const hint =
+        err instanceof Error && err.message ? err.message : "The change wasn't saved.";
+      alerts.push({
+        variant: "destructive",
+        title: `Couldn't save ${field.label.toLowerCase()}`,
+        message: hint,
+        persistent: true,
+      });
+      return;
+    }
     themeId = readThemeId();
     showShortcutHints = readShortcutHints();
-    alerts.push({ variant: "success", message: "Settings saved" });
-  }
-  // A dirty dismiss plainly discards the staged edits — the confirm guard is EXC-844.
-  function dismissSettings() {
-    settingsDraft.discard();
-    showSettings = false;
+    alerts.push({ variant: "success", message: `${field.label} updated` });
   }
 
   // The source view's retained-but-unsent composer drafts ("scratches"), mirrored
@@ -629,11 +632,9 @@
      review is active — so it renders at the top level, ungated on `active`. -->
 {#if showSettings}
   <SettingsDialog
-    draft={settingsDraft}
     entries={SETTINGS_REGISTRY}
-    {showShortcutHints}
-    onSave={saveSettings}
-    onClose={dismissSettings}
+    onChange={applySetting}
+    onClose={() => (showSettings = false)}
   />
 {/if}
 
