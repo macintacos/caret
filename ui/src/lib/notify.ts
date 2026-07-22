@@ -91,6 +91,41 @@ function defaultPermission(): NotificationPermission {
   return typeof Notification === "undefined" ? "default" : Notification.permission;
 }
 
+/** Subscribe to notification-permission changes made outside the caller's own
+ * request — the browser's site settings, the first-run onboarding modal, or
+ * another caret surface. On each Permissions-API "change" event it re-reads the
+ * live `Notification.permission` (the value the notifier gates on at fire time,
+ * which some engines diverge from `PermissionStatus.state`) and passes it to
+ * `onChange`. Returns a cleanup that detaches the listener. An inert no-op where
+ * the Notification API or `navigator.permissions.query` is unavailable — the
+ * caller's own request path still keeps its badge truthful. Shared by
+ * NotifyBell.svelte and the settings NotificationsPane (EXC-847). */
+export function observePermission(
+  onChange: (permission: NotificationPermission) => void,
+): () => void {
+  const perms = globalThis.navigator?.permissions;
+  if (typeof Notification === "undefined" || !perms?.query) return () => {};
+  let status: PermissionStatus | undefined;
+  let cancelled = false;
+  const sync = () => onChange(Notification.permission);
+  perms
+    .query({ name: "notifications" as PermissionName })
+    .then((s) => {
+      // The subscription may have been cleaned up while the query was in flight;
+      // don't attach a listener the cleanup already ran past.
+      if (cancelled) return;
+      status = s;
+      s.addEventListener("change", sync);
+    })
+    .catch(() => {
+      // Some engines reject a notifications permission query — nothing to sync.
+    });
+  return () => {
+    cancelled = true;
+    status?.removeEventListener("change", sync);
+  };
+}
+
 // Under normal polling, open tabs observe a newly-pending review within one 2s
 // poll interval of each other, so the winning tab holds the per-id lock a few
 // seconds past that window — long enough that a peer polling a beat later finds
