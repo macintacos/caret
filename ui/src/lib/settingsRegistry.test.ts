@@ -90,6 +90,23 @@ describe("SETTINGS_CATEGORIES (the two-pane sidebar taxonomy)", () => {
   });
 });
 
+describe("Notifications (search-only live pane, EXC-847)", () => {
+  test("Notifications is a sidebar category with a blurb", () => {
+    const cat = SETTINGS_CATEGORIES.find((c) => c.id === "Notifications");
+    expect(cat).toBeDefined();
+    expect(cat?.blurb).toBeTruthy();
+  });
+
+  test("contributes a search-only entry (findable by /-search, never staged)", () => {
+    const entry = SETTINGS_REGISTRY.find((e) => e.category === "Notifications");
+    expect(entry).toBeDefined();
+    // Live, browser-owned state — searchable but never an editable field.
+    expect(entry ? isStagedField(entry) : true).toBe(false);
+    expect(entry?.label).toBeTruthy();
+    expect(entry?.description).toBeTruthy();
+  });
+});
+
 describe("staged fields wrap existing pref modules", () => {
   test("write persists and read reflects it (round-trips through the pref module)", () => {
     for (const field of staged) {

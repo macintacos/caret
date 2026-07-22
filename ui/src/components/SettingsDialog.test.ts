@@ -75,6 +75,24 @@ describe("SettingsDialog shell", () => {
   });
 });
 
+describe("SettingsDialog Notifications pane (EXC-847)", () => {
+  test("renders a Notifications nav row (a search-only category earns a nav row)", async () => {
+    const { flush } = render(SettingsDialog, props());
+    await flushUntil(flush, mounted);
+    expect(has("[data-category='Notifications']")).toBe(true);
+  });
+
+  test("selecting Notifications swaps in the live pane", async () => {
+    const { flush } = render(SettingsDialog, props());
+    await flushUntil(flush, mounted);
+    // Appearance is selected first, so the field pane shows, not the live pane.
+    expect(has("[data-notifications-pane]")).toBe(false);
+    (document.body.querySelector("[data-category='Notifications']") as HTMLButtonElement).click();
+    flush();
+    expect(has("[data-notifications-pane]")).toBe(true);
+  });
+});
+
 describe("SettingsDialog immediate apply", () => {
   test("toggling the shortcut-hints switch calls onChange with the field and its new value", async () => {
     const calls: Array<{ key: string; value: unknown }> = [];

@@ -142,6 +142,16 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     read: readDiffIndicators,
     write: writeDiffIndicators,
   }),
+  // Live, browser-owned notification permission (EXC-847): a search-only entry so
+  // /-search (EXC-845) finds it. The pane itself (NotificationsPane) renders the
+  // live state and the enable / test affordance — there is nothing to persist.
+  {
+    kind: "search",
+    key: "notifications",
+    category: "Notifications",
+    label: "Desktop notifications",
+    description: "Get alerted when a new plan is ready for review; check the permission state.",
+  },
 ];
 
 /** A sidebar category: its id (matched against SettingEntry.category, and shown as
@@ -158,4 +168,5 @@ export interface SettingCategory {
  * Notifications (EXC-847), Advanced (EXC-848). */
 export const SETTINGS_CATEGORIES: readonly SettingCategory[] = [
   { id: "Appearance", blurb: "How the interface looks, including the diff view." },
+  { id: "Notifications", blurb: "Desktop alerts when a new plan is ready for review." },
 ];
