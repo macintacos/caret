@@ -4,6 +4,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { KNOWN_PREF_KEYS } from "$lib/prefs.ts";
 import {
   isStagedField,
+  SETTINGS_CATEGORIES,
   SETTINGS_REGISTRY,
   type SearchOnlyEntry,
   type StagedField,
@@ -54,6 +55,35 @@ describe("SETTINGS_REGISTRY", () => {
     expect(keys).toContain("shortcutHints");
     expect(keys).toContain("diffStyle");
     expect(keys).toContain("diffIndicators");
+  });
+});
+
+describe("SETTINGS_CATEGORIES (the two-pane sidebar taxonomy)", () => {
+  test("Appearance groups the theme and shortcut-hints fields", () => {
+    const appearance = staged.filter((f) => f.category === "Appearance").map((f) => f.key);
+    expect(appearance).toContain("theme");
+    expect(appearance).toContain("shortcutHints");
+  });
+
+  test("Diff view groups both diff prefs", () => {
+    const diffView = staged.filter((f) => f.category === "Diff view").map((f) => f.key);
+    expect(diffView).toContain("diffStyle");
+    expect(diffView).toContain("diffIndicators");
+  });
+
+  test("every registry category is an ordered SETTINGS_CATEGORIES entry with a blurb", () => {
+    const ids = new Set(SETTINGS_CATEGORIES.map((c) => c.id));
+    for (const entry of SETTINGS_REGISTRY) {
+      expect(ids).toContain(entry.category);
+    }
+    for (const cat of SETTINGS_CATEGORIES) {
+      expect(cat.blurb).toBeTruthy();
+    }
+  });
+
+  test("orders Appearance before Diff view", () => {
+    const order = SETTINGS_CATEGORIES.map((c) => c.id);
+    expect(order.indexOf("Appearance")).toBeLessThan(order.indexOf("Diff view"));
   });
 });
 

@@ -113,9 +113,9 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
   }),
   stagedField<boolean>({
     key: "shortcutHints",
-    category: "General",
-    label: "Keyboard shortcut hints",
-    description: "Show the shortcut-hint affordances around the interface.",
+    category: "Appearance",
+    label: "Shortcut hints",
+    description: "Show key-cap hints and the keyboard button.",
     control: { kind: "toggle" },
     read: readShortcutHints,
     write: writeShortcutHints,
@@ -141,4 +141,21 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     write: writeDiffIndicators,
     describe: selectDescribe(diffIndicatorOptions),
   }),
+];
+
+/** A sidebar category: its id (matched against SettingEntry.category, and shown as
+ * both the nav label and the pane title) plus the one-line blurb under the pane
+ * header. */
+export interface SettingCategory {
+  id: string;
+  blurb: string;
+}
+
+/** The ordered sidebar taxonomy (EXC-843). The two-pane shell renders a nav item
+ * per category that has at least one registry entry, in this order, and shows the
+ * blurb beneath the pane title. Later panes append their categories here — the diff
+ * view live reconcile (EXC-846), Notifications (EXC-847), Advanced (EXC-848). */
+export const SETTINGS_CATEGORIES: readonly SettingCategory[] = [
+  { id: "Appearance", blurb: "How the interface looks." },
+  { id: "Diff view", blurb: "Layout and change markers for the diff." },
 ];
