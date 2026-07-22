@@ -34,6 +34,24 @@ describe("SettingSelect trigger", () => {
   });
 });
 
+describe("SettingSelect swatches", () => {
+  test("renders a color dot per swatch entry, and none on an option without one", async () => {
+    const withSwatch = [
+      { value: "a", label: "A", swatch: ["#000000", "#111111", "#ffffff"] },
+      { value: "b", label: "B" },
+    ] as const;
+    const { flush } = render(SettingSelect, { ...baseProps, options: withSwatch, value: "a" });
+    flush();
+    document.body.querySelector<HTMLButtonElement>("button[aria-label='Layout']")?.click();
+    await flushUntil(
+      flush,
+      () => document.body.querySelector("[data-setting-option='a']") !== null,
+    );
+    expect(document.body.querySelectorAll("[data-setting-option='a'] .chip-dot").length).toBe(3);
+    expect(document.body.querySelectorAll("[data-setting-option='b'] .chip-dot").length).toBe(0);
+  });
+});
+
 describe("SettingSelect commit", () => {
   // The trigger mounts in the light DOM; the menu content portals to document.body
   // after an effect+timer flush (the shadcn-foundation verdict). A committing pick

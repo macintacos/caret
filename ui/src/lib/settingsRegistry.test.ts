@@ -110,6 +110,23 @@ describe("staged fields wrap existing pref modules", () => {
   });
 });
 
+describe("theme options carry palette swatches", () => {
+  test("each theme option has a 5-color swatch; other selects carry none", () => {
+    const theme = staged.find((f) => f.key === "theme");
+    expect(theme?.control.kind).toBe("select");
+    if (theme?.control.kind === "select") {
+      for (const opt of theme.control.options) {
+        expect(opt.swatch?.length).toBe(5);
+        for (const color of opt.swatch ?? []) expect(color).toMatch(/^#[0-9a-fA-F]{3,8}$/);
+      }
+    }
+    const layout = staged.find((f) => f.key === "diffStyle");
+    if (layout?.control.kind === "select") {
+      for (const opt of layout.control.options) expect(opt.swatch).toBeUndefined();
+    }
+  });
+});
+
 describe("isStagedField / search-only entries", () => {
   test("isStagedField is true for staged fields and false for a search-only entry", () => {
     const search: SearchOnlyEntry = {

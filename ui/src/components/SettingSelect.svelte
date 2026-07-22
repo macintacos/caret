@@ -11,6 +11,8 @@
   interface Option {
     value: string;
     label: string;
+    /** Optional palette preview — CSS colors shown as dots after the label (theme). */
+    swatch?: readonly string[];
   }
 
   interface Props {
@@ -88,6 +90,13 @@
               {/if}
             </span>
             <span class="name">{option.label}</span>
+            {#if option.swatch}
+              <span class="chips" aria-hidden="true">
+                {#each option.swatch as color, i (i)}
+                  <span class="chip-dot" style="background: {color}"></span>
+                {/each}
+              </span>
+            {/if}
           {/snippet}
         </DropdownMenuPrimitive.RadioItem>
       {/each}
@@ -163,5 +172,21 @@
     flex: 1 1 auto;
     min-width: 0;
     white-space: nowrap;
+  }
+  /* The palette preview: color dots, right-aligned. A hairline inset ring keeps a dot
+     visible when its color is near the menu surface (e.g. a near-black paper on
+     caret-dark). */
+  :global(.setting-menu .chips) {
+    flex: none;
+    display: flex;
+    gap: 3px;
+    margin-left: auto;
+    padding-left: 0.5rem;
+  }
+  :global(.setting-menu .chip-dot) {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 1px var(--rule-strong);
   }
 </style>

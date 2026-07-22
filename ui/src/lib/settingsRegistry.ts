@@ -21,10 +21,18 @@ import type { DiffIndicators, DiffStyle } from "$lib/diffview/types.ts";
 import { readShortcutHints, writeShortcutHints } from "$lib/shortcutHintsPref.ts";
 import { applyTheme, readThemeId, THEME_IDS, THEMES, type ThemeId } from "$lib/theme.ts";
 
+/** One choice in a select control. `swatch` is an optional row of CSS colors rendered
+ * as small dots beside the label — the theme options preview their palette this way. */
+export interface SettingOption {
+  value: string;
+  label: string;
+  swatch?: readonly string[];
+}
+
 /** How the two-pane shell (EXC-843) renders a field's control: the kind drives
  * both the rendered control and search. */
 export type SettingControl =
-  | { kind: "select"; options: readonly { value: string; label: string }[] }
+  | { kind: "select"; options: readonly SettingOption[] }
   | { kind: "toggle" };
 
 interface SettingEntryBase {
@@ -70,7 +78,15 @@ export function stagedField<V>(def: Omit<StagedField<V>, "kind">): StagedField {
   return { kind: "staged", ...def } as StagedField;
 }
 
-const themeOptions = THEME_IDS.map((id) => ({ value: id, label: THEMES[id].label }));
+// The five tokens every palette supplies (ColorToken makes them mandatory), previewed
+// as dots beside each theme option so a future theme renders its swatch with no extra
+// wiring — background, the raised surface, ink, the accent, and the positive hue.
+const SWATCH_TOKENS = ["--paper", "--paper-raised", "--ink", "--accent", "--ok"] as const;
+const themeOptions = THEME_IDS.map((id) => ({
+  value: id,
+  label: THEMES[id].label,
+  swatch: SWATCH_TOKENS.map((token) => THEMES[id].tokens[token]),
+}));
 
 const diffStyleOptions = [
   { value: "split", label: "Split" },
