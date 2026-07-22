@@ -1,10 +1,11 @@
-// Shortcut-hints toggle (EXC-826). A Settings switch (default on) hides the
-// vim-shortcut discoverability chrome — the status bar's keyboard button and the
-// TopBar's inline key-cap hints — live and persistently. Toggling, persistence
-// across a reload, and the ? keystroke are real-browser behavior
-// (browser-testing.md), so this lives here, not in a unit. The --fresh reset is
-// unit-covered (ui/src/lib/prefs.test.ts: SHORTCUT_HINTS_KEY is a KNOWN_PREF_KEY
-// that clearKnownPrefs removes), like the theme pref.
+// Shortcut-hints toggle (EXC-826, restaged by EXC-843). A Settings switch (default
+// on) hides the vim-shortcut discoverability chrome — the status bar's keyboard
+// button and the TopBar's inline key-cap hints. Under the immediate-apply shell the
+// switch applies (live + persistently) the moment it's toggled — no Save. Toggling,
+// live apply, persistence across a reload, and the ? keystroke are real-browser
+// behavior (browser-testing.md), so this lives here, not in a unit. The --fresh
+// reset is unit-covered (ui/src/lib/prefs.test.ts: SHORTCUT_HINTS_KEY is a
+// KNOWN_PREF_KEY that clearKnownPrefs removes), like the theme pref.
 
 import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
 
@@ -36,22 +37,18 @@ test("the Settings toggle hides the shortcut affordances live and persists", asy
   await expect(toggle).toBeVisible();
   await expect(toggle).toBeChecked();
 
-  // Toggling off hides both affordances live — no reload.
+  // Toggling off applies at once: the affordances hide live and a toast confirms it,
+  // with the modal still open.
   await toggle.click();
   await expect(toggle).not.toBeChecked();
+  await expect(page.getByText("Shortcut hints updated")).toBeVisible();
   await expect(page.locator(keyboardButton)).toBeHidden();
   await expect(page.locator(topbarHints)).toHaveCount(0);
   await expect(page.locator(tallyKey)).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
 
-  // Toggling back on brings them straight back.
-  await toggle.click();
-  await expect(toggle).toBeChecked();
-  await expect(page.locator(keyboardButton)).toBeVisible();
-
-  // Turn off again and reload: the choice persists (browser localStorage), so the
-  // affordances stay hidden across the reload with no daemon state.
-  await toggle.click();
-  await expect(toggle).not.toBeChecked();
+  // The choice persists across a reload (browser localStorage), so the affordances
+  // stay hidden with no daemon state.
   await page.reload();
   await expect(page.locator(".diff-plan")).toBeVisible();
   await expect(page.locator(keyboardButton)).toBeHidden();
@@ -71,18 +68,22 @@ test("with hints off, V-mode still selects lines but the hint chip stays hidden"
   await expect(page.locator(".diff-plan")).toBeVisible();
   await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
 
-  // Turn shortcut hints off, then close Settings so keystrokes reach the plan.
+  // Turn shortcut hints off (applies at once), then Esc to close so keystrokes reach
+  // the plan.
   await page.getByRole("button", { name: "Settings" }).click();
   const toggle = page.getByRole("switch", { name: "Shortcut hints" });
   await toggle.click();
   await expect(toggle).not.toBeChecked();
-  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByText("Shortcut hints updated")).toBeVisible();
+  // Past the safe-mode grace before Escape, or the dismiss keystroke is swallowed
+  // and the modal stays open (the guard window re-arms on the toggle interaction).
+  await waitPastSafeModeGrace(page);
+  await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeHidden();
 
   // Enter V-mode (gg → V → j): the shortcut itself is NOT gated, so the amber
   // selection band still spans two lines — but the "c comment · Esc cancel" chip
   // is suppressed because hints are off.
-  await waitPastSafeModeGrace(page);
   await page.keyboard.press("g");
   await page.keyboard.press("g");
   await page.keyboard.press("V");

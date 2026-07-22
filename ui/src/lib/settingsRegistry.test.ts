@@ -4,6 +4,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { KNOWN_PREF_KEYS } from "$lib/prefs.ts";
 import {
   isStagedField,
+  SETTINGS_CATEGORIES,
   SETTINGS_REGISTRY,
   type SearchOnlyEntry,
   type StagedField,
@@ -57,6 +58,38 @@ describe("SETTINGS_REGISTRY", () => {
   });
 });
 
+describe("SETTINGS_CATEGORIES (the two-pane sidebar taxonomy)", () => {
+  test("Appearance groups every staged field (Diff view folded in as a section)", () => {
+    const appearance = staged.filter((f) => f.category === "Appearance").map((f) => f.key);
+    expect(appearance).toContain("theme");
+    expect(appearance).toContain("shortcutHints");
+    expect(appearance).toContain("diffStyle");
+    expect(appearance).toContain("diffIndicators");
+  });
+
+  test("the diff prefs share the 'Diff view' section; the general fields carry none", () => {
+    const byKey = (k: string) => staged.find((f) => f.key === k);
+    expect(byKey("diffStyle")?.section).toBe("Diff view");
+    expect(byKey("diffIndicators")?.section).toBe("Diff view");
+    expect(byKey("theme")?.section).toBeUndefined();
+    expect(byKey("shortcutHints")?.section).toBeUndefined();
+  });
+
+  test("every registry category is a SETTINGS_CATEGORIES entry with a blurb", () => {
+    const ids = new Set(SETTINGS_CATEGORIES.map((c) => c.id));
+    for (const entry of SETTINGS_REGISTRY) {
+      expect(ids).toContain(entry.category);
+    }
+    for (const cat of SETTINGS_CATEGORIES) {
+      expect(cat.blurb).toBeTruthy();
+    }
+  });
+
+  test("leads with Appearance", () => {
+    expect(SETTINGS_CATEGORIES[0]?.id).toBe("Appearance");
+  });
+});
+
 describe("staged fields wrap existing pref modules", () => {
   test("write persists and read reflects it (round-trips through the pref module)", () => {
     for (const field of staged) {
@@ -77,21 +110,20 @@ describe("staged fields wrap existing pref modules", () => {
   });
 });
 
-describe("describe renders a value to its confirm-preview label", () => {
-  test("a select field describes each option value as that option's label", () => {
-    for (const field of staged) {
-      if (field.control.kind !== "select") continue;
-      expect(field.describe).toBeDefined();
-      for (const opt of field.control.options) {
-        expect(field.describe?.(opt.value)).toBe(opt.label);
+describe("theme options carry palette swatches", () => {
+  test("each theme option has a 5-color swatch; other selects carry none", () => {
+    const theme = staged.find((f) => f.key === "theme");
+    expect(theme?.control.kind).toBe("select");
+    if (theme?.control.kind === "select") {
+      for (const opt of theme.control.options) {
+        expect(opt.swatch?.length).toBe(5);
+        for (const color of opt.swatch ?? []) expect(color).toMatch(/^#[0-9a-fA-F]{3,8}$/);
       }
     }
-  });
-
-  test("the shortcut-hints toggle describes on/off as Shown/Hidden", () => {
-    const hints = staged.find((f) => f.key === "shortcutHints");
-    expect(hints?.describe?.(true)).toBe("Shown");
-    expect(hints?.describe?.(false)).toBe("Hidden");
+    const layout = staged.find((f) => f.key === "diffStyle");
+    if (layout?.control.kind === "select") {
+      for (const opt of layout.control.options) expect(opt.swatch).toBeUndefined();
+    }
   });
 });
 

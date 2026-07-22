@@ -39,6 +39,16 @@ describe("AlertHost", () => {
     expect(items[0]?.getAttribute("role")).toBe("status");
   });
 
+  test("a destructive alert is assertive (role=alert), not polite", () => {
+    // A failure the user must act on interrupts the screen reader; success/default
+    // confirmations stay polite (role=status).
+    const { target } = render(AlertHost, {
+      alerts: [item({ id: 9, variant: "destructive", message: "Couldn't save" })],
+      onDismiss: () => {},
+    });
+    expect(target.querySelector(".alert-item")?.getAttribute("role")).toBe("alert");
+  });
+
   test("the dismiss button calls onDismiss with the alert id", () => {
     const dismissed = capture<number>();
     const { target } = render(AlertHost, {

@@ -93,6 +93,22 @@ describe("createAlerts", () => {
     expect(sched.active()).toBe(before);
   });
 
+  test("a persistent push arms no dwell timer, staying until it's manually dismissed", () => {
+    const store = makeStore();
+    const sched = makeScheduler();
+    const alerts = createAlerts(store, { schedule: sched.schedule });
+    const id = alerts.push({ variant: "destructive", message: "Couldn't save", persistent: true });
+    // No auto-dismiss: a persistent alert (a failure the user must read + act on)
+    // never schedules its own removal.
+    expect(sched.active()).toBe(0);
+    expect(store.alerts).toHaveLength(1);
+    // A manual dismiss still runs the exit animation, then removes it.
+    alerts.dismiss(id);
+    expect(store.alerts[0]?.leaving).toBe(true);
+    sched.runNext();
+    expect(store.alerts).toHaveLength(0);
+  });
+
   test("multiple pushes stack in insertion order (oldest first)", () => {
     const store = makeStore();
     const alerts = createAlerts(store, { schedule: makeScheduler().schedule });

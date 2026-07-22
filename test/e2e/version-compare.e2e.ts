@@ -39,7 +39,7 @@ test("entering compare mode diffs a chosen non-default pair", async ({ daemon, p
 
   // Default pair is current (v3) vs previous (v2); pick a non-default pair:
   // base = v3, target = v1, so the diff spans the alpha→gamma change.
-  // The target picker reuses the ThemePicker's DropdownMenu: open its trigger,
+  // The target picker reuses the SettingSelect's DropdownMenu: open its trigger,
   // then choose the v1 radio item.
   await page.getByLabel("Target version").click();
   await page.getByRole("menuitemradio", { name: "v1" }).click();

@@ -7,6 +7,10 @@
 // It degrades cleanly: browsers without startViewTransition, and users who ask
 // for reduced motion, get an instant swap. The decision is behind injected deps
 // so it is unit-testable without a real browser (see themeWipe.test.ts).
+//
+// Retained, not dead: EXC-843 moved theme selection to a staged Save (applyTheme,
+// no wipe), so this has no production caller right now. Kept for EXC-753 (theme
+// preview), which decides whether the staged preview re-adopts the wipe.
 
 import { applyTheme, type ThemeId } from "$lib/theme.ts";
 

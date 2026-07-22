@@ -34,14 +34,14 @@
     pendingItems,
   } from "$lib/feedback.ts";
   import { applyTheme, DEFAULT_THEME_ID, readThemeId, THEMES, type ThemeId } from "$lib/theme.ts";
-  import { changeTheme } from "$lib/themeWipe.ts";
   import {
     clearKnownPrefs,
     freshResetApplied,
     markFreshResetApplied,
     shouldShowOnboarding,
   } from "$lib/prefs.ts";
-  import { readShortcutHints, writeShortcutHints } from "$lib/shortcutHintsPref.ts";
+  import { readShortcutHints } from "$lib/shortcutHintsPref.ts";
+  import { SETTINGS_REGISTRY, type StagedField } from "$lib/settingsRegistry.ts";
   import type { ComposerScratch } from "$lib/diffview/commenting.ts";
   import type { ApproveVariant, ApproveVariantId, Annotation, PersistedScratch } from "@core/lib/types";
 
@@ -117,11 +117,11 @@
   let pendingReject = $state(false);
   let safeMode = $state(false);
 
-  // Theme (EXC-730). main.ts applies the saved theme before mount (no wipe at
-  // boot); this mirrors the chosen id so the derived scheme reaches the diff view
-  // and the Settings dialog reflects the current selection. Switching runs through
-  // changeTheme (the view-transition wipe), then updates themeId so the reactive
-  // reads follow.
+  // Theme (EXC-730). main.ts applies the saved theme before mount; this mirrors the
+  // chosen id so the derived scheme reaches the diff view and the Settings select
+  // reflects the current theme. Picking a theme in Settings applies it immediately
+  // (the registry field's applyTheme persists + applies); applySetting then resyncs
+  // themeId so the reactive reads follow.
   let themeId = $state<ThemeId>(readThemeId());
   const scheme = $derived(THEMES[themeId].scheme);
   let showSettings = $state(false);
@@ -132,19 +132,44 @@
   let showOnboarding = $state(
     typeof Notification !== "undefined" && shouldShowOnboarding(Notification.permission),
   );
-  function selectTheme(id: ThemeId) {
-    changeTheme(id);
-    themeId = id;
-  }
-  // Shortcut-hint affordances (EXC-826). A persisted, live toggle: App owns the
-  // reactive flag and threads it to the surfaces that show discoverability chrome
-  // (the TopBar key-cap hints, the status-bar keyboard button, the V-mode chip),
-  // so flipping it in Settings hides/shows them in place. The ? help modal stays
-  // reachable by keyboard regardless.
+  // Shortcut-hint affordances (EXC-826). App owns the reactive flag and threads it
+  // to the surfaces that show discoverability chrome (the TopBar key-cap hints, the
+  // status-bar keyboard button, the V-mode chip); applySetting resyncs it after a
+  // Settings edit so flipping it applies in place. The ? help modal stays reachable
+  // by keyboard regardless.
   let showShortcutHints = $state(readShortcutHints());
-  function setShortcutHints(show: boolean) {
-    writeShortcutHints(show);
-    showShortcutHints = show;
+
+  // Settings apply immediately (EXC-843). The two-pane Settings dialog calls this the
+  // moment a control changes: it persists + applies through the registry field's
+  // write(), resyncs the reactive mirrors other surfaces read — themeId (the diff-view
+  // scheme) and showShortcutHints (the hint chrome) — then confirms with a toast. A
+  // failed write raises a PERSISTENT error toast the user must read and dismiss.
+  //
+  // settingsRev bumps on every applied change; DiffPlanView watches it to re-read the
+  // diff-layout/marker prefs into its compare store so an open diff reflows live too
+  // (those prefs live in the view's own store, not a mirror App can resync).
+  let settingsRev = $state(0);
+  function applySetting(field: StagedField, value: unknown) {
+    try {
+      field.write(value);
+    } catch (err) {
+      // ponytail: the hint is the write's own message — localStorage prefs can't fail
+      // today, but a future daemon-backed setting throws a helpful one (e.g. "Start
+      // the caret daemon to change this"). Persistent so a failure isn't missed.
+      const hint =
+        err instanceof Error && err.message ? err.message : "The change wasn't saved.";
+      alerts.push({
+        variant: "destructive",
+        title: `Couldn't save ${field.label.toLowerCase()}`,
+        message: hint,
+        persistent: true,
+      });
+      return;
+    }
+    themeId = readThemeId();
+    showShortcutHints = readShortcutHints();
+    settingsRev++;
+    alerts.push({ variant: "success", message: `${field.label} updated` });
   }
 
   // The source view's retained-but-unsent composer drafts ("scratches"), mirrored
@@ -503,6 +528,7 @@
       onExposeReveal={(r) => (revealLine = r)}
       {onCopyCwd}
       {showShortcutHints}
+      {settingsRev}
     />
   {:else}
     <EmptyState connected={selection.connected} />
@@ -613,10 +639,8 @@
      review is active — so it renders at the top level, ungated on `active`. -->
 {#if showSettings}
   <SettingsDialog
-    current={themeId}
-    onSelect={selectTheme}
-    {showShortcutHints}
-    onToggleShortcutHints={setShortcutHints}
+    entries={SETTINGS_REGISTRY}
+    onChange={applySetting}
     onClose={() => (showSettings = false)}
   />
 {/if}

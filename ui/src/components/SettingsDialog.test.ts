@@ -1,31 +1,37 @@
 import "../../test-mount.ts";
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 
 import SettingsDialog from "@/components/SettingsDialog.svelte";
-import { THEMES } from "$lib/theme.ts";
+import { writeDiffStyle } from "$lib/diffStylePref.ts";
+import { SETTINGS_REGISTRY, type StagedField } from "$lib/settingsRegistry.ts";
 
-import { capture, flushUntil, render } from "../../test-mount.ts";
+import { flushUntil, render } from "../../test-mount.ts";
 
-const baseProps = {
-  current: "caret-dark" as const,
-  onSelect: () => {},
-  onClose: () => {},
-  showShortcutHints: true,
-  onToggleShortcutHints: () => {},
-};
+afterEach(() => localStorage.clear());
+
+function props(over: Record<string, unknown> = {}) {
+  return {
+    entries: SETTINGS_REGISTRY,
+    onChange: () => {},
+    onClose: () => {},
+    ...over,
+  };
+}
 
 // bits-ui Dialog portals its content to document.body on a deferred tick, so
 // structure/ARIA is asserted against the body after an effect+timer flush (the
-// shadcn-foundation verdict). The ThemePicker's dropdown — opening it, the option
-// list, live-preview navigation — is real-browser interaction, covered by
-// test/e2e/theme.e2e.ts, not here.
+// shadcn-foundation verdict). Real interaction — Esc dismiss, focus, the theme
+// dropdown's open/nav/pick, live apply — is real-browser behavior, covered by
+// test/e2e/settings.e2e.ts. DOM-node presence is asserted as a boolean (a failing
+// `.toBeNull()` on a live happy-dom node hangs bun serializing the circular node).
 const content = () => document.body.querySelector("[data-slot='dialog-content']");
 const mounted = () => content() !== null;
+const has = (sel: string) => document.body.querySelector(sel) !== null;
 
-describe("SettingsDialog render", () => {
-  test("mounts a dialog titled Settings", async () => {
-    const { flush } = render(SettingsDialog, baseProps);
+describe("SettingsDialog shell", () => {
+  test("mounts a dialog whose accessible name is Settings", async () => {
+    const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);
     expect(content()?.getAttribute("role")).toBe("dialog");
     expect(document.body.querySelector("[data-slot='dialog-title']")?.textContent).toContain(
@@ -33,59 +39,61 @@ describe("SettingsDialog render", () => {
     );
   });
 
-  test("the theme trigger shows the applied theme's label", async () => {
-    const { flush } = render(SettingsDialog, { ...baseProps, current: "caret-light" });
+  test("renders a nav row for the populated Appearance category only", async () => {
+    const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);
-    // The ThemePicker's closed trigger is a labelled button carrying the applied
-    // theme's label (the open menu + options are portalled interaction, e2e-only).
-    const trigger = document.body.querySelector("button[aria-label='Theme']");
-    expect(trigger?.textContent).toContain(THEMES["caret-light"].label);
-  });
-});
-
-describe("SettingsDialog shortcut hints", () => {
-  const switchEl = () => document.body.querySelector("[data-slot='switch']");
-
-  test("renders a switch reflecting showShortcutHints (on)", async () => {
-    const { flush } = render(SettingsDialog, { ...baseProps, showShortcutHints: true });
-    await flushUntil(flush, mounted);
-    expect(switchEl()?.getAttribute("data-state")).toBe("checked");
+    expect(has("[data-category='Appearance']")).toBe(true);
+    // Diff view folded into Appearance as a section, so it is no longer its own
+    // nav row; General has no entries either.
+    expect(has("[data-category='Diff view']")).toBe(false);
+    expect(has("[data-category='General']")).toBe(false);
   });
 
-  test("renders the switch off when showShortcutHints is false", async () => {
-    const { flush } = render(SettingsDialog, { ...baseProps, showShortcutHints: false });
+  test("the Appearance pane renders theme, shortcut hints, and the Diff view fields", async () => {
+    const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);
-    expect(switchEl()?.getAttribute("data-state")).toBe("unchecked");
+    expect(has("button[aria-label='Theme']")).toBe(true);
+    expect(has("[data-slot='switch']")).toBe(true);
+    // The Diff view section's fields now live in the same (Appearance) pane.
+    expect(has("button[aria-label='Layout']")).toBe(true);
+    expect(has("button[aria-label='Change markers']")).toBe(true);
   });
 
-  test("toggling the switch fires onToggleShortcutHints with the new value", async () => {
-    const changed = capture<boolean>();
-    const { flush } = render(SettingsDialog, {
-      ...baseProps,
-      showShortcutHints: true,
-      onToggleShortcutHints: changed.cb,
-    });
+  test("groups the diff prefs under a 'Diff view' section header", async () => {
+    const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);
-    (switchEl() as HTMLButtonElement).click();
-    flush();
-    expect(changed.last()).toBe(false);
-  });
-});
-
-describe("SettingsDialog wiring", () => {
-  test("clicking Done fires onClose", async () => {
-    let closed = false;
-    const { flush } = render(SettingsDialog, {
-      ...baseProps,
-      onClose: () => {
-        closed = true;
-      },
-    });
-    await flushUntil(flush, mounted);
-    const done = [...document.body.querySelectorAll("button")].find(
-      (b) => b.textContent?.trim() === "Done",
+    const heads = [...document.body.querySelectorAll(".section-head")].map((h) =>
+      h.textContent?.trim(),
     );
-    done?.click();
-    expect(closed).toBe(true);
+    expect(heads).toContain("Diff view");
+  });
+
+  test("no save chip — edits apply immediately", async () => {
+    const { flush } = render(SettingsDialog, props());
+    await flushUntil(flush, mounted);
+    expect(has(".save-chip")).toBe(false);
+  });
+});
+
+describe("SettingsDialog immediate apply", () => {
+  test("toggling the shortcut-hints switch calls onChange with the field and its new value", async () => {
+    const calls: Array<{ key: string; value: unknown }> = [];
+    const { flush } = render(
+      SettingsDialog,
+      props({ onChange: (f: StagedField, v: unknown) => calls.push({ key: f.key, value: v }) }),
+    );
+    await flushUntil(flush, mounted);
+    // Default (fresh) is on, so the first click turns it off.
+    (document.body.querySelector("[data-slot='switch']") as HTMLButtonElement).click();
+    flush();
+    expect(calls).toEqual([{ key: "shortcutHints", value: false }]);
+  });
+
+  test("a select control shows the current persisted value's label", async () => {
+    writeDiffStyle("unified");
+    const { flush } = render(SettingsDialog, props());
+    await flushUntil(flush, mounted);
+    const label = document.body.querySelector("button[aria-label='Layout'] .trigger-label");
+    expect(label?.textContent?.trim()).toBe("Unified");
   });
 });

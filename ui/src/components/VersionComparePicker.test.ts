@@ -146,7 +146,7 @@ describe("VersionComparePicker compare icon", () => {
 });
 
 describe("VersionComparePicker pair selection", () => {
-  // The base/target pickers reuse the ThemePicker's DropdownMenu; the trigger
+  // The base/target pickers reuse the SettingSelect's DropdownMenu; the trigger
   // (.vpick) shows the current version and carries an accessible label. The
   // portalled radio menu is a bits-ui overlay, so choosing a version is covered
   // in the e2e spec.

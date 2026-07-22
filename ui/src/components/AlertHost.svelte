@@ -27,14 +27,15 @@
   <div class="alert-host">
     {#each alerts as a (a.id)}
       {@const icon = ICONS[a.variant]}
-      <!-- role="status" (polite) overrides Alert.Root's default role="alert"
-           (assertive): a copy/save confirmation shouldn't interrupt a screen
-           reader, and it avoids nesting an assertive region — matching the
-           safe-mode toast. The urgent daemon banner keeps the assertive default. -->
+      <!-- A destructive alert (a failure the user must act on, often persistent)
+           stays assertive — role="alert" interrupts the screen reader so it isn't
+           missed. Success/default confirmations are polite (role="status"): they
+           shouldn't interrupt, and it avoids nesting an assertive region, matching
+           the safe-mode toast. The urgent daemon banner keeps the assertive default. -->
       <Alert.Root
         variant={a.variant}
         data-variant={a.variant}
-        role="status"
+        role={a.variant === "destructive" ? "alert" : "status"}
         class={a.leaving ? "alert-item leaving" : "alert-item"}
       >
         {#if icon}<Icon name={icon} size={16} />{/if}
