@@ -163,7 +163,7 @@
         <!-- Search atop the rail (EXC-845): filters the nav + fields across categories.
              The trailing `/` Kbd cap advertises the focus shortcut, mirroring
              ShortcutsHelp's search field; `/` focuses it from anywhere in the modal. -->
-        <Sidebar.Header class="settings-search">
+        <Sidebar.Header>
           <div class="search-field">
             <Input
               type="text"
