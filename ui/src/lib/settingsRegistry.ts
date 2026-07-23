@@ -81,6 +81,25 @@ export function stagedField<V>(def: Omit<StagedField<V>, "kind">): StagedField {
   return { kind: "staged", ...def } as StagedField;
 }
 
+/** An entry's searchable text: its label plus its description, lowercased. */
+function searchText(entry: SettingEntry): string {
+  return `${entry.label} ${entry.description}`.toLowerCase();
+}
+
+/** Filter registry entries by a case-insensitive substring over label +
+ * description (EXC-845 settings search) — the same filter-then-group shape as the
+ * shortcuts help (`filterShortcuts` in $lib/shortcuts/help.ts). An empty or
+ * whitespace-only query returns every entry; search-only entries (live panes)
+ * match the same as staged fields. */
+export function filterSettings(
+  entries: readonly SettingEntry[],
+  query: string,
+): readonly SettingEntry[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return entries;
+  return entries.filter((entry) => searchText(entry).includes(q));
+}
+
 // The five tokens every palette supplies (ColorToken makes them mandatory), previewed
 // as dots beside each theme option so a future theme renders its swatch with no extra
 // wiring — background, the raised surface, ink, the accent, and the positive hue. The
