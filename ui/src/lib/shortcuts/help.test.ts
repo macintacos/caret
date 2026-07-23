@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { filterShortcuts, groupShortcuts } from "$lib/shortcuts/help.ts";
+import { filterShortcuts, fitsSingleColumn, groupShortcuts } from "$lib/shortcuts/help.ts";
 import type { ShortcutEntry } from "$lib/shortcuts/registry.ts";
 
 // A small out-of-order fixture spanning three of the five groups (commenting and
@@ -71,5 +71,26 @@ describe("filterShortcuts", () => {
 
   test("returns nothing when neither label nor caps match", () => {
     expect(filterShortcuts(entries, "zzzz")).toEqual([]);
+  });
+});
+
+describe("fitsSingleColumn", () => {
+  test("true for a small scoped keymap of a section or two (the settings-view help)", () => {
+    const settingsHelp: ShortcutEntry[] = [
+      { id: "settings.search", keys: [{ key: "/" }], group: "settings", label: "Search settings" },
+      {
+        id: "settings.close",
+        keys: [{ key: "Escape" }],
+        group: "settings",
+        label: "Close settings",
+      },
+      { id: "help.show", keys: [{ key: "?" }], group: "help", label: "Show shortcuts" },
+    ];
+    expect(fitsSingleColumn(settingsHelp)).toBe(true);
+  });
+
+  test("false for the full multi-section review keymap", () => {
+    // The fixture spans help / editor / motion — three sections, past the one-column cap.
+    expect(fitsSingleColumn(entries)).toBe(false);
   });
 });

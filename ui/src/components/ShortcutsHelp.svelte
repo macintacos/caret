@@ -7,7 +7,7 @@
   import { Input } from "$lib/components/ui/input/index.js";
   import { Kbd, KbdGroup } from "$lib/components/ui/kbd/index.js";
   import { isTopmostDialog, topmostDialogContent } from "$lib/modalStack.ts";
-  import { filterShortcuts, groupShortcuts } from "$lib/shortcuts/help.ts";
+  import { filterShortcuts, fitsSingleColumn, groupShortcuts } from "$lib/shortcuts/help.ts";
   import { isKbdKey, keyCaps, type ShortcutEntry } from "$lib/shortcuts/index.ts";
   import KbdCap from "@/components/KbdCap.svelte";
   import Modal from "@/components/Modal.svelte";
@@ -27,6 +27,10 @@
   // Filter first, then group: an empty group (all its rows filtered out) drops
   // away, so a search collapses to only the sections that still match.
   const groups = $derived(groupShortcuts(filterShortcuts(entries, query)));
+  // A small scoped keymap (the settings-view help, EXC-849) reads better as one narrow
+  // column than the wide multi-column layout. Derived from the unfiltered entries, so
+  // the modal keeps a stable width for a given open — a search narrows rows, not the frame.
+  const compact = $derived(fitsSingleColumn(entries));
 
   // A row is activatable only when its entry carries a live run() and isn't
   // disabled; display-only entries (the editor chords) list but don't dispatch.
@@ -82,7 +86,7 @@
   title="Shortcuts"
   onDismiss={onClose}
   onOpenAutoFocus={focusDialog}
-  contentClass="shortcuts-content"
+  contentClass={compact ? "shortcuts-content shortcuts-compact" : "shortcuts-content"}
 >
   {#snippet description()}
     Search by action or keys; click a row to run it.
@@ -109,7 +113,7 @@
     {#if groups.length === 0}
       <p class="help-empty">No shortcuts match your search.</p>
     {:else}
-      <div class="help-groups">
+      <div class="help-groups" class:is-compact={compact}>
         {#each groups as group (group.group)}
           <section class="help-group">
             <h3 class="help-group-title eyebrow">{group.label}</h3>
@@ -168,6 +172,14 @@
   :global(.shortcuts-content) {
     max-width: min(56rem, calc(100vw - 2rem));
   }
+  /* A scoped help of a section or two (over Settings, EXC-849) drops to one column
+     below, so it wants a narrower measure than the multi-column keymap — the wide cap
+     would strand the lone column in empty space. Later, equally-specific single :global
+     class, so source order lets it win over .shortcuts-content (both unlayered caret CSS
+     beating shadcn's layered utility). */
+  :global(.shortcuts-compact) {
+    max-width: min(28rem, calc(100vw - 2rem));
+  }
   .help {
     display: flex;
     flex-direction: column;
@@ -197,6 +209,12 @@
   .help-groups {
     columns: 16rem 3;
     column-gap: 1.5rem;
+  }
+  /* Compact keymaps (fitsSingleColumn) collapse to one column — the newspaper layout
+     would leave a lone section stranded beside empty columns. Two-class selector, so it
+     wins over .help-groups regardless of order. */
+  .help-groups.is-compact {
+    column-count: 1;
   }
   .help-group {
     /* Keep each group whole — never split its rows across a column boundary. */

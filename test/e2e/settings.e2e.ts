@@ -496,6 +496,10 @@ test("? over Settings lists only the settings-view shortcuts, not the review key
   const help = page.locator("[data-slot='dialog-content']").last();
   await expect(help).toBeVisible();
 
+  // With only a section or two, the help drops to a single column (fitsSingleColumn),
+  // not the wide multi-column keymap.
+  await expect(help.locator(".help-groups")).toHaveCSS("column-count", "1");
+
   // The settings-scoped affordances plus the global ? — exactly what works in this view.
   await expect(help.getByText("Search settings")).toBeVisible();
   await expect(help.getByText("Close settings")).toBeVisible();
