@@ -7,6 +7,28 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-07-23 - The Settings Release
+
+### Added
+
+- **A dedicated settings surface.** Settings became a two-pane shell — a navigation rail
+  beside a content pane — with every setting backed by a shared registry (#284, #286).
+- **Notifications settings pane.** Notification preferences moved into their own pane in
+  the new settings surface (#287).
+- **Advanced pane with read-only diagnostics.** An Advanced pane surfaces daemon and
+  install diagnostics for troubleshooting, without exposing anything editable (#285,
+  #288).
+- **Live theme preview.** Themes now preview on an abstract interface skeleton, so you can
+  see a theme before committing to it (#289).
+- **Search your settings.** A settings search field with `/`-to-focus jumps straight to a
+  setting by name (#290).
+
+### Changed
+
+- **Shortcuts scope to the active view.** Keyboard shortcuts now bind to whichever view is
+  focused, and the shortcuts help collapsed to a single column; a cohesion and
+  keyboard-flow pass tightened the settings surface throughout (#291, #292).
+
 ## [0.7.1] - 2026-07-21 - The Affordances Release
 
 ### Added
@@ -492,7 +514,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Review decisions are delivered via a bounded poll, fixing missed or delayed decision
   delivery.
 
-[Unreleased]: https://github.com/macintacos/caret/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/macintacos/caret/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/macintacos/caret/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/macintacos/caret/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/macintacos/caret/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/macintacos/caret/compare/v0.5.0...v0.6.0
