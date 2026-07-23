@@ -2,7 +2,7 @@
 // plus the field/control shapes the two-pane shell (EXC-843) renders. Each field
 // wraps an existing browser-preference module, so its read/write hit the SAME
 // localStorage key the pref already owns (theme, shortcut hints, diff
-// style/indicators) — no new keys enter KNOWN_PREF_KEYS and existing users'
+// style/indicators) — no new keys are registered and existing users'
 // stored values survive. Editing a setting applies it immediately: the shell
 // calls write() the moment a control changes (App confirms with a toast); there
 // is no staged draft.

@@ -6,17 +6,18 @@
 // 0600 store beside plan bodies for the opaque approve-variant token, written
 // only on the decision path, and a layout toggle belongs nowhere near it.
 //
-// The read/write pair is built from the shared enumLocalStoragePref helper, which
-// owns the never-throw fail-safe: a blocked or unavailable localStorage degrades
-// to the default rather than breaking the view.
+// The read/write pair is built from the shared definePref helper, which registers
+// the key for the `--fresh` reset (prefs.ts) and composes enumLocalStoragePref's
+// never-throw fail-safe: a blocked or unavailable localStorage degrades to the
+// default rather than breaking the view.
 
+import { definePref } from "$lib/definePref.ts";
 import type { DiffStyle } from "$lib/diffview/types.ts";
-import { enumLocalStoragePref } from "$lib/enumLocalStoragePref.ts";
 
 /** localStorage key holding the remembered diff layout. */
 export const DIFF_STYLE_KEY = "caret.diffStyle";
 
-const pref = enumLocalStoragePref<DiffStyle>(DIFF_STYLE_KEY, ["split", "unified"], "split");
+const pref = definePref<DiffStyle>(DIFF_STYLE_KEY, ["split", "unified"], "split");
 
 /** Read the remembered layout, defaulting to "split" on a missing, unrecognized,
  * or unreadable value. */

@@ -8,11 +8,16 @@
 //
 // Read and write both fail safe and never throw: a blocked or unavailable
 // localStorage (private mode, disabled storage) degrades to `null` / a dropped
-// write rather than breaking the view. The stored key is registered in
-// KNOWN_PREF_KEYS (prefs.ts) so `mise run dev --fresh` resets it.
+// write rather than breaking the view. registerPrefKey (definePref.ts) adds the key
+// to the `--fresh` reset set; the tri-state read/write stay bespoke here because the
+// null-vs-unreadable semantics don't fit definePref's flag or enum shapes.
+
+import { registerPrefKey } from "$lib/definePref.ts";
 
 /** localStorage key holding the remembered ToC open/collapsed state. */
 export const TOC_OPEN_KEY = "caret.tocOpen";
+
+registerPrefKey(TOC_OPEN_KEY);
 
 /** Read the remembered ToC state: `true` (open) / `false` (collapsed), or `null`
  * on a missing, unrecognized, or unreadable value so the caller applies its own

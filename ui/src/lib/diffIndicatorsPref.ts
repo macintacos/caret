@@ -5,21 +5,18 @@
 // cross-process consumer, so it lives in localStorage rather than the daemon's
 // machine-global prefs.
 //
-// The read/write pair is built from the shared enumLocalStoragePref helper, which
-// owns the never-throw fail-safe: a blocked or unavailable localStorage degrades
-// to the default rather than breaking the view.
+// The read/write pair is built from the shared definePref helper, which registers
+// the key for the `--fresh` reset (prefs.ts) and composes enumLocalStoragePref's
+// never-throw fail-safe: a blocked or unavailable localStorage degrades to the
+// default rather than breaking the view.
 
+import { definePref } from "$lib/definePref.ts";
 import type { DiffIndicators } from "$lib/diffview/types.ts";
-import { enumLocalStoragePref } from "$lib/enumLocalStoragePref.ts";
 
 /** localStorage key holding the remembered gutter indicators. */
 export const DIFF_INDICATORS_KEY = "caret.diffIndicators";
 
-const pref = enumLocalStoragePref<DiffIndicators>(
-  DIFF_INDICATORS_KEY,
-  ["bars", "classic", "both"],
-  "bars",
-);
+const pref = definePref<DiffIndicators>(DIFF_INDICATORS_KEY, ["bars", "classic", "both"], "bars");
 
 /** Read the remembered indicators, defaulting to "bars" on a missing, unrecognized,
  * or unreadable value. */

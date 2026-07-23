@@ -1,7 +1,7 @@
 import "../../test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { KNOWN_PREF_KEYS } from "$lib/prefs.ts";
+import { knownPrefKeys } from "$lib/definePref.ts";
 import {
   filterSettings,
   isStagedField,
@@ -139,12 +139,12 @@ describe("staged fields wrap existing pref modules", () => {
     }
   });
 
-  test("write only ever touches a key already in KNOWN_PREF_KEYS — no new keys", () => {
+  test("write only ever touches a key already registered in knownPrefKeys() — no new keys", () => {
     for (const field of staged) {
       localStorage.clear();
       field.write(sampleValue(field));
       for (const key of storedKeys()) {
-        expect(KNOWN_PREF_KEYS).toContain(key);
+        expect(knownPrefKeys()).toContain(key);
       }
     }
   });
