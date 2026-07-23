@@ -395,3 +395,60 @@ test("? stacks the shortcuts help over Settings; / routes to the topmost modal's
   await page.keyboard.press("/");
   await expect(settingsSearch).toBeFocused();
 });
+
+// The whole-journey cohesion pass (EXC-849): one flow that opens Settings, edits two
+// Appearance settings live (each confirming with a toast), searches across categories, and
+// crosses into a second category's live pane — the end-to-end path the redesign shipped,
+// exercised as one continuous session rather than a per-feature slice.
+test("drives the full journey: edit Appearance live, search across categories, open the Notifications pane", async ({
+  daemon,
+  page,
+}) => {
+  await page.addInitScript(initGrantedNotification);
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  // Fresh origin: caret dark, with the shortcut-hint chrome showing.
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(page.locator(topbarHints).first()).toBeVisible();
+
+  await openSettings(page);
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+
+  // Edit #1 (Appearance): shortcut hints off — the topbar chrome disappears live and a
+  // toast confirms it, no Save step.
+  await dialog.getByRole("switch", { name: "Shortcut hints" }).click();
+  await expect(page.locator(topbarHints)).toHaveCount(0);
+  await expect(page.getByText("Shortcut hints updated")).toBeVisible();
+
+  // Edit #2 (Appearance): theme to caret light — the whole UI retints at once, with its
+  // own toast.
+  await dialog.getByRole("button", { name: "Theme" }).click();
+  await page.getByRole("menuitemradio", { name: "caret light" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(page.getByText("Theme updated")).toBeVisible();
+
+  // Search across categories: "daemon" matches only the Advanced pane's entry, so the
+  // Appearance fields filter away and the Advanced nav row surfaces.
+  const search = dialog.getByRole("textbox", { name: "Search settings" });
+  await search.fill("daemon");
+  await expect(dialog.locator("[data-category='Advanced']")).toBeVisible();
+  await expect(dialog.locator("[data-field='theme']")).toHaveCount(0);
+
+  // Clearing the query restores the full nav. Emptying the field fires a bubbling input
+  // event (Playwright's fill("") doesn't drive Svelte 5's bind:value empty in this build).
+  await search.evaluate((el) => {
+    (el as HTMLInputElement).value = "";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(dialog.locator("[data-field='theme']")).toBeVisible();
+
+  // Cross into a second category: the Notifications nav row swaps the field pane for the
+  // live pane, which reflects the injected grant.
+  await dialog.locator("[data-category='Notifications']").click();
+  await expect(dialog.getByRole("heading", { name: "Notifications" })).toBeVisible();
+  await expect(page.locator("[data-notifications-pane]")).toHaveAttribute(
+    "data-permission",
+    "granted",
+  );
+});
