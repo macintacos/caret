@@ -17,6 +17,7 @@
   // eyebrow/title/footer identity doesn't fit the two-pane layout — keeping a
   // visually-hidden Dialog.Title so the dialog's accessible name is "Settings".
   import * as Dialog from "$lib/components/ui/dialog/index.js";
+  import { Input } from "$lib/components/ui/input/index.js";
   import {
     Item,
     ItemActions,
@@ -30,6 +31,7 @@
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
   import { Switch } from "$lib/components/ui/switch/index.js";
   import {
+    filterSettings,
     isStagedField,
     SETTINGS_CATEGORIES,
     type SettingEntry,
@@ -53,13 +55,21 @@
   }
   let { entries, onChange, onClose, onCopyDiagnostic = () => {} }: Props = $props();
 
-  // Staged fields carry controls; a live pane (Notifications, EXC-847) contributes
-  // search-only entries and renders a custom pane instead. A category earns a nav row
-  // when it has ANY registry entry — staged or search-only — in SETTINGS_CATEGORIES
-  // order, dropping an empty category so it never renders an empty nav row.
-  const staged = $derived(entries.filter(isStagedField));
+  // The search query (EXC-845): filters the registry across categories, mirroring
+  // ShortcutsHelp's filter-then-group. The search input, bound so the `/`-to-focus
+  // handler can move focus into it (added below).
+  let query = $state("");
+  let searchInput = $state<HTMLInputElement | null>(null);
+
+  // Filter first, then derive: staged fields carry controls; a live pane
+  // (Notifications, EXC-847) contributes search-only entries and renders a custom pane
+  // instead. A category earns a nav row when it has ANY matching registry entry — staged
+  // or search-only — in SETTINGS_CATEGORIES order, so filtering drops emptied categories
+  // and, at rest (empty query), the full nav is restored.
+  const filtered = $derived(filterSettings(entries, query));
+  const staged = $derived(filtered.filter(isStagedField));
   const categories = $derived(
-    SETTINGS_CATEGORIES.filter((c) => entries.some((e) => e.category === c.id)),
+    SETTINGS_CATEGORIES.filter((c) => filtered.some((e) => e.category === c.id)),
   );
 
   let selectedId = $state(SETTINGS_CATEGORIES[0]?.id ?? "");
@@ -93,25 +103,79 @@
     values = { ...values, [field.key]: field.read() };
   }
 
+  function focusContent(): void {
+    document.querySelector<HTMLElement>(".settings-content")?.focus();
+  }
+
   // Land focus on the dialog content (not the first control), matching ShortcutsHelp:
   // Esc dismisses "with nothing focused", and EXC-845's `/` search relies on focus
   // resting on the content.
   function focusDialog(e: Event): void {
     e.preventDefault();
-    document.querySelector<HTMLElement>(".settings-content")?.focus();
+    focusContent();
+  }
+
+  // EXC-845 (the EXC-835 capture-phase pattern): while the modal is open, `/` focuses the
+  // search input instead of falling through to the global plan-search binding
+  // (actions.search). Capture phase so the preventDefault lands before the bubble-phase
+  // global dispatcher (dispatcher.ts), which yields on defaultPrevented — the modal traps
+  // focus on the dialog content (not an input), so isEditingContext() wouldn't otherwise
+  // suppress the global `/`. Once the input owns focus, `/` types normally.
+  $effect(() => {
+    function onKeydown(e: KeyboardEvent): void {
+      if (e.key !== "/" || e.defaultPrevented) return;
+      if (document.activeElement === searchInput) return;
+      e.preventDefault();
+      searchInput?.focus();
+    }
+    window.addEventListener("keydown", onKeydown, { capture: true });
+    return () => window.removeEventListener("keydown", onKeydown, { capture: true });
+  });
+
+  // EXC-845: Esc is two-stage. When the search input owns focus, Esc clears the query and
+  // returns focus to the dialog content — preventDefault cancels bits-ui's close (its
+  // Dialog.Content runs onEscapeKeydown, then closes only if the event wasn't
+  // defaultPrevented). A second Esc, now with focus on the content rather than the input,
+  // falls through and dismisses — matching ShortcutsHelp's "Esc with nothing focused".
+  function onEscapeKeydown(e: KeyboardEvent): void {
+    if (document.activeElement !== searchInput) return;
+    e.preventDefault();
+    query = "";
+    focusContent();
   }
 </script>
 
 <!-- App gates this with {#if showSettings}, so it mounts open; bits-ui's close
      intents (Escape, backdrop) route through onOpenChange to onClose. -->
 <Dialog.Root open onOpenChange={(o) => { if (!o) onClose(); }}>
-  <Dialog.Content showCloseButton={false} onOpenAutoFocus={focusDialog} class="settings-content">
+  <Dialog.Content
+    showCloseButton={false}
+    onOpenAutoFocus={focusDialog}
+    {onEscapeKeydown}
+    class="settings-content"
+  >
     <!-- Visually hidden: keeps the dialog's accessible name "Settings" without a
          header band. The visible title is the per-category pane header. -->
     <Dialog.Title class="sr-only">Settings</Dialog.Title>
 
     <div class="settings">
       <Sidebar.Root collapsible="none" class="settings-rail">
+        <!-- Search atop the rail (EXC-845): filters the nav + fields across categories.
+             The trailing `/` Kbd cap advertises the focus shortcut, mirroring
+             ShortcutsHelp's search field; `/` focuses it from anywhere in the modal. -->
+        <Sidebar.Header>
+          <div class="search-field">
+            <Input
+              type="text"
+              class="search-input"
+              placeholder="Search settings…"
+              aria-label="Search settings"
+              bind:value={query}
+              bind:ref={searchInput}
+            />
+            <Kbd class="search-hint" aria-hidden="true">/</Kbd>
+          </div>
+        </Sidebar.Header>
         <Sidebar.Content>
           <Sidebar.Group>
             <Sidebar.Menu>
@@ -137,38 +201,44 @@
       </Sidebar.Root>
 
       <section class="settings-pane">
-        <header class="pane-head">
-          <h2 class="pane-title">{selected?.id}</h2>
-          <p class="pane-blurb">{selected?.blurb}</p>
-        </header>
-
-        {#if selected?.id === "Notifications"}
-          <!-- The live, read-only panes render their own surface instead of staged
-               fields: Notifications (EXC-847) reflects browser notification state,
-               Advanced (EXC-848) the read-only install diagnostics. Two id branches
-               beat a category→component map here — the panes take different props
-               (Advanced needs the copy callback), which a map can't thread. -->
-          <NotificationsPane />
-        {:else if selected?.id === "Advanced"}
-          <AdvancedPane {onCopyDiagnostic} />
+        {#if !selected}
+          <!-- Empty state (EXC-845): a search that matches nothing lands here instead of
+               a blank pane, so the dialog never reads as a broken dead-end. -->
+          <p class="pane-empty">No settings match your search.</p>
         {:else}
-          {#each paneSections as section, si (si)}
-            <div class="section">
-              {#if section.label}<h3 class="section-head">{section.label}</h3>{/if}
-              <ItemGroup class="fields">
-                {#each section.fields as field, i (field.key)}
-                  {#if i > 0}<ItemSeparator />{/if}
-                  <Item data-field={field.key} class="setting-item">
-                    <ItemContent>
-                      <ItemTitle class="field-label">{field.label}</ItemTitle>
-                      <ItemDescription>{field.description}</ItemDescription>
-                    </ItemContent>
-                    <ItemActions>{@render control(field)}</ItemActions>
-                  </Item>
-                {/each}
-              </ItemGroup>
-            </div>
-          {/each}
+          <header class="pane-head">
+            <h2 class="pane-title">{selected.id}</h2>
+            <p class="pane-blurb">{selected.blurb}</p>
+          </header>
+
+          {#if selected.id === "Notifications"}
+            <!-- The live, read-only panes render their own surface instead of staged
+                 fields: Notifications (EXC-847) reflects browser notification state,
+                 Advanced (EXC-848) the read-only install diagnostics. Two id branches
+                 beat a category→component map here — the panes take different props
+                 (Advanced needs the copy callback), which a map can't thread. -->
+            <NotificationsPane />
+          {:else if selected.id === "Advanced"}
+            <AdvancedPane {onCopyDiagnostic} />
+          {:else}
+            {#each paneSections as section, si (si)}
+              <div class="section">
+                {#if section.label}<h3 class="section-head">{section.label}</h3>{/if}
+                <ItemGroup class="fields">
+                  {#each section.fields as field, i (field.key)}
+                    {#if i > 0}<ItemSeparator />{/if}
+                    <Item data-field={field.key} class="setting-item">
+                      <ItemContent>
+                        <ItemTitle class="field-label">{field.label}</ItemTitle>
+                        <ItemDescription>{field.description}</ItemDescription>
+                      </ItemContent>
+                      <ItemActions>{@render control(field)}</ItemActions>
+                    </Item>
+                  {/each}
+                </ItemGroup>
+              </div>
+            {/each}
+          {/if}
         {/if}
       </section>
     </div>
@@ -227,6 +297,24 @@
      shade under the raised pane, reading as recessed. */
   .settings :global(.settings-rail) {
     border-right: 1px solid var(--rule);
+  }
+  /* Search field in the rail header (EXC-845): a relative wrapper that pins the trailing
+     `/` hint cap to the input's right edge, mirroring ShortcutsHelp's search field. */
+  .search-field {
+    position: relative;
+  }
+  /* Pad the input so typed text never slides under the pinned cap. */
+  .search-field :global(.search-input) {
+    padding-right: 2.5rem;
+  }
+  /* Pin the `/` cap to the input's right edge. The shadcn Kbd sets pointer-events:none,
+     so clicks fall through to the input. The class rides the Kbd root (no scope hash →
+     :global), bounded under the scoped field. */
+  .search-field :global(.search-hint) {
+    position: absolute;
+    top: 50%;
+    right: 0.5rem;
+    transform: translateY(-50%);
   }
   /* Nav rows sit a little apart (the shadcn menu ships gap-0) so a hover tint on
      one doesn't crowd its neighbor. */
@@ -315,6 +403,13 @@
     margin: 0;
     font-size: var(--text-sm);
     color: var(--ink-soft);
+  }
+  /* The no-match empty state (EXC-845): quiet, left-aligned with the pane's content. */
+  .pane-empty {
+    margin: 0;
+    padding: 1.5rem 0;
+    font-size: var(--text-sm);
+    color: var(--ink-faint);
   }
 
   /* A labelled sub-group of settings within the pane (e.g. "Diff view"). The header

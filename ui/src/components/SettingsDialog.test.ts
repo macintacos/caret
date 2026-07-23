@@ -133,3 +133,61 @@ describe("SettingsDialog immediate apply", () => {
     expect(label?.textContent?.trim()).toBe("Unified");
   });
 });
+
+describe("SettingsDialog search (EXC-845)", () => {
+  // Drive the search field by setting its value + firing an input event (the
+  // bind:value path) — DOM reactivity, not the real `/` focus / Esc keyboard, which
+  // stays in test/e2e/settings.e2e.ts.
+  function typeQuery(flush: () => void, q: string): void {
+    const input = document.body.querySelector<HTMLInputElement>(
+      "input[aria-label='Search settings']",
+    );
+    if (!input) throw new Error("settings search input not found");
+    input.value = q;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    flush();
+  }
+
+  test("filters nav rows and fields to the matches only", async () => {
+    const { flush } = render(SettingsDialog, props());
+    await flushUntil(flush, mounted);
+    typeQuery(flush, "theme");
+    // Only the theme field remains; the other Appearance fields drop.
+    expect(has("[data-field='theme']")).toBe(true);
+    expect(has("[data-field='shortcutHints']")).toBe(false);
+    expect(has("[data-field='diffStyle']")).toBe(false);
+    // Appearance is the only category with a match; the search-only categories drop.
+    expect(has("[data-category='Appearance']")).toBe(true);
+    expect(has("[data-category='Notifications']")).toBe(false);
+    expect(has("[data-category='Advanced']")).toBe(false);
+  });
+
+  test("clearing the query restores the full nav and fields", async () => {
+    const { flush } = render(SettingsDialog, props());
+    await flushUntil(flush, mounted);
+    typeQuery(flush, "theme");
+    expect(has("[data-category='Advanced']")).toBe(false);
+    typeQuery(flush, "");
+    expect(has("[data-field='shortcutHints']")).toBe(true);
+    expect(has("[data-category='Notifications']")).toBe(true);
+    expect(has("[data-category='Advanced']")).toBe(true);
+  });
+
+  test("a description-only match keeps a search-only category's nav row", async () => {
+    const { flush } = render(SettingsDialog, props());
+    await flushUntil(flush, mounted);
+    // "daemon" matches only the Advanced 'Daemon status' search-only entry.
+    typeQuery(flush, "daemon");
+    expect(has("[data-category='Advanced']")).toBe(true);
+    expect(has("[data-category='Appearance']")).toBe(false);
+  });
+
+  test("a query that matches nothing renders the empty state", async () => {
+    const { flush } = render(SettingsDialog, props());
+    await flushUntil(flush, mounted);
+    typeQuery(flush, "zzz-no-such-setting");
+    expect(has(".pane-empty")).toBe(true);
+    expect(has("[data-category='Appearance']")).toBe(false);
+    expect(has("[data-field='theme']")).toBe(false);
+  });
+});

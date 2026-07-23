@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import { KNOWN_PREF_KEYS } from "$lib/prefs.ts";
 import {
+  filterSettings,
   isStagedField,
   SETTINGS_CATEGORIES,
   SETTINGS_REGISTRY,
@@ -227,5 +228,42 @@ describe("stagedField", () => {
     });
     expect(field.kind).toBe("staged");
     expect(isStagedField(field)).toBe(true);
+  });
+});
+
+describe("filterSettings (EXC-845 settings search)", () => {
+  const keysOf = (entries: readonly { key: string }[]) => entries.map((e) => e.key);
+
+  test("an empty query returns every entry", () => {
+    expect(filterSettings(SETTINGS_REGISTRY, "")).toHaveLength(SETTINGS_REGISTRY.length);
+  });
+
+  test("a whitespace-only query returns every entry", () => {
+    expect(filterSettings(SETTINGS_REGISTRY, "   ")).toHaveLength(SETTINGS_REGISTRY.length);
+  });
+
+  test("matches over an entry's label", () => {
+    // "Theme" is the theme field's label; no other entry's label/description carries it.
+    expect(keysOf(filterSettings(SETTINGS_REGISTRY, "theme"))).toEqual(["theme"]);
+  });
+
+  test("matches over an entry's description", () => {
+    // "palette" appears only in the theme field's description ("Color palette …").
+    expect(keysOf(filterSettings(SETTINGS_REGISTRY, "palette"))).toEqual(["theme"]);
+  });
+
+  test("is case-insensitive", () => {
+    expect(keysOf(filterSettings(SETTINGS_REGISTRY, "THEME"))).toEqual(["theme"]);
+  });
+
+  test("includes a search-only entry (live pane) the same as a staged field", () => {
+    // "daemon" only matches the Advanced 'Daemon status' search-only entry.
+    const matched = filterSettings(SETTINGS_REGISTRY, "daemon");
+    expect(keysOf(matched)).toEqual(["advancedDaemon"]);
+    expect(matched.every((e) => !isStagedField(e))).toBe(true);
+  });
+
+  test("a query that matches nothing returns an empty list", () => {
+    expect(filterSettings(SETTINGS_REGISTRY, "zzz-no-such-setting")).toEqual([]);
   });
 });

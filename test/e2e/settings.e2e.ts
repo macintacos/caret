@@ -267,3 +267,90 @@ test("the Notifications pane reflects the permission and its test affordance fir
     { timeout: 5_000 },
   );
 });
+
+// Settings search (EXC-845): the query filters the nav + fields across categories, `/`
+// focuses the search from anywhere in the modal, and Esc is two-stage (clear + refocus
+// the dialog, then dismiss). Filtering, focus, and keyboard are all real-browser
+// behavior, so they live here rather than in the component unit.
+test("the search filters the nav and fields across categories; clearing restores them", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  await openSettings(page);
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  const search = dialog.getByRole("textbox", { name: "Search settings" });
+
+  // "theme" leaves only the Theme field; the other Appearance fields drop, and
+  // Appearance is the only category with a match — the search-only categories drop.
+  await search.fill("theme");
+  await expect(dialog.locator("[data-field='theme']")).toBeVisible();
+  await expect(dialog.locator("[data-field='shortcutHints']")).toHaveCount(0);
+  await expect(dialog.locator("[data-category='Appearance']")).toBeVisible();
+  await expect(dialog.locator("[data-category='Advanced']")).toHaveCount(0);
+
+  // Clearing the query restores the full nav and fields. Emptying the field fires a
+  // bubbling input event (what a real keystroke fires) — Playwright's fill("") /
+  // keyboard-delete don't drive Svelte 5's bind:value to empty in this build, so dispatch
+  // it explicitly. (The two-stage Esc, another clear path, is covered below.)
+  await search.evaluate((el) => {
+    (el as HTMLInputElement).value = "";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(search).toHaveValue("");
+  await expect(dialog.locator("[data-field='shortcutHints']")).toBeVisible();
+  await expect(dialog.locator("[data-category='Advanced']")).toBeVisible();
+});
+
+test("`/` focuses the search from anywhere in the modal; once focused, `/` types", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  await openSettings(page);
+  await waitPastSafeModeGrace(page);
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  const search = dialog.getByRole("textbox", { name: "Search settings" });
+
+  // Focus rests on the dialog content after open, not the input.
+  await expect(search).not.toBeFocused();
+  // `/` moves focus into the search (the EXC-835 capture-phase pattern).
+  await page.keyboard.press("/");
+  await expect(search).toBeFocused();
+  // Once it owns focus, `/` types a literal slash instead of re-focusing.
+  await page.keyboard.press("/");
+  await expect(search).toHaveValue("/");
+});
+
+test("Esc in the search clears the query and returns focus to the dialog; a second Esc dismisses", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  await openSettings(page);
+  await waitPastSafeModeGrace(page);
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  const search = dialog.getByRole("textbox", { name: "Search settings" });
+
+  // Stage one: with a query in the focused search, Esc clears it and moves focus back
+  // to the dialog — the modal stays open.
+  await search.fill("theme");
+  await expect(search).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(search).toHaveValue("");
+  await expect(search).not.toBeFocused();
+  await expect(dialog).toBeVisible();
+
+  // Stage two: a second Esc, now with focus on the dialog content, dismisses.
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+});
