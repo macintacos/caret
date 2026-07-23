@@ -28,6 +28,7 @@
     ItemTitle,
   } from "$lib/components/ui/item/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
+  import { isTopmostDialog } from "$lib/modalStack.ts";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
   import { Switch } from "$lib/components/ui/switch/index.js";
   import {
@@ -121,10 +122,17 @@
   // global dispatcher (dispatcher.ts), which yields on defaultPrevented — the modal traps
   // focus on the dialog content (not an input), so isEditingContext() wouldn't otherwise
   // suppress the global `/`. Once the input owns focus, `/` types normally.
+  //
+  // EXC-849: yield unless Settings is the topmost dialog. When ShortcutsHelp stacks above
+  // Settings (? over the settings modal), both register this capture handler; Settings'
+  // fires first (registered first), so without this guard it would steal `/` from the modal
+  // on top. isTopmostDialog gates on portal order instead of registration order, so `/`
+  // reaches whichever modal is stacked highest.
   $effect(() => {
     function onKeydown(e: KeyboardEvent): void {
       if (e.key !== "/" || e.defaultPrevented) return;
       if (document.activeElement === searchInput) return;
+      if (!isTopmostDialog(searchInput)) return;
       e.preventDefault();
       searchInput?.focus();
     }

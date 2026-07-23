@@ -354,3 +354,44 @@ test("Esc in the search clears the query and returns focus to the dialog; a seco
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
 });
+
+// Modal stacking + keyboard flow (EXC-849): `?` opens the shortcuts help ABOVE Settings,
+// and `/` routes to the topmost modal's search — not whichever modal registered its
+// capture-phase handler first (Settings always mounts first). Peeling the help off with Esc
+// hands `/` back to Settings. Portal order, focus, and Escape layering are real-browser
+// behavior, so this lives here rather than in a unit.
+test("? stacks the shortcuts help over Settings; / routes to the topmost modal's search", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  await openSettings(page);
+  await waitPastSafeModeGrace(page);
+
+  const contents = page.locator("[data-slot='dialog-content']");
+  const settingsSearch = page.locator("input[aria-label='Search settings']");
+  const helpSearch = page.locator("input[aria-label='Search shortcuts']");
+
+  // ? opens the shortcuts help stacked above the still-open Settings — two dialogs.
+  await page.keyboard.press("?");
+  await expect(contents).toHaveCount(2);
+  await expect(helpSearch).toBeVisible();
+
+  // / focuses the TOPMOST modal's search (the help), NOT the base Settings search —
+  // even though Settings' capture handler is registered first.
+  await page.keyboard.press("/");
+  await expect(helpSearch).toBeFocused();
+  await expect(settingsSearch).not.toBeFocused();
+
+  // Esc peels off just the topmost modal; Settings remains open beneath it.
+  await page.keyboard.press("Escape");
+  await expect(contents).toHaveCount(1);
+  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
+
+  // With Settings topmost again, / now claims the Settings search.
+  await page.keyboard.press("/");
+  await expect(settingsSearch).toBeFocused();
+});
