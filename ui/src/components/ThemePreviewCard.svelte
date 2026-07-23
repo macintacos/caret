@@ -50,11 +50,12 @@
       <span class="tp-title">{label}</span>
     </div>
 
-    <!-- Caret's topbar strip: a few neutral chips (redacted). -->
+    <!-- Caret's topbar strip: neutral chips + a small notification dot (--attention). -->
     <div class="tp-appbar" aria-hidden="true">
       <Skeleton class="tp-chip" />
       <Skeleton class="tp-chip tp-chip-wide" />
       <span class="tp-appbar-spacer"></span>
+      <span class="tp-notif"></span>
       <Skeleton class="tp-chip tp-chip-dot" />
     </div>
 
@@ -67,14 +68,15 @@
         <div class="tp-row"></div>
       </div>
 
-      <!-- Plan pane: redacted placeholder bars (skeleton blocks). -->
+      <!-- Plan pane as a redacted diff: prose bars plus added (--ok) and removed
+           (--danger) lines, so the mock samples more of the palette than the accent. -->
       <div class="tp-plan">
         <Skeleton class="tp-bar tp-bar-title" />
         <Skeleton class="tp-bar" />
+        <div class="tp-line tp-add" data-tp-diff="add"><Skeleton class="tp-bar tp-bar-mid" /></div>
+        <div class="tp-line tp-add" data-tp-diff="add"><Skeleton class="tp-bar" /></div>
+        <div class="tp-line tp-del" data-tp-diff="del"><Skeleton class="tp-bar tp-bar-short" /></div>
         <Skeleton class="tp-bar" />
-        <Skeleton class="tp-bar tp-bar-short" />
-        <Skeleton class="tp-bar" />
-        <Skeleton class="tp-bar tp-bar-mid" />
       </div>
     </div>
   </div>
@@ -143,6 +145,14 @@
   .tp-appbar-spacer {
     flex: 1 1 auto;
   }
+  /* A small notification indicator — the violet --attention hue. */
+  .tp-notif {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--attention);
+  }
   /* Neutral redacted chips — override the vendored Skeleton's --muted fill with an
      ink-derived tone so the placeholders read as content, not empty slots. */
   :global(.theme-preview .tp-chip) {
@@ -208,6 +218,38 @@
   }
   :global(.theme-preview .tp-bar-mid) {
     width: 70%;
+  }
+
+  /* Diff lines: an added line rides a green --ok wash + gutter, a removed line a red
+     --danger one — Caret's own +/- semantics, sampling two more palette hues. The
+     tint bleeds a touch wider than the bar via the negative margin. */
+  .tp-line {
+    position: relative;
+    padding: 1px 4px 1px 9px;
+    margin: 0 -4px;
+    border-radius: 3px;
+  }
+  .tp-line::before {
+    content: "";
+    position: absolute;
+    left: 3px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 2px;
+    height: 9px;
+    border-radius: 1px;
+  }
+  .tp-add {
+    background: color-mix(in srgb, var(--ok), transparent 85%);
+  }
+  .tp-add::before {
+    background: var(--ok);
+  }
+  .tp-del {
+    background: color-mix(in srgb, var(--danger), transparent 85%);
+  }
+  .tp-del::before {
+    background: var(--danger);
   }
 
   @keyframes tp-in {

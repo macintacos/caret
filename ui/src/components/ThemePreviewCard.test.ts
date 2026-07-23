@@ -71,3 +71,15 @@ describe("ThemePreviewCard single-primary rule", () => {
     expect(root()?.querySelectorAll("[data-tp-accent]").length).toBe(1);
   });
 });
+
+describe("ThemePreviewCard samples the palette beyond the accent", () => {
+  test("shows added and removed diff lines (pulling in --ok / --danger)", () => {
+    const { flush } = render(ThemePreviewCard, baseProps);
+    flush();
+    const el = root();
+    // Caret is a diff/plan reviewer, so the plan pane reads as a diff: some lines are
+    // additions (green --ok), one is a removal (red --danger) — more of the palette on show.
+    expect((el?.querySelectorAll("[data-tp-diff='add']").length ?? 0) >= 1).toBe(true);
+    expect((el?.querySelectorAll("[data-tp-diff='del']").length ?? 0) >= 1).toBe(true);
+  });
+});
