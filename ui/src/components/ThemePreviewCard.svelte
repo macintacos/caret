@@ -207,11 +207,12 @@
     border-radius: var(--radius);
     background: color-mix(in srgb, var(--ink), transparent 86%);
   }
-  /* A stronger, shorter first bar reads as a heading. */
+  /* The heading bar is solid --ink — the boldest line, and the one element that shows
+     the ink swatch color at full strength (so the preview matches the dropdown dots). */
   :global(.theme-preview .tp-bar-title) {
     height: 9px;
     width: 55%;
-    background: color-mix(in srgb, var(--ink), transparent 74%);
+    background: var(--ink);
   }
   :global(.theme-preview .tp-bar-short) {
     width: 40%;

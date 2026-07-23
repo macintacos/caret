@@ -1,8 +1,11 @@
 import "../../test-mount.ts";
 
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import ThemePreviewCard from "@/components/ThemePreviewCard.svelte";
+import { SWATCH_TOKENS } from "$lib/settingsRegistry.ts";
 
 import { render } from "../../test-mount.ts";
 
@@ -82,4 +85,20 @@ describe("ThemePreviewCard samples the palette beyond the accent", () => {
     expect((el?.querySelectorAll("[data-tp-diff='add']").length ?? 0) >= 1).toBe(true);
     expect((el?.querySelectorAll("[data-tp-diff='del']").length ?? 0) >= 1).toBe(true);
   });
+});
+
+describe("ThemePreviewCard covers the theme-dropdown swatch colors (EXC-753)", () => {
+  // The preview's floor: it must paint at least the same tokens the option's swatch
+  // dots show (SWATCH_TOKENS) — background, raised surface, ink, accent, positive hue —
+  // so a hovered theme never previews fewer colors than its dots. Extra hues
+  // (--danger / --attention) are welcome; these five are the minimum.
+  const source = readFileSync(join(import.meta.dir, "ThemePreviewCard.svelte"), "utf8");
+
+  for (const token of SWATCH_TOKENS) {
+    test(`paints an element in ${token}`, () => {
+      // A real var(<token>) usage — the negative lookahead keeps --paper from matching
+      // --paper-raised, and --ink from matching --ink-soft / --ink-faint.
+      expect(new RegExp(`var\\(\\s*${token}(?![\\w-])`).test(source)).toBe(true);
+    });
+  }
 });

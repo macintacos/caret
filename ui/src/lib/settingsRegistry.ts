@@ -83,8 +83,11 @@ export function stagedField<V>(def: Omit<StagedField<V>, "kind">): StagedField {
 
 // The five tokens every palette supplies (ColorToken makes them mandatory), previewed
 // as dots beside each theme option so a future theme renders its swatch with no extra
-// wiring — background, the raised surface, ink, the accent, and the positive hue.
-const SWATCH_TOKENS = ["--paper", "--paper-raised", "--ink", "--accent", "--ok"] as const;
+// wiring — background, the raised surface, ink, the accent, and the positive hue. The
+// hover preview (EXC-753) treats this as its floor: the ThemePreviewCard must paint at
+// least these five so the preview never shows fewer colors than the option's dots
+// (ThemePreviewCard.test.ts pins that against the exported list).
+export const SWATCH_TOKENS = ["--paper", "--paper-raised", "--ink", "--accent", "--ok"] as const;
 const themeOptions = THEME_IDS.map((id) => ({
   value: id,
   label: THEMES[id].label,
