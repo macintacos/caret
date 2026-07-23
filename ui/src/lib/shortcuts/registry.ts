@@ -26,13 +26,23 @@ export interface Chord {
 export type KeySpec = Chord[];
 
 /** The canonical shortcut groups (EXC-785's table). `editor` holds the existing
- * composer chords, surfaced read-only in the help modal. */
-export type ShortcutGroup = "motion" | "commenting" | "actions" | "help" | "editor";
+ * composer chords, surfaced read-only in the help modal. `settings` holds the
+ * Settings modal's own affordances (EXC-849), listed only in the scoped help. */
+export type ShortcutGroup = "motion" | "commenting" | "actions" | "settings" | "help" | "editor";
+
+/** The view a shortcut is active in (EXC-849). Absent on an entry = the base
+ * `"review"` surface (the plan-review view). `"global"` = active in every scope
+ * (the `?` help toggle). A named modal scope (`"settings"`) is active only while
+ * that modal owns the view. The dispatcher and the help modal both filter by the
+ * active scope (see shortcuts/scope.ts), so an open modal suppresses the review
+ * shortcuts and the help lists only the shortcuts valid in the current view. */
+export type ShortcutScope = "global" | "review" | "settings";
 
 /** A registry entry. `run` is optional: an entry without it is display-only —
  * listed for the help modal but never dispatched (the existing editor chords,
  * which the composer already owns on focus). `enabled` gates dispatch and lets
- * the modal grey out entries. */
+ * the modal grey out entries. `scope` gates by the active view (see ShortcutScope);
+ * absent = the base review surface. */
 export interface ShortcutEntry {
   id: string;
   keys: KeySpec;
@@ -40,6 +50,7 @@ export interface ShortcutEntry {
   label: string;
   run?: () => void;
   enabled?: () => boolean;
+  scope?: ShortcutScope;
 }
 
 export interface ShortcutRegistry {

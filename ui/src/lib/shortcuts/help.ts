@@ -20,6 +20,7 @@ const GROUP_ORDER: readonly { group: ShortcutGroup; label: string }[] = [
   { group: "motion", label: "Motion" },
   { group: "commenting", label: "Commenting" },
   { group: "actions", label: "Actions" },
+  { group: "settings", label: "Settings" },
   { group: "help", label: "Help" },
   { group: "editor", label: "Editor" },
 ];
@@ -47,4 +48,13 @@ export function filterShortcuts(entries: ShortcutEntry[], query: string): Shortc
   const q = query.trim().toLowerCase();
   if (!q) return entries;
   return entries.filter((e) => searchText(e).includes(q));
+}
+
+/** Whether a keymap is small enough to read as one narrow column rather than the
+ * multi-column newspaper layout — true for a scoped help of a section or two (the
+ * Settings view's help), false for the full review keymap. Keyed on the distinct
+ * group count, since the layout flows whole groups into columns, and computed from
+ * the unfiltered entries so the modal keeps a stable width regardless of the search. */
+export function fitsSingleColumn(entries: ShortcutEntry[]): boolean {
+  return new Set(entries.map((e) => e.group)).size <= 2;
 }

@@ -5,6 +5,7 @@ export * from "$lib/shortcuts/dispatcher.ts";
 export * from "$lib/shortcuts/keymap.ts";
 export * from "$lib/shortcuts/match.ts";
 export * from "$lib/shortcuts/registry.ts";
+export * from "$lib/shortcuts/scope.ts";
 
 /** The app-wide shortcut registry singleton. Downstream components register
  * their shortcuts into this instance; App.svelte wires the dispatcher to it and

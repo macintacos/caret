@@ -6,7 +6,8 @@
 // App.svelte's $effect exactly like createSafeModeGuard.
 
 import { matchKeydown, type SequenceState } from "$lib/shortcuts/match.ts";
-import type { KeySpec, ShortcutRegistry } from "$lib/shortcuts/registry.ts";
+import type { KeySpec, ShortcutRegistry, ShortcutScope } from "$lib/shortcuts/registry.ts";
+import { isEntryActive } from "$lib/shortcuts/scope.ts";
 
 const DEFAULT_SEQUENCE_TIMEOUT_MS = 1000;
 
@@ -18,6 +19,11 @@ export interface ShortcutDispatcherOptions {
   /** Whether a text-editing widget owns the keyboard right now; single-key
    * shortcuts are suppressed when true. Defaults to a DOM activeElement check. */
   isEditingContext?: () => boolean;
+  /** The modal scope currently owning the view (e.g. "settings" while the Settings
+   * modal is open), or null for the base review surface. Only entries active in this
+   * scope dispatch; a global-scoped entry (?) always does. Defaults to the base
+   * surface (EXC-849). */
+  activeScope?: () => ShortcutScope | null;
   /** Monotonic clock; injectable for tests. Defaults to performance.now. */
   now?: () => number;
   /** Max gap between the two keys of a sequence (gg, ]]). */
@@ -52,6 +58,7 @@ function isBareSpec(spec: KeySpec): boolean {
 export function createShortcutDispatcher(opts: ShortcutDispatcherOptions): ShortcutDispatcher {
   const { target, registry } = opts;
   const isEditingContext = opts.isEditingContext ?? defaultIsEditingContext;
+  const activeScope = opts.activeScope ?? (() => null);
   const now = opts.now ?? (() => performance.now());
   const timeoutMs = opts.sequenceTimeoutMs ?? DEFAULT_SEQUENCE_TIMEOUT_MS;
 
@@ -65,6 +72,13 @@ export function createShortcutDispatcher(opts: ShortcutDispatcherOptions): Short
     // Only dispatchable entries fire; display-only entries (the editor chords)
     // live in the registry for the help modal, never for dispatch.
     let entries = registry.list().filter((entry) => entry.run);
+    // Only shortcuts active in the current view fire: an open modal scope (Settings)
+    // suppresses the review surface's shortcuts, keeping just its own and the globals
+    // (?). Drop a buffered sequence whose candidates all fell out of scope so its
+    // second key can't complete from the matcher's buffer (EXC-849).
+    const scope = activeScope();
+    entries = entries.filter((entry) => isEntryActive(entry, scope));
+    if (seq && !seq.candidates.some((c) => isEntryActive(c, scope))) seq = null;
     // Single-key (bare) shortcuts do not fire while a text field or the composer
     // is focused — that surface keeps owning its own keys.
     if (isEditingContext()) {

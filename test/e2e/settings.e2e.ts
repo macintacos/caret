@@ -452,3 +452,61 @@ test("drives the full journey: edit Appearance live, search across categories, o
     "granted",
   );
 });
+
+// Scoped shortcuts (EXC-849): while the Settings modal owns the view, only the
+// shortcuts valid there are active — the review keybinds are inert and the `?` help
+// lists just the settings view's shortcuts, not the whole review keymap. daemon.seed()
+// gives an active review, so a/r carry live runs whose suppression is observable.
+test("while Settings is open, the review shortcuts are inert underneath", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  await openSettings(page);
+  await waitPastSafeModeGrace(page);
+
+  const contents = page.locator("[data-slot='dialog-content']");
+  await expect(contents).toHaveCount(1); // just Settings
+
+  // r would open Request Changes and a the approve guard — each a dialog that would
+  // stack a second content. Under the settings scope the dispatcher fires neither, so
+  // no review action leaks past the modal.
+  await page.keyboard.press("r");
+  await page.keyboard.press("a");
+  await expect(contents).toHaveCount(1);
+  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
+});
+
+test("? over Settings lists only the settings-view shortcuts, not the review keymap", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  await openSettings(page);
+  await waitPastSafeModeGrace(page);
+
+  // ? opens the help over Settings (a global shortcut, still active in the modal scope).
+  await page.keyboard.press("?");
+  const help = page.locator("[data-slot='dialog-content']").last();
+  await expect(help).toBeVisible();
+
+  // With only a section or two, the help drops to a single column (fitsSingleColumn),
+  // not the wide multi-column keymap.
+  await expect(help.locator(".help-groups")).toHaveCSS("column-count", "1");
+
+  // The settings-scoped affordances plus the global ? — exactly what works in this view.
+  await expect(help.getByText("Search settings")).toBeVisible();
+  await expect(help.getByText("Close settings")).toBeVisible();
+  await expect(help.getByText("Show shortcuts")).toBeVisible();
+
+  // The review keymap is absent — those shortcuts are suppressed while Settings owns
+  // the view, so listing them would advertise keys that do nothing here.
+  await expect(help.getByText("Approve", { exact: true })).toHaveCount(0);
+  await expect(help.getByText("Request changes")).toHaveCount(0);
+});
