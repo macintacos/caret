@@ -1,10 +1,10 @@
 // The single source for browser-preference localStorage keys. Each pref is built
 // through one of the factories here, which registers the key into a module-level
 // set as a side effect — so the dev `--fresh` reset (clearKnownPrefs in prefs.ts)
-// and its enforcing test derive the full key set from the definitions themselves,
-// rather than a hand-maintained list that can drift out of sync (the drag-hint
-// key did exactly that). enumLocalStoragePref.ts stays the deep never-throw
-// module; definePref composes it and adds only registration + surfacing the KEY.
+// and its enforcing test (prefKeys.test.ts) derive the full key set from the
+// definitions themselves, and a pref can't silently fall out of the reset set.
+// enumLocalStoragePref.ts stays the deep never-throw module; definePref composes it
+// and adds only registration + surfacing the KEY.
 
 import { enumLocalStoragePref } from "$lib/enumLocalStoragePref.ts";
 

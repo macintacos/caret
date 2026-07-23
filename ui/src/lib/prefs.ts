@@ -4,8 +4,8 @@
 // module registers its own through definePref / defineFlagPref / registerPrefKey
 // (definePref.ts), and clearKnownPrefs iterates the derived knownPrefKeys(). A pref
 // that forgets to register fails prefKeys.test.ts rather than silently surviving
-// `--fresh` (the drift the old hand-maintained list allowed). This file owns
-// onboarding (a flag), the reset, and the per-boot sessionStorage guard.
+// `--fresh`. This file owns onboarding (a flag), the reset, and the per-boot
+// sessionStorage guard.
 
 import { defineFlagPref, knownPrefKeys } from "$lib/definePref.ts";
 
@@ -33,9 +33,9 @@ export function shouldShowOnboarding(permission: NotificationPermission): boolea
 }
 
 // sessionStorage key recording which daemon boot the dev `--fresh` reset has
-// already run for. sessionStorage (per-tab), NOT localStorage and NOT a
-// KNOWN_PREF_KEYS entry: it is a session control marker, not a user preference,
-// so clearKnownPrefs() must never touch it.
+// already run for. sessionStorage (per-tab), NOT localStorage and NOT a registered
+// pref key: it is a session control marker, not a user preference, so
+// clearKnownPrefs() must never touch it (prefKeys.test.ts excludes it explicitly).
 const FRESH_APPLIED_KEY = "caret.freshApplied";
 
 /** Whether the dev `--fresh` browser reset has already run for this daemon boot.
