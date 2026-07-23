@@ -437,9 +437,10 @@ from built-in defaults) and, via `CARET_FRESH`, tells the UI to clear its saved
 preferences — theme back to the default, and first-run onboarding shown again — so you can
 re-test the new-user experience. It cannot reset the browser's own notification permission
 (no page-level API), but the dev origin is already separate from the installed build, so
-that permission is independent regardless. Every user-facing UI setting that persists in
-the browser registers its key in `KNOWN_PREF_KEYS` (`ui/src/lib/prefs.ts`) so `--fresh`
-resets it — add new settings there.
+that permission is independent regardless. Every user-facing UI setting the browser
+persists is built through `definePref` / `defineFlagPref` (`ui/src/lib/definePref.ts`),
+which registers its key so `--fresh` resets it; `knownPrefKeys()` derives from those
+registrations and `prefKeys.test.ts` fails if a persisted key isn't registered.
 
 `mise run test e2e` runs the Playwright specs in `test/e2e/` against an isolated daemon
 that serves the built `ui/dist/` artifact on an OS-assigned port with ephemeral state, so

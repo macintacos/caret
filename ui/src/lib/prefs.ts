@@ -1,53 +1,29 @@
-// The registry of user-facing UI settings persisted in the browser (theme, diff
-// prefs, first-run onboarding). It exists so the dev `--fresh` boot can wipe every
-// one of them from a single place to reproduce a brand-new-user session.
-//
-// When you add a new user-facing setting that persists in localStorage, add its
-// key to KNOWN_PREF_KEYS below — otherwise `mise run dev --fresh` won't reset it,
-// and you won't be able to re-test the first-run experience for that setting.
-//
-// Read/write are fail-safe like enumLocalStoragePref.ts: a blocked or unavailable
-// localStorage degrades rather than throwing.
+// The machinery for the dev `--fresh` boot: it wipes every user-facing UI setting
+// the browser persists (theme, diff prefs, first-run onboarding) so a
+// brand-new-user session can be reproduced. The keys are not listed here — each pref
+// module registers its own through definePref / defineFlagPref / registerPrefKey
+// (definePref.ts), and clearKnownPrefs iterates the derived knownPrefKeys(). A pref
+// that forgets to register fails prefKeys.test.ts rather than silently surviving
+// `--fresh`. This file owns onboarding (a flag), the reset, and the per-boot
+// sessionStorage guard.
 
-import { DIFF_INDICATORS_KEY } from "$lib/diffIndicatorsPref.ts";
-import { DIFF_STYLE_KEY } from "$lib/diffStylePref.ts";
-import { SHORTCUT_HINTS_KEY } from "$lib/shortcutHintsPref.ts";
-import { THEME_KEY } from "$lib/theme.ts";
-import { TOC_OPEN_KEY } from "$lib/tocPref.ts";
+import { defineFlagPref, knownPrefKeys } from "$lib/definePref.ts";
 
 /** localStorage key: has the first-run onboarding been seen (dismissed or acted on). */
 export const ONBOARDED_KEY = "caret.onboarded";
 
-/** Every localStorage key holding a user-facing UI setting. `--fresh` clears all
- * of them to reproduce a brand-new-user session — register new settings here. */
-export const KNOWN_PREF_KEYS: readonly string[] = [
-  THEME_KEY,
-  DIFF_INDICATORS_KEY,
-  DIFF_STYLE_KEY,
-  TOC_OPEN_KEY,
-  SHORTCUT_HINTS_KEY,
-  ONBOARDED_KEY,
-];
+// Onboarding is a "1"/absent flag. defineFlagPref registers ONBOARDED_KEY for the
+// `--fresh` reset and owns the never-throw fail-safe; the default onError (false)
+// means an unreadable store reports not-onboarded, so onboarding can still show.
+const onboardedPref = defineFlagPref(ONBOARDED_KEY);
 
 /** Whether the user has seen (dismissed or acted on) first-run onboarding.
  * Fail-safe: an unreadable localStorage reports false, so onboarding can still show. */
-export function hasOnboarded(): boolean {
-  try {
-    return localStorage.getItem(ONBOARDED_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
+export const hasOnboarded = onboardedPref.read;
 
 /** Record that onboarding is done so it never shows again. A storage failure is
  * swallowed (onboarding may re-show next load — harmless). */
-export function markOnboarded(): void {
-  try {
-    localStorage.setItem(ONBOARDED_KEY, "1");
-  } catch {
-    // Storage unavailable (private mode, quota, disabled) — drop silently.
-  }
-}
+export const markOnboarded = (): void => onboardedPref.write(true);
 
 /** Whether the first-run onboarding modal should open: only for a brand-new user
  * (never onboarded) whose notification permission is still undecided. A user who
@@ -57,9 +33,9 @@ export function shouldShowOnboarding(permission: NotificationPermission): boolea
 }
 
 // sessionStorage key recording which daemon boot the dev `--fresh` reset has
-// already run for. sessionStorage (per-tab), NOT localStorage and NOT a
-// KNOWN_PREF_KEYS entry: it is a session control marker, not a user preference,
-// so clearKnownPrefs() must never touch it.
+// already run for. sessionStorage (per-tab), NOT localStorage and NOT a registered
+// pref key: it is a session control marker, not a user preference, so
+// clearKnownPrefs() must never touch it (prefKeys.test.ts excludes it explicitly).
 const FRESH_APPLIED_KEY = "caret.freshApplied";
 
 /** Whether the dev `--fresh` browser reset has already run for this daemon boot.
@@ -90,7 +66,7 @@ export function markFreshResetApplied(instanceId: string | undefined): void {
 /** Remove every known UI preference, returning the browser to a new-user state.
  * Used by the dev `--fresh` boot; fail-safe per key. */
 export function clearKnownPrefs(): void {
-  for (const key of KNOWN_PREF_KEYS) {
+  for (const key of knownPrefKeys()) {
     try {
       localStorage.removeItem(key);
     } catch {

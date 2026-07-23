@@ -5,26 +5,19 @@
 // dismissal so it never nags again. This is the persistence seam, kept pure so it
 // is unit-testable without mounting the view; the component owns when to show it.
 
+import { defineFlagPref } from "$lib/definePref.ts";
+
 const STORAGE_KEY = "caret:diffview:drag-hint-dismissed";
 
-/** Whether the drag-to-comment hint has already been dismissed. Reads localStorage
- * defensively: a storage-disabled or private-mode browser throws on access, in
- * which case we treat the hint as dismissed rather than nagging on every load. */
-export function isDragHintDismissed(): boolean {
-  try {
-    return localStorage.getItem(STORAGE_KEY) === "1";
-  } catch {
-    return true;
-  }
-}
+// defineFlagPref registers the key for the `--fresh` reset (prefs.ts) and owns the
+// never-throw fail-safe. onError: true means an unreadable store (storage-disabled
+// or private mode) reports dismissed, so the hint is never re-nagged on every load.
+const pref = defineFlagPref(STORAGE_KEY, { onError: true });
+
+/** Whether the drag-to-comment hint has already been dismissed. Fail-safe: an
+ * unreadable store reports dismissed rather than nagging on every load. */
+export const isDragHintDismissed = pref.read;
 
 /** Records that the reviewer has seen the hint so it never shows again. A storage
  * failure is swallowed — the hint simply re-appears next session, never errors. */
-export function dismissDragHint(): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, "1");
-  } catch {
-    // Storage unavailable (private mode, quota): the hint is non-essential, so a
-    // failed persist is not worth surfacing.
-  }
-}
+export const dismissDragHint = (): void => pref.write(true);

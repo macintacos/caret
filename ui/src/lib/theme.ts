@@ -15,7 +15,7 @@
 // This module touches `document`/`localStorage` only inside function bodies, never
 // at module load, so caret-theme.ts can import THEMES under bun-test without a DOM.
 
-import { enumLocalStoragePref } from "$lib/enumLocalStoragePref.ts";
+import { definePref } from "$lib/definePref.ts";
 
 export type ThemeId = "caret-dark" | "caret-light";
 
@@ -120,7 +120,7 @@ export const THEME_KEY = "caret.theme";
 
 export const DEFAULT_THEME_ID: ThemeId = "caret-dark";
 
-const pref = enumLocalStoragePref<ThemeId>(THEME_KEY, THEME_IDS, DEFAULT_THEME_ID);
+const pref = definePref<ThemeId>(THEME_KEY, THEME_IDS, DEFAULT_THEME_ID);
 
 /** Read the remembered theme id, defaulting to caret-dark on a missing,
  * unrecognized, or unreadable value. */

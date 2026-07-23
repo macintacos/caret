@@ -16,6 +16,9 @@ exists only in code is undiscoverable; `doc/ADVANCED.md` is the configuration re
   without a restart.
 - **Browser-persisted UI settings.** A user-facing setting the UI persists in the browser
   (localStorage — e.g. theme, first-run onboarding, diff-view prefs) is not a
-  `config.toml` key. Register its key in `KNOWN_PREF_KEYS` (`ui/src/lib/prefs.ts`) so
-  `mise run dev --fresh` resets it — that flag reproduces a brand-new-user session, and a
-  setting missing from the registry silently survives the reset.
+  `config.toml` key. Build it with `definePref` / `defineFlagPref` (or, for a bespoke
+  read/write, `registerPrefKey`) from `ui/src/lib/definePref.ts`: each registers the key
+  so `mise run dev --fresh` resets it — that flag reproduces a brand-new-user session, and
+  a key missing from the reset set silently survives it. There is no hand-maintained list
+  to update: `knownPrefKeys()` derives from the registrations, and `prefKeys.test.ts`
+  fails if any persisted `caret.*` key isn't registered.

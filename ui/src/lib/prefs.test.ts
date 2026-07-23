@@ -1,13 +1,13 @@
 import "../../test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { knownPrefKeys } from "$lib/definePref.ts";
 import { DIFF_INDICATORS_KEY } from "$lib/diffIndicatorsPref.ts";
 import { DIFF_STYLE_KEY } from "$lib/diffStylePref.ts";
 import {
   clearKnownPrefs,
   freshResetApplied,
   hasOnboarded,
-  KNOWN_PREF_KEYS,
   markFreshResetApplied,
   markOnboarded,
   ONBOARDED_KEY,
@@ -22,14 +22,14 @@ afterEach(() => {
   sessionStorage.clear();
 });
 
-describe("KNOWN_PREF_KEYS", () => {
+describe("knownPrefKeys()", () => {
   test("covers every user-facing UI setting key", () => {
-    expect(KNOWN_PREF_KEYS).toContain(THEME_KEY);
-    expect(KNOWN_PREF_KEYS).toContain(DIFF_INDICATORS_KEY);
-    expect(KNOWN_PREF_KEYS).toContain(DIFF_STYLE_KEY);
-    expect(KNOWN_PREF_KEYS).toContain(TOC_OPEN_KEY);
-    expect(KNOWN_PREF_KEYS).toContain(ONBOARDED_KEY);
-    expect(KNOWN_PREF_KEYS).toContain(SHORTCUT_HINTS_KEY);
+    expect(knownPrefKeys()).toContain(THEME_KEY);
+    expect(knownPrefKeys()).toContain(DIFF_INDICATORS_KEY);
+    expect(knownPrefKeys()).toContain(DIFF_STYLE_KEY);
+    expect(knownPrefKeys()).toContain(TOC_OPEN_KEY);
+    expect(knownPrefKeys()).toContain(ONBOARDED_KEY);
+    expect(knownPrefKeys()).toContain(SHORTCUT_HINTS_KEY);
   });
 });
 
@@ -80,7 +80,7 @@ describe("clearKnownPrefs", () => {
 
     clearKnownPrefs();
 
-    for (const key of KNOWN_PREF_KEYS) {
+    for (const key of knownPrefKeys()) {
       expect(localStorage.getItem(key)).toBeNull();
     }
   });
