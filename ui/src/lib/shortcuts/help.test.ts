@@ -40,6 +40,16 @@ describe("groupShortcuts", () => {
     const motion = groupShortcuts(entries).find((g) => g.group === "motion");
     expect(motion?.entries.map((e) => e.id)).toEqual(["motion.top", "motion.down"]);
   });
+
+  test("places the Settings group above Help (the scoped-help section order, EXC-849)", () => {
+    const withSettings: ShortcutEntry[] = [
+      { id: "settings.search", keys: [{ key: "/" }], group: "settings", label: "Search settings" },
+      ...entries,
+    ];
+    const order = groupShortcuts(withSettings).map((g) => g.group);
+    expect(order).toContain("settings");
+    expect(order.indexOf("settings")).toBeLessThan(order.indexOf("help"));
+  });
 });
 
 describe("filterShortcuts", () => {

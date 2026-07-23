@@ -7,12 +7,14 @@ import {
   type KeySpec,
   type ShortcutEntry,
   type ShortcutRegistry,
+  type ShortcutScope,
 } from "$lib/shortcuts/registry.ts";
 
 let target: HTMLElement;
 let registry: ShortcutRegistry;
 let disp: ShortcutDispatcher | null;
 let editing: boolean;
+let scope: ShortcutScope | null;
 
 beforeEach(() => {
   document.body.innerHTML = "";
@@ -20,6 +22,7 @@ beforeEach(() => {
   document.body.appendChild(target);
   registry = createShortcutRegistry();
   editing = false;
+  scope = null;
   disp = null;
 });
 
@@ -32,6 +35,7 @@ function mount() {
     target,
     registry,
     isEditingContext: () => editing,
+    activeScope: () => scope,
     now: () => 0,
   });
 }
@@ -127,6 +131,48 @@ describe("createShortcutDispatcher", () => {
     keydown("g"); // buffers while not editing
     editing = true;
     keydown("g"); // focus now in a field — the second key must not complete it
+    expect(gg.calls()).toBe(0);
+  });
+
+  test("suppresses an out-of-scope shortcut while a modal scope owns the view", () => {
+    // A scopeless entry belongs to the base review surface; while the settings modal
+    // owns the view, it must not fire (EXC-849).
+    const a = spyEntry("approve", [{ key: "a" }]);
+    registry.register(a.entry);
+    scope = "settings";
+    mount();
+    const ev = keydown("a");
+    expect(a.calls()).toBe(0);
+    expect(ev.defaultPrevented).toBe(false);
+  });
+
+  test("fires an in-scope shortcut while its modal scope owns the view", () => {
+    const x = spyEntry("settings.act", [{ key: "x" }]);
+    x.entry.scope = "settings";
+    registry.register(x.entry);
+    scope = "settings";
+    mount();
+    keydown("x");
+    expect(x.calls()).toBe(1);
+  });
+
+  test("a global shortcut fires regardless of the active scope", () => {
+    const help = spyEntry("help.show", [{ key: "?" }]);
+    help.entry.scope = "global";
+    registry.register(help.entry);
+    scope = "settings";
+    mount();
+    keydown("?");
+    expect(help.calls()).toBe(1);
+  });
+
+  test("does not complete a buffered sequence once a modal scope excludes it", () => {
+    const gg = spyEntry("top", [{ key: "g" }, { key: "g" }]);
+    registry.register(gg.entry);
+    mount();
+    keydown("g"); // buffers under the base review surface
+    scope = "settings"; // a modal took the view
+    keydown("g"); // the second key must not complete the now-out-of-scope sequence
     expect(gg.calls()).toBe(0);
   });
 

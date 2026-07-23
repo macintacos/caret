@@ -17,6 +17,7 @@
     createShortcutDispatcher,
     defaultIsEditingContext,
     EDITOR_SHORTCUTS,
+    scopedShortcuts,
     shortcuts,
   } from "$lib/shortcuts/index.ts";
   import { type AlertStore, createAlerts } from "@/state/alerts.ts";
@@ -362,6 +363,9 @@
       keys: [{ key: "?" }],
       group: "help",
       label: "Show shortcuts",
+      // Global scope (EXC-849): ? toggles the help from any view — including over the
+      // Settings modal, where every other review shortcut is suppressed.
+      scope: "global",
       run: () => {
         showHelp = !showHelp;
       },
@@ -408,6 +412,9 @@
       // the verdict keys don't fire while the reviewer walks the comment list.
       isEditingContext: () =>
         defaultIsEditingContext() || document.activeElement?.closest("#comment-navigator") != null,
+      // While the Settings modal owns the view, the review shortcuts are inert
+      // (EXC-849) — only the settings-scoped entries and the globals (?) fire.
+      activeScope: () => (showSettings ? "settings" : null),
     });
     return () => {
       for (const off of unregister) off();
@@ -660,10 +667,15 @@
 {/if}
 
 <!-- Keyboard shortcuts help (EXC-787): the ? key toggles it, the status bar's
-     keyboard button opens it. Reads the live registry (shortcuts.list()) at
-     open, so it grows as later tickets register. -->
+     keyboard button opens it. Reads the live registry (shortcuts.list()) at open,
+     so it grows as later tickets register — then narrowed (EXC-849) to the shortcuts
+     valid in the current view: over Settings it lists only the settings + global
+     shortcuts, matching what the dispatcher will actually fire. -->
 {#if showHelp}
-  <ShortcutsHelp entries={shortcuts.list()} onClose={() => (showHelp = false)} />
+  <ShortcutsHelp
+    entries={scopedShortcuts(shortcuts.list(), showSettings ? "settings" : null)}
+    onClose={() => (showHelp = false)}
+  />
 {/if}
 
 <style>

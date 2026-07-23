@@ -20,6 +20,7 @@ const GROUP_ORDER: readonly { group: ShortcutGroup; label: string }[] = [
   { group: "motion", label: "Motion" },
   { group: "commenting", label: "Commenting" },
   { group: "actions", label: "Actions" },
+  { group: "settings", label: "Settings" },
   { group: "help", label: "Help" },
   { group: "editor", label: "Editor" },
 ];
