@@ -70,3 +70,84 @@ describe("SettingSelect commit", () => {
     expect(picked.last()).toBe("unified");
   });
 });
+
+describe("SettingSelect theme preview (EXC-753)", () => {
+  const PREVIEW_A = { "--paper": "#123456", "--ink": "#eeeeee", "--accent": "#ff8800" };
+  const PREVIEW_C = { "--paper": "#654321", "--ink": "#111111", "--accent": "#00ccff" };
+  const themeOptions = [
+    { value: "a", label: "Theme A", preview: PREVIEW_A },
+    { value: "b", label: "Theme B" },
+    { value: "c", label: "Theme C", preview: PREVIEW_C },
+  ] as const;
+
+  const previewProps = { ...baseProps, options: themeOptions, value: "a" };
+
+  const card = () => document.body.querySelector<HTMLElement>("[data-slot='theme-preview']");
+
+  async function openMenu(flush: () => void) {
+    document.body.querySelector<HTMLButtonElement>("button[aria-label='Layout']")?.click();
+    await flushUntil(
+      flush,
+      () => document.body.querySelector("[data-setting-option='a']") !== null,
+    );
+  }
+
+  // bits-ui highlights an item on pointer/keyboard; the component tracks that highlight.
+  function highlight(value: string) {
+    document.body
+      .querySelector<HTMLElement>(`[data-setting-option='${value}']`)
+      ?.dispatchEvent(new Event("pointerenter", { bubbles: true }));
+  }
+
+  test("highlighting a theme option surfaces a preview card tinted by that option", async () => {
+    const { flush } = render(SettingSelect, previewProps);
+    flush();
+    await openMenu(flush);
+    highlight("a");
+    await flushUntil(flush, () => card() !== null);
+    expect(card()?.style.getPropertyValue("--accent")).toBe("#ff8800");
+  });
+
+  test("keyboard-highlighting an option (focus) surfaces its preview too", async () => {
+    const { flush } = render(SettingSelect, previewProps);
+    flush();
+    await openMenu(flush);
+    // bits-ui moves real focus onto the highlighted item as you arrow through the
+    // menu; the component's onfocus mirrors onpointerenter, so keyboard roving previews.
+    document.body
+      .querySelector<HTMLElement>("[data-setting-option='c']")
+      ?.dispatchEvent(new FocusEvent("focus"));
+    await flushUntil(flush, () => card() !== null);
+    expect(card()?.style.getPropertyValue("--accent")).toBe("#00ccff");
+  });
+
+  test("an option without a preview surfaces no card", async () => {
+    const { flush } = render(SettingSelect, previewProps);
+    flush();
+    await openMenu(flush);
+    highlight("b");
+    flush();
+    expect(card() === null).toBe(true);
+  });
+
+  test("highlighting never retints the document root", async () => {
+    const before = document.documentElement.style.getPropertyValue("--accent");
+    const { flush } = render(SettingSelect, previewProps);
+    flush();
+    await openMenu(flush);
+    highlight("a");
+    await flushUntil(flush, () => card() !== null);
+    expect(document.documentElement.style.getPropertyValue("--accent")).toBe(before);
+  });
+
+  test("exactly one preview shows at a time — moving between options swaps it", async () => {
+    const { flush } = render(SettingSelect, previewProps);
+    flush();
+    await openMenu(flush);
+    highlight("a");
+    await flushUntil(flush, () => card()?.style.getPropertyValue("--accent") === "#ff8800");
+    highlight("c");
+    await flushUntil(flush, () => card()?.style.getPropertyValue("--accent") === "#00ccff");
+    expect(document.body.querySelectorAll("[data-slot='theme-preview']").length).toBe(1);
+  });
+});

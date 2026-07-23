@@ -22,11 +22,14 @@ import { readShortcutHints, writeShortcutHints } from "$lib/shortcutHintsPref.ts
 import { applyTheme, readThemeId, THEME_IDS, THEMES, type ThemeId } from "$lib/theme.ts";
 
 /** One choice in a select control. `swatch` is an optional row of CSS colors rendered
- * as small dots beside the label — the theme options preview their palette this way. */
+ * as small dots beside the label — the theme options preview their palette this way.
+ * `preview` is the option's full theme token map (EXC-753): when present, highlighting
+ * the option floats an abstract, tinted preview of Caret's chrome beside the menu. */
 export interface SettingOption {
   value: string;
   label: string;
   swatch?: readonly string[];
+  preview?: Record<string, string>;
 }
 
 /** How the two-pane shell (EXC-843) renders a field's control: the kind drives
@@ -80,12 +83,17 @@ export function stagedField<V>(def: Omit<StagedField<V>, "kind">): StagedField {
 
 // The five tokens every palette supplies (ColorToken makes them mandatory), previewed
 // as dots beside each theme option so a future theme renders its swatch with no extra
-// wiring — background, the raised surface, ink, the accent, and the positive hue.
-const SWATCH_TOKENS = ["--paper", "--paper-raised", "--ink", "--accent", "--ok"] as const;
+// wiring — background, the raised surface, ink, the accent, and the positive hue. The
+// hover preview (EXC-753) treats this as its floor: the ThemePreviewCard must paint at
+// least these five so the preview never shows fewer colors than the option's dots
+// (ThemePreviewCard.test.ts pins that against the exported list).
+export const SWATCH_TOKENS = ["--paper", "--paper-raised", "--ink", "--accent", "--ok"] as const;
 const themeOptions = THEME_IDS.map((id) => ({
   value: id,
   label: THEMES[id].label,
   swatch: SWATCH_TOKENS.map((token) => THEMES[id].tokens[token]),
+  // The full palette the hover preview (EXC-753) paints Caret's chrome from.
+  preview: THEMES[id].tokens,
 }));
 
 const diffStyleOptions = [

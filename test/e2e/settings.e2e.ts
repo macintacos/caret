@@ -96,6 +96,67 @@ test("picking a theme applies it immediately, confirms with a toast, and persist
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
 });
 
+test("hovering a theme option previews its palette beside the menu, without applying it (EXC-753)", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  // Fresh origin defaults to caret dark.
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+
+  await openSettings(page);
+  await page.getByRole("button", { name: "Theme" }).click();
+
+  // Hover the OTHER theme (caret light): an abstract preview card appears beside the
+  // open menu — before any selection.
+  await page.getByRole("menuitemradio", { name: "caret light" }).hover();
+  const preview = page.locator("[data-slot='theme-preview']");
+  await expect(preview).toBeVisible();
+
+  // Tinted by caret light's palette (accent #c2410c), applied inline on the card only —
+  // and the real app is NOT retinted on hover: html stays dark until a click.
+  await expect(preview).toHaveAttribute("style", /--accent:\s*#c2410c/i);
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+
+  // Beside the menu, fully within the viewport (never clipped).
+  const menuBox = await page.locator(".setting-menu").boundingBox();
+  const cardBox = await preview.boundingBox();
+  const vp = page.viewportSize();
+  expect(cardBox).not.toBeNull();
+  expect(menuBox).not.toBeNull();
+  if (cardBox && menuBox && vp) {
+    expect(cardBox.x).toBeGreaterThanOrEqual(0);
+    expect(cardBox.y).toBeGreaterThanOrEqual(0);
+    expect(cardBox.x + cardBox.width).toBeLessThanOrEqual(vp.width);
+    expect(cardBox.y + cardBox.height).toBeLessThanOrEqual(vp.height);
+    // Beside, not over: the card sits entirely to one side of the menu.
+    const clearsRight = cardBox.x >= menuBox.x + menuBox.width - 1;
+    const clearsLeft = cardBox.x + cardBox.width <= menuBox.x + 1;
+    expect(clearsRight || clearsLeft).toBe(true);
+  }
+
+  // Exactly one at a time — moving to the current option swaps it to caret dark.
+  await page.getByRole("menuitemradio", { name: "caret dark" }).hover();
+  await expect(preview).toHaveCount(1);
+  await expect(preview).toHaveAttribute("style", /--accent:\s*#fb923c/i);
+});
+
+test("keyboard-highlighting a theme option previews it too (EXC-753)", async ({ daemon, page }) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  await openSettings(page);
+  await page.getByRole("button", { name: "Theme" }).click();
+
+  // Roving the menu with the keyboard highlights an option (real focus), which surfaces
+  // its preview just like a hover does — the keyboard clause of the acceptance criteria.
+  await page.keyboard.press("ArrowDown");
+  await expect(page.locator("[data-slot='theme-preview']")).toBeVisible();
+});
+
 test("toggling shortcut hints applies immediately and persists", async ({ daemon, page }) => {
   await daemon.seed();
   await page.goto("/");
