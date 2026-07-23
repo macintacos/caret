@@ -103,19 +103,57 @@
     values = { ...values, [field.key]: field.read() };
   }
 
+  function focusContent(): void {
+    document.querySelector<HTMLElement>(".settings-content")?.focus();
+  }
+
   // Land focus on the dialog content (not the first control), matching ShortcutsHelp:
   // Esc dismisses "with nothing focused", and EXC-845's `/` search relies on focus
   // resting on the content.
   function focusDialog(e: Event): void {
     e.preventDefault();
-    document.querySelector<HTMLElement>(".settings-content")?.focus();
+    focusContent();
+  }
+
+  // EXC-845 (the EXC-835 capture-phase pattern): while the modal is open, `/` focuses the
+  // search input instead of falling through to the global plan-search binding
+  // (actions.search). Capture phase so the preventDefault lands before the bubble-phase
+  // global dispatcher (dispatcher.ts), which yields on defaultPrevented — the modal traps
+  // focus on the dialog content (not an input), so isEditingContext() wouldn't otherwise
+  // suppress the global `/`. Once the input owns focus, `/` types normally.
+  $effect(() => {
+    function onKeydown(e: KeyboardEvent): void {
+      if (e.key !== "/" || e.defaultPrevented) return;
+      if (document.activeElement === searchInput) return;
+      e.preventDefault();
+      searchInput?.focus();
+    }
+    window.addEventListener("keydown", onKeydown, { capture: true });
+    return () => window.removeEventListener("keydown", onKeydown, { capture: true });
+  });
+
+  // EXC-845: Esc is two-stage. When the search input owns focus, Esc clears the query and
+  // returns focus to the dialog content — preventDefault cancels bits-ui's close (its
+  // Dialog.Content runs onEscapeKeydown, then closes only if the event wasn't
+  // defaultPrevented). A second Esc, now with focus on the content rather than the input,
+  // falls through and dismisses — matching ShortcutsHelp's "Esc with nothing focused".
+  function onEscapeKeydown(e: KeyboardEvent): void {
+    if (document.activeElement !== searchInput) return;
+    e.preventDefault();
+    query = "";
+    focusContent();
   }
 </script>
 
 <!-- App gates this with {#if showSettings}, so it mounts open; bits-ui's close
      intents (Escape, backdrop) route through onOpenChange to onClose. -->
 <Dialog.Root open onOpenChange={(o) => { if (!o) onClose(); }}>
-  <Dialog.Content showCloseButton={false} onOpenAutoFocus={focusDialog} class="settings-content">
+  <Dialog.Content
+    showCloseButton={false}
+    onOpenAutoFocus={focusDialog}
+    {onEscapeKeydown}
+    class="settings-content"
+  >
     <!-- Visually hidden: keeps the dialog's accessible name "Settings" without a
          header band. The visible title is the per-category pane header. -->
     <Dialog.Title class="sr-only">Settings</Dialog.Title>
