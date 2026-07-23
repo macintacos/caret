@@ -354,3 +354,101 @@ test("Esc in the search clears the query and returns focus to the dialog; a seco
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
 });
+
+// Modal stacking + keyboard flow (EXC-849): `?` opens the shortcuts help ABOVE Settings,
+// and `/` routes to the topmost modal's search — not whichever modal registered its
+// capture-phase handler first (Settings always mounts first). Peeling the help off with Esc
+// hands `/` back to Settings. Portal order, focus, and Escape layering are real-browser
+// behavior, so this lives here rather than in a unit.
+test("? stacks the shortcuts help over Settings; / routes to the topmost modal's search", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  await openSettings(page);
+  await waitPastSafeModeGrace(page);
+
+  const contents = page.locator("[data-slot='dialog-content']");
+  const settingsSearch = page.locator("input[aria-label='Search settings']");
+  const helpSearch = page.locator("input[aria-label='Search shortcuts']");
+
+  // ? opens the shortcuts help stacked above the still-open Settings — two dialogs.
+  await page.keyboard.press("?");
+  await expect(contents).toHaveCount(2);
+  await expect(helpSearch).toBeVisible();
+
+  // / focuses the TOPMOST modal's search (the help), NOT the base Settings search —
+  // even though Settings' capture handler is registered first.
+  await page.keyboard.press("/");
+  await expect(helpSearch).toBeFocused();
+  await expect(settingsSearch).not.toBeFocused();
+
+  // Esc peels off just the topmost modal; Settings remains open beneath it.
+  await page.keyboard.press("Escape");
+  await expect(contents).toHaveCount(1);
+  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
+
+  // With Settings topmost again, / now claims the Settings search.
+  await page.keyboard.press("/");
+  await expect(settingsSearch).toBeFocused();
+});
+
+// The whole-journey cohesion pass (EXC-849): one flow that opens Settings, edits two
+// Appearance settings live (each confirming with a toast), searches across categories, and
+// crosses into a second category's live pane — the end-to-end path the redesign shipped,
+// exercised as one continuous session rather than a per-feature slice.
+test("drives the full journey: edit Appearance live, search across categories, open the Notifications pane", async ({
+  daemon,
+  page,
+}) => {
+  await page.addInitScript(initGrantedNotification);
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  // Fresh origin: caret dark, with the shortcut-hint chrome showing.
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(page.locator(topbarHints).first()).toBeVisible();
+
+  await openSettings(page);
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+
+  // Edit #1 (Appearance): shortcut hints off — the topbar chrome disappears live and a
+  // toast confirms it, no Save step.
+  await dialog.getByRole("switch", { name: "Shortcut hints" }).click();
+  await expect(page.locator(topbarHints)).toHaveCount(0);
+  await expect(page.getByText("Shortcut hints updated")).toBeVisible();
+
+  // Edit #2 (Appearance): theme to caret light — the whole UI retints at once, with its
+  // own toast.
+  await dialog.getByRole("button", { name: "Theme" }).click();
+  await page.getByRole("menuitemradio", { name: "caret light" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(page.getByText("Theme updated")).toBeVisible();
+
+  // Search across categories: "daemon" matches only the Advanced pane's entry, so the
+  // Appearance fields filter away and the Advanced nav row surfaces.
+  const search = dialog.getByRole("textbox", { name: "Search settings" });
+  await search.fill("daemon");
+  await expect(dialog.locator("[data-category='Advanced']")).toBeVisible();
+  await expect(dialog.locator("[data-field='theme']")).toHaveCount(0);
+
+  // Clearing the query restores the full nav. Emptying the field fires a bubbling input
+  // event (Playwright's fill("") doesn't drive Svelte 5's bind:value empty in this build).
+  await search.evaluate((el) => {
+    (el as HTMLInputElement).value = "";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(dialog.locator("[data-field='theme']")).toBeVisible();
+
+  // Cross into a second category: the Notifications nav row swaps the field pane for the
+  // live pane, which reflects the injected grant.
+  await dialog.locator("[data-category='Notifications']").click();
+  await expect(dialog.getByRole("heading", { name: "Notifications" })).toBeVisible();
+  await expect(page.locator("[data-notifications-pane]")).toHaveAttribute(
+    "data-permission",
+    "granted",
+  );
+});

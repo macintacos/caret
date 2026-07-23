@@ -33,6 +33,15 @@ const chromeComponents = [
   "components/UnsentCommentsDialog.svelte",
   "components/AlertHost.svelte",
   "components/ThemePreviewCard.svelte",
+  // The settings-redesign surfaces (EXC-837 tree), pulled under the same coverage so
+  // their one-shot hover/reveal motion stays on the shared --dur-* tokens and none
+  // grows a per-component reduced-motion block the global rule already subsumes.
+  "components/SettingsDialog.svelte",
+  "components/SettingSelect.svelte",
+  "components/NotificationsPane.svelte",
+  "components/AdvancedPane.svelte",
+  "components/ShortcutsHelp.svelte",
+  "components/KeyboardHelpButton.svelte",
 ];
 const chromeSources: Record<string, string> = Object.fromEntries(
   await Promise.all(

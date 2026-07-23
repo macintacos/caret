@@ -6,6 +6,7 @@
   // whatever is registered when it opens — it grows as later tickets register.
   import { Input } from "$lib/components/ui/input/index.js";
   import { Kbd, KbdGroup } from "$lib/components/ui/kbd/index.js";
+  import { isTopmostDialog, topmostDialogContent } from "$lib/modalStack.ts";
   import { filterShortcuts, groupShortcuts } from "$lib/shortcuts/help.ts";
   import { isKbdKey, keyCaps, type ShortcutEntry } from "$lib/shortcuts/index.ts";
   import KbdCap from "@/components/KbdCap.svelte";
@@ -44,10 +45,10 @@
   function focusDialog(e: Event): void {
     e.preventDefault();
     // bits-ui invokes this with a synthetic event (no currentTarget), so reach the
-    // content by slot. Take the LAST match: this modal portals after any modal
-    // already open (e.g. Settings), so the newest dialog-content is ours.
-    const contents = document.querySelectorAll<HTMLElement>("[data-slot='dialog-content']");
-    contents[contents.length - 1]?.focus();
+    // content by slot. The topmost (last-portalled) dialog-content is ours: this modal
+    // portals after any modal already open (e.g. Settings). Shared with the `/` handler
+    // below through modalStack.ts (EXC-849).
+    topmostDialogContent()?.focus();
   }
 
   // EXC-835: while the modal is open, `/` focuses the search input instead of
@@ -56,10 +57,16 @@
   // (dispatcher.ts), which yields on defaultPrevented — the modal traps focus on
   // the dialog content (not an input), so isEditingContext() wouldn't otherwise
   // suppress the global `/`. Once the input owns focus, `/` types normally.
+  //
+  // EXC-849: yield unless this help modal is the topmost dialog. Stacked above
+  // Settings (? over the settings modal), both register this capture handler; the
+  // topmost-modal guard makes `/` route by portal order (this modal is on top)
+  // rather than registration order, so it claims `/` over the Settings search.
   $effect(() => {
     function onKeydown(e: KeyboardEvent): void {
       if (e.key !== "/" || e.defaultPrevented) return;
       if (document.activeElement === searchInput) return;
+      if (!isTopmostDialog(searchInput)) return;
       e.preventDefault();
       searchInput?.focus();
     }

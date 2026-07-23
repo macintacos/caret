@@ -164,6 +164,11 @@ requests permission on click when undecided, and
 modal introduces desktop notifications and offers to enable them. Page-context only, no
 service worker: the tab must be open.
 
+The same permission state has a roomier home in **Settings → Notifications**, which reads
+it live (On / Blocked / Off) with the same enable / test affordance as the bell. Open
+Settings from the top-bar button or `,` — a two-pane dialog you can filter with `/`, and
+`?` opens the keyboard-shortcuts help from anywhere.
+
 Grants are **per-origin** (scheme + host + port). The installed build opens the review UI
 at the vanity origin `http://caret.localhost:42718`, which is a different origin from
 `mise run dev`'s Vite server (`localhost:5173`) — so a grant made in dev does **not**
