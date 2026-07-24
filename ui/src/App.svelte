@@ -43,7 +43,7 @@
   } from "$lib/prefs.ts";
   import { readShortcutHints } from "$lib/shortcutHintsPref.ts";
   import { SETTINGS_REGISTRY, type StagedField } from "$lib/settingsRegistry.ts";
-  import type { ComposerScratch } from "$lib/diffview/commenting.ts";
+  import { type ComposerScratch, createSourceCommenting } from "$lib/diffview/commenting.ts";
   import type { ApproveVariant, ApproveVariantId, Annotation, PersistedScratch } from "@core/lib/types";
 
   import * as Alert from "$lib/components/ui/alert/index.js";
@@ -173,26 +173,39 @@
     alerts.push({ variant: "success", message: `${field.label} updated` });
   }
 
-  // The source view's retained-but-unsent composer drafts ("scratches"), mirrored
-  // up from DiffPlanView so the Request Changes dialog can surface them with
-  // per-scratch Save/Discard. DiffPlanView owns the controller; this is a
-  // read-only projection (the controller's stable snapshot, forwarded verbatim)
-  // plus the two actions that act back on it. `scratchActions` is set on
-  // DiffPlanView mount, which always precedes the dialog opening.
+  // The unsent-scratch controller lives here (EXC-877): App owns createSourceCommenting
+  // (created below, once `autosave` exists) and injects it down into both consumers —
+  // DiffPlanView, which renders the composer + Resume markers and drives
+  // open/submit/cancel/resume, and the Request Changes dialog, which Saves/Discards/
+  // demotes scratches. These three runes mirror the controller's non-reactive reads so
+  // both consumers re-render on every change; the factory's onChange writes them.
+  let pending = $state<{ startLine: number; endLine: number } | undefined>();
+  let pendingText = $state("");
   let scratches = $state<ComposerScratch[]>([]);
-  let scratchActions = $state<
-    | {
-        save: (key: string) => void;
-        discard: (key: string) => void;
-        draft: (scratch: { startLine: number; endLine: number; text: string }) => void;
-      }
-    | undefined
-  >();
 
   // ----- State modules -----
   const selection = createReviewSelection(selStore);
   const autosave = createAutosave(work, () => selection.activeId, {
     onOffline: () => selection.setConnected(false),
+  });
+  // The scratch controller, injected into DiffPlanView + RequestChangesDialog (EXC-877).
+  // onCreate graduates a submitted composer draft straight into the autosaved annotation
+  // set; onChange mirrors the controller's non-reactive reads into the three runes above.
+  const commenting = createSourceCommenting({
+    onCreate: autosave.createLineAnnotation,
+    onChange: () => {
+      pending = commenting.pending();
+      pendingText = commenting.pendingText();
+      scratches = commenting.scratches();
+    },
+  });
+  // Persist the retained scratches through autosave in a scheduled $effect rather than
+  // synchronously inside onChange, so the write is never re-entrant with the controller
+  // callback that produced it (e.g. DiffPlanView's contentKey reseed, whose onChange
+  // would otherwise write host state mid-flush). setScratches' scratchesEqual guard
+  // absorbs the seed echo, so a reseed of the just-served set schedules no redundant PUT.
+  $effect(() => {
+    autosave.setScratches(scratches);
   });
   const resolve = createResolve(resStore, {
     activeId: () => selection.activeId,
@@ -521,17 +534,15 @@
     <DiffPlanView
       review={active}
       {scheme}
-      onCreateLineAnnotation={autosave.createLineAnnotation}
+      {commenting}
+      {pending}
+      {pendingText}
+      {scratches}
       annotations={autosave.annotations}
       focusedAnnotation={autosave.focusedAnnotation}
       onEditAnnotation={autosave.editAnnotation}
       onDeleteAnnotation={autosave.deleteAnnotation}
       onFocusAnnotation={autosave.focusAnnotation}
-      onScratchesChange={(s) => {
-        scratches = s;
-        autosave.setScratches(s);
-      }}
-      onExposeScratchActions={(a) => (scratchActions = a)}
       onExposeReveal={(r) => (revealLine = r)}
       {onCopyCwd}
       {showShortcutHints}
@@ -608,15 +619,15 @@
     {scratches}
     onGeneralCommentInput={autosave.editGeneralComment}
     onSubmit={onRequestChanges}
-    onSaveScratch={(key) => scratchActions?.save(key)}
-    onDiscardScratch={(key) => scratchActions?.discard(key)}
+    onSaveScratch={(key) => commenting.save(key)}
+    onDiscardScratch={(key) => commenting.discard(key)}
     onDiscardAnnotation={(id) => autosave.deleteAnnotation(id)}
     onDraftAnnotation={(a) => {
       // "Mark as draft": demote a committed line comment into the unsent-scratch
       // section — drop the annotation and insert a scratch at its range, so it can
       // be Saved back or Discarded like any other unsent draft (EXC-762).
       autosave.deleteAnnotation(a.id);
-      scratchActions?.draft({ startLine: a.startLine, endLine: a.endLine, text: a.comment });
+      commenting.draft({ startLine: a.startLine, endLine: a.endLine, text: a.comment });
     }}
     onCancel={() => {
       showDialog = false;

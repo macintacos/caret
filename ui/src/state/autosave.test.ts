@@ -340,7 +340,7 @@ describe("composer scratches", () => {
 
   test("setScratches does not reschedule when the scratches are unchanged", () => {
     // The controller reseeds on load / switch / version change, echoing the just-
-    // served set back through onScratchesChange. An unchanged set must not schedule
+    // served set back through App's onChange mirror. An unchanged set must not schedule
     // a redundant PUT (nor flip pendingSaveId onto the freshly-seeded review).
     const store = makeStore({ composerScratches: [scratch(2, "wip")] });
     const { autosave, timer } = build(store, () => "r1");
