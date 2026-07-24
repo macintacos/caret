@@ -53,7 +53,7 @@
   import type { SourceViewGutter } from "$lib/diffview/options.ts";
   import type { SourceViewApi, SourceViewOptions } from "$lib/diffview/types.ts";
   import { CANONICAL_KEYMAP, defaultIsEditingContext, shortcuts } from "$lib/shortcuts/index.ts";
-  import { type CursorMotion, resolveCursorLine } from "$lib/diffview/lineCursor.ts";
+  import type { CursorMotion } from "$lib/diffview/lineCursor.ts";
   import { activeHeadingLine, extractHeadings, lineForSlug, shouldShowToc, slugForLine } from "$lib/toc.ts";
   import { NARROW_WIDTH_PX, TIGHT_WIDTH_PX } from "$lib/layout.ts";
   import { readTocOpen, writeTocOpen } from "$lib/tocPref.ts";
@@ -597,8 +597,11 @@
   });
   const keyboard = createPlanKeyboard(keyboardStore, {
     lines: () => linkLayer.text.split("\n"),
+    headingLines: () => headings.map((h) => h.line),
     readingLine: () => topVisibleLine(),
+    halfPage: cursorHalfPage,
     follow: (line) => api?.followCursorLine(line),
+    openComposer: openRange,
     focusField: focusSearchField,
     blur: () => (document.activeElement as HTMLElement | null)?.blur(),
     hintsShown: () => showShortcutHints,
@@ -704,28 +707,9 @@
     "motion.prevBlank": "prevBlank",
   };
 
-  // Lines the cursor may occupy: the rendered plan text (what the view paints),
-  // trailing newline trimmed so `G` lands on a real row.
-  function cursorLineCount(): number {
-    const text = linkLayer.text;
-    const n = text.split("\n").length;
-    return Math.max(1, text.endsWith("\n") ? n - 1 : n);
-  }
-
-  // The blank (empty or whitespace-only) source lines the `{` / `}` motions jump
-  // between — the plan's paragraph boundaries. Read from the same rendered text
-  // as the line count, capped to real rows so a trailing newline is not a target.
-  function cursorBlankLines(): number[] {
-    const count = cursorLineCount();
-    return linkLayer.text
-      .split("\n")
-      .slice(0, count)
-      .flatMap((line, i) => (line.trim() === "" ? [i + 1] : []));
-  }
-
   // Half-page size from the scroller height over a rendered row's height, with a
-  // constant fallback before the view paints. Measured per motion — cheap at
-  // keyboard cadence.
+  // constant fallback before the view paints. Injected into the keyboard factory as its
+  // halfPage dep and measured per motion — cheap at keyboard cadence.
   function cursorHalfPage(): number {
     const rowH =
       scrollEl
@@ -734,66 +718,6 @@
         ?.getBoundingClientRect().height ?? 0;
     if (scrollEl == null || rowH <= 0) return 10;
     return Math.max(1, Math.floor(scrollEl.clientHeight / rowH / 2));
-  }
-
-  function moveCursor(motion: CursorMotion): void {
-    const next = resolveCursorLine(motion, {
-      cursor: keyboardStore.cursorLine,
-      lineCount: cursorLineCount(),
-      headingLines: headings.map((h) => h.line),
-      blankLines: cursorBlankLines(),
-      halfPage: cursorHalfPage(),
-      seed: topVisibleLine() ?? 1,
-    });
-    keyboardStore.cursorLine = next;
-    api?.followCursorLine(next);
-  }
-
-  // Comment the cursor line (EXC-790): open the composer on the cursor line, or —
-  // in visual mode — over the whole anchored selection, exiting visual mode as it
-  // opens. Reuses openRange, so an in-progress composer's text is retained and the
-  // cursor tracks the anchored line; seeds an unplaced cursor at the reading
-  // position, mirroring the motions.
-  function commentCursorLine(): void {
-    if (keyboardStore.visualAnchor != null) {
-      const { startLine, endLine } = normalizeRange({
-        start: keyboardStore.visualAnchor,
-        end: keyboardStore.cursorLine ?? keyboardStore.visualAnchor,
-      });
-      keyboardStore.visualAnchor = null;
-      openRange(startLine, endLine);
-    } else {
-      const line = keyboardStore.cursorLine ?? topVisibleLine() ?? 1;
-      openRange(line, line);
-    }
-  }
-
-  // Toggle visual line-select (EXC-790): on entry, anchor the selection at the
-  // cursor (seeded at the reading position when unplaced) so j/k then extend the
-  // span; pressing V again exits, as vim's V does, keeping the cursor placed.
-  function enterVisualMode(): void {
-    if (keyboardStore.visualAnchor != null) {
-      keyboardStore.visualAnchor = null;
-      return;
-    }
-    const anchor = keyboardStore.cursorLine ?? topVisibleLine() ?? 1;
-    keyboardStore.cursorLine = anchor;
-    keyboardStore.visualAnchor = anchor;
-    api?.followCursorLine(anchor);
-  }
-
-  // Esc reconciliation (EXC-790, superseding EXC-788's motion.clearCursor): close the
-  // search HUD if open (EXC-832), else exit visual mode if active. Esc never clears the
-  // line cursor (EXC-834) — the reader keeps their place no matter how many times they
-  // press it; a content switch still clears the cursor via the $effect above, not Esc.
-  // One handler, because the dispatcher fires only the first matching Escape entry —
-  // layering the two Esc meanings in priority order.
-  function clearSelectionOrCursor(): void {
-    if (keyboardStore.searchOpen) {
-      keyboard.closeSearch();
-      return;
-    }
-    if (keyboardStore.visualAnchor != null) keyboardStore.visualAnchor = null;
   }
 
   // ----- Plan search field focus (EXC-832) -----
@@ -830,7 +754,7 @@
       offs.push(
         shortcuts.register({
           ...base,
-          run: () => moveCursor(motion),
+          run: () => keyboard.moveCursor(motion),
           enabled: () => !defaultIsEditingContext(),
         }),
       );
@@ -846,7 +770,7 @@
       offs.push(
         shortcuts.register({
           ...commentBase,
-          run: commentCursorLine,
+          run: () => keyboard.commentCursorLine(),
           enabled: () => !defaultIsEditingContext(),
         }),
       );
@@ -856,7 +780,7 @@
       offs.push(
         shortcuts.register({
           ...visualBase,
-          run: enterVisualMode,
+          run: () => keyboard.enterVisualMode(),
           enabled: () => !defaultIsEditingContext(),
         }),
       );
@@ -869,7 +793,7 @@
       offs.push(
         shortcuts.register({
           ...clearBase,
-          run: clearSelectionOrCursor,
+          run: () => keyboard.clearSelectionOrCursor(),
           enabled: () => keyboardStore.searchOpen || keyboardStore.visualAnchor != null,
         }),
       );

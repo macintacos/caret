@@ -27,12 +27,21 @@ function makeStore(over: Partial<PlanKeyboardStore> = {}): PlanKeyboardStore {
  * test can fire them by hand — no real DOM, no real setTimeout. */
 function build(
   store: PlanKeyboardStore,
-  over: { text?: string; reading?: number | null; hints?: boolean } = {},
+  over: {
+    text?: string;
+    reading?: number | null;
+    hints?: boolean;
+    headings?: number[];
+    halfPage?: number;
+  } = {},
 ) {
   let text = over.text ?? "";
   let reading: number | null = over.reading ?? null;
   let hints = over.hints ?? true;
+  const headings = over.headings ?? [];
+  const halfPage = over.halfPage ?? 5;
   const followed: number[] = [];
+  const composerOpens: Array<{ startLine: number; endLine: number }> = [];
   const scheduled: Array<{ fn: () => void; handle: number }> = [];
   let nextHandle = 1;
   let focused = 0;
@@ -40,8 +49,15 @@ function build(
 
   const keyboard = createPlanKeyboard(store, {
     lines: () => text.split("\n"),
+    headingLines: () => headings,
     readingLine: () => reading,
+    halfPage: () => halfPage,
     follow: (line) => followed.push(line),
+    openComposer: (startLine, endLine) => {
+      composerOpens.push({ startLine, endLine });
+      // Mirror the component's openRange, which relocates the cursor onto the opened line.
+      store.cursorLine = endLine;
+    },
     focusField: () => {
       focused += 1;
     },
@@ -63,6 +79,7 @@ function build(
   return {
     keyboard,
     followed,
+    composerOpens,
     focusCount: () => focused,
     blurCount: () => blurred,
     pendingTimers: () => scheduled.length,
@@ -301,5 +318,140 @@ describe("clearForContentSwitch", () => {
     expect(store.searchQuery).toBe("");
     expect(store.searchIndex).toBe(-1);
     expect(store.lastQuery).toBe("alpha");
+  });
+});
+
+// Two headings (lines 1 and 5) and three blank lines (2, 4, 6); split on "\n" yields 8
+// entries, the last a trailing "" — so lineCount is 7 and `G` must land there, not on 8.
+const CURSOR_PLAN = "# Alpha\n\nbody one\n\n## Beta\n\nbody two\n";
+const CURSOR_HEADINGS = [1, 5];
+
+describe("moveCursor", () => {
+  test("reveals an unplaced cursor at the reading position, then steps from there", () => {
+    const h = build(store, { text: CURSOR_PLAN, reading: 3, headings: CURSOR_HEADINGS });
+    h.keyboard.moveCursor("down"); // unplaced → reveal at the reading line
+    expect(store.cursorLine).toBe(3);
+    h.keyboard.moveCursor("down"); // 3 → 4
+    expect(store.cursorLine).toBe(4);
+    expect(h.followed).toEqual([3, 4]);
+  });
+
+  test("G lands on the last real line, not past a trailing newline", () => {
+    store.cursorLine = 2;
+    const h = build(store, { text: CURSOR_PLAN, headings: CURSOR_HEADINGS });
+    h.keyboard.moveCursor("bottom");
+    expect(store.cursorLine).toBe(7); // 7 real lines; the trailing "" (would-be 8) is not a row
+  });
+
+  test("gg lands on the first line", () => {
+    store.cursorLine = 6;
+    const h = build(store, { text: CURSOR_PLAN, headings: CURSOR_HEADINGS });
+    h.keyboard.moveCursor("top");
+    expect(store.cursorLine).toBe(1);
+  });
+
+  test("a half-page motion steps by the injected half-page size", () => {
+    store.cursorLine = 1;
+    const h = build(store, { text: CURSOR_PLAN, headings: CURSOR_HEADINGS, halfPage: 3 });
+    h.keyboard.moveCursor("halfDown"); // 1 + 3
+    expect(store.cursorLine).toBe(4);
+  });
+
+  test("heading motions jump between the heading lines", () => {
+    store.cursorLine = 1;
+    const h = build(store, { text: CURSOR_PLAN, headings: CURSOR_HEADINGS });
+    h.keyboard.moveCursor("nextHeading"); // 1 → 5
+    expect(store.cursorLine).toBe(5);
+    h.keyboard.moveCursor("prevHeading"); // 5 → 1
+    expect(store.cursorLine).toBe(1);
+  });
+
+  test("blank-line motions jump between the paragraph boundaries", () => {
+    store.cursorLine = 1;
+    const h = build(store, { text: CURSOR_PLAN, headings: CURSOR_HEADINGS });
+    h.keyboard.moveCursor("nextBlank"); // blanks are 2, 4, 6 → 2
+    expect(store.cursorLine).toBe(2);
+    h.keyboard.moveCursor("nextBlank"); // 2 → 4
+    expect(store.cursorLine).toBe(4);
+  });
+});
+
+describe("enterVisualMode", () => {
+  test("anchors the selection at the seed and follows the cursor there", () => {
+    const h = build(store, { text: CURSOR_PLAN, reading: 3 });
+    h.keyboard.enterVisualMode();
+    expect(store.cursorLine).toBe(3);
+    expect(store.visualAnchor).toBe(3);
+    expect(h.followed).toEqual([3]);
+  });
+
+  test("seeds from a placed cursor over the reading position", () => {
+    store.cursorLine = 5;
+    const h = build(store, { text: CURSOR_PLAN, reading: 3 });
+    h.keyboard.enterVisualMode();
+    expect(store.visualAnchor).toBe(5);
+  });
+
+  test("pressing V again exits, keeping the cursor placed", () => {
+    store.cursorLine = 6;
+    store.visualAnchor = 4;
+    const h = build(store, { text: CURSOR_PLAN });
+    h.keyboard.enterVisualMode();
+    expect(store.visualAnchor).toBeNull();
+    expect(store.cursorLine).toBe(6);
+  });
+});
+
+describe("commentCursorLine", () => {
+  test("opens the composer on the cursor line", () => {
+    store.cursorLine = 4;
+    const h = build(store, { text: CURSOR_PLAN });
+    h.keyboard.commentCursorLine();
+    expect(h.composerOpens).toEqual([{ startLine: 4, endLine: 4 }]);
+  });
+
+  test("seeds an unplaced cursor at the reading position", () => {
+    const h = build(store, { text: CURSOR_PLAN, reading: 3 });
+    h.keyboard.commentCursorLine();
+    expect(h.composerOpens).toEqual([{ startLine: 3, endLine: 3 }]);
+  });
+
+  test("in visual mode, comments the whole (normalized) selection and exits visual mode", () => {
+    store.visualAnchor = 6;
+    store.cursorLine = 2;
+    const h = build(store, { text: CURSOR_PLAN });
+    h.keyboard.commentCursorLine();
+    expect(h.composerOpens).toEqual([{ startLine: 2, endLine: 6 }]);
+    expect(store.visualAnchor).toBeNull();
+  });
+});
+
+describe("clearSelectionOrCursor", () => {
+  test("closes the search HUD first, leaving any visual selection intact", () => {
+    store.searchOpen = true;
+    store.visualAnchor = 3;
+    const h = build(store, { text: CURSOR_PLAN, hints: false });
+    h.keyboard.clearSelectionOrCursor();
+    expect(store.searchOpen).toBe(false);
+    expect(store.visualAnchor).toBe(3); // search took priority; the selection survives
+  });
+
+  test("exits visual mode when no search is open, never clearing the cursor", () => {
+    store.searchOpen = false;
+    store.visualAnchor = 3;
+    store.cursorLine = 5;
+    const h = build(store, { text: CURSOR_PLAN });
+    h.keyboard.clearSelectionOrCursor();
+    expect(store.visualAnchor).toBeNull();
+    expect(store.cursorLine).toBe(5); // Esc never clears the line cursor
+  });
+
+  test("leaves a bare placed cursor untouched", () => {
+    store.searchOpen = false;
+    store.visualAnchor = null;
+    store.cursorLine = 5;
+    const h = build(store, { text: CURSOR_PLAN });
+    h.keyboard.clearSelectionOrCursor();
+    expect(store.cursorLine).toBe(5);
   });
 });

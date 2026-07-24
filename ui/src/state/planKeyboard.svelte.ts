@@ -12,6 +12,8 @@
 // (resolveCursorLine, findMatches, nearestMatchIndex, matchStepFromLine, stepIndex) do
 // the arithmetic; this factory only sequences them and mutates the store.
 
+import { normalizeRange } from "$lib/diffview/commenting.ts";
+import { type CursorMotion, resolveCursorLine } from "$lib/diffview/lineCursor.ts";
 import {
   findMatches,
   matchStepFromLine,
@@ -48,10 +50,17 @@ export interface PlanKeyboardStore {
 export interface PlanKeyboardDeps {
   /** The rendered plan text as lines (the view's `linkLayer.text` split on "\n"). */
   lines(): string[];
+  /** Heading source lines in ascending order (the `{`/`}`-adjacent motion targets). */
+  headingLines(): number[];
   /** The reading-position seed — the top-visible line, or null before the view paints. */
   readingLine(): number | null;
+  /** Lines a half-page motion (Ctrl+d / Ctrl+u) covers — measured from the scroller. */
+  halfPage(): number;
   /** Scroll the view to keep `line` visible — the keyboard cursor's follow scroll. */
   follow(line: number): void;
+  /** Open the comment composer over an inclusive line range (retaining any live text and
+   * relocating the cursor, as a gutter/line click does). */
+  openComposer(startLine: number, endLine: number): void;
   /** Focus + select the search input. */
   focusField(): void;
   /** Blur the active element, returning focus to the plan. */
@@ -70,6 +79,21 @@ export interface PlanKeyboard {
    * `searchMatches` derived (pill counter, highlight) and internally by the transitions.
    * An empty query yields no matches. */
   matches(): SearchMatch[];
+  /** A vim motion (j/k, Ctrl+d/u, gg/G, heading and blank-line jumps): resolve the target
+   * line, place the cursor there, and follow it. An unplaced cursor reveals at the reading
+   * position rather than stepping past it. */
+  moveCursor(motion: CursorMotion): void;
+  /** `c`: open the composer over the cursor line, or — in visual mode — over the whole
+   * anchored selection, exiting visual mode as it opens. Seeds an unplaced cursor at the
+   * reading position. */
+  commentCursorLine(): void;
+  /** `V`: toggle visual line-select. On entry, anchor at the cursor (seeded at the reading
+   * position when unplaced) so j/k extend the span; pressing V again exits, keeping the
+   * cursor placed. */
+  enterVisualMode(): void;
+  /** Esc: close the search HUD if open, else exit visual mode if active — in that priority
+   * order. Never clears the line cursor (the reader keeps their place). */
+  clearSelectionOrCursor(): void;
   /** `/`: open the pill prefilled with the last committed query and focus the field. */
   openSearch(): void;
   /** Esc / ✕: blur and dismiss the pill — immediately with hints off, or after the
@@ -112,6 +136,26 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
     return store.cursorLine ?? deps.readingLine() ?? 1;
   }
 
+  // Lines the cursor may occupy: the rendered plan rows, trailing newline trimmed so `G`
+  // lands on a real row. deps.lines() is the text split on "\n", so a trailing newline
+  // leaves a final "" entry that is not a row.
+  function lineCount(): number {
+    const lines = deps.lines();
+    const n = lines.length;
+    return Math.max(1, lines[n - 1] === "" ? n - 1 : n);
+  }
+
+  // The blank (empty or whitespace-only) source lines the `{` / `}` motions jump between —
+  // the plan's paragraph boundaries, capped to real rows so a trailing newline is not a
+  // target.
+  function blankLines(): number[] {
+    const count = lineCount();
+    return deps
+      .lines()
+      .slice(0, count)
+      .flatMap((line, i) => (line.trim() === "" ? [i + 1] : []));
+  }
+
   // Land the cursor on `line` and scroll it into view — a match reveal or a motion.
   function reveal(line: number): void {
     store.cursorLine = line;
@@ -145,8 +189,74 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
     reveal(m.line);
   }
 
+  // Dismiss the pill. Blur now so focus returns to the plan and the cursor/highlights stay
+  // where they landed. With hints on there's a "/ to search" chip to collapse back into,
+  // so keep the pill mounted for one --dur-fast playing its collapse animation, then reset;
+  // with hints off there's no chip, so reset immediately. Shared by the Esc chain.
+  function closeSearch(): void {
+    deps.blur();
+    if (!deps.hintsShown()) {
+      resetSearch();
+      return;
+    }
+    if (closeTimer !== undefined) clearTimer(closeTimer);
+    store.searchClosing = true;
+    closeTimer = setTimer(resetSearch, CLOSE_ANIM_MS);
+  }
+
   return {
     matches,
+
+    moveCursor(motion) {
+      reveal(
+        resolveCursorLine(motion, {
+          cursor: store.cursorLine,
+          lineCount: lineCount(),
+          headingLines: deps.headingLines(),
+          blankLines: blankLines(),
+          halfPage: deps.halfPage(),
+          seed: deps.readingLine() ?? 1,
+        }),
+      );
+    },
+
+    commentCursorLine() {
+      // Visual mode: comment the whole anchored selection (normalized ascending) and exit
+      // visual mode as it opens.
+      if (store.visualAnchor != null) {
+        const { startLine, endLine } = normalizeRange({
+          start: store.visualAnchor,
+          end: store.cursorLine ?? store.visualAnchor,
+        });
+        store.visualAnchor = null;
+        deps.openComposer(startLine, endLine);
+        return;
+      }
+      const line = seedLine();
+      deps.openComposer(line, line);
+    },
+
+    enterVisualMode() {
+      // Pressing V again exits, as vim's V does, keeping the cursor placed.
+      if (store.visualAnchor != null) {
+        store.visualAnchor = null;
+        return;
+      }
+      const anchor = seedLine();
+      reveal(anchor);
+      store.visualAnchor = anchor;
+    },
+
+    clearSelectionOrCursor() {
+      // Esc priority: close the search HUD first, then exit visual mode. Esc never clears
+      // the line cursor (EXC-834) — the reader keeps their place; a content switch clears
+      // it via clearForContentSwitch, not Esc.
+      if (store.searchOpen) {
+        closeSearch();
+        return;
+      }
+      if (store.visualAnchor != null) store.visualAnchor = null;
+    },
 
     openSearch() {
       cancelClose();
@@ -157,17 +267,7 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
       deps.focusField();
     },
 
-    closeSearch() {
-      deps.blur();
-      // With hints off there's no chip to collapse into, so close immediately.
-      if (!deps.hintsShown()) {
-        resetSearch();
-        return;
-      }
-      if (closeTimer !== undefined) clearTimer(closeTimer);
-      store.searchClosing = true;
-      closeTimer = setTimer(resetSearch, CLOSE_ANIM_MS);
-    },
+    closeSearch,
 
     commitSearch() {
       const ms = matches();
