@@ -6,8 +6,8 @@ import { join } from "node:path";
 import { loadOpencodePackaging } from "@/adapters/opencode/packaging.ts";
 
 // loadOpencodePackaging is tested with an explicit root (the resolveCaretRoot
-// argv/execPath detection is exercised by the install.sh integration + manual
-// runs, not unit tests — under `bun test` argv[1] is the test runner, not caret).
+// argv/execPath detection is exercised by real `caret install` runs, not unit
+// tests — under `bun test` argv[1] is the test runner, not caret).
 let root: string;
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "caret-pkg-"));

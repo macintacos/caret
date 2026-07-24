@@ -11,7 +11,7 @@ install it, and basic usage, start there.
 
 The [install methods in the README](../README.md#install) ship prebuilt artifacts — the
 `bun` bundle behind the plugin, and the published `@macintacos/caret` package — so you
-never need a compiler to _use_ caret; `scripts/install.sh` just registers those with your
+never need a compiler to _use_ caret; `caret install` just registers those with your
 agents. Build from source only when you want the platform-native compiled binary
 (`bin/caret-native`, which the entrypoint shim prefers when it is present) or you are
 hacking on caret itself. It uses the `mise` toolchain from a checkout:
@@ -161,8 +161,9 @@ asks which to install into, with the detected ones pre-checked. Off a terminal �
 pipe — it never waits on that prompt: it installs into every agent it detected, or into
 Claude Code when it detected none, and says which. `--dry-run` previews that same choice
 rather than asking, and `--uninstall` asks (or reports) the same way before removing.
-`--target` is the way to pin the agents non-interactively — `CARET_AGENTS` is
-`install.sh`'s own override and has no effect on `caret install`. Every install (but not
+`--target` is the way to pin the agents non-interactively. One more flag, `--from-local`,
+is dev-only: it installs the caret checkout the binary was built in rather than the
+published one — see [Development](#development) below. Every install (but not
 `--uninstall`) finishes by acquiring the rumdl plan formatter — it is part of installing
 caret, not a step of its own — see [Plan formatting](#plan-formatting-rumdl) below.
 
@@ -172,7 +173,7 @@ spinner per operation (registering the marketplace, installing the plugin, editi
 OpenCode's `plugin` array, deploying the command files, fetching rumdl) that settles into
 a line saying what it did, and a closing summary. Off a terminal — piped, `CI=true`, or
 `NO_COLOR` set — the same run reports as plain `caret: …` lines with no escape codes, so
-CI transcripts and the output `install.sh` captures stay readable.
+CI transcripts and captured logs stay readable.
 
 ### Desktop notifications
 
@@ -330,8 +331,8 @@ to the config file, then the default.
 caret canonicalizes every incoming plan by reflowing it to a 90-column MD013 shape with
 [rumdl](https://github.com/rvben/rumdl). rumdl is not a runtime prerequisite: caret
 installs the pinned binary (v0.2.37) into `$XDG_STATE_HOME/caret/rumdl/` and verifies its
-checksum — so formatting behaves the same however caret was installed (Claude plugin,
-OpenCode, or `install.sh`).
+checksum — so formatting behaves the same however caret was installed (Claude plugin or
+OpenCode).
 
 **caret only ever formats with that one binary, at that one path.** A `rumdl` on your PATH
 is never used: which version reflows your plans must not depend on what the machine
@@ -412,17 +413,18 @@ checking are all folded into `hk.pkl`'s `check` hook, so an unformatted or tab-i
 file fails the gate instead of being silently reflowed at commit time.
 
 `mise run build --install` goes one step further than `mise run build`: after building, it
-hands the fresh `bin/caret-native` + `bin/ui` to `scripts/install.sh --from-local`, which
-reuses those artifacts (no rebuild), registers a local dev marketplace pointing at the
-checkout, reinstalls the caret plugin through Claude Code's native plugin system, and
-prewarms so the just-built binary takes over the daemon — so after a `/reload-plugins` (or
-a Claude Code restart) `/caret:*` resolves to your local build. The handoff retires a
-current-build daemon automatically; a long-running daemon from an older build (no retire
-endpoint, no lock file) can't be retired and keeps serving until you restart it once —
-`kill` its pid, then any review respawns the fresh build. It mutates your Claude plugin
-state and daemon, so it is for local development only, not CI; run
-`CARET_DRY_RUN=1 mise run build --install` to preview the install steps without performing
-them.
+runs `bin/caret install --from-local`, which reuses the fresh `bin/caret-native` +
+`bin/ui` (never rebuilding them — a missing artifact is an error telling you to run
+`mise run build`), registers a local dev marketplace whose plugin source symlinks to the
+checkout, reinstalls the caret plugin through Claude Code's native plugin system, installs
+into OpenCode from that local binary, acquires rumdl, and prewarms so the just-built
+binary takes over the daemon — so after a `/reload-plugins` (or a Claude Code restart)
+`/caret:*` resolves to your local build. The handoff retires a current-build daemon
+automatically; a long-running daemon from an older build (no retire endpoint, no lock
+file) can't be retired and keeps serving until you restart it once — `kill` its pid, then
+any review respawns the fresh build. It mutates your Claude plugin state and daemon, so it
+is for local development only, not CI; run `bin/caret install --from-local --dry-run` to
+preview the install steps without performing them.
 
 `mise run dev` is self-contained — no separate `bin/caret daemon` needed. It starts an
 isolated caret daemon as `caret daemon --ephemeral`, which binds an OS-assigned port; the
@@ -580,7 +582,7 @@ ui/                 Svelte 5 multi-asset SPA (Vite) embedded into the binary via
 hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode + PostToolUse/ExitPlanMode) — Claude-adapter packaging
 commands/           /caret:demo · /caret:debug · /caret:discovery — Claude-adapter packaging (agent-specific behavioral prose)
 test/               core/ (tool-agnostic suites) · adapters/claude/ + adapters/codex/ (per-adapter suites + fixtures) · scripts/ (release + dev tooling) · support/ (shared scaffolding)
-scripts/            install.sh (register the published plugin with each agent; --from-local builds+installs a checkout)
+scripts/            dev and release tooling for the checkout, plus the caret entrypoint shim's test
 ```
 
 The polished diff/compare viewer for plan versions is a planned fast-follow.

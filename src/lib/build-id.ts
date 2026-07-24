@@ -169,8 +169,8 @@ export function currentCommit(): string {
   if (cachedCommit !== undefined) return cachedCommit;
   cachedCommit = resolveCommit({
     // Replaced with a string literal by `--define` in the build scripts
-    // (the `build bin` target, scripts/install.sh), so prod binaries can't be
-    // overridden by runtime env. Deliberately NOT a user setting — it's a
+    // (the `build bin` target), so prod binaries can't be overridden by
+    // runtime env. Deliberately NOT a user setting — it's a
     // build-time substitution token, exempt from the doc/agents/settings-rules.md
     // README-documentation requirement.
     baked: process.env.CARET_BUILD_COMMIT,

@@ -1,8 +1,7 @@
 // The registry of coding agents `caret install` can install into: one descriptor per
 // target, carrying its id, the copy the interactive chooser shows, and how to detect
-// it on this machine. Detection mirrors scripts/install.sh's select_targets() —
-// `claude` on PATH for Claude Code, `opencode` on PATH or an existing OpenCode config
-// dir for OpenCode.
+// it on this machine: `claude` on PATH for Claude Code, `opencode` on PATH or an
+// existing OpenCode config dir for OpenCode.
 //
 // Everything that enumerates targets (--target parsing, the chooser rows, detection)
 // reads this one array, so a future agent is one descriptor, one runner module beside

@@ -6,9 +6,9 @@
 # every install; it resolves the actual caret runtime from whatever the install
 # method placed beside it:
 #
-#   1. a compiled binary (bin/caret-native) — the build-from-source paths
-#      (`scripts/install.sh`, `mise run build --install`) compile this; running
-#      it needs no `bun` at hook time.
+#   1. a compiled binary (bin/caret-native) — the build-from-source path
+#      (`mise run build`, which `mise run build --install` then installs from)
+#      compiles this; running it needs no `bun` at hook time.
 #   2. the run-from-source bundle (dist/cli.js) — the GitHub/npm plugin install
 #      ships this plus a sibling ui/dist; it runs on `bun`. REQUIRES `bun` on
 #      PATH (documented in the README).

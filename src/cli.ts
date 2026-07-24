@@ -83,11 +83,16 @@ function buildProgram(): Command {
     )
     .option("--uninstall", "remove caret from the target(s) instead of installing")
     .option("--dry-run", "print what would change without writing")
+    .option(
+      "--from-local",
+      "dev loop: install the built caret checkout this binary runs from, then hand it the daemon",
+    )
     .action((opts) =>
       runInstallSubcommand({
         target: opts.target,
         uninstall: opts.uninstall ?? false,
         dryRun: opts.dryRun ?? false,
+        fromLocal: opts.fromLocal ?? false,
       }),
     );
 

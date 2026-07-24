@@ -16,7 +16,7 @@ function claudeConfigDir(): string {
 }
 
 /** caret's id in Claude Code's plugin registry: `<plugin>@<marketplace>`, both
- * "caret" per scripts/install.sh. */
+ * "caret" per src/commands/install/claude.ts. */
 const PLUGIN_ID = "caret@caret";
 
 /** Best-effort read of caret's Claude Code install state. Every miss degrades

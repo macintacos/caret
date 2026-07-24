@@ -12,6 +12,12 @@
 // real config dir, the `claude` CLI, the network, or a terminal.
 
 import { runInstallClaudeTarget } from "@/commands/install/claude.ts";
+import {
+  devMarketplaceDir,
+  type LocalInstall,
+  prewarmLocalBuild,
+  resolveLocalCheckout,
+} from "@/commands/install/local.ts";
 import { runInstallOpencodeTarget } from "@/commands/install/opencode.ts";
 import { promptForTargets } from "@/commands/install/prompt.ts";
 import {
@@ -55,56 +61,137 @@ export function parseTargets(
  * runner to assert selection and dispatch without touching a real config dir, the
  * `claude` CLI, or a terminal. */
 export interface InstallDeps {
-  runOpencode?: (opts: TargetOpts, deps: { ui: InstallUI }) => void | Promise<void>;
-  runClaude?: (opts: TargetOpts, deps: { ui: InstallUI }) => void | Promise<void>;
+  /** A runner returns false to report "this target failed" (it has already said why);
+   * returning nothing means it got through. */
+  runOpencode?: (opts: TargetOpts, deps: { ui: InstallUI }) => unknown;
+  runClaude?: (opts: TargetOpts, deps: { ui: InstallUI }) => unknown;
   detect?: () => InstallTarget[];
   prompt?: (detected: InstallTarget[], uninstall: boolean) => Promise<InstallTarget[] | null>;
   isInteractive?: () => boolean;
   /** Narrowed to what the step reports — the real `ensureRumdl` satisfies it, and a test
    * can describe an outcome without the config path it never reads. */
   ensureRumdl?: () => Promise<{ bin: string; installed: boolean }>;
+  /** `--from-local` seams: which checkout is being installed, where its generated
+   * marketplace goes, and the daemon hand-off. */
+  resolveLocal?: (opts: { requireArtifacts: boolean }) => { repoDir: string; ref: string };
+  marketplaceDir?: () => string;
+  prewarm?: (repoDir: string) => Promise<void>;
   ui?: InstallUI;
 }
 
 interface TargetOpts {
   uninstall: boolean;
   dryRun: boolean;
+  /** Set by `--from-local`: install this checkout rather than the published caret. Only
+   * the Claude target reads it — OpenCode's command files already resolve to the running
+   * binary, so installing from a local caret is local by construction. */
+  local?: LocalInstall;
 }
 
 /** Run the install command: resolve the targets (from `--target`, the chooser, or
  * detection), then dispatch to each one. On an invalid `--target`, writes the reason to
  * stderr and sets a non-zero exit code (nothing is installed). */
 export async function runInstallSubcommand(
-  opts: { target?: string; uninstall: boolean; dryRun: boolean },
+  opts: { target?: string; uninstall: boolean; dryRun: boolean; fromLocal?: boolean },
   deps: InstallDeps = {},
 ): Promise<void> {
   const ui = deps.ui ?? (await createInstallUI());
   const verb = opts.uninstall ? "uninstall" : "install";
-  ui.intro(`${verb}${opts.dryRun ? " (dry run)" : ""}`);
+  ui.intro(`${verb}${opts.fromLocal ? " (local build)" : ""}${opts.dryRun ? " (dry run)" : ""}`);
+
+  let local: LocalInstall | undefined;
+  if (opts.fromLocal) {
+    const resolved = resolveLocal(opts, deps, ui);
+    if (resolved === null) return;
+    local = resolved;
+  }
 
   const targets = await selectTargets(opts, deps, ui);
   if (targets === null) return;
 
   const runOpencode = deps.runOpencode ?? runInstallOpencodeTarget;
   const runClaude = deps.runClaude ?? runInstallClaudeTarget;
-  const targetOpts = { uninstall: opts.uninstall, dryRun: opts.dryRun };
+  const targetOpts = { uninstall: opts.uninstall, dryRun: opts.dryRun, local };
   for (const target of targets) {
-    switch (target) {
-      case "opencode":
-        await runOpencode(targetOpts, { ui });
-        break;
-      case "claude":
-        await runClaude(targetOpts, { ui });
-        break;
-      // Exhaustive on purpose: a new registry descriptor without a runner here is a
-      // type error, not a silent install into the wrong agent.
-      default:
-        target satisfies never;
+    let ok: unknown;
+    try {
+      switch (target) {
+        case "opencode":
+          ok = await runOpencode(targetOpts, { ui });
+          break;
+        case "claude":
+          ok = await runClaude(targetOpts, { ui });
+          break;
+        // Exhaustive on purpose: a new registry descriptor without a runner here is a
+        // type error, not a silent install into the wrong agent.
+        default:
+          target satisfies never;
+      }
+    } catch (e) {
+      // A target that throws instead of reporting would otherwise escape to the CLI's
+      // fail-safe handler, which renders a hook deny line — nonsense from an install.
+      ui.error(`${targetLabel(target)}: ${errorMessage(e)}`);
+      ok = false;
+    }
+    // A runner signals a reported failure by returning false; anything else (including
+    // the void the OpenCode target returns) means it got through. One failure stops the
+    // run: the remaining work all assumes caret is installed.
+    if (ok === false) {
+      process.exitCode = 1;
+      ui.outro(`Stopped — ${targetLabel(target)} was not set up. Nothing further was run.`);
+      return;
     }
   }
 
   await rumdlStep(opts, deps, ui);
-  ui.outro(closingLine(targets, opts));
+  if (local && !opts.dryRun) await prewarmStep(local.repoDir, deps, ui);
+  ui.outro(closingLine(targets, opts, local !== undefined));
+}
+
+/** Resolve the checkout `--from-local` installs, or report why it can't and return null
+ * (installing nothing, non-zero exit). Runs before target selection so a published binary
+ * — or a checkout nobody built — never reaches a target runner. */
+function resolveLocal(
+  opts: { uninstall: boolean; dryRun: boolean },
+  deps: InstallDeps,
+  ui: InstallUI,
+): LocalInstall | null {
+  if (opts.uninstall) {
+    ui.error(
+      "--from-local installs the checkout caret is running from; it has no uninstall. Run `caret install --uninstall` to remove caret from an agent.",
+    );
+    process.exitCode = 2;
+    return null;
+  }
+  try {
+    // A preview changes nothing, so it does not need the artifacts a real run reuses —
+    // `--from-local --dry-run` stays usable in a checkout nobody has built yet.
+    const { repoDir, ref } = (deps.resolveLocal ?? resolveLocalCheckout)({
+      requireArtifacts: !opts.dryRun,
+    });
+    ui.info(`Installing the local build at ${repoDir} (${ref}).`);
+    return { repoDir, marketplaceDir: (deps.marketplaceDir ?? devMarketplaceDir)() };
+  } catch (e) {
+    ui.error(errorMessage(e));
+    process.exitCode = 2;
+    return null;
+  }
+}
+
+/** Hand the daemon to the freshly built binary. Best-effort like every other part of the
+ * hand-off: a hiccup here leaves an otherwise-clean install standing, and the next review
+ * spawns the daemon anyway. The step reports only that prewarm ran — it cannot know
+ * whether the running daemon was retired or merely reused (see local.ts). */
+async function prewarmStep(repoDir: string, deps: InstallDeps, ui: InstallUI): Promise<void> {
+  try {
+    await ui.step(
+      "Prewarming the daemon on the fresh build",
+      () => (deps.prewarm ?? prewarmLocalBuild)(repoDir),
+      () => "Ran the fresh build's prewarm",
+    );
+  } catch (e) {
+    ui.warn(`Could not prewarm (${errorMessage(e)}) — the next review starts the daemon.`);
+  }
 }
 
 /** Acquire rumdl, the plan formatter every reviewed plan is reflowed through. Part of
@@ -141,11 +228,12 @@ async function rumdlStep(
   }
 }
 
-/** The closing line: what happened, to which agents, and the one thing OpenCode needs
+/** The closing line: what happened, to which agents, and the one thing each agent needs
  * the user to do next. */
 function closingLine(
   targets: InstallTarget[],
   opts: { uninstall: boolean; dryRun: boolean },
+  local = false,
 ): string {
   const names = targets.map(targetLabel).join(" and ");
   if (opts.dryRun) return `Dry run complete — nothing was changed.`;
@@ -153,14 +241,20 @@ function closingLine(
   const restart = targets.includes("opencode")
     ? " Restart OpenCode once so it installs and loads the plugin."
     : "";
-  return `caret is installed in ${names}.${restart}`;
+  // The local build lands in Claude's plugin cache at install time, so the running
+  // Claude Code session keeps the previous copy until it reloads.
+  const reload =
+    local && targets.includes("claude")
+      ? " Run /reload-plugins (or restart Claude Code) to pick it up."
+      : "";
+  return `caret${local ? " (local build)" : ""} is installed in ${names}.${reload}${restart}`;
 }
 
 /** Resolve which agents to install into. `null` means "install nothing" — either the
  * `--target` value was invalid (reported, non-zero exit) or the user cancelled the
  * chooser. The prompt is skipped whenever it can't be answered (no TTY) or shouldn't be
- * asked: `--dry-run` previews the detected agents instead, mirroring scripts/install.sh,
- * which also suppresses its prompt in dry-run. */
+ * asked: `--dry-run` previews the detected agents instead of asking about a run that
+ * changes nothing. */
 async function selectTargets(
   opts: { target?: string; uninstall: boolean; dryRun: boolean },
   deps: InstallDeps,
