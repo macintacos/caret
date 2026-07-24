@@ -12,6 +12,7 @@
   import { type ComposerScratch, rangeLabel } from "$lib/diffview/commenting.ts";
   import { formatFeedback, pendingInline, pendingLineCount, sourceLines } from "$lib/feedback.ts";
   import { isSubmitChord } from "$lib/keys.ts";
+  import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import ConfirmPopover from "@/components/ConfirmPopover.svelte";
   import Icon from "@/components/Icon.svelte";
   import MarkdownEditor from "@/components/MarkdownEditor.svelte";
@@ -344,7 +345,7 @@
 
   {#snippet footer()}
     <Button variant="secondary" class="float-chip" onclick={onCancel}>Cancel</Button>
-    <Button onclick={submit} disabled={!preview} aria-keyshortcuts="Meta+Enter Control+Enter">
+    <Button onclick={submit} disabled={!preview} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
       Send for revision
       <Kbd aria-hidden="true">
         <Icon name="command" size={12} /><Icon name="corner-down-left" size={12} />

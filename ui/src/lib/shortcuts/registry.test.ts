@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { flush } from "$lib/log.ts";
 import {
+  ariaKeyshortcuts,
   createShortcutRegistry,
   keyCaps,
   type ShortcutEntry,
@@ -107,6 +108,43 @@ describe("keyCaps", () => {
   });
   test("a plain symbol key renders as itself", () => {
     expect(keyCaps([{ key: "?" }])).toEqual([["?"]]);
+  });
+});
+
+describe("ariaKeyshortcuts", () => {
+  // The WAI-ARIA aria-keyshortcuts string, derived from the SAME semantic key/mods
+  // keyCaps renders — so a button's advertised shortcut cannot drift from the key the
+  // dispatcher fires on. Every case below reproduces a real CANONICAL_KEYMAP reservation.
+  test("an unshifted letter renders as its bare lowercase key", () => {
+    expect(ariaKeyshortcuts([{ key: "r" }])).toBe("r");
+    expect(ariaKeyshortcuts([{ key: "a" }])).toBe("a");
+    expect(ariaKeyshortcuts([{ key: "d" }])).toBe("d");
+  });
+  test("a shifted letter surfaces its implicit Shift (from the uppercase key)", () => {
+    expect(ariaKeyshortcuts([{ key: "C" }])).toBe("Shift+C");
+  });
+  test("the display `cap` glyph is ignored — key/mods are the source", () => {
+    // toggleComments carries cap ["shift","C"]; the aria string derives from the key.
+    expect(ariaKeyshortcuts([{ key: "C", cap: ["shift", "C"] }])).toBe("Shift+C");
+  });
+  test("a `mod` chord advertises both platform alternatives (Meta and Control)", () => {
+    // editor.submit: ⌘/Ctrl+Enter, platform-dispatched at match time, so both are named.
+    expect(ariaKeyshortcuts([{ key: "Enter", mods: ["mod"], cap: ["⌘", "↵"] }])).toBe(
+      "Meta+Enter Control+Enter",
+    );
+  });
+  test("a `ctrl` chord names Control and keeps the literal key", () => {
+    expect(ariaKeyshortcuts([{ key: "d", mods: ["ctrl"] }])).toBe("Control+d");
+  });
+  test("a punctuation key renders as its literal glyph", () => {
+    expect(ariaKeyshortcuts([{ key: "," }])).toBe(",");
+    expect(ariaKeyshortcuts([{ key: "\\" }])).toBe("\\");
+  });
+  test("a named key with no modifier renders as its DOM key name", () => {
+    expect(ariaKeyshortcuts([{ key: "Enter" }])).toBe("Enter");
+  });
+  test("a two-key sequence space-joins its chords (no ARIA sequence syntax; unused by any button)", () => {
+    expect(ariaKeyshortcuts([{ key: "g" }, { key: "g" }])).toBe("g g");
   });
 });
 

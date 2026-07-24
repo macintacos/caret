@@ -13,7 +13,7 @@
   import { installUiGoneBeacon } from "$lib/presence.ts";
   import { createSafeModeGuard } from "$lib/safeMode.ts";
   import {
-    CANONICAL_KEYMAP,
+    bind,
     createShortcutDispatcher,
     defaultIsEditingContext,
     EDITOR_SHORTCUTS,
@@ -355,54 +355,47 @@
   // own shortcuts into the same `shortcuts` singleton.
   $effect(() => {
     const unregister = EDITOR_SHORTCUTS.map((entry) => shortcuts.register(entry));
-    // The ? key toggles the shortcuts help modal (EXC-787). A live entry (with a
-    // run) replaces EXC-786's reserved help.show by id, so the dispatcher fires it
-    // and the modal lists it alongside the rest.
-    const unregisterHelp = shortcuts.register({
-      id: "help.show",
-      keys: [{ key: "?" }],
-      group: "help",
-      label: "Show shortcuts",
-      // Global scope (EXC-849): ? toggles the help from any view — including over the
-      // Settings modal, where every other review shortcut is suppressed.
-      scope: "global",
+    // A live binding = EXC-786's reservation (bind spreads key/label/group/cap/scope
+    // from CANONICAL_KEYMAP) + the caller's run/enabled, registered into the shared
+    // singleton. `reg` is the local wrapper over bind + register so each binding is a
+    // single call (EXC-876).
+    const reg = (id: string, opts: Parameters<typeof bind>[1]) => shortcuts.register(bind(id, opts));
+    // The ? key toggles the shortcuts help modal (EXC-787). help.show carries scope:
+    // "global" in the table (EXC-849), so binding it lets ? fire from every view —
+    // including over the Settings modal, where the review shortcuts are suppressed. The
+    // key and its global scope come from the reservation.
+    const unregisterHelp = reg("help.show", {
       run: () => {
         showHelp = !showHelp;
       },
     });
-    // The review-verdict + chrome shortcuts (EXC-789). Each reads its keys/label
-    // from EXC-786's canonical reservation and adds the live run + enabled here,
-    // routing through the SAME guarded path as its TopBar button — `a` is never a
-    // raw approve, always onApprove's unsent-comments guard. The two verdict
-    // actions gate on an active, not-busy review (matching the buttons' disabled
-    // state); Settings is persistent chrome (EXC-730), reachable with no review.
-    // Shift+C toggles the comment navigator (EXC-792), gated on an active review
-    // like the status-strip tally that also toggles it.
-    const reserved = new Map(CANONICAL_KEYMAP.map((e) => [e.id, e] as const));
-    const action = (id: string, run: () => void, enabled?: () => boolean) => {
-      const base = reserved.get(id);
-      return base ? shortcuts.register({ ...base, run, enabled }) : () => {};
-    };
+    // The review-verdict + chrome shortcuts (EXC-789). Each binds EXC-786's canonical
+    // reservation and adds the live run + enabled here, routing through the SAME guarded
+    // path as its TopBar button — `a` is never a raw approve, always onApprove's
+    // unsent-comments guard. The two verdict actions gate on an active, not-busy review
+    // (matching the buttons' disabled state); Settings is persistent chrome (EXC-730),
+    // reachable with no review. Shift+C toggles the comment navigator (EXC-792), gated on
+    // an active review like the status-strip tally that also toggles it.
     const canAct = () => active != null && !resolve.busy;
     const unregisterActions = [
-      action("actions.approve", () => onApprove(resolve.approveMode), canAct),
-      action(
-        "actions.requestChanges",
-        () => {
+      reg("actions.approve", { run: () => onApprove(resolve.approveMode), enabled: canAct }),
+      reg("actions.requestChanges", {
+        run: () => {
           showDialog = true;
         },
-        canAct,
-      ),
-      action("actions.settings", () => {
-        showSettings = true;
+        enabled: canAct,
       }),
-      action(
-        "actions.toggleComments",
-        () => {
+      reg("actions.settings", {
+        run: () => {
+          showSettings = true;
+        },
+      }),
+      reg("actions.toggleComments", {
+        run: () => {
           showComments = !showComments;
         },
-        () => active != null,
-      ),
+        enabled: () => active != null,
+      }),
     ];
     const dispatcher = createShortcutDispatcher({
       target: window,

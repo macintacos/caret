@@ -52,7 +52,7 @@
   import PlanSearch from "@/components/PlanSearch.svelte";
   import type { SourceViewGutter } from "$lib/diffview/options.ts";
   import type { SourceViewApi, SourceViewOptions } from "$lib/diffview/types.ts";
-  import { CANONICAL_KEYMAP, defaultIsEditingContext, shortcuts } from "$lib/shortcuts/index.ts";
+  import { ariaKeyshortcutsFor, bind, defaultIsEditingContext, shortcuts } from "$lib/shortcuts/index.ts";
   import type { CursorMotion } from "$lib/diffview/lineCursor.ts";
   import { activeHeadingLine, extractHeadings, lineForSlug, shouldShowToc, slugForLine } from "$lib/toc.ts";
   import { NARROW_WIDTH_PX, TIGHT_WIDTH_PX } from "$lib/layout.ts";
@@ -746,58 +746,50 @@
   // the composer is focused.
   $effect(() => {
     if (showDiff) return;
-    const reserved = new Map(CANONICAL_KEYMAP.map((e) => [e.id, e] as const));
     const offs: Array<() => void> = [];
     for (const [id, motion] of Object.entries(CURSOR_MOTIONS)) {
-      const base = reserved.get(id);
-      if (base == null) continue;
       offs.push(
-        shortcuts.register({
-          ...base,
-          run: () => keyboard.moveCursor(motion),
-          enabled: () => !defaultIsEditingContext(),
-        }),
+        shortcuts.register(
+          bind(id, {
+            run: () => keyboard.moveCursor(motion),
+            enabled: () => !defaultIsEditingContext(),
+          }),
+        ),
       );
     }
-    // Commenting on the focused line / a keyboard-selected range (EXC-790): live
-    // entries over EXC-786's reservations, registered in this same effect so they
-    // share its compare-mode gating (unregistered once showDiff) and editing-context
-    // guard. c comments the cursor line (or, in visual mode, the whole selection);
-    // V enters visual line-select; Esc closes search / exits visual mode but never
-    // clears the line cursor (EXC-834, narrowing EXC-790's Esc reconciliation).
-    const commentBase = reserved.get("commenting.comment");
-    if (commentBase != null) {
-      offs.push(
-        shortcuts.register({
-          ...commentBase,
+    // Commenting on the focused line / a keyboard-selected range (EXC-790): live entries
+    // bound over EXC-786's reservations, registered in this same effect so they share its
+    // compare-mode gating (unregistered once showDiff) and editing-context guard. c
+    // comments the cursor line (or, in visual mode, the whole selection); V enters visual
+    // line-select; Esc closes search / exits visual mode but never clears the line cursor
+    // (EXC-834, narrowing EXC-790's Esc reconciliation).
+    offs.push(
+      shortcuts.register(
+        bind("commenting.comment", {
           run: () => keyboard.commentCursorLine(),
           enabled: () => !defaultIsEditingContext(),
         }),
-      );
-    }
-    const visualBase = reserved.get("commenting.visualLine");
-    if (visualBase != null) {
-      offs.push(
-        shortcuts.register({
-          ...visualBase,
+      ),
+    );
+    offs.push(
+      shortcuts.register(
+        bind("commenting.visualLine", {
           run: () => keyboard.enterVisualMode(),
           enabled: () => !defaultIsEditingContext(),
         }),
-      );
-    }
+      ),
+    );
     // Gated on something to clear so Esc neither shadows other Esc handlers nor
     // preventDefaults with nothing to do; a focused editor keeps Esc regardless
     // (the dispatcher suppresses bare keys in an editing context).
-    const clearBase = reserved.get("commenting.clear");
-    if (clearBase != null) {
-      offs.push(
-        shortcuts.register({
-          ...clearBase,
+    offs.push(
+      shortcuts.register(
+        bind("commenting.clear", {
           run: () => keyboard.clearSelectionOrCursor(),
           enabled: () => keyboardStore.searchOpen || keyboardStore.visualAnchor != null,
         }),
-      );
-    }
+      ),
+    );
     return () => {
       for (const off of offs) off();
     };
@@ -845,73 +837,62 @@
   // search is committed. Mount-once: the closures read compareStore/showDiff/search*
   // live at dispatch, so a version or view change never churns the registry.
   $effect(() => {
-    const reserved = new Map(CANONICAL_KEYMAP.map((e) => [e.id, e] as const));
     const offs: Array<() => void> = [];
-    const toggleDiff = reserved.get("actions.toggleDiff");
-    if (toggleDiff != null) {
-      offs.push(
-        shortcuts.register({
-          ...toggleDiff,
+    offs.push(
+      shortcuts.register(
+        bind("actions.toggleDiff", {
           run: () => compare.setComparing(!compareStore.comparing),
           enabled: () => canCompare,
         }),
-      );
-    }
+      ),
+    );
     // `/` opens the plan search (EXC-832), repurposed from EXC-789's focus-filter.
     // Plan-content only; not gated on the ToC — search needs no rail.
-    const search = reserved.get("actions.search");
-    if (search != null) {
-      offs.push(
-        shortcuts.register({
-          ...search,
+    offs.push(
+      shortcuts.register(
+        bind("actions.search", {
           run: () => keyboard.openSearch(),
           enabled: () => !showDiff,
         }),
-      );
-    }
+      ),
+    );
     // n / N cycle matches, live while a search is committed (the field is blurred
     // then, so these bare keys reach the global dispatcher) OR when a remembered query
     // exists so they can RESUME a closed search from the cursor. Single-version only,
     // and never while an editor is focused.
-    const searchNext = reserved.get("actions.searchNext");
-    if (searchNext != null) {
-      offs.push(
-        shortcuts.register({
-          ...searchNext,
+    offs.push(
+      shortcuts.register(
+        bind("actions.searchNext", {
           run: () => keyboard.stepSearch(1),
           enabled: () =>
             !showDiff &&
             !defaultIsEditingContext() &&
             (keyboardStore.searchCommitted || keyboardStore.lastQuery !== ""),
         }),
-      );
-    }
-    const searchPrev = reserved.get("actions.searchPrev");
-    if (searchPrev != null) {
-      offs.push(
-        shortcuts.register({
-          ...searchPrev,
+      ),
+    );
+    offs.push(
+      shortcuts.register(
+        bind("actions.searchPrev", {
           run: () => keyboard.stepSearch(-1),
           enabled: () =>
             !showDiff &&
             !defaultIsEditingContext() &&
             (keyboardStore.searchCommitted || keyboardStore.lastQuery !== ""),
         }),
-      );
-    }
+      ),
+    );
     // `\` toggles the ToC rail (EXC-830), the same toggleToc the float-chip runs.
     // Same guard as the toggle button's `{#if !showDiff && hasToc}`: inert in
     // compare mode or when the plan has no contents pane.
-    const toggleSidebar = reserved.get("actions.toggleSidebar");
-    if (toggleSidebar != null) {
-      offs.push(
-        shortcuts.register({
-          ...toggleSidebar,
+    offs.push(
+      shortcuts.register(
+        bind("actions.toggleSidebar", {
           run: toggleToc,
           enabled: () => !showDiff && hasToc,
         }),
-      );
-    }
+      ),
+    );
     return () => {
       for (const off of offs) off();
     };
@@ -1107,7 +1088,7 @@
               type="button"
               class="toc-toggle float-chip"
               aria-label="Toggle sidebar"
-              aria-keyshortcuts={"\\"}
+              aria-keyshortcuts={ariaKeyshortcutsFor("actions.toggleSidebar")}
               aria-expanded={tocShown}
               aria-controls="plan-toc"
               onclick={toggleToc}

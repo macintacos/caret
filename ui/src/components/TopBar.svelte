@@ -6,6 +6,7 @@
   // only — every action is a callback prop resolved by App.svelte, and the
   // approve control's shape is driven by the variant count, not the adapter id.
   import { approveLabel } from "$lib/approve.ts";
+  import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import type { ApproveVariant, ApproveVariantId, ClientReview } from "@core/lib/types";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -98,7 +99,7 @@
         class="request float-chip"
         onclick={onRequestChanges}
         disabled={busy}
-        aria-keyshortcuts="r"
+        aria-keyshortcuts={ariaKeyshortcutsFor("actions.requestChanges")}
       >
         <Icon name="corner-up-left" size={14} />
         Request changes
@@ -208,7 +209,7 @@
             class="approve"
             onclick={() => onApprove(approveMode)}
             disabled={busy}
-            aria-keyshortcuts="a"
+            aria-keyshortcuts={ariaKeyshortcutsFor("actions.approve")}
           >
             <Icon name="check" size={14} />
             {approveLabel(approveMode, variants)}
@@ -218,7 +219,7 @@
           <SplitButton
             onclick={() => onApprove(approveMode)}
             optionsLabel="Approve options"
-            keyshortcuts="a"
+            keyshortcuts={ariaKeyshortcutsFor("actions.approve")}
             disabled={busy}
           >
             <Icon name="check" size={14} />
@@ -251,7 +252,7 @@
       size="icon"
       class="settings float-chip"
       aria-label="Settings"
-      aria-keyshortcuts=","
+      aria-keyshortcuts={ariaKeyshortcutsFor("actions.settings")}
       onclick={onOpenSettings}
     >
       <Icon name="settings" size={16} />

@@ -4,6 +4,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { isSubmitChord } from "$lib/keys.ts";
+  import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import Icon from "@/components/Icon.svelte";
   import MarkdownEditor from "@/components/MarkdownEditor.svelte";
   import Modal from "@/components/Modal.svelte";
@@ -148,7 +149,7 @@
       bind:ref={confirmEl}
       onclick={() => onConfirm(notes)}
       onkeydown={onKey}
-      aria-keyshortcuts="Meta+Enter Control+Enter"
+      aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}
     >
       {#if icon}<Icon name={icon} size={14} />{/if}
       {hasComments ? `${action} anyway` : action}

@@ -2,8 +2,19 @@ import "../../../test-setup.ts";
 import { describe, expect, test } from "bun:test";
 
 import { shortcuts } from "$lib/shortcuts/index.ts";
-import { CANONICAL_KEYMAP, EDITOR_SHORTCUTS } from "$lib/shortcuts/keymap.ts";
-import { createShortcutRegistry, keyCaps, specSignature } from "$lib/shortcuts/registry.ts";
+import {
+  ariaKeyshortcutsFor,
+  bind,
+  CANONICAL_KEYMAP,
+  EDITOR_SHORTCUTS,
+} from "$lib/shortcuts/keymap.ts";
+import {
+  createShortcutRegistry,
+  keyCaps,
+  type ShortcutScope,
+  specSignature,
+} from "$lib/shortcuts/registry.ts";
+import { isEntryActive } from "$lib/shortcuts/scope.ts";
 
 describe("CANONICAL_KEYMAP", () => {
   test("every entry id is unique", () => {
@@ -11,11 +22,44 @@ describe("CANONICAL_KEYMAP", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  test("globally-dispatched groups have no colliding key specs", () => {
-    const sigs = CANONICAL_KEYMAP.filter((e) => e.group !== "editor").map((e) =>
-      specSignature(e.keys),
-    );
-    expect(new Set(sigs).size).toBe(sigs.length);
+  test("no two dispatchable shortcuts collide within a scope (globals count in every scope)", () => {
+    // Editor chords are display-only (CodeMirror owns them on focus) and deliberately
+    // reuse Esc with commenting.clear, so they're excluded. Everything else is checked PER
+    // SCOPE: two entries collide only when some scope has both active — same scope, or one
+    // is global — which is exactly when the dispatcher could fire both. `/` is reserved in
+    // review (actions.search) AND settings (settings.search), but never both in one scope,
+    // so that cross-scope reuse is safe rather than a collision. The scope set is derived
+    // from the table — the base review surface (null) plus every distinct modal scope any
+    // entry declares — so a new modal scope is covered without editing this test.
+    const dispatchable = CANONICAL_KEYMAP.filter((e) => e.group !== "editor");
+    const modalScopes = [
+      ...new Set(
+        dispatchable
+          .map((e) => e.scope)
+          .filter((s): s is ShortcutScope => s != null && s !== "global"),
+      ),
+    ];
+    for (const scope of [null, ...modalScopes]) {
+      const sigs = dispatchable
+        .filter((e) => isEntryActive(e, scope))
+        .map((e) => specSignature(e.keys));
+      expect(new Set(sigs).size).toBe(sigs.length);
+    }
+  });
+
+  test("reserves the settings shortcuts in the table, scoped to settings (EXC-876)", () => {
+    // The Settings modal's own affordances are reserved in the single source so the
+    // collision check sees them. Display-only (no run): the modal owns / and Esc through
+    // its own handlers; these entries exist for the scoped `?` help and the collision check.
+    const search = CANONICAL_KEYMAP.find((e) => e.id === "settings.search");
+    const close = CANONICAL_KEYMAP.find((e) => e.id === "settings.close");
+    if (!search || !close) throw new Error("settings shortcuts missing from CANONICAL_KEYMAP");
+    expect(search.scope).toBe("settings");
+    expect(close.scope).toBe("settings");
+    expect(specSignature(search.keys)).toBe("/");
+    expect(specSignature(close.keys)).toBe("Escape");
+    expect(search.run).toBeUndefined();
+    expect(close.run).toBeUndefined();
   });
 
   test("reserves the parent keymap's bindings", () => {
@@ -26,11 +70,10 @@ describe("CANONICAL_KEYMAP", () => {
   });
 
   test("reserves Shift+C for the comment navigator, rendered as shift + C caps", () => {
-    // EXC-792: summons the comment navigator. Keyed "C" (a bare shifted key, no
-    // command modifier); its cap is ["shift", "C"] — the shift token (caps.ts's
-    // global shift icon) plus the capital. Since EXC-831, V/G derive the same
-    // shift + capital from their case, so C reads consistently with them. "shift"
-    // stays a plain string here, resolved to the icon at render.
+    // EXC-792: summons the comment navigator. Keyed "C" (a bare shifted key, no command
+    // modifier and no explicit cap: keyCaps derives the shift + capital from the uppercase
+    // key's case, the same path V/G take, EXC-831). "shift" is the token caps.ts resolves to
+    // the global shift icon at render.
     const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.toggleComments");
     if (!entry) throw new Error("actions.toggleComments missing");
     expect(entry.group).toBe("actions");
@@ -118,6 +161,47 @@ describe("EDITOR_SHORTCUTS", () => {
     if (!submit || !cancel) throw new Error("editor chords missing");
     expect(keyCaps(submit.keys)).toEqual([["⌘", "↵"]]);
     expect(keyCaps(cancel.keys)).toEqual([["Esc"]]);
+  });
+});
+
+describe("bind", () => {
+  test("spreads a reservation with the caller's run", () => {
+    const run = () => {};
+    const entry = bind("actions.approve", { run });
+    expect(entry.id).toBe("actions.approve");
+    expect(entry.keys).toEqual([{ key: "a" }]);
+    expect(entry.group).toBe("actions");
+    expect(entry.label).toBe("Approve");
+    expect(entry.run).toBe(run);
+  });
+
+  test("carries an enabled guard when given", () => {
+    const enabled = () => false;
+    expect(bind("actions.approve", { run: () => {}, enabled }).enabled).toBe(enabled);
+  });
+
+  test("preserves the reservation's own scope when none is passed (help.show is global)", () => {
+    expect(bind("help.show", { run: () => {} }).scope).toBe("global");
+  });
+
+  test("an explicit scope overrides the reservation's", () => {
+    expect(bind("actions.approve", { run: () => {}, scope: "settings" }).scope).toBe("settings");
+  });
+
+  test("throws on an id absent from the table", () => {
+    expect(() => bind("nope.missing", { run: () => {} })).toThrow();
+  });
+});
+
+describe("ariaKeyshortcutsFor", () => {
+  test("derives the aria-keyshortcuts string for a reserved id", () => {
+    expect(ariaKeyshortcutsFor("actions.approve")).toBe("a");
+    expect(ariaKeyshortcutsFor("actions.toggleComments")).toBe("Shift+C");
+    expect(ariaKeyshortcutsFor("editor.submit")).toBe("Meta+Enter Control+Enter");
+  });
+
+  test("throws on an id absent from the table", () => {
+    expect(() => ariaKeyshortcutsFor("nope.missing")).toThrow();
   });
 });
 

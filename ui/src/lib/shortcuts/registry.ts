@@ -124,6 +124,40 @@ export function keyCaps(spec: KeySpec): string[][] {
   });
 }
 
+/** Each command modifier in WAI-ARIA `aria-keyshortcuts` vocabulary. `mod` is
+ * platform-dispatched at match time (⌘ on macOS, Ctrl elsewhere), so a static
+ * attribute advertises BOTH alternatives (`Meta+X` and `Control+X`) rather than
+ * committing to one platform. */
+const ARIA_MOD: Record<Mod, readonly string[]> = {
+  mod: ["Meta", "Control"],
+  meta: ["Meta"],
+  ctrl: ["Control"],
+  alt: ["Alt"],
+};
+
+/** Render a key spec to its `aria-keyshortcuts` attribute string (WAI-ARIA:
+ * `+`-joined tokens, space-separated alternatives), derived from the SAME semantic
+ * `key` + `mods` as `keyCaps` — so a button's advertised shortcut cannot drift from
+ * the key the dispatcher fires on. A shifted letter (uppercase `key`, e.g. `C`/`V`)
+ * surfaces its implicit `Shift`; `mod` expands to its two platform alternatives. The
+ * display-only `cap` glyph (⌘↵, Esc) is intentionally ignored — the semantic key and
+ * mods are the source. ARIA has no key-sequence syntax, so a two-key spec (`gg`) is
+ * best-effort space-joined; no sequence drives an aria-keyshortcuts button. */
+export function ariaKeyshortcuts(spec: KeySpec): string {
+  return spec
+    .map((c) => {
+      // Each mod maps to one or more ARIA names (mod → Meta|Control); the cartesian
+      // product across mods yields every alternative combination (one, in practice).
+      const combos = (c.mods ?? []).reduce<string[][]>(
+        (acc, m) => acc.flatMap((combo) => ARIA_MOD[m].map((name) => [...combo, name])),
+        [[]],
+      );
+      const shift = /^[A-Z]$/.test(c.key) ? ["Shift"] : [];
+      return combos.map((combo) => [...combo, ...shift, c.key].join("+")).join(" ");
+    })
+    .join(" ");
+}
+
 export function createShortcutRegistry(): ShortcutRegistry {
   const entries = new Map<string, ShortcutEntry>();
 

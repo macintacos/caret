@@ -2,6 +2,7 @@ import "../../test-mount.ts";
 import { describe, expect, test } from "bun:test";
 
 import StatusStrip from "@/components/StatusStrip.svelte";
+import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
 
 import { render } from "../../test-mount.ts";
 
@@ -145,7 +146,11 @@ describe("StatusStrip", () => {
   test("advertises Shift+C and shows the shift-icon + C cap only when hints are enabled", () => {
     const off = render(StatusStrip, { ...base, pendingCount: 2 });
     const btn = off.target.querySelector<HTMLButtonElement>("button.comments-toggle")!;
-    expect(btn.getAttribute("aria-keyshortcuts")).toBe("Shift+C");
+    // The button derives its aria hint from the same reservation the dispatcher fires on,
+    // so this checks against that reservation rather than a fixed string (EXC-876).
+    expect(btn.getAttribute("aria-keyshortcuts")).toBe(
+      ariaKeyshortcutsFor("actions.toggleComments"),
+    );
     expect(btn.querySelector("[data-slot='kbd']")).toBeNull();
 
     const on = render(StatusStrip, { ...base, pendingCount: 2, showShortcutHints: true });

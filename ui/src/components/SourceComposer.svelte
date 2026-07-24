@@ -18,6 +18,7 @@
   import { Card } from "$lib/components/ui/card/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { rangeLabel } from "$lib/diffview/commenting.ts";
+  import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import ConfirmPopover from "@/components/ConfirmPopover.svelte";
   import Icon from "@/components/Icon.svelte";
   import MarkdownEditor from "@/components/MarkdownEditor.svelte";
@@ -161,7 +162,7 @@
       <!-- Edit mode: revise a saved comment. Cancel reverts (the comment survives,
            so no confirm), Save commits — same amber primary + ⌘↵ hint as Comment. -->
       <Button variant="ghost" class="cancel" onclick={onDiscard}>Cancel</Button>
-      <Button class="save" onclick={submit} aria-keyshortcuts="Meta+Enter Control+Enter">
+      <Button class="save" onclick={submit} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
         Save
         <Kbd aria-hidden="true">
           <Icon name="command" size={12} /><Icon name="corner-down-left" size={12} />
@@ -182,7 +183,7 @@
           />
         {/if}
       </span>
-      <Button onclick={submit} aria-keyshortcuts="Meta+Enter Control+Enter">
+      <Button onclick={submit} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
         Comment
         <Kbd aria-hidden="true">
           <Icon name="command" size={12} /><Icon name="corner-down-left" size={12} />
