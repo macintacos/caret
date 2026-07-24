@@ -252,6 +252,114 @@ test("the reporter reaches the real target runners, not just the orchestrator", 
   expect(ui.events).toContain("note:Claude Code — would run");
 });
 
+test("--from-local hands every target the resolved checkout and prewarms once, last", async () => {
+  const calls: string[] = [];
+  let handed: unknown;
+  await runInstallSubcommand(
+    { target: "claude", uninstall: false, dryRun: false, fromLocal: true },
+    {
+      ui: silentUI,
+      resolveLocal: () => ({ repoDir: "/checkout", ref: "v0.7.2-dirty" }),
+      marketplaceDir: () => "/dev-mp",
+      runClaude: (o) => {
+        calls.push("claude");
+        handed = o.local;
+      },
+      ensureRumdl: async () => {
+        calls.push("rumdl");
+        return { bin: "/x/rumdl", installed: false };
+      },
+      prewarm: async () => void calls.push("prewarm"),
+    },
+  );
+  expect(handed).toEqual({ repoDir: "/checkout", marketplaceDir: "/dev-mp" });
+  expect(calls).toEqual(["claude", "rumdl", "prewarm"]);
+});
+
+test("without --from-local nothing prewarms and no target sees a checkout", async () => {
+  const calls: string[] = [];
+  let handed: unknown = "untouched";
+  await runInstallSubcommand(
+    { target: "claude", uninstall: false, dryRun: false },
+    {
+      ui: silentUI,
+      runClaude: (o) => {
+        handed = o.local;
+      },
+      ensureRumdl: noRumdl,
+      prewarm: async () => void calls.push("prewarm"),
+    },
+  );
+  expect(handed).toBeUndefined();
+  expect(calls).toEqual([]);
+});
+
+test("--from-local outside a built checkout installs nothing and exits non-zero", async () => {
+  const calls: string[] = [];
+  const ui = recordingUI();
+  await runInstallSubcommand(
+    { target: "claude", uninstall: false, dryRun: false, fromLocal: true },
+    {
+      ui,
+      resolveLocal: () => {
+        throw new Error("run `mise run build` first");
+      },
+      runClaude: () => void calls.push("claude"),
+      ensureRumdl: noRumdl,
+      prewarm: async () => void calls.push("prewarm"),
+    },
+  );
+  expect(calls).toEqual([]);
+  expect(process.exitCode).toBe(2);
+  expect(ui.events.some((e) => e.includes("mise run build"))).toBe(true);
+});
+
+test("--from-local --uninstall is refused: local mode only installs", async () => {
+  const calls: string[] = [];
+  await runInstallSubcommand(
+    { target: "claude", uninstall: true, dryRun: false, fromLocal: true },
+    {
+      ui: silentUI,
+      resolveLocal: () => ({ repoDir: "/checkout", ref: "ref" }),
+      runClaude: () => void calls.push("claude"),
+    },
+  );
+  expect(calls).toEqual([]);
+  expect(process.exitCode).toBe(2);
+});
+
+test("--from-local --dry-run previews without prewarming", async () => {
+  const calls: string[] = [];
+  await runInstallSubcommand(
+    { target: "claude", uninstall: false, dryRun: true, fromLocal: true },
+    {
+      ui: silentUI,
+      resolveLocal: () => ({ repoDir: "/checkout", ref: "ref" }),
+      marketplaceDir: () => "/dev-mp",
+      runClaude: () => void calls.push("claude"),
+      prewarm: async () => void calls.push("prewarm"),
+    },
+  );
+  expect(calls).toEqual(["claude"]);
+});
+
+test("a failing prewarm still leaves the install successful", async () => {
+  const ui = recordingUI();
+  await runInstallSubcommand(
+    { target: "claude", uninstall: false, dryRun: false, fromLocal: true },
+    {
+      ui,
+      resolveLocal: () => ({ repoDir: "/checkout", ref: "ref" }),
+      marketplaceDir: () => "/dev-mp",
+      runClaude: () => {},
+      ensureRumdl: noRumdl,
+      prewarm: () => Promise.reject(new Error("daemon busy")),
+    },
+  );
+  expect(process.exitCode).toBe(0);
+  expect(ui.events.some((e) => e.startsWith("outro:"))).toBe(true);
+});
+
 test("--dry-run without --target previews the detected agents instead of prompting", async () => {
   const calls: string[] = [];
   let prompted = false;

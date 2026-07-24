@@ -74,6 +74,75 @@ test("a failed marketplace add is best-effort; a failed install is fatal", async
   ]);
 });
 
+test("--from-local registers the generated dev marketplace, never the published one", async () => {
+  const { runner, calls } = recorder();
+  const written: [string, string][] = [];
+  await runInstallClaudeTarget(
+    { uninstall: false, dryRun: false, local: { repoDir: "/checkout", marketplaceDir: "/dev-mp" } },
+    { claude: runner, writeDevMarketplace: (repo, out) => void written.push([repo, out]) },
+  );
+  expect(written).toEqual([["/checkout", "/dev-mp"]]);
+  expect(calls).toEqual([
+    ["plugin", "marketplace", "add", "/dev-mp"],
+    // Reinstall so the fresh build lands in the plugin cache even though the version is
+    // unchanged — the dev loop's defining difference from the published path.
+    ["plugin", "uninstall", "caret@caret"],
+    ["plugin", "install", "caret@caret", "--scope", "user"],
+    ["plugin", "enable", "caret@caret"],
+  ]);
+  expect(JSON.stringify(calls)).not.toContain("macintacos/caret");
+});
+
+test("--from-local falls back to updating the marketplace when the add fails", async () => {
+  // `marketplace add` fails once the dev marketplace is already registered; the update
+  // re-reads the same generated dir, so the run still installs the local build.
+  const calls: string[][] = [];
+  const runner: ClaudeRunner = async (args) => {
+    calls.push(args);
+    return args[2] === "add" ? { ok: false, detail: "already exists" } : { ok: true, detail: "" };
+  };
+  await runInstallClaudeTarget(
+    { uninstall: false, dryRun: false, local: { repoDir: "/checkout", marketplaceDir: "/dev-mp" } },
+    { claude: runner, writeDevMarketplace: () => {} },
+  );
+  expect(calls[0]).toEqual(["plugin", "marketplace", "add", "/dev-mp"]);
+  expect(calls[1]).toEqual(["plugin", "marketplace", "update", "caret"]);
+  expect(calls).toContainEqual(["plugin", "install", "caret@caret", "--scope", "user"]);
+});
+
+test("--from-local stops when neither the marketplace add nor its update lands", async () => {
+  // Pressing on would install the PUBLISHED plugin into a dev loop — silently wrong.
+  const calls: string[][] = [];
+  const runner: ClaudeRunner = async (args) => {
+    calls.push(args);
+    return args[1] === "marketplace" ? { ok: false, detail: "nope" } : { ok: true, detail: "" };
+  };
+  const ui = recordingUI();
+  await runInstallClaudeTarget(
+    { uninstall: false, dryRun: false, local: { repoDir: "/checkout", marketplaceDir: "/dev-mp" } },
+    { claude: runner, writeDevMarketplace: () => {}, ui },
+  );
+  expect(calls).toEqual([
+    ["plugin", "marketplace", "add", "/dev-mp"],
+    ["plugin", "marketplace", "update", "caret"],
+  ]);
+  expect(ui.events.some((e) => e.startsWith("error:"))).toBe(true);
+});
+
+test("--from-local --dry-run writes no marketplace and spawns no claude", async () => {
+  const { runner, calls } = recorder();
+  const written: string[] = [];
+  const ui = recordingUI();
+  await runInstallClaudeTarget(
+    { uninstall: false, dryRun: true, local: { repoDir: "/checkout", marketplaceDir: "/dev-mp" } },
+    { claude: runner, writeDevMarketplace: (_r, out) => void written.push(out), ui },
+  );
+  expect(calls).toEqual([]);
+  expect(written).toEqual([]);
+  // The preview says it is the local build, so a reader sees which caret would install.
+  expect(ui.events).toContain("note:Claude Code (local build) — would run");
+});
+
 test("the install narrates one step per phase, naming each claude command as it runs", async () => {
   const { runner } = recorder();
   const ui = recordingUI();

@@ -20,6 +20,13 @@ import { join, resolve } from "node:path";
 import { resolveCaretRoot } from "@/adapters/opencode/packaging.ts";
 import { stateDir } from "@/config/paths.ts";
 
+/** What a target needs to install the local build rather than the published one: the
+ * checkout to install, and where its generated marketplace is written. */
+export interface LocalInstall {
+  repoDir: string;
+  marketplaceDir: string;
+}
+
 /** Injection seam for tests: the caret root to treat as the checkout, how the ref label is
  * read, and how the prewarm child is spawned — so the whole module runs against a temp dir
  * without `git` and without starting a daemon. */
