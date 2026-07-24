@@ -128,7 +128,10 @@ agent to call it; the tool's `execute()` spawns `caret review` (`CARET_AGENT=ope
 blocks on your decision in the browser, and returns an approval or a change request (the
 reviewer feedback, without the plan echoed back) the agent revises and resubmits. The
 whole daemon/review pipeline is reused unchanged — the plugin is the OpenCode-side
-counterpart to Claude's `hooks.json`.
+counterpart to Claude's `hooks.json`. While the Plan agent is working, the plugin also
+warms the daemon in the background — `caret prewarm` on each plan-agent message, mirroring
+the `caret prewarm` row in the Claude hooks table above — so your first review doesn't
+wait on a cold start.
 
 OpenCode doesn't fire plugin hooks for subagent tool calls, so caret restricts the review
 tool to primary agents (`experimental.primary_tools` + per-agent `permission`) and
