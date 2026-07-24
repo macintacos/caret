@@ -65,3 +65,9 @@ const systemProbe: DetectProbe = {
 export function detectTargets(probe: DetectProbe = systemProbe): InstallTarget[] {
   return INSTALL_TARGETS.filter((t) => t.detect(probe)).map((t) => t.id);
 }
+
+/** A target's product name, for step labels and the closing line — the same string the
+ * chooser shows, so the run reads consistently from prompt to outro. */
+export function targetLabel(target: InstallTarget): string {
+  return INSTALL_TARGETS.find((t) => t.id === target)?.label ?? target;
+}

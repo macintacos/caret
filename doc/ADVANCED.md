@@ -166,6 +166,14 @@ rather than asking, and `--uninstall` asks (or reports) the same way before remo
 `--uninstall`) finishes by downloading the rumdl plan formatter, best-effort — see
 [Plan formatting](#plan-formatting-rumdl) below.
 
+At a terminal the whole run renders as one
+[`@clack/prompts`](https://github.com/bombshell-dev/clack) session: the chooser, then a
+spinner per operation (registering the marketplace, installing the plugin, editing
+OpenCode's `plugin` array, deploying the command files, fetching rumdl) that settles into
+a line saying what it did, and a closing summary. Off a terminal — piped, `CI=true`, or
+`NO_COLOR` set — the same run reports as plain `caret: …` lines with no escape codes, so
+CI transcripts and the output `install.sh` captures stay readable.
+
 ### Desktop notifications
 
 When a new plan lands while caret is in the background — tab hidden or window unfocused —

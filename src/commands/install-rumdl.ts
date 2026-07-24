@@ -16,12 +16,19 @@ export interface InstallRumdlDeps {
 }
 
 export async function runInstallRumdlSubcommand(deps: InstallRumdlDeps = {}): Promise<void> {
-  const ensure = deps.ensure ?? ensureRumdl;
   const write = deps.write ?? ((s: string) => void process.stdout.write(s));
+  write(`caret: ${await ensureRumdlInstalled(deps.ensure)}.\n`);
+}
 
+/** The acquisition, plus the one-line summary of what it did. `caret install` renders
+ * that summary as a step rather than writing it, so both callers describe rumdl the
+ * same way. */
+export async function ensureRumdlInstalled(
+  ensure: NonNullable<InstallRumdlDeps["ensure"]> = ensureRumdl,
+): Promise<string> {
   // `installed` is ensureRumdl's own signal for "this call downloaded it" — honest
   // whether the binary was freshly fetched, already cached, or a CARET_RUMDL_BIN
   // override (no guessing at the cache path the override never populates).
   const { bin, installed } = await ensure();
-  write(`caret: rumdl ${installed ? "installed" : "already present"} at ${bin}.\n`);
+  return `rumdl ${installed ? "installed" : "already present"} at ${bin}`;
 }

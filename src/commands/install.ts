@@ -14,12 +14,14 @@
 import { runInstallClaudeTarget } from "@/commands/install-claude.ts";
 import { runInstallOpencodeTarget } from "@/commands/install-opencode.ts";
 import { promptForTargets } from "@/commands/install-prompt.ts";
-import { runInstallRumdlSubcommand } from "@/commands/install-rumdl.ts";
+import { ensureRumdlInstalled } from "@/commands/install-rumdl.ts";
 import {
   detectTargets,
   INSTALL_TARGET_IDS,
   type InstallTarget,
+  targetLabel,
 } from "@/commands/install-targets.ts";
+import { createInstallUI, type InstallUI } from "@/commands/install-ui.ts";
 import { errorMessage } from "@/lib/types.ts";
 
 /** Parse a `--target` value ("opencode", "claude", or "opencode,claude") into a
@@ -53,12 +55,18 @@ export function parseTargets(
  * runner to assert selection and dispatch without touching a real config dir, the
  * `claude` CLI, or a terminal. */
 export interface InstallDeps {
-  runOpencode?: (opts: { uninstall: boolean; dryRun: boolean }) => void;
-  runClaude?: (opts: { uninstall: boolean; dryRun: boolean }) => void;
+  runOpencode?: (opts: TargetOpts, deps: { ui: InstallUI }) => void | Promise<void>;
+  runClaude?: (opts: TargetOpts, deps: { ui: InstallUI }) => void | Promise<void>;
   detect?: () => InstallTarget[];
   prompt?: (detected: InstallTarget[], uninstall: boolean) => Promise<InstallTarget[] | null>;
   isInteractive?: () => boolean;
-  ensureRumdl?: () => Promise<void>;
+  ensureRumdl?: () => Promise<string>;
+  ui?: InstallUI;
+}
+
+interface TargetOpts {
+  uninstall: boolean;
+  dryRun: boolean;
 }
 
 /** Run the install command: resolve the targets (from `--target`, the chooser, or
@@ -68,19 +76,23 @@ export async function runInstallSubcommand(
   opts: { target?: string; uninstall: boolean; dryRun: boolean },
   deps: InstallDeps = {},
 ): Promise<void> {
-  const targets = await selectTargets(opts, deps);
+  const ui = deps.ui ?? (await createInstallUI());
+  const verb = opts.uninstall ? "uninstall" : "install";
+  ui.intro(`${verb}${opts.dryRun ? " (dry run)" : ""}`);
+
+  const targets = await selectTargets(opts, deps, ui);
   if (targets === null) return;
 
-  const runOpencode = deps.runOpencode ?? ((o) => runInstallOpencodeTarget(o));
-  const runClaude = deps.runClaude ?? ((o) => runInstallClaudeTarget(o));
+  const runOpencode = deps.runOpencode ?? runInstallOpencodeTarget;
+  const runClaude = deps.runClaude ?? runInstallClaudeTarget;
   const targetOpts = { uninstall: opts.uninstall, dryRun: opts.dryRun };
   for (const target of targets) {
     switch (target) {
       case "opencode":
-        runOpencode(targetOpts);
+        await runOpencode(targetOpts, { ui });
         break;
       case "claude":
-        runClaude(targetOpts);
+        await runClaude(targetOpts, { ui });
         break;
       // Exhaustive on purpose: a new registry descriptor without a runner here is a
       // type error, not a silent install into the wrong agent.
@@ -89,21 +101,48 @@ export async function runInstallSubcommand(
     }
   }
 
+  await rumdlStep(opts, deps, ui);
+  ui.outro(closingLine(targets, opts));
+}
+
+/** Eagerly download rumdl so the first plan doesn't pay the latency, the same
+ * best-effort step scripts/install.sh runs: the daemon downloads it lazily anyway, so a
+ * failure here is reported as a warning and never fails the install. Uninstalls skip it
+ * (nothing is being set up), and dry-run only says it would run. */
+async function rumdlStep(
+  opts: { uninstall: boolean; dryRun: boolean },
+  deps: InstallDeps,
+  ui: InstallUI,
+): Promise<void> {
   if (opts.uninstall) return;
   if (opts.dryRun) {
-    process.stdout.write("caret: [dry-run] would download the rumdl plan formatter.\n");
+    ui.info("Would download the rumdl plan formatter.");
     return;
   }
-  // Eagerly download rumdl so the first plan doesn't pay the latency, the same
-  // best-effort step scripts/install.sh runs: the daemon downloads it lazily anyway, so
-  // a failure here is reported and never fails the install.
   try {
-    await (deps.ensureRumdl ?? (() => runInstallRumdlSubcommand()))();
-  } catch (e) {
-    process.stderr.write(
-      `caret: could not download rumdl (${errorMessage(e)}) — caret will retry on your first plan.\n`,
+    await ui.step(
+      "Downloading the rumdl plan formatter",
+      () => (deps.ensureRumdl ?? ensureRumdlInstalled)(),
+      (summary) => summary,
     );
+  } catch (e) {
+    ui.warn(`Could not download rumdl (${errorMessage(e)}) — caret will retry on your first plan.`);
   }
+}
+
+/** The closing line: what happened, to which agents, and the one thing OpenCode needs
+ * the user to do next. */
+function closingLine(
+  targets: InstallTarget[],
+  opts: { uninstall: boolean; dryRun: boolean },
+): string {
+  const names = targets.map(targetLabel).join(" and ");
+  if (opts.dryRun) return `Dry run complete — nothing was changed.`;
+  if (opts.uninstall) return `caret removed from ${names}.`;
+  const restart = targets.includes("opencode")
+    ? " Restart OpenCode once so it installs and loads the plugin."
+    : "";
+  return `caret is installed in ${names}.${restart}`;
 }
 
 /** Resolve which agents to install into. `null` means "install nothing" — either the
@@ -114,11 +153,12 @@ export async function runInstallSubcommand(
 async function selectTargets(
   opts: { target?: string; uninstall: boolean; dryRun: boolean },
   deps: InstallDeps,
+  ui: InstallUI,
 ): Promise<InstallTarget[] | null> {
   if (opts.target !== undefined) {
     const parsed = parseTargets(opts.target);
     if ("error" in parsed) {
-      process.stderr.write(`caret: ${parsed.error}\n`);
+      ui.error(parsed.error);
       process.exitCode = 2;
       return null;
     }
@@ -133,16 +173,16 @@ async function selectTargets(
   if (isInteractive() && !opts.dryRun) {
     const chosen = await (deps.prompt ?? promptForTargets)(detected, opts.uninstall);
     if (chosen === null) {
-      process.stdout.write("caret: cancelled — nothing was changed.\n");
+      ui.cancel("Cancelled — nothing was changed.");
       return null;
     }
     return chosen;
   }
 
-  // Non-interactive: install into everything detected, defaulting to Claude Code when
-  // nothing was. Say which, so a log explains the choice nobody was there to make.
+  // Non-interactive: act on everything detected, defaulting to Claude Code when nothing
+  // was. Say which, so a log explains the choice nobody was there to make.
   const targets: InstallTarget[] = detected.length > 0 ? detected : ["claude"];
-  const why = detected.length > 0 ? "detected" : "no agent detected, defaulting to";
-  process.stdout.write(`caret: ${why} ${targets.join(", ")}.\n`);
+  const names = targets.map(targetLabel).join(", ");
+  ui.info(detected.length > 0 ? `Detected ${names}.` : `No agent detected — using ${names}.`);
   return targets;
 }

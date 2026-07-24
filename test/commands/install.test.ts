@@ -6,10 +6,11 @@ import { afterEach, expect, test } from "bun:test";
 
 import { parseTargets, runInstallSubcommand } from "@/commands/install.ts";
 import type { InstallTarget } from "@/commands/install-targets.ts";
+import { recordingUI, silentUI } from "@/commands/install-ui.ts";
 
 /** Keep a test off the real rumdl download: without this seam the command falls through
  * to the production acquisition, which reaches the network and writes to the state dir. */
-const noRumdl = async () => {};
+const noRumdl = async () => "rumdl already present at /tmp/rumdl";
 
 test("parseTargets accepts a single target, both, and dedupes/preserves order", () => {
   expect(parseTargets("opencode")).toEqual({ targets: ["opencode"] });
@@ -35,8 +36,9 @@ test("runInstallSubcommand dispatches to each selected target with the same opts
   await runInstallSubcommand(
     { target: "opencode,claude", uninstall: true, dryRun: false },
     {
-      runOpencode: (o) => calls.push(`opencode:${o.uninstall}:${o.dryRun}`),
-      runClaude: (o) => calls.push(`claude:${o.uninstall}:${o.dryRun}`),
+      ui: silentUI,
+      runOpencode: (o) => void calls.push(`opencode:${o.uninstall}:${o.dryRun}`),
+      runClaude: (o) => void calls.push(`claude:${o.uninstall}:${o.dryRun}`),
     },
   );
   expect(calls).toEqual(["opencode:true:false", "claude:true:false"]);
@@ -47,8 +49,9 @@ test("runInstallSubcommand runs only the requested target", async () => {
   await runInstallSubcommand(
     { target: "opencode", uninstall: false, dryRun: true },
     {
-      runOpencode: () => calls.push("opencode"),
-      runClaude: () => calls.push("claude"),
+      ui: silentUI,
+      runOpencode: () => void calls.push("opencode"),
+      runClaude: () => void calls.push("claude"),
     },
   );
   expect(calls).toEqual(["opencode"]);
@@ -58,7 +61,11 @@ test("runInstallSubcommand sets a non-zero exit code and dispatches nothing on a
   const calls: string[] = [];
   await runInstallSubcommand(
     { target: "bogus", uninstall: false, dryRun: false },
-    { runOpencode: () => calls.push("opencode"), runClaude: () => calls.push("claude") },
+    {
+      ui: silentUI,
+      runOpencode: () => void calls.push("opencode"),
+      runClaude: () => void calls.push("claude"),
+    },
   );
   expect(calls).toEqual([]);
   expect(process.exitCode).toBe(2);
@@ -76,8 +83,9 @@ test("with no --target on a TTY, the chooser sees the detected agents and drives
         offered = detected;
         return ["opencode", "claude"];
       },
-      runOpencode: () => calls.push("opencode"),
-      runClaude: () => calls.push("claude"),
+      ui: silentUI,
+      runOpencode: () => void calls.push("opencode"),
+      runClaude: () => void calls.push("claude"),
       ensureRumdl: noRumdl,
     },
   );
@@ -97,8 +105,9 @@ test("a cancelled chooser installs nothing", async () => {
         prompted = true;
         return null;
       },
-      runOpencode: () => calls.push("opencode"),
-      runClaude: () => calls.push("claude"),
+      ui: silentUI,
+      runOpencode: () => void calls.push("opencode"),
+      runClaude: () => void calls.push("claude"),
     },
   );
   expect(prompted).toBe(true);
@@ -117,8 +126,9 @@ test("with no --target and no TTY, every detected agent is installed without pro
         prompted = true;
         return null;
       },
-      runOpencode: () => calls.push("opencode"),
-      runClaude: () => calls.push("claude"),
+      ui: silentUI,
+      runOpencode: () => void calls.push("opencode"),
+      runClaude: () => void calls.push("claude"),
       ensureRumdl: noRumdl,
     },
   );
@@ -134,8 +144,9 @@ test("with no --target, no TTY, and no agent detected, it falls back to Claude C
       detect: () => [],
       isInteractive: () => false,
       prompt: async () => null,
-      runOpencode: () => calls.push("opencode"),
-      runClaude: () => calls.push("claude"),
+      ui: silentUI,
+      runOpencode: () => void calls.push("opencode"),
+      runClaude: () => void calls.push("claude"),
       ensureRumdl: noRumdl,
     },
   );
@@ -153,6 +164,7 @@ test("with no --target, the chooser is told whether this is an uninstall", async
         asked = uninstall;
         return [];
       },
+      ui: silentUI,
       runClaude: () => {},
     },
   );
@@ -164,8 +176,12 @@ test("installing ensures rumdl once, after the targets", async () => {
   await runInstallSubcommand(
     { target: "claude", uninstall: false, dryRun: false },
     {
-      runClaude: () => calls.push("claude"),
-      ensureRumdl: async () => void calls.push("rumdl"),
+      ui: silentUI,
+      runClaude: () => void calls.push("claude"),
+      ensureRumdl: async () => {
+        calls.push("rumdl");
+        return "rumdl already present";
+      },
     },
   );
   expect(calls).toEqual(["claude", "rumdl"]);
@@ -173,7 +189,14 @@ test("installing ensures rumdl once, after the targets", async () => {
 
 test("uninstalling and --dry-run never download rumdl", async () => {
   const calls: string[] = [];
-  const deps = { runClaude: () => {}, ensureRumdl: async () => void calls.push("rumdl") };
+  const deps = {
+    runClaude: () => {},
+    ui: silentUI,
+    ensureRumdl: async () => {
+      calls.push("rumdl");
+      return "rumdl already present";
+    },
+  };
   await runInstallSubcommand({ target: "claude", uninstall: true, dryRun: false }, deps);
   await runInstallSubcommand({ target: "claude", uninstall: false, dryRun: true }, deps);
   expect(calls).toEqual([]);
@@ -184,12 +207,22 @@ test("a failing rumdl download leaves the install successful", async () => {
   await runInstallSubcommand(
     { target: "claude", uninstall: false, dryRun: false },
     {
-      runClaude: () => calls.push("claude"),
+      ui: silentUI,
+      runClaude: () => void calls.push("claude"),
       ensureRumdl: () => Promise.reject(new Error("offline")),
     },
   );
   expect(calls).toEqual(["claude"]);
   expect(process.exitCode).toBe(0);
+});
+
+test("the reporter reaches the real target runners, not just the orchestrator", async () => {
+  // Dry-run so the Claude target only previews (no `claude` spawn). With no runner
+  // overrides this exercises production dispatch — the wiring that silently fell back
+  // to the no-op UI when the reporter was passed in the runner's deps position.
+  const ui = recordingUI();
+  await runInstallSubcommand({ target: "claude", uninstall: false, dryRun: true }, { ui });
+  expect(ui.events).toContain("note:Claude Code — would run");
 });
 
 test("--dry-run without --target previews the detected agents instead of prompting", async () => {
@@ -204,8 +237,9 @@ test("--dry-run without --target previews the detected agents instead of prompti
         prompted = true;
         return null;
       },
-      runOpencode: () => calls.push("opencode"),
-      runClaude: () => calls.push("claude"),
+      ui: silentUI,
+      runOpencode: () => void calls.push("opencode"),
+      runClaude: () => void calls.push("claude"),
     },
   );
   expect(prompted).toBe(false);
