@@ -2,7 +2,12 @@ import "../../../test-setup.ts";
 import { describe, expect, test } from "bun:test";
 
 import { shortcuts } from "$lib/shortcuts/index.ts";
-import { CANONICAL_KEYMAP, EDITOR_SHORTCUTS } from "$lib/shortcuts/keymap.ts";
+import {
+  ariaKeyshortcutsFor,
+  bind,
+  CANONICAL_KEYMAP,
+  EDITOR_SHORTCUTS,
+} from "$lib/shortcuts/keymap.ts";
 import { createShortcutRegistry, keyCaps, specSignature } from "$lib/shortcuts/registry.ts";
 
 describe("CANONICAL_KEYMAP", () => {
@@ -118,6 +123,47 @@ describe("EDITOR_SHORTCUTS", () => {
     if (!submit || !cancel) throw new Error("editor chords missing");
     expect(keyCaps(submit.keys)).toEqual([["⌘", "↵"]]);
     expect(keyCaps(cancel.keys)).toEqual([["Esc"]]);
+  });
+});
+
+describe("bind", () => {
+  test("spreads a reservation with the caller's run", () => {
+    const run = () => {};
+    const entry = bind("actions.approve", { run });
+    expect(entry.id).toBe("actions.approve");
+    expect(entry.keys).toEqual([{ key: "a" }]);
+    expect(entry.group).toBe("actions");
+    expect(entry.label).toBe("Approve");
+    expect(entry.run).toBe(run);
+  });
+
+  test("carries an enabled guard when given", () => {
+    const enabled = () => false;
+    expect(bind("actions.approve", { run: () => {}, enabled }).enabled).toBe(enabled);
+  });
+
+  test("preserves the reservation's own scope when none is passed (help.show is global)", () => {
+    expect(bind("help.show", { run: () => {} }).scope).toBe("global");
+  });
+
+  test("an explicit scope overrides the reservation's", () => {
+    expect(bind("actions.approve", { run: () => {}, scope: "settings" }).scope).toBe("settings");
+  });
+
+  test("throws on an id absent from the table", () => {
+    expect(() => bind("nope.missing", { run: () => {} })).toThrow();
+  });
+});
+
+describe("ariaKeyshortcutsFor", () => {
+  test("derives the aria-keyshortcuts string for a reserved id", () => {
+    expect(ariaKeyshortcutsFor("actions.approve")).toBe("a");
+    expect(ariaKeyshortcutsFor("actions.toggleComments")).toBe("Shift+C");
+    expect(ariaKeyshortcutsFor("editor.submit")).toBe("Meta+Enter Control+Enter");
+  });
+
+  test("throws on an id absent from the table", () => {
+    expect(() => ariaKeyshortcutsFor("nope.missing")).toThrow();
   });
 });
 

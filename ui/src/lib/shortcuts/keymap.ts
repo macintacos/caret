@@ -6,7 +6,11 @@
 // chords, display-only so they appear in the help modal while the composer
 // (markdownEditor.ts) keeps owning the behavior.
 
-import type { ShortcutEntry } from "$lib/shortcuts/registry.ts";
+import {
+  ariaKeyshortcuts,
+  type ShortcutEntry,
+  type ShortcutScope,
+} from "$lib/shortcuts/registry.ts";
 
 /** The existing editor chords, surfaced read-only in the help modal (EXC-786).
  * No `run`: markdownEditor.ts owns ⌘/Ctrl+Enter and Esc on the focused editor,
@@ -121,7 +125,49 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
   // command modifier; the cap derives straight from the key (no override needed).
   { id: "actions.toggleSidebar", keys: [{ key: "\\" }], group: "actions", label: "Toggle sidebar" },
   // Help
-  { id: "help.show", keys: [{ key: "?" }], group: "help", label: "Show shortcuts" },
+  {
+    id: "help.show",
+    keys: [{ key: "?" }],
+    group: "help",
+    label: "Show shortcuts",
+    // Global scope (EXC-849): ? toggles the help from any view — including over the
+    // Settings modal, where every other review shortcut is suppressed. App binds this
+    // reservation (EXC-876), so the key AND its global scope flow from the table.
+    scope: "global",
+  },
   // Editor (existing) — the read-only chords, registered live for the help modal.
   ...EDITOR_SHORTCUTS,
 ];
+
+// One lookup of the reservations by id, built once. `bind` and `ariaKeyshortcutsFor` both
+// resolve through it, so the `new Map(CANONICAL_KEYMAP…)` + `.get` + null-check the
+// live-binding effects used to hand-roll now lives in exactly one place (EXC-876).
+const RESERVED = new Map(CANONICAL_KEYMAP.map((e) => [e.id, e] as const));
+
+/** The reservation for `id`, or a hard error — a typo'd id is a bug, not a silent no-op:
+ * the single source cannot serve a key it never reserved. */
+function reservedEntry(id: string): ShortcutEntry {
+  const base = RESERVED.get(id);
+  if (!base) throw new Error(`no reserved shortcut "${id}" in CANONICAL_KEYMAP`);
+  return base;
+}
+
+/** A live, dispatchable entry from a reservation: the canonical key/label/group/cap
+ * spread with the caller's `run` (+ optional `enabled`/`scope`). The single seam every
+ * live binding registers through — collapsing the `new Map(CANONICAL_KEYMAP…)` + `.get` +
+ * null-check + spread the App / DiffPlanView effects each repeated (EXC-876). An explicit
+ * `scope` overrides; otherwise the reservation's own scope (help.show's `"global"`) is
+ * preserved by the spread. */
+export function bind(
+  id: string,
+  { run, enabled, scope }: { run: () => void; enabled?: () => boolean; scope?: ShortcutScope },
+): ShortcutEntry {
+  return { ...reservedEntry(id), run, enabled, ...(scope !== undefined && { scope }) };
+}
+
+/** The `aria-keyshortcuts` string a button advertises for the shortcut `id`, derived from
+ * that id's reservation so the a11y hint can't drift from the key the dispatcher fires on.
+ * The ~8 hand-copied aria strings all route through here (EXC-876). */
+export function ariaKeyshortcutsFor(id: string): string {
+  return ariaKeyshortcuts(reservedEntry(id).keys);
+}
