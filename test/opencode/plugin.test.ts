@@ -7,6 +7,9 @@
 // spawn runner (no real OpenCode, no real `caret review` process).
 
 import { expect, test } from "bun:test";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import type { PluginInput, ToolContext } from "@opencode-ai/plugin";
 
@@ -464,4 +467,43 @@ test("the chat.message hook swallows a warm failure (best-effort, never disrupts
     throw new Error("spawn blew up");
   });
   await expect(hooks["chat.message"]?.(message("plan"), {} as never)).resolves.toBeUndefined();
+});
+
+// The two below drive the REAL nodeWarmRunner (no injected warm), because its
+// contract lives entirely in the spawn options the DI seam hides: the async
+// 'error' handler and the CARET_AGENT the child inherits. A stubbed runner can
+// pin neither.
+
+/** Assemble the plugin against a real binary path, with the production warm runner. */
+async function buildRealWarmHooks(bin: string) {
+  return await createCaretPlugin({ bin, run: stubRunner("{}") })({} as unknown as PluginInput);
+}
+
+test("the real warm runner survives a bad caret binary (async spawn error)", async () => {
+  // spawn emits 'error' (ENOENT) ASYNCHRONOUSLY, so the hook's synchronous
+  // try/catch cannot see it — without nodeWarmRunner's own 'error' handler this
+  // is an uncaught exception that kills the host process.
+  const hooks = await buildRealWarmHooks("/nonexistent/caret-838");
+  await hooks["chat.message"]?.(message("plan"), {} as never);
+  await Bun.sleep(150);
+  // Reaching this line at all is the assertion: an unhandled 'error' event would
+  // have taken the runner down before it.
+  await expect(hooks["chat.message"]?.(message("plan"), {} as never)).resolves.toBeUndefined();
+});
+
+test("the real warm runner runs `prewarm` with CARET_AGENT=opencode", async () => {
+  // The warm spawns the daemon, and the daemon picks its adapter from CARET_AGENT.
+  // Omitting it stands up a claude-flavored daemon that the later `caret review`
+  // reuses, offering OpenCode reviewers Claude's approve variants.
+  const dir = mkdtempSync(join(tmpdir(), "caret-warm-"));
+  const out = join(dir, "argv");
+  const shim = join(dir, "shim");
+  writeFileSync(shim, `#!/bin/sh\nprintf '%s %s' "$1" "$CARET_AGENT" > ${out}\n`);
+  chmodSync(shim, 0o755);
+
+  const hooks = await buildRealWarmHooks(shim);
+  await hooks["chat.message"]?.(message("plan"), {} as never);
+  // The child is detached; poll briefly rather than racing a fixed sleep.
+  for (let i = 0; i < 100 && !existsSync(out); i++) await Bun.sleep(20);
+  expect(readFileSync(out, "utf-8")).toBe("prewarm opencode");
 });

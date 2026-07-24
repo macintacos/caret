@@ -521,17 +521,6 @@ export async function runReviewViaCaret(
  * the renderer never owns it and it lingered after the decision (EXC-691). We now
  * parse that URL and surface it as a caret-owned toast instead; the child logs
  * diagnostics to caret.log, so dropping the rest of stderr loses nothing. */
-/** Warms the caret daemon ahead of a review. Injected so the chat.message hook is
- * unit-testable without spawning a process. */
-export type WarmRunner = (bin: string) => void;
-
-/** Production warm: `caret prewarm`, detached and unref'd so it never holds up
- * the turn. Output is discarded — the child logs to caret.log, and a failed warm
- * is a non-event (the review path spawns the daemon itself). */
-const nodeWarmRunner: WarmRunner = (bin) => {
-  spawn(bin, ["prewarm"], { stdio: "ignore", detached: true }).unref();
-};
-
 const nodeSpawnRunner: SpawnRunner = (bin, env, stdin, onStderr) =>
   new Promise((resolve, reject) => {
     const child = spawn(bin, ["review"], { env, stdio: ["pipe", "pipe", "pipe"] });
@@ -545,6 +534,28 @@ const nodeSpawnRunner: SpawnRunner = (bin, env, stdin, onStderr) =>
     child.stdin.write(stdin);
     child.stdin.end();
   });
+
+/** Warms the caret daemon ahead of a review. Injected so the chat.message hook is
+ * unit-testable without spawning a process. */
+export type WarmRunner = (bin: string) => void;
+
+/** Production warm: `caret prewarm`, detached and unref'd so it never holds up the
+ * turn. Output is discarded — the child logs to caret.log. Two non-obvious
+ * requirements, both spelled out in `doc/agents/opencode-integration.md` § Daemon
+ * warm-up: CARET_AGENT rides along because this spawn is what stands the daemon
+ * up and the daemon picks its adapter from that env; and the 'error' handler is
+ * mandatory because spawn emits 'error' ASYNCHRONOUSLY (ENOENT on a bad bin),
+ * where the hook's synchronous try/catch cannot see it and an unhandled event
+ * would take OpenCode's whole process down. */
+const nodeWarmRunner: WarmRunner = (bin) => {
+  const child = spawn(bin, ["prewarm"], {
+    stdio: "ignore",
+    detached: true,
+    env: { ...process.env, CARET_AGENT: "opencode" },
+  });
+  child.on("error", () => {});
+  child.unref();
+};
 
 // ---------------------------------------------------------------------------
 // The plugin
