@@ -3,7 +3,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import type { ClientReview, PlanVersion } from "@core/lib/types";
 import DiffPlanView from "@/components/DiffPlanView.svelte";
-import { type ComposerScratch, scratchKey } from "$lib/diffview/commenting.ts";
+import { createSourceCommenting, scratchKey } from "$lib/diffview/commenting.ts";
 import { shortcuts } from "$lib/shortcuts/index.ts";
 
 import { until } from "../../../test/support/poll.ts";
@@ -17,7 +17,7 @@ function props(over: Record<string, unknown> = {}) {
   return {
     review: reviewFixture(),
     onCopyCwd: () => {},
-    onCreateLineAnnotation: () => {},
+    commenting: createSourceCommenting({ onCreate: () => {} }),
     annotations: [],
     focusedAnnotation: null,
     onEditAnnotation: () => {},
@@ -470,53 +470,40 @@ describe("DiffPlanView file-reference resolution", () => {
   });
 });
 
-// The Request Changes dialog (a sibling) surfaces the source view's retained
-// scratches with per-scratch Save/Discard. DiffPlanView owns the controller and
-// hands its Save/Discard actions up once on mount, so the dialog can act on a
-// scratch without owning the controller (EXC-635).
-describe("DiffPlanView scratch hand-off to the host", () => {
-  test("exposes the controller's save and discard actions on mount", async () => {
-    let actions: { save: (key: string) => void; discard: (key: string) => void } | undefined;
-    render(DiffPlanView, props({ onExposeScratchActions: (a: typeof actions) => (actions = a) }));
-    await until(() => actions != null);
-    expect(typeof actions?.save).toBe("function");
-    expect(typeof actions?.discard).toBe("function");
-  });
-});
-
 // On load, and whenever the rendered content changes, DiffPlanView reseeds the
-// controller from the review's persisted scratches, so a reload restores the
-// reviewer's "Resume" markers instead of starting empty (EXC-744).
+// injected controller from the review's persisted scratches, so a reload restores
+// the reviewer's "Resume" markers instead of starting empty (EXC-744). The
+// controller is owned by App (EXC-877); these tests inject one and observe it directly.
 describe("DiffPlanView scratch rehydration", () => {
   test("seeds the controller from the review's persisted scratches on mount", async () => {
-    let reported: ComposerScratch[] | undefined;
+    const commenting = createSourceCommenting({ onCreate: () => {} });
     render(
       DiffPlanView,
       props({
+        commenting,
         review: reviewFixture({
           composerScratches: [{ startLine: 3, endLine: 3, text: "resume me" }],
         }),
-        onScratchesChange: (s: ComposerScratch[]) => (reported = s),
       }),
     );
-    await until(() => (reported?.length ?? 0) > 0);
-    expect(reported).toEqual([
+    await until(() => commenting.scratches().length > 0);
+    expect(commenting.scratches()).toEqual([
       { key: scratchKey(3, 3), startLine: 3, endLine: 3, text: "resume me" },
     ]);
   });
 
   test("wipes the prior version's scratches when a new plan version arrives", async () => {
-    let reported: ComposerScratch[] | undefined;
+    const commenting = createSourceCommenting({ onCreate: () => {} });
     const p = reactiveProps(
       props({
+        commenting,
         review: reviewFixture({
           composerScratches: [{ startLine: 3, endLine: 3, text: "v1 scratch" }],
         }),
-        onScratchesChange: (s: ComposerScratch[]) => (reported = s),
       }),
     );
     const { flush } = render(DiffPlanView, p);
-    await until(() => (reported?.length ?? 0) > 0);
+    await until(() => commenting.scratches().length > 0);
     // A revision (new version) is served with its own — empty — scratch set.
     p.review = reviewFixture({
       version: 2,
@@ -524,22 +511,22 @@ describe("DiffPlanView scratch rehydration", () => {
       composerScratches: [],
     });
     flush();
-    await until(() => reported?.length === 0);
-    expect(reported).toEqual([]);
+    await until(() => commenting.scratches().length === 0);
+    expect(commenting.scratches()).toEqual([]);
   });
 
   test("does not reseed when a poll re-delivers the same id:version", async () => {
-    let reported: ComposerScratch[] | undefined;
+    const commenting = createSourceCommenting({ onCreate: () => {} });
     const p = reactiveProps(
       props({
+        commenting,
         review: reviewFixture({
           composerScratches: [{ startLine: 3, endLine: 3, text: "live scratch" }],
         }),
-        onScratchesChange: (s: ComposerScratch[]) => (reported = s),
       }),
     );
     const { flush } = render(DiffPlanView, p);
-    await until(() => (reported?.length ?? 0) > 0);
+    await until(() => commenting.scratches().length > 0);
     // The 2s poll re-delivers the SAME id:version as a fresh object carrying a
     // different server-side set; the source view must NOT reseed over the
     // reviewer's in-progress scratch (contentKey is unchanged, read untracked).
@@ -547,7 +534,7 @@ describe("DiffPlanView scratch rehydration", () => {
       composerScratches: [{ startLine: 9, endLine: 9, text: "stale server copy" }],
     });
     flush();
-    expect(reported).toEqual([
+    expect(commenting.scratches()).toEqual([
       { key: scratchKey(3, 3), startLine: 3, endLine: 3, text: "live scratch" },
     ]);
   });

@@ -32,9 +32,9 @@
   import { codeBlockAtPoint, copyAnchor } from "$lib/diffview/codeCopy.ts";
   import {
     type ComposerScratch,
-    createSourceCommenting,
     normalizeRange,
     rangeLabel,
+    type SourceCommenting,
   } from "$lib/diffview/commenting.ts";
   import { dismissDragHint, isDragHintDismissed } from "$lib/diffview/dragHint.ts";
   import { buildFileRefLayer, type FileRefSpan, type FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
@@ -80,12 +80,6 @@
      * does the write + fires the success alert; the compare-row path calls this
      * on click. */
     onCopyCwd: (cwd: string) => void;
-    /** Persist a gutter-created line-anchored annotation. */
-    onCreateLineAnnotation: (anchor: {
-      startLine: number;
-      endLine: number;
-      comment: string;
-    }) => void;
     /** The working-copy annotations to display over the source. */
     annotations: Annotation[];
     /** The single focused annotation id (drives expand + highlight), or null. */
@@ -93,20 +87,20 @@
     onEditAnnotation: (id: string, comment: string) => void;
     onDeleteAnnotation: (id: string) => void;
     onFocusAnnotation: (id: string) => void;
-    /** Report the current retained scratches up to the host so a sibling (the
-     * Request Changes dialog) can surface them. Receives the controller's stable
-     * snapshot verbatim — the host must forward it as-is (no copy/map) to keep the
-     * reference-stability that avoids redundant re-renders. */
-    onScratchesChange?: (scratches: ComposerScratch[]) => void;
-    /** Hand the host the controller's per-scratch Save/Discard/Draft actions, once,
-     * so the dialog can graduate, drop, or demote-into a scratch without owning the
-     * controller. `draft` is how the dialog marks a committed inline comment as an
-     * unsent draft (EXC-762). */
-    onExposeScratchActions?: (actions: {
-      save: (key: string) => void;
-      discard: (key: string) => void;
-      draft: (scratch: { startLine: number; endLine: number; text: string }) => void;
-    }) => void;
+    /** The unsent-scratch controller, owned by App and injected down (EXC-877). This
+     * view operates it (open/submit/cancel/resume + the contentKey reseed effect) and
+     * reads its reactive state through the three mirror props below; App wires the
+     * controller's onChange to those mirrors and shares the same instance with the
+     * Request Changes dialog, so the dialog's Save/Discard/Draft reach it directly. */
+    commenting: SourceCommenting;
+    /** App's mirror of `commenting.pending()` — the open composer target, or undefined
+     * when closed. */
+    pending?: { startLine: number; endLine: number };
+    /** App's mirror of `commenting.pendingText()` — the seed text for the open composer. */
+    pendingText?: string;
+    /** App's mirror of `commenting.scratches()` — the retained drafts, one Resume marker
+     * per range. */
+    scratches?: ComposerScratch[];
     /** Hand the host a reveal(line) action once the source view mounts, so a sibling
      * (the comment navigator) can scroll the plan to a commented line. A call before
      * the view paints is a bounded-retry no-op. */
@@ -128,14 +122,15 @@
   let {
     review,
     onCopyCwd,
-    onCreateLineAnnotation,
     annotations,
     focusedAnnotation,
     onEditAnnotation,
     onDeleteAnnotation,
     onFocusAnnotation,
-    onScratchesChange,
-    onExposeScratchActions,
+    commenting,
+    pending = undefined,
+    pendingText = "",
+    scratches = [],
     onExposeReveal,
     scheme,
     showShortcutHints = true,
@@ -898,49 +893,9 @@
     };
   });
 
-  // Reactive mirror of the controller's pending target, so the composer renders
-  // when it opens or closes. The controller owns the state machine; this is the
-  // view's read of it.
-  let pending = $state<{ startLine: number; endLine: number } | undefined>();
-  // The text to seed the open composer with, restoring a resumed scratch draft.
-  let pendingText = $state("");
-  // The retained, unsubmitted composer drafts ("scratches"), one Resume marker
-  // per range. Mirrored from the controller so a dismissed-with-text composer
-  // leaves a returnable marker instead of vanishing.
-  let scratches = $state<ComposerScratch[]>([]);
-
-  const commenting = createSourceCommenting({
-    onCreate: (anchor) => onCreateLineAnnotation(anchor),
-    onChange: () => {
-      pending = commenting.pending();
-      pendingText = commenting.pendingText();
-      scratches = commenting.scratches();
-    },
-  });
-
-  // Mirror the scratches up to the host (the Request Changes dialog reads them).
-  // Done in an $effect on the local `scratches` state — not synchronously inside
-  // onChange — so the cross-component write is scheduled, never re-entrant with
-  // the controller callback that produced it (e.g. the clear() on a version
-  // change, whose onChange would otherwise write host state mid-flush). The value
-  // is the controller's stable snapshot, forwarded verbatim, so the host's
-  // projection keeps the same reference between mutations.
-  $effect(() => {
-    onScratchesChange?.(scratches);
-  });
-
-  // Hand the host the controller's per-scratch Save/Discard actions once, on
-  // mount. The controller returns one object whose methods are stable for its
-  // lifetime, so a single hand-off captures live references. `untrack` keeps the
-  // `onExposeScratchActions` prop from becoming a reactive dependency — the host
-  // re-creating that callback on every render must not re-run this.
-  $effect(() => {
-    untrack(() => onExposeScratchActions)?.({
-      save: commenting.save,
-      discard: commenting.discard,
-      draft: commenting.draft,
-    });
-  });
+  // The `commenting` controller, its pending / pendingText / scratches mirrors, and
+  // the scratches→autosave persistence all live in App (EXC-877); this view receives
+  // the controller and the three mirrors as props and simply operates the controller.
 
   // The open composer's live text, reported by SourceComposer.onInput. Held here
   // so opening a different range (gutter +, a line click, a Resume marker) first
