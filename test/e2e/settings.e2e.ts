@@ -149,6 +149,11 @@ test("keyboard-highlighting a theme option previews it too (EXC-753)", async ({ 
   await expect(page.locator(".diff-plan")).toBeVisible();
 
   await openSettings(page);
+  // This spec's first keypress lands ~120ms after the plan renders, well inside the
+  // 300ms safe-mode grace window armed at mount — which swallows it capture-phase, so
+  // the menu never roves and no preview appears. Fast machines lose that race; slow ones
+  // don't, which is the whole flake.
+  await waitPastSafeModeGrace(page);
   await page.getByRole("button", { name: "Theme" }).click();
 
   // Roving the menu with the keyboard highlights an option (real focus), which surfaces
