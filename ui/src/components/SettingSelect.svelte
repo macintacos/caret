@@ -14,6 +14,7 @@
   // option's tokens scoped to itself, so hovering never retints the real app.
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
+  import { placeOnNextFrame } from "$lib/themePreviewPlacement.ts";
   import ThemePreviewCard from "@/components/ThemePreviewCard.svelte";
 
   interface Option {
@@ -63,27 +64,33 @@
   const CARD_GAP = 10;
   const VIEWPORT_MARGIN = 8;
 
-  // Position the card beside the menu: prefer the right side, flip to the left when it
-  // would overflow, then clamp vertically. Fixed coords — the menu portals to body, so
-  // there is no positioned ancestor to lay out against. Undefined until measured; the
-  // card's own reveal keyframe fades from opacity 0 so the pre-measure frame never shows.
+  // Position the card beside the menu, measuring on the NEXT animation frame rather than
+  // synchronously. The menu is a bits-ui popover positioned ASYNCHRONOUSLY — Floating UI
+  // applies its transform a microtask after mount, so a synchronous measurement taken during
+  // a fast reopen can read the menu at the viewport origin and strand the card in the
+  // top-left corner. Deferring to a frame lands the measurement after that microtask, so the
+  // card anchors to the menu's settled rect (see themePreviewPlacement.ts). Re-runs when the
+  // highlighted option changes, so each move re-measures on its own frame. Coords stay
+  // undefined until the frame; the card's reveal keyframe fades from opacity 0 so the
+  // pre-measure frame never shows.
   $effect(() => {
     if (!preview || !menuEl || !cardEl) return;
-    const m = menuEl.getBoundingClientRect();
-    const c = cardEl.getBoundingClientRect();
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-
-    let left = m.right + CARD_GAP;
-    if (left + c.width > vw - VIEWPORT_MARGIN) {
-      const leftSide = m.left - CARD_GAP - c.width;
-      left =
-        leftSide >= VIEWPORT_MARGIN
-          ? leftSide
-          : Math.max(VIEWPORT_MARGIN, vw - c.width - VIEWPORT_MARGIN);
-    }
-    posLeft = left;
-    posTop = Math.max(VIEWPORT_MARGIN, Math.min(m.top, vh - c.height - VIEWPORT_MARGIN));
+    const menu = menuEl;
+    const card = cardEl;
+    return placeOnNextFrame(
+      {
+        menu: () => menu.getBoundingClientRect(),
+        card: () => card.getBoundingClientRect(),
+        view: () => ({ width: window.innerWidth, height: window.innerHeight }),
+        place: ({ top, left }) => {
+          posTop = top;
+          posLeft = left;
+        },
+        raf: (cb) => requestAnimationFrame(cb),
+        cancel: (handle) => cancelAnimationFrame(handle),
+      },
+      { gap: CARD_GAP, margin: VIEWPORT_MARGIN },
+    );
   });
 
   // A fixed card can't track a scrolling / resizing anchor, so back the preview out

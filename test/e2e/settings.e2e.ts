@@ -157,6 +157,56 @@ test("keyboard-highlighting a theme option previews it too (EXC-753)", async ({ 
   await expect(page.locator("[data-slot='theme-preview']")).toBeVisible();
 });
 
+// The reopen path (the reported glitch): after switching themes, reopening the menu and
+// highlighting an option used to intermittently strand the preview in the top-left corner,
+// because the card was positioned from a measurement of the menu taken synchronously —
+// before bits-ui had asynchronously positioned it (Floating UI applies the menu's transform
+// a microtask after mount). The card now measures on the next animation frame, after that
+// microtask, so it lands beside the menu — aligned to its top — no matter how fast the
+// reopen is.
+test("reopening the theme menu after a switch keeps the preview beside the menu, not at the origin (EXC-753)", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  await openSettings(page);
+
+  // Switch to caret light — the menu commits and closes.
+  await page.getByRole("button", { name: "Theme" }).click();
+  await page.getByRole("menuitemradio", { name: "caret light" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+
+  // Reopen and highlight the first option — the fast reopen that raced the menu's async
+  // positioning in the bug report.
+  await page.getByRole("button", { name: "Theme" }).click();
+  await page.locator(".setting-menu [role='menuitemradio']").first().hover();
+
+  const preview = page.locator("[data-slot='theme-preview']");
+  await expect(preview).toBeVisible();
+
+  const menuBox = await page.locator(".setting-menu").boundingBox();
+  const cardBox = await preview.boundingBox();
+  const vp = page.viewportSize();
+  expect(cardBox).not.toBeNull();
+  expect(menuBox).not.toBeNull();
+  if (cardBox && menuBox && vp) {
+    // Beside the menu (either side), fully within the viewport.
+    const clearsRight = cardBox.x >= menuBox.x + menuBox.width - 1;
+    const clearsLeft = cardBox.x + cardBox.width <= menuBox.x + 1;
+    expect(clearsRight || clearsLeft).toBe(true);
+    expect(cardBox.x).toBeGreaterThanOrEqual(0);
+    expect(cardBox.y).toBeGreaterThanOrEqual(0);
+    expect(cardBox.x + cardBox.width).toBeLessThanOrEqual(vp.width);
+    expect(cardBox.y + cardBox.height).toBeLessThanOrEqual(vp.height);
+    // Aligned to the menu top — NOT stranded in the top-left corner, where the glitch left
+    // it near y≈8 while the menu opened far lower down the pane.
+    expect(Math.abs(cardBox.y - menuBox.y)).toBeLessThan(40);
+  }
+});
+
 test("toggling shortcut hints applies immediately and persists", async ({ daemon, page }) => {
   await daemon.seed();
   await page.goto("/");
