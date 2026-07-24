@@ -368,9 +368,8 @@ test("a dry run closes by saying nothing was changed", async () => {
 });
 
 test("a target that reports failure exits non-zero and never claims caret was installed", async () => {
-  // scripts/install.sh aborted the whole run on a failed step; a green
-  // `mise run build --install` over a dev loop that installed nothing is the regression
-  // this pins.
+  // A green `mise run build --install` over a dev loop that installed nothing is what
+  // this pins against: the exit code is the task's exit code.
   const calls: string[] = [];
   const ui = recordingUI();
   await runInstallSubcommand(
