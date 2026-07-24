@@ -579,12 +579,12 @@
   let scrollEl = $state<HTMLElement | undefined>();
 
   // The plan's keyboard surface (EXC-875): the vim line cursor (EXC-788), visual
-  // line-select (EXC-790), and the `/` full-text search HUD (EXC-832), lifted into one
+  // line-select (EXC-790), and the `/` full-text search HUD (EXC-832) in one
   // unit-testable factory (state/planKeyboard). The component owns the reactive store —
   // the runes live here — and the factory sequences the transitions over it; single-
   // version view only (compare mode is a read-only diff with no cursor). The DOM effects
-  // are injected: the rendered lines, the reading position, scroll-follow, and
-  // focus/blur (Phase 4 adds the composer open, heading lines, and half-page).
+  // are injected: the rendered lines, heading lines, the reading position, the half-page
+  // size, scroll-follow, the composer open, and focus/blur.
   let keyboardStore = $state<PlanKeyboardStore>({
     cursorLine: null,
     visualAnchor: null,

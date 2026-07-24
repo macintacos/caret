@@ -423,6 +423,7 @@ describe("commentCursorLine", () => {
     h.keyboard.commentCursorLine();
     expect(h.composerOpens).toEqual([{ startLine: 2, endLine: 6 }]);
     expect(store.visualAnchor).toBeNull();
+    expect(store.cursorLine).toBe(6); // openComposer relocates the cursor to the range end
   });
 });
 

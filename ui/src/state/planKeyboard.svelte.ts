@@ -1,7 +1,7 @@
 // The plan source view's keyboard surface: the vim line cursor, visual line-select,
-// and the `/` full-text search HUD, lifted out of DiffPlanView.svelte into one deep,
-// unit-testable factory (EXC-875). Like the other state modules (compare, autosave),
-// this is a plain factory over an injected backing store plus a deps bag — the
+// and the `/` full-text search HUD, as one deep, unit-testable factory the DiffPlanView
+// shell drives (EXC-875). Like the other state modules (compare, autosave), this is a
+// plain factory over an injected backing store plus a deps bag — the
 // component owns the reactive `$state` store, tests pass a plain object, and every DOM
 // effect (scroll-follow, focus/blur, the composer open) is injected so the transitions
 // stay testable without mounting the view.
