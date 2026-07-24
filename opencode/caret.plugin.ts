@@ -521,6 +521,17 @@ export async function runReviewViaCaret(
  * the renderer never owns it and it lingered after the decision (EXC-691). We now
  * parse that URL and surface it as a caret-owned toast instead; the child logs
  * diagnostics to caret.log, so dropping the rest of stderr loses nothing. */
+/** Warms the caret daemon ahead of a review. Injected so the chat.message hook is
+ * unit-testable without spawning a process. */
+export type WarmRunner = (bin: string) => void;
+
+/** Production warm: `caret prewarm`, detached and unref'd so it never holds up
+ * the turn. Output is discarded — the child logs to caret.log, and a failed warm
+ * is a non-event (the review path spawns the daemon itself). */
+const nodeWarmRunner: WarmRunner = (bin) => {
+  spawn(bin, ["prewarm"], { stdio: "ignore", detached: true }).unref();
+};
+
 const nodeSpawnRunner: SpawnRunner = (bin, env, stdin, onStderr) =>
   new Promise((resolve, reject) => {
     const child = spawn(bin, ["review"], { env, stdio: ["pipe", "pipe", "pipe"] });
@@ -539,16 +550,23 @@ const nodeSpawnRunner: SpawnRunner = (bin, env, stdin, onStderr) =>
 // The plugin
 // ---------------------------------------------------------------------------
 
-/** Build the caret OpenCode plugin. The DI seam (bin/run/checkUpdate) keeps the
- * tool's execute() and the startup update check unit-testable; the default export
- * wires the production runner and update checker. */
+/** Build the caret OpenCode plugin. The DI seam (bin/run/warm/checkUpdate) keeps
+ * the tool's execute(), the daemon warm, and the startup update check
+ * unit-testable; the default export wires the production runners and update
+ * checker. */
 export function createCaretPlugin(
-  opts: { bin?: string; run?: SpawnRunner; checkUpdate?: (client: ToastClient) => void } = {},
+  opts: {
+    bin?: string;
+    run?: SpawnRunner;
+    warm?: WarmRunner;
+    checkUpdate?: (client: ToastClient) => void;
+  } = {},
 ): Plugin {
   const bin =
     opts.bin ??
     resolveCaretBin({ env: process.env, marker: CARET_BIN, importMetaUrl: import.meta.url });
   const run = opts.run ?? nodeSpawnRunner;
+  const warm = opts.warm ?? nodeWarmRunner;
 
   return async (input) => {
     // OpenCode gives every plugin its SDK client; caret uses it to surface the
@@ -561,6 +579,21 @@ export function createCaretPlugin(
       // Restrict the review tool to primary agents + allow/deny per agent.
       config: async (config) => {
         applyCaretConfig(config as unknown as LooseConfig);
+      },
+      // Warm the daemon while the plan agent is working, so the first
+      // caret_review_plan call doesn't pay the cold-spawn cost. This is
+      // OpenCode's counterpart to Claude Code's PostToolUse/EnterPlanMode
+      // prewarm hook — the closest-to-submission signal the plugin API offers.
+      // Deliberately per-message and unthrottled: the daemon idle-exits after
+      // [daemon].idle_ms (60s default), so a once-per-session warm would be
+      // dead long before the plan lands.
+      "chat.message": async (input) => {
+        if (!isPlanningAgent(input.agent)) return;
+        try {
+          warm(bin);
+        } catch {
+          // best-effort — the review path spawns the daemon itself if this missed.
+        }
       },
       // Steer the Plan agent to submit its plan to caret instead of plan_exit.
       "experimental.chat.system.transform": async (_input, output) => {

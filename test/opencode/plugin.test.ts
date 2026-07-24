@@ -24,6 +24,7 @@ import {
   REVIEW_TOOL,
   runReviewViaCaret,
   type SpawnRunner,
+  type WarmRunner,
 } from "../../opencode/caret.plugin.ts";
 
 // --- buildEnvelope / planTitle ---
@@ -427,4 +428,40 @@ test("the tool.definition hook redirects plan_exit to the review tool", async ()
   const output = { description: "original", parameters: {} };
   await hooks["tool.definition"]?.({ toolID: "plan_exit" } as never, output as never);
   expect(output.description).toContain(REVIEW_TOOL);
+});
+
+// --- the chat.message warm hook (plan-agent daemon prewarm) ---
+
+/** Assemble the plugin with a recording warm runner, so the chat.message hook's
+ * spawn decision is observable without a real `caret prewarm` process. */
+async function buildWarmHooks(warm: WarmRunner) {
+  const plugin = createCaretPlugin({ bin: "caret", run: stubRunner("{}"), warm });
+  return await plugin({} as unknown as PluginInput);
+}
+
+/** A chat.message hook input addressed to `agent` (undefined ⇒ unknown caller). */
+function message(agent: string | undefined) {
+  return { sessionID: "S", agent } as never;
+}
+
+test("the chat.message hook warms the daemon for a plan-agent message", async () => {
+  const warmed: string[] = [];
+  const hooks = await buildWarmHooks((bin) => warmed.push(bin));
+  await hooks["chat.message"]?.(message("plan"), {} as never);
+  expect(warmed).toEqual(["caret"]);
+});
+
+test("the chat.message hook does not warm for a non-planning or unknown agent", async () => {
+  const warmed: string[] = [];
+  const hooks = await buildWarmHooks((bin) => warmed.push(bin));
+  await hooks["chat.message"]?.(message("build"), {} as never);
+  await hooks["chat.message"]?.(message(undefined), {} as never);
+  expect(warmed).toEqual([]);
+});
+
+test("the chat.message hook swallows a warm failure (best-effort, never disrupts the turn)", async () => {
+  const hooks = await buildWarmHooks(() => {
+    throw new Error("spawn blew up");
+  });
+  await expect(hooks["chat.message"]?.(message("plan"), {} as never)).resolves.toBeUndefined();
 });
