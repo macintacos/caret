@@ -141,12 +141,14 @@ export interface BuildOptions {
   install: boolean;
 }
 
-/** The install command `build --install` runs (EXC-555): delegate to
- * install.sh's --from-local mode, which reuses these artifacts (no rebuild),
- * reinstalls the plugin, and cycles the daemon to this build. Null when
- * --install was not passed, so a plain `build` never touches install.sh. */
+/** The install command `build --install` runs (EXC-555): the caret that was just
+ * built, in its own `--from-local` mode — it reuses these artifacts (no rebuild),
+ * reinstalls the plugin from a dev marketplace pointing at this checkout, and
+ * hands the daemon to this build. Invoked through the bin/caret shim, the same
+ * entrypoint Claude Code's hooks use, so the dev loop exercises the real path.
+ * Null when --install was not passed, so a plain `build` installs nothing. */
 export function buildInstallCommand(opts: BuildOptions): string[] | null {
-  return opts.install ? ["scripts/install.sh", "--from-local"] : null;
+  return opts.install ? ["bin/caret", "install", "--from-local"] : null;
 }
 
 export async function runBuild(opts: BuildOptions): Promise<never> {
