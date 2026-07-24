@@ -22,7 +22,7 @@ import {
 } from "@/commands/install/targets.ts";
 import { createInstallUI, type InstallUI } from "@/commands/install/ui.ts";
 import { errorMessage } from "@/lib/types.ts";
-import { ensureRumdl } from "@/plan/rumdl.ts";
+import { ensureRumdl, RUMDL_VERSION } from "@/plan/rumdl.ts";
 
 /** Parse a `--target` value ("opencode", "claude", or "opencode,claude") into a
  * deduped, order-preserving target list — or an error message for an empty/unknown
@@ -108,11 +108,11 @@ export async function runInstallSubcommand(
 }
 
 /** Acquire rumdl, the plan formatter every reviewed plan is reflowed through. Part of
- * installing caret rather than a step of its own: ensureRumdl reuses whatever is already
- * there (a cached download, or the binary a `CARET_RUMDL_BIN` user pointed it at) and
- * downloads the pinned release only when nothing is. Doing it here is what keeps the
- * first plan off the download latency — the daemon would otherwise fetch it mid-review —
- * so a failure is a warning, not a failed install: that lazy path still covers it.
+ * installing caret rather than a step of its own: ensureRumdl puts the pinned version at
+ * caret's own path, replacing an older binary a previous caret left there, so plans are
+ * always reflowed by the rumdl caret expects. Doing it here is what keeps the first plan
+ * off the download latency — the daemon would otherwise fetch it mid-review — so a
+ * failure is a warning, not a failed install: that lazy path still covers it.
  * Uninstalls skip it (nothing is being set up), and dry-run only says it would run. */
 async function rumdlStep(
   opts: { uninstall: boolean; dryRun: boolean },
@@ -128,10 +128,13 @@ async function rumdlStep(
     await ui.step(
       "Installing the rumdl plan formatter",
       () => (deps.ensureRumdl ?? ensureRumdl)(),
-      // `installed` is ensureRumdl's own signal for "this call downloaded it" — honest
-      // whether the binary was freshly fetched, already cached, or a CARET_RUMDL_BIN
-      // override (no guessing at a cache path the override never populates).
-      ({ bin, installed }) => `rumdl ${installed ? "installed" : "already present"} at ${bin}`,
+      // Name the version, not just the path: "already present" is a claim about which
+      // rumdl will format your plans, and the pin is the whole point of the check.
+      // `installed` is ensureRumdl's own signal for "this call installed it" — honest
+      // whether the binary was freshly downloaded, already at the pinned version, or a
+      // CARET_RUMDL_BIN override (no guessing at a cache path the override never fills).
+      ({ bin, installed }) =>
+        `rumdl ${RUMDL_VERSION} ${installed ? "installed" : "already present"} at ${bin}`,
     );
   } catch (e) {
     ui.warn(`Could not install rumdl (${errorMessage(e)}) — caret will retry on your first plan.`);

@@ -329,15 +329,20 @@ to the config file, then the default.
 
 caret canonicalizes every incoming plan by reflowing it to a 90-column MD013 shape with
 [rumdl](https://github.com/rvben/rumdl). rumdl is not a runtime prerequisite: caret
-downloads the pinned binary (v0.2.37) into `$XDG_STATE_HOME/caret/rumdl/` on the first
-plan of the first session, verifies its checksum, and reuses it afterward — so it behaves
-the same however caret was installed (Claude plugin, OpenCode, or `install.sh`).
-`caret install` always ends by acquiring it, so the download happens at install time
-rather than on the first plan; an already-cached binary is reused, and a failure is a
-warning rather than a failed install (the first plan retries). If a plan can't be
-formatted (rumdl missing, offline, or an unsupported platform), caret stores it unchanged
-and logs one warning — a plan is never lost. Point `CARET_RUMDL_BIN` at an existing rumdl
-to skip the download entirely.
+installs the pinned binary (v0.2.37) into `$XDG_STATE_HOME/caret/rumdl/` and verifies its
+checksum — so formatting behaves the same however caret was installed (Claude plugin,
+OpenCode, or `install.sh`).
+
+**caret only ever formats with that one binary, at that one path.** A `rumdl` on your PATH
+is never used: which version reflows your plans must not depend on what the machine
+happens to have installed. The binary already at caret's path is reused only when it
+reports exactly the pinned version — an older copy left by a previous caret, or a file
+that won't run, is replaced. `caret install` runs that check at install time so the first
+plan doesn't pay the download, and a failure there is a warning rather than a failed
+install (the first plan retries). If a plan can't be formatted (rumdl missing, offline, or
+an unsupported platform), caret stores it unchanged and logs one warning — a plan is never
+lost. `CARET_RUMDL_BIN` is the one deliberate opt-out: point it at a binary of your own
+and caret uses that instead, unchecked.
 
 ## Logging & Debugging
 

@@ -1,7 +1,11 @@
-// Runtime rumdl acquisition + plan formatting (EXC-828). caret downloads the
-// pinned `rumdl` binary into its own state dir (off PATH) on first use and shells
-// out `rumdl fmt -` to reflow each incoming plan to the repo's 90-col MD013
-// convention. This is the default `doFormat` behind formatPlanMarkdown's
+// Runtime rumdl acquisition + plan formatting (EXC-828). caret installs the
+// pinned `rumdl` binary into its own state dir (off PATH) and shells out
+// `rumdl fmt -` to reflow each incoming plan to the repo's 90-col MD013
+// convention. Acquisition is version-gated, not presence-gated: the binary at
+// caret's path is used only when it reports exactly RUMDL_VERSION, so a stale
+// copy left by an older caret is replaced rather than reused, and a `rumdl` the
+// machine happens to have on PATH never formats a plan. This is the default
+// `doFormat` behind formatPlanMarkdown's
 // best-effort envelope (src/plan/markdown.ts): any failure here — unsupported
 // platform, offline download, spawn error — throws and is caught there, storing
 // the plan raw with one warn, so nothing is ever lost while rumdl is absent.
@@ -125,18 +129,54 @@ export async function downloadRumdl(
   }
 }
 
-// Guards concurrent first-format downloads: the first caller kicks off the
-// download, later callers await the same promise instead of racing a second
-// fetch. Only reached in production (no CARET_RUMDL_BIN override, no cached
-// binary); tests set the override and never enter this path.
-let downloadOnce: Promise<string> | undefined;
+/** Stand the pinned rumdl up at `binPath`, replacing whatever was there.
+ * Injected so tests can exercise the resolver offline. */
+export type RumdlInstaller = (binPath: string) => Promise<string>;
 
-/** Ensure rumdl (binary + config) exists under caret's state dir. Returns the
- * resolved paths plus whether this call performed the download (`installed`).
- * Resolution order: `CARET_RUMDL_BIN` override (blank counts as unset) → cached
- * download → fresh download of the pinned asset. The config is written
- * idempotently on every call so it always tracks the current state dir. */
-export async function ensureRumdl(): Promise<{ bin: string; config: string; installed: boolean }> {
+const installPinnedRumdl: RumdlInstaller = (binPath) => downloadRumdl(binPath, rumdlAsset());
+
+/** The version the binary at `bin` reports (`rumdl --version` prints
+ * `rumdl <semver>`), or null when there is nothing runnable there — absent, a
+ * truncated download, not executable, or built for another platform. Every one
+ * of those means "not the rumdl we pinned", so they collapse to one answer. */
+async function installedVersion(bin: string): Promise<string | null> {
+  if (!existsSync(bin)) return null;
+  try {
+    const proc = Bun.spawn([bin, "--version"], { stdout: "pipe", stderr: "ignore" });
+    const [out, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+    if (code !== 0) return null;
+    return out.trim().split(/\s+/).at(-1) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Coalesces concurrent installs: the first caller kicks the download off, callers
+// arriving while it is in flight await the same promise instead of racing a second
+// fetch (they would all still see the old binary, since downloadRumdl only renames
+// the new one into place at the end). Cleared once it settles — the binary is on
+// disk by then, so the version check below is the gate from that point on, and a
+// transient failure (offline, GitHub rate-limit) retries on the next call rather
+// than poisoning every later one for the life of the daemon.
+let inFlightInstall: Promise<string> | undefined;
+
+/** Ensure rumdl (binary + config) is present under caret's state dir, and is the
+ * version caret pinned. Returns the resolved paths plus whether this call
+ * installed the binary (`installed`).
+ *
+ * caret formats every plan with ONE rumdl: `RUMDL_VERSION`, at caret's own path.
+ * A binary already sitting there is used only if it reports exactly that version
+ * — an older build cached by a previous caret, or a file that won't run, is
+ * replaced (downloadRumdl renames the new one over it). A `rumdl` on PATH is
+ * never consulted: plan formatting must not vary with whatever the machine
+ * happens to have installed. `CARET_RUMDL_BIN` remains the one explicit opt-out,
+ * for a caller who is deliberately supplying their own binary.
+ *
+ * The config is written idempotently on every call so it always tracks the
+ * current state dir. */
+export async function ensureRumdl(
+  install: RumdlInstaller = installPinnedRumdl,
+): Promise<{ bin: string; config: string; installed: boolean }> {
   ensureStateDir(rumdlDir());
   const config = rumdlConfig();
   writeFileSync(config, RUMDL_CONFIG);
@@ -144,17 +184,13 @@ export async function ensureRumdl(): Promise<{ bin: string; config: string; inst
   const override = process.env.CARET_RUMDL_BIN?.trim();
   if (override) return { bin: override, config, installed: false };
 
-  const cached = rumdlBin();
-  if (existsSync(cached)) return { bin: cached, config, installed: false };
+  const bin = rumdlBin();
+  if ((await installedVersion(bin)) === RUMDL_VERSION) return { bin, config, installed: false };
 
-  // Reset the memo on rejection so a transient failure (offline, GitHub
-  // rate-limit) retries on the next format rather than poisoning every later
-  // call with the same rejected promise for the life of the daemon.
-  downloadOnce ??= downloadRumdl(cached, rumdlAsset()).catch((err) => {
-    downloadOnce = undefined;
-    throw err;
+  inFlightInstall ??= install(bin).finally(() => {
+    inFlightInstall = undefined;
   });
-  return { bin: await downloadOnce, config, installed: true };
+  return { bin: await inFlightInstall, config, installed: true };
 }
 
 /** The default `doFormat` for formatPlanMarkdown: reflow `text` through rumdl's

@@ -7,6 +7,7 @@ import { afterEach, expect, test } from "bun:test";
 import { parseTargets, runInstallSubcommand } from "@/commands/install/index.ts";
 import type { InstallTarget } from "@/commands/install/targets.ts";
 import { recordingUI, silentUI } from "@/commands/install/ui.ts";
+import { RUMDL_VERSION } from "@/plan/rumdl.ts";
 
 /** Keep a test off the real rumdl download: without this seam the command falls through
  * to the production acquisition, which reaches the network and writes to the state dir. */
@@ -197,7 +198,7 @@ test("the rumdl step reports a fresh download, naming the binary", async () => {
       ensureRumdl: async () => ({ bin: "/x/rumdl", installed: true }),
     },
   );
-  expect(ui.events).toContain("settled:rumdl installed at /x/rumdl");
+  expect(ui.events).toContain(`settled:rumdl ${RUMDL_VERSION} installed at /x/rumdl`);
 });
 
 test("the rumdl step reports an already-cached binary as present, not downloaded", async () => {
@@ -210,7 +211,7 @@ test("the rumdl step reports an already-cached binary as present, not downloaded
       ensureRumdl: async () => ({ bin: "/x/rumdl", installed: false }),
     },
   );
-  expect(ui.events).toContain("settled:rumdl already present at /x/rumdl");
+  expect(ui.events).toContain(`settled:rumdl ${RUMDL_VERSION} already present at /x/rumdl`);
 });
 
 test("uninstalling and --dry-run never download rumdl", async () => {
