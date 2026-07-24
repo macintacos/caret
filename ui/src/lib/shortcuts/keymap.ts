@@ -30,7 +30,7 @@ export const EDITOR_SHORTCUTS: ShortcutEntry[] = [
   },
 ];
 
-/** The Settings modal's own keyboard affordances (EXC-849), folded into the single source
+/** The Settings modal's own keyboard affordances (EXC-849), reserved in the single source
  * (EXC-876). Display-only (no `run`): SettingsDialog owns `/` (focus search) and Esc
  * (close) through its own handlers — these entries exist so the scoped `?` help lists
  * exactly the shortcuts valid in Settings, and so the collision test sees the settings
@@ -135,10 +135,9 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
   {
     // EXC-792: summons the comment navigator. Keyed "C" (a bare shifted key —
     // the case-sensitive matcher fires on it without a modifier flag, like V/G).
-    // No cap override: since EXC-831 a bare uppercase key derives its shift + capital
-    // from its case (as V/G do), so C renders ["shift", "C"] straight from the key —
-    // EXC-876 dropped the redundant explicit cap so shifted letters have one rendering
-    // path. "shift" draws the global shift icon (caps.ts).
+    // No cap override: a bare uppercase key derives its shift + capital from its case
+    // (as V/G do, EXC-831), so C renders ["shift", "C"] straight from the key — one
+    // rendering path for every shifted letter. "shift" draws the global shift icon (caps.ts).
     id: "actions.toggleComments",
     keys: [{ key: "C" }],
     group: "actions",
@@ -165,8 +164,8 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
 ];
 
 // One lookup of the reservations by id, built once. `bind` and `ariaKeyshortcutsFor` both
-// resolve through it, so the `new Map(CANONICAL_KEYMAP…)` + `.get` + null-check the
-// live-binding effects used to hand-roll now lives in exactly one place (EXC-876).
+// resolve a shortcut id to its reservation through it, so id → entry lookup lives in one
+// place (EXC-876).
 const RESERVED = new Map(CANONICAL_KEYMAP.map((e) => [e.id, e] as const));
 
 /** The reservation for `id`, or a hard error — a typo'd id is a bug, not a silent no-op:
@@ -179,10 +178,8 @@ function reservedEntry(id: string): ShortcutEntry {
 
 /** A live, dispatchable entry from a reservation: the canonical key/label/group/cap
  * spread with the caller's `run` (+ optional `enabled`/`scope`). The single seam every
- * live binding registers through — collapsing the `new Map(CANONICAL_KEYMAP…)` + `.get` +
- * null-check + spread the App / DiffPlanView effects each repeated (EXC-876). An explicit
- * `scope` overrides; otherwise the reservation's own scope (help.show's `"global"`) is
- * preserved by the spread. */
+ * live binding registers through (EXC-876). An explicit `scope` overrides; otherwise the
+ * reservation's own scope (help.show's `"global"`) is preserved by the spread. */
 export function bind(
   id: string,
   { run, enabled, scope }: { run: () => void; enabled?: () => boolean; scope?: ShortcutScope },
@@ -192,7 +189,7 @@ export function bind(
 
 /** The `aria-keyshortcuts` string a button advertises for the shortcut `id`, derived from
  * that id's reservation so the a11y hint can't drift from the key the dispatcher fires on.
- * The ~8 hand-copied aria strings all route through here (EXC-876). */
+ * Every advertising button resolves its hint through here (EXC-876). */
 export function ariaKeyshortcutsFor(id: string): string {
   return ariaKeyshortcuts(reservedEntry(id).keys);
 }

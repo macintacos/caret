@@ -57,9 +57,9 @@
   }
   let { entries, onChange, onClose, onCopyDiagnostic = () => {} }: Props = $props();
 
-  // EXC-849/876: while Settings owns the view, publish its own keyboard affordances into
-  // the shared registry. SETTINGS_SHORTCUTS is now reserved in CANONICAL_KEYMAP (the single
-  // source) rather than declared inline here. Display-only (no run) — the modal owns `/`
+  // EXC-849: while Settings owns the view, publish its own keyboard affordances into the
+  // shared registry. SETTINGS_SHORTCUTS is the settings-scoped reservation set from
+  // CANONICAL_KEYMAP (the single source). Display-only (no run) — the modal owns `/`
   // (focus search) and Esc (close) through its own handlers below; registering the
   // reservations makes the scoped `?` help list exactly the shortcuts valid here, and their
   // "settings" scope tells the dispatcher to suppress the review shortcuts while this modal

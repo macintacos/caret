@@ -146,8 +146,8 @@ describe("StatusStrip", () => {
   test("advertises Shift+C and shows the shift-icon + C cap only when hints are enabled", () => {
     const off = render(StatusStrip, { ...base, pendingCount: 2 });
     const btn = off.target.querySelector<HTMLButtonElement>("button.comments-toggle")!;
-    // Cross-checked against the single source (EXC-876), not a hardcoded literal — the
-    // button derives its aria hint from the same reservation the dispatcher fires on.
+    // The button derives its aria hint from the same reservation the dispatcher fires on,
+    // so this checks against that reservation rather than a fixed string (EXC-876).
     expect(btn.getAttribute("aria-keyshortcuts")).toBe(
       ariaKeyshortcutsFor("actions.toggleComments"),
     );

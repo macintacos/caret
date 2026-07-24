@@ -126,8 +126,8 @@ export function keyCaps(spec: KeySpec): string[][] {
 
 /** Each command modifier in WAI-ARIA `aria-keyshortcuts` vocabulary. `mod` is
  * platform-dispatched at match time (⌘ on macOS, Ctrl elsewhere), so a static
- * attribute advertises BOTH — the same `Meta+Enter Control+Enter` the buttons used
- * to hand-write — rather than committing to one platform. */
+ * attribute advertises BOTH alternatives (`Meta+X` and `Control+X`) rather than
+ * committing to one platform. */
 const ARIA_MOD: Record<Mod, readonly string[]> = {
   mod: ["Meta", "Control"],
   meta: ["Meta"],

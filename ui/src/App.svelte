@@ -357,13 +357,13 @@
     const unregister = EDITOR_SHORTCUTS.map((entry) => shortcuts.register(entry));
     // A live binding = EXC-786's reservation (bind spreads key/label/group/cap/scope
     // from CANONICAL_KEYMAP) + the caller's run/enabled, registered into the shared
-    // singleton. This local wrapper over bind + register replaces the per-effect lookup
-    // Map + null-check the effect used to hand-roll (EXC-876).
+    // singleton. `reg` is the local wrapper over bind + register so each binding is a
+    // single call (EXC-876).
     const reg = (id: string, opts: Parameters<typeof bind>[1]) => shortcuts.register(bind(id, opts));
     // The ? key toggles the shortcuts help modal (EXC-787). help.show carries scope:
-    // "global" in the table (EXC-849), so binding it keeps ? firing from every view —
+    // "global" in the table (EXC-849), so binding it lets ? fire from every view —
     // including over the Settings modal, where the review shortcuts are suppressed. The
-    // key and its global scope now flow from the reservation, not a re-declared copy.
+    // key and its global scope come from the reservation.
     const unregisterHelp = reg("help.show", {
       run: () => {
         showHelp = !showHelp;

@@ -8,7 +8,12 @@ import {
   CANONICAL_KEYMAP,
   EDITOR_SHORTCUTS,
 } from "$lib/shortcuts/keymap.ts";
-import { createShortcutRegistry, keyCaps, specSignature } from "$lib/shortcuts/registry.ts";
+import {
+  createShortcutRegistry,
+  keyCaps,
+  type ShortcutScope,
+  specSignature,
+} from "$lib/shortcuts/registry.ts";
 import { isEntryActive } from "$lib/shortcuts/scope.ts";
 
 describe("CANONICAL_KEYMAP", () => {
@@ -19,13 +24,22 @@ describe("CANONICAL_KEYMAP", () => {
 
   test("no two dispatchable shortcuts collide within a scope (globals count in every scope)", () => {
     // Editor chords are display-only (CodeMirror owns them on focus) and deliberately
-    // reuse Esc with commenting.clear, so they're excluded — as before. Everything else is
-    // checked PER SCOPE (EXC-876): two entries collide only when some scope has both active
-    // — same scope, or one is global — which is exactly when the dispatcher could fire
-    // both. `/` is reserved in review (actions.search) AND settings (settings.search), but
-    // never both in one scope, so that cross-scope reuse is safe rather than a collision.
+    // reuse Esc with commenting.clear, so they're excluded. Everything else is checked PER
+    // SCOPE: two entries collide only when some scope has both active — same scope, or one
+    // is global — which is exactly when the dispatcher could fire both. `/` is reserved in
+    // review (actions.search) AND settings (settings.search), but never both in one scope,
+    // so that cross-scope reuse is safe rather than a collision. The scope set is derived
+    // from the table — the base review surface (null) plus every distinct modal scope any
+    // entry declares — so a new modal scope is covered without editing this test.
     const dispatchable = CANONICAL_KEYMAP.filter((e) => e.group !== "editor");
-    for (const scope of [null, "settings"] as const) {
+    const modalScopes = [
+      ...new Set(
+        dispatchable
+          .map((e) => e.scope)
+          .filter((s): s is ShortcutScope => s != null && s !== "global"),
+      ),
+    ];
+    for (const scope of [null, ...modalScopes]) {
       const sigs = dispatchable
         .filter((e) => isEntryActive(e, scope))
         .map((e) => specSignature(e.keys));
@@ -34,7 +48,7 @@ describe("CANONICAL_KEYMAP", () => {
   });
 
   test("reserves the settings shortcuts in the table, scoped to settings (EXC-876)", () => {
-    // EXC-876 folds the Settings modal's own affordances into the single source so the
+    // The Settings modal's own affordances are reserved in the single source so the
     // collision check sees them. Display-only (no run): the modal owns / and Esc through
     // its own handlers; these entries exist for the scoped `?` help and the collision check.
     const search = CANONICAL_KEYMAP.find((e) => e.id === "settings.search");
@@ -56,10 +70,10 @@ describe("CANONICAL_KEYMAP", () => {
   });
 
   test("reserves Shift+C for the comment navigator, rendered as shift + C caps", () => {
-    // EXC-792: summons the comment navigator. Keyed "C" (a bare shifted key, no
-    // command modifier and — since EXC-876 — no explicit cap: keyCaps derives the
-    // shift + capital from the uppercase key's case, the same path V/G take (EXC-831).
-    // "shift" is the token caps.ts resolves to the global shift icon at render.
+    // EXC-792: summons the comment navigator. Keyed "C" (a bare shifted key, no command
+    // modifier and no explicit cap: keyCaps derives the shift + capital from the uppercase
+    // key's case, the same path V/G take, EXC-831). "shift" is the token caps.ts resolves to
+    // the global shift icon at render.
     const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.toggleComments");
     if (!entry) throw new Error("actions.toggleComments missing");
     expect(entry.group).toBe("actions");
