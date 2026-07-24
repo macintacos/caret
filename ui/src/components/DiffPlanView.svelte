@@ -557,10 +557,9 @@
     restored = true;
   }
 
-  // Hand the host the reveal(line) action once, mirroring the scratch-actions
-  // hand-off. `untrack` keeps onExposeReveal from becoming a reactive dependency;
-  // revealLine closes over the live `api`, so exposing it before the view paints is
-  // safe (the reveal simply no-ops until the api lands).
+  // Hand the host the reveal(line) action once. `untrack` keeps onExposeReveal from
+  // becoming a reactive dependency; revealLine closes over the live `api`, so exposing
+  // it before the view paints is safe (the reveal simply no-ops until the api lands).
   $effect(() => {
     untrack(() => onExposeReveal)?.(revealLine);
   });
