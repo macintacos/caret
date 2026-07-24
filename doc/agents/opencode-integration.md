@@ -61,6 +61,48 @@ pure logic (envelope build, fail-safe decision parse, config mutation, the spawn
 lives in `opencode/caret.plugin.ts` behind a `createCaretPlugin({ run })` DI seam and is
 unit-tested in `test/opencode/`.
 
+## Daemon warm-up: plan-agent parity, not session start (EXC-838)
+
+The plugin warms caret's daemon by fire-and-forget spawning `caret prewarm` from its
+`chat.message` hook whenever the message is addressed to a planning agent — the same
+`isPlanningAgent` guard the review tool's `execute()` uses. It is the counterpart to
+Claude Code's `PostToolUse`/`EnterPlanMode` prewarm hook, for which OpenCode offers no
+equivalent event: absent this hook the daemon only comes up when the first
+`caret_review_plan` call spawns `caret review`.
+
+**Why not a plugin-load (session-start) warm.** EXC-838 proposed warming at true session
+start — a `SessionStart` hook for Claude Code, a plugin-load warm here. Two measurements
+killed it: a cold daemon spawn costs ~0.4 s (`caret prewarm` cold 0.52 s vs. warm 0.13 s),
+and a warmed daemon **idle-exits after `[daemon].idle_ms`** (60 s by default; the value
+lives in `src/config/settings.ts`, the timer in `src/daemon/server.ts`). A session-start
+warm therefore only pays off when a plan is submitted within 60 s of session start — in
+any real session the daemon has already exited and `caret review` re-spawns cold anyway.
+The proposal bought ~0.4 s in a window that essentially never applies, at the cost of a
+process spawn on every start / resume / clear / compact. Rejected for **both**
+integrations: `hooks/hooks.json` deliberately has no `SessionStart` entry.
+
+**Why per-message and unthrottled.** The same 60 s idle-exit rules out a once-per-session
+warm here — it would be dead long before the plan lands. Warming on every plan-agent
+message keeps the daemon up for the turn most likely to end in a `caret_review_plan` call,
+and a detached `caret prewarm` against an already-warm daemon costs ~0.13 s in a
+background process. No throttle, no per-session state.
+
+**Two things the warm spawn must not get wrong.** It carries `CARET_AGENT=opencode` just
+as the `review` spawn does — the warm is what stands the daemon up, and the daemon picks
+its adapter from that env, so omitting it yields a claude-flavored daemon that the later
+`caret review` reuses (`ensureDaemon` matches on build/version/state dir, not adapter),
+offering OpenCode reviewers Claude's approve variants. And it registers its own `'error'`
+handler: `spawn` emits `'error'` **asynchronously** (ENOENT on a bad `CARET_OPENCODE_BIN`
+or a partial install), so the hook's synchronous `try`/`catch` cannot see it and an
+unhandled `'error'` event would take OpenCode's whole process down.
+
+Past that, the warm is best-effort in the same sense as `showToast` and
+`realUpdateChecker` — a failure is a non-event, because the review path spawns the daemon
+itself regardless. The spawn sits behind a `WarmRunner` DI seam beside `SpawnRunner` so
+the hook's gating is unit-testable without a process; the two properties above live in the
+production runner the seam hides, so `test/opencode/` pins them by driving the real runner
+against a bad path and against a recording shim.
+
 ## The subagent bypass, and how caret mitigates it
 
 OpenCode's `tool.execute.before` hook **does not fire for tool calls made by subagents**
@@ -175,10 +217,13 @@ it.
 **Verified in this repo (unit + integration tests, no live OpenCode required):** the
 adapter's parse/emit/probe/fatal-deny; the plugin's pure logic + the tool's `execute()`
 through a stubbed spawn runner (approve / deny / subagent-refusal); the config-hook
-restriction; the entrypoint's `Object.values`-single-Plugin invariant; the config-array
-editor (add/remove, comment-preserving); `--target` parsing + dispatch; the `claude`
-target's CLI command sequence; the runtime bin/version resolvers; and the update check
-(toasts when behind, silent on error / opt-out).
+restriction; the `chat.message` warm hook (warms for the plan agent, not for a
+build/unknown caller) and the production warm runner it hides (survives a bad binary's
+async spawn error, and runs `prewarm` with `CARET_AGENT=opencode`); the entrypoint's
+`Object.values`-single-Plugin invariant; the config-array editor (add/remove,
+comment-preserving); `--target` parsing + dispatch; the `claude` target's CLI command
+sequence; the runtime bin/version resolvers; and the update check (toasts when behind,
+silent on error / opt-out).
 
 **Confirmed against a live OpenCode (1.17.x) — pre-EXC-794 (file-deploy path):** that a
 local plugin file resolves `@opencode-ai/plugin` only when a config-dir `package.json`
