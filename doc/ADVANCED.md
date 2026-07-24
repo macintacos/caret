@@ -155,6 +155,14 @@ both agents at once, `--uninstall` reverses any target, and `--dry-run` previews
 changes without writing. See
 [`agents/opencode-integration.md`](agents/opencode-integration.md) for the design.
 
+Omit `--target` and `caret install` picks for you: it detects which agents you have
+(`claude` on your PATH; `opencode` on your PATH or an existing OpenCode config dir) and
+asks which to install into, with the detected ones pre-checked. Off a terminal — CI, a
+pipe — it never waits on that prompt: it installs into every agent it detected, or into
+Claude Code when it detected none, and says which. `--dry-run` previews that same choice
+rather than asking. Every install (but not `--uninstall`) finishes by downloading the
+rumdl plan formatter, best-effort — see [Plan formatting](#plan-formatting-rumdl) below.
+
 ### Desktop notifications
 
 When a new plan lands while caret is in the background — tab hidden or window unfocused —
@@ -313,11 +321,12 @@ caret canonicalizes every incoming plan by reflowing it to a 90-column MD013 sha
 downloads the pinned binary (v0.2.37) into `$XDG_STATE_HOME/caret/rumdl/` on the first
 plan of the first session, verifies its checksum, and reuses it afterward — so it behaves
 the same however caret was installed (Claude plugin, OpenCode, or `install.sh`).
-`install.sh` runs `caret install-rumdl` as a best-effort step so the download happens at
-install time rather than on the first plan, and you can run `caret install-rumdl` yourself
-at any point. If a plan can't be formatted (rumdl missing, offline, or an unsupported
-platform), caret stores it unchanged and logs one warning — a plan is never lost. Point
-`CARET_RUMDL_BIN` at an existing rumdl to skip the download entirely.
+`install.sh` and `caret install` both run that download as a best-effort step so it
+happens at install time rather than on the first plan, and you can run
+`caret install-rumdl` yourself at any point. If a plan can't be formatted (rumdl missing,
+offline, or an unsupported platform), caret stores it unchanged and logs one warning — a
+plan is never lost. Point `CARET_RUMDL_BIN` at an existing rumdl to skip the download
+entirely.
 
 ## Logging & Debugging
 
