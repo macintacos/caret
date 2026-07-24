@@ -52,7 +52,7 @@
   import PlanSearch from "@/components/PlanSearch.svelte";
   import type { SourceViewGutter } from "$lib/diffview/options.ts";
   import type { SourceViewApi, SourceViewOptions } from "$lib/diffview/types.ts";
-  import { bind, defaultIsEditingContext, shortcuts } from "$lib/shortcuts/index.ts";
+  import { ariaKeyshortcutsFor, bind, defaultIsEditingContext, shortcuts } from "$lib/shortcuts/index.ts";
   import type { CursorMotion } from "$lib/diffview/lineCursor.ts";
   import { activeHeadingLine, extractHeadings, lineForSlug, shouldShowToc, slugForLine } from "$lib/toc.ts";
   import { NARROW_WIDTH_PX, TIGHT_WIDTH_PX } from "$lib/layout.ts";
@@ -1088,7 +1088,7 @@
               type="button"
               class="toc-toggle float-chip"
               aria-label="Toggle sidebar"
-              aria-keyshortcuts={"\\"}
+              aria-keyshortcuts={ariaKeyshortcutsFor("actions.toggleSidebar")}
               aria-expanded={tocShown}
               aria-controls="plan-toc"
               onclick={toggleToc}

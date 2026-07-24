@@ -29,6 +29,7 @@
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
+  import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import Icon from "@/components/Icon.svelte";
 
   interface Props {
@@ -215,7 +216,7 @@
       size="sm"
       class="compare-toggle float-chip"
       aria-pressed={comparing}
-      aria-keyshortcuts="d"
+      aria-keyshortcuts={ariaKeyshortcutsFor("actions.toggleDiff")}
       onclick={() => onSetComparing(!comparing)}
     >
       {@render compareLabel()}

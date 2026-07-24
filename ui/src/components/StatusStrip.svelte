@@ -24,6 +24,7 @@
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
+  import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import KbdCap from "@/components/KbdCap.svelte";
 
   let {
@@ -64,7 +65,7 @@
         class="stat comments-toggle"
         aria-expanded={commentsOpen}
         aria-controls="comment-navigator"
-        aria-keyshortcuts="Shift+C"
+        aria-keyshortcuts={ariaKeyshortcutsFor("actions.toggleComments")}
         onclick={onToggleComments}
       >
         <span class="num" class:has={pendingCount > 0}>{pendingCount}</span>
