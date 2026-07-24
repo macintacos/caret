@@ -10,7 +10,7 @@ import {
   detectTargets,
   INSTALL_TARGET_IDS,
   INSTALL_TARGETS,
-} from "@/commands/install-targets.ts";
+} from "@/commands/install/targets.ts";
 
 /** A probe that finds only the named commands and only the named paths. */
 function probe(commands: string[] = [], paths: string[] = []): DetectProbe {

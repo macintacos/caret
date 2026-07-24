@@ -9,8 +9,8 @@
 // animating while each one runs — a blocked event loop would freeze it mid-frame and
 // read as a hang.
 
-import type { InstallUI } from "@/commands/install-ui.ts";
-import { silentUI } from "@/commands/install-ui.ts";
+import type { InstallUI } from "@/commands/install/ui.ts";
+import { silentUI } from "@/commands/install/ui.ts";
 
 /** caret's public marketplace source and the `plugin@marketplace` id Claude uses
  * (both the marketplace and the plugin are named `caret`). */

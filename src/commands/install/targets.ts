@@ -5,10 +5,10 @@
 // dir for OpenCode.
 //
 // Everything that enumerates targets (--target parsing, the chooser rows, detection)
-// reads this one array, so a future agent is one descriptor plus one dispatch arm in
-// install.ts — no second list to keep in sync, and the arm is not optional: install.ts
-// dispatches through an exhaustive switch, so a descriptor with no runner is a type
-// error.
+// reads this one array, so a future agent is one descriptor, one runner module beside
+// this one, and one dispatch arm in index.ts — no second list to keep in sync, and the
+// arm is not optional: index.ts dispatches through an exhaustive switch, so a descriptor
+// with no runner is a type error.
 
 import { existsSync } from "node:fs";
 

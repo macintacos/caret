@@ -3,8 +3,8 @@
 
 import { expect, test } from "bun:test";
 
-import { chooserOptions } from "@/commands/install-prompt.ts";
-import { INSTALL_TARGET_IDS } from "@/commands/install-targets.ts";
+import { chooserOptions } from "@/commands/install/prompt.ts";
+import { INSTALL_TARGET_IDS } from "@/commands/install/targets.ts";
 
 test("every registry target gets a row, in registry order", () => {
   expect(chooserOptions([]).map((o) => o.value)).toEqual([...INSTALL_TARGET_IDS]);

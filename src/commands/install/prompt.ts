@@ -6,7 +6,7 @@
 // src/cli.ts is the review hook's entrypoint on every plan, and the chooser is the one
 // subcommand branch that ever renders a prompt.
 
-import { INSTALL_TARGETS, type InstallTarget } from "@/commands/install-targets.ts";
+import { INSTALL_TARGETS, type InstallTarget } from "@/commands/install/targets.ts";
 
 /** The chooser's rows: every registry target, with the detected ones marked so the
  * pre-checked selection reads as a consequence of detection rather than a default. */

@@ -1,8 +1,9 @@
 // Shared OpenCode config-dir + packaging-path resolution for caret's OpenCode
 // integration. caret installs into OpenCode as a first-class `plugin` array entry
-// (@macintacos/caret) plus its command files; the install writer (install-opencode)
-// and the discovery probe (install.ts) resolve WHERE those live through this single
-// module, so the reader and the writer can never disagree about a path.
+// (@macintacos/caret) plus its command files; the install writer
+// (commands/install/opencode.ts) and the discovery probe (install.ts) resolve WHERE
+// those live through this single module, so the reader and the writer can never
+// disagree about a path.
 
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";

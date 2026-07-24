@@ -163,8 +163,8 @@ Claude Code when it detected none, and says which. `--dry-run` previews that sam
 rather than asking, and `--uninstall` asks (or reports) the same way before removing.
 `--target` is the way to pin the agents non-interactively — `CARET_AGENTS` is
 `install.sh`'s own override and has no effect on `caret install`. Every install (but not
-`--uninstall`) finishes by downloading the rumdl plan formatter, best-effort — see
-[Plan formatting](#plan-formatting-rumdl) below.
+`--uninstall`) finishes by acquiring the rumdl plan formatter — it is part of installing
+caret, not a step of its own — see [Plan formatting](#plan-formatting-rumdl) below.
 
 At a terminal the whole run renders as one
 [`@clack/prompts`](https://github.com/bombshell-dev/clack) session: the chooser, then a
@@ -332,12 +332,12 @@ caret canonicalizes every incoming plan by reflowing it to a 90-column MD013 sha
 downloads the pinned binary (v0.2.37) into `$XDG_STATE_HOME/caret/rumdl/` on the first
 plan of the first session, verifies its checksum, and reuses it afterward — so it behaves
 the same however caret was installed (Claude plugin, OpenCode, or `install.sh`).
-`install.sh` and `caret install` both run that download as a best-effort step so it
-happens at install time rather than on the first plan, and you can run
-`caret install-rumdl` yourself at any point. If a plan can't be formatted (rumdl missing,
-offline, or an unsupported platform), caret stores it unchanged and logs one warning — a
-plan is never lost. Point `CARET_RUMDL_BIN` at an existing rumdl to skip the download
-entirely.
+`caret install` always ends by acquiring it, so the download happens at install time
+rather than on the first plan; an already-cached binary is reused, and a failure is a
+warning rather than a failed install (the first plan retries). If a plan can't be
+formatted (rumdl missing, offline, or an unsupported platform), caret stores it unchanged
+and logs one warning — a plan is never lost. Point `CARET_RUMDL_BIN` at an existing rumdl
+to skip the download entirely.
 
 ## Logging & Debugging
 

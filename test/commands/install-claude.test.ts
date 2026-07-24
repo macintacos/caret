@@ -4,8 +4,8 @@
 
 import { expect, test } from "bun:test";
 
-import { type ClaudeRunner, runInstallClaudeTarget } from "@/commands/install-claude.ts";
-import { recordingUI } from "@/commands/install-ui.ts";
+import { type ClaudeRunner, runInstallClaudeTarget } from "@/commands/install/claude.ts";
+import { recordingUI } from "@/commands/install/ui.ts";
 
 // A runner that records every `claude` invocation and returns a scripted result.
 function recorder(result: Awaited<ReturnType<ClaudeRunner>> = { ok: true, detail: "" }): {

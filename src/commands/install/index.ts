@@ -4,25 +4,25 @@
 // Claude Code: the `claude` plugin CLI). Omit `--target` and caret detects the agents
 // on this machine and asks — on a TTY through the chooser, otherwise by installing into
 // everything it detected (Claude Code when it detected nothing), so CI never hangs on a
-// prompt. Every install ends by downloading the rumdl plan formatter, best-effort, the
-// same eager step scripts/install.sh runs. `--uninstall` / `--dry-run` apply to every
-// selected target, and neither downloads rumdl. Target parsing is a pure function so it
-// is unit-testable, and detection, the chooser, TTY-ness, and the target runners are all
-// injectable so selection and dispatch can be tested without touching a real config dir,
-// the `claude` CLI, or a terminal.
+// prompt. Every install ends by acquiring the rumdl plan formatter: it is part of a
+// working caret, not a step anyone can skip or forget. `--uninstall` / `--dry-run` apply
+// to every selected target, and neither acquires rumdl. Target parsing is a pure function
+// so it is unit-testable, and detection, the chooser, TTY-ness, rumdl, and the target
+// runners are all injectable so selection and dispatch can be tested without touching a
+// real config dir, the `claude` CLI, the network, or a terminal.
 
-import { runInstallClaudeTarget } from "@/commands/install-claude.ts";
-import { runInstallOpencodeTarget } from "@/commands/install-opencode.ts";
-import { promptForTargets } from "@/commands/install-prompt.ts";
-import { ensureRumdlInstalled } from "@/commands/install-rumdl.ts";
+import { runInstallClaudeTarget } from "@/commands/install/claude.ts";
+import { runInstallOpencodeTarget } from "@/commands/install/opencode.ts";
+import { promptForTargets } from "@/commands/install/prompt.ts";
 import {
   detectTargets,
   INSTALL_TARGET_IDS,
   type InstallTarget,
   targetLabel,
-} from "@/commands/install-targets.ts";
-import { createInstallUI, type InstallUI } from "@/commands/install-ui.ts";
+} from "@/commands/install/targets.ts";
+import { createInstallUI, type InstallUI } from "@/commands/install/ui.ts";
 import { errorMessage } from "@/lib/types.ts";
+import { ensureRumdl } from "@/plan/rumdl.ts";
 
 /** Parse a `--target` value ("opencode", "claude", or "opencode,claude") into a
  * deduped, order-preserving target list — or an error message for an empty/unknown
@@ -60,7 +60,9 @@ export interface InstallDeps {
   detect?: () => InstallTarget[];
   prompt?: (detected: InstallTarget[], uninstall: boolean) => Promise<InstallTarget[] | null>;
   isInteractive?: () => boolean;
-  ensureRumdl?: () => Promise<string>;
+  /** Narrowed to what the step reports — the real `ensureRumdl` satisfies it, and a test
+   * can describe an outcome without the config path it never reads. */
+  ensureRumdl?: () => Promise<{ bin: string; installed: boolean }>;
   ui?: InstallUI;
 }
 
@@ -105,10 +107,13 @@ export async function runInstallSubcommand(
   ui.outro(closingLine(targets, opts));
 }
 
-/** Eagerly download rumdl so the first plan doesn't pay the latency, the same
- * best-effort step scripts/install.sh runs: the daemon downloads it lazily anyway, so a
- * failure here is reported as a warning and never fails the install. Uninstalls skip it
- * (nothing is being set up), and dry-run only says it would run. */
+/** Acquire rumdl, the plan formatter every reviewed plan is reflowed through. Part of
+ * installing caret rather than a step of its own: ensureRumdl reuses whatever is already
+ * there (a cached download, or the binary a `CARET_RUMDL_BIN` user pointed it at) and
+ * downloads the pinned release only when nothing is. Doing it here is what keeps the
+ * first plan off the download latency — the daemon would otherwise fetch it mid-review —
+ * so a failure is a warning, not a failed install: that lazy path still covers it.
+ * Uninstalls skip it (nothing is being set up), and dry-run only says it would run. */
 async function rumdlStep(
   opts: { uninstall: boolean; dryRun: boolean },
   deps: InstallDeps,
@@ -116,17 +121,20 @@ async function rumdlStep(
 ): Promise<void> {
   if (opts.uninstall) return;
   if (opts.dryRun) {
-    ui.info("Would download the rumdl plan formatter.");
+    ui.info("Would install the rumdl plan formatter.");
     return;
   }
   try {
     await ui.step(
-      "Downloading the rumdl plan formatter",
-      () => (deps.ensureRumdl ?? ensureRumdlInstalled)(),
-      (summary) => summary,
+      "Installing the rumdl plan formatter",
+      () => (deps.ensureRumdl ?? ensureRumdl)(),
+      // `installed` is ensureRumdl's own signal for "this call downloaded it" — honest
+      // whether the binary was freshly fetched, already cached, or a CARET_RUMDL_BIN
+      // override (no guessing at a cache path the override never populates).
+      ({ bin, installed }) => `rumdl ${installed ? "installed" : "already present"} at ${bin}`,
     );
   } catch (e) {
-    ui.warn(`Could not download rumdl (${errorMessage(e)}) — caret will retry on your first plan.`);
+    ui.warn(`Could not install rumdl (${errorMessage(e)}) — caret will retry on your first plan.`);
   }
 }
 

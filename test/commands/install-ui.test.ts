@@ -4,7 +4,7 @@
 
 import { expect, test } from "bun:test";
 
-import { createInstallUI, type InstallUI, recordingUI, silentUI } from "@/commands/install-ui.ts";
+import { createInstallUI, type InstallUI, recordingUI, silentUI } from "@/commands/install/ui.ts";
 
 test("a step runs its work and returns the value", async () => {
   const ui: InstallUI = silentUI;

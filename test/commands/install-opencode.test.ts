@@ -6,7 +6,7 @@ import { join } from "node:path";
 
 import type { OpencodePackaging } from "@/adapters/opencode/packaging.ts";
 import { CARET_PACKAGE } from "@/adapters/opencode/paths.ts";
-import { runInstallOpencodeTarget } from "@/commands/install-opencode.ts";
+import { runInstallOpencodeTarget } from "@/commands/install/opencode.ts";
 
 // Stub packaging so the target never resolves the real caret root. Only the command
 // files + bin path matter now (caret itself installs as a `plugin` array entry).

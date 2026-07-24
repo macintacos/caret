@@ -4,13 +4,13 @@
 
 import { afterEach, expect, test } from "bun:test";
 
-import { parseTargets, runInstallSubcommand } from "@/commands/install.ts";
-import type { InstallTarget } from "@/commands/install-targets.ts";
-import { recordingUI, silentUI } from "@/commands/install-ui.ts";
+import { parseTargets, runInstallSubcommand } from "@/commands/install/index.ts";
+import type { InstallTarget } from "@/commands/install/targets.ts";
+import { recordingUI, silentUI } from "@/commands/install/ui.ts";
 
 /** Keep a test off the real rumdl download: without this seam the command falls through
  * to the production acquisition, which reaches the network and writes to the state dir. */
-const noRumdl = async () => "rumdl already present at /tmp/rumdl";
+const noRumdl = async () => ({ bin: "/tmp/rumdl", installed: false });
 
 test("parseTargets accepts a single target, both, and dedupes/preserves order", () => {
   expect(parseTargets("opencode")).toEqual({ targets: ["opencode"] });
@@ -180,11 +180,37 @@ test("installing ensures rumdl once, after the targets", async () => {
       runClaude: () => void calls.push("claude"),
       ensureRumdl: async () => {
         calls.push("rumdl");
-        return "rumdl already present";
+        return { bin: "/x/rumdl", installed: false };
       },
     },
   );
   expect(calls).toEqual(["claude", "rumdl"]);
+});
+
+test("the rumdl step reports a fresh download, naming the binary", async () => {
+  const ui = recordingUI();
+  await runInstallSubcommand(
+    { target: "claude", uninstall: false, dryRun: false },
+    {
+      ui,
+      runClaude: () => {},
+      ensureRumdl: async () => ({ bin: "/x/rumdl", installed: true }),
+    },
+  );
+  expect(ui.events).toContain("settled:rumdl installed at /x/rumdl");
+});
+
+test("the rumdl step reports an already-cached binary as present, not downloaded", async () => {
+  const ui = recordingUI();
+  await runInstallSubcommand(
+    { target: "claude", uninstall: false, dryRun: false },
+    {
+      ui,
+      runClaude: () => {},
+      ensureRumdl: async () => ({ bin: "/x/rumdl", installed: false }),
+    },
+  );
+  expect(ui.events).toContain("settled:rumdl already present at /x/rumdl");
 });
 
 test("uninstalling and --dry-run never download rumdl", async () => {
@@ -194,7 +220,7 @@ test("uninstalling and --dry-run never download rumdl", async () => {
     ui: silentUI,
     ensureRumdl: async () => {
       calls.push("rumdl");
-      return "rumdl already present";
+      return { bin: "/x/rumdl", installed: false };
     },
   };
   await runInstallSubcommand({ target: "claude", uninstall: true, dryRun: false }, deps);

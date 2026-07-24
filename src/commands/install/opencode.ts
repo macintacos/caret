@@ -27,8 +27,8 @@ import {
   opencodeConfigDir,
   resolveConfigFile,
 } from "@/adapters/opencode/paths.ts";
-import type { InstallUI } from "@/commands/install-ui.ts";
-import { silentUI } from "@/commands/install-ui.ts";
+import type { InstallUI } from "@/commands/install/ui.ts";
+import { silentUI } from "@/commands/install/ui.ts";
 import { VERSION } from "@/lib/build-id.ts";
 
 /** Injection seam for tests: override the config dir and packaging so the target

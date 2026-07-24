@@ -137,10 +137,12 @@ string" shape before writing, so it can't corrupt a user's config.
   `jsonc-parser` in `config-plugin.ts`) and deploys the `/caret:*` command **files**;
   `--uninstall` reverses both. OpenCode itself installs the package and its deps into its
   cache on the next start — caret writes no config-dir manifest and runs no `bun install`.
-  `caret install --target claude` registers caret with Claude Code via its plugin CLI, and
-  the orchestrator (`src/commands/install.ts`) parses `--target` (a comma list of
-  `opencode`/`claude`). `paths.ts` is the single source of truth both the probe (reader)
-  and the writer resolve through.
+  `caret install --target claude` registers caret with Claude Code via its plugin CLI. The
+  command lives in `src/commands/install/`: `index.ts` is the orchestrator (it parses
+  `--target` — a comma list of the registry's ids — resolves the targets, and dispatches),
+  beside the target registry, the chooser, the terminal reporter, and one module per
+  target runner. `paths.ts` is the single source of truth both the probe (reader) and the
+  writer resolve through.
 
 ## Distribution choice (amended by EXC-794)
 
