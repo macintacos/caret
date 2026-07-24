@@ -83,9 +83,13 @@ function phases(
         label: "Registering the local caret marketplace",
         done: `Registered the local dev marketplace (${local.marketplaceDir})`,
         before: () => writeDev(local.repoDir, local.marketplaceDir),
-        // Fatal, unlike the published path's best-effort add: if the `caret` marketplace
-        // is not the generated dev one, the install below would quietly fetch the
-        // PUBLISHED plugin — the one failure a dev loop must never ship silently.
+        // Fatal, unlike the published path's best-effort add: registration is what makes
+        // the local build (rather than the published plugin) the thing installed below, so
+        // a run where neither the add nor its update landed must stop rather than install
+        // something else. `update` re-reads whichever source is registered under the name
+        // `caret` — on a machine whose `caret` marketplace is still the public one, that
+        // succeeds and the published plugin installs. Removing and re-adding would close
+        // that gap at the cost of tearing down a user's marketplace registration.
         commands: [
           {
             args: ["plugin", "marketplace", "add", local.marketplaceDir],
@@ -138,7 +142,10 @@ class PhaseFailure extends Error {
 
 /** Install (or, with `uninstall`, remove) caret in Claude Code via its plugin CLI,
  * reporting one step per phase. `local` installs the checkout it describes instead of the
- * published plugin. A missing `claude` reports guidance and stops without throwing. */
+ * published plugin. A missing `claude` reports guidance and stops without throwing.
+ *
+ * Returns false when a phase failed (already reported), so the caller can fail the run
+ * rather than closing with a success line over an install that did not happen. */
 export async function runInstallClaudeTarget(
   opts: { uninstall: boolean; dryRun: boolean; local?: LocalInstall },
   deps: {
@@ -146,7 +153,7 @@ export async function runInstallClaudeTarget(
     ui?: InstallUI;
     writeDevMarketplace?: (repoDir: string, outDir: string) => void;
   } = {},
-): Promise<void> {
+): Promise<boolean> {
   const run = deps.claude ?? claudeCli;
   const ui = deps.ui ?? silentUI;
   const local = opts.uninstall ? undefined : opts.local;
@@ -161,7 +168,7 @@ export async function runInstallClaudeTarget(
       ]),
     ]);
     ui.note(lines.join("\n"), `Claude Code${local ? " (local build)" : ""} — would run`);
-    return;
+    return true;
   }
 
   for (const phase of plan) {
@@ -193,7 +200,8 @@ export async function runInstallClaudeTarget(
           ? `The \`claude\` CLI was not found. Install Claude Code (https://claude.com/claude-code) and re-run \`caret install --target claude\`, or add caret in Claude Code via \`/plugin marketplace add ${MARKETPLACE_SOURCE}\`.`
           : `Claude Code: ${e.reason}`,
       );
-      return;
+      return false;
     }
   }
+  return true;
 }

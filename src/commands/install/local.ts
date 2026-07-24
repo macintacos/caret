@@ -14,7 +14,16 @@
 // Code, which installs from a marketplace rather than from the running binary, needs the
 // generated marketplace below.
 
-import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  accessSync,
+  constants,
+  existsSync,
+  mkdirSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join, resolve } from "node:path";
 
 import { resolveCaretRoot } from "@/adapters/opencode/packaging.ts";
@@ -43,25 +52,46 @@ export function devMarketplaceDir(): string {
 }
 
 /** The checkout `--from-local` installs, with the ref label to report. Throws — with the
- * command that fixes it — when caret is not running from a checkout, or from one whose
- * build artifacts are missing. Missing artifacts are a misuse, not a fallback: this mode
- * REUSES what `mise run build` produced and never builds anything itself. */
-export function resolveLocalCheckout(deps: LocalDeps = {}): { repoDir: string; ref: string } {
-  const repoDir = resolve((deps.root ?? resolveCaretRoot)());
+ * command that fixes it — when caret is not running from a checkout, or (unless
+ * `requireArtifacts` is false, as it is for a preview) from one whose build artifacts are
+ * missing. Missing artifacts are a misuse, not a fallback: this mode REUSES what
+ * `mise run build` produced and never builds anything itself. */
+export function resolveLocalCheckout(
+  opts: { requireArtifacts?: boolean } = {},
+  deps: LocalDeps = {},
+): { repoDir: string; ref: string } {
+  const repoDir = resolve(caretRoot(deps));
   if (!existsSync(join(repoDir, ".claude-plugin", "marketplace.json"))) {
     throw new Error(
       `--from-local must run from a caret checkout (no .claude-plugin/marketplace.json at ${repoDir}). A published caret installs with a plain \`caret install\`.`,
     );
   }
-  if (
-    !existsSync(join(repoDir, "bin", "caret-native")) ||
-    !existsSync(join(repoDir, "bin", "ui"))
-  ) {
-    throw new Error(
-      `--from-local reuses the build artifacts bin/caret-native + bin/ui, and ${repoDir} has neither — run \`mise run build\` first.`,
-    );
+  if (opts.requireArtifacts !== false) {
+    const missing = [
+      isExecutable(join(repoDir, "bin", "caret-native")) ? null : "bin/caret-native",
+      isDirectory(join(repoDir, "bin", "ui")) ? null : "bin/ui",
+    ].filter((m) => m !== null);
+    if (missing.length > 0) {
+      throw new Error(
+        `--from-local reuses the build artifacts bin/caret-native + bin/ui, and ${repoDir} is missing ${missing.join(" + ")} — run \`mise run build\` first.`,
+      );
+    }
   }
   return { repoDir, ref: (deps.describe ?? gitDescribe)(repoDir) ?? "unknown ref" };
+}
+
+/** caret's root, with root resolution's own failure restated in `--from-local` terms —
+ * resolveCaretRoot describes the OpenCode packaging it looks for, which is not what a dev
+ * running the dev loop is asking about. */
+function caretRoot(deps: LocalDeps): string {
+  if (deps.root) return deps.root();
+  try {
+    return resolveCaretRoot();
+  } catch {
+    throw new Error(
+      "--from-local must run from a caret checkout, and this caret's root could not be resolved. Run it as the checkout's own `bin/caret` (what `mise run build --install` does).",
+    );
+  }
 }
 
 /** Write the private marketplace that makes Claude Code install THIS checkout. The
@@ -108,6 +138,26 @@ export async function prewarmLocalBuild(repoDir: string, deps: LocalDeps = {}): 
   }
 }
 
+/** Is `path` a file this process can exec? The artifacts are checked the way they are
+ * used — a `bin/caret-native` that won't run, or a `bin/ui` that is a file, is as absent
+ * as a missing one. */
+function isExecutable(path: string): boolean {
+  try {
+    accessSync(path, constants.X_OK);
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function isDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 /** `git describe` for the version label, or null when git fails (not a checkout, no git). */
 function gitDescribe(repoDir: string): string | null {
   try {
@@ -123,8 +173,9 @@ function gitDescribe(repoDir: string): string | null {
   }
 }
 
-/** Run a command with its output captured, resolving its exit code. */
+/** Run a command with its output discarded, resolving its exit code. Discarded rather than
+ * piped: nothing reads the output, and an unread pipe would block a chatty child. */
 async function runCaptured(cmd: string[]): Promise<number> {
-  const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
+  const proc = Bun.spawn(cmd, { stdout: "ignore", stderr: "ignore" });
   return await proc.exited;
 }

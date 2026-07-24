@@ -3,6 +3,9 @@
 // recording UI pins how the run is reported step by step.
 
 import { expect, test } from "bun:test";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { type ClaudeRunner, runInstallClaudeTarget } from "@/commands/install/claude.ts";
 import { recordingUI } from "@/commands/install/ui.ts";
@@ -181,6 +184,41 @@ test("--from-local --dry-run writes no marketplace and spawns no claude", async 
   expect(written).toEqual([]);
   // The preview says it is the local build, so a reader sees which caret would install.
   expect(ui.events).toContain("note:Claude Code (local build) — would run");
+});
+
+test("a reported failure is returned to the caller, a clean install is not", async () => {
+  const failing: ClaudeRunner = async () => ({ ok: false, detail: "boom" });
+  expect(
+    await runInstallClaudeTarget({ uninstall: false, dryRun: false }, { claude: failing }),
+  ).toBe(false);
+  const { runner } = recorder();
+  expect(
+    await runInstallClaudeTarget({ uninstall: false, dryRun: false }, { claude: runner }),
+  ).toBe(true);
+});
+
+test("--from-local writes a real dev marketplace through the production wiring", async () => {
+  // Every other local-mode test injects the writer; this one runs the default so a broken
+  // default can't stay green.
+  const dir = mkdtempSync(join(tmpdir(), "caret-claude-"));
+  try {
+    const { runner } = recorder();
+    await runInstallClaudeTarget(
+      {
+        uninstall: false,
+        dryRun: false,
+        local: { repoDir: dir, marketplaceDir: join(dir, "dev-marketplace") },
+      },
+      { claude: runner },
+    );
+    const manifest = readFileSync(
+      join(dir, "dev-marketplace", ".claude-plugin", "marketplace.json"),
+      "utf8",
+    );
+    expect(JSON.parse(manifest).plugins[0].source).toBe("./caret");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("the install narrates one step per phase, naming each claude command as it runs", async () => {

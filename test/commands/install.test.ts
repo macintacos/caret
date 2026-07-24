@@ -367,6 +367,69 @@ test("a dry run closes by saying nothing was changed", async () => {
   expect(ui.events).toContain("outro:Dry run complete — nothing was changed.");
 });
 
+test("a target that reports failure exits non-zero and never claims caret was installed", async () => {
+  // scripts/install.sh aborted the whole run on a failed step; a green
+  // `mise run build --install` over a dev loop that installed nothing is the regression
+  // this pins.
+  const calls: string[] = [];
+  const ui = recordingUI();
+  await runInstallSubcommand(
+    { target: "claude", uninstall: false, dryRun: false, fromLocal: true },
+    {
+      ui,
+      resolveLocal: () => ({ repoDir: "/checkout", ref: "ref" }),
+      marketplaceDir: () => "/dev-mp",
+      runClaude: () => false,
+      ensureRumdl: async () => {
+        calls.push("rumdl");
+        return { bin: "/x/rumdl", installed: false };
+      },
+      prewarm: async () => void calls.push("prewarm"),
+    },
+  );
+  expect(process.exitCode).toBe(1);
+  expect(ui.events.some((e) => e.startsWith("outro:caret"))).toBe(false);
+  // Nothing downstream runs: the build never landed, so there is nothing to warm.
+  expect(calls).toEqual([]);
+});
+
+test("a throwing target is reported and fails the run rather than escaping the command", async () => {
+  // An escaping throw reaches the CLI's fail-safe handler, which prints a hook deny line
+  // and exits 0 — nonsense from an install command.
+  const ui = recordingUI();
+  await runInstallSubcommand(
+    { target: "claude", uninstall: false, dryRun: false },
+    {
+      ui,
+      runClaude: () => {
+        throw new Error("EACCES");
+      },
+      ensureRumdl: noRumdl,
+    },
+  );
+  expect(process.exitCode).toBe(1);
+  expect(ui.events.some((e) => e.includes("EACCES"))).toBe(true);
+});
+
+test("--from-local --dry-run previews from a checkout that was never built", async () => {
+  // The artifact guard is what makes a real run fail early; a preview changes nothing, so
+  // it must still render (doc/ADVANCED.md points readers at exactly this command).
+  let askedFor: boolean | undefined;
+  await runInstallSubcommand(
+    { target: "claude", uninstall: false, dryRun: true, fromLocal: true },
+    {
+      ui: silentUI,
+      resolveLocal: (opts) => {
+        askedFor = opts?.requireArtifacts;
+        return { repoDir: "/checkout", ref: "ref" };
+      },
+      marketplaceDir: () => "/dev-mp",
+      runClaude: () => {},
+    },
+  );
+  expect(askedFor).toBe(false);
+});
+
 test("a failing prewarm still leaves the install successful", async () => {
   const ui = recordingUI();
   await runInstallSubcommand(

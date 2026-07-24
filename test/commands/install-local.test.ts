@@ -3,7 +3,15 @@
 // so these run without a caret checkout, without `git`, and without spawning the daemon.
 
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -27,9 +35,9 @@ function temp(): string {
 function fullCheckout(): string {
   const root = temp();
   mkdirSync(join(root, ".claude-plugin"), { recursive: true });
-  Bun.write(join(root, ".claude-plugin", "marketplace.json"), "{}");
+  writeFileSync(join(root, ".claude-plugin", "marketplace.json"), "{}");
   mkdirSync(join(root, "bin", "ui"), { recursive: true });
-  Bun.write(join(root, "bin", "caret-native"), "#!/bin/sh\n");
+  writeFileSync(join(root, "bin", "caret-native"), "#!/bin/sh\n", { mode: 0o755 });
   return root;
 }
 
@@ -63,7 +71,7 @@ test("writeDevMarketplace replaces a previous generation rather than merging int
   const repo = fullCheckout();
   const out = join(temp(), "dev-marketplace");
   writeDevMarketplace(join(temp(), "stale-checkout"), out);
-  Bun.write(join(out, "leftover.txt"), "x");
+  writeFileSync(join(out, "leftover.txt"), "x");
 
   writeDevMarketplace(repo, out);
 
@@ -73,13 +81,16 @@ test("writeDevMarketplace replaces a previous generation rather than merging int
 
 test("resolveLocalCheckout reports the repo and the ref it describes", () => {
   const repo = fullCheckout();
-  const resolved = resolveLocalCheckout({ root: () => repo, describe: () => "v0.7.2-3-gabc1234" });
+  const resolved = resolveLocalCheckout(
+    {},
+    { root: () => repo, describe: () => "v0.7.2-3-gabc1234" },
+  );
   expect(resolved).toEqual({ repoDir: repo, ref: "v0.7.2-3-gabc1234" });
 });
 
 test("resolveLocalCheckout falls back to an unknown ref when git can't describe", () => {
   const repo = fullCheckout();
-  const resolved = resolveLocalCheckout({ root: () => repo, describe: () => null });
+  const resolved = resolveLocalCheckout({}, { root: () => repo, describe: () => null });
   expect(resolved.ref).toBe("unknown ref");
 });
 
@@ -87,19 +98,46 @@ test("resolveLocalCheckout rejects a caret that is not a checkout", () => {
   // A published install: no marketplace manifest, so --from-local must not proceed to
   // register a dev marketplace from it.
   const notACheckout = temp();
-  expect(() => resolveLocalCheckout({ root: () => notACheckout, describe: () => null })).toThrow(
-    /checkout/,
-  );
+  expect(() =>
+    resolveLocalCheckout({}, { root: () => notACheckout, describe: () => null }),
+  ).toThrow(/checkout/);
 });
 
 test("resolveLocalCheckout rejects a checkout whose build artifacts are missing", () => {
   const repo = temp();
   mkdirSync(join(repo, ".claude-plugin"), { recursive: true });
-  Bun.write(join(repo, ".claude-plugin", "marketplace.json"), "{}");
+  writeFileSync(join(repo, ".claude-plugin", "marketplace.json"), "{}");
 
-  expect(() => resolveLocalCheckout({ root: () => repo, describe: () => null })).toThrow(
+  expect(() => resolveLocalCheckout({}, { root: () => repo, describe: () => null })).toThrow(
     /mise run build/,
   );
+  // A preview reuses nothing, so it renders from an unbuilt checkout.
+  expect(
+    resolveLocalCheckout({ requireArtifacts: false }, { root: () => repo, describe: () => null })
+      .repoDir,
+  ).toBe(repo);
+});
+
+test("resolveLocalCheckout names the artifact that is missing", () => {
+  const repo = temp();
+  mkdirSync(join(repo, ".claude-plugin"), { recursive: true });
+  mkdirSync(join(repo, "bin", "ui"), { recursive: true });
+  writeFileSync(join(repo, ".claude-plugin", "marketplace.json"), "{}");
+
+  // bin/ui is there; only the binary is missing, and the error says so rather than
+  // claiming both are absent.
+  expect(() => resolveLocalCheckout({}, { root: () => repo })).toThrow(/missing bin\/caret-native/);
+});
+
+test("resolveLocalCheckout treats an unrunnable artifact as a missing one", () => {
+  const repo = temp();
+  mkdirSync(join(repo, ".claude-plugin"), { recursive: true });
+  mkdirSync(join(repo, "bin", "ui"), { recursive: true });
+  writeFileSync(join(repo, ".claude-plugin", "marketplace.json"), "{}");
+  // Written, but never chmod +x — the dev loop would fail at spawn time.
+  writeFileSync(join(repo, "bin", "caret-native"), "#!/bin/sh\n");
+
+  expect(() => resolveLocalCheckout({}, { root: () => repo })).toThrow(/bin\/caret-native/);
 });
 
 test("prewarmLocalBuild runs the built binary's prewarm", async () => {

@@ -161,7 +161,9 @@ asks which to install into, with the detected ones pre-checked. Off a terminal �
 pipe — it never waits on that prompt: it installs into every agent it detected, or into
 Claude Code when it detected none, and says which. `--dry-run` previews that same choice
 rather than asking, and `--uninstall` asks (or reports) the same way before removing.
-`--target` is the way to pin the agents non-interactively. Every install (but not
+`--target` is the way to pin the agents non-interactively. One more flag, `--from-local`,
+is dev-only: it installs the caret checkout the binary was built in rather than the
+published one — see [Development](#development) below. Every install (but not
 `--uninstall`) finishes by acquiring the rumdl plan formatter — it is part of installing
 caret, not a step of its own — see [Plan formatting](#plan-formatting-rumdl) below.
 
