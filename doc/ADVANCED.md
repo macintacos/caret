@@ -160,8 +160,11 @@ Omit `--target` and `caret install` picks for you: it detects which agents you h
 asks which to install into, with the detected ones pre-checked. Off a terminal — CI, a
 pipe — it never waits on that prompt: it installs into every agent it detected, or into
 Claude Code when it detected none, and says which. `--dry-run` previews that same choice
-rather than asking. Every install (but not `--uninstall`) finishes by downloading the
-rumdl plan formatter, best-effort — see [Plan formatting](#plan-formatting-rumdl) below.
+rather than asking, and `--uninstall` asks (or reports) the same way before removing.
+`--target` is the way to pin the agents non-interactively — `CARET_AGENTS` is
+`install.sh`'s own override and has no effect on `caret install`. Every install (but not
+`--uninstall`) finishes by downloading the rumdl plan formatter, best-effort — see
+[Plan formatting](#plan-formatting-rumdl) below.
 
 ### Desktop notifications
 

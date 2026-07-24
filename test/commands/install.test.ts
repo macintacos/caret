@@ -7,6 +7,10 @@ import { afterEach, expect, test } from "bun:test";
 import { parseTargets, runInstallSubcommand } from "@/commands/install.ts";
 import type { InstallTarget } from "@/commands/install-targets.ts";
 
+/** Keep a test off the real rumdl download: without this seam the command falls through
+ * to the production acquisition, which reaches the network and writes to the state dir. */
+const noRumdl = async () => {};
+
 test("parseTargets accepts a single target, both, and dedupes/preserves order", () => {
   expect(parseTargets("opencode")).toEqual({ targets: ["opencode"] });
   expect(parseTargets("claude")).toEqual({ targets: ["claude"] });
@@ -74,6 +78,7 @@ test("with no --target on a TTY, the chooser sees the detected agents and drives
       },
       runOpencode: () => calls.push("opencode"),
       runClaude: () => calls.push("claude"),
+      ensureRumdl: noRumdl,
     },
   );
   expect(offered).toEqual(["claude"]);
@@ -114,6 +119,7 @@ test("with no --target and no TTY, every detected agent is installed without pro
       },
       runOpencode: () => calls.push("opencode"),
       runClaude: () => calls.push("claude"),
+      ensureRumdl: noRumdl,
     },
   );
   expect(prompted).toBe(false);
@@ -130,9 +136,27 @@ test("with no --target, no TTY, and no agent detected, it falls back to Claude C
       prompt: async () => null,
       runOpencode: () => calls.push("opencode"),
       runClaude: () => calls.push("claude"),
+      ensureRumdl: noRumdl,
     },
   );
   expect(calls).toEqual(["claude"]);
+});
+
+test("with no --target, the chooser is told whether this is an uninstall", async () => {
+  let asked: boolean | undefined;
+  await runInstallSubcommand(
+    { uninstall: true, dryRun: false },
+    {
+      detect: () => ["claude"],
+      isInteractive: () => true,
+      prompt: async (_detected, uninstall) => {
+        asked = uninstall;
+        return [];
+      },
+      runClaude: () => {},
+    },
+  );
+  expect(asked).toBe(true);
 });
 
 test("installing ensures rumdl once, after the targets", async () => {

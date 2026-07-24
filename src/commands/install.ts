@@ -6,10 +6,10 @@
 // everything it detected (Claude Code when it detected nothing), so CI never hangs on a
 // prompt. Every install ends by downloading the rumdl plan formatter, best-effort, the
 // same eager step scripts/install.sh runs. `--uninstall` / `--dry-run` apply to every
-// selected target (and neither downloads rumdl). Target parsing is
-// a pure function so it is unit-testable, and detection, the chooser, TTY-ness, and the
-// target runners are all injectable so selection and dispatch can be tested without
-// touching a real config dir, the `claude` CLI, or a terminal.
+// selected target, and neither downloads rumdl. Target parsing is a pure function so it
+// is unit-testable, and detection, the chooser, TTY-ness, and the target runners are all
+// injectable so selection and dispatch can be tested without touching a real config dir,
+// the `claude` CLI, or a terminal.
 
 import { runInstallClaudeTarget } from "@/commands/install-claude.ts";
 import { runInstallOpencodeTarget } from "@/commands/install-opencode.ts";
@@ -34,7 +34,7 @@ export function parseTargets(
     .filter(Boolean);
   if (parts.length === 0) {
     return {
-      error: `--target is required (a comma-separated list of: ${INSTALL_TARGET_IDS.join(", ")}).`,
+      error: `--target names no agent (it takes a comma-separated list of: ${INSTALL_TARGET_IDS.join(", ")}) — omit it entirely to choose interactively.`,
     };
   }
   const unknown = parts.filter((p) => !(INSTALL_TARGET_IDS as readonly string[]).includes(p));
@@ -56,7 +56,7 @@ export interface InstallDeps {
   runOpencode?: (opts: { uninstall: boolean; dryRun: boolean }) => void;
   runClaude?: (opts: { uninstall: boolean; dryRun: boolean }) => void;
   detect?: () => InstallTarget[];
-  prompt?: (detected: InstallTarget[]) => Promise<InstallTarget[] | null>;
+  prompt?: (detected: InstallTarget[], uninstall: boolean) => Promise<InstallTarget[] | null>;
   isInteractive?: () => boolean;
   ensureRumdl?: () => Promise<void>;
 }
@@ -75,8 +75,18 @@ export async function runInstallSubcommand(
   const runClaude = deps.runClaude ?? ((o) => runInstallClaudeTarget(o));
   const targetOpts = { uninstall: opts.uninstall, dryRun: opts.dryRun };
   for (const target of targets) {
-    if (target === "opencode") runOpencode(targetOpts);
-    else runClaude(targetOpts);
+    switch (target) {
+      case "opencode":
+        runOpencode(targetOpts);
+        break;
+      case "claude":
+        runClaude(targetOpts);
+        break;
+      // Exhaustive on purpose: a new registry descriptor without a runner here is a
+      // type error, not a silent install into the wrong agent.
+      default:
+        target satisfies never;
+    }
   }
 
   if (opts.uninstall) return;
@@ -102,7 +112,7 @@ export async function runInstallSubcommand(
  * asked: `--dry-run` previews the detected agents instead, mirroring scripts/install.sh,
  * which also suppresses its prompt in dry-run. */
 async function selectTargets(
-  opts: { target?: string; dryRun: boolean },
+  opts: { target?: string; uninstall: boolean; dryRun: boolean },
   deps: InstallDeps,
 ): Promise<InstallTarget[] | null> {
   if (opts.target !== undefined) {
@@ -116,11 +126,14 @@ async function selectTargets(
   }
 
   const detected = (deps.detect ?? detectTargets)();
-  const isInteractive = deps.isInteractive ?? (() => process.stdin.isTTY === true);
+  // Both ends must be a terminal: the chooser reads keys from stdin and draws to stdout,
+  // so a piped stdout would render its UI into the pipe and look like a hang.
+  const isInteractive =
+    deps.isInteractive ?? (() => process.stdin.isTTY === true && process.stdout.isTTY === true);
   if (isInteractive() && !opts.dryRun) {
-    const chosen = await (deps.prompt ?? promptForTargets)(detected);
+    const chosen = await (deps.prompt ?? promptForTargets)(detected, opts.uninstall);
     if (chosen === null) {
-      process.stdout.write("caret: install cancelled — nothing was changed.\n");
+      process.stdout.write("caret: cancelled — nothing was changed.\n");
       return null;
     }
     return chosen;
