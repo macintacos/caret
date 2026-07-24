@@ -7,7 +7,7 @@
 // whole target run against a temp dir without resolving the real caret root.
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import {
   addPluginToConfigText,
@@ -27,6 +27,8 @@ import {
   opencodeConfigDir,
   resolveConfigFile,
 } from "@/adapters/opencode/paths.ts";
+import type { InstallUI } from "@/commands/install/ui.ts";
+import { silentUI } from "@/commands/install/ui.ts";
 import { VERSION } from "@/lib/build-id.ts";
 
 /** Injection seam for tests: override the config dir and packaging so the target
@@ -34,38 +36,60 @@ import { VERSION } from "@/lib/build-id.ts";
 export interface InstallOpencodeDeps {
   configDir?: string;
   packaging?: OpencodePackaging;
+  ui?: InstallUI;
 }
 
 /** Install (or, with `uninstall`, remove) caret into OpenCode: edit the config's
  * `plugin` array to add/remove `@macintacos/caret`, and deploy/remove the `/caret:*`
  * command files. OpenCode installs the package (and the plugin's deps) itself on its
- * next start, so there is no manifest to write and no `bun install` to run here. */
-export function runInstallOpencodeTarget(
+ * next start, so there is no manifest to write and no `bun install` to run here. The
+ * two halves are reported as their own steps — the config edit and the command files
+ * fail independently, so a reader can see which one did what. */
+export async function runInstallOpencodeTarget(
   opts: { uninstall: boolean; dryRun: boolean },
   deps: InstallOpencodeDeps = {},
-): void {
+): Promise<void> {
   const dir = deps.configDir ?? opencodeConfigDir();
   const pkg = deps.packaging ?? loadOpencodePackaging();
+  const ui = deps.ui ?? silentUI;
   const configFile = resolveConfigFile(dir);
   const commandPaths = pkg.commands.map((c) =>
     join(commandDir(dir), namespacedCommandFilename(c.name)),
   );
 
-  if (opts.uninstall) {
-    const changed = editConfig(
-      configFile,
-      (text) => (text === null ? null : removePluginFromConfigText(text, CARET_PACKAGE)),
-      opts.dryRun,
-    );
-    const removed = removeFiles(commandPaths, { dryRun: opts.dryRun });
-    printResult("removed", [...changed, ...removed.paths], opts.dryRun, dir);
+  if (opts.dryRun) {
+    const verb = opts.uninstall ? "remove" : "write";
+    ui.note([configFile, ...commandPaths].join("\n"), `OpenCode — would ${verb}`);
     return;
   }
 
-  const changed = editConfig(
-    configFile,
-    (text) => addPluginToConfigText(text, CARET_PACKAGE),
-    opts.dryRun,
+  if (opts.uninstall) {
+    await ui.step(
+      `Removing ${CARET_PACKAGE} from OpenCode's plugin array`,
+      async () =>
+        editConfig(configFile, (text) =>
+          text === null ? null : removePluginFromConfigText(text, CARET_PACKAGE),
+        ),
+      (changed) =>
+        changed.length > 0
+          ? `Removed ${CARET_PACKAGE} from ${basename(configFile)}`
+          : `${CARET_PACKAGE} was not in ${basename(configFile)}`,
+    );
+    await ui.step(
+      "Removing the /caret:* command files",
+      async () => removeFiles(commandPaths, { dryRun: false }),
+      (removed) => `Removed ${removed.paths.length} command file(s) from ${dir}`,
+    );
+    return;
+  }
+
+  await ui.step(
+    `Adding ${CARET_PACKAGE} to OpenCode's plugin array`,
+    async () => editConfig(configFile, (text) => addPluginToConfigText(text, CARET_PACKAGE)),
+    (changed) =>
+      changed.length > 0
+        ? `Added ${CARET_PACKAGE} to ${basename(configFile)}`
+        : `${CARET_PACKAGE} was already in ${basename(configFile)}`,
   );
   const files: DeployFile[] = pkg.commands.map((c) => ({
     // Namespace the command file (`demo.md` -> `caret:demo.md`) so OpenCode exposes
@@ -74,38 +98,21 @@ export function runInstallOpencodeTarget(
     path: join(commandDir(dir), namespacedCommandFilename(c.name)),
     contents: renderPlugin(c.contents, { version: VERSION, binPath: pkg.binPath }),
   }));
-  const deployed = deployFiles(files, { dryRun: opts.dryRun });
-  printResult("installed", [...changed, ...deployed.paths], opts.dryRun, dir);
+  await ui.step(
+    "Deploying the /caret:* command files",
+    async () => deployFiles(files, { dryRun: false }),
+    (deployed) => `Deployed ${deployed.paths.length} command file(s) to ${dir}`,
+  );
 }
 
 /** Apply `transform` to the config file's text (null when the file is absent),
- * writing the result when it changes. Returns `[path]` when the file was (or, in
- * dry-run, would be) changed, else `[]`. A `null` transform result means "nothing
- * to do" (e.g. removing from a config that doesn't exist). */
-function editConfig(
-  path: string,
-  transform: (text: string | null) => string | null,
-  dryRun: boolean,
-): string[] {
+ * writing the result when it changes. Returns `[path]` when the file was changed, else
+ * `[]`. A `null` transform result means "nothing to do" (e.g. removing from a config
+ * that doesn't exist). Dry-run never reaches here — it returns after the preview. */
+function editConfig(path: string, transform: (text: string | null) => string | null): string[] {
   const existing = existsSync(path) ? readFileSync(path, "utf-8") : null;
   const next = transform(existing);
   if (next === null || next === existing) return [];
-  if (!dryRun) writeFileSync(path, next);
+  writeFileSync(path, next);
   return [path];
-}
-
-function printResult(verb: string, paths: string[], dryRun: boolean, dir: string): void {
-  if (paths.length === 0) {
-    const noun = verb === "removed" ? "remove" : "install";
-    process.stdout.write(`caret: nothing to ${noun} for OpenCode under ${dir}.\n`);
-    return;
-  }
-  const lead = dryRun ? `[dry-run] would have ${verb}` : verb;
-  process.stdout.write(
-    `caret: ${lead} caret in OpenCode (${paths.length} path(s)) under ${dir}:\n`,
-  );
-  for (const p of paths) process.stdout.write(`  ${p}\n`);
-  if (verb === "installed" && !dryRun) {
-    process.stdout.write("caret: restart OpenCode once so it installs and loads the plugin.\n");
-  }
 }

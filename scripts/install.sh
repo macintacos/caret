@@ -325,15 +325,6 @@ install_claude_plugin() {
 # does NOT claim the swap is done; it reports only that prewarm ran.
 prewarm_daemon() { run ./bin/caret-native prewarm >/dev/null 2>&1 || true; }
 
-# Eagerly download rumdl (the plan formatter) so the first plan doesn't pay the
-# download latency (EXC-828). Best-effort (`|| true`): the daemon downloads rumdl
-# on the first plan regardless, so a hiccup here never aborts the install. The
-# dev path uses the freshly built binary; the published path uses bunx (below).
-install_rumdl_local() { run ./bin/caret-native install-rumdl >/dev/null 2>&1 || true; }
-install_rumdl_published() {
-  run bunx --no-cache "${PACKAGE}@latest" install-rumdl >/dev/null 2>&1 || true
-}
-
 # --from-local only: resolve the caret checkout this script lives in (detected by
 # its marketplace manifest, via the script's own on-disk path — not the cwd) into
 # REPO_DIR / REF_DESC, or exit with guidance.
@@ -381,13 +372,13 @@ run_dev_install() {
   fi
 
   # OpenCode: add the array entry + command files via the freshly built binary's
-  # own tested subcommand (the config/JSON logic lives in TS, not bash).
+  # own tested subcommand (the config/JSON logic lives in TS, not bash). It acquires
+  # rumdl too, so there is no separate rumdl step.
   if [ "$WANT_OPENCODE" -eq 1 ]; then
-    step "Installing caret into OpenCode (plugin array + commands)" \
+    step "Installing caret into OpenCode (plugin array + commands, plus rumdl)" \
       run "$REPO_DIR/bin/caret" install --target opencode
   fi
 
-  step "Installing rumdl (plan formatter)" install_rumdl_local
   step "Prewarming the fresh build's daemon" prewarm_daemon
 }
 
@@ -429,18 +420,13 @@ run_user_install() {
   # than a stale cached manifest: a manifest cached before 0.4.0 resolves to a
   # version with no `bin`, so bunx fails with "could not determine executable to
   # run for package @macintacos/caret".
+  # It also acquires rumdl (the plan formatter) — `caret install` always does — which is
+  # why there is no separate rumdl step. A Claude-only install never runs the caret CLI
+  # (it drives `claude plugin` directly, so it needs no bun), and the daemon downloads
+  # rumdl on the first plan regardless, so that path pays the download then. (EXC-828)
   if [ "$WANT_OPENCODE" -eq 1 ]; then
-    step "Installing caret into OpenCode (plugin array + commands)" \
+    step "Installing caret into OpenCode (plugin array + commands, plus rumdl)" \
       run bunx --no-cache "${PACKAGE}@latest" install --target opencode
-  fi
-
-  # rumdl (the plan formatter) needs bunx to run the published caret. A Claude-only
-  # install may not have bun, and the daemon downloads rumdl on the first plan
-  # regardless — so skip rather than newly require bun for that path. (EXC-828)
-  if command -v bun >/dev/null 2>&1; then
-    step "Installing rumdl (plan formatter)" install_rumdl_published
-  else
-    info "Skipping rumdl download (bun not found) — caret installs it on your first plan."
   fi
 }
 

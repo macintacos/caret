@@ -155,6 +155,25 @@ both agents at once, `--uninstall` reverses any target, and `--dry-run` previews
 changes without writing. See
 [`agents/opencode-integration.md`](agents/opencode-integration.md) for the design.
 
+Omit `--target` and `caret install` picks for you: it detects which agents you have
+(`claude` on your PATH; `opencode` on your PATH or an existing OpenCode config dir) and
+asks which to install into, with the detected ones pre-checked. Off a terminal — CI, a
+pipe — it never waits on that prompt: it installs into every agent it detected, or into
+Claude Code when it detected none, and says which. `--dry-run` previews that same choice
+rather than asking, and `--uninstall` asks (or reports) the same way before removing.
+`--target` is the way to pin the agents non-interactively — `CARET_AGENTS` is
+`install.sh`'s own override and has no effect on `caret install`. Every install (but not
+`--uninstall`) finishes by acquiring the rumdl plan formatter — it is part of installing
+caret, not a step of its own — see [Plan formatting](#plan-formatting-rumdl) below.
+
+At a terminal the whole run renders as one
+[`@clack/prompts`](https://github.com/bombshell-dev/clack) session: the chooser, then a
+spinner per operation (registering the marketplace, installing the plugin, editing
+OpenCode's `plugin` array, deploying the command files, fetching rumdl) that settles into
+a line saying what it did, and a closing summary. Off a terminal — piped, `CI=true`, or
+`NO_COLOR` set — the same run reports as plain `caret: …` lines with no escape codes, so
+CI transcripts and the output `install.sh` captures stay readable.
+
 ### Desktop notifications
 
 When a new plan lands while caret is in the background — tab hidden or window unfocused —
@@ -310,14 +329,20 @@ to the config file, then the default.
 
 caret canonicalizes every incoming plan by reflowing it to a 90-column MD013 shape with
 [rumdl](https://github.com/rvben/rumdl). rumdl is not a runtime prerequisite: caret
-downloads the pinned binary (v0.2.37) into `$XDG_STATE_HOME/caret/rumdl/` on the first
-plan of the first session, verifies its checksum, and reuses it afterward — so it behaves
-the same however caret was installed (Claude plugin, OpenCode, or `install.sh`).
-`install.sh` runs `caret install-rumdl` as a best-effort step so the download happens at
-install time rather than on the first plan, and you can run `caret install-rumdl` yourself
-at any point. If a plan can't be formatted (rumdl missing, offline, or an unsupported
-platform), caret stores it unchanged and logs one warning — a plan is never lost. Point
-`CARET_RUMDL_BIN` at an existing rumdl to skip the download entirely.
+installs the pinned binary (v0.2.37) into `$XDG_STATE_HOME/caret/rumdl/` and verifies its
+checksum — so formatting behaves the same however caret was installed (Claude plugin,
+OpenCode, or `install.sh`).
+
+**caret only ever formats with that one binary, at that one path.** A `rumdl` on your PATH
+is never used: which version reflows your plans must not depend on what the machine
+happens to have installed. The binary already at caret's path is reused only when it
+reports exactly the pinned version — an older copy left by a previous caret, or a file
+that won't run, is replaced. `caret install` runs that check at install time so the first
+plan doesn't pay the download, and a failure there is a warning rather than a failed
+install (the first plan retries). If a plan can't be formatted (rumdl missing, offline, or
+an unsupported platform), caret stores it unchanged and logs one warning — a plan is never
+lost. `CARET_RUMDL_BIN` is the one deliberate opt-out: point it at a binary of your own
+and caret uses that instead, unchecked.
 
 ## Logging & Debugging
 
