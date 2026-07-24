@@ -9,7 +9,7 @@ install it, and basic usage, start there.
 
 ## Build from source
 
-The [install methods in the README](../README.md#install) ship prebuilt artifacts — the
+The [install path in the README](../README.md#install) ships prebuilt artifacts — the
 `bun` bundle behind the plugin, and the published `@macintacos/caret` package — so you
 never need a compiler to _use_ caret; `caret install` just registers those with your
 agents. Build from source only when you want the platform-native compiled binary
@@ -118,6 +118,19 @@ guarantee that ordering, `review.timeout_s` is pinned strictly below the hook's 
 coupling test keeps the two numbers from drifting into the unsafe direction. The timeout
 is therefore a requirement of the hook model — not a limit on how long you may take — so
 raise `review.timeout_s` (up to just under 3900 s) if you want a longer window.
+
+caret ships to Claude Code as the `caret@caret` plugin from its GitHub-based marketplace,
+`macintacos/caret`. `caret install --target claude` drives Claude's own CLI to register
+and install it — `claude plugin marketplace add macintacos/caret`, then
+`plugin install caret@caret --scope user` and `plugin enable` — and the same install by
+hand is `/plugin marketplace add macintacos/caret` + `/plugin install caret@caret` from
+inside Claude Code, which is what the installer points you at when the `claude` CLI isn't
+on your `PATH`. Take an update with `claude plugin update caret@caret` (restart to apply),
+or `/plugin marketplace update caret` then `/reload-plugins` — not by re-running the
+installer, whose `marketplace add` step is best-effort, so on a machine where the
+marketplace is already registered a re-run installs from the metadata Claude already had.
+`caret install --uninstall --target claude` removes the plugin and leaves that marketplace
+registration behind; `claude plugin marketplace remove caret` clears it.
 
 ### The OpenCode adapter
 
