@@ -4,7 +4,9 @@
 // Claude Code: the `claude` plugin CLI). Omit `--target` and caret detects the agents
 // on this machine and asks — on a TTY through the chooser, otherwise by installing into
 // everything it detected (Claude Code when it detected nothing), so CI never hangs on a
-// prompt. `--uninstall` / `--dry-run` apply to every selected target. Target parsing is
+// prompt. Every install ends by downloading the rumdl plan formatter, best-effort, the
+// same eager step scripts/install.sh runs. `--uninstall` / `--dry-run` apply to every
+// selected target (and neither downloads rumdl). Target parsing is
 // a pure function so it is unit-testable, and detection, the chooser, TTY-ness, and the
 // target runners are all injectable so selection and dispatch can be tested without
 // touching a real config dir, the `claude` CLI, or a terminal.
@@ -12,11 +14,13 @@
 import { runInstallClaudeTarget } from "@/commands/install-claude.ts";
 import { runInstallOpencodeTarget } from "@/commands/install-opencode.ts";
 import { promptForTargets } from "@/commands/install-prompt.ts";
+import { runInstallRumdlSubcommand } from "@/commands/install-rumdl.ts";
 import {
   detectTargets,
   INSTALL_TARGET_IDS,
   type InstallTarget,
 } from "@/commands/install-targets.ts";
+import { errorMessage } from "@/lib/types.ts";
 
 /** Parse a `--target` value ("opencode", "claude", or "opencode,claude") into a
  * deduped, order-preserving target list — or an error message for an empty/unknown
@@ -54,6 +58,7 @@ export interface InstallDeps {
   detect?: () => InstallTarget[];
   prompt?: (detected: InstallTarget[]) => Promise<InstallTarget[] | null>;
   isInteractive?: () => boolean;
+  ensureRumdl?: () => Promise<void>;
 }
 
 /** Run the install command: resolve the targets (from `--target`, the chooser, or
@@ -72,6 +77,22 @@ export async function runInstallSubcommand(
   for (const target of targets) {
     if (target === "opencode") runOpencode(targetOpts);
     else runClaude(targetOpts);
+  }
+
+  if (opts.uninstall) return;
+  if (opts.dryRun) {
+    process.stdout.write("caret: [dry-run] would download the rumdl plan formatter.\n");
+    return;
+  }
+  // Eagerly download rumdl so the first plan doesn't pay the latency, the same
+  // best-effort step scripts/install.sh runs: the daemon downloads it lazily anyway, so
+  // a failure here is reported and never fails the install.
+  try {
+    await (deps.ensureRumdl ?? (() => runInstallRumdlSubcommand()))();
+  } catch (e) {
+    process.stderr.write(
+      `caret: could not download rumdl (${errorMessage(e)}) — caret will retry on your first plan.\n`,
+    );
   }
 }
 

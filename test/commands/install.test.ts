@@ -135,6 +135,39 @@ test("with no --target, no TTY, and no agent detected, it falls back to Claude C
   expect(calls).toEqual(["claude"]);
 });
 
+test("installing ensures rumdl once, after the targets", async () => {
+  const calls: string[] = [];
+  await runInstallSubcommand(
+    { target: "claude", uninstall: false, dryRun: false },
+    {
+      runClaude: () => calls.push("claude"),
+      ensureRumdl: async () => void calls.push("rumdl"),
+    },
+  );
+  expect(calls).toEqual(["claude", "rumdl"]);
+});
+
+test("uninstalling and --dry-run never download rumdl", async () => {
+  const calls: string[] = [];
+  const deps = { runClaude: () => {}, ensureRumdl: async () => void calls.push("rumdl") };
+  await runInstallSubcommand({ target: "claude", uninstall: true, dryRun: false }, deps);
+  await runInstallSubcommand({ target: "claude", uninstall: false, dryRun: true }, deps);
+  expect(calls).toEqual([]);
+});
+
+test("a failing rumdl download leaves the install successful", async () => {
+  const calls: string[] = [];
+  await runInstallSubcommand(
+    { target: "claude", uninstall: false, dryRun: false },
+    {
+      runClaude: () => calls.push("claude"),
+      ensureRumdl: () => Promise.reject(new Error("offline")),
+    },
+  );
+  expect(calls).toEqual(["claude"]);
+  expect(process.exitCode).toBe(0);
+});
+
 test("--dry-run without --target previews the detected agents instead of prompting", async () => {
   const calls: string[] = [];
   let prompted = false;
