@@ -29,8 +29,7 @@
   } from "$lib/components/ui/item/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { isTopmostDialog } from "$lib/modalStack.ts";
-  import { shortcuts } from "$lib/shortcuts/index.ts";
-  import type { ShortcutEntry } from "$lib/shortcuts/registry.ts";
+  import { SETTINGS_SHORTCUTS, shortcuts } from "$lib/shortcuts/index.ts";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
   import { Switch } from "$lib/components/ui/switch/index.js";
   import {
@@ -58,28 +57,13 @@
   }
   let { entries, onChange, onClose, onCopyDiagnostic = () => {} }: Props = $props();
 
-  // EXC-849: while Settings owns the view, publish its own keyboard affordances into
-  // the shared registry, scoped to "settings". Display-only (no run) — the modal owns
-  // `/` (focus search) and Esc (close) through its own handlers below; these entries
-  // exist so the scoped `?` help lists exactly the shortcuts valid here. The
-  // "settings" scope also tells the dispatcher to suppress the review shortcuts while
-  // this modal is open (see App's activeScope + shortcuts/scope.ts).
-  const SETTINGS_SHORTCUTS: ShortcutEntry[] = [
-    {
-      id: "settings.search",
-      keys: [{ key: "/" }],
-      group: "settings",
-      label: "Search settings",
-      scope: "settings",
-    },
-    {
-      id: "settings.close",
-      keys: [{ key: "Escape", cap: "Esc" }],
-      group: "settings",
-      label: "Close settings",
-      scope: "settings",
-    },
-  ];
+  // EXC-849/876: while Settings owns the view, publish its own keyboard affordances into
+  // the shared registry. SETTINGS_SHORTCUTS is now reserved in CANONICAL_KEYMAP (the single
+  // source) rather than declared inline here. Display-only (no run) — the modal owns `/`
+  // (focus search) and Esc (close) through its own handlers below; registering the
+  // reservations makes the scoped `?` help list exactly the shortcuts valid here, and their
+  // "settings" scope tells the dispatcher to suppress the review shortcuts while this modal
+  // is open (see App's activeScope + shortcuts/scope.ts).
   $effect(() => {
     const offs = SETTINGS_SHORTCUTS.map((e) => shortcuts.register(e));
     return () => {

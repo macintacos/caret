@@ -30,6 +30,29 @@ export const EDITOR_SHORTCUTS: ShortcutEntry[] = [
   },
 ];
 
+/** The Settings modal's own keyboard affordances (EXC-849), folded into the single source
+ * (EXC-876). Display-only (no `run`): SettingsDialog owns `/` (focus search) and Esc
+ * (close) through its own handlers — these entries exist so the scoped `?` help lists
+ * exactly the shortcuts valid in Settings, and so the collision test sees the settings
+ * scope. `scope: "settings"` also tells the dispatcher to suppress the review shortcuts
+ * while the modal is open (see shortcuts/scope.ts). */
+export const SETTINGS_SHORTCUTS: ShortcutEntry[] = [
+  {
+    id: "settings.search",
+    keys: [{ key: "/" }],
+    group: "settings",
+    label: "Search settings",
+    scope: "settings",
+  },
+  {
+    id: "settings.close",
+    keys: [{ key: "Escape", cap: "Esc" }],
+    group: "settings",
+    label: "Close settings",
+    scope: "settings",
+  },
+];
+
 /** EXC-785's full proposed keymap. Reserved bindings for the vim-shortcut tree —
  * the single source downstream tickets read to claim non-colliding keys. Only
  * EDITOR_SHORTCUTS are registered live here; each other binding gains its `run`
@@ -112,18 +135,20 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
   {
     // EXC-792: summons the comment navigator. Keyed "C" (a bare shifted key —
     // the case-sensitive matcher fires on it without a modifier flag, like V/G).
-    // Its cap is ["shift", "C"] — "shift" draws the global shift icon (caps.ts).
-    // Since EXC-831, a bare uppercase key derives that same shift + capital from
-    // its case (as V/G do), so this explicit cap now matches the derive; it is
-    // kept per the "cap overrides win" contract.
+    // No cap override: since EXC-831 a bare uppercase key derives its shift + capital
+    // from its case (as V/G do), so C renders ["shift", "C"] straight from the key —
+    // EXC-876 dropped the redundant explicit cap so shifted letters have one rendering
+    // path. "shift" draws the global shift icon (caps.ts).
     id: "actions.toggleComments",
-    keys: [{ key: "C", cap: ["shift", "C"] }],
+    keys: [{ key: "C" }],
     group: "actions",
     label: "Toggle comments",
   },
   // EXC-830: toggles the plan's ToC rail (the sidebar). A bare backslash with no
   // command modifier; the cap derives straight from the key (no override needed).
   { id: "actions.toggleSidebar", keys: [{ key: "\\" }], group: "actions", label: "Toggle sidebar" },
+  // Settings — the Settings modal's scoped affordances, display-only (EXC-849/876).
+  ...SETTINGS_SHORTCUTS,
   // Help
   {
     id: "help.show",

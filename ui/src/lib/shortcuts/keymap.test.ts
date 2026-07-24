@@ -9,6 +9,7 @@ import {
   EDITOR_SHORTCUTS,
 } from "$lib/shortcuts/keymap.ts";
 import { createShortcutRegistry, keyCaps, specSignature } from "$lib/shortcuts/registry.ts";
+import { isEntryActive } from "$lib/shortcuts/scope.ts";
 
 describe("CANONICAL_KEYMAP", () => {
   test("every entry id is unique", () => {
@@ -16,11 +17,35 @@ describe("CANONICAL_KEYMAP", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  test("globally-dispatched groups have no colliding key specs", () => {
-    const sigs = CANONICAL_KEYMAP.filter((e) => e.group !== "editor").map((e) =>
-      specSignature(e.keys),
-    );
-    expect(new Set(sigs).size).toBe(sigs.length);
+  test("no two dispatchable shortcuts collide within a scope (globals count in every scope)", () => {
+    // Editor chords are display-only (CodeMirror owns them on focus) and deliberately
+    // reuse Esc with commenting.clear, so they're excluded — as before. Everything else is
+    // checked PER SCOPE (EXC-876): two entries collide only when some scope has both active
+    // — same scope, or one is global — which is exactly when the dispatcher could fire
+    // both. `/` is reserved in review (actions.search) AND settings (settings.search), but
+    // never both in one scope, so that cross-scope reuse is safe rather than a collision.
+    const dispatchable = CANONICAL_KEYMAP.filter((e) => e.group !== "editor");
+    for (const scope of [null, "settings"] as const) {
+      const sigs = dispatchable
+        .filter((e) => isEntryActive(e, scope))
+        .map((e) => specSignature(e.keys));
+      expect(new Set(sigs).size).toBe(sigs.length);
+    }
+  });
+
+  test("reserves the settings shortcuts in the table, scoped to settings (EXC-876)", () => {
+    // EXC-876 folds the Settings modal's own affordances into the single source so the
+    // collision check sees them. Display-only (no run): the modal owns / and Esc through
+    // its own handlers; these entries exist for the scoped `?` help and the collision check.
+    const search = CANONICAL_KEYMAP.find((e) => e.id === "settings.search");
+    const close = CANONICAL_KEYMAP.find((e) => e.id === "settings.close");
+    if (!search || !close) throw new Error("settings shortcuts missing from CANONICAL_KEYMAP");
+    expect(search.scope).toBe("settings");
+    expect(close.scope).toBe("settings");
+    expect(specSignature(search.keys)).toBe("/");
+    expect(specSignature(close.keys)).toBe("Escape");
+    expect(search.run).toBeUndefined();
+    expect(close.run).toBeUndefined();
   });
 
   test("reserves the parent keymap's bindings", () => {
@@ -32,10 +57,9 @@ describe("CANONICAL_KEYMAP", () => {
 
   test("reserves Shift+C for the comment navigator, rendered as shift + C caps", () => {
     // EXC-792: summons the comment navigator. Keyed "C" (a bare shifted key, no
-    // command modifier); its cap is ["shift", "C"] — the shift token (caps.ts's
-    // global shift icon) plus the capital. Since EXC-831, V/G derive the same
-    // shift + capital from their case, so C reads consistently with them. "shift"
-    // stays a plain string here, resolved to the icon at render.
+    // command modifier and — since EXC-876 — no explicit cap: keyCaps derives the
+    // shift + capital from the uppercase key's case, the same path V/G take (EXC-831).
+    // "shift" is the token caps.ts resolves to the global shift icon at render.
     const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.toggleComments");
     if (!entry) throw new Error("actions.toggleComments missing");
     expect(entry.group).toBe("actions");
