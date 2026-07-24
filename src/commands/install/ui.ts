@@ -11,9 +11,9 @@
 // Two implementations, chosen once per run: clack's session for a human at a terminal,
 // plain `caret: …` lines everywhere else. clack draws its bars, colors, and cursor
 // escapes unconditionally — it honours neither NO_COLOR nor a piped stdout — so without
-// that split a CI transcript, or the output scripts/install.sh captures and replays on
-// failure, would fill with escape junk. The chooser stays clack either way: NO_COLOR
-// asks for no color, not for a question to go unasked.
+// that split a CI transcript, or any log capturing the install's output, would fill with
+// escape junk. The chooser stays clack either way: NO_COLOR asks for no color, not for a
+// question to go unasked.
 
 /** Report sub-status while a step is still running (e.g. the command being spawned). */
 export type StepDetail = (message: string) => void;
@@ -86,9 +86,9 @@ export function recordingUI(): InstallUI & { events: string[] } {
 
 /** Plain `caret: …` lines, for when there is no terminal to draw to. clack renders its
  * bars, colors, and cursor hide/show escapes unconditionally — it honours neither
- * NO_COLOR nor a piped stdout — so a captured log (scripts/install.sh shows this output
- * on failure) or a CI transcript would fill with escape junk. Steps report once, when
- * they settle: the settled line names the outcome, and nobody is watching a spinner. */
+ * NO_COLOR nor a piped stdout — so a captured log or a CI transcript would fill with
+ * escape junk. Steps report once, when they settle: the settled line names the outcome,
+ * and nobody is watching a spinner. */
 function plainUI(write: (s: string) => void): InstallUI {
   const line = (s: string) => write(`caret: ${s}\n`);
   return {

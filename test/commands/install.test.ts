@@ -343,6 +343,30 @@ test("--from-local --dry-run previews without prewarming", async () => {
   expect(calls).toEqual(["claude"]);
 });
 
+test("the prewarm step reports that prewarm ran, not that the daemon was swapped", async () => {
+  // prewarm retires a retireable daemon but reuses a legacy one, and can't report which
+  // happened — so the step must not claim the fresh build is now serving.
+  const ui = recordingUI();
+  await runInstallSubcommand(
+    { target: "claude", uninstall: false, dryRun: false, fromLocal: true },
+    {
+      ui,
+      resolveLocal: () => ({ repoDir: "/checkout", ref: "ref" }),
+      marketplaceDir: () => "/dev-mp",
+      runClaude: () => {},
+      ensureRumdl: noRumdl,
+      prewarm: async () => {},
+    },
+  );
+  expect(ui.events).toContain("settled:Ran the fresh build's prewarm");
+});
+
+test("a dry run closes by saying nothing was changed", async () => {
+  const ui = recordingUI();
+  await runInstallSubcommand({ target: "claude", uninstall: false, dryRun: true }, { ui });
+  expect(ui.events).toContain("outro:Dry run complete — nothing was changed.");
+});
+
 test("a failing prewarm still leaves the install successful", async () => {
   const ui = recordingUI();
   await runInstallSubcommand(

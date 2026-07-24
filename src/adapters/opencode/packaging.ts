@@ -1,8 +1,8 @@
 // Locate caret's shipped OpenCode packaging (the plugin source + command files)
 // for the install subcommand. The packaging lives at <caret-root>/opencode/ in
-// every distribution that supports OpenCode install: the build-from-source clone
-// (scripts/install.sh) and the npm/github bundle (package.json `files` ships
-// opencode/). Root resolution uses argv[1]/execPath — the same signals build-id.ts
+// every distribution that supports OpenCode install: the local dev build
+// (`caret install --from-local`) and the npm/github bundle (package.json `files`
+// ships opencode/). Root resolution uses argv[1]/execPath — the same signals build-id.ts
 // keys off — so it is depth-independent (works whether this module runs from
 // source, the bundle, or the compiled binary).
 

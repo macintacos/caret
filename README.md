@@ -21,22 +21,22 @@ Want to develop caret rather than use it? Start with [CONTRIBUTING.md](CONTRIBUT
 
 caret needs [`bun`](https://bun.sh) on your `PATH` — it runs from a `bun` bundle.
 
-The quickest path is the one-shot installer. It registers the _published_ caret with
-whichever agents you have — [Claude Code](https://claude.com/claude-code) and/or
+The quickest path is `caret install`. It registers the _published_ caret with whichever
+agents you have — [Claude Code](https://claude.com/claude-code) and/or
 [OpenCode](https://opencode.ai) — installing prebuilt artifacts, with no `git clone` and
 no compile step:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/macintacos/caret/trunk/scripts/install.sh | bash
+bunx --no-cache @macintacos/caret@latest install
 ```
 
-It detects which agents are present and installs into each (into both when both are
-there). Set `CARET_AGENTS=claude` or `CARET_AGENTS=claude,opencode` to choose
-non-interactively, or `CARET_DRY_RUN=1` to preview the exact commands without changing
-anything. Restart the agent afterward, then try `/caret:demo`.
+It detects which agents are present and asks which of them to install into; where it can't
+ask — off a terminal — it installs into every agent it detected. `--target claude` or
+`--target claude,opencode` pins the agents non-interactively, and `--dry-run` previews the
+run without changing anything. Restart the agent afterward, then try `/caret:demo`.
 
-Prefer to run the steps yourself? The per-agent instructions below are exactly what the
-installer automates.
+Prefer to run the steps yourself? The per-agent instructions below are exactly what
+`caret install` automates.
 
 ### Claude Code
 
@@ -87,8 +87,8 @@ array entry and drops the command files for you:
 bunx --no-cache @macintacos/caret@latest install --target opencode
 ```
 
-The [one-shot installer](#install) above does the same as part of its run (and its
-`CARET_AGENTS=opencode,claude` covers both agents at once). If you already have the caret
+The [`caret install`](#install) command above does the same as part of its run (and
+`--target opencode,claude` covers both agents at once). If you already have the caret
 binary on your `PATH` — from `npm i -g @macintacos/caret`, say —
 `caret install --target opencode` works too.
 

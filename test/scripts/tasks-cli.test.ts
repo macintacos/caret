@@ -249,7 +249,11 @@ describe("tasks CLI: build pipeline command lines", () => {
   });
 
   test("build --install forwards to the just-built caret; plain build does not", () => {
-    expect(buildInstallCommand({ install: true })).toEqual(["bin/caret", "install", "--from-local"]);
+    expect(buildInstallCommand({ install: true })).toEqual([
+      "bin/caret",
+      "install",
+      "--from-local",
+    ]);
     expect(buildInstallCommand({ install: false })).toBeNull();
   });
 

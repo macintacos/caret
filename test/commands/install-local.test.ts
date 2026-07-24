@@ -50,7 +50,9 @@ test("writeDevMarketplace symlinks the checkout and names it the caret marketpla
   // The symlink — not a copy — is what makes every later build install without
   // regenerating the marketplace.
   expect(readlinkSync(join(out, "caret"))).toBe(repo);
-  const manifest = JSON.parse(readFileSync(join(out, ".claude-plugin", "marketplace.json"), "utf8"));
+  const manifest = JSON.parse(
+    readFileSync(join(out, ".claude-plugin", "marketplace.json"), "utf8"),
+  );
   expect(manifest.name).toBe("caret");
   expect(manifest.plugins).toEqual([
     { name: "caret", source: "./caret", description: "Local caret dev build." },

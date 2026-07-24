@@ -74,6 +74,27 @@ test("a failed marketplace add is best-effort; a failed install is fatal", async
   ]);
 });
 
+test("a failed enable is best-effort: the install still completes", async () => {
+  // `plugin enable` fails on a plugin Claude already has enabled; that is not a reason
+  // to report a failed install.
+  const calls: string[][] = [];
+  const runner: ClaudeRunner = async (args) => {
+    calls.push(args);
+    return args[1] === "enable"
+      ? { ok: false, detail: "already enabled" }
+      : { ok: true, detail: "" };
+  };
+  const ui = recordingUI();
+  await runInstallClaudeTarget({ uninstall: false, dryRun: false }, { claude: runner, ui });
+  expect(calls).toEqual([
+    ["plugin", "marketplace", "add", "macintacos/caret"],
+    ["plugin", "install", "caret@caret", "--scope", "user"],
+    ["plugin", "enable", "caret@caret"],
+  ]);
+  expect(ui.events.some((e) => e.startsWith("error:"))).toBe(false);
+  expect(ui.events.some((e) => e.startsWith("failed:"))).toBe(false);
+});
+
 test("--from-local registers the generated dev marketplace, never the published one", async () => {
   const { runner, calls } = recorder();
   const written: [string, string][] = [];
@@ -91,6 +112,25 @@ test("--from-local registers the generated dev marketplace, never the published 
     ["plugin", "enable", "caret@caret"],
   ]);
   expect(JSON.stringify(calls)).not.toContain("macintacos/caret");
+});
+
+test("--from-local survives a clean machine: uninstall and enable failures are best-effort", async () => {
+  // Nothing to uninstall on a first install, and enable fails on an already-enabled
+  // plugin; the reinstall must still land the fresh build.
+  const calls: string[][] = [];
+  const runner: ClaudeRunner = async (args) => {
+    calls.push(args);
+    return args[1] === "uninstall" || args[1] === "enable"
+      ? { ok: false, detail: "nothing to do" }
+      : { ok: true, detail: "" };
+  };
+  const ui = recordingUI();
+  await runInstallClaudeTarget(
+    { uninstall: false, dryRun: false, local: { repoDir: "/checkout", marketplaceDir: "/dev-mp" } },
+    { claude: runner, writeDevMarketplace: () => {}, ui },
+  );
+  expect(calls).toContainEqual(["plugin", "install", "caret@caret", "--scope", "user"]);
+  expect(ui.events.some((e) => e.startsWith("error:"))).toBe(false);
 });
 
 test("--from-local falls back to updating the marketplace when the add fails", async () => {

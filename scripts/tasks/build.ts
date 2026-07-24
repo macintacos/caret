@@ -80,7 +80,7 @@ async function headCommit(): Promise<string> {
 
 /** Compile the standalone binary from an already-built ui/dist: regenerate the
  * embed manifest (inline, not a mise dependency, so a bare `bash .mise/tasks/build
- * bin` from scripts/install.sh still works), compile, and copy the UI tree beside
+ * bin` outside mise still works), compile, and copy the UI tree beside
  * the binary as a runtime fallback. Resolves the exit code (0 = ok) WITHOUT
  * exiting so the umbrella can chain past it. */
 async function compileBin(run: typeof runForward = runForward): Promise<number> {

@@ -231,8 +231,8 @@ function closingLine(
 /** Resolve which agents to install into. `null` means "install nothing" — either the
  * `--target` value was invalid (reported, non-zero exit) or the user cancelled the
  * chooser. The prompt is skipped whenever it can't be answered (no TTY) or shouldn't be
- * asked: `--dry-run` previews the detected agents instead, mirroring scripts/install.sh,
- * which also suppresses its prompt in dry-run. */
+ * asked: `--dry-run` previews the detected agents instead of asking about a run that
+ * changes nothing. */
 async function selectTargets(
   opts: { target?: string; uninstall: boolean; dryRun: boolean },
   deps: InstallDeps,

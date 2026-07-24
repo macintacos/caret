@@ -53,7 +53,10 @@ export function resolveLocalCheckout(deps: LocalDeps = {}): { repoDir: string; r
       `--from-local must run from a caret checkout (no .claude-plugin/marketplace.json at ${repoDir}). A published caret installs with a plain \`caret install\`.`,
     );
   }
-  if (!existsSync(join(repoDir, "bin", "caret-native")) || !existsSync(join(repoDir, "bin", "ui"))) {
+  if (
+    !existsSync(join(repoDir, "bin", "caret-native")) ||
+    !existsSync(join(repoDir, "bin", "ui"))
+  ) {
     throw new Error(
       `--from-local reuses the build artifacts bin/caret-native + bin/ui, and ${repoDir} has neither — run \`mise run build\` first.`,
     );

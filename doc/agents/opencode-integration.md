@@ -2,9 +2,9 @@
 
 Load this when working on caret's OpenCode support — the adapter
 (`src/adapters/opencode/`), the plugin (`opencode/`), or the install path
-(`caret install --target opencode`, `scripts/install.sh`). It records the spike EXC-339
-ran (a review of OpenCode's plugin docs + source against what caret does in Claude Code)
-so the "is this even possible, and how" reasoning is not lost.
+(`caret install --target opencode`). It records the spike EXC-339 ran (a review of
+OpenCode's plugin docs + source against what caret does in Claude Code) so the "is this
+even possible, and how" reasoning is not lost.
 
 ## The headline: OpenCode is plugin-shaped, not command-hook-shaped
 
@@ -132,17 +132,17 @@ string" shape before writing, so it can't corrupt a user's config.
   ships in the `@macintacos/caret` npm package and resolves its binary and version at
   runtime from that package (§ Runtime resolution + update check); only the command files
   still carry a substituted `__CARET_BIN__` marker.
-- **Install (`caret install --target opencode` + `scripts/install.sh`)** — adds
-  `@macintacos/caret` to the user's OpenCode `plugin` array (comment-preserving, via
-  `jsonc-parser` in `config-plugin.ts`) and deploys the `/caret:*` command **files**;
-  `--uninstall` reverses both. OpenCode itself installs the package and its deps into its
-  cache on the next start — caret writes no config-dir manifest and runs no `bun install`.
-  `caret install --target claude` registers caret with Claude Code via its plugin CLI. The
-  command lives in `src/commands/install/`: `index.ts` is the orchestrator (it parses
-  `--target` — a comma list of the registry's ids — resolves the targets, and dispatches),
-  beside the target registry, the chooser, the terminal reporter, and one module per
-  target runner. `paths.ts` is the single source of truth both the probe (reader) and the
-  writer resolve through.
+- **Install (`caret install --target opencode`)** — adds `@macintacos/caret` to the user's
+  OpenCode `plugin` array (comment-preserving, via `jsonc-parser` in `config-plugin.ts`)
+  and deploys the `/caret:*` command **files**; `--uninstall` reverses both. OpenCode
+  itself installs the package and its deps into its cache on the next start — caret writes
+  no config-dir manifest and runs no `bun install`. `caret install --target claude`
+  registers caret with Claude Code via its plugin CLI. The command lives in
+  `src/commands/install/`: `index.ts` is the orchestrator (it parses `--target` — a comma
+  list of the registry's ids — resolves the targets, and dispatches), beside the target
+  registry, the chooser, the terminal reporter, and one module per target runner.
+  `paths.ts` is the single source of truth both the probe (reader) and the writer resolve
+  through.
 
 ## Distribution choice (amended by EXC-794)
 
