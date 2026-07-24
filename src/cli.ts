@@ -75,8 +75,8 @@ function buildProgram(): Command {
 
   program
     .command("install")
-    .description("install caret into a coding agent (--target opencode,claude)")
-    .requiredOption(
+    .description("install caret into a coding agent (omit --target to choose interactively)")
+    .option(
       "--target <targets>",
       "comma-separated agents to install into: opencode, claude, or opencode,claude",
     )
