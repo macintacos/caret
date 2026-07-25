@@ -40,7 +40,7 @@
     currentThemeId,
     watchSystemScheme,
   } from "$lib/appearance.ts";
-  import { THEMES, type ThemeId } from "$lib/theme.ts";
+  import type { ThemeId } from "$lib/theme.ts";
   import {
     clearKnownPrefs,
     freshResetApplied,

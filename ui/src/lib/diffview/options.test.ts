@@ -120,9 +120,9 @@ describe("toFileOptions", () => {
   test("threads the selected theme through to the library theme and themeType", () => {
     // The diff view renders into a shadow root whose :host re-declares
     // color-scheme, so it can't inherit the chrome's forced scheme — the caret
-    // theme selection reaches it only as explicit options (EXC-730). Since EXC-752
-    // that selection is the theme itself, so the code retints with the chrome
-    // rather than falling back to caret's palette at the right scheme.
+    // theme selection reaches it only as explicit options (EXC-730, EXC-752). The
+    // selection is the theme itself, so the code carries the picked palette rather
+    // than caret's at the matching scheme.
     expect(toFileOptions({ themeId: "caret-light" }).themeType).toBe("light");
     expect(toFileOptions({ themeId: "dracula" })).toMatchObject({
       theme: { light: "dracula", dark: "dracula" },

@@ -93,7 +93,9 @@ const inflight = new Map<string, Promise<boolean>>();
 // dropped from `inflight` (and never added to `loaded`) so a later mount retries.
 function startLoad(lang: string): Promise<boolean> {
   // Warmed against every caret theme, so the grammar is ready in whichever palette
-  // is live and a later theme switch re-tokenizes without another load.
+  // is live and a later theme switch re-tokenizes without another load. Naming the
+  // ids requires them to be registered first, which theme.ts's registerCaretDiffThemes
+  // does at the view components' module scope, before any instance loads a grammar.
   const p = preloadHighlighter({ themes: [...THEME_IDS], langs: [lang] })
     .then(() => {
       loaded.add(lang);

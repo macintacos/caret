@@ -28,7 +28,7 @@ describe("SourceView rendering", () => {
   });
 
   test("highlights with caret's registered Shiki theme", async () => {
-    // The theme/font bridge registers caret's caret-light/caret-dark themes and
+    // The theme/font bridge registers caret's own palettes as Shiki themes and
     // selects them through the view options, so the library highlights with
     // caret's palette rather than its own. A keyword token must carry caret's
     // accent color in both color schemes (light #c2410c / dark #fb923c from

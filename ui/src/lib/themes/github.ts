@@ -5,7 +5,7 @@
 //
 // The surfaces map onto GitHub's own: the page sits on the canvas GitHub itself
 // uses (`bgColor.muted` in light, `bgColor.default` in dark), cards take the
-// brightest canvas, and the code body takes the remaining one — which lands on
+// brightest canvas, and the code body takes the recessed one — which lands on
 // caret's ordering without reaching outside Primer for a value.
 
 import { paletteTheme } from "$lib/themes/recipe.ts";
@@ -21,7 +21,10 @@ export const githubLight = paletteTheme({
   inkSoft: "#59636e", // fgColor.muted
   inkFaint: "#818b98", // fgColor.disabled
   accent: "#0969da", // fgColor.accent — the link blue
-  accentBright: "#54aeff", // borderColor.accent-muted's base blue
+  // The deeper blue GitHub itself gives constants and entities: this token is the
+  // shiki entity color as well as the accent's hover, and on a white code surface
+  // a lighter blue would be the palette's least readable text.
+  accentBright: "#0550ae", // prettylights syntax constant
   accentInk: "#ffffff", // fgColor.onEmphasis
   neutral: "#818b98", // fgColor.disabled, the base of Primer's own neutral wash
   ok: "#1a7f37", // fgColor.success
@@ -34,8 +37,8 @@ export const githubDark = paletteTheme({
   label: "GitHub Dark",
   scheme: "dark",
   paper: "#0d1117", // bgColor.default — GitHub's page background
-  raised: "#212830", // bgColor.disabled
-  sunk: "#151b23", // bgColor.muted
+  raised: "#151b23", // bgColor.muted
+  sunk: "#010409", // bgColor.inset
   ink: "#f0f6fc", // fgColor.default
   inkSoft: "#9198a1", // fgColor.muted
   inkFaint: "#656c76", // fgColor.disabled

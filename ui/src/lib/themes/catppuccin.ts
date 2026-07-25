@@ -7,16 +7,18 @@
 // nothing above `base`, so the trio shifts down a step (base / mantle / crust) and
 // keeps caret's ordering rather than inventing an off-palette white.
 //
-// The ink ramp likewise shifts by scheme: the dark flavors read well on
-// subtext0 / overlay1, but Latte's bright surface compresses contrast, so it takes
-// the next deeper pair (subtext1 / overlay2) to clear caret's legibility floors.
-// `blue` is the attention hue — Catppuccin's own notice color, and the analog of
-// caret's violet against an amber accent, leaving `mauve` alone as the selection mark.
+// The ink ramp takes subtext1 / overlay2 rather than the shallower subtext0 /
+// overlay1: caret paints secondary copy and metadata on the RAISED surface too
+// (dialogs, dropdowns, cards), where a flavor's own surface tone eats the contrast
+// the deeper pair keeps. `blue` is the attention hue — Catppuccin's own notice
+// color, and the analog of caret's violet against an amber accent, leaving `mauve`
+// alone as the selection mark.
 //
-// One place the palette is followed rather than corrected: Latte's `green` is a low
-// contrast success color on a light surface. It stays as published — it is what
-// Catppuccin Latte's additions look like everywhere else — and caret only paints it
-// as a fill and a gutter bar, never as body copy.
+// One place the palette is followed rather than corrected: Latte's `green` and
+// `lavender` are low-contrast on a light surface, and they color string literals and
+// entities in the diff view as well as filling gutter bars. They stay as published —
+// reading Latte's own colors is the point of picking Latte, and overriding them would
+// ship caret's opinion of the flavor instead of the flavor.
 
 import type { Theme, ThemeId } from "$lib/theme.ts";
 import { type PaletteInput, paletteTheme } from "$lib/themes/recipe.ts";
@@ -28,9 +30,7 @@ interface Flavor {
   base: string;
   surface0: string;
   overlay0: string;
-  overlay1: string;
   overlay2: string;
-  subtext0: string;
   subtext1: string;
   text: string;
   mauve: string;
@@ -46,9 +46,7 @@ const LATTE: Flavor = {
   base: "#eff1f5",
   surface0: "#ccd0da",
   overlay0: "#9ca0b0",
-  overlay1: "#8c8fa1",
   overlay2: "#7c7f93",
-  subtext0: "#6c6f85",
   subtext1: "#5c5f77",
   text: "#4c4f69",
   mauve: "#8839ef",
@@ -64,9 +62,7 @@ const FRAPPE: Flavor = {
   base: "#303446",
   surface0: "#414559",
   overlay0: "#737994",
-  overlay1: "#838ba7",
   overlay2: "#949cbb",
-  subtext0: "#a5adce",
   subtext1: "#b5bfe2",
   text: "#c6d0f5",
   mauve: "#ca9ee6",
@@ -82,9 +78,7 @@ const MACCHIATO: Flavor = {
   base: "#24273a",
   surface0: "#363a4f",
   overlay0: "#6e738d",
-  overlay1: "#8087a2",
   overlay2: "#939ab7",
-  subtext0: "#a5adcb",
   subtext1: "#b8c0e0",
   text: "#cad3f5",
   mauve: "#c6a0f6",
@@ -100,9 +94,7 @@ const MOCHA: Flavor = {
   base: "#1e1e2e",
   surface0: "#313244",
   overlay0: "#6c7086",
-  overlay1: "#7f849c",
   overlay2: "#9399b2",
-  subtext0: "#a6adc8",
   subtext1: "#bac2de",
   text: "#cdd6f4",
   mauve: "#cba6f7",
@@ -112,8 +104,8 @@ const MOCHA: Flavor = {
   red: "#f38ba8",
 };
 
-/** Map one flavor onto caret's tokens. Latte is the only light flavor, so the
- * scheme carries both the surface shift and the deeper ink ramp it needs. */
+/** Map one flavor onto caret's tokens. Latte is the only light flavor, and the
+ * scheme carries the one thing that differs: which surfaces the trio draws from. */
 function flavor(id: ThemeId, label: string, f: Flavor, dark: boolean): Theme {
   const surfaces: Pick<PaletteInput, "paper" | "raised" | "sunk"> = dark
     ? { paper: f.mantle, raised: f.surface0, sunk: f.base }
@@ -124,8 +116,8 @@ function flavor(id: ThemeId, label: string, f: Flavor, dark: boolean): Theme {
     scheme: dark ? "dark" : "light",
     ...surfaces,
     ink: f.text,
-    inkSoft: dark ? f.subtext0 : f.subtext1,
-    inkFaint: dark ? f.overlay1 : f.overlay2,
+    inkSoft: f.subtext1,
+    inkFaint: f.overlay2,
     accent: f.mauve,
     accentBright: f.lavender,
     accentInk: dark ? f.crust : f.base,

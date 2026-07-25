@@ -53,12 +53,11 @@ export interface SourceViewOptions {
   overflow?: "scroll" | "wrap";
   /** Hide the line-number gutter. */
   disableLineNumbers?: boolean;
-  /** The caret theme in effect, which the shiki highlighter is forced to. The diff
-   * view renders into a shadow root that can't inherit the chrome's forced
-   * color-scheme, so the selection is passed in explicitly (EXC-730) — as the theme
-   * itself since EXC-752, so the code carries the picked palette's colors rather
-   * than caret's at the matching scheme. Omitted leaves the library on caret's pair
-   * following the system preference. */
+  /** The caret theme in effect, which the shiki highlighter is forced to, so the
+   * code carries the picked palette's own colors (EXC-730, EXC-752). The diff view
+   * renders into a shadow root that can't inherit the chrome's forced color-scheme,
+   * so the selection is passed in explicitly. Omitted leaves the library on caret's
+   * pair following the system preference. */
   themeId?: ThemeId;
 }
 

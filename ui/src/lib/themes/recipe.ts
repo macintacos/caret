@@ -1,9 +1,9 @@
 // The shared shape every vendor palette is mapped through (EXC-752). caret's own
 // two palettes (./caret.ts) are written out token by token — they are the reference
-// app.css mirrors — and this module is that reference generalized: name the fifteen
-// colors a palette actually decides, and the four tokens that are always derived
-// (the two rules, the accent wash, the two marks, the orphan mark, the shadow) come
-// out consistent for every theme instead of being re-typed seven times.
+// app.css mirrors — and this module is that reference generalized: name the thirteen
+// colors a palette actually decides, and the seven that are always derived (the two
+// rules, the accent wash, the two marks, the orphan mark, the shadow) come out
+// consistent for every theme instead of being re-typed seven times.
 //
 // The alpha suffixes and the two shadows are caret-dark's and caret-light's own
 // values, so a vendor theme's hairlines and highlight marks sit at exactly the

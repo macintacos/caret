@@ -216,9 +216,12 @@ test("picking a vendor palette retints the chrome and the code", async ({ daemon
 
   // And so does the code: the plan's heading is Dracula purple, not caret amber.
   await expect.poll(() => rowColors(page, "Widget Cache Refactor")).toContain("rgb(189, 147, 249)");
-  await expect
-    .poll(() => rowColors(page, "Widget Cache Refactor"))
-    .not.toContain("rgb(251, 146, 60)");
+  // Read once more and assert the amber is gone. Asserted on a resolved non-empty
+  // array rather than inside a poll, so a row that stopped matching can't satisfy
+  // "no amber" by returning nothing.
+  const retinted = await rowColors(page, "Widget Cache Refactor");
+  expect(retinted.length).toBeGreaterThan(0);
+  expect(retinted).not.toContain("rgb(251, 146, 60)");
 });
 
 // Back-compat (EXC-773): a user who picked a theme under the pre-mode model must not

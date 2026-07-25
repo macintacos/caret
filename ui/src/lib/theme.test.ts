@@ -155,35 +155,46 @@ describe("every theme", () => {
     }
   });
 
-  // caret's own two palettes place --paper-sunk differently by scheme: in dark BOTH
-  // panel surfaces lift off the page (raised > sunk > paper), in light the sunk
-  // surface recedes below it (raised > paper > sunk). --paper-raised is the lightest
-  // either way. A palette mapped without that shape reads inside-out.
-  test("keeps caret's surface ordering for its scheme", () => {
+  // --paper-raised is what lifts off the page: cards, dialogs, dropdowns, the plan
+  // pane. It is the lightest of the three surfaces in either scheme. Where --paper
+  // and --paper-sunk sit relative to each other is the palette's own call — caret-dark
+  // lifts its sunk surface above the page because the page is nearly black, while
+  // GitHub Dark recesses it below — so only the raised relation is pinned.
+  test("keeps --paper-raised as the lightest surface", () => {
     for (const [id, theme] of themeEntries()) {
-      const paper = luminance(theme.tokens["--paper"]);
       const raised = luminance(theme.tokens["--paper-raised"]);
-      const sunk = luminance(theme.tokens["--paper-sunk"]);
-      expect(raised, `${id} --paper-raised is the lightest surface`).toBeGreaterThan(
-        theme.scheme === "dark" ? sunk : paper,
+      expect(raised, `${id} --paper-raised vs --paper`).toBeGreaterThan(
+        luminance(theme.tokens["--paper"]),
       );
-      if (theme.scheme === "dark") expect(sunk, `${id} --paper-sunk`).toBeGreaterThan(paper);
-      else expect(paper, `${id} --paper`).toBeGreaterThan(sunk);
+      expect(raised, `${id} --paper-raised vs --paper-sunk`).toBeGreaterThan(
+        luminance(theme.tokens["--paper-sunk"]),
+      );
     }
   });
 
   // The ink ramp is body copy, secondary copy, and metadata — WCAG AA for the first
-  // two, the large-text floor for the faintest. A vendor palette whose neutrals are
-  // too close together fails here rather than shipping unreadable settings rows.
-  test("clears caret's contrast floors for the ink ramp", () => {
+  // two, the large-text floor for the faintest. It is held to those floors on BOTH
+  // chrome surfaces it actually renders on: the page and the raised surface every
+  // dialog, dropdown, and card sits on (--card / --popover / --secondary all bridge
+  // to --paper-raised). Measuring the page alone flatters a dark palette, whose page
+  // is its darkest surface — and lets a flavor ship sub-AA settings rows.
+  test("clears caret's contrast floors for the ink ramp, on every surface it renders on", () => {
     for (const [id, theme] of themeEntries()) {
-      const paper = theme.tokens["--paper"];
-      expect(contrast(theme.tokens["--ink"], paper), `${id} --ink`).toBeGreaterThanOrEqual(4.5);
-      expect(
-        contrast(theme.tokens["--ink-soft"], paper),
-        `${id} --ink-soft`,
-      ).toBeGreaterThanOrEqual(4.5);
-      expect(contrast(theme.tokens["--ink-faint"], paper), `${id} --ink-faint`).toBeGreaterThan(3);
+      for (const surface of ["--paper", "--paper-raised"] as const) {
+        const bg = theme.tokens[surface];
+        expect(
+          contrast(theme.tokens["--ink"], bg),
+          `${id} --ink on ${surface}`,
+        ).toBeGreaterThanOrEqual(4.5);
+        expect(
+          contrast(theme.tokens["--ink-soft"], bg),
+          `${id} --ink-soft on ${surface}`,
+        ).toBeGreaterThanOrEqual(4.5);
+        expect(
+          contrast(theme.tokens["--ink-faint"], bg),
+          `${id} --ink-faint on ${surface}`,
+        ).toBeGreaterThan(3);
+      }
     }
   });
 
