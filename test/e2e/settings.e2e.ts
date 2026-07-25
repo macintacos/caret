@@ -172,6 +172,55 @@ test("picking a slot's palette applies it immediately when that slot is live", a
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 });
 
+// The distinct computed colors of the plan row carrying `text`, read inside the diff
+// view's shadow root — where the shiki tokens live, so this is the rendered syntax
+// color rather than a token value read back out of the registry.
+function rowColors(page: import("@playwright/test").Page, text: string): Promise<string[]> {
+  return page.evaluate((needle) => {
+    const shadow = document.querySelector(".diffview")?.shadowRoot;
+    for (const row of shadow?.querySelectorAll("[data-line]") ?? []) {
+      if ((row.textContent ?? "").includes(needle)) {
+        return [...row.querySelectorAll("span")].map((s) => getComputedStyle(s).color);
+      }
+    }
+    return [];
+  }, text);
+}
+
+// EXC-752: a palette from outside caret's own pair has to land on BOTH halves of the
+// app — the chrome repaints from its tokens, and the code the reviewer is reading
+// retints with it. Dracula is the pick precisely because nothing in it is caret's
+// amber, so "the heading is still amber" is an unambiguous failure.
+test("picking a vendor palette retints the chrome and the code", async ({ daemon, page }) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  // The emulated OS is dark, so the dark slot is live: caret dark, amber headings.
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect.poll(() => rowColors(page, "Widget Cache Refactor")).toContain("rgb(251, 146, 60)");
+
+  await openSettings(page);
+  await page.getByRole("button", { name: "Dark theme" }).click();
+  await page.getByRole("menuitemradio", { name: "Dracula" }).click();
+  await expect(page.getByText("Dark theme updated")).toBeVisible();
+
+  // The chrome repaints from Dracula's own tokens, and the block still explains
+  // which slot is showing.
+  await expect(page.locator("html")).toHaveAttribute("style", /--paper:\s*#21222c/i);
+  await expect(page.locator("[data-field='themeDark']").getByText("In use")).toBeVisible();
+  await expect(page.locator("[data-theme-summary]")).toContainText("Dracula");
+
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Settings" })).toHaveCount(0);
+
+  // And so does the code: the plan's heading is Dracula purple, not caret amber.
+  await expect.poll(() => rowColors(page, "Widget Cache Refactor")).toContain("rgb(189, 147, 249)");
+  await expect
+    .poll(() => rowColors(page, "Widget Cache Refactor"))
+    .not.toContain("rgb(251, 146, 60)");
+});
+
 // Back-compat (EXC-773): a user who picked a theme under the pre-mode model must not
 // have that explicit choice silently replaced by the new `system` default. Seeded
 // through the real boot path, with the emulated OS set the OTHER way so an unmigrated
