@@ -26,7 +26,6 @@ digraph caret_docs_router {
     "Edit CLAUDE.md" [shape=box];
     "Edit a doc/agents/*.md rule file" [shape=box];
     "Edit doc/README.md" [shape=box];
-    "Edit CHANGELOG.md (via /release-caret)" [shape=box];
 
     "Changing documentation" -> "Which doc does the change affect?";
     "Which doc does the change affect?" -> "Edit README.md" [label="user-facing front door: what caret is, install, basic usage, pointers onward"];
@@ -35,7 +34,6 @@ digraph caret_docs_router {
     "Which doc does the change affect?" -> "Edit CLAUDE.md" [label="the code-change routing index, plus the CodeGraph / verifying-changes prose"];
     "Which doc does the change affect?" -> "Edit a doc/agents/*.md rule file" [label="a rule-of-the-road for a code area (architecture, logging, TS, Svelte, shadcn, testing, icons, settings, OpenCode)"];
     "Which doc does the change affect?" -> "Edit doc/README.md" [label="the index of the doc/ directory itself"];
-    "Which doc does the change affect?" -> "Edit CHANGELOG.md (via /release-caret)" [label="release history — owned by the release flow, not hand-edited mid-feature"];
 }
 ```
 
@@ -63,9 +61,6 @@ digraph caret_docs_router {
   edit one: [`references/agent-rules.md`](references/agent-rules.md).
 - **`doc/README.md`** — the index of the `doc/` directory: what lives here and why. How to
   edit it: [`references/doc-readme.md`](references/doc-readme.md).
-- **`CHANGELOG.md`** (repo root) — keep-a-changelog release history, owned by the
-  `/release-caret` flow rather than hand-edited during a feature. How it is maintained:
-  [`references/changelog.md`](references/changelog.md).
 
 ## Audience, stated at the top of every new doc
 

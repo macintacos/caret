@@ -16,9 +16,9 @@ the files here are the substance.
 
 For the wider picture — every doc in the repo and which one to update when — see
 [`agents/documentation-rules.md`](agents/documentation-rules.md). It maps the whole doc
-landscape (this index, the top-level README, `ADVANCED.md`, `CONTRIBUTING.md`, the
-CHANGELOG, and the `agents/` rule files) and carries the rule that adding, removing, or
-renaming a doc updates that map in the same change.
+landscape (this index, the top-level README, `ADVANCED.md`, `CONTRIBUTING.md`, and the
+`agents/` rule files) and carries the rule that adding, removing, or renaming a doc
+updates that map in the same change.
 
 Adding a new agent-facing rule? Drop it in `agents/` as its own file, add a route to it
 from the digraph in `CLAUDE.md`, and update the doc map in
