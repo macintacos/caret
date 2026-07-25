@@ -1,6 +1,7 @@
 import "@ui/test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { DARK_SLOT_KEY, LEGACY_THEME_KEY, LIGHT_SLOT_KEY, MODE_KEY } from "$lib/appearance.ts";
 import { knownPrefKeys } from "$lib/definePref.ts";
 import { DIFF_INDICATORS_KEY } from "$lib/diffIndicatorsPref.ts";
 import { DIFF_STYLE_KEY } from "$lib/diffStylePref.ts";
@@ -14,7 +15,6 @@ import {
   shouldShowOnboarding,
 } from "$lib/prefs.ts";
 import { SHORTCUT_HINTS_KEY } from "$lib/shortcutHintsPref.ts";
-import { THEME_KEY } from "$lib/theme.ts";
 import { TOC_OPEN_KEY } from "$lib/tocPref.ts";
 
 afterEach(() => {
@@ -24,7 +24,9 @@ afterEach(() => {
 
 describe("knownPrefKeys()", () => {
   test("covers every user-facing UI setting key", () => {
-    expect(knownPrefKeys()).toContain(THEME_KEY);
+    expect(knownPrefKeys()).toContain(MODE_KEY);
+    expect(knownPrefKeys()).toContain(LIGHT_SLOT_KEY);
+    expect(knownPrefKeys()).toContain(DARK_SLOT_KEY);
     expect(knownPrefKeys()).toContain(DIFF_INDICATORS_KEY);
     expect(knownPrefKeys()).toContain(DIFF_STYLE_KEY);
     expect(knownPrefKeys()).toContain(TOC_OPEN_KEY);
@@ -73,7 +75,11 @@ describe("hasOnboarded / markOnboarded", () => {
 
 describe("clearKnownPrefs", () => {
   test("removes every known preference", () => {
-    localStorage.setItem(THEME_KEY, "caret-light");
+    localStorage.setItem(MODE_KEY, "dark");
+    localStorage.setItem(LIGHT_SLOT_KEY, "caret-light");
+    // The pre-mode key still joins the reset set, so a `--fresh` boot clears it
+    // for anyone who hasn't been migrated off it yet.
+    localStorage.setItem(LEGACY_THEME_KEY, "caret-light");
     localStorage.setItem(DIFF_INDICATORS_KEY, "dashes");
     localStorage.setItem(DIFF_STYLE_KEY, "unified");
     markOnboarded();

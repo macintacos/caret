@@ -7,13 +7,13 @@ import { join } from "node:path";
 // and its key joins the registry. At runtime App's static import graph does this at
 // boot; here it is explicit. A new pref module added without an import here surfaces
 // as a scanned key missing from knownPrefKeys() below — which is the point.
+import "$lib/appearance.ts";
 import { knownPrefKeys } from "$lib/definePref.ts";
 import "$lib/diffIndicatorsPref.ts";
 import "$lib/diffStylePref.ts";
 import "$lib/diffview/dragHint.ts";
 import "$lib/prefs.ts";
 import "$lib/shortcutHintsPref.ts";
-import "$lib/theme.ts";
 import "$lib/tocPref.ts";
 
 // This is the structural guard the three-place key sync used to lack: it scans the

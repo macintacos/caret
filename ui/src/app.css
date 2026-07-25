@@ -36,7 +36,7 @@
 @source "./lib/components/ui";
 
 /* shadcn-svelte's `dark:` variant, keyed to the [data-theme] attribute
-   applyTheme() (lib/theme.ts) already stamps on <html>. caret has NO `.dark`
+   paintTheme() (lib/theme.ts) already stamps on <html>. caret has NO `.dark`
    class and must not grow one, so the variant targets the attribute directly;
    a `dark:` utility then activates under any caret dark scheme. */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));

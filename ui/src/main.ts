@@ -2,13 +2,19 @@ import { mount } from "svelte";
 
 import App from "@/App.svelte";
 import "@/app.css";
+import { applyAppearance, migrateLegacyTheme } from "$lib/appearance.ts";
 import { startLogBridge, uiLog } from "$lib/log.ts";
-import { applyTheme, readThemeId } from "$lib/theme.ts";
 
-// Apply the saved theme before the first paint so there's no flash of the app.css
-// default when the two differ (EXC-730). No wipe at boot — that's only for a
-// user-initiated switch (lib/themeWipe.ts).
-applyTheme(readThemeId());
+// Carry a pre-mode single-theme pick over to the mode + slots model before
+// anything reads the appearance, so an existing user's explicit choice survives
+// the new `system` default (EXC-773).
+migrateLegacyTheme();
+
+// Paint the saved appearance before the first paint so there's no flash of the
+// app.css default when the two differ (EXC-730). Instant, not a wipe: every other
+// appearance change wipes (lib/themeWipe.ts), but boot has no previous frame to
+// transition from.
+applyAppearance();
 
 // Mark the browser tab in dev so it's distinguishable from an installed build.
 // `import.meta.env.DEV` is true only under `vite` (mise run dev); the embedded

@@ -3,19 +3,18 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import { readAppCss } from "$lib/appCss.ts";
 import {
-  applyTheme,
   type ColorToken,
-  DEFAULT_THEME_ID,
-  readThemeId,
+  paintTheme,
+  type Scheme,
   THEME_IDS,
-  THEME_KEY,
   THEMES,
   type ThemeId,
+  themesForScheme,
 } from "$lib/theme.ts";
 
 afterEach(() => {
   localStorage.clear();
-  // Strip any inline vars/attrs a prior applyTheme wrote onto the root.
+  // Strip any inline vars/attrs a prior paintTheme wrote onto the root.
   document.documentElement.removeAttribute("style");
   document.documentElement.removeAttribute("data-theme");
 });
@@ -37,12 +36,7 @@ function readFirstRootTokens(css: string): Record<string, string> {
 }
 
 describe("THEMES", () => {
-  test("caret-dark is the default", () => {
-    expect(DEFAULT_THEME_ID).toBe("caret-dark");
-    expect(THEMES[DEFAULT_THEME_ID]).toBeDefined();
-  });
-
-  test("THEME_IDS lists caret-dark first (the default) then caret-light", () => {
+  test("THEME_IDS lists caret-dark first then caret-light", () => {
     expect(THEME_IDS).toEqual(["caret-dark", "caret-light"]);
   });
 
@@ -104,25 +98,33 @@ describe("THEMES", () => {
   });
 });
 
-describe("readThemeId", () => {
-  test("defaults to caret-dark when nothing is stored", () => {
-    expect(readThemeId()).toBe("caret-dark");
+// Every appearance slot is keyed by scheme, so a scheme with no themes would
+// render an empty picker — and the light/dark defaults would have nothing to
+// point at. Adding a palette to THEMES keeps both slots populated for free.
+describe("themesForScheme", () => {
+  test("every scheme offers at least one theme", () => {
+    const schemes: Scheme[] = ["light", "dark"];
+    for (const scheme of schemes) {
+      expect(themesForScheme(scheme).length, scheme).toBeGreaterThan(0);
+    }
   });
 
-  test("returns a stored valid id", () => {
-    localStorage.setItem(THEME_KEY, "caret-light");
-    expect(readThemeId()).toBe("caret-light");
+  test("returns only that scheme's themes, in THEME_IDS order", () => {
+    for (const theme of themesForScheme("light")) expect(theme.scheme).toBe("light");
+    for (const theme of themesForScheme("dark")) expect(theme.scheme).toBe("dark");
+    const ordered = themesForScheme("dark").map((t) => t.id);
+    expect(ordered).toEqual(THEME_IDS.filter((id) => THEMES[id].scheme === "dark"));
   });
 
-  test("falls back to caret-dark on an unrecognized stored value", () => {
-    localStorage.setItem(THEME_KEY, "midnight");
-    expect(readThemeId()).toBe("caret-dark");
+  test("partitions THEMES exactly — every theme lands in one scheme's list", () => {
+    const partitioned = [...themesForScheme("light"), ...themesForScheme("dark")].map((t) => t.id);
+    expect(partitioned.sort()).toEqual([...THEME_IDS].sort());
   });
 });
 
-describe("applyTheme", () => {
+describe("paintTheme", () => {
   test("writes every token as an inline custom property on the root", () => {
-    applyTheme("caret-light");
+    paintTheme("caret-light");
     const style = document.documentElement.style;
     for (const [name, value] of Object.entries(THEMES["caret-light"].tokens)) {
       expect(style.getPropertyValue(name), name).toBe(value);
@@ -130,22 +132,24 @@ describe("applyTheme", () => {
   });
 
   test("sets color-scheme and data-theme to the theme's scheme", () => {
-    applyTheme("caret-light");
+    paintTheme("caret-light");
     expect(document.documentElement.style.getPropertyValue("color-scheme")).toBe("light");
     expect(document.documentElement.dataset.theme).toBe("light");
 
-    applyTheme("caret-dark");
+    paintTheme("caret-dark");
     expect(document.documentElement.style.getPropertyValue("color-scheme")).toBe("dark");
     expect(document.documentElement.dataset.theme).toBe("dark");
   });
 
-  test("persists the applied id so the next readThemeId returns it", () => {
-    applyTheme("caret-light");
-    expect(readThemeId()).toBe("caret-light");
+  // Painting is the whole job: which theme to paint (and remembering it) is
+  // appearance.ts's, so a paint must never write a preference of its own.
+  test("persists nothing", () => {
+    paintTheme("caret-light");
+    expect(localStorage.length).toBe(0);
   });
 
-  test("returns the applied theme object", () => {
-    const applied: ThemeId = applyTheme("caret-light").id;
-    expect(applied).toBe("caret-light");
+  test("returns the painted theme object", () => {
+    const painted: ThemeId = paintTheme("caret-light").id;
+    expect(painted).toBe("caret-light");
   });
 });

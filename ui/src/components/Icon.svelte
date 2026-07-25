@@ -19,8 +19,11 @@
   import file from "@/icons/file.svg?raw";
   import gitCompare from "@/icons/git-compare.svg?raw";
   import keyboard from "@/icons/keyboard.svg?raw";
+  import monitor from "@/icons/monitor.svg?raw";
+  import moon from "@/icons/moon.svg?raw";
   import panelLeft from "@/icons/panel-left.svg?raw";
   import settings from "@/icons/settings.svg?raw";
+  import sun from "@/icons/sun.svg?raw";
   import trash2 from "@/icons/trash-2.svg?raw";
   import unplug from "@/icons/unplug.svg?raw";
   import x from "@/icons/x.svg?raw";
@@ -41,8 +44,11 @@
     file,
     "git-compare": gitCompare,
     keyboard,
+    monitor,
+    moon,
     "panel-left": panelLeft,
     settings,
+    sun,
     "trash-2": trash2,
     unplug,
     x,

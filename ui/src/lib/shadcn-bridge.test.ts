@@ -13,7 +13,7 @@ import { readAppCss } from "$lib/appCss.ts";
 // (no hex, no oklch), amber reaches shadcn only through --color-primary (never the
 // neutral --color-accent hover wash), fonts and radius are single-sourced from
 // caret, and there is no per-scheme [data-theme="dark"] block (scheme lives in the
-// caret tokens, which applyTheme() writes inline). A drift fails the unit suite
+// caret tokens, which paintTheme() writes inline). A drift fails the unit suite
 // rather than only showing as a visual mismatch on a placed shadcn component.
 
 const appCss = readAppCss();
@@ -160,7 +160,7 @@ describe("the shadcn @theme inline map", () => {
 
 describe("scheme lives in caret's tokens, not a per-scheme shadcn block", () => {
   test('no [data-theme="dark"] block redeclares shadcn tokens', () => {
-    // caret's tokens are written inline per-scheme by applyTheme() and the static
+    // caret's tokens are written inline per-scheme by paintTheme() and the static
     // :root fallback is caret-dark, so a var()-bridged shadcn block resolves the
     // right scheme at runtime and dark at first paint. A separate dark override is
     // redundant — its absence is the single-block guarantee (mirrors css-bridge's

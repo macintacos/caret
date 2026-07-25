@@ -62,7 +62,7 @@ body {
   }
 }
 
-/* The theme-switch "wipe" (EXC-730). changeTheme() (lib/themeWipe.ts) runs the
+/* The theme-switch "wipe" (EXC-730). withWipe() (lib/themeWipe.ts) runs the
    palette swap inside document.startViewTransition, so the browser snapshots the
    whole page — the light-DOM chrome AND the shadow-DOM diff view, as pixels — and
    animates between the old and new themes. The new snapshot wipes in from the left
@@ -72,7 +72,7 @@ body {
    full-viewport sweep needs the extra time to read, the same way the ambient
    animations keep their own longer literals. These pseudo-elements live on the
    document root, outside #app, so the reduced-motion guard above can't reach them:
-   changeTheme already skips the transition under reduced motion, and the media
+   withWipe already skips the transition under reduced motion, and the media
    query below is the belt-and-suspenders CSS half. */
 ::view-transition-old(root) {
   animation: none;

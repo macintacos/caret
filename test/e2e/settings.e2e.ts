@@ -3,9 +3,13 @@
 // value writes it, retints/reflows the app live, and confirms with a bottom-right
 // toast. Navigation, live apply, persistence across reload, and Esc-dismiss are all
 // real-browser behavior (focus, portalled menus, keyboard, localStorage across
-// reload), so this lives here, not in a unit (per doc/agents/browser-testing.md). The
-// theme pick uses a mouse CLICK on the portalled option, sidestepping the
+// reload), so this lives here, not in a unit (per doc/agents/browser-testing.md). A
+// palette pick uses a mouse CLICK on the portalled option, sidestepping the
 // keyboard-focus race that quarantined the old live-preview picker (EXC-796).
+//
+// The appearance specs (EXC-773) drive page.emulateMedia: caret follows the OS by
+// default, so the emulated prefers-color-scheme — pinned to dark in the project
+// config — is what a fresh origin resolves against.
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 
@@ -60,8 +64,14 @@ test("opens the Appearance pane with theme, hints, and the folded-in Diff view s
   );
   await expect(page.locator("[data-category='Diff view']")).toHaveCount(0);
 
-  // Its controls all live in the one pane: theme, shortcut hints, and the diff prefs.
-  await expect(page.getByRole("button", { name: "Theme" })).toBeVisible();
+  // Its controls all live in the one pane: the theme block, shortcut hints, and the
+  // diff prefs. All three modes are readable at once — the point of a segmented
+  // control over a dropdown here.
+  await expect(page.getByRole("radio", { name: "Light", exact: true })).toBeVisible();
+  await expect(page.getByRole("radio", { name: "Dark", exact: true })).toBeVisible();
+  await expect(page.getByRole("radio", { name: "System", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Light theme" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Dark theme" })).toBeVisible();
   await expect(page.getByRole("switch", { name: "Shortcut hints" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Layout" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Change markers" })).toBeVisible();
@@ -70,30 +80,115 @@ test("opens the Appearance pane with theme, hints, and the folded-in Diff view s
   await expect(page.locator(".save-chip")).toHaveCount(0);
 });
 
-test("picking a theme applies it immediately, confirms with a toast, and persists", async ({
+// Appearance mode (EXC-773). A fresh origin follows the OS, which the project config
+// emulates as dark; the whole point is that the resolution is live, so these drive
+// page.emulateMedia rather than seeding a stored theme. (That lever was inert while
+// caret ignored prefers-color-scheme — it is the real one again under `system`.)
+test("a fresh origin follows the system, in both directions", async ({ daemon, page }) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+
+  // Flipping the OS retints the running app — no reload, no re-pick.
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+});
+
+test("pinning a mode overrides the system and persists across a reload", async ({
   daemon,
   page,
 }) => {
   await daemon.seed();
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
-  // Fresh origin defaults to caret dark.
+
+  await openSettings(page);
+
+  // Pin Light while the emulated OS is dark: the whole UI retints AT ONCE, with no
+  // Save step, the modal stays open, and a success toast confirms it.
+  await page.getByRole("radio", { name: "Light", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
+  await expect(page.getByText("Mode updated")).toBeVisible();
+
+  // Pinned means pinned: an OS flip no longer moves it.
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+
+  // And the choice survives a reload (browser localStorage, no daemon state).
+  await page.reload();
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+});
+
+test("both theme slots stay visible, and the IN USE marker tracks the live one", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  await openSettings(page);
+
+  // Neither slot is hidden behind the current mode — that pairing is the feature.
+  const lightRow = page.locator("[data-field='themeLight']");
+  const darkRow = page.locator("[data-field='themeDark']");
+  await expect(lightRow).toBeVisible();
+  await expect(darkRow).toBeVisible();
+
+  // The emulated OS is dark, so the dark slot is the live one.
+  await expect(darkRow.getByText("In use")).toBeVisible();
+  await expect(lightRow.getByText("In use")).toHaveCount(0);
+  await expect(page.locator("[data-theme-summary]")).toContainText("Following your system");
+
+  // An OS flip while the modal is open moves the marker and rewrites the readout,
+  // live — the reviewer sees why the app just changed colour.
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(lightRow.getByText("In use")).toBeVisible();
+  await expect(darkRow.getByText("In use")).toHaveCount(0);
+  await expect(page.locator("[data-theme-summary]")).toContainText("caret light");
+});
+
+test("picking a slot's palette applies it immediately when that slot is live", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed();
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
   await openSettings(page);
 
-  // Pick caret light: the whole UI retints AT ONCE, with no Save step, and the modal
-  // stays open. A success toast confirms it.
-  await page.getByRole("button", { name: "Theme" }).click();
-  await page.getByRole("menuitemradio", { name: "caret light" }).click();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
-  await expect(page.getByText("Theme updated")).toBeVisible();
+  // The dark slot is live under the emulated dark OS, so re-picking its palette
+  // applies at once and confirms with its own toast.
+  await page.getByRole("button", { name: "Dark theme" }).click();
+  await page.getByRole("menuitemradio", { name: "caret dark" }).click();
+  await expect(page.getByText("Dark theme updated")).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+});
 
-  // The choice persists across a reload (browser localStorage, no daemon state).
-  await page.reload();
+// Back-compat (EXC-773): a user who picked a theme under the pre-mode model must not
+// have that explicit choice silently replaced by the new `system` default. Seeded
+// through the real boot path, with the emulated OS set the OTHER way so an unmigrated
+// build would visibly resolve dark.
+test("a pre-mode caret.theme pick migrates to an explicit mode", async ({ daemon, page }) => {
+  await page.addInitScript(() => localStorage.setItem("caret.theme", "caret-light"));
+  await daemon.seed();
+  await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
+
+  // The stored light pick became mode=light, which holds against the dark OS.
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(page.evaluate(() => localStorage.getItem("caret.theme.mode"))).resolves.toBe(
+    "light",
+  );
+  // Self-erasing: the legacy key is gone, so the migration never runs twice.
+  await expect(page.evaluate(() => localStorage.getItem("caret.theme"))).resolves.toBeNull();
 });
 
 test("hovering a theme option previews its palette beside the menu, without applying it (EXC-753)", async ({
@@ -103,14 +198,15 @@ test("hovering a theme option previews its palette beside the menu, without appl
   await daemon.seed();
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
-  // Fresh origin defaults to caret dark.
+  // The emulated OS is dark, so the dark slot is live.
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
   await openSettings(page);
-  await page.getByRole("button", { name: "Theme" }).click();
+  // Open the LIGHT slot's menu while dark is showing — the palette being previewed is
+  // deliberately not the live one, so "preview without applying" is unambiguous.
+  await page.getByRole("button", { name: "Light theme" }).click();
 
-  // Hover the OTHER theme (caret light): an abstract preview card appears beside the
-  // open menu — before any selection.
+  // An abstract preview card appears beside the open menu — before any selection.
   await page.getByRole("menuitemradio", { name: "caret light" }).hover();
   const preview = page.locator("[data-slot='theme-preview']");
   await expect(preview).toBeVisible();
@@ -137,7 +233,10 @@ test("hovering a theme option previews its palette beside the menu, without appl
     expect(clearsRight || clearsLeft).toBe(true);
   }
 
-  // Exactly one at a time — moving to the current option swaps it to caret dark.
+  // Exactly one at a time — closing this menu and hovering the other slot's option
+  // swaps the single card to caret dark rather than stacking a second.
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Dark theme" }).click();
   await page.getByRole("menuitemradio", { name: "caret dark" }).hover();
   await expect(preview).toHaveCount(1);
   await expect(preview).toHaveAttribute("style", /--accent:\s*#fb923c/i);
@@ -154,7 +253,7 @@ test("keyboard-highlighting a theme option previews it too (EXC-753)", async ({ 
   // the menu never roves and no preview appears. Fast machines lose that race; slow ones
   // don't, which is the whole flake.
   await waitPastSafeModeGrace(page);
-  await page.getByRole("button", { name: "Theme" }).click();
+  await page.getByRole("button", { name: "Light theme" }).click();
 
   // Roving the menu with the keyboard highlights an option (real focus), which surfaces
   // its preview just like a hover does — the keyboard clause of the acceptance criteria.
@@ -179,14 +278,14 @@ test("reopening the theme menu after a switch keeps the preview beside the menu,
 
   await openSettings(page);
 
-  // Switch to caret light — the menu commits and closes.
-  await page.getByRole("button", { name: "Theme" }).click();
-  await page.getByRole("menuitemradio", { name: "caret light" }).click();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  // Commit a palette — the menu closes on pick.
+  await page.getByRole("button", { name: "Dark theme" }).click();
+  await page.getByRole("menuitemradio", { name: "caret dark" }).click();
+  await expect(page.getByText("Dark theme updated")).toBeVisible();
 
   // Reopen and highlight the first option — the fast reopen that raced the menu's async
   // positioning in the bug report.
-  await page.getByRole("button", { name: "Theme" }).click();
+  await page.getByRole("button", { name: "Dark theme" }).click();
   await page.locator(".setting-menu [role='menuitemradio']").first().hover();
 
   const preview = page.locator("[data-slot='theme-preview']");
@@ -339,10 +438,14 @@ test("the search filters the nav and fields across categories; clearing restores
   const dialog = page.getByRole("dialog", { name: "Settings" });
   const search = dialog.getByRole("textbox", { name: "Search settings" });
 
-  // "theme" leaves only the Theme field; the other Appearance fields drop, and
-  // Appearance is the only category with a match — the search-only categories drop.
+  // "theme" leaves the whole appearance block intact — all three of its fields carry
+  // the word, so the mode control never ends up stranded from its slots. The other
+  // Appearance fields drop, and Appearance is the only category with a match, so the
+  // search-only categories drop.
   await search.fill("theme");
-  await expect(dialog.locator("[data-field='theme']")).toBeVisible();
+  await expect(dialog.locator("[data-field='themeMode']")).toBeVisible();
+  await expect(dialog.locator("[data-field='themeLight']")).toBeVisible();
+  await expect(dialog.locator("[data-field='themeDark']")).toBeVisible();
   await expect(dialog.locator("[data-field='shortcutHints']")).toHaveCount(0);
   await expect(dialog.locator("[data-category='Appearance']")).toBeVisible();
   await expect(dialog.locator("[data-category='Advanced']")).toHaveCount(0);
@@ -476,19 +579,19 @@ test("drives the full journey: edit Appearance live, search across categories, o
   await expect(page.locator(topbarHints)).toHaveCount(0);
   await expect(page.getByText("Shortcut hints updated")).toBeVisible();
 
-  // Edit #2 (Appearance): theme to caret light — the whole UI retints at once, with its
-  // own toast.
-  await dialog.getByRole("button", { name: "Theme" }).click();
-  await page.getByRole("menuitemradio", { name: "caret light" }).click();
+  // Edit #2 (Appearance): pin Light — the whole UI retints at once, with its own toast,
+  // and the IN USE marker follows to the light slot.
+  await dialog.getByRole("radio", { name: "Light", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-  await expect(page.getByText("Theme updated")).toBeVisible();
+  await expect(page.getByText("Mode updated")).toBeVisible();
+  await expect(dialog.locator("[data-field='themeLight']").getByText("In use")).toBeVisible();
 
   // Search across categories: "daemon" matches only the Advanced pane's entry, so the
   // Appearance fields filter away and the Advanced nav row surfaces.
   const search = dialog.getByRole("textbox", { name: "Search settings" });
   await search.fill("daemon");
   await expect(dialog.locator("[data-category='Advanced']")).toBeVisible();
-  await expect(dialog.locator("[data-field='theme']")).toHaveCount(0);
+  await expect(dialog.locator("[data-field='themeLight']")).toHaveCount(0);
 
   // Clearing the query restores the full nav. Emptying the field fires a bubbling input
   // event (Playwright's fill("") doesn't drive Svelte 5's bind:value empty in this build).
@@ -496,7 +599,7 @@ test("drives the full journey: edit Appearance live, search across categories, o
     (el as HTMLInputElement).value = "";
     el.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  await expect(dialog.locator("[data-field='theme']")).toBeVisible();
+  await expect(dialog.locator("[data-field='themeLight']")).toBeVisible();
 
   // Cross into a second category: the Notifications nav row swaps the field pane for the
   // live pane, which reflects the injected grant.

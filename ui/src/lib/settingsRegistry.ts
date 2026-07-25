@@ -15,27 +15,42 @@
 // category's fields into labelled blocks within its pane (Diff view lives as a
 // section under Appearance).
 
+import {
+  changeAppearance,
+  readSlotTheme,
+  readThemeMode,
+  THEME_MODES,
+  type ThemeMode,
+  writeSlotTheme,
+  writeThemeMode,
+} from "$lib/appearance.ts";
 import { readDiffIndicators, writeDiffIndicators } from "$lib/diffIndicatorsPref.ts";
 import { readDiffStyle, writeDiffStyle } from "$lib/diffStylePref.ts";
 import type { DiffIndicators, DiffStyle } from "$lib/diffview/types.ts";
+import type { IconName } from "$lib/icons.ts";
 import { readShortcutHints, writeShortcutHints } from "$lib/shortcutHintsPref.ts";
-import { applyTheme, readThemeId, THEME_IDS, THEMES, type ThemeId } from "$lib/theme.ts";
+import { type Scheme, type ThemeId, themesForScheme } from "$lib/theme.ts";
 
-/** One choice in a select control. `swatch` is an optional row of CSS colors rendered
- * as small dots beside the label — the theme options preview their palette this way.
- * `preview` is the option's full theme token map (EXC-753): when present, highlighting
- * the option floats an abstract, tinted preview of Caret's chrome beside the menu. */
+/** One choice in a select or segmented control. `swatch` is an optional row of CSS
+ * colors rendered as small dots beside the label — the theme options preview their
+ * palette this way. `preview` is the option's full theme token map (EXC-753): when
+ * present, highlighting the option floats an abstract, tinted preview of Caret's
+ * chrome beside the menu. `icon` is a vendored glyph shown before the label, which
+ * the segmented mode control uses (sun / moon / monitor). */
 export interface SettingOption {
   value: string;
   label: string;
   swatch?: readonly string[];
   preview?: Record<string, string>;
+  icon?: IconName;
 }
 
 /** How the two-pane shell (EXC-843) renders a field's control: the kind drives
- * both the rendered control and search. */
+ * both the rendered control and search. `segmented` is the always-visible 3-up
+ * form — every option readable at a glance — for a small fixed option set. */
 export type SettingControl =
   | { kind: "select"; options: readonly SettingOption[] }
+  | { kind: "segmented"; options: readonly SettingOption[] }
   | { kind: "toggle" };
 
 interface SettingEntryBase {
@@ -107,13 +122,47 @@ export function filterSettings(
 // least these five so the preview never shows fewer colors than the option's dots
 // (ThemePreviewCard.test.ts pins that against the exported list).
 export const SWATCH_TOKENS = ["--paper", "--paper-raised", "--ink", "--accent", "--ok"] as const;
-const themeOptions = THEME_IDS.map((id) => ({
-  value: id,
-  label: THEMES[id].label,
-  swatch: SWATCH_TOKENS.map((token) => THEMES[id].tokens[token]),
-  // The full palette the hover preview (EXC-753) paints Caret's chrome from.
-  preview: THEMES[id].tokens,
+
+/** A scheme's slot options: only that scheme's palettes, so the light selector
+ * previews light palettes and the dark selector dark ones (EXC-773). */
+function slotOptions(scheme: Scheme): SettingOption[] {
+  return themesForScheme(scheme).map((theme) => ({
+    value: theme.id,
+    label: theme.label,
+    swatch: SWATCH_TOKENS.map((token) => theme.tokens[token]),
+    // The full palette the hover preview (EXC-753) paints Caret's chrome from.
+    preview: theme.tokens,
+  }));
+}
+
+/** The mode control's three fixed choices, each carrying its glyph. */
+const MODE_ICONS: Record<ThemeMode, IconName> = {
+  light: "sun",
+  dark: "moon",
+  system: "monitor",
+};
+const MODE_LABELS: Record<ThemeMode, string> = {
+  light: "Light",
+  dark: "Dark",
+  system: "System",
+};
+const modeOptions: SettingOption[] = THEME_MODES.map((mode) => ({
+  value: mode,
+  label: MODE_LABELS[mode],
+  icon: MODE_ICONS[mode],
 }));
+
+/** The Appearance section whose fields the shell renders as one composite block
+ * (ThemeSection.svelte) instead of independent rows. */
+export const THEME_SECTION = "Theme";
+
+/** That block's field keys, so the section component can find each without
+ * re-spelling a string literal the registry owns. */
+export const THEME_FIELD = {
+  mode: "themeMode",
+  light: "themeLight",
+  dark: "themeDark",
+} as const;
 
 const diffStyleOptions = [
   { value: "split", label: "Split" },
@@ -130,15 +179,50 @@ const diffIndicatorOptions = [
  * its pref module's existing localStorage key; search-only entries (contributed
  * by later panes) never apply. */
 export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
-  stagedField<ThemeId>({
-    key: "theme",
+  // The appearance trio (EXC-773). They share the THEME_SECTION label, which the
+  // shell renders as one composite block (ThemeSection.svelte) rather than three
+  // independent rows — the `IN USE` marker and the resolved-state line only make
+  // sense across all three. Each write persists then repaints as a wipe, so the
+  // change takes effect immediately. Every label/description carries the word
+  // "theme" so a `/`-search for it keeps the block together.
+  stagedField<ThemeMode>({
+    key: "themeMode",
     category: "Appearance",
-    label: "Theme",
-    description: "Color palette for the whole interface.",
-    control: { kind: "select", options: themeOptions },
-    read: readThemeId,
-    // applyTheme both persists and applies — the change takes effect immediately.
-    write: applyTheme,
+    section: THEME_SECTION,
+    label: "Mode",
+    description: "Follow the system theme, or pin light or dark.",
+    control: { kind: "segmented", options: modeOptions },
+    read: readThemeMode,
+    write: (mode) => {
+      writeThemeMode(mode);
+      changeAppearance();
+    },
+  }),
+  stagedField<ThemeId>({
+    key: "themeLight",
+    category: "Appearance",
+    section: THEME_SECTION,
+    label: "Light theme",
+    description: "Color palette used while the light scheme is showing.",
+    control: { kind: "select", options: slotOptions("light") },
+    read: () => readSlotTheme("light"),
+    write: (id) => {
+      writeSlotTheme("light", id);
+      changeAppearance();
+    },
+  }),
+  stagedField<ThemeId>({
+    key: "themeDark",
+    category: "Appearance",
+    section: THEME_SECTION,
+    label: "Dark theme",
+    description: "Color palette used while the dark scheme is showing.",
+    control: { kind: "select", options: slotOptions("dark") },
+    read: () => readSlotTheme("dark"),
+    write: (id) => {
+      writeSlotTheme("dark", id);
+      changeAppearance();
+    },
   }),
   stagedField<boolean>({
     key: "shortcutHints",

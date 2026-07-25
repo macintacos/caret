@@ -436,16 +436,14 @@ test("crossing --w-narrow forces unified then restores the split preference", as
 // --attention hue under EACH theme — the ticket's "make sure it's supported in
 // each theme".
 //
-// The key detail: this does NOT use page.emulateMedia. caret stopped following
-// prefers-color-scheme when EXC-730 made the scheme an explicit user choice (see
-// tokens.css), so emulating the media query leaves every run on caret-dark — and a
-// hardcoded violet in the component would then satisfy both runs, which is exactly
-// the regression this test exists to catch. The theme is seeded into localStorage
-// before first paint instead, the lever diff-surface.e2e.ts uses to pin its theme.
-// Because the two themes really do render, comparing the badge against a live
-// :root probe is sufficient: --attention is a different violet per theme, so a
-// literal passes at most one of the two runs, and a wrong token or a lost cascade
-// fails both.
+// The key detail: this pins the MODE in localStorage rather than emulating the OS.
+// Under caret's default `system` mode (EXC-773) the emulated media query would work,
+// but it resolves after first paint, and an assertion this precise wants the palette
+// settled before the badge is ever measured — so seed the mode instead, the lever
+// diff-surface.e2e.ts also uses. Because the two themes really do render, comparing
+// the badge against a live :root probe is sufficient: --attention is a different
+// violet per theme, so a literal passes at most one of the two runs, and a wrong
+// token or a lost cascade fails both.
 
 /** A computed `color` string → integer sRGB channels. Chrome serializes the same
  * color differently depending on the declaration it came from: `rgb(r, g, b)` with
@@ -465,7 +463,10 @@ for (const [themeId, scheme] of [
     daemon,
     page,
   }) => {
-    await page.addInitScript((t) => localStorage.setItem("caret.theme", t), themeId);
+    // Pin the mode rather than emulate the OS: this asserts a colour, so the
+    // theme must be settled before first paint and independent of any system
+    // preference the runner happens to carry.
+    await page.addInitScript((s) => localStorage.setItem("caret.theme.mode", s), scheme);
     await daemon.seedVersions(3, [V1, V2, V3]);
     await page.goto("/");
     await expect(page.locator(".diff-plan")).toBeVisible();

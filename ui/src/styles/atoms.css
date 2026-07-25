@@ -109,7 +109,7 @@ button.float-chip[aria-expanded="true"]:not(:disabled) {
 }
 /* Per-theme nudge, one facet each — the rest of the keycap (fill/border, the
    raised bottom edge, radius) stays shared from the base rule. data-theme is the
-   scheme applyTheme() stamps on <html> (lib/theme.ts). caret-dark thins the
+   scheme paintTheme() stamps on <html> (lib/theme.ts). caret-dark thins the
    border so the near-white hairline sits a touch darker on the dark paper;
    caret-light thins the fill so the key floats a touch lighter on the light
    paper. Higher specificity than the base [data-slot="kbd"], both unlayered, so

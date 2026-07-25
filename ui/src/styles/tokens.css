@@ -60,13 +60,15 @@
     0.993, 0.991, 0.994, 0.998, 1
   );
 
-  /* caret-dark palette — the default (EXC-730). These color tokens are the
-     static first-paint / no-JS fallback; the source of truth is
-     THEMES["caret-dark"] in lib/theme.ts, whose applyTheme() writes them (and
-     the caret-light set) as inline :root properties to switch palettes at
-     runtime. theme.test.ts pins this :root block equal to THEMES["caret-dark"]
-     so the two never drift. The UI no longer follows prefers-color-scheme;
-     scheme is an explicit user choice, defaulting here to caret-dark. */
+  /* caret-dark palette (EXC-730). These color tokens are the static
+     first-paint / no-JS fallback; the source of truth is THEMES["caret-dark"]
+     in lib/theme.ts, whose paintTheme() writes them (and the caret-light set)
+     as inline :root properties to switch palettes at runtime. theme.test.ts
+     pins this :root block equal to THEMES["caret-dark"] so the two never drift.
+     Which palette is live is decided by lib/appearance.ts — a light/dark/system
+     mode over one theme slot per scheme (EXC-773) — so the UI does follow
+     prefers-color-scheme again by default, but through that resolution rather
+     than a CSS media query. This block is the pre-JS floor either way. */
   --paper: #0a0a0a;
   --paper-raised: #171717;
   --paper-sunk: #131313;

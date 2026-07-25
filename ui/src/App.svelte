@@ -34,7 +34,13 @@
     coveredLineCount,
     pendingItems,
   } from "$lib/feedback.ts";
-  import { applyTheme, DEFAULT_THEME_ID, readThemeId, THEMES, type ThemeId } from "$lib/theme.ts";
+  import {
+    applyAppearance,
+    changeAppearance,
+    currentThemeId,
+    watchSystemScheme,
+  } from "$lib/appearance.ts";
+  import { THEMES, type ThemeId } from "$lib/theme.ts";
   import {
     clearKnownPrefs,
     freshResetApplied,
@@ -118,12 +124,12 @@
   let pendingReject = $state(false);
   let safeMode = $state(false);
 
-  // Theme (EXC-730). main.ts applies the saved theme before mount; this mirrors the
-  // chosen id so the derived scheme reaches the diff view and the Settings select
-  // reflects the current theme. Picking a theme in Settings applies it immediately
-  // (the registry field's applyTheme persists + applies); applySetting then resyncs
-  // themeId so the reactive reads follow.
-  let themeId = $state<ThemeId>(readThemeId());
+  // Theme (EXC-730, EXC-773). main.ts paints the saved appearance before mount;
+  // this mirrors the RESOLVED theme id — mode + the light/dark slots + the OS
+  // preference — so the derived scheme reaches the diff view. Editing any of the
+  // three appearance settings applies immediately (the registry field's write
+  // persists then wipes); applySetting resyncs themeId so the reactive reads follow.
+  let themeId = $state<ThemeId>(currentThemeId());
   const scheme = $derived(THEMES[themeId].scheme);
   let showSettings = $state(false);
   // First-run onboarding (EXC-781): opens once for a brand-new user whose
@@ -167,7 +173,7 @@
       });
       return;
     }
-    themeId = readThemeId();
+    themeId = currentThemeId();
     showShortcutHints = readShortcutHints();
     settingsRev++;
     alerts.push({ variant: "success", message: `${field.label} updated` });
@@ -257,6 +263,20 @@
     autosave.syncActive(active);
   });
 
+  // ----- OS appearance -----
+  // Follow the system light/dark flip (EXC-773). No reactive reads: runs once on
+  // mount, returns the disposer. changeAppearance re-resolves against the fresh OS
+  // preference, so under a manual mode it re-paints the same theme (a harmless
+  // no-op) and only `system` actually changes — one call, no mode branch here. It
+  // wipes like an in-app switch, so the sweep explains the change if the reviewer
+  // is watching.
+  $effect(() => {
+    return watchSystemScheme(() => {
+      changeAppearance();
+      themeId = currentThemeId();
+    });
+  });
+
   // ----- Polling -----
   // No reactive reads: runs once on mount, returns the poll's stop fn.
   $effect(() => {
@@ -273,16 +293,17 @@
         commit = h.commit;
         source = h.source;
         // Dev --fresh (EXC-781): reset the browser to a brand-new-user session —
-        // clear saved UI prefs, drop to the default theme (main.ts already applied
-        // whatever was stored before this probe resolved, so re-apply here), and
-        // re-open first-run onboarding. Once per daemon boot only (keyed on
+        // clear saved UI prefs, fall back to the default appearance (main.ts already
+        // painted whatever was stored before this probe resolved, so re-paint here —
+        // instantly, since a reset isn't a switch the user made), and re-open
+        // first-run onboarding. Once per daemon boot only (keyed on
         // instanceId): the daemon reports fresh on every /api/health for its whole
         // life, so without this guard each reload would re-clear the onboarded flag
         // and "Maybe later" would never stick.
         if (h.fresh && !freshResetApplied(h.instanceId)) {
           clearKnownPrefs();
-          applyTheme(DEFAULT_THEME_ID);
-          themeId = DEFAULT_THEME_ID;
+          applyAppearance();
+          themeId = currentThemeId();
           showShortcutHints = readShortcutHints();
           showOnboarding =
             typeof Notification !== "undefined" && shouldShowOnboarding(Notification.permission);

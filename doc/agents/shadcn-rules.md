@@ -45,7 +45,7 @@ in exactly one place — the shadcn semantic `:root` block plus the `@theme inli
 `ui/src/app.css` — mapping each shadcn var onto a caret token with `var(--caret-token)`
 (the same pattern the `.diffview` → `--diffs-*` bridge uses).
 
-- **`theme.ts`'s `THEMES` registry stays the single color source.** `applyTheme` writes
+- **`theme.ts`'s `THEMES` registry stays the single color source.** `paintTheme` writes
   caret's tokens inline on `:root`, and because the shadcn vars are `var()`-bridged to
   them, shadcn components retint on theme switch with no per-component change.
 - **No raw hex or oklch in a component.** A color belongs in a caret token, bridged to a

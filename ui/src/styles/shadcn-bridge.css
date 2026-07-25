@@ -6,7 +6,7 @@
    contract, mirroring diffview/css-bridge.test.ts.
 
    ONE flat block, no [data-theme="dark"] override: caret's color tokens are
-   written inline on :root by applyTheme() (lib/theme.ts) for the active scheme,
+   written inline on :root by paintTheme() (lib/theme.ts) for the active scheme,
    and app.css's static :root fallback (above) is caret-dark. So a var(--paper)
    here resolves to the correct scheme at runtime and to caret-dark at first
    paint — which both kills the first-paint light-on-dark flash the stub risked
