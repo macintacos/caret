@@ -1,5 +1,5 @@
 // Exercises the real rumdl-backed reflow the release pipeline uses to normalize
-// GitHub Release notes: hard-wrapped changelog paragraphs must collapse to
+// GitHub Release notes: hard-wrapped release-note paragraphs must collapse to
 // single lines (MD013.reflow with an effectively-unbounded line length). This
 // runs the actual `mise x rumdl` binary — no release is performed — so it pins
 // the config, not just the wiring the fake-driven finalize tests cover.

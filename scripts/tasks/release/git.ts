@@ -51,8 +51,8 @@ const FIELD = "\x1f"; // unit separator: safe field delimiter for `git log`
  * Split `git status --porcelain` output into lines, preserving each line's
  * two-char `XY ` status prefix. Trimming the whole blob would strip the leading
  * space off a worktree-only change (` M path`), shifting the path left so a
- * downstream `slice(3)` eats its first character — turning `CHANGELOG.md` into
- * `HANGELOG.md` and tripping a false DIRTY_TREE.
+ * downstream `slice(3)` eats its first character — turning `package.json` into
+ * `ackage.json` and tripping a false DIRTY_TREE.
  */
 export function splitPorcelain(out: string): string[] {
   return out.split("\n").filter((line) => line !== "");

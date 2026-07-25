@@ -33,7 +33,7 @@ test("porcelainStatus returns an array", async () => {
 test("splitPorcelain preserves a leading-space status prefix", () => {
   // A worktree-only modification prints " M path"; the leading space must
   // survive so a downstream slice(3) recovers the path intact.
-  expect(splitPorcelain(" M CHANGELOG.md\n")).toEqual([" M CHANGELOG.md"]);
+  expect(splitPorcelain(" M package.json\n")).toEqual([" M package.json"]);
   expect(splitPorcelain("M  staged.ts\n D gone.ts\n")).toEqual(["M  staged.ts", " D gone.ts"]);
   expect(splitPorcelain("")).toEqual([]);
   expect(splitPorcelain("\n")).toEqual([]);

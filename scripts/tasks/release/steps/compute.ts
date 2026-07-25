@@ -1,6 +1,6 @@
 // compute: the read-only version oracle. Computes the next version and the
 // commit range since the last release, mutating nothing. The /release-caret
-// skill parses its JSON to author the changelog and detect the release phase.
+// skill parses its JSON to compose the release notes and detect the phase.
 
 import {
   type CommitInfo,

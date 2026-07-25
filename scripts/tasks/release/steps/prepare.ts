@@ -1,15 +1,13 @@
-// prepare (phase 1): bump the manifests, commit with the changelog, push the
-// release branch, and open the PR. Every sub-phase is resume-aware so the whole
-// step is safe to re-run after a partial failure: it detects an existing branch,
-// an already-bumped manifest, a committed bump, an up-to-date remote, and an open
+// prepare (phase 1): bump the manifests, commit them, push the release branch,
+// and open the PR. Every sub-phase is resume-aware so the whole step is safe to
+// re-run after a partial failure: it detects an existing branch, an
+// already-bumped manifest, a committed bump, an up-to-date remote, and an open
 // PR, skipping or no-oping rather than crashing. The body below sequences the
 // sub-phases; each is a named helper so the flow reads as its phases.
 
-import { composeReleaseTitle, findSection } from "@/tasks/release/changelog.ts";
 import type { PrState } from "@/tasks/release/github.ts";
 import { editVersion, extractVersion } from "@/tasks/release/manifest.ts";
 import {
-  CHANGELOG_PATH,
   gatherContext,
   MANIFESTS,
   type PrepareResult,
@@ -22,37 +20,33 @@ import {
   assertRepoAndGh,
   GuardError,
 } from "@/tasks/release/steps/guards.ts";
-import type { BumpLevel } from "@/tasks/release/version.ts";
+import { type BumpLevel, composeReleaseTitle } from "@/tasks/release/version.ts";
 
 /** The release PR body: a "What changed" summary and a "What to test" checklist. */
 function prBody(version: string, title: string): string {
   return [
     "## What changed",
     "",
-    `Release ${title}: bumps the version to ${version} across package.json and the two .claude-plugin manifests, and moves the Unreleased changelog entries under the new section.`,
+    `Release ${title}: bumps the version to ${version} across package.json and the two .claude-plugin manifests.`,
     "",
     "## What to test",
     "",
     "- `mise run preflight` passes on the release branch.",
-    "- The three manifests and CHANGELOG.md all reflect the new version.",
+    "- All three manifests reflect the new version.",
   ].join("\n");
 }
 
-/** Read the changelog section for the version and compose the release title. */
-async function composeTitle(deps: Deps, ctx: ReleaseContext): Promise<string> {
-  // The agent authors the changelog (with the theme) before this runs.
-  if (!(await deps.fs.exists(CHANGELOG_PATH))) {
-    throw new GuardError("CHANGELOG_MISSING", "CHANGELOG.md does not exist yet.");
+/**
+ * Compose the release title from the agent-supplied theme. The theme arrives as
+ * `--title` because it is prose only the agent can write, and it titles the
+ * commit, the PR, the tag, and the GitHub Release alike.
+ */
+function composeTitle(ctx: ReleaseContext, title: string | undefined): string {
+  const themed = title?.trim() ?? "";
+  if (themed === "") {
+    throw new GuardError("TITLE_MISSING", 'Pass --title "The <Theme> Release".');
   }
-  const changelog = await deps.fs.read(CHANGELOG_PATH);
-  const section = findSection(changelog, ctx.version);
-  if (section === null) {
-    throw new GuardError(
-      "CHANGELOG_MISSING",
-      `CHANGELOG.md has no [${ctx.version}] section; author it first.`,
-    );
-  }
-  return composeReleaseTitle(ctx.version, section.heading.title);
+  return composeReleaseTitle(ctx.version, themed);
 }
 
 /** Ensure we are on the release branch, resuming onto an existing local/remote one. */
@@ -109,7 +103,7 @@ async function commitRelease(deps: Deps, title: string, apply: boolean): Promise
     return false;
   }
   if (apply) {
-    await deps.git.stage([...MANIFESTS, CHANGELOG_PATH]);
+    await deps.git.stage(MANIFESTS);
     await deps.git.commit(title);
     return true;
   }
@@ -195,18 +189,18 @@ async function ensurePr(
   return { prNumber: null, prUrl: null };
 }
 
-/** Phase 1: bump manifests, commit with the changelog, push the branch, open a PR. */
+/** Phase 1: bump the manifests, commit them, push the branch, open a PR. */
 export async function prepare(
   deps: Deps,
-  opts: { bump: BumpLevel; dryRun: boolean },
+  opts: { bump: BumpLevel; dryRun: boolean; title?: string },
 ): Promise<PrepareResult> {
   const apply = !opts.dryRun;
   const { repoSlug, defaultBranch } = await assertRepoAndGh(deps);
   await assertBranch(deps, defaultBranch, { allowPrefixes: ["release/"] });
-  await assertCleanTree(deps, [...MANIFESTS, CHANGELOG_PATH]);
+  await assertCleanTree(deps, MANIFESTS);
   const ctx = await gatherContext(deps, opts.bump, repoSlug, defaultBranch);
 
-  const title = await composeTitle(deps, ctx);
+  const title = composeTitle(ctx, opts.title);
   await resolveReleaseBranch(deps, ctx, apply);
   await bumpManifests(deps, ctx, apply);
   // No preflight gate here: release deliberately does not run `mise run preflight`

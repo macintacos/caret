@@ -1,6 +1,7 @@
-// Version arithmetic for the release pipeline. The release script is the sole
-// source of the version number — the agent never computes or alters it — so all
-// semver math lives here and nowhere else.
+// Version arithmetic for the release pipeline, plus the release-asset names
+// derived from a version (the tag and the Release title). The release script is
+// the sole source of the version number — the agent never computes or alters it
+// — so all semver math lives here and nowhere else.
 
 import semver from "semver";
 
@@ -29,6 +30,20 @@ export function nextVersion(current: string, bump: BumpLevel): string {
 /** The git tag name for a version, e.g. "0.1.0" -> "v0.1.0". */
 export function tagName(version: string): string {
   return `v${version}`;
+}
+
+/**
+ * Whether `version` is strictly newer than `other` by semver order. `finalize`
+ * uses it to prove trunk's manifests moved past the latest release tag — a plain
+ * string compare would rank 0.10.0 below 0.9.0.
+ */
+export function isNewer(version: string, other: string): boolean {
+  return semver.gt(version, other);
+}
+
+/** The release asset title: `vX.Y.Z - <Theme>` (or bare `vX.Y.Z` when untitled). */
+export function composeReleaseTitle(version: string, title: string | null): string {
+  return title ? `v${version} - ${title}` : `v${version}`;
 }
 
 /** The version body of a `vX.Y.Z` tag. Throws if the tag is not `v` + semver. */

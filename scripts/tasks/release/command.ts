@@ -137,10 +137,13 @@ export function buildReleaseCommand(deps: Deps = realDeps()): Command {
     .argument("<bump>", "patch | minor | major")
     .option("--dry-run", "preview without mutating")
     .option("--yes", "confirm the mutation")
+    .option("--title <text>", 'the themed release name, e.g. "The Foundations Release"')
     .action(async (bump, opts) => {
       const level = requireBump(bump);
       requireGo("prepare", opts);
-      await emitStep(() => prepare(deps, { bump: level, dryRun: opts.dryRun ?? false }));
+      await emitStep(() =>
+        prepare(deps, { bump: level, dryRun: opts.dryRun ?? false, title: opts.title }),
+      );
     });
 
   program
@@ -148,13 +151,17 @@ export function buildReleaseCommand(deps: Deps = realDeps()): Command {
     .description("phase 2: tag merged trunk and publish the GitHub Release")
     .option("--dry-run", "preview without mutating")
     .option("--yes", "confirm the mutation")
-    .option(
-      "--summary <text>",
-      "human summary prepended above the changelog notes on the GitHub Release",
-    )
+    .option("--title <text>", 'the themed release name, e.g. "The Foundations Release"')
+    .option("--notes-file <path>", "markdown file holding the GitHub Release body")
     .action(async (opts) => {
       requireGo("finalize", opts);
-      await emitStep(() => finalize(deps, { dryRun: opts.dryRun ?? false, summary: opts.summary }));
+      await emitStep(() =>
+        finalize(deps, {
+          dryRun: opts.dryRun ?? false,
+          title: opts.title,
+          notesFile: opts.notesFile,
+        }),
+      );
     });
 
   return program;

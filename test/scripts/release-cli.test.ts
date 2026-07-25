@@ -145,6 +145,32 @@ describe("release group error discipline (in-process, injected deps)", () => {
     expect(stderr).toBe("");
   });
 
+  test("finalize's --title and --notes-file reach the step and shape the release", async () => {
+    // Commander camelCases --notes-file to opts.notesFile; a slip there reads as
+    // "no notes" and publishes a silently empty Release body, discovered only after
+    // the tag is pushed. --title fails loudly by contrast, so only this asserts it.
+    const NOTES_FILE = "/tmp/caret-release-notes.md";
+    const { deps, releases } = makeReleaseHarness({
+      refs: { "origin/trunk": "mergedsha" },
+      files: { [NOTES_FILE]: "Ships the widget.\n" },
+      filesAtRef: {
+        "origin/trunk:package.json": '{ "version": "0.1.0" }',
+        "origin/trunk:.claude-plugin/plugin.json": '{ "version": "0.1.0" }',
+        "origin/trunk:.claude-plugin/marketplace.json": '{ "version": "0.1.0" }',
+      },
+    });
+    const { threw } = await runReleaseInProcess(deps, [
+      "finalize",
+      "--yes",
+      "--title",
+      "The Foundations Release",
+      "--notes-file",
+      NOTES_FILE,
+    ]);
+    expect(threw).toBeUndefined();
+    expect(releases.get("v0.1.0")?.notes).toContain("Ships the widget.");
+  });
+
   test("an unexpected step error becomes an INTERNAL JSON error on stdout, stack to stderr", async () => {
     const { deps } = makeReleaseHarness();
     // A non-GuardError thrown mid-step: exercised via a collaborator compute calls.

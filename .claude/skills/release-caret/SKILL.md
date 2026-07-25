@@ -1,6 +1,6 @@
 ---
 name: release-caret
-description: Cut a caret release. Computes the next version with the deterministic release script, confirms it once, authors the keepachangelog CHANGELOG entry under a themed release name, then drives the flow end-to-end — phase 1 opens a PR with the version bump + changelog, merges it, then phase 2 tags trunk, publishes the GitHub Release, and publishes the plugin to npm. Triggers on "/release-caret", "release caret", "cut a caret release", "ship a caret version".
+description: Cut a caret release. Computes the next version with the deterministic release script, confirms it once, composes the GitHub Release notes under a themed release name, then drives the flow end-to-end — phase 1 opens a PR with the version bump, merges it, then phase 2 tags trunk, publishes the GitHub Release, and publishes the plugin to npm. Triggers on "/release-caret", "release caret", "cut a caret release", "ship a caret version".
 argument-hint: "[patch|minor|major] [dry run]"
 ---
 
@@ -10,11 +10,12 @@ Cut a caret release by orchestrating the release subcommand group of the caret t
 (`bun scripts/tasks/cli.ts release <subcommand>`). The script owns every judgment-free
 step — version math, version-file edits, the commit range, all `git`/`gh` operations — and
 is the **sole source of the version number**. Your only jobs are: (1) confirm the version
-the script computes — the single gate — (2) author the `CHANGELOG.md` prose, and (3)
-orchestrate the full flow end-to-end: open the release PR, merge it, then finalize (tag,
-GitHub Release, npm). Once the version is confirmed, everything after it runs without
-further prompts. **Never invent, compute, or alter the version yourself** — always take it
-from the script's JSON.
+the script computes — the single gate — (2) compose the themed release name and the
+release-notes body, and (3) orchestrate the full flow end-to-end: open the release PR,
+merge it, then finalize (tag, GitHub Release, npm). Once the version is confirmed,
+everything after it runs without further prompts.
+**Never invent, compute, or alter the version yourself** — always take it from the
+script's JSON.
 
 The script is invoked directly so its stdout is pure JSON:
 
@@ -82,13 +83,15 @@ follows:
   separate `AskUserQuestion` for the version — present the script-computed version
   (verbatim from `compute`'s JSON) inside the plan, and let plan approval stand in for
   that gate.
-- **The changelog goes in the plan, not on disk yet.** Plan mode can't write
-  `CHANGELOG.md`, so put the full proposed changelog (heading + entries) in the plan for
-  review. Author it to disk for real **after** exiting plan mode, before `prepare`.
+- **The release notes go in the plan, not on disk yet.** Plan mode can't write files, so
+  put the full proposed notes (summary paragraph + category sections) in the plan for
+  review. Write them for real **after** exiting plan mode, to a temp file outside the
+  repo, before `prepare`.
 - **Plan approval IS authorization for the whole release.** There is no separate
-  remote-mutation gate. Once you've exited plan mode and written the changelog to disk,
-  proceed straight through `prepare` → merge the PR → `finalize`, passing `--yes` to the
-  mutating calls — no further prompt. (Stop only on a script or `gh` error.)
+  remote-mutation gate. Once you've exited plan mode and written the notes to their temp
+  file, proceed straight through `prepare` → merge the PR → `finalize`, handing the
+  scripts the themed title and that file as flags and passing `--yes` to the mutating
+  calls — no further prompt. (Stop only on a script or `gh` error.)
 
 ---
 
@@ -111,10 +114,9 @@ On confirmation, run `bun scripts/tasks/cli.ts release baseline --yes` (or `--dr
 a dry run), then re-run `compute <bump>`.
 
 Otherwise you already have the successful `compute` result from phase detection. From it,
-keep: `currentVersion`, `version`, `tag`, `date`, `commits[]`, `compareUrl`,
-`unreleasedCompareUrl`, `manifests`. (`date` stamps the changelog heading; `manifests`
-lists the version-bearing files the script mutates, so you never have to grep `steps.ts`
-for them.)
+keep: `currentVersion`, `version`, `tag`, `commits[]`, `manifests`. (`commits[]` is the
+raw material for the release notes; `manifests` lists the version-bearing files the script
+mutates, so you never have to grep `steps.ts` for them.)
 
 ### 2. Confirm the version — the single gate
 
@@ -133,47 +135,58 @@ confirmation. Show the concrete numbers — never paraphrase them:
 Use the version verbatim from the JSON. If the user cancels, stop. After this point the
 skill does not prompt again unless a step errors.
 
-### 3. Author the changelog
+### 3. Compose the release notes
 
 Pick an evocative **theme** for the release by reading `commits[]` — the descriptor that
 captures what this release is really about (e.g. "Foundations", "Plan Review", "Polish").
 The descriptor can be any number of words and is allowed to be clever, but it **must** be
 Title Case and always sandwiched between "The" and "Release" (`The <Descriptor> Release`).
-Then author `CHANGELOG.md` in
-[Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) format.
+That exact string is what you hand `prepare` and `finalize` as `--title`.
 
-The section heading **must** be exactly this shape so the script can parse the themed
-title back out for the commit, PR, and GitHub Release:
+The notes body leads with a **one- or two-sentence release summary**: a plain-language
+digest of what this release delivers, not a re-listing of the category sections under it.
 
-```text
-## [<version>] - <YYYY-MM-DD> - The <Theme> Release
-```
+Write it tight and direct, the way the category entries under it read. Lead with
+`caret <version>` and a plain verb for what the release does — *adds*, *ships*, *fixes* —
+then name the headline changes concretely, by what they are and what they now do. If a
+second batch of changes is worth calling out, attach it as a second sentence stated just
+as plainly (`It also …: a, b, c`); where a change's point isn't self-evident, pin it with
+an em-dash or a `so` clause. Keep the register even and professional — the summary reports
+what shipped, so it needs no launch framing to sell it. The release *theme* belongs in the
+title; keep it — and any metaphor or filler clause written only to sound like an
+announcement — out of the summary prose.
 
-- If `CHANGELOG.md` does not exist, create it with the standard header (title, intro line
-  linking Keep a Changelog and semver, and an `## [Unreleased]` section).
-- Move the `[Unreleased]` entries under the new
-  `## [<version>] - <DATE> - The <Theme> Release` heading, stamping `<DATE>` from
-  `compute`'s `date` field verbatim. It is already UTC `YYYY-MM-DD` in the heading's
-  required shape — never hand-pick, paraphrase, or recompute it.
-- Group the work under the standard categories (`Added`, `Changed`, `Deprecated`,
-  `Removed`, `Fixed`, `Security`) — write human-readable entries derived from `commits[]`,
-  not raw commit subjects.
-- Reseed a fresh, empty `## [Unreleased]` above the new section.
-- Maintain the link-reference footers at the bottom, using the URLs from the script:
-  - `[Unreleased]: <unreleasedCompareUrl>`
-  - `[<version>]: <compareUrl>`
+Given what shipped in v0.5.0, this reads in the right register:
 
-Author this **before** the next step — `prepare` aborts with `CHANGELOG_MISSING` if the
-`[<version>]` section is absent.
+> caret 0.5.0 adds first-run onboarding, a notification bell that flags a waiting plan and
+> clears once you open it, and a confirmation step before you approve. It also polishes
+> the review surface: steadier hover previews, a refined inline comment card, warmer
+> light-theme greys, and room to scroll past the end of a plan.
+
+The wordier alternative — opening on a metaphor ("rolls out the welcome mat") and closing
+on a frame that carries no information ("a round of polish … rounds it out") — is what to
+avoid.
+
+Under the summary, group the work into the standard keep-a-changelog categories (`Added`,
+`Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`) as `###` sections — write
+human-readable entries derived from `commits[]`, not raw commit subjects.
+
+Write the whole body — summary paragraph on top, then the category sections — to one
+markdown file **outside the repo**, e.g. `/tmp/caret-release-notes-<version>.md`.
+`finalize` guards on a clean working tree with no allowlist, so an untracked notes file
+inside the repo would trip `DIRTY_TREE` and abort the release. Phase 2 step 2 hands that
+path to `finalize` through `--notes-file`.
 
 ### 4. Run prepare
 
-The version gate (step 2) already authorized this — no separate confirmation. With the
-changelog on disk, run:
+The version gate (step 2) already authorized this — no separate confirmation. Pass the
+themed name from step 3 as `--title`; without it `prepare` aborts with `TITLE_MISSING`.
+The script composes `v<version> - The <Theme> Release` from it and uses that for the
+commit message, the PR title, the tag message, and the GitHub Release title.
 
 ```sh
-bun scripts/tasks/cli.ts release prepare <bump> --yes      # real
-bun scripts/tasks/cli.ts release prepare <bump> --dry-run  # dry run (no --yes)
+bun scripts/tasks/cli.ts release prepare <bump> --title "The <Theme> Release" --yes      # real
+bun scripts/tasks/cli.ts release prepare <bump> --title "The <Theme> Release" --dry-run  # dry run (no --yes)
 ```
 
 Parse the result and keep `prNumber` and `prUrl`. Report the `prUrl`, then continue to
@@ -205,10 +218,12 @@ On a real merge failure (merge conflict, branch protection, not mergeable, auth)
 need to switch back to trunk first. The publish-safety gates are a clean working tree and
 the `NOT_MERGED` check that the bump is actually on trunk, not the working branch.
 
-The GitHub Release notes are this version's changelog section, reflowed with `rumdl` to
-single-line paragraphs (the on-disk changelog is hard-wrapped, which renders as awkward
-mid-sentence breaks on GitHub). Pass `--summary` (step 2) to prepend a short human digest
-above that changelog content.
+The GitHub Release body is the notes file you composed in Phase 1 step 3, passed through
+`--notes-file` (step 2) and reflowed with `rumdl` to single-line paragraphs (the source is
+hard-wrapped, which renders as awkward mid-sentence breaks on GitHub), under the themed
+title passed through `--title`. A re-run **without** `--notes-file` leaves an existing
+Release's notes untouched; a re-run with the same file regenerates a byte-identical body,
+so nothing ever doubles.
 
 After tagging and creating the GitHub Release, `finalize` builds the run-from-source
 bundle and **publishes the plugin to npm** (`@macintacos/caret`), because the
@@ -223,52 +238,28 @@ only the publish.
 ### 1. Preview the finalize
 
 ```sh
-bun scripts/tasks/cli.ts release finalize --dry-run
+bun scripts/tasks/cli.ts release finalize --dry-run --title "The <Theme> Release" --notes-file <path>
 ```
 
 This fetches `origin/trunk` and returns the concrete `version`, `tag`, `title`, and
 `taggedSha` (trunk's merged HEAD), and previews the npm publish, without mutating
-anything. It confirms the squash-merge from Phase 1 step 5 actually landed: `ok: true`
-means proceed. If it returns `ok: false` with `NOT_MERGED`, the merge didn't reach
-`origin/trunk` (the `gh pr merge` failed or is still settling) — surface that and work
-with the operator before continuing; do not run `finalize --yes`.
+anything. Pass the **same** flags you will pass for real: `--title` so the previewed
+`title` is the themed one rather than the bare `v<version>` fallback, and `--notes-file`
+so a mistyped path fails here as `NOTES_MISSING` instead of on the real run. It confirms
+the squash-merge from Phase 1 step 5 actually landed: `ok: true` means proceed. If it
+returns `ok: false` with `NOT_MERGED`, the merge didn't reach `origin/trunk` (the
+`gh pr merge` failed or is still settling) — surface that and work with the operator
+before continuing; do not run `finalize --yes`.
 
 ### 2. Run finalize
 
 The version gate (Phase 1 step 2) already authorized this — no separate confirmation.
-
-First author a **one- or two-sentence release summary**: a plain-language digest of what
-this release delivers, drawn from the changelog you wrote in Phase 1 (not a re-listing of
-the categories — the changelog already carries that detail). `finalize` prepends it above
-the changelog notes and reflows the whole body, so the GitHub Release opens with a
-readable summary. Pass it verbatim through `--summary`.
-
-Write it tight and direct, the way the changelog entries themselves read. Lead with
-`caret <version>` and a plain verb for what the release does — *adds*, *ships*, *fixes* —
-then name the headline changes concretely, by what they are and what they now do. If a
-second batch of changes is worth calling out, attach it as a second sentence stated just
-as plainly (`It also …: a, b, c`); where a change's point isn't self-evident, pin it with
-an em-dash or a `so` clause. Keep the register even and professional — the summary reports
-what shipped, so it needs no launch framing to sell it. The release *theme* belongs in the
-title; keep it — and any metaphor or filler clause written only to sound like an
-announcement — out of the summary prose.
-
-Given the v0.5.0 changelog, this reads in the right register:
-
-> caret 0.5.0 adds first-run onboarding, a notification bell that flags a waiting plan and
-> clears once you open it, and a confirmation step before you approve. It also polishes
-> the review surface: steadier hover previews, a refined inline comment card, warmer
-> light-theme greys, and room to scroll past the end of a plan.
-
-The wordier alternative — opening on a metaphor ("rolls out the welcome mat") and closing
-on a frame that carries no information ("a round of polish … rounds it out") — is what to
-avoid.
-
-Provided the dry-run probe returned `ok: true`, run:
+Provided the dry-run probe returned `ok: true`, run it with the same `--title` you gave
+`prepare` and the notes file from Phase 1 step 3:
 
 ```sh
-bun scripts/tasks/cli.ts release finalize --yes --summary "<one- or two-sentence summary>"   # real
-bun scripts/tasks/cli.ts release finalize --dry-run --summary "<summary>"                     # dry run
+bun scripts/tasks/cli.ts release finalize --yes --title "The <Theme> Release" --notes-file <path>      # real
+bun scripts/tasks/cli.ts release finalize --dry-run --title "The <Theme> Release" --notes-file <path>  # dry run
 ```
 
 Parse the result and report the `releaseUrl` and whether `npmPublished` is true. The
@@ -286,9 +277,8 @@ git switch trunk && git pull --ff-only
 - The script computes and owns the version; you only confirm it. If a script call fails,
   stop and surface its `message` — do not retry with a hand-edited version or work around
   the guard.
-- Author the changelog heading in the exact
-  `## [<version>] - <DATE> - The <Theme> Release` shape, or `prepare`/`finalize` cannot
-  recover the themed title.
+- Pass the **same** `--title` string (`The <Theme> Release`) to both `prepare` and
+  `finalize`, so the commit, PR, tag, and GitHub Release all carry one title.
 - One confirmation gates a real release — the version (Phase 1 step 2). Accepting it
   authorizes the entire remainder: `prepare --yes`, merging the PR
   (`gh pr merge --squash`), and `finalize --yes`, with no further prompts. A dry run skips
