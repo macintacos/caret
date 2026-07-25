@@ -71,8 +71,3 @@ export function findTopReleasedVersion(changelog: string): string | null {
   }
   return null;
 }
-
-/** The release asset title: `vX.Y.Z - <Theme>` (or bare `vX.Y.Z` when untitled). */
-export function composeReleaseTitle(version: string, title: string | null): string {
-  return title ? `v${version} - ${title}` : `v${version}`;
-}

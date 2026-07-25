@@ -20,6 +20,7 @@ export type ErrorCode =
   | "NO_GH"
   | "BAD_BUMP"
   | "TITLE_MISSING"
+  | "NOTES_MISSING"
   | "BRANCH_DIVERGED"
   | "PR_CLOSED"
   | "ALREADY_MERGED"

@@ -9,7 +9,6 @@ import type { ErrorCode } from "@/tasks/release/contract.ts";
 import { baseline, compute, finalize, GuardError, prepare } from "@/tasks/release/steps.ts";
 
 import {
-  CHANGELOG,
   type HarnessOptions,
   makeReleaseHarness,
   market,
@@ -310,15 +309,27 @@ test("prepare rejects PR_CLOSED when the release PR was closed unmerged", async 
 
 // --- finalize --------------------------------------------------------------
 
+// Trunk's three manifests at 0.1.0, ahead of the harness's default v0.0.1 tag —
+// i.e. the bump PR merged. That gap is the whole merged-check now that there is no
+// changelog on trunk to cross-check against.
 const FINALIZE_OPTS: HarnessOptions = {
   refs: { "origin/trunk": "mergedsha" },
   filesAtRef: {
-    "origin/trunk:CHANGELOG.md": CHANGELOG,
     "origin/trunk:package.json": pkg("0.1.0"),
     "origin/trunk:.claude-plugin/plugin.json": pkg("0.1.0"),
     "origin/trunk:.claude-plugin/marketplace.json": market("0.1.0"),
   },
 };
+
+/** Where the agent parks the composed release body; read through `deps.fs`. */
+const NOTES_FILE = "/tmp/caret-release-notes.md";
+const NOTES = "Ships the widget.\n\n### Added\n\n- A thing.\n";
+
+/** FINALIZE_OPTS plus the notes file staged in the fake working tree. */
+const withNotes = (opts: HarnessOptions = FINALIZE_OPTS): HarnessOptions => ({
+  ...opts,
+  files: { [NOTES_FILE]: NOTES },
+});
 
 test("finalize tags trunk's merged HEAD, creates the release, and publishes to npm", async () => {
   const { deps, calls } = makeReleaseHarness(FINALIZE_OPTS);
@@ -382,17 +393,30 @@ test("finalize still publishes to npm when the GitHub release already exists (re
   expect(r.npmPublished).toBe(true);
 });
 
-test("finalize rejects NOT_MERGED when trunk manifests lag the changelog", async () => {
+test("finalize rejects NOT_MERGED when trunk manifests are not ahead of the latest tag", async () => {
+  // Trunk still sits at v0.0.1's version, so the bump PR has not landed.
   const { deps } = makeReleaseHarness({
     refs: { "origin/trunk": "mergedsha" },
     filesAtRef: {
-      "origin/trunk:CHANGELOG.md": CHANGELOG,
       "origin/trunk:package.json": pkg("0.0.1"),
       "origin/trunk:.claude-plugin/plugin.json": pkg("0.0.1"),
       "origin/trunk:.claude-plugin/marketplace.json": market("0.0.1"),
     },
   });
   await expectGuard(finalize(deps, { dryRun: false }), "NOT_MERGED");
+});
+
+test("finalize rejects NOT_MERGED when a manifest is missing on trunk", async () => {
+  const { deps } = makeReleaseHarness({
+    refs: { "origin/trunk": "mergedsha" },
+    filesAtRef: { "origin/trunk:package.json": pkg("0.1.0") },
+  });
+  await expectGuard(finalize(deps, { dryRun: false }), "NOT_MERGED");
+});
+
+test("finalize rejects NO_BASELINE when the repo has no release tag to compare against", async () => {
+  const { deps } = makeReleaseHarness({ ...FINALIZE_OPTS, latestTag: null });
+  await expectGuard(finalize(deps, { dryRun: false }), "NO_BASELINE");
 });
 
 test("finalize resumes a created-but-unpushed local tag without a false TAG_EXISTS", async () => {
@@ -439,53 +463,77 @@ test("finalize reuses an existing GitHub release", async () => {
   expect(r.releaseUrl).toBe("https://github.com/macintacos/caret/releases/tag/v0.1.0");
 });
 
-// --- finalize: summary + reflow ---------------------------------------------
+// --- finalize: title ---------------------------------------------------------
 
-test("finalize prepends the --summary above the reflowed changelog notes", async () => {
-  const { deps, calls, releases } = makeReleaseHarness(FINALIZE_OPTS);
-  await finalize(deps, { dryRun: false, summary: "Ships the widget." });
+test("finalize titles the tag and release from --title", async () => {
+  const { deps, calls } = makeReleaseHarness(FINALIZE_OPTS);
+  const r = await finalize(deps, { dryRun: false, title: THEME });
+  expect(r.title).toBe("v0.1.0 - The Foundations Release");
+  expect(calls).toContain("createTag:v0.1.0@mergedsha");
+});
+
+test("finalize falls back to a bare vX.Y.Z title when --title is absent", async () => {
+  const { deps } = makeReleaseHarness(FINALIZE_OPTS);
+  const r = await finalize(deps, { dryRun: false });
+  expect(r.title).toBe("v0.1.0");
+});
+
+// --- finalize: notes + reflow ------------------------------------------------
+
+test("finalize publishes the --notes-file body, reflowed", async () => {
+  const { deps, calls, releases } = makeReleaseHarness(withNotes());
+  await finalize(deps, { dryRun: false, notesFile: NOTES_FILE });
   expect(calls).toContain("releaseCreate:v0.1.0");
   expect(calls).toContain("reflow"); // the body went through rumdl
   const notes = releases.get("v0.1.0")?.notes ?? "";
-  expect(notes).toContain("Ships the widget."); // summary at the top
-  expect(notes).toContain("- A thing."); // changelog-scraped content remains
+  expect(notes).toContain("Ships the widget."); // the human summary leads
+  expect(notes).toContain("- A thing."); // the grouped entries follow
   expect(notes.indexOf("Ships the widget.")).toBeLessThan(notes.indexOf("- A thing."));
 });
 
-test("finalize reflows the changelog notes even without a summary", async () => {
+test("finalize rejects NOTES_MISSING when --notes-file points at nothing", async () => {
+  const { deps } = makeReleaseHarness(FINALIZE_OPTS);
+  await expectGuard(
+    finalize(deps, { dryRun: false, notesFile: "/tmp/does-not-exist.md" }),
+    "NOTES_MISSING",
+  );
+});
+
+test("finalize creates a release with empty notes when no notes file is given", async () => {
   const { deps, calls, releases } = makeReleaseHarness(FINALIZE_OPTS);
   await finalize(deps, { dryRun: false });
-  expect(calls).toContain("reflow");
-  const notes = releases.get("v0.1.0")?.notes ?? "";
-  expect(notes).toContain("- A thing.");
-  expect(notes).not.toContain("Ships"); // no summary was supplied
+  expect(calls).toContain("releaseCreate:v0.1.0");
+  expect(calls).not.toContain("reflow"); // blank in, blank out — no rumdl spawn
+  expect(releases.get("v0.1.0")?.notes).toBe("");
 });
 
-test("finalize with a summary refreshes the notes of a reused release", async () => {
-  const { deps, calls, releases } = makeReleaseHarness({
-    ...FINALIZE_OPTS,
-    tags: ["v0.0.1", "v0.1.0"],
-    remoteTags: ["v0.0.1", "v0.1.0"],
-    releases: { "v0.1.0": { url: "https://github.com/macintacos/caret/releases/tag/v0.1.0" } },
-  });
-  await finalize(deps, { dryRun: false, summary: "Resumed and summarized." });
+test("finalize with a notes file refreshes the notes of a reused release", async () => {
+  const { deps, calls, releases } = makeReleaseHarness(
+    withNotes({
+      ...FINALIZE_OPTS,
+      tags: ["v0.0.1", "v0.1.0"],
+      remoteTags: ["v0.0.1", "v0.1.0"],
+      releases: { "v0.1.0": { url: "https://github.com/macintacos/caret/releases/tag/v0.1.0" } },
+    }),
+  );
+  await finalize(deps, { dryRun: false, notesFile: NOTES_FILE });
   expect(calls).not.toContain("releaseCreate:v0.1.0"); // reused, not recreated
   expect(calls).toContain("releaseEdit:v0.1.0"); // notes refreshed in place
-  expect(releases.get("v0.1.0")?.notes).toContain("Resumed and summarized.");
+  expect(releases.get("v0.1.0")?.notes).toContain("Ships the widget.");
 });
 
-test("finalize dry-run with a summary edits nothing", async () => {
-  const { deps, calls } = makeReleaseHarness(FINALIZE_OPTS);
-  await finalize(deps, { dryRun: true, summary: "Would-be summary." });
+test("finalize dry-run with a notes file edits nothing", async () => {
+  const { deps, calls } = makeReleaseHarness(withNotes());
+  await finalize(deps, { dryRun: true, notesFile: NOTES_FILE });
   expect(calls).not.toContain("releaseCreate:v0.1.0");
   expect(calls).not.toContain("releaseEdit:v0.1.0");
   expect(calls).not.toContain("reflow");
 });
 
-test("finalize without a summary leaves a reused release's notes untouched", async () => {
-  // The no-clobber invariant: a summary-less resume must never rewrite the notes,
-  // so a summary a prior run published survives. Dropping the summary guard in
-  // finalize would fail this (reuse would releaseEdit with the bare changelog).
+test("finalize without a notes file leaves a reused release's notes untouched", async () => {
+  // The no-clobber invariant: a notes-less resume must never rewrite the body, so
+  // the notes a prior run published survive. Dropping the notes guard in finalize
+  // would fail this (reuse would releaseEdit with an empty body).
   const { deps, calls, releases } = makeReleaseHarness({
     ...FINALIZE_OPTS,
     tags: ["v0.0.1", "v0.1.0"],
@@ -493,11 +541,11 @@ test("finalize without a summary leaves a reused release's notes untouched", asy
     releases: {
       "v0.1.0": {
         url: "https://github.com/macintacos/caret/releases/tag/v0.1.0",
-        notes: "Prior summary the operator published.",
+        notes: "Prior notes the operator published.",
       },
     },
   });
-  await finalize(deps, { dryRun: false }); // no summary
+  await finalize(deps, { dryRun: false }); // no notes file
   expect(calls).not.toContain("releaseEdit:v0.1.0");
-  expect(releases.get("v0.1.0")?.notes).toBe("Prior summary the operator published.");
+  expect(releases.get("v0.1.0")?.notes).toBe("Prior notes the operator published.");
 });

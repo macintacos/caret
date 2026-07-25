@@ -1,11 +1,6 @@
 import { expect, test } from "bun:test";
 
-import {
-  composeReleaseTitle,
-  findSection,
-  findTopReleasedVersion,
-  parseHeading,
-} from "@/tasks/release/changelog.ts";
+import { findSection, findTopReleasedVersion, parseHeading } from "@/tasks/release/changelog.ts";
 
 const CHANGELOG = `# Changelog
 
@@ -86,11 +81,4 @@ test("findSection returns null for an absent version", () => {
 
 test("findTopReleasedVersion returns the first released version below Unreleased", () => {
   expect(findTopReleasedVersion(CHANGELOG)).toBe("0.1.0");
-});
-
-test("composeReleaseTitle builds the themed asset title", () => {
-  expect(composeReleaseTitle("0.1.0", "The Foundations Release")).toBe(
-    "v0.1.0 - The Foundations Release",
-  );
-  expect(composeReleaseTitle("0.1.0", null)).toBe("v0.1.0");
 });
