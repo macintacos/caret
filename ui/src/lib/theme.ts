@@ -1,10 +1,14 @@
 // The color-palette registry and the single source of truth for every color the
 // UI paints (EXC-730). Each theme is a plain object of CSS-custom-property values;
-// `applyTheme` writes them as inline properties on the document root, where they
+// `paintTheme` writes them as inline properties on the document root, where they
 // override app.css's :root defaults (inline style wins over a stylesheet rule), so
 // the whole chrome — plus everything that reads `var(--token)`: dialogs, the
 // .diffview bridge — retints in realtime with no per-component change. Defining a
 // new palette is one more entry in THEMES.
+//
+// This module owns PALETTES only. Which palette is live — the light/dark/system
+// mode and the two per-scheme theme slots — is selection policy, and lives in
+// appearance.ts (EXC-773); paintTheme is the painting half it calls.
 //
 // app.css's :root holds the caret-dark values too, as the static first-paint /
 // no-JS fallback; theme.test.ts pins THEMES["caret-dark"] equal to that :root
@@ -12,12 +16,14 @@
 // for caret-theme.ts). The shiki highlighter derives its palettes from THEMES
 // here (see caret-theme.ts), so there is one place colors live.
 //
-// This module touches `document`/`localStorage` only inside function bodies, never
-// at module load, so caret-theme.ts can import THEMES under bun-test without a DOM.
-
-import { definePref } from "$lib/definePref.ts";
+// This module touches `document` only inside function bodies, never at module
+// load, so caret-theme.ts can import THEMES under bun-test without a DOM.
 
 export type ThemeId = "caret-dark" | "caret-light";
+
+/** A native color scheme. Every theme declares one, and it is what
+ * `color-scheme` / `data-theme` carry and what a theme slot is keyed by. */
+export type Scheme = "dark" | "light";
 
 /** Every color custom property app.css declares in :root — the exhaustive set a
  * palette must supply. Typing `tokens` against this union makes a missing or
@@ -48,8 +54,9 @@ export interface Theme {
   id: ThemeId;
   /** Human label shown in the Settings dropdown. */
   label: string;
-  /** Native color scheme; drives `color-scheme` and the diff view's themeType. */
-  scheme: "dark" | "light";
+  /** Native color scheme; drives `color-scheme` and the diff view's themeType,
+   * and decides which appearance slot the theme is selectable in. */
+  scheme: Scheme;
   /** CSS custom property → value, covering every color token app.css declares. */
   tokens: Record<ColorToken, string>;
 }
@@ -110,25 +117,22 @@ export const THEMES: Record<ThemeId, Theme> = {
   "caret-light": { id: "caret-light", label: "caret light", scheme: "light", tokens: lightTokens },
 };
 
-/** Selectable ids in display order — caret-dark (the default) first. Drives both
- * the persisted-preference allow-list and the Settings dropdown. */
+/** Selectable ids in display order — caret-dark first. Drives the per-slot
+ * preference allow-lists and the Settings dropdowns. */
 export const THEME_IDS = Object.keys(THEMES) as ThemeId[];
 
-/** localStorage key holding the remembered theme. Browser-origin-scoped, so it
- * survives daemon restarts (EXC-730 requirement) with no daemon-side state. */
-export const THEME_KEY = "caret.theme";
+/** The themes selectable for one scheme's slot, in THEME_IDS order. A light slot
+ * offers only light palettes (and vice versa), so the live theme can never
+ * contradict the resolved scheme. Every scheme has at least one, which
+ * theme.test.ts pins — a slot with no options would render an empty picker. */
+export function themesForScheme(scheme: Scheme): Theme[] {
+  return THEME_IDS.map((id) => THEMES[id]).filter((theme) => theme.scheme === scheme);
+}
 
-export const DEFAULT_THEME_ID: ThemeId = "caret-dark";
-
-const pref = definePref<ThemeId>(THEME_KEY, THEME_IDS, DEFAULT_THEME_ID);
-
-/** Read the remembered theme id, defaulting to caret-dark on a missing,
- * unrecognized, or unreadable value. */
-export const readThemeId = pref.read;
-
-/** Apply a theme to the document root — inline custom properties + color-scheme +
- * data-theme — and persist the choice. Returns the applied theme. */
-export function applyTheme(id: ThemeId): Theme {
+/** Paint a theme onto the document root — inline custom properties +
+ * color-scheme + data-theme. Painting only: what to paint is decided (and
+ * persisted) by appearance.ts. Returns the painted theme. */
+export function paintTheme(id: ThemeId): Theme {
   const theme = THEMES[id];
   const root = document.documentElement;
   for (const [name, value] of Object.entries(theme.tokens)) {
@@ -136,6 +140,5 @@ export function applyTheme(id: ThemeId): Theme {
   }
   root.style.setProperty("color-scheme", theme.scheme);
   root.dataset.theme = theme.scheme;
-  pref.write(theme.id);
   return theme;
 }

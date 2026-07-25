@@ -38,10 +38,13 @@
     SETTINGS_CATEGORIES,
     type SettingEntry,
     type StagedField,
+    THEME_SECTION,
   } from "$lib/settingsRegistry.ts";
   import AdvancedPane from "@/components/AdvancedPane.svelte";
   import NotificationsPane from "@/components/NotificationsPane.svelte";
+  import SettingSegmented from "@/components/SettingSegmented.svelte";
   import SettingSelect from "@/components/SettingSelect.svelte";
+  import ThemeSection from "@/components/ThemeSection.svelte";
 
   interface Props {
     /** The registry, grouped into categories/sections and rendered by control kind. */
@@ -246,19 +249,27 @@
           {:else}
             {#each paneSections as section, si (si)}
               <div class="section">
-                {#if section.label}<h3 class="section-head">{section.label}</h3>{/if}
-                <ItemGroup class="fields">
-                  {#each section.fields as field, i (field.key)}
-                    {#if i > 0}<ItemSeparator />{/if}
-                    <Item data-field={field.key} class="setting-item">
-                      <ItemContent>
-                        <ItemTitle class="field-label">{field.label}</ItemTitle>
-                        <ItemDescription>{field.description}</ItemDescription>
-                      </ItemContent>
-                      <ItemActions>{@render control(field)}</ItemActions>
-                    </Item>
-                  {/each}
-                </ItemGroup>
+                {#if section.label === THEME_SECTION}
+                  <!-- The theme controls render as one composite block rather than
+                       three independent rows: the IN USE marker and the resolved-state
+                       line only mean anything across all three. It carries no section
+                       header — the pane's own "Appearance" header is that header. -->
+                  <ThemeSection fields={section.fields} {values} onApply={apply} />
+                {:else}
+                  {#if section.label}<h3 class="section-head">{section.label}</h3>{/if}
+                  <ItemGroup class="fields">
+                    {#each section.fields as field, i (field.key)}
+                      {#if i > 0}<ItemSeparator />{/if}
+                      <Item data-field={field.key} class="setting-item">
+                        <ItemContent>
+                          <ItemTitle class="field-label">{field.label}</ItemTitle>
+                          <ItemDescription>{field.description}</ItemDescription>
+                        </ItemContent>
+                        <ItemActions>{@render control(field)}</ItemActions>
+                      </Item>
+                    {/each}
+                  </ItemGroup>
+                {/if}
               </div>
             {/each}
           {/if}
@@ -271,6 +282,13 @@
 {#snippet control(field: StagedField)}
   {#if field.control.kind === "select"}
     <SettingSelect
+      value={String(values[field.key] ?? "")}
+      options={field.control.options}
+      onSelect={(v) => apply(field, v)}
+      ariaLabel={field.label}
+    />
+  {:else if field.control.kind === "segmented"}
+    <SettingSegmented
       value={String(values[field.key] ?? "")}
       options={field.control.options}
       onSelect={(v) => apply(field, v)}

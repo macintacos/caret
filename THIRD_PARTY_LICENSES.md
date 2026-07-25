@@ -24,8 +24,11 @@ under the ISC license.
 | `file` | [ui/src/icons/file.svg](ui/src/icons/file.svg) | [file.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/file.svg) |
 | `git-compare` | [ui/src/icons/git-compare.svg](ui/src/icons/git-compare.svg) | [git-compare.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/git-compare.svg) |
 | `keyboard` | [ui/src/icons/keyboard.svg](ui/src/icons/keyboard.svg) | [keyboard.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/keyboard.svg) |
+| `monitor` | [ui/src/icons/monitor.svg](ui/src/icons/monitor.svg) | [monitor.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/monitor.svg) |
+| `moon` | [ui/src/icons/moon.svg](ui/src/icons/moon.svg) | [moon.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/moon.svg) |
 | `panel-left` | [ui/src/icons/panel-left.svg](ui/src/icons/panel-left.svg) | [panel-left.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/panel-left.svg) |
 | `settings` | [ui/src/icons/settings.svg](ui/src/icons/settings.svg) | [settings.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/settings.svg) |
+| `sun` | [ui/src/icons/sun.svg](ui/src/icons/sun.svg) | [sun.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/sun.svg) |
 | `trash-2` | [ui/src/icons/trash-2.svg](ui/src/icons/trash-2.svg) | [trash-2.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/trash-2.svg) |
 | `unplug` | [ui/src/icons/unplug.svg](ui/src/icons/unplug.svg) | [unplug.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/unplug.svg) |
 | `x` | [ui/src/icons/x.svg](ui/src/icons/x.svg) | [x.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/x.svg) |

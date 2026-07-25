@@ -1,6 +1,7 @@
 import "@ui/test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { THEME_MODES } from "$lib/appearance.ts";
 import { knownPrefKeys } from "$lib/definePref.ts";
 import {
   filterSettings,
@@ -10,7 +11,10 @@ import {
   type SearchOnlyEntry,
   type StagedField,
   stagedField,
+  THEME_FIELD,
+  THEME_SECTION,
 } from "$lib/settingsRegistry.ts";
+import { THEMES } from "$lib/theme.ts";
 
 afterEach(() => localStorage.clear());
 
@@ -26,7 +30,7 @@ function storedKeys(): string[] {
 
 /** A representative non-default value for a field, derived from its control. */
 function sampleValue(field: StagedField): unknown {
-  if (field.control.kind === "select") {
+  if (field.control.kind === "select" || field.control.kind === "segmented") {
     const opts = field.control.options;
     return opts[opts.length - 1]?.value;
   }
@@ -50,9 +54,11 @@ describe("SETTINGS_REGISTRY", () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  test("covers theme, shortcut hints, and both diff prefs as staged fields", () => {
+  test("covers the appearance trio, shortcut hints, and both diff prefs as staged fields", () => {
     const keys = staged.map((f) => f.key);
-    expect(keys).toContain("theme");
+    expect(keys).toContain(THEME_FIELD.mode);
+    expect(keys).toContain(THEME_FIELD.light);
+    expect(keys).toContain(THEME_FIELD.dark);
     expect(keys).toContain("shortcutHints");
     expect(keys).toContain("diffStyle");
     expect(keys).toContain("diffIndicators");
@@ -62,7 +68,9 @@ describe("SETTINGS_REGISTRY", () => {
 describe("SETTINGS_CATEGORIES (the two-pane sidebar taxonomy)", () => {
   test("Appearance groups every staged field (Diff view folded in as a section)", () => {
     const appearance = staged.filter((f) => f.category === "Appearance").map((f) => f.key);
-    expect(appearance).toContain("theme");
+    expect(appearance).toContain(THEME_FIELD.mode);
+    expect(appearance).toContain(THEME_FIELD.light);
+    expect(appearance).toContain(THEME_FIELD.dark);
     expect(appearance).toContain("shortcutHints");
     expect(appearance).toContain("diffStyle");
     expect(appearance).toContain("diffIndicators");
@@ -72,8 +80,18 @@ describe("SETTINGS_CATEGORIES (the two-pane sidebar taxonomy)", () => {
     const byKey = (k: string) => staged.find((f) => f.key === k);
     expect(byKey("diffStyle")?.section).toBe("Diff view");
     expect(byKey("diffIndicators")?.section).toBe("Diff view");
-    expect(byKey("theme")?.section).toBeUndefined();
     expect(byKey("shortcutHints")?.section).toBeUndefined();
+  });
+
+  // The three appearance fields render as one composite block, so they must share
+  // the section the shell branches on — and lead the pane, since the mock puts the
+  // theme controls directly under the Appearance header.
+  test("the appearance trio shares the Theme section and leads the registry", () => {
+    const themeKeys: string[] = [THEME_FIELD.mode, THEME_FIELD.light, THEME_FIELD.dark];
+    for (const key of themeKeys) {
+      expect(staged.find((f) => f.key === key)?.section, key).toBe(THEME_SECTION);
+    }
+    expect(staged.slice(0, 3).map((f) => f.key)).toEqual(themeKeys);
   });
 
   test("every registry category is a SETTINGS_CATEGORIES entry with a blurb", () => {
@@ -150,12 +168,55 @@ describe("staged fields wrap existing pref modules", () => {
   });
 });
 
+/** A theme slot's options, narrowed to the select control the shell renders. */
+function slotOptionsOf(key: string) {
+  const field = staged.find((f) => f.key === key);
+  expect(field?.control.kind, key).toBe("select");
+  return field?.control.kind === "select" ? field.control.options : [];
+}
+
+describe("each theme slot offers only its own scheme's palettes (EXC-773)", () => {
+  test("the light slot lists light themes, the dark slot dark ones", () => {
+    for (const opt of slotOptionsOf(THEME_FIELD.light)) {
+      expect(THEMES[opt.value as keyof typeof THEMES].scheme, opt.value).toBe("light");
+    }
+    for (const opt of slotOptionsOf(THEME_FIELD.dark)) {
+      expect(THEMES[opt.value as keyof typeof THEMES].scheme, opt.value).toBe("dark");
+    }
+  });
+
+  test("neither slot is empty — an empty picker would be a dead control", () => {
+    expect(slotOptionsOf(THEME_FIELD.light).length).toBeGreaterThan(0);
+    expect(slotOptionsOf(THEME_FIELD.dark).length).toBeGreaterThan(0);
+  });
+});
+
+describe("the mode control is segmented over the three modes, each with a glyph", () => {
+  test("its options mirror THEME_MODES and every one carries an icon", () => {
+    const mode = staged.find((f) => f.key === THEME_FIELD.mode);
+    expect(mode?.control.kind).toBe("segmented");
+    if (mode?.control.kind !== "segmented") return;
+    expect(mode.control.options.map((o) => o.value)).toEqual([...THEME_MODES]);
+    for (const opt of mode.control.options) {
+      expect(opt.icon, opt.value).toBeTruthy();
+      expect(opt.label, opt.value).toBeTruthy();
+    }
+  });
+
+  test("the mode options carry no palette chrome — they pick WHEN, not WHICH", () => {
+    const mode = staged.find((f) => f.key === THEME_FIELD.mode);
+    if (mode?.control.kind !== "segmented") return;
+    for (const opt of mode.control.options) {
+      expect(opt.swatch).toBeUndefined();
+      expect(opt.preview).toBeUndefined();
+    }
+  });
+});
+
 describe("theme options carry palette swatches", () => {
   test("each theme option has a 5-color swatch; other selects carry none", () => {
-    const theme = staged.find((f) => f.key === "theme");
-    expect(theme?.control.kind).toBe("select");
-    if (theme?.control.kind === "select") {
-      for (const opt of theme.control.options) {
+    for (const key of [THEME_FIELD.light, THEME_FIELD.dark]) {
+      for (const opt of slotOptionsOf(key)) {
         expect(opt.swatch?.length).toBe(5);
         for (const color of opt.swatch ?? []) expect(color).toMatch(/^#[0-9a-fA-F]{3,8}$/);
       }
@@ -169,10 +230,8 @@ describe("theme options carry palette swatches", () => {
 
 describe("theme options carry a full-palette preview (EXC-753)", () => {
   test("each theme option exposes a preview token map; other selects carry none", () => {
-    const theme = staged.find((f) => f.key === "theme");
-    expect(theme?.control.kind).toBe("select");
-    if (theme?.control.kind === "select") {
-      for (const opt of theme.control.options) {
+    for (const key of [THEME_FIELD.light, THEME_FIELD.dark]) {
+      for (const opt of slotOptionsOf(key)) {
         expect(opt.preview).toBeDefined();
         // The preview is the theme's full token map — at least the surfaces, ink, and
         // the accent the ThemePreviewCard paints from, as hex values.
@@ -242,18 +301,32 @@ describe("filterSettings (EXC-845 settings search)", () => {
     expect(filterSettings(SETTINGS_REGISTRY, "   ")).toHaveLength(SETTINGS_REGISTRY.length);
   });
 
-  test("matches over an entry's label", () => {
-    // "Theme" is the theme field's label; no other entry's label/description carries it.
-    expect(keysOf(filterSettings(SETTINGS_REGISTRY, "theme"))).toEqual(["theme"]);
+  // Searching "theme" must keep the whole appearance block together — the mode
+  // control is meaningless next to a lone slot row — which is why every one of the
+  // three carries the word in its label or description.
+  test("matches over an entry's label, keeping the appearance block whole", () => {
+    expect(keysOf(filterSettings(SETTINGS_REGISTRY, "theme"))).toEqual([
+      THEME_FIELD.mode,
+      THEME_FIELD.light,
+      THEME_FIELD.dark,
+    ]);
   });
 
   test("matches over an entry's description", () => {
-    // "palette" appears only in the theme field's description ("Color palette …").
-    expect(keysOf(filterSettings(SETTINGS_REGISTRY, "palette"))).toEqual(["theme"]);
+    // "palette" appears only in the two slot descriptions ("Color palette used …"),
+    // never in their labels — so this matches on description alone.
+    expect(keysOf(filterSettings(SETTINGS_REGISTRY, "palette"))).toEqual([
+      THEME_FIELD.light,
+      THEME_FIELD.dark,
+    ]);
   });
 
   test("is case-insensitive", () => {
-    expect(keysOf(filterSettings(SETTINGS_REGISTRY, "THEME"))).toEqual(["theme"]);
+    expect(keysOf(filterSettings(SETTINGS_REGISTRY, "THEME"))).toEqual([
+      THEME_FIELD.mode,
+      THEME_FIELD.light,
+      THEME_FIELD.dark,
+    ]);
   });
 
   test("includes a search-only entry (live pane) the same as a staged field", () => {

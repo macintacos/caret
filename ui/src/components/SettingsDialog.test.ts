@@ -5,7 +5,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { flushUntil, render } from "@ui/test-mount.ts";
 import SettingsDialog from "@/components/SettingsDialog.svelte";
 import { writeDiffStyle } from "$lib/diffStylePref.ts";
-import { SETTINGS_REGISTRY, type StagedField } from "$lib/settingsRegistry.ts";
+import { SETTINGS_REGISTRY, type StagedField, THEME_FIELD } from "$lib/settingsRegistry.ts";
 
 afterEach(() => localStorage.clear());
 
@@ -48,14 +48,28 @@ describe("SettingsDialog shell", () => {
     expect(has("[data-category='General']")).toBe(false);
   });
 
-  test("the Appearance pane renders theme, shortcut hints, and the Diff view fields", async () => {
+  test("the Appearance pane renders the theme block, shortcut hints, and the Diff view fields", async () => {
     const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);
-    expect(has("button[aria-label='Theme']")).toBe(true);
+    // The theme controls render as the composite block, not three generic rows.
+    expect(has("[data-theme-section]")).toBe(true);
+    expect(has("button[aria-label='Light theme']")).toBe(true);
+    expect(has("button[aria-label='Dark theme']")).toBe(true);
     expect(has("[data-slot='switch']")).toBe(true);
     // The Diff view section's fields now live in the same (Appearance) pane.
     expect(has("button[aria-label='Layout']")).toBe(true);
     expect(has("button[aria-label='Change markers']")).toBe(true);
+  });
+
+  // The pane's own "Appearance" header is the theme block's header, so the block
+  // adds none of its own — unlike the Diff view group below it.
+  test("the theme block carries no section header of its own", async () => {
+    const { flush } = render(SettingsDialog, props());
+    await flushUntil(flush, mounted);
+    const heads = [...document.body.querySelectorAll(".section-head")].map((h) =>
+      h.textContent?.trim(),
+    );
+    expect(heads).not.toContain("Theme");
   });
 
   test("groups the diff prefs under a 'Diff view' section header", async () => {
@@ -151,8 +165,8 @@ describe("SettingsDialog search (EXC-845)", () => {
     const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);
     typeQuery(flush, "theme");
-    // Only the theme field remains; the other Appearance fields drop.
-    expect(has("[data-field='theme']")).toBe(true);
+    // Only the theme block remains; the other Appearance fields drop.
+    expect(has(`[data-field='${THEME_FIELD.light}']`)).toBe(true);
     expect(has("[data-field='shortcutHints']")).toBe(false);
     expect(has("[data-field='diffStyle']")).toBe(false);
     // Appearance is the only category with a match; the search-only categories drop.
@@ -187,6 +201,6 @@ describe("SettingsDialog search (EXC-845)", () => {
     typeQuery(flush, "zzz-no-such-setting");
     expect(has(".pane-empty")).toBe(true);
     expect(has("[data-category='Appearance']")).toBe(false);
-    expect(has("[data-field='theme']")).toBe(false);
+    expect(has(`[data-field='${THEME_FIELD.light}']`)).toBe(false);
   });
 });
