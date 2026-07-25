@@ -13,7 +13,6 @@ export { compute } from "@/tasks/release/steps/compute.ts";
 export {
   BASELINE_TAG,
   type BaselineResult,
-  CHANGELOG_PATH,
   type FinalizeResult,
   gatherContext,
   MANIFESTS,

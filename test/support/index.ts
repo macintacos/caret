@@ -9,7 +9,6 @@ export { until, waitFor } from "./poll.ts";
 export { type RecordedEmit, recordingLog } from "./recording-log.ts";
 export { expectNeverLogsBody } from "./redaction.ts";
 export {
-  CHANGELOG,
   COMMITS,
   type GitHubOptions,
   type GitOptions,

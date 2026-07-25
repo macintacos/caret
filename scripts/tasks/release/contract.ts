@@ -36,7 +36,7 @@ export interface CommitInfo {
   prNumber: number | null;
 }
 
-/** The success payload `compute` emits for the skill to author the changelog. */
+/** The success payload `compute` emits for the skill to compose the release notes. */
 export interface ComputeResult {
   ok: true;
   schemaVersion: number;
@@ -52,8 +52,9 @@ export interface ComputeResult {
   defaultBranch: string;
   releaseBranch: string;
   compareUrl: string;
+  /** The compare range from this release forward, i.e. `<tag>...HEAD`. */
   unreleasedCompareUrl: string;
-  /** Today's date (UTC, ISO `YYYY-MM-DD`) for the changelog heading. */
+  /** The release date (UTC, ISO `YYYY-MM-DD`). */
   date: string;
   commits: CommitInfo[];
   /** The version-bearing files `prepare`/`finalize` mutate, in mutation order. */

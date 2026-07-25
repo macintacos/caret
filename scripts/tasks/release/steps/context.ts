@@ -19,8 +19,6 @@ export const MANIFESTS = [
   ".claude-plugin/plugin.json",
 ];
 
-export const CHANGELOG_PATH = "CHANGELOG.md";
-
 export interface BaselineResult {
   phase: "baseline";
   tag: string;

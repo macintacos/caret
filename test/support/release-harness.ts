@@ -1,5 +1,5 @@
 // The release pipeline's in-memory test harness: builds a `Deps` whose git, gh,
-// fs, and clock collaborators are fakes typed against their real
+// npm, rumdl, fs, and clock collaborators are fakes typed against their real
 // interfaces, so each baseline/compute/prepare/finalize step runs with no live
 // repo and no network. Every mutating call is recorded into `calls` so a test can
 // assert exactly what would (or would not) run. It lives in test/support/ (not a
@@ -16,21 +16,6 @@ export const pkg = (v: string) => `{\n  "name": "caret",\n  "version": "${v}"\n}
 /** A marketplace.json body whose single plugin entry carries the version. */
 export const market = (v: string) =>
   `{\n  "plugins": [\n    {\n      "version": "${v}"\n    }\n  ]\n}\n`;
-
-/** A synthetic, fully-formed changelog with one released section the steps parse. */
-export const CHANGELOG = `# Changelog
-
-## [Unreleased]
-
-## [0.1.0] - 2026-06-02 - The Foundations Release
-
-### Added
-
-- A thing.
-
-[Unreleased]: https://github.com/macintacos/caret/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/macintacos/caret/compare/v0.0.1...v0.1.0
-`;
 
 /** A one-commit history the compute step parses for issue/PR refs. */
 export const COMMITS: RawCommit[] = [

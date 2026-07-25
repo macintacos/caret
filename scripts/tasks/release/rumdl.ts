@@ -1,7 +1,7 @@
 // Thin `rumdl` shell-out behind the RumdlOps interface, mirroring github.ts /
 // npm.ts: the interface lets finalize be driven by a fake in tests, while
 // createRumdl() is the real implementation. finalize uses it to reflow the
-// GitHub Release notes — the changelog section is hard-wrapped at ~90 chars
+// GitHub Release notes — the agent's composed body is hard-wrapped at ~90 chars
 // (repo convention), which renders as awkward mid-sentence breaks on GitHub, so
 // reflowing to single-line paragraphs (MD013.reflow with an effectively-
 // unbounded line length) is what makes the published notes read cleanly.

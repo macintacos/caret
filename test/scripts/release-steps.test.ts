@@ -1,6 +1,6 @@
 // Drives the baseline/compute/prepare/finalize orchestration and its resume
 // state machine through injected fakes — no live repo, no network. The fakes (and
-// the synthetic manifest/changelog/commit fixtures) live in the typed builder
+// the synthetic manifest/commit fixtures) live in the typed builder
 // `test/support/release-harness.ts`; each records mutating calls so we can assert
 // exactly what would (or would not) run.
 import { expect, test } from "bun:test";
