@@ -38,8 +38,8 @@ function prBody(version: string, title: string): string {
 
 /**
  * Compose the release title from the agent-supplied theme. The theme arrives as
- * `--title` rather than being parsed back out of a file: it is prose only the
- * agent can write, and it titles the commit, the PR, the tag, and the Release.
+ * `--title` because it is prose only the agent can write, and it titles the
+ * commit, the PR, the tag, and the GitHub Release alike.
  */
 function composeTitle(ctx: ReleaseContext, title: string | undefined): string {
   const themed = title?.trim() ?? "";

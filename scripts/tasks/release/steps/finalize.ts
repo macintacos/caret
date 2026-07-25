@@ -1,10 +1,10 @@
 // finalize (phase 2): tag trunk's merged HEAD and publish the GitHub Release.
 // It derives the version from trunk's three manifests and proves the bump
-// actually merged by requiring that version to be ahead of the latest release
-// tag, and is resume-aware — reusing an existing release and never moving an
-// existing tag. The themed title and the release body are prose only the agent
-// can write, so they arrive as `--title` and `--notes-file`; the body is
-// reflowed to single-line paragraphs so it renders cleanly on GitHub.
+// actually merged before publishing anything, and is resume-aware throughout —
+// reusing an existing release, never moving an existing tag, and completing a
+// run that died partway. The themed title and the release body are prose only
+// the agent can write, so they arrive as `--title` and `--notes-file`; the body
+// is reflowed to single-line paragraphs so it renders cleanly on GitHub.
 
 import { extractVersion } from "@/tasks/release/manifest.ts";
 import {
@@ -32,9 +32,11 @@ interface TrunkRelease {
 
 /**
  * Resolve the release to finalize from trunk's merged HEAD. The version comes
- * from trunk's three manifests (which must agree), and the bump counts as merged
- * only when that version is strictly ahead of the latest release tag — otherwise
- * `NOT_MERGED`. Never mutates; the tag/release creation is the caller's job.
+ * from trunk's three manifests, which must agree. The bump counts as merged when
+ * that version is ahead of the latest release tag, or when this release's tag
+ * already points at the commit being tagged (a resume); a tag pointing anywhere
+ * else is `TAG_EXISTS`, and neither case holding is `NOT_MERGED`. Never mutates;
+ * the tag/release creation is the caller's job.
  */
 async function resolveTrunkRelease(
   deps: Deps,
