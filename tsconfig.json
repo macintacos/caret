@@ -24,17 +24,19 @@
     // program rather than owning a tsconfig — it is node/bun code tsc checks
     // alongside src and test, not a separate build like ui/.)
     //
-    // The remaining four cover the other roots this program spans, so nothing in
-    // test/ has to address a target by counting `../` hops (EXC-879). They are
-    // top-level rather than grafted under `@/` on purpose: `@/` means "this
-    // program's source root", and widening it to "any root" would cost the one
-    // alias here with a crisp definition. `@test/*` also disambiguates the two
-    // distinct support harnesses — test/support/ (bun) vs test/e2e/support/
-    // (Playwright) — which a bare `./support/x` could not.
+    // The four wildcard entries below cover the other roots this program spans,
+    // so nothing in test/ has to address a target by counting `../` hops
+    // (EXC-879). They are top-level rather than grafted under `@/` on purpose:
+    // `@/` means "this program's source root", and widening it to "any root"
+    // would cost the one alias here with a crisp definition. `@test/*` also
+    // disambiguates the two distinct support harnesses — test/support/ (bun) vs
+    // test/e2e/support/ (Playwright) — which a bare `./support/x` could not.
     //
-    // `@root/package.json` is an exact, non-wildcard mapping: one suite reads the
-    // version from package.json, and a `@root/*` wildcard would give every file
-    // under src/ a second spelling, which is the drift `@/` exists to prevent.
+    // `@root/package.json` is exact rather than a `@root/*` wildcard because the
+    // repo root is not a source root: `@root/*` would alias the whole tree at
+    // once — including every root above, which already has its own alias — so it
+    // would be a second spelling for all of them. One suite reads the version;
+    // widen this only when a second root-level file needs it.
     "paths": {
       "@/tasks/*": ["./scripts/tasks/*"],
       "@/*": ["./src/*"],

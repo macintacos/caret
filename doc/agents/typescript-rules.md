@@ -58,10 +58,10 @@ third-party):
   top-level rather than grafted under `@/` deliberately — `@/` means "this program's
   source root", and widening it to "any root" would cost the one alias with a crisp
   definition.
-- **`@root/package.json`** — an exact, non-wildcard mapping for the one suite that reads
-  the version. A `@root/*` wildcard would give every file under `src/` a second spelling,
-  which is the drift `@/` exists to prevent; widen it only when a second root file needs
-  it.
+- **`@root/package.json`** — exact rather than a `@root/*` wildcard, because the repo root
+  is not a source root: `@root/*` would alias the whole tree at once, including every root
+  above that already has its own alias, making it a second spelling for all of them. One
+  suite reads the version; widen this only when a second root-level file needs it.
 
 `@ui/*` and `@test/*` are repeated in `ui/tsconfig.json` because bun resolves `paths` from
 the **nearest** tsconfig, so `ui/src/**/*.test.ts` never sees the root config's mapping.

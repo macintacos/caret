@@ -18,9 +18,9 @@ import { join } from "node:path";
 // against import.meta.dir reads the real tree regardless of the runner's cwd.
 const REPO_ROOT = join(import.meta.dir, "..", "..");
 
-// The two source roots this invariant governs. `.ts` only: the `.svelte` bodies
-// under ui/src are vendored or already same-directory, and svelte-check rather
-// than bun owns them.
+// The two source roots this invariant governs. `.ts` only: svelte-check rather
+// than bun resolves the `.svelte` bodies, and most of them sit under the
+// vendored directory excluded below.
 const ROOTS = ["test", "ui/src"];
 
 // shadcn-svelte components are copied verbatim from the registry and re-synced
@@ -45,8 +45,9 @@ const ALLOWED_LITERALS: Record<string, string> = {
  *
  * Covers all three specifier-bearing forms: `from "…"` (which also catches
  * `export … from`), a bare side-effect `import "…"`, and a dynamic
- * `import("…")`. All three are real module references, so a rule that only read
- * the `from` form would leave the ~80 side-effect harness imports unpoliced. A
+ * `import("…")`. All three are real module references, so a rule that read only
+ * the `from` form would leave every side-effect harness import unpoliced — and
+ * the UI suites reach their harness that way. A
  * specifier offends when it starts with `../` (any upward traversal) or when it
  * starts with `./` and contains a further `/` (a descent into a subdirectory).
  *

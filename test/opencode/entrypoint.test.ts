@@ -10,8 +10,9 @@ import { expect, test } from "bun:test";
 
 import pkgJson from "@root/package.json" with { type: "json" };
 
-// package.json arrives as a parsed module (the same way test/core/lib/build-id
-// reads it) rather than through a runtime file read, so the alias resolves it.
+// package.json arrives as a parsed module (as test/core/lib/build-id.test.ts
+// reads it too) rather than through a runtime file read, so the alias resolves
+// it — `paths` governs module resolution, not `new URL(…, import.meta.url)`.
 // The assertions read through a widened shape because the inferred literal type
 // admits no lookup for a key that is correctly absent — devDependencies must
 // *not* carry @opencode-ai/plugin, which is precisely what the last test pins.
