@@ -1,4 +1,4 @@
-import "../../test-setup.ts";
+import "@ui/test-setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
 
 import type { Annotation, ApproveVariantId, ResolveBody } from "@core/lib/types";

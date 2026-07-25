@@ -7,7 +7,7 @@
 // special-cases *.localhost to loopback, so caret.localhost reaches the per-test
 // fixture daemon bound on 127.0.0.1.
 
-import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
+import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 
 const FEEDBACK = "Please tighten the verification section.";
 

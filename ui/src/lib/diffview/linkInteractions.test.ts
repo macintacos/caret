@@ -1,6 +1,6 @@
 // Registers happy-dom globals (MouseEvent / PointerEvent / element style) so the
 // handlers can be driven with real DOM event objects and a real token element.
-import "../../../test-setup.ts";
+import "@ui/test-setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 

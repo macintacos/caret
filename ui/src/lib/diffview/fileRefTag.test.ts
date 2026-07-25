@@ -1,4 +1,4 @@
-import "../../../test-setup.ts";
+import "@ui/test-setup.ts";
 import { beforeEach, expect, test } from "bun:test";
 
 import type { FileRefSpan, FileRefSpanMap } from "$lib/diffview/fileRefs.ts";

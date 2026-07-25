@@ -1,10 +1,9 @@
-import "../../test-mount.ts";
+import "@ui/test-mount.ts";
 
 import { describe, expect, test } from "bun:test";
 
+import { capture, flushUntil, render } from "@ui/test-mount.ts";
 import SettingSelect from "@/components/SettingSelect.svelte";
-
-import { capture, flushUntil, render } from "../../test-mount.ts";
 
 const OPTIONS = [
   { value: "split", label: "Split" },

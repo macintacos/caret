@@ -1,10 +1,9 @@
-import "../../test-mount.ts";
+import "@ui/test-mount.ts";
 import { describe, expect, test } from "bun:test";
 
 import type { PlanVersion } from "@core/lib/types";
+import { capture, render } from "@ui/test-mount.ts";
 import VersionComparePicker from "@/components/VersionComparePicker.svelte";
-
-import { capture, render } from "../../test-mount.ts";
 
 function versions(n: number): PlanVersion[] {
   return Array.from({ length: n }, (_, i) => ({

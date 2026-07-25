@@ -38,7 +38,7 @@ resolves to the current program's source root — `src/` for the root (bun) prog
 carries the mapping in its own `tsconfig.json` (`paths`), and the UI mirrors it in
 `ui/vite.config.ts` so svelte-check, the vite build, and `bun test` agree.
 
-Three more aliases sit **beside** `@/` in the import grouping (they are app code, not
+More aliases sit **beside** `@/` in the import grouping (they are app code, not
 third-party):
 
 - **`@/tasks/*`** — the dev/release tooling in `scripts/tasks/`, grafted onto the `@/`
@@ -51,21 +51,46 @@ third-party):
   `architecture-rules.md`.
 - **`$lib`** — the UI's `ui/src/lib/` directory, the prefix shadcn-svelte's copied
   components and `components.json` assume. See `svelte-rules.md` / `shadcn-rules.md`.
+- **`@test/*`, `@scripts/*`, `@opencode/*`, `@ui/*`** — the repo's other roots, so a test
+  never addresses a target by counting `../` hops (EXC-879). `@test/*` also names *which*
+  harness is meant: `test/support/` (bun) and `test/e2e/support/` (Playwright) are two
+  different directories that a bare `./support/x` could not distinguish. These are
+  top-level rather than grafted under `@/` deliberately — `@/` means "this program's
+  source root", and widening it to "any root" would cost the one alias with a crisp
+  definition.
+- **`@root/package.json`** — exact rather than a `@root/*` wildcard, because the repo root
+  is not a source root: `@root/*` would alias the whole tree at once, including every root
+  above that already has its own alias, making it a second spelling for all of them. One
+  suite reads the version; widen this only when a second root-level file needs it.
 
-A relative import (`./x`, `../x`) is correct **only when the target has no alias** — code
-outside every alias's root: a test reaching its `test/support/*` harness, a
-`scripts/`-root utility like `scripts/preflight.ts` (which sits above `scripts/tasks/`, so
-`@/tasks/` doesn't cover it), `opencode/` internals. Those stay relative; everything that
-resolves inside a source root uses its alias.
+`@ui/*` and `@test/*` are repeated in `ui/tsconfig.json` because bun resolves `paths` from
+the **nearest** tsconfig, so `ui/src/**/*.test.ts` never sees the root config's mapping.
+Both are test-only — resolved by `bun test` and svelte-check, never by the vite build,
+which does not compile `*.test.ts` — so they are deliberately **absent** from
+`ui/vite.config.ts`. That is a considered exception to the mirror-vite rule above, which
+exists for the aliases production UI code uses.
+
+**No `../` import anywhere under `test/` or `ui/src/`.** A `./x` import is correct only
+for a true same-directory sibling — the idiomatic barrel form, with no path arithmetic to
+get wrong. Anything that leaves the directory uses an alias. Two exclusions: the vendored
+shadcn-svelte barrels under `ui/src/lib/components/ui/` (re-synced with
+`shadcn-svelte add`, so not ours to police — the same boundary `biome.jsonc` draws), and
+the string literals in `test/scripts/generate-ui-manifest.test.ts` that assert the
+*generated* manifest's own relative imports, which are expected output rather than module
+references. `test/structure/import-conventions.test.ts` enforces this, so a reintroduced
+`../` fails `bun test` rather than waiting for review.
 
 Biome's `organizeImports` (configured in `biome.jsonc`) sorts and groups every `.ts`
 file's imports into blocks, blank-line separated: runtime built-ins (`node:`/`bun:`),
-third-party packages, app code (`@/`, `@/tasks`, `$lib`, `@core`), then any leftover
-relative paths. It is applied by `mise run format` and gated read-only by `mise run lint`
-— so ordering is mechanical, never hand-maintained. (`.svelte` files carry the `@/`
-aliases but Biome does not reorder them; it doesn't parse Svelte.) `@core` looks like a
-scoped npm package to Biome, so the config carves it out of the package group explicitly —
-don't remove that carve-out.
+third-party packages, app code (`@/`, `@/tasks`, `$lib`, `@core`, and the root aliases
+above), then any leftover relative paths. It is applied by `mise run format` and gated
+read-only by `mise run lint` — so ordering is mechanical, never hand-maintained.
+(`.svelte` files carry the `@/` aliases but Biome does not reorder them; it doesn't parse
+Svelte.) Every alias that isn't `@/`-prefixed looks like a scoped npm package to Biome, so
+each is carved out of the package group explicitly (`!@core/**`, `!@test/**`, and so on)
+and folded in with the app code — a pattern to extend when adding a root alias, not a
+one-off. The match is on the exact segment, which is why `!@opencode/**` leaves the real
+`@opencode-ai/*` package where it belongs. Don't remove those carve-outs.
 
 ## Shared-helper policy
 
@@ -106,8 +131,8 @@ cover of "adding validation."
   `step` token, `level`, and structured fields — not the human-readable `msg` string,
   which is free to be reworded. An assertion on exact message text is brittle by design.
 - **Make invariants falsifiable.** A "never throws" claim gets a regression test that
-  *injects the failure*: `test/core/log.test.ts`'s `poisoned()` returns an object with a
-  getter that throws, and the test asserts the logger swallows it and the caller
+  *injects the failure*: `test/core/lib/log.test.ts`'s `poisoned()` returns an object with
+  a getter that throws, and the test asserts the logger swallows it and the caller
   continues. A guarantee with no test that could break it is documentation, not an
   invariant.
 - **Commit fixtures for back-compat claims.** A "still reads the old format" claim is

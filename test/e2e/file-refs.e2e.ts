@@ -20,7 +20,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { expect, test } from "./support/fixtures.ts";
+import { expect, test } from "@test/e2e/support/fixtures.ts";
 
 /** Write a throwaway project dir with the given files, returning its path and a
  * cleanup. The daemon (a real subprocess) reads it via the seeded review's cwd. */

@@ -4,7 +4,7 @@
 // scratches show as distinct "draft" rows. Clicking any row scrolls the plan to it
 // (and focuses/highlights a committed comment's card). Escape dismisses the panel.
 
-import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
+import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 
 test("opens from the strip, filters + underlines by text, and reveals comments and drafts", async ({
   daemon,

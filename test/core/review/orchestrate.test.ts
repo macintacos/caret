@@ -1,14 +1,13 @@
 import { afterEach, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
+import { setupTempStateDir } from "@test/support/env.ts";
+import { ndjsonRecords } from "@test/support/ndjson.ts";
 import { logFile } from "@/config/paths.ts";
 import { setLogLevel } from "@/lib/log.ts";
 import type { Decision, PlanInput } from "@/lib/types.ts";
 import { PLAN_FORMAT_DENY_MESSAGE } from "@/plan/format.ts";
 import { expireAbandoned, runReview } from "@/review/orchestrate.ts";
-
-import { setupTempStateDir } from "../support/env.ts";
-import { ndjsonRecords } from "../support/ndjson.ts";
 
 const allow: Decision = { behavior: "allow", decidedAt: 1 };
 

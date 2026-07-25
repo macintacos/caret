@@ -1,4 +1,4 @@
-import "../../test-setup.ts";
+import "@ui/test-setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { headingSlug, setHeadingSlug, takeHeadingSlug } from "@/state/headingLink.ts";

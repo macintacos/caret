@@ -7,7 +7,7 @@
 // scroll + layout geometry is browser behavior, so this is an e2e, not a unit
 // (per doc/agents/browser-testing.md).
 
-import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
+import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 
 // Read the geometry that proves a modal is capped, not clipped: its box stays
 // within the viewport AND its content is taller than the box (so the cap is

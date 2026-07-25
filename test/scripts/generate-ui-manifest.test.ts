@@ -14,7 +14,7 @@ import {
   type ManifestEntry,
   renderManifestModule,
   writeManifest,
-} from "../../scripts/generate-ui-manifest.ts";
+} from "@scripts/generate-ui-manifest.ts";
 
 // Lay down a representative dist tree (index plus hashed siblings under assets/)
 // in a temp dir and return its root; caller cleans up.

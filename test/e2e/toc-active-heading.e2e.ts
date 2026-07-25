@@ -5,7 +5,7 @@
 // URL mirrors the active header by slug (?heading=<slug>), and a ?heading= deep
 // link scrolls that header into view on load.
 
-import { expect, test } from "./support/fixtures.ts";
+import { expect, test } from "@test/e2e/support/fixtures.ts";
 
 // Long filler keeps each section taller than the viewport, so clicking a lower
 // heading genuinely scrolls it to the top rather than leaving the whole plan in

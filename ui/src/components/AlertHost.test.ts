@@ -1,10 +1,9 @@
-import "../../test-mount.ts";
+import "@ui/test-mount.ts";
 import { describe, expect, test } from "bun:test";
 
+import { capture, render } from "@ui/test-mount.ts";
 import AlertHost from "@/components/AlertHost.svelte";
 import type { AlertItem } from "@/state/alerts.ts";
-
-import { capture, render } from "../../test-mount.ts";
 
 const item = (over: Partial<AlertItem> & { id: number }): AlertItem => ({
   variant: "default",

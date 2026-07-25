@@ -7,9 +7,16 @@
 // import must be a real dependency so OpenCode's `bun install` provides it).
 
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 
-const pkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf-8")) as {
+import pkgJson from "@root/package.json" with { type: "json" };
+
+// package.json arrives as a parsed module (as test/core/lib/build-id.test.ts
+// reads it too) rather than through a runtime file read, so the alias resolves
+// it — `paths` governs module resolution, not `new URL(…, import.meta.url)`.
+// The assertions read through a widened shape because the inferred literal type
+// admits no lookup for a key that is correctly absent — devDependencies must
+// *not* carry @opencode-ai/plugin, which is precisely what the last test pins.
+const pkg = pkgJson as {
   exports?: Record<string, unknown>;
   main?: string;
   bin?: Record<string, string>;
@@ -18,7 +25,7 @@ const pkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.ur
 };
 
 test("the OpenCode package entrypoint exports only the plugin (OpenCode loader invariant)", async () => {
-  const mod = await import("../../opencode/index.ts");
+  const mod = await import("@opencode/index.ts");
   const values = Object.values(mod);
   expect(values).toHaveLength(1);
   expect(typeof values[0]).toBe("function");

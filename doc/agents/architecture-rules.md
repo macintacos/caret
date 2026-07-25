@@ -129,7 +129,7 @@ happens to have open.
 - **Read-confidentiality rests on the loopback bind + the absence of CORS headers, not on
   the CSRF guard.** The daemon emits **no** `Access-Control-*` header on any route, so the
   browser's same-origin policy blocks a foreign page from reading any response — even a
-  `GET` that reaches a handler. A regression test (`test/core/daemon.test.ts`, the
+  `GET` that reaches a handler. A regression test (`test/core/daemon/server.test.ts`, the
   read-confidentiality block) asserts no route family ever emits an `Access-Control-*`
   header, so a future permissive-CORS "fix" fails loudly instead of silently exposing plan
   bodies. Never add a CORS-grant header.

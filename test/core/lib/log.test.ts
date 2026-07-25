@@ -4,6 +4,8 @@ import { writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { setupTempStateDir } from "@test/support/env.ts";
+import { ndjsonRecords } from "@test/support/ndjson.ts";
 import { daemonLogFile, logFile } from "@/config/paths.ts";
 import { callerLocation, parseCaller } from "@/lib/caller-location.ts";
 import {
@@ -17,9 +19,6 @@ import {
   setLogLevel,
   setRedact,
 } from "@/lib/log.ts";
-
-import { setupTempStateDir } from "../support/env.ts";
-import { ndjsonRecords } from "../support/ndjson.ts";
 
 // The per-test state dir doubles as the temp home these path assertions resolve
 // against; the helper owns its creation, XDG wiring, and teardown.
@@ -230,7 +229,7 @@ test("an explicit extra.source wins over the logger's own tag", () => {
 // Stack-captured repo-relative `path:line` of the emitting call site. The
 // regex pins the file to this test (so we know the frame walk skipped
 // src/lib/log.ts and landed on the real caller) and the trailing line number.
-const CALLER = /^test\/core\/log\.test\.ts:\d+$/;
+const CALLER = /^test\/core\/lib\/log\.test\.ts:\d+$/;
 
 test("hook records carry the caller location", () => {
   logInfo("review", "created");

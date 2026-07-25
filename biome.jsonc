@@ -56,6 +56,10 @@
   // group (`!@core/**`) and folded in with the app-code aliases (`@/`, `@/tasks`,
   // `$lib`) where it belongs — the shadowing fix. `@/tasks` needs no such carve-out:
   // it starts with `@/`, so `:ALIAS:` already groups it with the app code.
+  // `@test`, `@scripts`, `@opencode`, `@ui`, and `@root` (EXC-879) share `@core`'s
+  // shape and therefore its treatment — the carve-out is a pattern every non-`@/`
+  // app alias needs, not a one-off. The segment match is exact, so `!@opencode/**`
+  // leaves the real `@opencode-ai/*` package in the package group.
   // Bare/side-effect imports stay put
   // (sortBareImports defaults off) so CSS and polyfill order is preserved.
   "assist": {
@@ -67,9 +71,26 @@
             "groups": [
               [":NODE:", ":BUN:"],
               ":BLANK_LINE:",
-              [":PACKAGE:", ":PACKAGE_WITH_PROTOCOL:", "!@core/**"],
+              [
+                ":PACKAGE:",
+                ":PACKAGE_WITH_PROTOCOL:",
+                "!@core/**",
+                "!@test/**",
+                "!@scripts/**",
+                "!@opencode/**",
+                "!@ui/**",
+                "!@root/**"
+              ],
               ":BLANK_LINE:",
-              [":ALIAS:", "@core/**"],
+              [
+                ":ALIAS:",
+                "@core/**",
+                "@test/**",
+                "@scripts/**",
+                "@opencode/**",
+                "@ui/**",
+                "@root/**"
+              ],
               ":BLANK_LINE:",
               [":PATH:"]
             ]

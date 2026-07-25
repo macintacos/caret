@@ -7,7 +7,7 @@
 // reset is unit-covered (ui/src/lib/prefs.test.ts: SHORTCUT_HINTS_KEY is a
 // KNOWN_PREF_KEY that clearKnownPrefs removes), like the theme pref.
 
-import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
+import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 
 const keyboardButton = "button[aria-label='Keyboard shortcuts']";
 const topbarHints = ".topbar [data-slot='kbd']";

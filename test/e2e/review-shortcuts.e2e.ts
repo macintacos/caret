@@ -10,7 +10,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
+import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 
 // Two headings so the contents pane (ToC) renders (toc.ts § shouldShowToc needs
 // >= 2), giving the `/` shortcut a filter to focus.

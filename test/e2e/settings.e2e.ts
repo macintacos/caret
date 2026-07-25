@@ -7,7 +7,7 @@
 // theme pick uses a mouse CLICK on the portalled option, sidestepping the
 // keyboard-focus race that quarantined the old live-preview picker (EXC-796).
 
-import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
+import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 
 const topbarHints = ".topbar [data-slot='kbd']";
 const keyboardButton = "button[aria-label='Keyboard shortcuts']";

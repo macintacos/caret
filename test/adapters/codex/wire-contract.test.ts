@@ -12,11 +12,10 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { setupTempStateDir } from "@test/support/env.ts";
 import { codexAdapter } from "@/adapters/codex/index.ts";
 import type { Decision } from "@/lib/types.ts";
 import { runReview } from "@/review/orchestrate.ts";
-
-import { setupTempStateDir } from "../../support/env.ts";
 
 const FIXTURE = join(import.meta.dir, "fixtures", "permission-request-stdin.json");
 const stdin = readFileSync(FIXTURE, "utf-8");

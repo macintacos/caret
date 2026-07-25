@@ -8,7 +8,7 @@
 // refocus timing makes flaky to drive headless. The 2s suppression window is
 // absorbed by the auto-retrying toBeHidden (timeout > 2000) — no fixed sleeps.
 
-import { expect, test } from "./support/fixtures.ts";
+import { expect, test } from "@test/e2e/support/fixtures.ts";
 
 test("a keystroke right after refocus triggers safe mode, which then releases", async ({
   daemon,

@@ -1,9 +1,8 @@
-import "../../test-mount.ts";
+import "@ui/test-mount.ts";
 import { describe, expect, test } from "bun:test";
 
+import { render } from "@ui/test-mount.ts";
 import SourceComposer from "@/components/SourceComposer.svelte";
-
-import { render } from "../../test-mount.ts";
 
 // SourceComposer is the inline comment editor for the source-view gutter flow.
 // It wraps MarkdownEditor (the CodeMirror boundary) with the range label and the

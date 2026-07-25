@@ -6,7 +6,7 @@
 // fixture daemon declares no adapter variants, so Approve renders as the
 // split-button (WIRE_FALLBACK set), i.e. .split-primary / .split-toggle.
 
-import { expect, test } from "./support/fixtures.ts";
+import { expect, test } from "@test/e2e/support/fixtures.ts";
 
 test("wide: secondaries are inline and the overflow menu is hidden", async ({ daemon, page }) => {
   await daemon.seed();

@@ -6,7 +6,7 @@
 // doc/agents/browser-testing.md); the queue's auto-dismiss timing is unit-tested
 // deterministically in ui/src/state/alerts.test.ts.
 
-import { expect, test } from "./support/fixtures.ts";
+import { expect, test } from "@test/e2e/support/fixtures.ts";
 
 // Deep enough that shortCwd abbreviates the display (…/Play/caret) while the copy
 // carries the whole absolute path — so the test proves the two genuinely differ.

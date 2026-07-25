@@ -1,10 +1,9 @@
-import "../../test-mount.ts";
+import "@ui/test-mount.ts";
 import { describe, expect, test } from "bun:test";
 
 import type { ClientReview } from "@core/lib/types";
+import { render } from "@ui/test-mount.ts";
 import ReviewSwitcher from "@/components/ReviewSwitcher.svelte";
-
-import { render } from "../../test-mount.ts";
 
 // EXC-760: ReviewSwitcher is now a shadcn DropdownMenu. Its trigger (active
 // title + count Badge + chevron) and the inert single-review label render

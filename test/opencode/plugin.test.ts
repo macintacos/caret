@@ -28,7 +28,7 @@ import {
   runReviewViaCaret,
   type SpawnRunner,
   type WarmRunner,
-} from "../../opencode/caret.plugin.ts";
+} from "@opencode/caret.plugin.ts";
 
 // --- buildEnvelope / planTitle ---
 

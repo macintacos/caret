@@ -1,10 +1,9 @@
-import "../../test-mount.ts";
+import "@ui/test-mount.ts";
 import { describe, expect, test } from "bun:test";
 
 import type { LineAnnotation } from "@core/lib/types";
+import { capture, render } from "@ui/test-mount.ts";
 import SourceAnnotationThread from "@/components/SourceAnnotationThread.svelte";
-
-import { capture, render } from "../../test-mount.ts";
 
 // SourceAnnotationThread is the caret-owned chrome that frames the comments
 // sharing one source line as a single ordered thread. A lone comment renders as

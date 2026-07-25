@@ -1,10 +1,10 @@
-import "../../../../../test-mount.ts";
+import "@ui/test-mount.ts";
 
 import { describe, expect, test } from "bun:test";
 
 import { Switch } from "$lib/components/ui/switch/index.js";
 
-import { capture, flushUntil, render } from "../../../../../test-mount.ts";
+import { capture, flushUntil, render } from "@ui/test-mount.ts";
 
 // bits-ui Switch is a plain (non-portalled) button[role=switch]; it mounts into
 // the render target and reflects reactive state synchronously after a flush — no

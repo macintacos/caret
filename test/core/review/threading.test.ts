@@ -4,12 +4,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { recordingLog } from "@test/support/recording-log.ts";
 import { currentVersion, type PlanInput, type Review } from "@/lib/types.ts";
 import { formatPlanMarkdown } from "@/plan/markdown.ts";
 import { createStore, type Store } from "@/review/store.ts";
 import { newReviewId, routeIncomingPlan } from "@/review/threading.ts";
-
-import { recordingLog } from "../support/recording-log.ts";
 
 let dir: string;
 let store: Store;

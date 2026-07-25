@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 
+import { setupTempStateDir, withEnv } from "@test/support/env.ts";
 import {
   configDir,
   configFile,
@@ -11,8 +12,6 @@ import {
   reviewsDir,
   stateDir,
 } from "@/config/paths.ts";
-
-import { setupTempStateDir, withEnv } from "../support/env.ts";
 
 // The CARET_* accessor and invalidEnvVars tests live in settings.test.ts with
 // the EXC-430 accessors themselves. The VERSION/buildHash identity tests live in

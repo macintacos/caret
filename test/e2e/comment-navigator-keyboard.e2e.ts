@@ -12,7 +12,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
+import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 
 // The focused plan-cursor marker (SourceView tags the focused row data-caret-cursor;
 // Playwright's CSS engine pierces the library's open shadow root).

@@ -1,7 +1,7 @@
 // Smoke: a seeded plan renders on the source view — heading lines, the contents
 // pane, and body content are all visible.
 
-import { expect, test } from "./support/fixtures.ts";
+import { expect, test } from "@test/e2e/support/fixtures.ts";
 
 test("a seeded plan renders headings, contents pane, and body content", async ({
   daemon,
