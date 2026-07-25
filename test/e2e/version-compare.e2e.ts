@@ -2,7 +2,9 @@
 // versions, a picker lets the reviewer diff any pair, side-by-side or stacked,
 // switching the layout at runtime without remounting the view or losing scroll.
 // The control is always shown but disabled for single-version reviews (EXC-664),
-// and the chosen layout persists across reloads.
+// and the chosen layout persists across reloads. EXC-804 adds a count of the other
+// comparable versions on the toggle and a "(current)" marker on the newest picker
+// row; both are covered at the end of this file.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 
@@ -427,4 +429,102 @@ test("crossing --w-narrow forces unified then restores the split preference", as
   await page.setViewportSize({ width: 1400, height: 900 });
   await expect(pre).toHaveAttribute("data-diff-type", "split");
   await expect(page.getByRole("radio", { name: "Split" })).toBeVisible();
+});
+
+// Version-count badge on the compare toggle (EXC-804). The count itself is unit
+// tested; what only a browser can settle is that the badge resolves to caret's
+// --attention hue under EACH theme — the ticket's "make sure it's supported in
+// each theme".
+//
+// The key detail: this does NOT use page.emulateMedia. caret stopped following
+// prefers-color-scheme when EXC-730 made the scheme an explicit user choice (see
+// tokens.css), so emulating the media query leaves every run on caret-dark — and a
+// hardcoded violet in the component would then satisfy both runs, which is exactly
+// the regression this test exists to catch. The theme is seeded into localStorage
+// before first paint instead, the lever diff-surface.e2e.ts uses to pin its theme.
+// Because the two themes really do render, comparing the badge against a live
+// :root probe is sufficient: --attention is a different violet per theme, so a
+// literal passes at most one of the two runs, and a wrong token or a lost cascade
+// fails both.
+
+/** A computed `color` string → integer sRGB channels. Chrome serializes the same
+ * color differently depending on the declaration it came from: `rgb(r, g, b)` with
+ * integers for some forms, `color(srgb r g b)` with 0-1 floats for a bare
+ * `var(--token)`. Normalize both shapes so either can be compared. */
+function srgbChannels(value: string): [number, number, number] {
+  const nums = (value.match(/\d*\.?\d+/g) ?? []).slice(0, 3).map(Number);
+  const out = value.trim().startsWith("color(") ? nums.map((n) => Math.round(n * 255)) : nums;
+  return [out[0] as number, out[1] as number, out[2] as number];
+}
+
+for (const [themeId, scheme] of [
+  ["caret-dark", "dark"],
+  ["caret-light", "light"],
+] as const) {
+  test(`the compare toggle's version-count badge carries --attention in ${themeId}`, async ({
+    daemon,
+    page,
+  }) => {
+    await page.addInitScript((t) => localStorage.setItem("caret.theme", t), themeId);
+    await daemon.seedVersions(3, [V1, V2, V3]);
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+    // The seeded choice actually took effect. Without this the colour assertion
+    // below could silently be checking the default theme twice.
+    await expect(page.locator("html")).toHaveAttribute("data-theme", scheme);
+
+    // Three stored versions ⇒ two OTHERS to compare the current one against.
+    const badge = page.locator('.compare-toggle [data-slot="badge"]');
+    await expect(badge).toHaveText("2");
+
+    const probe = await page.evaluate(() => {
+      const el = document.querySelector('.compare-toggle [data-slot="badge"]');
+      // Declare the probe's colour exactly as the badge's rule does — a bare
+      // var(--token) — so both serialize through the same Chrome path.
+      const p = document.createElement("span");
+      p.style.color = "var(--attention)";
+      document.body.appendChild(p);
+      const attention = getComputedStyle(p).color;
+      p.remove();
+      return {
+        badgeColor: el ? getComputedStyle(el as HTMLElement).color : null,
+        attention,
+      };
+    });
+
+    expect(srgbChannels(probe.badgeColor as string)).toEqual(srgbChannels(probe.attention));
+  });
+}
+
+// The current version is annotated in the pair pickers, so a reviewer choosing a
+// base/target can tell which end is the plan as it stands now. Menu rows are
+// portalled bits-ui content driven by real pointer interaction, so this is e2e
+// rather than a component unit (browser-testing.md; the same call ReviewSwitcher
+// and the pair-selection unit test already make).
+test("the version pickers annotate the current version, and only that one", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seedVersions(3, [V1, V2, V3]);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Compare versions" }).click();
+
+  await page.getByLabel("Target version").click();
+  // v3 is the newest, so it is the current plan; v1 and v2 are history.
+  await expect(page.getByRole("menuitemradio", { name: "v3" })).toContainText("(current)");
+  await expect(page.getByRole("menuitemradio", { name: "v2" })).not.toContainText("(current)");
+  await expect(page.getByRole("menuitemradio", { name: "v1" })).not.toContainText("(current)");
+  // Exactly one row is annotated.
+  await expect(page.locator(".vmenu .cur")).toHaveCount(1);
+
+  // The annotation reads the head of the same newest-first `ordered` list the rows
+  // render from, so pinning that order here is what keeps "(current)" meaning
+  // "newest" rather than "whichever row happens to be first".
+  await expect(page.locator(".vmenu .vitem")).toHaveText([/v3/, /v2/, /v1/]);
+  await page.keyboard.press("Escape");
+
+  // Both pickers are the same snippet, so the base side carries it too.
+  await page.getByLabel("Base version").click();
+  await expect(page.getByRole("menuitemradio", { name: "v3" })).toContainText("(current)");
+  await expect(page.locator(".vmenu .cur")).toHaveCount(1);
 });

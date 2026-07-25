@@ -54,6 +54,19 @@ function hasRadio(target: Element, name: string): boolean {
   return findRadio(target, name) != null;
 }
 
+// The toggle's own label text, with the count badge's digits subtracted. The badge
+// is separate chrome (EXC-804), so stripping it keeps the label assertion able to
+// catch a stray `label=` on the Icon — which a substring check would not.
+function labelOf(toggle: Element): string {
+  const badge = toggle.querySelector('[data-slot="badge"]');
+  return (toggle.textContent ?? "").replace(badge?.textContent ?? "", "").trim();
+}
+
+// The count badge on the toggle, or null when it isn't rendered.
+function countBadge(target: Element): HTMLElement | null {
+  return target.querySelector<HTMLElement>('.compare-toggle [data-slot="badge"]');
+}
+
 describe("VersionComparePicker visibility", () => {
   test("renders the toggle enabled with two or more versions", () => {
     const { target } = render(VersionComparePicker, baseProps);
@@ -95,15 +108,16 @@ describe("VersionComparePicker visibility", () => {
 describe("VersionComparePicker compare icon", () => {
   // EXC-808: the toggle carries a leading git-compare glyph so it reads as a
   // compare affordance. Icon.svelte wraps the vendored SVG in a decorative
-  // (aria-hidden) .icon span, so the button's accessible name is unchanged.
+  // (aria-hidden) .icon span, so it contributes nothing to the button's name.
   test("the enabled toggle renders the compare icon, leading the label", () => {
     const { target } = render(VersionComparePicker, baseProps);
     const toggle = target.querySelector<HTMLButtonElement>(".compare-toggle");
     expect(toggle!.querySelector(".icon svg")).not.toBeNull();
-    // The icon is decorative, so it adds no text: the accessible name (which
-    // the e2e getByRole selectors depend on) stays exactly "Compare versions".
-    // A stray label= on the Icon would break this at unit speed.
-    expect(toggle!.textContent?.trim()).toBe("Compare versions");
+    // The icon is decorative, so it adds no text: the visible label stays exactly
+    // "Compare versions". A stray label= on the Icon would break this at unit
+    // speed. The EXC-804 count badge is subtracted — it's chrome beside the label,
+    // not part of it.
+    expect(labelOf(toggle!)).toBe("Compare versions");
     // EXC-808: the icon leads the label (sits to its left), so it precedes the
     // "Compare versions" text in DOM order.
     const kids = [...toggle!.childNodes];
@@ -120,8 +134,8 @@ describe("VersionComparePicker compare icon", () => {
     const toggle = target.querySelector<HTMLButtonElement>(".compare-toggle");
     const cap = [...toggle!.querySelectorAll("kbd")].find((k) => k.textContent === "d");
     expect(cap != null).toBe(true);
-    // The cap is aria-hidden, so it stays out of the button's accessible name,
-    // which remains "Compare versions" (the e2e getByRole selectors depend on it).
+    // The cap is aria-hidden, so its glyph never lands in the button's name (which
+    // the "every accessible name begins with the visible label" test below pins).
     expect(cap?.getAttribute("aria-hidden")).toBe("true");
   });
 
@@ -143,6 +157,116 @@ describe("VersionComparePicker compare icon", () => {
     expect(toggle!.querySelector(".icon svg")).not.toBeNull();
   });
 });
+
+// EXC-804: the toggle carries a badge counting the OTHER versions the current one
+// can be diffed against — N-1, not N, matching the disabled tooltip's "No other
+// versions to compare yet". It's a visual tally, so it persists whether or not
+// compare mode is on.
+describe("VersionComparePicker version count badge", () => {
+  test("counts the other versions, not the total, on the enabled toggle", () => {
+    const { target } = render(VersionComparePicker, baseProps);
+    expect(countBadge(target)?.textContent?.trim()).toBe("2");
+  });
+
+  test("counts one other version for a two-version review", () => {
+    const { target } = render(VersionComparePicker, {
+      ...baseProps,
+      versions: versions(2),
+      baseVersion: 2,
+      targetVersion: 1,
+    });
+    expect(countBadge(target)?.textContent?.trim()).toBe("1");
+  });
+
+  // ARIA prohibits a name on a <span> (role=generic), so the badge is aria-hidden
+  // and the count rides the button's own label — the TopBar .overflow-count split.
+  test("keeps the badge out of the accessibility tree", () => {
+    const { target } = render(VersionComparePicker, baseProps);
+    expect(countBadge(target)?.getAttribute("aria-hidden")).toBe("true");
+    expect(countBadge(target)?.hasAttribute("aria-label")).toBe(false);
+  });
+
+  test("singularizes the toggle's accessible name at one other version", () => {
+    const { target } = render(VersionComparePicker, {
+      ...baseProps,
+      versions: versions(2),
+      baseVersion: 2,
+      targetVersion: 1,
+    });
+    expect(target.querySelector(".compare-toggle")?.getAttribute("aria-label")).toBe(
+      "Compare versions, 1 other version",
+    );
+  });
+
+  test("pluralizes the toggle's accessible name beyond one", () => {
+    const { target } = render(VersionComparePicker, baseProps);
+    expect(target.querySelector(".compare-toggle")?.getAttribute("aria-label")).toBe(
+      "Compare versions, 2 other versions",
+    );
+  });
+
+  // Every accessible name this toggle can take still STARTS with the visible label,
+  // which is what keeps ~20 e2e `getByRole("button", { name: "Compare versions" })`
+  // locators resolving (Playwright matches a substring) and satisfies WCAG 2.5.3
+  // Label in Name. Previously implicit; pinned here so a reworded label fails fast.
+  test("every accessible name begins with the visible label", () => {
+    for (const n of [1, 2, 3]) {
+      const { target } = render(VersionComparePicker, {
+        ...baseProps,
+        versions: versions(n),
+        canCompare: n >= 2,
+        baseVersion: n,
+        targetVersion: Math.max(1, n - 1),
+      });
+      const toggle = target.querySelector(".compare-toggle");
+      const name = toggle?.getAttribute("aria-label") ?? labelOf(toggle!);
+      expect(name.startsWith("Compare versions")).toBe(true);
+    }
+  });
+
+  // Nothing to compare means nothing to count: the disabled toggle stays a bare
+  // affordance, and its Tooltip already explains why.
+  test("renders no badge on the disabled single-version toggle", () => {
+    const { target } = render(VersionComparePicker, {
+      ...baseProps,
+      versions: versions(1),
+      comparing: false,
+      canCompare: false,
+    });
+    expect(countBadge(target) != null).toBe(false);
+  });
+
+  // The tally is true in both views, and keeping it mounted means entering compare
+  // mode never reflows the toggle's width.
+  test("stays on the toggle while compare mode is off", () => {
+    const { target } = render(VersionComparePicker, { ...baseProps, comparing: false });
+    expect(countBadge(target)?.textContent?.trim()).toBe("2");
+  });
+
+  // `canCompare` is a parent-owned prop, so it can disagree with `versions`. The
+  // count's own guard — not canCompare — is what keeps a meaningless "0" off the
+  // toggle, so drive that disagreement directly.
+  test("renders no badge when canCompare disagrees with a single-version set", () => {
+    const { target } = render(VersionComparePicker, {
+      ...baseProps,
+      versions: versions(1),
+      canCompare: true,
+      baseVersion: 1,
+      targetVersion: 1,
+    });
+    expect(countBadge(target) != null).toBe(false);
+  });
+});
+
+// The "(current)" annotation on the newest picker row lives in the e2e spec, not
+// here. Opening a bits-ui DropdownMenu is trigger-driven interaction, which
+// happy-dom cannot carry: a synthetic .click() flips the trigger's aria-expanded
+// to true but renders zero rows, and no synthetic key/pointer event opens it
+// reliably from a fresh mount. That is a different case from the flushUntil
+// dialogs (ShortcutsHelp, UnsentCommentsDialog), which mount already-open through
+// a prop and so never need the interaction. Per browser-testing.md the annotation
+// is asserted in test/e2e/version-compare.e2e.ts, which also pins the newest-first
+// row order the annotation's derivation depends on.
 
 describe("VersionComparePicker pair selection", () => {
   // The base/target pickers reuse the SettingSelect's DropdownMenu; the trigger

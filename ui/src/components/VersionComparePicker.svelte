@@ -5,8 +5,11 @@
   // and switch the gutter change markers between vertical bars and classic +/-
   // glyphs. The "Compare versions" toggle is always present, but disabled (greyed
   // out) when fewer than two versions exist, since there is nothing to compare —
-  // shown-but-disabled keeps the affordance discoverable (EXC-664). All state is
-  // owned by the parent (the compare state factory); this component is
+  // shown-but-disabled keeps the affordance discoverable (EXC-664). When there IS
+  // something to compare, the toggle carries a badge counting the other versions
+  // available, and the base/target menus mark the newest row "(current)" so the
+  // reviewer can tell which end of the pair is the plan as it stands (EXC-804).
+  // All state is owned by the parent (the compare state factory); this component is
   // presentational and reports changes through callback props.
   //
   // The controls are composed from the shadcn-svelte catalog (EXC-764): the two
@@ -25,6 +28,7 @@
   import type { DiffIndicators, DiffStyle } from "$lib/diffview/types.ts";
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
+  import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
@@ -83,6 +87,21 @@
   // Newest first reads most naturally in a picker — the current version is the
   // default base and sits at the top.
   const ordered = $derived([...versions].sort((a, b) => b.version - a.version));
+
+  // How many OTHER versions the current one can be diffed against — the toggle's
+  // count badge (EXC-804). N-1, not N: it answers "what is there to compare
+  // against", the same framing as the disabled tooltip's "No other versions to
+  // compare yet". Derived here rather than passed down like `canCompare`, whose
+  // rule the parent owns because DiffPlanView gates `showDiff` on it too; this
+  // count has one consumer, and `versions` is already in scope. Can go negative on
+  // an empty set; the render guard reads `> 0`, so that needs no clamp here.
+  const otherCount = $derived(versions.length - 1);
+
+  // The newest version — the plan as it stands now. Annotated in the pickers so a
+  // reviewer choosing a pair can tell which end is current without counting. Reads
+  // `ordered`'s head rather than re-deriving a max: the list is already sorted
+  // newest-first for exactly this reason.
+  const currentVersion = $derived(ordered[0]?.version);
 
   // Sliding pill for the segmented ToggleGroups: instead of each option painting
   // its own background, one shared pill rides behind the options and animates to
@@ -192,6 +211,8 @@
                 {#if checked}<Icon name="check" size={15} />{/if}
               </span>
               <span>v{v.version}</span>
+              <!-- Only the newest row is annotated; the rest are history. -->
+              {#if v.version === currentVersion}<span class="cur">(current)</span>{/if}
             {/snippet}
           </DropdownMenuPrimitive.RadioItem>
         {/each}
@@ -202,9 +223,10 @@
 
 <!-- The toggle's leading git-compare glyph + label (EXC-808). Shared by the
      enabled and disabled buttons so the affordance stays identical; the icon is
-     decorative (aria-hidden via Icon.svelte), so the button's accessible name
-     stays "Compare versions" and inherits the button's currentColor. Spacing is
-     the Button's own gap. -->
+     decorative (aria-hidden via Icon.svelte), so it contributes nothing to the
+     button's name and inherits the button's currentColor. Spacing is the Button's
+     own gap. This text is the visible label; the accessible name is the same
+     string, extended with the version count when there is one (EXC-804). -->
 {#snippet compareLabel()}
   <Icon name="git-compare" size={14} />Compare versions
 {/snippet}
@@ -217,12 +239,28 @@
       class="compare-toggle float-chip"
       aria-pressed={comparing}
       aria-keyshortcuts={ariaKeyshortcutsFor("actions.toggleDiff")}
+      aria-label={otherCount > 0
+        ? `Compare versions, ${otherCount} other version${otherCount === 1 ? "" : "s"}`
+        : undefined}
       onclick={() => onSetComparing(!comparing)}
     >
       {@render compareLabel()}
+      <!-- How many other versions there are to compare against (EXC-804): the
+           TopBar pending-count Badge's shape, differing only in hue (see the style
+           block). Guarded on the count rather than on `canCompare` alone, since
+           canCompare is a parent-owned prop and a "0" tally would be noise.
+           aria-hidden because ARIA prohibits a name on a <span> (role=generic), so
+           an aria-label here would announce unreliably; the count reaches AT
+           through the button's own aria-label above instead — the same split
+           TopBar's .overflow-count uses. -->
+      {#if otherCount > 0}
+        <Badge variant="secondary" class="count metric other-count" aria-hidden="true">
+          {otherCount}
+        </Badge>
+      {/if}
       <!-- The `d` shortcut toggles compare mode; the cap teaches it. Only on the
            enabled toggle (the disabled one has no shortcut), aria-hidden so the
-           button's accessible name stays "Compare versions". -->
+           cap's glyph never lands in the button's name. -->
       {#if showShortcutHints}
         <Kbd class="kbd-sm shortcut-cap" aria-hidden="true">d</Kbd>
       {/if}
@@ -343,6 +381,20 @@
   .compare-picker :global(.compare-toggle[aria-pressed="true"]:not(:disabled):hover) {
     background: var(--accent-wash);
   }
+  /* The count of other versions (EXC-804). Hue is the ONLY divergence from the
+     TopBar/ReviewSwitcher counts — size, padding and tabular figures all come from
+     the shared `.count metric` classes, so the three read as one family. Those
+     counts are deliberately neutral because amber is reserved for the Approve
+     primary; this one is asked to draw the eye, so it wears --attention, caret's
+     quiet-notice violet (the NotifyBell's undecided tone, the notification dot).
+     That keeps amber scarce AND keeps --ok/--danger free to mean
+     addition/deletion, which matters with the diff surface sitting directly below
+     this bar. Fill and ink both derive from the one token, so applyTheme retints
+     it per theme with no second rule. */
+  .compare-picker :global(.other-count) {
+    background: color-mix(in lab, var(--attention) 18%, transparent);
+    color: var(--attention);
+  }
   /* Nudge the `d` shortcut cap a hair further right of the label than the
      button's own gap gives it. */
   .compare-picker :global(.compare-toggle .shortcut-cap) {
@@ -431,6 +483,13 @@
     display: inline-flex;
     width: 15px;
     color: var(--accent);
+  }
+  /* The "(current)" marker on the newest row: the quietest ink in the menu, so it
+     reads as an annotation on the version rather than a second label competing
+     with it. */
+  :global(.vmenu .cur) {
+    color: var(--ink-faint);
+    font-size: var(--text-xs);
   }
 
   /* The display-option cluster (layout + indicators), pushed to the trailing edge
