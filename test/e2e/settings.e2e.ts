@@ -3,9 +3,13 @@
 // value writes it, retints/reflows the app live, and confirms with a bottom-right
 // toast. Navigation, live apply, persistence across reload, and Esc-dismiss are all
 // real-browser behavior (focus, portalled menus, keyboard, localStorage across
-// reload), so this lives here, not in a unit (per doc/agents/browser-testing.md). The
-// theme pick uses a mouse CLICK on the portalled option, sidestepping the
+// reload), so this lives here, not in a unit (per doc/agents/browser-testing.md). A
+// palette pick uses a mouse CLICK on the portalled option, sidestepping the
 // keyboard-focus race that quarantined the old live-preview picker (EXC-796).
+//
+// The appearance specs (EXC-773) drive page.emulateMedia: caret follows the OS by
+// default, so the emulated prefers-color-scheme — pinned to dark in the project
+// config — is what a fresh origin resolves against.
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 
@@ -61,9 +65,8 @@ test("opens the Appearance pane with theme, hints, and the folded-in Diff view s
   await expect(page.locator("[data-category='Diff view']")).toHaveCount(0);
 
   // Its controls all live in the one pane: the theme block, shortcut hints, and the
-  // diff prefs.
-  // All three modes are readable at once — the point of a segmented control over a
-  // dropdown here.
+  // diff prefs. All three modes are readable at once — the point of a segmented
+  // control over a dropdown here.
   await expect(page.getByRole("radio", { name: "Light", exact: true })).toBeVisible();
   await expect(page.getByRole("radio", { name: "Dark", exact: true })).toBeVisible();
   await expect(page.getByRole("radio", { name: "System", exact: true })).toBeVisible();

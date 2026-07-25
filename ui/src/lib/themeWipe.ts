@@ -26,8 +26,7 @@ export interface ThemeWipeDeps {
   prefersReducedMotion: () => boolean;
 }
 
-/** The real browser effects, wired at the composition point. */
-export function defaultWipeDeps(): ThemeWipeDeps {
+function defaultWipeDeps(): ThemeWipeDeps {
   const doc = typeof document !== "undefined" ? (document as MaybeViewTransitions) : undefined;
   const start = doc?.startViewTransition;
   return {

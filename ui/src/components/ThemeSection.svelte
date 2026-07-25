@@ -71,7 +71,7 @@
   );
 </script>
 
-<div class="theme-section" data-theme-section data-scheme={scheme}>
+<div class="theme-section" data-theme-section>
   <ItemGroup class="fields">
     {#each rows as field, i (field.key)}
       {#if i > 0}<ItemSeparator />{/if}
@@ -80,9 +80,9 @@
           <ItemTitle class="field-label">
             <span>{field.label}</span>
             {#if field.key === liveKey}
-              <!-- The block's one amber mark: which palette is actually showing.
-                   Keyed on liveKey so it re-mounts (and replays its reveal) when it
-                   moves between the two rows. -->
+              <!-- The block's one amber mark: which palette is actually showing. It
+                   unmounts from one row and mounts in the other as the live scheme
+                   changes, which replays its reveal on arrival. -->
               <Badge class="in-use">In use</Badge>
             {/if}
           </ItemTitle>
