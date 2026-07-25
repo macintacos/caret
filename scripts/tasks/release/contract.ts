@@ -6,7 +6,7 @@
 import type { BumpLevel } from "@/tasks/release/version.ts";
 
 /** Bumped whenever the payload shape changes incompatibly. */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /** Stable machine-readable reasons a release step can refuse. */
 export type ErrorCode =
@@ -51,11 +51,6 @@ export interface ComputeResult {
   repoSlug: string;
   defaultBranch: string;
   releaseBranch: string;
-  compareUrl: string;
-  /** The compare range from this release forward, i.e. `<tag>...HEAD`. */
-  unreleasedCompareUrl: string;
-  /** The release date (UTC, ISO `YYYY-MM-DD`). */
-  date: string;
   commits: CommitInfo[];
   /** The version-bearing files `prepare`/`finalize` mutate, in mutation order. */
   manifests: string[];
@@ -72,11 +67,6 @@ export interface ReleaseError {
 /** Builds a ReleaseError with the current schema version stamped in. */
 export function errorResult(errorCode: ErrorCode, message: string): ReleaseError {
   return { ok: false, schemaVersion: SCHEMA_VERSION, errorCode, message };
-}
-
-/** A GitHub compare URL, e.g. `.../compare/v0.0.1...v0.1.0`. */
-export function compareUrl(repoSlug: string, from: string, to: string): string {
-  return `https://github.com/${repoSlug}/compare/${from}...${to}`;
 }
 
 const ISSUE_REF = /\b[A-Z]{2,}-\d+\b/g;

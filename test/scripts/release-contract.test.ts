@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 
 import {
   type ComputeResult,
-  compareUrl,
   errorResult,
   parseCommitMeta,
   SCHEMA_VERSION,
@@ -15,12 +14,6 @@ test("errorResult builds the ok:false payload shape", () => {
     errorCode: "NO_BASELINE",
     message: "no tags yet",
   });
-});
-
-test("compareUrl builds a GitHub compare link", () => {
-  expect(compareUrl("macintacos/caret", "v0.0.1", "v0.1.0")).toBe(
-    "https://github.com/macintacos/caret/compare/v0.0.1...v0.1.0",
-  );
 });
 
 test("parseCommitMeta extracts a single issue ref and PR number", () => {
@@ -58,9 +51,6 @@ test("a ComputeResult round-trips through JSON unchanged", () => {
     repoSlug: "macintacos/caret",
     defaultBranch: "trunk",
     releaseBranch: "release/v0.1.0",
-    compareUrl: compareUrl("macintacos/caret", "v0.0.1", "v0.1.0"),
-    unreleasedCompareUrl: compareUrl("macintacos/caret", "v0.1.0", "HEAD"),
-    date: "2026-06-02",
     commits: [
       {
         sha: "def456",

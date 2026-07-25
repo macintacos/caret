@@ -1,6 +1,6 @@
 // The injected collaborators the release orchestration runs against. Effectful
-// dependencies (git, gh, fs, the clock) are passed in so each step is
-// unit-testable with fakes; cli.ts wires the real ones.
+// dependencies (git, gh, fs) are passed in so each step is unit-testable with
+// fakes; cli.ts wires the real ones.
 
 import type { GitOps } from "@/tasks/release/git.ts";
 import type { GitHubOps } from "@/tasks/release/github.ts";
@@ -26,6 +26,4 @@ export interface Deps {
   rumdl: RumdlOps;
   fs: FsOps;
   io: Io;
-  /** Clock seam: the current instant, injected so `compute`'s date is testable. */
-  now(): Date;
 }

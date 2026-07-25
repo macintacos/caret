@@ -31,7 +31,7 @@ import {
 } from "@/tasks/release/steps.ts";
 import { isBumpLevel } from "@/tasks/release/version.ts";
 
-/** The production Deps: real git/gh/npm/rumdl collaborators plus fs/clock seams. */
+/** The production Deps: real git/gh/npm/rumdl collaborators plus the fs seam. */
 function realDeps(): Deps {
   return {
     git: createGit(),
@@ -46,7 +46,6 @@ function realDeps(): Deps {
       exists: (path) => Bun.file(path).exists(),
     },
     io: { log: (m) => process.stderr.write(`${m}\n`) },
-    now: () => new Date(),
   };
 }
 

@@ -5,7 +5,6 @@
 import {
   type CommitInfo,
   type ComputeResult,
-  compareUrl,
   parseCommitMeta,
   SCHEMA_VERSION,
 } from "@/tasks/release/contract.ts";
@@ -41,9 +40,6 @@ export async function compute(deps: Deps, opts: { bump: BumpLevel }): Promise<Co
     repoSlug: ctx.repoSlug,
     defaultBranch: ctx.defaultBranch,
     releaseBranch: ctx.releaseBranch,
-    compareUrl: compareUrl(repoSlug, ctx.previousTag, ctx.tag),
-    unreleasedCompareUrl: compareUrl(repoSlug, ctx.tag, "HEAD"),
-    date: deps.now().toISOString().slice(0, 10),
     commits,
     manifests: MANIFESTS,
   };

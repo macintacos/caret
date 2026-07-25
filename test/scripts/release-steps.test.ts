@@ -39,15 +39,13 @@ test("compute returns the next version, tag, and parsed commits", async () => {
   expect(r.tag).toBe("v0.1.0");
   expect(r.previousTag).toBe("v0.0.1");
   expect(r.releaseBranch).toBe("release/v0.1.0");
-  expect(r.compareUrl).toBe("https://github.com/macintacos/caret/compare/v0.0.1...v0.1.0");
   expect(r.commits[0]?.issueRefs).toEqual(["EXC-1"]);
   expect(r.commits[0]?.prNumber).toBe(2);
 });
 
-test("compute surfaces the UTC date and the manifest paths", async () => {
+test("compute surfaces the manifest paths", async () => {
   const { deps } = makeReleaseHarness();
   const r = await compute(deps, { bump: "minor" });
-  expect(r.date).toBe("2026-06-02");
   expect(r.manifests).toEqual([
     "package.json",
     ".claude-plugin/marketplace.json",

@@ -51,10 +51,9 @@ export interface NpmOptions {
   npmPublishedVersions?: string[];
 }
 
-/** Controls for the working-tree and clock seams. */
+/** Controls for the working-tree seam. */
 export interface IoOptions {
   files?: Record<string, string>;
-  now?: string;
 }
 
 export type HarnessOptions = GitOptions & GitHubOptions & NpmOptions & IoOptions;
@@ -290,7 +289,6 @@ export function makeReleaseHarness(opts: HarnessOptions = {}): ReleaseHarness {
     rumdl,
     fs,
     io: { log: () => {} },
-    now: () => new Date(opts.now ?? "2026-06-02T00:00:00Z"),
   };
   return { deps, calls, files, state, releases };
 }
