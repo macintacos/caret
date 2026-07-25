@@ -1,9 +1,8 @@
-import "../../test-mount.ts";
+import "@ui/test-mount.ts";
 import { describe, expect, test } from "bun:test";
 
+import { render } from "@ui/test-mount.ts";
 import VersionLabel from "@/components/VersionLabel.svelte";
-
-import { render } from "../../test-mount.ts";
 
 describe("VersionLabel", () => {
   test("renders nothing for the first version", () => {

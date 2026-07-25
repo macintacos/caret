@@ -3,7 +3,7 @@
 // than pinned to the bottom edge, leaving ~1/3 of the viewport of overscroll
 // room below it. Real scroll behavior → an e2e, per browser-testing.md.
 
-import { expect, test } from "./support/fixtures.ts";
+import { expect, test } from "@test/e2e/support/fixtures.ts";
 
 // A plan several viewports tall, so there is genuine scrolling to the bottom
 // and a clearly-rendered last line to measure.

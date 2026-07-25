@@ -9,7 +9,7 @@
 // The rail collapses by animating its lane width to 0 (not display:none), so the
 // state is asserted on the toggle's aria-expanded plus the #plan-toc lane width.
 
-import { expect, test } from "./support/fixtures.ts";
+import { expect, test } from "@test/e2e/support/fixtures.ts";
 
 const TOGGLE = "Toggle sidebar";
 

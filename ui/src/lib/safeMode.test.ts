@@ -1,10 +1,9 @@
-import "../../test-setup.ts";
+import "@ui/test-setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
+import { type LogCapture, logCapture } from "@ui/test-helpers.ts";
 import { flush } from "$lib/log.ts";
 import { createSafeModeGuard, type SafeModeGuard } from "$lib/safeMode.ts";
-
-import { type LogCapture, logCapture } from "../../test-helpers.ts";
 
 // A controllable clock so the grace-window logic is deterministic. The
 // auto-deactivate timer uses real setTimeout, so those tests await real time.

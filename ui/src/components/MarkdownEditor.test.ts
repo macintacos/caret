@@ -1,11 +1,10 @@
-import "../../test-mount.ts";
+import "@ui/test-mount.ts";
 import { describe, expect, test } from "bun:test";
 
 import { languages } from "@codemirror/language-data";
 
+import { render } from "@ui/test-mount.ts";
 import MarkdownEditor from "@/components/MarkdownEditor.svelte";
-
-import { render } from "../../test-mount.ts";
 
 // MarkdownEditor is the swappable CodeMirror boundary. These units cover the
 // engine-agnostic contract that SourceComposer and the annotation-card edit

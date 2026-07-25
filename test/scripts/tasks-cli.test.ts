@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import type { JsonArgs } from "@scripts/preflight.ts";
 import {
   buildBinArtifacts,
   buildBinCompileCommand,
@@ -16,8 +17,6 @@ import { lintCommand } from "@/tasks/lint.ts";
 import { setupCommands } from "@/tasks/setup.ts";
 import { smokePlan } from "@/tasks/smoke.ts";
 import { e2eCommand, testCommand } from "@/tasks/test.ts";
-
-import type { JsonArgs } from "../../scripts/preflight.ts";
 
 // The actions are injectable, so these drive the real commander tree (parsing,
 // defaults, coercion, passthrough) and capture what it would hand each run

@@ -17,8 +17,8 @@
 // (ui/src/lib/notify.test.ts's bellPresentation cases) — the stub could fake
 // it here, but that would re-prove the same pure mapping with no extra wiring.
 
-import { SECOND_PLAN } from "./support/fixture-plan.ts";
-import { expect, test } from "./support/fixtures.ts";
+import { SECOND_PLAN } from "@test/e2e/support/fixture-plan.ts";
+import { expect, test } from "@test/e2e/support/fixtures.ts";
 
 // Captured constructions of the stubbed Notification (see initStub).
 interface CapturedNote {

@@ -11,8 +11,8 @@
 // already derives its viewport from — so this spec tracks the real breakpoints
 // instead of hardcoding regime literals.
 
-import { MIN_APP_WIDTH_PX, NARROW_WIDTH_PX, TIGHT_WIDTH_PX } from "../../ui/src/lib/layout.ts";
-import { expect, test } from "./support/fixtures.ts";
+import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { MIN_APP_WIDTH_PX, NARROW_WIDTH_PX, TIGHT_WIDTH_PX } from "@ui/src/lib/layout.ts";
 
 test("no surface overflows the viewport horizontally across the breakpoint sweep", async ({
   daemon,

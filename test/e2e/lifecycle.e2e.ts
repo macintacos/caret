@@ -6,8 +6,8 @@
 // the daemon SUPERSEDES a same-session pending review, so sharing a session
 // would silently collapse two seeds into one.
 
-import { SECOND_PLAN } from "./support/fixture-plan.ts";
-import { expect, test } from "./support/fixtures.ts";
+import { SECOND_PLAN } from "@test/e2e/support/fixture-plan.ts";
+import { expect, test } from "@test/e2e/support/fixtures.ts";
 
 test("switching between two pending reviews shows the right plan", async ({ daemon, page }) => {
   await daemon.seed();

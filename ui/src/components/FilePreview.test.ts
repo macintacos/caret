@@ -1,12 +1,11 @@
-import "../../test-mount.ts";
+import "@ui/test-mount.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import type { FileExcerpt } from "@core/lib/types";
+import { until } from "@test/support/poll.ts";
+import { type LogCapture, logCapture } from "@ui/test-helpers.ts";
+import { render } from "@ui/test-mount.ts";
 import FilePreview from "@/components/FilePreview.svelte";
-
-import { until } from "../../../test/support/poll.ts";
-import { type LogCapture, logCapture } from "../../test-helpers.ts";
-import { render } from "../../test-mount.ts";
 
 // The filename-hover preview (EXC-687) shows a bounded excerpt of a referenced
 // file. These pin the reader affordances layered on top of the highlighted code:

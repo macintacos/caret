@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { withEnv } from "@test/support/env.ts";
 import { MAX_HEARTBEAT_MS } from "@/config/constants.ts";
 import {
   createSettings,
@@ -23,8 +24,6 @@ import {
   settings,
   watchSettings,
 } from "@/config/settings.ts";
-
-import { withEnv } from "../support/env.ts";
 
 let dir: string;
 let file: string;

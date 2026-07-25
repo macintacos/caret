@@ -8,18 +8,17 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { ndjsonRecords } from "@test/support/ndjson.ts";
+import { freePort } from "@test/support/net.ts";
+import { until } from "@test/support/poll.ts";
+import { recordingLog } from "@test/support/recording-log.ts";
+import { expectNeverLogsBody } from "@test/support/redaction.ts";
 import { httpHealth } from "@/daemon/client.ts";
 import { ensureDaemon } from "@/daemon/lifecycle.ts";
 import { createServer } from "@/daemon/server.ts";
 import { VERSION } from "@/lib/build-id.ts";
 import { formatPlanMarkdown } from "@/plan/markdown.ts";
 import { createStore } from "@/review/store.ts";
-
-import { ndjsonRecords } from "../support/ndjson.ts";
-import { freePort } from "../support/net.ts";
-import { until } from "../support/poll.ts";
-import { recordingLog } from "../support/recording-log.ts";
-import { expectNeverLogsBody } from "../support/redaction.ts";
 
 // Many tests here spawn a real `bun src/cli.ts daemon` subprocess (transpile + boot
 // the whole daemon module graph), then wait on the lock file. Standalone that boot is

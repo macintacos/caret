@@ -3,6 +3,8 @@ import { rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { setupTempStateDir } from "@test/support/env.ts";
+import { expectNeverLogsBody } from "@test/support/redaction.ts";
 import { reviewsDir } from "@/config/paths.ts";
 import { DEFAULTS } from "@/config/settings.ts";
 import {
@@ -18,9 +20,6 @@ import {
   tallyReviews,
 } from "@/discovery.ts";
 import { scrubValue } from "@/redact/node.ts";
-
-import { setupTempStateDir } from "../support/env.ts";
-import { expectNeverLogsBody } from "../support/redaction.ts";
 
 function boom(): never {
   throw new Error("probe boom");

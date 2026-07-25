@@ -1,12 +1,11 @@
-import "../../test-mount.ts";
+import "@ui/test-mount.ts";
 
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { flushUntil, render } from "@ui/test-mount.ts";
 import SettingsDialog from "@/components/SettingsDialog.svelte";
 import { writeDiffStyle } from "$lib/diffStylePref.ts";
 import { SETTINGS_REGISTRY, type StagedField } from "$lib/settingsRegistry.ts";
-
-import { flushUntil, render } from "../../test-mount.ts";
 
 afterEach(() => localStorage.clear());
 

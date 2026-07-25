@@ -1,10 +1,9 @@
-import "../../test-mount.ts";
+import "@ui/test-mount.ts";
 
 import { describe, expect, test } from "bun:test";
 
+import { render } from "@ui/test-mount.ts";
 import KeyboardHelpButton from "@/components/KeyboardHelpButton.svelte";
-
-import { render } from "../../test-mount.ts";
 
 describe("KeyboardHelpButton", () => {
   test("renders a labelled button with the vendored keyboard glyph and the ? cap", () => {

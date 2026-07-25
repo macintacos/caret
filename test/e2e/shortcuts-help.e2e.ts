@@ -6,7 +6,7 @@
 // waitPastSafeModeGrace is mandatory before the first keystroke: a ? landing
 // inside the post-focus grace window is swallowed by Safe Mode (safe-mode.e2e.ts).
 
-import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
+import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 
 test("? opens and toggles the help; the bar button opens it; search filters", async ({
   daemon,

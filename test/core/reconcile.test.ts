@@ -1,9 +1,8 @@
 import { expect, test } from "bun:test";
 
+import { setupTempStateDir } from "@test/support/env.ts";
 import type { ClientReview, PlanInput } from "@/lib/types.ts";
 import { runReconcile } from "@/review/reconcile.ts";
-
-import { setupTempStateDir } from "../support/env.ts";
 
 // Point the state dir at a throwaway temp dir so reconcile's best-effort log
 // lines append to a disposable caret.log, not the real ~/.local/state/caret.

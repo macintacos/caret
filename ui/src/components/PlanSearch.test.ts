@@ -1,9 +1,8 @@
-import "../../test-mount.ts";
+import "@ui/test-mount.ts";
 import { describe, expect, test } from "bun:test";
 
+import { render } from "@ui/test-mount.ts";
 import PlanSearch from "@/components/PlanSearch.svelte";
-
-import { render } from "../../test-mount.ts";
 
 const base = {
   query: "foo",

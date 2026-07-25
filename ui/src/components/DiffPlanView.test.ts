@@ -1,15 +1,14 @@
-import "../../test-mount.ts";
+import "@ui/test-mount.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import type { ClientReview, PlanVersion } from "@core/lib/types";
+import { until } from "@test/support/poll.ts";
+import { logCapture } from "@ui/test-helpers.ts";
+import { capture, render } from "@ui/test-mount.ts";
+import { reactiveProps } from "@ui/test-props.svelte.ts";
 import DiffPlanView from "@/components/DiffPlanView.svelte";
 import { createSourceCommenting, scratchKey } from "$lib/diffview/commenting.ts";
 import { shortcuts } from "$lib/shortcuts/index.ts";
-
-import { until } from "../../../test/support/poll.ts";
-import { logCapture } from "../../test-helpers.ts";
-import { capture, render } from "../../test-mount.ts";
-import { reactiveProps } from "../../test-props.svelte.ts";
 
 // Default props: no-op handlers and an empty annotation set, so the rendering
 // tests below need only override `review` (or `annotations`).

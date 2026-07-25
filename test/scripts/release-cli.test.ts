@@ -15,10 +15,9 @@
 
 import { describe, expect, test } from "bun:test";
 
+import { makeReleaseHarness } from "@test/support/release-harness.ts";
 import { buildReleaseCommand } from "@/tasks/release/command.ts";
 import type { Deps } from "@/tasks/release/steps.ts";
-
-import { makeReleaseHarness } from "../support/release-harness.ts";
 
 const CLI = "scripts/tasks/cli.ts";
 

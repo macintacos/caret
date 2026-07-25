@@ -4,10 +4,9 @@
 // (oversize or unparseable input comes back raw with exactly one warn).
 import { expect, test } from "bun:test";
 
+import { recordingLog } from "@test/support/recording-log.ts";
 import { formatPlanMarkdown, MAX_FORMAT_BYTES } from "@/plan/markdown.ts";
 import { rumdlFormatPlan } from "@/plan/rumdl.ts";
-
-import { recordingLog } from "../support/recording-log.ts";
 
 const LONG_PROSE =
   "# Title\n\n" +

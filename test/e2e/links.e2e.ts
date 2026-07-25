@@ -10,7 +10,7 @@
 // production opener (openLinkInNewTab) passes, with no real cross-origin
 // navigation: the test owns the seam the daemon serves, not the wider web.
 
-import { expect, test } from "./support/fixtures.ts";
+import { expect, test } from "@test/e2e/support/fixtures.ts";
 
 const SAFE_URL = "https://docs.example.test/widget-cache";
 // An http link (display collapses to its label), a plain-prose row with no link

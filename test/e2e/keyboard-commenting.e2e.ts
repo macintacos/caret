@@ -12,7 +12,7 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
+import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 
 // Tall enough that the cursor has room to move, with three headings so the plan
 // reflows to a stable multi-line shape.

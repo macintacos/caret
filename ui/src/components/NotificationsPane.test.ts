@@ -1,9 +1,8 @@
-import "../../test-mount.ts";
+import "@ui/test-mount.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
+import { render } from "@ui/test-mount.ts";
 import NotificationsPane from "@/components/NotificationsPane.svelte";
-
-import { render } from "../../test-mount.ts";
 
 // The settings Notifications pane (EXC-847) reflects the browser's live
 // Notification.permission and offers the enable / test affordance. Its state

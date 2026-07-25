@@ -4,9 +4,8 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { recordingLog } from "@test/support/recording-log.ts";
 import { type ApproveModeSet, readApproveMode, writeApproveMode } from "@/config/prefs.ts";
-
-import { recordingLog } from "../support/recording-log.ts";
 
 let dir: string;
 let file: string;

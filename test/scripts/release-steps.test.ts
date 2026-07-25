@@ -5,15 +5,14 @@
 // exactly what would (or would not) run.
 import { expect, test } from "bun:test";
 
-import type { ErrorCode } from "@/tasks/release/contract.ts";
-import { baseline, compute, finalize, GuardError, prepare } from "@/tasks/release/steps.ts";
-
 import {
   type HarnessOptions,
   makeReleaseHarness,
   market,
   pkg,
-} from "../support/release-harness.ts";
+} from "@test/support/release-harness.ts";
+import type { ErrorCode } from "@/tasks/release/contract.ts";
+import { baseline, compute, finalize, GuardError, prepare } from "@/tasks/release/steps.ts";
 
 /** The themed release name the agent hands the script via `--title`. */
 const THEME = "The Foundations Release";

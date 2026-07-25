@@ -6,7 +6,7 @@
 // The fixture daemon declares no adapter variants, so the UI renders the
 // WIRE_FALLBACK set (Approve / Approve & accept edits / Approve & auto mode).
 
-import { expect, test } from "./support/fixtures.ts";
+import { expect, test } from "@test/e2e/support/fixtures.ts";
 
 test("the options menu approves the review in a chosen variant", async ({ daemon, page }) => {
   const id = await daemon.seed();

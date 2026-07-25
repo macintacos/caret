@@ -6,7 +6,7 @@
 // (doc/agents/browser-testing.md). querySelectorAll doesn't pierce shadow roots,
 // so the diff library's own buttons are naturally out of scope.
 
-import { expect, test } from "./support/fixtures.ts";
+import { expect, test } from "@test/e2e/support/fixtures.ts";
 
 test("every enabled button and menu action shows the pointer cursor", async ({ daemon, page }) => {
   await daemon.seed();

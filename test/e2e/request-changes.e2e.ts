@@ -3,7 +3,7 @@
 // daemon-side via GET /api/reviews/:id (a deny keeps the review in memory as
 // `rejected` with the decision riding on it), not just by UI disappearance.
 
-import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
+import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 
 const FEEDBACK = "Please tighten the verification section.";
 

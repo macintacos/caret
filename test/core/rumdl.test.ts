@@ -12,6 +12,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { setupTempStateDir } from "@test/support/env.ts";
 import { rumdlBin } from "@/config/paths.ts";
 import {
   downloadRumdl,
@@ -20,8 +21,6 @@ import {
   rumdlAsset,
   rumdlFormatPlan,
 } from "@/plan/rumdl.ts";
-
-import { setupTempStateDir } from "../support/env.ts";
 
 setupTempStateDir("caret-rumdl-");
 

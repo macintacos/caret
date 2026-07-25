@@ -4,6 +4,8 @@ import { writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { setupTempStateDir } from "@test/support/env.ts";
+import { ndjsonRecords } from "@test/support/ndjson.ts";
 import { daemonLogFile, logFile } from "@/config/paths.ts";
 import { callerLocation, parseCaller } from "@/lib/caller-location.ts";
 import {
@@ -17,9 +19,6 @@ import {
   setLogLevel,
   setRedact,
 } from "@/lib/log.ts";
-
-import { setupTempStateDir } from "../support/env.ts";
-import { ndjsonRecords } from "../support/ndjson.ts";
 
 // The per-test state dir doubles as the temp home these path assertions resolve
 // against; the helper owns its creation, XDG wiring, and teardown.

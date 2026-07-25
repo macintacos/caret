@@ -17,11 +17,24 @@
     // `$lib/*` → ui/src/lib/*, the import prefix shadcn-svelte's copied
     // components and components.json assume. Mirrors the vite `$lib` alias so
     // svelte-check, the vite build, and bun test agree (EXC-757).
+    //
+    // `@ui/*` → this program's root (ui/), one level above its source root, where
+    // the unit harness lives (test-mount.ts, test-setup.ts, test-helpers.ts,
+    // test-props.svelte.ts). `@test/*` → the bun program's test/ tree, which the
+    // UI suites reach for shared polling helpers (EXC-879). Both are duplicated
+    // here rather than inherited because bun resolves `paths` from the *nearest*
+    // tsconfig, so ui/src/**/*.test.ts never sees the root config's mapping.
+    // Unlike the aliases above these two are test-only — resolved by bun test and
+    // svelte-check, never by the vite build, which does not compile *.test.ts — so
+    // they are deliberately absent from vite.config.ts; mirroring them there would
+    // imply vite resolves them.
     "paths": {
       "@/*": ["./src/*"],
       "@core/*": ["../src/*"],
       "$lib": ["./src/lib"],
-      "$lib/*": ["./src/lib/*"]
+      "$lib/*": ["./src/lib/*"],
+      "@ui/*": ["./*"],
+      "@test/*": ["../test/*"]
     }
   },
   "include": ["src/**/*.ts", "*.ts"]

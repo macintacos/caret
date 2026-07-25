@@ -1,4 +1,4 @@
-import "../../../test-setup.ts";
+import "@ui/test-setup.ts";
 import { describe, expect, test } from "bun:test";
 
 import {

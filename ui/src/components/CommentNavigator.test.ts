@@ -1,10 +1,9 @@
-import "../../test-mount.ts";
+import "@ui/test-mount.ts";
 import { describe, expect, test } from "bun:test";
 
+import { render } from "@ui/test-mount.ts";
 import CommentNavigator from "@/components/CommentNavigator.svelte";
 import type { CommentIndexEntry } from "$lib/feedback.ts";
-
-import { render } from "../../test-mount.ts";
 
 // The comment navigator's synchronous surface: the list structure, the row
 // contract (jump + active marker), the empty state, and dismissal. Search

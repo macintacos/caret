@@ -1,6 +1,7 @@
-import "../../../test-setup.ts";
+import "@ui/test-setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
+import { type LogCapture, logCapture } from "@ui/test-helpers.ts";
 import { flush } from "$lib/log.ts";
 import {
   ariaKeyshortcuts,
@@ -9,8 +10,6 @@ import {
   type ShortcutEntry,
   specSignature,
 } from "$lib/shortcuts/registry.ts";
-
-import { type LogCapture, logCapture } from "../../../test-helpers.ts";
 
 function entry(over: Partial<ShortcutEntry> & Pick<ShortcutEntry, "id" | "keys">): ShortcutEntry {
   return { group: "actions", label: over.id, ...over };

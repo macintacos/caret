@@ -1,9 +1,8 @@
-import "../../test-mount.ts";
+import "@ui/test-mount.ts";
 import { describe, expect, test } from "bun:test";
 
+import { render } from "@ui/test-mount.ts";
 import CodeCopyButton from "@/components/CodeCopyButton.svelte";
-
-import { render } from "../../test-mount.ts";
 
 // CodeCopyButton is the per-code-block copy affordance. These units cover the
 // contract DiffPlanView depends on: it positions itself, writes the block's code

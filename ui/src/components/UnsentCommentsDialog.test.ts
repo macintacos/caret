@@ -1,12 +1,11 @@
-import "../../test-mount.ts";
+import "@ui/test-mount.ts";
 
 import { describe, expect, test } from "bun:test";
 
 import type { ComponentProps } from "svelte";
 
+import { flushUntil, render } from "@ui/test-mount.ts";
 import UnsentCommentsDialog from "@/components/UnsentCommentsDialog.svelte";
-
-import { flushUntil, render } from "../../test-mount.ts";
 
 const twoItems = [
   { label: "General", text: "reconsider the rollout" },

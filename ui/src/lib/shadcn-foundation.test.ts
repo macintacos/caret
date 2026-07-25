@@ -15,13 +15,12 @@
 // ARIA assertions (with an async flush), but their real interaction semantics —
 // focus trap, Escape-to-close, outside-click, focus restoration, scroll lock —
 // are real-browser behaviors that stay e2e per doc/agents/browser-testing.md.
-import "../../test-setup.ts";
+import "@ui/test-setup.ts";
 import { expect, test } from "bun:test";
 
+import { render } from "@ui/test-mount.ts";
 import { Button } from "$lib/components/ui/button/index.js";
 import DialogFixture from "$lib/shadcn-dialog-fixture.svelte";
-
-import { render } from "../../test-mount.ts";
 
 /** Flush effects and advance timer ticks until `done()` holds (or a bounded
  * number of tries elapses) — bits-ui's portal/presence mounts its content on a

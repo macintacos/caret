@@ -4,6 +4,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { type BootOptions, bootDaemon, type TestDaemon } from "@test/support/daemon.ts";
+import { recordingLog } from "@test/support/recording-log.ts";
+import { expectNeverLogsBody } from "@test/support/redaction.ts";
 import { APPROVE_VARIANTS } from "@/adapters/claude/approve.ts";
 import { isClientLive, LIVE_CLIENT_WINDOW_MS } from "@/daemon/guards.ts";
 import { VERSION } from "@/lib/build-id.ts";
@@ -11,10 +14,6 @@ import { createDaemonLogger } from "@/lib/log.ts";
 import { formatPlanMarkdown } from "@/plan/markdown.ts";
 import type { Store } from "@/review/store.ts";
 import type { UiAssets } from "@/ui/assets.ts";
-
-import { type BootOptions, bootDaemon, type TestDaemon } from "../support/daemon.ts";
-import { recordingLog } from "../support/recording-log.ts";
-import { expectNeverLogsBody } from "../support/redaction.ts";
 
 // A UiAssets handle over real temp files, so the daemon serves bytes through
 // Bun.file (and its MIME) exactly as in production. Resolver injected as a dep —

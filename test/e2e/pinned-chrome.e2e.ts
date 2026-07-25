@@ -7,7 +7,7 @@
 // Layout and positioning are real-browser concerns (browser-testing.md), so this
 // asserts on visibility + bounding-box geometry, not a component unit.
 
-import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
+import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 
 // A right-docked 21rem card is at most this wide; the full-bleed sheet is wider.
 const CARD_MAX_PX = 21 * 16 + 4; // 21rem + rounding headroom

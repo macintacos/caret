@@ -5,7 +5,7 @@
 // outside all dismiss. With pending inline comments it additionally previews what
 // a plain approve would silently drop.
 
-import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
+import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 
 // The approve confirmation is a role="dialog" (dismissible on outside click,
 // EXC-791) titled "Approve this plan?" — named so the locator never collides with

@@ -4,7 +4,7 @@
 // The control is always shown but disabled for single-version reviews (EXC-664),
 // and the chosen layout persists across reloads.
 
-import { expect, test } from "./support/fixtures.ts";
+import { expect, test } from "@test/e2e/support/fixtures.ts";
 
 // Three versions whose bodies each carry a unique, greppable line so a diff
 // between a chosen pair is verifiable by visible text.

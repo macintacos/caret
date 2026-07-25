@@ -1,7 +1,8 @@
-import "../../test-setup.ts";
+import "@ui/test-setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import type { Annotation, FileExcerpt, ResolveBody } from "@core/lib/types";
+import { type LogCapture, logCapture } from "@ui/test-helpers.ts";
 import {
   getApproveMode,
   getDiagnostics,
@@ -14,8 +15,6 @@ import {
   resolveReview,
 } from "$lib/api.ts";
 import { flush } from "$lib/log.ts";
-
-import { type LogCapture, logCapture } from "../../test-helpers.ts";
 
 // Shared URL-routing fetch double (test-helpers.ts): /api/logs POSTs are
 // captured; the review/prefs endpoints answer from the per-test `respond` so

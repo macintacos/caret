@@ -19,7 +19,7 @@ import {
   shouldCheckForUpdate,
   updateCheckCachePath,
   updateToastBody,
-} from "../../opencode/caret.plugin.ts";
+} from "@opencode/caret.plugin.ts";
 
 // A client that records every toast realUpdateChecker surfaces.
 function recordingClient(): {

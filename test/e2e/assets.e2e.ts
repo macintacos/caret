@@ -5,7 +5,7 @@
 // run here proves the hashed-asset build is served end-to-end with no broken
 // references.
 
-import { expect, test } from "./support/fixtures.ts";
+import { expect, test } from "@test/e2e/support/fixtures.ts";
 
 // Same-origin only: the index links external Google Fonts (a separate CDN
 // origin), whose reachability is not what this spec proves and would make the

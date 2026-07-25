@@ -6,7 +6,7 @@
 // synthetic build identity + diagnostics wired in support/daemon-entry.ts; the two
 // are kept in sync deliberately.
 
-import { expect, test } from "./support/fixtures.ts";
+import { expect, test } from "@test/e2e/support/fixtures.ts";
 
 async function openAdvanced(page: import("@playwright/test").Page) {
   await page.getByRole("button", { name: "Settings" }).click();

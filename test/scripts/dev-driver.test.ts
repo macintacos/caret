@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
 
+import { bootDaemon, type TestDaemon } from "@test/support/daemon.ts";
+import { setupTempStateDir } from "@test/support/env.ts";
+import { waitFor } from "@test/support/poll.ts";
+import { expectNeverLogsBody } from "@test/support/redaction.ts";
 import { PLAN_REJECTED_MESSAGE } from "@/config/constants.ts";
 import { setLogLevel } from "@/lib/log.ts";
 import { hasUntaggedCodeBlock } from "@/plan/format.ts";
@@ -24,11 +28,6 @@ import {
   parseNumVersions,
   parsePositiveInt,
 } from "@/tasks/dev/protocol.ts";
-
-import { bootDaemon, type TestDaemon } from "../support/daemon.ts";
-import { setupTempStateDir } from "../support/env.ts";
-import { waitFor } from "../support/poll.ts";
-import { expectNeverLogsBody } from "../support/redaction.ts";
 
 // The final ("current") demo plan the driver seeds — read independently here so
 // the assertions don't lean on the driver's own loader.

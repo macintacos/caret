@@ -1,11 +1,10 @@
-import "../../test-mount.ts";
+import "@ui/test-mount.ts";
 
 import { describe, expect, test } from "bun:test";
 
+import { flushUntil, render } from "@ui/test-mount.ts";
 import ShortcutsHelp from "@/components/ShortcutsHelp.svelte";
 import type { ShortcutEntry } from "$lib/shortcuts/registry.ts";
-
-import { flushUntil, render } from "../../test-mount.ts";
 
 // bits-ui Dialog portals its content to document.body on a deferred tick, so the
 // grouped list is asserted against the body after an effect+timer flush (the

@@ -6,7 +6,7 @@
 // doc/agents/browser-testing.md). Two distinct plans are seeded (distinct
 // sessions → two pending reviews) so a switch is observable in the trigger.
 
-import { expect, test } from "./support/fixtures.ts";
+import { expect, test } from "@test/e2e/support/fixtures.ts";
 
 test("switches the active plan through the dropdown, both ways", async ({ daemon, page }) => {
   await daemon.seed({ title: "Plan Alpha", cwd: "/tmp/proj-alpha" });

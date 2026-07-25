@@ -21,8 +21,8 @@ import {
   runPreflight,
   type SpawnOutcome,
   type SpawnTask,
-} from "../../scripts/preflight.ts";
-import { waitFor } from "../support/poll.ts";
+} from "@scripts/preflight.ts";
+import { waitFor } from "@test/support/poll.ts";
 
 const ALL_TASKS = ["build bin", "build ui", "lint", "test", "test e2e"];
 

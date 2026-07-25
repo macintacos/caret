@@ -1,14 +1,13 @@
-import "../../test-mount.ts";
+import "@ui/test-mount.ts";
 
 import { describe, expect, test } from "bun:test";
 
 import type { ComponentProps } from "svelte";
 
 import type { Annotation } from "@core/lib/types";
+import { capture, flushUntil, render } from "@ui/test-mount.ts";
 import RequestChangesDialog from "@/components/RequestChangesDialog.svelte";
 import type { ComposerScratch } from "$lib/diffview/commenting.ts";
-
-import { capture, flushUntil, render } from "../../test-mount.ts";
 
 // Now composed on the shared Modal (bits-ui Dialog): its content portals to
 // document.body on a deferred tick, so structure/render is asserted against the

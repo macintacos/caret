@@ -10,7 +10,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, test, waitPastSafeModeGrace } from "./support/fixtures.ts";
+import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 
 const filler = (label: string) =>
   Array.from({ length: 8 }, (_, i) => `${label} filler line ${i + 1}.`).join("\n\n");

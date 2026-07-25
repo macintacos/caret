@@ -1,12 +1,11 @@
 import { afterEach, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
+import { setupTempStateDir } from "@test/support/env.ts";
+import { ndjsonRecords } from "@test/support/ndjson.ts";
 import { logFile } from "@/config/paths.ts";
 import { ensureDaemon, retireDaemon } from "@/daemon/lifecycle.ts";
 import { setLogLevel } from "@/lib/log.ts";
-
-import { setupTempStateDir } from "../support/env.ts";
-import { ndjsonRecords } from "../support/ndjson.ts";
 
 // Point the state dir at a throwaway temp dir so the debug-level instrumentation
 // tests append to a disposable caret.log instead of the real ~/.local/state/caret.
