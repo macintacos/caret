@@ -57,9 +57,11 @@ OpenCode-side counterpart to Claude Code's `hooks.json`, which likewise spawns
 Because both ends of this wire are caret-owned (the plugin writes the envelope, the
 `opencode` adapter renders the decision the plugin reads), the OpenCode adapter is the
 *least* speculative of the three — there is no foreign agent wire format to model. The
-pure logic (envelope build, fail-safe decision parse, config mutation, the spawn bridge)
-lives in `opencode/caret.plugin.ts` behind a `createCaretPlugin({ run })` DI seam and is
-unit-tested in `test/opencode/`.
+pure logic (envelope build, fail-safe decision parse, the spawn bridge) lives in
+`opencode/caret.plugin.ts` behind a `createCaretPlugin({ run })` DI seam and is
+unit-tested in `test/opencode/`. Config mutation is the adapter's, not the plugin's, so it
+lives in `src/adapters/opencode/config-plugin.ts` and is covered from
+`test/adapters/opencode/`.
 
 ## Daemon warm-up: plan-agent parity, not session start (EXC-838)
 
