@@ -10,6 +10,7 @@ import type { GitHubOps, PullRequestSummary } from "@/tasks/release/github.ts";
 import type { NpmOps } from "@/tasks/release/npm.ts";
 import type { RumdlOps } from "@/tasks/release/rumdl.ts";
 import type { Deps, FsOps } from "@/tasks/release/steps.ts";
+import { isNewer, versionFromTag } from "@/tasks/release/version.ts";
 
 /** A package.json / plugin.json body carrying just the version field tests assert on. */
 export const pkg = (v: string) => `{\n  "name": "caret",\n  "version": "${v}"\n}\n`;
@@ -92,19 +93,34 @@ const defaultFiles = (): Record<string, string> => ({
 });
 
 /**
+ * The highest `vX.Y.Z` tag by semver order, mirroring what `git tag --sort=-v:refname`
+ * gives the real `latestVersionTag()`. Deriving it from the tag set keeps a fixture
+ * from describing a world git cannot produce — a tag set whose maximum disagrees with
+ * the reported latest tag, which is how a finalize resume bug once slipped through.
+ */
+const maxVersionTag = (tags: Iterable<string>): string | null => {
+  let highest: string | null = null;
+  for (const tag of tags) {
+    if (highest === null || isNewer(versionFromTag(tag), versionFromTag(highest))) highest = tag;
+  }
+  return highest;
+};
+
+/**
  * Build a `Deps` backed by recording fakes plus the mutable `state`/`files` they
  * read and write. Each option group (`GitOptions`/`GitHubOptions`/`IoOptions`)
  * is optional, so a test states only what it cares about.
  */
 export function makeReleaseHarness(opts: HarnessOptions = {}): ReleaseHarness {
   const calls: string[] = [];
+  const tags = new Set(opts.tags ?? ["v0.0.1"]);
   const state: HarnessState = {
     branch: opts.branch ?? "trunk",
     head: "headsha",
     root: "rootsha",
     porcelain: opts.porcelain ?? [],
-    latestTag: opts.latestTag === undefined ? "v0.0.1" : opts.latestTag,
-    tags: new Set(opts.tags ?? ["v0.0.1"]),
+    latestTag: opts.latestTag === undefined ? maxVersionTag(tags) : opts.latestTag,
+    tags,
     remoteTags: new Set(opts.remoteTags ?? ["v0.0.1"]),
     localBranches: new Set(opts.localBranches ?? []),
     remoteBranches: new Set(opts.remoteBranches ?? []),

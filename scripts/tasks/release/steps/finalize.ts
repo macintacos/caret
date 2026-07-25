@@ -7,7 +7,11 @@
 // reflowed to single-line paragraphs so it renders cleanly on GitHub.
 
 import { extractVersion } from "@/tasks/release/manifest.ts";
-import { type FinalizeResult, MANIFESTS } from "@/tasks/release/steps/context.ts";
+import {
+  type FinalizeResult,
+  MANIFESTS,
+  NO_BASELINE_MESSAGE,
+} from "@/tasks/release/steps/context.ts";
 import type { Deps } from "@/tasks/release/steps/deps.ts";
 import {
   assertCleanTree,
@@ -54,21 +58,22 @@ async function resolveTrunkRelease(
 
   const latestTag = await deps.git.latestVersionTag();
   if (latestTag === null) {
-    throw new GuardError(
-      "NO_BASELINE",
-      "No release tags yet. Run `mise run release baseline` to tag the initial commit as v0.0.1.",
-    );
+    throw new GuardError("NO_BASELINE", NO_BASELINE_MESSAGE);
   }
+  // Dereference this release's tag to a commit: an annotated tag's own object SHA
+  // differs from the commit it points at. Null means it does not exist yet.
+  const taggedSha = await deps.git.tryRevParse(`${tag}^{commit}`);
+  if (taggedSha !== null && taggedSha !== trunkSha) {
+    throw new GuardError("TAG_EXISTS", `Tag ${tag} points at ${taggedSha}, not ${trunkSha}.`);
+  }
+
   // Trunk must have moved past the last release for the bump to have merged —
   // except when this release's own tag already points at the very commit we are
   // about to tag. That only happens when an earlier run already cleared this
   // check and tagged trunk, so we are resuming it (the classic case: the tag and
   // the Release landed, the npm publish failed). Without the carve-out every
-  // post-tag resume would abort as NOT_MERGED. Requiring the tag to point at
-  // *this* commit is what keeps the carve-out from also waving through a stale
-  // trunk whose last release tag sits further back in history.
-  const resuming = (await deps.git.tryRevParse(`${tag}^{commit}`)) === trunkSha;
-  if (!resuming && !isNewer(version, versionFromTag(latestTag))) {
+  // post-tag resume would abort as NOT_MERGED.
+  if (taggedSha !== trunkSha && !isNewer(version, versionFromTag(latestTag))) {
     throw new GuardError(
       "NOT_MERGED",
       `Trunk manifests at ${version}, not ahead of ${latestTag}; bump not merged yet.`,
@@ -84,6 +89,18 @@ async function resolveTrunkRelease(
 }
 
 /**
+ * Reject an unreadable `--notes-file` before anything mutates. The read itself
+ * stays lazy (below), but a mistyped path must not surface only after the tag has
+ * been pushed — tags are never moved, so that would strand the release.
+ */
+async function assertNotesFile(deps: Deps, notesFile: string | undefined): Promise<void> {
+  if (notesFile === undefined) return;
+  if (!(await deps.fs.exists(notesFile))) {
+    throw new GuardError("NOTES_MISSING", `Release notes file ${notesFile} does not exist.`);
+  }
+}
+
+/**
  * The GitHub Release body: the agent-composed notes file, reflowed to single-line
  * paragraphs (the source is hard-wrapped at ~90 chars, which renders as awkward
  * breaks on GitHub). Re-read from the same file on every call, so a resume
@@ -92,9 +109,6 @@ async function resolveTrunkRelease(
  */
 async function composeReleaseNotes(deps: Deps, notesFile: string | undefined): Promise<string> {
   if (notesFile === undefined) return "";
-  if (!(await deps.fs.exists(notesFile))) {
-    throw new GuardError("NOTES_MISSING", `Release notes file ${notesFile} does not exist.`);
-  }
   const notes = await deps.fs.read(notesFile);
   return notes.trim() === "" ? "" : deps.rumdl.reflow(notes);
 }
@@ -130,6 +144,7 @@ export async function finalize(
   // here would reject every phase-2 entry. The real publish-safety gates are the
   // clean-tree check and the NOT_MERGED triple-check in resolveTrunkRelease.
   await assertCleanTree(deps);
+  await assertNotesFile(deps, opts.notesFile);
 
   // Fetch unconditionally (read-only): even a dry run must read a fresh
   // origin/trunk so phase detection and previews reflect a merged PR.
@@ -158,11 +173,16 @@ export async function finalize(
       if (opts.dryRun) {
         deps.io.log(`Would refresh ${tag} release notes.`);
       } else {
-        await deps.github.releaseEdit({
-          tag,
-          notes: await composeReleaseNotes(deps, opts.notesFile),
-        });
-        deps.io.log(`Refreshed ${tag} release notes.`);
+        const notes = await composeReleaseNotes(deps, opts.notesFile);
+        // Same no-clobber rule: an empty body is never something you meant to
+        // publish over a good one (a truncated notes file reads as blank), so
+        // leave the published notes alone rather than wiping them.
+        if (notes === "") {
+          deps.io.log(`Notes file is empty; leaving ${tag} release notes as published.`);
+        } else {
+          await deps.github.releaseEdit({ tag, notes });
+          deps.io.log(`Refreshed ${tag} release notes.`);
+        }
       }
     }
   } else if (opts.dryRun) {

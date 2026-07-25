@@ -238,17 +238,18 @@ only the publish.
 ### 1. Preview the finalize
 
 ```sh
-bun scripts/tasks/cli.ts release finalize --dry-run --title "The <Theme> Release"
+bun scripts/tasks/cli.ts release finalize --dry-run --title "The <Theme> Release" --notes-file <path>
 ```
 
 This fetches `origin/trunk` and returns the concrete `version`, `tag`, `title`, and
 `taggedSha` (trunk's merged HEAD), and previews the npm publish, without mutating
-anything. Pass `--title` here too, so the previewed `title` is the themed one you are
-about to publish rather than the bare `v<version>` fallback. It confirms the squash-merge
-from Phase 1 step 5 actually landed: `ok: true` means proceed. If it returns `ok: false`
-with `NOT_MERGED`, the merge didn't reach `origin/trunk` (the `gh pr merge` failed or is
-still settling) — surface that and work with the operator before continuing; do not run
-`finalize --yes`.
+anything. Pass the **same** flags you will pass for real: `--title` so the previewed
+`title` is the themed one rather than the bare `v<version>` fallback, and `--notes-file`
+so a mistyped path fails here as `NOTES_MISSING` instead of on the real run. It confirms
+the squash-merge from Phase 1 step 5 actually landed: `ok: true` means proceed. If it
+returns `ok: false` with `NOT_MERGED`, the merge didn't reach `origin/trunk` (the
+`gh pr merge` failed or is still settling) — surface that and work with the operator
+before continuing; do not run `finalize --yes`.
 
 ### 2. Run finalize
 

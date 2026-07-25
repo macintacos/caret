@@ -12,6 +12,9 @@ import { type BumpLevel, nextVersion, tagName, versionFromTag } from "@/tasks/re
 /** The baseline tag placed on the repository's initial commit. */
 export const BASELINE_TAG = "v0.0.1";
 
+/** The advice both version-deriving steps give when the repo has no release tag. */
+export const NO_BASELINE_MESSAGE = `No release tags yet. Run \`mise run release baseline\` to tag the initial commit as ${BASELINE_TAG}.`;
+
 /** The version-bearing files prepare/finalize mutate, in mutation order. */
 export const MANIFESTS = [
   "package.json",
@@ -89,10 +92,7 @@ export async function gatherContext(
 ): Promise<ReleaseContext> {
   const previousTag = await deps.git.latestVersionTag();
   if (previousTag === null) {
-    throw new GuardError(
-      "NO_BASELINE",
-      "No release tags yet. Run `mise run release baseline` to tag the initial commit as v0.0.1.",
-    );
+    throw new GuardError("NO_BASELINE", NO_BASELINE_MESSAGE);
   }
   const previousVersion = versionFromTag(previousTag);
   const currentVersion = await readSyncedVersion(deps);

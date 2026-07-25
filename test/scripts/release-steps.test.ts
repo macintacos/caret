@@ -87,7 +87,10 @@ test("compute rejects manifest drift", async () => {
 });
 
 test("compute rejects when the target tag already exists", async () => {
-  const { deps } = makeReleaseHarness({ tags: ["v0.0.1", "v0.1.0"] });
+  // The reachable shape: someone already pushed v0.1.0, so it is on the remote but
+  // not in this checkout's tag list — the local latest is still v0.0.1, and the
+  // minor bump lands right on top of the tag that beat us there.
+  const { deps } = makeReleaseHarness({ remoteTags: ["v0.0.1", "v0.1.0"] });
   await expectGuard(compute(deps, { bump: "minor" }), "TAG_EXISTS");
 });
 
@@ -144,7 +147,7 @@ test("prepare rejects TITLE_MISSING when the title is blank", async () => {
   await expectGuard(prepare(deps, { bump: "minor", dryRun: false, title: "   " }), "TITLE_MISSING");
 });
 
-test("prepare stages only the manifests, never a changelog", async () => {
+test("prepare stages only the version manifests", async () => {
   const { deps, calls } = makeReleaseHarness(PREPARE_OPTS);
   await prepare(deps, { bump: "minor", dryRun: false, title: THEME });
   expect(calls).toContain(
@@ -310,8 +313,7 @@ test("prepare rejects PR_CLOSED when the release PR was closed unmerged", async 
 // --- finalize --------------------------------------------------------------
 
 // Trunk's three manifests at 0.1.0, ahead of the harness's default v0.0.1 tag —
-// i.e. the bump PR merged. That gap is the whole merged-check now that there is no
-// changelog on trunk to cross-check against.
+// i.e. the bump PR merged. That gap is the merged-check.
 const FINALIZE_OPTS: HarnessOptions = {
   refs: { "origin/trunk": "mergedsha" },
   filesAtRef: {
@@ -383,6 +385,7 @@ test("finalize still publishes to npm when the GitHub release already exists (re
     ...FINALIZE_OPTS,
     tags: ["v0.0.1", "v0.1.0"],
     remoteTags: ["v0.0.1", "v0.1.0"],
+    refs: { "origin/trunk": "mergedsha", "v0.1.0^{commit}": "mergedsha" },
     releases: {
       "v0.1.0": { url: "https://github.com/macintacos/caret/releases/tag/v0.1.0" },
     },
@@ -393,11 +396,11 @@ test("finalize still publishes to npm when the GitHub release already exists (re
   expect(r.npmPublished).toBe(true);
 });
 
-test("finalize rejects NOT_MERGED when trunk manifests are not ahead of the latest tag", async () => {
-  // Trunk still sits at v0.0.1's version, so the bump PR has not landed. Other
-  // work has merged since v0.0.1, so that tag points behind trunk's HEAD — which
-  // is what separates this from a post-tag resume of our own release.
-  const { deps } = makeReleaseHarness({
+test("finalize refuses to publish when the bump never merged", async () => {
+  // Trunk still sits at v0.0.1's version, so the bump PR has not landed, and other
+  // work has merged since v0.0.1 — that tag points behind trunk's HEAD. Refusing
+  // with the tag's own commit named is the actionable message here.
+  const { deps, calls } = makeReleaseHarness({
     refs: { "origin/trunk": "mergedsha", "v0.0.1^{commit}": "oldersha" },
     filesAtRef: {
       "origin/trunk:package.json": pkg("0.0.1"),
@@ -405,7 +408,8 @@ test("finalize rejects NOT_MERGED when trunk manifests are not ahead of the late
       "origin/trunk:.claude-plugin/marketplace.json": market("0.0.1"),
     },
   });
-  await expectGuard(finalize(deps, { dryRun: false }), "NOT_MERGED");
+  await expectGuard(finalize(deps, { dryRun: false }), "TAG_EXISTS");
+  expect(calls).not.toContain("npmPublish"); // nothing published off an unmerged trunk
 });
 
 test("finalize rejects NOT_MERGED when a manifest is missing on trunk", async () => {
@@ -429,7 +433,6 @@ test("finalize resumes after its own tag was pushed rather than crying NOT_MERGE
   // strand every post-tag resume.
   const { deps, calls } = makeReleaseHarness({
     ...FINALIZE_OPTS,
-    latestTag: "v0.1.0",
     tags: ["v0.0.1", "v0.1.0"],
     remoteTags: ["v0.0.1", "v0.1.0"],
     refs: { "origin/trunk": "mergedsha", "v0.1.0^{commit}": "mergedsha" },
@@ -461,6 +464,7 @@ test("finalize resumes a created-but-unpushed local tag without a false TAG_EXIS
     ...FINALIZE_OPTS,
     tags: ["v0.0.1", "v0.1.0"], // local tag exists
     remoteTags: ["v0.0.1"], // but was never pushed
+    refs: { "origin/trunk": "mergedsha", "v0.1.0^{commit}": "mergedsha" },
   });
   const r = await finalize(deps, { dryRun: false });
   expect(calls).not.toContain("createTag:v0.1.0@mergedsha"); // tag already local
@@ -491,6 +495,7 @@ test("finalize reuses an existing GitHub release", async () => {
     ...FINALIZE_OPTS,
     tags: ["v0.0.1", "v0.1.0"],
     remoteTags: ["v0.0.1", "v0.1.0"],
+    refs: { "origin/trunk": "mergedsha", "v0.1.0^{commit}": "mergedsha" },
     releases: {
       "v0.1.0": { url: "https://github.com/macintacos/caret/releases/tag/v0.1.0" },
     },
@@ -550,6 +555,7 @@ test("finalize with a notes file refreshes the notes of a reused release", async
       ...FINALIZE_OPTS,
       tags: ["v0.0.1", "v0.1.0"],
       remoteTags: ["v0.0.1", "v0.1.0"],
+      refs: { "origin/trunk": "mergedsha", "v0.1.0^{commit}": "mergedsha" },
       releases: { "v0.1.0": { url: "https://github.com/macintacos/caret/releases/tag/v0.1.0" } },
     }),
   );
@@ -575,6 +581,7 @@ test("finalize without a notes file leaves a reused release's notes untouched", 
     ...FINALIZE_OPTS,
     tags: ["v0.0.1", "v0.1.0"],
     remoteTags: ["v0.0.1", "v0.1.0"],
+    refs: { "origin/trunk": "mergedsha", "v0.1.0^{commit}": "mergedsha" },
     releases: {
       "v0.1.0": {
         url: "https://github.com/macintacos/caret/releases/tag/v0.1.0",
