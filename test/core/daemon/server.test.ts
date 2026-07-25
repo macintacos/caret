@@ -189,7 +189,7 @@ test("GET /api/health reports isDev as a boolean", async () => {
   // The UI's "local build" badge keys on this flag. It derives from
   // isCompiledBinary() (a process-constant), so assert it's present and a
   // boolean rather than a fixed value — the true/false truth table is proven
-  // in test/core/build-id.test.ts.
+  // in test/core/lib/build-id.test.ts.
   await boot();
   const body = (await (await fetch(`${base}/api/health`)).json()) as { isDev?: unknown };
   expect(typeof body.isDev).toBe("boolean");
@@ -945,7 +945,6 @@ describe("read-confidentiality posture", () => {
             body: JSON.stringify({ events: [{ level: "info", step: "ui", msg: "x" }] }),
           }),
       ],
-      ["POST /api/retire", () => fetch(`${base}/api/retire`, { method: "POST" })],
       ["a 404 fallthrough", () => fetch(`${base}/api/nope`)],
     ];
     // /resolve and /expire are terminal (they consume the pending review), so
@@ -968,6 +967,10 @@ describe("read-confidentiality posture", () => {
       await fetch(`${base}/api/reviews/${eid}/expire`, { method: "POST" }),
       "POST /api/reviews/:id/expire",
     );
+    // /api/retire is terminal for the *daemon*, not just a review: handleRetire
+    // defers stop() by a tick so its 200 can flush, so every later request races
+    // that shutdown. It must therefore be the last request this test makes.
+    expectNoCorsHeaders(await fetch(`${base}/api/retire`, { method: "POST" }), "POST /api/retire");
   });
 
   test("a cross-origin GET is allowed through (the read-confidentiality tax)", async () => {

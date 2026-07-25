@@ -36,7 +36,7 @@ export function isClientLive(lastPollAt: number, now: number, windowMs: number):
 // (non-safe) methods, where the browser *can* fire a cross-origin request whose
 // side effect lands even though the attacker can't read the reply. A safe
 // method (GET/HEAD) is let through deliberately; that asymmetry is the
-// read-confidentiality tax, and `test/core/daemon.test.ts` pins both halves (no
+// read-confidentiality tax, and `test/core/daemon/server.test.ts` pins both halves (no
 // CORS header is ever emitted; a cross-origin GET is allowed through).
 
 /** GET and HEAD are the safe (non-mutating) HTTP methods. The CSRF guard gates

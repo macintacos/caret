@@ -229,7 +229,7 @@ test("an explicit extra.source wins over the logger's own tag", () => {
 // Stack-captured repo-relative `path:line` of the emitting call site. The
 // regex pins the file to this test (so we know the frame walk skipped
 // src/lib/log.ts and landed on the real caller) and the trailing line number.
-const CALLER = /^test\/core\/log\.test\.ts:\d+$/;
+const CALLER = /^test\/core\/lib\/log\.test\.ts:\d+$/;
 
 test("hook records carry the caller location", () => {
   logInfo("review", "created");
