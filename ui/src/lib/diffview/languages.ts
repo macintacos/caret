@@ -13,7 +13,7 @@
 import { preloadHighlighter } from "@pierre/diffs";
 
 import { bundledLanguages } from "$lib/diffview/shiki-bundle.ts";
-import { caretDiffTheme } from "$lib/diffview/theme.ts";
+import { THEME_IDS } from "$lib/theme.ts";
 
 // The grammars the shiki bundle can resolve (canonical shiki names). markdown is
 // the plan source language itself; the rest are the fenced-code grammars.
@@ -92,10 +92,9 @@ const inflight = new Map<string, Promise<boolean>>();
 // load leaves its fences plain and must never break the view). A failed load is
 // dropped from `inflight` (and never added to `loaded`) so a later mount retries.
 function startLoad(lang: string): Promise<boolean> {
-  const p = preloadHighlighter({
-    themes: [caretDiffTheme.theme.light, caretDiffTheme.theme.dark],
-    langs: [lang],
-  })
+  // Warmed against every caret theme, so the grammar is ready in whichever palette
+  // is live and a later theme switch re-tokenizes without another load.
+  const p = preloadHighlighter({ themes: [...THEME_IDS], langs: [lang] })
     .then(() => {
       loaded.add(lang);
       return true;

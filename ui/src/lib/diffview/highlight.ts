@@ -1,12 +1,13 @@
 // Standalone syntax highlighting for the filename-hover excerpt (EXC-687). The
 // @pierre/diffs library keeps its own private highlighter, so this builds a small
 // dedicated one bound to shiki's full grammar bundle and caret's themes, then
-// highlights an excerpt to the single theme matching the current color scheme —
-// so the popover reads like the plan view's own code. Grammars load lazily and
-// cache; anything that can't highlight falls back to plain text. Never throws.
+// highlights an excerpt to the caret theme in effect — so the popover reads like
+// the plan view's own code. Grammars load lazily and cache; anything that can't
+// highlight falls back to plain text. Never throws.
 
-import { caretDark, caretLight } from "$lib/caret-theme.ts";
+import { CARET_SHIKI_THEMES } from "$lib/caret-theme.ts";
 import { createHighlighter } from "$lib/diffview/shiki-bundle.ts";
+import type { ThemeId } from "$lib/theme.ts";
 
 type Highlighter = Awaited<ReturnType<typeof createHighlighter>>;
 
@@ -17,10 +18,7 @@ function highlighter(): Promise<Highlighter> {
   if (highlighterPromise === undefined) {
     highlighterPromise = createHighlighter({
       langs: [],
-      themes: [
-        { ...caretLight, name: "caret-light" },
-        { ...caretDark, name: "caret-dark" },
-      ],
+      themes: CARET_SHIKI_THEMES,
     });
   }
   return highlighterPromise;
@@ -41,17 +39,18 @@ async function resolveLanguage(hl: Highlighter, language: string): Promise<strin
 }
 
 /** Highlights `code` to themed HTML (`<pre class="shiki">…`) for the excerpt
- * popover, using caret-dark or caret-light per `dark`. Returns "" on any failure
- * so the caller can fall back to rendering the code as plain text. */
+ * popover, in the caret theme currently painted — the popover opens over the plan
+ * view, so it reads as the same palette. Returns "" on any failure so the caller
+ * can fall back to rendering the code as plain text. */
 export async function highlightExcerpt(
   code: string,
   language: string,
-  dark: boolean,
+  themeId: ThemeId,
 ): Promise<string> {
   try {
     const hl = await highlighter();
     const lang = await resolveLanguage(hl, language);
-    return hl.codeToHtml(code, { lang, theme: dark ? "caret-dark" : "caret-light" });
+    return hl.codeToHtml(code, { lang, theme: themeId });
   } catch {
     return "";
   }

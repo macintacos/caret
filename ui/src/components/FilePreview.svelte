@@ -9,6 +9,7 @@
   // popover that stays put until dismissed (Escape, or a click outside it;
   // DiffPlanView owns that). pointer-events stay on so the reader can move onto the
   // card to scroll a long line or select text in it without dismissing it.
+  import { currentThemeId } from "$lib/appearance.ts";
   import { getFileExcerpt } from "$lib/api.ts";
   import { highlightExcerpt } from "$lib/diffview/highlight.ts";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
@@ -41,16 +42,6 @@
     | { kind: "error" }
     | { kind: "ready"; excerpt: FileExcerpt; rows: Row[] };
   let preview = $state<Preview>({ kind: "loading" });
-
-  // Current color scheme, honoring caret's manual data-theme override before the
-  // system preference. Read per fetch — a transient popover needn't track a
-  // theme flip that happens while it is open.
-  function prefersDark(): boolean {
-    const attr = document.documentElement.dataset.theme;
-    if (attr === "dark") return true;
-    if (attr === "light") return false;
-    return typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches;
-  }
 
   // Split shiki's `<pre><code>` blob into one HTML string per line (the inner
   // token spans of each `.line`), so each source line can render in its own
@@ -89,10 +80,12 @@
     void (async () => {
       try {
         const excerpt = await getFileExcerpt(id, p, ln);
+        // The live theme is resolved per fetch — a transient popover needn't track
+        // a theme switch that happens while it is open.
         const html = await highlightExcerpt(
           excerpt.lines.join("\n"),
           excerpt.language,
-          prefersDark(),
+          currentThemeId(),
         );
         if (!cancelled) preview = { kind: "ready", excerpt, rows: buildRows(excerpt, html) };
       } catch {

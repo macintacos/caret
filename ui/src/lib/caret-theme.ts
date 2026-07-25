@@ -1,12 +1,17 @@
 import type { ThemeRegistrationRaw } from "shiki/core";
 
-import { THEMES, type Theme } from "$lib/theme.ts";
+import { THEME_IDS, THEMES, type Theme, type ThemeId } from "$lib/theme.ts";
 
-// Custom shiki themes that mirror caret's neutral palette so highlighted code
-// reads like a typeset listing rather than a generic editor theme: mostly ink,
-// the amber accent for keywords, one green for strings, faint italic comments.
-// Registered into the source view's highlighter (see diffview/theme.ts) as
-// dual-theme CSS variables so light/dark switches happen via CSS only.
+// Custom shiki themes that mirror caret's palettes so highlighted code reads like
+// a typeset listing rather than a generic editor theme: mostly ink, the accent for
+// keywords, the positive hue for strings, faint italic comments. Registered into
+// the source view's highlighter (see diffview/theme.ts).
+//
+// One theme is derived per registered palette (EXC-752), so the code a reviewer
+// reads is colored by the theme they picked rather than by caret's own pair at the
+// matching scheme. A vendor palette therefore gets caret's typographic highlighting
+// rendered in its colors — not that vendor's editor theme, which would be a second
+// place colors live.
 //
 // The seven token colors are DERIVED from the palette objects in theme.ts — the
 // single source of truth for every color the UI paints (EXC-730; supersedes the
@@ -139,7 +144,7 @@ function build(name: string, type: "light" | "dark", p: Palette): ThemeRegistrat
         scope: ["fenced_code.block.language"],
         settings: { foreground: p.keyword, fontStyle: "bold" },
       },
-      // Diff (deleted lines reuse the burnt-amber accent — the palette has no red)
+      // Diff (deleted lines reuse the keyword color — the derivation maps no red)
       {
         scope: ["markup.deleted", "meta.diff.header.from-file", "punctuation.definition.deleted"],
         settings: { foreground: p.keyword },
@@ -152,5 +157,17 @@ function build(name: string, type: "light" | "dark", p: Palette): ThemeRegistrat
   };
 }
 
-export const caretLight = build("caret-light", "light", paletteFromTheme(THEMES["caret-light"]));
-export const caretDark = build("caret-dark", "dark", paletteFromTheme(THEMES["caret-dark"]));
+// Built once at module load, keyed by theme id: they are plain objects, and both
+// highlighters (the library's and the excerpt popover's) want the whole set up front.
+const SHIKI_THEMES = Object.fromEntries(
+  THEME_IDS.map((id) => [id, build(id, THEMES[id].scheme, paletteFromTheme(THEMES[id]))]),
+) as Record<ThemeId, ThemeRegistrationRaw>;
+
+/** The shiki theme for one caret palette. It is named by the palette's id, so a
+ * highlighter resolves it by the same handle appearance.ts paints with. */
+export function shikiThemeFor(id: ThemeId): ThemeRegistrationRaw {
+  return SHIKI_THEMES[id];
+}
+
+/** Every caret shiki theme, in THEME_IDS order — what a highlighter registers. */
+export const CARET_SHIKI_THEMES: ThemeRegistrationRaw[] = THEME_IDS.map(shikiThemeFor);

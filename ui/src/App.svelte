@@ -126,11 +126,11 @@
 
   // Theme (EXC-730, EXC-773). main.ts paints the saved appearance before mount;
   // this mirrors the RESOLVED theme id — mode + the light/dark slots + the OS
-  // preference — so the derived scheme reaches the diff view. Editing any of the
-  // three appearance settings applies immediately (the registry field's write
-  // persists then wipes); applySetting resyncs themeId so the reactive reads follow.
+  // preference — so the picked palette reaches the diff view, which renders into a
+  // shadow root and can't read it off the chrome. Editing any of the three
+  // appearance settings applies immediately (the registry field's write persists
+  // then wipes); applySetting resyncs themeId so the reactive reads follow.
   let themeId = $state<ThemeId>(currentThemeId());
-  const scheme = $derived(THEMES[themeId].scheme);
   let showSettings = $state(false);
   // First-run onboarding (EXC-781): opens once for a brand-new user whose
   // notification permission is still undecided. Guarded on Notification support
@@ -554,7 +554,7 @@
          filterable contents pane and a line gutter for creating comments. -->
     <DiffPlanView
       review={active}
-      {scheme}
+      {themeId}
       {commenting}
       {pending}
       {pendingText}
