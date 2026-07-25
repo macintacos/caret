@@ -394,9 +394,11 @@ test("finalize still publishes to npm when the GitHub release already exists (re
 });
 
 test("finalize rejects NOT_MERGED when trunk manifests are not ahead of the latest tag", async () => {
-  // Trunk still sits at v0.0.1's version, so the bump PR has not landed.
+  // Trunk still sits at v0.0.1's version, so the bump PR has not landed. Other
+  // work has merged since v0.0.1, so that tag points behind trunk's HEAD — which
+  // is what separates this from a post-tag resume of our own release.
   const { deps } = makeReleaseHarness({
-    refs: { "origin/trunk": "mergedsha" },
+    refs: { "origin/trunk": "mergedsha", "v0.0.1^{commit}": "oldersha" },
     filesAtRef: {
       "origin/trunk:package.json": pkg("0.0.1"),
       "origin/trunk:.claude-plugin/plugin.json": pkg("0.0.1"),
@@ -417,6 +419,41 @@ test("finalize rejects NOT_MERGED when a manifest is missing on trunk", async ()
 test("finalize rejects NO_BASELINE when the repo has no release tag to compare against", async () => {
   const { deps } = makeReleaseHarness({ ...FINALIZE_OPTS, latestTag: null });
   await expectGuard(finalize(deps, { dryRun: false }), "NO_BASELINE");
+});
+
+test("finalize resumes after its own tag was pushed rather than crying NOT_MERGED", async () => {
+  // The documented partial failure: a prior run tagged and pushed v0.1.0, then
+  // the npm publish failed. `latestVersionTag()` now reports v0.1.0 — trunk is no
+  // longer "ahead of the latest tag" — but that tag is this release's own, which
+  // is proof the earlier run already cleared the merged check. Blocking here would
+  // strand every post-tag resume.
+  const { deps, calls } = makeReleaseHarness({
+    ...FINALIZE_OPTS,
+    latestTag: "v0.1.0",
+    tags: ["v0.0.1", "v0.1.0"],
+    remoteTags: ["v0.0.1", "v0.1.0"],
+    refs: { "origin/trunk": "mergedsha", "v0.1.0^{commit}": "mergedsha" },
+    releases: { "v0.1.0": { url: "https://github.com/macintacos/caret/releases/tag/v0.1.0" } },
+  });
+  const r = await finalize(deps, { dryRun: false });
+  expect(r.tag).toBe("v0.1.0");
+  expect(calls).toContain("npmPublish"); // the step that failed last time completes
+  expect(r.npmPublished).toBe(true);
+});
+
+test("finalize still rejects NOT_MERGED when trunk lags a newer tag", async () => {
+  // Trunk sits behind the latest tag entirely — not this release's own tag, so
+  // the ahead-check applies and must still refuse.
+  const { deps } = makeReleaseHarness({
+    refs: { "origin/trunk": "mergedsha" },
+    latestTag: "v0.2.0",
+    filesAtRef: {
+      "origin/trunk:package.json": pkg("0.1.0"),
+      "origin/trunk:.claude-plugin/plugin.json": pkg("0.1.0"),
+      "origin/trunk:.claude-plugin/marketplace.json": market("0.1.0"),
+    },
+  });
+  await expectGuard(finalize(deps, { dryRun: false }), "NOT_MERGED");
 });
 
 test("finalize resumes a created-but-unpushed local tag without a false TAG_EXISTS", async () => {

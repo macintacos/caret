@@ -50,6 +50,7 @@ async function resolveTrunkRelease(
     entries.push({ file, version: extractVersion(c) });
   }
   const version = syncedVersion(entries);
+  const tag = tagName(version);
 
   const latestTag = await deps.git.latestVersionTag();
   if (latestTag === null) {
@@ -58,7 +59,16 @@ async function resolveTrunkRelease(
       "No release tags yet. Run `mise run release baseline` to tag the initial commit as v0.0.1.",
     );
   }
-  if (!isNewer(version, versionFromTag(latestTag))) {
+  // Trunk must have moved past the last release for the bump to have merged —
+  // except when this release's own tag already points at the very commit we are
+  // about to tag. That only happens when an earlier run already cleared this
+  // check and tagged trunk, so we are resuming it (the classic case: the tag and
+  // the Release landed, the npm publish failed). Without the carve-out every
+  // post-tag resume would abort as NOT_MERGED. Requiring the tag to point at
+  // *this* commit is what keeps the carve-out from also waving through a stale
+  // trunk whose last release tag sits further back in history.
+  const resuming = (await deps.git.tryRevParse(`${tag}^{commit}`)) === trunkSha;
+  if (!resuming && !isNewer(version, versionFromTag(latestTag))) {
     throw new GuardError(
       "NOT_MERGED",
       `Trunk manifests at ${version}, not ahead of ${latestTag}; bump not merged yet.`,
@@ -68,7 +78,7 @@ async function resolveTrunkRelease(
   return {
     trunkSha,
     version,
-    tag: tagName(version),
+    tag,
     title: composeReleaseTitle(version, title?.trim() || null),
   };
 }
