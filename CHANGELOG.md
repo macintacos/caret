@@ -7,6 +7,42 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-07-25 - The One Way In Release
+
+### Added
+
+- **`caret install` picks its own targets.** Run it with no flags and it detects which
+  coding agents you have, then asks which to install into with the detected ones
+  pre-checked. `--target` still works byte-for-byte for CI, and off a terminal it never
+  waits on the prompt — it installs into every agent it found, or Claude Code if it found
+  none. Every install also downloads the rumdl plan formatter (#299).
+- **OpenCode warms the daemon on plan-agent activity.** Messaging the Plan agent now
+  brings the daemon up before you submit, the analog of Claude Code's `EnterPlanMode`
+  prewarm, so the first review doesn't pay the cold-spawn cost (#298).
+
+### Changed
+
+- **One way in.** `bunx --no-cache @macintacos/caret@latest install` is now the only
+  documented install path. `scripts/install.sh` is deleted and its dev loop moved into
+  `caret install --from-local`, so `mise run build --install` and Claude Code's hooks go
+  through the same entrypoint; the per-agent plugin mechanics moved out of the README into
+  `doc/ADVANCED.md` (#300, #301).
+- **A failed install target exits non-zero.** Installing no longer closes with a success
+  line when a target actually failed (#300).
+- **The keyboard and preference layers each got a single source.** A shortcut's key now
+  comes only from `CANONICAL_KEYMAP` (buttons derive `aria-keyshortcuts` from it), the
+  plan's search HUD, vim cursor, and visual-select moved into one `planKeyboard` factory,
+  browser prefs self-register their storage keys, and the unsent-comment controller now
+  lives in the parent both consumers share. No behavior change (#294, #295, #296, #297).
+
+### Fixed
+
+- **The theme preview lands in the right place when you reopen the picker quickly.**
+  Reopening the theme select before the previous preview settled could leave the preview
+  misplaced (5fc0bf1).
+- **`mise run dev --fresh` clears the drag-hint dismissal.** That key had drifted out of
+  the reset list, so the hint stayed dismissed across a fresh run (#294).
+
 ## [0.7.2] - 2026-07-23 - The Settings Release
 
 ### Added
@@ -514,7 +550,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Review decisions are delivered via a bounded poll, fixing missed or delayed decision
   delivery.
 
-[Unreleased]: https://github.com/macintacos/caret/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/macintacos/caret/compare/v0.7.3...HEAD
+[0.7.3]: https://github.com/macintacos/caret/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/macintacos/caret/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/macintacos/caret/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/macintacos/caret/compare/v0.6.0...v0.7.0
