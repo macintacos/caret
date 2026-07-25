@@ -6,9 +6,14 @@
 // .diffview bridge — retints in realtime with no per-component change. Defining a
 // new palette is one more entry in THEMES.
 //
-// This module owns PALETTES only. Which palette is live — the light/dark/system
-// mode and the two per-scheme theme slots — is selection policy, and lives in
-// appearance.ts (EXC-773); paintTheme is the painting half it calls.
+// The palettes themselves live in ./themes/ — one module per family, each carrying
+// its upstream source and the mapping onto the tokens below. This module owns the
+// types, the assembled registry, and the painting; ./themes/recipe.ts owns the
+// tokens a palette derives rather than decides.
+//
+// Which palette is live — the light/dark/system mode and the two per-scheme theme
+// slots — is selection policy, and lives in appearance.ts (EXC-773); paintTheme is
+// the painting half it calls.
 //
 // app.css's :root holds the caret-dark values too, as the static first-paint /
 // no-JS fallback; theme.test.ts pins THEMES["caret-dark"] equal to that :root
@@ -19,7 +24,26 @@
 // This module touches `document` only inside function bodies, never at module
 // load, so caret-theme.ts can import THEMES under bun-test without a DOM.
 
-export type ThemeId = "caret-dark" | "caret-light";
+import { caretDark, caretLight } from "$lib/themes/caret.ts";
+import {
+  catppuccinFrappe,
+  catppuccinLatte,
+  catppuccinMacchiato,
+  catppuccinMocha,
+} from "$lib/themes/catppuccin.ts";
+import { dracula } from "$lib/themes/dracula.ts";
+import { githubDark, githubLight } from "$lib/themes/github.ts";
+
+export type ThemeId =
+  | "caret-dark"
+  | "caret-light"
+  | "catppuccin-latte"
+  | "catppuccin-frappe"
+  | "catppuccin-macchiato"
+  | "catppuccin-mocha"
+  | "dracula"
+  | "github-light"
+  | "github-dark";
 
 /** A native color scheme. Every theme declares one, and it is what
  * `color-scheme` / `data-theme` carry and what a theme slot is keyed by. */
@@ -61,60 +85,18 @@ export interface Theme {
   tokens: Record<ColorToken, string>;
 }
 
-// caret-dark = the values app.css's :root now carries (the default). caret-light =
-// the values app.css used to serve under prefers-color-scheme: light.
-const darkTokens: Record<ColorToken, string> = {
-  "--paper": "#0a0a0a",
-  "--paper-raised": "#171717",
-  "--paper-sunk": "#131313",
-  "--ink": "#fafafa",
-  "--ink-soft": "#a1a1a1",
-  "--ink-faint": "#737373",
-  "--rule": "#ffffff1a",
-  "--rule-strong": "#ffffff29",
-  "--accent": "#fb923c",
-  "--accent-bright": "#fdba74",
-  "--accent-wash": "#ec7c3829",
-  "--accent-ink": "#0a0a0a",
-  "--mark": "#f3953c2e",
-  "--mark-active": "#f3953c57",
-  "--mark-orphan": "#9b9b9b29",
-  "--ok": "#4ade80",
-  "--danger": "#f87171",
-  "--attention": "#a78bfa",
-  "--shadow-card": "0 1px 2px #00000066, 0 10px 30px #00000080",
-};
-
-// The neutral surfaces and ink carry a subtle warm (brown-ish) undertone so the
-// light theme reads as a sibling to caret-dark rather than a cool grey (EXC-776):
-// each grey has R > G > B instead of a flat R = G = B. The warmth stays subtle —
-// no perceptible yellow/orange cast — and preserves the prior luminance ordering
-// (raised > paper > sunk) and text contrast. theme.test.ts pins R > B on these.
-const lightTokens: Record<ColorToken, string> = {
-  "--paper": "#faf9f5",
-  "--paper-raised": "#fffdf8",
-  "--paper-sunk": "#f4f1ea",
-  "--ink": "#1c1714",
-  "--ink-soft": "#57504a",
-  "--ink-faint": "#8a827a",
-  "--rule": "#1c17141a",
-  "--rule-strong": "#1c171429",
-  "--accent": "#c2410c",
-  "--accent-bright": "#ea580c",
-  "--accent-wash": "#ec7c381f",
-  "--accent-ink": "#fff7ed",
-  "--mark": "#ec7c3824",
-  "--mark-active": "#ec7c3847",
-  "--mark-orphan": "#78706829",
-  "--ok": "#15803d",
-  "--danger": "#b91c1c",
-  "--attention": "#7c3aed",
-  "--shadow-card": "0 1px 2px #0000000f, 0 8px 24px #00000014",
-};
-
+// Insertion order is display order: caret's own pair first, then each vendor family
+// kept together, so a slot's dropdown groups the way a reader expects to find it.
 export const THEMES: Record<ThemeId, Theme> = {
-  "caret-dark": { id: "caret-dark", label: "caret dark", scheme: "dark", tokens: darkTokens },
-  "caret-light": { id: "caret-light", label: "caret light", scheme: "light", tokens: lightTokens },
+  "caret-dark": caretDark,
+  "caret-light": caretLight,
+  "catppuccin-latte": catppuccinLatte,
+  "catppuccin-frappe": catppuccinFrappe,
+  "catppuccin-macchiato": catppuccinMacchiato,
+  "catppuccin-mocha": catppuccinMocha,
+  dracula,
+  "github-light": githubLight,
+  "github-dark": githubDark,
 };
 
 /** Selectable ids in display order — caret-dark first. Drives the per-slot
