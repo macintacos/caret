@@ -590,7 +590,7 @@ test("creating a range annotation from the gutter persists the correct line span
   // range composer's Cmd+Enter submit does not fire when the diff renders dark).
   // This test guards range-annotation correctness, not theming, so it exercises
   // the working (light) path; EXC-751 owns the dark case.
-  await page.addInitScript(() => localStorage.setItem("caret.theme", "caret-light"));
+  await page.addInitScript(() => localStorage.setItem("caret.theme.mode", "light"));
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();

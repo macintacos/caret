@@ -465,7 +465,10 @@ for (const [themeId, scheme] of [
     daemon,
     page,
   }) => {
-    await page.addInitScript((t) => localStorage.setItem("caret.theme", t), themeId);
+    // Pin the mode rather than emulate the OS: this asserts a colour, so the
+    // theme must be settled before first paint and independent of any system
+    // preference the runner happens to carry.
+    await page.addInitScript((s) => localStorage.setItem("caret.theme.mode", s), scheme);
     await daemon.seedVersions(3, [V1, V2, V3]);
     await page.goto("/");
     await expect(page.locator(".diff-plan")).toBeVisible();

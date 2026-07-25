@@ -51,6 +51,12 @@ export default defineConfig({
         // both have room — derived from the constant so the e2e viewport tracks
         // the reference width instead of being coupled to it by prose.
         viewport: { width: REFERENCE_WIDTH_PX + 200, height: 900 },
+        // EXC-773: caret's default appearance mode follows the OS, so the
+        // emulated `prefers-color-scheme` now decides what a fresh origin
+        // paints. Pin it rather than inherit Playwright's light default — the
+        // suite's baseline is caret dark, and a spec that cares about system
+        // switching overrides this with page.emulateMedia().
+        colorScheme: "dark",
       },
     },
   ],
