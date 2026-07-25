@@ -25,6 +25,7 @@
   import type { DiffIndicators, DiffStyle } from "$lib/diffview/types.ts";
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
+  import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
@@ -83,6 +84,14 @@
   // Newest first reads most naturally in a picker — the current version is the
   // default base and sits at the top.
   const ordered = $derived([...versions].sort((a, b) => b.version - a.version));
+
+  // How many OTHER versions the current one can be diffed against — the toggle's
+  // count badge (EXC-804). N-1, not N: it answers "what is there to compare
+  // against", the same framing as the disabled tooltip's "No other versions to
+  // compare yet". Derived here rather than passed down like `canCompare`, whose
+  // rule the parent owns because DiffPlanView gates `showDiff` on it too; this
+  // count has one consumer, and `versions` is already in scope.
+  const otherCount = $derived(Math.max(0, versions.length - 1));
 
   // Sliding pill for the segmented ToggleGroups: instead of each option painting
   // its own background, one shared pill rides behind the options and animates to
@@ -220,6 +229,21 @@
       onclick={() => onSetComparing(!comparing)}
     >
       {@render compareLabel()}
+      <!-- How many other versions there are to compare against (EXC-804). The
+           TopBar pending-count Badge's exact shape — same variant, same
+           .count metric classes, same "the aria-label carries the count into the
+           button's name" wiring — differing only in hue (see the style block).
+           Guarded on the count rather than on `canCompare` alone: canCompare is a
+           parent-owned prop, and a "0" tally would be noise, not information. -->
+      {#if otherCount > 0}
+        <Badge
+          variant="secondary"
+          class="count metric other-count"
+          aria-label="{otherCount} other version{otherCount === 1 ? '' : 's'} to compare"
+        >
+          {otherCount}
+        </Badge>
+      {/if}
       <!-- The `d` shortcut toggles compare mode; the cap teaches it. Only on the
            enabled toggle (the disabled one has no shortcut), aria-hidden so the
            button's accessible name stays "Compare versions". -->
@@ -342,6 +366,20 @@
   }
   .compare-picker :global(.compare-toggle[aria-pressed="true"]:not(:disabled):hover) {
     background: var(--accent-wash);
+  }
+  /* The count of other versions (EXC-804). Structurally the TopBar's pending-count
+     badge; the one divergence is hue. That count is deliberately neutral because
+     amber is reserved for the Approve primary — but this one is asked to draw the
+     eye, so it wears --attention, caret's quiet-notice violet (the NotifyBell's
+     undecided tone, the notification dot). That keeps amber scarce AND keeps
+     --ok/--danger free to mean addition/deletion, which matters with the diff
+     surface sitting directly below this bar. Fill and ink both derive from the one
+     token, so applyTheme retints it per theme with no second rule. */
+  .compare-picker :global(.other-count) {
+    padding: 0 0.32rem;
+    font-size: var(--text-2xs);
+    background: color-mix(in lab, var(--attention) 18%, transparent);
+    color: var(--attention);
   }
   /* Nudge the `d` shortcut cap a hair further right of the label than the
      button's own gap gives it. */

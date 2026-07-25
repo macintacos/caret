@@ -54,6 +54,19 @@ function hasRadio(target: Element, name: string): boolean {
   return findRadio(target, name) != null;
 }
 
+// The toggle's own label text, with the count badge's digits subtracted. The badge
+// is separate chrome (EXC-804), so stripping it keeps the label assertion able to
+// catch a stray `label=` on the Icon — which a substring check would not.
+function labelOf(toggle: Element): string {
+  const badge = toggle.querySelector('[data-slot="badge"]');
+  return (toggle.textContent ?? "").replace(badge?.textContent ?? "", "").trim();
+}
+
+// The count badge on the toggle, or null when it isn't rendered.
+function countBadge(target: Element): HTMLElement | null {
+  return target.querySelector<HTMLElement>('.compare-toggle [data-slot="badge"]');
+}
+
 describe("VersionComparePicker visibility", () => {
   test("renders the toggle enabled with two or more versions", () => {
     const { target } = render(VersionComparePicker, baseProps);
@@ -100,10 +113,11 @@ describe("VersionComparePicker compare icon", () => {
     const { target } = render(VersionComparePicker, baseProps);
     const toggle = target.querySelector<HTMLButtonElement>(".compare-toggle");
     expect(toggle!.querySelector(".icon svg")).not.toBeNull();
-    // The icon is decorative, so it adds no text: the accessible name (which
-    // the e2e getByRole selectors depend on) stays exactly "Compare versions".
-    // A stray label= on the Icon would break this at unit speed.
-    expect(toggle!.textContent?.trim()).toBe("Compare versions");
+    // The icon is decorative, so it adds no text: the label (which the e2e
+    // getByRole selectors match on) stays exactly "Compare versions". A stray
+    // label= on the Icon would break this at unit speed. The EXC-804 count badge
+    // is subtracted — it's chrome beside the label, not part of it.
+    expect(labelOf(toggle!)).toBe("Compare versions");
     // EXC-808: the icon leads the label (sits to its left), so it precedes the
     // "Compare versions" text in DOM order.
     const kids = [...toggle!.childNodes];
@@ -141,6 +155,61 @@ describe("VersionComparePicker compare icon", () => {
     });
     const toggle = target.querySelector<HTMLButtonElement>(".compare-toggle");
     expect(toggle!.querySelector(".icon svg")).not.toBeNull();
+  });
+});
+
+// EXC-804: the toggle carries a badge counting the OTHER versions the current one
+// can be diffed against — N-1, not N, matching the disabled tooltip's "No other
+// versions to compare yet". It's a visual tally, so it persists whether or not
+// compare mode is on.
+describe("VersionComparePicker version count badge", () => {
+  test("counts the other versions, not the total, on the enabled toggle", () => {
+    const { target } = render(VersionComparePicker, baseProps);
+    expect(countBadge(target)?.textContent?.trim()).toBe("2");
+  });
+
+  test("counts one other version for a two-version review", () => {
+    const { target } = render(VersionComparePicker, {
+      ...baseProps,
+      versions: versions(2),
+      baseVersion: 2,
+      targetVersion: 1,
+    });
+    expect(countBadge(target)?.textContent?.trim()).toBe("1");
+  });
+
+  test("singularizes the accessible label at one other version", () => {
+    const { target } = render(VersionComparePicker, {
+      ...baseProps,
+      versions: versions(2),
+      baseVersion: 2,
+      targetVersion: 1,
+    });
+    expect(countBadge(target)?.getAttribute("aria-label")).toBe("1 other version to compare");
+  });
+
+  test("pluralizes the accessible label beyond one", () => {
+    const { target } = render(VersionComparePicker, baseProps);
+    expect(countBadge(target)?.getAttribute("aria-label")).toBe("2 other versions to compare");
+  });
+
+  // Nothing to compare means nothing to count: the disabled toggle stays a bare
+  // affordance, and its Tooltip already explains why.
+  test("renders no badge on the disabled single-version toggle", () => {
+    const { target } = render(VersionComparePicker, {
+      ...baseProps,
+      versions: versions(1),
+      comparing: false,
+      canCompare: false,
+    });
+    expect(countBadge(target) != null).toBe(false);
+  });
+
+  // The tally is true in both views, and keeping it mounted means entering compare
+  // mode never reflows the toggle's width.
+  test("stays on the toggle while compare mode is off", () => {
+    const { target } = render(VersionComparePicker, { ...baseProps, comparing: false });
+    expect(countBadge(target)?.textContent?.trim()).toBe("2");
   });
 });
 
