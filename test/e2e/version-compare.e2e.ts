@@ -2,7 +2,9 @@
 // versions, a picker lets the reviewer diff any pair, side-by-side or stacked,
 // switching the layout at runtime without remounting the view or losing scroll.
 // The control is always shown but disabled for single-version reviews (EXC-664),
-// and the chosen layout persists across reloads.
+// and the chosen layout persists across reloads. EXC-804 adds a count of the other
+// comparable versions on the toggle and a "(current)" marker on the newest picker
+// row; both are covered at the end of this file.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 
@@ -431,49 +433,66 @@ test("crossing --w-narrow forces unified then restores the split preference", as
 
 // Version-count badge on the compare toggle (EXC-804). The count itself is unit
 // tested; what only a browser can settle is that the badge resolves to caret's
-// --attention hue under BOTH themes — the ticket's "make sure it's supported in
-// each theme". Same probe technique as the --ok/--danger emphasis test above:
-// resolve the token through a throwaway span using the identical relative-color
-// form so both sides serialize to comparable sRGB channels.
-for (const colorScheme of ["light", "dark"] as const) {
-  test(`the compare toggle's version-count badge carries --attention in ${colorScheme}`, async ({
+// --attention hue under EACH theme — the ticket's "make sure it's supported in
+// each theme".
+//
+// The key detail: this does NOT use page.emulateMedia. caret stopped following
+// prefers-color-scheme when EXC-730 made the scheme an explicit user choice (see
+// tokens.css), so emulating the media query leaves every run on caret-dark — and a
+// hardcoded violet in the component would then satisfy both runs, which is exactly
+// the regression this test exists to catch. The theme is seeded into localStorage
+// before first paint instead, the lever diff-surface.e2e.ts uses to pin its theme.
+// Because the two themes really do render, comparing the badge against a live
+// :root probe is sufficient: --attention is a different violet per theme, so a
+// literal passes at most one of the two runs, and a wrong token or a lost cascade
+// fails both.
+
+/** A computed `color` string → integer sRGB channels. Chrome serializes the same
+ * color differently depending on the declaration it came from: `rgb(r, g, b)` with
+ * integers for some forms, `color(srgb r g b)` with 0-1 floats for a bare
+ * `var(--token)`. Normalize both shapes so either can be compared. */
+function srgbChannels(value: string): [number, number, number] {
+  const nums = (value.match(/\d*\.?\d+/g) ?? []).slice(0, 3).map(Number);
+  const out = value.trim().startsWith("color(") ? nums.map((n) => Math.round(n * 255)) : nums;
+  return [out[0] as number, out[1] as number, out[2] as number];
+}
+
+for (const [themeId, scheme] of [
+  ["caret-dark", "dark"],
+  ["caret-light", "light"],
+] as const) {
+  test(`the compare toggle's version-count badge carries --attention in ${themeId}`, async ({
     daemon,
     page,
   }) => {
-    await page.emulateMedia({ colorScheme });
+    await page.addInitScript((t) => localStorage.setItem("caret.theme", t), themeId);
     await daemon.seedVersions(3, [V1, V2, V3]);
     await page.goto("/");
     await expect(page.locator(".diff-plan")).toBeVisible();
+    // The seeded choice actually took effect. Without this the colour assertion
+    // below could silently be checking the default theme twice.
+    await expect(page.locator("html")).toHaveAttribute("data-theme", scheme);
 
     // Three stored versions ⇒ two OTHERS to compare the current one against.
     const badge = page.locator('.compare-toggle [data-slot="badge"]');
     await expect(badge).toHaveText("2");
-    await expect(badge).toHaveAttribute("aria-label", "2 other versions to compare");
 
     const probe = await page.evaluate(() => {
       const el = document.querySelector('.compare-toggle [data-slot="badge"]');
-      // Declare the probe's color EXACTLY as the badge's rule does — a bare
-      // var(--token). Chrome serializes a computed color differently depending on
-      // the form it was written in (a bare var() here comes back as
-      // `color(srgb r g b)` with 0-1 floats, `rgb(from …)` as integer rgb()), so
-      // matching the declaration is what makes the two sides comparable.
-      function tokenColor(token: string): string {
-        const p = document.createElement("span");
-        p.style.color = `var(${token})`;
-        document.body.appendChild(p);
-        const c = getComputedStyle(p).color;
-        p.remove();
-        return c;
-      }
+      // Declare the probe's colour exactly as the badge's rule does — a bare
+      // var(--token) — so both serialize through the same Chrome path.
+      const p = document.createElement("span");
+      p.style.color = "var(--attention)";
+      document.body.appendChild(p);
+      const attention = getComputedStyle(p).color;
+      p.remove();
       return {
         badgeColor: el ? getComputedStyle(el as HTMLElement).color : null,
-        attention: tokenColor("--attention"),
+        attention,
       };
     });
 
-    // The badge's ink IS the token — not a hardcoded violet, and not the neutral
-    // chip ink the TopBar counts wear.
-    expect(channels(probe.badgeColor as string)).toEqual(channels(probe.attention));
+    expect(srgbChannels(probe.badgeColor as string)).toEqual(srgbChannels(probe.attention));
   });
 }
 
@@ -497,6 +516,11 @@ test("the version pickers annotate the current version, and only that one", asyn
   await expect(page.getByRole("menuitemradio", { name: "v1" })).not.toContainText("(current)");
   // Exactly one row is annotated.
   await expect(page.locator(".vmenu .cur")).toHaveCount(1);
+
+  // The annotation reads the head of the same newest-first `ordered` list the rows
+  // render from, so pinning that order here is what keeps "(current)" meaning
+  // "newest" rather than "whichever row happens to be first".
+  await expect(page.locator(".vmenu .vitem")).toHaveText([/v3/, /v2/, /v1/]);
   await page.keyboard.press("Escape");
 
   // Both pickers are the same snippet, so the base side carries it too.
