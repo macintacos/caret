@@ -5,7 +5,7 @@
 // caret highlights with shiki's pure-JS regex engine (diffview/shiki-bundle.ts),
 // so the Oniguruma WASM binary the library would lazy-load for the `shiki-wasm`
 // engine (~600 KB) is dead weight — the wrapper never selects that engine.
-// caret also renders only its own caret-light / caret-dark themes (registered via
+// caret also renders only its own palettes (registered as custom themes via
 // registerCustomTheme in diffview/theme.ts), so the library's bundled pierre-*
 // theme loaders are never invoked.
 //

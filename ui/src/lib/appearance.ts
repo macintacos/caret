@@ -1,4 +1,4 @@
-// Which palette is live (EXC-773). theme.ts owns the palettes; this module owns
+// Which palette is live (EXC-773). theme.ts owns the palette registry; this owns
 // the selection policy over them: a MODE — `light`, `dark`, or `system` (the
 // default, following the OS) — plus one persisted theme SLOT per scheme, so a
 // reviewer can run a light palette by day and a dark one at night without

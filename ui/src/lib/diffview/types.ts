@@ -4,6 +4,8 @@
 // instead of the library's.
 import type { DiffLineAnnotation, LineAnnotation } from "@pierre/diffs";
 
+import type { ThemeId } from "$lib/theme.ts";
+
 /** A document rendered in the source or diff view. */
 export interface SourceDocument {
   /** Display name; also drives syntax-highlight language inference. */
@@ -51,11 +53,12 @@ export interface SourceViewOptions {
   overflow?: "scroll" | "wrap";
   /** Hide the line-number gutter. */
   disableLineNumbers?: boolean;
-  /** Force the shiki highlighter's light/dark selection to the caret theme in
-   * effect. The diff view renders into a shadow root that can't inherit the
-   * chrome's forced color-scheme, so the scheme is passed in explicitly; omitted
-   * leaves the library following the system preference (EXC-730). */
-  scheme?: "light" | "dark";
+  /** The caret theme in effect, which the shiki highlighter is forced to, so the
+   * code carries the picked palette's own colors (EXC-730, EXC-752). The diff view
+   * renders into a shadow root that can't inherit the chrome's forced color-scheme,
+   * so the selection is passed in explicitly. Omitted leaves the library on caret's
+   * pair following the system preference. */
+  themeId?: ThemeId;
 }
 
 /** Display options caret exposes for the diff view. */

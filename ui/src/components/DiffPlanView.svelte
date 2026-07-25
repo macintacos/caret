@@ -52,6 +52,7 @@
   import PlanSearch from "@/components/PlanSearch.svelte";
   import type { SourceViewGutter } from "$lib/diffview/options.ts";
   import type { SourceViewApi, SourceViewOptions } from "$lib/diffview/types.ts";
+  import type { ThemeId } from "$lib/theme.ts";
   import { ariaKeyshortcutsFor, bind, defaultIsEditingContext, shortcuts } from "$lib/shortcuts/index.ts";
   import type { CursorMotion } from "$lib/diffview/lineCursor.ts";
   import { activeHeadingLine, extractHeadings, lineForSlug, shouldShowToc, slugForLine } from "$lib/toc.ts";
@@ -105,10 +106,10 @@
      * (the comment navigator) can scroll the plan to a commented line. A call before
      * the view paints is a bounded-retry no-op. */
     onExposeReveal?: (reveal: (line: number) => void) => void;
-    /** The active caret theme's color scheme, forwarded to the shadow-DOM diff
-     * view so its shiki highlighting follows the selected theme (EXC-730). Omitted
-     * leaves the library following the system preference. */
-    scheme?: "light" | "dark";
+    /** The active caret theme, forwarded to the shadow-DOM diff view so its shiki
+     * highlighting is painted in the selected palette (EXC-730, EXC-752). Omitted
+     * leaves the library on caret's pair following the system preference. */
+    themeId?: ThemeId;
     /** Whether the shortcut-hint affordances are shown (EXC-826); gates the V-mode
      * "c comment · Esc cancel" chip. Defaults to shown; the shortcut still fires. */
     showShortcutHints?: boolean;
@@ -132,7 +133,7 @@
     pendingText = "",
     scratches = [],
     onExposeReveal,
-    scheme,
+    themeId,
     showShortcutHints = true,
     settingsRev = 0,
   }: Props = $props();
@@ -230,13 +231,13 @@
   // line-number gutter is always shown. These were once user toggles (EXC-606),
   // but that configurability was removed, so the former defaults are now the only
   // behavior.
-  // Reactive on `scheme` so a theme switch yields a new options reference — both
+  // Reactive on `themeId` so a theme switch yields a new options reference — both
   // the reader (SourceView) and the compare view (which spreads this) re-apply it
   // through their existing `lifecycle.sync`, re-highlighting in the chosen theme.
   const readerOptions = $derived<SourceViewOptions>({
     overflow: "scroll",
     disableLineNumbers: false,
-    scheme,
+    themeId,
   });
 
   // Identity of the rendered content: the wrapper recreates its instance only

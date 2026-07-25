@@ -29,7 +29,7 @@ export * from "shiki/core";
 // bug EXC-665 fixed, where unlisted languages rendered plain — fails the suite.
 export const bundledLanguages = fullBundledLanguages;
 
-// caret registers caret-light / caret-dark as custom themes (diffview/theme.ts),
+// caret registers every one of its palettes as a custom theme (diffview/theme.ts),
 // so the library resolves them from its custom-theme registry and never falls
 // through to this map. An empty map keeps shiki's bundled themes out of the
 // build without changing what caret renders.

@@ -35,9 +35,39 @@ function readFirstRootTokens(css: string): Record<string, string> {
   return tokens;
 }
 
+// WCAG relative luminance, so "is this palette legible" is arithmetic rather than
+// a judgement call. Alpha suffixes are ignored — every token these run on is solid.
+function luminance(hex: string): number {
+  const rgb = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(hex);
+  if (rgb === null) throw new Error(`expected #rrggbb, got ${hex}`);
+  const [r, g, b] = rgb.slice(1, 4).map((pair) => {
+    const c = Number.parseInt(pair, 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  }) as [number, number, number];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** The WCAG contrast ratio between two solid colors, lighter over darker. */
+function contrast(a: string, b: string): number {
+  const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
+  return (light + 0.05) / (dark + 0.05);
+}
+
+const themeEntries = () => Object.entries(THEMES) as [ThemeId, (typeof THEMES)[ThemeId]][];
+
 describe("THEMES", () => {
-  test("THEME_IDS lists caret-dark first then caret-light", () => {
-    expect(THEME_IDS).toEqual(["caret-dark", "caret-light"]);
+  test("THEME_IDS lists caret's palettes first, then each vendor family", () => {
+    expect(THEME_IDS).toEqual([
+      "caret-dark",
+      "caret-light",
+      "catppuccin-latte",
+      "catppuccin-frappe",
+      "catppuccin-macchiato",
+      "catppuccin-mocha",
+      "dracula",
+      "github-light",
+      "github-dark",
+    ]);
   });
 
   test("every theme carries a human label and a scheme matching its id", () => {
@@ -95,6 +125,114 @@ describe("THEMES", () => {
       expect(root[name], `app.css :root ${name}`).toBe(value);
     }
     expect(root["color-scheme"]).toBe("dark");
+  });
+});
+
+// Registry-wide invariants: these run over every palette rather than the two named
+// ones, so a theme added later is held to caret's structure — surface ordering, a
+// legible ink ramp, and the shape the shiki derivation needs — the moment it lands.
+describe("every theme", () => {
+  test("keys itself by its own id and carries a label", () => {
+    for (const [id, theme] of themeEntries()) {
+      expect(theme.id, id).toBe(id);
+      expect(theme.label.length, id).toBeGreaterThan(0);
+    }
+  });
+
+  test("covers caret-dark's full token set", () => {
+    const reference = Object.keys(THEMES["caret-dark"].tokens).sort();
+    for (const [id, theme] of themeEntries()) {
+      expect(Object.keys(theme.tokens).sort(), id).toEqual(reference);
+    }
+  });
+
+  test("paints surfaces its declared scheme agrees with", () => {
+    for (const [id, theme] of themeEntries()) {
+      const paper = luminance(theme.tokens["--paper"]);
+      const ink = luminance(theme.tokens["--ink"]);
+      if (theme.scheme === "dark") expect(paper, id).toBeLessThan(ink);
+      else expect(paper, id).toBeGreaterThan(ink);
+    }
+  });
+
+  // --paper-raised is what lifts off the page: cards, dialogs, dropdowns, the plan
+  // pane. It is the lightest of the three surfaces in either scheme. Where --paper
+  // and --paper-sunk sit relative to each other is the palette's own call — caret-dark
+  // lifts its sunk surface above the page because the page is nearly black, while
+  // GitHub Dark recesses it below — so only the raised relation is pinned.
+  test("keeps --paper-raised as the lightest surface", () => {
+    for (const [id, theme] of themeEntries()) {
+      const raised = luminance(theme.tokens["--paper-raised"]);
+      expect(raised, `${id} --paper-raised vs --paper`).toBeGreaterThan(
+        luminance(theme.tokens["--paper"]),
+      );
+      expect(raised, `${id} --paper-raised vs --paper-sunk`).toBeGreaterThan(
+        luminance(theme.tokens["--paper-sunk"]),
+      );
+    }
+  });
+
+  // The ink ramp is body copy, secondary copy, and metadata — WCAG AA for the first
+  // two, the large-text floor for the faintest. It is held to those floors on BOTH
+  // chrome surfaces it actually renders on: the page and the raised surface every
+  // dialog, dropdown, and card sits on (--card / --popover / --secondary all bridge
+  // to --paper-raised). Measuring the page alone flatters a dark palette, whose page
+  // is its darkest surface — and lets a flavor ship sub-AA settings rows.
+  test("clears caret's contrast floors for the ink ramp, on every surface it renders on", () => {
+    for (const [id, theme] of themeEntries()) {
+      for (const surface of ["--paper", "--paper-raised"] as const) {
+        const bg = theme.tokens[surface];
+        expect(
+          contrast(theme.tokens["--ink"], bg),
+          `${id} --ink on ${surface}`,
+        ).toBeGreaterThanOrEqual(4.5);
+        expect(
+          contrast(theme.tokens["--ink-soft"], bg),
+          `${id} --ink-soft on ${surface}`,
+        ).toBeGreaterThanOrEqual(4.5);
+        expect(
+          contrast(theme.tokens["--ink-faint"], bg),
+          `${id} --ink-faint on ${surface}`,
+        ).toBeGreaterThan(3);
+      }
+    }
+  });
+
+  test("keeps --accent-ink readable on --accent", () => {
+    for (const [id, theme] of themeEntries()) {
+      expect(
+        contrast(theme.tokens["--accent-ink"], theme.tokens["--accent"]),
+        `${id} --accent-ink on --accent`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  // shiki resolves token colors at highlight time and takes plain 6-digit hex; an
+  // alpha suffix on any of these would reach the highlighter as an invalid color.
+  test("supplies alpha-free hex for the tokens shiki reads", () => {
+    const shikiTokens: ColorToken[] = [
+      "--paper-sunk",
+      "--ink",
+      "--ink-faint",
+      "--ink-soft",
+      "--accent",
+      "--accent-bright",
+      "--ok",
+    ];
+    for (const [id, theme] of themeEntries()) {
+      for (const token of shikiTokens) {
+        expect(theme.tokens[token], `${id} ${token}`).toMatch(/^#[0-9a-f]{6}$/i);
+      }
+    }
+  });
+
+  // --accent is the scarce mark caret spends on the current selection; --attention is
+  // the separate "look here" hue (the notification dot, the version-count badge).
+  // Collapsing them into one color erases that distinction.
+  test("keeps --attention distinct from --accent", () => {
+    for (const [id, theme] of themeEntries()) {
+      expect(theme.tokens["--attention"], id).not.toBe(theme.tokens["--accent"]);
+    }
   });
 });
 

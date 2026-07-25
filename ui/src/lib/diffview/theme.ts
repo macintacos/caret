@@ -12,7 +12,8 @@
 // registration, never the WASM engine.
 import { registerCustomTheme } from "@pierre/diffs";
 
-import { caretDark, caretLight } from "$lib/caret-theme.ts";
+import { CARET_SHIKI_THEMES } from "$lib/caret-theme.ts";
+import { THEMES, type ThemeId } from "$lib/theme.ts";
 
 /** Registers a named theme into the library's shared highlighter. Derived from
  * the library's own signature so the loader's resolved theme type stays in
@@ -20,37 +21,45 @@ import { caretDark, caretLight } from "$lib/caret-theme.ts";
 type RegisterTheme = typeof registerCustomTheme;
 type ThemeLoader = Parameters<RegisterTheme>[1];
 
-/** The diff-view theme selection. `theme` names caret's light/dark shiki themes;
- * `themeType` is the default the options mapper falls back to when no explicit
- * scheme is supplied. Since EXC-730 the reader view threads the selected caret
- * theme's scheme through as an explicit "light"/"dark" themeType (see
- * options.ts), so the diff follows the user's chosen palette rather than the OS —
- * "system" now only applies when a caller omits the scheme. */
-export const caretDiffTheme = {
-  theme: { light: "caret-light", dark: "caret-dark" },
-  themeType: "system",
-} as const;
+/** The diff-view theme selection for the caret theme in effect. Both slots name
+ * that one theme on purpose: caret always forces the scheme explicitly, and the
+ * library also emits dual-theme CSS variables, so naming the live palette on both
+ * sides makes the resolved colors independent of how the library resolves them —
+ * the code retints with the chrome rather than with the scheme alone (EXC-752).
+ *
+ * With no theme named, the selection is caret's own pair following the system
+ * preference, which is what a caller that doesn't track the appearance gets. */
+export function caretDiffTheme(id?: ThemeId): {
+  theme: Record<"light" | "dark", string>;
+  themeType: "light" | "dark" | "system";
+} {
+  if (id === undefined) {
+    return { theme: { light: "caret-light", dark: "caret-dark" }, themeType: "system" };
+  }
+  return { theme: { light: id, dark: id }, themeType: THEMES[id].scheme };
+}
 
 // caret's themes as the library expects them: a name plus an async loader
 // returning the theme object. The name is duplicated onto the object because
 // the library resolves a theme by the name it was registered under.
-const caretThemeLoaders: { name: string; load: ThemeLoader }[] = [
-  { name: "caret-light", load: async () => ({ ...caretLight, name: "caret-light" }) },
-  { name: "caret-dark", load: async () => ({ ...caretDark, name: "caret-dark" }) },
-];
+const caretThemeLoaders: { name: string; load: ThemeLoader }[] = CARET_SHIKI_THEMES.map((theme) => {
+  const name = String(theme.name);
+  return { name, load: async () => ({ ...theme, name }) };
+});
 
 let registered = false;
 
 /**
- * Register caret's light/dark Shiki themes into the @pierre/diffs highlighter.
- * The register function is injected so the mapping is unit-testable without the
+ * Register caret's Shiki themes into the @pierre/diffs highlighter — every
+ * palette, so whichever theme the reviewer picks can be selected by name. The
+ * register function is injected so the mapping is unit-testable without the
  * library's module-global highlighter; production uses registerCustomTheme.
  *
- * Each call registers both themes once through the supplied register function.
- * The shared production highlighter is a process singleton, so a module-level
- * guard skips repeat production registrations (the wrapper calls this on every
- * mount). Passing a register function bypasses the guard, which is what lets a
- * test observe the registration directly.
+ * Each call registers the whole set through the supplied register function. The
+ * shared production highlighter is a process singleton, so a module-level guard
+ * skips repeat production registrations (the wrapper calls this on every mount).
+ * Passing a register function bypasses the guard, which is what lets a test
+ * observe the registration directly.
  */
 export function registerCaretDiffThemes(register?: RegisterTheme): void {
   if (register) {

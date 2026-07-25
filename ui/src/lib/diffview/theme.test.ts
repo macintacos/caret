@@ -1,14 +1,29 @@
 import { describe, expect, test } from "bun:test";
 
 import { caretDiffTheme, registerCaretDiffThemes } from "$lib/diffview/theme.ts";
+import { THEME_IDS } from "$lib/theme.ts";
 
 // The bridge selects caret's own Shiki themes for the diff view so its
 // highlighting matches caret's code blocks exactly, and registers them into
 // the library's highlighter exactly once.
 
 describe("caretDiffTheme", () => {
-  test("selects caret's light and dark themes, following the system color scheme", () => {
-    expect(caretDiffTheme).toEqual({
+  test("selects the live theme for both slots, at that theme's scheme", () => {
+    // Both sides name the live palette on purpose: caret always forces the scheme
+    // explicitly, and the library also emits dual-theme CSS variables, so naming
+    // it twice makes the resolved palette independent of how the library resolves.
+    expect(caretDiffTheme("dracula")).toEqual({
+      theme: { light: "dracula", dark: "dracula" },
+      themeType: "dark",
+    });
+    expect(caretDiffTheme("catppuccin-latte")).toEqual({
+      theme: { light: "catppuccin-latte", dark: "catppuccin-latte" },
+      themeType: "light",
+    });
+  });
+
+  test("falls back to caret's pair following the system scheme when no theme is named", () => {
+    expect(caretDiffTheme()).toEqual({
       theme: { light: "caret-light", dark: "caret-dark" },
       themeType: "system",
     });
@@ -16,13 +31,13 @@ describe("caretDiffTheme", () => {
 });
 
 describe("registerCaretDiffThemes", () => {
-  test("registers both caret themes under their selected names", () => {
+  test("registers every caret theme under its own name", () => {
     const registered: string[] = [];
     registerCaretDiffThemes((name) => {
       registered.push(name);
     });
 
-    expect(registered).toEqual(["caret-light", "caret-dark"]);
+    expect(registered).toEqual(THEME_IDS);
   });
 
   test("registers each theme with a loader resolving to the named theme object", async () => {
@@ -31,11 +46,11 @@ describe("registerCaretDiffThemes", () => {
       loaders.set(name, load);
     });
 
-    const light = (await loaders.get("caret-light")?.()) as { name: string };
-    const dark = (await loaders.get("caret-dark")?.()) as { name: string };
-    // The library resolves a theme by the name it was registered under, so the
-    // loaded object must carry that exact name.
-    expect(light.name).toBe("caret-light");
-    expect(dark.name).toBe("caret-dark");
+    for (const id of THEME_IDS) {
+      const loaded = (await loaders.get(id)?.()) as { name: string };
+      // The library resolves a theme by the name it was registered under, so the
+      // loaded object must carry that exact name.
+      expect(loaded.name, id).toBe(id);
+    }
   });
 });

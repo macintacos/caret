@@ -3,11 +3,12 @@ import { describe, expect, test } from "bun:test";
 import { createHighlighterCore } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 
-import { caretDark, caretLight } from "$lib/caret-theme.ts";
-import { type ColorToken, THEMES, type ThemeId } from "$lib/theme.ts";
+import { CARET_SHIKI_THEMES, shikiThemeFor } from "$lib/caret-theme.ts";
+import { type ColorToken, THEME_IDS, THEMES, type ThemeId } from "$lib/theme.ts";
 
-// caret-theme.ts derives its two shiki palettes from the THEMES color tokens in
-// theme.ts (EXC-730) — the single source of truth for every color the UI paints.
+// caret-theme.ts derives one shiki palette per registered theme from the THEMES
+// color tokens in theme.ts (EXC-730) — the single source of truth for every color
+// the UI paints.
 // shiki resolves token colors at highlight time and can't read CSS custom
 // properties, so it reads the hex out of THEMES at module load. These tests pin
 // that derivation: every color a theme emits must be one of the seven mapped
@@ -54,11 +55,26 @@ function themeColors(theme: ThemeLike): Set<string> {
 }
 
 describe("caret-theme ↔ THEMES palette sync", () => {
-  for (const [label, theme, id] of [
-    ["caretLight", caretLight, "caret-light"],
-    ["caretDark", caretDark, "caret-dark"],
-  ] as const) {
-    describe(label, () => {
+  // Every palette gets a highlighter theme, not just caret's own pair (EXC-752):
+  // a reviewer who picks Dracula reads Dracula-colored code, not amber code.
+  test("derives one shiki theme per registered palette, named by its id", () => {
+    expect(CARET_SHIKI_THEMES.map((theme) => theme.name)).toEqual(THEME_IDS);
+  });
+
+  test("highlights a vendor palette in its own colors, not caret's", () => {
+    expect(shikiThemeFor("dracula").colors?.["editor.background"]).not.toBe(
+      shikiThemeFor("caret-dark").colors?.["editor.background"],
+    );
+  });
+
+  for (const id of THEME_IDS) {
+    describe(id, () => {
+      const theme: ThemeLike & { type?: string } = shikiThemeFor(id);
+
+      test("carries its palette's scheme as the shiki theme type", () => {
+        expect(theme.type).toBe(THEMES[id].scheme);
+      });
+
       test("editor background/foreground match the THEMES tokens", () => {
         const expected = expectedPalette(id);
         expect(theme.colors?.["editor.background"]).toBe(expected.bg);
@@ -81,15 +97,15 @@ describe("caret-theme ↔ THEMES palette sync", () => {
         for (const [field, color] of Object.entries(expected)) {
           // Guards the reverse direction: a token the palette claims to mirror
           // must actually be used, so renaming/dropping a token is caught too.
-          expect(emitted, `${label}.${field} (${color}) is used by the theme`).toContain(color);
+          expect(emitted, `${id}.${field} (${color}) is used by the theme`).toContain(color);
         }
       });
     });
   }
 
-  test("the two themes use distinct palettes (light vs dark do not collapse)", () => {
-    expect(caretLight.colors?.["editor.background"]).not.toBe(
-      caretDark.colors?.["editor.background"],
+  test("the two caret themes use distinct palettes (light vs dark do not collapse)", () => {
+    expect(shikiThemeFor("caret-light").colors?.["editor.background"]).not.toBe(
+      shikiThemeFor("caret-dark").colors?.["editor.background"],
     );
   });
 });
@@ -106,7 +122,7 @@ describe("caret-theme fenced-code fence line", () => {
   // uppercased, so normalize the received color (only) before comparing.
   async function tokenizeFence() {
     const hl = await createHighlighterCore({
-      themes: [caretLight],
+      themes: [shikiThemeFor("caret-light")],
       langs: [import("shiki/langs/markdown.mjs")],
       engine: createJavaScriptRegexEngine(),
     });

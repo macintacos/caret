@@ -52,19 +52,20 @@ export type SourceDiffViewLibOptions = FileDiffOptions<undefined>;
 
 // The keys both views share (from the library's BaseCodeOptions); typed as a
 // Pick so the diff mapper can spread it without dragging in File-only option
-// types that conflict with FileDiff's. The Shiki theme is fixed by the bridge
-// (caret's themes), not consumer-chosen, so it's folded in here rather than
-// surfaced on the caret-domain options.
+// types that conflict with FileDiff's. The Shiki theme comes from the bridge
+// (caret's own themes) rather than being consumer-chosen, so it's folded in here
+// rather than surfaced on the caret-domain options — the caller only names which
+// caret theme is live.
 function sharedOptions(
   options: SourceViewOptions,
 ): Pick<SourceViewLibOptions, "overflow" | "disableLineNumbers" | "theme" | "themeType"> {
   return {
     overflow: options.overflow,
     disableLineNumbers: options.disableLineNumbers,
-    theme: caretDiffTheme.theme,
-    // caret's theme selection forces light/dark; with none supplied the library
-    // follows the system preference (caretDiffTheme.themeType) as before (EXC-730).
-    themeType: options.scheme ?? caretDiffTheme.themeType,
+    // The caret theme in effect names both the palette and the scheme it forces;
+    // with none supplied the library stays on caret's pair following the system
+    // preference, as before (EXC-730, EXC-752).
+    ...caretDiffTheme(options.themeId),
   };
 }
 
