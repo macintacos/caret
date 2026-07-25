@@ -16,6 +16,9 @@ import {
   pkg,
 } from "../support/release-harness.ts";
 
+/** The themed release name the agent hands the script via `--title`. */
+const THEME = "The Foundations Release";
+
 async function expectGuard(p: Promise<unknown>, code: ErrorCode) {
   try {
     await p;
@@ -118,28 +121,41 @@ test("baseline is a no-op when v0.0.1 already exists", async () => {
 
 // --- prepare ---------------------------------------------------------------
 
-const PREPARE_OPTS: HarnessOptions = {
-  porcelain: ["?? CHANGELOG.md"],
-  files: {
-    "package.json": pkg("0.0.1"),
-    ".claude-plugin/plugin.json": pkg("0.0.1"),
-    ".claude-plugin/marketplace.json": market("0.0.1"),
-    "CHANGELOG.md": CHANGELOG,
-  },
-};
+// A tree dirtied only by a manifest edit: `prepare` allows the manifests it is about
+// to bump, and `commitRelease` needs a non-empty status to have something to commit.
+// The manifests themselves come from the harness default (all three at 0.0.1).
+const PREPARE_OPTS: HarnessOptions = { porcelain: [" M package.json"] };
 
 test("prepare dry-run writes, commits, pushes, and PRs nothing", async () => {
   const { deps, calls } = makeReleaseHarness(PREPARE_OPTS);
-  const r = await prepare(deps, { bump: "minor", dryRun: true });
+  const r = await prepare(deps, { bump: "minor", dryRun: true, title: THEME });
   expect(r.dryRun).toBe(true);
   expect(r.version).toBe("0.1.0");
   expect(r.title).toBe("v0.1.0 - The Foundations Release");
   expect(calls).toEqual([]);
 });
 
+test("prepare rejects TITLE_MISSING when no themed title is supplied", async () => {
+  const { deps } = makeReleaseHarness(PREPARE_OPTS);
+  await expectGuard(prepare(deps, { bump: "minor", dryRun: false }), "TITLE_MISSING");
+});
+
+test("prepare rejects TITLE_MISSING when the title is blank", async () => {
+  const { deps } = makeReleaseHarness(PREPARE_OPTS);
+  await expectGuard(prepare(deps, { bump: "minor", dryRun: false, title: "   " }), "TITLE_MISSING");
+});
+
+test("prepare stages only the manifests, never a changelog", async () => {
+  const { deps, calls } = makeReleaseHarness(PREPARE_OPTS);
+  await prepare(deps, { bump: "minor", dryRun: false, title: THEME });
+  expect(calls).toContain(
+    "stage:package.json,.claude-plugin/marketplace.json,.claude-plugin/plugin.json",
+  );
+});
+
 test("prepare bumps manifests, commits, pushes, and opens a PR", async () => {
   const { deps, calls, files } = makeReleaseHarness(PREPARE_OPTS);
-  const r = await prepare(deps, { bump: "minor", dryRun: false });
+  const r = await prepare(deps, { bump: "minor", dryRun: false, title: THEME });
   expect(files.get("package.json")).toContain('"version": "0.1.0"');
   expect(files.get(".claude-plugin/marketplace.json")).toContain('"version": "0.1.0"');
   expect(calls).toContain("checkoutNew:release/v0.1.0");
@@ -164,7 +180,7 @@ test("prepare reuses an already-open PR instead of opening a duplicate", async (
       },
     ],
   });
-  const r = await prepare(deps, { bump: "minor", dryRun: false });
+  const r = await prepare(deps, { bump: "minor", dryRun: false, title: THEME });
   expect(calls).not.toContain("prCreate");
   expect(r.prNumber).toBe(3);
   expect(r.prUrl).toBe("https://github.com/macintacos/caret/pull/3");
@@ -185,7 +201,6 @@ test("prepare resumes cleanly when the release branch is already bumped", async 
       "package.json": pkg("0.1.0"),
       ".claude-plugin/plugin.json": pkg("0.1.0"),
       ".claude-plugin/marketplace.json": market("0.1.0"),
-      "CHANGELOG.md": CHANGELOG,
     },
     prs: [
       {
@@ -195,25 +210,12 @@ test("prepare resumes cleanly when the release branch is already bumped", async 
       },
     ],
   });
-  const r = await prepare(deps, { bump: "minor", dryRun: false });
+  const r = await prepare(deps, { bump: "minor", dryRun: false, title: THEME });
   expect(r.version).toBe("0.1.0");
   expect(r.prNumber).toBe(3);
   expect(calls).not.toContain("write:package.json"); // bump skipped, no crash
   expect(calls.filter((c) => c.startsWith("commit:"))).toEqual([]); // nothing to commit
   expect(calls).not.toContain("prCreate");
-});
-
-test("prepare fails loudly when the changelog section is missing", async () => {
-  const { deps } = makeReleaseHarness({
-    ...PREPARE_OPTS,
-    files: {
-      "package.json": pkg("0.0.1"),
-      ".claude-plugin/plugin.json": pkg("0.0.1"),
-      ".claude-plugin/marketplace.json": market("0.0.1"),
-      "CHANGELOG.md": "# Changelog\n\n## [Unreleased]\n",
-    },
-  });
-  await expectGuard(prepare(deps, { bump: "minor", dryRun: false }), "CHANGELOG_MISSING");
 });
 
 test("prepare rejects BRANCH_DIVERGED when the remote release branch is not an ancestor", async () => {
@@ -234,10 +236,12 @@ test("prepare rejects BRANCH_DIVERGED when the remote release branch is not an a
       "package.json": pkg("0.1.0"),
       ".claude-plugin/plugin.json": pkg("0.1.0"),
       ".claude-plugin/marketplace.json": market("0.1.0"),
-      "CHANGELOG.md": CHANGELOG,
     },
   });
-  await expectGuard(prepare(deps, { bump: "minor", dryRun: false }), "BRANCH_DIVERGED");
+  await expectGuard(
+    prepare(deps, { bump: "minor", dryRun: false, title: THEME }),
+    "BRANCH_DIVERGED",
+  );
   expect(calls).not.toContain("pushBranch:release/v0.1.0:false"); // never pushed over the divergence
 });
 
@@ -258,7 +262,6 @@ test("prepare rejects ALREADY_MERGED when the release PR is already merged", asy
       "package.json": pkg("0.1.0"),
       ".claude-plugin/plugin.json": pkg("0.1.0"),
       ".claude-plugin/marketplace.json": market("0.1.0"),
-      "CHANGELOG.md": CHANGELOG,
     },
     prs: [
       {
@@ -268,7 +271,10 @@ test("prepare rejects ALREADY_MERGED when the release PR is already merged", asy
       },
     ],
   });
-  await expectGuard(prepare(deps, { bump: "minor", dryRun: false }), "ALREADY_MERGED");
+  await expectGuard(
+    prepare(deps, { bump: "minor", dryRun: false, title: THEME }),
+    "ALREADY_MERGED",
+  );
   expect(calls).not.toContain("prCreate");
 });
 
@@ -289,7 +295,6 @@ test("prepare rejects PR_CLOSED when the release PR was closed unmerged", async 
       "package.json": pkg("0.1.0"),
       ".claude-plugin/plugin.json": pkg("0.1.0"),
       ".claude-plugin/marketplace.json": market("0.1.0"),
-      "CHANGELOG.md": CHANGELOG,
     },
     prs: [
       {
@@ -299,7 +304,7 @@ test("prepare rejects PR_CLOSED when the release PR was closed unmerged", async 
       },
     ],
   });
-  await expectGuard(prepare(deps, { bump: "minor", dryRun: false }), "PR_CLOSED");
+  await expectGuard(prepare(deps, { bump: "minor", dryRun: false, title: THEME }), "PR_CLOSED");
   expect(calls).not.toContain("prCreate");
 });
 

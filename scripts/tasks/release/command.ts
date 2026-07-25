@@ -137,10 +137,13 @@ export function buildReleaseCommand(deps: Deps = realDeps()): Command {
     .argument("<bump>", "patch | minor | major")
     .option("--dry-run", "preview without mutating")
     .option("--yes", "confirm the mutation")
+    .option("--title <text>", 'the themed release name, e.g. "The Foundations Release"')
     .action(async (bump, opts) => {
       const level = requireBump(bump);
       requireGo("prepare", opts);
-      await emitStep(() => prepare(deps, { bump: level, dryRun: opts.dryRun ?? false }));
+      await emitStep(() =>
+        prepare(deps, { bump: level, dryRun: opts.dryRun ?? false, title: opts.title }),
+      );
     });
 
   program
