@@ -428,3 +428,79 @@ test("crossing --w-narrow forces unified then restores the split preference", as
   await expect(pre).toHaveAttribute("data-diff-type", "split");
   await expect(page.getByRole("radio", { name: "Split" })).toBeVisible();
 });
+
+// Version-count badge on the compare toggle (EXC-804). The count itself is unit
+// tested; what only a browser can settle is that the badge resolves to caret's
+// --attention hue under BOTH themes — the ticket's "make sure it's supported in
+// each theme". Same probe technique as the --ok/--danger emphasis test above:
+// resolve the token through a throwaway span using the identical relative-color
+// form so both sides serialize to comparable sRGB channels.
+for (const colorScheme of ["light", "dark"] as const) {
+  test(`the compare toggle's version-count badge carries --attention in ${colorScheme}`, async ({
+    daemon,
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme });
+    await daemon.seedVersions(3, [V1, V2, V3]);
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+
+    // Three stored versions ⇒ two OTHERS to compare the current one against.
+    const badge = page.locator('.compare-toggle [data-slot="badge"]');
+    await expect(badge).toHaveText("2");
+    await expect(badge).toHaveAttribute("aria-label", "2 other versions to compare");
+
+    const probe = await page.evaluate(() => {
+      const el = document.querySelector('.compare-toggle [data-slot="badge"]');
+      // Declare the probe's color EXACTLY as the badge's rule does — a bare
+      // var(--token). Chrome serializes a computed color differently depending on
+      // the form it was written in (a bare var() here comes back as
+      // `color(srgb r g b)` with 0-1 floats, `rgb(from …)` as integer rgb()), so
+      // matching the declaration is what makes the two sides comparable.
+      function tokenColor(token: string): string {
+        const p = document.createElement("span");
+        p.style.color = `var(${token})`;
+        document.body.appendChild(p);
+        const c = getComputedStyle(p).color;
+        p.remove();
+        return c;
+      }
+      return {
+        badgeColor: el ? getComputedStyle(el as HTMLElement).color : null,
+        attention: tokenColor("--attention"),
+      };
+    });
+
+    // The badge's ink IS the token — not a hardcoded violet, and not the neutral
+    // chip ink the TopBar counts wear.
+    expect(channels(probe.badgeColor as string)).toEqual(channels(probe.attention));
+  });
+}
+
+// The current version is annotated in the pair pickers, so a reviewer choosing a
+// base/target can tell which end is the plan as it stands now. Menu rows are
+// portalled bits-ui content driven by real pointer interaction, so this is e2e
+// rather than a component unit (browser-testing.md; the same call ReviewSwitcher
+// and the pair-selection unit test already make).
+test("the version pickers annotate the current version, and only that one", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seedVersions(3, [V1, V2, V3]);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Compare versions" }).click();
+
+  await page.getByLabel("Target version").click();
+  // v3 is the newest, so it is the current plan; v1 and v2 are history.
+  await expect(page.getByRole("menuitemradio", { name: "v3" })).toContainText("(current)");
+  await expect(page.getByRole("menuitemradio", { name: "v2" })).not.toContainText("(current)");
+  await expect(page.getByRole("menuitemradio", { name: "v1" })).not.toContainText("(current)");
+  // Exactly one row is annotated.
+  await expect(page.locator(".vmenu .cur")).toHaveCount(1);
+  await page.keyboard.press("Escape");
+
+  // Both pickers are the same snippet, so the base side carries it too.
+  await page.getByLabel("Base version").click();
+  await expect(page.getByRole("menuitemradio", { name: "v3" })).toContainText("(current)");
+  await expect(page.locator(".vmenu .cur")).toHaveCount(1);
+});

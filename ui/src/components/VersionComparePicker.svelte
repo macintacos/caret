@@ -93,6 +93,12 @@
   // count has one consumer, and `versions` is already in scope.
   const otherCount = $derived(Math.max(0, versions.length - 1));
 
+  // The newest version — the plan as it stands now. Annotated in the pickers so a
+  // reviewer choosing a pair can tell which end is current without counting. Reads
+  // `ordered`'s head rather than re-deriving a max: the list is already sorted
+  // newest-first for exactly this reason.
+  const currentVersion = $derived(ordered[0]?.version);
+
   // Sliding pill for the segmented ToggleGroups: instead of each option painting
   // its own background, one shared pill rides behind the options and animates to
   // whichever is active. A CSS transform/width transition is inherently
@@ -201,6 +207,8 @@
                 {#if checked}<Icon name="check" size={15} />{/if}
               </span>
               <span>v{v.version}</span>
+              <!-- Only the newest row is annotated; the rest are history. -->
+              {#if v.version === currentVersion}<span class="cur">(current)</span>{/if}
             {/snippet}
           </DropdownMenuPrimitive.RadioItem>
         {/each}
@@ -469,6 +477,13 @@
     display: inline-flex;
     width: 15px;
     color: var(--accent);
+  }
+  /* The "(current)" marker on the newest row: the quietest ink in the menu, so it
+     reads as an annotation on the version rather than a second label competing
+     with it. */
+  :global(.vmenu .cur) {
+    color: var(--ink-faint);
+    font-size: var(--text-xs);
   }
 
   /* The display-option cluster (layout + indicators), pushed to the trailing edge
