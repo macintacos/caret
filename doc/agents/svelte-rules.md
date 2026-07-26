@@ -30,13 +30,27 @@ declares its own `$state`:
 - **Tests supply a plain object** as the store and fake deps, and assert on the factory
   directly.
 
-The real reason for the split: `bun test` (the unit runner) cannot compile runes inside a
-`.svelte.ts` module, so logic written as runes there is untestable without mounting. A
-plain factory over an injected store is directly unit-testable — see
-`ui/src/state/autosave.test.ts` and `polling.test.ts`, which drive the factories with fake
-timers and stores and never mount a component. Keep `App.svelte` a layout + wiring shell:
-state literals, the factory calls, and the `$effect`s that connect them — no business
-logic.
+The real reason for the split: an injected store keeps the reactive state where the
+consumers already are. App.svelte owns the tree these factories serve, so state it holds
+reaches every consumer as a prop, and a test drives the factory against a plain object
+with no mount — see `ui/src/state/autosave.test.ts` and `polling.test.ts`, which drive the
+factories with fake timers and stores and never mount a component. Keep `App.svelte` a
+layout + wiring shell: state literals, the factory calls, and the `$effect`s that connect
+them — no business logic.
+
+**The narrow exception: app-wide service state.** A module modelling something there is
+exactly one of per document, whose consumers are *not* all reachable from App's prop tree,
+owns its own `$state` in a `.svelte.ts` module and exports **both** the factory and the
+singleton. `createAppearance()` / `appearance` in `ui/src/state/appearance.svelte.ts` is
+the case: the live palette is one per document (it paints `document.documentElement` and
+persists to origin-scoped `localStorage`), and ThemeSection and FilePreview read it from
+outside App's tree — threading it down would be prop-drilling genuinely global state. It
+follows the same singleton-plus-exported-factory shape as the non-reactive `shortcuts`
+registry (`ui/src/lib/shortcuts/index.ts`). This stays the exception: reach for it only
+once a consumer outside App's tree actually exists, and keep the factory exported so tests
+construct a fresh instance with injected deps instead of sharing the singleton. Runes are
+testable there — `ui/test-svelte-preload.ts` compiles `.svelte.ts` modules through
+svelte's `compileModule` for the bun runner (§ Component tests).
 
 ## Extract component logic to a testable lib module
 

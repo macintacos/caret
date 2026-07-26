@@ -3,9 +3,6 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import {
   appearanceSummary,
-  applyAppearance,
-  changeAppearance,
-  currentThemeId,
   DARK_SLOT_KEY,
   DEFAULT_MODE,
   DEFAULT_SLOT_THEME,
@@ -25,12 +22,7 @@ import {
 } from "$lib/appearance.ts";
 import { THEMES } from "$lib/theme.ts";
 
-afterEach(() => {
-  localStorage.clear();
-  // Strip any inline vars/attrs a prior paint wrote onto the root.
-  document.documentElement.removeAttribute("style");
-  document.documentElement.removeAttribute("data-theme");
-});
+afterEach(() => localStorage.clear());
 
 /** A minimal stand-in for the `(prefers-color-scheme: dark)` MediaQueryList, so
  * the OS-flip path is driven deterministically instead of slept through. */
@@ -145,65 +137,6 @@ describe("readSlotTheme / writeSlotTheme", () => {
 
     localStorage.setItem(DARK_SLOT_KEY, "caret-light");
     expect(readSlotTheme("dark")).toBe("caret-dark");
-  });
-});
-
-describe("currentThemeId", () => {
-  test("resolves the persisted mode and slots against the system preference", () => {
-    writeThemeMode("dark");
-    expect(currentThemeId(true)).toBe("caret-dark");
-    expect(currentThemeId(false)).toBe("caret-dark");
-
-    writeThemeMode("system");
-    expect(currentThemeId(true)).toBe("caret-dark");
-    expect(currentThemeId(false)).toBe("caret-light");
-  });
-});
-
-describe("applyAppearance", () => {
-  test("paints the resolved theme onto the document root", () => {
-    writeThemeMode("light");
-    const applied = applyAppearance(false);
-    expect(applied.id).toBe("caret-light");
-    expect(document.documentElement.dataset.theme).toBe("light");
-    expect(document.documentElement.style.getPropertyValue("--paper")).toBe(
-      THEMES["caret-light"].tokens["--paper"],
-    );
-  });
-
-  test("persists nothing of its own — it only reads and paints", () => {
-    writeThemeMode("dark");
-    const before = localStorage.getItem(MODE_KEY);
-    applyAppearance(false);
-    expect(localStorage.getItem(MODE_KEY)).toBe(before);
-    expect(localStorage.getItem(LIGHT_SLOT_KEY)).toBeNull();
-    expect(localStorage.getItem(DARK_SLOT_KEY)).toBeNull();
-  });
-});
-
-describe("changeAppearance", () => {
-  test("routes the same paint through the wipe when it is available", () => {
-    writeThemeMode("light");
-    let started = false;
-    changeAppearance(false, {
-      startViewTransition: (update) => {
-        started = true;
-        update();
-        return undefined;
-      },
-      prefersReducedMotion: () => false,
-    });
-    expect(started).toBe(true);
-    expect(document.documentElement.dataset.theme).toBe("light");
-  });
-
-  test("still paints when the wipe is unavailable", () => {
-    writeThemeMode("light");
-    changeAppearance(false, {
-      startViewTransition: undefined,
-      prefersReducedMotion: () => false,
-    });
-    expect(document.documentElement.dataset.theme).toBe("light");
   });
 });
 

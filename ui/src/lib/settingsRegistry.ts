@@ -15,15 +15,8 @@
 // category's fields into labelled blocks within its pane (Diff view lives as a
 // section under Appearance).
 
-import {
-  changeAppearance,
-  readSlotTheme,
-  readThemeMode,
-  THEME_MODES,
-  type ThemeMode,
-  writeSlotTheme,
-  writeThemeMode,
-} from "$lib/appearance.ts";
+import { appearance } from "@/state/appearance.svelte.ts";
+import { THEME_MODES, type ThemeMode } from "$lib/appearance.ts";
 import { readDiffIndicators, writeDiffIndicators } from "$lib/diffIndicatorsPref.ts";
 import { readDiffStyle, writeDiffStyle } from "$lib/diffStylePref.ts";
 import type { DiffIndicators, DiffStyle } from "$lib/diffview/types.ts";
@@ -182,9 +175,10 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
   // The appearance trio (EXC-773). They share the THEME_SECTION label, which the
   // shell renders as one composite block (ThemeSection.svelte) rather than three
   // independent rows — the `IN USE` marker and the resolved-state line only make
-  // sense across all three. Each write persists then repaints as a wipe, so the
-  // change takes effect immediately. Every label/description carries the word
-  // "theme" so a `/`-search for it keeps the block together.
+  // sense across all three. Each one reads and commands the live appearance
+  // (@/state/appearance.svelte.ts), which owns the persist-then-repaint sequence,
+  // so the change takes effect immediately. Every label/description carries the
+  // word "theme" so a `/`-search for it keeps the block together.
   stagedField<ThemeMode>({
     key: "themeMode",
     category: "Appearance",
@@ -192,11 +186,8 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     label: "Mode",
     description: "Follow the system theme, or pin light or dark.",
     control: { kind: "segmented", options: modeOptions },
-    read: readThemeMode,
-    write: (mode) => {
-      writeThemeMode(mode);
-      changeAppearance();
-    },
+    read: () => appearance.mode,
+    write: (mode) => appearance.setMode(mode),
   }),
   stagedField<ThemeId>({
     key: "themeLight",
@@ -205,11 +196,8 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     label: "Light theme",
     description: "Color palette used while the light scheme is showing.",
     control: { kind: "select", options: slotOptions("light") },
-    read: () => readSlotTheme("light"),
-    write: (id) => {
-      writeSlotTheme("light", id);
-      changeAppearance();
-    },
+    read: () => appearance.slots.light,
+    write: (id) => appearance.setSlot("light", id),
   }),
   stagedField<ThemeId>({
     key: "themeDark",
@@ -218,11 +206,8 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     label: "Dark theme",
     description: "Color palette used while the dark scheme is showing.",
     control: { kind: "select", options: slotOptions("dark") },
-    read: () => readSlotTheme("dark"),
-    write: (id) => {
-      writeSlotTheme("dark", id);
-      changeAppearance();
-    },
+    read: () => appearance.slots.dark,
+    write: (id) => appearance.setSlot("dark", id),
   }),
   stagedField<boolean>({
     key: "shortcutHints",
