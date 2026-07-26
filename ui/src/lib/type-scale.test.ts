@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 
-import { readAppCss } from "$lib/appCss.ts";
+import { readAppCss, rootBlock } from "$lib/appCss.ts";
 
 // caret's chrome font sizing flows from one named scale declared in app.css: a
 // set of --text-* steps with paired --leading-* tokens. This suite pins that
@@ -33,21 +33,11 @@ const LEADING_TOKENS: Record<string, string> = {
   "--leading-normal": "1.55",
 };
 
-// The body of the :root block declaring `marker`. The sheet carries several
-// :root blocks — the hand-written tokens, the emitted palette, the shadcn
-// bridge, the width foundation — so the block is found by what it declares, not
-// by position (the lookup shadcn-bridge.test.ts uses).
-function rootBlock(css: string, marker: string): string {
-  for (const m of css.matchAll(/:root\s*\{([^}]*)\}/g)) {
-    if (m[1]?.includes(marker)) return m[1];
-  }
-  return "";
-}
-
 describe("the --text-*/--leading-* type scale in app.css", () => {
-  // Keyed on the font stacks — the token block's other hand-written half — so
-  // every scale assertion below stays falsifiable.
-  const root = rootBlock(appCss, "--font-display:");
+  // Keyed on a token the scale owns, so the lookup is self-locating. A marker
+  // that matches nothing yields "" and every assertion below fails, so this
+  // cannot mask a missing block.
+  const root = rootBlock(appCss, "--text-base:");
 
   for (const [token, value] of Object.entries(TEXT_STEPS)) {
     test(`declares ${token}: ${value}`, () => {

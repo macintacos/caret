@@ -20,13 +20,14 @@ import { execAndExit, runForward } from "@/tasks/lib/exec.ts";
 // ui/src/styles/palette.generated.css is emitted from THEMES["caret-dark"] and
 // gitignored, so anything that consumes app.css has to generate it first. The
 // vite config runs the generator itself (covering `build ui`, the dev server,
-// and `test e2e`); the argv is exported here for the two entrypoints that never
-// touch Vite — `test unit`, whose suites read the partial through lib/appCss.ts,
-// and `setup`, so a fresh clone can run the raw `bun test` CONTRIBUTING.md
-// documents.
+// and `test e2e`); the argv is exported here for the three entrypoints that
+// never touch Vite — `test unit`, whose suites read the partial through
+// lib/appCss.ts; `lint`, whose Tailwind step loads app.css as its theme; and
+// `setup`, so a fresh clone can run the raw `bun test` CONTRIBUTING.md documents.
 
-/** The argv that emits ui/src/styles/palette.generated.css. Repo-root form: the
- * generator resolves its own output path from import.meta.url, so cwd is free. */
+/** The argv that emits ui/src/styles/palette.generated.css. The script path is
+ * repo-root-relative, which mise guarantees by running tasks from the config
+ * root; the output path comes from import.meta.url, so it holds either way. */
 export function paletteCssCommand(): string[] {
   return ["bun", "ui/generate-palette-css.ts"];
 }

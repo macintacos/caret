@@ -13,9 +13,10 @@ dist/
 # .mise/tasks/build-bin) — emitted from ui/dist/, never hand-edited.
 src/ui-manifest.generated.ts
 # Generated first-paint palette (ui/generate-palette-css.ts, run by the vite
-# config, `mise run test`, and `mise run setup`) — emitted from
-# THEMES["caret-dark"], never hand-edited.
-ui/src/styles/palette.generated.css
+# config and by the lint/format/test/setup tasks) — emitted from
+# THEMES["caret-dark"], never hand-edited. The trailing glob also covers the
+# `.<pid>.tmp` file an interrupted write leaves behind.
+ui/src/styles/palette.generated.css*
 
 # rumdl cache (rumdl also self-ignores this via a nested .gitignore)
 .rumdl_cache/

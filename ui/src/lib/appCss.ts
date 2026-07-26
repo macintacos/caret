@@ -21,3 +21,15 @@ export function readAppCss(): string {
     readFileSync(join(dir, spec), "utf8"),
   );
 }
+
+/** The body of the `:root` block declaring `marker`, or `""` when none does.
+ * The sheet carries several — the emitted palette, the hand-written tokens, the
+ * shadcn bridge, the width foundation — so a suite finds its block by what it
+ * declares rather than by position. `:root` bodies are flat (no nested braces),
+ * which is what makes the `[^}]*` capture a safe delimiter. */
+export function rootBlock(css: string, marker: string): string {
+  for (const m of css.matchAll(/:root\s*\{([^}]*)\}/g)) {
+    if (m[1]?.includes(marker)) return m[1];
+  }
+  return "";
+}

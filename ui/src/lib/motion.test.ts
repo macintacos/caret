@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 
-import { readAppCss } from "$lib/appCss.ts";
+import { readAppCss, rootBlock } from "$lib/appCss.ts";
 
 // caret's motion vocabulary lives in app.css: a small set of functional
 // duration/easing tokens for one-shot chrome reveals, plus a single global
@@ -49,17 +49,6 @@ const chromeSources: Record<string, string> = Object.fromEntries(
   ),
 );
 
-// The body of the :root block declaring `marker`. The sheet carries several
-// :root blocks — the hand-written tokens, the emitted palette, the shadcn
-// bridge, the width foundation — so the block is found by what it declares, not
-// by position (the lookup shadcn-bridge.test.ts uses).
-function rootBlock(css: string, marker: string): string {
-  for (const m of css.matchAll(/:root\s*\{([^}]*)\}/g)) {
-    if (m[1]?.includes(marker)) return m[1];
-  }
-  return "";
-}
-
 // Parse a ms/s duration value to milliseconds. Returns NaN for non-time values.
 function toMs(value: string): number {
   const v = value.trim();
@@ -69,9 +58,10 @@ function toMs(value: string): number {
 }
 
 describe("motion tokens in app.css", () => {
-  // Keyed on the font stacks — the token block's other hand-written half — so
-  // every motion assertion below stays falsifiable.
-  const root = rootBlock(appCss, "--font-display:");
+  // Keyed on a token the motion vocabulary owns, so the lookup is
+  // self-locating. A marker that matches nothing yields "" and every assertion
+  // below fails, so this cannot mask a missing block.
+  const root = rootBlock(appCss, "--dur-fast:");
 
   test("declares two functional one-shot durations, both ≤200ms", () => {
     const fast = root.match(/--dur-fast:\s*([^;]+);/)?.[1] ?? "";

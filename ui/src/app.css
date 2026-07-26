@@ -14,7 +14,8 @@
    the base layer, layout, the shared atoms, and the diff-view bridge — one
    concern each. styles/palette.generated.css is emitted from THEMES by
    ui/generate-palette-css.ts and gitignored, so it must be generated before this
-   entry resolves; every path that consumes app.css runs the generator first.
+   entry resolves; the vite config and the lint/format/test/setup tasks each run
+   the generator first.
    The CSS-contract tests (motion/type-scale/shadcn-bridge/layout/derived-tokens/
    css-bridge) parse the reconstituted whole via lib/appCss.ts. */
 

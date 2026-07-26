@@ -10,19 +10,18 @@
    and the static :root fallback in styles/palette.generated.css is caret-dark.
    So a var(--paper) here resolves to the correct scheme at runtime and to
    caret-dark at first paint — which both kills the first-paint light-on-dark
-   flash the stub risked
-   AND makes a separate dark block redundant (the tokens it would reference
-   already flip). Scheme lives entirely in the caret operands, exactly as it does
-   for the .diffview bridge — no @media, no per-scheme block.
+   flash the stub risked AND makes a separate dark block redundant (the tokens it
+   would reference already flip). Scheme lives entirely in the caret operands,
+   exactly as it does for the .diffview bridge — no @media, no per-scheme block.
 
    --primary carries caret's amber accent — the primary action's fill. Amber
    reaches shadcn surfaces in just two controlled spots: this fill and --ring
    (the focus outline, matching caret's global :focus-visible). shadcn's OTHER
    accent — a neutral hover/active wash — collides with caret's --accent (amber),
    so it is deliberately NOT declared here (that would clobber caret amber
-   app-wide). It is set as a neutral --color-accent in
-   @theme inline below. --radius likewise stays caret-owned; the radius ramp below
-   is single-sourced from caret's two radius roles. */
+   app-wide). It is set as a neutral --color-accent in @theme inline below.
+   --radius likewise stays caret-owned; the radius ramp below is single-sourced
+   from caret's two radius roles. */
 :root {
   --background: var(--paper);
   --foreground: var(--ink);
