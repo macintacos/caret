@@ -11,9 +11,12 @@
 
 /** The topmost open dialog's content — the last `[data-slot='dialog-content']`
  * in document order, i.e. the modal stacked above any others. Null when none is
- * open. */
+ * open. Narrowed to `data-state='open'` because a modal now outlives its flag
+ * while it plays its exit (EXC-891): during the guard's divert to Request
+ * Changes two contents coexist, and the one on its way out is the later node —
+ * it must not claim the key from the surface that stays. */
 export function topmostDialogContent(root: ParentNode = document): HTMLElement | null {
-  const all = root.querySelectorAll<HTMLElement>("[data-slot='dialog-content']");
+  const all = root.querySelectorAll<HTMLElement>("[data-slot='dialog-content'][data-state='open']");
   return all[all.length - 1] ?? null;
 }
 
