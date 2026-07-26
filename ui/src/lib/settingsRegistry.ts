@@ -26,15 +26,15 @@ import { type Scheme, type ThemeId, themesForScheme } from "$lib/theme.ts";
 
 /** One choice in a select or segmented control. `swatch` is an optional row of CSS
  * colors rendered as small dots beside the label — the theme options preview their
- * palette this way. `preview` is the option's full theme token map (EXC-753): when
- * present, highlighting the option floats an abstract, tinted preview of Caret's
- * chrome beside the menu. `icon` is a vendored glyph shown before the label, which
- * the segmented mode control uses (sun / moon / monitor). */
+ * palette this way. `preview` is the option's theme id (EXC-753): when present,
+ * highlighting the option floats an abstract preview of Caret's chrome beside the
+ * menu, painted in that theme. `icon` is a vendored glyph shown before the label,
+ * which the segmented mode control uses (sun / moon / monitor). */
 export interface SettingOption {
   value: string;
   label: string;
   swatch?: readonly string[];
-  preview?: Record<string, string>;
+  preview?: ThemeId;
   icon?: IconName;
 }
 
@@ -111,8 +111,8 @@ export function filterSettings(
 // The five tokens every palette supplies (ColorToken makes them mandatory), previewed
 // as dots beside each theme option so a future theme renders its swatch with no extra
 // wiring — background, the raised surface, ink, the accent, and the positive hue. The
-// hover preview (EXC-753) treats this as its floor: the ThemePreviewCard must paint at
-// least these five so the preview never shows fewer colors than the option's dots
+// hover preview (EXC-753) treats this as its floor: the ThemePreviewCard must reference
+// at least these five so the preview never shows fewer colors than the option's dots
 // (ThemePreviewCard.test.ts pins that against the exported list).
 export const SWATCH_TOKENS = ["--paper", "--paper-raised", "--ink", "--accent", "--ok"] as const;
 
@@ -123,8 +123,8 @@ function slotOptions(scheme: Scheme): SettingOption[] {
     value: theme.id,
     label: theme.label,
     swatch: SWATCH_TOKENS.map((token) => theme.tokens[token]),
-    // The full palette the hover preview (EXC-753) paints Caret's chrome from.
-    preview: theme.tokens,
+    // The palette the hover preview (EXC-753) paints Caret's chrome in.
+    preview: theme.id,
   }));
 }
 
