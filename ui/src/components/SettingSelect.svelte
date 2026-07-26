@@ -6,14 +6,15 @@
   // applies immediately on pick. One component renders every `select` control in the
   // registry (theme, diff layout, diff markers).
   //
-  // Theme preview (EXC-753): when the HIGHLIGHTED option carries `preview` tokens (only
-  // the theme options do), a single abstract ThemePreviewCard floats beside the open
-  // menu, tinted by that option BEFORE it is selected — a palette seen on Caret's own
-  // chrome. It tracks the highlight (pointer or keyboard), portals to document.body to
-  // escape the menu's overflow, and clamps into the viewport. The card paints from the
-  // option's tokens scoped to itself, so hovering never retints the real app.
+  // Theme preview (EXC-753): when the HIGHLIGHTED option carries a `preview` theme id
+  // (only the theme options do), a single abstract ThemePreviewCard floats beside the
+  // open menu, tinted by that option BEFORE it is selected — a palette seen on Caret's
+  // own chrome. It tracks the highlight (pointer or keyboard), portals to document.body
+  // to escape the menu's overflow, and clamps into the viewport. The card paints that
+  // theme onto itself, so hovering never retints the real app.
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
+  import type { ThemeId } from "$lib/theme.ts";
   import { placeOnNextFrame } from "$lib/themePreviewPlacement.ts";
   import ThemePreviewCard from "@/components/ThemePreviewCard.svelte";
 
@@ -22,9 +23,9 @@
     label: string;
     /** Optional palette preview — CSS colors shown as dots after the label (theme). */
     swatch?: readonly string[];
-    /** Optional full theme token map — when present, highlighting this option floats a
-     * ThemePreviewCard tinted by it beside the menu (EXC-753). */
-    preview?: Record<string, string>;
+    /** Optional theme id — when present, highlighting this option floats a
+     * ThemePreviewCard painted in that theme beside the menu (EXC-753). */
+    preview?: ThemeId;
   }
 
   interface Props {
@@ -204,7 +205,7 @@
     style:top={posTop !== undefined ? `${posTop}px` : null}
     style:left={posLeft !== undefined ? `${posLeft}px` : null}
   >
-    <ThemePreviewCard tokens={preview} label={highlighted?.label ?? ""} />
+    <ThemePreviewCard themeId={preview} label={highlighted?.label ?? ""} />
   </div>
 {/if}
 

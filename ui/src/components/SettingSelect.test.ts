@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 
 import { capture, flushUntil, render } from "@ui/test-mount.ts";
 import SettingSelect from "@/components/SettingSelect.svelte";
+import { THEMES } from "$lib/theme.ts";
 
 const OPTIONS = [
   { value: "split", label: "Split" },
@@ -71,15 +72,17 @@ describe("SettingSelect commit", () => {
 });
 
 describe("SettingSelect theme preview (EXC-753)", () => {
-  const PREVIEW_A = { "--paper": "#123456", "--ink": "#eeeeee", "--accent": "#ff8800" };
-  const PREVIEW_C = { "--paper": "#654321", "--ink": "#111111", "--accent": "#00ccff" };
+  // Real theme ids: the card paints straight from the registry (EXC-884), so the
+  // expected accents come from THEMES too and cannot drift from it.
+  const LIGHT_ACCENT = THEMES["caret-light"].tokens["--accent"];
+  const DARK_ACCENT = THEMES["caret-dark"].tokens["--accent"];
   const themeOptions = [
-    { value: "a", label: "Theme A", preview: PREVIEW_A },
+    { value: "caret-light", label: "caret light", preview: "caret-light" },
     { value: "b", label: "Theme B" },
-    { value: "c", label: "Theme C", preview: PREVIEW_C },
+    { value: "caret-dark", label: "caret dark", preview: "caret-dark" },
   ] as const;
 
-  const previewProps = { ...baseProps, options: themeOptions, value: "a" };
+  const previewProps = { ...baseProps, options: themeOptions, value: "caret-light" };
 
   const card = () => document.body.querySelector<HTMLElement>("[data-slot='theme-preview']");
 
@@ -87,7 +90,7 @@ describe("SettingSelect theme preview (EXC-753)", () => {
     document.body.querySelector<HTMLButtonElement>("button[aria-label='Layout']")?.click();
     await flushUntil(
       flush,
-      () => document.body.querySelector("[data-setting-option='a']") !== null,
+      () => document.body.querySelector("[data-setting-option='caret-light']") !== null,
     );
   }
 
@@ -102,9 +105,9 @@ describe("SettingSelect theme preview (EXC-753)", () => {
     const { flush } = render(SettingSelect, previewProps);
     flush();
     await openMenu(flush);
-    highlight("a");
+    highlight("caret-light");
     await flushUntil(flush, () => card() !== null);
-    expect(card()?.style.getPropertyValue("--accent")).toBe("#ff8800");
+    expect(card()?.style.getPropertyValue("--accent")).toBe(LIGHT_ACCENT);
   });
 
   test("keyboard-highlighting an option (focus) surfaces its preview too", async () => {
@@ -114,10 +117,10 @@ describe("SettingSelect theme preview (EXC-753)", () => {
     // bits-ui moves real focus onto the highlighted item as you arrow through the
     // menu; the component's onfocus mirrors onpointerenter, so keyboard roving previews.
     document.body
-      .querySelector<HTMLElement>("[data-setting-option='c']")
+      .querySelector<HTMLElement>("[data-setting-option='caret-dark']")
       ?.dispatchEvent(new FocusEvent("focus"));
     await flushUntil(flush, () => card() !== null);
-    expect(card()?.style.getPropertyValue("--accent")).toBe("#00ccff");
+    expect(card()?.style.getPropertyValue("--accent")).toBe(DARK_ACCENT);
   });
 
   test("an option without a preview surfaces no card", async () => {
@@ -134,7 +137,7 @@ describe("SettingSelect theme preview (EXC-753)", () => {
     const { flush } = render(SettingSelect, previewProps);
     flush();
     await openMenu(flush);
-    highlight("a");
+    highlight("caret-light");
     await flushUntil(flush, () => card() !== null);
     expect(document.documentElement.style.getPropertyValue("--accent")).toBe(before);
   });
@@ -143,10 +146,10 @@ describe("SettingSelect theme preview (EXC-753)", () => {
     const { flush } = render(SettingSelect, previewProps);
     flush();
     await openMenu(flush);
-    highlight("a");
-    await flushUntil(flush, () => card()?.style.getPropertyValue("--accent") === "#ff8800");
-    highlight("c");
-    await flushUntil(flush, () => card()?.style.getPropertyValue("--accent") === "#00ccff");
+    highlight("caret-light");
+    await flushUntil(flush, () => card()?.style.getPropertyValue("--accent") === LIGHT_ACCENT);
+    highlight("caret-dark");
+    await flushUntil(flush, () => card()?.style.getPropertyValue("--accent") === DARK_ACCENT);
     expect(document.body.querySelectorAll("[data-slot='theme-preview']").length).toBe(1);
   });
 });

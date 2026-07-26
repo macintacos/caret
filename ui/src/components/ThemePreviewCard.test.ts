@@ -7,23 +7,14 @@ import { join } from "node:path";
 import { render } from "@ui/test-mount.ts";
 import ThemePreviewCard from "@/components/ThemePreviewCard.svelte";
 import { SWATCH_TOKENS } from "$lib/settingsRegistry.ts";
+import { THEMES } from "$lib/theme.ts";
 
-// A representative palette: distinctive hex values so a token that lands on the card
-// root is unmistakable, and separable from anything :root might carry.
-const TOKENS = {
-  "--paper": "#101112",
-  "--paper-raised": "#1a1b1c",
-  "--paper-sunk": "#0c0d0e",
-  "--ink": "#eeeeee",
-  "--ink-soft": "#aaaaaa",
-  "--ink-faint": "#777777",
-  "--rule": "#ffffff22",
-  "--rule-strong": "#ffffff33",
-  "--accent": "#ff8800",
-  "--accent-wash": "#ff880033",
-} as const;
+// A real palette, not a hand-rolled stand-in: the card paints through paintTheme, so
+// the registry entry IS the contract. caret-light is the light one — distinct from
+// whatever caret-dark :root might carry, so a leak onto the root is unmistakable.
+const PREVIEWED = THEMES["caret-light"];
 
-const baseProps = { tokens: TOKENS, label: "caret light" };
+const baseProps = { themeId: PREVIEWED.id, label: PREVIEWED.label };
 
 function root(): HTMLElement | null {
   return document.body.querySelector<HTMLElement>("[data-slot='theme-preview']");
@@ -49,20 +40,43 @@ describe("ThemePreviewCard chrome", () => {
 });
 
 describe("ThemePreviewCard tinting is scoped to the card", () => {
-  test("applies the passed tokens as inline custom properties on its own root", () => {
+  test("applies the previewed theme's tokens as inline custom properties on its own root", () => {
     const { flush } = render(ThemePreviewCard, baseProps);
     flush();
     const el = root();
-    expect(el?.style.getPropertyValue("--paper")).toBe("#101112");
-    expect(el?.style.getPropertyValue("--ink")).toBe("#eeeeee");
-    expect(el?.style.getPropertyValue("--accent")).toBe("#ff8800");
+    for (const [name, value] of Object.entries(PREVIEWED.tokens)) {
+      expect(el?.style.getPropertyValue(name), name).toBe(value);
+    }
+  });
+
+  // The scheme travels with the palette (EXC-884), so scheme-keyed rules inside the
+  // card resolve against the PREVIEWED scheme rather than the app's.
+  test("carries the previewed palette's scheme as color-scheme and data-theme", () => {
+    const { flush } = render(ThemePreviewCard, baseProps);
+    flush();
+    const el = root();
+    expect(el?.dataset.theme).toBe(PREVIEWED.scheme);
+    expect(el?.style.getPropertyValue("color-scheme")).toBe(PREVIEWED.scheme);
   });
 
   test("never writes the tokens onto the document root (:root untouched)", () => {
-    const before = document.documentElement.style.getPropertyValue("--paper");
+    const beforePaper = document.documentElement.style.getPropertyValue("--paper");
+    const beforeScheme = document.documentElement.dataset.theme;
     const { flush } = render(ThemePreviewCard, baseProps);
     flush();
-    expect(document.documentElement.style.getPropertyValue("--paper")).toBe(before);
+    expect(document.documentElement.style.getPropertyValue("--paper")).toBe(beforePaper);
+    expect(document.documentElement.dataset.theme).toBe(beforeScheme);
+  });
+
+  // The card paints through the shared paintTheme (EXC-884) rather than its own
+  // setProperty loop; a copy reintroduced here would drift from the registry's stamp
+  // the same way the deleted applyTokens did.
+  test("owns no paint loop of its own — it delegates to paintTheme", () => {
+    const source = readFileSync(join(import.meta.dir, "ThemePreviewCard.svelte"), "utf8");
+    expect(/\.setProperty\s*\(/.test(source)).toBe(false);
+    // Line-anchored so the header's own `paintTheme(themeId, node)` prose can't
+    // satisfy it — a comment line starts with `//`, a call does not.
+    expect(/^\s*paintTheme\(/m.test(source)).toBe(true);
   });
 });
 

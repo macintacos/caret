@@ -14,7 +14,7 @@ import {
   THEME_FIELD,
   THEME_SECTION,
 } from "$lib/settingsRegistry.ts";
-import { THEMES } from "$lib/theme.ts";
+import { THEME_IDS, THEMES, type ThemeId } from "$lib/theme.ts";
 
 afterEach(() => localStorage.clear());
 
@@ -228,16 +228,14 @@ describe("theme options carry palette swatches", () => {
   });
 });
 
-describe("theme options carry a full-palette preview (EXC-753)", () => {
-  test("each theme option exposes a preview token map; other selects carry none", () => {
+describe("theme options carry a palette preview (EXC-753)", () => {
+  test("each theme option previews its own theme; other selects carry none", () => {
     for (const key of [THEME_FIELD.light, THEME_FIELD.dark]) {
       for (const opt of slotOptionsOf(key)) {
-        expect(opt.preview).toBeDefined();
-        // The preview is the theme's full token map — at least the surfaces, ink, and
-        // the accent the ThemePreviewCard paints from, as hex values.
-        for (const token of ["--paper", "--paper-raised", "--ink", "--accent"]) {
-          expect(opt.preview?.[token]).toMatch(/^#[0-9a-fA-F]{3,8}$/);
-        }
+        // The preview is the option's own theme id — the card paints from the registry
+        // (EXC-884), so the option carries the key, not a copy of the palette.
+        expect(opt.preview).toBe(opt.value as ThemeId);
+        expect(THEME_IDS).toContain(opt.preview!);
       }
     }
     const layout = staged.find((f) => f.key === "diffStyle");

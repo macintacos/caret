@@ -4,39 +4,41 @@
   // palette can be seen ON Caret's layout before it is selected. The mock is a generic
   // (unfocused) macOS window around a miniature Caret shell — a topbar strip, a left
   // rail with one selected row, and a plan pane of skeleton bars — never real
-  // plan/diff content, so there is no PII to leak. It is styled ENTIRELY from the
-  // passed token map, applied as inline custom properties on this card's root only
-  // (use:applyTokens), so descendants reading var(--paper)/var(--ink)/… paint in the
-  // hovered palette while :root is untouched: hovering never retints the real app.
-  // The single --accent appears exactly once — the selected rail row (caret's "amber
-  // marks the selection" language) — keeping the primary scarce.
+  // plan/diff content, so there is no PII to leak. It is styled ENTIRELY by
+  // `paintTheme(themeId, node)` (EXC-884) — the same painter the app itself runs,
+  // aimed at this card's root instead of the document — so descendants reading
+  // var(--paper)/var(--ink)/… paint in the hovered palette while :root is untouched:
+  // hovering never retints the real app. Painting through the shared function also
+  // scopes `color-scheme` and `data-theme` here, which is what makes a real
+  // (scaled-down) render of Caret's chrome viable as a follow-up rather than this
+  // hand-drawn miniature — see theme.ts's header for the one thing a scoped stamp
+  // still cannot insulate. The single --accent appears exactly once — the selected
+  // rail row (caret's "amber marks the selection" language) — keeping the primary
+  // scarce.
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
+  import { paintTheme, type ThemeId } from "$lib/theme.ts";
 
   interface Props {
-    /** The hovered theme's token map (THEMES[id].tokens): CSS custom property → value.
-     * Applied inline on the root so the whole mock paints in this palette. */
-    tokens: Record<string, string>;
+    /** The hovered theme's id. Its palette is painted inline on the root so the whole
+     * mock — and only the mock — wears that theme. */
+    themeId: ThemeId;
     /** The theme's display name — the window title and the card's accessible name. */
     label: string;
   }
-  let { tokens, label }: Props = $props();
+  let { themeId, label }: Props = $props();
 
-  // Apply the palette as inline custom properties on the card root. An action (not a
-  // style string) so arbitrary token keys land via setProperty — robust in happy-dom
-  // and the browser alike — and re-apply if the hovered option's tokens change.
-  function applyTokens(node: HTMLElement, t: Record<string, string>) {
-    const set = (next: Record<string, string>) => {
-      for (const [name, value] of Object.entries(next)) node.style.setProperty(name, value);
-    };
-    set(t);
-    return { update: set };
+  // An action (not a style string) so the palette lands as inline properties — robust
+  // in happy-dom and the browser alike — and repaints when the hovered option changes.
+  function paint(node: HTMLElement, id: ThemeId) {
+    paintTheme(id, node);
+    return { update: (next: ThemeId) => paintTheme(next, node) };
   }
 </script>
 
 <div
   class="theme-preview"
   data-slot="theme-preview"
-  use:applyTokens={tokens}
+  use:paint={themeId}
   role="img"
   aria-label={`${label} theme preview`}
 >

@@ -268,6 +268,13 @@ test("hovering a theme option previews its palette beside the menu, without appl
   await expect(preview).toHaveAttribute("style", /--accent:\s*#c2410c/i);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
+  // The previewed SCHEME is scoped to the card too (EXC-884): it stamps data-theme and
+  // an inline color-scheme, so scheme-keyed rules inside it resolve light while the
+  // document around it stays dark. color-scheme on a non-root element is legal CSS and
+  // is what keeps the card's own form controls / scrollbars in the previewed scheme.
+  await expect(preview).toHaveAttribute("data-theme", "light");
+  await expect(preview).toHaveAttribute("style", /color-scheme:\s*light/i);
+
   // Beside the menu, fully within the viewport (never clipped).
   const menuBox = await page.locator(".setting-menu").boundingBox();
   const cardBox = await preview.boundingBox();
