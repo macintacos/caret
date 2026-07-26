@@ -6,7 +6,7 @@
 // comparable versions on the toggle and a "(current)" marker on the newest picker
 // row; both are covered at the end of this file.
 
-import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 
 // Three versions whose bodies each carry a unique, greppable line so a diff
 // between a chosen pair is verifiable by visible text.
@@ -508,6 +508,10 @@ test("the version pickers annotate the current version, and only that one", asyn
 }) => {
   await daemon.seedVersions(3, [V1, V2, V3]);
   await page.goto("/");
+  // The Escape below is this test's only keydown and it must land — the base
+  // picker is clicked next, and an unclosed target menu swallows that click.
+  // Measured 348ms after mount, i.e. 48ms clear of the 300ms grace (EXC-897).
+  await waitPastSafeModeGrace(page);
   await page.getByRole("button", { name: "Compare versions" }).click();
 
   await page.getByLabel("Target version").click();

@@ -2073,6 +2073,10 @@ test("editing a saved comment focuses the editor so the caret tracks typing", as
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  // End and the typed "XY" below are this test's only keydowns and both are
+  // load-bearing; a swallowed End also puts Safe Mode's 2s suppression over the
+  // typing. Measured 348ms after mount, 48ms clear of the grace (EXC-897).
+  await waitPastSafeModeGrace(page);
 
   await createAnnotation(page, 3, "aaaaaaaa");
   const card = page.locator("[data-annotation-card]");
