@@ -136,8 +136,8 @@
 <style>
   /* The HUD pill: the sheer --paper-veil surface, so the plan reads faintly through
      it — a HUD, not a modal — lifted with the shared card shadow and the larger chip
-     radius. The controls row sits on top; the
-     current-of-total counter sits below it, right-aligned to the pill's edge, so a
+     radius. The controls row sits on top; the current-of-total counter sits below it,
+     right-aligned to the pill's edge, so a
      changing total never reflows the row's width. On open it expands from the top-right
      corner — where the "/ to search" chip sat (DiffPlanView's dock) — so `/` reads as
      the chip growing into the field; the global #app reduced-motion guard zeroes it. */
