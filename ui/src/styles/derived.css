@@ -1,0 +1,40 @@
+/* The derived tier — the colors a palette implies rather than decides. A palette
+   names its surfaces, ink, and accent in lib/themes/recipe.ts; these fall out of
+   that choice, so they are mixed once here instead of at each call site, and a new
+   palette inherits every one of them for free.
+
+   The selector is load-bearing, not decoration. A custom property's computed value
+   is its specified value with var() already substituted, so a token declared only
+   on :root bakes in :root's palette and inherits into every subtree as a literal —
+   it does not re-derive inside a subtree paintTheme(id, node) painted with a
+   different palette. paintTheme stamps data-theme on every target it paints, root
+   or scoped, so [data-theme] re-derives the whole tier once per painted scope and
+   exactly where one exists.
+
+   @imported by app.css directly after tokens.css: after the palette it reads from,
+   and late enough that tokens.css keeps the first :root block theme.test.ts pins.
+   Mixed in lab like caret's other derivations — oklch is mangled in the embedding
+   Chrome build. derived-tokens.test.ts pins the selector, the mix space, and that
+   every input is a palette token, which is what makes the tier well-formed for all
+   nine palettes rather than just caret's. */
+:root,
+[data-theme] {
+  /* The floating chip: paper-raised nudged toward ink for a soft solid fill with
+     no hard border, and the firmer step it takes on hover / while its menu is
+     open. Worn by the topbar's neutral badges and buttons (.float-chip in
+     atoms.css), by ConfirmPopover's bubble, and — through the shadcn bridge's
+     --sidebar-accent — by the settings sidebar's row hover. */
+  --chip: color-mix(in lab, var(--paper-raised), var(--ink) 9%);
+  --chip-hover: color-mix(in lab, var(--paper-raised), var(--ink) 15%);
+
+  /* A sheer raised surface: the panel fill thinned just enough that what scrolls
+     under it stays faintly legible — a HUD rather than a modal. The plan view's
+     search pill and the "/ to search" chip it expands from both ride it. */
+  --paper-veil: color-mix(in lab, var(--paper-raised), transparent 6%);
+
+  /* A bare wash of ink over whatever is already behind it — the neutral hover for
+     a control that is transparent at rest and must not paint over its container's
+     surface. Distinct from --chip-hover, which is opaque and mixes onto a known
+     surface; this one is a tint the background shows through. */
+  --wash-ink: color-mix(in lab, var(--ink) 8%, transparent);
+}

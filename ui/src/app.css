@@ -9,8 +9,9 @@
 
    This file is the stylesheet ENTRY: it wires Tailwind, then @imports the
    ./styles/* partials (which the Tailwind bundler inlines at build). The design
-   system itself lives in those partials — tokens, the shadcn bridge, the base
-   layer, layout, the shared atoms, and the diff-view bridge — one concern each.
+   system itself lives in those partials — tokens, the tier derived from them, the
+   shadcn bridge, the base layer, layout, the shared atoms, and the diff-view
+   bridge — one concern each.
    The CSS-contract tests (theme/motion/type-scale/shadcn-bridge/layout/
    css-bridge) parse the reconstituted whole via lib/appCss.ts. */
 
@@ -28,6 +29,7 @@
 @import "tailwindcss" source(none);
 @import "tw-animate-css";
 @import "./styles/tokens.css";
+@import "./styles/derived.css";
 @import "./styles/shadcn-bridge.css";
 @import "./styles/base.css";
 @import "./styles/layout.css";

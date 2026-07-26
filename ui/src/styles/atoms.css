@@ -8,20 +8,14 @@
   letter-spacing: 0.01em;
 }
 
-/* Floating chip: a soft solid fill lifted just off the raised topbar surface
-   (paper-raised nudged toward ink), no hard border — the shared "floats above
-   the background" look worn by the topbar's neutral badges (DevBadge,
-   VersionLabel) and its neutral buttons (Request changes, the review switcher).
-   Derived from the palette tokens so it retints on theme switch; declared in its
-   own :root — not the first palette block theme.test.ts pins, nor the shadcn
-   bridge block — because it's a derived surface, not a theme-contract token.
+/* Floating chip: the shared "floats above the background" look worn by the
+   topbar's neutral badges (DevBadge, VersionLabel) and its neutral buttons
+   (Request changes, the review switcher) — a soft solid fill lifted just off the
+   raised topbar surface, no hard border. The fill itself is --chip / --chip-hover
+   from the derived tier (styles/derived.css), so it retints on theme switch.
    Unlayered, so it wins over the shadcn variant's Tailwind bg utility. On a
    <button> it lifts on hover / while its menu is open; passive <span> badges
    stay at rest. */
-:root {
-  --chip: color-mix(in lab, var(--paper-raised), var(--ink) 9%);
-  --chip-hover: color-mix(in lab, var(--paper-raised), var(--ink) 15%);
-}
 .float-chip {
   background: var(--chip);
 }
