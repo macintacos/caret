@@ -391,7 +391,7 @@
      addition/deletion, which matters with the diff surface sitting directly below
      this bar. Fill and ink both derive from the one token, so paintTheme retints
      it per theme with no second rule. The wash stays local — it is the only
-     --attention fill in the chrome, so a shared token would name a set of one. */
+     --attention wash in the chrome, so a shared token would name a set of one. */
   .compare-picker :global(.other-count) {
     background: color-mix(in lab, var(--attention) 18%, transparent);
     color: var(--attention);

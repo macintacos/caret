@@ -389,13 +389,13 @@
     color: var(--ink-soft);
     background: transparent;
   }
-  /* Unselected rows are transparent at rest; on hover they take --wash-ink, the
+  /* Unselected rows are transparent at rest; on hover they take --ink-wash, the
      shared neutral tint for a control the surface shows through — gentler than the
      app-wide --chip-hover (15% ink) the shadcn button ships, so it never rivals the
      selection's amber below. */
   .settings :global([data-slot="sidebar-menu-button"]:not([data-active="true"]):hover),
   .settings :global([data-slot="sidebar-menu-button"]:not([data-active="true"]):active) {
-    background: var(--wash-ink);
+    background: var(--ink-wash);
     color: var(--ink);
   }
   .settings :global([data-slot="sidebar-menu-button"][data-active="true"]) {

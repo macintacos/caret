@@ -2,7 +2,7 @@
 // (./caret.ts) included: name the thirteen colors a palette actually decides, and
 // the seven that are always derived (the two rules, the accent wash, the two marks,
 // the orphan mark, the shadow) come out consistent for every theme instead of being
-// re-typed seven times.
+// re-typed once per palette.
 //
 // The alpha suffixes and the two shadows are caret-dark's and caret-light's own
 // values, so a vendor theme's hairlines and highlight marks sit at exactly the

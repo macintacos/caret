@@ -136,19 +136,19 @@ describe("THEMES", () => {
   // — so a dropped or mis-cascaded override surfaces here as a changed byte rather
   // than as a subtly-off hairline. caret-dark's set is pinned transitively by the
   // app.css mirror above; caret-light's is pinned nowhere else.
-  const OVERRIDE_SENSITIVE: ColorToken[] = [
-    "--rule",
-    "--rule-strong",
-    "--accent-wash",
-    "--mark",
-    "--mark-active",
-    "--mark-orphan",
-  ];
-  const washes = (id: ThemeId) =>
-    Object.fromEntries(OVERRIDE_SENSITIVE.map((token) => [token, THEMES[id].tokens[token]]));
-
+  // caret-dark's other thirteen are pinned by the app.css mirror above, so only the
+  // override-sensitive six are named here.
   test("caret-dark's overridden washes", () => {
-    expect(washes("caret-dark")).toEqual({
+    const OVERRIDE_SENSITIVE: ColorToken[] = [
+      "--rule",
+      "--rule-strong",
+      "--accent-wash",
+      "--mark",
+      "--mark-active",
+      "--mark-orphan",
+    ];
+    const tokens = THEMES["caret-dark"].tokens;
+    expect(Object.fromEntries(OVERRIDE_SENSITIVE.map((t) => [t, tokens[t]]))).toEqual({
       "--rule": "#ffffff1a",
       "--rule-strong": "#ffffff29",
       "--accent-wash": "#ec7c3829",
@@ -158,14 +158,31 @@ describe("THEMES", () => {
     });
   });
 
-  test("caret-light's overridden washes", () => {
-    expect(washes("caret-light")).toEqual({
+  // caret-light gets its whole record pinned rather than the derived six, because it
+  // has no app.css mirror and nothing else in the repo pins its decided colors. The
+  // six derived values come out of three lines of the recipe; the thirteen decided
+  // ones are hand-transcribed, which is where a silent slip would actually live.
+  test("caret-light's full token set", () => {
+    expect(THEMES["caret-light"].tokens).toEqual({
+      "--paper": "#faf9f5",
+      "--paper-raised": "#fffdf8",
+      "--paper-sunk": "#f4f1ea",
+      "--ink": "#1c1714",
+      "--ink-soft": "#57504a",
+      "--ink-faint": "#8a827a",
       "--rule": "#1c17141a",
       "--rule-strong": "#1c171429",
+      "--accent": "#c2410c",
+      "--accent-bright": "#ea580c",
       "--accent-wash": "#ec7c381f",
+      "--accent-ink": "#fff7ed",
       "--mark": "#ec7c3824",
       "--mark-active": "#ec7c3847",
       "--mark-orphan": "#78706829",
+      "--ok": "#15803d",
+      "--danger": "#b91c1c",
+      "--attention": "#7c3aed",
+      "--shadow-card": "0 1px 2px #0000000f, 0 8px 24px #00000014",
     });
   });
 });
@@ -192,6 +209,11 @@ describe("every palette module", () => {
       const source = readFileSync(join(THEMES_DIR, file), "utf8");
       expect(source, file).toContain("paletteTheme(");
       expect(source, file).not.toContain("Record<ColorToken, string>");
+      // The type annotation alone is a weak proxy — a module could drop it and still
+      // hand-write a token record. No palette module names a `"--token":` key at all
+      // (only recipe.ts does, and it is excluded), so the absence of one is the
+      // falsifiable form of "the derivation is not re-typed per palette".
+      expect(source, file).not.toMatch(/"--[\w-]+"\s*:/);
     });
   }
 });

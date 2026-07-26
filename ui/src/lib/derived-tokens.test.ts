@@ -53,18 +53,24 @@ describe("the derived-token tier", () => {
     expect(Object.keys(tokens).sort()).toEqual([
       "--chip",
       "--chip-hover",
+      "--ink-wash",
       "--paper-veil",
-      "--wash-ink",
     ]);
   });
 
+  // The two well-formedness tests below iterate the block's contents, so both would
+  // pass vacuously against a missing block. The test above is what actually catches
+  // that, but assert non-emptiness here too so neither reads as a green tick over
+  // nothing.
   test("derives every one with color-mix(in lab, …)", () => {
+    expect(Object.keys(tokens).length).toBeGreaterThan(0);
     for (const [name, value] of Object.entries(tokens)) {
       expect(value, name).toMatch(/^color-mix\(in lab,/);
     }
   });
 
   test("uses no hardcoded hex or oklch — the palette is the only input", () => {
+    expect(decls.trim()).not.toBe("");
     expect(decls).not.toMatch(/#[0-9a-fA-F]{3,8}/);
     expect(decls).not.toContain("oklch");
   });
