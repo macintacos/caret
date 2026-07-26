@@ -594,6 +594,10 @@ test("creating a range annotation from the gutter persists the correct line span
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  // The submit chord below is this test's first keydown, ~330ms after mount — 30ms
+  // clear of the 300ms safe-mode grace, and less under load. Unguarded, the guard
+  // eats the chord and the composer never closes (EXC-897).
+  await waitPastSafeModeGrace(page);
 
   // Select lines 5–8 by dragging the number column, then open the composer from
   // the gutter + that the selection reveals.
@@ -2068,6 +2072,10 @@ test("editing a saved comment focuses the editor so the caret tracks typing", as
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  // End and the typed "XY" below are this test's only keydowns and both are
+  // load-bearing; a swallowed End also puts Safe Mode's 2s suppression over the
+  // typing. Measured 348ms after mount, 48ms clear of the grace (EXC-897).
+  await waitPastSafeModeGrace(page);
 
   await createAnnotation(page, 3, "aaaaaaaa");
   const card = page.locator("[data-annotation-card]");
@@ -2270,6 +2278,10 @@ async function createRangeAnnotation(
   end: number,
   comment: string,
 ): Promise<void> {
+  // The submit chord below is the first keydown of every test funnelling through
+  // here — the drag, the gutter +, and the fill are all mouse — so it lands ~330ms
+  // after mount, barely clear of the 300ms safe-mode grace (EXC-897).
+  await waitPastSafeModeGrace(page);
   await selectGutterRange(page, start, end);
   const plus = page.locator(".diffview [data-utility-button]");
   await expect(plus).toBeVisible();
