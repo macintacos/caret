@@ -1,10 +1,25 @@
 // The color-palette registry and the single source of truth for every color the
 // UI paints (EXC-730). Each theme is a plain object of CSS-custom-property values;
-// `paintTheme` writes them as inline properties on the document root, where they
-// override app.css's :root defaults (inline style wins over a stylesheet rule), so
-// the whole chrome — plus everything that reads `var(--token)`: dialogs, the
-// .diffview bridge — retints in realtime with no per-component change. Defining a
-// new palette is one more entry in THEMES.
+// `paintTheme` writes them as inline properties onto a target element. Its default
+// target is the document root, where they override app.css's :root defaults (inline
+// style wins over a stylesheet rule), so the whole chrome — plus everything that
+// reads `var(--token)`: dialogs, the .diffview bridge — retints in realtime with no
+// per-component change. Defining a new palette is one more entry in THEMES.
+//
+// A caller may pass any element instead, painting the palette onto that subtree
+// rather than the page (EXC-884). Two adapters justify the parameter: the document
+// in production, and the scoped preview card that previews a palette the app is not
+// currently wearing. Both carry the full stamp — tokens, color-scheme, data-theme —
+// so scheme-keyed rules resolve against the painted scheme, not the app's.
+//
+// Known limitation of a scoped stamp. It makes the subtree match its own scheme's
+// rules, but it does not unmatch the page's: app.css's
+// `@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *))` and
+// atoms.css's `[data-theme="dark"] [data-slot="kbd"]` both key on *any* ancestor, so
+// under `<html data-theme="dark">` a subtree stamped light matches both. Today that
+// is harmless (the disjoint kbd rules union rather than conflict), but a preview
+// that renders real chrome needs the `dark:` variant reworked to a nearest-ancestor
+// form first — every `dark:` utility in the tree, hence a separate change.
 //
 // The palettes themselves live in ./themes/ — one module per family, each carrying
 // its upstream source and the mapping onto the tokens below. This module owns the
@@ -111,16 +126,20 @@ export function themesForScheme(scheme: Scheme): Theme[] {
   return THEME_IDS.map((id) => THEMES[id]).filter((theme) => theme.scheme === scheme);
 }
 
-/** Paint a theme onto the document root — inline custom properties +
- * color-scheme + data-theme. Painting only: what to paint is decided (and
- * persisted) by appearance.ts. Returns the painted theme. */
-export function paintTheme(id: ThemeId): Theme {
+/** Paint a theme onto an element — inline custom properties + color-scheme +
+ * data-theme. Painting only: what to paint is decided (and persisted) by
+ * appearance.ts. Returns the painted theme.
+ *
+ * @param target - The element to paint. Defaults to the document root, which is
+ * the production path; pass an element to scope the palette to that subtree
+ * instead (see the module header's note on what a scoped stamp does and doesn't
+ * insulate). */
+export function paintTheme(id: ThemeId, target: HTMLElement = document.documentElement): Theme {
   const theme = THEMES[id];
-  const root = document.documentElement;
   for (const [name, value] of Object.entries(theme.tokens)) {
-    root.style.setProperty(name, value);
+    target.style.setProperty(name, value);
   }
-  root.style.setProperty("color-scheme", theme.scheme);
-  root.dataset.theme = theme.scheme;
+  target.style.setProperty("color-scheme", theme.scheme);
+  target.dataset.theme = theme.scheme;
   return theme;
 }

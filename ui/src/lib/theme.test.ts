@@ -290,4 +290,40 @@ describe("paintTheme", () => {
     const painted: ThemeId = paintTheme("caret-light").id;
     expect(painted).toBe("caret-light");
   });
+
+  // The scoped-target contract (EXC-884): the same paint, aimed anywhere. The four
+  // tests above are the no-target contract and stay as they are.
+  test("writes every token as an inline custom property on a passed target", () => {
+    const node = document.createElement("div");
+    paintTheme("caret-light", node);
+    for (const [name, value] of Object.entries(THEMES["caret-light"].tokens)) {
+      expect(node.style.getPropertyValue(name), name).toBe(value);
+    }
+  });
+
+  test("sets color-scheme and data-theme on a passed target", () => {
+    const node = document.createElement("div");
+    paintTheme("caret-light", node);
+    expect(node.style.getPropertyValue("color-scheme")).toBe("light");
+    expect(node.dataset.theme).toBe("light");
+  });
+
+  // A scoped paint that leaked to the root would retint the whole app behind a
+  // preview, so the root is pre-painted to the opposite scheme — any leak is a
+  // visible contradiction rather than a coincidence.
+  test("leaves the document root untouched when given a target", () => {
+    paintTheme("caret-dark");
+    const node = document.createElement("div");
+    paintTheme("caret-light", node);
+
+    const root = document.documentElement;
+    expect(root.dataset.theme).toBe("dark");
+    expect(root.style.getPropertyValue("color-scheme")).toBe("dark");
+    expect(root.style.getPropertyValue("--paper")).toBe(THEMES["caret-dark"].tokens["--paper"]);
+  });
+
+  test("returns the painted theme when given a target", () => {
+    const painted: ThemeId = paintTheme("caret-light", document.createElement("div")).id;
+    expect(painted).toBe("caret-light");
+  });
 });
