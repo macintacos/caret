@@ -1,5 +1,7 @@
 import "@ui/test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { readAppCss } from "$lib/appCss.ts";
 import {
@@ -126,6 +128,72 @@ describe("THEMES", () => {
     }
     expect(root["color-scheme"]).toBe("dark");
   });
+
+  // The six washes caret's three hue overrides exist to reproduce. Each rides a hue
+  // that is NOT the token it would otherwise default to — the rules ride pure white
+  // in dark rather than the ink, the accent wash rides a mid-amber that is not
+  // --accent, and the dark marks ride a second, lighter amber that is not the wash's
+  // — so a dropped or mis-cascaded override surfaces here as a changed byte rather
+  // than as a subtly-off hairline. caret-dark's set is pinned transitively by the
+  // app.css mirror above; caret-light's is pinned nowhere else.
+  const OVERRIDE_SENSITIVE: ColorToken[] = [
+    "--rule",
+    "--rule-strong",
+    "--accent-wash",
+    "--mark",
+    "--mark-active",
+    "--mark-orphan",
+  ];
+  const washes = (id: ThemeId) =>
+    Object.fromEntries(OVERRIDE_SENSITIVE.map((token) => [token, THEMES[id].tokens[token]]));
+
+  test("caret-dark's overridden washes", () => {
+    expect(washes("caret-dark")).toEqual({
+      "--rule": "#ffffff1a",
+      "--rule-strong": "#ffffff29",
+      "--accent-wash": "#ec7c3829",
+      "--mark": "#f3953c2e",
+      "--mark-active": "#f3953c57",
+      "--mark-orphan": "#9b9b9b29",
+    });
+  });
+
+  test("caret-light's overridden washes", () => {
+    expect(washes("caret-light")).toEqual({
+      "--rule": "#1c17141a",
+      "--rule-strong": "#1c171429",
+      "--accent-wash": "#ec7c381f",
+      "--mark": "#ec7c3824",
+      "--mark-active": "#ec7c3847",
+      "--mark-orphan": "#78706829",
+    });
+  });
+});
+
+// The recipe is the only way a Theme is constructed (EXC-885). Asserted against each
+// palette module's source rather than its exports, because a hand-written token
+// record and a generated one are indistinguishable once they are Theme objects —
+// the thing worth pinning is that the derivation is not re-typed per palette.
+// recipe.ts is the constructor itself, so it is the one file exempt.
+describe("every palette module", () => {
+  const THEMES_DIR = join(import.meta.dir, "themes");
+  const modules = readdirSync(THEMES_DIR).filter(
+    (file) => file.endsWith(".ts") && file !== "recipe.ts",
+  );
+
+  // Guards the loop below against iterating an empty list, which would report as a
+  // clean pass if the directory ever moved.
+  test("is found beside recipe.ts", () => {
+    expect(modules.length).toBeGreaterThan(0);
+  });
+
+  for (const file of modules) {
+    test(`${file} builds its themes through paletteTheme`, () => {
+      const source = readFileSync(join(THEMES_DIR, file), "utf8");
+      expect(source, file).toContain("paletteTheme(");
+      expect(source, file).not.toContain("Record<ColorToken, string>");
+    });
+  }
 });
 
 // Registry-wide invariants: these run over every palette rather than the two named
