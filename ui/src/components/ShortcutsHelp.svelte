@@ -1,8 +1,8 @@
 <script lang="ts">
   // The keyboard-shortcuts help modal (EXC-787): every live-registered shortcut,
   // grouped by category, searchable, click-to-run. Composes the shared Modal
-  // (kind="dialog": Escape + backdrop dismiss). The host gates this with
-  // {#if showHelp} and passes shortcuts.list() at mount, so the list reflects
+  // (kind="dialog": Escape + backdrop dismiss). The host mounts this per open
+  // (ModalPresence) and passes shortcuts.list() at mount, so the list reflects
   // whatever is registered when it opens — it grows as later tickets register.
   import { Input } from "$lib/components/ui/input/index.js";
   import { Kbd, KbdGroup } from "$lib/components/ui/kbd/index.js";
@@ -13,12 +13,16 @@
   import Modal from "@/components/Modal.svelte";
 
   interface Props {
+    /** Controlled open — false while the modal plays its exit. */
+    open: boolean;
+    /** The surface finished its exit and may be unmounted. */
+    onClosed?: () => void;
     /** The shortcuts to list — the host passes shortcuts.list() at mount. */
     entries: ShortcutEntry[];
     /** Dismiss (Escape, backdrop, or after running a shortcut). */
     onClose: () => void;
   }
-  let { entries, onClose }: Props = $props();
+  let { open, onClosed, entries, onClose }: Props = $props();
 
   let query = $state("");
   // The search input element, bound so the `/`-to-focus handler below can move
@@ -81,7 +85,8 @@
 
 <Modal
   kind="dialog"
-  open
+  {open}
+  {onClosed}
   eyebrow="Keyboard"
   title="Shortcuts"
   onDismiss={onClose}

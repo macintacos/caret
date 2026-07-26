@@ -10,16 +10,22 @@ import { isTopmostDialog, topmostDialogContent } from "$lib/modalStack.ts";
 // tests stay hermetic (no document.body cleanup).
 function stack(count: number): HTMLElement {
   const root = document.createElement("div");
-  for (let i = 0; i < count; i++) {
-    const content = document.createElement("div");
-    content.setAttribute("data-slot", "dialog-content");
-    content.dataset.n = String(i);
-    const input = document.createElement("input");
-    input.dataset.role = "search";
-    content.appendChild(input);
-    root.appendChild(content);
-  }
+  for (let i = 0; i < count; i++) root.appendChild(dialog(String(i), "open"));
   return root;
+}
+
+// One portalled dialog content, tagged with the `data-state` bits-ui writes.
+// A "closed" one is a surface playing its exit — still in the DOM (EXC-891),
+// but no longer a candidate for the topmost slot.
+function dialog(n: string, state: "open" | "closed"): HTMLElement {
+  const content = document.createElement("div");
+  content.setAttribute("data-slot", "dialog-content");
+  content.setAttribute("data-state", state);
+  content.dataset.n = n;
+  const input = document.createElement("input");
+  input.dataset.role = "search";
+  content.appendChild(input);
+  return content;
 }
 
 describe("topmostDialogContent", () => {
@@ -35,6 +41,21 @@ describe("topmostDialogContent", () => {
   test("returns the LAST dialog content when several are stacked", () => {
     const root = stack(3);
     expect(topmostDialogContent(root)?.dataset.n).toBe("2");
+  });
+
+  // With presence (EXC-891) an exiting dialog outlives its flag, so the last node
+  // in document order can be one on its way out — during the guard's divert to
+  // Request Changes, both coexist. The key must route to the surface that stays.
+  test("skips a dialog that is playing its exit", () => {
+    const root = stack(1);
+    root.appendChild(dialog("exiting", "closed"));
+    expect(topmostDialogContent(root)?.dataset.n).toBe("0");
+  });
+
+  test("returns null when the only dialog is playing its exit", () => {
+    const root = document.createElement("div");
+    root.appendChild(dialog("exiting", "closed"));
+    expect(topmostDialogContent(root)).toBeNull();
   });
 });
 

@@ -11,9 +11,15 @@
      *    is required, so a backdrop click does NOT dismiss; Escape still does,
      *    routed to onDismiss. */
     kind?: "dialog" | "confirm";
-    /** Controlled open — the host gates the component with {#if}, so it mounts
-     * open and this stays literal-true; bits-ui's close intents route to onDismiss. */
+    /** Controlled open. The host (ModalPresence) keeps this component mounted
+     * through the close, so the flag really does go true → false on a live
+     * surface — which is what lets bits-ui play the exit. Its close intents
+     * route to onDismiss. */
     open: boolean;
+    /** The surface finished its exit and may be unmounted — bits-ui's
+     * onOpenChangeComplete, narrowed to the close direction. ModalPresence
+     * drops the component when this fires. */
+    onClosed?: () => void;
     /** Uppercase eyebrow over the title (caret's dialog signature). Optional. */
     eyebrow?: string;
     /** The dialog heading — wired to aria-labelledby by bits-ui. */
@@ -40,6 +46,7 @@
   let {
     kind = "dialog",
     open,
+    onClosed,
     eyebrow,
     title,
     onDismiss,
@@ -58,7 +65,7 @@
      worn by both branches, so a future modal reuses this shell instead of hand-
      rolling a look that drifts. -->
 {#if kind === "confirm"}
-  <AlertDialog.Root {open}>
+  <AlertDialog.Root {open} onOpenChangeComplete={(o) => { if (!o) onClosed?.(); }}>
     <AlertDialog.Content onEscapeKeydown={() => onDismiss()} {onOpenAutoFocus} class={contentClass}>
       <AlertDialog.Header class="m-head">
         {#if eyebrow}<span class="eyebrow">{eyebrow}</span>{/if}
@@ -72,7 +79,11 @@
     </AlertDialog.Content>
   </AlertDialog.Root>
 {:else}
-  <Dialog.Root {open} onOpenChange={(o) => { if (!o) onDismiss(); }}>
+  <Dialog.Root
+    {open}
+    onOpenChange={(o) => { if (!o) onDismiss(); }}
+    onOpenChangeComplete={(o) => { if (!o) onClosed?.(); }}
+  >
     <Dialog.Content
       showCloseButton={false}
       {onOpenAutoFocus}

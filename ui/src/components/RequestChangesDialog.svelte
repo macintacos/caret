@@ -19,6 +19,10 @@
   import Modal from "@/components/Modal.svelte";
 
   interface Props {
+    // Controlled open — false while the dialog plays its exit.
+    open: boolean;
+    // The surface finished its exit and may be unmounted.
+    onClosed?: () => void;
     annotations: Annotation[];
     // The general comment is lifted into App.svelte (autosaved per review), so
     // it survives the dialog unmounting on Cancel/Escape/scrim. The dialog is a
@@ -45,6 +49,8 @@
     onDraftAnnotation: (annotation: LineAnnotation) => void;
   }
   let {
+    open,
+    onClosed,
     annotations,
     generalComment,
     planText,
@@ -116,13 +122,15 @@
 </script>
 
 <!-- Composes the shared Modal (kind="dialog": Escape + backdrop dismiss, routed to
-     onCancel). App gates this with {#if showDialog}, so it mounts open. The eyebrow
-     keeps caret's dialog signature; the title is the fuller heading bits-ui wires as
-     the accessible name. contentClass is a plain marker the dialog styles below to
-     widen past the (unscanned) Tailwind default — see the width rule. -->
+     onCancel). The host mounts this per open (ModalPresence) and keeps it through
+     the exit. The eyebrow keeps caret's dialog signature; the title is the fuller
+     heading bits-ui wires as the accessible name. contentClass is a plain marker the
+     dialog styles below to widen past the (unscanned) Tailwind default — see the
+     width rule. -->
 <Modal
   kind="dialog"
-  open
+  {open}
+  {onClosed}
   eyebrow="Request changes"
   title="Send the plan back for revision"
   contentClass="rcd-content"

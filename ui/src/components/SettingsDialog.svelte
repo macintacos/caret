@@ -47,6 +47,10 @@
   import ThemeSection from "@/components/ThemeSection.svelte";
 
   interface Props {
+    /** Controlled open — false while the dialog plays its exit. */
+    open: boolean;
+    /** The surface finished its exit and may be unmounted. */
+    onClosed?: () => void;
     /** The registry, grouped into categories/sections and rendered by control kind. */
     entries: readonly SettingEntry[];
     /** Apply a setting's new value now (App: write + resync + confirming toast). */
@@ -58,7 +62,7 @@
      * without the Advanced pane need not supply it. */
     onCopyDiagnostic?: (text: string) => void;
   }
-  let { entries, onChange, onClose, onCopyDiagnostic = () => {} }: Props = $props();
+  let { open, onClosed, entries, onChange, onClose, onCopyDiagnostic = () => {} }: Props = $props();
 
   // EXC-849: while Settings owns the view, publish its own keyboard affordances into the
   // shared registry. SETTINGS_SHORTCUTS is the settings-scoped reservation set from
@@ -171,9 +175,15 @@
   }
 </script>
 
-<!-- App gates this with {#if showSettings}, so it mounts open; bits-ui's close
-     intents (Escape, backdrop) route through onOpenChange to onClose. -->
-<Dialog.Root open onOpenChange={(o) => { if (!o) onClose(); }}>
+<!-- The host mounts this per open (ModalPresence) and keeps it through the exit;
+     bits-ui's close intents (Escape, backdrop) route through onOpenChange to
+     onClose, and onOpenChangeComplete reports the exit done so the host can drop
+     the component. -->
+<Dialog.Root
+  {open}
+  onOpenChange={(o) => { if (!o) onClose(); }}
+  onOpenChangeComplete={(o) => { if (!o) onClosed?.(); }}
+>
   <Dialog.Content
     showCloseButton={false}
     onOpenAutoFocus={focusDialog}

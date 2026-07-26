@@ -10,6 +10,10 @@
   import Modal from "@/components/Modal.svelte";
 
   interface Props {
+    /** Controlled open — false while the guard plays its exit. */
+    open: boolean;
+    /** The surface finished its exit and may be unmounted. */
+    onClosed?: () => void;
     /** The unsent feedback a plain confirm would leave behind — the general-comment
      * draft, committed inline comments, and unsent scratches — each a short anchor
      * label plus its text. When empty the dialog is a plain "are you sure?" confirm
@@ -39,6 +43,8 @@
     onCancel: () => void;
   }
   let {
+    open,
+    onClosed,
     items,
     action,
     consequence,
@@ -81,11 +87,12 @@
 <!-- Composes the shared Modal. The role is caller-chosen (`kind`): Reject keeps the
      default confirm guard (role="alertdialog", no backdrop dismiss — a verdict is
      deliberate; Escape still cancels, EXC-685); Approve passes "dialog" so a click
-     outside also dismisses (EXC-791). App gates this with {#if}, so it mounts open;
-     the buttons route to the existing callbacks. -->
+     outside also dismisses (EXC-791). The host mounts this per open (ModalPresence)
+     and keeps it through the exit; the buttons route to the existing callbacks. -->
 <Modal
   {kind}
-  open
+  {open}
+  {onClosed}
   eyebrow={action}
   title="{action} this plan?"
   contentClass="guard-content"

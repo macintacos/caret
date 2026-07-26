@@ -39,8 +39,12 @@
 			"grid w-full max-w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto gap-4 sm:max-w-sm",
 			// Shape + spacing + type
 			"rounded-xl p-4 text-sm outline-none",
-			// Open / close animation
-			"data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 duration-100",
+			// Open / close animation. Keyed on data-[state=…], the attribute bits-ui
+			// actually emits — a bare `data-open:` compiles to an [data-open] presence
+			// selector that nothing ever sets, so the whole set is dead (EXC-891). The
+			// alert-dialog copies already spell it this way; a `shadcn add --overwrite`
+			// would restore the broken form.
+			"data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 duration-100",
 			className
 		)}
 		{...restProps}

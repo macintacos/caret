@@ -28,8 +28,24 @@ function makeEntries(onRun: () => void): ShortcutEntry[] {
 }
 
 describe("ShortcutsHelp render", () => {
+  // The host keeps the component mounted through the exit (EXC-891), so a closed
+  // `open` must render nothing rather than a surface the {#if} used to hide.
+  test("renders no dialog while closed", async () => {
+    const { flush } = render(ShortcutsHelp, {
+      open: false,
+      entries: makeEntries(() => {}),
+      onClose: () => {},
+    });
+    await flushUntil(flush, mounted, 5);
+    expect(mounted()).toBe(false);
+  });
+
   test("mounts a dialog titled Shortcuts", async () => {
-    const { flush } = render(ShortcutsHelp, { entries: makeEntries(() => {}), onClose: () => {} });
+    const { flush } = render(ShortcutsHelp, {
+      open: true,
+      entries: makeEntries(() => {}),
+      onClose: () => {},
+    });
     await flushUntil(flush, mounted);
     expect(content()?.getAttribute("role")).toBe("dialog");
     expect(document.body.querySelector("[data-slot='dialog-title']")?.textContent).toContain(
@@ -38,7 +54,11 @@ describe("ShortcutsHelp render", () => {
   });
 
   test("renders a group heading, an entry label, and its key cap", async () => {
-    const { flush } = render(ShortcutsHelp, { entries: makeEntries(() => {}), onClose: () => {} });
+    const { flush } = render(ShortcutsHelp, {
+      open: true,
+      entries: makeEntries(() => {}),
+      onClose: () => {},
+    });
     await flushUntil(flush, mounted);
     expect(bodyText()).toContain("Motion"); // group label
     expect(bodyText()).toContain("Cancel editing"); // entry label
@@ -51,6 +71,7 @@ describe("ShortcutsHelp wiring", () => {
     let ran = false;
     let closed = false;
     const { flush } = render(ShortcutsHelp, {
+      open: true,
       entries: makeEntries(() => {
         ran = true;
       }),
@@ -68,7 +89,11 @@ describe("ShortcutsHelp wiring", () => {
   });
 
   test("typing in search narrows the visible rows", async () => {
-    const { flush } = render(ShortcutsHelp, { entries: makeEntries(() => {}), onClose: () => {} });
+    const { flush } = render(ShortcutsHelp, {
+      open: true,
+      entries: makeEntries(() => {}),
+      onClose: () => {},
+    });
     await flushUntil(flush, mounted);
     const search = document.body.querySelector<HTMLInputElement>("[data-slot='input']");
     expect(search).not.toBeNull();
