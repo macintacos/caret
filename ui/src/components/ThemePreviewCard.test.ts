@@ -74,7 +74,9 @@ describe("ThemePreviewCard tinting is scoped to the card", () => {
   test("owns no paint loop of its own — it delegates to paintTheme", () => {
     const source = readFileSync(join(import.meta.dir, "ThemePreviewCard.svelte"), "utf8");
     expect(/\.setProperty\s*\(/.test(source)).toBe(false);
-    expect(/paintTheme\s*\(/.test(source)).toBe(true);
+    // Line-anchored so the header's own `paintTheme(themeId, node)` prose can't
+    // satisfy it — a comment line starts with `//`, a call does not.
+    expect(/^\s*paintTheme\(/m.test(source)).toBe(true);
   });
 });
 

@@ -16,10 +16,14 @@
 // rules, but it does not unmatch the page's: app.css's
 // `@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *))` and
 // atoms.css's `[data-theme="dark"] [data-slot="kbd"]` both key on *any* ancestor, so
-// under `<html data-theme="dark">` a subtree stamped light matches both. Today that
-// is harmless (the disjoint kbd rules union rather than conflict), but a preview
-// that renders real chrome needs the `dark:` variant reworked to a nearest-ancestor
-// form first — every `dark:` utility in the tree, hence a separate change.
+// the stamp cuts both ways. Under `<html data-theme="dark">` a subtree stamped light
+// matches both rule sets; under a light page a subtree stamped dark newly ACTIVATES
+// the `dark:` utilities, which could not match there before. Both are harmless today
+// — the two kbd rules set disjoint properties, and the only shadcn component the
+// scoped adapter renders (Skeleton) carries no `dark:` variant — but a preview that
+// renders real chrome hits components that do (kbd, input), so it needs the `dark:`
+// variant reworked to a nearest-ancestor form first: every `dark:` utility in the
+// tree, hence a separate change.
 //
 // The palettes themselves live in ./themes/ — one module per family, each carrying
 // its upstream source and the mapping onto the tokens below. This module owns the
@@ -36,8 +40,9 @@
 // for caret-theme.ts). The shiki highlighter derives its palettes from THEMES
 // here (see caret-theme.ts), so there is one place colors live.
 //
-// This module touches `document` only inside function bodies, never at module
-// load, so caret-theme.ts can import THEMES under bun-test without a DOM.
+// This module touches `document` only at call time — including the default `target`
+// expression, which a parameter default evaluates per call, not at module load — so
+// caret-theme.ts can import THEMES under bun-test without a DOM.
 
 import { caretDark, caretLight } from "$lib/themes/caret.ts";
 import {
