@@ -3,7 +3,6 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { readAppCss } from "$lib/appCss.ts";
 import {
   type ColorToken,
   paintTheme,
@@ -20,22 +19,6 @@ afterEach(() => {
   document.documentElement.removeAttribute("style");
   document.documentElement.removeAttribute("data-theme");
 });
-
-// The color custom properties app.css declares in :root — the exhaustive set a
-// theme must supply. Parsed from the first :root block so a token added to
-// app.css without a matching THEMES entry (or vice versa) fails here.
-function readFirstRootTokens(css: string): Record<string, string> {
-  const body = css.match(/:root\s*\{([^}]*)\}/)?.[1];
-  if (body === undefined) throw new Error("app.css :root block not found");
-  // Strip comments first so prose inside them can't be mistaken for a
-  // declaration, then capture every `prop: value;` — custom properties and the
-  // bare `color-scheme` alike (the :root block declares nothing else).
-  const tokens: Record<string, string> = {};
-  for (const decl of body.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([\w-]+)\s*:\s*([^;]+);/g)) {
-    tokens[decl[1]!] = decl[2]!.trim();
-  }
-  return tokens;
-}
 
 // WCAG relative luminance, so "is this palette legible" is arithmetic rather than
 // a judgement call. Alpha suffixes are ignored — every token these run on is solid.
@@ -121,47 +104,40 @@ describe("THEMES", () => {
     }
   });
 
-  test("caret-dark mirrors the app.css :root fallback exactly", () => {
-    const root = readFirstRootTokens(readAppCss());
-    for (const [name, value] of Object.entries(THEMES["caret-dark"].tokens)) {
-      expect(root[name], `app.css :root ${name}`).toBe(value);
-    }
-    expect(root["color-scheme"]).toBe("dark");
-  });
-
-  // The six washes caret's three hue overrides exist to reproduce. Each rides a hue
-  // that is NOT the token it would otherwise default to — the rules ride pure white
-  // in dark rather than the ink, the accent wash rides a mid-amber that is not
-  // --accent, and the dark marks ride a second, lighter amber that is not the wash's
-  // — so a dropped or mis-cascaded override surfaces here as a changed byte rather
-  // than as a subtly-off hairline. caret-dark's set is pinned transitively by the
-  // app.css mirror above; caret-light's is pinned nowhere else.
-  // caret-dark's other thirteen are pinned by the app.css mirror above, so only the
-  // override-sensitive six are named here.
-  test("caret-dark's overridden washes", () => {
-    const OVERRIDE_SENSITIVE: ColorToken[] = [
-      "--rule",
-      "--rule-strong",
-      "--accent-wash",
-      "--mark",
-      "--mark-active",
-      "--mark-orphan",
-    ];
-    const tokens = THEMES["caret-dark"].tokens;
-    expect(Object.fromEntries(OVERRIDE_SENSITIVE.map((t) => [t, tokens[t]]))).toEqual({
+  // Neither caret palette has a CSS mirror — app.css's first-paint block is emitted
+  // from this record — so each pins its whole token set directly, and nothing else
+  // in the repo pins their decided colors. The six derived values come out of three
+  // lines of the recipe; the thirteen decided ones are hand-transcribed, which is
+  // where a silent slip would actually live. The three hue overrides are subsumed:
+  // each rides a hue that is NOT the token it would otherwise default to — the rules
+  // ride pure white rather than the ink, the accent wash a mid-amber that is not
+  // --accent, the marks a second, lighter amber that is not the wash's — so a dropped
+  // or mis-cascaded override surfaces as a changed byte rather than a subtly-off
+  // hairline.
+  test("caret-dark's full token set", () => {
+    expect(THEMES["caret-dark"].tokens).toEqual({
+      "--paper": "#0a0a0a",
+      "--paper-raised": "#171717",
+      "--paper-sunk": "#131313",
+      "--ink": "#fafafa",
+      "--ink-soft": "#a1a1a1",
+      "--ink-faint": "#737373",
       "--rule": "#ffffff1a",
       "--rule-strong": "#ffffff29",
+      "--accent": "#fb923c",
+      "--accent-bright": "#fdba74",
       "--accent-wash": "#ec7c3829",
+      "--accent-ink": "#0a0a0a",
       "--mark": "#f3953c2e",
       "--mark-active": "#f3953c57",
       "--mark-orphan": "#9b9b9b29",
+      "--ok": "#4ade80",
+      "--danger": "#f87171",
+      "--attention": "#a78bfa",
+      "--shadow-card": "0 1px 2px #00000066, 0 10px 30px #00000080",
     });
   });
 
-  // caret-light gets its whole record pinned rather than the derived six, because it
-  // has no app.css mirror and nothing else in the repo pins its decided colors. The
-  // six derived values come out of three lines of the recipe; the thirteen decided
-  // ones are hand-transcribed, which is where a silent slip would actually live.
   test("caret-light's full token set", () => {
     expect(THEMES["caret-light"].tokens).toEqual({
       "--paper": "#faf9f5",

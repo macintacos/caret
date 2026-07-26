@@ -41,11 +41,10 @@
 // slots — is selection policy, and lives in appearance.ts (EXC-773); paintTheme is
 // the painting half it calls.
 //
-// app.css's :root holds the caret-dark values too, as the static first-paint /
-// no-JS fallback; theme.test.ts pins THEMES["caret-dark"] equal to that :root
-// block so the two never drift (the same test-guarded duplication EXC-370 uses
-// for caret-theme.ts). The shiki highlighter derives its palettes from THEMES
-// here (see caret-theme.ts), so there is one place colors live.
+// app.css's static first-paint / no-JS fallback is a :root block emitted from
+// THEMES["caret-dark"] by ui/generate-palette-css.ts, so the palette is never
+// transcribed into CSS by hand. The shiki highlighter derives its palettes from
+// THEMES here (see caret-theme.ts), so there is one place colors live.
 //
 // This module touches `document` only at call time — including the default `target`
 // expression, which a parameter default evaluates per call, not at module load — so

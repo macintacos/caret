@@ -7,9 +7,10 @@
 
    ONE flat block, no [data-theme="dark"] override: caret's color tokens are
    written inline on :root by paintTheme() (lib/theme.ts) for the active scheme,
-   and app.css's static :root fallback (above) is caret-dark. So a var(--paper)
-   here resolves to the correct scheme at runtime and to caret-dark at first
-   paint — which both kills the first-paint light-on-dark flash the stub risked
+   and the static :root fallback in styles/palette.generated.css is caret-dark.
+   So a var(--paper) here resolves to the correct scheme at runtime and to
+   caret-dark at first paint — which both kills the first-paint light-on-dark
+   flash the stub risked
    AND makes a separate dark block redundant (the tokens it would reference
    already flip). Scheme lives entirely in the caret operands, exactly as it does
    for the .diffview bridge — no @media, no per-scheme block.
@@ -19,8 +20,7 @@
    (the focus outline, matching caret's global :focus-visible). shadcn's OTHER
    accent — a neutral hover/active wash — collides with caret's --accent (amber),
    so it is deliberately NOT declared here (that would clobber caret amber
-   app-wide and break the
-   first-:root guard in theme.test.ts). It is set as a neutral --color-accent in
+   app-wide). It is set as a neutral --color-accent in
    @theme inline below. --radius likewise stays caret-owned; the radius ramp below
    is single-sourced from caret's two radius roles. */
 :root {

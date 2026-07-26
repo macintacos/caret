@@ -7,7 +7,7 @@
    config) and mirrored here as tokens; layout.test.ts pins the two in sync.
    Their own :root — like the derived tier in styles/derived.css — because they're
    layout substrate, not theme-contract tokens, so they stay out of the palette
-   block theme.test.ts pins. CAVEAT: @media conditions cannot read var(), so the surface tickets
+   block. CAVEAT: @media conditions cannot read var(), so the surface tickets
    (EXC-807–814) write these px literals in their media queries; these tokens are
    the canonical source those literals must match. --w-min is the exception — it's
    consumed directly by the .shell floor below. */
