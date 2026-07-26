@@ -5,18 +5,14 @@
 // re-picking. Resolution is `mode + the OS preference -> scheme -> that scheme's
 // slot -> a ThemeId`, which theme.ts then paints.
 //
-// The resolving half (resolveScheme / resolveThemeId / appearanceSummary) is
-// pure and takes the OS preference as an argument, so it is unit-testable with no
-// matchMedia; the effectful half takes the same value with a live default and an
-// injectable media query.
-//
-// Every appearance change wipes (themeWipe.ts) — changeAppearance is the wiping
-// entry point, applyAppearance the instant one that boot and the dev `--fresh`
-// reset use, where there is no previous frame to wipe from.
+// This module is the pure, one-piece-at-a-time seam: the resolvers take the OS
+// preference as an argument and the persisted reads/writes each touch a single
+// key, so all of it is unit-testable with no matchMedia and no paint. Nothing
+// here holds the resolved answer or repaints — @/state/appearance.svelte.ts owns
+// the live appearance, and it is the surface callers use (EXC-883).
 
 import { definePref, registerPrefKey } from "$lib/definePref.ts";
-import { paintTheme, type Scheme, type Theme, type ThemeId, themesForScheme } from "$lib/theme.ts";
-import { type ThemeWipeDeps, withWipe } from "$lib/themeWipe.ts";
+import { type Scheme, type ThemeId, themesForScheme } from "$lib/theme.ts";
 
 /** When each scheme applies: pinned to one, or following the OS. */
 export type ThemeMode = "light" | "dark" | "system";
@@ -95,7 +91,7 @@ export function appearanceSummary(mode: ThemeMode, scheme: Scheme, label: string
  * or unreadable value. */
 export const readThemeMode = modePref.read;
 
-/** Persist the mode. Painting is the caller's next step (changeAppearance). */
+/** Persist the mode. Painting is the live appearance's next step. */
 export const writeThemeMode = modePref.write;
 
 /** Read a scheme's remembered theme, defaulting to that scheme's caret palette. */
@@ -103,7 +99,7 @@ export function readSlotTheme(scheme: Scheme): ThemeId {
   return slotPrefs[scheme].read();
 }
 
-/** Persist a scheme's theme. Painting is the caller's next step. */
+/** Persist a scheme's theme. Painting is the live appearance's next step. */
 export function writeSlotTheme(scheme: Scheme, id: ThemeId): void {
   slotPrefs[scheme].write(id);
 }
@@ -129,34 +125,6 @@ export function schemeMediaQuery(): SchemeMediaQuery | undefined {
  * caret's own default slot then decides, rather than a throw. */
 export function systemPrefersDark(): boolean {
   return schemeMediaQuery()?.matches ?? false;
-}
-
-/** The theme the persisted mode + slots resolve to right now. */
-export function currentThemeId(prefersDark: boolean = systemPrefersDark()): ThemeId {
-  return resolveThemeId(
-    readThemeMode(),
-    { light: readSlotTheme("light"), dark: readSlotTheme("dark") },
-    prefersDark,
-  );
-}
-
-/** Paint the resolved theme immediately, with no wipe. For boot and the dev
- * `--fresh` reset — there is no previous frame to transition from. Persists
- * nothing: it only reads the stored appearance and paints it. */
-export function applyAppearance(prefersDark: boolean = systemPrefersDark()): Theme {
-  return paintTheme(currentThemeId(prefersDark));
-}
-
-/** Paint the resolved theme as a whole-UI wipe — every switch: a mode change, a
- * slot change, and an OS appearance flip under `system`. Degrades to an instant
- * paint where the View Transitions API is missing or motion is reduced. */
-export function changeAppearance(
-  prefersDark: boolean = systemPrefersDark(),
-  deps?: ThemeWipeDeps,
-): void {
-  withWipe(() => {
-    paintTheme(currentThemeId(prefersDark));
-  }, deps);
 }
 
 /** Subscribe to OS appearance flips. The callback receives the new preference;

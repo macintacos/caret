@@ -21,6 +21,7 @@
     shortcuts,
   } from "$lib/shortcuts/index.ts";
   import { type AlertStore, createAlerts } from "@/state/alerts.ts";
+  import { appearance } from "@/state/appearance.svelte.ts";
   import { createAutosave } from "@/state/autosave.svelte.ts";
   import {
     createReviewSelection,
@@ -34,13 +35,6 @@
     coveredLineCount,
     pendingItems,
   } from "$lib/feedback.ts";
-  import {
-    applyAppearance,
-    changeAppearance,
-    currentThemeId,
-    watchSystemScheme,
-  } from "$lib/appearance.ts";
-  import type { ThemeId } from "$lib/theme.ts";
   import {
     clearKnownPrefs,
     freshResetApplied,
@@ -124,13 +118,6 @@
   let pendingReject = $state(false);
   let safeMode = $state(false);
 
-  // Theme (EXC-730, EXC-773). main.ts paints the saved appearance before mount;
-  // this mirrors the RESOLVED theme id — mode + the light/dark slots + the OS
-  // preference — so the picked palette reaches the diff view, which renders into a
-  // shadow root and can't read it off the chrome. Editing any of the three
-  // appearance settings applies immediately (the registry field's write persists
-  // then wipes); applySetting resyncs themeId so the reactive reads follow.
-  let themeId = $state<ThemeId>(currentThemeId());
   let showSettings = $state(false);
   // First-run onboarding (EXC-781): opens once for a brand-new user whose
   // notification permission is still undecided. Guarded on Notification support
@@ -148,9 +135,10 @@
 
   // Settings apply immediately (EXC-843). The two-pane Settings dialog calls this the
   // moment a control changes: it persists + applies through the registry field's
-  // write(), resyncs the reactive mirrors other surfaces read — themeId (the diff-view
-  // scheme) and showShortcutHints (the hint chrome) — then confirms with a toast. A
-  // failed write raises a PERSISTENT error toast the user must read and dismiss.
+  // write(), resyncs the one reactive mirror left here — showShortcutHints (the hint
+  // chrome) — then confirms with a toast. The appearance fields need no resync: they
+  // command the appearance module, which every surface reads live. A failed write
+  // raises a PERSISTENT error toast the user must read and dismiss.
   //
   // settingsRev bumps on every applied change; DiffPlanView watches it to re-read the
   // diff-layout/marker prefs into its compare store so an open diff reflows live too
@@ -173,7 +161,6 @@
       });
       return;
     }
-    themeId = currentThemeId();
     showShortcutHints = readShortcutHints();
     settingsRev++;
     alerts.push({ variant: "success", message: `${field.label} updated` });
@@ -264,18 +251,11 @@
   });
 
   // ----- OS appearance -----
-  // Follow the system light/dark flip (EXC-773). No reactive reads: runs once on
-  // mount, returns the disposer. changeAppearance re-resolves against the fresh OS
-  // preference, so under a manual mode it re-paints the same theme (a harmless
-  // no-op) and only `system` actually changes — one call, no mode branch here. It
-  // wipes like an in-app switch, so the sweep explains the change if the reviewer
-  // is watching.
-  $effect(() => {
-    return watchSystemScheme(() => {
-      changeAppearance();
-      themeId = currentThemeId();
-    });
-  });
+  // Follow the system light/dark flip (EXC-773). The appearance module owns the one
+  // subscription and re-resolves against the fresh preference, wiping like an in-app
+  // switch when the palette actually moves and staying silent under a pinned mode.
+  // No reactive reads: runs once on mount, returns the disposer.
+  $effect(() => appearance.watch());
 
   // ----- Polling -----
   // No reactive reads: runs once on mount, returns the poll's stop fn.
@@ -302,8 +282,7 @@
         // and "Maybe later" would never stick.
         if (h.fresh && !freshResetApplied(h.instanceId)) {
           clearKnownPrefs();
-          applyAppearance();
-          themeId = currentThemeId();
+          appearance.boot();
           showShortcutHints = readShortcutHints();
           showOnboarding =
             typeof Notification !== "undefined" && shouldShowOnboarding(Notification.permission);
@@ -551,10 +530,12 @@
 
   {#if active}
     <!-- The plan rendered as line-numbered markdown source with a left-hand
-         filterable contents pane and a line gutter for creating comments. -->
+         filterable contents pane and a line gutter for creating comments. The
+         resolved theme id is passed down because the view renders into a shadow
+         root and can't read the palette off the chrome. -->
     <DiffPlanView
       review={active}
-      {themeId}
+      themeId={appearance.themeId}
       {commenting}
       {pending}
       {pendingText}

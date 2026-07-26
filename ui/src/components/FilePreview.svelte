@@ -9,7 +9,9 @@
   // popover that stays put until dismissed (Escape, or a click outside it;
   // DiffPlanView owns that). pointer-events stay on so the reader can move onto the
   // card to scroll a long line or select text in it without dismissing it.
-  import { currentThemeId } from "$lib/appearance.ts";
+  import { untrack } from "svelte";
+
+  import { appearance } from "@/state/appearance.svelte.ts";
   import { getFileExcerpt } from "$lib/api.ts";
   import { highlightExcerpt } from "$lib/diffview/highlight.ts";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
@@ -81,11 +83,12 @@
       try {
         const excerpt = await getFileExcerpt(id, p, ln);
         // The live theme is resolved per fetch — a transient popover needn't track
-        // a theme switch that happens while it is open.
+        // a theme switch that happens while it is open, so the read is untracked
+        // rather than a dependency that would re-fetch the excerpt on every switch.
         const html = await highlightExcerpt(
           excerpt.lines.join("\n"),
           excerpt.language,
-          currentThemeId(),
+          untrack(() => appearance.themeId),
         );
         if (!cancelled) preview = { kind: "ready", excerpt, rows: buildRows(excerpt, html) };
       } catch {

@@ -6,22 +6,14 @@
   // Both slots stay on screen because they are persistent settings, not a function
   // of the current mode; showing both is what teaches that the pairing exists. The
   // live one wears an IN USE pill, the block's single amber mark, which moves as
-  // the mode changes or the OS flips. The section owns its own OS-preference
-  // subscription so the pill and the summary line track a flip while the modal is
-  // open, without the shell having to thread the preference down.
+  // the mode changes or the OS flips. Which one that is comes from the live
+  // appearance module, so the pill and the summary line track an OS flip while the
+  // modal is open without a second subscription of this section's own.
   //
   // The shell renders this in place of the generic field rows for the Theme
   // section, and hands it that section's fields — which the /-search may have
   // filtered — so each row is rendered only when its field is present.
-  import {
-    DEFAULT_MODE,
-    DEFAULT_SLOT_THEME,
-    appearanceSummary,
-    resolveScheme,
-    systemPrefersDark,
-    type ThemeMode,
-    watchSystemScheme,
-  } from "$lib/appearance.ts";
+  import { appearance } from "@/state/appearance.svelte.ts";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import {
     Item,
@@ -33,7 +25,6 @@
     ItemTitle,
   } from "$lib/components/ui/item/index.js";
   import { type StagedField, THEME_FIELD } from "$lib/settingsRegistry.ts";
-  import { THEMES, type ThemeId } from "$lib/theme.ts";
   import SettingSegmented from "@/components/SettingSegmented.svelte";
   import SettingSelect from "@/components/SettingSelect.svelte";
 
@@ -47,20 +38,8 @@
   }
   let { fields, values, onApply }: Props = $props();
 
-  // The OS preference, kept live: under `system` a flip changes which slot is in
-  // use, and the reviewer may be looking right at these two rows when it happens.
-  let prefersDark = $state(systemPrefersDark());
-  $effect(() => watchSystemScheme((next) => (prefersDark = next)));
-
-  const mode = $derived((values[THEME_FIELD.mode] as ThemeMode | undefined) ?? DEFAULT_MODE);
-  const slots = $derived({
-    light: (values[THEME_FIELD.light] as ThemeId | undefined) ?? DEFAULT_SLOT_THEME.light,
-    dark: (values[THEME_FIELD.dark] as ThemeId | undefined) ?? DEFAULT_SLOT_THEME.dark,
-  });
-
-  const scheme = $derived(resolveScheme(mode, prefersDark));
-  const liveKey = $derived(scheme === "light" ? THEME_FIELD.light : THEME_FIELD.dark);
-  const summary = $derived(appearanceSummary(mode, scheme, THEMES[slots[scheme]].label));
+  // Which slot wears the pill: the live resolved scheme, so an OS flip moves it.
+  const liveKey = $derived(appearance.scheme === "light" ? THEME_FIELD.light : THEME_FIELD.dark);
 
   // Render in registry order, skipping any field the search filtered out — so a
   // query matching one row shows that row alone rather than a broken block.
@@ -111,7 +90,7 @@
 
   <!-- The resolved state in one sentence, so "why is it dark right now" never
        needs working out from the three controls above. -->
-  <p class="resolved" data-theme-summary>{summary}</p>
+  <p class="resolved" data-theme-summary>{appearance.summary}</p>
 </div>
 
 <style>

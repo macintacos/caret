@@ -4,6 +4,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import { render } from "@ui/test-mount.ts";
 import ThemeSection from "@/components/ThemeSection.svelte";
+import { appearance } from "@/state/appearance.svelte.ts";
 import {
   isStagedField,
   SETTINGS_REGISTRY,
@@ -12,7 +13,13 @@ import {
   THEME_SECTION,
 } from "$lib/settingsRegistry.ts";
 
-afterEach(() => localStorage.clear());
+// The section reads the live appearance singleton, so a seeded mode/slot must be
+// wound back or it leaks into the next test — clear storage, then boot() re-seeds
+// the module from the now-empty origin.
+afterEach(() => {
+  localStorage.clear();
+  appearance.boot();
+});
 
 // The theme block renders three registry fields as one composite: a segmented mode
 // control and both slot selectors, with the IN USE marker on whichever slot the
@@ -75,27 +82,21 @@ describe("ThemeSection layout", () => {
 
 describe("the IN USE marker", () => {
   test("lands on the dark slot under a manual dark mode", () => {
+    appearance.setMode("dark");
     render(ThemeSection, props());
     expect(q(`[data-field='${THEME_FIELD.dark}']`)?.textContent).toContain("In use");
     expect(q(`[data-field='${THEME_FIELD.light}']`)?.textContent).not.toContain("In use");
   });
 
   test("lands on the light slot under a manual light mode", () => {
-    render(
-      ThemeSection,
-      props({
-        values: {
-          [THEME_FIELD.mode]: "light",
-          [THEME_FIELD.light]: "caret-light",
-          [THEME_FIELD.dark]: "caret-dark",
-        },
-      }),
-    );
+    appearance.setMode("light");
+    render(ThemeSection, props({ values: { ...props().values, [THEME_FIELD.mode]: "light" } }));
     expect(q(`[data-field='${THEME_FIELD.light}']`)?.textContent).toContain("In use");
     expect(q(`[data-field='${THEME_FIELD.dark}']`)?.textContent).not.toContain("In use");
   });
 
   test("marks exactly one slot — never both, never neither", () => {
+    appearance.setMode("dark");
     render(ThemeSection, props());
     expect(document.body.querySelectorAll(".in-use").length).toBe(1);
   });
@@ -103,6 +104,7 @@ describe("the IN USE marker", () => {
 
 describe("the resolved-state line", () => {
   test("a manual mode says the scheme is pinned and names the live theme", () => {
+    appearance.setMode("dark");
     render(ThemeSection, props());
     const copy = text("[data-theme-summary]");
     expect(copy).toContain("dark");
@@ -111,16 +113,8 @@ describe("the resolved-state line", () => {
   });
 
   test("system mode explains that it is following the system", () => {
-    render(
-      ThemeSection,
-      props({
-        values: {
-          [THEME_FIELD.mode]: "system",
-          [THEME_FIELD.light]: "caret-light",
-          [THEME_FIELD.dark]: "caret-dark",
-        },
-      }),
-    );
+    appearance.setMode("system");
+    render(ThemeSection, props({ values: { ...props().values, [THEME_FIELD.mode]: "system" } }));
     expect(text("[data-theme-summary]")).toContain("system");
   });
 });
