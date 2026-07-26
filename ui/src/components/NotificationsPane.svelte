@@ -128,6 +128,9 @@
   .tone-attention {
     color: var(--attention);
   }
+  /* The halo tints whatever tone class the row wears (.tone-danger, .tone-attention,
+     …), so it mixes off currentColor rather than a palette token — nothing in the
+     derived tier could stand in for it. */
   .notif-icon {
     display: inline-flex;
     padding: 0.5rem;

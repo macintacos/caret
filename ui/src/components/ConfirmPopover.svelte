@@ -165,10 +165,11 @@
      row — the height constraint SourceComposer's reveal note calls out). Below,
      not above, keeps the thing being dropped — the draft, the comment — visible
      while the reviewer decides. It sits over the same --paper-raised surface as
-     the composer/card, so --pop-bg lifts it a step lighter to read as its own
-     floating layer rather than melting into what it covers. */
+     the composer/card, so --pop-bg takes the chip fill — the same step lighter the
+     topbar's chips ride — to read as its own floating layer rather than melting
+     into what it covers. */
   .confirm-popover {
-    --pop-bg: color-mix(in srgb, var(--paper-raised), var(--ink) 8%);
+    --pop-bg: var(--chip);
     /* Pin the sans stack explicitly: in anchor mode the bubble portals to
        document.body — outside #app and the diff view's slotted content — so it
        can't rely on inheriting a font-family from either. Without this it fell

@@ -1423,14 +1423,14 @@
   }
 
   /* The "/ to search" discovery chip (EXC-832): the collapsed state of the search pill,
-     wearing the same float-chip surface so `/` reads as expanding this chip into the
-     field. Shown only with the Show Hints setting on; fades in on mount. */
+     wearing the same sheer --paper-veil surface so `/` reads as expanding this chip
+     into the field. Shown only with the Show Hints setting on; fades in on mount. */
   .search-hint {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
     padding: 0.35rem 0.6rem;
-    background: color-mix(in lab, var(--paper-raised), transparent 6%);
+    background: var(--paper-veil);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
     color: var(--ink-soft);

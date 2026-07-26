@@ -177,7 +177,7 @@
   }
   .diag-copy:hover {
     color: var(--ink);
-    background: color-mix(in lab, var(--ink) 8%, transparent);
+    background: var(--wash-ink);
   }
 
   /* The config file path, above its block. */
@@ -191,7 +191,9 @@
 
   /* The sunk-paper block: recessed off the pane on --paper-sunk, mono, and the
      whole surface is the click-to-copy target. A subtle hover deepens the border
-     and fill so it reads as interactive. */
+     and fill so it reads as interactive. That hover mixes off --paper-sunk rather
+     than taking a derived token: it is the only step this recessed surface has,
+     and the tier's fills all ride --paper-raised, a surface above this one. */
   .diag-block {
     display: block;
     width: 100%;
