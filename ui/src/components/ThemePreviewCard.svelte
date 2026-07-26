@@ -87,7 +87,12 @@
 <style>
   /* The card fits its window; SettingSelect positions it (fixed) beside the open menu.
      One subtle reveal on mount, timed off the shared motion tokens — the global
-     reduced-motion rule reaches it via the [data-slot] anchor even when portalled. */
+     reduced-motion rule reaches it via the [data-slot] anchor even when portalled.
+
+     The mixes below stay local rather than joining the derived tier: they are the
+     miniature's own ramp — a titlebar, dots, and skeleton bars at sizes nothing else
+     in the chrome renders — and each is a single site. They already re-derive per
+     preview, since paintTheme stamps the previewed palette on this subtree. */
   .theme-preview {
     width: max-content;
     animation: tp-in var(--dur-base) var(--ease-out);

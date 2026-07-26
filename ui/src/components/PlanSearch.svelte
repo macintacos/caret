@@ -134,11 +134,11 @@
 </div>
 
 <style>
-  /* The HUD pill: caret's float-chip surface (paper-raised nudged translucent so the
-     plan reads faintly through it — a HUD, not a modal), lifted with the shared card
-     shadow and the larger chip radius. The controls row sits on top; the
-     current-of-total counter sits below it, right-aligned to the pill's edge, so a
-     changing total never reflows the row's width. On open it expands from the top-right
+  /* The HUD pill: the sheer --paper-veil surface, so the plan reads faintly through
+     it — a HUD, not a modal — lifted with the shared card shadow and the larger chip
+     radius. The controls row sits on top; the current-of-total counter sits below it,
+     right-aligned to the pill's edge, so a changing total never reflows the row's
+     width. On open it expands from the top-right
      corner — where the "/ to search" chip sat (DiffPlanView's dock) — so `/` reads as
      the chip growing into the field; the global #app reduced-motion guard zeroes it. */
   .plan-search {
@@ -146,7 +146,7 @@
     flex-direction: column;
     gap: 0.1rem;
     padding: 0.3rem 0.4rem;
-    background: color-mix(in lab, var(--paper-raised), transparent 6%);
+    background: var(--paper-veil);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
     transform-origin: top right;

@@ -1,13 +1,14 @@
-// The shared shape every vendor palette is mapped through (EXC-752). caret's own
-// two palettes (./caret.ts) are written out token by token — they are the reference
-// app.css mirrors — and this module is that reference generalized: name the thirteen
-// colors a palette actually decides, and the seven that are always derived (the two
-// rules, the accent wash, the two marks, the orphan mark, the shadow) come out
-// consistent for every theme instead of being re-typed seven times.
+// The shared shape every palette is mapped through (EXC-752), caret's own two
+// (./caret.ts) included: name the thirteen colors a palette actually decides, and
+// the seven that are always derived (the two rules, the accent wash, the two marks,
+// the orphan mark, the shadow) come out consistent for every theme instead of being
+// re-typed once per palette.
 //
 // The alpha suffixes and the two shadows are caret-dark's and caret-light's own
 // values, so a vendor theme's hairlines and highlight marks sit at exactly the
-// weight caret's chrome was designed around — only the hue changes.
+// weight caret's chrome was designed around — only the hue changes. A palette that
+// wants a derived wash on some other hue says so through the three optional
+// overrides below rather than by writing its tokens out by hand.
 
 import type { ColorToken, Scheme, Theme, ThemeId } from "$lib/theme.ts";
 
@@ -42,6 +43,19 @@ export interface PaletteInput {
   /** The separate "look here" hue: the notification dot, the version-count badge.
    * Distinct from `accent`, which marks selection rather than novelty. */
   attention: string;
+
+  // Hue overrides. A derived wash normally rides the color it belongs to; these
+  // three name a different hue for the cases where a palette decides one
+  // separately, so the weight still comes from the recipe and only the hue moves.
+
+  /** The hue the two hairline rules ride. Defaults to `ink` — caret-dark rides
+   * pure white instead, so its hairlines stay neutral on near-black paper. */
+  ruleHue?: string;
+  /** The hue `--accent-wash` rides. Defaults to `accent`. */
+  washHue?: string;
+  /** The hue the two marks ride. Falls back to `washHue`, then `accent`, so a
+   * palette whose marks and wash share a hue declares it once. */
+  markHue?: string;
 }
 
 // caret-dark's and caret-light's shadows. Black alphas, so they carry no hue and
@@ -62,6 +76,9 @@ const ALPHA: Record<Scheme, { wash: string; mark: string; markActive: string }> 
 /** Expand a palette's decided colors into caret's full token set. */
 export function paletteTheme(input: PaletteInput): Theme {
   const alpha = ALPHA[input.scheme];
+  const ruleHue = input.ruleHue ?? input.ink;
+  const washHue = input.washHue ?? input.accent;
+  const markHue = input.markHue ?? washHue;
   const tokens: Record<ColorToken, string> = {
     "--paper": input.paper,
     "--paper-raised": input.raised,
@@ -69,14 +86,14 @@ export function paletteTheme(input: PaletteInput): Theme {
     "--ink": input.ink,
     "--ink-soft": input.inkSoft,
     "--ink-faint": input.inkFaint,
-    "--rule": `${input.ink}1a`,
-    "--rule-strong": `${input.ink}29`,
+    "--rule": `${ruleHue}1a`,
+    "--rule-strong": `${ruleHue}29`,
     "--accent": input.accent,
     "--accent-bright": input.accentBright,
-    "--accent-wash": `${input.accent}${alpha.wash}`,
+    "--accent-wash": `${washHue}${alpha.wash}`,
     "--accent-ink": input.accentInk,
-    "--mark": `${input.accent}${alpha.mark}`,
-    "--mark-active": `${input.accent}${alpha.markActive}`,
+    "--mark": `${markHue}${alpha.mark}`,
+    "--mark-active": `${markHue}${alpha.markActive}`,
     "--mark-orphan": `${input.neutral}29`,
     "--ok": input.ok,
     "--danger": input.danger,

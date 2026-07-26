@@ -180,7 +180,9 @@
     color: var(--ink-faint);
   }
   /* A non-zero pending tally is the metric the reviewer is tracking — lift it to
-     the semantic add color so a populated strip reads at a glance. */
+     the semantic add color so a populated strip reads at a glance. Local rather
+     than a derived token: this is a two-step emphasis ramp on --ok, and only the
+     pair together carries the "pending reads louder than covered" relation. */
   .num.has {
     color: color-mix(in srgb, var(--ok) 80%, var(--ink));
   }

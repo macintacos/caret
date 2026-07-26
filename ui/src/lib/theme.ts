@@ -25,6 +25,13 @@
 // variant reworked to a nearest-ancestor form first: every `dark:` utility in the
 // tree, hence a separate change.
 //
+// The same follow-up inherits one more asymmetry. styles/derived.css declares its
+// tier on `:root, [data-theme]`, so it re-derives per painted scope; the shadcn
+// bridge (styles/shadcn-bridge.css) is still :root-only, so its semantic vars bake
+// the root palette and inherit as literals. Inside a scoped paint the two disagree —
+// harmless while no scoped subtree renders a bridged component, which is exactly
+// what that follow-up changes.
+//
 // The palettes themselves live in ./themes/ — one module per family, each carrying
 // its upstream source and the mapping onto the tokens below. This module owns the
 // types, the assembled registry, and the painting; ./themes/recipe.ts owns the
