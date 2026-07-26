@@ -40,6 +40,7 @@ const scratch = (startLine: number, endLine: number, text: string): ComposerScra
 });
 
 const baseProps = {
+  open: true,
   annotations: [] as Annotation[],
   generalComment: "",
   planText: "",

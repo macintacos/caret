@@ -11,6 +11,7 @@ afterEach(() => localStorage.clear());
 
 function props(over: Record<string, unknown> = {}) {
   return {
+    open: true,
     entries: SETTINGS_REGISTRY,
     onChange: () => {},
     onClose: () => {},
@@ -29,6 +30,15 @@ const mounted = () => content() !== null;
 const has = (sel: string) => document.body.querySelector(sel) !== null;
 
 describe("SettingsDialog shell", () => {
+  // Settings wires its own Dialog.Root rather than composing Modal, so its `open`
+  // plumbing (EXC-891) is pinned separately from the shared shell's: the host keeps
+  // the component mounted through the exit, so a closed `open` renders nothing.
+  test("renders no dialog while closed", async () => {
+    const { flush } = render(SettingsDialog, props({ open: false }));
+    await flushUntil(flush, mounted, 5);
+    expect(mounted()).toBe(false);
+  });
+
   test("mounts a dialog whose accessible name is Settings", async () => {
     const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);

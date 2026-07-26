@@ -52,6 +52,7 @@
   import CommentNavigator from "@/components/CommentNavigator.svelte";
   import DiffPlanView from "@/components/DiffPlanView.svelte";
   import EmptyState from "@/components/EmptyState.svelte";
+  import ModalPresence from "@/components/ModalPresence.svelte";
   import OnboardingDialog from "@/components/OnboardingDialog.svelte";
   import RequestChangesDialog from "@/components/RequestChangesDialog.svelte";
   import SettingsDialog from "@/components/SettingsDialog.svelte";
@@ -588,58 +589,75 @@
   {showShortcutHints}
 />
 
-{#if pendingApproveMode !== null && active}
-  <UnsentCommentsDialog
-    items={guardItems}
-    action="Approve"
-    consequence="Approving accepts the plan and starts the agent's work."
-    icon="check"
-    kind="dialog"
-    showNotes
-    onConfirm={approveAnyway}
-    onRequestChanges={divertToRequestChanges}
-    onCancel={() => (pendingApproveMode = null)}
-  />
-{/if}
+<!-- Each modal is hosted by ModalPresence rather than an {#if} (EXC-891): the
+     surface stays mounted while `open` is false so bits-ui can play its exit, then
+     unmounts. One consequence on the three `active`-gated sites below: `active` can
+     go null DURING the exit (approveAnyway resolves the review while the guard is
+     still fading), so a site that dereferences it reads it optionally. -->
+<ModalPresence open={pendingApproveMode !== null && active !== null}>
+  {#snippet modal({ open, onClosed })}
+    <UnsentCommentsDialog
+      {open}
+      {onClosed}
+      items={guardItems}
+      action="Approve"
+      consequence="Approving accepts the plan and starts the agent's work."
+      icon="check"
+      kind="dialog"
+      showNotes
+      onConfirm={approveAnyway}
+      onRequestChanges={divertToRequestChanges}
+      onCancel={() => (pendingApproveMode = null)}
+    />
+  {/snippet}
+</ModalPresence>
 
-{#if pendingReject && active}
-  <UnsentCommentsDialog
-    items={guardItems}
-    action="Reject"
-    consequence="The agent will be told the plan was rejected and to wait for your next message."
-    onConfirm={rejectAnyway}
-    onRequestChanges={divertToRequestChanges}
-    onCancel={() => (pendingReject = false)}
-  />
-{/if}
+<ModalPresence open={pendingReject && active !== null}>
+  {#snippet modal({ open, onClosed })}
+    <UnsentCommentsDialog
+      {open}
+      {onClosed}
+      items={guardItems}
+      action="Reject"
+      consequence="The agent will be told the plan was rejected and to wait for your next message."
+      onConfirm={rejectAnyway}
+      onRequestChanges={divertToRequestChanges}
+      onCancel={() => (pendingReject = false)}
+    />
+  {/snippet}
+</ModalPresence>
 
-{#if showDialog && active}
-  <RequestChangesDialog
-    annotations={autosave.annotations}
-    generalComment={autosave.generalCommentDraft}
-    planText={active.currentPlan}
-    {scratches}
-    onGeneralCommentInput={autosave.editGeneralComment}
-    onSubmit={onRequestChanges}
-    onSaveScratch={(key) => commenting.save(key)}
-    onDiscardScratch={(key) => commenting.discard(key)}
-    onDiscardAnnotation={(id) => autosave.deleteAnnotation(id)}
-    onDraftAnnotation={(a) => {
-      // "Mark as draft": demote a committed line comment into the unsent-scratch
-      // section — drop the annotation and insert a scratch at its range, so it can
-      // be Saved back or Discarded like any other unsent draft (EXC-762).
-      autosave.deleteAnnotation(a.id);
-      commenting.draft({ startLine: a.startLine, endLine: a.endLine, text: a.comment });
-    }}
-    onCancel={() => {
-      showDialog = false;
-      // Flush now so a draft typed within the last 500ms debounce window is
-      // persisted before the component unmounts — survives a page reload, not
-      // just an in-session reopen.
-      void autosave.flushPending();
-    }}
-  />
-{/if}
+<ModalPresence open={showDialog && active !== null}>
+  {#snippet modal({ open, onClosed })}
+    <RequestChangesDialog
+      {open}
+      {onClosed}
+      annotations={autosave.annotations}
+      generalComment={autosave.generalCommentDraft}
+      planText={active?.currentPlan ?? ""}
+      {scratches}
+      onGeneralCommentInput={autosave.editGeneralComment}
+      onSubmit={onRequestChanges}
+      onSaveScratch={(key) => commenting.save(key)}
+      onDiscardScratch={(key) => commenting.discard(key)}
+      onDiscardAnnotation={(id) => autosave.deleteAnnotation(id)}
+      onDraftAnnotation={(a) => {
+        // "Mark as draft": demote a committed line comment into the unsent-scratch
+        // section — drop the annotation and insert a scratch at its range, so it can
+        // be Saved back or Discarded like any other unsent draft (EXC-762).
+        autosave.deleteAnnotation(a.id);
+        commenting.draft({ startLine: a.startLine, endLine: a.endLine, text: a.comment });
+      }}
+      onCancel={() => {
+        showDialog = false;
+        // Flush now so a draft typed within the last 500ms debounce window is
+        // persisted before the component unmounts — survives a page reload, not
+        // just an in-session reopen.
+        void autosave.flushPending();
+      }}
+    />
+  {/snippet}
+</ModalPresence>
 
 {#if safeMode}
   <div class="safe-mode-toast" role="status" aria-live="polite">
@@ -657,32 +675,42 @@
 
 <!-- Settings is persistent chrome (theme switching), reachable whether or not a
      review is active — so it renders at the top level, ungated on `active`. -->
-{#if showSettings}
-  <SettingsDialog
-    entries={SETTINGS_REGISTRY}
-    onChange={applySetting}
-    onClose={() => (showSettings = false)}
-    onCopyDiagnostic={copyDiagnostics}
-  />
-{/if}
+<ModalPresence open={showSettings}>
+  {#snippet modal({ open, onClosed })}
+    <SettingsDialog
+      {open}
+      {onClosed}
+      entries={SETTINGS_REGISTRY}
+      onChange={applySetting}
+      onClose={() => (showSettings = false)}
+      onCopyDiagnostic={copyDiagnostics}
+    />
+  {/snippet}
+</ModalPresence>
 
 <!-- First-run onboarding: a one-time invite to enable desktop notifications,
      gated on a brand-new user (see showOnboarding above). -->
-{#if showOnboarding}
-  <OnboardingDialog onClose={() => (showOnboarding = false)} />
-{/if}
+<ModalPresence open={showOnboarding}>
+  {#snippet modal({ open, onClosed })}
+    <OnboardingDialog {open} {onClosed} onClose={() => (showOnboarding = false)} />
+  {/snippet}
+</ModalPresence>
 
 <!-- Keyboard shortcuts help (EXC-787): the ? key toggles it, the status bar's
      keyboard button opens it. Reads the live registry (shortcuts.list()) at open,
      so it grows as later tickets register — then narrowed (EXC-849) to the shortcuts
      valid in the current view: over Settings it lists only the settings + global
      shortcuts, matching what the dispatcher will actually fire. -->
-{#if showHelp}
-  <ShortcutsHelp
-    entries={scopedShortcuts(shortcuts.list(), showSettings ? "settings" : null)}
-    onClose={() => (showHelp = false)}
-  />
-{/if}
+<ModalPresence open={showHelp}>
+  {#snippet modal({ open, onClosed })}
+    <ShortcutsHelp
+      {open}
+      {onClosed}
+      entries={scopedShortcuts(shortcuts.list(), showSettings ? "settings" : null)}
+      onClose={() => (showHelp = false)}
+    />
+  {/snippet}
+</ModalPresence>
 
 <style>
   /* Pin the shell's direct children to their grid rows (app.css declares

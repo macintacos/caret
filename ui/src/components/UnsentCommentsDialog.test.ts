@@ -13,6 +13,7 @@ const twoItems = [
 ];
 
 const approveProps = {
+  open: true,
   items: twoItems,
   action: "Approve",
   consequence: "Approving accepts the plan and starts the agent's work.",
@@ -23,6 +24,7 @@ const approveProps = {
 };
 
 const rejectProps = {
+  open: true,
   items: twoItems,
   action: "Reject",
   consequence: "The agent will be told the plan was rejected and to wait.",

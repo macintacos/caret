@@ -10,10 +10,14 @@
   import Modal from "@/components/Modal.svelte";
 
   interface Props {
-    /** Dismiss the modal — App flips its {#if} gate. */
+    /** Controlled open — false while the modal plays its exit. */
+    open: boolean;
+    /** The surface finished its exit and may be unmounted. */
+    onClosed?: () => void;
+    /** Dismiss the modal — App flips its open flag. */
     onClose: () => void;
   }
-  let { onClose }: Props = $props();
+  let { open, onClosed, onClose }: Props = $props();
 
   // Both paths record onboarding as seen so it never reappears, then close. Where
   // the Permissions API fires a change event, the bell re-reads
@@ -35,7 +39,14 @@
   }
 </script>
 
-<Modal kind="dialog" open eyebrow="Welcome to caret" title="Desktop notifications" onDismiss={dismiss}>
+<Modal
+  kind="dialog"
+  {open}
+  {onClosed}
+  eyebrow="Welcome to caret"
+  title="Desktop notifications"
+  onDismiss={dismiss}
+>
   {#snippet description()}
     caret can alert you the moment a plan is ready for review — even when this tab is in the
     background.
