@@ -69,23 +69,51 @@ test("closing a modal plays its exit before the surface leaves the DOM", async (
 });
 
 test("re-opening a modal mounts it fresh", async ({ daemon, page }) => {
+  // Asserted through LOCAL component state, not DOM presence: bits-ui removes the
+  // content node on its own, so a count assertion would pass with or without the
+  // gate. A surface the gate failed to renew would re-open carrying the previous
+  // session's search query. Two mechanisms deliver this — the unmount on a
+  // completed close, and the {#key} remount per open — and either alone suffices
+  // here; the {#key}'s own case (re-opening mid-exit, where the unmount never
+  // happens) is pinned in modalPresence.test.ts.
   await daemon.seed();
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
   await openSettings(page);
-  await page.keyboard.press("Escape");
+  const search = page.getByPlaceholder("Search settings…");
+  await search.fill("theme");
+  await expect(search).toHaveValue("theme");
+
+  // Dismiss by backdrop, not Escape: Escape in the search clears the query first
+  // (settings.e2e.ts), which would hide exactly the state under test.
+  await page.mouse.click(5, 5);
   await expect(page.locator(settingsDialog)).toHaveCount(0);
 
-  // The on-open focus behavior fires again — a surface left permanently mounted
-  // would have run it only for the first open.
   await openSettings(page);
-  const focusInDialog = await page.evaluate(
-    (sel) => document.activeElement?.closest(sel) != null,
-    settingsDialog,
-  );
-  expect(focusInDialog).toBe(true);
+  await expect(page.getByPlaceholder("Search settings…")).toHaveValue("");
+});
+
+test("a confirm guard unmounts too — the alertdialog branch of the shell", async ({
+  daemon,
+  page,
+}) => {
+  // Modal selects a different bits-ui primitive per `kind`, and every other case
+  // here drives the Dialog half. This covers the alertdialog half closing cleanly
+  // under the gate — the guards are the sites where `active` can go null mid-exit.
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain cold cost" }],
+  });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  await page.getByRole("button", { name: "Reject", exact: true }).click();
+  await expect(page.getByRole("alertdialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("[data-slot='alert-dialog-content']")).toHaveCount(0);
 });
 
 test("a modal still unmounts under reduced motion", async ({ daemon, page }) => {
