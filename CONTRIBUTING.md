@@ -14,7 +14,7 @@ caret pins its toolchain with [mise](https://mise.jdx.dev) (bun, biome, hk, pkl)
 mise, then bootstrap everything in one shot:
 
 ```sh
-mise run setup   # pinned tools, bun install, the e2e Chromium, and git hooks
+mise run setup   # pinned tools, bun install, the generated palette, the e2e Chromium, and git hooks
 ```
 
 `bun install` on its own refreshes JS dependencies if that is all you need.

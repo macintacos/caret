@@ -5,8 +5,8 @@
 
 import { existsSync } from "node:fs";
 
-import { ensureUi } from "@/tasks/build.ts";
-import { execAndExit } from "@/tasks/lib/exec.ts";
+import { ensureUi, paletteCssCommand } from "@/tasks/build.ts";
+import { execAndExit, runForward } from "@/tasks/lib/exec.ts";
 
 // --- test unit --------------------------------------------------------------
 // `--conditions browser` selects svelte's client runtime entry so the UI
@@ -20,6 +20,10 @@ export function testCommand(args: string[]): string[] {
 }
 
 export async function runTest(args: string[]): Promise<never> {
+  // The CSS-contract suites read app.css's generated palette partial through
+  // lib/appCss.ts, and this path never runs Vite — so emit it here.
+  const palette = await runForward(paletteCssCommand());
+  if (palette !== 0) process.exit(palette);
   return execAndExit(testCommand(args));
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 
-import { readAppCss } from "$lib/appCss.ts";
+import { readAppCss, rootBlock } from "$lib/appCss.ts";
 
 // caret's motion vocabulary lives in app.css: a small set of functional
 // duration/easing tokens for one-shot chrome reveals, plus a single global
@@ -49,12 +49,6 @@ const chromeSources: Record<string, string> = Object.fromEntries(
   ),
 );
 
-// The :root block where the design tokens (including motion) are declared.
-function rootBlock(css: string): string {
-  const match = css.match(/:root\s*\{([\s\S]*?)\n\}/);
-  return match?.[1] ?? "";
-}
-
 // Parse a ms/s duration value to milliseconds. Returns NaN for non-time values.
 function toMs(value: string): number {
   const v = value.trim();
@@ -64,7 +58,10 @@ function toMs(value: string): number {
 }
 
 describe("motion tokens in app.css", () => {
-  const root = rootBlock(appCss);
+  // Keyed on a token the motion vocabulary owns, so the lookup is
+  // self-locating. A marker that matches nothing yields "" and every assertion
+  // below fails, so this cannot mask a missing block.
+  const root = rootBlock(appCss, "--dur-fast:");
 
   test("declares two functional one-shot durations, both ≤200ms", () => {
     const fast = root.match(/--dur-fast:\s*([^;]+);/)?.[1] ?? "";

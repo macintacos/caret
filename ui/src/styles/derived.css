@@ -11,10 +11,9 @@
    or scoped, so [data-theme] re-derives the whole tier once per painted scope and
    exactly where one exists.
 
-   @imported by app.css after tokens.css so that block stays the first :root the
-   contract tests pin. Import position is not otherwise load-bearing: var() inside a
-   custom property is substituted at computed-value time, so the tier resolves
-   against the palette wherever it sits in the sheet.
+   Import position is not load-bearing: var() inside a custom property is
+   substituted at computed-value time, so the tier resolves against the palette
+   wherever it sits in the sheet.
    Mixed in lab like caret's other derivations — oklch is mangled in the embedding
    Chrome build. derived-tokens.test.ts pins the selector, the mix space, and that
    every input is a palette token, which is what makes the tier well-formed for all

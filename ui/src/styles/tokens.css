@@ -1,5 +1,8 @@
-/* caret design tokens — the caret-dark :root fallback. @imported first by
-   app.css so its palette is the first :root block (theme.test.ts pins it). */
+/* caret design tokens — the hand-written half, the one with no TS counterpart:
+   the font stacks, the type scale and its leading roles, the motion vocabulary,
+   and the radius roles. The color palette is emitted instead, from
+   THEMES["caret-dark"], into the styles/palette.generated.css partial app.css
+   @imports beside this one. */
 :root {
   /* Type */
   --font-display: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -60,40 +63,6 @@
     0.993, 0.991, 0.994, 0.998, 1
   );
 
-  /* caret-dark palette (EXC-730). These color tokens are the static
-     first-paint / no-JS fallback; the source of truth is THEMES["caret-dark"]
-     in lib/theme.ts, whose paintTheme() writes them (and the caret-light set)
-     as inline :root properties to switch palettes at runtime. theme.test.ts
-     pins this :root block equal to THEMES["caret-dark"] so the two never drift.
-     Which palette is live is decided by lib/appearance.ts — a light/dark/system
-     mode over one theme slot per scheme (EXC-773) — so the UI does follow
-     prefers-color-scheme again by default, but through that resolution rather
-     than a CSS media query. This block is the pre-JS floor either way. */
-  --paper: #0a0a0a;
-  --paper-raised: #171717;
-  --paper-sunk: #131313;
-  --ink: #fafafa;
-  --ink-soft: #a1a1a1;
-  --ink-faint: #737373;
-  --rule: #ffffff1a;
-  --rule-strong: #ffffff29;
-
-  /* Caret amber accent */
-  --accent: #fb923c;
-  --accent-bright: #fdba74;
-  --accent-wash: #ec7c3829;
-  --accent-ink: #0a0a0a;
-
-  /* Annotation highlight */
-  --mark: #f3953c2e;
-  --mark-active: #f3953c57;
-  --mark-orphan: #9b9b9b29;
-
-  --ok: #4ade80;
-  --danger: #f87171;
-  --attention: #a78bfa;
-  --shadow-card: 0 1px 2px #00000066, 0 10px 30px #00000080;
-
   /* Radius roles, shared by the shell chrome and the source-view surface so the
      two read as one system: --radius tags interactive controls (buttons,
      inputs, the switcher trigger, menu rows), --radius-lg floats panels (menus,
@@ -101,6 +70,4 @@
      (the review count, version pills, the build tag). */
   --radius: 6px;
   --radius-lg: 10px;
-
-  color-scheme: dark;
 }

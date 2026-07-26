@@ -1,6 +1,6 @@
-// caret's own two palettes — the reference every other theme is mapped against, and
-// the values app.css's :root carries as its static first-paint fallback
-// (theme.test.ts pins caret-dark against that block).
+// caret's own two palettes — the reference every other theme is mapped against.
+// caret-dark is also the source ui/generate-palette-css.ts emits as app.css's
+// static first-paint fallback.
 //
 // Both go through ./recipe.ts like every vendor palette, with hue overrides for the
 // three washes caret decides apart from the color they would otherwise derive from:
