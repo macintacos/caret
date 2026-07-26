@@ -594,6 +594,11 @@ test("creating a range annotation from the gutter persists the correct line span
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  // The submit chord below is this test's first keydown — everything before it is
+  // mouse — so it lands ~330ms after mount, clearing the 300ms grace by as little
+  // as 11ms under load. Without this the guard eats it and the composer never
+  // closes (EXC-897).
+  await waitPastSafeModeGrace(page);
 
   // Select lines 5–8 by dragging the number column, then open the composer from
   // the gutter + that the selection reveals.
@@ -2270,6 +2275,11 @@ async function createRangeAnnotation(
   end: number,
   comment: string,
 ): Promise<void> {
+  // The submit chord below is the first keydown of every test that funnels through
+  // here — the drag, the gutter +, and the fill are all mouse — so it lands ~330ms
+  // after mount, clearing the 300ms grace by as little as 11ms under load. Without
+  // this the guard eats it and the composer never closes (EXC-897).
+  await waitPastSafeModeGrace(page);
   await selectGutterRange(page, start, end);
   const plus = page.locator(".diffview [data-utility-button]");
   await expect(plus).toBeVisible();
