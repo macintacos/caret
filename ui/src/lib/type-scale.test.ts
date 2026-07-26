@@ -33,24 +33,21 @@ const LEADING_TOKENS: Record<string, string> = {
   "--leading-normal": "1.55",
 };
 
-// The body of the :root { … } light-theme block (first occurrence), where the
-// scale tokens are declared.
-function rootBlock(css: string): string {
-  const start = css.indexOf(":root {");
-  const open = css.indexOf("{", start);
-  let depth = 0;
-  for (let i = open; i < css.length; i++) {
-    if (css[i] === "{") depth++;
-    else if (css[i] === "}") {
-      depth--;
-      if (depth === 0) return css.slice(open + 1, i);
-    }
+// The body of the :root block declaring `marker`. The sheet carries several
+// :root blocks — the hand-written tokens, the emitted palette, the shadcn
+// bridge, the width foundation — so the block is found by what it declares, not
+// by position (the lookup shadcn-bridge.test.ts uses).
+function rootBlock(css: string, marker: string): string {
+  for (const m of css.matchAll(/:root\s*\{([^}]*)\}/g)) {
+    if (m[1]?.includes(marker)) return m[1];
   }
   return "";
 }
 
 describe("the --text-*/--leading-* type scale in app.css", () => {
-  const root = rootBlock(appCss);
+  // Keyed on the font stacks — the token block's other hand-written half — so
+  // every scale assertion below stays falsifiable.
+  const root = rootBlock(appCss, "--font-display:");
 
   for (const [token, value] of Object.entries(TEXT_STEPS)) {
     test(`declares ${token}: ${value}`, () => {

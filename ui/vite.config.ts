@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { svelte } from "@sveltejs/vite-plugin-svelte";
@@ -14,6 +15,22 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
     svelte(),
+    {
+      // The caret-dark first-paint fallback (src/styles/palette.generated.css) is
+      // emitted from THEMES["caret-dark"] and gitignored, so it must exist before
+      // app.css's @import is resolved — for `vite build` and the dev server alike.
+      // Spawned rather than imported: vite bundles this config with esbuild before
+      // evaluating it, and whether that loader honours the UI program's $lib alias
+      // transitively is not something to bet the build on.
+      name: "caret-palette-css",
+      config() {
+        const { status } = spawnSync("bun", ["generate-palette-css.ts"], {
+          cwd: fileURLToPath(new URL(".", import.meta.url)),
+          stdio: "inherit",
+        });
+        if (status !== 0) throw new Error("caret: generate-palette-css.ts failed");
+      },
+    },
     {
       // EXC-426: print the vanity origin in the dev banner. Cosmetic — the bind
       // stays localhost (binding caret.localhost needs the OS resolver; browsers

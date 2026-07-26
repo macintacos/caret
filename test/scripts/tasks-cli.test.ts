@@ -267,10 +267,14 @@ describe("tasks CLI: build pipeline command lines", () => {
     ]);
   });
 
-  test("setup installs tools, JS deps, then the e2e Chromium in order", () => {
+  // The palette generator sits after `bun install` because it runs through bun;
+  // emitting the gitignored partial here is what makes the raw `bun test`
+  // CONTRIBUTING.md documents work on a fresh clone.
+  test("setup installs tools and JS deps, emits the palette, then the e2e Chromium", () => {
     expect(setupCommands()).toEqual([
       ["mise", "install"],
       ["bun", "install"],
+      ["bun", "ui/generate-palette-css.ts"],
       ["bunx", "playwright", "install", "chromium"],
     ]);
   });

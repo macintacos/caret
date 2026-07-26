@@ -49,10 +49,15 @@ const chromeSources: Record<string, string> = Object.fromEntries(
   ),
 );
 
-// The :root block where the design tokens (including motion) are declared.
-function rootBlock(css: string): string {
-  const match = css.match(/:root\s*\{([\s\S]*?)\n\}/);
-  return match?.[1] ?? "";
+// The body of the :root block declaring `marker`. The sheet carries several
+// :root blocks — the hand-written tokens, the emitted palette, the shadcn
+// bridge, the width foundation — so the block is found by what it declares, not
+// by position (the lookup shadcn-bridge.test.ts uses).
+function rootBlock(css: string, marker: string): string {
+  for (const m of css.matchAll(/:root\s*\{([^}]*)\}/g)) {
+    if (m[1]?.includes(marker)) return m[1];
+  }
+  return "";
 }
 
 // Parse a ms/s duration value to milliseconds. Returns NaN for non-time values.
@@ -64,7 +69,9 @@ function toMs(value: string): number {
 }
 
 describe("motion tokens in app.css", () => {
-  const root = rootBlock(appCss);
+  // Keyed on the font stacks — the token block's other hand-written half — so
+  // every motion assertion below stays falsifiable.
+  const root = rootBlock(appCss, "--font-display:");
 
   test("declares two functional one-shot durations, both ≤200ms", () => {
     const fast = root.match(/--dur-fast:\s*([^;]+);/)?.[1] ?? "";

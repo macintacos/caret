@@ -9,10 +9,13 @@
 
    This file is the stylesheet ENTRY: it wires Tailwind, then @imports the
    ./styles/* partials (which the Tailwind bundler inlines at build). The design
-   system itself lives in those partials — tokens, the tier derived from them, the
-   shadcn bridge, the base layer, layout, the shared atoms, and the diff-view
-   bridge — one concern each.
-   The CSS-contract tests (theme/motion/type-scale/shadcn-bridge/layout/
+   system itself lives in those partials — the generated first-paint palette, the
+   hand-written tokens beside it, the tier derived from them, the shadcn bridge,
+   the base layer, layout, the shared atoms, and the diff-view bridge — one
+   concern each. styles/palette.generated.css is emitted from THEMES by
+   ui/generate-palette-css.ts and gitignored, so it must be generated before this
+   entry resolves; every path that consumes app.css runs the generator first.
+   The CSS-contract tests (motion/type-scale/shadcn-bridge/layout/derived-tokens/
    css-bridge) parse the reconstituted whole via lib/appCss.ts. */
 
 /* `source(none)` disables Tailwind's automatic content detection; the @source
@@ -28,6 +31,7 @@
    ticket that authors utilities in a caret chrome file adds it to @source then. */
 @import "tailwindcss" source(none);
 @import "tw-animate-css";
+@import "./styles/palette.generated.css";
 @import "./styles/tokens.css";
 @import "./styles/derived.css";
 @import "./styles/shadcn-bridge.css";

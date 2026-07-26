@@ -425,6 +425,13 @@ alongside Biome lint, `tsc --noEmit`, and `svelte-check` — formatting, linting
 checking are all folded into `hk.pkl`'s `check` hook, so an unformatted or tab-indented
 file fails the gate instead of being silently reflowed at commit time.
 
+`ui/src/styles/palette.generated.css` is generated, not committed: `app.css` imports it
+for the caret-dark first-paint fallback, and `ui/generate-palette-css.ts` emits it from
+`THEMES["caret-dark"]` so the palette lives in one place. Every path that consumes
+`app.css` runs the generator first — the Vite config (build and dev server),
+`mise run test`, and `mise run setup`. Like the build-generated asset manifest
+(`src/ui-manifest.generated.ts`), it is gitignored and never hand-edited.
+
 `mise run build --install` goes one step further than `mise run build`: after building, it
 runs `bin/caret install --from-local`, which reuses the fresh `bin/caret-native` +
 `bin/ui` (never rebuilding them — a missing artifact is an error telling you to run

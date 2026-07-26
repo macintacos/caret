@@ -16,6 +16,21 @@ import { mkdirSync, rmSync } from "node:fs";
 
 import { execAndExit, runForward } from "@/tasks/lib/exec.ts";
 
+// --- the generated first-paint palette ---------------------------------------
+// ui/src/styles/palette.generated.css is emitted from THEMES["caret-dark"] and
+// gitignored, so anything that consumes app.css has to generate it first. The
+// vite config runs the generator itself (covering `build ui`, the dev server,
+// and `test e2e`); the argv is exported here for the two entrypoints that never
+// touch Vite — `test unit`, whose suites read the partial through lib/appCss.ts,
+// and `setup`, so a fresh clone can run the raw `bun test` CONTRIBUTING.md
+// documents.
+
+/** The argv that emits ui/src/styles/palette.generated.css. Repo-root form: the
+ * generator resolves its own output path from import.meta.url, so cwd is free. */
+export function paletteCssCommand(): string[] {
+  return ["bun", "ui/generate-palette-css.ts"];
+}
+
 // --- build ui ---------------------------------------------------------------
 // The Svelte UI built with Vite into ui/dist. It runs from the `ui/` workspace
 // (its own vite config); extra args are forwarded to `vite build`.
