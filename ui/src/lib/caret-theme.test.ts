@@ -92,9 +92,8 @@ function themeColors(theme: ThemeLike): Set<string> {
 }
 
 // EXC-896: a vendor palette names that vendor's published shiki theme, so picking
-// Dracula highlights code in real Dracula rather than in caret's seven-role
-// derivation wearing Dracula's hues. caret's own pair names none — there is no
-// upstream theme to point at, so they keep the derivation.
+// Dracula highlights code in real Dracula rather than in caret's own hues wearing
+// Dracula's name.
 describe("upstream shiki theme declarations", () => {
   test("every registry key is that theme's own upstream name", () => {
     for (const [id, theme] of Object.entries(UPSTREAM_SHIKI_THEMES)) {
@@ -392,6 +391,7 @@ describe("dracula fenced-code block", () => {
 describe("caret themes over a real TypeScript sample", () => {
   const SAMPLE = [
     "function build(rows: Row[]): string {",
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: sample source, never evaluated
     '  return rows.map((r) => `${r.id}`).join("\\n");',
     "}",
     'const el = <div className="row" />;',
