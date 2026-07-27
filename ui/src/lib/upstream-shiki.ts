@@ -10,11 +10,13 @@
 // through CARET_SHIKI_THEMES. The seven themes are ~264 KB raw, against the full
 // shiki grammar bundle the UI already ships.
 //
-// GitHub's `-default` suffix is load-bearing. The unsuffixed `github-light` /
-// `github-dark` themes are the legacy Primer pair; caret's GitHub palettes are built
-// from current Primer, which is the `-default` pair. The key union below catches an
-// id that doesn't exist, not one that exists and is wrong, so caret-theme.test.ts
-// pins the pairing by value.
+// GitHub's `-default` suffix is load-bearing — the unsuffixed pair is legacy Primer.
+// caret-theme.test.ts pins the pairing by value, since the key union below catches an
+// id that doesn't exist but not one that exists and is wrong.
+//
+// Hand these objects to caret-theme.ts, never straight to a highlighter: shiki's
+// normalizeTheme mutates the rule array it is given in place, and the resolver's copy
+// is what absorbs that rather than the entry here.
 //
 // This is a shiki-side asset map rather than a palette, so it lives beside
 // theme.ts rather than in ./themes/ — every module in that directory is a palette

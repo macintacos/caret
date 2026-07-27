@@ -94,6 +94,41 @@ test("marks only references that resolve to a real file", async ({ daemon, page 
   }
 });
 
+// EXC-896: tagging depends on shiki emitting the opening backtick as a token of its
+// own, which only holds while the backtick and the path resolve to different colors.
+// A vendor palette highlights with that vendor's published theme, where the two are
+// the same color, so caret appends a rule that keeps them apart. Without it the icon,
+// the pointer cursor, and the hover wash all vanish under those seven palettes while
+// the click target survives — a failure shape no color assertion can see.
+test("marks references under a vendor palette too", async ({ daemon, page }) => {
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await page.addInitScript(() => {
+      localStorage.setItem("caret.theme.mode", "dark");
+      localStorage.setItem("caret.theme.dark", "dracula");
+    });
+    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nEdit `src/cache.ts` to fix it.\n" });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("style", /--paper:\s*#21222c/i);
+
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+
+    await page.locator("[data-file-ref]").first().hover();
+    const style = await page.evaluate(() => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+      const tok = sh?.querySelector("[data-file-ref]");
+      if (!tok) return null;
+      const cs = getComputedStyle(tok);
+      return { background: cs.backgroundColor, cursor: cs.cursor };
+    });
+    expect(style?.cursor).toBe("pointer");
+    expect(style?.background).not.toBe("rgba(0, 0, 0, 0)");
+  } finally {
+    await proj.cleanup();
+  }
+});
+
 test("clicking a real reference reveals a highlighted excerpt centered on its line", async ({
   daemon,
   page,

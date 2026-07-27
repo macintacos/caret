@@ -11,9 +11,10 @@ import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
 // A palette resolves one of two ways (shikiThemeForPalette). A vendor palette
 // names that vendor's OWN published shiki theme (EXC-896), so picking Dracula
 // gets Dracula — its full rule set, including the pink keyword the seven-role
-// derivation below has no way to name. The upstream object is carried whole,
-// `colors` included: the code background is inert on every caret surface, so
-// overwriting it with --paper-sunk would be a deviation that buys nothing.
+// derivation below has no way to name — with caret's structural marker rules
+// appended last. The upstream object is otherwise carried whole, `colors`
+// included: the code background is inert on every caret surface, so overwriting
+// it with --paper-sunk would be a deviation that buys nothing.
 //
 // caret's own pair has no upstream theme to point at, so it is DERIVED: seven
 // color tokens mapped onto 15 TextMate rules, and highlighted code reads like a
@@ -51,13 +52,24 @@ function paletteFromTheme(t: Theme): Palette {
   };
 }
 
-/** EXC-692: inside a fenced block, subdue the ``` / ~~~ fence markers and make the
- * language info-string prominent, so a code block reads as its own element in the
- * plan view. Both resolutions carry these — the derivation places them among its
- * own rules (more specific than its bare `punctuation` and `markup.fenced_code`
- * entries, so they win only on the fence line), and a vendor theme takes them
- * appended last, which is how they beat whatever upstream says about that line. */
-function fenceRules(p: Palette): NonNullable<ThemeRegistrationRaw["settings"]> {
+/** The markdown structural markers caret styles itself, whatever theme colors the
+ * code underneath. Both resolutions carry them: the derivation places them among its
+ * own rules (each more specific than its bare `punctuation` / `markup.fenced_code`
+ * entries, so they win only where they apply), and a vendor theme takes them appended
+ * last, which is how they beat whatever upstream says.
+ *
+ * The first two are EXC-692 — subdue the ``` / ~~~ fence markers and make the language
+ * info-string prominent, so a code block reads as its own element in the plan view.
+ *
+ * The third is load-bearing beyond its color. fileRefTag.ts tags the token that BEGINS
+ * at a file reference (the column past the opening backtick), and shiki merges adjacent
+ * tokens that style identically. Every upstream theme colors the backtick exactly like
+ * the code between them, which collapses `` `path` `` into a single token and silently
+ * drops the file icon, pointer cursor, and hover chip while leaving the click target
+ * alive (EXC-687, EXC-840). Coloring the backtick separately keeps the boundary. It is
+ * a no-op for the derivation, whose generic `punctuation` rule already resolves this
+ * scope to the same value. */
+function structuralMarkerRules(p: Palette): NonNullable<ThemeRegistrationRaw["settings"]> {
   return [
     {
       scope: ["markup.fenced_code.block.markdown punctuation.definition.markdown"],
@@ -66,6 +78,10 @@ function fenceRules(p: Palette): NonNullable<ThemeRegistrationRaw["settings"]> {
     {
       scope: ["fenced_code.block.language"],
       settings: { foreground: p.keyword, fontStyle: "bold" },
+    },
+    {
+      scope: ["punctuation.definition.raw.markdown"],
+      settings: { foreground: p.punctuation },
     },
   ];
 }
@@ -158,7 +174,7 @@ function deriveShikiTheme(theme: Theme): ThemeRegistrationRaw {
       { scope: ["markup.bold"], settings: { fontStyle: "bold" } },
       { scope: ["markup.italic"], settings: { fontStyle: "italic" } },
       { scope: ["markup.inline.raw", "markup.fenced_code"], settings: { foreground: p.entity } },
-      ...fenceRules(p),
+      ...structuralMarkerRules(p),
       // Diff (deleted lines reuse the keyword color — the derivation maps no red)
       {
         scope: ["markup.deleted", "meta.diff.header.from-file", "punctuation.definition.deleted"],
@@ -172,18 +188,26 @@ function deriveShikiTheme(theme: Theme): ThemeRegistrationRaw {
   };
 }
 
-/** Re-key an upstream theme to caret's palette id and append the fence rules.
- * Upstream themes carry their rules as `tokenColors`; caret's derivation emits
- * `settings`, and shiki accepts either — normalizing to one keeps the appended
- * pair last, which is what makes them win (shiki is last-match-wins). The rename
- * is what lets a highlighter resolve the theme by the same handle appearance.ts
- * paints with. */
-function withFenceOverrides(theme: Theme, upstream: ThemeRegistrationRaw): ThemeRegistrationRaw {
+/** Re-key an upstream theme to caret's palette id and append the structural marker
+ * rules. Upstream themes carry their rules as `tokenColors`; caret's derivation emits
+ * `settings`, and shiki accepts either — normalizing to one keeps the appended rules
+ * last, which is what makes them win (shiki is last-match-wins). This order matches
+ * shiki's own `normalizeTheme`; `settings` is the branch TypeScript believes is always
+ * taken, `tokenColors` the one every real upstream theme actually uses. The rename is
+ * what lets a highlighter resolve the theme by the same handle appearance.ts paints
+ * with. */
+function withStructuralOverrides(
+  theme: Theme,
+  upstream: ThemeRegistrationRaw,
+): ThemeRegistrationRaw {
   const { tokenColors, settings, ...rest } = upstream;
   return {
     ...rest,
     name: theme.id,
-    settings: [...(settings ?? tokenColors ?? []), ...fenceRules(paletteFromTheme(theme))],
+    settings: [
+      ...(settings ?? tokenColors ?? []),
+      ...structuralMarkerRules(paletteFromTheme(theme)),
+    ],
   };
 }
 
@@ -191,7 +215,7 @@ function withFenceOverrides(theme: Theme, upstream: ThemeRegistrationRaw): Theme
  * theme when the palette names one, else caret's seven-role derivation. */
 export function shikiThemeForPalette(theme: Theme): ThemeRegistrationRaw {
   const upstream = theme.shikiTheme ? UPSTREAM_SHIKI_THEMES[theme.shikiTheme] : undefined;
-  return upstream ? withFenceOverrides(theme, upstream) : deriveShikiTheme(theme);
+  return upstream ? withStructuralOverrides(theme, upstream) : deriveShikiTheme(theme);
 }
 
 // Built once at module load, keyed by theme id: they are plain objects, and both

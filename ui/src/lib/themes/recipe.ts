@@ -13,8 +13,8 @@
 import type { ColorToken, Scheme, Theme, ThemeId } from "$lib/theme.ts";
 import type { UpstreamShikiThemeId } from "$lib/upstream-shiki.ts";
 
-/** The colors a palette decides for itself. Everything else in a `Theme` is
- * derived from these by `paletteTheme`. */
+/** The colors a palette decides for itself, plus the upstream shiki theme it names.
+ * Everything else in a `Theme` is derived from these by `paletteTheme`. */
 export interface PaletteInput {
   id: ThemeId;
   /** Human label shown in the Settings dropdown. */

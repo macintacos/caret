@@ -39,6 +39,10 @@ const VENDOR_PALETTES = THEME_IDS.flatMap((id) => {
 });
 const DERIVED_IDS = THEME_IDS.filter((id) => THEMES[id].shikiTheme === undefined);
 
+/** How many rules caret appends over an upstream theme — the two EXC-692 fence rules
+ * plus the inline-code backtick (caret-theme.ts's `structuralMarkerRules`). */
+const STRUCTURAL_RULES = 3;
+
 /** The expected color for each Palette field, sourced from a theme's tokens. The
  * ColorToken-keyed tokens map guarantees each lookup resolves. */
 function expectedPalette(id: ThemeId): Record<string, string> {
@@ -81,11 +85,10 @@ describe("upstream shiki theme declarations", () => {
 
   test("every palette either names an upstream theme or is one of caret's own", () => {
     // Pinned rather than merely counted: a new palette has to make a deliberate
-    // choice instead of silently falling through to the derivation.
+    // choice instead of silently falling through to the derivation. That a named id
+    // resolves to a registered theme needs no assertion — `shikiTheme` is typed
+    // `keyof typeof UPSTREAM_SHIKI_THEMES`, so an unregistered id cannot compile.
     expect(DERIVED_IDS).toEqual(["caret-dark", "caret-light"]);
-    for (const { id, shikiTheme } of VENDOR_PALETTES) {
-      expect(UPSTREAM_SHIKI_THEMES, id).toHaveProperty(shikiTheme);
-    }
   });
 
   // GitHub publishes two pairs. The unsuffixed `github-light` / `github-dark` are
@@ -163,14 +166,17 @@ describe("caret-theme ↔ THEMES palette sync", () => {
       // normalizeTheme unshifts a default fg/bg rule into the `settings` array it
       // is handed, in place, so the cached theme's rule count grows by one the
       // first time any highlighter registers it. The resolver's output is the
-      // contract; the extra rule is shiki's bookkeeping, and harmless — it lands
-      // first, and shiki is last-match-wins.
+      // contract; the extra rule is shiki's bookkeeping, and harmless — it carries
+      // no scope, which textmate reads as the theme's default fg/bg rather than as
+      // a rule competing with the others.
       const theme = shikiThemeForPalette(THEMES[id]);
 
-      test("carries the whole upstream rule set, plus caret's two fence rules", () => {
+      test("carries the whole upstream rule set, plus caret's structural markers", () => {
         const upstream = UPSTREAM_SHIKI_THEMES[shikiTheme];
-        const upstreamRules = upstream.tokenColors ?? upstream.settings ?? [];
-        expect(theme.settings).toHaveLength(upstreamRules.length + 2);
+        // Same precedence withStructuralOverrides applies, so the expected length is
+        // computed the way production computes it rather than paraphrasing it.
+        const upstreamRules = upstream.settings ?? upstream.tokenColors ?? [];
+        expect(theme.settings).toHaveLength(upstreamRules.length + STRUCTURAL_RULES);
       });
 
       test("emits syntax colors the seven-token derivation cannot produce", () => {
@@ -184,11 +190,11 @@ describe("caret-theme ↔ THEMES palette sync", () => {
         expect(unmapped.length).toBeGreaterThan(0);
       });
 
-      // shiki is last-match-wins, so appending EXC-692's pair is what makes it
-      // win over whatever the upstream theme says about the fence line.
-      test("appends caret's two fence rules last, in order", () => {
+      // shiki is last-match-wins, so appending caret's markers is what makes them
+      // win over whatever the upstream theme says about those scopes.
+      test("appends caret's structural marker rules last, in order", () => {
         const tokens = THEMES[id].tokens;
-        const [markers, language] = (theme.settings ?? []).slice(-2);
+        const [markers, language, raw] = (theme.settings ?? []).slice(-STRUCTURAL_RULES);
         expect(markers?.scope).toEqual([
           "markup.fenced_code.block.markdown punctuation.definition.markdown",
         ]);
@@ -196,6 +202,8 @@ describe("caret-theme ↔ THEMES palette sync", () => {
         expect(language?.scope).toEqual(["fenced_code.block.language"]);
         expect(language?.settings.foreground).toBe(tokens["--accent"]);
         expect(language?.settings.fontStyle).toBe("bold");
+        expect(raw?.scope).toEqual(["punctuation.definition.raw.markdown"]);
+        expect(raw?.settings.foreground).toBe(tokens["--ink-soft"]);
       });
     });
   }
@@ -261,6 +269,43 @@ describe("caret-theme fenced-code fence line", () => {
     const code = (await tokenizeFence())[1]?.find((t) => t.content === "code");
     expect(code?.color?.toLowerCase()).toBe(expected.entity);
   });
+});
+
+// fileRefTag.ts tags the token that BEGINS at a file reference's start column — the
+// column past the opening backtick — so the backtick has to be a token of its own.
+// Whether it is depends on the THEME, not the grammar: shiki merges adjacent tokens
+// that style identically, and every upstream theme colors
+// `punctuation.definition.raw.markdown` the same as `markup.inline.raw`. Without
+// caret's override the whole `` `path` `` collapses into one token starting at the
+// backtick, no token begins at the path, and the file icon, pointer cursor, and hover
+// chip all silently vanish while the click target survives (EXC-687, EXC-840). No
+// color assertion can see that, so pin the boundary itself.
+describe("inline-code file references stay tokenized for fileRefTag", () => {
+  const LINE = "See `ui/src/lib/theme.ts` for details.";
+  const PATH_COL = LINE.indexOf("`") + 1;
+
+  let shared: Awaited<ReturnType<typeof createHighlighterCore>> | undefined;
+  async function tokenize(id: ThemeId) {
+    shared ??= await createHighlighterCore({
+      themes: THEME_IDS.map(shikiThemeFor),
+      langs: [import("shiki/langs/markdown.mjs")],
+      engine: createJavaScriptRegexEngine(),
+    });
+    return shared.codeToTokensBase(LINE, { lang: "markdown", theme: id })[0] ?? [];
+  }
+
+  for (const id of THEME_IDS) {
+    test(`${id} emits a token beginning at the path`, async () => {
+      // The same running-length walk tagTokenAt performs over the rendered spans.
+      const starts = new Set<number>();
+      let col = 0;
+      for (const token of await tokenize(id)) {
+        starts.add(col);
+        col += token.content.length;
+      }
+      expect(starts).toContain(PATH_COL);
+    });
+  }
 });
 
 // The vendor half of the same fence line. caret's two appended rules still win on
