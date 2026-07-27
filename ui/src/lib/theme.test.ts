@@ -335,16 +335,12 @@ describe("every theme", () => {
 
   // shiki resolves token colors at highlight time and takes plain 6-digit hex; an
   // alpha suffix on any of these would reach the highlighter as an invalid color.
+  // Only the three caret-theme.ts's structural marker rules read reach shiki through
+  // the tokens: caret's authored themes take their colors from the named set (covered
+  // by "names every color as alpha-free 6-digit hex" above), and a vendor palette
+  // highlights with its own upstream `colors`.
   test("supplies alpha-free hex for the tokens shiki reads", () => {
-    const shikiTokens: ColorToken[] = [
-      "--paper-sunk",
-      "--ink",
-      "--ink-faint",
-      "--ink-soft",
-      "--accent",
-      "--accent-bright",
-      "--ok",
-    ];
+    const shikiTokens: ColorToken[] = ["--ink-faint", "--ink-soft", "--accent"];
     for (const [id, theme] of themeEntries()) {
       for (const token of shikiTokens) {
         expect(theme.tokens[token], `${id} ${token}`).toMatch(/^#[0-9a-f]{6}$/i);

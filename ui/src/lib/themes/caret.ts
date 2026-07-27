@@ -9,13 +9,14 @@
 // than a parade. The count is sized against Catppuccin's 26 per flavor — a count, not a
 // source of hues.
 
+import type { AuthoredShikiThemeId } from "$lib/authored-shiki.ts";
 import type { Scheme, Theme, ThemeId } from "$lib/theme.ts";
 import { paletteTheme } from "$lib/themes/recipe.ts";
 
 /** Every color caret's own palettes name: the thirteen `PaletteInput` values, the three
  * hues the recipe's derived washes ride, and the syntax half only the highlighter
- * spends. Exported because EXC-903's authored shiki themes read the last group out of
- * it — nothing else in the UI reaches past `Theme.tokens`. */
+ * spends. Exported because the authored shiki themes (authored-shiki.ts) read the last
+ * group out of it — nothing else in the UI reaches past `Theme.tokens`. */
 export interface CaretPalette {
   // The three surfaces. Dark is kraft: the page darkest, the plan document a step up, the
   // chrome a step above that. Light is oat — a warm limestone rather than a cool grey, so
@@ -36,9 +37,8 @@ export interface CaretPalette {
 
   // The accent trio — carrot, the pigment the rest of the chrome's prose calls amber, and
   // the scarce mark caret spends on the current selection. The syntax half carries its own
-  // sienna and ochre so EXC-903's authored themes need not spend the accent on every
-  // keyword; until those land, the seven-role derivation in caret-theme.ts still paints
-  // keywords with it.
+  // sienna and ochre, so the authored themes (authored-shiki.ts) spend the accent only on
+  // a markdown heading rather than on every keyword.
   accent: string;
   accentBright: string;
   accentInk: string;
@@ -64,10 +64,10 @@ export interface CaretPalette {
   danger: string;
   attention: string;
 
-  // The syntax half — shiki-only, and measured against `sunk`. Eleven hues, because
-  // EXC-903's authored themes must tell a type from a function, a number from a string
-  // escape, and an attribute from a property; those three pairs are the ones held apart by
-  // hue, never under 157 degrees in either scheme.
+  // The syntax half — shiki-only, and measured against `sunk`. Eleven hues, because the
+  // authored themes must tell a type from a function, a number from a string escape, and
+  // an attribute from a property; those three pairs are the ones held apart by hue, never
+  // under 157 degrees in either scheme.
   //
   // Three pigments are each spent twice, at different value: thistle on keyword and
   // attention, madder on escape and danger, terre verte on string and ok. Keyword and
@@ -195,13 +195,24 @@ export const CARET_COLOR_PLACEMENT: Record<keyof CaretPalette, ColorPlacement> =
 };
 
 /** Read one palette's sixteen chrome colors out of its record and through the recipe.
- * The syntax half is not passed: `paletteTheme` has nowhere to put it, and EXC-903 reads
- * it from the record directly. */
-function caretTheme(id: ThemeId, label: string, scheme: Scheme, p: CaretPalette): Theme {
+ * The syntax half is not passed: `paletteTheme` has nowhere to put it, and the authored
+ * shiki themes (authored-shiki.ts) read it from the record directly.
+ *
+ * @param id - caret's palettes and its authored shiki themes spell their ids
+ * identically, so the one string names both. The intersection makes that identity a
+ * compile error to break rather than a coincidence to rely on — the same shape
+ * catppuccin.ts's `flavor` uses for the vendor half. */
+function caretTheme(
+  id: ThemeId & AuthoredShikiThemeId,
+  label: string,
+  scheme: Scheme,
+  p: CaretPalette,
+): Theme {
   return paletteTheme({
     id,
     label,
     scheme,
+    shikiTheme: id,
     paper: p.paper,
     raised: p.raised,
     sunk: p.sunk,
