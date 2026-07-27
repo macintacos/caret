@@ -118,7 +118,7 @@ describe("THEMES", () => {
   test("caret-dark's full token set", () => {
     expect(THEMES["caret-dark"].tokens).toEqual({
       "--paper": "#0a0806",
-      "--paper-raised": "#191410",
+      "--paper-raised": "#15110d",
       "--paper-sunk": "#100d0a",
       "--ink": "#f7f2ea",
       "--ink-soft": "#bcb0a1",

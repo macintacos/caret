@@ -107,7 +107,7 @@ export interface CaretPalette {
 
 export const CARET_DARK: CaretPalette = {
   paper: "#0a0806", // kraft — the darkest stock, and what accentInk paints back onto
-  raised: "#191410", // kraft, two steps up: cards, dialogs, dropdowns
+  raised: "#15110d", // kraft, two steps up: chrome, cards, dialogs, dropdowns
   sunk: "#100d0a", // kraft, one step up: the code body lifts off the page
   ink: "#f7f2ea", // parchment
   inkSoft: "#bcb0a1", // parchment, half-tone
