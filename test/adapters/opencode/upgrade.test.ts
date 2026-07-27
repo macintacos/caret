@@ -39,16 +39,20 @@ function cacheDir(specifier: string, manifest: unknown): string {
 }
 const shim = (version: string) => ({ dependencies: { [PKG]: version } });
 
-/** A fetch stub: one canned response, and a record of the URLs it was asked for. */
+/** A fetch stub: one canned response, and a record of how it was called. */
 function fetching(response: { ok: boolean; body: unknown }): {
   fetchImpl: FetchLike;
   urls: string[];
+  inits: { signal: AbortSignal }[];
 } {
   const urls: string[] = [];
+  const inits: { signal: AbortSignal }[] = [];
   return {
     urls,
-    fetchImpl: async (url) => {
+    inits,
+    fetchImpl: async (url, init) => {
       urls.push(url);
+      inits.push(init);
       return {
         ok: response.ok,
         json: async () => {
@@ -198,6 +202,12 @@ test("the published version comes from npm's latest dist-tag document", async ()
   expect(await publishedCaretVersion(fetchImpl)).toBe("0.8.1");
   // npm's `latest`, not GitHub releases: it is what OpenCode actually re-resolves to.
   expect(urls).toEqual([`https://registry.npmjs.org/${PKG}/latest`]);
+});
+
+test("the version check is bounded, so a blackholed registry can't stall an install", async () => {
+  const { fetchImpl, inits } = fetching({ ok: true, body: { version: "0.8.1" } });
+  await publishedCaretVersion(fetchImpl);
+  expect(inits[0]?.signal).toBeInstanceOf(AbortSignal);
 });
 
 test("a non-200, a malformed body, and a thrown request all degrade to null", async () => {

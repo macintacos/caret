@@ -25,9 +25,18 @@ import { CARET_PACKAGE, existingOpencodeCachePackageDirs } from "@/adapters/open
  * cannot keep. */
 const NPM_LATEST_URL = `https://registry.npmjs.org/${CARET_PACKAGE}/latest`;
 
+/** How long the version check waits on npm. Bounded for the same reason every daemon
+ * fetch is (`src/daemon/client.ts`): the check runs behind a spinner mid-install, and a
+ * blackholed connection would otherwise stall the whole command for the OS timeout. A
+ * check that times out is just an `unknown` verdict. */
+const NPM_TIMEOUT_MS = 3_000;
+
 /** The slice of `fetch` the version check needs — narrowed so a test injects a plain
  * stub without reconstructing the whole `typeof fetch` surface. `fetch` satisfies it. */
-export type FetchLike = (url: string) => Promise<{ ok: boolean; json(): Promise<unknown> }>;
+export type FetchLike = (
+  url: string,
+  init: { signal: AbortSignal },
+) => Promise<{ ok: boolean; json(): Promise<unknown> }>;
 
 /** What install found when it compared the caret OpenCode would load against the one
  * npm publishes. `fresh` and `current` need no action; the two `stale-*` kinds each
@@ -154,7 +163,7 @@ export function clearCachedCaret(
  * install. */
 export async function publishedCaretVersion(fetchImpl: FetchLike = fetch): Promise<string | null> {
   try {
-    const res = await fetchImpl(NPM_LATEST_URL);
+    const res = await fetchImpl(NPM_LATEST_URL, { signal: AbortSignal.timeout(NPM_TIMEOUT_MS) });
     if (!res.ok) return null;
     const body = (await res.json()) as { version?: unknown } | null;
     const v = body?.version;
