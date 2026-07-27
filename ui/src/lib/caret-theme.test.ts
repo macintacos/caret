@@ -3,8 +3,10 @@ import { describe, expect, test } from "bun:test";
 import { createHighlighterCore } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 
+import { AUTHORED_SHIKI_THEMES } from "$lib/authored-shiki.ts";
 import { CARET_SHIKI_THEMES, shikiThemeFor, shikiThemeForPalette } from "$lib/caret-theme.ts";
 import { type ColorToken, THEME_IDS, THEMES, type Theme, type ThemeId } from "$lib/theme.ts";
+import { CARET_COLOR_PLACEMENT, CARET_DARK, CARET_LIGHT } from "$lib/themes/caret.ts";
 import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
 
 // caret-theme.ts resolves one shiki theme per registered palette, two ways. A
@@ -42,6 +44,20 @@ const DERIVED_IDS = THEME_IDS.filter((id) => THEMES[id].shikiTheme === undefined
 /** How many rules caret appends over an upstream theme — the two EXC-692 fence rules
  * plus the inline-code backtick (caret-theme.ts's `structuralMarkerRules`). */
 const STRUCTURAL_RULES = 3;
+
+/** The scopes those three rules own, in the order the resolver appends them. */
+const STRUCTURAL_SCOPES = [
+  "markup.fenced_code.block.markdown punctuation.definition.markdown",
+  "fenced_code.block.language",
+  "punctuation.definition.raw.markdown",
+];
+
+/** The half of the named color set nothing but the highlighter spends (EXC-902).
+ * Read off the placement map rather than re-listed, so a color reclassified there
+ * changes what the authored themes are held to. */
+const SHIKI_ONLY = Object.entries(CARET_COLOR_PLACEMENT)
+  .filter(([, placement]) => placement === "shiki-only")
+  .map(([color]) => color as keyof typeof CARET_DARK);
 
 /** The expected color for each Palette field, sourced from a theme's tokens. The
  * ColorToken-keyed tokens map guarantees each lookup resolves. */
@@ -103,6 +119,67 @@ describe("upstream shiki theme declarations", () => {
       "#0d1117",
     );
   });
+});
+
+// EXC-903: caret's own pair has no vendor to point at, so it AUTHORS its two themes
+// from the named color set in themes/caret.ts (EXC-902) — the eleven shiki-only hues
+// spent across a scope set wide enough to tell a type from a function. These pin the
+// asset map's own contract; how a palette reaches it is the resolver's, below.
+describe("authored caret shiki themes", () => {
+  const records = [
+    ["caret-dark", CARET_DARK],
+    ["caret-light", CARET_LIGHT],
+  ] as const;
+
+  test("registers one theme per caret palette, named by its key", () => {
+    // Same pin the upstream registry carries: a mis-wired entry (`caret-light`
+    // holding the dark theme) would otherwise resolve by the wrong handle.
+    expect(Object.keys(AUTHORED_SHIKI_THEMES)).toEqual(["caret-dark", "caret-light"]);
+    for (const [id, theme] of Object.entries(AUTHORED_SHIKI_THEMES)) {
+      expect(theme.name, id).toBe(id);
+    }
+  });
+
+  for (const [id, record] of records) {
+    describe(id, () => {
+      const theme = AUTHORED_SHIKI_THEMES[id];
+
+      test("paints the editor on the record's sunk surface, in its ink", () => {
+        // The same two values --paper-sunk / --ink carry, read from the record
+        // rather than through the tokens: the record is the source both halves share.
+        expect(theme.colors?.["editor.background"]).toBe(record.sunk);
+        expect(theme.colors?.["editor.foreground"]).toBe(record.ink);
+      });
+
+      test("carries the palette's scheme as the theme type", () => {
+        expect(theme.type).toBe(THEMES[id].scheme);
+      });
+
+      test("emits no color the named set does not name", () => {
+        // Closure over the record: a hex typed into the theme by hand, or a hue
+        // that drifted from the set, fails here rather than shipping.
+        const named = new Set<string>(Object.values(record));
+        for (const color of themeColors(theme)) expect(named, color).toContain(color);
+      });
+
+      test("spends every shiki-only hue", () => {
+        // The reverse direction, and the point of EXC-902's set: a hue classified
+        // shiki-only that no rule actually names is a color nothing paints.
+        const emitted = themeColors(theme);
+        for (const color of SHIKI_ONLY) {
+          expect(emitted, `${id}.${color} (${record[color]})`).toContain(record[color]);
+        }
+      });
+
+      test("leaves the structural markers to the resolver", () => {
+        // The resolver appends structuralMarkerRules to every theme, and
+        // appended-last is what makes them win. A copy carried here would sit
+        // among the rules it is supposed to beat.
+        const scopes = (theme.settings ?? []).flatMap((rule) => rule.scope ?? []);
+        for (const scope of STRUCTURAL_SCOPES) expect(scopes).not.toContain(scope);
+      });
+    });
+  }
 });
 
 describe("caret-theme ↔ THEMES palette sync", () => {
