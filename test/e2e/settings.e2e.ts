@@ -222,6 +222,12 @@ test("picking a vendor palette retints the chrome and the code", async ({ daemon
   const retinted = await rowColors(page, "Widget Cache Refactor");
   expect(retinted.length).toBeGreaterThan(0);
   expect(retinted).not.toContain("rgb(251, 146, 60)");
+
+  // EXC-896: the fenced block is upstream Dracula's own highlighting, not caret's
+  // seven-role derivation wearing Dracula's hues. Dracula paints `function` its
+  // pink (#ff79c6) — a color the derivation, which maps seven palette tokens and
+  // no pink among them, cannot produce at any scope.
+  await expect.poll(() => rowColors(page, "function warm")).toContain("rgb(255, 121, 198)");
 });
 
 // Back-compat (EXC-773): a user who picked a theme under the pre-mode model must not
