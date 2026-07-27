@@ -76,20 +76,22 @@ export function opencodeCachePackageDir(pkg: string = CARET_PACKAGE): string {
 }
 
 /** Every cache dir on disk for `pkg`: the bare specifier dir first, then any pinned
- * `<pkg>@<version>` sibling, sorted. OpenCode names each dir after the VERBATIM
- * specifier, and a pin's version segment is arbitrary (`@0.7.3`, `@latest`), so
- * listing is the only way to find one. Empty when the cache is absent. */
+ * `<pkg>@<version>` sibling, ordered lexicographically by name — NOT by version, since
+ * the caller takes the first candidate that resolves. OpenCode names each dir after the
+ * VERBATIM specifier, and a pin's version segment is arbitrary (`@0.7.3`, `@latest`), so
+ * listing is the only way to find one. Empty when nothing is listable. */
 export function existingOpencodeCachePackageDirs(pkg: string = CARET_PACKAGE): string[] {
   const bare = opencodeCachePackageDir(pkg);
   const parent = dirname(bare);
   const leaf = basename(bare);
+  // Entry types are deliberately not filtered: a symlinked cache dir reports as a
+  // symlink rather than a directory, and a non-directory named like a candidate just
+  // fails its manifest read downstream.
   let names: string[];
   try {
-    names = readdirSync(parent, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
-      .map((e) => e.name);
+    names = readdirSync(parent);
   } catch {
-    return []; // no cache dir yet — nothing installed.
+    return []; // parent dir absent or unreadable — no candidates.
   }
   const pinned = names.filter((n) => n.startsWith(`${leaf}@`)).sort();
   return [...(names.includes(leaf) ? [bare] : []), ...pinned.map((n) => join(parent, n))];

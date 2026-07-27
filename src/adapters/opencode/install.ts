@@ -32,8 +32,8 @@ export function readOpencodeInstallState(): InstallProbe {
   const version = readCachedVersion(existingOpencodeCachePackageDirs());
   return {
     pluginVersion: version,
-    // A resolved version == OpenCode installed the array entry. A bare directory
-    // check would call a failed install "enabled".
+    // A `packages/<specifier>/` dir survives an interrupted install, so presence alone
+    // isn't proof — only a resolved version is.
     pluginEnabled: version !== "unknown",
     // caret listed in the user's `plugin` array == caret is configured for OpenCode.
     hookInUserSettings: readCaretInPluginArray(dir),
@@ -55,7 +55,7 @@ function readCachedVersion(cacheDirs: readonly string[]): string | "unknown" {
       const v = deps?.[CARET_PACKAGE];
       if (typeof v === "string" && v.length > 0) return v;
     } catch {
-      // unreadable / unparseable manifest — try the next candidate.
+      // missing / unreadable / unparseable manifest — try the next candidate.
     }
   }
   return "unknown";

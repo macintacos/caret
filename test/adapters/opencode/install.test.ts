@@ -88,6 +88,16 @@ test("the bare specifier dir wins when a pinned one also exists", async () => {
   expect(s.pluginEnabled).toBe(true);
 });
 
+test("a sibling package that merely starts with caret's leaf is not a candidate", async () => {
+  await configWithCaret();
+  // Same scope, leaf `caret-tools` — only `caret` and `caret@…` are caret's dirs. The
+  // manifest names caret so a prefix scan missing the `@` would wrongly resolve it.
+  await writeCachePkg("@macintacos/caret-tools", shim("9.9.9"));
+  const s = readOpencodeInstallState();
+  expect(s.pluginVersion).toBe("unknown");
+  expect(s.pluginEnabled).toBe(false);
+});
+
 test("configured but not yet installed: array entry present, cache still empty", async () => {
   await configWithCaret();
   const s = readOpencodeInstallState();
