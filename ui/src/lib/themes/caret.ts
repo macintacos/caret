@@ -40,8 +40,8 @@
 //
 // THE SYNTAX HALF is eleven hues, and its size is set by what EXC-903's authored themes
 // must tell apart: a type from a function, a number from a string escape, an attribute
-// from a property. Those three are the pairs held apart by hue — 158 degrees, 177, and
-// 173 respectively.
+// from a property. Those three are the pairs held apart by hue — never under 157 degrees
+// in either scheme.
 //
 // Three pigments are each spent twice, at different value: thistle on keyword and
 // attention, madder on escape and danger, terre verte on string and ok. Keyword and
@@ -106,63 +106,63 @@ export interface CaretPalette {
 }
 
 export const CARET_DARK: CaretPalette = {
-  paper: "#17130f", // kraft — the darkest stock, and what accentInk paints back onto
-  raised: "#26201a", // kraft, two steps up: cards, dialogs, dropdowns
-  sunk: "#1e1813", // kraft, one step up: the code body lifts off the page
-  ink: "#f4eee4", // parchment
-  inkSoft: "#b5a999", // parchment, half-tone
-  inkFaint: "#8b7f70", // parchment, quarter-tone
-  accent: "#ef7d33", // carrot
-  accentBright: "#f9a768", // carrot, lifted
-  accentInk: "#17130f", // the page, painted back onto the accent
+  paper: "#0d0b08", // kraft — the darkest stock, and what accentInk paints back onto
+  raised: "#1f1a15", // kraft, two steps up: cards, dialogs, dropdowns
+  sunk: "#15110d", // kraft, one step up: the code body lifts off the page
+  ink: "#f7f2ea", // parchment
+  inkSoft: "#bcb0a1", // parchment, half-tone
+  inkFaint: "#918576", // parchment, quarter-tone
+  accent: "#ff8f3d", // carrot
+  accentBright: "#ffb277", // carrot, lifted
+  accentInk: "#0d0b08", // the page, painted back onto the accent
   ruleHue: "#f2e7d5", // bone — a white hairline on brown paper reads cold
-  washHue: "#e8813a", // ember, a shade off the accent so the wash is its own color
-  markHue: "#f0a04a", // amber, a step above the wash so a mark reads over it
-  neutral: "#95877a", // dust
-  ok: "#8fbe55", // carrot-top
-  danger: "#e26877", // madder
-  attention: "#b28ddb", // thistle
-  keyword: "#ad7ade", // thistle, deepened — the spine of a statement
-  type: "#7fb6d4", // woad, the cool anchor
-  func: "#d9b866", // ochre
-  variable: "#e8ded0", // bone, barely off the ink — identifiers keep the page calm
-  property: "#a9c3d4", // flax — keys read as pale types
-  attribute: "#e6845e", // sienna
-  string: "#9dbf7a", // terre verte, muted below carrot-top so long literals don't buzz
-  escape: "#f0838d", // madder, lifted — an escape has to break its string
-  number: "#67c1b4", // verdigris
-  comment: "#7d7267", // umber — the pencil note, held to the large-text floor
-  punctuation: "#a1938a", // stone
+  washHue: "#f2842f", // ember, a shade off the accent so the wash is its own color
+  markHue: "#ffa64d", // amber, a step above the wash so a mark reads over it
+  neutral: "#9a8c7e", // dust
+  ok: "#5fc464", // carrot-top
+  danger: "#f0697a", // madder
+  attention: "#bb92e6", // thistle
+  keyword: "#b982e8", // thistle, deepened — the spine of a statement
+  type: "#7fc0dc", // woad, the cool anchor
+  func: "#e2bd6a", // ochre
+  variable: "#ece2d4", // bone, barely off the ink — identifiers keep the page calm
+  property: "#aecada", // flax — keys read as pale types
+  attribute: "#f08a5e", // sienna
+  string: "#8ec97e", // terre verte, lighter and a shade yellower than carrot-top
+  escape: "#f78a94", // madder, lifted — an escape has to break its string
+  number: "#5fcabb", // verdigris
+  comment: "#857a6e", // umber — the pencil note, held to the large-text floor
+  punctuation: "#a89a90", // stone
 };
 
 export const CARET_LIGHT: CaretPalette = {
-  paper: "#faf7f0", // oat
-  raised: "#fffdf7", // oat, bleached
-  sunk: "#f2ede2", // oat, recessed: light inverts the surface order dark uses
-  ink: "#1d1713", // umber, near-black
-  inkSoft: "#5a5048", // umber, half-tone
-  inkFaint: "#8c8177", // umber, quarter-tone
-  accent: "#b8440f", // burnt carrot — the light scheme takes the accent deeper
-  accentBright: "#d9622a", // burnt carrot, lifted
-  accentInk: "#fff4e8", // oat, bleached warmer
-  ruleHue: "#271e16", // umber — a warmer red/blue ratio than the ink, at the same weight
-  washHue: "#d9702e", // ember
-  markHue: "#e07f2e", // amber
-  neutral: "#7d7266", // dust
-  ok: "#4f7a1e", // carrot-top
-  danger: "#b83a4a", // madder
-  attention: "#7a4bb5", // thistle
-  keyword: "#6f3d9e", // thistle, deepened
-  type: "#2c6a8f", // woad
-  func: "#805e07", // ochre
-  variable: "#2e2620", // umber, barely off the ink
-  property: "#4a6478", // flax
-  attribute: "#9c4718", // sienna
-  string: "#55703a", // terre verte
-  escape: "#b03544", // madder, deepened
-  number: "#12706a", // verdigris
-  comment: "#8c7f6f", // umber, recessive
-  punctuation: "#6b6058", // stone
+  paper: "#fdfbf6", // oat
+  raised: "#fffefb", // oat, bleached
+  sunk: "#f7f2e8", // oat, recessed: light inverts the surface order dark uses
+  ink: "#191310", // umber, near-black
+  inkSoft: "#544b43", // umber, half-tone
+  inkFaint: "#847a70", // umber, quarter-tone
+  accent: "#c2490d", // burnt carrot — the light scheme takes the accent deeper
+  accentBright: "#e06a24", // burnt carrot, lifted
+  accentInk: "#fff6ec", // oat, bleached warmer
+  ruleHue: "#2a2018", // umber — a warmer red/blue ratio than the ink, at the same weight
+  washHue: "#e07a2e", // ember
+  markHue: "#e8882e", // amber
+  neutral: "#7a6f63", // dust
+  ok: "#2f7d3a", // carrot-top
+  danger: "#b8323f", // madder
+  attention: "#7440b5", // thistle
+  keyword: "#6a37a0", // thistle, deepened
+  type: "#26648c", // woad
+  func: "#7d5a05", // ochre
+  variable: "#2a221c", // umber, barely off the ink
+  property: "#456075", // flax
+  attribute: "#984314", // sienna
+  string: "#3d7040", // terre verte
+  escape: "#ad2f3f", // madder, deepened
+  number: "#0d6d66", // verdigris
+  comment: "#8a7d6d", // umber, recessive
+  punctuation: "#665b52", // stone
 };
 
 /** Where a named color lands downstream. `token` is one the chrome reads through

@@ -198,9 +198,9 @@ test("picking a vendor palette retints the chrome and the code", async ({ daemon
 
   // The emulated OS is dark, so the dark slot is live: caret dark, amber headings.
   // Computed styles come back in decimal, so the two assertions below spell caret
-  // dark's --accent (#ef7d33) as rgb() — grep both forms when the palette is revised.
+  // dark's --accent (#ff8f3d) as rgb() — grep both forms when the palette is revised.
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await expect.poll(() => rowColors(page, "Widget Cache Refactor")).toContain("rgb(239, 125, 51)");
+  await expect.poll(() => rowColors(page, "Widget Cache Refactor")).toContain("rgb(255, 143, 61)");
 
   await openSettings(page);
   await page.getByRole("button", { name: "Dark theme" }).click();
@@ -223,7 +223,7 @@ test("picking a vendor palette retints the chrome and the code", async ({ daemon
   // "no amber" by returning nothing.
   const retinted = await rowColors(page, "Widget Cache Refactor");
   expect(retinted.length).toBeGreaterThan(0);
-  expect(retinted).not.toContain("rgb(239, 125, 51)");
+  expect(retinted).not.toContain("rgb(255, 143, 61)");
 
   // EXC-896: the fenced block is upstream Dracula's own highlighting, not caret's
   // seven-role derivation wearing Dracula's hues. Dracula paints `function` its
@@ -271,9 +271,9 @@ test("hovering a theme option previews its palette beside the menu, without appl
   const preview = page.locator("[data-slot='theme-preview']");
   await expect(preview).toBeVisible();
 
-  // Tinted by caret light's palette (accent #b8440f), applied inline on the card only —
+  // Tinted by caret light's palette (accent #c2490d), applied inline on the card only —
   // and the real app is NOT retinted on hover: html stays dark until a click.
-  await expect(preview).toHaveAttribute("style", /--accent:\s*#b8440f/i);
+  await expect(preview).toHaveAttribute("style", /--accent:\s*#c2490d/i);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
   // The previewed SCHEME is scoped to the card too (EXC-884): it stamps data-theme and
@@ -306,7 +306,7 @@ test("hovering a theme option previews its palette beside the menu, without appl
   await page.getByRole("button", { name: "Dark theme" }).click();
   await page.getByRole("menuitemradio", { name: "caret dark" }).hover();
   await expect(preview).toHaveCount(1);
-  await expect(preview).toHaveAttribute("style", /--accent:\s*#ef7d33/i);
+  await expect(preview).toHaveAttribute("style", /--accent:\s*#ff8f3d/i);
 });
 
 test("keyboard-highlighting a theme option previews it too (EXC-753)", async ({ daemon, page }) => {
