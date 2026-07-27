@@ -1,6 +1,6 @@
 import type { ThemeRegistrationRaw } from "shiki/core";
 
-import { AUTHORED_SHIKI_THEMES } from "$lib/authored-shiki.ts";
+import { CARET_SHIKI_THEMES } from "$lib/caret-shiki.ts";
 import { type ShikiThemeId, THEME_IDS, THEMES, type Theme, type ThemeId } from "$lib/theme.ts";
 import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
 
@@ -14,7 +14,7 @@ import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
 // A vendor palette names that vendor's OWN published theme (EXC-896), so picking
 // Dracula gets Dracula — its full rule set, including the pink keyword caret's own
 // color set cannot name. caret's pair names the theme authored for it out of that
-// set (EXC-903; authored-shiki.ts). Either object is carried whole, `colors`
+// set (EXC-903; caret-shiki.ts). Either object is carried whole, `colors`
 // included: an upstream theme's code background is inert on every caret surface,
 // so overwriting it with --paper-sunk would be a deviation that buys nothing.
 //
@@ -74,7 +74,7 @@ function structuralMarkerRules(p: Palette): NonNullable<ThemeRegistrationRaw["se
 }
 
 /** Re-key a source theme to caret's palette id and append the structural marker
- * rules. Upstream themes carry their rules as `tokenColors` and caret's authored pair
+ * rules. Upstream themes carry their rules as `tokenColors` and caret's own pair
  * as `settings`; shiki accepts either — normalizing to one keeps the appended rules
  * last, which is what makes them win (shiki is last-match-wins). This order matches
  * shiki's own `normalizeTheme`; `settings` is the branch TypeScript believes is always
@@ -94,12 +94,12 @@ function withStructuralOverrides(theme: Theme, source: ThemeRegistrationRaw): Th
 }
 
 /** Every theme a palette can name, in one map — the vendors' published themes and
- * caret's authored pair. Keying it by `ShikiThemeId` is what makes the lookup below
+ * caret's own pair. Keying it by `ShikiThemeId` is what makes the lookup below
  * total: a palette's `shikiTheme` is that same union, so there is no unresolved case
  * to branch on. */
 const SHIKI_THEME_SOURCES: Record<ShikiThemeId, ThemeRegistrationRaw> = {
   ...UPSTREAM_SHIKI_THEMES,
-  ...AUTHORED_SHIKI_THEMES,
+  ...CARET_SHIKI_THEMES,
 };
 
 /** The shiki theme one palette highlights code with, wearing caret's structural
@@ -120,5 +120,7 @@ export function shikiThemeFor(id: ThemeId): ThemeRegistrationRaw {
   return SHIKI_THEMES[id];
 }
 
-/** Every caret shiki theme, in THEME_IDS order — what a highlighter registers. */
-export const CARET_SHIKI_THEMES: ThemeRegistrationRaw[] = THEME_IDS.map(shikiThemeFor);
+/** One resolved theme per registered palette, in THEME_IDS order — what a highlighter
+ * registers. Every palette's, not just caret's own pair: this is the output side of the
+ * resolver, where `CARET_SHIKI_THEMES` and `UPSTREAM_SHIKI_THEMES` are its two inputs. */
+export const REGISTERED_SHIKI_THEMES: ThemeRegistrationRaw[] = THEME_IDS.map(shikiThemeFor);

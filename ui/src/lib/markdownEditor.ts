@@ -48,7 +48,7 @@ export interface MarkdownEditorOptions {
 // (hex/var, never oklch): keyword = accent, string = ok/green, comment = faint,
 // names/types/numbers = accent-bright. This is the editor's own scheme, NOT the diff
 // view's — the shiki themes there paint syntax from the named colour set's eleven
-// shiki-only hues (themes/caret.ts, authored-shiki.ts), and those are not ColorTokens,
+// shiki-only hues (themes/caret.ts, caret-shiki.ts), and those are not ColorTokens,
 // so a `var(--x)` highlight style has no way to name them.
 const highlightStyle = HighlightStyle.define([
   // Markdown structure.

@@ -51,7 +51,7 @@
 // expression, which a parameter default evaluates per call, not at module load — so
 // caret-theme.ts can import THEMES under bun-test without a DOM.
 
-import type { AuthoredShikiThemeId } from "$lib/authored-shiki.ts";
+import type { CaretShikiThemeId } from "$lib/caret-shiki.ts";
 import { caretDark, caretLight } from "$lib/themes/caret.ts";
 import {
   catppuccinFrappe,
@@ -66,7 +66,7 @@ import type { UpstreamShikiThemeId } from "$lib/upstream-shiki.ts";
 /** Every shiki theme a palette may name: the vendors' published ones (EXC-896) and
  * the two caret authors for its own pair (EXC-903). One union over both maps is what
  * lets caret-theme.ts resolve any palette with a single lookup. */
-export type ShikiThemeId = UpstreamShikiThemeId | AuthoredShikiThemeId;
+export type ShikiThemeId = UpstreamShikiThemeId | CaretShikiThemeId;
 
 export type ThemeId =
   | "caret-dark"
@@ -118,7 +118,7 @@ export interface Theme {
   /** CSS custom property → value, covering every color token app.css declares. */
   tokens: Record<ColorToken, string>;
   /** The shiki theme this palette highlights code with — the vendor's own published
-   * one for a palette named after a vendor (EXC-896), caret's authored theme of the
+   * one for a palette named after a vendor (EXC-896), caret's own theme of the
    * same name for its own pair (EXC-903). Required, so a palette that names none is
    * a compile error rather than a page of uncolored code. */
   shikiTheme: ShikiThemeId;

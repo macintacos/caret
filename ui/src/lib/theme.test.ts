@@ -165,7 +165,7 @@ describe("THEMES", () => {
 });
 
 // caret's own named color set (EXC-902) — the record the thirteen PaletteInput values
-// are read from, and the one EXC-903's authored shiki themes spend. The token colors
+// are read from, and the one EXC-903's caret shiki themes spend. The token colors
 // are already covered by the two full-token pins above and by the registry-wide
 // invariants below; what those cannot reach is the set's shiki-only half, which never
 // becomes a ColorToken and so never renders on a surface the other tests measure.
@@ -336,7 +336,7 @@ describe("every theme", () => {
   // shiki resolves token colors at highlight time and takes plain 6-digit hex; an
   // alpha suffix on any of these would reach the highlighter as an invalid color.
   // Only the three caret-theme.ts's structural marker rules read reach shiki through
-  // the tokens: caret's authored themes take their colors from the named set (covered
+  // the tokens: caret's own themes take their colors from the named set (covered
   // by "names every color as alpha-free 6-digit hex" above), and a vendor palette
   // highlights with its own upstream `colors`.
   test("supplies alpha-free hex for the tokens shiki reads", () => {

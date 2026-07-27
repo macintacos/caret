@@ -12,7 +12,7 @@
 // registration, never the WASM engine.
 import { registerCustomTheme } from "@pierre/diffs";
 
-import { CARET_SHIKI_THEMES } from "$lib/caret-theme.ts";
+import { REGISTERED_SHIKI_THEMES } from "$lib/caret-theme.ts";
 import { THEMES, type ThemeId } from "$lib/theme.ts";
 
 /** Registers a named theme into the library's shared highlighter. Derived from
@@ -42,10 +42,12 @@ export function caretDiffTheme(id?: ThemeId): {
 // caret's themes as the library expects them: a name plus an async loader
 // returning the theme object. The name is duplicated onto the object because
 // the library resolves a theme by the name it was registered under.
-const caretThemeLoaders: { name: string; load: ThemeLoader }[] = CARET_SHIKI_THEMES.map((theme) => {
-  const name = String(theme.name);
-  return { name, load: async () => ({ ...theme, name }) };
-});
+const caretThemeLoaders: { name: string; load: ThemeLoader }[] = REGISTERED_SHIKI_THEMES.map(
+  (theme) => {
+    const name = String(theme.name);
+    return { name, load: async () => ({ ...theme, name }) };
+  },
+);
 
 let registered = false;
 

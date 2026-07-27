@@ -3,8 +3,8 @@ import { describe, expect, test } from "bun:test";
 import { createHighlighterCore } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 
-import { AUTHORED_SHIKI_THEMES, type AuthoredShikiThemeId } from "$lib/authored-shiki.ts";
-import { CARET_SHIKI_THEMES, shikiThemeFor, shikiThemeForPalette } from "$lib/caret-theme.ts";
+import { CARET_SHIKI_THEMES, type CaretShikiThemeId } from "$lib/caret-shiki.ts";
+import { REGISTERED_SHIKI_THEMES, shikiThemeFor, shikiThemeForPalette } from "$lib/caret-theme.ts";
 import { type ColorToken, type ShikiThemeId, THEME_IDS, THEMES, type ThemeId } from "$lib/theme.ts";
 import { CARET_COLOR_PLACEMENT, CARET_DARK, CARET_LIGHT } from "$lib/themes/caret.ts";
 import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
@@ -18,7 +18,7 @@ import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
 //
 // These tests pin what the resolver adds on top of that lookup: caret's three
 // structural marker rules, appended last for every registered theme. The two
-// halves' own contracts sit either side of it — the authored pair spends the named
+// halves' own contracts sit either side of it — caret's own pair spends the named
 // color set and nothing else, and a vendor palette carries its upstream rule set
 // whole.
 
@@ -31,7 +31,7 @@ const FIELD_TO_TOKEN: Record<string, ColorToken> = {
   fenceBody: "--accent-bright",
 };
 
-/** caret's two palettes paired with the record each authored theme is built from. */
+/** caret's two palettes paired with the record each caret shiki theme is built from. */
 const CARET_RECORDS = [
   ["caret-dark", CARET_DARK],
   ["caret-light", CARET_LIGHT],
@@ -40,16 +40,16 @@ const CARET_RECORDS = [
 /** caret's own palettes name a theme this repo authors; every other palette names a
  * vendor's published one. Narrowing through this predicate rather than a cast is what
  * keeps a caret id from ever being handed to `UPSTREAM_SHIKI_THEMES`. */
-function isAuthored(shikiTheme: ShikiThemeId): shikiTheme is AuthoredShikiThemeId {
-  return shikiTheme in AUTHORED_SHIKI_THEMES;
+function isCaretOwn(shikiTheme: ShikiThemeId): shikiTheme is CaretShikiThemeId {
+  return shikiTheme in CARET_SHIKI_THEMES;
 }
 
 /** The two halves of the registry, partitioned by which map holds the id a palette
  * names — vendor entries paired with that id, so the upstream lookup stays typed. */
-const AUTHORED_IDS = THEME_IDS.filter((id) => isAuthored(THEMES[id].shikiTheme));
+const CARET_IDS = THEME_IDS.filter((id) => isCaretOwn(THEMES[id].shikiTheme));
 const VENDOR_PALETTES = THEME_IDS.flatMap((id) => {
   const shikiTheme = THEMES[id].shikiTheme;
-  return isAuthored(shikiTheme) ? [] : [{ id, shikiTheme }];
+  return isCaretOwn(shikiTheme) ? [] : [{ id, shikiTheme }];
 });
 
 /** How many rules caret appends over the theme a palette names — the two EXC-692 fence
@@ -65,7 +65,7 @@ const STRUCTURAL_SCOPES = [FENCE_MARKERS, FENCE_LANGUAGE, INLINE_RAW];
 
 /** The half of the named color set nothing but the highlighter spends (EXC-902).
  * Read off the placement map rather than re-listed, so a color reclassified there
- * changes what the authored themes are held to. */
+ * changes what caret's shiki themes are held to. */
 const SHIKI_ONLY = Object.entries(CARET_COLOR_PLACEMENT)
   .filter(([, placement]) => placement === "shiki-only")
   .map(([color]) => color as keyof typeof CARET_DARK);
@@ -109,13 +109,13 @@ describe("upstream shiki theme declarations", () => {
     }
   });
 
-  test("caret's own pair is the half that names an authored theme", () => {
+  test("caret's own pair is the half that names a caret shiki theme", () => {
     // Pinned rather than merely counted: which half a palette lands in is a
     // deliberate choice, and this is where a vendor palette quietly pointed at
     // caret's own theme (or the reverse) surfaces. That a named id resolves to a
     // registered theme needs no assertion — `shikiTheme` is typed `ShikiThemeId` and
     // required, so an unregistered id, or none at all, cannot compile.
-    expect(AUTHORED_IDS).toEqual(["caret-dark", "caret-light"]);
+    expect(CARET_IDS).toEqual(["caret-dark", "caret-light"]);
   });
 
   // GitHub publishes two pairs. The unsuffixed `github-light` / `github-dark` are
@@ -136,19 +136,19 @@ describe("upstream shiki theme declarations", () => {
 // from the named color set in themes/caret.ts (EXC-902) — the eleven shiki-only hues
 // spent across a scope set wide enough to tell a type from a function. These pin the
 // asset map's own contract; how a palette reaches it is the resolver's, below.
-describe("authored caret shiki themes", () => {
+describe("caret's own shiki themes", () => {
   test("registers one theme per caret palette, named by its key", () => {
     // Same pin the upstream registry carries: a mis-wired entry (`caret-light`
     // holding the dark theme) would otherwise resolve by the wrong handle.
-    expect(Object.keys(AUTHORED_SHIKI_THEMES)).toEqual(["caret-dark", "caret-light"]);
-    for (const [id, theme] of Object.entries(AUTHORED_SHIKI_THEMES)) {
+    expect(Object.keys(CARET_SHIKI_THEMES)).toEqual(["caret-dark", "caret-light"]);
+    for (const [id, theme] of Object.entries(CARET_SHIKI_THEMES)) {
       expect(theme.name, id).toBe(id);
     }
   });
 
   for (const [id, record] of CARET_RECORDS) {
     describe(id, () => {
-      const theme = AUTHORED_SHIKI_THEMES[id];
+      const theme = CARET_SHIKI_THEMES[id];
 
       test("paints the editor on the record's sunk surface, in its ink", () => {
         // The same two values --paper-sunk / --ink carry, read from the record
@@ -192,7 +192,7 @@ describe("caret-theme ↔ THEMES palette sync", () => {
   // Every palette gets a highlighter theme, not just caret's own pair (EXC-752):
   // a reviewer who picks Dracula reads Dracula-colored code, not amber code.
   test("resolves one shiki theme per registered palette, named by its id", () => {
-    expect(CARET_SHIKI_THEMES.map((theme) => theme.name)).toEqual(THEME_IDS);
+    expect(REGISTERED_SHIKI_THEMES.map((theme) => theme.name)).toEqual(THEME_IDS);
   });
 
   test("highlights a vendor palette in its own colors, not caret's", () => {
@@ -378,7 +378,7 @@ describe("dracula fenced-code block", () => {
 // AC 2: a type reads apart from a function, a number from a string escape, and an
 // attribute from a property. This is where those three pairs are checked against a
 // real grammar rather than read back off the rule table, which would only restate
-// authored-shiki.ts in a second spelling.
+// caret-shiki.ts in a second spelling.
 //
 // A caveat for anyone editing the sample: shiki's JS regex engine — the one caret
 // ships (diffview/shiki-bundle.ts) — resolves some TypeScript constructs to coarser

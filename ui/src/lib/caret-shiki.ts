@@ -23,7 +23,7 @@
 
 import type { ThemeRegistrationRaw } from "shiki/core";
 
-// Both imports are type-only in one direction: theme.ts takes `AuthoredShikiThemeId`
+// Both imports are type-only in one direction: theme.ts takes `CaretShikiThemeId`
 // from here and this module takes its two types from there. `verbatimModuleSyntax`
 // erases both, so the cycle is a source-graph artifact rather than a load order — keep
 // it that way, and never reach for a runtime value across it.
@@ -41,9 +41,9 @@ import { CARET_DARK, CARET_LIGHT, type CaretPalette } from "$lib/themes/caret.ts
  * @param id - The theme's shiki name, which is also its palette id — a highlighter
  * resolves it by the same handle appearance.ts paints with. Typing it `ThemeId` keeps a
  * theme from naming a palette that does not exist; that its key and its `name` agree is
- * pinned by caret-theme.test.ts, and `caretTheme`'s `ThemeId & AuthoredShikiThemeId`
+ * pinned by caret-theme.test.ts, and `caretTheme`'s `ThemeId & CaretShikiThemeId`
  * parameter closes the loop from the palette side. */
-function authoredTheme(id: ThemeId, scheme: Scheme, p: CaretPalette): ThemeRegistrationRaw {
+function caretShikiTheme(id: ThemeId, scheme: Scheme, p: CaretPalette): ThemeRegistrationRaw {
   return {
     name: id,
     type: scheme,
@@ -189,11 +189,11 @@ function authoredTheme(id: ThemeId, scheme: Scheme, p: CaretPalette): ThemeRegis
 
 /** caret's own shiki themes, keyed by the palette id each belongs to. In THEMES order,
  * so this registry and upstream-shiki.ts's read alike. */
-export const AUTHORED_SHIKI_THEMES = {
-  "caret-dark": authoredTheme("caret-dark", "dark", CARET_DARK),
-  "caret-light": authoredTheme("caret-light", "light", CARET_LIGHT),
+export const CARET_SHIKI_THEMES = {
+  "caret-dark": caretShikiTheme("caret-dark", "dark", CARET_DARK),
+  "caret-light": caretShikiTheme("caret-light", "light", CARET_LIGHT),
 } as const;
 
-/** The authored theme ids a palette can point at — caret's own pair, and the half of
+/** The theme ids caret's own palettes point at — caret's own pair, and the half of
  * `ShikiThemeId` that is not a vendor's. */
-export type AuthoredShikiThemeId = keyof typeof AUTHORED_SHIKI_THEMES;
+export type CaretShikiThemeId = keyof typeof CARET_SHIKI_THEMES;
