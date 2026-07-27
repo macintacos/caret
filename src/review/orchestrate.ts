@@ -10,6 +10,9 @@
 
 import { VANITY_HOST } from "@/config/constants.ts";
 import { logFile } from "@/config/paths.ts";
+// Type-only: the review core takes its daemon operations as deps and never imports
+// the daemon at runtime.
+import type { EnsureOptions } from "@/daemon/lifecycle.ts";
 import { type ErrorContext, logDebug, logError, logInfo, shortId } from "@/lib/log.ts";
 import { type Decision, errorMessage, type PlanInput } from "@/lib/types.ts";
 import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "@/plan/format.ts";
@@ -25,8 +28,10 @@ export interface ReviewDeps {
   /** Normalize the agent's raw hook stdin into a core PlanInput. Throws on input
    * that can't be parsed — the throw becomes the fail-safe deny. */
   parseHookInput: (stdin: string) => PlanInput;
-  /** Ensure a daemon is up and return its base URL. */
-  ensureDaemon: () => Promise<string>;
+  /** Ensure a daemon is up and return its base URL. `takeover: false` attaches to
+   * whichever daemon is already serving this world instead of replacing it with
+   * this binary's own (see EnsureOptions) — what a mid-review reconnect wants. */
+  ensureDaemon: (opts?: EnsureOptions) => Promise<string>;
   /** Create the review. `hasLiveClient` (EXC-559) reports whether a UI tab is
    * already polling the daemon; when true the hook skips opening the browser so
    * an open backgrounded tab's away-gated notification isn't pre-empted. */
@@ -164,9 +169,12 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decisi
       } catch (err) {
         if (err instanceof TimeoutError) throw err;
         // Reconnect — label this step so a failed reconnect logs the real
-        // failing op, not the poll it was recovering from.
+        // failing op, not the poll it was recovering from. It ATTACHES rather
+        // than takes over: this client may be an old build whose review outlived
+        // an upgrade, and a reconnect that installed its own daemon would undo
+        // that upgrade on every dropped poll.
         step = "reconnect";
-        baseUrl = await deps.ensureDaemon();
+        baseUrl = await deps.ensureDaemon({ takeover: false });
         step = "longPoll";
       }
     }

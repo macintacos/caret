@@ -43,7 +43,7 @@ function openBrowser(url: string): void {
 export function prodReviewDeps(s: Settings, adapter: AgentAdapter): ReviewDeps {
   return {
     parseHookInput: (stdin) => adapter.parseHookInput(stdin),
-    ensureDaemon: async () => ensureDaemon(await prodEnsureDeps(s)),
+    ensureDaemon: async (opts) => ensureDaemon(await prodEnsureDeps(s), opts),
     postReview,
     longPoll,
     openBrowser,
