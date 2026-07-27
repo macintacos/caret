@@ -1,56 +1,12 @@
-// caret's own two palettes — the reference every other theme is mapped against, and
-// the only pair that names its colors instead of transcribing a vendor's. caret-dark is
-// also the source ui/generate-palette-css.ts emits as app.css's static first-paint
-// fallback.
+// caret's own two palettes — the reference every other theme is mapped against, and the
+// only pair that names its colors instead of transcribing a vendor's. caret-dark is also
+// the source ui/generate-palette-css.ts emits as app.css's static first-paint fallback.
 //
-// The direction is earth pigment (EXC-902). caret's token vocabulary is paper, ink,
-// rule, and mark — a proofing desk — so the palette is the pigment set that desk would
-// hold, and dark mode's page is a dark PAPER (kraft) rather than a neutral void. The
-// hairlines follow it onto bone, because a pure-white rule on brown paper reads cold.
-// Nothing runs at full chroma, and that restraint is what lets twenty-seven colors
-// still read as one page rather than a parade.
-//
-// SURFACES. Dark is kraft: page darkest, code body a step up, cards a step above that.
-// Light is oat — a warm limestone rather than a cool grey, so it reads as caret-dark's
-// sibling (EXC-776): every neutral has R > G > B, subtle enough to carry no visible
-// yellow cast, and theme.test.ts pins R > B on the tokens that reach it.
-//
-// INK. Parchment on dark, near-black umber on light, each at three rungs — body copy,
-// secondary copy, metadata. The rungs clear WCAG AA (AA-large for the faintest) on both
-// chrome surfaces, not just the page, because dialogs and dropdowns sit on the raised
-// one.
-//
-// THE ACCENT is carrot — the color the rest of the chrome's prose calls amber, named
-// here for its pigment: the scarce mark caret spends on the current selection. The syntax
-// half carries its own sienna and ochre so EXC-903's authored themes need not spend the
-// accent on every keyword. Until those land, the seven-role derivation in caret-theme.ts
-// still paints keywords with it.
-//
-// THE SEMANTIC TRIO is deliberately three different pigments rather than three tints of
-// one. `ok` is carrot-top, the green above the root, and it belongs to this family
-// rather than to a generic UI-green set; it cascades into the diff addition tint.
-// `danger` is madder, pulled to the blue side of red so a deletion never reads as
-// an orange mark. `attention` is thistle — the "look here" hue for novelty, which is a
-// different job from selection, and the far side of the wheel from both.
-//
-// THE THREE HUE OVERRIDES name a hue the recipe would otherwise take from a token. The
-// rules ride bone (dark) and a warm umber (light) rather than the ink; the accent wash
-// rides an ember that is deliberately not the accent; the marks ride a lighter amber
-// than the wash, so a highlight sits above the wash it overlaps.
-//
-// THE SYNTAX HALF is eleven hues, and its size is set by what EXC-903's authored themes
-// must tell apart: a type from a function, a number from a string escape, an attribute
-// from a property. Those three are the pairs held apart by hue — never under 157 degrees
-// in either scheme.
-//
-// Three pigments are each spent twice, at different value: thistle on keyword and
-// attention, madder on escape and danger, terre verte on string and ok. Keyword and
-// attention split cleanly across code and chrome. The other two meet on the diff
-// surface, where --ok / --danger reach the code rows as the line tint and gutter bar
-// (styles/diffview.css) — there the chrome hue is a low-alpha wash UNDER text and the
-// syntax hue is the text, so the two never compete as foregrounds.
-//
-// Sizing is calibrated against Catppuccin's 26 named colors per flavor — a count, not a
+// The direction is earth pigment (EXC-902). caret's token vocabulary is paper, ink, rule,
+// and mark — a proofing desk — so the palette is the pigment set that desk would hold,
+// and dark mode's page is a dark PAPER rather than a neutral void. Nothing runs at full
+// chroma, and that restraint is what lets twenty-seven colors read as one page rather
+// than a parade. The count is sized against Catppuccin's 26 per flavor — a count, not a
 // source of hues.
 
 import type { Scheme, Theme, ThemeId } from "$lib/theme.ts";
@@ -61,24 +17,37 @@ import { paletteTheme } from "$lib/themes/recipe.ts";
  * spends. Exported because EXC-903's authored shiki themes read the last group out of
  * it — nothing else in the UI reaches past `Theme.tokens`. */
 export interface CaretPalette {
-  // Surfaces. `PaletteInput` documents what each one carries; the one thing worth
-  // repeating here is that `sunk` is the surface every syntax hue below is measured on.
+  // The three surfaces. Dark is kraft: the page darkest, the plan document a step up, the
+  // chrome a step above that. Light is oat — a warm limestone rather than a cool grey, so
+  // it reads as caret-dark's sibling (EXC-776); theme.test.ts pins R > B on every light
+  // neutral that reaches a token. `PaletteInput` documents what each surface carries; what
+  // matters here is that `sunk` is the plan document, and so the surface every syntax hue
+  // below is measured on.
   paper: string;
   raised: string;
   sunk: string;
 
-  // The ink ramp: body copy, then secondary copy, then metadata.
+  // The ink ramp: body copy, then secondary copy, then metadata. The rungs clear WCAG AA
+  // (AA-large for the faintest) on both chrome surfaces, not just the page, because
+  // dialogs and dropdowns sit on the raised one.
   ink: string;
   inkSoft: string;
   inkFaint: string;
 
-  // The accent trio.
+  // The accent trio — carrot, the pigment the rest of the chrome's prose calls amber, and
+  // the scarce mark caret spends on the current selection. The syntax half carries its own
+  // sienna and ochre so EXC-903's authored themes need not spend the accent on every
+  // keyword; until those land, the seven-role derivation in caret-theme.ts still paints
+  // keywords with it.
   accent: string;
   accentBright: string;
   accentInk: string;
 
-  // Hue overrides: a hue the recipe's derived washes ride instead of the token they
-  // would otherwise default to.
+  // Hue overrides: a hue the recipe's derived washes ride instead of the token they would
+  // otherwise default to. The rules ride bone (dark) and a warm umber (light) rather than
+  // the ink, because a pure-white hairline on brown paper reads cold; the accent wash
+  // rides an ember that is deliberately not the accent; the marks ride a lighter amber
+  // than the wash, so a highlight sits above the wash it overlaps.
   ruleHue: string;
   washHue: string;
   markHue: string;
@@ -86,12 +55,26 @@ export interface CaretPalette {
   // The mid-tone neutral behind the orphaned-comment mark.
   neutral: string;
 
-  // The semantic trio.
+  // The semantic trio — three different pigments rather than three tints of one. `ok` is
+  // carrot-top, the green above the root, and it cascades into the diff addition tint.
+  // `danger` is madder, pulled to the blue side of red so a deletion never reads as an
+  // orange mark. `attention` is thistle — the "look here" hue for novelty, a different job
+  // from selection, and the far side of the wheel from both.
   ok: string;
   danger: string;
   attention: string;
 
-  // The syntax half — shiki-only, and measured against `sunk`.
+  // The syntax half — shiki-only, and measured against `sunk`. Eleven hues, because
+  // EXC-903's authored themes must tell a type from a function, a number from a string
+  // escape, and an attribute from a property; those three pairs are the ones held apart by
+  // hue, never under 157 degrees in either scheme.
+  //
+  // Three pigments are each spent twice, at different value: thistle on keyword and
+  // attention, madder on escape and danger, terre verte on string and ok. Keyword and
+  // attention split cleanly across code and chrome. The other two meet on the diff surface,
+  // where --ok / --danger reach the code rows as the line tint and gutter bar
+  // (styles/diffview.css) — there the chrome hue is a low-alpha wash UNDER text and the
+  // syntax hue is the text, so the two never compete as foregrounds.
   keyword: string;
   type: string;
   func: string;
