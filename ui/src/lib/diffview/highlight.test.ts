@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 
 import { highlightExcerpt } from "$lib/diffview/highlight.ts";
-import { THEMES } from "$lib/theme.ts";
 
 // Thin glue over shiki; the full visual render is covered by e2e. These pin the
 // contract: highlighted HTML for a known grammar, plain fallback otherwise.
@@ -18,8 +17,10 @@ test("falls back to plain text for an unknown grammar (still renders the code)",
 
 // The excerpt popover opens over the plan view, so it has to read as the same
 // palette — a vendor theme's excerpt is highlighted in that theme (EXC-752), not
-// in caret's colors at the matching scheme.
+// in caret's colors at the matching scheme. Pinned on Dracula's own pink keyword
+// (EXC-896) rather than on a caret token: the derivation maps no pink at all, so
+// only the upstream theme can put it in the HTML.
 test("highlights the excerpt in the named theme", async () => {
   const html = await highlightExcerpt("const x = 1;", "typescript", "dracula");
-  expect(html).toContain(THEMES.dracula.tokens["--paper-sunk"]);
+  expect(html.toLowerCase()).toContain("#ff79c6");
 });

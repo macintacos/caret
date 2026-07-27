@@ -43,8 +43,10 @@
 //
 // app.css's static first-paint / no-JS fallback is a :root block emitted from
 // THEMES["caret-dark"] by ui/generate-palette-css.ts, so the palette is never
-// transcribed into CSS by hand. The shiki highlighter derives its palettes from
-// THEMES here (see caret-theme.ts), so there is one place colors live.
+// transcribed into CSS by hand. The shiki highlighter resolves its themes from
+// THEMES here (see caret-theme.ts) — caret's own pair derived from these tokens,
+// a vendor palette from the upstream theme it names — so there is one place
+// colors live.
 //
 // This module touches `document` only at call time — including the default `target`
 // expression, which a parameter default evaluates per call, not at module load — so
