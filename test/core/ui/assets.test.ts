@@ -8,7 +8,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { assetsFromDist } from "@/ui/assets.ts";
+import { assetsFromDist, uiDistCandidates } from "@/ui/assets.ts";
 
 function fakeDist(files: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), "caret-ui-dist-"));
@@ -89,4 +89,30 @@ test("assetsFromDist returns undefined for an empty dir", () => {
   } finally {
     rmSync(dist, { recursive: true, force: true });
   }
+});
+
+// The two distributions that read a dist tree off disk put this module at
+// different depths under the caret root, and no single relative path reaches
+// ui/dist from both: the run-from-source bundle collapses to <root>/dist/cli.js
+// (bun leaves import.meta.url pointing at the OUTPUT file), while a checkout
+// keeps it at <root>/src/ui/assets.ts. Each layout is pinned on its own — a
+// resolver offering one candidate serves the daemon's placeholder for whichever
+// layout it isn't. `mise run smoke bundle` is the end-to-end counterpart.
+test("uiDistCandidates reaches <root>/ui/dist from the bundle layout", () => {
+  expect(uiDistCandidates("file:///pkg/dist/cli.js")).toContain("/pkg/ui/dist");
+});
+
+test("uiDistCandidates reaches <root>/ui/dist from the source layout", () => {
+  expect(uiDistCandidates("file:///repo/src/ui/assets.ts")).toContain("/repo/ui/dist");
+});
+
+// Order is load-bearing, not cosmetic: in a checkout the bundle candidate names
+// <root>/src/ui/dist, which does not exist, so the source candidate must still be
+// reached. Nearest-first keeps the bundle — the layout with no other fallback,
+// since its execPath is bun's own bin dir — from depending on a miss upstream.
+test("uiDistCandidates offers the bundle candidate before the source one", () => {
+  expect(uiDistCandidates("file:///repo/src/ui/assets.ts")).toEqual([
+    "/repo/src/ui/dist",
+    "/repo/ui/dist",
+  ]);
 });
