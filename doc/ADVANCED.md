@@ -440,14 +440,26 @@ runs `bin/caret install --from-local`, which reuses the fresh `bin/caret-native`
 `bin/ui` (never rebuilding them — a missing artifact is an error telling you to run
 `mise run build`), registers a local dev marketplace whose plugin source symlinks to the
 checkout, reinstalls the caret plugin through Claude Code's native plugin system, installs
-into OpenCode from that local binary, acquires rumdl, and prewarms so the just-built
-binary takes over the daemon — so after a `/reload-plugins` (or a Claude Code restart)
-`/caret:*` resolves to your local build. The handoff retires a current-build daemon
-automatically; a long-running daemon from an older build (no retire endpoint, no lock
-file) can't be retired and keeps serving until you restart it once — `kill` its pid, then
-any review respawns the fresh build. It mutates your Claude plugin state and daemon, so it
-is for local development only, not CI; run `bin/caret install --from-local --dry-run` to
-preview the install steps without performing them.
+into OpenCode by pointing its `plugin` array at the checkout (`file:<checkout>`, which
+OpenCode symlinks — so later rebuilds need no reinstall), acquires rumdl, and prewarms so
+the just-built binary takes over the daemon — so after a `/reload-plugins` (or a Claude
+Code restart) `/caret:*` resolves to your local build. The handoff retires a current-build
+daemon automatically; a long-running daemon from an older build (no retire endpoint, no
+lock file) can't be retired and keeps serving until you restart it once — `kill` its pid,
+then any review respawns the fresh build.
+
+**Abandoned reviews hold an old build alive.** A `caret review` blocks until the reviewer
+decides or `[review].timeout_s` elapses (an hour by default), so closing the browser tab
+instead of deciding leaves the process running. A reconnecting client only ever _attaches_
+to whichever daemon is serving, but one built before that rule takes over instead: it
+respawns its own daemon every time the poll drops, which quietly reinstates the old build
+no matter how often you rebuild. If a fresh build's UI never appears, look for stragglers
+with `ps -eo pid,command | grep caret` and kill the `caret review` processes, not just the
+daemon.
+
+`mise run build --install` mutates your Claude plugin state and daemon, so it is for local
+development only, not CI; run `bin/caret install --from-local --dry-run` to preview the
+install steps without performing them.
 
 `mise run dev` is self-contained — no separate `bin/caret daemon` needed. It starts an
 isolated caret daemon as `caret daemon --ephemeral`, which binds an OS-assigned port; the

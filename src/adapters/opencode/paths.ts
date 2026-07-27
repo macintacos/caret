@@ -14,6 +14,30 @@ import { basename, dirname, join } from "node:path";
  * specifier loads it; OpenCode installs it and its deps into its own cache. */
 export const CARET_PACKAGE = "@macintacos/caret";
 
+/** The `plugin` array entry `--from-local` writes: npm's `file:` protocol pointed at a
+ * caret checkout. OpenCode hands the specifier to its package installer and SYMLINKS the
+ * target into its cache, so the plugin module it loads is the checkout's own file — its
+ * `import.meta.url` sits in the checkout, and the `../bin/caret` the plugin resolves is
+ * that checkout's shim. A rebuild is therefore picked up with no reinstall, which is the
+ * whole point of the dev loop. caret's `package.json` `main` is what makes OpenCode
+ * accept the directory as a plugin ("server target"). */
+export function localPluginSpecifier(repoDir: string): string {
+  return `file:${repoDir}`;
+}
+
+/** Whether a `plugin` array entry is a local-path specifier rather than a package name.
+ * Only `file:` is produced by caret; the check is deliberately narrow, so an unfamiliar
+ * entry is left alone rather than guessed at. */
+export function isLocalPluginSpecifier(spec: string): boolean {
+  return spec.startsWith("file:");
+}
+
+/** The checkout path a local specifier points at — the inverse of
+ * `localPluginSpecifier`. Undefined for anything that isn't one. */
+export function localSpecifierPath(spec: string): string | undefined {
+  return isLocalPluginSpecifier(spec) ? spec.slice("file:".length) : undefined;
+}
+
 /** OpenCode's command dir name. OpenCode scans both `commands/` and (for backwards
  * compatibility) `command/`; caret uses the canonical plural form. */
 export const COMMAND_DIRNAME = "commands";

@@ -75,13 +75,32 @@ function isForeignWorld(h: HealthBody, currentStateDir: string): boolean {
 const FOREIGN_WORLD_ERROR =
   "port serves a different caret world (state dir mismatch) — set CARET_PORT to a free port";
 
-/** Ensure a caret daemon of THIS build owns the port: reuse a same-build daemon,
- * gracefully retire a stale one and spawn a fresh daemon, and clean orphan locks
- * (EXC-406). Never denies a review because takeover failed — an unretireable
+/** How a caller wants the port resolved when a daemon of another build holds it. */
+export interface EnsureOptions {
+  /** Whether to retire a different-build daemon and spawn this binary's own.
+   * Defaults to true — starting a review, or prewarming, is when a build claims
+   * the port. Pass false to ATTACH instead: return whichever same-world daemon is
+   * answering, whatever its build, and spawn only when nothing is.
+   *
+   * A mid-review reconnect passes false, and the distinction is load-bearing. The
+   * reconnecting client may be an OLD build whose review has outlived an upgrade;
+   * letting it take over would install that old build as the port's owner, and
+   * because it reconnects on every drop it would keep winning against the current
+   * one indefinitely. Recovery must not double as installation. Attaching costs
+   * nothing: reviews are persisted per world, so any same-world daemon can serve
+   * the decision. */
+  takeover?: boolean;
+}
+
+/** Ensure a caret daemon owns the port and return its base URL: reuse a same-build
+ * daemon, gracefully retire a stale one and spawn a fresh daemon, and clean orphan
+ * locks (EXC-406). `takeover: false` skips the retire-and-replace half — see
+ * EnsureOptions. Never denies a review because takeover failed — an unretireable
  * stale daemon is reused (serving its old UI) rather than left unreachable. The
  * one exception: a foreign world's daemon (EXC-461) is neither reused nor
  * retired — that's a config conflict, and cross-attaching IS the bug. */
-export async function ensureDaemon(deps: EnsureDeps): Promise<string> {
+export async function ensureDaemon(deps: EnsureDeps, opts: EnsureOptions = {}): Promise<string> {
+  const takeover = opts.takeover ?? true;
   for (let attempt = 0; attempt < deps.maxAttempts; attempt++) {
     const h = await deps.health(deps.baseUrl);
     if (h && h.service === "caret") {
@@ -94,6 +113,9 @@ export async function ensureDaemon(deps: EnsureDeps): Promise<string> {
       if (h.build === deps.currentBuild && h.version === deps.currentVersion) {
         return deps.baseUrl;
       }
+      // Attaching caller: this daemon is not ours, but it is this world's and it
+      // is answering, which is all a resumed poll needs.
+      if (!takeover) return deps.baseUrl;
       const retired = await deps.retire(deps.baseUrl, deps.readLock());
       // A pre-fix daemon (no /api/retire, no lock) can't be retired: reuse it
       // (stale UI) rather than deny the review or spin retrying — strictly no

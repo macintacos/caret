@@ -16,11 +16,11 @@ import { parse as parseJsonc } from "jsonc-parser";
 
 import type { InstallProbe } from "@/adapters/adapter.ts";
 import {
-  CARET_PACKAGE,
   CONFIG_FILENAMES,
   existingOpencodeCachePackageDirs,
   opencodeConfigDir,
 } from "@/adapters/opencode/paths.ts";
+import { readCachedCaretVersion } from "@/adapters/opencode/upgrade.ts";
 
 /** Best-effort read of caret's OpenCode install state. Every miss degrades to
  * "unknown". Reads ONLY caret's own cache package / the user's plugin array. */
@@ -29,7 +29,9 @@ export function readOpencodeInstallState(): InstallProbe {
   if (!existsSync(dir)) {
     return { pluginVersion: "unknown", pluginEnabled: "unknown", hookInUserSettings: "unknown" };
   }
-  const version = readCachedVersion(existingOpencodeCachePackageDirs());
+  // The probe's vocabulary is "unknown", the upgrade module's is null; the boundary is
+  // this one coercion.
+  const version = readCachedCaretVersion(existingOpencodeCachePackageDirs()) ?? "unknown";
   return {
     pluginVersion: version,
     // A `packages/<specifier>/` dir survives an interrupted install, so presence alone
@@ -38,27 +40,6 @@ export function readOpencodeInstallState(): InstallProbe {
     // caret listed in the user's `plugin` array == caret is configured for OpenCode.
     hookInUserSettings: readCaretInPluginArray(dir),
   };
-}
-
-/** caret's resolved version from the first candidate whose top-level shim manifest
- * names caret under `dependencies` — one file, no node_modules walk. OpenCode records
- * that entry with an empty save prefix, so the value is an exact version, not a range.
- * "unknown" when no candidate yields one. */
-function readCachedVersion(cacheDirs: readonly string[]): string | "unknown" {
-  for (const d of cacheDirs) {
-    try {
-      const deps = (
-        JSON.parse(readFileSync(join(d, "package.json"), "utf-8")) as {
-          dependencies?: Record<string, unknown>;
-        }
-      ).dependencies;
-      const v = deps?.[CARET_PACKAGE];
-      if (typeof v === "string" && v.length > 0) return v;
-    } catch {
-      // missing / unreadable / unparseable manifest — try the next candidate.
-    }
-  }
-  return "unknown";
 }
 
 /** Whether caret is listed in any OpenCode config file's `plugin` array. Scans every

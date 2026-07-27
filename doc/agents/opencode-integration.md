@@ -134,11 +134,19 @@ string" shape before writing, so it can't corrupt a user's config.
   ships in the `@macintacos/caret` npm package and resolves its binary and version at
   runtime from that package (§ Runtime resolution + update check); only the command files
   still carry a substituted `__CARET_BIN__` marker.
-- **Install (`caret install --target opencode`)** — adds `@macintacos/caret` to the user's
-  OpenCode `plugin` array (comment-preserving, via `jsonc-parser` in `config-plugin.ts`)
-  and deploys the `/caret:*` command **files**; `--uninstall` reverses both. OpenCode
-  itself installs the package and its deps into its cache on the next start — caret writes
-  no config-dir manifest and runs no `bun install`. `caret install --target claude`
+- **Install (`caret install --target opencode`)** — adds caret to the user's OpenCode
+  `plugin` array (comment-preserving, via `jsonc-parser` in `config-plugin.ts`) as either
+  `@macintacos/caret` or, under `--from-local`, `file:<checkout>` (§ The local form) and
+  deploys the `/caret:*` command **files**; `--uninstall` reverses both. OpenCode itself
+  installs the package and its deps into its cache on the next start — caret writes no
+  config-dir manifest and runs no `bun install`. Between the two writes it runs an upgrade
+  check: OpenCode resolves an array entry once and caches it forever (§ The cache layout),
+  so re-adding the entry never moves anyone off install-day's version. `upgrade.ts` weighs
+  the entry and that cache against npm's `latest` — npm rather than GitHub releases,
+  because `latest` is what OpenCode would re-resolve to — and a stale result offers to
+  clear the cached copy, or to bump a user-authored pin. That offer is a prompt, since
+  `~/.cache/opencode` is not caret's to delete unasked; `--refresh` pre-answers it, and
+  off a TTY install names the gap and changes nothing. `caret install --target claude`
   registers caret with Claude Code via its plugin CLI. The command lives in
   `src/commands/install/`: `index.ts` is the orchestrator (it parses `--target` — a comma
   list of the registry's ids — resolves the targets, and dispatches), beside the target
@@ -168,6 +176,31 @@ the file-deploy machinery (the config-dir manifest, the caret-run `bun install`,
 `stripNonDefaultExports`). The other two rejected options still stand: (a) a
 `permission.ask` per-edit gate (wrong semantic) and (b) re-implementing the daemon
 round-trip in the plugin (duplication).
+
+### The local form: `--from-local`
+
+`caret install --from-local` writes `file:<checkout>` as the array entry instead of the
+package name. That is what makes `mise run build --install` put the developer's build in
+front of OpenCode: OpenCode hands the specifier to its package installer, which
+**symlinks** the target into the cache
+(`packages/file:/abs/path/node_modules/@macintacos/caret -> <checkout>`). The plugin
+module OpenCode loads is therefore the checkout's own file, its `import.meta.url` sits in
+the checkout, and the `../bin/caret` that `resolveCaretBin` falls back to is the
+checkout's shim — so `bin/caret-native`, freshly compiled. Because it is a symlink, every
+later rebuild is picked up with no reinstall. `package.json` `main` is what makes OpenCode
+accept a directory as a plugin ("server target"); a bare `exports["."]` is rejected.
+
+Caret owns **exactly one** array entry, so install rewrites across forms: `--from-local`
+drops a package entry, a published install drops a checkout entry, and `--uninstall`
+removes either. Both present would load two caret plugins, each registering the review
+tool. A `file:` entry pointing somewhere that is not a caret checkout (no
+`opencode/caret.plugin.ts`) belongs to another plugin and is left alone. A version **pin**
+is not a different form — `@macintacos/caret@0.8.1` is the user's pin and survives a
+re-install.
+
+The upgrade check is skipped in local mode, and now for a load-bearing reason rather than
+convenience: a checkout entry re-resolves to that checkout on every OpenCode start, so it
+cannot go stale and npm's published version says nothing about it.
 
 ### The cache layout, and what the probe may conclude from it
 

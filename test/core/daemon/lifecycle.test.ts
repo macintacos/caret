@@ -166,6 +166,63 @@ test("ensureDaemon reuses a same-build daemon (no spawn, no retire)", async () =
   expect(retires).toBe(0);
 });
 
+// `takeover: false` is what a mid-review reconnect passes. The daemon answering may
+// be a NEWER build that took the port during an upgrade; retiring it would put this
+// (older) client's build back in charge, and since a reconnect repeats on every
+// dropped poll it would keep undoing the upgrade. Falsifiable: with the flag ignored,
+// the daemon is retired on every attempt until maxAttempts, so `retires` climbs off 0.
+test("ensureDaemon with takeover:false attaches to a different-build daemon", async () => {
+  let retires = 0;
+  let spawns = 0;
+  const url = await ensureDaemon(
+    ensureDeps({
+      health: async () => ({ service: "caret", build: "b2", version: "v2", stateDir: "/my/world" }),
+      retire: async () => {
+        retires++;
+        return true;
+      },
+      spawn: () => spawns++,
+    }),
+    { takeover: false },
+  );
+  expect(url).toBe("http://localhost:42718");
+  expect(retires).toBe(0);
+  expect(spawns).toBe(0);
+});
+
+// Attaching is not "never spawn": a daemon that died with nothing replacing it leaves
+// the review unservable, and this client is then the only candidate.
+test("ensureDaemon with takeover:false still spawns when nothing holds the port", async () => {
+  let spawns = 0;
+  const url = await ensureDaemon(
+    ensureDeps({
+      health: async () => (spawns === 0 ? null : { service: "caret", build: "b1", version: "v1" }),
+      spawn: () => spawns++,
+    }),
+    { takeover: false },
+  );
+  expect(spawns).toBe(1);
+  expect(url).toBe("http://localhost:42718");
+});
+
+// The foreign-world refusal outranks attaching: cross-attaching another world's
+// daemon writes this world's reviews into its state dir (EXC-461).
+test("ensureDaemon with takeover:false still refuses a foreign world", async () => {
+  await expect(
+    ensureDaemon(
+      ensureDeps({
+        health: async () => ({
+          service: "caret",
+          build: "b2",
+          version: "v2",
+          stateDir: "/other/world",
+        }),
+      }),
+      { takeover: false },
+    ),
+  ).rejects.toThrow(/different caret world/);
+});
+
 test("ensureDaemon retires a stale-build daemon, then reuses the fresh respawn", async () => {
   let retires = 0;
   let spawns = 0;

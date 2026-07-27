@@ -7,8 +7,9 @@
 // Resolution preserves today's graceful-degradation chain:
 //   1. the build-generated manifest module — the compiled binary, and a source
 //      run after `mise run build bin` has emitted it;
-//   2. ui/dist/ enumerated on disk relative to the source tree — dev/e2e runs
-//      that built the UI but not the manifest;
+//   2. ui/dist/ enumerated on disk relative to this module — the run-from-source
+//      bundle's sibling tree, and dev/e2e runs that built the UI but not the
+//      manifest (uiDistCandidates covers both layouts);
 //   3. a dist tree copied beside the binary (dirname(execPath)/ui/) — the
 //      safety-net analogue of the former bin/index.html fallback;
 //   4. undefined — no UI; the daemon serves its built-in placeholder at /.
@@ -59,9 +60,24 @@ export function assetsFromDist(distDir: string): UiAssets | undefined {
   return Object.keys(map).length > 0 ? fromPathMap(map) : undefined;
 }
 
+/** The ui/dist directories to try for the module at `moduleUrl`, nearest first.
+ * Two distributions read a dist tree off disk and they put this module at
+ * different depths under the caret root, so no single relative path reaches
+ * ui/dist from both: the run-from-source bundle collapses to <root>/dist/cli.js —
+ * bun leaves `import.meta.url` pointing at the OUTPUT file, not this source — and
+ * a checkout keeps it at <root>/src/ui/assets.ts. Whichever candidate does not
+ * match the live layout names a directory that does not exist, so offering both
+ * costs a failed stat rather than risking the wrong tree. */
+export function uiDistCandidates(moduleUrl: string): string[] {
+  return [
+    fileURLToPath(new URL("../ui/dist", moduleUrl)), // bundle: <root>/dist/cli.js
+    fileURLToPath(new URL("../../ui/dist", moduleUrl)), // checkout: <root>/src/ui/assets.ts
+  ];
+}
+
 /** Resolve the UI assets, or undefined when no UI is available (the daemon then
- * serves its placeholder). Tries the embedded manifest, then ui/dist/ in the
- * source tree, then a dist tree beside the binary. */
+ * serves its placeholder). Tries the embedded manifest, then ui/dist/ relative to
+ * this module, then a dist tree beside the binary. */
 export async function loadUiAssets(): Promise<UiAssets | undefined> {
   try {
     const mod = await import("@/ui-manifest.generated.ts");
@@ -71,9 +87,10 @@ export async function loadUiAssets(): Promise<UiAssets | undefined> {
   } catch {
     // No generated manifest (dev / fresh checkout) — fall through.
   }
-  const srcDist = fileURLToPath(new URL("../../ui/dist", import.meta.url));
-  const fromSrc = assetsFromDist(srcDist);
-  if (fromSrc) return fromSrc;
+  for (const dir of uiDistCandidates(import.meta.url)) {
+    const fromDist = assetsFromDist(dir);
+    if (fromDist) return fromDist;
+  }
   const besideDist = join(dirname(process.execPath), "ui");
   return assetsFromDist(besideDist);
 }

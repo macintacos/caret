@@ -255,6 +255,31 @@ test("a transient drop reconnects and keeps polling (no premature deny)", async 
   expect(out.behavior).toBe("allow");
 });
 
+// Starting a review claims the port for this build; resuming one must not. A client
+// whose review outlived a caret upgrade is running the OLD build, and a reconnect
+// that took over would reinstall that old daemon — on every dropped poll, so it wins
+// against the new build indefinitely and every later review is served stale. Pinning
+// the flag per call is what makes "recovery is not installation" falsifiable.
+test("the startup ensure takes over, the reconnect only attaches", async () => {
+  const takeovers: (boolean | undefined)[] = [];
+  let calls = 0;
+  await runReview(
+    stdin,
+    reviewDeps({
+      ensureDaemon: async (opts) => {
+        takeovers.push(opts?.takeover);
+        return "http://x";
+      },
+      longPoll: async () => {
+        calls++;
+        if (calls === 1) throw new Error("socket closed");
+        return allow;
+      },
+    }),
+  );
+  expect(takeovers).toEqual([undefined, false]);
+});
+
 test("the poll loop is bounded by timeoutMs (endless heartbeats → deny)", async () => {
   const out = await runReview(
     stdin,
