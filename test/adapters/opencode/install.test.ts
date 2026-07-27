@@ -27,7 +27,30 @@ afterEach(async () => {
 });
 
 const configDir = () => join(tmp, "opencode");
-const cachePkg = () => join(tmp, "cache", "opencode", "node_modules", "@macintacos/caret");
+
+/** OpenCode's plugin cache: one dir per RAW specifier under `packages/`, each holding
+ * a top-level shim manifest whose `dependencies` entry names the resolved version. */
+const cachePkg = (specifier: string) => join(tmp, "cache", "opencode", "packages", specifier);
+
+/** The shim manifest OpenCode's Arborist reify writes into a cache dir — an exact
+ * version under the package NAME, with no range prefix. */
+const shim = (version: string) => ({ dependencies: { "@macintacos/caret": version } });
+
+/** Create `specifier`'s cache dir holding `manifest` as its top-level package.json. */
+async function writeCachePkg(specifier: string, manifest: unknown): Promise<void> {
+  await mkdir(cachePkg(specifier), { recursive: true });
+  await writeFile(join(cachePkg(specifier), "package.json"), JSON.stringify(manifest));
+}
+
+/** A config dir listing caret in its `plugin` array, selected via OPENCODE_CONFIG_DIR.
+ * Scaffolding for the cache cases: the probe returns all-unknown without a config dir,
+ * but these cases assert on the cache, not on the array scan. */
+async function configWithCaret(): Promise<void> {
+  const dir = configDir();
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, "opencode.json"), JSON.stringify({ plugin: ["@macintacos/caret"] }));
+  process.env.OPENCODE_CONFIG_DIR = dir;
+}
 
 test("everything is unknown when the config dir is absent", () => {
   process.env.OPENCODE_CONFIG_DIR = configDir(); // never created
@@ -38,13 +61,9 @@ test("everything is unknown when the config dir is absent", () => {
   });
 });
 
-test("reports the cache version + enabled, and caret configured in the plugin array", async () => {
-  const dir = configDir();
-  await mkdir(dir, { recursive: true });
-  await writeFile(join(dir, "opencode.json"), JSON.stringify({ plugin: ["@macintacos/caret"] }));
-  await mkdir(cachePkg(), { recursive: true });
-  await writeFile(join(cachePkg(), "package.json"), JSON.stringify({ version: "1.2.3" }));
-  process.env.OPENCODE_CONFIG_DIR = dir;
+test("reports the bare specifier dir's version + enabled, and caret configured", async () => {
+  await configWithCaret();
+  await writeCachePkg("@macintacos/caret", shim("1.2.3"));
   expect(readOpencodeInstallState()).toEqual({
     pluginVersion: "1.2.3",
     pluginEnabled: true,
@@ -52,15 +71,56 @@ test("reports the cache version + enabled, and caret configured in the plugin ar
   });
 });
 
+test("finds a pinned specifier dir when the bare one is absent", async () => {
+  await configWithCaret();
+  await writeCachePkg("@macintacos/caret@latest", shim("0.2.0"));
+  const s = readOpencodeInstallState();
+  expect(s.pluginVersion).toBe("0.2.0");
+  expect(s.pluginEnabled).toBe(true);
+});
+
+test("the bare specifier dir wins when a pinned one also exists", async () => {
+  await configWithCaret();
+  await writeCachePkg("@macintacos/caret", shim("0.8.1"));
+  await writeCachePkg("@macintacos/caret@latest", shim("0.2.0"));
+  const s = readOpencodeInstallState();
+  expect(s.pluginVersion).toBe("0.8.1");
+  expect(s.pluginEnabled).toBe(true);
+});
+
+test("a sibling package that merely starts with caret's leaf is not a candidate", async () => {
+  await configWithCaret();
+  // Same scope, leaf `caret-tools` — only `caret` and `caret@…` are caret's dirs. The
+  // manifest names caret so a prefix scan missing the `@` would wrongly resolve it.
+  await writeCachePkg("@macintacos/caret-tools", shim("9.9.9"));
+  const s = readOpencodeInstallState();
+  expect(s.pluginVersion).toBe("unknown");
+  expect(s.pluginEnabled).toBe(false);
+});
+
 test("configured but not yet installed: array entry present, cache still empty", async () => {
-  const dir = configDir();
-  await mkdir(dir, { recursive: true });
-  await writeFile(join(dir, "opencode.json"), JSON.stringify({ plugin: ["@macintacos/caret"] }));
-  process.env.OPENCODE_CONFIG_DIR = dir;
+  await configWithCaret();
   const s = readOpencodeInstallState();
   expect(s.hookInUserSettings).toBe(true); // configured
   expect(s.pluginEnabled).toBe(false); // not installed until OpenCode restarts
   expect(s.pluginVersion).toBe("unknown");
+});
+
+test("a failed install — cache dir present, no dependency entry — is not enabled", async () => {
+  await configWithCaret();
+  await writeCachePkg("@macintacos/caret", { name: "opencode-shim" });
+  const s = readOpencodeInstallState();
+  expect(s.pluginVersion).toBe("unknown");
+  expect(s.pluginEnabled).toBe(false);
+});
+
+test("an unparseable shim manifest degrades to unknown", async () => {
+  await configWithCaret();
+  await mkdir(cachePkg("@macintacos/caret"), { recursive: true });
+  await writeFile(join(cachePkg("@macintacos/caret"), "package.json"), "{ not json");
+  const s = readOpencodeInstallState();
+  expect(s.pluginVersion).toBe("unknown");
+  expect(s.pluginEnabled).toBe(false);
 });
 
 test("config present without a caret array entry → not configured", async () => {

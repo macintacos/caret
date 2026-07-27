@@ -149,10 +149,10 @@ string" shape before writing, so it can't corrupt a user's config.
 ## Distribution choice (amended by EXC-794)
 
 caret installs into OpenCode as a first-class `plugin` array entry —
-`plugin: ["@macintacos/caret"]` — which OpenCode `bun install`s (package + deps) into its
-own cache and loads. The **package entrypoint is the plugin** (`package.json` `exports`
-`.` → `opencode/index.ts`), so a **bare** specifier loads it: Bun's dynamic `import()`
-does not support subpath imports, and OpenCode's `parsePluginSpecifier` yields only
+`plugin: ["@macintacos/caret"]` — which OpenCode installs (package + deps) into its own
+cache and loads. The **package entrypoint is the plugin** (`package.json` `exports` `.` →
+`opencode/index.ts`), so a **bare** specifier loads it: Bun's dynamic `import()` does not
+support subpath imports, and OpenCode's `parsePluginSpecifier` yields only
 `{ pkg, version }`, so a `@macintacos/caret/opencode` subpath is not viable. The plugin's
 runtime import (`@opencode-ai/plugin`, for `tool.schema`'s zod — zod is not
 cross-instance-compatible, so the `plan` arg must use OpenCode's zod) is a real
@@ -168,6 +168,26 @@ the file-deploy machinery (the config-dir manifest, the caret-run `bun install`,
 `stripNonDefaultExports`). The other two rejected options still stand: (a) a
 `permission.ask` per-edit gate (wrong semantic) and (b) re-implementing the daemon
 round-trip in the plugin (duplication).
+
+### The cache layout, and what the probe may conclude from it
+
+OpenCode keys that cache by the **verbatim specifier string** from the `plugin` array, one
+directory per entry under `packages/` — `<cache>/opencode/packages/<specifier>/`, honoring
+`XDG_CACHE_HOME` with the same precedence caret's own helper uses. There is no
+`node_modules` segment at that level. The resolved version lives in that directory's
+top-level shim manifest under `dependencies[<package name>]`, and it is an exact version
+rather than a range, so one file read answers "which caret is installed" with no
+`node_modules` walk.
+
+Two consequences the probe (`readOpencodeInstallState`) is built around. Because the key
+is the raw string, a bare `@macintacos/caret` and a pinned `@macintacos/caret@latest` are
+two sibling directories that can coexist — so `existingOpencodeCachePackageDirs`
+(`src/adapters/opencode/paths.ts`) *lists* the parent instead of probing one path, and the
+version reported is the first candidate that resolves (bare first, since that is what
+`caret install --target opencode` writes). And a directory can exist with no manifest
+entry at all after an interrupted install — OpenCode's own installed-check is
+`existsSafe(join(dir, "node_modules", name))`, not the directory itself — so the probe
+treats a resolved version, never directory presence, as proof of install.
 
 ## Runtime resolution + update check (EXC-794)
 

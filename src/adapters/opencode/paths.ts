@@ -5,9 +5,9 @@
 // those live through this single module, so the reader and the writer can never
 // disagree about a path.
 
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 /** caret's npm package — the entry users add to OpenCode's `plugin` array. Its
  * package entrypoint (package.json `exports`) IS the OpenCode plugin, so a bare
@@ -61,11 +61,38 @@ export function commandDir(configDir: string): string {
   return join(configDir, COMMAND_DIRNAME);
 }
 
-/** OpenCode's plugin cache dir for caret's package — where OpenCode `bun install`s
- * an array plugin. Respects XDG_CACHE_HOME, else ~/.cache. The discovery probe reads
- * caret's installed version from the package.json here. */
-export function opencodeCachePackageDir(pkg: string = CARET_PACKAGE): string {
+/** OpenCode's plugin cache root: where OpenCode installs each `plugin` array entry,
+ * one directory per RAW specifier string. Respects XDG_CACHE_HOME, else ~/.cache —
+ * the same precedence OpenCode itself uses to resolve the dir. */
+function opencodeCachePackagesDir(): string {
   const xdg = process.env.XDG_CACHE_HOME?.trim();
-  const base = xdg || join(homedir(), ".cache");
-  return join(base, "opencode", "node_modules", pkg);
+  return join(xdg || join(homedir(), ".cache"), "opencode", "packages");
+}
+
+/** The cache dir for the BARE `pkg` specifier — what `caret install --target opencode`'s
+ * array entry produces, and the prefix every pinned variant extends. */
+export function opencodeCachePackageDir(pkg: string = CARET_PACKAGE): string {
+  return join(opencodeCachePackagesDir(), pkg);
+}
+
+/** Every cache dir on disk for `pkg`: the bare specifier dir first, then any pinned
+ * `<pkg>@<version>` sibling, ordered lexicographically by name — NOT by version, since
+ * the caller takes the first candidate that resolves. OpenCode names each dir after the
+ * VERBATIM specifier, and a pin's version segment is arbitrary (`@0.7.3`, `@latest`), so
+ * listing is the only way to find one. Empty when nothing is listable. */
+export function existingOpencodeCachePackageDirs(pkg: string = CARET_PACKAGE): string[] {
+  const bare = opencodeCachePackageDir(pkg);
+  const parent = dirname(bare);
+  const leaf = basename(bare);
+  // Entry types are deliberately not filtered: a symlinked cache dir reports as a
+  // symlink rather than a directory, and a non-directory named like a candidate just
+  // fails its manifest read downstream.
+  let names: string[];
+  try {
+    names = readdirSync(parent);
+  } catch {
+    return []; // parent dir absent or unreadable — no candidates.
+  }
+  const pinned = names.filter((n) => n.startsWith(`${leaf}@`)).sort();
+  return [...(names.includes(leaf) ? [bare] : []), ...pinned.map((n) => join(parent, n))];
 }
