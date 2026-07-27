@@ -152,7 +152,7 @@
   .tp-appbar-spacer {
     flex: 1 1 auto;
   }
-  /* A small notification indicator — the violet --attention hue. */
+  /* A small notification indicator — the verdigris --attention hue. */
   .tp-notif {
     flex: none;
     width: 6px;

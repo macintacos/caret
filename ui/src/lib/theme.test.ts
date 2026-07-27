@@ -134,7 +134,7 @@ describe("THEMES", () => {
       "--mark-orphan": "#9a8c7e29",
       "--ok": "#5fc464",
       "--danger": "#f0697a",
-      "--attention": "#bb92e6",
+      "--attention": "#3fbda9",
       "--shadow-card": "0 1px 2px #00000066, 0 10px 30px #00000080",
     });
   });
@@ -158,7 +158,7 @@ describe("THEMES", () => {
       "--mark-orphan": "#7a6f6329",
       "--ok": "#2f7d3a",
       "--danger": "#b8323f",
-      "--attention": "#7440b5",
+      "--attention": "#0a5f57",
       "--shadow-card": "0 1px 2px #0000000f, 0 8px 24px #00000014",
     });
   });

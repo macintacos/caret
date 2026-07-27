@@ -11,7 +11,7 @@
 // overlay1: caret paints secondary copy and metadata on the RAISED surface too
 // (dialogs, dropdowns, cards), where a flavor's own surface tone eats the contrast
 // the deeper pair keeps. `blue` is the attention hue — Catppuccin's own notice
-// color, and the analog of caret's violet against an amber accent, leaving `mauve`
+// color, and the analog of caret's verdigris against an amber accent, leaving `mauve`
 // alone as the selection mark.
 //
 // One place the palette is followed rather than corrected: Latte's `green` and

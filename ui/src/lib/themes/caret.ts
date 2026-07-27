@@ -8,6 +8,11 @@
 // chroma, and that restraint is what lets twenty-seven colors read as one page rather
 // than a parade. The count is sized against Catppuccin's 26 per flavor — a count, not a
 // source of hues.
+//
+// Nothing sits on the violet arc. A pigment box has nothing there — the historical purples
+// are a shellfish and an aniline dye — so a violet keyword read as the one synthetic in the
+// set. Keyword takes red ochre instead, the oldest pigment there is, and attention takes
+// verdigris.
 
 import type { AuthoredShikiThemeId } from "$lib/authored-shiki.ts";
 import type { Scheme, Theme, ThemeId } from "$lib/theme.ts";
@@ -58,8 +63,8 @@ export interface CaretPalette {
   // The semantic trio — three different pigments rather than three tints of one. `ok` is
   // carrot-top, the green above the root, and it cascades into the diff addition tint.
   // `danger` is madder, pulled to the blue side of red so a deletion never reads as an
-  // orange mark. `attention` is thistle — the "look here" hue for novelty, a different job
-  // from selection, and the far side of the wheel from both.
+  // orange mark. `attention` is verdigris — the "look here" hue for novelty, a different
+  // job from selection, and the far side of the wheel from both.
   ok: string;
   danger: string;
   attention: string;
@@ -69,8 +74,8 @@ export interface CaretPalette {
   // an attribute from a property; those three pairs are the ones held apart by hue, never
   // under 157 degrees in either scheme.
   //
-  // Three pigments are each spent twice, at different value: thistle on keyword and
-  // attention, madder on escape and danger, terre verte on string and ok. Keyword and
+  // Three pigments are each spent twice, at different value: verdigris on number and
+  // attention, madder on escape and danger, terre verte on string and ok. Number and
   // attention split cleanly across code and chrome. The other two meet on the diff surface,
   // where --ok / --danger reach the code rows as the line tint and gutter bar
   // (styles/diffview.css) — there the chrome hue is a low-alpha wash UNDER text and the
@@ -104,15 +109,15 @@ export const CARET_DARK: CaretPalette = {
   neutral: "#9a8c7e", // dust
   ok: "#5fc464", // carrot-top
   danger: "#f0697a", // madder
-  attention: "#bb92e6", // thistle
-  keyword: "#b982e8", // thistle, deepened — the spine of a statement
+  attention: "#3fbda9", // verdigris, deepened
+  keyword: "#d4877f", // red ochre — the spine of a statement
   type: "#7fc0dc", // woad, the cool anchor
   func: "#e2bd6a", // ochre
   variable: "#ece2d4", // bone, barely off the ink — identifiers keep the page calm
   property: "#aecada", // flax — keys read as pale types
   attribute: "#f08a5e", // sienna
   string: "#8ec97e", // terre verte, lighter and a shade yellower than carrot-top
-  escape: "#f78a94", // madder, lifted — an escape has to break its string
+  escape: "#ef8098", // madder, lifted past the ochre — an escape has to break its string
   number: "#5fcabb", // verdigris
   comment: "#7f7466", // umber — the pencil note, held to the large-text floor
   punctuation: "#a89a90", // stone
@@ -134,15 +139,15 @@ export const CARET_LIGHT: CaretPalette = {
   neutral: "#7a6f63", // dust
   ok: "#2f7d3a", // carrot-top
   danger: "#b8323f", // madder
-  attention: "#7440b5", // thistle
-  keyword: "#6a37a0", // thistle, deepened
+  attention: "#0a5f57", // verdigris, deepened
+  keyword: "#9c4238", // red ochre
   type: "#26648c", // woad
   func: "#7d5a05", // ochre
   variable: "#2a221c", // umber, barely off the ink
   property: "#456075", // flax
   attribute: "#984314", // sienna
   string: "#3d7040", // terre verte
-  escape: "#ad2f3f", // madder, deepened
+  escape: "#a82d4a", // madder, deepened past the ochre
   number: "#0d6d66", // verdigris
   comment: "#8a7d6d", // umber, recessive
   punctuation: "#665b52", // stone
