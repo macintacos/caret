@@ -74,6 +74,12 @@ export interface CaretPalette {
   // an attribute from a property; those three pairs are the ones held apart by hue, never
   // under 157 degrees in either scheme.
   //
+  // The eight colored ones sit in a narrow, HIGH chroma band — the three neutrals below
+  // (variable, comment, punctuation) sit well under it. Holding the band tight is what
+  // keeps eleven hues from reading as a parade; sitting it high is what keeps them off
+  // pastel. Gruvbox is the proof the two are compatible: it is the earthiest theme in wide
+  // use and it runs hotter than this.
+  //
   // Three pigments are each spent twice, at different value: verdigris on number and
   // attention, madder on escape and danger, terre verte on string and ok. Number and
   // attention split cleanly across code and chrome. The other two meet on the diff surface,
@@ -110,17 +116,17 @@ export const CARET_DARK: CaretPalette = {
   ok: "#5fc464", // carrot-top
   danger: "#f0697a", // madder
   attention: "#3fbda9", // verdigris, deepened
-  keyword: "#d4877f", // red ochre — the spine of a statement
-  type: "#7fc0dc", // woad, the cool anchor
-  func: "#e2bd6a", // ochre
+  keyword: "#dd7a6c", // red ochre — the spine of a statement
+  type: "#6ec4e4", // woad, the cool anchor
+  func: "#ecc25c", // ochre
   variable: "#ece2d4", // bone, barely off the ink — identifiers keep the page calm
-  property: "#aecada", // flax — keys read as pale types
-  attribute: "#f08a5e", // sienna
-  string: "#8ec97e", // terre verte, lighter and a shade yellower than carrot-top
-  escape: "#ef8098", // madder, lifted past the ochre — an escape has to break its string
-  number: "#5fcabb", // verdigris
+  property: "#a3d4ec", // flax — keys read as pale types
+  attribute: "#f5834f", // sienna
+  string: "#92d474", // terre verte, lighter and a shade yellower than carrot-top
+  escape: "#f56f8e", // madder, lifted past the ochre — an escape has to break its string
+  number: "#4bd2bd", // verdigris
   comment: "#7f7466", // umber — the pencil note, held to the large-text floor
-  punctuation: "#a89a90", // stone
+  punctuation: "#b0a094", // stone
 };
 
 export const CARET_LIGHT: CaretPalette = {
@@ -140,15 +146,15 @@ export const CARET_LIGHT: CaretPalette = {
   ok: "#2f7d3a", // carrot-top
   danger: "#b8323f", // madder
   attention: "#0a5f57", // verdigris, deepened
-  keyword: "#9c4238", // red ochre
-  type: "#26648c", // woad
+  keyword: "#9a2f22", // red ochre
+  type: "#145d8f", // woad
   func: "#7d5a05", // ochre
   variable: "#2a221c", // umber, barely off the ink
-  property: "#456075", // flax
-  attribute: "#984314", // sienna
-  string: "#3d7040", // terre verte
-  escape: "#a82d4a", // madder, deepened past the ochre
-  number: "#0d6d66", // verdigris
+  property: "#35617e", // flax
+  attribute: "#963c07", // sienna
+  string: "#2c7331", // terre verte
+  escape: "#ab1f43", // madder, deepened past the ochre
+  number: "#06716a", // verdigris
   comment: "#8a7d6d", // umber, recessive
   punctuation: "#665b52", // stone
 };
