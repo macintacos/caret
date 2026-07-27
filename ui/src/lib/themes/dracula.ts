@@ -29,4 +29,5 @@ export const dracula = paletteTheme({
   ok: "#50fa7b", // Green
   danger: "#ff5555", // Red
   attention: "#ffb86c", // Orange
+  shikiTheme: "dracula",
 });

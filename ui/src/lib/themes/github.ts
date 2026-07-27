@@ -30,6 +30,9 @@ export const githubLight = paletteTheme({
   ok: "#1a7f37", // fgColor.success
   danger: "#d1242f", // fgColor.danger
   attention: "#9a6700", // fgColor.attention
+  // The `-default` pair, not the unsuffixed one: the latter is the legacy Primer
+  // theme, and these surfaces come from current Primer.
+  shikiTheme: "github-light-default",
 });
 
 export const githubDark = paletteTheme({
@@ -49,4 +52,5 @@ export const githubDark = paletteTheme({
   ok: "#3fb950", // fgColor.success
   danger: "#f85149", // fgColor.danger
   attention: "#d29922", // fgColor.attention
+  shikiTheme: "github-dark-default",
 });

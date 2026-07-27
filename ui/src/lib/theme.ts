@@ -43,8 +43,10 @@
 //
 // app.css's static first-paint / no-JS fallback is a :root block emitted from
 // THEMES["caret-dark"] by ui/generate-palette-css.ts, so the palette is never
-// transcribed into CSS by hand. The shiki highlighter derives its palettes from
-// THEMES here (see caret-theme.ts), so there is one place colors live.
+// transcribed into CSS by hand. The shiki highlighter resolves its themes from
+// THEMES here (see caret-theme.ts) — caret's own pair derived from these tokens,
+// a vendor palette from the upstream theme it names — so there is one place
+// colors live.
 //
 // This module touches `document` only at call time — including the default `target`
 // expression, which a parameter default evaluates per call, not at module load — so
@@ -59,6 +61,7 @@ import {
 } from "$lib/themes/catppuccin.ts";
 import { dracula } from "$lib/themes/dracula.ts";
 import { githubDark, githubLight } from "$lib/themes/github.ts";
+import type { UpstreamShikiThemeId } from "$lib/upstream-shiki.ts";
 
 export type ThemeId =
   | "caret-dark"
@@ -109,6 +112,10 @@ export interface Theme {
   scheme: Scheme;
   /** CSS custom property → value, covering every color token app.css declares. */
   tokens: Record<ColorToken, string>;
+  /** The vendor's own published shiki theme, for a palette named after one
+   * (EXC-896). caret's own pair names none and gets the derivation instead; see
+   * caret-theme.ts. */
+  shikiTheme?: UpstreamShikiThemeId;
 }
 
 // Insertion order is display order: caret's own pair first, then each vendor family

@@ -3,17 +3,21 @@ import { describe, expect, test } from "bun:test";
 import { createHighlighterCore } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 
-import { CARET_SHIKI_THEMES, shikiThemeFor } from "$lib/caret-theme.ts";
-import { type ColorToken, THEME_IDS, THEMES, type ThemeId } from "$lib/theme.ts";
+import { CARET_SHIKI_THEMES, shikiThemeFor, shikiThemeForPalette } from "$lib/caret-theme.ts";
+import { type ColorToken, THEME_IDS, THEMES, type Theme, type ThemeId } from "$lib/theme.ts";
+import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
 
-// caret-theme.ts derives one shiki palette per registered theme from the THEMES
-// color tokens in theme.ts (EXC-730) — the single source of truth for every color
-// the UI paints.
+// caret-theme.ts resolves one shiki theme per registered palette, two ways. A
+// vendor palette resolves to that vendor's own published theme (EXC-896); caret's
+// pair, which has no upstream theme, is DERIVED from the THEMES color tokens in
+// theme.ts (EXC-730) — the single source of truth for every color the UI paints.
 // shiki resolves token colors at highlight time and can't read CSS custom
-// properties, so it reads the hex out of THEMES at module load. These tests pin
-// that derivation: every color a theme emits must be one of the seven mapped
-// tokens, and each mapped token must actually be used — so renaming or dropping a
-// token, or leaking a stray color in, fails here.
+// properties, so the hex is read out of THEMES at module load.
+//
+// These tests pin both halves: the derivation emits exactly the seven mapped
+// tokens and nothing else, so renaming or dropping a token (or leaking a stray
+// color in) fails here; and a vendor palette carries its upstream rule set with
+// caret's two fence overrides appended last.
 
 // Each Palette field maps to one THEMES custom property (the mapping
 // caret-theme.ts's paletteFromTheme performs).
@@ -26,6 +30,18 @@ const FIELD_TO_TOKEN: Record<string, ColorToken> = {
   entity: "--accent-bright",
   string: "--ok",
 };
+
+/** The palettes that name an upstream theme, paired with the id they name — and
+ * the ones that name none, which keep the derivation. */
+const VENDOR_PALETTES = THEME_IDS.flatMap((id) => {
+  const shikiTheme = THEMES[id].shikiTheme;
+  return shikiTheme ? [{ id, shikiTheme }] : [];
+});
+const DERIVED_IDS = THEME_IDS.filter((id) => THEMES[id].shikiTheme === undefined);
+
+/** How many rules caret appends over an upstream theme — the two EXC-692 fence rules
+ * plus the inline-code backtick (caret-theme.ts's `structuralMarkerRules`). */
+const STRUCTURAL_RULES = 3;
 
 /** The expected color for each Palette field, sourced from a theme's tokens. The
  * ColorToken-keyed tokens map guarantees each lookup resolves. */
@@ -54,10 +70,45 @@ function themeColors(theme: ThemeLike): Set<string> {
   return colors;
 }
 
+// EXC-896: a vendor palette names that vendor's published shiki theme, so picking
+// Dracula highlights code in real Dracula rather than in caret's seven-role
+// derivation wearing Dracula's hues. caret's own pair names none — there is no
+// upstream theme to point at, so they keep the derivation.
+describe("upstream shiki theme declarations", () => {
+  test("every registry key is that theme's own upstream name", () => {
+    for (const [id, theme] of Object.entries(UPSTREAM_SHIKI_THEMES)) {
+      // A mis-wired import (`dracula: githubDarkDefault`) would otherwise render
+      // the wrong theme with nothing to catch it.
+      expect(theme.name, id).toBe(id);
+    }
+  });
+
+  test("every palette either names an upstream theme or is one of caret's own", () => {
+    // Pinned rather than merely counted: a new palette has to make a deliberate
+    // choice instead of silently falling through to the derivation. That a named id
+    // resolves to a registered theme needs no assertion — `shikiTheme` is typed
+    // `keyof typeof UPSTREAM_SHIKI_THEMES`, so an unregistered id cannot compile.
+    expect(DERIVED_IDS).toEqual(["caret-dark", "caret-light"]);
+  });
+
+  // GitHub publishes two pairs. The unsuffixed `github-light` / `github-dark` are
+  // the legacy Primer themes (dark background #24292e); caret's GitHub palettes are
+  // built from current Primer, which matches the `-default` pair (#0d1117). The key
+  // union catches a nonexistent id but not a valid-yet-wrong-vintage one, so pin the
+  // choice by value.
+  test("the GitHub palettes name current Primer, not the legacy pair", () => {
+    expect(THEMES["github-dark"].shikiTheme).toBe("github-dark-default");
+    expect(THEMES["github-light"].shikiTheme).toBe("github-light-default");
+    expect(UPSTREAM_SHIKI_THEMES["github-dark-default"].colors?.["editor.background"]).toBe(
+      "#0d1117",
+    );
+  });
+});
+
 describe("caret-theme ↔ THEMES palette sync", () => {
   // Every palette gets a highlighter theme, not just caret's own pair (EXC-752):
   // a reviewer who picks Dracula reads Dracula-colored code, not amber code.
-  test("derives one shiki theme per registered palette, named by its id", () => {
+  test("resolves one shiki theme per registered palette, named by its id", () => {
     expect(CARET_SHIKI_THEMES.map((theme) => theme.name)).toEqual(THEME_IDS);
   });
 
@@ -67,13 +118,19 @@ describe("caret-theme ↔ THEMES palette sync", () => {
     );
   });
 
+  // Both resolution paths preserve the scheme, so a light theme can never be
+  // rendered on a dark palette (or the reverse) without failing here.
   for (const id of THEME_IDS) {
-    describe(id, () => {
-      const theme: ThemeLike & { type?: string } = shikiThemeFor(id);
+    test(`${id} carries its palette's scheme as the shiki theme type`, () => {
+      expect(shikiThemeFor(id).type).toBe(THEMES[id].scheme);
+    });
+  }
 
-      test("carries its palette's scheme as the shiki theme type", () => {
-        expect(theme.type).toBe(THEMES[id].scheme);
-      });
+  // The derivation's contract, and caret's own pair is all of it: every color the
+  // theme emits is one of the seven mapped tokens, and every mapped token is used.
+  for (const id of DERIVED_IDS) {
+    describe(id, () => {
+      const theme: ThemeLike = shikiThemeFor(id);
 
       test("editor background/foreground match the THEMES tokens", () => {
         const expected = expectedPalette(id);
@@ -103,10 +160,71 @@ describe("caret-theme ↔ THEMES palette sync", () => {
     });
   }
 
+  for (const { id, shikiTheme } of VENDOR_PALETTES) {
+    describe(id, () => {
+      // Resolved fresh rather than read off shikiThemeFor's cached object: shiki's
+      // normalizeTheme unshifts a default fg/bg rule into the `settings` array it
+      // is handed, in place, so the cached theme's rule count grows by one the
+      // first time any highlighter registers it. The resolver's output is the
+      // contract; the extra rule is shiki's bookkeeping, and harmless — it carries
+      // no scope, which textmate reads as the theme's default fg/bg rather than as
+      // a rule competing with the others.
+      const theme = shikiThemeForPalette(THEMES[id]);
+
+      test("carries the whole upstream rule set, plus caret's structural markers", () => {
+        const upstream = UPSTREAM_SHIKI_THEMES[shikiTheme];
+        // Same precedence withStructuralOverrides applies, so the expected length is
+        // computed the way production computes it rather than paraphrasing it.
+        const upstreamRules = upstream.settings ?? upstream.tokenColors ?? [];
+        expect(theme.settings).toHaveLength(upstreamRules.length + STRUCTURAL_RULES);
+      });
+
+      test("emits syntax colors the seven-token derivation cannot produce", () => {
+        const mapped = new Set(Object.values(expectedPalette(id)));
+        const unmapped = (theme.settings ?? []).filter((rule) => {
+          const fg = rule.settings?.foreground?.toLowerCase();
+          return fg !== undefined && !mapped.has(fg);
+        });
+        // The point of the swap: Dracula's pink keyword is a color the seven
+        // mapped tokens have no way to name.
+        expect(unmapped.length).toBeGreaterThan(0);
+      });
+
+      // shiki is last-match-wins, so appending caret's markers is what makes them
+      // win over whatever the upstream theme says about those scopes.
+      test("appends caret's structural marker rules last, in order", () => {
+        const tokens = THEMES[id].tokens;
+        const [markers, language, raw] = (theme.settings ?? []).slice(-STRUCTURAL_RULES);
+        expect(markers?.scope).toEqual([
+          "markup.fenced_code.block.markdown punctuation.definition.markdown",
+        ]);
+        expect(markers?.settings.foreground).toBe(tokens["--ink-faint"]);
+        expect(language?.scope).toEqual(["fenced_code.block.language"]);
+        expect(language?.settings.foreground).toBe(tokens["--accent"]);
+        expect(language?.settings.fontStyle).toBe("bold");
+        expect(raw?.scope).toEqual(["punctuation.definition.raw.markdown"]);
+        expect(raw?.settings.foreground).toBe(tokens["--ink-soft"]);
+      });
+    });
+  }
+
   test("the two caret themes use distinct palettes (light vs dark do not collapse)", () => {
     expect(shikiThemeFor("caret-light").colors?.["editor.background"]).not.toBe(
       shikiThemeFor("caret-dark").colors?.["editor.background"],
     );
+  });
+
+  // The fallback is what caret's own pair rides, but it is a property of the
+  // resolver rather than of those two ids — so drive it with a palette that would
+  // otherwise resolve upstream.
+  test("a palette naming no upstream theme falls back to the derivation", () => {
+    const synthetic: Theme = { ...THEMES.dracula, shikiTheme: undefined };
+    const fallback = shikiThemeForPalette(synthetic);
+    expect(fallback.settings?.length).toBe(
+      shikiThemeForPalette(THEMES["caret-dark"]).settings?.length,
+    );
+    const allowed = new Set(Object.values(expectedPalette("dracula")));
+    for (const color of themeColors(fallback)) expect(allowed).toContain(color);
   });
 });
 
@@ -150,5 +268,72 @@ describe("caret-theme fenced-code fence line", () => {
     const expected = expectedPalette("caret-light");
     const code = (await tokenizeFence())[1]?.find((t) => t.content === "code");
     expect(code?.color?.toLowerCase()).toBe(expected.entity);
+  });
+});
+
+// fileRefTag.ts tags the token that BEGINS at a file reference's start column — the
+// column past the opening backtick — so the backtick has to be a token of its own.
+// Whether it is depends on the THEME, not the grammar: shiki merges adjacent tokens
+// that style identically, and every upstream theme colors
+// `punctuation.definition.raw.markdown` the same as `markup.inline.raw`. Without
+// caret's override the whole `` `path` `` collapses into one token starting at the
+// backtick, no token begins at the path, and the file icon, pointer cursor, and hover
+// chip all silently vanish while the click target survives (EXC-687, EXC-840). No
+// color assertion can see that, so pin the boundary itself.
+describe("inline-code file references stay tokenized for fileRefTag", () => {
+  const LINE = "See `ui/src/lib/theme.ts` for details.";
+  const PATH_COL = LINE.indexOf("`") + 1;
+
+  let shared: Awaited<ReturnType<typeof createHighlighterCore>> | undefined;
+  async function tokenize(id: ThemeId) {
+    shared ??= await createHighlighterCore({
+      themes: THEME_IDS.map(shikiThemeFor),
+      langs: [import("shiki/langs/markdown.mjs")],
+      engine: createJavaScriptRegexEngine(),
+    });
+    return shared.codeToTokensBase(LINE, { lang: "markdown", theme: id })[0] ?? [];
+  }
+
+  for (const id of THEME_IDS) {
+    test(`${id} emits a token beginning at the path`, async () => {
+      // The same running-length walk tagTokenAt performs over the rendered spans.
+      const starts = new Set<number>();
+      let col = 0;
+      for (const token of await tokenize(id)) {
+        starts.add(col);
+        col += token.content.length;
+      }
+      expect(starts).toContain(PATH_COL);
+    });
+  }
+});
+
+// The vendor half of the same fence line. caret's two appended rules still win on
+// the fence itself, while the block's body is tokenized by the embedded TypeScript
+// grammar and colored by real Dracula — `const` renders Dracula's pink, which the
+// seven-token derivation maps nowhere.
+describe("dracula fenced-code block", () => {
+  async function tokenizeFence() {
+    const hl = await createHighlighterCore({
+      themes: [shikiThemeFor("dracula")],
+      langs: [import("shiki/langs/markdown.mjs"), import("shiki/langs/typescript.mjs")],
+      engine: createJavaScriptRegexEngine(),
+    });
+    const md = ["```ts", "const x = 1", "```"].join("\n");
+    return hl.codeToTokensBase(md, { lang: "markdown", theme: "dracula" });
+  }
+
+  test("keeps caret's fence treatment over the upstream theme", async () => {
+    const expected = expectedPalette("dracula");
+    const [line1] = await tokenizeFence();
+    expect(line1?.find((t) => t.content === "```")?.color?.toLowerCase()).toBe(expected.comment);
+    const lang = line1?.find((t) => t.content === "ts");
+    expect(lang?.color?.toLowerCase()).toBe(expected.keyword);
+    expect((lang?.fontStyle ?? 0) & 2).toBe(2);
+  });
+
+  test("colors the code body in real Dracula", async () => {
+    const body = (await tokenizeFence())[1]?.find((t) => t.content === "const");
+    expect(body?.color?.toLowerCase()).toBe("#ff79c6");
   });
 });

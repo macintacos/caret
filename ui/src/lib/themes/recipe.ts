@@ -11,9 +11,10 @@
 // overrides below rather than by writing its tokens out by hand.
 
 import type { ColorToken, Scheme, Theme, ThemeId } from "$lib/theme.ts";
+import type { UpstreamShikiThemeId } from "$lib/upstream-shiki.ts";
 
-/** The colors a palette decides for itself. Everything else in a `Theme` is
- * derived from these by `paletteTheme`. */
+/** The colors a palette decides for itself, plus the upstream shiki theme it names.
+ * Everything else in a `Theme` is derived from these by `paletteTheme`. */
 export interface PaletteInput {
   id: ThemeId;
   /** Human label shown in the Settings dropdown. */
@@ -56,6 +57,11 @@ export interface PaletteInput {
   /** The hue the two marks ride. Falls back to `washHue`, then `accent`, so a
    * palette whose marks and wash share a hue declares it once. */
   markHue?: string;
+
+  /** The vendor's own published shiki theme, when there is one (EXC-896). A
+   * palette that names one highlights code with it; one that names none — caret's
+   * own pair — gets the seven-role derivation in caret-theme.ts instead. */
+  shikiTheme?: UpstreamShikiThemeId;
 }
 
 // caret-dark's and caret-light's shadows. Black alphas, so they carry no hue and
@@ -100,5 +106,11 @@ export function paletteTheme(input: PaletteInput): Theme {
     "--attention": input.attention,
     "--shadow-card": SHADOW[input.scheme],
   };
-  return { id: input.id, label: input.label, scheme: input.scheme, tokens };
+  return {
+    id: input.id,
+    label: input.label,
+    scheme: input.scheme,
+    tokens,
+    shikiTheme: input.shikiTheme,
+  };
 }

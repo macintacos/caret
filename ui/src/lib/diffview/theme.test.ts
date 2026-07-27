@@ -53,4 +53,21 @@ describe("registerCaretDiffThemes", () => {
       expect(loaded.name, id).toBe(id);
     }
   });
+
+  // The diff view is the second surface the upstream swap has to reach (EXC-896):
+  // what the library loads for a vendor palette is that vendor's own theme, not
+  // caret's seven-role derivation. Pinned on Dracula's pink keyword, which the
+  // derivation maps nowhere.
+  test("loads a vendor palette's upstream theme, not caret's derivation", async () => {
+    const loaders = new Map<string, () => Promise<unknown>>();
+    registerCaretDiffThemes((name, load) => {
+      loaders.set(name, load);
+    });
+
+    const loaded = (await loaders.get("dracula")?.()) as {
+      settings?: Array<{ settings?: { foreground?: string } }>;
+    };
+    const colors = (loaded.settings ?? []).map((rule) => rule.settings?.foreground?.toLowerCase());
+    expect(colors).toContain("#ff79c6");
+  });
 });
