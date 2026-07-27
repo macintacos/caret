@@ -106,15 +106,15 @@ export interface CaretPalette {
 }
 
 export const CARET_DARK: CaretPalette = {
-  paper: "#0d0b08", // kraft — the darkest stock, and what accentInk paints back onto
-  raised: "#1f1a15", // kraft, two steps up: cards, dialogs, dropdowns
-  sunk: "#15110d", // kraft, one step up: the code body lifts off the page
+  paper: "#0a0806", // kraft — the darkest stock, and what accentInk paints back onto
+  raised: "#191410", // kraft, two steps up: cards, dialogs, dropdowns
+  sunk: "#100d0a", // kraft, one step up: the code body lifts off the page
   ink: "#f7f2ea", // parchment
   inkSoft: "#bcb0a1", // parchment, half-tone
   inkFaint: "#918576", // parchment, quarter-tone
   accent: "#ff8f3d", // carrot
   accentBright: "#ffb277", // carrot, lifted
-  accentInk: "#0d0b08", // the page, painted back onto the accent
+  accentInk: "#0a0806", // the page, painted back onto the accent
   ruleHue: "#f2e7d5", // bone — a white hairline on brown paper reads cold
   washHue: "#f2842f", // ember, a shade off the accent so the wash is its own color
   markHue: "#ffa64d", // amber, a step above the wash so a mark reads over it
@@ -131,14 +131,14 @@ export const CARET_DARK: CaretPalette = {
   string: "#8ec97e", // terre verte, lighter and a shade yellower than carrot-top
   escape: "#f78a94", // madder, lifted — an escape has to break its string
   number: "#5fcabb", // verdigris
-  comment: "#857a6e", // umber — the pencil note, held to the large-text floor
+  comment: "#7f7466", // umber — the pencil note, held to the large-text floor
   punctuation: "#a89a90", // stone
 };
 
 export const CARET_LIGHT: CaretPalette = {
-  paper: "#fdfbf6", // oat
-  raised: "#fffefb", // oat, bleached
-  sunk: "#f7f2e8", // oat, recessed: light inverts the surface order dark uses
+  paper: "#fefcf8", // oat
+  raised: "#fffefc", // oat, bleached
+  sunk: "#faf6ec", // oat, recessed: light inverts the surface order dark uses
   ink: "#191310", // umber, near-black
   inkSoft: "#544b43", // umber, half-tone
   inkFaint: "#847a70", // umber, quarter-tone

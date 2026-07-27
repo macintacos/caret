@@ -117,9 +117,9 @@ describe("THEMES", () => {
   // surfaces as a changed byte rather than a subtly-off hairline.
   test("caret-dark's full token set", () => {
     expect(THEMES["caret-dark"].tokens).toEqual({
-      "--paper": "#0d0b08",
-      "--paper-raised": "#1f1a15",
-      "--paper-sunk": "#15110d",
+      "--paper": "#0a0806",
+      "--paper-raised": "#191410",
+      "--paper-sunk": "#100d0a",
       "--ink": "#f7f2ea",
       "--ink-soft": "#bcb0a1",
       "--ink-faint": "#918576",
@@ -128,7 +128,7 @@ describe("THEMES", () => {
       "--accent": "#ff8f3d",
       "--accent-bright": "#ffb277",
       "--accent-wash": "#f2842f29",
-      "--accent-ink": "#0d0b08",
+      "--accent-ink": "#0a0806",
       "--mark": "#ffa64d2e",
       "--mark-active": "#ffa64d57",
       "--mark-orphan": "#9a8c7e29",
@@ -141,9 +141,9 @@ describe("THEMES", () => {
 
   test("caret-light's full token set", () => {
     expect(THEMES["caret-light"].tokens).toEqual({
-      "--paper": "#fdfbf6",
-      "--paper-raised": "#fffefb",
-      "--paper-sunk": "#f7f2e8",
+      "--paper": "#fefcf8",
+      "--paper-raised": "#fffefc",
+      "--paper-sunk": "#faf6ec",
       "--ink": "#191310",
       "--ink-soft": "#544b43",
       "--ink-faint": "#847a70",
