@@ -9,6 +9,7 @@ import { expect, test } from "bun:test";
 import {
   addPluginToConfigText,
   findPluginEntry,
+  pluginEntries,
   removePluginFromConfigText,
   setPluginVersionInConfigText,
   splitPluginSpecifier,
@@ -156,6 +157,25 @@ test("set preserves comments and sibling keys in a jsonc config", () => {
     theme: "dark",
     plugin: ["opencode-wakatime", `${PKG}@0.8.1`],
   });
+});
+
+// A local `file:` entry's tail is a filesystem path, and a directory may legitimately
+// contain an `@` — a worktree named `caret@fix`, a `~/src/work@home` tree. The npm split
+// would read that as a pin and truncate the path, which would make caret remove and
+// rewrite an entry it should have recognized as already correct. Falsifiable: without the
+// `file:` guard, `pkg` comes back as `file:/Users/j/src/caret` and `version` as `fix`.
+test("splitPluginSpecifier never splits a local path on an @ in a directory name", () => {
+  const spec = "file:/Users/j/src/caret@fix";
+  expect(splitPluginSpecifier(spec)).toEqual({ pkg: spec, version: null });
+});
+
+test("pluginEntries lists the array's string entries and ignores the rest", () => {
+  const src = JSON.stringify({ plugin: ["a", 42, "file:/x", { b: 1 }] });
+  expect(pluginEntries(src)).toEqual(["a", "file:/x"]);
+});
+
+test("pluginEntries reads an absent config as no entries", () => {
+  expect(pluginEntries(null)).toEqual([]);
 });
 
 // Minimal comment stripper so a jsonc body can be JSON.parsed for structural checks.

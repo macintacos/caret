@@ -8,6 +8,8 @@
 
 import { applyEdits, type JSONPath, modify, parse } from "jsonc-parser";
 
+import { isLocalPluginSpecifier } from "@/adapters/opencode/paths.ts";
+
 const FORMATTING = { insertSpaces: true, tabSize: 2 } as const;
 
 /** The current `plugin` array as a plain array (empty when absent/not an array). */
@@ -23,6 +25,10 @@ function pluginArray(text: string): unknown[] {
  * `@`, so the whole string is the package and the version is null. The version segment
  * is returned verbatim — `latest` and `0.8.1` are both just what the user wrote. */
 export function splitPluginSpecifier(spec: string): { pkg: string; version: string | null } {
+  // A local specifier is never split: its tail is a filesystem path, and a directory may
+  // legitimately contain an `@` (a worktree named `caret@fix`, a `~/src/work@home` tree)
+  // which the npm split would mistake for a pin and truncate.
+  if (isLocalPluginSpecifier(spec)) return { pkg: spec, version: null };
   const from = spec.startsWith("@") ? spec.indexOf("/") : 0;
   if (from === -1) return { pkg: spec, version: null }; // malformed scoped name
   const at = spec.indexOf("@", from + 1);
@@ -74,6 +80,15 @@ export function findPluginEntry(existing: string | null, pkg: string): string | 
   if (existing === null) return null;
   const entry = pluginArray(existing).find((e) => entryNames(e, pkg));
   return typeof entry === "string" ? entry : null;
+}
+
+/** Every string entry in the config's `plugin` array, in order. Which of them are
+ * caret's is the caller's call: recognizing a local entry means asking the filesystem
+ * whether the path is a caret checkout, and this module never touches disk. */
+export function pluginEntries(existing: string | null): string[] {
+  return existing === null
+    ? []
+    : pluginArray(existing).filter((e): e is string => typeof e === "string");
 }
 
 /** Pin `pkg`'s `plugin` array entry to `version`, returning the new config text —

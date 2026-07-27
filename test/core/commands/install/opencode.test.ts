@@ -289,7 +289,8 @@ test("a dry run that could not check says why, since it has no warning to carry 
 
 test("--from-local skips the check: a dev-loop install asks npm nothing", async () => {
   // `mise run build --install` runs this path, so a network read and a possible confirm
-  // would land in the middle of a build.
+  // would land in the middle of a build — and a checkout entry has no published version
+  // to be behind anyway.
   const calls: string[] = [];
   await runInstallOpencodeTarget(
     {
@@ -306,7 +307,7 @@ test("--from-local skips the check: a dev-loop install asks npm nothing", async 
     }),
   );
   expect(calls).toEqual([]);
-  expect(plugins()).toEqual([CARET_PACKAGE]); // the rest of the install still ran
+  expect(plugins()).toEqual(["file:/checkout"]); // the rest of the install still ran
   expect(existsSync(commandFile())).toBe(true);
 });
 
@@ -329,4 +330,100 @@ test("uninstall skips the check: no network call, no cache read, nothing cleared
   );
   expect(calls).toEqual([]);
   expect(existsSync(cache)).toBe(true);
+});
+
+// --- the local (--from-local) plugin entry ----------------------------------------
+// `--from-local` writes `file:<checkout>` instead of the npm package, which is what makes
+// OpenCode load the developer's build: it symlinks the target into its cache, so the
+// plugin module is the checkout's own and the binary it spawns is the one `mise run build`
+// just produced. These cases pin that the two forms are mutually exclusive — caret owns
+// exactly one entry — because both present would load two caret plugins, each registering
+// the review tool, with the published one answering from a build nobody made.
+// `isCheckout` is deliberately NOT injected: the fixtures create the real probe file, so
+// the suite exercises the same predicate production uses.
+
+/** A directory the install target will accept as a caret checkout, by the one file it
+ * probes for (`opencode/caret.plugin.ts` — what resolveCaretRoot looks for too). */
+function checkout(name: string): string {
+  const repo = join(dir, name);
+  mkdirSync(join(repo, "opencode"), { recursive: true });
+  writeFileSync(join(repo, "opencode", "caret.plugin.ts"), "// caret");
+  return repo;
+}
+
+/** Seed the config's `plugin` array before an install, so a case can start from a config
+ * a user (or an earlier install) already wrote. */
+function seedPlugins(entries: string[]): void {
+  writeFileSync(configJson(), `${JSON.stringify({ plugin: entries }, null, 2)}\n`);
+}
+
+async function installLocal(repoDir: string, overrides: InstallOpencodeDeps = {}) {
+  await runInstallOpencodeTarget(
+    {
+      uninstall: false,
+      dryRun: false,
+      refresh: false,
+      local: { repoDir, marketplaceDir: join(dir, "dev-marketplace") },
+    },
+    deps(overrides),
+  );
+}
+
+test("--from-local points the plugin array at the checkout, not the npm package", async () => {
+  const repo = checkout("repo");
+  await installLocal(repo);
+  expect(plugins()).toEqual([`file:${repo}`]);
+});
+
+test("--from-local replaces a pinned npm entry so only one caret plugin loads", async () => {
+  const repo = checkout("repo");
+  seedPlugins(["someone-else", `${CARET_PACKAGE}@0.7.3`]);
+  await installLocal(repo);
+  expect(plugins()).toEqual(["someone-else", `file:${repo}`]);
+});
+
+test("--from-local is idempotent", async () => {
+  const repo = checkout("repo");
+  await installLocal(repo);
+  await installLocal(repo);
+  expect(plugins()).toEqual([`file:${repo}`]);
+});
+
+// The reverse direction matters as much: a developer who goes back to the published caret
+// must not silently keep running their checkout.
+test("a published install replaces the checkout entry --from-local left", async () => {
+  const repo = checkout("repo");
+  seedPlugins([`file:${repo}`]);
+  await install();
+  expect(plugins()).toEqual([CARET_PACKAGE]);
+});
+
+test("a local entry that is not a caret checkout is another plugin's, and is kept", async () => {
+  const other = join(dir, "not-caret");
+  mkdirSync(other, { recursive: true });
+  seedPlugins([`file:${other}`]);
+  await install();
+  expect(plugins()).toEqual([`file:${other}`, CARET_PACKAGE]);
+});
+
+test("uninstall removes a checkout entry, not just the npm package", async () => {
+  const repo = checkout("repo");
+  seedPlugins(["someone-else", `file:${repo}`]);
+  await install(true);
+  expect(plugins()).toEqual(["someone-else"]);
+});
+
+// A checkout entry resolves to that checkout on every OpenCode start, so it cannot be
+// stale and npm's version says nothing about it. The check is skipped for that reason,
+// not merely to keep the dev loop quiet.
+test("--from-local never asks npm what is published", async () => {
+  const repo = checkout("repo");
+  let asked = false;
+  await installLocal(repo, {
+    published: async () => {
+      asked = true;
+      return "9.9.9";
+    },
+  });
+  expect(asked).toBe(false);
 });
