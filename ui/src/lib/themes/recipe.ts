@@ -49,8 +49,9 @@ export interface PaletteInput {
   // three name a different hue for the cases where a palette decides one
   // separately, so the weight still comes from the recipe and only the hue moves.
 
-  /** The hue the two hairline rules ride. Defaults to `ink` — caret-dark rides
-   * pure white instead, so its hairlines stay neutral on near-black paper. */
+  /** The hue the two hairline rules ride. Defaults to `ink` — caret's own pair
+   * rides a warmer neutral instead, so its hairlines carry the paper's cast
+   * rather than the ink's. */
   ruleHue?: string;
   /** The hue `--accent-wash` rides. Defaults to `accent`. */
   washHue?: string;

@@ -147,8 +147,8 @@ describe("THEMES", () => {
       "--ink": "#1d1713",
       "--ink-soft": "#5a5048",
       "--ink-faint": "#8c8177",
-      "--rule": "#4a3b2e1a",
-      "--rule-strong": "#4a3b2e29",
+      "--rule": "#271e161a",
+      "--rule-strong": "#271e1629",
       "--accent": "#b8440f",
       "--accent-bright": "#d9622a",
       "--accent-wash": "#d9702e1f",
@@ -199,13 +199,21 @@ describe("the caret color set", () => {
   // so widening it is a visible decision.
   const RECESSIVE: (keyof typeof CARET_DARK)[] = ["comment"];
 
+  const shikiOnly = Object.entries(CARET_COLOR_PLACEMENT)
+    .filter(([, placement]) => placement === "shiki-only")
+    .map(([color]) => color as keyof typeof CARET_DARK);
+
+  // Guards the loop below against iterating an empty list: a reclassification that left
+  // no color `shiki-only` would otherwise report as a clean pass having measured nothing.
+  test("names a shiki-only half to measure", () => {
+    expect(shikiOnly.length).toBeGreaterThan(0);
+  });
+
   test("clears caret's contrast floors for every shiki-only hue, on --paper-sunk", () => {
     for (const [id, record] of records) {
-      for (const [color, placement] of Object.entries(CARET_COLOR_PLACEMENT)) {
-        if (placement !== "shiki-only") continue;
-        const key = color as keyof typeof CARET_DARK;
-        const ratio = contrast(record[key], record.sunk);
-        if (RECESSIVE.includes(key)) {
+      for (const color of shikiOnly) {
+        const ratio = contrast(record[color], record.sunk);
+        if (RECESSIVE.includes(color)) {
           expect(ratio, `${id} ${color} on sunk (recessive)`).toBeGreaterThan(3);
         } else {
           expect(ratio, `${id} ${color} on sunk`).toBeGreaterThanOrEqual(4.5);

@@ -196,7 +196,7 @@ test("picking a vendor palette retints the chrome and the code", async ({ daemon
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
 
-  // The emulated OS is dark, so the dark slot is live: caret dark, carrot headings.
+  // The emulated OS is dark, so the dark slot is live: caret dark, amber headings.
   // Computed styles come back in decimal, so the two assertions below spell caret
   // dark's --accent (#ef7d33) as rgb() — grep both forms when the palette is revised.
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -216,11 +216,11 @@ test("picking a vendor palette retints the chrome and the code", async ({ daemon
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Settings" })).toHaveCount(0);
 
-  // And so does the code: the plan's heading is Dracula purple, not caret carrot.
+  // And so does the code: the plan's heading is Dracula purple, not caret amber.
   await expect.poll(() => rowColors(page, "Widget Cache Refactor")).toContain("rgb(189, 147, 249)");
-  // Read once more and assert the carrot is gone. Asserted on a resolved non-empty
+  // Read once more and assert the amber is gone. Asserted on a resolved non-empty
   // array rather than inside a poll, so a row that stopped matching can't satisfy
-  // "no carrot" by returning nothing.
+  // "no amber" by returning nothing.
   const retinted = await rowColors(page, "Widget Cache Refactor");
   expect(retinted.length).toBeGreaterThan(0);
   expect(retinted).not.toContain("rgb(239, 125, 51)");

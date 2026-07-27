@@ -1,6 +1,6 @@
 /* caret — a quiet, near-monochrome developer surface.
-   The plan-review UI reads like a focused code tool: neutral grey paper/ink in
-   both schemes, hairline rules for structure, and a single restrained amber
+   The plan-review UI reads like a focused code tool: warm, low-chroma paper/ink
+   in both schemes, hairline rules for structure, and a single restrained amber
    accent (the ^ insertion mark the tool is named for) reserved for the wordmark
    and the primary action. Geist for UI text and headings (with platform sans
    fallback), Berkeley Mono for rendered code, the ^ carets, and metadata

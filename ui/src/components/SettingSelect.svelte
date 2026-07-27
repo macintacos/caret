@@ -291,8 +291,8 @@
     white-space: nowrap;
   }
   /* The palette preview: color dots, right-aligned. A hairline inset ring keeps a dot
-     visible when its color is near the menu surface (e.g. a near-black paper on
-     caret-dark). */
+     visible when its color is near the menu surface (e.g. a dark palette's own
+     surfaces, which the first two dots are). */
   :global(.setting-menu .chips) {
     flex: none;
     display: flex;

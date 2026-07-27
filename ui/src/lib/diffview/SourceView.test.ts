@@ -31,8 +31,8 @@ describe("SourceView rendering", () => {
     // The theme/font bridge registers caret's own palettes as Shiki themes and
     // selects them through the view options, so the library highlights with
     // caret's palette rather than its own. A keyword token must carry caret's
-    // accent color in both color schemes (light #b8440f / dark #ef7d33 from
-    // ui/src/lib/caret-theme.ts) — proof the registration reached the renderer.
+    // accent color in both color schemes (light #b8440f / dark #ef7d33, the --accent
+    // ui/src/lib/themes/caret.ts names) — proof the registration reached the renderer.
     const code: SourceDocument = { name: "code.ts", text: "const x = 1\n" };
     const { target } = render(SourceView, { doc: code, contentKey: "c1:v1" });
     await until(() => shadow(target)?.textContent?.includes("const") ?? false);
