@@ -4,7 +4,13 @@
 
 import { expect, test } from "bun:test";
 
-import { createInstallUI, type InstallUI, recordingUI, silentUI } from "@/commands/install/ui.ts";
+import {
+  createInstallUI,
+  type InstallUI,
+  isTerminal,
+  recordingUI,
+  silentUI,
+} from "@/commands/install/ui.ts";
 
 test("a step runs its work and returns the value", async () => {
   const ui: InstallUI = silentUI;
@@ -61,6 +67,27 @@ test("off a terminal a failed step still reports, and the error reaches the call
     }),
   ).rejects.toThrow("nope");
   expect(lines.join("")).toContain("Installing");
+});
+
+test("a run counts as interactive only when BOTH ends are a terminal", () => {
+  // A piped stdout would render a prompt's UI into the pipe and read as a hang, so
+  // stdout alone is not enough — and neither is stdin alone.
+  const saved = { in: process.stdin.isTTY, out: process.stdout.isTTY };
+  try {
+    for (const [stdin, stdout, expected] of [
+      [true, true, true],
+      [true, false, false],
+      [false, true, false],
+      [undefined, undefined, false],
+    ] as const) {
+      process.stdin.isTTY = stdin as boolean;
+      process.stdout.isTTY = stdout as boolean;
+      expect(isTerminal()).toBe(expected);
+    }
+  } finally {
+    process.stdin.isTTY = saved.in;
+    process.stdout.isTTY = saved.out;
+  }
 });
 
 test("the recorder captures the non-step surfaces too", () => {

@@ -84,6 +84,10 @@ function buildProgram(): Command {
     .option("--uninstall", "remove caret from the target(s) instead of installing")
     .option("--dry-run", "print what would change without writing")
     .option(
+      "--refresh",
+      "take the published caret in every target without asking — clears OpenCode's cached copy, or bumps a pinned entry (Claude Code always takes an update)",
+    )
+    .option(
       "--from-local",
       "dev loop: install the built caret checkout this binary runs from, then hand it the daemon",
     )
@@ -92,6 +96,7 @@ function buildProgram(): Command {
         target: opts.target,
         uninstall: opts.uninstall ?? false,
         dryRun: opts.dryRun ?? false,
+        refresh: opts.refresh ?? false,
         fromLocal: opts.fromLocal ?? false,
       }),
     );

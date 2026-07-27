@@ -18,6 +18,14 @@
 /** Report sub-status while a step is still running (e.g. the command being spawned). */
 export type StepDetail = (message: string) => void;
 
+/** Whether this run can ask the user a question. BOTH ends must be a terminal: a prompt
+ * reads keys from stdin and draws to stdout, so a piped stdout would render its UI into
+ * the pipe and look like a hang. Every install surface that gates on "can I ask?" — the
+ * target chooser, the OpenCode upgrade confirm — resolves through this one predicate. */
+export function isTerminal(): boolean {
+  return process.stdin.isTTY === true && process.stdout.isTTY === true;
+}
+
 export interface InstallUI {
   /** Open the session. `action` is the bare verb ("install", "uninstall (dry run)") —
    * each implementation brands it, so no caller hand-rolls a "caret" prefix. */

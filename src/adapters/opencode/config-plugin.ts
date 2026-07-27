@@ -16,21 +16,25 @@ function pluginArray(text: string): unknown[] {
   return Array.isArray(cfg?.plugin) ? cfg.plugin : [];
 }
 
+/** A plugin specifier split into its package name and its pinned version (null when
+ * the entry is bare). Mirrors how OpenCode's own `parsePluginSpecifier` splits one: for
+ * a scoped name the version is the `@` AFTER the `/`; for an unscoped name it is the
+ * first `@`. Non-npm entries (a `bun link` path) and malformed scoped names have no such
+ * `@`, so the whole string is the package and the version is null. The version segment
+ * is returned verbatim — `latest` and `0.8.1` are both just what the user wrote. */
+export function splitPluginSpecifier(spec: string): { pkg: string; version: string | null } {
+  const from = spec.startsWith("@") ? spec.indexOf("/") : 0;
+  if (from === -1) return { pkg: spec, version: null }; // malformed scoped name
+  const at = spec.indexOf("@", from + 1);
+  return at === -1
+    ? { pkg: spec, version: null }
+    : { pkg: spec.slice(0, at), version: spec.slice(at + 1) };
+}
+
 /** The package name of a plugin specifier, dropping any pinned version — so a
- * bare `@macintacos/caret` and a pinned `@macintacos/caret@0.4.0` share one name.
- * Mirrors how OpenCode's `parsePluginSpecifier` splits a specifier into
- * `{ pkg, version }`: for a scoped name the version is the `@` AFTER the `/`; for an
- * unscoped name it is the first `@`. Non-npm entries (a `bun link` path) have no such
- * `@` and return unchanged. */
+ * bare `@macintacos/caret` and a pinned `@macintacos/caret@0.4.0` share one name. */
 function packageName(spec: string): string {
-  if (spec.startsWith("@")) {
-    const slash = spec.indexOf("/");
-    if (slash === -1) return spec; // malformed scoped name — treat the whole as the name
-    const at = spec.indexOf("@", slash + 1);
-    return at === -1 ? spec : spec.slice(0, at);
-  }
-  const at = spec.indexOf("@");
-  return at === -1 ? spec : spec.slice(0, at);
+  return splitPluginSpecifier(spec).pkg;
 }
 
 /** Whether a `plugin` array entry names `pkg` — matching a version-pinned entry
@@ -60,6 +64,35 @@ export function addPluginToConfigText(existing: string | null, pkg: string): str
   }
   const edits = modify(text, ["plugin"], [pkg], { formattingOptions: FORMATTING });
   return applyEdits(text, edits);
+}
+
+/** The VERBATIM `plugin` array entry naming `pkg` — pin and all — or null when the
+ * config is absent, has no `plugin` array, or lists no entry for `pkg`. The raw string
+ * is what callers need: it is both the key OpenCode caches under and the thing a version
+ * rewrite replaces. */
+export function findPluginEntry(existing: string | null, pkg: string): string | null {
+  if (existing === null) return null;
+  const entry = pluginArray(existing).find((e) => entryNames(e, pkg));
+  return typeof entry === "string" ? entry : null;
+}
+
+/** Pin `pkg`'s `plugin` array entry to `version`, returning the new config text —
+ * rewriting an existing pin rather than appending beside it. Returns the text unchanged
+ * when no entry names `pkg`. Replaces the one array element in place
+ * (`modify(text, ["plugin", i], …)`), which keeps sibling entries, other keys, and
+ * comments intact — unlike the whole-array replacement `removePluginFromConfigText`
+ * needs for its trailing-comma bug. */
+export function setPluginVersionInConfigText(
+  existing: string,
+  pkg: string,
+  version: string,
+): string {
+  const arr = pluginArray(existing);
+  const i = arr.findIndex((e) => entryNames(e, pkg));
+  if (i === -1) return existing;
+  const next = `${packageName(arr[i] as string)}@${version}`;
+  const edits = modify(existing, ["plugin", i], next, { formattingOptions: FORMATTING });
+  return applyEdits(existing, edits);
 }
 
 /** Remove `pkg` from the config's `plugin` array, returning the new config text.

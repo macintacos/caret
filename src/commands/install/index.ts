@@ -26,7 +26,7 @@ import {
   type InstallTarget,
   targetLabel,
 } from "@/commands/install/targets.ts";
-import { createInstallUI, type InstallUI } from "@/commands/install/ui.ts";
+import { createInstallUI, type InstallUI, isTerminal } from "@/commands/install/ui.ts";
 import { errorMessage } from "@/lib/types.ts";
 import { ensureRumdl, RUMDL_VERSION } from "@/plan/rumdl.ts";
 
@@ -82,6 +82,9 @@ export interface InstallDeps {
 interface TargetOpts {
   uninstall: boolean;
   dryRun: boolean;
+  /** Set by `--refresh`: pre-answer the upgrade prompt a stale target would raise, so a
+   * non-interactive run can take the published caret without being asked. */
+  refresh: boolean;
   /** Set by `--from-local`: install this checkout rather than the published caret. Only
    * the Claude target reads it — OpenCode's command files already resolve to the running
    * binary, so installing from a local caret is local by construction. */
@@ -92,7 +95,13 @@ interface TargetOpts {
  * detection), then dispatch to each one. On an invalid `--target`, writes the reason to
  * stderr and sets a non-zero exit code (nothing is installed). */
 export async function runInstallSubcommand(
-  opts: { target?: string; uninstall: boolean; dryRun: boolean; fromLocal?: boolean },
+  opts: {
+    target?: string;
+    uninstall: boolean;
+    dryRun: boolean;
+    fromLocal?: boolean;
+    refresh?: boolean;
+  },
   deps: InstallDeps = {},
 ): Promise<void> {
   const ui = deps.ui ?? (await createInstallUI());
@@ -111,7 +120,12 @@ export async function runInstallSubcommand(
 
   const runOpencode = deps.runOpencode ?? runInstallOpencodeTarget;
   const runClaude = deps.runClaude ?? runInstallClaudeTarget;
-  const targetOpts = { uninstall: opts.uninstall, dryRun: opts.dryRun, local };
+  const targetOpts = {
+    uninstall: opts.uninstall,
+    dryRun: opts.dryRun,
+    refresh: opts.refresh ?? false,
+    local,
+  };
   for (const target of targets) {
     let ok: unknown;
     try {
@@ -271,10 +285,7 @@ async function selectTargets(
   }
 
   const detected = (deps.detect ?? detectTargets)();
-  // Both ends must be a terminal: the chooser reads keys from stdin and draws to stdout,
-  // so a piped stdout would render its UI into the pipe and look like a hang.
-  const isInteractive =
-    deps.isInteractive ?? (() => process.stdin.isTTY === true && process.stdout.isTTY === true);
+  const isInteractive = deps.isInteractive ?? isTerminal;
   if (isInteractive() && !opts.dryRun) {
     const chosen = await (deps.prompt ?? promptForTargets)(detected, opts.uninstall);
     if (chosen === null) {

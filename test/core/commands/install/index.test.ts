@@ -45,6 +45,22 @@ test("runInstallSubcommand dispatches to each selected target with the same opts
   expect(calls).toEqual(["opencode:true:false", "claude:true:false"]);
 });
 
+test("--refresh reaches every target runner, and defaults to off", async () => {
+  const seen: (boolean | undefined)[] = [];
+  const deps = {
+    ui: silentUI,
+    ensureRumdl: noRumdl,
+    runOpencode: (o: { refresh: boolean }) => void seen.push(o.refresh),
+    runClaude: (o: { refresh: boolean }) => void seen.push(o.refresh),
+  };
+  await runInstallSubcommand(
+    { target: "opencode,claude", uninstall: false, dryRun: false, refresh: true },
+    deps,
+  );
+  await runInstallSubcommand({ target: "opencode", uninstall: false, dryRun: false }, deps);
+  expect(seen).toEqual([true, true, false]);
+});
+
 test("runInstallSubcommand runs only the requested target", async () => {
   const calls: string[] = [];
   await runInstallSubcommand(
