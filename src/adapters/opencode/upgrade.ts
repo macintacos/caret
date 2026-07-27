@@ -1,4 +1,4 @@
-// Whether the caret OpenCode is running is behind the published one, and the effects
+// Whether the caret that OpenCode runs is behind the published one, and the effects
 // needed to answer that. OpenCode records a `plugin` array entry's resolution in
 // `packages/<specifier>/package.json` on first install and never re-resolves it, so a
 // bare entry stays frozen at install-day's version — `caret install --target opencode`

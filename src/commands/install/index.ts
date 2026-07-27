@@ -82,8 +82,10 @@ export interface InstallDeps {
 interface TargetOpts {
   uninstall: boolean;
   dryRun: boolean;
-  /** Set by `--refresh`: pre-answer the upgrade prompt a stale target would raise, so a
-   * non-interactive run can take the published caret without being asked. */
+  /** Set by `--refresh`: pre-answer the upgrade prompt a stale OpenCode raises, so a
+   * non-interactive run can take the published caret without being asked. Only the
+   * OpenCode target reads it — Claude Code's plugin cache is managed by Claude's own CLI,
+   * so that target always updates and has no prompt to pre-answer. */
   refresh: boolean;
   /** Set by `--from-local`: install this checkout rather than the published caret. Only
    * the Claude target reads it — OpenCode's command files already resolve to the running

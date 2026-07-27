@@ -42,6 +42,7 @@ import {
   type UpgradeVerdict,
   upgradeVerdict,
 } from "@/adapters/opencode/upgrade.ts";
+import type { LocalInstall } from "@/commands/install/local.ts";
 import { promptUpgrade, type StaleVerdict, upgradeVerdictLine } from "@/commands/install/prompt.ts";
 import type { InstallUI } from "@/commands/install/ui.ts";
 import { isTerminal, silentUI } from "@/commands/install/ui.ts";
@@ -69,7 +70,7 @@ export interface InstallOpencodeDeps {
  * two halves are reported as their own steps — the config edit and the command files
  * fail independently, so a reader can see which one did what. */
 export async function runInstallOpencodeTarget(
-  opts: { uninstall: boolean; dryRun: boolean; refresh: boolean },
+  opts: { uninstall: boolean; dryRun: boolean; refresh: boolean; local?: LocalInstall },
   deps: InstallOpencodeDeps = {},
 ): Promise<void> {
   const dir = deps.configDir ?? opencodeConfigDir();
@@ -82,8 +83,9 @@ export async function runInstallOpencodeTarget(
 
   if (opts.dryRun) {
     const verb = opts.uninstall ? "remove" : "write";
-    // The check is read-only, so a preview can still run it and say what it found.
-    const found = opts.uninstall ? [] : ["", upgradeVerdictLine(await check(configFile, deps))];
+    // The check is read-only, so a preview can still run it and say what it found. A
+    // preview has no warning to carry an `unknown`'s reason, so the note carries it.
+    const found = checks(opts) ? ["", previewLine(await check(configFile, deps))] : [];
     ui.note([configFile, ...commandPaths, ...found].join("\n"), `OpenCode — would ${verb}`);
     return;
   }
@@ -118,7 +120,7 @@ export async function runInstallOpencodeTarget(
   );
   // After the array edit — the entry has to exist before it can be read — and before the
   // command files, so a cache clear is settled by the time the run reports it deployed.
-  await upgradeStep(configFile, opts, deps, ui);
+  if (checks(opts)) await upgradeStep(configFile, opts, deps, ui);
   const files: DeployFile[] = pkg.commands.map((c) => ({
     // Namespace the command file (`demo.md` -> `caret:demo.md`) so OpenCode exposes
     // it as `/caret:demo`. The command files' `__CARET_BIN__` marker is substituted
@@ -131,6 +133,22 @@ export async function runInstallOpencodeTarget(
     async () => deployFiles(files, { dryRun: false }),
     (deployed) => `Deployed ${deployed.paths.length} command file(s) to ${dir}`,
   );
+}
+
+/** Whether this run asks npm which caret is published. An uninstall is tearing caret out,
+ * so there is nothing to compare. `--from-local` is a dev loop — `mise run build --install`
+ * drives it — where a network read and a possible confirm mid-build buy nothing: the
+ * developer is installing the checkout in front of them. The Claude target skips its own
+ * update phase in local mode for the same reason. */
+function checks(opts: { uninstall: boolean; local?: LocalInstall }): boolean {
+  return !opts.uninstall && opts.local === undefined;
+}
+
+/** The verdict as a dry run states it: the settled line, plus an `unknown`'s reason —
+ * which the live path reports as a warning the preview has no room for. */
+function previewLine(verdict: UpgradeVerdict): string {
+  const line = upgradeVerdictLine(verdict);
+  return verdict.kind === "unknown" ? `${line} (${verdict.reason})` : line;
 }
 
 /** Compare the caret OpenCode would load against npm's published one. Read-only: the

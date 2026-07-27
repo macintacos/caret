@@ -242,6 +242,17 @@ test("without a terminal, a stale cache names the gap and --refresh rather than 
   expect(existsSync(cache)).toBe(true);
 });
 
+test("without a terminal, a stale pin is told to bump rather than to clear", async () => {
+  // The two stale kinds have different remedies, so the nudge names the right one.
+  writeFileSync(configJson(), JSON.stringify({ plugin: [`${CARET_PACKAGE}@0.7.3`] }, null, 2));
+  const said = await transcript({
+    published: async () => "0.8.1",
+    isInteractive: () => false,
+  });
+  expect(said).toContain("--refresh to bump the pin");
+  expect(plugins()).toEqual([`${CARET_PACKAGE}@0.7.3`]);
+});
+
 test("--refresh bumps a stale pin in place, and leaves the cache alone", async () => {
   writeFileSync(configJson(), JSON.stringify({ plugin: [`${CARET_PACKAGE}@0.7.3`] }, null, 2));
   const cache = cacheDir(`${CARET_PACKAGE}@0.7.3`, "0.7.3");
@@ -269,6 +280,34 @@ test("dry-run reports the verdict and still writes nothing", async () => {
   expect(said).toContain("resolve caret on its next start");
   expect(existsSync(configJson())).toBe(false);
   expect(existsSync(commandFile())).toBe(false);
+});
+
+test("a dry run that could not check says why, since it has no warning to carry it", async () => {
+  const said = await transcript({ published: async () => null }, { dryRun: true });
+  expect(said).toContain("could not reach npm");
+});
+
+test("--from-local skips the check: a dev-loop install asks npm nothing", async () => {
+  // `mise run build --install` runs this path, so a network read and a possible confirm
+  // would land in the middle of a build.
+  const calls: string[] = [];
+  await runInstallOpencodeTarget(
+    {
+      uninstall: false,
+      dryRun: false,
+      refresh: false,
+      local: { repoDir: "/checkout", marketplaceDir: "/dev-mp" },
+    },
+    deps({
+      published: async () => {
+        calls.push("published");
+        return "0.8.1";
+      },
+    }),
+  );
+  expect(calls).toEqual([]);
+  expect(plugins()).toEqual([CARET_PACKAGE]); // the rest of the install still ran
+  expect(existsSync(commandFile())).toBe(true);
 });
 
 test("uninstall skips the check: no network call, no cache read, nothing cleared", async () => {

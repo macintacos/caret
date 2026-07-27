@@ -138,13 +138,20 @@ string" shape before writing, so it can't corrupt a user's config.
   OpenCode `plugin` array (comment-preserving, via `jsonc-parser` in `config-plugin.ts`)
   and deploys the `/caret:*` command **files**; `--uninstall` reverses both. OpenCode
   itself installs the package and its deps into its cache on the next start — caret writes
-  no config-dir manifest and runs no `bun install`. `caret install --target claude`
-  registers caret with Claude Code via its plugin CLI. The command lives in
-  `src/commands/install/`: `index.ts` is the orchestrator (it parses `--target` — a comma
-  list of the registry's ids — resolves the targets, and dispatches), beside the target
-  registry, the chooser, the terminal reporter, and one module per target runner.
-  `paths.ts` is the single source of truth both the probe (reader) and the writer resolve
-  through.
+  no config-dir manifest and runs no `bun install`. Between the two writes it runs an
+  upgrade check: OpenCode resolves an array entry once and caches it forever (§ The cache
+  layout), so re-adding the entry never moves anyone off install-day's version.
+  `upgrade.ts` weighs the entry and that cache against npm's `latest` — npm rather than
+  GitHub releases, because `latest` is what OpenCode would re-resolve to — and a stale
+  result offers to clear the cached copy, or to bump a user-authored pin. That offer is a
+  prompt, since `~/.cache/opencode` is not caret's to delete unasked; `--refresh`
+  pre-answers it, and off a TTY install names the gap and changes nothing.
+  `caret install --target claude` registers caret with Claude Code via its plugin CLI. The
+  command lives in `src/commands/install/`: `index.ts` is the orchestrator (it parses
+  `--target` — a comma list of the registry's ids — resolves the targets, and dispatches),
+  beside the target registry, the chooser, the terminal reporter, and one module per
+  target runner. `paths.ts` is the single source of truth both the probe (reader) and the
+  writer resolve through.
 
 ## Distribution choice (amended by EXC-794)
 

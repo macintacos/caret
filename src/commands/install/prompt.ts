@@ -41,8 +41,10 @@ export async function promptForTargets(
   return isCancel(chosen) ? null : chosen;
 }
 
-/** The two verdicts with a remedy to offer — the only ones anyone is asked about. */
-export type StaleVerdict = Extract<UpgradeVerdict, { kind: `stale-${string}` }>;
+/** The two verdicts with a remedy to offer — the only ones anyone is asked about. Spelled
+ * out rather than matched on a `stale-*` prefix, so a third stale kind is a compile error
+ * here, at the copy that would have to describe its remedy. */
+export type StaleVerdict = Extract<UpgradeVerdict, { kind: "stale-cache" | "stale-pin" }>;
 
 /** One line naming what an upgrade check found: which caret OpenCode would load, and,
  * when it is behind, which one npm publishes. `unknown` deliberately names no version —

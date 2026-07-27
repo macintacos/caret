@@ -92,7 +92,10 @@ test("an unreadable plugin list still settles, and the install still succeeds", 
   expect(ui.events.some((e) => e.startsWith("failed:"))).toBe(false);
 });
 
-test("a failed plugin update is best-effort: the install still succeeds", async () => {
+test("a failed plugin update warns and says so, rather than claiming already-current", async () => {
+  // The two version reads are identical when the update never lands, so a line derived
+  // from them alone would report "already current" — the exact false reassurance this
+  // command exists to remove.
   const calls: string[][] = [];
   const runner: ClaudeRunner = async (args) => {
     calls.push(args);
@@ -104,11 +107,30 @@ test("a failed plugin update is best-effort: the install still succeeds", async 
     { uninstall: false, dryRun: false },
     { claude: runner, ui },
   );
-  expect(ok).toBe(true);
+  expect(ok).toBe(true); // best-effort: a failed update does not fail the install
   expect(calls).toContainEqual(["plugin", "update", "caret@caret", "--scope", "user"]);
-  // The second read still happens, so the settled line reports the version that stuck.
-  expect(ui.events).toContain("settled:caret 0.7.3 in Claude Code — already current");
+  expect(ui.events).toContain("settled:caret 0.7.3 in Claude Code — the update did not land");
+  expect(ui.events.some((e) => e.startsWith("warn:") && e.includes("network down"))).toBe(true);
   expect(ui.events.some((e) => e.startsWith("failed:"))).toBe(false);
+});
+
+test("the version read prefers the user-scope row, which is the one the update targets", async () => {
+  // `plugin update --scope user` moves the user row; reporting a project row's version
+  // beside it would describe a plugin the command never touched.
+  const both = (userVersion: string) =>
+    JSON.stringify([
+      { id: "caret@caret", version: "0.1.0", scope: "project", enabled: true },
+      { id: "caret@caret", version: userVersion, scope: "user", enabled: true },
+    ]);
+  const queue = [both("0.7.3"), both("0.8.1")];
+  const runner: ClaudeRunner = async (args) => ({
+    ok: true,
+    detail: "",
+    stdout: args[1] === "list" ? (queue.shift() ?? "") : "",
+  });
+  const ui = recordingUI();
+  await runInstallClaudeTarget({ uninstall: false, dryRun: false }, { claude: runner, ui });
+  expect(ui.events).toContain("settled:caret 0.7.3 → 0.8.1 in Claude Code — restart to apply");
 });
 
 test("neither --from-local nor --uninstall asks Claude to update the plugin", async () => {

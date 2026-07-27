@@ -20,8 +20,10 @@ export type StepDetail = (message: string) => void;
 
 /** Whether this run can ask the user a question. BOTH ends must be a terminal: a prompt
  * reads keys from stdin and draws to stdout, so a piped stdout would render its UI into
- * the pipe and look like a hang. Every install surface that gates on "can I ask?" — the
- * target chooser, the OpenCode upgrade confirm — resolves through this one predicate. */
+ * the pipe and look like a hang. Every surface that gates on *asking* — the target
+ * chooser, the OpenCode upgrade confirm — resolves through this one predicate;
+ * `createInstallUI`'s own render check is separate and stricter (it also honours NO_COLOR
+ * and CI), because drawing clack's chrome and asking a question are different questions. */
 export function isTerminal(): boolean {
   return process.stdin.isTTY === true && process.stdout.isTTY === true;
 }

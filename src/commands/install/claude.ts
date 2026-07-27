@@ -54,26 +54,36 @@ const claudeCli: ClaudeRunner = async (args) => {
 };
 
 /** The version Claude reports for `id` in a `claude plugin list --json` payload — an
- * array of `{ id, version, scope, enabled, … }` entries. Null when the output can't be
- * read (not JSON, an unexpected shape, or no entry for `id`), so the caller degrades to
- * a version-less report rather than failing an otherwise-good install. */
+ * array of `{ id, version, scope, enabled, … }` entries. A plugin can appear at more than
+ * one scope, and the update below targets `--scope user`, so that row wins: reporting a
+ * project row's version beside it would describe a plugin the command never touched. Null
+ * when the output can't be read (not JSON, an unexpected shape, or no entry for `id`), so
+ * the caller degrades to a version-less report rather than failing a good install. */
 function parsePluginVersion(stdout: string, id: string): string | null {
   try {
     const parsed: unknown = JSON.parse(stdout);
     if (!Array.isArray(parsed)) return null;
-    const entry = parsed.find(
-      (p) => typeof p === "object" && p !== null && "id" in p && p.id === id,
+    const rows = parsed.filter(
+      (p): p is { version?: unknown; scope?: unknown } =>
+        typeof p === "object" && p !== null && "id" in p && p.id === id,
     );
-    const version = (entry as { version?: unknown } | undefined)?.version;
+    const version = (rows.find((p) => p.scope === "user") ?? rows[0])?.version;
     return typeof version === "string" ? version : null;
   } catch {
     return null;
   }
 }
 
-/** The update phase's settled line: what actually moved, read back from Claude rather
- * than guessed from whether the update command succeeded. */
-function updateLine(before: string | null, after: string | null): string {
+/** The update phase's settled line. `updated` is whether the update command itself
+ * landed, and it is load-bearing: when it did not, the two reads are identical, so a line
+ * derived from the versions alone would announce "already current" over an install that
+ * did not move — the false reassurance this whole command exists to remove. */
+function updateLine(before: string | null, after: string | null, updated: boolean): string {
+  if (!updated) {
+    return before
+      ? `caret ${before} in Claude Code — the update did not land`
+      : "Could not ask Claude Code for the latest caret";
+  }
   if (!before || !after) return "Asked Claude Code for the latest caret — restart to apply";
   if (before === after) return `caret ${after} in Claude Code — already current`;
   return `caret ${before} → ${after} in Claude Code — restart to apply`;
@@ -92,11 +102,18 @@ interface PhaseCommand {
  * perform first, and the `claude` commands it covers. `marketplace add` and `enable` are
  * best-effort — an already-registered marketplace or already-enabled plugin is not a
  * failure — so a phase fails only when one of its `fatal` commands does. */
+/** What a phase's commands returned, one entry per entry in `commands` and in the same
+ * order — pushed even for a failed non-fatal command, so the positions stay aligned. */
+type CommandResults = Awaited<ReturnType<ClaudeRunner>>[];
+
 interface Phase {
   label: string;
-  /** The settled line. A function when the line reports what the commands returned
-   * rather than what was attempted, receiving each command's stdout positionally. */
-  done: string | ((stdouts: string[]) => string);
+  /** The settled line. A function when the line reports what the commands returned rather
+   * than what was attempted. */
+  done: string | ((results: CommandResults) => string);
+  /** A warning to emit after the step settles, or null for nothing to say. The seam for a
+   * best-effort command whose failure the settled line alone cannot convey. */
+  warn?: (results: CommandResults) => string | null;
   /** Runs before the phase's commands; local mode generates its marketplace here. */
   before?: () => void;
   commands: PhaseCommand[];
@@ -178,11 +195,16 @@ function phases(
       // actually moved instead of what was asked for. All best-effort: a failed update
       // must not fail an install that otherwise landed.
       label: "Updating the caret plugin",
-      done: (stdouts) =>
+      done: ([before, update, after]) =>
         updateLine(
-          parsePluginVersion(stdouts[0] ?? "", PLUGIN_REF),
-          parsePluginVersion(stdouts[2] ?? "", PLUGIN_REF),
+          parsePluginVersion(before?.stdout ?? "", PLUGIN_REF),
+          parsePluginVersion(after?.stdout ?? "", PLUGIN_REF),
+          update?.ok === true,
         ),
+      warn: ([, update]) =>
+        update?.ok === false
+          ? `Claude Code did not take the update (${update.detail}) — caret there is unchanged.`
+          : null,
       commands: [
         { args: ["plugin", "list", "--json"], fatal: false },
         { args: ["plugin", "update", PLUGIN_REF, "--scope", "user"], fatal: false },
@@ -236,13 +258,11 @@ export async function runInstallClaudeTarget(
 
   for (const phase of plan) {
     try {
-      await ui.step(
+      const results = await ui.step(
         phase.label,
         async (detail) => {
           phase.before?.();
-          // One entry per command, positional, so a `done` function can address a
-          // specific command's output (the update phase's two version reads).
-          const stdouts: string[] = [];
+          const collected: CommandResults = [];
           for (const { args, fatal, fallback } of phase.commands) {
             detail(`claude ${args.join(" ")}`);
             let r = await run(args);
@@ -250,17 +270,20 @@ export async function runInstallClaudeTarget(
               detail(`claude ${fallback.join(" ")}`);
               r = await run(fallback);
             }
-            stdouts.push(r.stdout);
+            collected.push(r);
             if (r.ok) continue;
             // A missing CLI ends the whole target, not just this command — every
             // remaining phase would fail the same way.
             if (r.missing) throw new PhaseFailure(r.detail, true);
             if (fatal) throw new PhaseFailure(`\`claude ${args.join(" ")}\`: ${r.detail}`, false);
           }
-          return stdouts;
+          return collected;
         },
-        (stdouts) => (typeof phase.done === "string" ? phase.done : phase.done(stdouts)),
+        (collected) => (typeof phase.done === "string" ? phase.done : phase.done(collected)),
       );
+      // After the step settles, so the warning sits below the line it qualifies.
+      const warning = phase.warn?.(results);
+      if (warning) ui.warn(warning);
     } catch (e) {
       if (!(e instanceof PhaseFailure)) throw e;
       ui.error(
