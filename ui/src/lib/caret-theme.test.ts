@@ -5,6 +5,7 @@ import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 
 import { CARET_SHIKI_THEMES, shikiThemeFor } from "$lib/caret-theme.ts";
 import { type ColorToken, THEME_IDS, THEMES, type ThemeId } from "$lib/theme.ts";
+import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
 
 // caret-theme.ts derives one shiki palette per registered theme from the THEMES
 // color tokens in theme.ts (EXC-730) — the single source of truth for every color
@@ -106,6 +107,44 @@ describe("caret-theme ↔ THEMES palette sync", () => {
   test("the two caret themes use distinct palettes (light vs dark do not collapse)", () => {
     expect(shikiThemeFor("caret-light").colors?.["editor.background"]).not.toBe(
       shikiThemeFor("caret-dark").colors?.["editor.background"],
+    );
+  });
+});
+
+// EXC-896: a vendor palette names that vendor's published shiki theme, so picking
+// Dracula highlights code in real Dracula rather than in caret's seven-role
+// derivation wearing Dracula's hues. caret's own pair names none — there is no
+// upstream theme to point at, so they keep the derivation.
+describe("upstream shiki theme declarations", () => {
+  test("every registry key is that theme's own upstream name", () => {
+    for (const [id, theme] of Object.entries(UPSTREAM_SHIKI_THEMES)) {
+      // A mis-wired import (`dracula: githubDarkDefault`) would otherwise render
+      // the wrong theme with nothing to catch it.
+      expect(theme.name, id).toBe(id);
+    }
+  });
+
+  test("every palette either names an upstream theme or is one of caret's own", () => {
+    // Pinned rather than merely counted: a new palette has to make a deliberate
+    // choice instead of silently falling through to the derivation.
+    const derived = THEME_IDS.filter((id) => THEMES[id].shikiTheme === undefined);
+    expect(derived).toEqual(["caret-dark", "caret-light"]);
+    for (const id of THEME_IDS) {
+      const named = THEMES[id].shikiTheme;
+      if (named) expect(UPSTREAM_SHIKI_THEMES, id).toHaveProperty(named);
+    }
+  });
+
+  // GitHub publishes two pairs. The unsuffixed `github-light` / `github-dark` are
+  // the legacy Primer themes (dark background #24292e); caret's GitHub palettes are
+  // built from current Primer, which matches the `-default` pair (#0d1117). The key
+  // union catches a nonexistent id but not a valid-yet-wrong-vintage one, so pin the
+  // choice by value.
+  test("the GitHub palettes name current Primer, not the legacy pair", () => {
+    expect(THEMES["github-dark"].shikiTheme).toBe("github-dark-default");
+    expect(THEMES["github-light"].shikiTheme).toBe("github-light-default");
+    expect(UPSTREAM_SHIKI_THEMES["github-dark-default"].colors?.["editor.background"]).toBe(
+      "#0d1117",
     );
   });
 });

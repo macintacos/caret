@@ -22,6 +22,7 @@
 
 import type { Theme, ThemeId } from "$lib/theme.ts";
 import { type PaletteInput, paletteTheme } from "$lib/themes/recipe.ts";
+import type { UpstreamShikiThemeId } from "$lib/upstream-shiki.ts";
 
 /** The subset of a Catppuccin flavor caret's tokens draw from. */
 interface Flavor {
@@ -105,8 +106,17 @@ const MOCHA: Flavor = {
 };
 
 /** Map one flavor onto caret's tokens. Latte is the only light flavor, and the
- * scheme carries the one thing that differs: which surfaces the trio draws from. */
-function flavor(id: ThemeId, label: string, f: Flavor, dark: boolean): Theme {
+ * scheme carries the one thing that differs: which surfaces the trio draws from.
+ *
+ * @param id - caret and shiki spell the flavor ids identically, so the one string
+ * names both the palette and its upstream theme. The intersection makes that
+ * identity a compile error to break rather than a coincidence to rely on. */
+function flavor(
+  id: ThemeId & UpstreamShikiThemeId,
+  label: string,
+  f: Flavor,
+  dark: boolean,
+): Theme {
   const surfaces: Pick<PaletteInput, "paper" | "raised" | "sunk"> = dark
     ? { paper: f.mantle, raised: f.surface0, sunk: f.base }
     : { paper: f.mantle, raised: f.base, sunk: f.crust };
@@ -125,6 +135,7 @@ function flavor(id: ThemeId, label: string, f: Flavor, dark: boolean): Theme {
     ok: f.green,
     danger: f.red,
     attention: f.blue,
+    shikiTheme: id,
   });
 }
 

@@ -59,6 +59,7 @@ import {
 } from "$lib/themes/catppuccin.ts";
 import { dracula } from "$lib/themes/dracula.ts";
 import { githubDark, githubLight } from "$lib/themes/github.ts";
+import type { UpstreamShikiThemeId } from "$lib/upstream-shiki.ts";
 
 export type ThemeId =
   | "caret-dark"
@@ -109,6 +110,10 @@ export interface Theme {
   scheme: Scheme;
   /** CSS custom property → value, covering every color token app.css declares. */
   tokens: Record<ColorToken, string>;
+  /** The vendor's own published shiki theme, for a palette named after one
+   * (EXC-896). caret's own pair names none and gets the derivation instead; see
+   * caret-theme.ts. */
+  shikiTheme?: UpstreamShikiThemeId;
 }
 
 // Insertion order is display order: caret's own pair first, then each vendor family
