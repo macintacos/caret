@@ -12,6 +12,7 @@ import {
   type ThemeId,
   themesForScheme,
 } from "$lib/theme.ts";
+import { CARET_COLOR_PLACEMENT, CARET_DARK, CARET_LIGHT } from "$lib/themes/caret.ts";
 
 afterEach(() => {
   localStorage.clear();
@@ -107,59 +108,118 @@ describe("THEMES", () => {
   // Neither caret palette has a CSS mirror — app.css's first-paint block is emitted
   // from this record — so each pins its whole token set directly, and nothing else
   // in the repo pins their decided colors. The six derived values come out of three
-  // lines of the recipe; the thirteen decided ones are hand-transcribed, which is
-  // where a silent slip would actually live. The three hue overrides are subsumed:
-  // each rides a hue that is NOT the token it would otherwise default to — the rules
-  // ride pure white rather than the ink, the accent wash a mid-amber that is not
-  // --accent, the marks a second, lighter amber that is not the wash's — so a dropped
-  // or mis-cascaded override surfaces as a changed byte rather than a subtly-off
-  // hairline.
+  // lines of the recipe; the thirteen decided ones are read from the named color set
+  // in themes/caret.ts, so this pin is what catches a slip in either the set or the
+  // reading. The three hue overrides are subsumed: each rides a hue that is NOT the
+  // token it would otherwise default to — the rules ride bone in dark and a warmer
+  // umber than the ink in light, the accent wash an ember that is not --accent, the
+  // marks a lighter amber than the wash's — so a dropped or mis-cascaded override
+  // surfaces as a changed byte rather than a subtly-off hairline.
   test("caret-dark's full token set", () => {
     expect(THEMES["caret-dark"].tokens).toEqual({
-      "--paper": "#0a0a0a",
-      "--paper-raised": "#171717",
-      "--paper-sunk": "#131313",
-      "--ink": "#fafafa",
-      "--ink-soft": "#a1a1a1",
-      "--ink-faint": "#737373",
-      "--rule": "#ffffff1a",
-      "--rule-strong": "#ffffff29",
-      "--accent": "#fb923c",
-      "--accent-bright": "#fdba74",
-      "--accent-wash": "#ec7c3829",
-      "--accent-ink": "#0a0a0a",
-      "--mark": "#f3953c2e",
-      "--mark-active": "#f3953c57",
-      "--mark-orphan": "#9b9b9b29",
-      "--ok": "#4ade80",
-      "--danger": "#f87171",
-      "--attention": "#a78bfa",
+      "--paper": "#0a0806",
+      "--paper-raised": "#15110d",
+      "--paper-sunk": "#100d0a",
+      "--ink": "#f7f2ea",
+      "--ink-soft": "#bcb0a1",
+      "--ink-faint": "#918576",
+      "--rule": "#f2e7d51a",
+      "--rule-strong": "#f2e7d529",
+      "--accent": "#ff8f3d",
+      "--accent-bright": "#ffb277",
+      "--accent-wash": "#f2842f29",
+      "--accent-ink": "#0a0806",
+      "--mark": "#ffa64d2e",
+      "--mark-active": "#ffa64d57",
+      "--mark-orphan": "#9a8c7e29",
+      "--ok": "#5fc464",
+      "--danger": "#f0697a",
+      "--attention": "#bb92e6",
       "--shadow-card": "0 1px 2px #00000066, 0 10px 30px #00000080",
     });
   });
 
   test("caret-light's full token set", () => {
     expect(THEMES["caret-light"].tokens).toEqual({
-      "--paper": "#faf9f5",
-      "--paper-raised": "#fffdf8",
-      "--paper-sunk": "#f4f1ea",
-      "--ink": "#1c1714",
-      "--ink-soft": "#57504a",
-      "--ink-faint": "#8a827a",
-      "--rule": "#1c17141a",
-      "--rule-strong": "#1c171429",
-      "--accent": "#c2410c",
-      "--accent-bright": "#ea580c",
-      "--accent-wash": "#ec7c381f",
-      "--accent-ink": "#fff7ed",
-      "--mark": "#ec7c3824",
-      "--mark-active": "#ec7c3847",
-      "--mark-orphan": "#78706829",
-      "--ok": "#15803d",
-      "--danger": "#b91c1c",
-      "--attention": "#7c3aed",
+      "--paper": "#fefcf8",
+      "--paper-raised": "#fffefc",
+      "--paper-sunk": "#faf6ec",
+      "--ink": "#191310",
+      "--ink-soft": "#544b43",
+      "--ink-faint": "#847a70",
+      "--rule": "#2a20181a",
+      "--rule-strong": "#2a201829",
+      "--accent": "#c2490d",
+      "--accent-bright": "#e06a24",
+      "--accent-wash": "#e07a2e1f",
+      "--accent-ink": "#fff6ec",
+      "--mark": "#e8882e24",
+      "--mark-active": "#e8882e47",
+      "--mark-orphan": "#7a6f6329",
+      "--ok": "#2f7d3a",
+      "--danger": "#b8323f",
+      "--attention": "#7440b5",
       "--shadow-card": "0 1px 2px #0000000f, 0 8px 24px #00000014",
     });
+  });
+});
+
+// caret's own named color set (EXC-902) — the record the thirteen PaletteInput values
+// are read from, and the one EXC-903's authored shiki themes spend. The token colors
+// are already covered by the two full-token pins above and by the registry-wide
+// invariants below; what those cannot reach is the set's shiki-only half, which never
+// becomes a ColorToken and so never renders on a surface the other tests measure.
+//
+// Coverage of the placement map is deliberately NOT asserted here.
+// `Record<keyof CaretPalette, ColorPlacement>` already makes a color with no placement
+// (or a placement for no color) a compile error, and the "type annotation is a weak
+// proxy" note below applies to source-text claims that cannot be typed, not to this one.
+describe("the caret color set", () => {
+  const records = [
+    ["caret-dark", CARET_DARK],
+    ["caret-light", CARET_LIGHT],
+  ] as const;
+
+  // shiki resolves token colors at highlight time and takes plain 6-digit hex, and the
+  // registry-wide pin below already demands the same form of the tokens it reads. One
+  // rule over the whole record keeps the two halves from drifting apart.
+  test("names every color as alpha-free 6-digit hex", () => {
+    for (const [id, record] of records) {
+      for (const [color, value] of Object.entries(record)) {
+        expect(value, `${id} ${color}`).toMatch(/^#[0-9a-f]{6}$/i);
+      }
+    }
+  });
+
+  // The syntax hues render on --paper-sunk (the code body and the diff surface), which
+  // is neither of the two chrome surfaces the ink-ramp floors are measured against — in
+  // caret-dark it sits between them, in caret-light below both. So they get their own
+  // floor on their own surface: WCAG AA, except the hues that recede on purpose, held to
+  // the large-text floor instead. The exception list is named here rather than inferred,
+  // so widening it is a visible decision.
+  const RECESSIVE: (keyof typeof CARET_DARK)[] = ["comment"];
+
+  const shikiOnly = Object.entries(CARET_COLOR_PLACEMENT)
+    .filter(([, placement]) => placement === "shiki-only")
+    .map(([color]) => color as keyof typeof CARET_DARK);
+
+  // Guards the loop below against iterating an empty list: a reclassification that left
+  // no color `shiki-only` would otherwise report as a clean pass having measured nothing.
+  test("names a shiki-only half to measure", () => {
+    expect(shikiOnly.length).toBeGreaterThan(0);
+  });
+
+  test("clears caret's contrast floors for every shiki-only hue, on --paper-sunk", () => {
+    for (const [id, record] of records) {
+      for (const color of shikiOnly) {
+        const ratio = contrast(record[color], record.sunk);
+        if (RECESSIVE.includes(color)) {
+          expect(ratio, `${id} ${color} on sunk (recessive)`).toBeGreaterThan(3);
+        } else {
+          expect(ratio, `${id} ${color} on sunk`).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    }
   });
 });
 
