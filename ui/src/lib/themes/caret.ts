@@ -8,14 +8,20 @@
 // chroma, and that restraint is what lets twenty-seven colors read as one page rather
 // than a parade. The count is sized against Catppuccin's 26 per flavor — a count, not a
 // source of hues.
+//
+// Nothing sits on the violet arc. A pigment box has nothing there — the historical purples
+// are a shellfish and an aniline dye — so a violet keyword read as the one synthetic in the
+// set. Keyword takes red ochre instead, the oldest pigment there is, and attention takes
+// verdigris.
 
+import type { CaretShikiThemeId } from "$lib/caret-shiki.ts";
 import type { Scheme, Theme, ThemeId } from "$lib/theme.ts";
 import { paletteTheme } from "$lib/themes/recipe.ts";
 
 /** Every color caret's own palettes name: the thirteen `PaletteInput` values, the three
  * hues the recipe's derived washes ride, and the syntax half only the highlighter
- * spends. Exported because EXC-903's authored shiki themes read the last group out of
- * it — nothing else in the UI reaches past `Theme.tokens`. */
+ * spends. Exported because caret's shiki themes (caret-shiki.ts) read the last
+ * group out of it — nothing else in the UI reaches past `Theme.tokens`. */
 export interface CaretPalette {
   // The three surfaces. Dark is kraft: the page darkest, the plan document a step up, the
   // chrome a step above that. Light is oat — a warm limestone rather than a cool grey, so
@@ -36,9 +42,8 @@ export interface CaretPalette {
 
   // The accent trio — carrot, the pigment the rest of the chrome's prose calls amber, and
   // the scarce mark caret spends on the current selection. The syntax half carries its own
-  // sienna and ochre so EXC-903's authored themes need not spend the accent on every
-  // keyword; until those land, the seven-role derivation in caret-theme.ts still paints
-  // keywords with it.
+  // sienna and ochre, so caret's shiki themes (caret-shiki.ts) spend the accent only on
+  // a markdown heading rather than on every keyword.
   accent: string;
   accentBright: string;
   accentInk: string;
@@ -58,19 +63,25 @@ export interface CaretPalette {
   // The semantic trio — three different pigments rather than three tints of one. `ok` is
   // carrot-top, the green above the root, and it cascades into the diff addition tint.
   // `danger` is madder, pulled to the blue side of red so a deletion never reads as an
-  // orange mark. `attention` is thistle — the "look here" hue for novelty, a different job
-  // from selection, and the far side of the wheel from both.
+  // orange mark. `attention` is verdigris — the "look here" hue for novelty, a different
+  // job from selection, and the far side of the wheel from both.
   ok: string;
   danger: string;
   attention: string;
 
   // The syntax half — shiki-only, and measured against `sunk`. Eleven hues, because
-  // EXC-903's authored themes must tell a type from a function, a number from a string
-  // escape, and an attribute from a property; those three pairs are the ones held apart by
-  // hue, never under 157 degrees in either scheme.
+  // caret's shiki themes must tell a type from a function, a number from a string escape,
+  // an attribute from a property; those three pairs are the ones held apart by hue, never
+  // under 130 degrees in either scheme, measured in OKLCH.
   //
-  // Three pigments are each spent twice, at different value: thistle on keyword and
-  // attention, madder on escape and danger, terre verte on string and ok. Keyword and
+  // The eight colored ones sit in a narrow, HIGH chroma band — the three neutrals below
+  // (variable, comment, punctuation) sit well under it. Holding the band tight is what
+  // keeps eleven hues from reading as a parade; sitting it high is what keeps them off
+  // pastel. Gruvbox is the proof the two are compatible: it is the earthiest theme in wide
+  // use and it runs hotter than this.
+  //
+  // Three pigments are each spent twice, at different value: verdigris on number and
+  // attention, madder on escape and danger, terre verte on string and ok. Number and
   // attention split cleanly across code and chrome. The other two meet on the diff surface,
   // where --ok / --danger reach the code rows as the line tint and gutter bar
   // (styles/diffview.css) — there the chrome hue is a low-alpha wash UNDER text and the
@@ -102,20 +113,20 @@ export const CARET_DARK: CaretPalette = {
   washHue: "#f2842f", // ember, a shade off the accent so the wash is its own color
   markHue: "#ffa64d", // amber, a step above the wash so a mark reads over it
   neutral: "#9a8c7e", // dust
-  ok: "#5fc464", // carrot-top
-  danger: "#f0697a", // madder
-  attention: "#bb92e6", // thistle
-  keyword: "#b982e8", // thistle, deepened — the spine of a statement
-  type: "#7fc0dc", // woad, the cool anchor
-  func: "#e2bd6a", // ochre
+  ok: "#4ed056", // carrot-top
+  danger: "#f65a6f", // madder
+  attention: "#3fbda9", // verdigris, deepened
+  keyword: "#dd7a6c", // red ochre — the spine of a statement
+  type: "#6ec4e4", // woad, the cool anchor
+  func: "#ecc25c", // ochre
   variable: "#ece2d4", // bone, barely off the ink — identifiers keep the page calm
-  property: "#aecada", // flax — keys read as pale types
-  attribute: "#f08a5e", // sienna
-  string: "#8ec97e", // terre verte, lighter and a shade yellower than carrot-top
-  escape: "#f78a94", // madder, lifted — an escape has to break its string
-  number: "#5fcabb", // verdigris
+  property: "#a3d4ec", // flax — keys read as pale types
+  attribute: "#f5834f", // sienna
+  string: "#92d474", // terre verte, lighter and a shade yellower than carrot-top
+  escape: "#f56f8e", // madder, lifted past the ochre — an escape has to break its string
+  number: "#4cbbc8", // verdigris, tilted off the green side of cyan toward the sky
   comment: "#7f7466", // umber — the pencil note, held to the large-text floor
-  punctuation: "#a89a90", // stone
+  punctuation: "#b0a094", // stone
 };
 
 export const CARET_LIGHT: CaretPalette = {
@@ -132,18 +143,18 @@ export const CARET_LIGHT: CaretPalette = {
   washHue: "#e07a2e", // ember
   markHue: "#e8882e", // amber
   neutral: "#7a6f63", // dust
-  ok: "#2f7d3a", // carrot-top
-  danger: "#b8323f", // madder
-  attention: "#7440b5", // thistle
-  keyword: "#6a37a0", // thistle, deepened
-  type: "#26648c", // woad
+  ok: "#1d802a", // carrot-top
+  danger: "#c11f30", // madder
+  attention: "#0a5f57", // verdigris, deepened
+  keyword: "#9a2f22", // red ochre
+  type: "#145d8f", // woad
   func: "#7d5a05", // ochre
   variable: "#2a221c", // umber, barely off the ink
-  property: "#456075", // flax
-  attribute: "#984314", // sienna
-  string: "#3d7040", // terre verte
-  escape: "#ad2f3f", // madder, deepened
-  number: "#0d6d66", // verdigris
+  property: "#35617e", // flax
+  attribute: "#963c07", // sienna
+  string: "#2c7331", // terre verte
+  escape: "#ab1f43", // madder, deepened past the ochre
+  number: "#14717b", // verdigris, tilted toward the sky
   comment: "#8a7d6d", // umber, recessive
   punctuation: "#665b52", // stone
 };
@@ -154,7 +165,7 @@ export const CARET_LIGHT: CaretPalette = {
  * highlighting spends. */
 export type ColorPlacement = "token" | "derived" | "shiki-only";
 
-/** Every color's placement, so EXC-903 (authored shiki themes) and EXC-904 (the
+/** Every color's placement, so EXC-903 (caret's shiki themes) and EXC-904 (the
  * `ColorToken` plumbing) each know which half of the set is theirs.
  *
  * `Record<keyof CaretPalette, ColorPlacement>` is the point: a color with no placement,
@@ -195,13 +206,24 @@ export const CARET_COLOR_PLACEMENT: Record<keyof CaretPalette, ColorPlacement> =
 };
 
 /** Read one palette's sixteen chrome colors out of its record and through the recipe.
- * The syntax half is not passed: `paletteTheme` has nowhere to put it, and EXC-903 reads
- * it from the record directly. */
-function caretTheme(id: ThemeId, label: string, scheme: Scheme, p: CaretPalette): Theme {
+ * The syntax half is not passed: `paletteTheme` has nowhere to put it, and caret's
+ * shiki themes (caret-shiki.ts) read it from the record directly.
+ *
+ * @param id - caret's palettes and its shiki themes spell their ids
+ * identically, so the one string names both. The intersection makes that identity a
+ * compile error to break rather than a coincidence to rely on — the same shape
+ * catppuccin.ts's `flavor` uses for the vendor half. */
+function caretTheme(
+  id: ThemeId & CaretShikiThemeId,
+  label: string,
+  scheme: Scheme,
+  p: CaretPalette,
+): Theme {
   return paletteTheme({
     id,
     label,
     scheme,
+    shikiTheme: id,
     paper: p.paper,
     raised: p.raised,
     sunk: p.sunk,

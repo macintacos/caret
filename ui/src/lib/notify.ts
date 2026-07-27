@@ -323,7 +323,7 @@ export interface BellPresentation {
 /** Pure permission → badge presentation mapping for NotifyBell.svelte. The bell
  * itself stays neutral chrome for the decided states so the colored status dot
  * is the signal; the undecided state is the one invitation to act, so it tints
- * `attention` (subtle purple) and shows the `?` glyph instead of a dot. */
+ * `attention` (subtle verdigris) and shows the `?` glyph instead of a dot. */
 export function bellPresentation(permission: NotificationPermission): BellPresentation {
   switch (permission) {
     case "granted":

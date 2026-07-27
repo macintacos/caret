@@ -132,9 +132,9 @@ describe("THEMES", () => {
       "--mark": "#ffa64d2e",
       "--mark-active": "#ffa64d57",
       "--mark-orphan": "#9a8c7e29",
-      "--ok": "#5fc464",
-      "--danger": "#f0697a",
-      "--attention": "#bb92e6",
+      "--ok": "#4ed056",
+      "--danger": "#f65a6f",
+      "--attention": "#3fbda9",
       "--shadow-card": "0 1px 2px #00000066, 0 10px 30px #00000080",
     });
   });
@@ -156,16 +156,16 @@ describe("THEMES", () => {
       "--mark": "#e8882e24",
       "--mark-active": "#e8882e47",
       "--mark-orphan": "#7a6f6329",
-      "--ok": "#2f7d3a",
-      "--danger": "#b8323f",
-      "--attention": "#7440b5",
+      "--ok": "#1d802a",
+      "--danger": "#c11f30",
+      "--attention": "#0a5f57",
       "--shadow-card": "0 1px 2px #0000000f, 0 8px 24px #00000014",
     });
   });
 });
 
 // caret's own named color set (EXC-902) — the record the thirteen PaletteInput values
-// are read from, and the one EXC-903's authored shiki themes spend. The token colors
+// are read from, and the one EXC-903's caret shiki themes spend. The token colors
 // are already covered by the two full-token pins above and by the registry-wide
 // invariants below; what those cannot reach is the set's shiki-only half, which never
 // becomes a ColorToken and so never renders on a surface the other tests measure.
@@ -256,7 +256,7 @@ describe("every palette module", () => {
 
 // Registry-wide invariants: these run over every palette rather than the two named
 // ones, so a theme added later is held to caret's structure — surface ordering, a
-// legible ink ramp, and the shape the shiki derivation needs — the moment it lands.
+// legible ink ramp, and the shape the shiki resolver needs — the moment it lands.
 describe("every theme", () => {
   test("keys itself by its own id and carries a label", () => {
     for (const [id, theme] of themeEntries()) {
@@ -335,16 +335,12 @@ describe("every theme", () => {
 
   // shiki resolves token colors at highlight time and takes plain 6-digit hex; an
   // alpha suffix on any of these would reach the highlighter as an invalid color.
+  // Only the three caret-theme.ts's structural marker rules read reach shiki through
+  // the tokens: caret's own themes take their colors from the named set (covered
+  // by "names every color as alpha-free 6-digit hex" above), and a vendor palette
+  // highlights with its own upstream `colors`.
   test("supplies alpha-free hex for the tokens shiki reads", () => {
-    const shikiTokens: ColorToken[] = [
-      "--paper-sunk",
-      "--ink",
-      "--ink-faint",
-      "--ink-soft",
-      "--accent",
-      "--accent-bright",
-      "--ok",
-    ];
+    const shikiTokens: ColorToken[] = ["--ink-faint", "--ink-soft", "--accent"];
     for (const [id, theme] of themeEntries()) {
       for (const token of shikiTokens) {
         expect(theme.tokens[token], `${id} ${token}`).toMatch(/^#[0-9a-f]{6}$/i);

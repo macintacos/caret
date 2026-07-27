@@ -386,7 +386,7 @@
      the shared `.count metric` classes, so the three read as one family. Those
      counts are deliberately neutral because amber is reserved for the Approve
      primary; this one is asked to draw the eye, so it wears --attention, caret's
-     quiet-notice violet (the NotifyBell's undecided tone, the notification dot).
+     quiet-notice verdigris (the NotifyBell's undecided tone, the notification dot).
      That keeps amber scarce AND keeps --ok/--danger free to mean
      addition/deletion, which matters with the diff surface sitting directly below
      this bar. Fill and ink both derive from the one token, so paintTheme retints

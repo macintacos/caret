@@ -45,11 +45,11 @@ export interface MarkdownEditorOptions {
 // The markdown grammar tags structure (strong/emphasis/heading/link) and the
 // syntax markers (meta); the code-* tags below colour fenced-block content once a
 // language parses it (see codeLanguages in markdownExtensions). Colours are caret tokens
-// (hex/var, never oklch), mapped onto the same roles caret-theme.ts's own derivation uses:
-// keyword = accent, string = ok/green, comment = faint, names/types/numbers =
-// accent-bright. That matches the diff view under caret-dark and caret-light; a vendor
-// palette highlights its code with the vendor's published shiki theme (EXC-896), so the
-// two converge only on caret's own pair.
+// (hex/var, never oklch): keyword = accent, string = ok/green, comment = faint,
+// names/types/numbers = accent-bright. This is the editor's own scheme, NOT the diff
+// view's — the shiki themes there paint syntax from the named colour set's eleven
+// shiki-only hues (themes/caret.ts, caret-shiki.ts), and those are not ColorTokens,
+// so a `var(--x)` highlight style has no way to name them.
 const highlightStyle = HighlightStyle.define([
   // Markdown structure.
   { tag: tags.strong, fontWeight: "700" },

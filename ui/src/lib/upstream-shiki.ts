@@ -1,13 +1,13 @@
 // The upstream shiki themes caret's vendor palettes point at (EXC-896): a palette
 // named after a vendor highlights code with that vendor's own published theme, so
-// picking Dracula gets Dracula — including the colors caret's seven-role derivation
-// cannot produce at all. caret's own pair names nothing here and keeps the
-// derivation; the resolution lives in caret-theme.ts.
+// picking Dracula gets Dracula — including the colors caret's own named set does not
+// carry. caret's pair names nothing in THIS map; it points at the themes caret
+// authors for itself (caret-shiki.ts). The resolution lives in caret-theme.ts.
 //
 // The imports are static so the map stays a synchronous module constant, which is
 // what lets both highlighters — the excerpt popover's (diffview/highlight.ts) and
 // the @pierre/diffs one (diffview/theme.ts) — keep sharing a single loaded copy
-// through CARET_SHIKI_THEMES. The seven themes are ~264 KB raw, against the full
+// through REGISTERED_SHIKI_THEMES. The seven themes are ~264 KB raw, against the full
 // shiki grammar bundle the UI already ships.
 //
 // GitHub's `-default` suffix is load-bearing — the unsuffixed pair is legacy Primer.

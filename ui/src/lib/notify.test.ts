@@ -387,7 +387,7 @@ describe("bellPresentation", () => {
     const p = bellPresentation("default");
     expect(p.icon).toBe("bell");
     expect(p.overlay).toBe("circle-question-mark");
-    // The undecided state is the one invitation to act — it tints purple to
+    // The undecided state is the one invitation to act — it tints verdigris to
     // draw the eye, and carries the `?` glyph rather than a plain status dot.
     expect(p.tone).toBe("attention");
     expect(p.dot).toBeUndefined();

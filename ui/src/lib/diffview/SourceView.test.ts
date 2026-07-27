@@ -31,7 +31,7 @@ describe("SourceView rendering", () => {
     // The theme/font bridge registers caret's own palettes as Shiki themes and
     // selects them through the view options, so the library highlights with
     // caret's palette rather than its own. A keyword token must carry caret's
-    // accent color in both color schemes (light #c2490d / dark #ff8f3d, the --accent
+    // keyword hue in both color schemes (light #9a2f22 / dark #dd7a6c, the red ochre
     // ui/src/lib/themes/caret.ts names) — proof the registration reached the renderer.
     const code: SourceDocument = { name: "code.ts", text: "const x = 1\n" };
     const { target } = render(SourceView, { doc: code, contentKey: "c1:v1" });
@@ -40,8 +40,8 @@ describe("SourceView rendering", () => {
       .map((el) => el.getAttribute("style") ?? "")
       .join(" ")
       .toLowerCase();
-    expect(tokenStyles).toContain("--diffs-token-light:#c2490d");
-    expect(tokenStyles).toContain("--diffs-token-dark:#ff8f3d");
+    expect(tokenStyles).toContain("--diffs-token-light:#9a2f22");
+    expect(tokenStyles).toContain("--diffs-token-dark:#dd7a6c");
   });
 });
 

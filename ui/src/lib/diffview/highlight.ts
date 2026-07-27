@@ -5,7 +5,7 @@
 // the plan view's own code. Grammars load lazily and cache; anything that can't
 // highlight falls back to plain text. Never throws.
 
-import { CARET_SHIKI_THEMES } from "$lib/caret-theme.ts";
+import { REGISTERED_SHIKI_THEMES } from "$lib/caret-theme.ts";
 import { createHighlighter } from "$lib/diffview/shiki-bundle.ts";
 import type { ThemeId } from "$lib/theme.ts";
 
@@ -18,7 +18,7 @@ function highlighter(): Promise<Highlighter> {
   if (highlighterPromise === undefined) {
     highlighterPromise = createHighlighter({
       langs: [],
-      themes: CARET_SHIKI_THEMES,
+      themes: REGISTERED_SHIKI_THEMES,
     });
   }
   return highlighterPromise;
