@@ -256,7 +256,7 @@ describe("every palette module", () => {
 
 // Registry-wide invariants: these run over every palette rather than the two named
 // ones, so a theme added later is held to caret's structure — surface ordering, a
-// legible ink ramp, and the shape the shiki derivation needs — the moment it lands.
+// legible ink ramp, and the shape the shiki resolver needs — the moment it lands.
 describe("every theme", () => {
   test("keys itself by its own id and carries a label", () => {
     for (const [id, theme] of themeEntries()) {

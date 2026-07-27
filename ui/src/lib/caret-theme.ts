@@ -7,7 +7,7 @@ import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
 // One shiki theme per registered palette (EXC-752), so the code a reviewer reads
 // is colored by the theme they picked rather than by caret's own pair at the
 // matching scheme. Registered into both highlighters: the source view's
-// (diffview/theme.ts) and the excerpt popover's.
+// (diffview/theme.ts) and the excerpt popover's (diffview/highlight.ts).
 //
 // Every palette names the theme it highlights with, and the two asset maps below
 // hold them all, so shikiThemeForPalette is one total lookup rather than a fork.
@@ -53,9 +53,9 @@ function paletteFromTheme(t: Theme): Palette {
  * tokens that style identically. Every upstream theme colors the backtick exactly like
  * the code between them, which collapses `` `path` `` into a single token and silently
  * drops the file icon, pointer cursor, and hover chip while leaving the click target
- * alive (EXC-687, EXC-840). Coloring the backtick separately keeps the boundary. It is
- * a no-op under caret's own themes, whose generic `punctuation` rule already resolves
- * this scope to the same value. */
+ * alive (EXC-687, EXC-840). Coloring the backtick separately keeps the boundary. Under
+ * caret's own themes it also lifts the backtick off the generic `punctuation` hue, so
+ * the boundary holds by color rather than by rule order alone. */
 function structuralMarkerRules(p: Palette): NonNullable<ThemeRegistrationRaw["settings"]> {
   return [
     {
@@ -81,7 +81,7 @@ function structuralMarkerRules(p: Palette): NonNullable<ThemeRegistrationRaw["se
  * taken, `tokenColors` the one every real upstream theme actually uses. The rename is
  * what lets a highlighter resolve the theme by the same handle appearance.ts paints
  * with. */
-function withStructuralOverrides(theme: Theme, source: ThemeRegistrationRaw) {
+function withStructuralOverrides(theme: Theme, source: ThemeRegistrationRaw): ThemeRegistrationRaw {
   const { tokenColors, settings, ...rest } = source;
   return {
     ...rest,

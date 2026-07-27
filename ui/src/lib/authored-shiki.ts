@@ -1,8 +1,7 @@
-// caret's own two shiki themes (EXC-903), authored rather than derived. The eleven
-// shiki-only hues of the named color set in ./themes/caret.ts (EXC-902) are spent here,
-// across a TextMate scope set wide enough to tell a type from a function, a number from
-// a string escape, and an attribute from a property — the three pairs the set holds apart
-// by hue, and the three the seven-role derivation this replaces painted all one color.
+// caret's own two shiki themes (EXC-903). The eleven shiki-only hues of the named color
+// set in ./themes/caret.ts (EXC-902) are spent here, across a TextMate scope set wide
+// enough to tell a type from a function, a number from a string escape, and an attribute
+// from a property — the three pairs that set holds apart by hue.
 //
 // A theme is a plain `ThemeRegistrationRaw` object (shiki's load-theme guide), the same
 // shape ./upstream-shiki.ts's vendor themes carry, so caret-theme.ts resolves the whole
@@ -24,7 +23,11 @@
 
 import type { ThemeRegistrationRaw } from "shiki/core";
 
-import type { Scheme } from "$lib/theme.ts";
+// Both imports are type-only in one direction: theme.ts takes `AuthoredShikiThemeId`
+// from here and this module takes its two types from there. `verbatimModuleSyntax`
+// erases both, so the cycle is a source-graph artifact rather than a load order — keep
+// it that way, and never reach for a runtime value across it.
+import type { Scheme, ThemeId } from "$lib/theme.ts";
 import { CARET_DARK, CARET_LIGHT, type CaretPalette } from "$lib/themes/caret.ts";
 
 /** Build one scheme's theme from its record.
@@ -36,9 +39,11 @@ import { CARET_DARK, CARET_LIGHT, type CaretPalette } from "$lib/themes/caret.ts
  * with its string.
  *
  * @param id - The theme's shiki name, which is also its palette id — a highlighter
- * resolves it by the same handle appearance.ts paints with. `caretTheme`'s
- * `ThemeId & AuthoredShikiThemeId` parameter is what makes the two spell alike. */
-function authoredTheme(id: string, scheme: Scheme, p: CaretPalette): ThemeRegistrationRaw {
+ * resolves it by the same handle appearance.ts paints with. Typing it `ThemeId` keeps a
+ * theme from naming a palette that does not exist; that its key and its `name` agree is
+ * pinned by caret-theme.test.ts, and `caretTheme`'s `ThemeId & AuthoredShikiThemeId`
+ * parameter closes the loop from the palette side. */
+function authoredTheme(id: ThemeId, scheme: Scheme, p: CaretPalette): ThemeRegistrationRaw {
   return {
     name: id,
     type: scheme,
@@ -187,7 +192,7 @@ function authoredTheme(id: string, scheme: Scheme, p: CaretPalette): ThemeRegist
 export const AUTHORED_SHIKI_THEMES = {
   "caret-dark": authoredTheme("caret-dark", "dark", CARET_DARK),
   "caret-light": authoredTheme("caret-light", "light", CARET_LIGHT),
-};
+} as const;
 
 /** The authored theme ids a palette can point at — caret's own pair, and the half of
  * `ShikiThemeId` that is not a vendor's. */

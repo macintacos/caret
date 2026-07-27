@@ -12,7 +12,7 @@
 
 import type { ColorToken, Scheme, ShikiThemeId, Theme, ThemeId } from "$lib/theme.ts";
 
-/** The colors a palette decides for itself, plus the upstream shiki theme it names.
+/** The colors a palette decides for itself, plus the shiki theme it names.
  * Everything else in a `Theme` is derived from these by `paletteTheme`. */
 export interface PaletteInput {
   id: ThemeId;

@@ -85,8 +85,8 @@ export type Scheme = "dark" | "light";
 
 /** Every color custom property app.css declares in :root — the exhaustive set a
  * palette must supply. Typing `tokens` against this union makes a missing or
- * stray token a compile error, and lets the shiki derivation in caret-theme.ts
- * index tokens without a non-null assertion. */
+ * stray token a compile error, and lets caret-theme.ts index the tokens its
+ * structural marker rules read without a non-null assertion. */
 export type ColorToken =
   | "--paper"
   | "--paper-raised"
@@ -119,9 +119,8 @@ export interface Theme {
   tokens: Record<ColorToken, string>;
   /** The shiki theme this palette highlights code with — the vendor's own published
    * one for a palette named after a vendor (EXC-896), caret's authored theme of the
-   * same name for its own pair (EXC-903). Required: a palette that named none would
-   * have nothing to highlight with, and making that a compile error is what replaced
-   * the seven-role derivation caret's pair used to fall back to. */
+   * same name for its own pair (EXC-903). Required, so a palette that names none is
+   * a compile error rather than a page of uncolored code. */
   shikiTheme: ShikiThemeId;
 }
 

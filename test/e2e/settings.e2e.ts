@@ -226,9 +226,9 @@ test("picking a vendor palette retints the chrome and the code", async ({ daemon
   expect(retinted).not.toContain("rgb(255, 143, 61)");
 
   // EXC-896: the fenced block is upstream Dracula's own highlighting, not caret's
-  // seven-role derivation wearing Dracula's hues. Dracula paints `function` its
-  // pink (#ff79c6) — a color the derivation, which maps seven palette tokens and
-  // no pink among them, cannot produce at any scope.
+  // own authored theme wearing Dracula's hues. Dracula paints `function` its pink
+  // (#ff79c6) — a hue caret's named color set does not carry, so caret's pair
+  // cannot produce it at any scope.
   await expect.poll(() => rowColors(page, "function warm")).toContain("rgb(255, 121, 198)");
 });
 

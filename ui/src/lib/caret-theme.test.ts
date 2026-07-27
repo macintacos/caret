@@ -22,14 +22,20 @@ import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
 // color set and nothing else, and a vendor palette carries its upstream rule set
 // whole.
 
-// The tokens these tests read: the three the structural marker rules paint with,
-// plus the one a fenced block's body takes under caret's own themes.
+// The tokens these tests read: the two the fence line's own rules paint with, plus
+// the one a fenced block's body takes under caret's own themes. (The third structural
+// rule's token, --ink-soft, is asserted directly where it is read.)
 const FIELD_TO_TOKEN: Record<string, ColorToken> = {
   comment: "--ink-faint",
-  punctuation: "--ink-soft",
   keyword: "--accent",
   fenceBody: "--accent-bright",
 };
+
+/** caret's two palettes paired with the record each authored theme is built from. */
+const CARET_RECORDS = [
+  ["caret-dark", CARET_DARK],
+  ["caret-light", CARET_LIGHT],
+] as const;
 
 /** caret's own palettes name a theme this repo authors; every other palette names a
  * vendor's published one. Narrowing through this predicate rather than a cast is what
@@ -131,11 +137,6 @@ describe("upstream shiki theme declarations", () => {
 // spent across a scope set wide enough to tell a type from a function. These pin the
 // asset map's own contract; how a palette reaches it is the resolver's, below.
 describe("authored caret shiki themes", () => {
-  const records = [
-    ["caret-dark", CARET_DARK],
-    ["caret-light", CARET_LIGHT],
-  ] as const;
-
   test("registers one theme per caret palette, named by its key", () => {
     // Same pin the upstream registry carries: a mis-wired entry (`caret-light`
     // holding the dark theme) would otherwise resolve by the wrong handle.
@@ -145,7 +146,7 @@ describe("authored caret shiki themes", () => {
     }
   });
 
-  for (const [id, record] of records) {
+  for (const [id, record] of CARET_RECORDS) {
     describe(id, () => {
       const theme = AUTHORED_SHIKI_THEMES[id];
 
@@ -200,7 +201,7 @@ describe("caret-theme ↔ THEMES palette sync", () => {
     );
   });
 
-  // Both resolution paths preserve the scheme, so a light theme can never be
+  // The one resolution path preserves the scheme, so a light theme can never be
   // rendered on a dark palette (or the reverse) without failing here.
   for (const id of THEME_IDS) {
     test(`${id} carries its palette's scheme as the shiki theme type`, () => {
@@ -252,13 +253,9 @@ describe("caret-theme ↔ THEMES palette sync", () => {
 // is what makes them beat whatever the theme underneath says about those scopes.
 describe("caret's structural marker rules", () => {
   for (const id of THEME_IDS) {
-    // Resolved fresh rather than read off shikiThemeFor's cached object: shiki's
-    // normalizeTheme unshifts a default fg/bg rule into the `settings` array it is
-    // handed, in place, so the cached theme's rule count grows by one the first time
-    // any highlighter registers it. The resolver's output is the contract; the extra
-    // rule is shiki's bookkeeping, and harmless — it carries no scope, which textmate
-    // reads as the theme's default fg/bg rather than as a rule competing with the
-    // others.
+    // Resolved fresh rather than read off the cached object, for the reason the
+    // vendor block above spells out: shiki's normalizeTheme mutates the array it is
+    // handed, so a registered theme's rule count no longer matches the resolver's.
     test(`${id} carries them last, in order`, () => {
       const tokens = THEMES[id].tokens;
       const rules = shikiThemeForPalette(THEMES[id]).settings ?? [];
@@ -378,10 +375,10 @@ describe("dracula fenced-code block", () => {
   });
 });
 
-// AC 2. The derivation painted types, functions, numbers, and object keys all with
-// --accent-bright; the authored themes hold three of those pairs apart by hue. This
-// is where that is checked against a real grammar rather than read back off the rule
-// table, which would only restate authored-shiki.ts in a second spelling.
+// AC 2: a type reads apart from a function, a number from a string escape, and an
+// attribute from a property. This is where those three pairs are checked against a
+// real grammar rather than read back off the rule table, which would only restate
+// authored-shiki.ts in a second spelling.
 //
 // A caveat for anyone editing the sample: shiki's JS regex engine — the one caret
 // ships (diffview/shiki-bundle.ts) — resolves some TypeScript constructs to coarser
@@ -414,12 +411,7 @@ describe("caret themes over a real TypeScript sample", () => {
     return lines[row]?.find((t) => t.content === text)?.color?.toLowerCase();
   }
 
-  const records = [
-    ["caret-dark", CARET_DARK],
-    ["caret-light", CARET_LIGHT],
-  ] as const;
-
-  for (const [id, p] of records) {
+  for (const [id, p] of CARET_RECORDS) {
     describe(id, () => {
       test("colors a type apart from a function", async () => {
         const lines = await tokenizeSample(id);
@@ -438,6 +430,35 @@ describe("caret themes over a real TypeScript sample", () => {
         expect(colorAt(lines, 3, "className")).toBe(p.attribute);
         expect(colorAt(lines, 1, "id")).toBe(p.property);
       });
+    });
+  }
+});
+
+// A rendered patch takes the semantic pair rather than two more syntax hues, so it
+// agrees with the diff view's own addition and deletion tints. Pinned because these
+// three are `token`-placed rather than `shiki-only`, which puts them outside the
+// coverage check above — and because the deletion hue is the one color decision this
+// theme pair makes that no other surface already asserts.
+describe("caret themes over a diff fence", () => {
+  const PATCH = ["```diff", "@@ -1,2 +1,2 @@", "-old(1)", "+new(2)", "```"].join("\n");
+
+  let shared: Awaited<ReturnType<typeof createHighlighterCore>> | undefined;
+  async function tokenizePatch(id: ThemeId) {
+    shared ??= await createHighlighterCore({
+      themes: [shikiThemeFor("caret-dark"), shikiThemeFor("caret-light")],
+      langs: [import("shiki/langs/markdown.mjs"), import("shiki/langs/diff.mjs")],
+      engine: createJavaScriptRegexEngine(),
+    });
+    return shared.codeToTokensBase(PATCH, { lang: "markdown", theme: id });
+  }
+
+  for (const [id, p] of CARET_RECORDS) {
+    test(`${id} paints an addition ok, a deletion danger, and the range faint`, async () => {
+      const lines = await tokenizePatch(id);
+      const colorOn = (row: number) => lines[row]?.[0]?.color?.toLowerCase();
+      expect(colorOn(1), "@@ range").toBe(p.comment);
+      expect(colorOn(2), "deleted line").toBe(p.danger);
+      expect(colorOn(3), "added line").toBe(p.ok);
     });
   }
 });
