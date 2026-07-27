@@ -72,7 +72,7 @@ export interface CaretPalette {
   // The syntax half — shiki-only, and measured against `sunk`. Eleven hues, because the
   // authored themes must tell a type from a function, a number from a string escape, and
   // an attribute from a property; those three pairs are the ones held apart by hue, never
-  // under 157 degrees in either scheme.
+  // under 130 degrees in either scheme, measured in OKLCH.
   //
   // The eight colored ones sit in a narrow, HIGH chroma band — the three neutrals below
   // (variable, comment, punctuation) sit well under it. Holding the band tight is what
@@ -113,8 +113,8 @@ export const CARET_DARK: CaretPalette = {
   washHue: "#f2842f", // ember, a shade off the accent so the wash is its own color
   markHue: "#ffa64d", // amber, a step above the wash so a mark reads over it
   neutral: "#9a8c7e", // dust
-  ok: "#5fc464", // carrot-top
-  danger: "#f0697a", // madder
+  ok: "#4ed056", // carrot-top
+  danger: "#f65a6f", // madder
   attention: "#3fbda9", // verdigris, deepened
   keyword: "#dd7a6c", // red ochre — the spine of a statement
   type: "#6ec4e4", // woad, the cool anchor
@@ -124,7 +124,7 @@ export const CARET_DARK: CaretPalette = {
   attribute: "#f5834f", // sienna
   string: "#92d474", // terre verte, lighter and a shade yellower than carrot-top
   escape: "#f56f8e", // madder, lifted past the ochre — an escape has to break its string
-  number: "#4bd2bd", // verdigris
+  number: "#4cbbc8", // verdigris, tilted off the green side of cyan toward the sky
   comment: "#7f7466", // umber — the pencil note, held to the large-text floor
   punctuation: "#b0a094", // stone
 };
@@ -143,8 +143,8 @@ export const CARET_LIGHT: CaretPalette = {
   washHue: "#e07a2e", // ember
   markHue: "#e8882e", // amber
   neutral: "#7a6f63", // dust
-  ok: "#2f7d3a", // carrot-top
-  danger: "#b8323f", // madder
+  ok: "#1d802a", // carrot-top
+  danger: "#c11f30", // madder
   attention: "#0a5f57", // verdigris, deepened
   keyword: "#9a2f22", // red ochre
   type: "#145d8f", // woad
@@ -154,7 +154,7 @@ export const CARET_LIGHT: CaretPalette = {
   attribute: "#963c07", // sienna
   string: "#2c7331", // terre verte
   escape: "#ab1f43", // madder, deepened past the ochre
-  number: "#06716a", // verdigris
+  number: "#14717b", // verdigris, tilted toward the sky
   comment: "#8a7d6d", // umber, recessive
   punctuation: "#665b52", // stone
 };

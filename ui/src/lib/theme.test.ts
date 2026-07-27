@@ -132,8 +132,8 @@ describe("THEMES", () => {
       "--mark": "#ffa64d2e",
       "--mark-active": "#ffa64d57",
       "--mark-orphan": "#9a8c7e29",
-      "--ok": "#5fc464",
-      "--danger": "#f0697a",
+      "--ok": "#4ed056",
+      "--danger": "#f65a6f",
       "--attention": "#3fbda9",
       "--shadow-card": "0 1px 2px #00000066, 0 10px 30px #00000080",
     });
@@ -156,8 +156,8 @@ describe("THEMES", () => {
       "--mark": "#e8882e24",
       "--mark-active": "#e8882e47",
       "--mark-orphan": "#7a6f6329",
-      "--ok": "#2f7d3a",
-      "--danger": "#b8323f",
+      "--ok": "#1d802a",
+      "--danger": "#c11f30",
       "--attention": "#0a5f57",
       "--shadow-card": "0 1px 2px #0000000f, 0 8px 24px #00000014",
     });
