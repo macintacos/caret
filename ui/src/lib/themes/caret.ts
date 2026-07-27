@@ -1,60 +1,241 @@
-// caret's own two palettes — the reference every other theme is mapped against.
-// caret-dark is also the source ui/generate-palette-css.ts emits as app.css's
-// static first-paint fallback.
+// caret's own two palettes — the reference every other theme is mapped against, and
+// the only pair that names its colors instead of transcribing a vendor's. caret-dark is
+// also the source ui/generate-palette-css.ts emits as app.css's static first-paint
+// fallback.
 //
-// Both go through ./recipe.ts like every vendor palette, with hue overrides for the
-// three washes caret decides apart from the color they would otherwise derive from:
-// the accent wash rides a mid-amber that is deliberately not --accent, caret-dark's
-// marks ride a second, slightly lighter amber, and caret-dark's rules ride pure
-// white so its hairlines stay neutral on near-black paper.
+// The direction is earth pigment (EXC-902). caret's token vocabulary is paper, ink,
+// rule, and mark — a proofing desk — so the palette is the pigment set that desk would
+// hold, and dark mode's page is a dark PAPER (kraft) rather than the neutral near-black
+// it started as. The hairlines follow it off white onto bone: a pure-white rule on brown
+// paper reads cold, which was the whole reason the old override existed. Nothing runs at
+// full chroma, and that restraint is what lets twenty-seven colors still read as one
+// page rather than a parade.
+//
+// SURFACES. Dark is kraft: page darkest, code body a step up, cards a step above that.
+// Light is oat — a warm limestone rather than a cool grey, so it reads as caret-dark's
+// sibling (EXC-776): every neutral has R > G > B, subtle enough to carry no visible
+// yellow cast, and theme.test.ts pins R > B on the tokens that reach it.
+//
+// INK. Parchment on dark, near-black umber on light, each at three rungs — body copy,
+// secondary copy, metadata. The rungs clear WCAG AA (AA-large for the faintest) on both
+// chrome surfaces, not just the page, because dialogs and dropdowns sit on the raised
+// one.
+//
+// THE ACCENT is carrot: the scarce mark caret spends on the current selection. Code does
+// NOT spend it — the syntax set carries its own sienna and ochre — so the accent stays
+// scarce where scarcity is the point.
+//
+// THE SEMANTIC TRIO is deliberately three different pigments rather than three tints of
+// one. `ok` is carrot-top, the green above the root, and it is a designed hue rather
+// than the leftover Tailwind swatch it used to be; it cascades into the diff addition
+// tint. `danger` is madder, pulled to the blue side of red so a deletion never reads as
+// an orange mark. `attention` is thistle — the "look here" hue for novelty, which is a
+// different job from selection, and the far side of the wheel from both.
+//
+// THE THREE HUE OVERRIDES name a hue the recipe would otherwise take from a token. The
+// rules ride bone (dark) and a warm umber (light) rather than the ink; the accent wash
+// rides an ember that is deliberately not the accent; the marks ride a lighter amber
+// than the wash, so a highlight sits above the wash it overlaps.
+//
+// THE SYNTAX HALF is eleven hues, and its size is set by what EXC-903's authored themes
+// must tell apart: a type from a function, a number from a string escape, an attribute
+// from a property. Seven pigment regions serve them, so three pairs share a region at
+// different value — thistle for keyword and attention, madder for escape and danger,
+// terre verte for string and ok. Each of those pairs splits across chrome and code,
+// which never render on the same surface. The pairs that DO co-occur in code are the
+// ones held apart by hue: type against function is 158 degrees, number against escape
+// 177, attribute against property 173.
+//
+// Sizing is calibrated against Catppuccin's 26 named colors per flavor — a count, not a
+// source of hues.
 
+import type { Scheme, Theme, ThemeId } from "$lib/theme.ts";
 import { paletteTheme } from "$lib/themes/recipe.ts";
 
-export const caretDark = paletteTheme({
-  id: "caret-dark",
-  label: "caret dark",
-  scheme: "dark",
-  paper: "#0a0a0a",
-  raised: "#171717",
-  sunk: "#131313",
-  ink: "#fafafa",
-  inkSoft: "#a1a1a1",
-  inkFaint: "#737373",
-  accent: "#fb923c",
-  accentBright: "#fdba74",
-  accentInk: "#0a0a0a",
-  neutral: "#9b9b9b",
-  ok: "#4ade80",
-  danger: "#f87171",
-  attention: "#a78bfa",
-  ruleHue: "#ffffff",
-  washHue: "#ec7c38",
-  markHue: "#f3953c",
-});
+/** Every color caret's own palettes name: the thirteen `PaletteInput` values, the three
+ * hues the recipe's derived washes ride, and the syntax half only the highlighter
+ * spends. Exported because EXC-903's authored shiki themes read the last group out of
+ * it — nothing else in the UI reaches past `Theme.tokens`. */
+export interface CaretPalette {
+  // Surfaces.
+  /** The page. Darkest of the three in dark, the middle one in light. */
+  paper: string;
+  /** The lightest surface in either scheme — cards, dialogs, the plan pane. */
+  raised: string;
+  /** Code blocks and the diff body, and the surface every syntax hue is measured on. */
+  sunk: string;
 
-// The neutral surfaces and ink carry a subtle warm (brown-ish) undertone so the
-// light theme reads as a sibling to caret-dark rather than a cool grey (EXC-776):
-// each grey has R > G > B instead of a flat R = G = B. The warmth stays subtle —
-// no perceptible yellow/orange cast — and preserves the prior luminance ordering
-// (raised > paper > sunk) and text contrast. theme.test.ts pins R > B on these.
-export const caretLight = paletteTheme({
-  id: "caret-light",
-  label: "caret light",
-  scheme: "light",
-  paper: "#faf9f5",
-  raised: "#fffdf8",
-  sunk: "#f4f1ea",
-  ink: "#1c1714",
-  inkSoft: "#57504a",
-  inkFaint: "#8a827a",
-  accent: "#c2410c",
-  accentBright: "#ea580c",
-  accentInk: "#fff7ed",
-  neutral: "#787068",
-  ok: "#15803d",
-  danger: "#b91c1c",
-  attention: "#7c3aed",
-  // The marks cascade from the wash: both ride the same mid-amber here, where
-  // caret-dark lifts its marks a step lighter than its wash.
-  washHue: "#ec7c38",
-});
+  // The ink ramp: body copy, then secondary copy, then metadata.
+  ink: string;
+  inkSoft: string;
+  inkFaint: string;
+
+  // The accent trio.
+  /** The scarce mark caret spends on the current selection. */
+  accent: string;
+  /** The accent's lighter sibling — hovers. */
+  accentBright: string;
+  /** Text painted on top of `accent`. */
+  accentInk: string;
+
+  // Hue overrides: a hue the recipe's derived washes ride instead of the token they
+  // would otherwise default to.
+  ruleHue: string;
+  washHue: string;
+  markHue: string;
+
+  // The mid-tone neutral behind the orphaned-comment mark.
+  neutral: string;
+
+  // The semantic trio.
+  ok: string;
+  danger: string;
+  attention: string;
+
+  // The syntax half — shiki-only, and measured against `sunk`.
+  keyword: string;
+  type: string;
+  func: string;
+  variable: string;
+  property: string;
+  attribute: string;
+  string: string;
+  escape: string;
+  number: string;
+  comment: string;
+  punctuation: string;
+}
+
+export const CARET_DARK: CaretPalette = {
+  paper: "#17130f", // kraft — the darkest stock, and what accentInk paints back onto
+  raised: "#26201a", // kraft, two steps up: cards, dialogs, dropdowns
+  sunk: "#1e1813", // kraft, one step up: the code body lifts off a near-black page
+  ink: "#f4eee4", // parchment
+  inkSoft: "#b5a999", // parchment, half-tone
+  inkFaint: "#8b7f70", // parchment, quarter-tone
+  accent: "#ef7d33", // carrot
+  accentBright: "#f9a768", // carrot, lifted
+  accentInk: "#17130f", // the page, painted back onto the accent
+  ruleHue: "#f2e7d5", // bone — a white hairline on brown paper reads cold
+  washHue: "#e8813a", // ember, a shade off the accent so the wash is its own color
+  markHue: "#f0a04a", // amber, a step above the wash so a mark reads over it
+  neutral: "#95877a", // dust
+  ok: "#8fbe55", // carrot-top
+  danger: "#e26877", // madder
+  attention: "#b28ddb", // thistle
+  keyword: "#ad7ade", // thistle, deepened — the spine of a statement
+  type: "#7fb6d4", // woad, the one cool anchor
+  func: "#d9b866", // ochre
+  variable: "#e8ded0", // bone, barely off the ink — identifiers keep the page calm
+  property: "#a9c3d4", // flax — keys read as pale types
+  attribute: "#e6845e", // sienna
+  string: "#9dbf7a", // terre verte, muted below carrot-top so long literals don't buzz
+  escape: "#f0838d", // madder, lifted — an escape has to break its string
+  number: "#67c1b4", // verdigris
+  comment: "#7d7267", // umber — the pencil note, held to the large-text floor
+  punctuation: "#a1938a", // stone
+};
+
+export const CARET_LIGHT: CaretPalette = {
+  paper: "#faf7f0", // oat
+  raised: "#fffdf7", // oat, bleached
+  sunk: "#f2ede2", // oat, recessed: light inverts the surface order dark uses
+  ink: "#1d1713", // umber, near-black
+  inkSoft: "#5a5048", // umber, half-tone
+  inkFaint: "#8c8177", // umber, quarter-tone
+  accent: "#b8440f", // burnt carrot — the light scheme takes the accent deeper
+  accentBright: "#d9622a", // burnt carrot, lifted
+  accentInk: "#fff4e8", // oat, bleached warmer
+  ruleHue: "#4a3b2e", // umber, warmer than the ink so hairlines carry the paper's cast
+  washHue: "#d9702e", // ember
+  markHue: "#e07f2e", // amber
+  neutral: "#7d7266", // dust
+  ok: "#4f7a1e", // carrot-top
+  danger: "#b83a4a", // madder
+  attention: "#7a4bb5", // thistle
+  keyword: "#6f3d9e", // thistle, deepened
+  type: "#2c6a8f", // woad
+  func: "#805e07", // ochre
+  variable: "#2e2620", // umber, barely off the ink
+  property: "#4a6478", // flax
+  attribute: "#9c4718", // sienna
+  string: "#55703a", // terre verte
+  escape: "#b03544", // madder, deepened
+  number: "#12706a", // verdigris
+  comment: "#8c7f6f", // umber, recessive
+  punctuation: "#6b6058", // stone
+};
+
+/** Where a named color lands downstream. `token` is one the chrome reads through
+ * `var(--x)` on a surface; `derived` is one that reaches the page only as a mix — a
+ * wash, a hairline, a hover step; `shiki-only` is one that nothing but code
+ * highlighting spends. */
+export type ColorPlacement = "token" | "derived" | "shiki-only";
+
+/** Every color's placement, so EXC-903 (authored shiki themes) and EXC-904 (the
+ * `ColorToken` plumbing) each know which half of the set is theirs.
+ *
+ * `Record<keyof CaretPalette, ColorPlacement>` is the point: a color with no placement,
+ * or a placement for no color, is a compile error rather than something a runtime test
+ * has to re-check. */
+export const CARET_COLOR_PLACEMENT: Record<keyof CaretPalette, ColorPlacement> = {
+  paper: "token",
+  raised: "token",
+  sunk: "token",
+  ink: "token",
+  inkSoft: "token",
+  inkFaint: "token",
+  accent: "token",
+  accentBright: "token",
+  accentInk: "token",
+  // The three overrides are hues, not colors the chrome can read: each reaches the page
+  // only through an alpha the recipe applies (--rule, --accent-wash, --mark).
+  ruleHue: "derived",
+  washHue: "derived",
+  markHue: "derived",
+  neutral: "token",
+  ok: "token",
+  danger: "token",
+  attention: "token",
+  keyword: "shiki-only",
+  type: "shiki-only",
+  func: "shiki-only",
+  variable: "shiki-only",
+  property: "shiki-only",
+  attribute: "shiki-only",
+  string: "shiki-only",
+  escape: "shiki-only",
+  number: "shiki-only",
+  comment: "shiki-only",
+  punctuation: "shiki-only",
+};
+
+/** Read one palette's sixteen chrome colors out of its record and through the recipe.
+ * The syntax half is not passed: `paletteTheme` has nowhere to put it, and EXC-903 reads
+ * it from the record directly. */
+function caretTheme(id: ThemeId, label: string, scheme: Scheme, p: CaretPalette): Theme {
+  return paletteTheme({
+    id,
+    label,
+    scheme,
+    paper: p.paper,
+    raised: p.raised,
+    sunk: p.sunk,
+    ink: p.ink,
+    inkSoft: p.inkSoft,
+    inkFaint: p.inkFaint,
+    accent: p.accent,
+    accentBright: p.accentBright,
+    accentInk: p.accentInk,
+    neutral: p.neutral,
+    ok: p.ok,
+    danger: p.danger,
+    attention: p.attention,
+    ruleHue: p.ruleHue,
+    washHue: p.washHue,
+    markHue: p.markHue,
+  });
+}
+
+export const caretDark = caretTheme("caret-dark", "caret dark", "dark", CARET_DARK);
+export const caretLight = caretTheme("caret-light", "caret light", "light", CARET_LIGHT);

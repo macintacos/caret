@@ -196,9 +196,11 @@ test("picking a vendor palette retints the chrome and the code", async ({ daemon
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
 
-  // The emulated OS is dark, so the dark slot is live: caret dark, amber headings.
+  // The emulated OS is dark, so the dark slot is live: caret dark, carrot headings.
+  // Computed styles come back in decimal, so the two assertions below spell caret
+  // dark's --accent (#ef7d33) as rgb() — grep both forms when the palette is revised.
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await expect.poll(() => rowColors(page, "Widget Cache Refactor")).toContain("rgb(251, 146, 60)");
+  await expect.poll(() => rowColors(page, "Widget Cache Refactor")).toContain("rgb(239, 125, 51)");
 
   await openSettings(page);
   await page.getByRole("button", { name: "Dark theme" }).click();
@@ -214,14 +216,14 @@ test("picking a vendor palette retints the chrome and the code", async ({ daemon
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Settings" })).toHaveCount(0);
 
-  // And so does the code: the plan's heading is Dracula purple, not caret amber.
+  // And so does the code: the plan's heading is Dracula purple, not caret carrot.
   await expect.poll(() => rowColors(page, "Widget Cache Refactor")).toContain("rgb(189, 147, 249)");
-  // Read once more and assert the amber is gone. Asserted on a resolved non-empty
+  // Read once more and assert the carrot is gone. Asserted on a resolved non-empty
   // array rather than inside a poll, so a row that stopped matching can't satisfy
-  // "no amber" by returning nothing.
+  // "no carrot" by returning nothing.
   const retinted = await rowColors(page, "Widget Cache Refactor");
   expect(retinted.length).toBeGreaterThan(0);
-  expect(retinted).not.toContain("rgb(251, 146, 60)");
+  expect(retinted).not.toContain("rgb(239, 125, 51)");
 
   // EXC-896: the fenced block is upstream Dracula's own highlighting, not caret's
   // seven-role derivation wearing Dracula's hues. Dracula paints `function` its
@@ -269,9 +271,9 @@ test("hovering a theme option previews its palette beside the menu, without appl
   const preview = page.locator("[data-slot='theme-preview']");
   await expect(preview).toBeVisible();
 
-  // Tinted by caret light's palette (accent #c2410c), applied inline on the card only —
+  // Tinted by caret light's palette (accent #b8440f), applied inline on the card only —
   // and the real app is NOT retinted on hover: html stays dark until a click.
-  await expect(preview).toHaveAttribute("style", /--accent:\s*#c2410c/i);
+  await expect(preview).toHaveAttribute("style", /--accent:\s*#b8440f/i);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
   // The previewed SCHEME is scoped to the card too (EXC-884): it stamps data-theme and
@@ -304,7 +306,7 @@ test("hovering a theme option previews its palette beside the menu, without appl
   await page.getByRole("button", { name: "Dark theme" }).click();
   await page.getByRole("menuitemradio", { name: "caret dark" }).hover();
   await expect(preview).toHaveCount(1);
-  await expect(preview).toHaveAttribute("style", /--accent:\s*#fb923c/i);
+  await expect(preview).toHaveAttribute("style", /--accent:\s*#ef7d33/i);
 });
 
 test("keyboard-highlighting a theme option previews it too (EXC-753)", async ({ daemon, page }) => {
