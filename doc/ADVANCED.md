@@ -125,12 +125,16 @@ and install it — `claude plugin marketplace add macintacos/caret`, then
 `plugin install caret@caret --scope user` and `plugin enable` — and the same install by
 hand is `/plugin marketplace add macintacos/caret` + `/plugin install caret@caret` from
 inside Claude Code, which is what the installer points you at when the `claude` CLI isn't
-on your `PATH`. Take an update with `claude plugin update caret@caret` (restart to apply),
-or `/plugin marketplace update caret` then `/reload-plugins` — not by re-running the
-installer, whose `marketplace add` step is best-effort, so on a machine where the
-marketplace is already registered a re-run installs from the metadata Claude already had.
-`caret install --uninstall --target claude` removes the plugin and leaves that marketplace
-registration behind; `claude plugin marketplace remove caret` clears it.
+on your `PATH`. Re-running `caret install --refresh` is the update path — and for this
+target the flag changes nothing, because the run always attempts an update: the
+`marketplace add` is best-effort, but the `marketplace update caret` behind it is
+unconditional, and a third phase runs `plugin update caret@caret --scope user` between two
+`plugin list --json` reads, so the settled line reports the version Claude Code actually
+moved from and to. Restart to apply. By hand the equivalents are
+`claude plugin update caret@caret`, or `/plugin marketplace update caret` then
+`/reload-plugins`. `caret install --uninstall --target claude` removes the plugin and
+leaves that marketplace registration behind; `claude plugin marketplace remove caret`
+clears it.
 
 ### The OpenCode adapter
 
@@ -162,15 +166,31 @@ file would register a second review tool beside the array entry. The config dir'
 OpenCode installs the package and its `@opencode-ai/plugin` dependency into its own cache
 and loads it — caret writes no config-dir manifest and runs no `bun install` itself. The
 plugin resolves the caret binary and its own version at runtime from the package it ships
-in (an env override, `CARET_OPENCODE_BIN`, still wins), and on load it checks caret's
-latest GitHub release and toasts an update nudge when you're behind
-(`CARET_OPENCODE_NO_UPDATE_CHECK` opts out). To take an update, delete OpenCode's cached
-copy (`~/.cache/opencode/node_modules/@macintacos/caret`) and restart, or pin
-`"@macintacos/caret@<version>"` in the array and bump it. `caret install --target claude`
-registers caret with Claude Code through its plugin CLI, `--target opencode,claude` does
-both agents at once, `--uninstall` reverses any target, and `--dry-run` previews the
-changes without writing. See
-[`agents/opencode-integration.md`](agents/opencode-integration.md) for the design.
+in (`CARET_OPENCODE_BIN` overrides the binary — see
+[Environment variables](#environment-variables)), and on load it checks caret's latest
+GitHub release and toasts an update nudge when you're behind
+(`CARET_OPENCODE_NO_UPDATE_CHECK` opts out). `caret install --target claude` registers
+caret with Claude Code through its plugin CLI, `--target opencode,claude` does both agents
+at once, `--uninstall` reverses any target, and `--dry-run` previews the changes without
+writing. See [`agents/opencode-integration.md`](agents/opencode-integration.md) for the
+design.
+
+`caret install --refresh` takes an update: it compares the caret OpenCode would load
+against npm's published one, then either clears the stale cached copy so OpenCode
+re-resolves on next start **or**, for a stale pinned entry, bumps the pin in the array in
+place — a bump deliberately leaves the cache alone, since the new specifier gets its own
+cache dir. A plain `caret install` runs the same check and asks first at a terminal; off
+one, with no flag, it names the gap and the command that would close it and changes
+nothing. Restart OpenCode afterward. Clearing the cache by hand is:
+
+```sh
+rm -rf ~/.cache/opencode/packages/@macintacos/caret*
+```
+
+The glob is load-bearing: OpenCode names one cache dir per **verbatim** specifier, so a
+bare `@macintacos/caret` entry and every pinned `@macintacos/caret@<version>` get separate
+dirs, and all of them have to go. Pinning `"@macintacos/caret@<version>"` in the array and
+bumping it yourself is the other way to control which version loads.
 
 Omit `--target` and `caret install` picks for you: it detects which agents you have
 (`claude` on your PATH; `opencode` on your PATH or an existing OpenCode config dir) and
@@ -336,6 +356,7 @@ to the config file, then the default.
 | `XDG_STATE_HOME`     | —                     | `~/.local/state` | Unresolved reviews persist under `$XDG_STATE_HOME/caret/reviews/` and rehydrate on restart. |
 | `CARET_CONFIG_FILE`  | —                     | `config.toml`    | Absolute path to the settings file, overriding the default `config.toml` location. `mise run dev` sets it to `config.dev.toml`; `--fresh` sets it to a nonexistent path so dev boots from built-in defaults. |
 | `CARET_RUMDL_BIN`    | —                     | _(downloads)_    | Absolute path to an existing rumdl binary for plan formatting, overriding the on-first-use download of the pinned v0.2.37 into `$XDG_STATE_HOME/caret/rumdl/`. Blank counts as unset. Useful for offline / air-gapped installs or reusing a system rumdl. |
+| `CARET_OPENCODE_BIN` | —                     | _(packaged)_     | Absolute path to the caret binary the OpenCode plugin spawns — for `caret review` and the daemon prewarm alike — overriding the one shipped beside the plugin in the `@macintacos/caret` package. Blank counts as unset. The way to point a published-package OpenCode install at a local build. |
 | `CARET_DEV_PORT`         | `dev.port`            | —                | **Dev-only.** Fixed `mise run dev` daemon port; unset → ephemeral. Must differ from `42718`. |
 | `CARET_DEV_STATE_DIR`    | `dev.state_dir`       | —                | **Dev-only.** Persistent `mise run dev` state dir; unset → ephemeral. |
 | `CARET_DEV_NEW_REVIEW_MS` | `dev.notify.interval_ms` | —             | **Dev-only.** Extra-review seeder cadence override (ms); a positive value also arms the seeder. Unset → cadence falls to `[dev.notify].interval_ms` (`15000`), and arming is governed by `--notify` / `[dev.notify].enabled`. |
