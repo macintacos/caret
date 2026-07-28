@@ -38,11 +38,17 @@ then try `/caret:demo`, which presents a short fake plan to exercise the flow.
 
 ### Updating and uninstalling
 
-**Update.** In Claude Code, run `claude plugin update caret@caret` and restart. In
-OpenCode, caret toasts you at startup when a newer release is out; delete OpenCode's
-cached copy — `rm -rf ~/.cache/opencode/node_modules/@macintacos/caret` — and restart to
-take it, or pin the version in OpenCode's config
-(`"plugin": ["@macintacos/caret@<version>"]`) and bump that when you want to move.
+**Update.** One command, whichever agents you installed into:
+
+```sh
+bunx --no-cache @macintacos/caret@latest install --refresh
+```
+
+`--target` pins the agents the same way it does on install, and restarting each one
+applies the update. In OpenCode, caret toasts you at startup when a newer release is out;
+a plain `install` at a terminal runs the same check and asks before taking it. See
+[`doc/ADVANCED.md`](doc/ADVANCED.md#how-it-works) for the by-hand equivalents and for
+pinning a version in OpenCode's config.
 
 **Uninstall.** The same command, one flag:
 
