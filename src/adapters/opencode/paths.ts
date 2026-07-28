@@ -85,6 +85,44 @@ export function commandDir(configDir: string): string {
   return join(configDir, COMMAND_DIRNAME);
 }
 
+/** The filename caret's plugin carries when it is deployed as a FILE rather than
+ * installed as a `plugin` array entry. */
+const LEGACY_PLUGIN_FILENAME = "caret.ts";
+
+/** The plugin dirs OpenCode scans, both of which caret has deployed into. OpenCode loads
+ * a plugin out of EITHER, so an orphan in the one caret stopped writing is still live —
+ * and a plugin file loading beside the array entry means two caret plugins register the
+ * review tool in one OpenCode process. */
+const LEGACY_PLUGIN_DIRNAMES = ["plugins", "plugin"] as const;
+
+/** The singular command dir OpenCode still scans for backwards compatibility, and that
+ * caret deployed into before `COMMAND_DIRNAME`. Its `caret:`-namespaced files still
+ * register commands, pointed at a binary path nothing writes any more. */
+const LEGACY_COMMAND_DIRNAME = "command";
+
+/** Every file-deploy-era artifact still on disk under `configDir`: caret's plugin file in
+ * either plugin dir, plus any `caret:`-namespaced command file in the singular command
+ * dir. Filtered to what exists, so the caller gates on and removes the same list. Only
+ * ever files caret itself wrote — those dirs hold other tools' files, which are not
+ * caret's to touch, and neither is the config dir's own `package.json`. The command sweep
+ * matches on `COMMAND_NAMESPACE` rather than on the commands caret ships today: an old
+ * install may hold a file for a command the package has since dropped, and matching the
+ * live set would strand exactly those. */
+export function existingLegacyInstallFiles(configDir: string): string[] {
+  const plugins = LEGACY_PLUGIN_DIRNAMES.map((d) => join(configDir, d, LEGACY_PLUGIN_FILENAME));
+  let commandNames: string[];
+  try {
+    commandNames = readdirSync(join(configDir, LEGACY_COMMAND_DIRNAME));
+  } catch {
+    commandNames = []; // dir absent or unreadable — nothing to sweep there.
+  }
+  const commands = commandNames
+    .filter((n) => n.startsWith(COMMAND_NAMESPACE))
+    .sort()
+    .map((n) => join(configDir, LEGACY_COMMAND_DIRNAME, n));
+  return [...plugins, ...commands].filter((p) => existsSync(p));
+}
+
 /** OpenCode's plugin cache root: where OpenCode installs each `plugin` array entry,
  * one directory per RAW specifier string. Respects XDG_CACHE_HOME, else ~/.cache —
  * the same precedence OpenCode itself uses to resolve the dir. */
