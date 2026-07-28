@@ -102,7 +102,8 @@
 
 <style>
   /* An IDE-outline panel in caret's paper palette: a quiet left column that
-     reads as code navigation, sharing the diffs surface's monospace voice. */
+     reads as code navigation. It is chrome rather than plan surface, so it wears
+     the UI's sans while the plan beside it keeps the monospace voice (EXC-900). */
   .source-toc {
     display: flex;
     flex-direction: column;
@@ -142,14 +143,14 @@
     gap: 0.05rem;
   }
 
-  /* Each row is a monospace outline entry; the left-indent ramp (per level,
-     below) plus the weight/colour hierarchy carry the heading depth — clean
-     indentation, no per-level guide rules (EXC-664). */
+  /* Each row is an outline entry; the left-indent ramp (per level, below) plus
+     the weight/colour hierarchy carry the heading depth — clean indentation, no
+     per-level guide rules (EXC-664). */
   .toc-row {
     display: block;
     width: 100%;
     text-align: left;
-    font-family: "Berkeley Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-family: var(--font-sans);
     font-size: var(--text-sm);
     line-height: var(--leading-tight);
     color: var(--ink-soft);
