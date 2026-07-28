@@ -266,7 +266,9 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
   // them to runPreflightCli (the gate orchestrator in scripts/preflight.ts).
   program
     .command("preflight")
-    .description("Pre-push gate (check-only): lint, unit + e2e tests, and build, run concurrently")
+    .description(
+      "Pre-push gate: lint, unit + e2e tests, build, and artifact smoke, run concurrently",
+    )
     .option(
       "--json",
       "Emit machine-readable JSON (two NDJSON docs on stdout) instead of the live display",

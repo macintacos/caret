@@ -1,17 +1,25 @@
 #!/usr/bin/env bun
 // Preflight orchestrator (EXC-462): runs the pre-push gate's constituent mise
 // tasks concurrently per their dependency DAG, rendered as a live listr2 task
-// list (plain line-per-event output when not a TTY). Check-only: nothing here
-// writes to the tree — `lint` (hk check) is the formatting gate, and a lint
-// failure points at `mise run format`.
+// list (plain line-per-event output when not a TTY). The gate BUILDS: it leaves
+// ui/dist, bin/, and dist/ behind, and `smoke bundle` removes the generated
+// src/ui-manifest.generated.ts (gitignored, and the next `build bin` rewrites
+// it). Only `lint` (hk check) is read-only — it is the formatting gate, and a
+// lint failure points at `mise run format`.
 //
 // DAG: lint, test (unit), and `build ui` start immediately; `test e2e` and
-// `build bin` start once `build ui` passes. The UI-first ordering + skip
-// mechanism now live in the tasks CLI (scripts/tasks/build.ts), so each
-// dependent is spawned with CARET_SKIP_BUILD_UI=1 to keep the UI built at exactly
-// one run per gate — two concurrent Vite builds would otherwise race on ui/dist.
+// `build bin` start once `build ui` passes; `smoke` starts once `build bin`
+// passes (EXC-914). The build-first ordering + skip mechanism live in the tasks
+// CLI (scripts/tasks/build.ts), so each dependent is spawned with the skips that
+// let it reuse its gate's artifact: CARET_SKIP_BUILD_UI keeps the UI built at
+// exactly one run per gate (two concurrent Vite builds would otherwise race on
+// ui/dist), and CARET_SKIP_BUILD_BIN keeps smoke from paying a second compile.
 // (This replaces the old MISE_TASK_SKIP=build-ui dedupe of the mise `depends`
 // edge, which is gone now that build/test are single multi-target tasks.)
+//
+// smoke is here because it is the only task that exercises the artifacts users
+// receive rather than the source tree: preflight proves the source works, smoke
+// proves the binary and the npm bundle do.
 //
 // DI mirrors scripts/tasks/release/command.ts: the spawn collaborator is injected so
 // test/scripts/preflight.test.ts can drive the DAG without running real tasks.

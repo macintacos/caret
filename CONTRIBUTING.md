@@ -23,7 +23,7 @@ mise run setup   # pinned tools, bun install, the generated palette, the e2e Chr
 
 ```sh
 mise run dev        # isolated daemon + a fake plan + the Vite UI on an ephemeral port
-mise run preflight  # the pre-push gate: lint + unit/e2e tests + build, run concurrently
+mise run preflight  # the pre-push gate: lint + unit/e2e tests + build + artifact smoke
 ```
 
 `mise run preflight` is the gate to pass before pushing. The full task catalog (`build`,
