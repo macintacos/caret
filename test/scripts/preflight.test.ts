@@ -4,12 +4,11 @@
 // and dedupe its artifact via CARET_SKIP_BUILD_UI / CARET_SKIP_BUILD_BIN,
 // `smoke` gates on `build bin` one level down (EXC-914), failures don't hide
 // other results, and the summary surfaces failed output plus the `mise run
-// format` hint. Also
-// covers the `--json` report builders (EXC-471) — the lean default (status +
-// line counts), the -v/-vv verbosity ladder, --grep line filtering, --task
-// scoping, and the error doc — plus the CLI's invalid-`--grep` exit path. The
-// --json flags themselves are parsed by the tasks CLI's commander tree, so that
-// parse contract is pinned in tasks-cli.test.ts (EXC-737).
+// format` hint. Also covers the `--json` report builders (EXC-471) — the lean
+// default (status + line counts), the -v/-vv verbosity ladder, --grep line
+// filtering, --task scoping, and the error doc — plus the CLI's invalid-`--grep`
+// exit path. The --json flags themselves are parsed by the tasks CLI's commander
+// tree, so that parse contract is pinned in tasks-cli.test.ts (EXC-737).
 
 import { expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -322,6 +321,12 @@ test("a failed task aborts in-flight siblings that honor the signal (recorded sk
   expect(r.results.get("lint")?.status).toBe("failed");
   expect(r.results.get("test")?.status).toBe("skipped");
   expect(r.results.get("test e2e")?.status).toBe("skipped");
+  // `build bin` aborted mid-flight is the third of its four gate exit paths, and
+  // the one with no other coverage. Without these two the path is exercised but
+  // unasserted: a regression that stopped resolving the gate here would hang the
+  // run rather than fail an assertion.
+  expect(r.results.get("build bin")?.status).toBe("skipped");
+  expect(r.results.get("smoke")?.status).toBe("skipped");
 });
 
 // --json report builders (EXC-471) ------------------------------------------

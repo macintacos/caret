@@ -524,10 +524,17 @@ describe("ensureUi: the shared skip contract", () => {
 
 describe("ensureBin: the shared skip contract", () => {
   test("returns 0 without compiling when CARET_SKIP_BUILD_BIN is set", async () => {
-    // No runner injected either: a broken skip would spawn a real `build bin`
-    // (manifest regen + bun build --compile). Returning 0 proves the short-circuit.
+    // The runner throws rather than being omitted: a real `build bin` also exits
+    // 0, so an injected-nothing version of this test would PASS on a broken skip
+    // while spawning a compile that rewrites src/ui-manifest.generated.ts,
+    // bin/caret-native, and bin/ui from inside the unit suite. Reaching the
+    // runner at all is the failure.
     await withSkipBin(async () => {
-      expect(await ensureBin()).toBe(0);
+      expect(
+        await ensureBin(() => {
+          throw new Error("ensureBin spawned a build despite CARET_SKIP_BUILD_BIN");
+        }),
+      ).toBe(0);
     });
   });
 

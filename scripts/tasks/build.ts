@@ -137,9 +137,8 @@ export function shouldBuildBin(env: Record<string, string | undefined>): boolean
 
 /** Compile the binary unless CARET_SKIP_BUILD_BIN opts out, resolving the child's
  * exit code WITHOUT exiting so a caller can go on to use the artifact. Spawned
- * through the tasks CLI (not buildBinArtifacts directly) so the target keeps its
- * own process, and so CARET_SKIP_BUILD_UI reaches it the same way it always has.
- * `ensureUi`'s sibling one artifact up — used by `smoke bin`. */
+ * through the tasks CLI (not buildBinArtifacts directly) so the compile keeps its
+ * own process. `ensureUi`'s sibling one artifact up — used by `smoke bin`. */
 export async function ensureBin(run: typeof runForward = runForward): Promise<number> {
   if (!shouldBuildBin(process.env)) return 0;
   return await run(["bun", "scripts/tasks/cli.ts", "build", "bin"]);

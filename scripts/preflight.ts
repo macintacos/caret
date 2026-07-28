@@ -4,8 +4,8 @@
 // list (plain line-per-event output when not a TTY). The gate BUILDS: it leaves
 // ui/dist, bin/, and dist/ behind, and `smoke bundle` removes the generated
 // src/ui-manifest.generated.ts (gitignored, and the next `build bin` rewrites
-// it). Only `lint` (hk check) is read-only — it is the formatting gate, and a
-// lint failure points at `mise run format`.
+// it). `lint`'s `hk check` step is the read-only one — it is the formatting
+// gate, and a lint failure points at `mise run format`.
 //
 // DAG: lint, test (unit), and `build ui` start immediately; `test e2e` and
 // `build bin` start once `build ui` passes; `smoke` starts once `build bin`
@@ -182,11 +182,6 @@ export async function runPreflight(deps: {
   for (const { after } of DEPENDENT) {
     if (!gates.has(after)) gates.set(after, Promise.withResolvers<boolean>());
   }
-  const gateFor = (name: string): PromiseWithResolvers<boolean> => {
-    const gate = gates.get(name);
-    if (!gate) throw new Error(`preflight: no gate for ${name}`);
-    return gate;
-  };
   // EXC-587: the first task to fail aborts every in-flight sibling. A spawner
   // that honors the signal tears its process group down and resolves
   // `aborted` — recorded `skipped` so the doomed gate stops burning CPU on
@@ -228,24 +223,32 @@ export async function runPreflight(deps: {
     },
   });
 
-  const dependent = ({ name, after, env }: Dependent): ListrTask => ({
-    title: name,
-    task: async (_ctx, task) => {
-      const own = gates.get(name);
-      task.output = `waiting for ${after}`;
-      if (!(await gateFor(after).promise)) {
-        results.set(name, { status: "skipped", output: "" });
-        own?.resolve(false);
-        return task.skip(`${name} (skipped: ${after} failed)`);
-      }
-      const status = await runTask(name, env, (line) => {
-        task.output = line;
-      });
-      own?.resolve(status === "passed");
-      if (status === "skipped") return task.skip(`${name} (aborted: a sibling failed)`);
-      if (status === "failed") throw new Error(`${name} failed`);
-    },
-  });
+  const dependent = ({ name, after, env }: Dependent): ListrTask => {
+    // Both lookups happen HERE, in the factory, which runs synchronously before
+    // listr.run(). A missing gate then throws straight out of runPreflight; the
+    // same throw from inside the task body would abandon a gating task before it
+    // resolves its own gate, turning a wiring bug into the hang above.
+    const upstream = gates.get(after);
+    if (!upstream) throw new Error(`preflight: no gate for ${after}`);
+    const own = gates.get(name);
+    return {
+      title: name,
+      task: async (_ctx, task) => {
+        task.output = `waiting for ${after}`;
+        if (!(await upstream.promise)) {
+          results.set(name, { status: "skipped", output: "" });
+          own?.resolve(false);
+          return task.skip(`${name} (skipped: ${after} failed)`);
+        }
+        const status = await runTask(name, env, (line) => {
+          task.output = line;
+        });
+        own?.resolve(status === "passed");
+        if (status === "skipped") return task.skip(`${name} (aborted: a sibling failed)`);
+        if (status === "failed") throw new Error(`${name} failed`);
+      },
+    };
+  };
 
   const listr = new Listr([...IMMEDIATE.map(immediate), ...DEPENDENT.map(dependent)], {
     // EXC-587: a finite cap (host CPU count by default) instead of the prior

@@ -42,8 +42,8 @@ import { probeServedUi } from "@/tasks/lib/smoke-probe.ts";
  * fresh subprocesses with CARET_SKIP_BUILD_UI=1 so neither rebuilds it — the
  * umbrella would otherwise pay the full Vite build twice (each target's build
  * bin / build bundle runs ensureUi). That leading build is itself skipped under
- * CARET_SKIP_BUILD_UI, so an in-gate smoke reuses the ui/dist preflight's own
- * `build ui` task produced. Each target exits on its own; stop at the first
+ * CARET_SKIP_BUILD_UI, so an in-gate smoke reuses the ui/dist that preflight's
+ * own `build ui` task produced. Each target exits on its own; stop at the first
  * failure. The runner is injectable so tests pin the sequence + the skip env
  * without spawning. */
 export async function smokePlan(run: typeof runForward = runForward): Promise<number> {
