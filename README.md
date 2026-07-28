@@ -38,7 +38,7 @@ then try `/caret:demo`, which presents a short fake plan to exercise the flow.
 
 ### Updating and uninstalling
 
-**Update.** One command, whichever agents you installed into:
+**Update.** One command for every agent:
 
 ```sh
 bunx --no-cache @macintacos/caret@latest install --refresh
@@ -46,8 +46,8 @@ bunx --no-cache @macintacos/caret@latest install --refresh
 
 `--target` pins the agents the same way it does on install, and restarting each one
 applies the update. In OpenCode, caret toasts you at startup when a newer release is out;
-a plain `install` at a terminal runs the same check and asks before taking it. See
-[`doc/ADVANCED.md`](doc/ADVANCED.md#how-it-works) for the by-hand equivalents and for
+a plain `install` at a terminal runs its own check against npm and asks before taking it.
+See [`doc/ADVANCED.md`](doc/ADVANCED.md#how-it-works) for the by-hand equivalents and for
 pinning a version in OpenCode's config.
 
 **Uninstall.** The same command, one flag:

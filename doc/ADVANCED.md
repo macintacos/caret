@@ -126,7 +126,7 @@ and install it — `claude plugin marketplace add macintacos/caret`, then
 hand is `/plugin marketplace add macintacos/caret` + `/plugin install caret@caret` from
 inside Claude Code, which is what the installer points you at when the `claude` CLI isn't
 on your `PATH`. Re-running `caret install --refresh` is the update path — and for this
-target the flag changes nothing, because Claude Code always takes an update: the
+target the flag changes nothing, because the run always attempts an update: the
 `marketplace add` is best-effort, but the `marketplace update caret` behind it is
 unconditional, and a third phase runs `plugin update caret@caret --scope user` between two
 `plugin list --json` reads, so the settled line reports the version Claude Code actually
@@ -176,11 +176,12 @@ writing. See [`agents/opencode-integration.md`](agents/opencode-integration.md) 
 design.
 
 `caret install --refresh` takes an update: it compares the caret OpenCode would load
-against npm's published one, clears the stale cached copy so OpenCode re-resolves on next
-start, and bumps a stale pinned entry in the array in place. A plain `caret install` runs
-the same check and asks first at a terminal; off one, with no flag, it names the gap and
-the command that would close it and changes nothing. Restart OpenCode afterward. Clearing
-the cache by hand is:
+against npm's published one, then either clears the stale cached copy so OpenCode
+re-resolves on next start **or**, for a stale pinned entry, bumps the pin in the array in
+place — a bump deliberately leaves the cache alone, since the new specifier gets its own
+cache dir. A plain `caret install` runs the same check and asks first at a terminal; off
+one, with no flag, it names the gap and the command that would close it and changes
+nothing. Restart OpenCode afterward. Clearing the cache by hand is:
 
 ```sh
 rm -rf ~/.cache/opencode/packages/@macintacos/caret*
@@ -355,7 +356,7 @@ to the config file, then the default.
 | `XDG_STATE_HOME`     | —                     | `~/.local/state` | Unresolved reviews persist under `$XDG_STATE_HOME/caret/reviews/` and rehydrate on restart. |
 | `CARET_CONFIG_FILE`  | —                     | `config.toml`    | Absolute path to the settings file, overriding the default `config.toml` location. `mise run dev` sets it to `config.dev.toml`; `--fresh` sets it to a nonexistent path so dev boots from built-in defaults. |
 | `CARET_RUMDL_BIN`    | —                     | _(downloads)_    | Absolute path to an existing rumdl binary for plan formatting, overriding the on-first-use download of the pinned v0.2.37 into `$XDG_STATE_HOME/caret/rumdl/`. Blank counts as unset. Useful for offline / air-gapped installs or reusing a system rumdl. |
-| `CARET_OPENCODE_BIN` | —                     | _(packaged)_     | Absolute path to the caret binary the OpenCode plugin spawns for `caret review`, overriding the one shipped beside the plugin in the `@macintacos/caret` package. Blank counts as unset. The way to point a published-package OpenCode install at a local build. |
+| `CARET_OPENCODE_BIN` | —                     | _(packaged)_     | Absolute path to the caret binary the OpenCode plugin spawns — for `caret review` and the daemon prewarm alike — overriding the one shipped beside the plugin in the `@macintacos/caret` package. Blank counts as unset. The way to point a published-package OpenCode install at a local build. |
 | `CARET_DEV_PORT`         | `dev.port`            | —                | **Dev-only.** Fixed `mise run dev` daemon port; unset → ephemeral. Must differ from `42718`. |
 | `CARET_DEV_STATE_DIR`    | `dev.state_dir`       | —                | **Dev-only.** Persistent `mise run dev` state dir; unset → ephemeral. |
 | `CARET_DEV_NEW_REVIEW_MS` | `dev.notify.interval_ms` | —             | **Dev-only.** Extra-review seeder cadence override (ms); a positive value also arms the seeder. Unset → cadence falls to `[dev.notify].interval_ms` (`15000`), and arming is governed by `--notify` / `[dev.notify].enabled`. |

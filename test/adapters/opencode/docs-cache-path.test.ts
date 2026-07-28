@@ -15,8 +15,8 @@ import { opencodeCachePackageDir } from "@/adapters/opencode/paths.ts";
 const ADVANCED_MD = join(import.meta.dir, "../../../doc/ADVANCED.md");
 
 /** The by-hand cache path the doc prints, minus its trailing glob. Requires exactly one
- * such line, so dropping it (the state this issue found) or adding a second, divergent
- * one fails here rather than silently passing. */
+ * such line, so dropping it (the state this issue found) or adding a second one fails
+ * here rather than silently passing. */
 function quotedCachePath(text: string): string {
   const found = [...text.matchAll(/rm -rf (\S+?)\*/g)];
   const path = found.length === 1 ? found[0]?.[1] : undefined;
