@@ -64,10 +64,15 @@
   .item:last-child {
     margin-bottom: 0;
   }
+  /* The quoted passage is a marked region of the document whose anchor is gone,
+     which is exactly what --mark-orphan names: the same mark as a live plan-search
+     hit, drained of hue because there is no line to point at. Padded out on both
+     sides so the wash reads as a marked passage rather than a stray tint. */
   .quote {
     margin: 0 0 0.3rem;
-    padding-left: 0.55rem;
+    padding: 0.2rem 0.5rem 0.2rem 0.55rem;
     border-left: 2px solid var(--rule-strong);
+    background: var(--mark-orphan);
     font-size: var(--text-base);
     color: var(--ink-soft);
     line-height: var(--leading-tight);

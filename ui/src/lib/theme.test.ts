@@ -449,3 +449,29 @@ describe("paintTheme", () => {
     expect(painted).toBe("caret-light");
   });
 });
+
+// EXC-905: a palette token nothing reads is the opposite of a system. --mark-active
+// and --mark-orphan were produced by the recipe for all nine palettes and pinned by
+// both full-token tests above while having zero var() readers anywhere in the
+// chrome, and nothing caught it. This walks ui/src and asserts every ColorToken
+// reaches at least one surface, so "declared for nobody" fails the suite rather
+// than waiting to be noticed.
+describe("every ColorToken reaches a surface", () => {
+  const UI_SRC = join(import.meta.dir, "..");
+  // palette.generated.css DECLARES every token, so counting it would make the
+  // assertion vacuous. Test files are excluded for the same reason: a token named
+  // only by its own pin is not a token the chrome uses.
+  const sources = readdirSync(UI_SRC, { recursive: true, encoding: "utf8" })
+    .filter((f) => /\.(svelte|css|ts)$/.test(f) && !f.endsWith(".test.ts"))
+    .filter((f) => f !== join("styles", "palette.generated.css"))
+    .map((f) => readFileSync(join(UI_SRC, f), "utf8"))
+    .join("\n");
+
+  for (const token of Object.keys(THEMES["caret-dark"].tokens)) {
+    test(`${token} is read by at least one var()`, () => {
+      // The negative lookahead keeps --mark from matching --mark-active and --ink
+      // from matching --ink-soft — the same guard ThemePreviewCard.test.ts uses.
+      expect(new RegExp(`var\\(\\s*${token}(?![\\w-])`).test(sources)).toBe(true);
+    });
+  }
+});
