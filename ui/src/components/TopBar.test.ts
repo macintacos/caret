@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 import type { ApproveVariant, ClientReview } from "@core/lib/types";
 import { capture, render } from "@ui/test-mount.ts";
 import TopBar from "@/components/TopBar.svelte";
+import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
 
 // EXC-760: the TopBar is rebuilt on shadcn primitives (Button / Badge /
 // DropdownMenu / Tooltip / Separator). This suite covers the synchronous
@@ -227,16 +228,30 @@ describe("TopBar reject", () => {
     expect(target.querySelector(".reject")).toBeNull();
   });
 
-  test("the reject button advertises Shift+R and shows its key cap", () => {
-    const { target } = render(TopBar, baseProps);
-    const reject = target.querySelector(".reject") as HTMLElement;
-    expect(reject.getAttribute("aria-keyshortcuts")).toBe("Shift+R");
-    expect(reject.querySelector("[data-slot='kbd']")).not.toBeNull();
-  });
+  // EXC-913: Reject is the third verdict to carry a key, so it advertises the
+  // shortcut for a11y and shows a single Shift+R cap — the global shift icon (not a
+  // ⇧ glyph) plus R — when hints are on.
+  test("advertises Shift+R and shows the shift-icon + R cap only when hints are enabled", () => {
+    const off = render(TopBar, { ...baseProps, showShortcutHints: false });
+    const offBtn = off.target.querySelector(".reject") as HTMLElement;
+    // Derived from the same reservation the dispatcher fires on rather than a fixed
+    // string, so a rebind is a one-file edit (EXC-876). The literal is pinned once,
+    // in keymap.test.ts.
+    expect(offBtn.getAttribute("aria-keyshortcuts")).toBe(ariaKeyshortcutsFor("actions.reject"));
+    // Boolean rather than toBeNull(): a FAILING toBeNull() against a happy-dom node
+    // hangs the bun runner, and this assertion fails with a node when it regresses.
+    expect(offBtn.querySelector("[data-slot='kbd']") === null).toBe(true);
 
-  test("the reject key cap hides when shortcut hints are off", () => {
-    const { target } = render(TopBar, { ...baseProps, showShortcutHints: false });
-    expect(target.querySelector(".reject [data-slot='kbd']") === null).toBe(true);
+    const on = render(TopBar, baseProps);
+    const cap = (on.target.querySelector(".reject") as HTMLElement).querySelector(
+      "[data-slot='kbd']",
+    );
+    expect(cap).not.toBeNull();
+    // The shift half is the shared icon (Icon renders a labelled .icon wrapper),
+    // never the ⇧ character; the letter stays plain text.
+    expect((cap as HTMLElement).querySelector(".icon")?.getAttribute("aria-label")).toBe("Shift");
+    expect((cap as HTMLElement).textContent).toContain("R");
+    expect((cap as HTMLElement).textContent).not.toContain("⇧");
   });
 });
 

@@ -1,10 +1,10 @@
 // Review-verdict + chrome keyboard shortcuts. Approve (a), request changes (r),
-// reject (shift+R, EXC-913), toggle compare/diff (d), open plan search (/, EXC-832),
-// toggle the sidebar (\), and open settings (,) are all wired through the shortcut
-// engine (EXC-786). These are
-// real-browser keyboard behaviors — a keydown routed through the global
-// dispatcher into the same guarded path a click takes — so they live here, not
-// in a unit (browser-testing.md). Every action is driven with a REAL keystroke.
+// reject (shift+R, EXC-913), toggle compare/diff (d), open plan search (/,
+// EXC-832), toggle the sidebar (\), and open settings (,) are all wired through
+// the shortcut engine (EXC-786). These are real-browser keyboard behaviors — a
+// keydown routed through the global dispatcher into the same guarded path a click
+// takes — so they live here, not in a unit (browser-testing.md). Every action is
+// driven with a REAL keystroke.
 //
 // waitPastSafeModeGrace is mandatory before the first key press: a key inside the
 // post-mount grace window is swallowed by Safe Mode (safeMode.ts).

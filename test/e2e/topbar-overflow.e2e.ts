@@ -145,6 +145,23 @@ test("narrow: bell and settings stay visible while a long title truncates", asyn
   expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
 });
 
+test("the overflow Reject row carries the Shift+R cap (EXC-913)", async ({ daemon, page }) => {
+  // The collapsed row gets the same cap as the inline button, so all three verdicts
+  // are keyed once they consolidate here. The menu Content is portalled, so this is
+  // e2e rather than a TopBar unit (browser-testing.md).
+  await daemon.seed();
+  await page.setViewportSize({ width: 500, height: 800 });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  await page.getByRole("button", { name: "More actions" }).click();
+  const cap = page.getByRole("menuitem", { name: "Reject" }).locator("[data-slot='kbd']");
+  await expect(cap).toBeVisible();
+  // The shift half is the shared icon, never a ⇧ character.
+  await expect(cap.locator(".icon")).toHaveAttribute("aria-label", "Shift");
+  await expect(cap).toHaveText("R");
+});
+
 test("the overflow Reject glyph is red like its label", async ({ daemon, page }) => {
   // The destructive menu row's leading X should read the same danger red as its
   // label — a real-rendering (computed color) check, so it's an e2e. caret's Icon

@@ -101,10 +101,12 @@
         Reject
         {#if showShortcutHints}
           <!-- One combined key: the global shift icon then R, both typed KbdCaps
-               (see caps.ts) so the shift glyph is the shared icon, never a ⇧ char. -->
-          <Kbd class="reject-key" aria-hidden="true"
-            ><KbdCap key="shift" size={9} /><KbdCap key="R" /></Kbd
-          >
+               (see caps.ts) so the shift glyph is the shared icon, never a ⇧ char.
+               KbdCap's `size` is px while the cap's text is em-relative (the base
+               [data-slot="kbd"] is 0.8em of this button's 14px), so 9 is not a free
+               number — it is ~0.8 of the resulting 11px glyph, seating the arrow at
+               the letter's cap height. Retune it if the button's font-size moves. -->
+          <Kbd aria-hidden="true"><KbdCap key="shift" size={9} /><KbdCap key="R" /></Kbd>
         {/if}
       </Button>
 
@@ -206,6 +208,9 @@
           <DropdownMenu.Item variant="destructive" onSelect={() => onReject()}>
             <Icon name="x" size={14} />
             Reject
+            <!-- Same ⇧R cap as the inline button above, in the menu-row placement
+                 Approve and Request changes already use, so all three verdicts carry
+                 a cap once they collapse in here. -->
             {#if showShortcutHints}
               <Kbd class="menu-key" aria-hidden="true"
                 ><KbdCap key="shift" size={9} /><KbdCap key="R" /></Kbd
@@ -363,14 +368,19 @@
     color: var(--paper);
   }
   /* The X glyph reads danger-red at rest (the reject affordance); on hover the chip
-     fills with danger, so the glyph flips to the paper ink to stay legible on it.
-     Direct child only: the ⇧ inside the key cap is also an .icon, and a keycap has
-     no hue of its own — it derives from currentColor so both of its glyphs read as
-     one key (see the hue table in doc/agents/svelte-rules.md). */
-  .actions :global(.reject > .icon) {
+     fills with danger, so the glyph flips to the paper ink to stay legible on it. */
+  .actions :global(.reject .icon) {
     color: var(--danger);
   }
-  .actions :global(.reject:not(:disabled):hover > .icon) {
+  .actions :global(.reject:not(:disabled):hover .icon) {
+    color: inherit;
+  }
+  /* The ⇧ inside the key cap is an .icon too, and a keycap has no hue of its own —
+     it derives from currentColor so both glyphs read as one key (see the hue table
+     in doc/agents/svelte-rules.md). Stated as its own positive rule rather than by
+     narrowing the two above to a direct child: `>` would silently drop the X's red
+     the day a shadcn re-sync wraps Button's children in an element. */
+  .actions :global(.reject [data-slot="kbd"] .icon) {
     color: inherit;
   }
 
