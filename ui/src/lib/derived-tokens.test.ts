@@ -5,9 +5,9 @@ import { THEMES } from "$lib/theme.ts";
 
 // The derived tier (EXC-885): the colors a palette *implies* rather than decides.
 // A palette names its surfaces, ink, and accent through lib/themes/recipe.ts; the
-// chip fills, the sheer panel, and the neutral hover wash all fall out of that
-// choice, so ui/src/styles/derived.css mixes them once and components read
-// var(--token) instead of mixing by hand.
+// chip fills, the sheer panel, the neutral hover wash, and the novelty wash all
+// fall out of that choice, so ui/src/styles/derived.css mixes them once and
+// components read var(--token) instead of mixing by hand.
 //
 // This suite pins the two properties that make the tier safe for every palette.
 //
@@ -49,8 +49,9 @@ describe("the derived-token tier", () => {
     expect(appCss).toMatch(DERIVED_BLOCK);
   });
 
-  test("names the four tokens the chrome reads", () => {
+  test("names the five tokens the chrome reads", () => {
     expect(Object.keys(tokens).sort()).toEqual([
+      "--attention-wash",
       "--chip",
       "--chip-hover",
       "--ink-wash",

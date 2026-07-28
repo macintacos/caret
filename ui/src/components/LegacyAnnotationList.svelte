@@ -52,14 +52,6 @@
     text-transform: uppercase;
     color: var(--ink-soft);
   }
-  /* The tally: an outline Badge kept quiet and tabular so a growing count reads
-     as chrome beside the eyebrow, not a second accent. */
-  :global([data-slot="badge"].count) {
-    padding: 0.05rem 0.4rem;
-    font-size: var(--text-2xs);
-    font-variant-numeric: tabular-nums;
-    color: var(--ink-faint);
-  }
   .note {
     margin: 0 0 0.85rem;
     font-size: var(--text-sm);

@@ -106,7 +106,7 @@
         {#if pendingCount > 0}
           <Badge
             variant="secondary"
-            class="count metric"
+            class="count count-attention metric"
             aria-label="{pendingCount} pending comment{pendingCount === 1 ? '' : 's'}"
           >
             {pendingCount}
@@ -137,7 +137,11 @@
                 <!-- Visual only: the trigger's own aria-label carries the count
                      (an element's aria-label replaces its subtree for naming, so
                      a label here would never be announced). -->
-                <Badge variant="secondary" class="count metric overflow-count" aria-hidden="true">
+                <Badge
+                  variant="secondary"
+                  class="count count-attention metric overflow-count"
+                  aria-hidden="true"
+                >
                   {pendingCount}
                 </Badge>
               {/if}
@@ -177,7 +181,7 @@
             {#if pendingCount > 0}
               <Badge
                 variant="secondary"
-                class="count metric"
+                class="count count-attention metric"
                 aria-label="{pendingCount} pending comment{pendingCount === 1 ? '' : 's'}"
               >
                 {pendingCount}
@@ -430,8 +434,9 @@
     }
   }
   /* Pending count pinned to the trigger's top-right corner, lifted off the
-     ellipsis with a paper ring (the NotifyBell dot pattern). Neutral, not amber
-     — amber stays reserved for the Approve primary. */
+     ellipsis with a paper ring (the NotifyBell dot pattern). The hue is
+     --attention, from the shared .count-attention modifier — the count's job is
+     to be noticed, and amber stays reserved for the Approve primary. */
   .actions :global(.overflow-count) {
     position: absolute;
     top: -5px;
