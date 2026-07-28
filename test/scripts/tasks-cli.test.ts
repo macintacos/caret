@@ -7,7 +7,9 @@ import {
   buildBundleCommand,
   buildInstallCommand,
   buildUiCommand,
+  ensureBin,
   ensureUi,
+  shouldBuildBin,
   shouldBuildUi,
 } from "@/tasks/build.ts";
 import { caretCommand } from "@/tasks/caret.ts";
@@ -249,6 +251,14 @@ describe("tasks CLI: build pipeline command lines", () => {
     expect(shouldBuildUi({ CARET_SKIP_BUILD_UI: "1" })).toBe(false);
   });
 
+  // The same contract one artifact up: the preflight gate compiles the binary as
+  // its own task, then spawns `smoke` with CARET_SKIP_BUILD_BIN=1 so the smoke
+  // targets reuse bin/caret-native instead of paying a second compile.
+  test("shouldBuildBin is true by default, false only when CARET_SKIP_BUILD_BIN is set", () => {
+    expect(shouldBuildBin({})).toBe(true);
+    expect(shouldBuildBin({ CARET_SKIP_BUILD_BIN: "1" })).toBe(false);
+  });
+
   test("build bin bakes the commit into the compile via --define", () => {
     expect(buildBinCompileCommand("abc123")).toEqual([
       "bun",
@@ -450,17 +460,20 @@ function capturingRun() {
   return { calls, run };
 }
 
-/** Set CARET_SKIP_BUILD_UI for the duration of `fn`, restoring the prior value. */
-async function withSkipUi(fn: () => Promise<void>): Promise<void> {
-  const prev = process.env.CARET_SKIP_BUILD_UI;
-  process.env.CARET_SKIP_BUILD_UI = "1";
+/** Set `key` to "1" for the duration of `fn`, restoring the prior value. */
+async function withEnv(key: string, fn: () => Promise<void>): Promise<void> {
+  const prev = process.env[key];
+  process.env[key] = "1";
   try {
     await fn();
   } finally {
-    if (prev === undefined) delete process.env.CARET_SKIP_BUILD_UI;
-    else process.env.CARET_SKIP_BUILD_UI = prev;
+    if (prev === undefined) delete process.env[key];
+    else process.env[key] = prev;
   }
 }
+
+const withSkipUi = (fn: () => Promise<void>): Promise<void> => withEnv("CARET_SKIP_BUILD_UI", fn);
+const withSkipBin = (fn: () => Promise<void>): Promise<void> => withEnv("CARET_SKIP_BUILD_BIN", fn);
 
 describe("build bin: UI-first ordering + skip", () => {
   test("builds the UI before compiling the binary", async () => {
@@ -509,6 +522,22 @@ describe("ensureUi: the shared skip contract", () => {
   });
 });
 
+describe("ensureBin: the shared skip contract", () => {
+  test("returns 0 without compiling when CARET_SKIP_BUILD_BIN is set", async () => {
+    // No runner injected either: a broken skip would spawn a real `build bin`
+    // (manifest regen + bun build --compile). Returning 0 proves the short-circuit.
+    await withSkipBin(async () => {
+      expect(await ensureBin()).toBe(0);
+    });
+  });
+
+  test("forwards to the tasks CLI's build bin when the skip is absent", async () => {
+    const { calls, run } = capturingRun();
+    expect(await ensureBin(run)).toBe(0);
+    expect(calls.map((c) => c.cmd)).toEqual([["bun", "scripts/tasks/cli.ts", "build", "bin"]]);
+  });
+});
+
 describe("smoke umbrella: build the UI once, skip it in each target", () => {
   test("builds the UI once, then runs bin + bundle with CARET_SKIP_BUILD_UI=1", async () => {
     const { calls, run } = capturingRun();
@@ -522,6 +551,20 @@ describe("smoke umbrella: build the UI once, skip it in each target", () => {
     expect(calls[0]?.env?.CARET_SKIP_BUILD_UI).toBeUndefined();
     expect(calls[1]?.env?.CARET_SKIP_BUILD_UI).toBe("1");
     expect(calls[2]?.env?.CARET_SKIP_BUILD_UI).toBe("1");
+  });
+
+  // Under the preflight gate the UI is already built, so the umbrella's own
+  // leading `build ui` has to honour the same skip its targets inherit —
+  // otherwise an in-gate smoke kicks a second full Vite build.
+  test("skips its leading UI build when CARET_SKIP_BUILD_UI is set", async () => {
+    await withSkipUi(async () => {
+      const { calls, run } = capturingRun();
+      expect(await smokePlan(run)).toBe(0);
+      expect(calls.map((c) => c.cmd)).toEqual([
+        ["bun", "scripts/tasks/cli.ts", "smoke", "bin"],
+        ["bun", "scripts/tasks/cli.ts", "smoke", "bundle"],
+      ]);
+    });
   });
 
   test("stops at the first failing target", async () => {

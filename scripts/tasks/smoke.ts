@@ -1,13 +1,18 @@
 // `smoke` task group (EXC-740): release-confidence smoke tests for the two
 // distribution artifacts, consolidated into one command whose `bin`/`bundle`
 // positional targets map to `mise run smoke <target>`. Bare `mise run smoke`
-// runs both (bin then bundle) — the full pre-release check. Kept OUT of preflight
-// on purpose: each target depends on a full build, too slow for the per-push gate.
+// runs both (bin then bundle) — the full pre-release check, and the last task of
+// the preflight gate (EXC-914), where it is the only check that exercises what
+// users actually receive rather than the source tree.
 //
 // Each target builds its own artifact first (replacing the old `#MISE
 // depends=["build"]` / `depends=["build-bundle"]` edges): `smoke bin` invokes
 // `build bin`, `smoke bundle` invokes `build bundle`, via the tasks CLI so the
-// UI-first ordering + skip mechanism in build.ts is reused.
+// UI-first ordering + skip mechanism in build.ts is reused. Those skips are what
+// make smoke cheap enough for a per-push gate: preflight spawns it with
+// CARET_SKIP_BUILD_UI + CARET_SKIP_BUILD_BIN set, so it reuses the ui/dist and
+// bin/caret-native the gate's own `build ui` / `build bin` tasks just produced
+// and the only build it pays for is `build bundle`, which no other task runs.
 
 import {
   accessSync,
@@ -26,6 +31,7 @@ import type { Subprocess } from "bun";
 
 import { isPidAlive } from "@/daemon/lifecycle.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
+import { ensureBin, shouldBuildUi } from "@/tasks/build.ts";
 import { runForward } from "@/tasks/lib/exec.ts";
 import { installCleanupHandlers } from "@/tasks/lib/signals.ts";
 import { probeServedUi } from "@/tasks/lib/smoke-probe.ts";
@@ -35,12 +41,16 @@ import { probeServedUi } from "@/tasks/lib/smoke-probe.ts";
 /** Bare `mise run smoke`: build the UI once up front, then run both targets as
  * fresh subprocesses with CARET_SKIP_BUILD_UI=1 so neither rebuilds it — the
  * umbrella would otherwise pay the full Vite build twice (each target's build
- * bin / build bundle runs ensureUi). Each target exits on its own; stop at the
- * first failure. The runner is injectable so tests pin the sequence + the skip
- * env without spawning. */
+ * bin / build bundle runs ensureUi). That leading build is itself skipped under
+ * CARET_SKIP_BUILD_UI, so an in-gate smoke reuses the ui/dist preflight's own
+ * `build ui` task produced. Each target exits on its own; stop at the first
+ * failure. The runner is injectable so tests pin the sequence + the skip env
+ * without spawning. */
 export async function smokePlan(run: typeof runForward = runForward): Promise<number> {
-  const ui = await run(["bun", "scripts/tasks/cli.ts", "build", "ui"]);
-  if (ui !== 0) return ui;
+  if (shouldBuildUi(process.env)) {
+    const ui = await run(["bun", "scripts/tasks/cli.ts", "build", "ui"]);
+    if (ui !== 0) return ui;
+  }
   const env = { ...(process.env as Record<string, string>), CARET_SKIP_BUILD_UI: "1" };
   const bin = await run(["bun", "scripts/tasks/cli.ts", "smoke", "bin"], { env });
   if (bin !== 0) return bin;
@@ -82,8 +92,9 @@ function lockPort(lockFile: string): number | undefined {
 
 export async function runSmokeBin(): Promise<never> {
   // Build the compiled binary first (ui + compile), replacing the old mise
-  // `depends=["build"]` edge.
-  const built = await runForward(["bun", "scripts/tasks/cli.ts", "build", "bin"]);
+  // `depends=["build"]` edge — unless CARET_SKIP_BUILD_BIN says the caller (the
+  // preflight gate) already compiled it.
+  const built = await ensureBin();
   if (built !== 0) process.exit(built);
 
   const srcBin = join(process.cwd(), "bin", "caret-native");
