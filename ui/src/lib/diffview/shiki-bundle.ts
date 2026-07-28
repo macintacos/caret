@@ -14,7 +14,12 @@
 
 import { bundledLanguages as fullBundledLanguages } from "shiki/bundle/full";
 import { createBundledHighlighter } from "shiki/core";
-import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
+import {
+  createJavaScriptRegexEngine,
+  defaultJavaScriptRegexConstructor,
+} from "shiki/engine/javascript";
+
+import { jscSafeSource } from "$lib/diffview/jsc-regex.ts";
 
 // shiki/core carries the token/theme/codeToHtml surface the library imports
 // from the bare barrel (getTokenStyleObject, stringifyTokenStyle, normalizeTheme,
@@ -47,14 +52,36 @@ export { createOnigurumaEngine, loadWasm } from "shiki/engine/oniguruma";
  * the way shiki's own bundles are (createBundledHighlighter). The library calls
  * this to construct its shared highlighter; binding it to the full set means a
  * `langs: ["markdown"]` request — or any grammar id caret's fence scan turns up —
- * resolves from shiki's complete bundle. The JS engine runs `forgiving`, so a
- * grammar carrying a pattern the engine can't compile skips that pattern instead
- * of throwing at load time, maximizing how much of the full set actually
- * highlights; a grammar that still fails to load leaves its fences plain
- * (languages.ts) — the pre-existing behavior for an unavailable grammar.
+ * resolves from shiki's complete bundle. A grammar that fails to load leaves its
+ * fences plain (languages.ts) — the pre-existing behavior for an unavailable
+ * grammar.
  */
+/**
+ * caret's regex engine: shiki's pure-JS engine with every compiled pattern passed
+ * through the JavaScriptCore repair in `jsc-regex.ts` (EXC-911). Named rather than
+ * inlined so a test can tokenize through the exact engine the UI renders with — a
+ * bare `createJavaScriptRegexEngine()` is a different engine and pins nothing.
+ *
+ * The engine runs STRICT. `forgiving: true` was carried here from EXC-665 on the
+ * theory that some grammar needed it, but all 332 bundled grammars load and all
+ * 14,234 of their patterns compile without it (pinned by shiki-bundle.test.ts), so
+ * it rescued nothing. What it did do was convert a future uncompilable pattern
+ * from a loud failure at load into a silently dropped rule — and silent
+ * degradation is precisely what hid EXC-911's mis-scoped comments for so long.
+ */
+export const createCaretRegexEngine = () =>
+  createJavaScriptRegexEngine({
+    regexConstructor: (pattern) => {
+      const re = defaultJavaScriptRegexConstructor(pattern, { target: "auto" });
+      const safe = jscSafeSource(re.source);
+      // Rebuild only when the transform fired, so the 14,192 untouched patterns
+      // keep the exact RegExp the default constructor produced.
+      return safe === re.source ? re : new RegExp(safe, re.flags);
+    },
+  });
+
 export const createHighlighter = createBundledHighlighter({
   langs: bundledLanguages,
   themes: bundledThemes,
-  engine: () => createJavaScriptRegexEngine({ forgiving: true }),
+  engine: createCaretRegexEngine,
 });
