@@ -159,6 +159,16 @@ describe("tasks CLI: task command lines", () => {
     expect(formatCommand(["src"])).toEqual(["hk", "fix", "--all", "--no-stage", "src"]);
   });
 
+  test("caret forwards a leading --help instead of answering it", async () => {
+    // Every other passthrough keeps commander's built-in help: `mise run lint --help`
+    // describing the forwarder is useful. Here the forwarder is the whole task, so
+    // the help worth printing is caret's. passThroughOptions only forwards options
+    // once an operand has been seen, so a LEADING --help needs helpOption(false) to
+    // reach the tool; `caret install --help` already passes through on its own.
+    expect(await parsePassthrough(["caret"], "caret", ["--help"])).toEqual(["--help"]);
+    expect(await parsePassthrough(["caret"], "caret", ["-h"])).toEqual(["-h"]);
+  });
+
   test("caret runs the CLI from source, never a built artifact", () => {
     // `bin/caret` execs `bin/caret-native` when a build produced one, so it can lag
     // the working tree. Running `src/cli.ts` is what makes this task match the

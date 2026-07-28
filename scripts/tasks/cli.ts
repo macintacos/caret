@@ -138,12 +138,12 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
   // its run function shells out to. allowUnknownOption + passThroughOptions keep
   // commander from parsing the forwarded flags; the top-level
   // enablePositionalOptions above lets even a nested subcommand (e.g. `build ui`)
-  // pass through untouched.
+  // pass through untouched. Returns the command so a caller can refine it.
   const passthrough = (
     name: string,
     description: string,
     run: (args: string[]) => Promise<unknown>,
-  ): void => {
+  ) =>
     program
       .command(name)
       .description(description)
@@ -153,14 +153,21 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
       .action(async (args: string[]) => {
         await run(args);
       });
-  };
 
   passthrough("lint", "Check formatting and lint rules (Biome, read-only)", (a) => actions.lint(a));
   passthrough("format", "Format all files (Biome, write mode)", (a) => actions.format(a));
   // caret's own CLI, run from source so it always matches the checkout. Passthrough
   // rather than a modelled surface: src/cli.ts owns those subcommands and their
   // flags, and re-declaring them here would be a second place to keep in sync.
-  passthrough("caret", "Run caret's own CLI from source (src/cli.ts)", (a) => actions.caret(a));
+  // helpOption(false) so a LEADING `--help` reaches caret too. passThroughOptions
+  // only forwards options once an operand has been seen, so `caret install --help`
+  // already passes through, but a bare `caret --help` would otherwise be answered by
+  // commander with this command's own help — which describes the forwarder rather
+  // than the tool, and here the forwarder IS the whole task. The other passthroughs
+  // keep their help: `lint --help` describing the forwarder is the useful answer.
+  passthrough("caret", "Run caret's own CLI from source (src/cli.ts)", (a) =>
+    actions.caret(a),
+  ).helpOption(false);
 
   // `build`: bare umbrella (UI -> binary, plus the optional --install dev step),
   // with `ui`/`bin`/`bundle` as positional targets so `mise run build ui` reaches
