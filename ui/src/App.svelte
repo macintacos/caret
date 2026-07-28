@@ -386,7 +386,8 @@
     // The review-verdict + chrome shortcuts (EXC-789). Each binds EXC-786's canonical
     // reservation and adds the live run + enabled here, routing through the SAME guarded
     // path as its TopBar button — `a` is never a raw approve, always onApprove's
-    // unsent-comments guard. The two verdict actions gate on an active, not-busy review
+    // unsent-comments guard, and Shift+R is never a raw deny, always onReject's confirm
+    // (EXC-913). The three verdict actions gate on an active, not-busy review
     // (matching the buttons' disabled state); Settings is persistent chrome (EXC-730),
     // reachable with no review. Shift+C toggles the comment navigator (EXC-792), gated on
     // an active review like the status-strip tally that also toggles it.
@@ -399,6 +400,7 @@
         },
         enabled: canAct,
       }),
+      reg("actions.reject", { run: onReject, enabled: canAct }),
       reg("actions.settings", {
         run: () => {
           showSettings = true;

@@ -82,6 +82,22 @@ describe("CANONICAL_KEYMAP", () => {
     expect(keyCaps(entry.keys)).toEqual([["shift", "C"]]);
   });
 
+  test("reserves Shift+R for Reject, rendered as shift + R caps (EXC-913)", () => {
+    // EXC-913: shift+r fires the top bar's Reject. A bare shifted key (uppercase key,
+    // no command modifier and no cap override), so keyCaps derives ["shift", "R"] from
+    // the case and ariaKeyshortcuts derives "Shift+R" from the same field — the
+    // ADVERTISED hint (aria-keyshortcuts) cannot drift from the key the dispatcher
+    // fires on. The visible cap is still typed by hand at each call site, as the
+    // topbar's a/r caps are, so it does not ride this guarantee.
+    const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.reject");
+    if (!entry) throw new Error("actions.reject missing");
+    expect(entry.group).toBe("actions");
+    expect(entry.label).toBe("Reject");
+    expect(specSignature(entry.keys)).toBe("R");
+    expect(keyCaps(entry.keys)).toEqual([["shift", "R"]]);
+    expect(ariaKeyshortcutsFor("actions.reject")).toBe("Shift+R");
+  });
+
   test("reserves \\ for the sidebar toggle in the Actions group, rendered as a \\ cap", () => {
     // EXC-830: toggles the plan's ToC rail (the sidebar). A bare backslash, no
     // command modifier — the cap derives straight from the key, no explicit override.

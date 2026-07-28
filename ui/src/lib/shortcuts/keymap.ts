@@ -112,6 +112,18 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
     label: "Request changes",
   },
   {
+    // EXC-913: shift+r rejects the plan. A bare shifted key — uppercase `key`, no
+    // command modifier and no cap override — the same shape as V/G/C/N, so keyCaps
+    // derives ["shift", "R"] from the case and ariaKeyshortcuts derives "Shift+R".
+    // Shifted rather than a second bare letter: reject is the one verdict with no
+    // undo, and any free bare letter would sit a key or two from `r` (request
+    // changes), so a slip lands it. Shift on the SAME key makes it deliberate.
+    id: "actions.reject",
+    keys: [{ key: "R" }],
+    group: "actions",
+    label: "Reject",
+  },
+  {
     id: "actions.toggleDiff",
     keys: [{ key: "d" }],
     group: "actions",
