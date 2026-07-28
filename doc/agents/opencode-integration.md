@@ -137,22 +137,35 @@ string" shape before writing, so it can't corrupt a user's config.
 - **Install (`caret install --target opencode`)** — adds caret to the user's OpenCode
   `plugin` array (comment-preserving, via `jsonc-parser` in `config-plugin.ts`) as either
   `@macintacos/caret` or, under `--from-local`, `file:<checkout>` (§ The local form) and
-  deploys the `/caret:*` command **files**; `--uninstall` reverses both. OpenCode itself
-  installs the package and its deps into its cache on the next start — caret writes no
-  config-dir manifest and runs no `bun install`. Between the two writes it runs an upgrade
-  check: OpenCode resolves an array entry once and caches it forever (§ The cache layout),
-  so re-adding the entry never moves anyone off install-day's version. `upgrade.ts` weighs
-  the entry and that cache against npm's `latest` — npm rather than GitHub releases,
-  because `latest` is what OpenCode would re-resolve to — and a stale result offers to
-  clear the cached copy, or to bump a user-authored pin. That offer is a prompt, since
-  `~/.cache/opencode` is not caret's to delete unasked; `--refresh` pre-answers it, and
-  off a TTY install names the gap and changes nothing. `caret install --target claude`
-  registers caret with Claude Code via its plugin CLI. The command lives in
-  `src/commands/install/`: `index.ts` is the orchestrator (it parses `--target` — a comma
-  list of the registry's ids — resolves the targets, and dispatches), beside the target
-  registry, the chooser, the terminal reporter, and one module per target runner.
-  `paths.ts` is the single source of truth both the probe (reader) and the writer resolve
-  through.
+  deploys the `/caret:*` command **files**; `--uninstall` reverses both. Both arms also
+  sweep what the file-deploy era left in the config dir: caret's `caret.ts` in either
+  plugin dir OpenCode scans (`plugins/`, and the singular `plugin/` it keeps as a
+  back-compat alias) and any `caret:`-namespaced file in the singular `command/`. That is
+  not tidiness — OpenCode loads a plugin out of either dir, so a leftover file registers a
+  **second** `caret_review_plan` beside the array entry, and a leftover command file
+  re-exposes `/caret:*` pointed at a substituted binary path nothing writes any more. The
+  command sweep matches caret's namespace rather than the commands the package ships
+  today, so an old install's file for a since-dropped command isn't stranded. The config
+  dir's own `package.json` is deliberately **left**: it is inert, and another of the
+  user's plugins may import `@opencode-ai/plugin` through it. The sweep runs after the
+  upgrade check, so a plugin file is only dropped once the array entry exists and a stale
+  cached copy has been offered a refresh — and it still runs when that refresh is
+  declined, since two loaded caret plugins are worse than one stale-but-single plugin.
+  OpenCode itself installs the package and its deps into its cache on the next start —
+  caret writes no config-dir manifest and runs no `bun install`. Between the two writes it
+  runs an upgrade check: OpenCode resolves an array entry once and caches it forever (§
+  The cache layout), so re-adding the entry never moves anyone off install-day's version.
+  `upgrade.ts` weighs the entry and that cache against npm's `latest` — npm rather than
+  GitHub releases, because `latest` is what OpenCode would re-resolve to — and a stale
+  result offers to clear the cached copy, or to bump a user-authored pin. That offer is a
+  prompt, since `~/.cache/opencode` is not caret's to delete unasked; `--refresh`
+  pre-answers it, and off a TTY install names the gap and changes nothing.
+  `caret install --target claude` registers caret with Claude Code via its plugin CLI. The
+  command lives in `src/commands/install/`: `index.ts` is the orchestrator (it parses
+  `--target` — a comma list of the registry's ids — resolves the targets, and dispatches),
+  beside the target registry, the chooser, the terminal reporter, and one module per
+  target runner. `paths.ts` is the single source of truth both the probe (reader) and the
+  writer resolve through.
 
 ## Distribution choice (amended by EXC-794)
 
@@ -173,8 +186,9 @@ already publishes `@macintacos/caret`, so the array path needs **no second packa
 one package's entrypoint is the OpenCode plugin, and it ships the whole caret runtime
 (`bin/caret`, `dist/`, `ui/dist/`), so an array install is self-contained. This retired
 the file-deploy machinery (the config-dir manifest, the caret-run `bun install`, and
-`stripNonDefaultExports`). The other two rejected options still stand: (a) a
-`permission.ask` per-edit gate (wrong semantic) and (b) re-implementing the daemon
+`stripNonDefaultExports`), and install now cleans up after it — see the Install bullet in
+§ How it maps onto caret's two-layer split. The other two rejected options still stand:
+(a) a `permission.ask` per-edit gate (wrong semantic) and (b) re-implementing the daemon
 round-trip in the plugin (duplication).
 
 ### The local form: `--from-local`
