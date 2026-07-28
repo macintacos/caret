@@ -105,6 +105,13 @@ async function compileBin(run: typeof runForward = runForward): Promise<number> 
   if (manifest !== 0) return manifest;
   const compiled = await run(buildBinCompileCommand(await headCommit()));
   if (compiled !== 0) return compiled;
+  // Clear bin/ui before copying: `cp -R ui/dist bin/ui` copies INTO the directory
+  // when it already exists, which would bury this build at bin/ui/dist/ and leave
+  // the first build's index.html + assets/ stranded at the top level — exactly
+  // where the beside-the-binary fallback looks, so it would serve a stale index
+  // whose hashed asset URLs resolve to nothing.
+  const cleaned = await run(["rm", "-rf", "bin/ui"]);
+  if (cleaned !== 0) return cleaned;
   return await run(["cp", "-R", "ui/dist", "bin/ui"]);
 }
 

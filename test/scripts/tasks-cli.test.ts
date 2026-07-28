@@ -456,6 +456,21 @@ describe("build bin: UI-first ordering + skip", () => {
       expect(calls[0]?.cmd).toEqual(["bun", "scripts/generate-ui-manifest.ts"]);
     });
   });
+
+  // `cp -R ui/dist bin/ui` copies INTO an existing bin/ui rather than replacing it,
+  // so the second build onward lands the real tree at bin/ui/dist/ and strands the
+  // FIRST build's index.html + assets/ at the top level. The beside-the-binary
+  // fallback enumerates that top level, so it would serve a months-old index whose
+  // hashed asset URLs resolve to nothing — worse than having no fallback at all.
+  // Clearing the directory first is what keeps the copy idempotent.
+  test("clears the beside-the-binary UI tree before copying, so it can't nest", async () => {
+    const { calls, run } = capturingRun();
+    expect(await buildBinArtifacts(run)).toBe(0);
+    const rmAt = calls.findIndex((c) => c.cmd[0] === "rm" && c.cmd.includes("bin/ui"));
+    const cpAt = calls.findIndex((c) => c.cmd[0] === "cp");
+    expect(rmAt).toBeGreaterThanOrEqual(0);
+    expect(cpAt).toBeGreaterThan(rmAt);
+  });
 });
 
 describe("ensureUi: the shared skip contract", () => {
