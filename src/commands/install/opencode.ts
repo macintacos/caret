@@ -125,11 +125,11 @@ function setCaretPluginEntry(
 }
 
 /** Install (or, with `uninstall`, remove) caret into OpenCode: edit the config's
- * `plugin` array to add/remove `@macintacos/caret`, and deploy/remove the `/caret:*`
- * command files. OpenCode installs the package (and the plugin's deps) itself on its
- * next start, so there is no manifest to write and no `bun install` to run here. The
- * two halves are reported as their own steps — the config edit and the command files
- * fail independently, so a reader can see which one did what. */
+ * `plugin` array to add/remove `@macintacos/caret`, deploy/remove the `/caret:*`
+ * command files, and sweep whatever the file-deploy era left in the config dir.
+ * OpenCode installs the package (and the plugin's deps) itself on its next start, so
+ * there is no manifest to write and no `bun install` to run here. Each piece is its own
+ * step — they fail independently, so a reader can see which one did what. */
 export async function runInstallOpencodeTarget(
   opts: { uninstall: boolean; dryRun: boolean; refresh: boolean; local?: LocalInstall },
   deps: InstallOpencodeDeps = {},
@@ -229,9 +229,8 @@ export async function runInstallOpencodeTarget(
 /** Remove the file-deploy era's leftovers, on both arms. Unlike every other step here it
  * is raised only when there is something to remove: the others describe the command's
  * primary work, so a zero outcome is still information, while this one is a migration
- * concern that would otherwise print an empty line into every install transcript forever.
- * One step covers both artifact classes — they were deployed by one era and are removed
- * for one reason, so splitting them would report two steps where at most one ever fires. */
+ * concern that would otherwise print an empty line into every install transcript
+ * forever. */
 async function sweepLegacy(legacy: string[], dir: string, ui: InstallUI): Promise<void> {
   if (legacy.length === 0) return;
   await ui.step(
