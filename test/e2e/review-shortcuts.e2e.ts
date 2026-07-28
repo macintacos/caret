@@ -1,6 +1,7 @@
 // Review-verdict + chrome keyboard shortcuts. Approve (a), request changes (r),
-// toggle compare/diff (d), open plan search (/, EXC-832), toggle the sidebar (\),
-// and open settings (,) are all wired through the shortcut engine (EXC-786). These are
+// reject (shift+R, EXC-913), toggle compare/diff (d), open plan search (/, EXC-832),
+// toggle the sidebar (\), and open settings (,) are all wired through the shortcut
+// engine (EXC-786). These are
 // real-browser keyboard behaviors — a keydown routed through the global
 // dispatcher into the same guarded path a click takes — so they live here, not
 // in a unit (browser-testing.md). Every action is driven with a REAL keystroke.
@@ -66,7 +67,31 @@ test("r opens the request-changes dialog", async ({ daemon, page }) => {
   await expect(dialog).toBeVisible();
 });
 
-test("comma opens Settings even with no active review; a and r no-op there", async ({ page }) => {
+test("shift+R opens the reject guard and Escape dismisses it", async ({ daemon, page }) => {
+  await daemon.seed({ plan: PLAN });
+  await page.goto("/");
+  await loadPlan(page);
+
+  await expect(page.getByRole("button", { name: "Reject", exact: true })).toHaveAttribute(
+    "aria-keyshortcuts",
+    "Shift+R",
+  );
+
+  // Shift+R routes through onReject's confirm — the same alertdialog the button
+  // opens, never a raw deny. Resolution behavior is covered by reject.e2e.ts.
+  const confirm = page.getByRole("alertdialog");
+  await expect(confirm).toBeHidden();
+  await page.keyboard.press("R");
+  await expect(confirm).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(confirm).toBeHidden();
+  await expect(page.locator(".diff-plan")).toBeVisible();
+});
+
+test("comma opens Settings even with no active review; a, r and shift+R no-op there", async ({
+  page,
+}) => {
   // No review seeded — the empty state, where the review actions are inert but
   // Settings (persistent chrome) stays reachable.
   await page.goto("/");
@@ -81,8 +106,10 @@ test("comma opens Settings even with no active review; a and r no-op there", asy
   // The review-verdict keys do nothing without a review.
   await page.keyboard.press("a");
   await page.keyboard.press("r");
+  await page.keyboard.press("R");
   await expect(page.getByRole("dialog", { name: "Approve this plan?" })).toBeHidden();
   await expect(page.getByRole("dialog", { name: "Send the plan back for revision" })).toBeHidden();
+  await expect(page.getByRole("alertdialog")).toBeHidden();
 
   // Settings opens regardless.
   const settings = page.getByRole("dialog", { name: "Settings" });
