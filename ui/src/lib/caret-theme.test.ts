@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
 import { createHighlighterCore } from "shiki/core";
-import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 
 import { CARET_SHIKI_THEMES, type CaretShikiThemeId } from "$lib/caret-shiki.ts";
 import { REGISTERED_SHIKI_THEMES, shikiThemeFor, shikiThemeForPalette } from "$lib/caret-theme.ts";
@@ -288,7 +287,7 @@ describe("fenced-code fence line", () => {
     shared ??= await createHighlighterCore({
       themes: THEME_IDS.map(shikiThemeFor),
       langs: [import("shiki/langs/markdown.mjs")],
-      engine: createJavaScriptRegexEngine(),
+      engine: createCaretRegexEngine(),
     });
     const md = ["```ts", "code", "```"].join("\n");
     return shared.codeToTokensBase(md, { lang: "markdown", theme: id });
@@ -338,7 +337,7 @@ describe("inline-code file references stay tokenized for fileRefTag", () => {
     shared ??= await createHighlighterCore({
       themes: THEME_IDS.map(shikiThemeFor),
       langs: [import("shiki/langs/markdown.mjs")],
-      engine: createJavaScriptRegexEngine(),
+      engine: createCaretRegexEngine(),
     });
     return shared.codeToTokensBase(LINE, { lang: "markdown", theme: id })[0] ?? [];
   }
@@ -366,7 +365,7 @@ describe("dracula fenced-code block", () => {
     const hl = await createHighlighterCore({
       themes: [shikiThemeFor("dracula")],
       langs: [import("shiki/langs/markdown.mjs"), import("shiki/langs/typescript.mjs")],
-      engine: createJavaScriptRegexEngine(),
+      engine: createCaretRegexEngine(),
     });
     const md = ["```ts", "const x = 1", "```"].join("\n");
     const body = hl
@@ -381,11 +380,11 @@ describe("dracula fenced-code block", () => {
 // real grammar rather than read back off the rule table, which would only restate
 // caret-shiki.ts in a second spelling.
 //
-// A caveat for anyone editing the sample: shiki's JS regex engine — the one caret
-// ships (diffview/shiki-bundle.ts) — resolves some TypeScript constructs to coarser
-// scopes than the Oniguruma engine does, and which ones depends on the surrounding
-// lines, not just the token. Every token asserted below resolves the same under both
-// engines, so re-verify the WHOLE sample after changing any line of it.
+// A caveat for anyone editing the sample: which scope a token resolves to can
+// depend on the lines around it, not just the token itself, so re-verify the WHOLE
+// sample after changing any line of it. Tokenized through caret's own engine
+// (diffview/shiki-bundle.ts) rather than a bare `createJavaScriptRegexEngine()` —
+// the two are no longer interchangeable, and only the former is what caret paints.
 describe("caret themes over a real TypeScript sample", () => {
   const SAMPLE = [
     "function build(rows: Row[]): string {",
@@ -401,7 +400,7 @@ describe("caret themes over a real TypeScript sample", () => {
     shared ??= await createHighlighterCore({
       themes: [shikiThemeFor("caret-dark"), shikiThemeFor("caret-light")],
       langs: [import("shiki/langs/tsx.mjs")],
-      engine: createJavaScriptRegexEngine(),
+      engine: createCaretRegexEngine(),
     });
     return shared.codeToTokensBase(SAMPLE, { lang: "tsx", theme: id });
   }
@@ -436,9 +435,8 @@ describe("caret themes over a real TypeScript sample", () => {
 });
 
 // EXC-911: the block above reads COLORS, which can only ever be as right as the
-// scopes underneath them. This one reads the scopes directly, through the engine
-// shiki-bundle.ts actually ships — a bare `createJavaScriptRegexEngine()` is a
-// different engine and would pin nothing about production.
+// scopes underneath them. This one reads the scopes directly, so a mis-scoped
+// token fails here by name instead of surfacing as a puzzling wrong hue there.
 //
 // The defect it exists for: JavaScriptCore treats an optional group containing `^`
 // as anchoring the whole pattern (`/(^a)?b/.exec("xb")` → null on JSC, a match on
@@ -472,10 +470,12 @@ describe("the shipped engine tokenizes TypeScript to the grammar's real scopes",
       engine: createCaretRegexEngine(),
     });
     const grammar = highlighter.getInternalContext().getLanguage("tsx");
-    let stack = null as never;
+    // The grammar's own stack type, which starts null and is threaded line to line
+    // — carrying it is what lets a multi-line construct scope correctly.
+    let stack: Parameters<typeof grammar.tokenizeLine>[1] = null;
     cached = SAMPLE.split("\n").map((line) => {
       const { tokens, ruleStack } = grammar.tokenizeLine(line, stack, undefined);
-      stack = ruleStack as never;
+      stack = ruleStack;
       return tokens.map(
         (t) => [line.slice(t.startIndex, t.endIndex), t.scopes] as [string, string[]],
       );
@@ -533,7 +533,7 @@ describe("caret themes over a diff fence", () => {
     shared ??= await createHighlighterCore({
       themes: [shikiThemeFor("caret-dark"), shikiThemeFor("caret-light")],
       langs: [import("shiki/langs/markdown.mjs"), import("shiki/langs/diff.mjs")],
-      engine: createJavaScriptRegexEngine(),
+      engine: createCaretRegexEngine(),
     });
     return shared.codeToTokensBase(PATCH, { lang: "markdown", theme: id });
   }

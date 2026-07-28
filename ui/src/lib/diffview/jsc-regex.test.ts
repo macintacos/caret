@@ -75,6 +75,39 @@ describe("jscSafeSource leaves everything else byte-identical", () => {
     });
   }
 
+  test("leaves a quantifier other than `?` alone", () => {
+    // Only `?` occurs on an anchored group across shiki's full bundle (all 42
+    // sites), so the transform is scoped to it rather than generalized to `*`.
+    expect(jscSafeSource(String.raw`(^a)*b`)).toBe(String.raw`(^a)*b`);
+  });
+
+  test("leaves a lazy optional alone", () => {
+    // `(^a)??` needs the mirrored rewrite `(?:|(^a))`, and no bundled pattern uses
+    // it — so the scanner skips it rather than emitting a wrong-precedence guess.
+    expect(jscSafeSource(String.raw`(^a)??b`)).toBe(String.raw`(^a)??b`);
+  });
+});
+
+describe("jscSafeSource finds the group boundary through every prefix form", () => {
+  // The scanner hand-parses regex source, so each prefix it claims to understand
+  // needs a case: a prefix misread by one character puts the `^` test on the wrong
+  // offset and the site is silently missed.
+  const cases: Array<[string, string, string]> = [
+    ["plain capture", String.raw`(^a)?b`, String.raw`(?:(^a)|)b`],
+    ["non-capturing", String.raw`(?:^a)?b`, String.raw`(?:(?:^a)|)b`],
+    ["named group", String.raw`(?<n>^a)?b`, String.raw`(?:(?<n>^a)|)b`],
+    ["lookahead", String.raw`(?=^a)?b`, String.raw`(?:(?=^a)|)b`],
+    ["negative lookahead", String.raw`(?!^a)?b`, String.raw`(?:(?!^a)|)b`],
+    ["lookbehind", String.raw`(?<=^a)?b`, String.raw`(?:(?<=^a)|)b`],
+    ["modifier group", String.raw`(?i:^a)?b`, String.raw`(?:(?i:^a)|)b`],
+  ];
+
+  for (const [name, source, expected] of cases) {
+    test(`rewrites through a ${name}`, () => {
+      expect(jscSafeSource(source)).toBe(expected);
+    });
+  }
+
   test("does not mistake a class-bracketed paren for a group open", () => {
     // `[(]` is a literal `(`; only the real group that follows may be rewritten.
     expect(jscSafeSource(String.raw`[(](^a)?b`)).toBe(String.raw`[(](?:(^a)|)b`);
@@ -83,20 +116,15 @@ describe("jscSafeSource leaves everything else byte-identical", () => {
   test("does not mistake an escaped paren for a group open", () => {
     expect(jscSafeSource(String.raw`\((^a)?b`)).toBe(String.raw`\((?:(^a)|)b`);
   });
-
-  test("leaves a quantifier other than `?` alone", () => {
-    // Only `?` occurs on an anchored group across shiki's full bundle (all 42
-    // sites), so the transform is scoped to it rather than generalized to `*`.
-    expect(jscSafeSource(String.raw`(^a)*b`)).toBe(String.raw`(^a)*b`);
-  });
 });
 
 describe("the rewrite fixes the JavaScriptCore divergence it exists for", () => {
   // The bug: JSC treats an optional group containing `^` as anchoring the whole
   // pattern, so scanning for the group's *absent* case fails. V8 returns a match.
-  // These run on whatever engine the suite runs on — under bun (JSC) they are the
-  // regression pin; under V8 the `before` case would already pass, so only the
-  // `after` assertions carry there. Either way a rewrite that stopped working fails.
+  //
+  // This block is JSC-only by design. caret's unit suite runs under bun, which IS
+  // JavaScriptCore, so the reproduction below genuinely holds here — on V8 it would
+  // fail, and deliberately so: that failure is the signal the workaround can go.
   const shapes = [
     String.raw`(^[\t ]+)?(?=\/\/)`,
     String.raw`((?:^[\t ]+)?)(?=\/\/)`,

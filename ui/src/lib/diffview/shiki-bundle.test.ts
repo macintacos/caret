@@ -49,16 +49,22 @@ describe("the shiki bundle", () => {
 
 // EXC-911 dropped `forgiving: true` from the engine, which had been carried since
 // EXC-665 on the theory that some grammar could not compile strictly. Nothing in
-// the bundle needs it — and this is the test that says so, permanently.
+// the bundle needs it, and these two tests are what say so.
 //
-// It is the standing answer to two questions that were previously unmeasured:
-// which grammars fail to load strictly (none), and whether any fence regressed to
-// plain when `forgiving` went away (none can, since a fence renders plain only
-// when its grammar fails to load). Without this, re-adding `forgiving` would look
-// harmless — and it would restore exactly the silent per-pattern degradation that
-// let EXC-911's mis-scoped comments ship unnoticed.
+// They are deliberately split, because the two halves cost three orders of
+// magnitude apart and pin different things:
+//
+//   - Loading a grammar registers its rules but compiles NONE of its patterns —
+//     an engine whose regexConstructor always throws still loads every grammar,
+//     and only throws once something is tokenized. So the cheap test below is a
+//     real guard on the bundle, but it is NOT evidence that patterns compile.
+//   - Translating all 14,234 patterns is the claim that actually justifies strict
+//     mode, and costs ~9s.
+//
+// Saying which is which matters: the load test alone reads like proof that strict
+// is safe, and it is not.
 describe("every bundled grammar loads under caret's engine", () => {
-  test("no grammar fails to load, so no fence falls back to plain", async () => {
+  test("every grammar in the bundle registers without throwing", async () => {
     const highlighter = await createHighlighterCore({
       themes: [],
       langs: [],
@@ -84,4 +90,52 @@ describe("every bundled grammar loads under caret's engine", () => {
     // key count because some grammars pull in embedded dependencies.
     expect(highlighter.getLoadedLanguages().length).toBeGreaterThan(300);
   });
+});
+
+/** The TextMate rule keys whose value is an Oniguruma pattern. */
+const PATTERN_KEYS = new Set(["match", "begin", "end", "while"]);
+
+/** Every `match` / `begin` / `end` / `while` string reachable from a grammar. */
+function collectPatterns(node: unknown, out: Set<string>) {
+  if (node == null || typeof node !== "object") return;
+  if (Array.isArray(node)) {
+    for (const child of node) collectPatterns(child, out);
+    return;
+  }
+  for (const [key, value] of Object.entries(node)) {
+    if (typeof value === "string") {
+      if (PATTERN_KEYS.has(key)) out.add(value);
+      continue;
+    }
+    collectPatterns(value, out);
+  }
+}
+
+// The expensive half — the claim that actually justifies strict mode, and the only
+// thing a shiki bump can invalidate. The ~9s is paid on every run deliberately:
+// behind an opt-in flag it would never actually run, and an unverified claim about
+// these 14,234 patterns is what let EXC-911 hide for as long as it did.
+describe("every bundled pattern translates strictly", () => {
+  test("no pattern fails to compile through caret's regexConstructor", async () => {
+    const patterns = new Set<string>();
+    for (const load of Object.values(bundledLanguages)) {
+      collectPatterns((await load()).default, patterns);
+    }
+
+    // The engine's own scanner, called on the engine, so this exercises the
+    // jsc-regex rewrite as production reaches it rather than a paraphrase.
+    const engine = createCaretRegexEngine();
+    const failures: string[] = [];
+    for (const pattern of patterns) {
+      try {
+        engine.createScanner([pattern]);
+      } catch (err) {
+        failures.push(`${pattern}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    expect(failures).toEqual([]);
+    // Non-vacuity again: an empty pattern set would pass the check above.
+    expect(patterns.size).toBeGreaterThan(10_000);
+  }, 60_000);
 });

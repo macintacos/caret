@@ -10,7 +10,9 @@
 // TypeScript grammar's is `(^[\t ]+)?((//)…)`, so under JSC a `//` after code
 // never matched the comment rule and fell through to the arithmetic-operator
 // rule. It affects every C-family `//`, SQL/Lua/Haskell `--`, Lisp/asm `;`, and
-// block-comment `*/` rule in shiki's bundle: 11 of the 14,234 bundled patterns.
+// block-comment `*/` rule in shiki's bundle: 42 of its 14,234 patterns carry the
+// shape. (How many of those *observably* diverge depends on the input you probe
+// with; the count of patterns carrying the shape is the checkable number.)
 //
 // `(^X)?` and `(?:(^X)|)` are equivalent — a greedy optional is "try X, then try
 // empty" — but JSC matches the second correctly, so rewriting the compiled source
