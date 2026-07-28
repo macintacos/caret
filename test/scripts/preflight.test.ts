@@ -1,8 +1,10 @@
 // Drives the preflight orchestrator's task DAG through an injected fake
 // spawner — no real mise tasks run. Asserts the scheduling contract from
-// EXC-462: lint/test/`build ui` start immediately, dependents wait on `build ui`
-// and dedupe it via CARET_SKIP_BUILD_UI, failures don't hide other results, and
-// the summary surfaces failed output plus the `mise run format` hint. Also
+// EXC-462: lint/test/`build ui` start immediately, dependents wait on their gate
+// and dedupe its artifact via CARET_SKIP_BUILD_UI / CARET_SKIP_BUILD_BIN,
+// `smoke` gates on `build bin` one level down (EXC-914), failures don't hide
+// other results, and the summary surfaces failed output plus the `mise run
+// format` hint. Also
 // covers the `--json` report builders (EXC-471) — the lean default (status +
 // line counts), the -v/-vv verbosity ladder, --grep line filtering, --task
 // scoping, and the error doc — plus the CLI's invalid-`--grep` exit path. The
@@ -24,7 +26,7 @@ import {
 } from "@scripts/preflight.ts";
 import { waitFor } from "@test/support/poll.ts";
 
-const ALL_TASKS = ["build bin", "build ui", "lint", "test", "test e2e"];
+const ALL_TASKS = ["build bin", "build ui", "lint", "smoke", "test", "test e2e"];
 
 /** Fake spawner that resolves immediately from a per-task plan (default: pass). */
 function fakeSpawner(plan?: Record<string, SpawnOutcome>) {
@@ -83,18 +85,68 @@ test("lint, test, build ui start immediately; dependents wait for build ui", asy
   expect(s.calls).toContain("test e2e");
   expect(s.calls).toContain("build bin");
 
-  for (const name of ["lint", "test", "test e2e", "build bin"]) s.release(name);
+  s.release("build bin");
+  await waitForCond(() => s.calls.includes("smoke"));
+  for (const name of ["lint", "test", "test e2e", "smoke"]) s.release(name);
   const r = await run;
   expect(r.exitCode).toBe(0);
 });
 
-test("dependents get CARET_SKIP_BUILD_UI=1; immediate tasks do not", async () => {
+// smoke is the one second-order node: it gates on `build bin`, which is itself a
+// dependent. A smoke wired to `build ui` like its siblings would start while the
+// compile is still running and probe a stale (or absent) bin/caret-native.
+test("smoke waits for build bin, not merely build ui", async () => {
+  const s = gatedSpawner();
+  const run = runPreflight({ spawnTask: s.spawnTask, renderer: "silent" });
+
+  await waitForCond(() => s.calls.length === 3);
+  s.release("build ui");
+  await waitForCond(() => s.calls.length === 5);
+  await Bun.sleep(20); // would catch a smoke gated on `build ui`
+  expect(s.calls).not.toContain("smoke");
+
+  s.release("build bin");
+  await waitForCond(() => s.calls.includes("smoke"));
+
+  for (const name of ["lint", "test", "test e2e", "smoke"]) s.release(name);
+  const r = await run;
+  expect(r.exitCode).toBe(0);
+});
+
+// listr2 fills its concurrency slots in array order, so a task can only start
+// once every task before it has started. That ordering is what keeps a cap below
+// the task count (CARET_PREFLIGHT_JOBS=1 here) from parking smoke in the last
+// slot while `build bin` — the gate it awaits — is still queued behind it. A
+// regression deadlocks rather than fails, so this test times out to prove it.
+test("concurrency 1: the whole gate still completes, in array order", async () => {
+  const { calls, spawnTask } = fakeSpawner();
+  const r = await runPreflight({ spawnTask, renderer: "silent", concurrency: 1 });
+
+  expect(r.exitCode).toBe(0);
+  expect(calls.map((c) => c.name)).toEqual([
+    "lint",
+    "test",
+    "build ui",
+    "test e2e",
+    "build bin",
+    "smoke",
+  ]);
+});
+
+test("dependents get their gate's skip env; immediate tasks get none", async () => {
   const { calls, spawnTask } = fakeSpawner();
   await runPreflight({ spawnTask, renderer: "silent" });
 
   const envByName = new Map(calls.map((c) => [c.name, c.env]));
   expect(envByName.get("test e2e")?.CARET_SKIP_BUILD_UI).toBe("1");
   expect(envByName.get("build bin")?.CARET_SKIP_BUILD_UI).toBe("1");
+  // smoke reuses both upstream artifacts, so it carries both skips; its siblings
+  // still build the binary themselves and must not inherit the bin skip.
+  expect(envByName.get("smoke")?.CARET_SKIP_BUILD_UI).toBe("1");
+  expect(envByName.get("smoke")?.CARET_SKIP_BUILD_BIN).toBe("1");
+  for (const name of ["test e2e", "build bin"]) {
+    expect(envByName.get(name)?.CARET_SKIP_BUILD_BIN).toBeUndefined();
+  }
   for (const name of ["lint", "test", "build ui"]) {
     expect(envByName.get(name)?.CARET_SKIP_BUILD_UI).toBeUndefined();
   }
@@ -175,10 +227,27 @@ test("build ui failure skips its dependents and reports them as skipped", async 
   const names = calls.map((c) => c.name);
   expect(names).not.toContain("test e2e");
   expect(names).not.toContain("build bin");
+  // Transitive: a skipped `build bin` still has to release its own gate, or
+  // smoke awaits a promise nobody will ever resolve and the run never returns.
+  expect(names).not.toContain("smoke");
   expect(r.results.get("build ui")?.status).toBe("failed");
   expect(r.results.get("test e2e")?.status).toBe("skipped");
   expect(r.results.get("build bin")?.status).toBe("skipped");
+  expect(r.results.get("smoke")?.status).toBe("skipped");
   expect(r.summary).toContain("vite exploded");
+});
+
+test("build bin failure skips smoke and never spawns it", async () => {
+  const { calls, spawnTask } = fakeSpawner({
+    "build bin": { exitCode: 1, output: "compile exploded" },
+  });
+  const r = await runPreflight({ spawnTask, renderer: "silent" });
+
+  expect(r.exitCode).toBe(1);
+  expect(calls.map((c) => c.name)).not.toContain("smoke");
+  expect(r.results.get("build bin")?.status).toBe("failed");
+  expect(r.results.get("smoke")?.status).toBe("skipped");
+  expect(r.summary).toContain("compile exploded");
 });
 
 // Process-group teardown + fail-fast (EXC-587) ------------------------------
@@ -261,7 +330,7 @@ test("buildStartReport echoes the parsed filters and lists planned tasks", () =>
   const start = buildStartReport({ json: true, verbosity: 2, grep: "err", tasks: ["test"] });
   expect(start.event).toBe("start");
   expect(start.schemaVersion).toBe(1);
-  expect(start.tasks).toEqual(["lint", "test", "build ui", "test e2e", "build bin"]);
+  expect(start.tasks).toEqual(["lint", "test", "build ui", "test e2e", "build bin", "smoke"]);
   expect(start.filters).toEqual({ verbosity: 2, grep: "err", tasks: ["test"] });
 });
 
@@ -284,6 +353,7 @@ test("buildResultReport level 0: passing tasks carry status only", async () => {
     "build ui",
     "test e2e",
     "build bin",
+    "smoke",
   ]);
   for (const t of report.tasks) {
     expect(t.status).toBe("passed");

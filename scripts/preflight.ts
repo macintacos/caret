@@ -121,9 +121,29 @@ export interface JsonArgs {
 // spawner splits each on spaces into `mise run <words…>` (mise task names never
 // contain spaces, so the split is exact). They double as the map keys and the
 // display titles.
+
+/** A task that waits on `after` to pass, then spawns with `env` merged over the
+ * parent environment — the skips that let it reuse `after`'s artifact. */
+interface Dependent {
+  readonly name: string;
+  readonly after: string;
+  readonly env: Record<string, string>;
+}
+
+const SKIP_UI = { CARET_SKIP_BUILD_UI: "1" } as const;
+
 const IMMEDIATE = ["lint", "test", "build ui"] as const;
-const DEPENDENT = ["test e2e", "build bin"] as const;
-const TASK_ORDER = [...IMMEDIATE, ...DEPENDENT];
+// ORDER IS LOAD-BEARING: listr2 fills its concurrency slots in array order, so a
+// task can only start once every task before it has started. `smoke` therefore
+// stays LAST — a gate capped below the task count (CARET_PREFLIGHT_JOBS=1) would
+// otherwise park it in a slot while `build bin`, the gate it awaits, is still
+// queued behind it, and the run would deadlock rather than fail.
+const DEPENDENT: readonly Dependent[] = [
+  { name: "test e2e", after: "build ui", env: SKIP_UI },
+  { name: "build bin", after: "build ui", env: SKIP_UI },
+  { name: "smoke", after: "build bin", env: { ...SKIP_UI, CARET_SKIP_BUILD_BIN: "1" } },
+];
+const TASK_ORDER = [...IMMEDIATE, ...DEPENDENT.map((d) => d.name)];
 
 // Bumpable integer so machine consumers detect a breaking shape change,
 // mirroring scripts/tasks/release/contract.ts.
@@ -144,7 +164,21 @@ export async function runPreflight(deps: {
   concurrency?: number;
 }): Promise<PreflightOutcome> {
   const results = new Map<string, TaskResult>();
-  const { promise: buildUiDone, resolve: releaseBuildUi } = Promise.withResolvers<boolean>();
+  // One gate per task something waits on, each resolving "did it pass?". EVERY
+  // EXIT PATH OF A GATING TASK MUST RESOLVE ITS GATE — `build bin` is a gate and
+  // a dependent at once, so it resolves when it passes, fails, is aborted by
+  // fail-fast, AND when it is itself skipped because `build ui` failed. Miss one
+  // and `smoke` awaits a promise nobody settles: the gate hangs instead of
+  // failing.
+  const gates = new Map<string, PromiseWithResolvers<boolean>>();
+  for (const { after } of DEPENDENT) {
+    if (!gates.has(after)) gates.set(after, Promise.withResolvers<boolean>());
+  }
+  const gateFor = (name: string): PromiseWithResolvers<boolean> => {
+    const gate = gates.get(name);
+    if (!gate) throw new Error(`preflight: no gate for ${name}`);
+    return gate;
+  };
   // EXC-587: the first task to fail aborts every in-flight sibling. A spawner
   // that honors the signal tears its process group down and resolves
   // `aborted` — recorded `skipped` so the doomed gate stops burning CPU on
@@ -180,23 +214,26 @@ export async function runPreflight(deps: {
       const status = await runTask(name, undefined, (line) => {
         task.output = line;
       });
-      if (name === "build ui") releaseBuildUi(status === "passed");
+      gates.get(name)?.resolve(status === "passed");
       if (status === "skipped") return task.skip(`${name} (aborted: a sibling failed)`);
       if (status === "failed") throw new Error(`${name} failed`);
     },
   });
 
-  const dependent = (name: string): ListrTask => ({
+  const dependent = ({ name, after, env }: Dependent): ListrTask => ({
     title: name,
     task: async (_ctx, task) => {
-      task.output = "waiting for build ui";
-      if (!(await buildUiDone)) {
+      const own = gates.get(name);
+      task.output = `waiting for ${after}`;
+      if (!(await gateFor(after).promise)) {
         results.set(name, { status: "skipped", output: "" });
-        return task.skip(`${name} (skipped: build ui failed)`);
+        own?.resolve(false);
+        return task.skip(`${name} (skipped: ${after} failed)`);
       }
-      const status = await runTask(name, { CARET_SKIP_BUILD_UI: "1" }, (line) => {
+      const status = await runTask(name, env, (line) => {
         task.output = line;
       });
+      own?.resolve(status === "passed");
       if (status === "skipped") return task.skip(`${name} (aborted: a sibling failed)`);
       if (status === "failed") throw new Error(`${name} failed`);
     },
@@ -205,7 +242,7 @@ export async function runPreflight(deps: {
   const listr = new Listr([...IMMEDIATE.map(immediate), ...DEPENDENT.map(dependent)], {
     // EXC-587: a finite cap (host CPU count by default) instead of the prior
     // `true` (→ Infinity), so a constrained or stacked host can't oversubscribe;
-    // CARET_PREFLIGHT_JOBS lowers it further. ≥ the 5-task count is a no-op, so
+    // CARET_PREFLIGHT_JOBS lowers it further. ≥ the task count is a no-op, so
     // the default preserves today's effective parallelism on real hosts.
     concurrent: deps.concurrency ?? availableParallelism(),
     exitOnError: false,
