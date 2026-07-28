@@ -226,6 +226,18 @@ describe("TopBar reject", () => {
     const { target } = render(TopBar, { ...baseProps, active: null });
     expect(target.querySelector(".reject")).toBeNull();
   });
+
+  test("the reject button advertises Shift+R and shows its key cap", () => {
+    const { target } = render(TopBar, baseProps);
+    const reject = target.querySelector(".reject") as HTMLElement;
+    expect(reject.getAttribute("aria-keyshortcuts")).toBe("Shift+R");
+    expect(reject.querySelector("[data-slot='kbd']")).not.toBeNull();
+  });
+
+  test("the reject key cap hides when shortcut hints are off", () => {
+    const { target } = render(TopBar, { ...baseProps, showShortcutHints: false });
+    expect(target.querySelector(".reject [data-slot='kbd']") === null).toBe(true);
+  });
 });
 
 describe("TopBar overflow menu (EXC-810)", () => {

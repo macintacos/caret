@@ -15,6 +15,7 @@
   import { Separator } from "$lib/components/ui/separator/index.js";
   import DevBadge from "@/components/DevBadge.svelte";
   import Icon from "@/components/Icon.svelte";
+  import KbdCap from "@/components/KbdCap.svelte";
   import NotifyBell from "@/components/NotifyBell.svelte";
   import ReviewSwitcher from "@/components/ReviewSwitcher.svelte";
   import SplitButton from "@/components/SplitButton.svelte";
@@ -89,9 +90,22 @@
       <!-- Same quiet floating-chip as Request changes (soft fill, ink-soft label),
            differentiated only by warming to danger on hover. Reject always routes
            through a confirm dialog, so the resting button stays low-key. -->
-      <Button variant="secondary" class="reject float-chip" onclick={onReject} disabled={busy}>
+      <Button
+        variant="secondary"
+        class="reject float-chip"
+        onclick={onReject}
+        disabled={busy}
+        aria-keyshortcuts={ariaKeyshortcutsFor("actions.reject")}
+      >
         <Icon name="x" size={14} />
         Reject
+        {#if showShortcutHints}
+          <!-- One combined key: the global shift icon then R, both typed KbdCaps
+               (see caps.ts) so the shift glyph is the shared icon, never a ⇧ char. -->
+          <Kbd class="reject-key" aria-hidden="true"
+            ><KbdCap key="shift" size={9} /><KbdCap key="R" /></Kbd
+          >
+        {/if}
       </Button>
 
       <Button
@@ -192,6 +206,11 @@
           <DropdownMenu.Item variant="destructive" onSelect={() => onReject()}>
             <Icon name="x" size={14} />
             Reject
+            {#if showShortcutHints}
+              <Kbd class="menu-key" aria-hidden="true"
+                ><KbdCap key="shift" size={9} /><KbdCap key="R" /></Kbd
+              >
+            {/if}
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Root>
@@ -344,11 +363,14 @@
     color: var(--paper);
   }
   /* The X glyph reads danger-red at rest (the reject affordance); on hover the chip
-     fills with danger, so the glyph flips to the paper ink to stay legible on it. */
-  .actions :global(.reject .icon) {
+     fills with danger, so the glyph flips to the paper ink to stay legible on it.
+     Direct child only: the ⇧ inside the key cap is also an .icon, and a keycap has
+     no hue of its own — it derives from currentColor so both of its glyphs read as
+     one key (see the hue table in doc/agents/svelte-rules.md). */
+  .actions :global(.reject > .icon) {
     color: var(--danger);
   }
-  .actions :global(.reject:not(:disabled):hover .icon) {
+  .actions :global(.reject:not(:disabled):hover > .icon) {
     color: inherit;
   }
 
