@@ -22,6 +22,9 @@ test("the ToC rail reads in the UI sans while the plan surface stays mono", asyn
   await daemon.seed({ plan: PLAN });
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
+  // The plan read below reaches into the shadow root through a one-shot
+  // page.evaluate, which does not auto-retry — gate on shadow content first.
+  await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
 
   const toc = page.locator(".source-toc");
   await expect(toc).toBeVisible();
@@ -46,5 +49,6 @@ test("the ToC rail reads in the UI sans while the plan surface stays mono", asyn
     const line = sh?.querySelector("[data-line] span") ?? sh?.querySelector("[data-line]");
     return line ? getComputedStyle(line).fontFamily : null;
   });
+  expect(planFont).not.toBeNull();
   expect(planFont).toContain("Berkeley Mono");
 });
