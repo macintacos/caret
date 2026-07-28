@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
 import { createHighlighterCore } from "shiki/core";
-import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 
 import { CARET_SHIKI_THEMES, type CaretShikiThemeId } from "$lib/caret-shiki.ts";
 import { REGISTERED_SHIKI_THEMES, shikiThemeFor, shikiThemeForPalette } from "$lib/caret-theme.ts";
+import { createCaretRegexEngine } from "$lib/diffview/shiki-bundle.ts";
 import { type ColorToken, type ShikiThemeId, THEME_IDS, THEMES, type ThemeId } from "$lib/theme.ts";
 import { CARET_COLOR_PLACEMENT, CARET_DARK, CARET_LIGHT } from "$lib/themes/caret.ts";
 import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
@@ -287,7 +287,7 @@ describe("fenced-code fence line", () => {
     shared ??= await createHighlighterCore({
       themes: THEME_IDS.map(shikiThemeFor),
       langs: [import("shiki/langs/markdown.mjs")],
-      engine: createJavaScriptRegexEngine(),
+      engine: createCaretRegexEngine(),
     });
     const md = ["```ts", "code", "```"].join("\n");
     return shared.codeToTokensBase(md, { lang: "markdown", theme: id });
@@ -337,7 +337,7 @@ describe("inline-code file references stay tokenized for fileRefTag", () => {
     shared ??= await createHighlighterCore({
       themes: THEME_IDS.map(shikiThemeFor),
       langs: [import("shiki/langs/markdown.mjs")],
-      engine: createJavaScriptRegexEngine(),
+      engine: createCaretRegexEngine(),
     });
     return shared.codeToTokensBase(LINE, { lang: "markdown", theme: id })[0] ?? [];
   }
@@ -365,7 +365,7 @@ describe("dracula fenced-code block", () => {
     const hl = await createHighlighterCore({
       themes: [shikiThemeFor("dracula")],
       langs: [import("shiki/langs/markdown.mjs"), import("shiki/langs/typescript.mjs")],
-      engine: createJavaScriptRegexEngine(),
+      engine: createCaretRegexEngine(),
     });
     const md = ["```ts", "const x = 1", "```"].join("\n");
     const body = hl
@@ -380,11 +380,11 @@ describe("dracula fenced-code block", () => {
 // real grammar rather than read back off the rule table, which would only restate
 // caret-shiki.ts in a second spelling.
 //
-// A caveat for anyone editing the sample: shiki's JS regex engine — the one caret
-// ships (diffview/shiki-bundle.ts) — resolves some TypeScript constructs to coarser
-// scopes than the Oniguruma engine does, and which ones depends on the surrounding
-// lines, not just the token. Every token asserted below resolves the same under both
-// engines, so re-verify the WHOLE sample after changing any line of it.
+// A caveat for anyone editing the sample: which scope a token resolves to can
+// depend on the lines around it, not just the token itself, so re-verify the WHOLE
+// sample after changing any line of it. Tokenized through caret's own engine
+// (diffview/shiki-bundle.ts) rather than a bare `createJavaScriptRegexEngine()` —
+// the two are no longer interchangeable, and only the former is what caret paints.
 describe("caret themes over a real TypeScript sample", () => {
   const SAMPLE = [
     "function build(rows: Row[]): string {",
@@ -400,7 +400,7 @@ describe("caret themes over a real TypeScript sample", () => {
     shared ??= await createHighlighterCore({
       themes: [shikiThemeFor("caret-dark"), shikiThemeFor("caret-light")],
       langs: [import("shiki/langs/tsx.mjs")],
-      engine: createJavaScriptRegexEngine(),
+      engine: createCaretRegexEngine(),
     });
     return shared.codeToTokensBase(SAMPLE, { lang: "tsx", theme: id });
   }
@@ -434,6 +434,92 @@ describe("caret themes over a real TypeScript sample", () => {
   }
 });
 
+// EXC-911: the block above reads COLORS, which can only ever be as right as the
+// scopes underneath them. This one reads the scopes directly, so a mis-scoped
+// token fails here by name instead of surfacing as a puzzling wrong hue there.
+//
+// The defect it exists for: JavaScriptCore treats an optional group containing `^`
+// as anchoring the whole pattern (`/(^a)?b/.exec("xb")` → null on JSC, a match on
+// V8), and the TypeScript grammar's line-comment rule is exactly that shape. So a
+// `//` following code on the same line never matched the comment rule and fell
+// through to the arithmetic-operator rule. caret's engine rewrites the pattern
+// (diffview/jsc-regex.ts) to restore it.
+//
+// This suite runs under bun, which IS JavaScriptCore — the buggy engine — so this
+// is a genuine regression pin rather than a tautology, and it belongs in the unit
+// suite rather than e2e for exactly that reason.
+describe("the shipped engine tokenizes TypeScript to the grammar's real scopes", () => {
+  // Every expectation below was read off the Oniguruma engine — the reference
+  // implementation — rather than guessed, so the suite pins the grammar's truth.
+  const SAMPLE = [
+    "function build(rows: { id: number }[]): string {",
+    "  return rows.length.toString(); // rows",
+    "}",
+    "const LIMIT = 42;",
+  ].join("\n");
+
+  /** Each line's tokens as `[text, scopeStack]`. shiki 4.1.0's `includeExplanation`
+   * throws, so scopes come from the TextMate grammar directly — the same path the
+   * highlighter itself tokenizes through. */
+  let cached: Array<Array<[string, string[]]>> | undefined;
+  async function scopeLines() {
+    if (cached !== undefined) return cached;
+    const highlighter = await createHighlighterCore({
+      themes: [shikiThemeFor("caret-dark")],
+      langs: [import("shiki/langs/tsx.mjs")],
+      engine: createCaretRegexEngine(),
+    });
+    const grammar = highlighter.getInternalContext().getLanguage("tsx");
+    // The grammar's own stack type, which starts null and is threaded line to line
+    // — carrying it is what lets a multi-line construct scope correctly.
+    let stack: Parameters<typeof grammar.tokenizeLine>[1] = null;
+    cached = SAMPLE.split("\n").map((line) => {
+      const { tokens, ruleStack } = grammar.tokenizeLine(line, stack, undefined);
+      stack = ruleStack;
+      return tokens.map(
+        (t) => [line.slice(t.startIndex, t.endIndex), t.scopes] as [string, string[]],
+      );
+    });
+    return cached;
+  }
+
+  /** The deepest scope on the token whose text is `text`, on line `row`. */
+  async function scopeAt(row: number, text: string) {
+    const lines = await scopeLines();
+    return lines[row]?.find(([content]) => content === text)?.[1]?.at(-1);
+  }
+
+  // The assertion that goes red before the fix: under the unrepaired engine the
+  // trailing `//` splits into two `keyword.operator.arithmetic` tokens and the
+  // comment body scopes as a plain variable.
+  test("scopes a trailing line comment as a comment", async () => {
+    const lines = await scopeLines();
+    // Defaulted rather than optional-chained: unrepaired, `//` is not a token at
+    // all (it splits into two arithmetic-operator tokens), and an empty stack says
+    // that far more legibly than a matcher complaining about `undefined`.
+    const slashes = lines[1]?.find(([content]) => content === "//")?.[1] ?? [];
+    expect(slashes).toContain("comment.line.double-slash.tsx");
+    expect(await scopeAt(1, " rows")).toBe("comment.line.double-slash.tsx");
+  });
+
+  // The remaining three are the ticket's other claimed failures. They already hold
+  // today, so they are regression pins rather than the fix's target — and they are
+  // what makes this test the standing answer to "did tokenization drift?".
+  test("scopes `function` and `const` as storage types, not entity names", async () => {
+    expect(await scopeAt(0, "function")).toBe("storage.type.function.tsx");
+    expect(await scopeAt(3, "const")).toBe("storage.type.tsx");
+  });
+
+  test("splits a type literal's members rather than merging them", async () => {
+    expect(await scopeAt(0, "id")).toBe("variable.object.property.tsx");
+    expect(await scopeAt(0, "number")).toBe("support.type.primitive.tsx");
+  });
+
+  test("scopes a screaming-case binding as a constant", async () => {
+    expect(await scopeAt(3, "LIMIT")).toBe("variable.other.constant.tsx");
+  });
+});
+
 // A rendered patch takes the semantic pair rather than two more syntax hues, so it
 // agrees with the diff view's own addition and deletion tints. Pinned because these
 // three are `token`-placed rather than `shiki-only`, which puts them outside the
@@ -447,7 +533,7 @@ describe("caret themes over a diff fence", () => {
     shared ??= await createHighlighterCore({
       themes: [shikiThemeFor("caret-dark"), shikiThemeFor("caret-light")],
       langs: [import("shiki/langs/markdown.mjs"), import("shiki/langs/diff.mjs")],
-      engine: createJavaScriptRegexEngine(),
+      engine: createCaretRegexEngine(),
     });
     return shared.codeToTokensBase(PATCH, { lang: "markdown", theme: id });
   }
