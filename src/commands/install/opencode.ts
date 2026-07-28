@@ -1,10 +1,12 @@
 // caret's OpenCode install target. `caret install --target opencode` makes caret a
 // first-class `plugin` array entry — OpenCode installs it and its deps into its own
 // cache and loads it — and deploys the `/caret:*` command files (which aren't
-// array-installable). `--uninstall` reverses both. The config-array edit is
-// comment-preserving (config-plugin.ts); the command-file writes go through the
-// temp-dir-testable deploy module. Injection seams let the whole target run against a
-// temp dir without resolving the real caret root.
+// array-installable). `--uninstall` reverses both. Either arm also sweeps the plugin and
+// command FILES an older caret deployed into the config dir: OpenCode still loads them,
+// so a leftover plugin file would register a second review tool beside the array entry.
+// The config-array edit is comment-preserving (config-plugin.ts); the command-file writes
+// go through the temp-dir-testable deploy module. Injection seams let the whole target run
+// against a temp dir without resolving the real caret root.
 //
 // The entry takes one of two forms, and caret owns exactly one of them at a time: the
 // npm package (@macintacos/caret) for a published install, or `file:<checkout>` under
@@ -39,6 +41,7 @@ import { loadOpencodePackaging, type OpencodePackaging } from "@/adapters/openco
 import {
   CARET_PACKAGE,
   commandDir,
+  existingLegacyInstallFiles,
   existingOpencodeCachePackageDirs,
   isLocalPluginSpecifier,
   localPluginSpecifier,
@@ -122,11 +125,11 @@ function setCaretPluginEntry(
 }
 
 /** Install (or, with `uninstall`, remove) caret into OpenCode: edit the config's
- * `plugin` array to add/remove `@macintacos/caret`, and deploy/remove the `/caret:*`
- * command files. OpenCode installs the package (and the plugin's deps) itself on its
- * next start, so there is no manifest to write and no `bun install` to run here. The
- * two halves are reported as their own steps — the config edit and the command files
- * fail independently, so a reader can see which one did what. */
+ * `plugin` array to add/remove `@macintacos/caret`, deploy/remove the `/caret:*`
+ * command files, and sweep whatever the file-deploy era left in the config dir.
+ * OpenCode installs the package (and the plugin's deps) itself on its next start, so
+ * there is no manifest to write and no `bun install` to run here. Each piece is its own
+ * step — they fail independently, so a reader can see which one did what. */
 export async function runInstallOpencodeTarget(
   opts: { uninstall: boolean; dryRun: boolean; refresh: boolean; local?: LocalInstall },
   deps: InstallOpencodeDeps = {},
@@ -139,6 +142,7 @@ export async function runInstallOpencodeTarget(
   const commandPaths = pkg.commands.map((c) =>
     join(commandDir(dir), namespacedCommandFilename(c.name)),
   );
+  const legacy = existingLegacyInstallFiles(dir);
   // `--from-local` points the array entry at the checkout instead of the npm package.
   // OpenCode symlinks a `file:` target into its cache, so the plugin it loads is the
   // checkout's own — and the `../bin/caret` that plugin spawns is the binary
@@ -153,8 +157,11 @@ export async function runInstallOpencodeTarget(
     // The specifier is the one thing a preview can't be read off the paths: `--from-local`
     // and a published install write the same file with very different content.
     const entry = opts.uninstall ? [] : ["", `plugin entry: ${specifier}`];
+    // Their own labelled section: an install's bare path list is titled "would write", and
+    // listing a file caret is about to DELETE under that heading would misread badly.
+    const sweep = legacy.length === 0 ? [] : ["", "pre-array-install files to remove:", ...legacy];
     ui.note(
-      [configFile, ...commandPaths, ...entry, ...found].join("\n"),
+      [configFile, ...commandPaths, ...entry, ...sweep, ...found].join("\n"),
       `OpenCode — would ${verb}`,
     );
     return;
@@ -185,6 +192,7 @@ export async function runInstallOpencodeTarget(
       async () => removeFiles(commandPaths, { dryRun: false }),
       (removed) => `Removed ${removed.paths.length} command file(s) from ${dir}`,
     );
+    await sweepLegacy(legacy, dir, ui);
     return;
   }
 
@@ -199,6 +207,11 @@ export async function runInstallOpencodeTarget(
   // After the array edit — the entry has to exist before it can be read — and before the
   // command files, so a cache clear is settled by the time the run reports it deployed.
   if (checks(opts)) await upgradeStep(configFile, opts, deps, ui);
+  // Only once the array entry exists and a stale cached copy has been offered a refresh:
+  // dropping the plugin file any earlier could move a user backwards onto an older cached
+  // caret. It still sweeps when that refresh is declined — two loaded caret plugins are
+  // worse than one stale-but-single plugin, and the user was just given the fix.
+  await sweepLegacy(legacy, dir, ui);
   const files: DeployFile[] = pkg.commands.map((c) => ({
     // Namespace the command file (`demo.md` -> `caret:demo.md`) so OpenCode exposes
     // it as `/caret:demo`. The command files' `__CARET_BIN__` marker is substituted
@@ -210,6 +223,20 @@ export async function runInstallOpencodeTarget(
     "Deploying the /caret:* command files",
     async () => deployFiles(files, { dryRun: false }),
     (deployed) => `Deployed ${deployed.paths.length} command file(s) to ${dir}`,
+  );
+}
+
+/** Remove the file-deploy era's leftovers, on both arms. Unlike every other step here it
+ * is raised only when there is something to remove: the others describe the command's
+ * primary work, so a zero outcome is still information, while this one is a migration
+ * concern that would otherwise print an empty line into every install transcript
+ * forever. */
+async function sweepLegacy(legacy: string[], dir: string, ui: InstallUI): Promise<void> {
+  if (legacy.length === 0) return;
+  await ui.step(
+    "Removing the pre-array-install files",
+    async () => removeFiles(legacy, { dryRun: false }),
+    (removed) => `Removed ${removed.paths.length} pre-array-install file(s) from ${dir}`,
   );
 }
 

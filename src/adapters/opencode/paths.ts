@@ -3,9 +3,10 @@
 // (@macintacos/caret) plus its command files; the install writer
 // (commands/install/opencode.ts) and the discovery probe (install.ts) resolve WHERE
 // those live through this single module, so the reader and the writer can never
-// disagree about a path.
+// disagree about a path. It also resolves what the file-deploy era left in that config
+// dir, which install and uninstall sweep.
 
-import { existsSync, readdirSync } from "node:fs";
+import { type Dirent, existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
@@ -83,6 +84,51 @@ export function resolveConfigFile(configDir: string): string {
 /** Absolute path to OpenCode's command dir under a config dir. */
 export function commandDir(configDir: string): string {
   return join(configDir, COMMAND_DIRNAME);
+}
+
+/** The filename caret's plugin file carries in a pre-array-install config dir. */
+const LEGACY_PLUGIN_FILENAME = "caret.ts";
+
+/** The plugin dirs OpenCode scans, both of which caret has deployed into. */
+const LEGACY_PLUGIN_DIRNAMES = ["plugins", "plugin"] as const;
+
+/** The singular command dir OpenCode still scans for backwards compatibility, and that
+ * caret deployed into before `COMMAND_DIRNAME`. Its `caret:`-namespaced files still
+ * register commands, pointed at a binary path nothing writes any more. */
+const LEGACY_COMMAND_DIRNAME = "command";
+
+/** Every file-deploy-era artifact still on disk under `configDir`: caret's plugin file in
+ * either plugin dir, plus any `caret:`-namespaced command file in the singular command
+ * dir. OpenCode loads out of either spelling of either dir, so an orphan in the one caret
+ * stopped writing is still live — a leftover plugin file registers a second review tool
+ * beside the array entry. Filtered to what exists, so the caller gates on and removes the
+ * same list.
+ *
+ * Only paths in caret's own namespace: the fixed `caret.ts` filename, and the `caret:`
+ * command prefix caret claims (a user who squats it loses that file). Everything else in
+ * those dirs is another tool's, as is the config dir's own `package.json`. The command
+ * scan matches that prefix rather than the commands caret ships today — an old install
+ * may hold a file for a command since dropped, and matching the live set would strand
+ * exactly those.
+ *
+ * Entry types ARE filtered here, unlike in `existingOpencodeCachePackageDirs`: this list
+ * is handed to `rmSync`, where a `caret:`-named DIRECTORY throws rather than merely
+ * failing a read downstream, and a `caret:demo.md.bak` is not a command OpenCode loads.
+ * `!isDirectory()` rather than `isFile()` keeps a symlinked command file sweepable. */
+export function existingLegacyInstallFiles(configDir: string): string[] {
+  const plugins = LEGACY_PLUGIN_DIRNAMES.map((d) => join(configDir, d, LEGACY_PLUGIN_FILENAME));
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(join(configDir, LEGACY_COMMAND_DIRNAME), { withFileTypes: true });
+  } catch {
+    entries = []; // dir absent or unreadable — nothing to sweep there.
+  }
+  const commands = entries
+    .filter((e) => !e.isDirectory() && e.name.startsWith(COMMAND_NAMESPACE))
+    .filter((e) => e.name.endsWith(".md"))
+    .map((e) => join(configDir, LEGACY_COMMAND_DIRNAME, e.name))
+    .sort();
+  return [...plugins, ...commands].filter((p) => existsSync(p));
 }
 
 /** OpenCode's plugin cache root: where OpenCode installs each `plugin` array entry,

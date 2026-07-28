@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import type { OpencodePackaging } from "@/adapters/opencode/packaging.ts";
 import { CARET_PACKAGE } from "@/adapters/opencode/paths.ts";
@@ -426,4 +426,147 @@ test("--from-local never asks npm what is published", async () => {
     },
   });
   expect(asked).toBe(false);
+});
+
+// --- the pre-array-install sweep ---------------------------------------------------
+// caret deployed itself as FILES before the `plugin` array install: a plugin module under
+// `plugin/` and command files under `command/` (through v0.1.0), then a plugin module
+// under `plugins/` (through v0.3.0). OpenCode scans both spellings of both dirs, so every
+// one of those orphans still loads — a leftover plugin file registers a SECOND
+// caret_review_plan alongside the array entry, and a leftover command file exposes
+// `/caret:*` pointed at a binary path nothing writes any more. Install and uninstall
+// sweep them. What the sweep must NOT touch is pinned just as hard: other tools' files,
+// the config dir's `package.json`, and the canonical `commands/` dir.
+
+/** caret's own pre-array-install artifacts, all of which the sweep removes. */
+function legacyPaths(): string[] {
+  return [
+    join(dir, "plugins", "caret.ts"),
+    join(dir, "plugin", "caret.ts"),
+    join(dir, "command", "caret:demo.md"),
+    // A command the package no longer ships: the sweep matches caret's NAMESPACE, not the
+    // live command set, so an install can't strand a file an older caret deployed.
+    join(dir, "command", "caret:retired.md"),
+  ];
+}
+
+/** A `caret:`-named SUBDIRECTORY of the singular command dir. It matches caret's
+ * namespace by name but is not a file caret ever wrote — and handing it to `rmSync`
+ * throws, which would abort the install after the array entry was already written. */
+const caretNamedDir = () => join(dir, "command", "caret:tools");
+
+/** Files the sweep must leave exactly where they are. */
+function survivorPaths(): string[] {
+  return [
+    join(dir, "plugins", "other-plugin.ts"), // another tool's plugin
+    join(dir, "command", "mine.md"), // another tool's command
+    join(dir, "command", "caret:demo.md.bak"), // not a command OpenCode would load
+    caretNamedDir(),
+    join(dir, "package.json"), // the config-dir manifest — deliberately out of scope
+    join(dir, "commands", "caret:orphan.md"), // the canonical dir is live, not legacy
+  ];
+}
+
+/** Write the config dir as a pre-array-install machine left it. */
+function seedLegacy(): void {
+  mkdirSync(caretNamedDir(), { recursive: true });
+  for (const p of [...legacyPaths(), ...survivorPaths()].filter((p) => p !== caretNamedDir())) {
+    mkdirSync(dirname(p), { recursive: true });
+    writeFileSync(p, "// seeded");
+  }
+}
+
+/** The subset still on disk / already gone — filters rather than booleans, so a failure
+ * names which path broke the expectation. */
+const stillThere = (paths: string[]) => paths.filter((p) => existsSync(p));
+const missing = (paths: string[]) => paths.filter((p) => !existsSync(p));
+
+test("install sweeps caret's pre-array-install plugin and command files", async () => {
+  seedLegacy();
+  await install();
+  expect(stillThere(legacyPaths())).toEqual([]);
+});
+
+test("the sweep leaves other tools' files, the config-dir manifest, and commands/ alone", async () => {
+  seedLegacy();
+  await install();
+  expect(missing(survivorPaths())).toEqual([]);
+  expect(existsSync(commandFile())).toBe(true); // the command file it just deployed
+});
+
+test("with nothing legacy on disk, no sweep step is raised at all", async () => {
+  const said = await transcript({ published: async () => "0.8.1" });
+  expect(said).not.toContain("pre-array-install");
+  expect(existsSync(commandFile())).toBe(true);
+});
+
+test("a `caret:`-named directory is not swept, and does not break the install", async () => {
+  // `rmSync` on a directory throws, and the step's throw aborts the run — after the array
+  // entry is written and before the command files deploy, on every re-run.
+  seedLegacy();
+  await install();
+  expect(existsSync(caretNamedDir())).toBe(true);
+  expect(existsSync(commandFile())).toBe(true); // the run got past the sweep
+});
+
+test("the sweep is idempotent: a second install raises no step and changes nothing", async () => {
+  seedLegacy();
+  await install();
+  const said = await transcript({ published: async () => "0.8.1" });
+  expect(said).not.toContain("pre-array-install");
+  expect(stillThere(legacyPaths())).toEqual([]);
+  expect(missing(survivorPaths())).toEqual([]);
+});
+
+// The install arm's ordering is what unblocked this work from the upgrade-path child: a
+// cached array plugin can be OLDER than the file-deployed one, so dropping the file before
+// the refresh is offered can move a user backwards.
+test("the install sweep runs after the upgrade check, never before it", async () => {
+  seedLegacy();
+  const ui = recordingUI();
+  await runInstallOpencodeTarget(
+    { uninstall: false, dryRun: false, refresh: true },
+    deps({
+      ui,
+      published: async () => "0.8.1",
+      cacheDirs: () => [cacheDir(CARET_PACKAGE, "0.2.0")],
+    }),
+  );
+  const checkStep = ui.events.findIndex((e) => e.startsWith("step:Checking OpenCode's caret"));
+  const sweepStep = ui.events.findIndex((e) => e.includes("pre-array-install"));
+  expect(checkStep).toBeGreaterThanOrEqual(0);
+  expect(sweepStep).toBeGreaterThan(checkStep);
+});
+
+test("a declined refresh still sweeps — two loaded caret plugins is the worse outcome", async () => {
+  const cache = cacheDir(CARET_PACKAGE, "0.2.0");
+  seedLegacy();
+  await transcript({
+    published: async () => "0.8.1",
+    cacheDirs: () => [cache],
+    isInteractive: () => true,
+    confirm: async () => false,
+  });
+  expect(existsSync(cache)).toBe(true); // the decline was honoured
+  expect(stillThere(legacyPaths())).toEqual([]);
+});
+
+test("uninstall sweeps them too, reported apart from the command-file step", async () => {
+  seedLegacy();
+  const ui = recordingUI();
+  await runInstallOpencodeTarget({ uninstall: true, dryRun: false, refresh: false }, deps({ ui }));
+  expect(stillThere(legacyPaths())).toEqual([]);
+  expect(missing(survivorPaths())).toEqual([]);
+  const commandStep = ui.events.findIndex((e) => e.startsWith("step:Removing the /caret:*"));
+  const sweepStep = ui.events.findIndex((e) => e.includes("pre-array-install"));
+  expect(commandStep).toBeGreaterThanOrEqual(0);
+  expect(sweepStep).toBeGreaterThan(commandStep);
+});
+
+test("--dry-run names the legacy files in its preview and removes none of them", async () => {
+  seedLegacy();
+  const said = await transcript({ published: async () => "0.8.1" }, { dryRun: true });
+  expect(said).toContain("pre-array-install files to remove:");
+  for (const p of legacyPaths()) expect(said).toContain(p);
+  expect(missing(legacyPaths())).toEqual([]);
 });

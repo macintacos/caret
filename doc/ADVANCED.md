@@ -155,13 +155,17 @@ unparseable decision, or a timeout all return `deny`.
 caret installs into OpenCode as a `plugin` array entry: `caret install --target opencode`
 adds `@macintacos/caret` to your OpenCode config's `plugin` array (comment-preserving, via
 `jsonc-parser`) and deploys the `/caret:*` command files, or you can add the array entry
-by hand. On its next start OpenCode installs the package and its `@opencode-ai/plugin`
-dependency into its own cache and loads it — caret writes no config-dir manifest and runs
-no `bun install` itself. The plugin resolves the caret binary and its own version at
-runtime from the package it ships in (an env override, `CARET_OPENCODE_BIN`, still wins),
-and on load it checks caret's latest GitHub release and toasts an update nudge when you're
-behind (`CARET_OPENCODE_NO_UPDATE_CHECK` opts out). To take an update, delete OpenCode's
-cached copy (`~/.cache/opencode/node_modules/@macintacos/caret`) and restart, or pin
+by hand. Install and uninstall both remove the plugin and command files older caret
+versions deployed into that config dir: OpenCode still loads them, so a leftover plugin
+file would register a second review tool beside the array entry. The config dir's own
+`package.json` is left alone — it may belong to another of your plugins. On its next start
+OpenCode installs the package and its `@opencode-ai/plugin` dependency into its own cache
+and loads it — caret writes no config-dir manifest and runs no `bun install` itself. The
+plugin resolves the caret binary and its own version at runtime from the package it ships
+in (an env override, `CARET_OPENCODE_BIN`, still wins), and on load it checks caret's
+latest GitHub release and toasts an update nudge when you're behind
+(`CARET_OPENCODE_NO_UPDATE_CHECK` opts out). To take an update, delete OpenCode's cached
+copy (`~/.cache/opencode/node_modules/@macintacos/caret`) and restart, or pin
 `"@macintacos/caret@<version>"` in the array and bump it. `caret install --target claude`
 registers caret with Claude Code through its plugin CLI, `--target opencode,claude` does
 both agents at once, `--uninstall` reverses any target, and `--dry-run` previews the
@@ -413,6 +417,7 @@ mise run setup      # install pinned tools + JS deps + the generated palette + e
 mise run build      # build the UI (Vite multi-asset) then the binary (bun build --compile, embeds the UI)
 mise run build ui   # just the Svelte UI (Vite -> ui/dist); also `build bin` / `build bundle`
 mise run dev        # isolated daemon + fake plan + Vite UI (ephemeral port)
+mise run caret      # caret's own CLI from src/cli.ts, e.g. `mise run caret discovery`
 mise run test       # bun test (unit); `mise run test unit` is the same target
 mise run test e2e   # Playwright browser e2e (isolated daemon, Chromium)
 mise run lint       # read-only gate: formatting + Biome lint + tsc + svelte-check
