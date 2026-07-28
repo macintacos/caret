@@ -443,7 +443,8 @@ mise run test       # bun test (unit); `mise run test unit` is the same target
 mise run test e2e   # Playwright browser e2e (isolated daemon, Chromium)
 mise run lint       # read-only gate: formatting + Biome lint + tsc + svelte-check
 mise run format     # Biome (write)
-mise run preflight  # check-only pre-push gate: lint + tests (unit ∥ e2e) + build, concurrent
+mise run smoke      # smoke the shipped artifacts; also `smoke bin` / `smoke bundle`
+mise run preflight  # pre-push gate: lint + tests (unit ∥ e2e) + build + smoke, concurrent
 ```
 
 `mise run lint` (and the pre-commit hook) runs every formatter in read-only check mode
@@ -587,6 +588,15 @@ build their artifact (via the tasks CLI) before smoking it. `scripts/preflight.t
 `CARET_SKIP_BUILD_UI=1` on the dependents it spawns so the gate builds the UI exactly once
 (two concurrent Vite builds would race on `ui/dist`). This is why the per-variant tasks
 were consolidated into single multi-target `build`/`test`/`smoke` tasks.
+
+The gate's DAG has one second-order edge: `smoke` waits on `build bin`, not on `build ui`
+(EXC-914), and is spawned with `CARET_SKIP_BUILD_BIN=1` alongside the UI skip. That is the
+sibling of `CARET_SKIP_BUILD_UI` one artifact up — `smoke bin` reuses the
+`bin/caret-native` the gate's own `build bin` just compiled instead of compiling a second
+one, so the only build smoke pays for in-gate is `build bundle`, which no other task runs.
+`smoke` is deliberately last in the task array: listr2 fills its concurrency slots in
+order, so a lower `CARET_PREFLIGHT_JOBS` can't park `smoke` in a slot while the
+`build bin` it waits on is still queued.
 
 `mise run dev` takes `--num-versions <n>` (how many versions the primary dev review opens
 with; default 4, a positive integer), `--notify` (arm the extra-review seeder), and

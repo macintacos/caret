@@ -1,17 +1,25 @@
 #!/usr/bin/env bun
 // Preflight orchestrator (EXC-462): runs the pre-push gate's constituent mise
 // tasks concurrently per their dependency DAG, rendered as a live listr2 task
-// list (plain line-per-event output when not a TTY). Check-only: nothing here
-// writes to the tree — `lint` (hk check) is the formatting gate, and a lint
-// failure points at `mise run format`.
+// list (plain line-per-event output when not a TTY). The gate BUILDS: it leaves
+// ui/dist, bin/, and dist/ behind, and `smoke bundle` removes the generated
+// src/ui-manifest.generated.ts (gitignored, and the next `build bin` rewrites
+// it). `lint`'s `hk check` step is the read-only one — it is the formatting
+// gate, and a lint failure points at `mise run format`.
 //
 // DAG: lint, test (unit), and `build ui` start immediately; `test e2e` and
-// `build bin` start once `build ui` passes. The UI-first ordering + skip
-// mechanism now live in the tasks CLI (scripts/tasks/build.ts), so each
-// dependent is spawned with CARET_SKIP_BUILD_UI=1 to keep the UI built at exactly
-// one run per gate — two concurrent Vite builds would otherwise race on ui/dist.
+// `build bin` start once `build ui` passes; `smoke` starts once `build bin`
+// passes (EXC-914). The build-first ordering + skip mechanism live in the tasks
+// CLI (scripts/tasks/build.ts), so each dependent is spawned with the skips that
+// let it reuse its gate's artifact: CARET_SKIP_BUILD_UI keeps the UI built at
+// exactly one run per gate (two concurrent Vite builds would otherwise race on
+// ui/dist), and CARET_SKIP_BUILD_BIN keeps smoke from paying a second compile.
 // (This replaces the old MISE_TASK_SKIP=build-ui dedupe of the mise `depends`
 // edge, which is gone now that build/test are single multi-target tasks.)
+//
+// smoke is here because it is the only task that exercises the artifacts users
+// receive rather than the source tree: preflight proves the source works, smoke
+// proves the binary and the npm bundle do.
 //
 // DI mirrors scripts/tasks/release/command.ts: the spawn collaborator is injected so
 // test/scripts/preflight.test.ts can drive the DAG without running real tasks.
@@ -121,9 +129,29 @@ export interface JsonArgs {
 // spawner splits each on spaces into `mise run <words…>` (mise task names never
 // contain spaces, so the split is exact). They double as the map keys and the
 // display titles.
+
+/** A task that waits on `after` to pass, then spawns with `env` merged over the
+ * parent environment — the skips that let it reuse `after`'s artifact. */
+interface Dependent {
+  readonly name: string;
+  readonly after: string;
+  readonly env: Record<string, string>;
+}
+
+const SKIP_UI = { CARET_SKIP_BUILD_UI: "1" } as const;
+
 const IMMEDIATE = ["lint", "test", "build ui"] as const;
-const DEPENDENT = ["test e2e", "build bin"] as const;
-const TASK_ORDER = [...IMMEDIATE, ...DEPENDENT];
+// ORDER IS LOAD-BEARING: listr2 fills its concurrency slots in array order, so a
+// task can only start once every task before it has started. `smoke` therefore
+// stays LAST — a gate capped below the task count (CARET_PREFLIGHT_JOBS=1) would
+// otherwise park it in a slot while `build bin`, the gate it awaits, is still
+// queued behind it, and the run would deadlock rather than fail.
+const DEPENDENT: readonly Dependent[] = [
+  { name: "test e2e", after: "build ui", env: SKIP_UI },
+  { name: "build bin", after: "build ui", env: SKIP_UI },
+  { name: "smoke", after: "build bin", env: { ...SKIP_UI, CARET_SKIP_BUILD_BIN: "1" } },
+];
+const TASK_ORDER = [...IMMEDIATE, ...DEPENDENT.map((d) => d.name)];
 
 // Bumpable integer so machine consumers detect a breaking shape change,
 // mirroring scripts/tasks/release/contract.ts.
@@ -144,7 +172,16 @@ export async function runPreflight(deps: {
   concurrency?: number;
 }): Promise<PreflightOutcome> {
   const results = new Map<string, TaskResult>();
-  const { promise: buildUiDone, resolve: releaseBuildUi } = Promise.withResolvers<boolean>();
+  // One gate per task something waits on, each resolving "did it pass?". EVERY
+  // EXIT PATH OF A GATING TASK MUST RESOLVE ITS GATE — `build bin` is a gate and
+  // a dependent at once, so it resolves when it passes, fails, is aborted by
+  // fail-fast, AND when it is itself skipped because `build ui` failed. Miss one
+  // and `smoke` awaits a promise nobody settles: the gate hangs instead of
+  // failing.
+  const gates = new Map<string, PromiseWithResolvers<boolean>>();
+  for (const { after } of DEPENDENT) {
+    if (!gates.has(after)) gates.set(after, Promise.withResolvers<boolean>());
+  }
   // EXC-587: the first task to fail aborts every in-flight sibling. A spawner
   // that honors the signal tears its process group down and resolves
   // `aborted` — recorded `skipped` so the doomed gate stops burning CPU on
@@ -180,32 +217,43 @@ export async function runPreflight(deps: {
       const status = await runTask(name, undefined, (line) => {
         task.output = line;
       });
-      if (name === "build ui") releaseBuildUi(status === "passed");
+      gates.get(name)?.resolve(status === "passed");
       if (status === "skipped") return task.skip(`${name} (aborted: a sibling failed)`);
       if (status === "failed") throw new Error(`${name} failed`);
     },
   });
 
-  const dependent = (name: string): ListrTask => ({
-    title: name,
-    task: async (_ctx, task) => {
-      task.output = "waiting for build ui";
-      if (!(await buildUiDone)) {
-        results.set(name, { status: "skipped", output: "" });
-        return task.skip(`${name} (skipped: build ui failed)`);
-      }
-      const status = await runTask(name, { CARET_SKIP_BUILD_UI: "1" }, (line) => {
-        task.output = line;
-      });
-      if (status === "skipped") return task.skip(`${name} (aborted: a sibling failed)`);
-      if (status === "failed") throw new Error(`${name} failed`);
-    },
-  });
+  const dependent = ({ name, after, env }: Dependent): ListrTask => {
+    // Both lookups happen HERE, in the factory, which runs synchronously before
+    // listr.run(). A missing gate then throws straight out of runPreflight; the
+    // same throw from inside the task body would abandon a gating task before it
+    // resolves its own gate, turning a wiring bug into the hang above.
+    const upstream = gates.get(after);
+    if (!upstream) throw new Error(`preflight: no gate for ${after}`);
+    const own = gates.get(name);
+    return {
+      title: name,
+      task: async (_ctx, task) => {
+        task.output = `waiting for ${after}`;
+        if (!(await upstream.promise)) {
+          results.set(name, { status: "skipped", output: "" });
+          own?.resolve(false);
+          return task.skip(`${name} (skipped: ${after} failed)`);
+        }
+        const status = await runTask(name, env, (line) => {
+          task.output = line;
+        });
+        own?.resolve(status === "passed");
+        if (status === "skipped") return task.skip(`${name} (aborted: a sibling failed)`);
+        if (status === "failed") throw new Error(`${name} failed`);
+      },
+    };
+  };
 
   const listr = new Listr([...IMMEDIATE.map(immediate), ...DEPENDENT.map(dependent)], {
     // EXC-587: a finite cap (host CPU count by default) instead of the prior
     // `true` (→ Infinity), so a constrained or stacked host can't oversubscribe;
-    // CARET_PREFLIGHT_JOBS lowers it further. ≥ the 5-task count is a no-op, so
+    // CARET_PREFLIGHT_JOBS lowers it further. ≥ the task count is a no-op, so
     // the default preserves today's effective parallelism on real hosts.
     concurrent: deps.concurrency ?? availableParallelism(),
     exitOnError: false,

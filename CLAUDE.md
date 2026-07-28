@@ -92,12 +92,12 @@ after editing a file in the same turn — give it a beat, or trust your edit.
 
 ## Verifying changes
 
-`mise run preflight` is the pre-push gate — lint, unit + e2e tests, and build, run
-concurrently. When **you** (an agent) run it, pass `--json`. `mise run preflight --json`
-replaces the live human display with two compact JSON documents on stdout, one per line: a
-`start` document (the planned tasks plus the filters in effect) and a `result` document
-carrying each task's status and an overall `ok` boolean. The exit code is unchanged (`0`
-pass, `1` fail).
+`mise run preflight` is the pre-push gate — lint, unit + e2e tests, build, and artifact
+smoke, run concurrently. When **you** (an agent) run it, pass `--json`.
+`mise run preflight --json` replaces the live human display with two compact JSON
+documents on stdout, one per line: a `start` document (the planned tasks plus the filters
+in effect) and a `result` document carrying each task's status and an overall `ok`
+boolean. The exit code is unchanged (`0` pass, `1` fail).
 
 `mise run preflight --json` is the call you want almost every time.
 **Failures show their output by default**, so you can act immediately — and if a task's

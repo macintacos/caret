@@ -128,6 +128,22 @@ export async function runBuildBin(): Promise<never> {
   process.exit(await buildBinArtifacts());
 }
 
+/** Whether a bin-dependent target should compile the binary first. False only
+ * when CARET_SKIP_BUILD_BIN is set — the caller (the preflight gate) has already
+ * compiled it as its own task, and a second compile is pure duplicated work. */
+export function shouldBuildBin(env: Record<string, string | undefined>): boolean {
+  return !env.CARET_SKIP_BUILD_BIN;
+}
+
+/** Compile the binary unless CARET_SKIP_BUILD_BIN opts out, resolving the child's
+ * exit code WITHOUT exiting so a caller can go on to use the artifact. Spawned
+ * through the tasks CLI (not buildBinArtifacts directly) so the compile keeps its
+ * own process. `ensureUi`'s sibling one artifact up — used by `smoke bin`. */
+export async function ensureBin(run: typeof runForward = runForward): Promise<number> {
+  if (!shouldBuildBin(process.env)) return 0;
+  return await run(["bun", "scripts/tasks/cli.ts", "build", "bin"]);
+}
+
 // --- build bundle -----------------------------------------------------------
 // The distribution bundle for the GitHub/npm plugin install (EXC-643). Unlike
 // build bin (a compiled standalone binary), this is a NON-compile `bun build`: a
