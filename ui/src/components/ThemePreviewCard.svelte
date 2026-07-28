@@ -14,7 +14,8 @@
   // hand-drawn miniature — see theme.ts's header for the one thing a scoped stamp
   // still cannot insulate. The single --accent appears exactly once — the selected
   // rail row (caret's "amber marks the selection" language) — keeping the primary
-  // scarce.
+  // scarce. The marks on the closing plan line are not a second accent: they do the
+  // content-highlight job, a different one (svelte-rules.md § CSS-token discipline).
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { paintTheme, type ThemeId } from "$lib/theme.ts";
 
@@ -70,15 +71,20 @@
         <div class="tp-row"></div>
       </div>
 
-      <!-- Plan pane as a redacted diff: prose bars plus added (--ok) and removed
-           (--danger) lines, so the mock samples more of the palette than the accent. -->
+      <!-- Plan pane as a redacted diff: prose bars, added (--ok) and removed
+           (--danger) lines, and a closing prose line carrying two plan-search hits
+           (--mark, --mark-active) — so the mock samples every hue job the palette
+           names, not just the accent. -->
       <div class="tp-plan">
         <Skeleton class="tp-bar tp-bar-title" />
         <Skeleton class="tp-bar" />
         <div class="tp-line tp-add" data-tp-diff="add"><Skeleton class="tp-bar tp-bar-mid" /></div>
         <div class="tp-line tp-add" data-tp-diff="add"><Skeleton class="tp-bar" /></div>
         <div class="tp-line tp-del" data-tp-diff="del"><Skeleton class="tp-bar tp-bar-short" /></div>
-        <Skeleton class="tp-bar" />
+        <div class="tp-bar-marked">
+          <span class="tp-mark" data-tp-mark="all"></span>
+          <span class="tp-mark tp-mark-current" data-tp-mark="current"></span>
+        </div>
       </div>
     </div>
   </div>
@@ -226,6 +232,32 @@
   }
   :global(.theme-preview .tp-bar-mid) {
     width: 70%;
+  }
+
+  /* The closing prose line, marked: the same neutral bar fill as its neighbours with
+     two plan-search hits laid over it — --mark for a match, --mark-active a step up
+     for the current one. Both tokens are translucent by recipe, so the bar reads
+     through them exactly as syntax colors read through a real highlight, and the
+     two-step is what tells the reviewer the palette distinguishes them. Keeps the
+     pane's 7px bar rhythm, so it costs the card no height. */
+  .tp-bar-marked {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    height: 7px;
+    padding: 0 4px;
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--ink), transparent 86%);
+  }
+  .tp-mark {
+    height: 7px;
+    width: 22px;
+    border-radius: 2px;
+    background: var(--mark);
+  }
+  .tp-mark-current {
+    width: 30px;
+    background: var(--mark-active);
   }
 
   /* Diff lines: an added line rides a green --ok wash + gutter, a removed line a red
