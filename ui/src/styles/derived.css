@@ -39,4 +39,9 @@
      surface. Distinct from --chip-hover, which is opaque and mixes onto a known
      surface; this one is a tint the background shows through. */
   --ink-wash: color-mix(in lab, var(--ink) 8%, transparent);
+
+  /* The novelty hue at chip strength — the fill behind a count that exists to be
+     noticed, worn through the .count-attention atom. Reach for it when a surface
+     does the novelty job and needs a fill rather than just ink. */
+  --attention-wash: color-mix(in lab, var(--attention) 18%, transparent);
 }

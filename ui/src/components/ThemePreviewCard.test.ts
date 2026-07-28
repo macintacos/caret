@@ -98,13 +98,30 @@ describe("ThemePreviewCard samples the palette beyond the accent", () => {
     expect((el?.querySelectorAll("[data-tp-diff='add']").length ?? 0) >= 1).toBe(true);
     expect((el?.querySelectorAll("[data-tp-diff='del']").length ?? 0) >= 1).toBe(true);
   });
+
+  // The mark vocabulary is a quarter of the palette's hue jobs and the card showed
+  // none of it (EXC-905). Two segments, not one: --mark-active only means anything
+  // beside a plain --mark, so the pair is what advertises the two-step.
+  test("shows a marked run and the current match (pulling in --mark / --mark-active)", () => {
+    const { flush } = render(ThemePreviewCard, baseProps);
+    flush();
+    expect((root()?.querySelectorAll("[data-tp-mark]").length ?? 0) >= 2).toBe(true);
+  });
+
+  for (const token of ["--mark", "--mark-active"]) {
+    test(`paints an element in ${token}`, () => {
+      const source = readFileSync(join(import.meta.dir, "ThemePreviewCard.svelte"), "utf8");
+      // The negative lookahead keeps --mark from matching --mark-active.
+      expect(new RegExp(`var\\(\\s*${token}(?![\\w-])`).test(source)).toBe(true);
+    });
+  }
 });
 
 describe("ThemePreviewCard covers the theme-dropdown swatch colors (EXC-753)", () => {
   // The preview's floor: it must paint at least the same tokens the option's swatch
   // dots show (SWATCH_TOKENS) — background, raised surface, ink, accent, positive hue —
   // so a hovered theme never previews fewer colors than its dots. Extra hues
-  // (--danger / --attention) are welcome; these five are the minimum.
+  // (--danger, --attention, the marks) are welcome; these five are the minimum.
   const source = readFileSync(join(import.meta.dir, "ThemePreviewCard.svelte"), "utf8");
 
   for (const token of SWATCH_TOKENS) {

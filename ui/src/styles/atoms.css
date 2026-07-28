@@ -1,5 +1,5 @@
-/* Shared chrome atoms — .mono, the floating chip, .metric, .eyebrow, and the
-   keycap. @imported by app.css after the base layer. */
+/* Shared chrome atoms — .mono, the floating chip, .metric, .eyebrow, the count
+   chip, and the keycap. @imported by app.css after the base layer. */
 
 /* ----- Shared atoms ----- */
 .mono {
@@ -50,6 +50,30 @@ button.float-chip[aria-expanded="true"]:not(:disabled) {
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--ink-faint);
+}
+
+/* The count chip: every Badge that answers "how many" wears it — the TopBar's
+   pending comments, the review switcher's plan inventory, the compare picker's
+   other versions, the unanchored-comment tally. Small, quiet and tabular, so a
+   growing number reads as chrome rather than a second accent. Cross-component
+   from the start, it lived as a :global rule inside LegacyAnnotationList until
+   EXC-905 moved it here beside the other shared atoms. Unlayered, so it wins
+   over the shadcn Badge variant's Tailwind text utility. */
+[data-slot="badge"].count {
+  padding: 0.05rem 0.4rem;
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+}
+/* The modifier for a count doing the novelty job — one that asks to be noticed
+   rather than reporting a static fact. Both fill and ink derive from the one
+   --attention token, so paintTheme retints it per theme with no second rule.
+   Counts that merely tally (the plan inventory, the unanchored list) opt out by
+   staying neutral. Equal specificity to the base rule and declared after it, so
+   the hue lands. */
+[data-slot="badge"].count-attention {
+  background: var(--attention-wash);
+  color: var(--attention);
 }
 
 /* Keycap: every Kbd renders as a small key, consistent across surfaces

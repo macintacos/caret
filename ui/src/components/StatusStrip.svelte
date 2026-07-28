@@ -180,14 +180,19 @@
     color: var(--ink-faint);
   }
   /* A non-zero pending tally is the metric the reviewer is tracking — lift it to
-     the semantic add color so a populated strip reads at a glance. Local rather
-     than a derived token: this is a two-step emphasis ramp on --ok, and only the
-     pair together carries the "pending reads louder than covered" relation. */
+     --attention so a populated strip reads at a glance. That is the novelty hue's
+     job, and it is the one the TopBar's pending badge and the compare picker's
+     version count already wear, so all three counts read as one family. The tally
+     borrowed the add hue without ever carrying the add meaning; --ok stays below for
+     the genuinely semantic pair (connection state). Local rather than a derived
+     token: this is a two-step emphasis
+     ramp, and only the pair together carries the "pending reads louder than
+     covered" relation. */
   .num.has {
-    color: color-mix(in srgb, var(--ok) 80%, var(--ink));
+    color: color-mix(in srgb, var(--attention) 80%, var(--ink));
   }
   .num.covered {
-    color: color-mix(in srgb, var(--ok) 60%, var(--ink));
+    color: color-mix(in srgb, var(--attention) 60%, var(--ink));
   }
   .label {
     color: var(--ink-soft);

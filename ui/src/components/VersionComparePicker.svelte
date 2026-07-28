@@ -246,15 +246,16 @@
     >
       {@render compareLabel()}
       <!-- How many other versions there are to compare against (EXC-804): the
-           TopBar pending-count Badge's shape, differing only in hue (see the style
-           block). Guarded on the count rather than on `canCompare` alone, since
-           canCompare is a parent-owned prop and a "0" tally would be noise.
-           aria-hidden because ARIA prohibits a name on a <span> (role=generic), so
-           an aria-label here would announce unreliably; the count reaches AT
-           through the button's own aria-label above instead — the same split
-           TopBar's .overflow-count uses. -->
+           TopBar pending-count Badge, shape and hue alike — both are counts doing
+           the novelty job, so both wear .count-attention (atoms.css). Guarded on
+           the count rather than on `canCompare` alone, since canCompare is a
+           parent-owned prop and a "0" tally would be noise. aria-hidden because
+           ARIA prohibits a name on a <span> (role=generic), so an aria-label here
+           would announce unreliably; the count reaches AT through the button's own
+           aria-label above instead — the same split TopBar's .overflow-count
+           uses. -->
       {#if otherCount > 0}
-        <Badge variant="secondary" class="count metric other-count" aria-hidden="true">
+        <Badge variant="secondary" class="count count-attention metric" aria-hidden="true">
           {otherCount}
         </Badge>
       {/if}
@@ -380,21 +381,6 @@
   }
   .compare-picker :global(.compare-toggle[aria-pressed="true"]:not(:disabled):hover) {
     background: var(--accent-wash);
-  }
-  /* The count of other versions (EXC-804). Hue is the ONLY divergence from the
-     TopBar/ReviewSwitcher counts — size, padding and tabular figures all come from
-     the shared `.count metric` classes, so the three read as one family. Those
-     counts are deliberately neutral because amber is reserved for the Approve
-     primary; this one is asked to draw the eye, so it wears --attention, caret's
-     quiet-notice verdigris (the NotifyBell's undecided tone, the notification dot).
-     That keeps amber scarce AND keeps --ok/--danger free to mean
-     addition/deletion, which matters with the diff surface sitting directly below
-     this bar. Fill and ink both derive from the one token, so paintTheme retints
-     it per theme with no second rule. The wash stays local — it is the only
-     --attention wash in the chrome, so a shared token would name a set of one. */
-  .compare-picker :global(.other-count) {
-    background: color-mix(in lab, var(--attention) 18%, transparent);
-    color: var(--attention);
   }
   /* Nudge the `d` shortcut cap a hair further right of the label than the
      button's own gap gives it. */

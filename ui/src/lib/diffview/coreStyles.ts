@@ -487,16 +487,17 @@ const CARET_OVERRIDES = `
      "caret-search", the active match in "caret-search-current". They are styled
      here, in the override sheet adopted into the same shadow root the highlighted
      ranges live in, because ::highlight() resolves against the tree scope of the
-     text it paints (not the document). Both read the amber accent through the theme
-     bridge (palette unchanged): the underlay is a half-transparent --accent so
-     every match is easy to spot in both themes while the syntax colors stay legible
-     beneath it, and the current match is solid --accent with readable --accent-ink. */
+     text it paints (not the document). A search hit is a marked region of the
+     document, so the pair reads caret's content-highlight vocabulary — --mark for
+     every match, --mark-active for the current one. That is the two-step the
+     recipe's ALPHA.mark / ALPHA.markActive exists to produce, and it leaves the
+     syntax colors legible under both washes rather than replacing them. The accent
+     these used to carry belongs to selection, a different job (EXC-905). */
   ::highlight(caret-search) {
-    background-color: color-mix(in lab, var(--accent), transparent 50%);
+    background-color: var(--mark);
   }
   ::highlight(caret-search-current) {
-    background-color: var(--accent);
-    color: var(--accent-ink);
+    background-color: var(--mark-active);
   }
 `;
 

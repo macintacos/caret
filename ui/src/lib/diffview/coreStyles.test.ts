@@ -391,3 +391,31 @@ describe("the filename-reference hover highlight (EXC-840)", () => {
     expect(hoverRule).not.toMatch(/transition|animation/);
   });
 });
+
+describe("the plan-search highlights (EXC-832, rehued EXC-905)", () => {
+  const allMatches = overrideDecls.match(/::highlight\(caret-search\)\s*\{[^}]*\}/)?.[0] ?? "";
+  const currentMatch =
+    overrideDecls.match(/::highlight\(caret-search-current\)\s*\{[^}]*\}/)?.[0] ?? "";
+
+  // Both extractions fall back to "" on a regex miss, and `not.toContain` passes
+  // vacuously over an empty string — so pin non-emptiness before asserting absence.
+  test("both highlight rules are present to assert against", () => {
+    expect(allMatches).not.toBe("");
+    expect(currentMatch).not.toBe("");
+  });
+
+  test("every match rides --mark, the content-highlight token", () => {
+    expect(allMatches).toMatch(/background-color:\s*var\(--mark\)/);
+  });
+
+  test("the current match rides --mark-active, the same vocabulary a step up", () => {
+    expect(currentMatch).toMatch(/background-color:\s*var\(--mark-active\)/);
+  });
+
+  // A search hit marks content; it is not the reviewer's selection. Reaching for
+  // --accent here is what left --mark-active unread for as long as it was.
+  test("neither spends the selection hue", () => {
+    expect(allMatches).not.toContain("--accent");
+    expect(currentMatch).not.toContain("--accent");
+  });
+});
