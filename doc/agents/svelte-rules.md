@@ -130,6 +130,24 @@ stays green under any invocation.
   viewport derives from it — so a drift fails the unit suite instead of silently breaking
   the e2e smoke. When a magic number couples TS to config, name it once and test the
   coupling.
+- **Every hue has a job; everything else is neutral.** The palette recipe
+  (`ui/src/lib/themes/recipe.ts`) draws a four-way split, and the chrome obeys it — a
+  reviewer should be able to predict a surface's hue from the job it does.
+
+  | Job | Token | What it marks |
+  | -- | -- | -- |
+  | Selection | `--accent` | the current selection, plus brand: the wordmark, the `^`, the primary action |
+  | Novelty | `--attention` | "look here" — new, unread, worth a glance. Every count that asks to be noticed: the TopBar pending badges, the compare picker's other-version count, the status strip's tallies |
+  | Semantics | `--ok` / `--danger` | added / removed, succeeded / failed |
+  | Content highlight | `--mark`, `--mark-active`, `--mark-orphan` | a marked region of the document — plan-search hits, with `-active` the current one and `-orphan` the same mark with its anchor gone |
+
+  Everything else is neutral: the ink ramp and the chip fills. Two carve-outs are
+  deliberate. The **chip vocabulary** stays neutral because neutral is what the rule
+  prescribes for a control that is neither selection, novelty, nor semantics. The
+  **keycap** derives from `currentColor` because it has no job of its own and inherits its
+  container's — which is why a key on the amber Approve button reads light and a key on a
+  neutral chip reads grey. `theme.test.ts` asserts every `ColorToken` has at least one
+  `var()` reader under `ui/src`, so a token can't stay declared for nobody.
 - **The diff-view bridge is amber-selection-only.** The single `.diffview` rule in
   `app.css` maps caret's tokens onto `@pierre/diffs`'s `--diffs-*` properties. caret
   adopts the library's surface STRUCTURE — the layered buffer/context/separator depth
