@@ -81,7 +81,8 @@
         <div class="tp-line tp-add" data-tp-diff="add"><Skeleton class="tp-bar tp-bar-mid" /></div>
         <div class="tp-line tp-add" data-tp-diff="add"><Skeleton class="tp-bar" /></div>
         <div class="tp-line tp-del" data-tp-diff="del"><Skeleton class="tp-bar tp-bar-short" /></div>
-        <div class="tp-bar-marked">
+        <div class="tp-marked-line">
+          <Skeleton class="tp-bar" />
           <span class="tp-mark" data-tp-mark="all"></span>
           <span class="tp-mark tp-mark-current" data-tp-mark="current"></span>
         </div>
@@ -234,28 +235,30 @@
     width: 70%;
   }
 
-  /* The closing prose line, marked: the same neutral bar fill as its neighbours with
-     two plan-search hits laid over it — --mark for a match, --mark-active a step up
-     for the current one. Both tokens are translucent by recipe, so the bar reads
-     through them exactly as syntax colors read through a real highlight, and the
-     two-step is what tells the reviewer the palette distinguishes them. Keeps the
-     pane's 7px bar rhythm, so it costs the card no height. */
-  .tp-bar-marked {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    height: 7px;
-    padding: 0 4px;
-    border-radius: var(--radius);
-    background: color-mix(in srgb, var(--ink), transparent 86%);
+  /* The closing prose line, marked: two plan-search hits laid over an ordinary
+     .tp-bar — --mark for a match, --mark-active a step up for the current one. Both
+     tokens are translucent by recipe, so the bar reads through them exactly as syntax
+     colors read through a real highlight, and the two-step is what tells the reviewer
+     the palette distinguishes them. The bar stays a Skeleton, so this line breathes
+     with the rest of the pane; only the marks on it hold still. Wrapping a bar in a
+     positioned row is the same shape .tp-line uses for the diff tints, and it keeps
+     the 7px rhythm, so the marked line costs the card no height. */
+  .tp-marked-line {
+    position: relative;
   }
+  /* Offsets are literal because the whole miniature is: they place two short runs
+     near the start of the line, leaving the rest of the bar unmarked. */
   .tp-mark {
+    position: absolute;
+    top: 0;
+    left: 4px;
     height: 7px;
     width: 22px;
     border-radius: 2px;
     background: var(--mark);
   }
   .tp-mark-current {
+    left: 31px;
     width: 30px;
     background: var(--mark-active);
   }

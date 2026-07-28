@@ -41,9 +41,7 @@
   --ink-wash: color-mix(in lab, var(--ink) 8%, transparent);
 
   /* The novelty hue at chip strength — the fill behind a count that exists to be
-     noticed. It sat local in VersionComparePicker while the compare picker's
-     other-version count was the chrome's only --attention wash; once the TopBar's
-     pending badges adopted the same hue the mix had a second call site, so it
-     moved here rather than being written twice. */
+     noticed, worn through the .count-attention atom. Reach for it when a surface
+     does the novelty job and needs a fill rather than just ink. */
   --attention-wash: color-mix(in lab, var(--attention) 18%, transparent);
 }

@@ -3,7 +3,8 @@
 // the library's row repaints (unlike wrapping matched text in <mark>, which would
 // trip SourceView's MutationObserver). Two named highlights register on the
 // document-global CSS.highlights registry: `caret-search` (every non-current match,
-// a dim amber underlay) and `caret-search-current` (the active match, amber);
+// a dim --mark wash) and `caret-search-current` (the active match, the stronger
+// --mark-active wash);
 // coreStyles.ts styles them via ::highlight() rules adopted into the same shadow
 // root. Feature-detected: an engine without the API is a clean no-op, so the line
 // cursor still moves on commit/n/N even when highlights can't paint. Line/column

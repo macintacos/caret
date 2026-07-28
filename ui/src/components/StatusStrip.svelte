@@ -182,9 +182,10 @@
   /* A non-zero pending tally is the metric the reviewer is tracking — lift it to
      --attention so a populated strip reads at a glance. That is the novelty hue's
      job, and it is the one the TopBar's pending badge and the compare picker's
-     version count already wear, so all three counts read as one family. --ok stays
-     for the genuinely semantic pair below (connection state); it never meant
-     "added" here. Local rather than a derived token: this is a two-step emphasis
+     version count already wear, so all three counts read as one family. The tally
+     borrowed the add hue without ever carrying the add meaning; --ok stays below for
+     the genuinely semantic pair (connection state). Local rather than a derived
+     token: this is a two-step emphasis
      ramp, and only the pair together carries the "pending reads louder than
      covered" relation. */
   .num.has {

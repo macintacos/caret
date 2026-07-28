@@ -7,7 +7,9 @@
   //
   // The container stays a plain full-bleed footer section (a Card's contained,
   // rounded frame would fight the below-the-view framing); the count adopts a
-  // shadcn Badge (EXC-765), matching the count-chip pattern used elsewhere.
+  // shadcn Badge (EXC-765), matching the count-chip pattern used elsewhere — the
+  // shared `.count` rule lives in styles/atoms.css. It stays neutral: this tally
+  // reports a static fact, so it skips the .count-attention modifier.
   import type { LegacyAnnotation } from "@core/lib/types";
   import { Badge } from "$lib/components/ui/badge/index.js";
 
@@ -66,8 +68,9 @@
   }
   /* The quoted passage is a marked region of the document whose anchor is gone,
      which is exactly what --mark-orphan names: the same mark as a live plan-search
-     hit, drained of hue because there is no line to point at. Padded out on both
-     sides so the wash reads as a marked passage rather than a stray tint. */
+     hit, drained of hue because there is no line to point at. Padded on all four
+     sides so the wash reads as a marked passage rather than a stray tint — the block
+     padding is what stops the quote's text sitting flush against the wash's edge. */
   .quote {
     margin: 0 0 0.3rem;
     padding: 0.2rem 0.5rem 0.2rem 0.55rem;

@@ -397,6 +397,13 @@ describe("the plan-search highlights (EXC-832, rehued EXC-905)", () => {
   const currentMatch =
     overrideDecls.match(/::highlight\(caret-search-current\)\s*\{[^}]*\}/)?.[0] ?? "";
 
+  // Both extractions fall back to "" on a regex miss, and `not.toContain` passes
+  // vacuously over an empty string — so pin non-emptiness before asserting absence.
+  test("both highlight rules are present to assert against", () => {
+    expect(allMatches).not.toBe("");
+    expect(currentMatch).not.toBe("");
+  });
+
   test("every match rides --mark, the content-highlight token", () => {
     expect(allMatches).toMatch(/background-color:\s*var\(--mark\)/);
   });

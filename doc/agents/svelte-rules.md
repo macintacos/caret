@@ -141,6 +141,11 @@ stays green under any invocation.
   | Semantics | `--ok` / `--danger` | added / removed, succeeded / failed |
   | Content highlight | `--mark`, `--mark-active`, `--mark-orphan` | a marked region of the document — plan-search hits, with `-active` the current one and `-orphan` the same mark with its anchor gone |
 
+  The split is by **token**, not by hue: a palette may draw two jobs from one hue family
+  at different value and alpha. caret's own does — `markHue` is a lighter amber than the
+  accent, so a search hit and the current selection are the same family and still
+  different jobs. Read the token, not the colour.
+
   Everything else is neutral: the ink ramp and the chip fills. Two carve-outs are
   deliberate. The **chip vocabulary** stays neutral because neutral is what the rule
   prescribes for a control that is neither selection, novelty, nor semantics. The
