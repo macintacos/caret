@@ -10,6 +10,7 @@ import {
   ensureUi,
   shouldBuildUi,
 } from "@/tasks/build.ts";
+import { caretCommand } from "@/tasks/caret.ts";
 import { buildProgram, type TaskActions } from "@/tasks/cli.ts";
 import type { RunDevOptions } from "@/tasks/dev/run.ts";
 import { formatCommand } from "@/tasks/format.ts";
@@ -123,6 +124,7 @@ describe("tasks CLI: passthrough forwarding", () => {
     [["test"], "test"],
     [["test", "unit"], "test"],
     [["test", "e2e"], "testE2e"],
+    [["caret"], "caret"],
   ];
   for (const [commandPath, key] of cases) {
     const label = commandPath.join(" ");
@@ -155,6 +157,20 @@ describe("tasks CLI: task command lines", () => {
   test("format runs hk fix --all --no-stage", () => {
     expect(formatCommand([])).toEqual(["hk", "fix", "--all", "--no-stage"]);
     expect(formatCommand(["src"])).toEqual(["hk", "fix", "--all", "--no-stage", "src"]);
+  });
+
+  test("caret runs the CLI from source, never a built artifact", () => {
+    // `bin/caret` execs `bin/caret-native` when a build produced one, so it can lag
+    // the working tree. Running `src/cli.ts` is what makes this task match the
+    // checkout, and is the whole reason it exists.
+    expect(caretCommand([])).toEqual(["bun", "run", "src/cli.ts"]);
+    expect(caretCommand(["install", "--dry-run"])).toEqual([
+      "bun",
+      "run",
+      "src/cli.ts",
+      "install",
+      "--dry-run",
+    ]);
   });
 
   test("test runs bun test --conditions browser", () => {

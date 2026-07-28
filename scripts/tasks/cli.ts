@@ -24,6 +24,7 @@ import { InvalidArgumentError } from "@commander-js/extra-typings";
 
 import { createProgram } from "@/lib/program.ts";
 import { runBuild, runBuildBin, runBuildBundle, runBuildUi } from "@/tasks/build.ts";
+import { runCaret } from "@/tasks/caret.ts";
 import { DEFAULT_NUM_VERSIONS, parsePositiveInt } from "@/tasks/dev/protocol.ts";
 import { type RunDevOptions, runDev } from "@/tasks/dev/run.ts";
 import { runFormat } from "@/tasks/format.ts";
@@ -46,6 +47,7 @@ export interface TaskActions {
   buildBundle: () => Promise<unknown>;
   lint: (args: string[]) => Promise<unknown>;
   format: (args: string[]) => Promise<unknown>;
+  caret: (args: string[]) => Promise<unknown>;
   test: (args: string[]) => Promise<unknown>;
   testE2e: (args: string[]) => Promise<unknown>;
   setup: () => Promise<unknown>;
@@ -63,6 +65,7 @@ const realActions: TaskActions = {
   buildBundle: runBuildBundle,
   lint: runLint,
   format: runFormat,
+  caret: runCaret,
   test: runTest,
   testE2e: runTestE2e,
   setup: runSetup,
@@ -154,6 +157,10 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
 
   passthrough("lint", "Check formatting and lint rules (Biome, read-only)", (a) => actions.lint(a));
   passthrough("format", "Format all files (Biome, write mode)", (a) => actions.format(a));
+  // caret's own CLI, run from source so it always matches the checkout. Passthrough
+  // rather than a modelled surface: src/cli.ts owns those subcommands and their
+  // flags, and re-declaring them here would be a second place to keep in sync.
+  passthrough("caret", "Run caret's own CLI from source (src/cli.ts)", (a) => actions.caret(a));
 
   // `build`: bare umbrella (UI -> binary, plus the optional --install dev step),
   // with `ui`/`bin`/`bundle` as positional targets so `mise run build ui` reaches

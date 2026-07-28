@@ -417,6 +417,7 @@ mise run setup      # install pinned tools + JS deps + the generated palette + e
 mise run build      # build the UI (Vite multi-asset) then the binary (bun build --compile, embeds the UI)
 mise run build ui   # just the Svelte UI (Vite -> ui/dist); also `build bin` / `build bundle`
 mise run dev        # isolated daemon + fake plan + Vite UI (ephemeral port)
+mise run caret      # caret's own CLI from src/cli.ts, e.g. `mise run caret discovery`
 mise run test       # bun test (unit); `mise run test unit` is the same target
 mise run test e2e   # Playwright browser e2e (isolated daemon, Chromium)
 mise run lint       # read-only gate: formatting + Biome lint + tsc + svelte-check

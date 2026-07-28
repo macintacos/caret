@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#MISE description="Run caret's own CLI from source: mise run caret <subcommand>"
+#MISE raw_args=true
+# raw_args hands every argument (including a bare --help) straight to the CLI, so
+# `mise run caret --help` shows the CLI's real help instead of mise's task help.
+# That help is the tasks CLI's, which owns the passthrough; `mise run caret help
+# [subcommand]` reaches caret's own. Thin forwarder: the subcommands and flags
+# live in caret's CLI (src/cli.ts). `exec` replaces this shell with the CLI, so
+# stdin reaches a subcommand that reads it (`mise run caret review <
+# payload.json`), Ctrl-C reaches caret's own signal handlers, and its exit code
+# becomes the task's. "$@" is safe on an empty arg list (a special parameter, not
+# a plain array — no set -u footgun).
+exec bun scripts/tasks/cli.ts caret "$@"
