@@ -204,7 +204,7 @@ test("rumdlFormatPlan preserves fenced code verbatim", async () => {
 });
 
 test("rumdlFormatPlan keeps a long inline code span inline with its prose", async () => {
-  const span = "`" + `const XS = [${'"alpha","bravo","charlie","delta","echo",'.repeat(2)}];` + "`";
+  const span = `\`const XS = [${'"alpha","bravo","charlie","delta","echo",'.repeat(2)}];\``;
   const out = await rumdlFormatPlan(`intro\n\nprefix ${span} suffix\n`);
   expect(out).toContain(`prefix ${span} suffix`);
 });
