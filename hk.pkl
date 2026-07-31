@@ -60,8 +60,13 @@ local formatters = new Mapping<String, Step> {
   // leftover lint); the Markdown(Lint) step below enforces read-only `rumdl check`.
   // Override only `fix` — the builtin's glob (**/*.md, **/*.markdown) and its
   // check_diff = "rumdl check --diff" are inherited. Config lives in .rumdl.toml.
+  //
+  // The dev plan fixture is excluded here as well as in .rumdl.toml so the file
+  // never reaches rumdl at all: it must stay as an agent would have written it,
+  // because caret reflows it at ingest and that is what `mise run dev` is testing.
   ["Markdown(Format) [[builtins.rumdl]]"] = (Builtins.rumdl) {
     fix = "rumdl fmt {{ files }}"
+    exclude = List("scripts/tasks/dev/fake-plan.md")
   }
 
   ["YAML(Format)     [[builtins.yamlfmt]]"] = Builtins.yamlfmt
@@ -112,6 +117,7 @@ local linters = new Mapping<String, Step> {
   // fixable lint after the formatter's `rumdl fmt`, so a commit converges in one pass.
   ["Markdown(Lint)    [[builtins.rumdl]]"] = (Builtins.rumdl) {
     check = "rumdl check {{ files }}"
+    exclude = List("scripts/tasks/dev/fake-plan.md")
   }
 
   ["TOML(Lint)        [[builtins.taplo]]"] = Builtins.taplo

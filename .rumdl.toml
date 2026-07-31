@@ -12,7 +12,15 @@ disable = ["MD033", "MD034", "MD041"]
 # Respect .gitignore when scanning directories (rumdl init default).
 respect-gitignore = true
 
-# Paths rumdl never scans — `rumdl init`'s defaults, kept as-is.
+# Paths rumdl never scans — `rumdl init`'s defaults, plus the dev plan fixture.
+#
+# scripts/tasks/dev/fake-plan.md is the one file in the repo that must stay
+# un-rumdl'd. It stands in for a plan as an agent actually writes one — paragraphs
+# and list items on single long lines — so that `mise run dev` exercises caret's
+# own reflow (src/plan/rumdl.ts) on realistic input. Formatting it here would
+# pre-wrap it at 90 columns under a config with no reflow exemptions, and caret's
+# reflow never rejoins a line something else already broke, so the fixture would
+# silently stop testing the thing it exists to test.
 exclude = [
   ".git",
   ".github",
@@ -21,6 +29,7 @@ exclude = [
   "dist",
   "build",
   "LICENSE.md",
+  "scripts/tasks/dev/fake-plan.md",
 ]
 
 [MD013]

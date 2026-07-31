@@ -24,16 +24,17 @@ import {
 
 setupTempStateDir("caret-rumdl-");
 
-test("rumdlAsset maps each supported platform to its pinned asset + checksum", () => {
+// The checksums themselves are pinned against mise.lock in
+// test/structure/rumdl-pin.test.ts, which compares them to a source they are not
+// copied from; asserting them here too would only restate the module constant.
+test("rumdlAsset maps each supported platform to its release archive", () => {
   const darwinArm = rumdlAsset("darwin", "arm64");
   expect(darwinArm.url).toBe(
     `https://github.com/rvben/rumdl/releases/download/v${RUMDL_VERSION}/rumdl-v${RUMDL_VERSION}-aarch64-apple-darwin.tar.gz`,
   );
-  expect(darwinArm.sha256).toBe("ac5f31077c492c3303d27264d8d8840b1279cb5a8cd62f863a2045e1427a6c79");
 
   const linuxX64 = rumdlAsset("linux", "x64");
   expect(linuxX64.url).toContain("x86_64-unknown-linux-musl.tar.gz");
-  expect(linuxX64.sha256).toBe("0999d31c6f1429f0b3b5ed86d3ebb2768e5b4a16b373a51a41a7af2d7eb43b7c");
 });
 
 test("rumdlAsset throws on an unsupported platform", () => {
@@ -201,6 +202,13 @@ test("rumdlFormatPlan preserves fenced code verbatim", async () => {
     "```";
   const out = await rumdlFormatPlan(`intro\n\n${fence}\n`);
   expect(out).toContain(fence);
+});
+
+test("rumdlFormatPlan does not count a link's URL against the line budget", async () => {
+  const url = "https://example.com/search?q=markdown+reflow&sort=relevance&per_page=100";
+  const line = `padding padding padding padding [short link](${url}) end.`;
+  const out = await rumdlFormatPlan(`intro\n\n${line}\n`);
+  expect(out).toContain(line);
 });
 
 test("rumdlFormatPlan returns blank input untouched (no subprocess)", async () => {

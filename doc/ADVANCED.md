@@ -355,7 +355,7 @@ to the config file, then the default.
 | `CARET_AGENT`        | —                     | `claude`         | Which coding-agent adapter to drive. `claude` (default) or `codex` (provisional, default-off — see below). |
 | `XDG_STATE_HOME`     | —                     | `~/.local/state` | Unresolved reviews persist under `$XDG_STATE_HOME/caret/reviews/` and rehydrate on restart. |
 | `CARET_CONFIG_FILE`  | —                     | `config.toml`    | Absolute path to the settings file, overriding the default `config.toml` location. `mise run dev` sets it to `config.dev.toml`; `--fresh` sets it to a nonexistent path so dev boots from built-in defaults. |
-| `CARET_RUMDL_BIN`    | —                     | _(downloads)_    | Absolute path to an existing rumdl binary for plan formatting, overriding the on-first-use download of the pinned v0.2.37 into `$XDG_STATE_HOME/caret/rumdl/`. Blank counts as unset. Useful for offline / air-gapped installs or reusing a system rumdl. |
+| `CARET_RUMDL_BIN`    | —                     | _(downloads)_    | Absolute path to an existing rumdl binary for plan formatting, overriding the on-first-use download of the pinned v0.2.47 into `$XDG_STATE_HOME/caret/rumdl/`. Blank counts as unset. Useful for offline / air-gapped installs or reusing a system rumdl. |
 | `CARET_OPENCODE_BIN` | —                     | _(packaged)_     | Absolute path to the caret binary the OpenCode plugin spawns — for `caret review` and the daemon prewarm alike — overriding the one shipped beside the plugin in the `@macintacos/caret` package. Blank counts as unset. The way to point a published-package OpenCode install at a local build. |
 | `CARET_DEV_PORT`         | `dev.port`            | —                | **Dev-only.** Fixed `mise run dev` daemon port; unset → ephemeral. Must differ from `42718`. |
 | `CARET_DEV_STATE_DIR`    | `dev.state_dir`       | —                | **Dev-only.** Persistent `mise run dev` state dir; unset → ephemeral. |
@@ -367,10 +367,12 @@ to the config file, then the default.
 ### Plan formatting (rumdl)
 
 caret canonicalizes every incoming plan by reflowing it to a 90-column MD013 shape with
-[rumdl](https://github.com/rvben/rumdl). rumdl is not a runtime prerequisite: caret
-installs the pinned binary (v0.2.37) into `$XDG_STATE_HOME/caret/rumdl/` and verifies its
-checksum — so formatting behaves the same however caret was installed (Claude plugin or
-OpenCode).
+[rumdl](https://github.com/rvben/rumdl). Link URLs are exempt from that measurement —
+nothing can break inside a URL, so counting it would only fragment the prose around it —
+which means a line carrying a link runs wider than 90 and scrolls in the plan reader.
+rumdl is not a runtime prerequisite: caret installs the pinned binary (v0.2.47) into
+`$XDG_STATE_HOME/caret/rumdl/` and verifies its checksum — so formatting behaves the same
+however caret was installed (Claude plugin or OpenCode).
 
 **caret only ever formats with that one binary, at that one path.** A `rumdl` on your PATH
 is never used: which version reflows your plans must not depend on what the machine
