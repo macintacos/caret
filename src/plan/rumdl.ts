@@ -26,7 +26,7 @@ import { ensureStateDir, rumdlBin, rumdlConfig, rumdlDir } from "@/config/paths.
 
 /** The rumdl release pinned for plan formatting — kept in lockstep with
  * mise.lock's `[[tools.rumdl]]` so dev (mise) and prod (this download) agree. */
-export const RUMDL_VERSION = "0.2.37";
+export const RUMDL_VERSION = "0.2.47";
 
 export interface RumdlAsset {
   /** GitHub release download URL for this platform's archive. */
@@ -47,19 +47,19 @@ type FetchLike = (url: string) => Promise<{ arrayBuffer(): Promise<ArrayBuffer> 
 const ASSETS: Record<string, RumdlAsset> = {
   "darwin-arm64": {
     url: `https://github.com/rvben/rumdl/releases/download/v${RUMDL_VERSION}/rumdl-v${RUMDL_VERSION}-aarch64-apple-darwin.tar.gz`,
-    sha256: "ac5f31077c492c3303d27264d8d8840b1279cb5a8cd62f863a2045e1427a6c79",
+    sha256: "10dc23e994327ecc6e98d285802fcad1174608f203062cb18bac55b51976e0cb",
   },
   "darwin-x64": {
     url: `https://github.com/rvben/rumdl/releases/download/v${RUMDL_VERSION}/rumdl-v${RUMDL_VERSION}-x86_64-apple-darwin.tar.gz`,
-    sha256: "7cdfbc6ac896bfe433938a050e0f7b4dfc9ebc78d17ec8f4f872580b1fe06eba",
+    sha256: "9a2bf0c692310e0469fdc66fa83f74579cf0331cc1f9b306b25849cffd146c0f",
   },
   "linux-arm64": {
     url: `https://github.com/rvben/rumdl/releases/download/v${RUMDL_VERSION}/rumdl-v${RUMDL_VERSION}-aarch64-unknown-linux-musl.tar.gz`,
-    sha256: "2cee94dbc4e577c54869723245be548589e80a5e5a93fe25a3cc535d51e1ac6d",
+    sha256: "b5ab4207b92c0bf0ea6d8946f15545c787e8cf6ecf2176d9e7f26c43aead86a8",
   },
   "linux-x64": {
     url: `https://github.com/rvben/rumdl/releases/download/v${RUMDL_VERSION}/rumdl-v${RUMDL_VERSION}-x86_64-unknown-linux-musl.tar.gz`,
-    sha256: "0999d31c6f1429f0b3b5ed86d3ebb2768e5b4a16b373a51a41a7af2d7eb43b7c",
+    sha256: "bd4049763e93d6c25420ec086dee6690af31efc85af463c3ecf5d686a5fcf762",
   },
 };
 
