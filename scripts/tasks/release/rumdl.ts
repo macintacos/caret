@@ -15,9 +15,9 @@ export interface RumdlOps {
   reflow(markdown: string): Promise<string>;
 }
 
-/** Constructs the real, rumdl-backed RumdlOps. Pinned via mise (`rumdl = latest`
- * in mise.toml, version-locked in mise.lock), invoked as `mise x rumdl` so it
- * resolves the same binary the repo's format task uses. */
+/** Constructs the real, rumdl-backed RumdlOps. Pinned via mise (mise.toml,
+ * version-locked in mise.lock), invoked as `mise x rumdl` so it resolves the
+ * same binary the repo's format task uses. */
 export function createRumdl(): RumdlOps {
   return {
     async reflow(markdown) {

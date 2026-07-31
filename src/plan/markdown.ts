@@ -7,7 +7,8 @@
 //
 // The formatter is rumdl (src/plan/rumdl.ts), downloaded into caret's state dir
 // on first use: it reflows prose to caret's 90-col MD013 convention, leaves
-// fenced code verbatim, and is idempotent. `doFormat` stays injectable so tests
+// fenced code verbatim, exempts link URLs and inline code spans from the column
+// measurement, and is idempotent. `doFormat` stays injectable so tests
 // can pin the failure envelope; a missing/failed rumdl throws and is caught here.
 
 import { type CaretLogger, noopLogger } from "@/lib/log.ts";

@@ -367,10 +367,12 @@ to the config file, then the default.
 ### Plan formatting (rumdl)
 
 caret canonicalizes every incoming plan by reflowing it to a 90-column MD013 shape with
-[rumdl](https://github.com/rvben/rumdl). rumdl is not a runtime prerequisite: caret
-installs the pinned binary (v0.2.47) into `$XDG_STATE_HOME/caret/rumdl/` and verifies its
-checksum — so formatting behaves the same however caret was installed (Claude plugin or
-OpenCode).
+[rumdl](https://github.com/rvben/rumdl). Link URLs and inline code spans are exempt from
+that measurement — nothing can break inside them, so counting them would only fragment the
+prose around them — which means a line carrying one runs wider than 90 and scrolls in the
+plan reader. rumdl is not a runtime prerequisite: caret installs the pinned binary
+(v0.2.47) into `$XDG_STATE_HOME/caret/rumdl/` and verifies its checksum — so formatting
+behaves the same however caret was installed (Claude plugin or OpenCode).
 
 **caret only ever formats with that one binary, at that one path.** A `rumdl` on your PATH
 is never used: which version reflows your plans must not depend on what the machine

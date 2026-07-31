@@ -337,14 +337,15 @@ than a single visual line on most viewports and wrapping behavior becomes observ
 
 Plans are reflowed through `rumdl fmt` at 90 columns before they render, with a link's URL
 and an inline code span exempt from that measurement — an atom nobody can break should not
-fragment the sentence around it. Look for prose that stays whole around each link and span
-below. One caveat before calling any of this broken: exempting a URL stops a link from
-*causing* a wrap, but a link the source already placed on its own line stays there. This
-fixture is a tracked file, so the repo's own `rumdl fmt` pre-commit hook rewraps it under
-`.rumdl.toml`, which does measure URLs — case 1 and the long-URL cases therefore arrive
-pre-split and sit isolated on their own lines. That is the expected shape, not a
-regression. A code span is exempt outright, so case 2 rejoins its surrounding prose no
-matter how the source wrapped it.
+fragment the sentence around it. The exemption is from measurement only, so a line
+carrying one ends up wider than 90 and scrolls rather than wrapping.
+
+Cases 2 and 8 are where that shows: the code span sits inline with its prose, and the
+short link's line overruns the budget intact. The rest are regression anchors and should
+look unremarkable. In particular, exempting a URL stops a link from *causing* a wrap but
+never rejoins a line the source already broke — this fixture is tracked, so the repo's own
+pre-commit `rumdl fmt` rewraps it under `.rumdl.toml`, which does measure URLs, leaving
+cases 1 and 5 pre-split and isolated. That is the expected shape, not a regression.
 
 **1. Link text past 90.**
 [a link whose visible text alone runs well past ninety columns before its URL is even measured](https://example.com/reflow/long-text)

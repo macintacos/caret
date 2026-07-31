@@ -1,11 +1,11 @@
 // Runtime rumdl acquisition + plan formatting (EXC-828). caret installs the
 // pinned `rumdl` binary into its own state dir (off PATH) and shells out
-// `rumdl fmt -` to reflow each incoming plan to the repo's 90-col MD013
-// convention. Acquisition is version-gated, not presence-gated: the binary at
-// caret's path is used only when it reports exactly RUMDL_VERSION, so a stale
-// copy left by an older caret is replaced rather than reused, and a `rumdl` the
-// machine happens to have on PATH never formats a plan. This is the default
-// `doFormat` behind formatPlanMarkdown's
+// `rumdl fmt -` to reflow each incoming plan to caret's own 90-col MD013 config
+// (not .rumdl.toml's — see RUMDL_CONFIG). Acquisition is version-gated, not
+// presence-gated: the binary at caret's path is used only when it reports exactly
+// RUMDL_VERSION, so a stale copy left by an older caret is replaced rather than
+// reused, and a `rumdl` the machine happens to have on PATH never formats a plan.
+// This is the default `doFormat` behind formatPlanMarkdown's
 // best-effort envelope (src/plan/markdown.ts): any failure here — unsupported
 // platform, offline download, spawn error — throws and is caught there, storing
 // the plan raw with one warn, so nothing is ever lost while rumdl is absent.
@@ -13,8 +13,8 @@
 // Acquisition analog: scripts/tasks/release/rumdl.ts (the release-time `rumdl fmt`
 // shell-out). This runtime path differs in two ticket-required ways: it invokes a
 // downloaded binary by absolute path (end-users have no mise), and it reflows to
-// the ticket's fixed MD013 config (line 90, reflow normalize) rather than the
-// release module's unbounded width.
+// RUMDL_CONFIG's fixed 90-column shape rather than the release module's unbounded
+// width.
 
 import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
@@ -89,11 +89,16 @@ export function rumdlAsset(
 // around it when it counts against the budget. The repo's own markdown is read and
 // edited in a text editor, so .rumdl.toml keeps measuring those atoms.
 //
-// `reflow-length-exemptions` turns the exemptions on; the two below say which atoms
-// they cover. Both are stated explicitly because this block is where the divergence
-// lives: `ignore-link-urls` already defaults to true but is load-bearing here, and
-// `code-spans` is inverted — it means "measure code spans", so exempting them is
-// `false`.
+// The exemption is from *measurement*, so a line carrying such an atom ends up
+// physically wider than 90 by roughly the atom's length — reflow packs prose up to
+// 90 measured columns and the exempt atom rides on top. Accepted deliberately: a
+// line that scrolls beats a sentence chopped around an isolated atom, and the plan
+// reader scrolls rather than wraps either way. It also only governs what *causes* a
+// break — a link the source already put on its own line stays there.
+//
+// `ignore-link-urls` already defaults to true but is load-bearing under
+// `reflow-length-exemptions`, so it is stated rather than inherited; `code-spans` is
+// inverted — it means "measure code spans", so exempting them is `false`.
 const RUMDL_CONFIG = `[MD013]
 line-length = 90
 code-blocks = false

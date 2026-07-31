@@ -24,16 +24,17 @@ import {
 
 setupTempStateDir("caret-rumdl-");
 
-test("rumdlAsset maps each supported platform to its pinned asset + checksum", () => {
+// The checksums themselves are pinned against mise.lock in
+// test/structure/rumdl-pin.test.ts, which compares them to a source they are not
+// copied from; asserting them here too would only restate the module constant.
+test("rumdlAsset maps each supported platform to its release archive", () => {
   const darwinArm = rumdlAsset("darwin", "arm64");
   expect(darwinArm.url).toBe(
     `https://github.com/rvben/rumdl/releases/download/v${RUMDL_VERSION}/rumdl-v${RUMDL_VERSION}-aarch64-apple-darwin.tar.gz`,
   );
-  expect(darwinArm.sha256).toBe("10dc23e994327ecc6e98d285802fcad1174608f203062cb18bac55b51976e0cb");
 
   const linuxX64 = rumdlAsset("linux", "x64");
   expect(linuxX64.url).toContain("x86_64-unknown-linux-musl.tar.gz");
-  expect(linuxX64.sha256).toBe("bd4049763e93d6c25420ec086dee6690af31efc85af463c3ecf5d686a5fcf762");
 });
 
 test("rumdlAsset throws on an unsupported platform", () => {
