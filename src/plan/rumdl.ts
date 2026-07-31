@@ -79,15 +79,30 @@ export function rumdlAsset(
   return asset;
 }
 
-// The formatting-only rumdl config (EXC-828): the .rumdl.toml MD013 block,
-// verbatim from the ticket. No [global] lint rules — `rumdl fmt` applies fixes and
-// won't fail on leftover lint, so this is formatting-only by construction.
+// The formatting-only rumdl config (EXC-828). No [global] lint rules — `rumdl fmt`
+// applies fixes and won't fail on leftover lint, so this is formatting-only by
+// construction.
+//
+// It shares .rumdl.toml's 90-column MD013 shape but deliberately diverges on the
+// exemption trio (EXC-931): plans are read in a no-wrap viewer, where an atom that
+// cannot be broken — a link's URL, an inline code span — only fragments the sentence
+// around it when it counts against the budget. The repo's own markdown is read and
+// edited in a text editor, so .rumdl.toml keeps measuring those atoms.
+//
+// `reflow-length-exemptions` turns the exemptions on; the two below say which atoms
+// they cover. Both are stated explicitly because this block is where the divergence
+// lives: `ignore-link-urls` already defaults to true but is load-bearing here, and
+// `code-spans` is inverted — it means "measure code spans", so exempting them is
+// `false`.
 const RUMDL_CONFIG = `[MD013]
 line-length = 90
 code-blocks = false
 tables      = false
 reflow      = true
 reflow-mode = "normalize"
+reflow-length-exemptions = true
+ignore-link-urls = true
+code-spans = false
 `;
 
 /** Download `asset.url` (via injectable `fetchImpl`), verify its sha256, extract
