@@ -10,6 +10,7 @@
   import type { FileRefSpan, FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
   import { tagFileRefTokens } from "$lib/diffview/fileRefTag.ts";
   import { type ComposedTokenHandlers, composeTokenHandlers } from "$lib/diffview/linkInteractions.ts";
+  import { clearLinkHighlights, paintLinkHighlights } from "$lib/diffview/linkHighlight.ts";
   import { type LinkSpanMap, openLinkInNewTab } from "$lib/diffview/links.ts";
   import { type SourceViewGutter, type SourceViewLibOptions, toFileOptions } from "$lib/diffview/options.ts";
   import { followCursorLine, scrollToLine } from "$lib/diffview/scroll.ts";
@@ -358,13 +359,19 @@
     if (root != null) paintSearchHighlights(root, searchMirror, searchIndexMirror);
   });
 
-  // Clear the document-global search highlights when this view unmounts (compare
-  // toggle, review switch) so they don't linger over a torn-down shadow root.
-  $effect(() => () => clearSearchHighlights());
+  // Clear the document-global search + link highlights when this view unmounts
+  // (compare toggle, review switch) so they don't linger over a torn-down shadow
+  // root.
+  $effect(() => () => {
+    clearSearchHighlights();
+    clearLinkHighlights();
+  });
 
-  // A stable empty map for the "no file references" case, so the tagging pass
-  // still clears any prior icons without allocating each repaint.
+  // Stable empty maps for the "no file references" / "no link layer" cases, so the
+  // tagging pass still clears any prior icons or link marks without allocating
+  // each repaint.
   const EMPTY_FILE_REFS: FileRefSpanMap = new Map();
+  const EMPTY_LINKS: LinkSpanMap = new Map();
   $effect(() => {
     const root = container?.shadowRoot;
     if (root == null) return;
@@ -374,6 +381,11 @@
     // starts each reference (EXC-687), re-applied on every repaint alongside the
     // code-block tagging so it survives the library's row rewrites.
     const refs = fileRefs;
+    // Same snapshot for the link layer: the resting-state link marks are
+    // painted as a CSS Custom Highlight over the rendered rows, so they rebuild
+    // alongside the tags after every repaint. `links` is memoized by the parent, so
+    // this stays a stable reference and doesn't re-arm the observer each render.
+    const linkSpans = links;
     let raf = 0;
     // Tag the rows, then wrap each overflowing block in its scroll card (EXC-729). Both re-run
     // after every library repaint via the observer below; syncCodeBlockCards is idempotent (an
@@ -386,6 +398,8 @@
       // Always run — the clear-stale pass lives inside tagFileRefTokens, so a
       // populated→empty transition still drops the prior icons.
       tagFileRefTokens(root, refs ?? EMPTY_FILE_REFS);
+      // Likewise unconditional — an empty map clears the prior link marks.
+      paintLinkHighlights(root, linkSpans ?? EMPTY_LINKS);
       // Re-apply the cursor tag after a repaint from the non-reactive mirror
       // (the reactive effect above owns applying a move).
       tagCursorRow(root, cursorMirror);

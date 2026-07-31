@@ -419,3 +419,27 @@ describe("the plan-search highlights (EXC-832, rehued EXC-905)", () => {
     expect(currentMatch).not.toContain("--accent");
   });
 });
+
+describe("the resting-state link mark", () => {
+  const linkRule = overrideDecls.match(/::highlight\(caret-link\)\s*\{[^}]*\}/)?.[0] ?? "";
+
+  // The extraction falls back to "" on a regex miss, and the assertions below
+  // would pass vacuously over one — pin non-emptiness first.
+  test("the rule is present to assert against", () => {
+    expect(linkRule).not.toBe("");
+  });
+
+  // The two properties a highlight pseudo supports that a link needs. Without
+  // the decoration a link reads as tinted prose; without the tint it reads as
+  // underlined prose. Both, or the affordance is half-drawn.
+  test("it tints the glyphs and dots the underline", () => {
+    expect(linkRule).toMatch(/color:\s*color-mix\([^)]*var\(--ink\)[^)]*var\(--accent\)/);
+    expect(linkRule).toMatch(/text-decoration:\s*underline dotted/);
+  });
+
+  // Amber stays scarce: a link takes a minority mix into the ink, not the accent
+  // itself, so a paragraph of links never reads as a page of selections.
+  test("the accent is mixed in, not spent whole", () => {
+    expect(linkRule).not.toMatch(/color:\s*var\(--accent[^)]*\)\s*;/);
+  });
+});

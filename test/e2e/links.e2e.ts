@@ -137,6 +137,32 @@ test("hovering a link token reveals a caret tooltip with the full href, not a na
   await expect.poll(() => tooltipHref(page)).toBeNull();
 });
 
+test("a link is marked before any hover, over its label only", async ({ daemon, page }) => {
+  await daemon.seed({ plan: LINK_PLAN });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.getByText("the cache docs")).toBeVisible();
+
+  // The display collapse leaves a link tokenized as ordinary prose, so
+  // its resting appearance comes from the caret-link CSS Custom Highlight — the
+  // only marker there is with the pointer elsewhere. Assert the painted ranges,
+  // not a computed style: ::highlight() styling is unreachable from
+  // getComputedStyle, and it is the RANGES that carry the fix (coreStyles.test.ts
+  // pins the tint + dotted underline the rule paints them with).
+  const marked = () =>
+    page.evaluate(() => [...(CSS.highlights.get("caret-link") ?? [])].map((r) => r.toString()));
+  await expect.poll(marked).toContain("the cache docs");
+
+  // Over the label ONLY. The line is one shiki token, so a mark that leaked to
+  // the token would underline the whole sentence — the reason this is a highlight
+  // and not a data-attribute tag like data-file-ref.
+  expect(await marked()).not.toContain("See the cache docs for the warm-restart design.");
+
+  // The javascript:-scheme link is not clickable, so it is not marked either —
+  // the mark tracks the same spans the click handler does.
+  expect((await marked()).join("\n")).not.toContain("this control");
+});
+
 test("hovering an ordinary code token reveals no tooltip", async ({ daemon, page }) => {
   await daemon.seed({ plan: LINK_PLAN });
   await page.goto("/");

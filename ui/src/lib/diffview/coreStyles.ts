@@ -499,6 +499,31 @@ const CARET_OVERRIDES = `
   ::highlight(caret-search-current) {
     background-color: var(--mark-active);
   }
+
+  /* The resting-state link mark. The link layer collapses [label](url)
+     to its label, so shiki paints a link as ordinary prose and it read as body
+     copy until hovered. linkHighlight.ts registers the exact link columns as the
+     "caret-link" highlight and this styles them — the only two properties a
+     highlight pseudo needs here, both of which it supports.
+
+     A LINK, not a marked region: the search pair above washes a background,
+     because a hit is a region of the document caret painted onto. A link is a
+     control the reader can act on, so it marks itself the way body text does —
+     the glyphs take the color and the underline sits under them. The tint is a
+     minority mix of the accent into --ink rather than the accent itself: amber
+     stays scarce and brand-reserved (the amber-selection-only strategy in
+     styles/diffview.css), and prose littered with full-strength accent would
+     spend it everywhere. Both operands carry light/dark variants, so the mix
+     resolves warm-on-dark and warm-on-paper without a second rule. The underline
+     is dotted and offset clear of the descenders — present at a glance, quiet
+     enough to read a paragraph through. Hover still adds the pointer cursor and
+     the href tooltip (linkInteractions.ts); this is what the link looks like
+     before the pointer arrives. */
+  ::highlight(caret-link) {
+    color: color-mix(in lab, var(--ink), var(--accent) 45%);
+    text-decoration: underline dotted;
+    text-underline-offset: 0.22em;
+  }
 `;
 
 // Constructable sheets shared across every view's shadow root, the override
