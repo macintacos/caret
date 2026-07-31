@@ -1,14 +1,28 @@
 # caret dev — markdown rendering stress test
 
-> **This is a local `mise run dev` fixture, not a real plan.** It exists to exercise every
-> markdown rendering path in the review webview — headings, lists, tables, code
-> highlighting, sanitization, and overflow — so visual regressions show up at a glance.
-> Look for the **`local build`** badge in the top bar; if you see it, you're looking at
-> this seed.
+<!--
+Keep this comment BELOW the h1: review titles derive from the plan's first non-empty line
+(deriveTitle, src/review/threading.ts), so a comment above the heading becomes the title.
 
-The renderer is `marked` (GFM on, `breaks` off) → DOMPurify (strict allowlist) → Shiki
-(dual-theme). The sections below each target a slice of that pipeline. Edit this file and
-the dev driver reseeds it, so it doubles as a live scratchpad for renderer work.
+Write this file the way an agent writes a plan: every paragraph and every list item on
+ONE long line, wrapped nowhere. Do not hand-wrap it, and do not run rumdl over it.
+
+It is excluded from the repo's markdown tooling on purpose (.rumdl.toml `exclude`, and
+`exclude` on both rumdl steps in hk.pkl). caret reflows every incoming plan at ingest
+through its own config (src/plan/rumdl.ts), and this file is the input that reflow is
+tested against — so it has to arrive unformatted, as real agent output does. Wrapping it
+here would pre-break lines under a config with no reflow exemptions, and caret's reflow
+never rejoins a line something else already broke, so the fixture would quietly stop
+testing anything.
+
+The plan view shows stored plan text as markdown SOURCE, so this comment is visible in
+the UI. That is fine — it belongs to the fixture.
+-->
+
+
+> **This is a local `mise run dev` fixture, not a real plan.** It exists to exercise every markdown rendering path in the review webview — headings, lists, tables, code highlighting, sanitization, and overflow — so visual regressions show up at a glance. Look for the **`local build`** badge in the top bar; if you see it, you're looking at this seed.
+
+The renderer is `marked` (GFM on, `breaks` off) → DOMPurify (strict allowlist) → Shiki (dual-theme). The sections below each target a slice of that pipeline. Edit this file and the dev driver reseeds it, so it doubles as a live scratchpad for renderer work.
 
 ## Contents
 
@@ -28,14 +42,11 @@ the dev driver reseeds it, so it doubles as a live scratchpad for renderer work.
 
 ## Headings
 
-The first heading in the document is normalized to an `h1` regardless of its authored
-level; every heading below keeps its level so the table-of-contents rail and scrollspy
-have a full ladder.
+The first heading in the document is normalized to an `h1` regardless of its authored level; every heading below keeps its level so the table-of-contents rail and scrollspy have a full ladder.
 
 ### Heading level three
 
-Body copy under an `h3`. Headings should keep comfortable vertical rhythm and not collide
-with the paragraph that follows them.
+Body copy under an `h3`. Headings should keep comfortable vertical rhythm and not collide with the paragraph that follows them.
 
 #### Heading level four
 
@@ -51,13 +62,9 @@ Body copy under an `h6` — the deepest level, often rendered close to body size
 
 ## Inline formatting
 
-A paragraph with **bold**, *italic*, ***bold italic***, `inline code`, and
-~~strikethrough~~ text, plus a [relative link](#tables), an
-[external link](https://example.com/docs/markdown), and a bare autolink
-https://example.com/autolinked?q=1&lang=en that GFM should turn into an anchor.
+A paragraph with **bold**, *italic*, ***bold italic***, `inline code`, and ~~strikethrough~~ text, plus a [relative link](#tables), an [external link](https://example.com/docs/markdown), and a bare autolink https://example.com/autolinked?q=1&lang=en that GFM should turn into an anchor.
 
-Inline code can hold awkward characters: `const re = /^\s*#{1,6}\s+/g;` and
-`rm -rf "$dir"/*.tmp`.
+Inline code can hold awkward characters: `const re = /^\s*#{1,6}\s+/g;` and `rm -rf "$dir"/*.tmp`.
 
 A footnote-style reference[^1] and an inline image:
 
@@ -88,9 +95,7 @@ Ordered, with a nested unordered list and a restart:
    1. nested ordered
    2. nested ordered two
 
-Task list (GFM). Note: the `<input type="checkbox">` markup is **stripped by DOMPurify**
-(it is not on the tag allowlist), so these render as plain items — an intentional
-sanitizer demonstration:
+Task list (GFM). Note: the `<input type="checkbox">` markup is **stripped by DOMPurify** (it is not on the tag allowlist), so these render as plain items — an intentional sanitizer demonstration:
 
 - [x] Build the daemon
 - [x] Serve the UI
@@ -197,8 +202,7 @@ fn main() {
 }
 ```
 
-Lua — outside the old scoped bundle, so it rendered plain before EXC-665; it must now
-highlight like the rest:
+Lua — outside the old scoped bundle, so it rendered plain before EXC-665; it must now highlight like the rest:
 
 ```lua
 -- iterative fibonacci
@@ -252,8 +256,7 @@ CSS:
 }
 ```
 
-A `text` fence — non-code content (a directory tree). Per the plan-format rule, non-code
-blocks are tagged `text` so they never count as untagged:
+A `text` fence — non-code content (a directory tree). Per the plan-format rule, non-code blocks are tagged `text` so they never count as untagged:
 
 ```text
 caret/
@@ -275,10 +278,7 @@ $ mise run dev
 ==> vite ready on http://localhost:5173
 ```
 
-An **unrecognized language** — caret now bundles shiki's full grammar set (EXC-665), so
-this plain-fallback path only fires for a tag shiki has no grammar for at all (here
-PlantUML — shiki ships no `plantuml` grammar). It must still fall back to a plain
-`<pre><code>` without crashing:
+An **unrecognized language** — caret now bundles shiki's full grammar set (EXC-665), so this plain-fallback path only fires for a tag shiki has no grammar for at all (here PlantUML — shiki ships no `plantuml` grammar). It must still fall back to a plain `<pre><code>` without crashing:
 
 ```plantuml
 @startuml
@@ -287,11 +287,7 @@ daemon -> browser : review
 @enduml
 ```
 
-Very long lines (EXC-729) — a code block whose lines run well past the panel's width. Per
-the fix these must stay **inside** the panel and scroll horizontally: the whole block
-scrolls as one unit so the aligned columns stay aligned, and a line must never wrap or
-break out of the code block's background. Scroll the longest line to its end — the shorter
-lines follow it, while the short `project.yml` row (which fits) stays put:
+Very long lines (EXC-729) — a code block whose lines run well past the panel's width. Per the fix these must stay **inside** the panel and scroll horizontally: the whole block scrolls as one unit so the aligned columns stay aligned, and a line must never wrap or break out of the code block's background. Scroll the longest line to its end — the shorter lines follow it, while the short `project.yml` row (which fits) stays put:
 
 ```text
 Sieve/App/SieveApp.swift              @main App, WindowGroup { RootView() } — installs the root scene, its window styling, and the shared AppModel every feature module reads
@@ -316,55 +312,34 @@ Text below the rule.
 
 ## Overflow and edge cases
 
-A very long unbroken token that must wrap or scroll rather than blow out the layout:
-`supercalifragilisticexpialidocious_pneumonoultramicroscopicsilicovolcanoconiosis_antidisestablishmentarianism_floccinaucinihilipilification`
+A very long unbroken token that must wrap or scroll rather than blow out the layout: `supercalifragilisticexpialidocious_pneumonoultramicroscopicsilicovolcanoconiosis_antidisestablishmentarianism_floccinaucinihilipilification`
 
 A long URL in a link:
 [a very long query string](https://example.com/search?q=markdown+rendering+stress+test&category=ui&sort=relevance&page=1&per_page=100&include=headings,tables,code,quotes&debug=true).
 
-A long inline-code run:
-`const ALL_THE_THINGS = ["alpha","bravo","charlie","delta","echo","foxtrot","golf","hotel","india","juliett","kilo","lima","mike"];`
+A long inline-code run: `const ALL_THE_THINGS = ["alpha","bravo","charlie","delta","echo","foxtrot","golf","hotel","india","juliett","kilo","lima","mike"];`
 
-Unicode and emoji: café, naïve, Ω≈ç√∫, 你好, مرحبا, 🚀 ✅ ⚠️ — confirming the font stack
-and direction handling don't break.
+Unicode and emoji: café, naïve, Ω≈ç√∫, 你好, مرحبا, 🚀 ✅ ⚠️ — confirming the font stack and direction handling don't break.
 
-A paragraph that is simply long, to check measure and line-height across a wide column:
-the quick brown fox jumps over the lazy dog, and then the quick brown fox jumps over the
-lazy dog again, and once more for good measure, until the paragraph is comfortably longer
-than a single visual line on most viewports and wrapping behavior becomes observable.
+A paragraph that is simply long, to check measure and line-height across a wide column: the quick brown fox jumps over the lazy dog, and then the quick brown fox jumps over the lazy dog again, and once more for good measure, until the paragraph is comfortably longer than a single visual line on most viewports and wrapping behavior becomes observable.
 
 ## Reflow exemptions
 
-Plans are reflowed through `rumdl fmt` at 90 columns before they render, with a link's URL
-and an inline code span exempt from that measurement — an atom nobody can break should not
-fragment the sentence around it. The exemption is from measurement only, so a line
-carrying one ends up wider than 90 and scrolls rather than wrapping.
+Every case below arrives on one unwrapped line, the way an agent emits it, and caret reflows it at ingest to 90 columns with link URLs and inline code spans exempt from that measurement — an atom nobody can break should not fragment the sentence around it. The exemption is from measurement only, so a line carrying one of those atoms settles wider than 90 and scrolls rather than wrapping.
 
-Cases 2 and 8 are where that shows: the code span sits inline with its prose, and the
-short link's line overruns the budget intact. The rest are regression anchors and should
-look unremarkable. In particular, exempting a URL stops a link from *causing* a wrap but
-never rejoins a line the source already broke — this fixture is tracked, so the repo's own
-pre-commit `rumdl fmt` rewraps it under `.rumdl.toml`, which does measure URLs, leaving
-cases 1 and 5 pre-split and isolated. That is the expected shape, not a regression.
+Read each case as a whole sentence: the prose around a link or code span should stay with it rather than being pushed onto its own line. A line whose *visible* text alone exceeds 90 still wraps — only the URL is exempt, never the link text — so case 1 is expected to break where the others do not.
 
-**1. Link text past 90.**
-[a link whose visible text alone runs well past ninety columns before its URL is even measured](https://example.com/reflow/long-text)
+**1. Link text past 90.** [a link whose visible text alone runs well past ninety columns before its URL is even measured](https://example.com/reflow/long-text) and prose trailing after it.
 
-**2. Long code span mid-sentence.** Prose ahead of the span,
-`const EXEMPTIONS = ["reflow-length-exemptions", "ignore-link-urls", "code-spans"] as const;`
-and prose behind it.
+**2. Long code span mid-sentence.** Prose ahead of the span, `const EXEMPTIONS = ["reflow-length-exemptions", "ignore-link-urls", "code-spans"] as const;` and prose behind it.
 
-**3. Bare autolink.**
-https://example.com/reflow/autolink?q=exemption&cols=90&mode=normalize followed by a few
-words.
+**3. Bare autolink.** https://example.com/reflow/autolink?q=exemption&cols=90&mode=normalize followed by a few words.
 
-**4. Reference link.** A [reference-style link][reflow-ref] whose definition sits at the
-end of this section.
+**4. Reference link.** A [reference-style link][reflow-ref] whose definition sits at the end of this section.
 
 **5. In a list item.**
 
-- [a long link inside a list item](https://example.com/reflow/list-item?cols=90&mode=normalize)
-  and trailing prose on the same item.
+- [a long link inside a list item](https://example.com/reflow/list-item?cols=90&mode=normalize) and trailing prose on the same item.
 
 **6. In a table cell.**
 
@@ -376,16 +351,13 @@ end of this section.
 
 ![reflow probe image](https://example.com/img/reflow/probe.png?cols=90&mode=normalize&cache=0)
 
-**8. Short link, long line.** A link comfortably under ninety characters
-[such as this one](https://example.com/reflow/short) that still carries its line past the
-budget on the strength of the prose around it.
+**8. Short link, long line.** A link comfortably under ninety characters [such as this one](https://example.com/reflow/short) that still carries its line past the budget on the strength of the prose around it.
 
 [reflow-ref]: https://example.com/reflow/reference-definition?cols=90&mode=normalize
 
 ## Sanitizer probes
 
-The block below is shown **as source** (inside a tagged `html` fence) so you can read what
-is being attempted — it is highlighted, not executed:
+The block below is shown **as source** (inside a tagged `html` fence) so you can read what is being attempted — it is highlighted, not executed:
 
 ```html
 <script>alert("xss")</script>
@@ -394,44 +366,28 @@ is being attempted — it is highlighted, not executed:
 <div style="position: fixed; inset: 0; z-index: 9999">overlay</div>
 ```
 
-Below, the same markup appears **raw** so DOMPurify actually processes it live. Expected:
-the `<script>` and `<iframe>` are removed entirely, the `onclick` handler and the
-`position: fixed` style are stripped (only Shiki dual-theme styles survive the style
-hook), while the anchor text and plain content remain.
+Below, the same markup appears **raw** so DOMPurify actually processes it live. Expected: the `<script>` and `<iframe>` are removed entirely, the `onclick` handler and the `position: fixed` style are stripped (only Shiki dual-theme styles survive the style hook), while the anchor text and plain content remain.
 
 <script>alert("xss")</script>
 <iframe src="https://evil.example.com"></iframe>
 <a href="#" onclick="steal()">a sanitized link</a>
 <div style="position: fixed; inset: 0; z-index: 9999">this should not pin to the viewport</div>
 
-If anything in the paragraph above escapes the sanitizer — an alert fires, an iframe
-loads, or the overlay covers the page — that is a real security regression in
-`ui/src/lib/render.ts`.
+If anything in the paragraph above escapes the sanitizer — an alert fires, an iframe loads, or the overlay covers the page — that is a real security regression in `ui/src/lib/render.ts`.
 
 ## Filename references
 
-EXC-687: a filename written in **inline code** that resolves to a real file under the
-review's working directory gets a small file icon to its left, and hovering the reference
-reveals a syntax-highlighted excerpt of that file — the head of the file, or a window
-centered on the referenced line when the reference carries a `:line`. The affordance is
-scoped to inline code (a bare-prose path renders as one coarse token with nowhere to hang
-the icon), and a path that does not resolve stays completely inert — no icon, no hover —
-so a made-up reference never masquerades as a link.
+EXC-687: a filename written in **inline code** that resolves to a real file under the review's working directory gets a small file icon to its left, and hovering the reference reveals a syntax-highlighted excerpt of that file — the head of the file, or a window centered on the referenced line when the reference carries a `:line`. The affordance is scoped to inline code (a bare-prose path renders as one coarse token with nowhere to hang the icon), and a path that does not resolve stays completely inert — no icon, no hover — so a made-up reference never masquerades as a link.
 
-The list below points at stable, top-level files so the check keeps working as the tree
-around it changes. Hover each to verify:
+The list below points at stable, top-level files so the check keeps working as the tree around it changes. Hover each to verify:
 
 - `package.json` — a real file: shows the icon; the hover previews the head of the file.
 - `README.md` — another real file, for a second icon to eyeball beside the first.
-- `README.md:37` — the same file with a line: the excerpt is centered on line 37 (a small
-  ±6-line snippet) instead of the head.
-- `src/does-not-exist.ts` — a path deliberately **not** in the repo: it must show **no**
-  icon and **no** hover. If it ever sprouts one, the existence gate has regressed.
+- `README.md:37` — the same file with a line: the excerpt is centered on line 37 (a small ±6-line snippet) instead of the head.
+- `src/does-not-exist.ts` — a path deliberately **not** in the repo: it must show **no** icon and **no** hover. If it ever sprouts one, the existence gate has regressed.
 
 ---
 
 ## Out of scope
 
-This fixture renders only; there is nothing to approve here. Use **Request changes** to
-watch the dev driver thread a revision onto this plan, or **Approve** to have it reseed a
-fresh copy.
+This fixture renders only; there is nothing to approve here. Use **Request changes** to watch the dev driver thread a revision onto this plan, or **Approve** to have it reseed a fresh copy.
