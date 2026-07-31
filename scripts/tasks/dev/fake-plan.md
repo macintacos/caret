@@ -325,9 +325,9 @@ A paragraph that is simply long, to check measure and line-height across a wide 
 
 ## Reflow exemptions
 
-Every case below arrives on one unwrapped line, the way an agent emits it, and caret reflows it at ingest to 90 columns with link URLs and inline code spans exempt from that measurement — an atom nobody can break should not fragment the sentence around it. The exemption is from measurement only, so a line carrying one of those atoms settles wider than 90 and scrolls rather than wrapping.
+Every case below arrives on one unwrapped line, the way an agent emits it, and caret reflows it at ingest to 90 columns with a link's URL exempt from that measurement — a URL nobody can break should not fragment the sentence around it. The exemption is from measurement only, so a line carrying a link settles wider than 90 and scrolls rather than wrapping.
 
-Read each case as a whole sentence: the prose around a link or code span should stay with it rather than being pushed onto its own line. A line whose *visible* text alone exceeds 90 still wraps — only the URL is exempt, never the link text — so case 1 is expected to break where the others do not.
+Read each link case as a whole sentence: the prose around the link should stay with it rather than being pushed onto its own line. Two cases are expected to break anyway. Case 1's *visible* link text alone exceeds 90, and only the URL is exempt, never the link text. Case 2's inline code span is not exempt either — `code-spans` is left at its default, so a long span still counts against the budget and lands on its own line with the sentence split around it.
 
 **1. Link text past 90.** [a link whose visible text alone runs well past ninety columns before its URL is even measured](https://example.com/reflow/long-text) and prose trailing after it.
 

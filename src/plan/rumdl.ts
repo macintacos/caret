@@ -83,22 +83,23 @@ export function rumdlAsset(
 // applies fixes and won't fail on leftover lint, so this is formatting-only by
 // construction.
 //
-// It shares .rumdl.toml's 90-column MD013 shape but deliberately diverges on the
-// exemption trio (EXC-931): plans are read in a no-wrap viewer, where an atom that
-// cannot be broken — a link's URL, an inline code span — only fragments the sentence
-// around it when it counts against the budget. The repo's own markdown is read and
-// edited in a text editor, so .rumdl.toml keeps measuring those atoms.
+// It shares .rumdl.toml's 90-column MD013 shape but deliberately diverges on link
+// URLs (EXC-931): plans are read in a no-wrap viewer, where a URL nobody can break
+// only fragments the sentence around it when it counts against the budget. The
+// repo's own markdown is read and edited in a text editor, so .rumdl.toml keeps
+// measuring URLs.
 //
-// The exemption is from *measurement*, so a line carrying such an atom ends up
-// physically wider than 90 by roughly the atom's length — reflow packs prose up to
-// 90 measured columns and the exempt atom rides on top. Accepted deliberately: a
-// line that scrolls beats a sentence chopped around an isolated atom, and the plan
-// reader scrolls rather than wraps either way. It also only governs what *causes* a
-// break — a link the source already put on its own line stays there.
+// The exemption is from *measurement*, so a line carrying a link ends up physically
+// wider than 90 by roughly the URL's length — reflow packs prose up to 90 measured
+// columns and the URL rides on top. Accepted deliberately: a line that scrolls beats
+// a sentence chopped around an isolated link, and the plan reader scrolls rather
+// than wraps either way. It also only governs what *causes* a break — a link the
+// source already put on its own line stays there.
 //
 // `ignore-link-urls` already defaults to true but is load-bearing under
-// `reflow-length-exemptions`, so it is stated rather than inherited; `code-spans` is
-// inverted — it means "measure code spans", so exempting them is `false`.
+// `reflow-length-exemptions`, so it is stated rather than inherited. Inline code
+// spans are deliberately NOT exempt (`code-spans` is left at its default): a long
+// span still counts against the budget and is isolated onto its own line.
 const RUMDL_CONFIG = `[MD013]
 line-length = 90
 code-blocks = false
@@ -107,7 +108,6 @@ reflow      = true
 reflow-mode = "normalize"
 reflow-length-exemptions = true
 ignore-link-urls = true
-code-spans = false
 `;
 
 /** Download `asset.url` (via injectable `fetchImpl`), verify its sha256, extract

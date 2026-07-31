@@ -204,12 +204,6 @@ test("rumdlFormatPlan preserves fenced code verbatim", async () => {
   expect(out).toContain(fence);
 });
 
-test("rumdlFormatPlan keeps a long inline code span inline with its prose", async () => {
-  const span = `\`const XS = [${'"alpha","bravo","charlie","delta","echo",'.repeat(2)}];\``;
-  const out = await rumdlFormatPlan(`intro\n\nprefix ${span} suffix\n`);
-  expect(out).toContain(`prefix ${span} suffix`);
-});
-
 test("rumdlFormatPlan does not count a link's URL against the line budget", async () => {
   const url = "https://example.com/search?q=markdown+reflow&sort=relevance&per_page=100";
   const line = `padding padding padding padding [short link](${url}) end.`;
