@@ -20,8 +20,9 @@ the dev driver reseeds it, so it doubles as a live scratchpad for renderer work.
 6. [Code blocks](#code-blocks)
 7. [Horizontal rules](#horizontal-rules)
 8. [Overflow and edge cases](#overflow-and-edge-cases)
-9. [Sanitizer probes](#sanitizer-probes)
-10. [Filename references](#filename-references)
+9. [Reflow exemptions](#reflow-exemptions)
+10. [Sanitizer probes](#sanitizer-probes)
+11. [Filename references](#filename-references)
 
 ---
 
@@ -331,6 +332,54 @@ A paragraph that is simply long, to check measure and line-height across a wide 
 the quick brown fox jumps over the lazy dog, and then the quick brown fox jumps over the
 lazy dog again, and once more for good measure, until the paragraph is comfortably longer
 than a single visual line on most viewports and wrapping behavior becomes observable.
+
+## Reflow exemptions
+
+Plans are reflowed through `rumdl fmt` at 90 columns before they render, with a link's URL
+and an inline code span exempt from that measurement — an atom nobody can break should not
+fragment the sentence around it. Look for prose that stays whole around each link and span
+below. One caveat before calling any of this broken: exempting a URL stops a link from
+*causing* a wrap, but a link the source already placed on its own line stays there. This
+fixture is a tracked file, so the repo's own `rumdl fmt` pre-commit hook rewraps it under
+`.rumdl.toml`, which does measure URLs — case 1 and the long-URL cases therefore arrive
+pre-split and sit isolated on their own lines. That is the expected shape, not a
+regression. A code span is exempt outright, so case 2 rejoins its surrounding prose no
+matter how the source wrapped it.
+
+**1. Link text past 90.**
+[a link whose visible text alone runs well past ninety columns before its URL is even measured](https://example.com/reflow/long-text)
+
+**2. Long code span mid-sentence.** Prose ahead of the span,
+`const EXEMPTIONS = ["reflow-length-exemptions", "ignore-link-urls", "code-spans"] as const;`
+and prose behind it.
+
+**3. Bare autolink.**
+https://example.com/reflow/autolink?q=exemption&cols=90&mode=normalize followed by a few
+words.
+
+**4. Reference link.** A [reference-style link][reflow-ref] whose definition sits at the
+end of this section.
+
+**5. In a list item.**
+
+- [a long link inside a list item](https://example.com/reflow/list-item?cols=90&mode=normalize)
+  and trailing prose on the same item.
+
+**6. In a table cell.**
+
+| Case | Link                                                                                        |
+| ---- | ------------------------------------------------------------------------------------------- |
+| Cell | [a long link in a table cell](https://example.com/reflow/table-cell?cols=90&mode=normalize) |
+
+**7. Image with a long URL.**
+
+![reflow probe image](https://example.com/img/reflow/probe.png?cols=90&mode=normalize&cache=0)
+
+**8. Short link, long line.** A link comfortably under ninety characters
+[such as this one](https://example.com/reflow/short) that still carries its line past the
+budget on the strength of the prose around it.
+
+[reflow-ref]: https://example.com/reflow/reference-definition?cols=90&mode=normalize
 
 ## Sanitizer probes
 
