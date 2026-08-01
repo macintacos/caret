@@ -2,8 +2,9 @@
 #
 # Hermetic tests for scripts/bootstrap.sh — the dep-free preamble a mise task
 # forwarder sources before it reaches bun (EXC-932). Each case builds a throwaway
-# checkout root plus a PATH holding nothing but stubs, sources the script in a
-# fresh shell, and asserts on what the fake `mise` was asked to do.
+# checkout root plus a PATH holding nothing but stubs and the one coreutil the
+# script needs, sources the script in a fresh shell, and asserts on what the fake
+# `mise` was asked to do — and where it was asked to do it.
 #
 #   bash scripts/bootstrap.test.sh
 #
@@ -26,26 +27,28 @@ assert_contains() {
   esac
 }
 
-# A throwaway checkout root holding just the script under test. It resolves its
-# root from ${BASH_SOURCE[0]}, so this fixture is what it sees regardless of cwd.
+# A throwaway checkout root holding just the script under test. Reported as its
+# physical path, because the script resolves its own root with `cd -P` — on
+# macOS a bare mktemp path is under the /var symlink and would never compare
+# equal to what the script computes.
 make_root() {
   local root
   root="$(mktemp -d "${TMPDIR:-/tmp}/caret-bootstrap.XXXXXX")"
   mkdir -p "$root/scripts"
   cp "$script" "$root/scripts/bootstrap.sh"
-  printf '%s' "$root"
+  (cd -P "$root" && pwd | tr -d '\n')
 }
 
-# A PATH holding a fake `mise` that logs its argv (and optionally fails on
-# `install`), plus the one real binary the script shells out to. Cases run with
-# PATH set to this alone, so a real bun on the developer's machine can't leak in
-# and turn a cold case warm.
+# A PATH holding a fake `mise` that logs its argv and cwd (and optionally fails
+# on `install`), plus the one real binary the script shells out to. Cases run
+# with PATH set to this alone, so a real bun on the developer's machine can't
+# leak in and turn a cold case warm.
 make_stub_path() {
   local stub install_rc="${1:-0}"
   stub="$(mktemp -d "${TMPDIR:-/tmp}/caret-bootstrap-bin.XXXXXX")"
   cat >"$stub/mise" <<STUB
 #!$bash_bin
-echo "\$*" >>"$stub/mise.log"
+echo "\$* @ \$PWD" >>"$stub/mise.log"
 [ "\$1" = install ] && exit $install_rc
 exit 0
 STUB
@@ -54,25 +57,28 @@ STUB
   printf '%s' "$stub"
 }
 
-# Source the script the way a forwarder does, reporting both the exported marker
-# and the return code. env -i drops every inherited var so PATH is exactly $1.
+# Source the script the way a forwarder does, reporting the exported marker, the
+# return code, and the caller's cwd afterwards — the preamble must leave that
+# last one alone. env -i drops every inherited var, so PATH is exactly $1, and
+# the `cd /` makes the cwd assertion independent of where this suite was run.
 run_bootstrap() {
   # SC2016: the single quotes are the point — $1, $? and the marker must expand
   # in the inner shell that does the sourcing, not in this one.
   # shellcheck disable=SC2016
-  env -i PATH="$1" HOME="$HOME" "$bash_bin" -c '
-    source "$1"; rc=$?; echo "MARKER=${CARET_BOOTSTRAPPED:-unset} RC=$rc"
+  env -i PATH="$1" "$bash_bin" -c '
+    cd /; source "$1"; rc=$?
+    echo "MARKER=${CARET_BOOTSTRAPPED:-unset} RC=$rc PWD=[$PWD]"
   ' _ "$2/scripts/bootstrap.sh"
 }
 
-# --- 1. cold: no deps, no bun — installs everything -----------------------
+# --- 1. cold: no deps, no bun — installs everything, at the root ----------
 root="$(make_root)"
 stub="$(make_stub_path)"
 out="$(run_bootstrap "$stub" "$root" 2>&1)"
-assert_contains "$out" "MARKER=1 RC=0" "cold: exports the marker and returns 0"
-assert_contains "$(cat "$stub/mise.log" 2>&1)" 'install
-exec -- bun install
-exec -- bun ui/generate-palette-css.ts' "cold: mise install, then bun install, then the palette generator"
+assert_contains "$out" "MARKER=1 RC=0 PWD=[/]" "cold: exports the marker, returns 0, leaves the caller's cwd"
+assert_contains "$(cat "$stub/mise.log" 2>&1)" "install @ $root
+exec -- bun install @ $root
+exec -- bun ui/generate-palette-css.ts @ $root" "cold: mise install, bun install, then the palette generator — each at the checkout root"
 rm -rf "$root" "$stub"
 
 # --- 2. cold: aborts on the first failing step ----------------------------
@@ -81,7 +87,7 @@ stub="$(make_stub_path 1)"
 out="$(run_bootstrap "$stub" "$root" 2>&1)"
 assert_contains "$out" "MARKER=unset RC=1" "cold failure: returns non-zero, marker unset"
 log="$(cat "$stub/mise.log" 2>&1)"
-if [ "$log" = "install" ]; then
+if [ "$log" = "install @ $root" ]; then
   ok "cold failure: aborts before the bun steps"
 else
   fail "cold failure: aborts before the bun steps (log: $log)"
@@ -103,12 +109,20 @@ else
 fi
 rm -rf "$root" "$stub"
 
-# --- 4. warm needs BOTH conditions — node_modules alone isn't enough ------
+# --- 4 & 5. warm needs BOTH conditions — each alone takes the cold path ---
 root="$(make_root)"
 mkdir -p "$root/node_modules"
 stub="$(make_stub_path)"
 out="$(run_bootstrap "$stub" "$root" 2>&1)"
 assert_contains "$out" "MARKER=1 RC=0" "node_modules without bun still takes the cold path"
+rm -rf "$root" "$stub"
+
+root="$(make_root)"
+stub="$(make_stub_path)"
+printf '#!%s\nexit 0\n' "$bash_bin" >"$stub/bun"
+chmod +x "$stub/bun"
+out="$(run_bootstrap "$stub" "$root" 2>&1)"
+assert_contains "$out" "MARKER=1 RC=0" "bun without node_modules still takes the cold path"
 rm -rf "$root" "$stub"
 
 # --- summary --------------------------------------------------------------

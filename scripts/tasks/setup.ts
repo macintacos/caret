@@ -9,7 +9,11 @@
 import { paletteCssCommand } from "@/tasks/build.ts";
 import { runForward } from "@/tasks/lib/exec.ts";
 
-/** The commands `setup` runs, in order. */
+/**
+ * The commands `setup` runs, in order. `scripts/bootstrap.sh` re-implements the
+ * first three in bash for its cold path — a new step the tasks CLI needs in
+ * order to *load* has to be added there too, or a fresh clone still can't run.
+ */
 export function setupCommands(): string[][] {
   return [
     ["mise", "install"],
