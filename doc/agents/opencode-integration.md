@@ -31,7 +31,9 @@ this:
   (`tool({ description, args, execute })`).
 - An `experimental.chat.system.transform` hook injects a planning steer telling the Plan
   agent to call `caret_review_plan` (and a `tool.definition` hook redirects the native
-  `plan_exit` description toward it).
+  `plan_exit` description toward it). The steer is pushed **only for the plan agent** —
+  every other primary agent may call the tool but is not prompted toward it (§ The
+  subagent bypass).
 - The tool's `execute()` runs the review **synchronously and blocks** until the human
   decides, then returns an approval string or a change-request string (the reviewer
   feedback plus a resubmit instruction; the plan itself is not echoed back — the agent
@@ -42,6 +44,35 @@ this:
 This matches caret's "review the whole plan" semantic far better than OpenCode's
 per-action `permission.ask` hook, which fires per edit/bash and would gate individual
 actions, not the plan.
+
+### Why gating the steer needs a session→agent map
+
+`experimental.chat.system.transform` receives only `{ sessionID?, model }` — **no agent**.
+`chat.params` does carry `agent`, but fires **after** system.transform inside the same
+`LLMRequestPrep.prepare`, so it cannot prime the current turn. The only hook carrying both
+`sessionID` and `agent` *before* the transform is `chat.message`, which the plugin already
+registers for the daemon prewarm. So `chat.message` records the session's agent into a
+`Map` held in `createCaretPlugin`'s closure (injectable state, not a module global — see
+`typescript-rules.md`), and system.transform reads it back. No eviction: one short string
+per session, in a process already holding those sessions.
+
+Two knock-on wins. OpenCode calls system.transform from a **second** site
+(`Agent.generate`, generating an agent config) with no `sessionID` at all, so the gate
+also stops the steer leaking into that unrelated prompt; and a session whose agent was
+never observed gets *no* steer rather than a wrong one.
+
+**Known gap, accepted.** A turn that reaches the model without a preceding `chat.message`
+in this process — a resumed session's first synthetic turn — finds no map entry and skips
+the steer. The safety net is already in place: the `tool.definition` hook rewrites
+`plan_exit`'s description to point at `caret_review_plan`, and `plan_exit` is permitted
+only on the `plan` agent, so the plan agent is still routed to caret even on a missed
+steer.
+
+That safety net does **not** make the steer redundant, and the two are not
+interchangeable. The `plan_exit` rewrite is *reactive* — it only fires once the model has
+already reached for `plan_exit`. The steer is *proactive*: it tells a model that would
+otherwise just narrate its plan in prose to call the tool at all. Both are kept because a
+model that never considers `plan_exit` is exactly the case the rewrite cannot catch.
 
 ## The bridge: the plugin spawns `caret review`
 
@@ -63,14 +94,23 @@ unit-tested in `test/opencode/`. Config mutation is the adapter's, not the plugi
 lives in `src/adapters/opencode/config-plugin.ts` and is covered from
 `test/adapters/opencode/`.
 
-## Daemon warm-up: plan-agent parity, not session start (EXC-838)
+## Daemon warm-up: plan-agent only, not session start (EXC-838)
 
 The plugin warms caret's daemon by fire-and-forget spawning `caret prewarm` from its
-`chat.message` hook whenever the message is addressed to a planning agent — the same
-`isPlanningAgent` guard the review tool's `execute()` uses. It is the counterpart to
-Claude Code's `PostToolUse`/`EnterPlanMode` prewarm hook, for which OpenCode offers no
-equivalent event: absent this hook the daemon only comes up when the first
-`caret_review_plan` call spawns `caret review`.
+`chat.message` hook whenever the message is addressed to a planning agent
+(`isPlanningAgent`). It is the counterpart to Claude Code's `PostToolUse`/`EnterPlanMode`
+prewarm hook, for which OpenCode offers no equivalent event: absent this hook the daemon
+only comes up when the first `caret_review_plan` call spawns `caret review`.
+
+**Why the warm stays plan-only even though any primary agent may call the tool.** The plan
+agent is the one whose turn *reliably* ends in a review; a `build`-agent review is an
+explicit, occasional act. Warming on every `build` message would spawn a process on the
+busiest traffic in the session to save ~0.4 s in the rare case — and the 60 s idle-exit
+below means a warm triggered by an unrelated `build` message is usually dead before any
+review lands anyway. So non-plan callers accept the cold spawn. `chat.message` therefore
+does two things with different scopes: record the session's agent (always — that is what §
+Why gating the steer needs a session→agent map reads back) and warm the daemon (plan
+only).
 
 **Why not a plugin-load (session-start) warm.** EXC-838 proposed warming at true session
 start — a `SessionStart` hook for Claude Code, a plugin-load warm here. Two measurements
@@ -110,16 +150,54 @@ against a bad path and against a recording shim.
 OpenCode's `tool.execute.before` hook **does not fire for tool calls made by subagents**
 (the `task` tool) — a known gap (sst/opencode#5894). A gate that relies only on that hook
 can be bypassed by delegating to a subagent. caret therefore does **not** rely on a hook
-firing for subagents. The `config` hook restricts the review tool to primary agents — it
-adds `caret_review_plan` to `experimental.primary_tools` (blocking subagents) and sets
-per-agent `permission` (`allow` on `plan`, `deny` on `build`) — and the tool body
-re-checks the caller (`isPlanningAgent`). Defense in depth: even if a future OpenCode
-version changes hook propagation, the primary-tools restriction plus the in-body check
-still hold.
+firing for subagents. Two mechanisms, both independent of hook propagation:
 
-`applyCaretConfig` is idempotent and preservation-safe (it keeps existing `primary_tools`,
-agent modes, and other permissions) and normalizes the degenerate "permission is a bare
-string" shape before writing, so it can't corrupt a user's config.
+- **`experimental.primary_tools`** — the enforcing gate. The `config` hook adds
+  `caret_review_plan` to that array, and OpenCode's `task` tool turns every entry into an
+  explicit `{ permission, pattern: "*", action: "deny" }` rule injected into the
+  subagent's session at creation. Subagents cannot call the tool at all.
+- **The in-body session check** — second-line defense. `execute()` reads the calling
+  session and refuses when it has a `parentID`. The signal is the session *shape*, not the
+  agent name: `task` always creates a child session, so a `parentID` is an exact,
+  mode-independent marker — where an agent-name test is not, since a user-defined agent
+  defaults to `mode: "all"` and is legitimately both primary and subagent.
+
+**The tool is available to every primary agent.** It grants no permission and gates no
+edit, so a narrow permission never prevented unreviewed work — a `build` agent could
+always ship without calling it. All a narrow permission did was stop an agent from
+*voluntarily* asking for a review, which is the opposite of what caret wants. The workflow
+this unblocks: skills that must run under `build` (they write outside what OpenCode's
+`plan` agent permits) can hand any markdown to caret's review UI, not just a plan.
+
+**The in-body check's failure fallback is `allow`,** deliberately inverting this file's
+usual fail-safe-deny rule. That rule governs review *decisions*, where a deny stops
+unreviewed work from shipping. Here a refusal would not prevent unreviewed work; it would
+only remove the review option from every primary caller the moment the SDK shifts — the
+exact failure this widening exists to remove. So a missing client, an absent
+`session.get`, an error payload, and a thrown request all fall through to permitting the
+call, and `primary_tools` carries the enforcement.
+
+`applyCaretConfig` writes exactly one per-agent permission: `allow` for
+`caret_review_plan` on the `plan` agent, and only when the agent has no entry of its own.
+Every other primary agent is left untouched — OpenCode's base ruleset permits an unknown
+tool id, so the *absence* of an entry is what makes the tool available. The `plan` entry
+is worth its one line because a user with a restrictive global
+`permission: { "*": "deny" }` would otherwise lose the tool on the one agent that depends
+on it; agent-level permission merges after the global ruleset, so the entry is what
+rescues it. The helper stays idempotent and preservation-safe (it keeps existing
+`primary_tools`, agent modes, other permissions, and any review-tool permission the user
+set themselves) and normalizes the degenerate "permission is a bare string" shape before
+writing, so it can't corrupt a user's config.
+
+**One consequence, unresolved.** That rescue reaches `plan` and only `plan`. A user with a
+global `permission: { "*": "deny" }` therefore keeps the tool on the plan agent and loses
+it everywhere else — so "any primary agent can ask for a review" holds for the default
+config but not for the very config the retained line exists to survive. Writing the allow
+into the **global** `permission` map instead would cover every primary at the same cost,
+and subagents should still be blocked (the `task` tool appends its `primary_tools` denies
+ahead of inherited rules). "Should" is the reason this is not done here: that precedence
+was not confirmable from the minified binary with the confidence the per-agent claim got,
+so it wants the live check § Verified vs. follow-up already schedules.
 
 ## How it maps onto caret's two-layer split
 
@@ -287,14 +365,18 @@ it.
 
 **Verified in this repo (unit + integration tests, no live OpenCode required):** the
 adapter's parse/emit/probe/fatal-deny; the plugin's pure logic + the tool's `execute()`
-through a stubbed spawn runner (approve / deny / subagent-refusal); the config-hook
-restriction; the `chat.message` warm hook (warms for the plan agent, not for a
-build/unknown caller) and the production warm runner it hides (survives a bad binary's
-async spawn error, and runs `prewarm` with `CARET_AGENT=opencode`); the entrypoint's
-`Object.values`-single-Plugin invariant; the config-array editor (add/remove,
-comment-preserving); `--target` parsing + dispatch; the `claude` target's CLI command
-sequence; the runtime bin/version resolvers; and the update check (toasts when behind,
-silent on error / opt-out).
+through a stubbed spawn runner (approve / deny / a child-session refusal / a `build` and a
+user-defined agent proceeding / the allow-on-unreadable-session fallback in each of its
+three shapes); the config hook (writes `primary_tools`, leaves other agents untouched,
+never overwrites a user's own review-tool permission); the steer gate (plan agent yes,
+`build` no, no `sessionID` no, unseen session no, agent switching mid-session); the
+`chat.message` warm hook (warms for the plan agent only — not for a build or unknown
+caller — even though it records every session's agent) and the production warm runner it
+hides (survives a bad binary's async spawn error, and runs `prewarm` with
+`CARET_AGENT=opencode`); the entrypoint's `Object.values`-single-Plugin invariant; the
+config-array editor (add/remove, comment-preserving); `--target` parsing + dispatch; the
+`claude` target's CLI command sequence; the runtime bin/version resolvers; and the update
+check (toasts when behind, silent on error / opt-out).
 
 **Confirmed against a live OpenCode (1.17.x) — pre-EXC-794 (file-deploy path):** that a
 local plugin file resolves `@opencode-ai/plugin` only when a config-dir `package.json`
@@ -304,8 +386,10 @@ manifest is present. The array install's live round-trip (below) supersedes this
 install's live round-trip — add `@macintacos/caret` to a real OpenCode `plugin` array (or
 run `caret install --target opencode`), restart 1.17.x, and confirm the package resolves,
 `caret_review_plan` registers, the planning steer routes the Plan agent to it end-to-end,
-and the update toast fires when the plugin is behind. This mirrors the Codex adapter's
-live-contract follow-up (EXC-549) and the upgrade story tracked in EXC-383.
+a **`build`-agent** call is offered rather than denied and completes its round-trip while
+that session receives no unprompted steer, and the update toast fires when the plugin is
+behind. This mirrors the Codex adapter's live-contract follow-up (EXC-549) and the upgrade
+story tracked in EXC-383.
 
 ## Sources
 

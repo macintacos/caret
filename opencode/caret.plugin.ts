@@ -12,8 +12,10 @@
 //
 // Subagent-bypass mitigation: OpenCode's tool.execute.before does not fire for
 // subagent tool calls, so caret does NOT rely on a hook to gate subagents. The
-// config hook restricts the tool to primary agents (experimental.primary_tools +
-// per-agent permission), and the tool body re-checks the caller — defense in depth.
+// config hook marks the tool primary-only (experimental.primary_tools), which
+// OpenCode turns into a deny rule on every subagent session it creates, and the
+// tool body re-checks the calling session's shape — defense in depth. Any PRIMARY
+// agent may ask for a review; only the plan agent is steered toward it.
 //
 // This file runs in-process inside OpenCode. It ships in the @macintacos/caret npm
 // package; OpenCode loads it when the package is in the user's `plugin` array, and
@@ -78,7 +80,7 @@ export function resolveCaretVersion(opts: {
 export const REVIEW_TOOL = "caret_review_plan";
 
 /** OpenCode's built-in primary planning agent — the one agent caret steers toward
- * the review tool and allows to call it. */
+ * the review tool and warms the daemon for. */
 export const PLANNING_AGENTS = ["plan"] as const;
 
 export interface CaretDecision {
@@ -148,8 +150,9 @@ function failsafeDeny(feedback: string): CaretDecision {
   return { behavior: "deny", feedback };
 }
 
-/** Only the configured planning agent(s) may call the review tool — the second
- * line of defense against the subagent-bypass (the config hook is the first). */
+/** True for the planning agent(s) caret treats specially — the planning steer and
+ * the daemon warm-up both fire only for them. Not a permission check: the review
+ * tool itself is open to every primary agent. */
 export function isPlanningAgent(agent: string | undefined): boolean {
   return agent !== undefined && (PLANNING_AGENTS as readonly string[]).includes(agent);
 }
@@ -210,7 +213,7 @@ export function parseReviewUrl(stderr: string): string | undefined {
  * shows the tool's `metadata` title. */
 const REVIEW_TOAST_TITLE = "caret: review this plan";
 
-/** OpenCode's plugin client, structurally narrowed to the one call caret makes.
+/** OpenCode's plugin client, structurally narrowed to the calls caret makes.
  * A structural type (rather than importing the SDK client) keeps this robust
  * against version skew between the pinned plugin SDK and the running OpenCode. */
 type ToastBody = {
@@ -220,6 +223,16 @@ type ToastBody = {
   duration?: number;
 };
 type ToastClient = { tui?: { showToast?: (opts: { body: ToastBody }) => unknown } } | undefined;
+
+/** The same client, narrowed to the session read the review tool's subagent check
+ * makes — narrowed separately, and for the same skew-safety reason, so each helper
+ * declares exactly the one call it performs. */
+type SessionClient =
+  | { session?: { get?: (opts: { path: { id: string } }) => unknown } }
+  | undefined;
+
+/** What OpenCode actually hands the plugin: both narrowings at once. */
+type CaretClient = NonNullable<ToastClient> & NonNullable<SessionClient>;
 
 /** How long the pending review-link toast stays up. Long enough to outlast a
  * review; on a decision we supersede it with the short toast below, so this
@@ -240,6 +253,26 @@ function showToast(client: ToastClient, body: ToastBody): void {
     Promise.resolve(tui.showToast({ body })).catch(() => {});
   } catch {
     // best-effort — the review decision is what matters.
+  }
+}
+
+/** True when this tool call arrived from a subagent — a `parentID` on the calling
+ * session, which OpenCode's `task` tool always sets and an agent-name test cannot
+ * see. Failure falls back to ALLOW, deliberately inverting this file's failsafeDeny
+ * convention; both choices are argued in `doc/agents/opencode-integration.md` § The
+ * subagent bypass. Not raced against a timeout: the call is loopback to OpenCode's
+ * own server, so a hang is out of scope. Called as `session.get(...)` so the SDK
+ * client keeps its `this` binding. */
+async function isSubagentSession(client: SessionClient, sessionID: string): Promise<boolean> {
+  const session = client?.session;
+  if (!session || typeof session.get !== "function") return false;
+  try {
+    const res = (await session.get({ path: { id: sessionID } })) as {
+      data?: { parentID?: unknown } | null;
+    };
+    return typeof res?.data?.parentID === "string";
+  } catch {
+    return false;
   }
 }
 
@@ -420,10 +453,14 @@ type LooseConfig = {
   agent?: Record<string, LooseAgent>;
 } & Record<string, unknown>;
 
-/** Mutate the OpenCode config in place to (1) mark the review tool primary-only so
- * subagents cannot call it, and (2) allow it on the planning agent while denying it
- * on the build agent. Idempotent and preservation-safe (existing primary_tools,
- * agent modes, and other permissions are kept). */
+/** Mutate the OpenCode config in place to mark the review tool primary-only, so
+ * subagents cannot call it. Every primary agent may call it — OpenCode's base
+ * ruleset permits an unknown tool id, so the absence of a per-agent entry is what
+ * makes it available. The mechanism and the reasoning are in
+ * `doc/agents/opencode-integration.md` § The subagent bypass.
+ *
+ * Idempotent and preservation-safe: existing primary_tools, agent modes, and other
+ * permissions survive, as does a user's own entry for the review tool. */
 export function applyCaretConfig(config: LooseConfig): void {
   config.experimental ??= {};
   const pt = Array.isArray(config.experimental.primary_tools)
@@ -431,9 +468,14 @@ export function applyCaretConfig(config: LooseConfig): void {
     : [];
   if (!pt.includes(REVIEW_TOOL)) config.experimental.primary_tools = [...pt, REVIEW_TOOL];
 
-  for (const name of PLANNING_AGENTS) setToolPermission(config, name, "allow");
-  // Deny on the build agent so a non-planning primary can't ship an unreviewed plan.
-  setToolPermission(config, "build", "deny");
+  for (const name of PLANNING_AGENTS) {
+    // The plan agent is the one that depends on the tool, so rescue it from a
+    // restrictive global `permission: { "*": "deny" }` — agent-level permission
+    // merges after the global ruleset. Written only when the agent has no entry for
+    // this tool id: a `"*"` catch-all is deliberately overridden, an explicit entry
+    // for the tool is not.
+    ensurePermission(ensureAgent(config, name))[REVIEW_TOOL] ??= "allow";
+  }
 }
 
 function ensureAgent(config: LooseConfig, name: string): LooseAgent {
@@ -450,10 +492,6 @@ function ensurePermission(agent: LooseAgent): Record<string, unknown> {
   if (typeof p === "string") agent.permission = { "*": p };
   else if (typeof p !== "object" || p === null) agent.permission = {};
   return agent.permission as Record<string, unknown>;
-}
-
-function setToolPermission(config: LooseConfig, agentName: string, action: "allow" | "deny"): void {
-  ensurePermission(ensureAgent(config, agentName))[REVIEW_TOOL] = action;
 }
 
 // --- the spawn bridge ----------------------------------------------------------
@@ -581,24 +619,37 @@ export function createCaretPlugin(
 
   return async (input) => {
     // OpenCode gives every plugin its SDK client; caret uses it to surface the
-    // review link as a toast (EXC-691). Narrowed structurally for skew-safety.
-    const client = (input as { client?: ToastClient }).client;
+    // review link as a toast (EXC-691) and to read the calling session's shape.
+    // Narrowed structurally for skew-safety.
+    const client = (input as { client?: CaretClient }).client;
     // Best-effort startup update nudge (EXC-794); fire-and-forget so it never
     // delays plugin load. Only the production default export wires this.
     if (opts.checkUpdate) opts.checkUpdate(client);
+    // The agent driving each session, recorded by chat.message and read by
+    // system.transform, which carries no agent of its own. Why a map is the only
+    // route: `doc/agents/opencode-integration.md` § Why gating the steer needs a
+    // session→agent map. One instance per plugin, closed over rather than
+    // module-global, so a test constructs a fresh one.
+    const sessionAgents = new Map<string, string>();
     const hooks: Hooks = {
-      // Restrict the review tool to primary agents + allow/deny per agent.
+      // Restrict the review tool to primary agents (see applyCaretConfig).
       config: async (config) => {
         applyCaretConfig(config as unknown as LooseConfig);
       },
-      // Warm the daemon while the plan agent is working, so the first
+      // Two jobs. (1) Record the session's agent, ALWAYS — it is what the steer
+      // below gates on. (2) Warm the daemon, for the PLAN AGENT ONLY, so the first
       // caret_review_plan call doesn't pay the cold-spawn cost. This is
       // OpenCode's counterpart to Claude Code's PostToolUse/EnterPlanMode
       // prewarm hook — the closest-to-submission signal the plugin API offers.
       // Deliberately per-message and unthrottled: the daemon idle-exits after
       // [daemon].idle_ms (60s default), so a once-per-session warm would be
-      // dead long before the plan lands.
+      // dead long before the plan lands. The warm stays plan-only even though any
+      // primary agent may call the tool: the plan agent is the one whose turn
+      // reliably ends in a review, and warming on every build message would spawn
+      // a process on the session's busiest traffic to save ~0.4s in the rare case.
       "chat.message": async (input) => {
+        // A message whose agent is unknown must not clobber the recorded one.
+        if (input.sessionID && input.agent) sessionAgents.set(input.sessionID, input.agent);
         if (!isPlanningAgent(input.agent)) return;
         try {
           warm(bin);
@@ -607,8 +658,16 @@ export function createCaretPlugin(
         }
       },
       // Steer the Plan agent to submit its plan to caret instead of plan_exit.
-      "experimental.chat.system.transform": async (_input, output) => {
-        output.system.push(planningSteer());
+      // Only the plan agent: every other primary agent may call the review tool
+      // but is not prompted toward it. A session with no recorded agent gets no
+      // steer rather than a wrong one — which also keeps it out of the second
+      // call site (Agent.generate, generating an agent config, passes no session).
+      // A turn that reaches the model without a preceding chat.message therefore
+      // misses the steer; the tool.definition hook below is the safety net, since
+      // it points plan_exit — permitted only on the plan agent — at caret.
+      "experimental.chat.system.transform": async (input, output) => {
+        const agent = input.sessionID ? sessionAgents.get(input.sessionID) : undefined;
+        if (isPlanningAgent(agent)) output.system.push(planningSteer());
       },
       // Redirect the native plan_exit tool's description toward caret's tool.
       "tool.definition": async (input, output) => {
@@ -626,9 +685,8 @@ export function createCaretPlugin(
               .describe("The complete plan, as markdown, to present for human review."),
           },
           async execute(args, context) {
-            const agent = (context as { agent?: string }).agent;
-            if (!isPlanningAgent(agent)) {
-              return `${REVIEW_TOOL} is restricted to the plan agent (${PLANNING_AGENTS.join(", ")}); it was called by "${agent ?? "unknown"}". Continue without caret review, or switch to the plan agent and resubmit.`;
+            if (await isSubagentSession(client, context.sessionID)) {
+              return `${REVIEW_TOOL} is available to primary agents only; this call came from a subagent session. Continue without caret review, or hand the plan back to the primary agent to submit.`;
             }
             const envelope = buildEnvelope(args.plan, {
               sessionID: context.sessionID,

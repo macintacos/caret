@@ -151,11 +151,15 @@ warms the daemon in the background — `caret prewarm` on each plan-agent messag
 the `caret prewarm` row in the Claude hooks table above — so your first review doesn't
 wait on a cold start.
 
-OpenCode doesn't fire plugin hooks for subagent tool calls, so caret restricts the review
-tool to primary agents (`experimental.primary_tools` + per-agent `permission`) and
-re-checks the caller in the tool body — a planning agent can't slip an unreviewed plan
-past you through a subagent. The same **fail-safe = deny** rule holds: a spawn failure, an
-unparseable decision, or a timeout all return `deny`.
+**Any primary agent can ask for a review; subagents can't.** OpenCode doesn't fire plugin
+hooks for subagent tool calls, so caret marks the review tool primary-only
+(`experimental.primary_tools`, which OpenCode turns into a deny rule on every subagent
+session) and re-checks in the tool body that the call didn't come from a subagent's child
+session. Only the Plan agent is _steered_ toward the tool — but if you're mid-session on
+`build` and want something in front of you before it lands, you can just ask for it; the
+review UI takes any markdown, not only a plan. The same **fail-safe = deny** rule holds
+where it matters, on the review decision itself: a spawn failure, an unparseable decision,
+or a timeout all return `deny`.
 
 caret installs into OpenCode as a `plugin` array entry: `caret install --target opencode`
 adds `@macintacos/caret` to your OpenCode config's `plugin` array (comment-preserving, via
