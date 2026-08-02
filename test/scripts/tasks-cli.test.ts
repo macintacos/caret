@@ -306,11 +306,20 @@ describe("tasks CLI: build pipeline command lines", () => {
   // The palette generator sits after `bun install` because it runs through bun;
   // emitting the gitignored partial here is what makes the raw `bun test`
   // CONTRIBUTING.md documents work on a fresh clone.
-  test("setup installs tools and JS deps, emits the palette, then the e2e Chromium", () => {
-    expect(setupCommands()).toEqual([
+  test("setup runs the full four-step list when the bootstrap did not install", () => {
+    expect(setupCommands({})).toEqual([
       ["mise", "install"],
       ["bun", "install"],
       ["bun", "ui/generate-palette-css.ts"],
+      ["bunx", "playwright", "install", "chromium"],
+    ]);
+  });
+
+  // scripts/bootstrap.sh runs those first three itself on a cold checkout and
+  // exports CARET_BOOTSTRAPPED, so `mise run setup` on a fresh clone is left with
+  // the one step the bootstrap deliberately skips.
+  test("setup runs only the Chromium step when the bootstrap marker is set", () => {
+    expect(setupCommands({ CARET_BOOTSTRAPPED: "1" })).toEqual([
       ["bunx", "playwright", "install", "chromium"],
     ]);
   });

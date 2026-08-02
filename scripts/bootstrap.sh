@@ -24,8 +24,9 @@
 #
 # The marker is deliberately asymmetric — set on the cold path, left unset on
 # the warm one — so it answers "did I just install everything?", not "has this
-# run?". EXC-934 is its reader: a `setup` that already installed via the
-# preamble can skip those steps. Nothing reads it yet.
+# run?". Its reader is scripts/tasks/setup.ts: when the marker is set, `setup`
+# skips the three steps below and runs only the e2e Chromium download, which the
+# preamble deliberately excludes.
 #
 # `mise exec -- bun …` rather than bare `bun …` is load-bearing. mise computes a
 # task's PATH from the tools installed at launch; on a fresh clone bun is not
