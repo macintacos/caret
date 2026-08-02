@@ -10,17 +10,21 @@ given area.
 
 ## Setup
 
-caret pins its toolchain with [mise](https://mise.jdx.dev) (bun, biome, hk, pkl). Install
-mise, then bootstrap everything in one shot:
+caret pins its toolchain with [mise](https://mise.jdx.dev) (bun, biome, hk, pkl), and mise
+is the only prerequisite. Every task bootstraps the clone before it runs, so a fresh
+checkout can go straight to the task you actually want:
 
 ```sh
-mise run setup   # pinned tools, bun install, the generated palette, the e2e Chromium, and git hooks
+mise run build --install   # build caret, then install this checkout into your agent(s)
 ```
 
-A fresh clone can go straight to any task: each one installs the pinned tools, JS deps,
-and generated palette when they are missing (which also registers the git hooks).
-`mise run setup` stays the one-shot front door and the only task that also fetches the e2e
-Chromium.
+That first task installs the pinned tools, JS deps, and generated palette before doing its
+own job, and registers the git hooks along the way. mise asks you to trust the clone's
+config the first time — answer yes, or run `mise trust` up front; in a non-interactive
+shell an untrusted config is a hard error rather than a prompt.
+
+`mise run setup` runs those same steps and adds the e2e Chromium the bootstrap leaves out;
+run it before `mise run test e2e`.
 
 `bun install` on its own refreshes JS dependencies if that is all you need.
 
