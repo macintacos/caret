@@ -11,20 +11,20 @@ given area.
 ## Setup
 
 caret pins its toolchain with [mise](https://mise.jdx.dev) (bun, biome, hk, pkl), and mise
-is the only prerequisite. Every task bootstraps the clone before it runs, so a fresh
+is the only prerequisite. Every task bootstraps the clone if it needs to, so a fresh
 checkout can go straight to the task you actually want:
 
 ```sh
-mise run build --install   # build caret, then install this checkout into your agent(s)
+mise run build --install   # build caret, then swap your agents over to this checkout
 ```
 
 That first task installs the pinned tools, JS deps, and generated palette before doing its
 own job, and registers the git hooks along the way. mise asks you to trust the clone's
-config the first time — answer yes, or run `mise trust` up front; in a non-interactive
-shell an untrusted config is a hard error rather than a prompt.
+config the first time — answer yes, or run `mise trust` up front.
 
 `mise run setup` runs those same steps and adds the e2e Chromium the bootstrap leaves out;
-run it before `mise run test e2e`.
+run it before the e2e suite — `mise run test e2e`, and `mise run preflight`, which
+includes it.
 
 `bun install` on its own refreshes JS dependencies if that is all you need.
 

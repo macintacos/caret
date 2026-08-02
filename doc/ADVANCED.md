@@ -26,8 +26,8 @@ mise run build --install  # …then install THIS local build into your detected 
 `mise run build --install` is the dev loop: it registers the freshly built checkout with
 Claude Code (via a private dev marketplace) and OpenCode and cycles the daemon — see
 [Development](#development) below and [CONTRIBUTING.md](../CONTRIBUTING.md). It needs
-[`git`](https://git-scm.com) and [mise](https://mise.jdx.dev), which supplies
-[`bun`](https://bun.sh) itself on the first task run; the
+[`git`](https://git-scm.com) and [mise](https://mise.jdx.dev) — the first `mise run`
+installs [`bun`](https://bun.sh) and the rest of the pinned toolchain; the
 [`claude`](https://claude.com/claude-code) CLI is required only for the Claude target.
 
 ## How it works
@@ -450,15 +450,15 @@ mise run smoke      # smoke the shipped artifacts; also `smoke bin` / `smoke bun
 mise run preflight  # pre-push gate: lint + tests (unit ∥ e2e) + build + smoke, concurrent
 ```
 
-mise is the only prerequisite. Every task in that catalog sources `scripts/bootstrap.sh`
-before it reaches bun, so the first one run in a fresh clone installs the pinned tools, JS
-deps, and the generated palette before doing its own job — a clone can go straight to
-`mise run build --install` or `mise run lint` with no separate setup step. mise does ask
-you to trust the clone's config the first time; `mise trust` answers that up front, and in
-a non-interactive shell an untrusted config is a hard error rather than a prompt.
+Past git, mise is the only prerequisite. Every task sources `scripts/bootstrap.sh` before
+it reaches bun, so the first one run in a fresh clone installs the pinned tools, JS deps,
+and the generated palette before doing its own job — a clone can go straight to
+`mise run build --install` or `mise run lint` with no separate setup step.
 `mise run setup` runs those same three steps and adds the e2e Chromium download the
-bootstrap deliberately excludes, skipping straight to Chromium when a task has just
-bootstrapped the clone.
+bootstrap deliberately excludes; on a fresh clone its own forwarder has already run those
+three, so it goes straight to Chromium. mise does ask you to trust the clone's config the
+first time; `mise trust` answers that up front, and in a non-interactive shell an
+untrusted config is a hard error rather than a prompt.
 
 `mise run lint` (and the pre-commit hook) runs every formatter in read-only check mode
 alongside Biome lint, `tsc --noEmit`, and `svelte-check` — formatting, linting, and type
@@ -568,12 +568,11 @@ The `.mise/tasks/*` file tasks are thin forwarders to a single
 [Commander](https://github.com/tj/commander.js) CLI at `scripts/tasks/cli.ts` — the same
 scaffolding (`src/lib/program.ts`) as the product CLI (`src/cli.ts`). Each task file is a
 fresh-clone guard above a one-line exec: `.mise/tasks/dev` sources `scripts/bootstrap.sh`
-(with `|| exit 1`, part of that file's caller contract) and then execs
-`bun scripts/tasks/cli.ts dev "$@"`, so the CLI owns every flag's parsing, validation,
-defaults, and `--help`, and the task stays trivial. Each forwarder sets
-`#MISE raw_args=true` so mise hands every argument — including a bare `--help` — straight
-to the CLI instead of intercepting it, so `mise run dev --help` shows a subcommand's real
-flags with no `--` separator.
+(see [Development](#development)) and then execs `bun scripts/tasks/cli.ts dev "$@"`, so
+the CLI owns every flag's parsing, validation, defaults, and `--help`, and the task stays
+trivial. Each forwarder sets `#MISE raw_args=true` so mise hands every argument —
+including a bare `--help` — straight to the CLI instead of intercepting it, so
+`mise run dev --help` shows a subcommand's real flags with no `--` separator.
 
 The CLI hosts `dev`; the `build` group (bare umbrella plus the `ui`/`bin`/`bundle`
 targets, `mise run build bin`); the `test` group (bare/`unit` = bun, `e2e` = Playwright);
