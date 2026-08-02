@@ -7,12 +7,13 @@ import { type LogCapture, logCapture } from "@ui/test-helpers.ts";
 import { render } from "@ui/test-mount.ts";
 import FilePreview from "@/components/FilePreview.svelte";
 
-// The filename-hover preview (EXC-687) shows a bounded excerpt of a referenced
-// file. These pin the reader affordances layered on top of the highlighted code:
-// per-line numbers off the file's real line offset, a header that frames it as a
-// slice ("lines a–b of N"), and muted boundary strips that say how much file sits
-// above/below the window — so the reader always knows they're seeing an excerpt.
-// The syntax highlighting itself and the real pointer wiring are covered by the
+// The filename preview (EXC-687) shows an excerpt of a referenced file. These
+// pin the reader affordances layered on top of the highlighted code: per-line
+// numbers off the file's real line offset, a header that frames it as a slice
+// ("lines a–b of N"), boundary strips that say how much file sits above/below
+// the window and expand it toward those ends on click, and the distinct
+// too-large-to-preview state. The syntax highlighting itself and everything that
+// needs real layout (scroll anchoring, the height cap) are covered by the
 // highlight unit test and the Playwright e2e.
 
 const ID = "r1";
@@ -52,6 +53,47 @@ function serveExcerpt(excerpt: FileExcerpt): LogCapture {
     }
     return Promise.resolve(new Response(null, { status: 204 }));
   });
+}
+
+/** Install a fetch double that answers every excerpt request with `status`. */
+function serveStatus(status: number): LogCapture {
+  return logCapture((url) =>
+    Promise.resolve(new Response(null, { status: url.includes("/file?") ? status : 204 })),
+  );
+}
+
+/**
+ * Install a fetch double that serves a slice of a `totalLines`-line file for
+ * whatever window the card asks for, recording each requested URL. With no
+ * `start`/`end` it answers the opening window `[1, headLines]`.
+ */
+function serveWindowed(totalLines: number, headLines: number): LogCapture & { urls: string[] } {
+  const urls: string[] = [];
+  const cap = logCapture((url) => {
+    if (!url.includes("/file?")) return Promise.resolve(new Response(null, { status: 204 }));
+    urls.push(url);
+    const params = new URLSearchParams(url.slice(url.indexOf("?") + 1));
+    const rawStart = params.get("start");
+    const rawEnd = params.get("end");
+    const startLine = rawStart === null ? 1 : Math.max(1, Number(rawStart));
+    const endLine =
+      rawEnd === null ? Math.min(totalLines, headLines) : Math.min(totalLines, Number(rawEnd));
+    const body: FileExcerpt = {
+      path: "src/cache.ts",
+      language: "text",
+      startLine,
+      endLine,
+      totalLines,
+      lines: Array.from({ length: endLine - startLine + 1 }, (_, i) => `line ${startLine + i}`),
+    };
+    return Promise.resolve(
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+  });
+  return Object.assign(cap, { urls });
 }
 
 /** An excerpt of `count` lines starting at `startLine` in a `totalLines` file. */
@@ -186,5 +228,62 @@ describe("FilePreview excerpt boundaries", () => {
     await until(() => target.querySelector(".fp-edge-top") != null);
     expect(target.querySelector(".fp-edge-top")?.textContent).toContain("1 line above");
     expect(target.querySelector(".fp-edge-bottom")).toBeNull();
+  });
+});
+
+describe("FilePreview load failures", () => {
+  test("a file too large to preview reads as its own state, not a load failure", async () => {
+    cap = serveStatus(413);
+    const { target } = render(FilePreview, props());
+    await until(() => target.querySelector('[data-preview-state="too-large"]') != null);
+    expect(target.querySelector(".fp-message")?.textContent).toContain("too large");
+    expect(target.querySelector('[data-preview-state="error"]')).toBeNull();
+  });
+
+  test("any other failure still reads as a load failure", async () => {
+    cap = serveStatus(404);
+    const { target } = render(FilePreview, props());
+    await until(() => target.querySelector('[data-preview-state="error"]') != null);
+    expect(target.querySelector('[data-preview-state="too-large"]')).toBeNull();
+  });
+});
+
+describe("FilePreview expansion", () => {
+  test("the boundary strips are controls, not labels", async () => {
+    cap = serveWindowed(300, 60);
+    const { target } = render(FilePreview, props());
+    await until(() => target.querySelector(".fp-edge-bottom") != null);
+    const bottom = target.querySelector(".fp-edge-bottom");
+    expect(bottom?.tagName).toBe("BUTTON");
+    expect(bottom?.getAttribute("aria-label")).toContain("more lines below");
+  });
+
+  test("clicking a strip widens the window toward that end of the file", async () => {
+    const served = serveWindowed(300, 60);
+    cap = served;
+    const { target } = render(FilePreview, props());
+    await until(() => target.querySelector(".fp-edge-bottom") != null);
+    expect(target.querySelector(".fp-edge-bottom")?.textContent).toContain("240");
+
+    (target.querySelector(".fp-edge-bottom") as HTMLButtonElement).click();
+    await until(() => lineNumbers(target).length > 60);
+
+    const last = served.urls.at(-1) ?? "";
+    expect(last).toContain("start=1");
+    expect(last).toContain("end=110");
+    expect(lineNumbers(target).at(-1)).toBe("110");
+    expect(target.querySelector(".fp-edge-bottom")?.textContent).toContain("190");
+  });
+
+  test("a strip disappears once its side reaches the end of the file", async () => {
+    // 70 lines with a 60-line opening window: one downward step covers the rest.
+    const served = serveWindowed(70, 60);
+    cap = served;
+    const { target } = render(FilePreview, props());
+    await until(() => target.querySelector(".fp-edge-bottom") != null);
+    (target.querySelector(".fp-edge-bottom") as HTMLButtonElement).click();
+    await until(() => target.querySelector(".fp-edge-bottom") == null);
+    expect(lineNumbers(target).at(-1)).toBe("70");
+    expect(target.querySelector(".fp-edge-top")).toBeNull();
   });
 });
