@@ -5,12 +5,13 @@ import { join } from "node:path";
 
 import { bootDaemon, type TestDaemon } from "@test/support/daemon.ts";
 import type { FileExcerpt } from "@/lib/types.ts";
-import { EXCERPT_RADIUS } from "@/plan/excerpt.ts";
+import { EXCERPT_RADIUS, MAX_EXCERPT_BYTES } from "@/plan/excerpt.ts";
 
-// The two review-scoped file routes back the plan view's filename hover (EXC-687).
-// Both key off the review record's own cwd (never a client-supplied base), and
-// both refuse to read outside it — the daemon must not become an arbitrary
-// local-file reader even though it binds loopback-only.
+// The two review-scoped file routes back the plan view's filename preview
+// (EXC-687). Both key off the review record's own cwd (never a client-supplied
+// base), and both refuse to read outside it — the daemon must not become an
+// arbitrary local-file reader even though it binds loopback-only. That holds for
+// the explicit start/end window the preview's boundary strips ask for too.
 
 let store: string; // the daemon's own state dir
 let cwd: string; // the review's project dir, populated with real files
@@ -45,8 +46,17 @@ async function fileRefs(id: string, paths: string[]): Promise<Response> {
   });
 }
 
-function fileExcerpt(id: string, path: string, line?: number): Promise<Response> {
-  const q = new URLSearchParams({ path, ...(line === undefined ? {} : { line: String(line) }) });
+function fileExcerpt(
+  id: string,
+  path: string,
+  line?: number,
+  range?: { start: number; end: number },
+): Promise<Response> {
+  const q = new URLSearchParams({
+    path,
+    ...(line === undefined ? {} : { line: String(line) }),
+    ...(range === undefined ? {} : { start: String(range.start), end: String(range.end) }),
+  });
   return fetch(`${d.url}/api/reviews/${id}/file?${q}`);
 }
 
@@ -105,4 +115,54 @@ test("file refuses a ../ escape and an absolute path outside cwd", async () => {
 
 test("file 404s for an unknown review", async () => {
   expect((await fileExcerpt("nope", "a.ts")).status).toBe(404);
+});
+
+test("file honours an explicit start/end window over the line", async () => {
+  write("a.ts", numbered(300));
+  const id = await d.seed({ cwd });
+  const res = await fileExcerpt(id, "a.ts", 50, { start: 100, end: 160 });
+  expect(res.status).toBe(200);
+  const ex = (await res.json()) as FileExcerpt;
+  expect(ex.startLine).toBe(100);
+  expect(ex.endLine).toBe(160);
+  expect(ex.lines[0]).toBe("line 100");
+});
+
+test("file clamps a window wider than the file to the whole file", async () => {
+  write("a.ts", numbered(30));
+  const id = await d.seed({ cwd });
+  const ex = (await (
+    await fileExcerpt(id, "a.ts", undefined, { start: 1, end: 9999 })
+  ).json()) as FileExcerpt;
+  expect(ex.startLine).toBe(1);
+  expect(ex.endLine).toBe(30);
+  expect(ex.lines).toHaveLength(30);
+});
+
+test("file ignores a half-supplied or non-numeric window", async () => {
+  write("a.ts", numbered(300));
+  const id = await d.seed({ cwd });
+  const q = new URLSearchParams({ path: "a.ts", line: "50", start: "100" });
+  const ex = (await (await fetch(`${d.url}/api/reviews/${id}/file?${q}`)).json()) as FileExcerpt;
+  expect(ex.startLine).toBe(50 - EXCERPT_RADIUS);
+  expect(ex.endLine).toBe(50 + EXCERPT_RADIUS);
+});
+
+test("file 413s for a file too large to preview", async () => {
+  write("huge.ts", "x".repeat(MAX_EXCERPT_BYTES + 1));
+  const id = await d.seed({ cwd });
+  expect((await fileExcerpt(id, "huge.ts")).status).toBe(413);
+});
+
+test("file 404s rather than 413s for binary content", async () => {
+  write("bin.dat", "abc\0def");
+  const id = await d.seed({ cwd });
+  expect((await fileExcerpt(id, "bin.dat")).status).toBe(404);
+});
+
+test("file still refuses an escaping path when a window is supplied", async () => {
+  const id = await d.seed({ cwd });
+  expect((await fileExcerpt(id, "../../etc/hosts", undefined, { start: 1, end: 50 })).status).toBe(
+    404,
+  );
 });

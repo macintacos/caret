@@ -37,14 +37,51 @@ async function makeProject(files: Record<string, string>): Promise<{
   return { dir, cleanup: () => rm(dir, { recursive: true, force: true }) };
 }
 
-// A 50-line source file with a unique marker on line 1 and line 42, so a preview
-// can be told apart as "head" vs "centered on :42".
-const CACHE_TS = Array.from({ length: 50 }, (_, i) => {
+// A 300-line source file with unique markers on lines 1, 42, and 150, so a
+// preview can be told apart as "head" vs "centered on :42" and a window's reach
+// can be pinned from either end. It must stay comfortably longer than the widest
+// opening window (EXCERPT_HEAD_LINES = 60, EXCERPT_RADIUS = 30) — a file that
+// fits in one window would leave every boundary-strip assertion below vacuous.
+const CACHE_TS_LINES = 300;
+const CACHE_TS = Array.from({ length: CACHE_TS_LINES }, (_, i) => {
   const n = i + 1;
   if (n === 1) return "// MARKER_LINE_ONE — top of the file";
   if (n === 42) return 'const cacheKey = "MARKER_LINE_FORTYTWO"; // line 42';
+  if (n === 150) return 'const deepKey = "MARKER_LINE_DEEP"; // line 150';
   return `const line${n} = ${n};`;
 }).join("\n");
+
+/** Where the cited (`.fp-target`) row sits inside the preview's scrolling code
+ * region, plus the region's own scroll state — the geometry both scroll specs
+ * below read. Null when no preview or no cited row is on screen. */
+function citedRowInRegion(page: import("@playwright/test").Page): Promise<{
+  offset: number;
+  region: number;
+  row: number;
+  scrollTop: number;
+} | null> {
+  return page.evaluate(() => {
+    const code = document.querySelector("[data-file-preview] .fp-code");
+    const row = document.querySelector("[data-file-preview] .fp-target");
+    if (code === null || row === null) return null;
+    const c = code.getBoundingClientRect();
+    const r = row.getBoundingClientRect();
+    return {
+      offset: r.top - c.top,
+      region: c.height,
+      row: r.height,
+      scrollTop: (code as HTMLElement).scrollTop,
+    };
+  });
+}
+
+/** Assert the cited row is fully on screen within the code region — neither
+ * scrolled off the top nor left below the fold. */
+function expectCitedRowVisible(m: Awaited<ReturnType<typeof citedRowInRegion>>): void {
+  expect(m).not.toBeNull();
+  expect(m?.offset ?? -1).toBeGreaterThanOrEqual(0);
+  expect(m?.offset ?? Infinity).toBeLessThanOrEqual((m?.region ?? 0) - (m?.row ?? 0));
+}
 
 /** The number of file-reference icons currently tagged in the plan's shadow root. */
 function fileRefCount(page: import("@playwright/test").Page): Promise<number> {
@@ -148,7 +185,7 @@ test("clicking a real reference reveals a highlighted excerpt centered on its li
 
     // The preview appears (light DOM, not the shadow root) with the resolved path
     // and a window centered on line 42 — so the line-42 marker shows and the
-    // line-1 marker (outside the ±6 snippet) does not.
+    // line-1 marker (outside the ±30 window) does not.
     const preview = page.locator("[data-file-preview]");
     await expect(preview).toBeVisible();
     await expect(preview).toContainText("src/cache.ts");
@@ -159,12 +196,12 @@ test("clicking a real reference reveals a highlighted excerpt centered on its li
     // per numbered row (not one undivided block).
     await expect(preview.locator('.fp-lcode span[style*="color"]').first()).toBeVisible();
 
-    // The window centers on line 42 (±EXCERPT_RADIUS = 6) → lines 36–48 of the
-    // 50-line file, so the gutter starts at 36 and both strips report the elided
-    // tail: 35 lines above and 2 below.
-    await expect(preview.locator(".fp-lnum").first()).toHaveText("36");
-    await expect(preview.locator(".fp-edge-top")).toContainText("35");
-    await expect(preview.locator(".fp-edge-bottom")).toContainText("2");
+    // The window centers on line 42 (±EXCERPT_RADIUS = 30) → lines 12–72 of the
+    // 300-line file, so the gutter starts at 12 and both strips report the elided
+    // remainder: 11 lines above and 228 below.
+    await expect(preview.locator(".fp-lnum").first()).toHaveText("12");
+    await expect(preview.locator(".fp-edge-top")).toContainText("11");
+    await expect(preview.locator(".fp-edge-bottom")).toContainText("228");
 
     // The referenced line itself (42) is the one highlighted, so the eye lands on it.
     await expect(preview.locator(".fp-target")).toHaveCount(1);
@@ -298,14 +335,21 @@ test("pressing Escape dismisses the open preview", async ({ daemon, page }) => {
   }
 });
 
-test("the preview shows only a bounded snippet, never a scrollable full file", async ({
+test("the preview opens wide, caps at the viewport, and pages inside itself", async ({
   daemon,
   page,
 }) => {
-  // A preview is a peek, not the file: even against a large file it must cap to a
-  // handful of lines and never scroll vertically, so it can't be mistaken for the
-  // whole thing. (Horizontal scroll for long lines is fine; vertical paging is not.)
-  const BIG = Array.from({ length: 400 }, (_, i) => `const line${i + 1} = ${i + 1};`).join("\n");
+  // The opening window is large enough to judge a plan against (EXC-756), so
+  // against a big file the card takes the room it needs and then scrolls
+  // internally rather than growing off-screen. Both halves matter: a card that
+  // overflowed the viewport would put its bottom strip out of reach. Lines are
+  // realistic source width, not `const lineN = N;` — a file of stubs never
+  // reaches the width cap, so it could not tell a wide card from a narrow one.
+  const BIG = Array.from(
+    { length: 400 },
+    (_, i) =>
+      `export const configuredThresholdForLine${i + 1} = { attempts: ${i + 1}, backoffMs: ${(i + 1) * 25}, label: "line ${i + 1}" };`,
+  ).join("\n");
   const proj = await makeProject({ "src/big.ts": BIG });
   try {
     await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nOpen `src/big.ts` to see it.\n" });
@@ -317,20 +361,199 @@ test("the preview shows only a bounded snippet, never a scrollable full file", a
     const preview = page.locator("[data-file-preview]");
     await expect(preview).toBeVisible();
 
-    // Only a snippet — a handful of rows, nowhere near the 400-line file.
-    const rows = await preview.locator(".fp-row").count();
-    expect(rows).toBeGreaterThan(0);
-    expect(rows).toBeLessThanOrEqual(20);
+    // The whole 60-line opening window is rendered, not a handful of rows.
+    await expect(preview.locator(".fp-row")).toHaveCount(60);
 
-    // The code region cannot scroll vertically: overflow-y is clipped, not auto.
-    const overflowY = await page.evaluate(() => {
-      const code = document.querySelector("[data-file-preview] .fp-code");
-      return code ? getComputedStyle(code).overflowY : null;
+    const geometry = await page.evaluate(() => {
+      const card = document.querySelector("[data-file-preview]") as HTMLElement | null;
+      const code = document.querySelector("[data-file-preview] .fp-code") as HTMLElement | null;
+      if (card === null || code === null) return null;
+      return {
+        overflowY: getComputedStyle(code).overflowY,
+        scrollHeight: code.scrollHeight,
+        clientHeight: code.clientHeight,
+        codeScrollWidth: code.scrollWidth,
+        codeClientWidth: code.clientWidth,
+        cardBottom: card.getBoundingClientRect().bottom,
+        cardTop: card.getBoundingClientRect().top,
+        cardWidth: card.getBoundingClientRect().width,
+        cardHeight: card.getBoundingClientRect().height,
+        viewport: window.innerHeight,
+        viewportWidth: window.innerWidth,
+      };
     });
-    expect(overflowY).toBe("hidden");
+    expect(geometry).not.toBeNull();
+    // The code region is the scroller, and it has more to show than it can fit.
+    expect(geometry?.overflowY).toBe("auto");
+    expect(geometry?.scrollHeight ?? 0).toBeGreaterThan(geometry?.clientHeight ?? 0);
+    // The card itself stays inside the viewport, so both strips remain reachable.
+    expect(geometry?.cardTop ?? -1).toBeGreaterThanOrEqual(0);
+    expect(geometry?.cardBottom ?? Infinity).toBeLessThanOrEqual(geometry?.viewport ?? 0);
 
-    // And a bottom strip announces the large remainder, reinforcing it's an excerpt.
+    // Given the room, the card reads landscape rather than as a tall column: it
+    // stops short of the viewport's height so the plan stays visible behind it,
+    // and spends the space on width instead — enough that a real source line
+    // fits without scrolling sideways, which is the whole point of the width.
+    expect(geometry?.cardHeight ?? Infinity).toBeLessThanOrEqual(0.65 * (geometry?.viewport ?? 0));
+    expect(geometry?.cardWidth ?? 0).toBeGreaterThan(geometry?.cardHeight ?? Infinity);
+    expect(geometry?.codeScrollWidth ?? Infinity).toBeLessThanOrEqual(
+      geometry?.codeClientWidth ?? 0,
+    );
+
+    // A bottom strip still announces the remainder — and now offers to reach it.
     await expect(preview.locator(".fp-edge-bottom")).toContainText("below");
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("the boundary strips expand the window until the whole file is reachable", async ({
+  daemon,
+  page,
+}) => {
+  // The core of EXC-756: a reader who needs more than the opening window gets it
+  // in place. Clicking a strip repeatedly walks the window to that end of the
+  // file, and the strip retires once there is nothing left on its side.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
+    });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+    await page.locator("[data-file-ref]").first().click();
+
+    const preview = page.locator("[data-file-preview]");
+    await expect(preview).toBeVisible();
+    const top = preview.locator(".fp-edge-top");
+    const bottom = preview.locator(".fp-edge-bottom");
+    await expect(top).toBeVisible();
+
+    // Walk upward until the top strip retires: the window then starts at line 1.
+    // One click per attempt, retried — a click landing while the widened window
+    // is still in flight is deliberately dropped, so the walk must be poll-shaped
+    // rather than a fixed burst of clicks.
+    await expect(async () => {
+      if ((await top.count()) > 0) await top.click();
+      await expect(top).toHaveCount(0, { timeout: 1_000 });
+    }).toPass({ timeout: 20_000 });
+    await expect(preview.locator(".fp-lnum").first()).toHaveText("1");
+    await expect(preview).toContainText("MARKER_LINE_ONE");
+
+    // Then downward until the bottom strip retires: the window ends at the last
+    // line, and the reader has reached the whole file without leaving the review.
+    await expect(async () => {
+      if ((await bottom.count()) > 0) await bottom.click();
+      await expect(bottom).toHaveCount(0, { timeout: 1_000 });
+    }).toPass({ timeout: 20_000 });
+    await expect(preview.locator(".fp-lnum").last()).toHaveText(String(CACHE_TS_LINES));
+    await expect(preview.locator(".fp-row")).toHaveCount(CACHE_TS_LINES);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("expanding upward keeps the reader's line in view", async ({ daemon, page }) => {
+  // An upward expansion prepends lines above the scroll offset. Without anchoring,
+  // the code region would keep its old scrollTop (or reset to 0) and dump the
+  // reader at the newly revealed top — the line they were reading gone below the
+  // fold. The cited line is the one they were on, so it must still be in view.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
+    });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+    await page.locator("[data-file-ref]").first().click();
+
+    const preview = page.locator("[data-file-preview]");
+    await expect(preview).toBeVisible();
+    await expect(preview.locator(".fp-target")).toHaveCount(1);
+
+    const before = await citedRowInRegion(page);
+    expect(before).not.toBeNull();
+    // The reader is genuinely parked mid-file — the region is scrolled, so there
+    // is somewhere to be dumped from, and the cited row is on screen to begin with.
+    expect(before?.scrollTop ?? 0).toBeGreaterThan(0);
+    expectCitedRowVisible(before);
+
+    await preview.locator(".fp-edge-top").click();
+    await expect(preview.locator(".fp-lnum").first()).toHaveText("1");
+
+    // Still on screen inside the region — not pushed off either edge by the 11
+    // lines that just appeared above it.
+    expectCitedRowVisible(await citedRowInRegion(page));
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("the cited line is in view on open, wherever the reference sits", async ({ daemon, page }) => {
+  // The opening window is taller than the code region, so the cited line is only
+  // visible because the card scrolls to it — and that scroll is computed against
+  // the region's height, which the card's viewport-derived cap decides. The
+  // worst case is a reference near the vertical middle of the viewport: the card
+  // takes the roomier of the two gaps, and both are at their smallest there, so
+  // it gets the shortest region any anchor can produce. A reference in the first
+  // line or two of a plan (every other spec here) gets a tall card and never
+  // exercises it.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    const filler = Array.from({ length: 7 }, (_, i) => `Preamble paragraph ${i + 1}.`).join("\n\n");
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: `# Refs\n\n${filler}\n\nThe cache key lives in \`src/cache.ts:42\` today.\n`,
+    });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+
+    // The token must actually land in the middle band for this to be the case it
+    // claims to be; assert that rather than trusting the filler's line height.
+    const anchorY = await page.evaluate(() => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+      const tok = sh?.querySelector("[data-file-ref]");
+      return tok === null || tok === undefined ? null : tok.getBoundingClientRect().top;
+    });
+    expect(anchorY ?? 0).toBeGreaterThan(0.35 * 900);
+    expect(anchorY ?? Infinity).toBeLessThan(0.65 * 900);
+
+    await page.locator("[data-file-ref]").first().click();
+    const preview = page.locator("[data-file-preview]");
+    await expect(preview).toBeVisible();
+    await expect(preview.locator(".fp-target")).toHaveCount(1);
+
+    expectCitedRowVisible(await citedRowInRegion(page));
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("a file too large to preview says so, rather than reading as a load failure", async ({
+  daemon,
+  page,
+}) => {
+  // Past MAX_EXCERPT_BYTES the daemon has nothing to show, and the reason is worth
+  // distinguishing: "too large" is a property of the file, "couldn't load" reads
+  // as something broken. Synthetic filler, just over the 2 MiB ceiling.
+  const HUGE = `${"// filler\n".repeat(220_000)}`;
+  const proj = await makeProject({ "src/huge.ts": HUGE });
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nOpen `src/huge.ts` to see it.\n" });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+
+    await page.locator("[data-file-ref]").first().click();
+    const preview = page.locator("[data-file-preview]");
+    await expect(preview).toBeVisible();
+    await expect(preview.locator('[data-preview-state="too-large"]')).toBeVisible();
+    await expect(preview.locator('[data-preview-state="error"]')).toHaveCount(0);
   } finally {
     await proj.cleanup();
   }
@@ -492,11 +715,11 @@ test("a reference with no line shows the head of the file", async ({ daemon, pag
     await page.locator("[data-file-ref]").first().click();
 
     // No line number → the excerpt starts at the top, so the line-1 marker shows
-    // and the line-42 marker (past the head window) does not.
+    // and the line-150 marker (past the 60-line head window) does not.
     const preview = page.locator("[data-file-preview]");
     await expect(preview).toBeVisible();
     await expect(preview).toContainText("MARKER_LINE_ONE");
-    await expect(preview).not.toContainText("MARKER_LINE_FORTYTWO");
+    await expect(preview).not.toContainText("MARKER_LINE_DEEP");
 
     // The gutter starts at line 1 and — since the head window omits the file's
     // tail — a bottom strip reports the remainder, with no strip above.

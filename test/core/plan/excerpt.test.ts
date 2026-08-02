@@ -6,15 +6,19 @@ import { join } from "node:path";
 import {
   EXCERPT_HEAD_LINES,
   EXCERPT_RADIUS,
+  isFileTooLargeToPreview,
+  MAX_EXCERPT_BYTES,
   readFileExcerpt,
   resolveFileInCwd,
 } from "@/plan/excerpt.ts";
 
-// plan-files.ts resolves a plan's filename reference to a real file *inside the
+// excerpt.ts resolves a plan's filename reference to a real file *inside the
 // review's cwd* (the daemon's source of truth is the review record, never the
-// client) and reads a bounded, line-aware excerpt for the hover preview. The
-// containment guard is load-bearing: the daemon must never become an arbitrary
-// local-file reader, so `../` and symlink escapes resolve to null.
+// client) and reads a line-aware excerpt for the preview card — a default window
+// around the reference, or an explicit range the card asks for as the reader
+// expands it. The containment guard is load-bearing: the daemon must never
+// become an arbitrary local-file reader, so `../` and symlink escapes resolve to
+// null, whatever window is requested.
 
 let dir: string;
 let cwd: string; // realpath of dir, so assertions compare canonical paths
@@ -143,4 +147,57 @@ test("returns null for binary content", () => {
 
 test("returns null when the reference does not resolve", () => {
   expect(readFileExcerpt(cwd, "ghost.ts", 5)).toBeNull();
+});
+
+// ----- readFileExcerpt with an explicit range -----
+
+test("honours an explicit range, ignoring the line", () => {
+  write("a.ts", numberedLines(100));
+  const ex = readFileExcerpt(cwd, "a.ts", 50, { start: 20, end: 30 });
+  expect(ex?.startLine).toBe(20);
+  expect(ex?.endLine).toBe(30);
+  expect(ex?.lines).toHaveLength(11);
+  expect(ex?.lines[0]).toBe("line 20");
+  expect(ex?.lines.at(-1)).toBe("line 30");
+});
+
+test("clamps an explicit range at both ends of the file", () => {
+  write("a.ts", numberedLines(40));
+  const ex = readFileExcerpt(cwd, "a.ts", undefined, { start: -10, end: 500 });
+  expect(ex?.startLine).toBe(1);
+  expect(ex?.endLine).toBe(40);
+  expect(ex?.lines).toHaveLength(40);
+});
+
+test("keeps an inverted range non-empty by widening the end to the start", () => {
+  write("a.ts", numberedLines(40));
+  const ex = readFileExcerpt(cwd, "a.ts", undefined, { start: 30, end: 5 });
+  expect(ex?.startLine).toBe(30);
+  expect(ex?.endLine).toBe(30);
+  expect(ex?.lines).toEqual(["line 30"]);
+});
+
+// ----- isFileTooLargeToPreview -----
+
+test("reports a file over MAX_EXCERPT_BYTES as too large to preview", () => {
+  write("huge.ts", "x".repeat(MAX_EXCERPT_BYTES + 1));
+  expect(isFileTooLargeToPreview(cwd, "huge.ts")).toBe(true);
+  expect(readFileExcerpt(cwd, "huge.ts")).toBeNull();
+});
+
+test("does not report a small, a missing, or an escaping file as too large", () => {
+  write("small.ts", numberedLines(5));
+  // An oversized file outside cwd answers false because it never resolves, not
+  // because of its size — so it needs to really be oversized. Its own temp dir,
+  // torn down in a finally, keeps 2 MiB out of the shared tmpdir on a failure.
+  const outsideDir = mkdtempSync(join(tmpdir(), "caret-planfiles-outside-"));
+  const outside = join(outsideDir, "huge.ts");
+  try {
+    writeFileSync(outside, "x".repeat(MAX_EXCERPT_BYTES + 1));
+    expect(isFileTooLargeToPreview(cwd, "small.ts")).toBe(false);
+    expect(isFileTooLargeToPreview(cwd, "ghost.ts")).toBe(false);
+    expect(isFileTooLargeToPreview(cwd, outside)).toBe(false);
+  } finally {
+    rmSync(outsideDir, { recursive: true, force: true });
+  }
 });

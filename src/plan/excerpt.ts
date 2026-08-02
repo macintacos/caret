@@ -1,23 +1,25 @@
 // Resolves a plan's filename reference to a real file inside the review's cwd
-// and reads a bounded, line-aware excerpt for the hover preview (EXC-687). The
-// browser can't touch the filesystem, so the daemon does both — keyed off the
-// review record's cwd, never a client-supplied base. Resolution is confined to
-// cwd: a `../` or symlink target that escapes it resolves to null, so the
-// daemon never becomes an arbitrary local-file reader. A reference that resolves
-// to no real file yields null, and the UI then shows no icon and no affordance.
+// and reads a line-aware excerpt for the preview card (EXC-687). The browser
+// can't touch the filesystem, so the daemon does both — keyed off the review
+// record's cwd, never a client-supplied base. Resolution is confined to cwd: a
+// `../` or symlink target that escapes it resolves to null, so the daemon never
+// becomes an arbitrary local-file reader. A reference that resolves to no real
+// file yields null, and the UI then shows no icon and no affordance.
 
 import { type Dirent, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import type { FileExcerpt } from "@/lib/types.ts";
 
-// The preview is deliberately a small snippet: it must fit in the hover card
-// without vertical scrolling, so it never reads as the whole file. These windows
-// are sized to that — a peek, with the boundary strips saying how much is elided.
+// The opening window is sized to show enough of the file to judge a plan against
+// it without leaving the review; the card scrolls internally past that, and its
+// boundary strips expand the window through an explicit range until the reader
+// reaches line 1 and the last line. Only MAX_EXCERPT_BYTES bounds how wide a
+// window can get.
 /** Lines of context on each side of a referenced `:line` (the ±window). */
-export const EXCERPT_RADIUS = 6;
+export const EXCERPT_RADIUS = 30;
 /** Lines shown from the top when a reference carries no line number. */
-export const EXCERPT_HEAD_LINES = 13;
+export const EXCERPT_HEAD_LINES = 60;
 /** Files larger than this are not previewed (skip, don't read). */
 export const MAX_EXCERPT_BYTES = 2 * 1024 * 1024;
 /** Upper bound on directory entries the basename fallback will scan. */
@@ -156,12 +158,36 @@ export function resolveFileInCwd(cwd: string, candidate: string): string | null 
 }
 
 /**
- * Resolves `candidate` within `cwd` and returns a bounded excerpt: a ±window
- * around `line` (1-based) when given, else the head of the file. Returns null
- * when the reference doesn't resolve, the file is too large, or its content is
- * binary. Never throws.
+ * True when `candidate` resolves to a real file inside `cwd` that exceeds
+ * `MAX_EXCERPT_BYTES` — the one case `readFileExcerpt`'s null hides that the UI
+ * shows differently. Answered on the error path only, so the common path pays
+ * nothing for the extra resolve; on that path a reference that resolves to
+ * nothing re-runs `resolveFileInCwd`'s bounded basename search, which is why
+ * this is not called before `readFileExcerpt`. Never throws.
  */
-export function readFileExcerpt(cwd: string, candidate: string, line?: number): FileExcerpt | null {
+export function isFileTooLargeToPreview(cwd: string, candidate: string): boolean {
+  const abs = resolveFileInCwd(cwd, candidate);
+  if (abs === null) return false;
+  try {
+    return statSync(abs).size > MAX_EXCERPT_BYTES;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolves `candidate` within `cwd` and returns an excerpt: the 1-based
+ * inclusive `range` when given, else a ±window around `line`, else the head of
+ * the file. A range is clamped to the file and never inverted, so it always
+ * yields at least one line. Returns null when the reference doesn't resolve, the
+ * file is too large, or its content is binary. Never throws.
+ */
+export function readFileExcerpt(
+  cwd: string,
+  candidate: string,
+  line?: number,
+  range?: { start: number; end: number },
+): FileExcerpt | null {
   const abs = resolveFileInCwd(cwd, candidate);
   if (abs === null) return null;
 
@@ -189,7 +215,10 @@ export function readFileExcerpt(cwd: string, candidate: string, line?: number): 
 
   let startLine: number;
   let endLine: number;
-  if (line !== undefined && line >= 1) {
+  if (range !== undefined) {
+    startLine = Math.min(Math.max(1, range.start), totalLines);
+    endLine = Math.min(totalLines, Math.max(range.end, startLine));
+  } else if (line !== undefined && line >= 1) {
     // Clamp a past-EOF line to the last line, so a plan citing a line past a file
     // that has since shrunk still yields a non-empty, correctly-labeled window
     // (an unclamped line beyond EOF would give startLine > endLine → no lines).

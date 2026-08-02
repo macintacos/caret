@@ -382,7 +382,7 @@ The list below points at stable, top-level files so the check keeps working as t
 
 - `package.json` — a real file: shows the icon; the hover previews the head of the file.
 - `README.md` — another real file, for a second icon to eyeball beside the first.
-- `README.md:37` — the same file with a line: the excerpt is centered on line 37 (a small ±6-line snippet) instead of the head.
+- `README.md:37` — the same file with a line: the excerpt is centered on line 37 (a ±30-line window) instead of the head.
 - `src/does-not-exist.ts` — a path deliberately **not** in the repo: it must show **no** icon and **no** hover. If it ever sprouts one, the existence gate has regressed.
 
 ---

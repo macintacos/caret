@@ -112,16 +112,22 @@ export async function resolveFileRefs(id: string, paths: string[]): Promise<stri
   }
 }
 
-/** A bounded, line-aware excerpt of a plan-referenced file for the hover
- * preview: the excerpt centers on `line` when given, else the file's head.
- * Throws HttpError on a non-2xx so the popover can render a fallback. */
+/** A line-aware excerpt of a plan-referenced file for the preview card: the
+ * 1-based inclusive `range` when given, else a window centred on `line`, else
+ * the file's head. Throws HttpError on a non-2xx so the popover can tell a
+ * too-large file (413) from any other failure. */
 export async function getFileExcerpt(
   id: string,
   path: string,
   line?: number,
+  range?: { start: number; end: number },
 ): Promise<FileExcerpt> {
   const params = new URLSearchParams({ path });
   if (line !== undefined) params.set("line", String(line));
+  if (range !== undefined) {
+    params.set("start", String(range.start));
+    params.set("end", String(range.end));
+  }
   return json(await fetch(`/api/reviews/${encodeURIComponent(id)}/file?${params}`));
 }
 
