@@ -51,12 +51,17 @@ caret_bootstrap() {
   # stdout goes to stderr: install chatter is a diagnostic, and the forwarders
   # for `preflight`, `release` and `caret` all treat their stdout as a
   # machine-readable channel that a first-run install must not pollute.
+  #
+  # stdin is the mirror image: `.mise/tasks/caret` documents
+  # `mise run caret review < payload.json`, so on a fresh clone this subshell
+  # sits between that payload and its reader. /dev/null keeps a first-run
+  # installer from eating bytes the task itself is waiting for.
   (
     cd "$root" || exit 1
     mise install &&
       mise exec -- bun install &&
       mise exec -- bun ui/generate-palette-css.ts
-  ) >&2 || return 1
+  ) >&2 </dev/null || return 1
 
   export CARET_BOOTSTRAPPED=1
 }

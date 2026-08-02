@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 #MISE description="Run caret's own CLI from source: mise run caret <subcommand>"
 #MISE raw_args=true
+# Fresh-clone guard (scripts/bootstrap.sh); `|| exit 1` is its caller contract.
+# shellcheck source=/dev/null
+source "$(dirname "${BASH_SOURCE[0]}")/../../scripts/bootstrap.sh" || exit 1
 # raw_args hands every argument (including a bare --help) straight to the CLI, so
 # `mise run caret --help` shows caret's real help instead of mise's task help --
 # the tasks CLI turns its own help option off for this command so a leading --help

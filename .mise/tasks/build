@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 #MISE description="Build the UI then the binary (bare); or a ui/bin/bundle target"
 #MISE raw_args=true
+# Fresh-clone guard (scripts/bootstrap.sh); `|| exit 1` is its caller contract.
+# shellcheck source=/dev/null
+source "$(dirname "${BASH_SOURCE[0]}")/../../scripts/bootstrap.sh" || exit 1
 # raw_args hands every argument (including a bare --help) straight to the CLI, so
 # `mise run build --help` shows the CLI's real help instead of mise's task help.
 # Thin forwarder: the ui/bin/bundle targets, the UI-first ordering + skip

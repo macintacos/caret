@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 #MISE description="Cut a caret release: baseline|compute|prepare|finalize (drive via /release-caret)"
 #MISE raw_args=true
+# Fresh-clone guard (scripts/bootstrap.sh); `|| exit 1` is its caller contract.
+# shellcheck source=/dev/null
+source "$(dirname "${BASH_SOURCE[0]}")/../../scripts/bootstrap.sh" || exit 1
 # raw_args hands every argument (including a bare --help) straight to the CLI, so
 # `mise run release --help` shows the CLI's real help instead of mise's task help.
 # Thin forwarder: subcommands, flags, and --help live in the caret tasks CLI

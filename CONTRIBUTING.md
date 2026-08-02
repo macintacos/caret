@@ -17,6 +17,11 @@ mise, then bootstrap everything in one shot:
 mise run setup   # pinned tools, bun install, the generated palette, the e2e Chromium, and git hooks
 ```
 
+A fresh clone can go straight to any task: each one installs the pinned tools, JS deps,
+and generated palette when they are missing (which also registers the git hooks).
+`mise run setup` stays the one-shot front door and the only task that also fetches the e2e
+Chromium.
+
 `bun install` on its own refreshes JS dependencies if that is all you need.
 
 ## Everyday tasks

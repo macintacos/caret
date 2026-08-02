@@ -31,7 +31,7 @@ describe("jscSafeSource rewrites an optional anchored group", () => {
   });
 
   test("rewrites every site in a pattern, not just the first", () => {
-    expect(jscSafeSource(String.raw`(^a)?b(^c)?d`)).toBe(String.raw`(?:(^a)|)b(?:(^c)|)d`);
+    expect(jscSafeSource("(^a)?b(^c)?d")).toBe("(?:(^a)|)b(?:(^c)|)d");
   });
 
   test("preserves capture-group numbering", () => {
@@ -62,7 +62,7 @@ describe("jscSafeSource leaves everything else byte-identical", () => {
     // them would pair `\(` with `\)` and misread the group boundaries entirely.
     String.raw`\(\^a\)?b`,
     // Parens inside a character class are literals too.
-    String.raw`[(^)]?b`,
+    "[(^)]?b",
     // An escaped backslash before a paren — the paren really does open a group,
     // and that group is not anchored.
     String.raw`\\(a)?b`,
@@ -78,13 +78,13 @@ describe("jscSafeSource leaves everything else byte-identical", () => {
   test("leaves a quantifier other than `?` alone", () => {
     // Only `?` occurs on an anchored group across shiki's full bundle (all 42
     // sites), so the transform is scoped to it rather than generalized to `*`.
-    expect(jscSafeSource(String.raw`(^a)*b`)).toBe(String.raw`(^a)*b`);
+    expect(jscSafeSource("(^a)*b")).toBe("(^a)*b");
   });
 
   test("leaves a lazy optional alone", () => {
     // `(^a)??` needs the mirrored rewrite `(?:|(^a))`, and no bundled pattern uses
     // it — so the scanner skips it rather than emitting a wrong-precedence guess.
-    expect(jscSafeSource(String.raw`(^a)??b`)).toBe(String.raw`(^a)??b`);
+    expect(jscSafeSource("(^a)??b")).toBe("(^a)??b");
   });
 });
 
@@ -93,13 +93,13 @@ describe("jscSafeSource finds the group boundary through every prefix form", () 
   // needs a case: a prefix misread by one character puts the `^` test on the wrong
   // offset and the site is silently missed.
   const cases: Array<[string, string, string]> = [
-    ["plain capture", String.raw`(^a)?b`, String.raw`(?:(^a)|)b`],
-    ["non-capturing", String.raw`(?:^a)?b`, String.raw`(?:(?:^a)|)b`],
-    ["named group", String.raw`(?<n>^a)?b`, String.raw`(?:(?<n>^a)|)b`],
-    ["lookahead", String.raw`(?=^a)?b`, String.raw`(?:(?=^a)|)b`],
-    ["negative lookahead", String.raw`(?!^a)?b`, String.raw`(?:(?!^a)|)b`],
-    ["lookbehind", String.raw`(?<=^a)?b`, String.raw`(?:(?<=^a)|)b`],
-    ["modifier group", String.raw`(?i:^a)?b`, String.raw`(?:(?i:^a)|)b`],
+    ["plain capture", "(^a)?b", "(?:(^a)|)b"],
+    ["non-capturing", "(?:^a)?b", "(?:(?:^a)|)b"],
+    ["named group", "(?<n>^a)?b", "(?:(?<n>^a)|)b"],
+    ["lookahead", "(?=^a)?b", "(?:(?=^a)|)b"],
+    ["negative lookahead", "(?!^a)?b", "(?:(?!^a)|)b"],
+    ["lookbehind", "(?<=^a)?b", "(?:(?<=^a)|)b"],
+    ["modifier group", "(?i:^a)?b", "(?:(?i:^a)|)b"],
   ];
 
   for (const [name, source, expected] of cases) {
@@ -110,7 +110,7 @@ describe("jscSafeSource finds the group boundary through every prefix form", () 
 
   test("does not mistake a class-bracketed paren for a group open", () => {
     // `[(]` is a literal `(`; only the real group that follows may be rewritten.
-    expect(jscSafeSource(String.raw`[(](^a)?b`)).toBe(String.raw`[(](?:(^a)|)b`);
+    expect(jscSafeSource("[(](^a)?b")).toBe("[(](?:(^a)|)b");
   });
 
   test("does not mistake an escaped paren for a group open", () => {

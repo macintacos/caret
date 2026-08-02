@@ -26,3 +26,5 @@ postinstall = "hk install --mise"
 
 # Every task is a file task in .mise/tasks/ — a thin forwarder into the caret
 # tasks CLI (scripts/tasks/cli.ts), which owns each task's flags and --help.
+# Each one sources scripts/bootstrap.sh first, so a task run from a fresh clone
+# installs the tools and deps that CLI needs instead of dying on them.

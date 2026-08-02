@@ -39,16 +39,18 @@ make_root() {
   (cd -P "$root" && pwd | tr -d '\n')
 }
 
-# A PATH holding a fake `mise` that logs its argv and cwd (and optionally fails
-# on `install`), plus the one real binary the script shells out to. Cases run
-# with PATH set to this alone, so a real bun on the developer's machine can't
-# leak in and turn a cold case warm.
+# A PATH holding a fake `mise` that logs its argv and cwd — plus anything it
+# managed to read off stdin, which must be nothing — and optionally fails on
+# `install`, plus the one real binary the script shells out to. Cases run with
+# PATH set to this alone, so a real bun on the developer's machine can't leak in
+# and turn a cold case warm.
 make_stub_path() {
   local stub install_rc="${1:-0}"
   stub="$(mktemp -d "${TMPDIR:-/tmp}/caret-bootstrap-bin.XXXXXX")"
   cat >"$stub/mise" <<STUB
 #!$bash_bin
-echo "\$* @ \$PWD" >>"$stub/mise.log"
+if read -r stdin_line; then leak=" <stdin:\$stdin_line>"; else leak=""; fi
+echo "\$* @ \$PWD\$leak" >>"$stub/mise.log"
 [ "\$1" = install ] && exit $install_rc
 exit 0
 STUB
@@ -61,6 +63,7 @@ STUB
 # return code, and the caller's cwd afterwards — the preamble must leave that
 # last one alone. env -i drops every inherited var, so PATH is exactly $1, and
 # the `cd /` makes the cwd assertion independent of where this suite was run.
+# $3 is the payload on stdin, standing in for `mise run caret review < file`.
 run_bootstrap() {
   # SC2016: the single quotes are the point — $1, $? and the marker must expand
   # in the inner shell that does the sourcing, not in this one.
@@ -68,7 +71,7 @@ run_bootstrap() {
   env -i PATH="$1" "$bash_bin" -c '
     cd /; source "$1"; rc=$?
     echo "MARKER=${CARET_BOOTSTRAPPED:-unset} RC=$rc PWD=[$PWD]"
-  ' _ "$2/scripts/bootstrap.sh"
+  ' _ "$2/scripts/bootstrap.sh" <<<"${3-}"
 }
 
 # --- 1. cold: no deps, no bun — installs everything, at the root ----------
@@ -123,6 +126,21 @@ printf '#!%s\nexit 0\n' "$bash_bin" >"$stub/bun"
 chmod +x "$stub/bun"
 out="$(run_bootstrap "$stub" "$root" 2>&1)"
 assert_contains "$out" "MARKER=1 RC=0" "bun without node_modules still takes the cold path"
+rm -rf "$root" "$stub"
+
+# --- 6. cold: leaves the caller's stdin untouched -------------------------
+# `.mise/tasks/caret` documents `mise run caret review < payload.json`, so a
+# first-run install sits between that payload and its reader — and must not
+# swallow a byte of it on the way past.
+root="$(make_root)"
+stub="$(make_stub_path)"
+out="$(run_bootstrap "$stub" "$root" '{"kind":"review"}' 2>&1)"
+assert_contains "$out" "MARKER=1 RC=0" "piped payload: still takes the cold path"
+log="$(cat "$stub/mise.log" 2>&1)"
+case "$log" in
+*"<stdin:"*) fail "piped payload: the install steps must not read the caller's stdin (log: $log)" ;;
+*) ok "piped payload: the install steps never read the caller's stdin" ;;
+esac
 rm -rf "$root" "$stub"
 
 # --- summary --------------------------------------------------------------
