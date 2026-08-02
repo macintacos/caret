@@ -305,7 +305,8 @@ describe("tasks CLI: build pipeline command lines", () => {
 
   // The palette generator sits after `bun install` because it runs through bun;
   // emitting the gitignored partial here is what makes the raw `bun test`
-  // CONTRIBUTING.md documents work on a fresh clone.
+  // CONTRIBUTING.md documents work. On a fresh clone scripts/bootstrap.sh emits
+  // it instead, which is why the bootstrapped branch below can skip it.
   test("setup runs the full four-step list when the bootstrap did not install", () => {
     expect(setupCommands({})).toEqual([
       ["mise", "install"],
