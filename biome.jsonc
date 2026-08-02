@@ -46,7 +46,12 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true
+      "recommended": true,
+      // Biome ships this one at `info`, which sits below the threshold
+      // `--error-on-warnings` enforces — so a useless String.raw was reported
+      // on every lint run and failed none of them. Pinned to `error` so it
+      // fails the gate like any other finding instead of accumulating.
+      "complexity": { "noUselessStringRaw": "error" }
     }
   },
   // Import organization (EXC/import-aliases). Groups top-to-bottom, blank line
