@@ -196,14 +196,15 @@
     above: boolean;
     originX: number;
     // How tall the card may grow on the side it landed on, so an expanded window
-    // stops at the viewport edge and scrolls internally from there.
-    maxHeight: number;
+    // stops at the viewport edge and scrolls internally from there. Undefined
+    // until first placed: the card must measure at its natural height, and a
+    // seeded cap would collapse it and make that measurement meaningless.
+    maxHeight?: number;
   }>({
     left: -9999,
     top: -9999,
     above: false,
     originX: 0,
-    maxHeight: 0,
   });
   // Gates the fade-in: the card stays hidden (offscreen, opacity 0) until its
   // FINAL content is measured and placed, then reveals once. Without this the card
@@ -223,12 +224,18 @@
     const left = Math.max(MARGIN, Math.min(anchor.left, window.innerWidth - rect.width - MARGIN));
     const spaceAbove = anchor.top - GAP - MARGIN;
     const spaceBelow = window.innerHeight - anchor.bottom - GAP - MARGIN;
+    // What the card would measure with no cap on it. Once a previous pass has
+    // capped it, `rect.height` is that cap rather than the content's height, so
+    // whatever the code region is currently hiding has to be added back — else
+    // the card judges itself short enough for a gap it has long outgrown.
+    const hidden = codeEl === undefined ? 0 : codeEl.scrollHeight - codeEl.clientHeight;
+    const natural = rect.height + hidden;
     // Prefer above while the card fits there; once it has outgrown both sides,
     // take the roomier one. Position is height-independent on either branch
     // (bottom when above, top when below), so only the side choice reads the
-    // measured height and one pass settles it. Reassigning `preview` on an
-    // expansion re-runs this, so the side is re-judged as the card grows.
-    const above = rect.height <= spaceAbove || spaceAbove > spaceBelow;
+    // height and one pass settles it. Reassigning `preview` on an expansion
+    // re-runs this, so the side is re-judged as the card grows.
+    const above = natural <= spaceAbove || spaceAbove > spaceBelow;
     const maxHeight = Math.max(0, above ? spaceAbove : spaceBelow);
     // The token's horizontal centre as an offset within the card, so the pop-in
     // origins at the filename (clamped to the card when the card was shifted to fit).
@@ -269,7 +276,7 @@
   style:top={placement.top === undefined ? null : `${placement.top}px`}
   style:bottom={placement.bottom === undefined ? null : `${placement.bottom}px`}
   style:--fp-origin-x="{placement.originX}px"
-  style:--fp-max-height="{placement.maxHeight}px"
+  style:--fp-max-height={placement.maxHeight === undefined ? null : `${placement.maxHeight}px`}
 >
   <div class="fp-header">
     <span class="fp-badge">Preview</span>
@@ -465,6 +472,10 @@
      the plan, not a smaller sibling. The header and boundary strips stay at the
      --text-2xs label size. */
   .fp-code {
+    /* Positioned so it is the offsetParent of its own rows: centring the cited
+       line reads `row.offsetTop`, which against an unpositioned region would be
+       measured from the card instead and overshoot by the header + strip. */
+    position: relative;
     flex: 1;
     min-height: 0;
     padding: 0.4rem 0;
