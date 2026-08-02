@@ -144,22 +144,13 @@ OpenCode has no `ExitPlanMode` hook to intercept, so caret wires in as an
 `@macintacos/caret` package) registers a `caret_review_plan` tool and steers the Plan
 agent to call it; the tool's `execute()` spawns `caret review` (`CARET_AGENT=opencode`),
 blocks on your decision in the browser, and returns an approval or a change request (the
-reviewer feedback, without the plan echoed back) the agent revises and resubmits. The
-whole daemon/review pipeline is reused unchanged — the plugin is the OpenCode-side
-counterpart to Claude's `hooks.json`. While the Plan agent is working, the plugin also
-warms the daemon in the background — `caret prewarm` on each plan-agent message, mirroring
-the `caret prewarm` row in the Claude hooks table above — so your first review doesn't
-wait on a cold start.
-
-**Any primary agent can ask for a review; subagents can't.** OpenCode doesn't fire plugin
-hooks for subagent tool calls, so caret marks the review tool primary-only
-(`experimental.primary_tools`, which OpenCode turns into a deny rule on every subagent
-session) and re-checks in the tool body that the call didn't come from a subagent's child
-session. Only the Plan agent is _steered_ toward the tool — but if you're mid-session on
-`build` and want something in front of you before it lands, you can just ask for it; the
-review UI takes any markdown, not only a plan. The same **fail-safe = deny** rule holds
-where it matters, on the review decision itself: a spawn failure, an unparseable decision,
-or a timeout all return `deny`.
+reviewer feedback, without the plan echoed back) the agent revises and resubmits — see
+[Calling the review tool from your own skill](#calling-the-review-tool-from-your-own-skill)
+for who may call it and how to call it yourself. The whole daemon/review pipeline is
+reused unchanged — the plugin is the OpenCode-side counterpart to Claude's `hooks.json`.
+While the Plan agent is working, the plugin also warms the daemon in the background —
+`caret prewarm` on each plan-agent message, mirroring the `caret prewarm` row in the
+Claude hooks table above — so your first review doesn't wait on a cold start.
 
 caret installs into OpenCode as a `plugin` array entry: `caret install --target opencode`
 adds `@macintacos/caret` to your OpenCode config's `plugin` array (comment-preserving, via
@@ -216,6 +207,49 @@ OpenCode's `plugin` array, deploying the command files, fetching rumdl) that set
 a line saying what it did, and a closing summary. Off a terminal — piped, `CI=true`, or
 `NO_COLOR` set — the same run reports as plain `caret: …` lines with no escape codes, so
 CI transcripts and captured logs stay readable.
+
+### Calling the review tool from your own skill
+
+The review tool is **OpenCode-only** — it exists because caret wires into OpenCode as a
+plugin, and a plugin can register tools, where Claude Code's adapter is a command hook
+(`PermissionRequest`/`ExitPlanMode`) with nothing to call. Within OpenCode it is a plain
+tool: a skill that wants a human decision before its work proceeds can ask for one
+directly rather than waiting to be intercepted.
+
+The call is `caret_review_plan`, and it takes a single argument, `plan` — the complete
+plan, as markdown, to put in front of the reviewer. Session and working directory come
+from the tool context, so there is nothing else to thread through.
+
+It **blocks until you decide**. A change request comes back as the tool result: the
+reviewer's feedback, plus an instruction to revise and call again. The plan itself is
+deliberately not echoed back — the agent still holds it in its own tool-call arguments.
+The feedback's line numbers point into caret's stored copy, which is reflowed to caret's
+90-column shape at ingest (see [Plan formatting](#plan-formatting-rumdl)), so each one
+carries an abbreviated quote to match against your own text. So the loop is call, read the
+feedback, revise, call again, until an approval returns. An approval may carry reviewer
+notes of its own, in a clearly labeled section, to fold in as the work proceeds; that is
+not another round, the plan is already approved.
+
+The same **fail-safe = deny** rule holds where it matters, on the review decision itself:
+a spawn failure, an unparseable decision, or a timeout (`review.timeout_s`, 1 hour by
+default — see [Config file](#config-file)) all come back as a change request rather than
+an approval.
+
+**Any primary agent may call it; subagents may not.** OpenCode doesn't fire plugin hooks
+for subagent tool calls, so caret marks the review tool primary-only
+(`experimental.primary_tools`, which OpenCode turns into a deny rule on every subagent
+session) and re-checks in the tool body that the call didn't come from a subagent's child
+session. Only the Plan agent is _steered_ toward the tool; every other primary agent has
+to reach for it deliberately. One exception is worth knowing about: caret writes the
+permission rescue for the `plan` agent alone, so a config with a global
+`permission: { "*": "deny" }` keeps the tool there and loses it everywhere else. If your
+skill is pinned to a non-plan agent, `caret_review_plan` is the route — OpenCode's own
+`plan_exit` is permitted on the `plan` agent alone, so there is nothing to fall back on.
+
+What you submit need not be a plan, and it need not come from a skill — mid-session on
+`build`, you can simply ask for a review. The review UI renders any markdown, so a
+migration checklist, a proposed schema, or a summary of what the agent is about to do all
+go in front of a human the same way.
 
 ### Desktop notifications
 
