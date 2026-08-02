@@ -340,10 +340,16 @@ test("the preview opens wide, caps at the viewport, and pages inside itself", as
   page,
 }) => {
   // The opening window is large enough to judge a plan against (EXC-756), so
-  // against a big file the card fills the space it has and then scrolls
+  // against a big file the card takes the room it needs and then scrolls
   // internally rather than growing off-screen. Both halves matter: a card that
-  // overflowed the viewport would put its bottom strip out of reach.
-  const BIG = Array.from({ length: 400 }, (_, i) => `const line${i + 1} = ${i + 1};`).join("\n");
+  // overflowed the viewport would put its bottom strip out of reach. Lines are
+  // realistic source width, not `const lineN = N;` — a file of stubs never
+  // reaches the width cap, so it could not tell a wide card from a narrow one.
+  const BIG = Array.from(
+    { length: 400 },
+    (_, i) =>
+      `export const configuredThresholdForLine${i + 1} = { attempts: ${i + 1}, backoffMs: ${(i + 1) * 25}, label: "line ${i + 1}" };`,
+  ).join("\n");
   const proj = await makeProject({ "src/big.ts": BIG });
   try {
     await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nOpen `src/big.ts` to see it.\n" });
@@ -366,9 +372,14 @@ test("the preview opens wide, caps at the viewport, and pages inside itself", as
         overflowY: getComputedStyle(code).overflowY,
         scrollHeight: code.scrollHeight,
         clientHeight: code.clientHeight,
+        codeScrollWidth: code.scrollWidth,
+        codeClientWidth: code.clientWidth,
         cardBottom: card.getBoundingClientRect().bottom,
         cardTop: card.getBoundingClientRect().top,
+        cardWidth: card.getBoundingClientRect().width,
+        cardHeight: card.getBoundingClientRect().height,
         viewport: window.innerHeight,
+        viewportWidth: window.innerWidth,
       };
     });
     expect(geometry).not.toBeNull();
@@ -378,6 +389,16 @@ test("the preview opens wide, caps at the viewport, and pages inside itself", as
     // The card itself stays inside the viewport, so both strips remain reachable.
     expect(geometry?.cardTop ?? -1).toBeGreaterThanOrEqual(0);
     expect(geometry?.cardBottom ?? Infinity).toBeLessThanOrEqual(geometry?.viewport ?? 0);
+
+    // Given the room, the card reads landscape rather than as a tall column: it
+    // stops short of the viewport's height so the plan stays visible behind it,
+    // and spends the space on width instead — enough that a real source line
+    // fits without scrolling sideways, which is the whole point of the width.
+    expect(geometry?.cardHeight ?? Infinity).toBeLessThanOrEqual(0.65 * (geometry?.viewport ?? 0));
+    expect(geometry?.cardWidth ?? 0).toBeGreaterThan(geometry?.cardHeight ?? Infinity);
+    expect(geometry?.codeScrollWidth ?? Infinity).toBeLessThanOrEqual(
+      geometry?.codeClientWidth ?? 0,
+    );
 
     // A bottom strip still announces the remainder — and now offers to reach it.
     await expect(preview.locator(".fp-edge-bottom")).toContainText("below");

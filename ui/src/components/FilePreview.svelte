@@ -203,6 +203,12 @@
 
   const GAP = 8;
   const MARGIN = 8;
+  // The card stops well short of filling the gap it sits in. Left to take the
+  // whole gap it grows tall and narrow — a full-height panel beside the plan
+  // rather than a look at a file — so it is held to a share of the viewport and
+  // spends the room on width instead (see `.file-preview`'s max-width). The gap
+  // still wins wherever it is the smaller of the two.
+  const MAX_HEIGHT_SHARE = 0.62;
   let el = $state<HTMLElement>();
   // Fixed (viewport) placement: prefer above the token, flipping below when the
   // card wouldn't fit. Seeded offscreen so it never flashes at the wrong spot
@@ -252,13 +258,18 @@
     // itself short enough for a gap it has long outgrown.
     const hidden = codeEl === undefined ? 0 : codeEl.scrollHeight - codeEl.clientHeight;
     const natural = rect.height + hidden;
+    // What the card will actually stand at: its content, held to the height
+    // share. The side test reads this rather than `natural`, so a tall file
+    // whose capped card fits above still opens above.
+    const ceiling = window.innerHeight * MAX_HEIGHT_SHARE;
+    const effective = Math.min(natural, ceiling);
     // Prefer above while the card fits there; once it has outgrown both sides,
     // take the roomier one. Position is height-independent on either branch
     // (bottom when above, top when below), so only the side choice reads the
     // height and one pass settles it. Reassigning `preview` on an expansion
     // re-runs this, so the side is re-judged as the card grows.
-    const above = natural <= spaceAbove || spaceAbove > spaceBelow;
-    const maxHeight = Math.max(0, above ? spaceAbove : spaceBelow);
+    const above = effective <= spaceAbove || spaceAbove > spaceBelow;
+    const maxHeight = Math.max(0, Math.min(above ? spaceAbove : spaceBelow, ceiling));
     // The token's horizontal centre as an offset within the card, so the pop-in
     // origins at the filename (clamped to the card when the card was shifted to fit).
     const originX = Math.max(0, Math.min(rect.width, anchor.left + anchor.width / 2 - left));
@@ -364,7 +375,10 @@
        active preview is never occluded by the chrome; below modal dialogs (z 100),
        which supersede the preview entirely. */
     z-index: 60;
-    max-width: min(72ch, 90vw);
+    /* Room to read a real source line before it has to scroll sideways. The card
+       is still content-sized — a short excerpt stays narrow — this only raises
+       how far it may grow, and the vh term keeps it off the edges on a laptop. */
+    max-width: min(120ch, 92vw);
     /* A column so the header and both strips stay pinned while only .fp-code
        scrolls between them. The card grows with the window the reader expands
        until it reaches the viewport edge the placement effect measured. */
