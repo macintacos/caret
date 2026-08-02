@@ -6,6 +6,9 @@ import {
   followCursorLine,
   followScrollDelta,
   lineAtReadingZone,
+  REVEAL_MARGIN_BOTTOM,
+  revealCard,
+  revealScrollDelta,
   SCROLL_OFFSET_TOP,
   scrollToLine,
 } from "$lib/diffview/scroll.ts";
@@ -259,5 +262,152 @@ describe("followCursorLine", () => {
     row.scrollIntoView = () => (scrolledIntoView = true);
     expect(followCursorLine(host, 5)).toBe(true);
     expect(scrolledIntoView).toBe(true);
+  });
+});
+
+// revealCard scrolls a freshly-mounted composer card fully into view, moving the
+// plan as little as it can. revealScrollDelta is the pure geometry; revealCard
+// waits for the card's height to settle (the editor builds inside its own effect),
+// measures, and applies it. happy-dom has no layout, so the DOM test stubs the
+// rects the same way the followCursorLine block does.
+describe("revealScrollDelta", () => {
+  // The same 600px-tall viewport [100, 700], with the production bottom margin.
+  const base = { viewTop: 100, viewBottom: 700, margin: REVEAL_MARGIN_BOTTOM };
+
+  test("does not move the view when the card already fits above the margin", () => {
+    expect(revealScrollDelta({ ...base, cardTop: 300, cardBottom: 400 })).toBe(0);
+  });
+
+  test("does not move the view when the card's bottom rests exactly on the margin", () => {
+    expect(
+      revealScrollDelta({ ...base, cardTop: 400, cardBottom: 700 - REVEAL_MARGIN_BOTTOM }),
+    ).toBe(0);
+  });
+
+  test("scrolls by exactly the overshoot when the card is clipped at the bottom", () => {
+    // Bottom 720 is 20px past the viewport, plus the 12px margin → 32.
+    expect(revealScrollDelta({ ...base, cardTop: 500, cardBottom: 720 })).toBe(
+      20 + REVEAL_MARGIN_BOTTOM,
+    );
+  });
+
+  test("takes the same path for a card entirely below the fold — no special case", () => {
+    // Lands the card flush at the bottom with the margin: 900 - 212 === 700 - 12.
+    expect(revealScrollDelta({ ...base, cardTop: 750, cardBottom: 900 })).toBe(
+      900 + REVEAL_MARGIN_BOTTOM - 700,
+    );
+  });
+
+  test("clamps a card taller than the viewport so its top is not pushed off-screen", () => {
+    // Raw overshoot would be 312 and shove the card's label past the top edge;
+    // clamping at cardTop - viewTop reveals it from its top down instead.
+    expect(revealScrollDelta({ ...base, cardTop: 200, cardBottom: 1000 })).toBe(100);
+  });
+
+  test("never scrolls up — a card already starting above the viewport stays put", () => {
+    expect(revealScrollDelta({ ...base, cardTop: 50, cardBottom: 720 })).toBe(0);
+  });
+});
+
+describe("revealCard", () => {
+  function rect(top: number, bottom: number): DOMRect {
+    return {
+      top,
+      bottom,
+      left: 0,
+      right: 0,
+      width: 0,
+      height: bottom - top,
+      x: 0,
+      y: top,
+      toJSON() {},
+    } as DOMRect;
+  }
+
+  /** A card inside a scroller (top 100, bottom 700), clipped 20px past the bottom. */
+  function harness(scrollable = true): { card: HTMLElement; scrollBys: ScrollToOptions[] } {
+    const scroller = document.createElement("div");
+    if (scrollable) scroller.style.overflowY = "auto";
+    scroller.getBoundingClientRect = () => rect(100, 700);
+    const card = document.createElement("div");
+    card.getBoundingClientRect = () => rect(500, 720);
+    const scrollBys: ScrollToOptions[] = [];
+    scroller.scrollBy = ((opts: ScrollToOptions) =>
+      scrollBys.push(opts)) as typeof scroller.scrollBy;
+    scroller.append(card);
+    document.body.append(scroller);
+    return { card, scrollBys };
+  }
+
+  /** Resolves after `n` animation frames, so the settle retry can run to completion. */
+  function frames(n: number): Promise<void> {
+    return new Promise((resolve) => {
+      let left = n;
+      const tick = () => (--left <= 0 ? resolve() : requestAnimationFrame(tick));
+      requestAnimationFrame(tick);
+    });
+  }
+
+  test("scrolls the card's scroll container by the reveal delta, smoothly", async () => {
+    const { card, scrollBys } = harness();
+    revealCard(card);
+    await frames(4);
+    expect(scrollBys.length).toBe(1);
+    expect(scrollBys[0]?.top).toBe(20 + REVEAL_MARGIN_BOTTOM);
+    expect(scrollBys[0]?.behavior).toBe("smooth"); // a one-shot move, unlike the cursor follow
+  });
+
+  test("the disposer cancels a pending measurement, so a dismissed composer never scrolls", async () => {
+    const { card, scrollBys } = harness();
+    revealCard(card)();
+    await frames(4);
+    expect(scrollBys.length).toBe(0);
+  });
+
+  test("does nothing when the card has no scroll container", async () => {
+    const { card, scrollBys } = harness(false);
+    revealCard(card);
+    await frames(4);
+    expect(scrollBys.length).toBe(0);
+  });
+
+  test("does not scroll when the card already fits", async () => {
+    const { card, scrollBys } = harness();
+    card.getBoundingClientRect = () => rect(300, 400);
+    revealCard(card);
+    await frames(4);
+    expect(scrollBys.length).toBe(0);
+  });
+
+  test("measures the settled height, not the height on the mount frame", async () => {
+    // The composer's editor builds in its own effect, so the card grows for a few
+    // frames after mount. Measuring the mount frame's 60px-tall box would compute
+    // a delta of 0 (it fits); only the settled 220px box is clipped.
+    const { card, scrollBys } = harness();
+    const heights = [60, 120, 180, 220]; // grows for three frames, then holds
+    let call = 0;
+    card.getBoundingClientRect = () => {
+      const height = heights[Math.min(call, heights.length - 1)] ?? 0;
+      call += 1;
+      return rect(500, 500 + height);
+    };
+    revealCard(card);
+    await frames(8);
+    expect(scrollBys.length).toBe(1);
+    expect(scrollBys[0]?.top).toBe(20 + REVEAL_MARGIN_BOTTOM);
+  });
+
+  test("measures anyway once the settle budget is spent", async () => {
+    // A card whose height never stops changing must not retry forever — the cap
+    // gives up and measures, exactly once.
+    const { card, scrollBys } = harness();
+    let grown = 0;
+    card.getBoundingClientRect = () => {
+      grown += 1;
+      return rect(500, 720 + grown);
+    };
+    revealCard(card);
+    await frames(40);
+    expect(scrollBys.length).toBe(1);
   });
 });

@@ -18,6 +18,7 @@
   import { Card } from "$lib/components/ui/card/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { rangeLabel } from "$lib/diffview/commenting.ts";
+  import { revealCard } from "$lib/diffview/scroll.ts";
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import ConfirmPopover from "@/components/ConfirmPopover.svelte";
   import Icon from "@/components/Icon.svelte";
@@ -95,6 +96,19 @@
   // The composer surface, focused when the first Escape blurs the editor so the
   // card can catch the second Escape (see the two-stage Escape below).
   let cardEl = $state<HTMLElement | null>(null);
+
+  // The composer opens in the annotation row BELOW its anchor line, so a comment
+  // started near the bottom of the plan can leave the card — often the whole
+  // Comment / Keep / Discard row — off screen. This scrolls the plan the minimum
+  // amount that brings the card fully into view, once MarkdownEditor has built
+  // its editor and the height is final. The only reactive read is cardEl, which
+  // changes once at mount, so it is a one-shot: the view does not chase the box
+  // as it grows while the reviewer types. Both parents that mount this component
+  // — the gutter/shortcut composer and the edit-mode one — inherit it from here.
+  $effect(() => {
+    if (cardEl == null) return;
+    return revealCard(cardEl);
+  });
 
   function submit() {
     onSubmit(comment);

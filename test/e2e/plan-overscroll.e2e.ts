@@ -3,21 +3,11 @@
 // than pinned to the bottom edge, leaving ~1/3 of the viewport of overscroll
 // room below it. Real scroll behavior → an e2e, per browser-testing.md.
 
+import { TALL_PLAN } from "@test/e2e/support/fixture-plan.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 
-// A plan several viewports tall, so there is genuine scrolling to the bottom
-// and a clearly-rendered last line to measure.
-const filler = (label: string) =>
-  Array.from({ length: 40 }, (_, i) => `${label} line ${i + 1} keeps the plan tall.`).join("\n");
-const TALL_PLAN = [
-  "# Alpha",
-  filler("Alpha"),
-  "## Bravo",
-  filler("Bravo"),
-  "## Charlie",
-  filler("Charlie"),
-  "",
-].join("\n\n");
+// TALL_PLAN is several viewports tall, so there is genuine scrolling to the
+// bottom and a clearly-rendered last line to measure.
 
 test("the reader can scroll past the end of the plan", async ({ daemon, page }) => {
   await daemon.seed({ plan: TALL_PLAN });
