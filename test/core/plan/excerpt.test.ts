@@ -6,6 +6,8 @@ import { join } from "node:path";
 import {
   EXCERPT_HEAD_LINES,
   EXCERPT_RADIUS,
+  isFileTooLargeToPreview,
+  MAX_EXCERPT_BYTES,
   readFileExcerpt,
   resolveFileInCwd,
 } from "@/plan/excerpt.ts";
@@ -143,4 +145,49 @@ test("returns null for binary content", () => {
 
 test("returns null when the reference does not resolve", () => {
   expect(readFileExcerpt(cwd, "ghost.ts", 5)).toBeNull();
+});
+
+// ----- readFileExcerpt with an explicit range -----
+
+test("honours an explicit range, ignoring the line", () => {
+  write("a.ts", numberedLines(100));
+  const ex = readFileExcerpt(cwd, "a.ts", 50, { start: 20, end: 30 });
+  expect(ex?.startLine).toBe(20);
+  expect(ex?.endLine).toBe(30);
+  expect(ex?.lines).toHaveLength(11);
+  expect(ex?.lines[0]).toBe("line 20");
+  expect(ex?.lines.at(-1)).toBe("line 30");
+});
+
+test("clamps an explicit range at both ends of the file", () => {
+  write("a.ts", numberedLines(40));
+  const ex = readFileExcerpt(cwd, "a.ts", undefined, { start: -10, end: 500 });
+  expect(ex?.startLine).toBe(1);
+  expect(ex?.endLine).toBe(40);
+  expect(ex?.lines).toHaveLength(40);
+});
+
+test("keeps an inverted range non-empty by widening the end to the start", () => {
+  write("a.ts", numberedLines(40));
+  const ex = readFileExcerpt(cwd, "a.ts", undefined, { start: 30, end: 5 });
+  expect(ex?.startLine).toBe(30);
+  expect(ex?.endLine).toBe(30);
+  expect(ex?.lines).toEqual(["line 30"]);
+});
+
+// ----- isFileTooLargeToPreview -----
+
+test("reports a file over MAX_EXCERPT_BYTES as too large to preview", () => {
+  write("huge.ts", "x".repeat(MAX_EXCERPT_BYTES + 1));
+  expect(isFileTooLargeToPreview(cwd, "huge.ts")).toBe(true);
+  expect(readFileExcerpt(cwd, "huge.ts")).toBeNull();
+});
+
+test("does not report a small, a missing, or an escaping file as too large", () => {
+  write("small.ts", numberedLines(5));
+  writeFileSync(join(cwd, "..", "outside.ts"), "x".repeat(MAX_EXCERPT_BYTES + 1));
+  expect(isFileTooLargeToPreview(cwd, "small.ts")).toBe(false);
+  expect(isFileTooLargeToPreview(cwd, "ghost.ts")).toBe(false);
+  expect(isFileTooLargeToPreview(cwd, "../outside.ts")).toBe(false);
+  rmSync(join(cwd, "..", "outside.ts"), { force: true });
 });

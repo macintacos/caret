@@ -39,7 +39,7 @@ import {
   type RouteResult,
   toClientReview,
 } from "@/lib/types.ts";
-import { readFileExcerpt, resolveFileInCwd } from "@/plan/excerpt.ts";
+import { isFileTooLargeToPreview, readFileExcerpt, resolveFileInCwd } from "@/plan/excerpt.ts";
 import { createDecisions } from "@/review/decisions.ts";
 import type { Store } from "@/review/store.ts";
 import { routeIncomingPlan } from "@/review/threading.ts";
@@ -282,6 +282,10 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return new Response("not found", { status: 404 });
   }
 
+  function tooLarge() {
+    return new Response("too large", { status: 413 });
+  }
+
   // GET /api/health — the daemon's identity signature.
   function handleHealth(): Response {
     // Undefined fields are dropped from the JSON, so a daemon missing any
@@ -482,19 +486,29 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return Response.json({ resolved });
   }
 
-  // GET /api/reviews/:id/file?path=&line= — a bounded, line-aware excerpt of a
-  // plan-referenced file for the hover preview. Resolution is confined to the
-  // review's cwd; a path that doesn't resolve (missing, or escaping cwd) is a
-  // 404. File contents are never logged.
+  // GET /api/reviews/:id/file?path=&line=&start=&end= — a line-aware excerpt of
+  // a plan-referenced file for the preview card. `line` centres a default
+  // window; `start`/`end` state one outright (both required, and they win over
+  // `line`), which is how the card's boundary strips expand toward the file's
+  // ends. Resolution is confined to the review's cwd; a path that doesn't
+  // resolve (missing, or escaping cwd) is a 404, and a file too large to preview
+  // is a 413 so the UI can say so. File contents are never logged.
   function handleFileExcerpt(req: Request, id: string): Response {
     const r = store.get(id);
     if (!r) return notFound();
     const params = new URL(req.url).searchParams;
     const path = params.get("path") ?? "";
-    const lineRaw = params.get("line");
-    const line = lineRaw !== null && /^\d+$/.test(lineRaw) ? Number(lineRaw) : undefined;
-    const excerpt = readFileExcerpt(r.cwd, path, line);
-    return excerpt ? Response.json(excerpt) : notFound();
+    const num = (key: string): number | undefined => {
+      const raw = params.get(key);
+      return raw !== null && /^\d+$/.test(raw) ? Number(raw) : undefined;
+    };
+    const line = num("line");
+    const start = num("start");
+    const end = num("end");
+    const range = start !== undefined && end !== undefined ? { start, end } : undefined;
+    const excerpt = readFileExcerpt(r.cwd, path, line, range);
+    if (excerpt) return Response.json(excerpt);
+    return isFileTooLargeToPreview(r.cwd, path) ? tooLarge() : notFound();
   }
 
   // GET /api/reviews/:id/decision — the hook's long-poll for a decision.
