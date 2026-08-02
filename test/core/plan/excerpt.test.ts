@@ -12,11 +12,13 @@ import {
   resolveFileInCwd,
 } from "@/plan/excerpt.ts";
 
-// plan-files.ts resolves a plan's filename reference to a real file *inside the
+// excerpt.ts resolves a plan's filename reference to a real file *inside the
 // review's cwd* (the daemon's source of truth is the review record, never the
-// client) and reads a bounded, line-aware excerpt for the hover preview. The
-// containment guard is load-bearing: the daemon must never become an arbitrary
-// local-file reader, so `../` and symlink escapes resolve to null.
+// client) and reads a line-aware excerpt for the preview card — a default window
+// around the reference, or an explicit range the card asks for as the reader
+// expands it. The containment guard is load-bearing: the daemon must never
+// become an arbitrary local-file reader, so `../` and symlink escapes resolve to
+// null, whatever window is requested.
 
 let dir: string;
 let cwd: string; // realpath of dir, so assertions compare canonical paths
@@ -185,9 +187,17 @@ test("reports a file over MAX_EXCERPT_BYTES as too large to preview", () => {
 
 test("does not report a small, a missing, or an escaping file as too large", () => {
   write("small.ts", numberedLines(5));
-  writeFileSync(join(cwd, "..", "outside.ts"), "x".repeat(MAX_EXCERPT_BYTES + 1));
-  expect(isFileTooLargeToPreview(cwd, "small.ts")).toBe(false);
-  expect(isFileTooLargeToPreview(cwd, "ghost.ts")).toBe(false);
-  expect(isFileTooLargeToPreview(cwd, "../outside.ts")).toBe(false);
-  rmSync(join(cwd, "..", "outside.ts"), { force: true });
+  // An oversized file outside cwd answers false because it never resolves, not
+  // because of its size — so it needs to really be oversized. Its own temp dir,
+  // torn down in a finally, keeps 2 MiB out of the shared tmpdir on a failure.
+  const outsideDir = mkdtempSync(join(tmpdir(), "caret-planfiles-outside-"));
+  const outside = join(outsideDir, "huge.ts");
+  try {
+    writeFileSync(outside, "x".repeat(MAX_EXCERPT_BYTES + 1));
+    expect(isFileTooLargeToPreview(cwd, "small.ts")).toBe(false);
+    expect(isFileTooLargeToPreview(cwd, "ghost.ts")).toBe(false);
+    expect(isFileTooLargeToPreview(cwd, outside)).toBe(false);
+  } finally {
+    rmSync(outsideDir, { recursive: true, force: true });
+  }
 });

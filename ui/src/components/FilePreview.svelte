@@ -46,7 +46,11 @@
     | { kind: "error" }
     | { kind: "too-large" }
     | { kind: "ready"; excerpt: FileExcerpt; rows: Row[] };
-  let preview = $state<Preview>({ kind: "loading" });
+  // Raw, not deep-proxied: `preview` is only ever replaced wholesale, and its
+  // `rows` array is one object per source line — unbounded once the reader
+  // expands toward a large file's ends. Proxying every row would buy reactivity
+  // nothing here and cost a signal per row read.
+  let preview = $state.raw<Preview>({ kind: "loading" });
 
   /** Lines one strip click adds to that side of the window. */
   const EXPAND_STEP = 50;
@@ -87,7 +91,9 @@
     ln: number | undefined,
     range?: { start: number; end: number },
   ): Promise<Extract<Preview, { kind: "ready" }>> {
-    const excerpt = await getFileExcerpt(id, p, ln, range);
+    // An explicit range wins over `line` server-side, so don't send both — one
+    // window per request, with no precedence for a future edit to invert.
+    const excerpt = await getFileExcerpt(id, p, range === undefined ? ln : undefined, range);
     const html = await highlightExcerpt(
       excerpt.lines.join("\n"),
       excerpt.language,
@@ -124,15 +130,18 @@
     };
   });
 
-  let expanding = false;
+  // Reactive so the strips can show they are busy: a click that lands while a
+  // widened window is in flight is dropped, and the wait grows with the window.
+  let expanding = $state(false);
   // Widen the window one step toward `direction` and refetch it whole. Refetching
   // rather than splicing in a delta chunk is what keeps the colouring right:
   // shiki needs the full window to close multi-line constructs (a block comment,
   // a template literal) that begin outside a fragment. The current rows stay on
   // screen while the wider window loads, so the card never blanks.
-  // ponytail: re-highlight cost grows with the window — walking a very large file
-  // to both ends re-highlights every line each step. Chunked or virtualized
-  // rendering is the upgrade path if that ever bites.
+  // ponytail: both costs here scale with the file — re-highlighting redoes the
+  // whole widened window each step, and a fixed EXPAND_STEP means a 20k-line file
+  // is hundreds of clicks from end to end. Chunked or virtualized rendering, and
+  // a step that tracks the visible row count, are the upgrade paths if either bites.
   async function expand(direction: "up" | "down"): Promise<void> {
     if (preview.kind !== "ready" || expanding) return;
     const { startLine, endLine } = preview.excerpt;
@@ -144,7 +153,8 @@
     const p = path;
     const ln = line;
     const region = codeEl;
-    const before = region === undefined ? null : { top: region.scrollTop, height: region.scrollHeight };
+    const before =
+      region === undefined ? null : { top: region.scrollTop, height: region.scrollHeight };
     expanding = true;
     try {
       const ready = await load(id, p, ln, range);
@@ -155,8 +165,8 @@
       if (direction === "up" && region !== undefined && before !== null) {
         await tick();
         // Every revealed line sits above what the reader was looking at, so
-        // adding the growth back to the offset holds their place exactly. While
-        // the region isn't scrollable yet the browser clamps this to 0.
+        // adding the growth back to the offset holds their place exactly. The
+        // browser clamps the result when the card grew instead of the region.
         region.scrollTop = before.top + (region.scrollHeight - before.height);
       }
     } catch {
@@ -168,17 +178,27 @@
 
   let codeEl = $state<HTMLElement>();
   let centred = false;
-  // Bring the cited line into view on first open. The opening window is wider
-  // than the code region is tall, so the marked row would otherwise sit below the
-  // fold. scrollTop directly rather than scrollIntoView, which would also scroll
-  // the plan view behind the card.
+  // Bring the cited line into view on first open. The opening window is taller
+  // than the code region, so the marked row would otherwise sit below the fold.
+  // scrollTop directly rather than scrollIntoView, which would also scroll the
+  // plan view behind the card.
   $effect(() => {
     if (preview.kind !== "ready" || centred || line === undefined) return;
+    // Wait for the placement pass to put its cap on the card. Until it does the
+    // card is bounded only by the `100vh` fallback, and a row centred against
+    // that taller region drops below the fold the moment the cap shrinks it.
+    if (placement.maxHeight === undefined) return;
     const region = codeEl;
-    const row = region?.querySelector<HTMLElement>(".fp-target");
-    if (region === undefined || row === null || row === undefined) return;
+    if (region === undefined) return;
     centred = true;
-    region.scrollTop = row.offsetTop - (region.clientHeight - row.offsetHeight) / 2;
+    // A reference citing a line past EOF gets a window clamped to the last line,
+    // so no row is marked and there is nothing to centre — stop looking.
+    const row = region.querySelector<HTMLElement>(".fp-target");
+    if (row === null) return;
+    region.scrollTop +=
+      row.getBoundingClientRect().top -
+      region.getBoundingClientRect().top -
+      (region.clientHeight - row.offsetHeight) / 2;
   });
 
   const GAP = 8;
@@ -197,8 +217,9 @@
     originX: number;
     // How tall the card may grow on the side it landed on, so an expanded window
     // stops at the viewport edge and scrolls internally from there. Undefined
-    // until first placed: the card must measure at its natural height, and a
-    // seeded cap would collapse it and make that measurement meaningless.
+    // until first placed — the card is then bounded only by the `100vh` fallback,
+    // rather than collapsed by a seeded cap that would make the first
+    // measurement meaningless.
     maxHeight?: number;
   }>({
     left: -9999,
@@ -224,10 +245,11 @@
     const left = Math.max(MARGIN, Math.min(anchor.left, window.innerWidth - rect.width - MARGIN));
     const spaceAbove = anchor.top - GAP - MARGIN;
     const spaceBelow = window.innerHeight - anchor.bottom - GAP - MARGIN;
-    // What the card would measure with no cap on it. Once a previous pass has
-    // capped it, `rect.height` is that cap rather than the content's height, so
-    // whatever the code region is currently hiding has to be added back — else
-    // the card judges itself short enough for a gap it has long outgrown.
+    // What the card would measure with no cap on it. Whenever the card is capped
+    // — by a previous pass, or by the `100vh` fallback on the first one —
+    // `rect.height` is that cap rather than the content's height, so whatever the
+    // code region is currently hiding has to be added back; else the card judges
+    // itself short enough for a gap it has long outgrown.
     const hidden = codeEl === undefined ? 0 : codeEl.scrollHeight - codeEl.clientHeight;
     const natural = rect.height + hidden;
     // Prefer above while the card fits there; once it has outgrown both sides,
@@ -293,7 +315,11 @@
       <button
         type="button"
         class="fp-edge fp-edge-top"
-        aria-label="Show {Math.min(EXPAND_STEP, meta.above)} more lines above"
+        aria-label="{meta.above} {lineWord(meta.above)} above — show {Math.min(
+          EXPAND_STEP,
+          meta.above,
+        )} more"
+        aria-busy={expanding}
         onclick={() => expand("up")}>↑ {meta.above} {lineWord(meta.above)} above</button
       >
     {/if}
@@ -310,7 +336,11 @@
       <button
         type="button"
         class="fp-edge fp-edge-bottom"
-        aria-label="Show {Math.min(EXPAND_STEP, meta.below)} more lines below"
+        aria-label="{meta.below} {lineWord(meta.below)} below — show {Math.min(
+          EXPAND_STEP,
+          meta.below,
+        )} more"
+        aria-busy={expanding}
         onclick={() => expand("down")}>↓ {meta.below} {lineWord(meta.below)} below</button
       >
     {/if}
@@ -430,12 +460,10 @@
      window saying how much file it omits — and the control that reaches it. A
      click widens the window one step toward that end, so the count is both the
      label and the affordance; the strip retires once its side hits the file's
-     edge. Full-width button with the UA chrome reset off, so it keeps reading as
+     edge. A button with the UA border and font dropped, so it keeps reading as
      part of the card until the pointer or keyboard lands on it. */
   .fp-edge {
     flex: 0 0 auto;
-    display: block;
-    width: 100%;
     border: 0;
     padding: 0.25rem 0.6rem;
     font-family: var(--font-mono);
@@ -446,15 +474,21 @@
     color: var(--ink-soft);
     background: var(--paper-sunk);
     user-select: none;
-    cursor: pointer;
     transition: color var(--dur-fast) var(--ease-out);
   }
   .fp-edge:hover {
     color: var(--ink);
   }
+  /* Inset the app-wide focus ring rather than restyling it: the card clips to its
+     radius, so an outset ring on a flush-edge strip would be cut off. */
   .fp-edge:focus-visible {
-    outline: 2px solid var(--accent);
     outline-offset: -2px;
+  }
+  /* A widened window is loading, and this click would be dropped — say so rather
+     than looking live and doing nothing. */
+  .fp-edge[aria-busy="true"] {
+    color: var(--ink-faint);
+    cursor: progress;
   }
   .fp-edge-top {
     border-bottom: 1px solid var(--rule);
@@ -472,10 +506,6 @@
      the plan, not a smaller sibling. The header and boundary strips stay at the
      --text-2xs label size. */
   .fp-code {
-    /* Positioned so it is the offsetParent of its own rows: centring the cited
-       line reads `row.offsetTop`, which against an unpositioned region would be
-       measured from the card instead and overshoot by the header + strip. */
-    position: relative;
     flex: 1;
     min-height: 0;
     padding: 0.4rem 0;

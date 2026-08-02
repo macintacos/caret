@@ -161,7 +161,9 @@ export function resolveFileInCwd(cwd: string, candidate: string): string | null 
  * True when `candidate` resolves to a real file inside `cwd` that exceeds
  * `MAX_EXCERPT_BYTES` — the one case `readFileExcerpt`'s null hides that the UI
  * shows differently. Answered on the error path only, so the common path pays
- * nothing for the extra resolve. Never throws.
+ * nothing for the extra resolve; on that path a reference that resolves to
+ * nothing re-runs `resolveFileInCwd`'s bounded basename search, which is why
+ * this is not called before `readFileExcerpt`. Never throws.
  */
 export function isFileTooLargeToPreview(cwd: string, candidate: string): boolean {
   const abs = resolveFileInCwd(cwd, candidate);

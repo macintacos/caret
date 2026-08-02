@@ -51,6 +51,38 @@ const CACHE_TS = Array.from({ length: CACHE_TS_LINES }, (_, i) => {
   return `const line${n} = ${n};`;
 }).join("\n");
 
+/** Where the cited (`.fp-target`) row sits inside the preview's scrolling code
+ * region, plus the region's own scroll state — the geometry both scroll specs
+ * below read. Null when no preview or no cited row is on screen. */
+function citedRowInRegion(page: import("@playwright/test").Page): Promise<{
+  offset: number;
+  region: number;
+  row: number;
+  scrollTop: number;
+} | null> {
+  return page.evaluate(() => {
+    const code = document.querySelector("[data-file-preview] .fp-code");
+    const row = document.querySelector("[data-file-preview] .fp-target");
+    if (code === null || row === null) return null;
+    const c = code.getBoundingClientRect();
+    const r = row.getBoundingClientRect();
+    return {
+      offset: r.top - c.top,
+      region: c.height,
+      row: r.height,
+      scrollTop: (code as HTMLElement).scrollTop,
+    };
+  });
+}
+
+/** Assert the cited row is fully on screen within the code region — neither
+ * scrolled off the top nor left below the fold. */
+function expectCitedRowVisible(m: Awaited<ReturnType<typeof citedRowInRegion>>): void {
+  expect(m).not.toBeNull();
+  expect(m?.offset ?? -1).toBeGreaterThanOrEqual(0);
+  expect(m?.offset ?? Infinity).toBeLessThanOrEqual((m?.region ?? 0) - (m?.row ?? 0));
+}
+
 /** The number of file-reference icons currently tagged in the plan's shadow root. */
 function fileRefCount(page: import("@playwright/test").Page): Promise<number> {
   return page.evaluate(() => {
@@ -422,31 +454,60 @@ test("expanding upward keeps the reader's line in view", async ({ daemon, page }
     await expect(preview).toBeVisible();
     await expect(preview.locator(".fp-target")).toHaveCount(1);
 
-    // How far the cited row sits below the top of the scrolling region.
-    const offsetInRegion = () =>
-      page.evaluate(() => {
-        const code = document.querySelector("[data-file-preview] .fp-code");
-        const row = document.querySelector("[data-file-preview] .fp-target");
-        if (code === null || row === null) return null;
-        const c = code.getBoundingClientRect();
-        const r = row.getBoundingClientRect();
-        return { offset: r.top - c.top, region: c.height, row: r.height };
-      });
-
-    const before = await offsetInRegion();
+    const before = await citedRowInRegion(page);
     expect(before).not.toBeNull();
-    // The region really is scrolled, so there is a place to be dumped from.
-    expect(before?.offset ?? 0).toBeGreaterThan(0);
+    // The reader is genuinely parked mid-file — the region is scrolled, so there
+    // is somewhere to be dumped from, and the cited row is on screen to begin with.
+    expect(before?.scrollTop ?? 0).toBeGreaterThan(0);
+    expectCitedRowVisible(before);
 
     await preview.locator(".fp-edge-top").click();
     await expect(preview.locator(".fp-lnum").first()).toHaveText("1");
 
-    const after = await offsetInRegion();
-    expect(after).not.toBeNull();
-    // Still on screen inside the region — not pushed off either edge by the 41
+    // Still on screen inside the region — not pushed off either edge by the 11
     // lines that just appeared above it.
-    expect(after?.offset ?? -1).toBeGreaterThanOrEqual(0);
-    expect(after?.offset ?? Infinity).toBeLessThanOrEqual((after?.region ?? 0) - (after?.row ?? 0));
+    expectCitedRowVisible(await citedRowInRegion(page));
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("the cited line is in view on open, wherever the reference sits", async ({ daemon, page }) => {
+  // The opening window is taller than the code region, so the cited line is only
+  // visible because the card scrolls to it — and that scroll is computed against
+  // the region's height, which the card's viewport-derived cap decides. The
+  // worst case is a reference near the vertical middle of the viewport: the card
+  // takes the roomier of the two gaps, and both are at their smallest there, so
+  // it gets the shortest region any anchor can produce. A reference in the first
+  // line or two of a plan (every other spec here) gets a tall card and never
+  // exercises it.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    const filler = Array.from({ length: 7 }, (_, i) => `Preamble paragraph ${i + 1}.`).join("\n\n");
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: `# Refs\n\n${filler}\n\nThe cache key lives in \`src/cache.ts:42\` today.\n`,
+    });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+
+    // The token must actually land in the middle band for this to be the case it
+    // claims to be; assert that rather than trusting the filler's line height.
+    const anchorY = await page.evaluate(() => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+      const tok = sh?.querySelector("[data-file-ref]");
+      return tok === null || tok === undefined ? null : tok.getBoundingClientRect().top;
+    });
+    expect(anchorY ?? 0).toBeGreaterThan(0.35 * 900);
+    expect(anchorY ?? Infinity).toBeLessThan(0.65 * 900);
+
+    await page.locator("[data-file-ref]").first().click();
+    const preview = page.locator("[data-file-preview]");
+    await expect(preview).toBeVisible();
+    await expect(preview.locator(".fp-target")).toHaveCount(1);
+
+    expectCitedRowVisible(await citedRowInRegion(page));
   } finally {
     await proj.cleanup();
   }

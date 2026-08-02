@@ -255,7 +255,12 @@ describe("FilePreview expansion", () => {
     await until(() => target.querySelector(".fp-edge-bottom") != null);
     const bottom = target.querySelector(".fp-edge-bottom");
     expect(bottom?.tagName).toBe("BUTTON");
-    expect(bottom?.getAttribute("aria-label")).toContain("more lines below");
+    // The accessible name says what the click does, and it still contains the
+    // visible label — speech input activates a control by what it reads
+    // (WCAG 2.5.3 label-in-name), so the two must not diverge.
+    const name = bottom?.getAttribute("aria-label") ?? "";
+    expect(name).toContain("show 50 more");
+    expect(name).toContain((bottom?.textContent ?? "").replace("↓ ", "").trim());
   });
 
   test("clicking a strip widens the window toward that end of the file", async () => {

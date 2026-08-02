@@ -7,10 +7,11 @@ import { bootDaemon, type TestDaemon } from "@test/support/daemon.ts";
 import type { FileExcerpt } from "@/lib/types.ts";
 import { EXCERPT_RADIUS, MAX_EXCERPT_BYTES } from "@/plan/excerpt.ts";
 
-// The two review-scoped file routes back the plan view's filename hover (EXC-687).
-// Both key off the review record's own cwd (never a client-supplied base), and
-// both refuse to read outside it — the daemon must not become an arbitrary
-// local-file reader even though it binds loopback-only.
+// The two review-scoped file routes back the plan view's filename preview
+// (EXC-687). Both key off the review record's own cwd (never a client-supplied
+// base), and both refuse to read outside it — the daemon must not become an
+// arbitrary local-file reader even though it binds loopback-only. That holds for
+// the explicit start/end window the preview's boundary strips ask for too.
 
 let store: string; // the daemon's own state dir
 let cwd: string; // the review's project dir, populated with real files
