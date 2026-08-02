@@ -10,21 +10,24 @@ import { paletteCssCommand } from "@/tasks/build.ts";
 import { runForward } from "@/tasks/lib/exec.ts";
 
 /**
- * The commands `setup` runs, in order. `scripts/bootstrap.sh` re-implements the
- * first three in bash for its cold path — a new step the tasks CLI needs in
- * order to *load* has to be added there too, or a fresh clone still can't run.
+ * The commands `setup` runs, in order. `scripts/bootstrap.sh` sets
+ * CARET_BOOTSTRAPPED only after its cold path has run the `preamble` set below
+ * and every step succeeded, so a set marker means those are already done. Unset
+ * means nothing vouches for them — the warm path, where the bootstrap no-ops, or
+ * any invocation outside a mise forwarder — and the full list runs.
  */
-export function setupCommands(): string[][] {
-  return [
-    ["mise", "install"],
-    ["bun", "install"],
-    paletteCssCommand(),
-    ["bunx", "playwright", "install", "chromium"],
-  ];
+export function setupCommands(env: Record<string, string | undefined>): string[][] {
+  // What scripts/bootstrap.sh re-implements in bash. A new step the tasks CLI
+  // needs in order to *load* belongs here and there, or a fresh clone can't run.
+  const preamble = [["mise", "install"], ["bun", "install"], paletteCssCommand()];
+  // What `setup` owns whatever the preamble did. Chromium is here because the
+  // bootstrap deliberately never downloads a browser; new steps go here too.
+  const own = [["bunx", "playwright", "install", "chromium"]];
+  return env.CARET_BOOTSTRAPPED ? own : [...preamble, ...own];
 }
 
 export async function runSetup(): Promise<never> {
-  for (const cmd of setupCommands()) {
+  for (const cmd of setupCommands(process.env)) {
     const code = await runForward(cmd);
     if (code !== 0) process.exit(code);
   }
