@@ -86,9 +86,9 @@ test("parseDecision fails safe to a deny on empty output", () => {
   expect(parseDecision("   \n").behavior).toBe("deny");
 });
 
-// --- isPlanningAgent (subagent guard) ---
+// --- isPlanningAgent (steer + warm gate) ---
 
-test("isPlanningAgent allows the plan agent only", () => {
+test("isPlanningAgent matches the plan agent only", () => {
   expect(isPlanningAgent("plan")).toBe(true);
   expect(isPlanningAgent("build")).toBe(false);
   expect(isPlanningAgent(undefined)).toBe(false);
@@ -390,6 +390,8 @@ test("the review tool refuses a subagent caller (a child session) without spawni
 
 test("the review tool proceeds for any primary caller — build and a user-defined agent", async () => {
   const client = sessionClient(() => Promise.resolve({ data: { parentID: null } }));
+  // execute() deliberately does not consult context.agent; both names are here to
+  // pin the requirement (any primary agent), not because they drive distinct paths.
   for (const agent of ["build", "refine"]) {
     const hooks = await buildHooks(stubRunner(`{"behavior":"allow"}`), client);
     const out = await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, ctx(agent));
@@ -520,6 +522,18 @@ test("the system-transform hook pushes nothing for a session chat.message never 
     output as never,
   );
   expect(output.system).toEqual(["base"]);
+});
+
+test("a chat.message with an unknown agent does not clobber the recorded one", async () => {
+  const hooks = await buildHooks(stubRunner("{}"));
+  await hooks["chat.message"]?.({ sessionID: "S", agent: "plan" } as never, {} as never);
+  await hooks["chat.message"]?.({ sessionID: "S" } as never, {} as never);
+  const output = { system: ["base"] };
+  await hooks["experimental.chat.system.transform"]?.(
+    { sessionID: "S", model: {} } as never,
+    output as never,
+  );
+  expect(output.system.join("\n")).toContain(REVIEW_TOOL);
 });
 
 test("a later chat.message replaces the session's recorded agent (agent switching)", async () => {

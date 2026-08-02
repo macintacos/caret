@@ -68,6 +68,12 @@ the steer. The safety net is already in place: the `tool.definition` hook rewrit
 only on the `plan` agent, so the plan agent is still routed to caret even on a missed
 steer.
 
+That safety net does **not** make the steer redundant, and the two are not
+interchangeable. The `plan_exit` rewrite is *reactive* — it only fires once the model has
+already reached for `plan_exit`. The steer is *proactive*: it tells a model that would
+otherwise just narrate its plan in prose to call the tool at all. Both are kept because a
+model that never considers `plan_exit` is exactly the case the rewrite cannot catch.
+
 ## The bridge: the plugin spawns `caret review`
 
 caret does **not** re-implement the daemon round-trip inside the plugin. The tool's
@@ -102,8 +108,9 @@ explicit, occasional act. Warming on every `build` message would spawn a process
 busiest traffic in the session to save ~0.4 s in the rare case — and the 60 s idle-exit
 below means a warm triggered by an unrelated `build` message is usually dead before any
 review lands anyway. So non-plan callers accept the cold spawn. `chat.message` therefore
-does two things with different scopes: record the session's agent (always, for the steer
-below) and warm the daemon (plan only).
+does two things with different scopes: record the session's agent (always — that is what §
+Why gating the steer needs a session→agent map reads back) and warm the daemon (plan
+only).
 
 **Why not a plugin-load (session-start) warm.** EXC-838 proposed warming at true session
 start — a `SessionStart` hook for Claude Code, a plugin-load warm here. Two measurements
@@ -160,7 +167,7 @@ edit, so a narrow permission never prevented unreviewed work — a `build` agent
 always ship without calling it. All a narrow permission did was stop an agent from
 *voluntarily* asking for a review, which is the opposite of what caret wants. The workflow
 this unblocks: skills that must run under `build` (they write outside what OpenCode's
-`plan` agent permits) can now put a diff through caret's review UI.
+`plan` agent permits) can hand any markdown to caret's review UI, not just a plan.
 
 **The in-body check's failure fallback is `allow`,** deliberately inverting this file's
 usual fail-safe-deny rule. That rule governs review *decisions*, where a deny stops
@@ -181,6 +188,16 @@ rescues it. The helper stays idempotent and preservation-safe (it keeps existing
 `primary_tools`, agent modes, other permissions, and any review-tool permission the user
 set themselves) and normalizes the degenerate "permission is a bare string" shape before
 writing, so it can't corrupt a user's config.
+
+**One consequence, unresolved.** That rescue reaches `plan` and only `plan`. A user with a
+global `permission: { "*": "deny" }` therefore keeps the tool on the plan agent and loses
+it everywhere else — so "any primary agent can ask for a review" holds for the default
+config but not for the very config the retained line exists to survive. Writing the allow
+into the **global** `permission` map instead would cover every primary at the same cost,
+and subagents should still be blocked (the `task` tool appends its `primary_tools` denies
+ahead of inherited rules). "Should" is the reason this is not done here: that precedence
+was not confirmable from the minified binary with the confidence the per-agent claim got,
+so it wants the live check § Verified vs. follow-up already schedules.
 
 ## How it maps onto caret's two-layer split
 
@@ -353,9 +370,9 @@ user-defined agent proceeding / the allow-on-unreadable-session fallback in each
 three shapes); the config hook (writes `primary_tools`, leaves other agents untouched,
 never overwrites a user's own review-tool permission); the steer gate (plan agent yes,
 `build` no, no `sessionID` no, unseen session no, agent switching mid-session); the
-`chat.message` warm hook (warms for the plan agent, not for a build/unknown caller, and
-still doesn't after it started recording every session's agent) and the production warm
-runner it hides (survives a bad binary's async spawn error, and runs `prewarm` with
+`chat.message` warm hook (warms for the plan agent only — not for a build or unknown
+caller — even though it records every session's agent) and the production warm runner it
+hides (survives a bad binary's async spawn error, and runs `prewarm` with
 `CARET_AGENT=opencode`); the entrypoint's `Object.values`-single-Plugin invariant; the
 config-array editor (add/remove, comment-preserving); `--target` parsing + dispatch; the
 `claude` target's CLI command sequence; the runtime bin/version resolvers; and the update

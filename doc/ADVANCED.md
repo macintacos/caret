@@ -156,9 +156,10 @@ hooks for subagent tool calls, so caret marks the review tool primary-only
 (`experimental.primary_tools`, which OpenCode turns into a deny rule on every subagent
 session) and re-checks in the tool body that the call didn't come from a subagent's child
 session. Only the Plan agent is _steered_ toward the tool — but if you're mid-session on
-`build` and want a diff in front of you before it lands, you can just ask for it. The same
-**fail-safe = deny** rule holds where it matters, on the review decision itself: a spawn
-failure, an unparseable decision, or a timeout all return `deny`.
+`build` and want something in front of you before it lands, you can just ask for it; the
+review UI takes any markdown, not only a plan. The same **fail-safe = deny** rule holds
+where it matters, on the review decision itself: a spawn failure, an unparseable decision,
+or a timeout all return `deny`.
 
 caret installs into OpenCode as a `plugin` array entry: `caret install --target opencode`
 adds `@macintacos/caret` to your OpenCode config's `plugin` array (comment-preserving, via
