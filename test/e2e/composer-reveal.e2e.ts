@@ -1,0 +1,199 @@
+// Composer reveal (EXC-782): opening a comment near the bottom of the plan left
+// the composer clipped, often with its whole Comment / Keep for later / Discard
+// row off screen. The composer now scrolls itself into view on mount, moving the
+// plan the minimum amount that shows the whole card. Real layout and real scroll
+// behavior, so it is an e2e per browser-testing.md — happy-dom reports zero for
+// every metric this measures.
+
+import type { Locator, Page } from "@playwright/test";
+
+import { expect, test } from "@test/e2e/support/fixtures.ts";
+
+// Several viewports tall, so a composer can open well below the fold and there is
+// always somewhere to scroll to.
+const filler = (label: string) =>
+  Array.from({ length: 40 }, (_, i) => `${label} line ${i + 1} keeps the plan tall.`).join("\n");
+const TALL_PLAN = [
+  "# Alpha",
+  filler("Alpha"),
+  "## Bravo",
+  filler("Bravo"),
+  "## Charlie",
+  filler("Charlie"),
+  "",
+].join("\n\n");
+
+/** The vertical center (viewport px) of a 1-based source line's gutter cell. */
+async function lineCenterY(page: Page, line: number): Promise<number> {
+  return page.evaluate((ln) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const span = Array.from(sh?.querySelectorAll("[data-line-number-content]") ?? []).find(
+      (s) => (s.parentElement as HTMLElement)?.dataset.lineIndex === String(ln - 1),
+    );
+    const r = (span?.parentElement as HTMLElement)?.getBoundingClientRect();
+    return r ? r.y + r.height / 2 : 0;
+  }, line);
+}
+
+/** Reveal the gutter `+` on `line` by hovering the scroll container's left edge
+ * (the gutter sits there, shifted right by the contents pane). */
+async function revealGutterPlus(page: Page, line: number): Promise<Locator> {
+  const y = await lineCenterY(page, line);
+  const x = await page.locator(".diff-plan").evaluate((el) => el.getBoundingClientRect().x + 6);
+  await page.mouse.move(x, y);
+  const plus = page.locator(".diffview [data-utility-button]");
+  await expect(plus).toBeVisible();
+  return plus;
+}
+
+/** The highest 1-based line whose gutter cell still sits fully inside the scroll
+ * viewport — the anchor whose composer is guaranteed to open past the fold, since
+ * the annotation row renders below its line. */
+async function lastVisibleLine(page: Page): Promise<number> {
+  const line = await page.evaluate(() => {
+    const scroller = document.querySelector(".diff-plan");
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    if (scroller == null || sh == null) return 0;
+    const viewBottom = scroller.getBoundingClientRect().bottom;
+    let best = 0;
+    for (const span of sh.querySelectorAll("[data-line-number-content]")) {
+      const cell = span.parentElement as HTMLElement | null;
+      const index = cell?.dataset.lineIndex;
+      if (cell == null || index === undefined) continue;
+      if (cell.getBoundingClientRect().bottom > viewBottom) continue;
+      best = Math.max(best, Number(index) + 1);
+    }
+    return best;
+  });
+  if (line === 0) throw new Error("no fully-visible source line found");
+  return line;
+}
+
+/** How far `dialog`'s bottom edge overhangs the scroll viewport's, in px.
+ * `<= 0` means the whole card — label, editor, action row — is on screen. */
+async function bottomOverhang(dialog: Locator): Promise<number> {
+  return dialog.evaluate((el) => {
+    const scroller = document.querySelector(".diff-plan");
+    if (scroller == null) return Number.NaN;
+    return el.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom;
+  });
+}
+
+/** Resolve once `count` animation frames have elapsed. Frames, not wall-clock:
+ * this rides the same rAF loop the reveal measures on, so it outlasts the
+ * height-settle retry without racing it or sleeping a fixed span. */
+async function afterFrames(page: Page, count: number): Promise<void> {
+  await page.evaluate(
+    (n) =>
+      new Promise<void>((resolve) => {
+        let left = n;
+        const tick = () => (--left <= 0 ? resolve() : requestAnimationFrame(tick));
+        requestAnimationFrame(tick);
+      }),
+    count,
+  );
+}
+
+async function loadPlan(page: Page): Promise<void> {
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
+}
+
+/** Scroll so `dialog`'s bottom edge rests on the scroll viewport's bottom edge. */
+async function parkAtBottom(page: Page, selector: string): Promise<void> {
+  await page.evaluate((sel) => {
+    const scroller = document.querySelector(".diff-plan");
+    const el = document.querySelector(sel);
+    if (scroller == null || el == null) return;
+    const delta = el.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom;
+    scroller.scrollBy({ top: delta, behavior: "auto" });
+  }, selector);
+}
+
+test("a composer opened on the last visible line scrolls itself fully into view", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: TALL_PLAN });
+  await page.goto("/");
+  await loadPlan(page);
+
+  // Park a third of the way down, so there is plan above and below the composer.
+  const view = page.locator(".diff-plan");
+  await view.evaluate((el) => el.scrollTo({ top: Math.round(el.scrollHeight / 3) }));
+  await expect.poll(() => view.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  const before = await view.evaluate((el) => el.scrollTop);
+
+  // The composer opens in the annotation row BELOW this line, so it starts clipped.
+  const plus = await revealGutterPlus(page, await lastVisibleLine(page));
+  await plus.click();
+
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+
+  // The whole card ends up on screen — the poll absorbs the settle frames and the
+  // smooth scroll — and it took a scroll to get there. Without the reveal the view
+  // never moves and the action row stays below the fold.
+  await expect.poll(() => bottomOverhang(composer)).toBeLessThanOrEqual(0);
+  expect(await view.evaluate((el) => el.scrollTop)).toBeGreaterThan(before);
+});
+
+test("a composer that already fits leaves the view exactly where it was", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: TALL_PLAN });
+  await page.goto("/");
+  await loadPlan(page);
+
+  const view = page.locator(".diff-plan");
+  const before = await view.evaluate((el) => el.scrollTop);
+
+  // Line 3 is body text near the top, with the whole viewport below it.
+  const plus = await revealGutterPlus(page, 3);
+  await plus.click();
+
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+  await expect(composer).toBeInViewport();
+
+  // Past the settle cap, so the measurement has certainly run: it found the card
+  // already inside the viewport and moved nothing.
+  await afterFrames(page, 40);
+  expect(await view.evaluate((el) => el.scrollTop)).toBe(before);
+});
+
+test("re-opening a saved comment for editing inherits the same reveal", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: TALL_PLAN });
+  await page.goto("/");
+  await loadPlan(page);
+
+  const view = page.locator(".diff-plan");
+  await view.evaluate((el) => el.scrollTo({ top: Math.round(el.scrollHeight / 3) }));
+  await expect.poll(() => view.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+
+  // Leave a comment anchored near the bottom of the view.
+  const plus = await revealGutterPlus(page, await lastVisibleLine(page));
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+  await composer.getByRole("textbox", { name: "Comment" }).fill("Worth a second look.");
+  await composer.getByRole("button", { name: "Comment" }).click();
+  await expect(composer).toHaveCount(0);
+
+  // Park the saved card flush against the bottom edge, so the taller edit
+  // composer that replaces it is clipped the moment it mounts.
+  const card = page.locator("[data-annotation-card]");
+  await expect(card).toBeVisible();
+  await parkAtBottom(page, "[data-annotation-card]");
+  await card.getByRole("button", { name: "Edit" }).click();
+
+  // The edit surface is the same component, so it reveals itself the same way —
+  // this is the second parent inheriting the behavior, not a second wiring.
+  const editor = page.getByRole("dialog", { name: "Edit comment" });
+  await expect(editor).toBeVisible();
+  await expect.poll(() => bottomOverhang(editor)).toBeLessThanOrEqual(0);
+});
