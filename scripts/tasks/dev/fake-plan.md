@@ -376,14 +376,19 @@ If anything in the paragraph above escapes the sanitizer — an alert fires, an 
 
 ## Filename references
 
-EXC-687: a filename written in **inline code** that resolves to a real file under the review's working directory gets a small file icon to its left, and hovering the reference reveals a syntax-highlighted excerpt of that file — the head of the file, or a window centered on the referenced line when the reference carries a `:line`. The affordance is scoped to inline code (a bare-prose path renders as one coarse token with nowhere to hang the icon), and a path that does not resolve stays completely inert — no icon, no hover — so a made-up reference never masquerades as a link.
+EXC-687: a filename written in **inline code** that resolves to a real file under the review's working directory gets a small file icon to its left, and clicking the reference opens a syntax-highlighted excerpt of that file — the head of the file, or a window centered on the referenced line when the reference carries a `:line`. The affordance is scoped to inline code (a bare-prose path renders as one coarse token with nowhere to hang the icon), and a path that does not resolve stays completely inert — no icon, no preview — so a made-up reference never masquerades as a link.
 
-The list below points at stable, top-level files so the check keeps working as the tree around it changes. Hover each to verify:
+The list below points at long-lived files, and leans on paths and line numbers that stay meaningful as their contents drift, so the check keeps working as the tree around it changes. Every path needs a known extension to be tagged at all, which is why extensionless files like `LICENSE` are absent. Click each to verify:
 
-- `package.json` — a real file: shows the icon; the hover previews the head of the file.
+- `package.json` — a real file: shows the icon; the preview opens on the head of the file.
 - `README.md` — another real file, for a second icon to eyeball beside the first.
-- `README.md:37` — the same file with a line: the excerpt is centered on line 37 (a ±30-line window) instead of the head.
-- `src/does-not-exist.ts` — a path deliberately **not** in the repo: it must show **no** icon and **no** hover. If it ever sprouts one, the existence gate has regressed.
+- `README.md:37` — the same file with a line: the excerpt is centered on line 37 (a ±30-line window) instead of the head, and that line is marked and already in view — no scrolling to find it.
+- `README.md:3` — a line near the top: the window clamps at line 1, so a bottom strip shows and there is **no** top strip.
+- `mise.toml` — a file shorter than the 60-line opening window: the whole file shows, with **no** strips on either side, and the header reads a plain line count instead of a range.
+- `mise.toml:900` — a line far past the end: the window clamps to the last line rather than opening empty, and **nothing** is marked, since the cited line doesn't exist.
+- `doc/ADVANCED.md:300` — a long file opened mid-way, so both strips carry large counts. Click `↑` and `↓` repeatedly to walk the window out to line 1 and to the last line; each strip disappears when its side runs out, and an upward click should not throw away the line you were reading.
+- `src/cli.ts` — real source rather than config: the card should be wide enough to read a full line without scrolling sideways.
+- `src/does-not-exist.ts` — a path deliberately **not** in the repo: it must show **no** icon and **no** preview. If it ever sprouts one, the existence gate has regressed.
 
 ---
 
