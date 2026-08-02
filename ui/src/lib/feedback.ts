@@ -42,10 +42,11 @@ const QUOTE_HEAD_WORDS = 3;
 const QUOTE_TAIL_WORDS = 3;
 
 /** Abbreviates a quote to the line reference's companion: the first and last few
- * words joined by an ellipsis, dropping the middle. The agent locates the text by
- * its line numbers and confirms it by these anchor words; the elided middle is
- * wasted tokens, since the agent re-reads the plan itself. A quote short enough
- * that abbreviation would drop no words is returned whole (whitespace collapsed). */
+ * words joined by an ellipsis, dropping the middle. The line reference indexes the
+ * stored plan version, so the anchor words are what the agent matches against its
+ * own text whenever its line numbering differs; the elided middle would only add
+ * tokens, since the agent already holds the plan. A quote short enough that
+ * abbreviation would drop no words is returned whole (whitespace collapsed). */
 function abbreviate(text: string): string {
   const flat = flatten(text);
   const words = flat.split(" ");
