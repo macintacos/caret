@@ -129,6 +129,83 @@ export function followCursorLine(container: HTMLElement, line: number): boolean 
   return true;
 }
 
+/** Breathing room (px) below a revealed composer card, so its action row isn't
+ * flush against the scroll container's bottom edge. Mirrors SCROLL_OFFSET_TOP's
+ * role at the other edge. */
+export const REVEAL_MARGIN_BOTTOM = 12;
+
+/** How many frames revealCard waits for a card's height to stop changing before
+ * measuring. The editor inside a composer builds in its own effect, so the card
+ * is still growing on the mount frame; the cap keeps a card that never settles
+ * (an animation, a stuck load) from retrying forever. */
+const REVEAL_SETTLE_FRAMES = 30;
+
+/**
+ * The downward scroll delta (px) that brings a card fully into the reading
+ * viewport, moving the view as little as it can: `0` when the card already fits
+ * above `margin`, otherwise the exact overshoot past that margin. Pure geometry
+ * (no DOM) so it is directly unit-testable.
+ *
+ * The result is clamped to `cardTop - viewTop`, and never negative: a card taller
+ * than the viewport cannot be revealed in full, and scrolling by the raw overshoot
+ * would push its top — its label, and the anchor line it belongs to — off the top
+ * edge. Clamping reveals such a card from its top down instead, and makes the
+ * reveal strictly downward, so it can never fight a scroll that already parked the
+ * anchor line.
+ */
+export function revealScrollDelta(g: {
+  cardTop: number;
+  cardBottom: number;
+  viewTop: number;
+  viewBottom: number;
+  margin: number;
+}): number {
+  const overshoot = g.cardBottom + g.margin - g.viewBottom;
+  if (overshoot <= 0) return 0; // already fits → the view does not move at all
+  return Math.min(overshoot, Math.max(0, g.cardTop - g.viewTop));
+}
+
+/**
+ * Scrolls the plan just far enough to reveal `card` in full, once its height has
+ * settled, animating unless the user prefers reduced motion. A one-shot: it
+ * measures once and does not follow the card as it grows. Returns a disposer that
+ * cancels a pending measurement, so a composer dismissed inside the settle window
+ * never scrolls the view after it is gone.
+ */
+export function revealCard(card: HTMLElement, margin = REVEAL_MARGIN_BOTTOM): () => void {
+  let lastHeight = Number.NaN;
+  let frames = 0;
+  let pending = requestAnimationFrame(measure);
+
+  function measure(): void {
+    const cardRect = card.getBoundingClientRect();
+    // Height still moving (and budget left) → look again next frame.
+    if (cardRect.height !== lastHeight && frames < REVEAL_SETTLE_FRAMES) {
+      lastHeight = cardRect.height;
+      frames += 1;
+      pending = requestAnimationFrame(measure);
+      return;
+    }
+    // Resolved here rather than up front: a card measured before the library
+    // relocates it into its annotation row has no scroller yet.
+    const scroller = nearestScrollParent(card);
+    if (scroller == null) return;
+    const hostRect = scroller.getBoundingClientRect();
+    const delta = revealScrollDelta({
+      cardTop: cardRect.top,
+      cardBottom: cardRect.bottom,
+      viewTop: hostRect.top,
+      viewBottom: hostRect.bottom,
+      margin,
+    });
+    if (delta !== 0) {
+      scroller.scrollBy({ top: delta, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    }
+  }
+
+  return () => cancelAnimationFrame(pending);
+}
+
 /**
  * The 1-based line of the row occupying the reading zone — the first row (in
  * document order) whose bottom edge clears `containerTop + SCROLL_OFFSET_TOP` by
