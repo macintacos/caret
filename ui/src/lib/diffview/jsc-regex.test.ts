@@ -1,3 +1,5 @@
+// biome-ignore-all lint/complexity/noUselessStringRaw: every regex fixture below is String.raw, including the ones that happen to carry no backslash today. Dropping it from those would make a pattern like `(^a)?b` a plain template literal, where a later edit to `(^\t)?b` silently inserts a real tab instead of the two characters the regex needs.
+
 import { describe, expect, test } from "bun:test";
 
 import { jscSafeSource } from "$lib/diffview/jsc-regex.ts";
