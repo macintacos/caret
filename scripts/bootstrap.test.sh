@@ -49,8 +49,8 @@ make_stub_path() {
   stub="$(mktemp -d "${TMPDIR:-/tmp}/caret-bootstrap-bin.XXXXXX")"
   cat >"$stub/mise" <<STUB
 #!$bash_bin
-read -r stdin_line || stdin_line=
-echo "\$* @ \$PWD\${stdin_line:+ <stdin:\$stdin_line>}" >>"$stub/mise.log"
+if read -r stdin_line; then leak=" <stdin:\$stdin_line>"; else leak=""; fi
+echo "\$* @ \$PWD\$leak" >>"$stub/mise.log"
 [ "\$1" = install ] && exit $install_rc
 exit 0
 STUB
