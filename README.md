@@ -75,10 +75,9 @@ prompt. There you:
 A single local daemon serves every session, so concurrent plans queue up in one tab behind
 a switcher.
 
-**In OpenCode**, you don't have to wait to be intercepted. caret's plugin registers a
-`caret_review_plan` tool that any primary agent can call, so a skill of your own can route
-its approval step through the same review UI. Claude Code's adapter is hook-based and has
-no equivalent tool. See
+**In OpenCode**, you don't have to wait to be intercepted: caret registers a
+`caret_review_plan` tool your agent can call directly, so a skill of your own can route
+its approval step through the same review UI. Claude Code has no equivalent — see
 [`doc/ADVANCED.md`](doc/ADVANCED.md#calling-the-review-tool-from-your-own-skill).
 
 ## Configuration
