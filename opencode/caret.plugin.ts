@@ -80,7 +80,8 @@ export function resolveCaretVersion(opts: {
 export const REVIEW_TOOL = "caret_review_plan";
 
 /** OpenCode's built-in primary planning agent — the one agent caret steers toward
- * the review tool and allows to call it. */
+ * the review tool and warms the daemon for. Any other primary agent may still call
+ * the tool; it is simply not prompted toward it. */
 export const PLANNING_AGENTS = ["plan"] as const;
 
 export interface CaretDecision {
@@ -150,8 +151,9 @@ function failsafeDeny(feedback: string): CaretDecision {
   return { behavior: "deny", feedback };
 }
 
-/** True for the planning agent(s) caret treats specially — the daemon warm-up
- * fires only for them. */
+/** True for the planning agent(s) caret treats specially — the planning steer and
+ * the daemon warm-up both fire only for them. Not a permission check: the review
+ * tool itself is open to every primary agent. */
 export function isPlanningAgent(agent: string | undefined): boolean {
   return agent !== undefined && (PLANNING_AGENTS as readonly string[]).includes(agent);
 }
@@ -630,19 +632,32 @@ export function createCaretPlugin(
     // Best-effort startup update nudge (EXC-794); fire-and-forget so it never
     // delays plugin load. Only the production default export wires this.
     if (opts.checkUpdate) opts.checkUpdate(client);
+    // The agent driving each session, recorded by chat.message and read by
+    // system.transform — which receives only { sessionID?, model } and cannot
+    // otherwise know whose prompt it is building. (chat.params does carry the
+    // agent, but fires AFTER system.transform in the same request prep, so it
+    // cannot prime the current turn.) One instance per plugin, closed over rather
+    // than module-global, so a test constructs a fresh one. No eviction: one short
+    // string per session, in a process already holding those sessions.
+    const sessionAgents = new Map<string, string>();
     const hooks: Hooks = {
       // Restrict the review tool to primary agents (see applyCaretConfig).
       config: async (config) => {
         applyCaretConfig(config as unknown as LooseConfig);
       },
-      // Warm the daemon while the plan agent is working, so the first
+      // Two jobs. (1) Record the session's agent, ALWAYS — it is what the steer
+      // below gates on. (2) Warm the daemon, for the PLAN AGENT ONLY, so the first
       // caret_review_plan call doesn't pay the cold-spawn cost. This is
       // OpenCode's counterpart to Claude Code's PostToolUse/EnterPlanMode
       // prewarm hook — the closest-to-submission signal the plugin API offers.
       // Deliberately per-message and unthrottled: the daemon idle-exits after
       // [daemon].idle_ms (60s default), so a once-per-session warm would be
-      // dead long before the plan lands.
+      // dead long before the plan lands. The warm stays plan-only even though any
+      // primary agent may now call the tool: the plan agent is the one whose turn
+      // reliably ends in a review, and warming on every build message would spawn
+      // a process on the session's busiest traffic to save ~0.4s in the rare case.
       "chat.message": async (input) => {
+        if (input.sessionID && input.agent) sessionAgents.set(input.sessionID, input.agent);
         if (!isPlanningAgent(input.agent)) return;
         try {
           warm(bin);
@@ -651,8 +666,16 @@ export function createCaretPlugin(
         }
       },
       // Steer the Plan agent to submit its plan to caret instead of plan_exit.
-      "experimental.chat.system.transform": async (_input, output) => {
-        output.system.push(planningSteer());
+      // Only the plan agent: every other primary agent may call the review tool
+      // but is not prompted toward it. A session with no recorded agent gets no
+      // steer rather than a wrong one — which also keeps it out of the second
+      // call site (Agent.generate, generating an agent config, passes no session).
+      // A turn that reaches the model without a preceding chat.message therefore
+      // misses the steer; the tool.definition hook below is the safety net, since
+      // it points plan_exit — permitted only on the plan agent — at caret.
+      "experimental.chat.system.transform": async (input, output) => {
+        const agent = input.sessionID ? sessionAgents.get(input.sessionID) : undefined;
+        if (isPlanningAgent(agent)) output.system.push(planningSteer());
       },
       // Redirect the native plan_exit tool's description toward caret's tool.
       "tool.definition": async (input, output) => {

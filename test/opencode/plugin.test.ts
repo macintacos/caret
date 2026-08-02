@@ -473,11 +473,65 @@ test("the config hook restricts the tool to primary agents", async () => {
   expect((config.experimental as { primary_tools: string[] }).primary_tools).toContain(REVIEW_TOOL);
 });
 
-test("the system-transform hook injects the planning steer", async () => {
+// --- the system-transform steer (plan-agent only) ---
+//
+// system.transform receives only { sessionID?, model } — no agent — and chat.params,
+// which does carry the agent, fires AFTER it in the same request prep. So the steer
+// is gated on an agent recorded by chat.message, the one hook carrying both.
+
+test("the system-transform hook injects the planning steer for a plan-agent session", async () => {
   const hooks = await buildHooks(stubRunner("{}"));
+  await hooks["chat.message"]?.({ sessionID: "S", agent: "plan" } as never, {} as never);
+  const output = { system: ["base"] };
+  await hooks["experimental.chat.system.transform"]?.(
+    { sessionID: "S", model: {} } as never,
+    output as never,
+  );
+  expect(output.system.join("\n")).toContain(REVIEW_TOOL);
+});
+
+test("the system-transform hook pushes nothing for a non-planning agent's session", async () => {
+  const hooks = await buildHooks(stubRunner("{}"));
+  await hooks["chat.message"]?.({ sessionID: "S", agent: "build" } as never, {} as never);
+  const output = { system: ["base"] };
+  await hooks["experimental.chat.system.transform"]?.(
+    { sessionID: "S", model: {} } as never,
+    output as never,
+  );
+  expect(output.system).toEqual(["base"]);
+});
+
+test("the system-transform hook pushes nothing when there is no sessionID", async () => {
+  // OpenCode calls system.transform from a second site (Agent.generate, for
+  // generating an agent config) with no session at all — the steer must not leak
+  // into that unrelated prompt.
+  const hooks = await buildHooks(stubRunner("{}"));
+  await hooks["chat.message"]?.({ sessionID: "S", agent: "plan" } as never, {} as never);
   const output = { system: ["base"] };
   await hooks["experimental.chat.system.transform"]?.({ model: {} } as never, output as never);
-  expect(output.system.join("\n")).toContain(REVIEW_TOOL);
+  expect(output.system).toEqual(["base"]);
+});
+
+test("the system-transform hook pushes nothing for a session chat.message never saw", async () => {
+  const hooks = await buildHooks(stubRunner("{}"));
+  const output = { system: ["base"] };
+  await hooks["experimental.chat.system.transform"]?.(
+    { sessionID: "unseen", model: {} } as never,
+    output as never,
+  );
+  expect(output.system).toEqual(["base"]);
+});
+
+test("a later chat.message replaces the session's recorded agent (agent switching)", async () => {
+  const hooks = await buildHooks(stubRunner("{}"));
+  await hooks["chat.message"]?.({ sessionID: "S", agent: "plan" } as never, {} as never);
+  await hooks["chat.message"]?.({ sessionID: "S", agent: "build" } as never, {} as never);
+  const output = { system: ["base"] };
+  await hooks["experimental.chat.system.transform"]?.(
+    { sessionID: "S", model: {} } as never,
+    output as never,
+  );
+  expect(output.system).toEqual(["base"]);
 });
 
 test("the tool.definition hook redirects plan_exit to the review tool", async () => {
