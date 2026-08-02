@@ -1,4 +1,5 @@
-// Scroll-to-line and active-line resolution for the source view. @pierre/diffs
+// Scroll-to-line, active-line resolution, the keyboard cursor's follow scroll,
+// and the composer reveal — the source view's scrolling. @pierre/diffs
 // renders each line as a <div data-line="N"> inside the container's shadow root;
 // jumping to a heading finds that row and scrolls the surrounding scroll container
 // so the row rests near the top, and the reverse — which line currently occupies
@@ -134,11 +135,11 @@ export function followCursorLine(container: HTMLElement, line: number): boolean 
  * role at the other edge. */
 export const REVEAL_MARGIN_BOTTOM = 12;
 
-/** How many frames revealCard waits for a card's height to stop changing before
- * measuring. The editor inside a composer builds in its own effect, so the card
- * is still growing on the mount frame; the cap keeps a card that never settles
- * (an animation, a stuck load) from retrying forever. */
-const REVEAL_SETTLE_FRAMES = 30;
+/** How many times revealCard re-checks a card's height before measuring anyway.
+ * The editor inside a composer builds in its own effect, so the card is still
+ * growing on the mount frame; the cap keeps a card that never settles (an
+ * animation, a stuck load) from retrying forever. */
+const REVEAL_SETTLE_RETRIES = 30;
 
 /**
  * The downward scroll delta (px) that brings a card fully into the reading
@@ -172,22 +173,22 @@ export function revealScrollDelta(g: {
  * cancels a pending measurement, so a composer dismissed inside the settle window
  * never scrolls the view after it is gone.
  */
-export function revealCard(card: HTMLElement, margin = REVEAL_MARGIN_BOTTOM): () => void {
+export function revealCard(card: HTMLElement): () => void {
+  // NaN so the first comparison never matches: the mount frame, where the editor
+  // has not built yet, is never the frame the reveal measures on.
   let lastHeight = Number.NaN;
-  let frames = 0;
+  let retries = 0;
   let pending = requestAnimationFrame(measure);
 
   function measure(): void {
     const cardRect = card.getBoundingClientRect();
     // Height still moving (and budget left) → look again next frame.
-    if (cardRect.height !== lastHeight && frames < REVEAL_SETTLE_FRAMES) {
+    if (cardRect.height !== lastHeight && retries < REVEAL_SETTLE_RETRIES) {
       lastHeight = cardRect.height;
-      frames += 1;
+      retries += 1;
       pending = requestAnimationFrame(measure);
       return;
     }
-    // Resolved here rather than up front: a card measured before the library
-    // relocates it into its annotation row has no scroller yet.
     const scroller = nearestScrollParent(card);
     if (scroller == null) return;
     const hostRect = scroller.getBoundingClientRect();
@@ -196,7 +197,7 @@ export function revealCard(card: HTMLElement, margin = REVEAL_MARGIN_BOTTOM): ()
       cardBottom: cardRect.bottom,
       viewTop: hostRect.top,
       viewBottom: hostRect.bottom,
-      margin,
+      margin: REVEAL_MARGIN_BOTTOM,
     });
     if (delta !== 0) {
       scroller.scrollBy({ top: delta, behavior: prefersReducedMotion() ? "auto" : "smooth" });

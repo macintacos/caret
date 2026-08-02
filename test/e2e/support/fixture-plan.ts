@@ -31,6 +31,21 @@ Run the loader against a recorded sidecar and confirm the first lookup is a
 cache hit. Cold-start timings should match warm-path timings within noise.
 `;
 
+const tallSection = (label: string) =>
+  Array.from({ length: 40 }, (_, i) => `${label} line ${i + 1} keeps the plan tall.`).join("\n");
+
+/** A plan several viewports tall, for specs that need genuine scrolling — an
+ * overscroll gap below the last line, or a composer opening below the fold. */
+export const TALL_PLAN = [
+  "# Alpha",
+  tallSection("Alpha"),
+  "## Bravo",
+  tallSection("Bravo"),
+  "## Charlie",
+  tallSection("Charlie"),
+  "",
+].join("\n\n");
+
 /** A second, distinguishable plan for multi-review specs (switcher/deep link). */
 export const SECOND_PLAN = `# Gadget Renderer Cleanup
 

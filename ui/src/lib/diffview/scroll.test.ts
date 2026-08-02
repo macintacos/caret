@@ -378,4 +378,36 @@ describe("revealCard", () => {
     await frames(4);
     expect(scrollBys.length).toBe(0);
   });
+
+  test("measures the settled height, not the height on the mount frame", async () => {
+    // The composer's editor builds in its own effect, so the card grows for a few
+    // frames after mount. Measuring the mount frame's 60px-tall box would compute
+    // a delta of 0 (it fits); only the settled 220px box is clipped.
+    const { card, scrollBys } = harness();
+    const heights = [60, 120, 180, 220]; // grows for three frames, then holds
+    let call = 0;
+    card.getBoundingClientRect = () => {
+      const height = heights[Math.min(call, heights.length - 1)] ?? 0;
+      call += 1;
+      return rect(500, 500 + height);
+    };
+    revealCard(card);
+    await frames(8);
+    expect(scrollBys.length).toBe(1);
+    expect(scrollBys[0]?.top).toBe(20 + REVEAL_MARGIN_BOTTOM);
+  });
+
+  test("measures anyway once the settle budget is spent", async () => {
+    // A card whose height never stops changing must not retry forever — the cap
+    // gives up and measures, exactly once.
+    const { card, scrollBys } = harness();
+    let grown = 0;
+    card.getBoundingClientRect = () => {
+      grown += 1;
+      return rect(500, 720 + grown);
+    };
+    revealCard(card);
+    await frames(40);
+    expect(scrollBys.length).toBe(1);
+  });
 });
