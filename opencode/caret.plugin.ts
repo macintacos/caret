@@ -12,8 +12,10 @@
 //
 // Subagent-bypass mitigation: OpenCode's tool.execute.before does not fire for
 // subagent tool calls, so caret does NOT rely on a hook to gate subagents. The
-// config hook restricts the tool to primary agents (experimental.primary_tools +
-// per-agent permission), and the tool body re-checks the caller — defense in depth.
+// config hook marks the tool primary-only (experimental.primary_tools), which
+// OpenCode turns into a deny rule on every subagent session it creates, and the
+// tool body re-checks the calling session's shape — defense in depth. Any PRIMARY
+// agent may ask for a review; only the plan agent is steered toward it.
 //
 // This file runs in-process inside OpenCode. It ships in the @macintacos/caret npm
 // package; OpenCode loads it when the package is in the user's `plugin` array, and
@@ -148,8 +150,8 @@ function failsafeDeny(feedback: string): CaretDecision {
   return { behavior: "deny", feedback };
 }
 
-/** Only the configured planning agent(s) may call the review tool — the second
- * line of defense against the subagent-bypass (the config hook is the first). */
+/** True for the planning agent(s) caret treats specially — the daemon warm-up
+ * fires only for them. */
 export function isPlanningAgent(agent: string | undefined): boolean {
   return agent !== undefined && (PLANNING_AGENTS as readonly string[]).includes(agent);
 }
@@ -221,6 +223,13 @@ type ToastBody = {
 };
 type ToastClient = { tui?: { showToast?: (opts: { body: ToastBody }) => unknown } } | undefined;
 
+/** The same client, narrowed to the session read the review tool's subagent check
+ * makes — narrowed separately, and for the same skew-safety reason, so each helper
+ * declares exactly the one call it performs. */
+type SessionClient =
+  | { session?: { get?: (opts: { path: { id: string } }) => unknown } }
+  | undefined;
+
 /** How long the pending review-link toast stays up. Long enough to outlast a
  * review; on a decision we supersede it with the short toast below, so this
  * ceiling only bites if the review process dies without ever deciding. */
@@ -240,6 +249,32 @@ function showToast(client: ToastClient, body: ToastBody): void {
     Promise.resolve(tui.showToast({ body })).catch(() => {});
   } catch {
     // best-effort — the review decision is what matters.
+  }
+}
+
+/** True when this tool call arrived from a subagent. The signal is the session
+ * shape, not the agent name: OpenCode's `task` tool always creates a CHILD session
+ * for the subagent, so a `parentID` is an exact, mode-independent marker — where an
+ * agent-name test is not, since a user-defined agent defaults to `mode: "all"` and
+ * is legitimately both primary and subagent.
+ *
+ * Failure falls back to ALLOW — the opposite of this file's failsafeDeny
+ * convention, deliberately. That convention governs review DECISIONS, where a deny
+ * stops unreviewed work from shipping. Here the tool grants no permission and gates
+ * no edit, so a refusal would not prevent unreviewed work; it would only remove the
+ * review option from every primary caller the moment the SDK shifts.
+ * `experimental.primary_tools` is the enforcing gate, and this is second-line
+ * defense. Called as `session.get(...)` so the SDK client keeps its `this` binding. */
+async function isSubagentSession(client: SessionClient, sessionID: string): Promise<boolean> {
+  const session = client?.session;
+  if (!session || typeof session.get !== "function") return false;
+  try {
+    const res = (await session.get({ path: { id: sessionID } })) as {
+      data?: { parentID?: unknown } | null;
+    };
+    return typeof res?.data?.parentID === "string";
+  } catch {
+    return false;
   }
 }
 
@@ -420,10 +455,17 @@ type LooseConfig = {
   agent?: Record<string, LooseAgent>;
 } & Record<string, unknown>;
 
-/** Mutate the OpenCode config in place to (1) mark the review tool primary-only so
- * subagents cannot call it, and (2) allow it on the planning agent while denying it
- * on the build agent. Idempotent and preservation-safe (existing primary_tools,
- * agent modes, and other permissions are kept). */
+/** Mutate the OpenCode config in place to mark the review tool primary-only, so
+ * subagents cannot call it — OpenCode turns every `primary_tools` entry into an
+ * explicit deny rule on the subagent's session at creation. Every primary agent
+ * may call it: OpenCode's base ruleset permits an unknown tool id, so the absence
+ * of a per-agent entry is what makes it available.
+ *
+ * The one entry written is `allow` on the planning agent, which depends on the
+ * tool — it rescues that agent from a restrictive global `permission: { "*": "deny" }`,
+ * since agent-level permission merges after the global ruleset. Idempotent and
+ * preservation-safe: existing primary_tools, agent modes, and other permissions
+ * are kept, and a user's own entry for the review tool is never overwritten. */
 export function applyCaretConfig(config: LooseConfig): void {
   config.experimental ??= {};
   const pt = Array.isArray(config.experimental.primary_tools)
@@ -432,8 +474,6 @@ export function applyCaretConfig(config: LooseConfig): void {
   if (!pt.includes(REVIEW_TOOL)) config.experimental.primary_tools = [...pt, REVIEW_TOOL];
 
   for (const name of PLANNING_AGENTS) setToolPermission(config, name, "allow");
-  // Deny on the build agent so a non-planning primary can't ship an unreviewed plan.
-  setToolPermission(config, "build", "deny");
 }
 
 function ensureAgent(config: LooseConfig, name: string): LooseAgent {
@@ -452,8 +492,10 @@ function ensurePermission(agent: LooseAgent): Record<string, unknown> {
   return agent.permission as Record<string, unknown>;
 }
 
+/** Write the review-tool permission for `agentName`, but only when the agent has
+ * no entry for it yet — a user's own setting always wins. */
 function setToolPermission(config: LooseConfig, agentName: string, action: "allow" | "deny"): void {
-  ensurePermission(ensureAgent(config, agentName))[REVIEW_TOOL] = action;
+  ensurePermission(ensureAgent(config, agentName))[REVIEW_TOOL] ??= action;
 }
 
 // --- the spawn bridge ----------------------------------------------------------
@@ -581,13 +623,15 @@ export function createCaretPlugin(
 
   return async (input) => {
     // OpenCode gives every plugin its SDK client; caret uses it to surface the
-    // review link as a toast (EXC-691). Narrowed structurally for skew-safety.
-    const client = (input as { client?: ToastClient }).client;
+    // review link as a toast (EXC-691) and to read the calling session's shape.
+    // Narrowed structurally for skew-safety.
+    const client = (input as { client?: NonNullable<ToastClient> & NonNullable<SessionClient> })
+      .client;
     // Best-effort startup update nudge (EXC-794); fire-and-forget so it never
     // delays plugin load. Only the production default export wires this.
     if (opts.checkUpdate) opts.checkUpdate(client);
     const hooks: Hooks = {
-      // Restrict the review tool to primary agents + allow/deny per agent.
+      // Restrict the review tool to primary agents (see applyCaretConfig).
       config: async (config) => {
         applyCaretConfig(config as unknown as LooseConfig);
       },
@@ -626,9 +670,8 @@ export function createCaretPlugin(
               .describe("The complete plan, as markdown, to present for human review."),
           },
           async execute(args, context) {
-            const agent = (context as { agent?: string }).agent;
-            if (!isPlanningAgent(agent)) {
-              return `${REVIEW_TOOL} is restricted to the plan agent (${PLANNING_AGENTS.join(", ")}); it was called by "${agent ?? "unknown"}". Continue without caret review, or switch to the plan agent and resubmit.`;
+            if (await isSubagentSession(client, context.sessionID)) {
+              return `${REVIEW_TOOL} is available to primary agents only; this call came from a subagent session. Continue without caret review, or hand the plan back to the primary agent to submit.`;
             }
             const envelope = buildEnvelope(args.plan, {
               sessionID: context.sessionID,

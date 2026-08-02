@@ -148,16 +148,28 @@ test("parseReviewUrl waits for the whole line — a URL not yet newline-terminat
 
 // --- applyCaretConfig (subagent-bypass mitigation) ---
 
-test("applyCaretConfig restricts the tool to primary agents and allows only the planner", () => {
+test("applyCaretConfig restricts the tool to primary agents and allows the planner", () => {
   const config: Record<string, unknown> = {};
   applyCaretConfig(config);
   expect((config.experimental as { primary_tools: string[] }).primary_tools).toContain(REVIEW_TOOL);
-  const agent = config.agent as {
-    plan: { permission: Record<string, string> };
-    build: { permission: Record<string, string> };
+  const agent = config.agent as Record<string, { permission: Record<string, string> }>;
+  expect(agent.plan?.permission[REVIEW_TOOL]).toBe("allow");
+  // Every other primary agent is left untouched: OpenCode permits an unknown tool
+  // id by default, so no entry is what makes the tool available to all of them.
+  expect(agent.build).toBeUndefined();
+});
+
+test("applyCaretConfig never overwrites a user's own review-tool permission", () => {
+  const config: Record<string, unknown> = {
+    agent: {
+      plan: { permission: { [REVIEW_TOOL]: "ask" } },
+      build: { permission: { [REVIEW_TOOL]: "deny" } },
+    },
   };
-  expect(agent.plan.permission[REVIEW_TOOL]).toBe("allow");
-  expect(agent.build.permission[REVIEW_TOOL]).toBe("deny");
+  applyCaretConfig(config);
+  const agent = config.agent as Record<string, { permission: Record<string, string> }>;
+  expect(agent.plan?.permission[REVIEW_TOOL]).toBe("ask");
+  expect(agent.build?.permission[REVIEW_TOOL]).toBe("deny");
 });
 
 test("applyCaretConfig is idempotent and preserves existing config", () => {
@@ -179,11 +191,12 @@ test("applyCaretConfig is idempotent and preserves existing config", () => {
 test("applyCaretConfig defensively replaces a non-object agent permission", () => {
   // OpenCode allows an agent's `permission` to be a bare action string; spreading
   // it would corrupt the map, so the helper normalizes it to an object first.
-  const config: Record<string, unknown> = { agent: { build: { permission: "deny" } } };
+  const config: Record<string, unknown> = { agent: { plan: { permission: "deny" } } };
   applyCaretConfig(config);
-  const build = (config.agent as { build: { permission: Record<string, string> } }).build;
-  expect(typeof build.permission).toBe("object");
-  expect(build.permission[REVIEW_TOOL]).toBe("deny");
+  const plan = (config.agent as { plan: { permission: Record<string, string> } }).plan;
+  expect(typeof plan.permission).toBe("object");
+  expect(plan.permission["*"]).toBe("deny"); // the bare action survives as a catch-all
+  expect(plan.permission[REVIEW_TOOL]).toBe("allow");
 });
 
 // --- runReviewViaCaret (the spawn bridge) ---
@@ -348,16 +361,57 @@ test("the review tool denies: a plan-agent call returns the feedback without ech
   expect(String(out)).not.toContain("body"); // the submitted plan is not re-pasted
 });
 
-test("the review tool refuses a non-planning (subagent) caller without spawning caret", async () => {
+// A plugin client whose `session.get` is `get` — the one call the review tool's
+// subagent check makes. `get` may resolve a payload, reject, or throw.
+function sessionClient(get: (opts: { path: { id: string } }) => unknown): PluginInput["client"] {
+  return { session: { get } } as unknown as PluginInput["client"];
+}
+
+test("the review tool refuses a subagent caller (a child session) without spawning caret", async () => {
   let spawned = false;
   const run: SpawnRunner = async () => {
     spawned = true;
     return { stdout: `{"behavior":"allow"}`, exitCode: 0 };
   };
-  const hooks = await buildHooks(run);
-  const out = await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, ctx("general"));
+  const asked: string[] = [];
+  const hooks = await buildHooks(
+    run,
+    sessionClient((opts) => {
+      asked.push(opts.path.id);
+      return Promise.resolve({ data: { parentID: "parent-session" } });
+    }),
+  );
+  const out = await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, ctx("build"));
   expect(spawned).toBe(false);
+  expect(asked).toEqual(["S"]); // the CALLING session is the one asked about
   expect(String(out)).toContain(REVIEW_TOOL);
+  expect(String(out).toLowerCase()).toContain("subagent");
+});
+
+test("the review tool proceeds for any primary caller — build and a user-defined agent", async () => {
+  const client = sessionClient(() => Promise.resolve({ data: { parentID: null } }));
+  for (const agent of ["build", "refine"]) {
+    const hooks = await buildHooks(stubRunner(`{"behavior":"allow"}`), client);
+    const out = await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, ctx(agent));
+    expect(String(out).toLowerCase()).toContain("approv");
+  }
+});
+
+test("the review tool proceeds when the session read fails — allow, not deny", async () => {
+  // experimental.primary_tools is the enforcing gate; this in-body check is only
+  // second-line defense, so an unreadable session must not cost every primary
+  // caller the tool. Deliberately the opposite of the fail-safe DENY that governs
+  // review decisions.
+  const clients: Array<PluginInput["client"]> = [
+    {} as unknown as PluginInput["client"], // session.get absent (SDK skew)
+    sessionClient(() => Promise.reject(new Error("request blew up"))),
+    sessionClient(() => Promise.resolve({ data: undefined, error: { message: "not found" } })),
+  ];
+  for (const client of clients) {
+    const hooks = await buildHooks(stubRunner(`{"behavior":"allow"}`), client);
+    const out = await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, ctx("build"));
+    expect(String(out).toLowerCase()).toContain("approv");
+  }
 });
 
 test("the review tool shows the pending review URL as a toast, then clears it on approval (EXC-691)", async () => {
