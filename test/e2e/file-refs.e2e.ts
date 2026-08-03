@@ -16,26 +16,8 @@
 // writes a synthetic project dir and seeds a review whose cwd points at it. The
 // content is throwaway, non-identifying scaffolding — never a real plan.
 
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-
+import { fileRefCount, makeProject, settleDrawer } from "@test/e2e/support/file-refs.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
-
-/** Write a throwaway project dir with the given files, returning its path and a
- * cleanup. The daemon (a real subprocess) reads it via the seeded review's cwd. */
-async function makeProject(files: Record<string, string>): Promise<{
-  dir: string;
-  cleanup: () => Promise<void>;
-}> {
-  const dir = await mkdtemp(join(tmpdir(), "caret-e2e-proj."));
-  for (const [rel, content] of Object.entries(files)) {
-    const abs = join(dir, rel);
-    await mkdir(dirname(abs), { recursive: true });
-    await writeFile(abs, content);
-  }
-  return { dir, cleanup: () => rm(dir, { recursive: true, force: true }) };
-}
 
 // A 300-line source file with unique markers on lines 1, 42, and 150, so a
 // preview can be told apart as "head" vs "centered on :42" and a window's reach
@@ -81,14 +63,6 @@ function expectCitedRowVisible(m: Awaited<ReturnType<typeof citedRowInRegion>>):
   expect(m).not.toBeNull();
   expect(m?.offset ?? -1).toBeGreaterThanOrEqual(0);
   expect(m?.offset ?? Infinity).toBeLessThanOrEqual((m?.region ?? 0) - (m?.row ?? 0));
-}
-
-/** The number of file-reference icons currently tagged in the plan's shadow root. */
-function fileRefCount(page: import("@playwright/test").Page): Promise<number> {
-  return page.evaluate(() => {
-    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
-    return sh?.querySelectorAll("[data-file-ref]").length ?? 0;
-  });
 }
 
 test("marks only references that resolve to a real file", async ({ daemon, page }) => {
@@ -335,16 +309,14 @@ test("pressing Escape dismisses the open preview", async ({ daemon, page }) => {
   }
 });
 
-test("the preview opens wide, caps at the viewport, and pages inside itself", async ({
-  daemon,
-  page,
-}) => {
+test("the preview fills its lane and pages inside itself", async ({ daemon, page }) => {
   // The opening window is large enough to judge a plan against (EXC-756), so
-  // against a big file the card takes the room it needs and then scrolls
-  // internally rather than growing off-screen. Both halves matter: a card that
-  // overflowed the viewport would put its bottom strip out of reach. Lines are
-  // realistic source width, not `const lineN = N;` — a file of stubs never
-  // reaches the width cap, so it could not tell a wide card from a narrow one.
+  // against a big file the excerpt has more rows — and longer lines — than the
+  // lane can show, and pages inside .fp-code in BOTH axes rather than stretching
+  // the panel. That matters because a panel that outgrew its lane would put its
+  // bottom strip out of reach, and a line clipped instead of scrolled would be
+  // unreadable with no way to reach it. Lines are realistic source width, not
+  // `const lineN = N;` — a file of stubs would never overflow the lane at all.
   const BIG = Array.from(
     { length: 400 },
     (_, i) =>
@@ -360,45 +332,56 @@ test("the preview opens wide, caps at the viewport, and pages inside itself", as
     await page.locator("[data-file-ref]").first().click();
     const preview = page.locator("[data-file-preview]");
     await expect(preview).toBeVisible();
+    // Measure at the lane's settled size, not part-way through its opening wipe.
+    await settleDrawer(page);
 
     // The whole 60-line opening window is rendered, not a handful of rows.
     await expect(preview.locator(".fp-row")).toHaveCount(60);
 
     const geometry = await page.evaluate(() => {
-      const card = document.querySelector("[data-file-preview]") as HTMLElement | null;
+      const panel = document.querySelector("[data-file-preview]") as HTMLElement | null;
+      const lane = document.querySelector("[data-file-drawer]") as HTMLElement | null;
       const code = document.querySelector("[data-file-preview] .fp-code") as HTMLElement | null;
-      if (card === null || code === null) return null;
+      if (panel === null || lane === null || code === null) return null;
+      const p = panel.getBoundingClientRect();
+      const l = lane.getBoundingClientRect();
       return {
+        overflowX: getComputedStyle(code).overflowX,
         overflowY: getComputedStyle(code).overflowY,
         scrollHeight: code.scrollHeight,
         clientHeight: code.clientHeight,
         codeScrollWidth: code.scrollWidth,
         codeClientWidth: code.clientWidth,
-        cardBottom: card.getBoundingClientRect().bottom,
-        cardTop: card.getBoundingClientRect().top,
-        cardWidth: card.getBoundingClientRect().width,
-        cardHeight: card.getBoundingClientRect().height,
-        viewport: window.innerHeight,
-        viewportWidth: window.innerWidth,
+        // How far the panel's edges sit inside the lane's, on each side.
+        insetLeft: p.left - l.left,
+        insetRight: l.right - p.right,
+        insetTop: p.top - l.top,
+        insetBottom: l.bottom - p.bottom,
       };
     });
     expect(geometry).not.toBeNull();
     // The code region is the scroller, and it has more to show than it can fit.
     expect(geometry?.overflowY).toBe("auto");
     expect(geometry?.scrollHeight ?? 0).toBeGreaterThan(geometry?.clientHeight ?? 0);
-    // The card itself stays inside the viewport, so both strips remain reachable.
-    expect(geometry?.cardTop ?? -1).toBeGreaterThanOrEqual(0);
-    expect(geometry?.cardBottom ?? Infinity).toBeLessThanOrEqual(geometry?.viewport ?? 0);
-
-    // Given the room, the card reads landscape rather than as a tall column: it
-    // stops short of the viewport's height so the plan stays visible behind it,
-    // and spends the space on width instead — enough that a real source line
-    // fits without scrolling sideways, which is the whole point of the width.
-    expect(geometry?.cardHeight ?? Infinity).toBeLessThanOrEqual(0.65 * (geometry?.viewport ?? 0));
-    expect(geometry?.cardWidth ?? 0).toBeGreaterThan(geometry?.cardHeight ?? Infinity);
-    expect(geometry?.codeScrollWidth ?? Infinity).toBeLessThanOrEqual(
-      geometry?.codeClientWidth ?? 0,
-    );
+    // The panel fills its lane: every edge sits within a pixel or two of the
+    // lane's — the hairline separator and sub-pixel rounding — rather than being
+    // inset by a margin or a corner radius. So the header and both strips stay
+    // reachable at the lane's own edges instead of floating inside it.
+    for (const inset of [
+      geometry?.insetLeft,
+      geometry?.insetRight,
+      geometry?.insetTop,
+      geometry?.insetBottom,
+    ]) {
+      expect(Math.abs(inset ?? Infinity)).toBeLessThanOrEqual(2);
+    }
+    // A source line wider than the lane stays reachable: the region scrolls
+    // sideways to it rather than truncating it. The lane trades the old card's
+    // ability to grow to the line for taking layout space instead, so how much
+    // of a long line shows at once is the reader's call — they widen the lane
+    // with the handle, or scroll here.
+    expect(geometry?.overflowX).toBe("auto");
+    expect(geometry?.codeScrollWidth ?? 0).toBeGreaterThan(geometry?.codeClientWidth ?? Infinity);
 
     // A bottom strip still announces the remainder — and now offers to reach it.
     await expect(preview.locator(".fp-edge-bottom")).toContainText("below");
@@ -495,13 +478,11 @@ test("expanding upward keeps the reader's line in view", async ({ daemon, page }
 
 test("the cited line is in view on open, wherever the reference sits", async ({ daemon, page }) => {
   // The opening window is taller than the code region, so the cited line is only
-  // visible because the card scrolls to it — and that scroll is computed against
-  // the region's height, which the card's viewport-derived cap decides. The
-  // worst case is a reference near the vertical middle of the viewport: the card
-  // takes the roomier of the two gaps, and both are at their smallest there, so
-  // it gets the shortest region any anchor can produce. A reference in the first
-  // line or two of a plan (every other spec here) gets a tall card and never
-  // exercises it.
+  // visible because the panel scrolls to it — and that scroll is computed against
+  // the region's height, which the lane decides. The reference's own position in
+  // the plan no longer changes the lane's size, so this is now the general case
+  // rather than a worst case; it stays here as the guard that the centring still
+  // happens for a reference anywhere in the plan, not just its first lines.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
     const filler = Array.from({ length: 7 }, (_, i) => `Preamble paragraph ${i + 1}.`).join("\n\n");
@@ -513,8 +494,9 @@ test("the cited line is in view on open, wherever the reference sits", async ({ 
     await expect(page.locator(".diff-plan")).toBeVisible();
     await expect.poll(() => fileRefCount(page)).toBe(1);
 
-    // The token must actually land in the middle band for this to be the case it
-    // claims to be; assert that rather than trusting the filler's line height.
+    // The reference must actually sit well down the plan for this to be the case
+    // it claims to be — "wherever the reference sits", not in its first lines;
+    // assert that rather than trusting the filler's line height.
     const anchorY = await page.evaluate(() => {
       const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
       const tok = sh?.querySelector("[data-file-ref]");

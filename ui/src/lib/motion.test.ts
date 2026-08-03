@@ -29,6 +29,7 @@ const chromeComponents = [
   "components/VersionBadge.svelte",
   "components/SourceAnnotationCard.svelte",
   "components/DiffPlanView.svelte",
+  "components/FileDrawer.svelte",
   "components/VersionComparePicker.svelte",
   "components/UnsentCommentsDialog.svelte",
   "components/AlertHost.svelte",

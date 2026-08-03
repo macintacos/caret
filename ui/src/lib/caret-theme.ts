@@ -7,7 +7,7 @@ import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
 // One shiki theme per registered palette (EXC-752), so the code a reviewer reads
 // is colored by the theme they picked rather than by caret's own pair at the
 // matching scheme. Registered into both highlighters: the source view's
-// (diffview/theme.ts) and the excerpt popover's (diffview/highlight.ts).
+// (diffview/theme.ts) and the excerpt preview's (diffview/highlight.ts).
 //
 // Every palette names the theme it highlights with, and the two asset maps below
 // hold them all, so shikiThemeForPalette is one total lookup rather than a fork.
@@ -109,7 +109,7 @@ export function shikiThemeForPalette(theme: Theme): ThemeRegistrationRaw {
 }
 
 // Built once at module load, keyed by theme id: they are plain objects, and both
-// highlighters (the library's and the excerpt popover's) want the whole set up front.
+// highlighters (the library's and the excerpt preview's) want the whole set up front.
 const SHIKI_THEMES = Object.fromEntries(
   THEME_IDS.map((id) => [id, shikiThemeForPalette(THEMES[id])]),
 ) as Record<ThemeId, ThemeRegistrationRaw>;
