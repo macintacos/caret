@@ -288,6 +288,32 @@ test("h and l walk into a section the reader is not in, and only Enter goes ther
   await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("echo");
 });
 
+test("every level of a deep walk is actually on screen", async ({ daemon, page }) => {
+  // Stock shadcn-svelte leaves a submenu inside its parent panel, and that panel
+  // is a scroll container (a max-height plus overflow), so from the second level
+  // down each panel was clipped away — present in the DOM, sized, and invisible.
+  // Playwright's own visibility check does not see overflow clipping, so this
+  // hit-tests each panel's middle: a clipped one is not there to be hit.
+  await daemon.seed({ plan: DEEP_PLAN });
+  await page.goto("/");
+  await jumpTo(page, "Echo");
+
+  // Onto the top-level heading, then straight down the chain — each submenu opens
+  // with its first row focused, and in this plan that row is the next level down.
+  await page.locator(CRUMB).first().click();
+  await page.keyboard.press("j");
+  for (let level = 0; level < 4; level++) await page.keyboard.press("l");
+  await expect(page.locator(SUBMENU)).toHaveCount(4);
+
+  const painted = await page.locator(SUBMENU).evaluateAll((els) =>
+    els.map((el) => {
+      const box = el.getBoundingClientRect();
+      return el.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+    }),
+  );
+  expect(painted).toEqual([true, true, true, true]);
+});
+
 test("Enter on a heading that has children takes the reader there", async ({ daemon, page }) => {
   // The split the whole recursion rests on: a row can both open a level and be a
   // destination, and bits-ui flattens its own open keys into a click that looks

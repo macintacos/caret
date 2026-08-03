@@ -128,13 +128,16 @@
   //      the menu's typeahead and jumps to some row starting with "j".
   //   2. The window dispatcher yields on defaultPrevented, so the plan's own j/k
   //      line cursor stays put behind the open menu.
-  //   3. A SubContent is a DOM DESCENDANT of its parent Content (bits-ui portals
-  //      neither), so the keydown keeps bubbling into this same handler one level
-  //      up. The pre-check is what stops that second pass from dispatching a second
-  //      arrow and double-stepping the walk.
+  //   3. The re-dispatched arrow below bubbles back through this same handler, and
+  //      the pre-check is what stops that second pass from dispatching a third and
+  //      double-stepping the walk.
   // Job 2 is vacuous for h and l — neither is bound in keymap.ts — but they take
   // the same path as j/k rather than a second, quieter one, so a later binding on
   // either key cannot reach the plan from behind an open menu.
+  // A SubContent is portalled to the body since EXC-957 (see the comment on the
+  // vendored component), so a submenu's keydown no longer bubbles through the
+  // Content that spawned it. Both carry this handler, which is why the walk works
+  // at every depth either way.
   // Arrow keys are untouched and keep working.
   function onMenuKeydown(e: KeyboardEvent): void {
     if (e.ctrlKey || e.altKey || e.metaKey) return;
@@ -374,7 +377,10 @@
         >
           <span class="crumb-label" title={heading.text}>{heading.text}</span>
         </DropdownMenu.SubTrigger>
-        <DropdownMenu.SubContent class="plan-crumb-menu" onkeydown={onMenuKeydown}>
+        <DropdownMenu.SubContent
+          class="plan-crumb-menu"
+          onkeydown={onMenuKeydown}
+        >
           {@render level(node.children)}
         </DropdownMenu.SubContent>
       </DropdownMenu.Sub>

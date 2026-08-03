@@ -1,5 +1,19 @@
 <script lang="ts">
+	// EXC-957: portalled, which the stock component is not. bits-ui renders a
+	// SubContent inside its parent panel, and the sibling dropdown-menu-content
+	// makes every panel a scroll container (max-height + overflow, for a menu
+	// taller than the viewport). An absolutely positioned submenu inside a
+	// scroll container is clipped by it, so from the SECOND level down a submenu
+	// was present, sized, focusable — and invisible, with the walk scrolling its
+	// parent sideways as focus chased rows nobody could see. The Content beside
+	// it is portalled for the same reason; this makes the pair consistent.
+	//
+	// The cost is that a SubContent is no longer a DOM descendant of the Content
+	// that spawned it, so a keydown inside one stops bubbling through the other.
+	// PlanBreadcrumbs handles its keys on both, so it is unaffected — see the
+	// comment on its onMenuKeydown.
 	import { cn } from "$lib/utils.js";
+	import DropdownMenuPortal from "./dropdown-menu-portal.svelte";
 	import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
 
 	let {
@@ -9,6 +23,7 @@
 	}: DropdownMenuPrimitive.SubContentProps = $props();
 </script>
 
+<DropdownMenuPortal>
 <DropdownMenuPrimitive.SubContent
 	bind:ref
 	data-slot="dropdown-menu-sub-content"
@@ -33,3 +48,4 @@
 	)}
 	{...restProps}
 />
+</DropdownMenuPortal>
