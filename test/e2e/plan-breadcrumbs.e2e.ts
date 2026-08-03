@@ -235,8 +235,13 @@ test("j and k walk the results, and stay coherent as the query narrows them", as
     "Delta Alpha",
   ]);
 
-  // ArrowDown hands the field's focus to the list; from there the walk is the
-  // menu's own, so j/k step it one row at a time in either direction.
+  // The arrows hand the field's focus to the list — the field is not one of the
+  // menu's roving candidates, so it enters at the top going down and at the bottom
+  // going up. From there the walk is the menu's own, so j/k step it one row at a
+  // time in either direction.
+  await page.keyboard.press("ArrowUp");
+  await expect(menu.getByRole("menuitem", { name: "Delta Alpha" })).toBeFocused();
+  await page.keyboard.press("/");
   await page.keyboard.press("ArrowDown");
   await expect(menu.getByRole("menuitem", { name: "Alpha", exact: true })).toBeFocused();
   await page.keyboard.press("j");
@@ -291,6 +296,7 @@ test("Escape restores the hierarchical menu without leaving the bar", async ({ d
 
   await jumpTo(page, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
+  await waitPastSafeModeGrace(page);
 
   const menu = page.locator(MENU);
   await page.keyboard.press("b");
@@ -298,14 +304,63 @@ test("Escape restores the hierarchical menu without leaving the bar", async ({ d
   await expect(menu.locator(QUERY)).toBeVisible();
 
   await page.keyboard.press("Escape");
-  // Same menu, back on the hierarchy it opened with, with the walk live again.
+  // Same menu, back on the hierarchy it opened with — and focus landed on a row,
+  // which is the whole reason restoring waits a tick for the swap to render. A
+  // restore that stranded focus on the body would still pass the assertions above.
   await expect(menu).toBeVisible();
   await expect(menu.locator(QUERY)).toHaveCount(0);
   await expect(menu.getByRole("menuitem")).toHaveText(["Charlie"]);
+  await expect(menu.getByRole("menuitem", { name: "Charlie" })).toBeFocused();
 
   await page.keyboard.press("Escape");
   await expect(menu).toBeHidden();
   await expect(page.locator(CRUMB).last()).toBeFocused();
+});
+
+test("Tab leaves the filter rather than being swallowed by the query field", async ({
+  daemon,
+  page,
+}) => {
+  // The field stops nearly every key to keep it out of the menu's typeahead, so
+  // the keys it must NOT stop need pinning: swallowing Tab strands a keyboard user
+  // inside the panel, because the menu's focus scope pulls focus straight back.
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+  await expect(page.locator(`${CRUMB}.current`)).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const menu = page.locator(MENU);
+  await page.keyboard.press("b");
+  await page.keyboard.press("/");
+  await expect(menu.locator(QUERY)).toBeFocused();
+
+  await page.keyboard.press("Tab");
+  await expect(menu).toBeHidden();
+});
+
+test("/ reaches the filter from inside a submenu too", async ({ daemon, page }) => {
+  // The handler sits on the SubContent as well as the Content, so the key works at
+  // any depth — and that is the one path where the swap unmounts the submenu and
+  // its trigger underneath the focus the field is about to take.
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+
+  await jumpTo(page, "Charlie");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
+  await waitPastSafeModeGrace(page);
+
+  // Open the outermost crumb and step into its submenu, as the nested-walk spec does.
+  await page.locator(CRUMB).first().click();
+  await page.keyboard.press("j");
+  await page.keyboard.press("ArrowRight");
+  const submenu = page.locator("[data-slot='dropdown-menu-sub-content']");
+  await expect(submenu).toBeVisible();
+
+  await page.keyboard.press("/");
+  const menu = page.locator(MENU);
+  await expect(menu.locator(QUERY)).toBeFocused();
+  await expect(submenu).toHaveCount(0);
+  await expect(menu.getByRole("menuitem")).toHaveCount(6);
 });
 
 test("a query matching nothing says so instead of emptying the panel", async ({ daemon, page }) => {

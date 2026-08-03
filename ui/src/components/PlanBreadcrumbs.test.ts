@@ -264,9 +264,12 @@ describe("PlanBreadcrumbs filter", () => {
     return document.body.querySelector("[data-slot='dropdown-menu-content']");
   }
 
-  /** Press a bare key on the open menu, as a reviewer walking it would. */
+  /** Press a bare key on the open menu, as a reviewer walking it would. Cancelable
+   * so the handler's preventDefault is real rather than a silent no-op. */
   function pressInMenu(key: string): void {
-    menuContent()?.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+    menuContent()?.dispatchEvent(
+      new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
+    );
   }
 
   function queryField(): HTMLInputElement | null {

@@ -24,6 +24,14 @@
   // when you already know the destination. It stays inside the same menu, so the
   // walk, the jump, the dismissal, and the focus return are all still the
   // primitive's; Escape swaps the hierarchy back rather than closing.
+  //
+  // That reuse costs one ARIA deviation, recorded here rather than left to be
+  // rediscovered: bits-ui puts role="menu" on the content, and a textbox is not
+  // among the roles `menu` admits as children. The role cannot be overridden from
+  // the call site (the primitive merges its own last), so a screen reader in menu
+  // mode gets the field's label but no narration as the row set narrows. The
+  // structural fix is combobox + listbox semantics — shadcn's `command` in a
+  // popover — which is a vendoring job this issue does not carry.
   import { tick, untrack } from "svelte";
 
   import * as Breadcrumb from "$lib/components/ui/breadcrumb/index.js";
@@ -128,8 +136,8 @@
   }
 
   // Whether the open menu is showing the filter rather than the hierarchy, and
-  // the live query. One pair for the whole bar: only one menu is ever open, and
-  // the results span the plan, so which crumb hosts them carries no meaning.
+  // the live query. One set for the whole bar: the results span the plan, so
+  // which crumb hosts them carries no meaning.
   let filtering = $state(false);
   let query = $state("");
   let queryEl = $state<HTMLInputElement | null>(null);
@@ -143,45 +151,58 @@
     if (filtering) queryEl?.focus();
   });
 
-  // The result rows of whichever menu is open. Portalled to the body, so this
-  // reaches past the component's own subtree — the same place the tests look.
+  // The open menu's content element, reached through the field rather than the
+  // document: bits-ui portals the content to the body, so the field's ancestor is
+  // the only handle on the panel these rows belong to that cannot pick up a
+  // different crumb's menu — including one still fading out.
+  function menuContent(): HTMLElement | null {
+    return queryEl?.closest<HTMLElement>("[data-slot='dropdown-menu-content']") ?? null;
+  }
+
+  // The result rows. While filtering, every item in that content is one.
   function resultRows(): HTMLElement[] {
-    return [...document.querySelectorAll<HTMLElement>(".plan-crumb-menu .crumb-filter-row")];
+    return [
+      ...(menuContent()?.querySelectorAll<HTMLElement>("[data-slot='dropdown-menu-item']") ?? []),
+    ];
   }
 
   // Put the hierarchy back with the menu still open, and land focus on a row so
-  // j/k keep working. Awaits the swap: the rows being focused do not exist until
-  // the render that `filtering = false` schedules has run.
+  // j/k keep working. The content is resolved BEFORE the swap, since the field it
+  // is reached through is the very thing about to unmount; the await is what lets
+  // the rows being focused exist by the time they are looked up.
   async function restoreMenu(): Promise<void> {
+    const content = menuContent();
     filtering = false;
     query = "";
     await tick();
-    document
-      .querySelector<HTMLElement>(
-        ".plan-crumb-menu [data-slot='dropdown-menu-item'], .plan-crumb-menu [data-slot='dropdown-menu-sub-trigger']",
+    content
+      ?.querySelector<HTMLElement>(
+        "[data-slot='dropdown-menu-item'], [data-slot='dropdown-menu-sub-trigger']",
       )
       ?.focus();
   }
 
-  // The query field's keys. Everything but Escape is stopped here rather than
-  // allowed to bubble: bits-ui runs typeahead on any character key inside the
-  // menu content and focuses whichever row matches, which would empty the field
-  // of focus on the first keystroke. Escape deliberately keeps going, so the
-  // content's onEscapeKeydown below is the single place that decides what Escape
-  // means on this surface.
+  // The query field's keys. Four belong to the surface rather than to the query,
+  // so they keep bubbling: Escape to the content's onEscapeKeydown below, which is
+  // the single place deciding what Escape means here; Tab to bits-ui's own
+  // handleTabKeyDown, which closes the menu and moves focus past the bar; and the
+  // vertical arrows to the menu's roving focus group, which enters the results at
+  // the top on ArrowDown and at the bottom on ArrowUp precisely because the field
+  // is not one of its candidates. Everything else is stopped, because bits-ui runs
+  // typeahead on any character key inside the content and focuses whichever row
+  // matches — which would empty the field of focus on the first keystroke.
   function onQueryKeydown(e: KeyboardEvent): void {
-    if (e.key === "Escape") return;
+    if (e.key === "Escape" || e.key === "Tab" || e.key === "ArrowDown" || e.key === "ArrowUp") {
+      return;
+    }
     e.stopPropagation();
     if (e.key === "Enter") {
       // The row's own select: it jumps AND closes the menu, so Enter from the
       // field is the four-keystroke path (b, /, query, Enter) without a detour
-      // through the list.
+      // through the list. CommentNavigator's Enter instead hands focus to its
+      // list — its rows are cards to read, where these are destinations to take.
       e.preventDefault();
       resultRows()[0]?.click();
-    } else if (e.key === "ArrowDown") {
-      // Hand off to the menu's roving focus, which is what j/k then walk.
-      e.preventDefault();
-      resultRows()[0]?.focus();
     }
   }
 
@@ -248,7 +269,6 @@
   />
   {#each matches as match (match.heading.line)}
     <DropdownMenu.Item
-      class="crumb-filter-row"
       aria-current={match.heading.line === activeLine ? "location" : undefined}
       onSelect={() => onJump(match.heading.line)}
     >
@@ -281,11 +301,14 @@
           {/if}
         {/if}
         <Breadcrumb.Item class={current ? "crumb-item current" : "crumb-item"}>
-          <!-- A closed menu is always a hierarchical one: the filter is a mode of
-               an open menu, never a state the bar carries between openings. -->
+          <!-- A menu always opens on its hierarchy: the filter is a mode of an open
+               menu, never a state the bar carries between openings. Reset on the
+               OPEN edge rather than the close one, because a crumb whose menu is
+               open can be unmounted outright — the trail re-roots whenever the
+               reader moves — and an unmount reports no close. -->
           <DropdownMenu.Root
             onOpenChange={(open) => {
-              if (!open) {
+              if (open) {
                 filtering = false;
                 query = "";
               }
@@ -307,6 +330,7 @@
             <DropdownMenu.Content
               align="start"
               class="plan-crumb-menu"
+              aria-keyshortcuts="/"
               onkeydown={onMenuKeydown}
               onEscapeKeydown={(e) => {
                 // While filtering, Escape is a step back to the hierarchy rather
@@ -521,13 +545,9 @@
     background: color-mix(in lab, var(--accent-wash), var(--chip-hover) 40%);
   }
 
-  /* The filter is a MODE of the crumb menu, not a second surface: it keeps the
-     panel, its width, its scrolling, and its row treatment, and only swaps what
-     is inside. So there is no panel styling here at all — just the field, the
-     one thing a row cannot be mistaken for, and the two quiet labels below.
-     The field is the shadcn Input molded the way the ToC rail's filter molds it:
-     surface, border, and focus ring stay the recipe's (bridged tokens), and only
-     the pinning and the menu's compact voice are set. */
+  /* The field is the shadcn Input molded the way the ToC rail's filter molds it:
+     surface, border, and focus ring stay the recipe's (bridged tokens), so only
+     the pinning and the menu's compact voice are set here. */
   :global(.plan-crumb-menu .crumb-filter-field) {
     height: 2rem;
     margin-bottom: 0.25rem;
@@ -537,9 +557,11 @@
   /* The enclosing heading, trailing its row: what tells two identically titled
      sections apart. It is metadata about the row rather than the row's label, so
      it takes the quietest ink and the smallest size — the same weighting the
-     chevrons and the `b` cap have in the bar. It yields width before the heading
-     does, and truncates rather than wrapping the row onto a second line. */
+     chevrons and the `b` cap have in the bar. Weighted to give width up first,
+     the way the bar's ancestors yield ahead of the crumb the reader is on, so a
+     long heading truncates its parent rather than itself. */
   :global(.plan-crumb-menu .crumb-parent) {
+    flex-shrink: 8;
     margin-inline-start: auto;
     padding-inline-start: 0.6rem;
     min-width: 0;
