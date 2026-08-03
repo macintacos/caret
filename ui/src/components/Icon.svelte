@@ -10,6 +10,7 @@
   import bellOff from "@/icons/bell-off.svg?raw";
   import check from "@/icons/check.svg?raw";
   import chevronDown from "@/icons/chevron-down.svg?raw";
+  import chevronRight from "@/icons/chevron-right.svg?raw";
   import circleQuestionMark from "@/icons/circle-question-mark.svg?raw";
   import command from "@/icons/command.svg?raw";
   import copy from "@/icons/copy.svg?raw";
@@ -35,6 +36,7 @@
     "bell-off": bellOff,
     check,
     "chevron-down": chevronDown,
+    "chevron-right": chevronRight,
     "circle-question-mark": circleQuestionMark,
     command,
     copy,
