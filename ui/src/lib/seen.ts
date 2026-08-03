@@ -6,9 +6,10 @@
 // dwell outright rather than pausing it, so a background tab left open all day
 // never accumulates its way to a false read.
 //
-// Framework-agnostic and unit-tested in isolation (cf. safeMode.ts): the clock,
-// the timers, and both event sources are injectable options, and App.svelte
-// wires the real `window` / `document`.
+// Framework-agnostic and unit-tested in isolation (cf. safeMode.ts): the
+// presence predicate, the timers, and both event sources are injectable options,
+// and App.svelte wires the real `window` / `document`. Injecting the timers
+// rather than a clock is what makes the dwell window deterministic in a unit.
 
 import { isAway as defaultIsAway } from "$lib/presence.ts";
 
@@ -31,8 +32,11 @@ export interface SeenWatcherOptions {
 }
 
 export interface SeenWatcher {
-  /** The review now on screen (null when none). */
+  /** Point the dwell at the review now on screen (null when none). Idempotent
+   * for an unchanged id:version, so the 2s poll doesn't restart the window. */
   track: (active: { id: string; version: number } | null) => void;
+  /** Cancel any pending dwell and detach the presence listeners. Call once, at
+   * teardown — the watcher is not reusable afterwards. */
   destroy: () => void;
 }
 

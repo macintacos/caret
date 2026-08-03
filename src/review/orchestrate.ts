@@ -133,8 +133,10 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decisi
     // Stamp the originating cmux pane, if any, so the daemon can clear that
     // pane's unread mark once the plan is reviewed — the daemon is long-lived
     // and shared, so it never inherits this hook's cmux environment (EXC-961).
-    input.cmux = deps.readPane?.();
-    const { id, hasLiveClient } = await deps.postReview(baseUrl, input);
+    const { id, hasLiveClient } = await deps.postReview(baseUrl, {
+      ...input,
+      cmux: deps.readPane?.(),
+    });
     // From here every record — decision and error alike — carries the reviewId,
     // stitching this stream against the daemon's review/resolve records.
     ctx.reviewId = id;

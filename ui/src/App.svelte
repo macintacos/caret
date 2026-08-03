@@ -12,7 +12,7 @@
   import { createPlanNotifier } from "$lib/notify.ts";
   import { installUiGoneBeacon } from "$lib/presence.ts";
   import { createSafeModeGuard } from "$lib/safeMode.ts";
-  import { createSeenWatcher, type SeenWatcher } from "$lib/seen.ts";
+  import { createSeenWatcher } from "$lib/seen.ts";
   import {
     bind,
     createShortcutDispatcher,
@@ -214,6 +214,15 @@
   // EXC-427 desktop-plan notifier. Component-scoped so both consumers — the poll
   // (observe) and the EXC-815 dismiss-on-open effect below — share one instance.
   const notifier = createPlanNotifier({ onSelect: selection.selectReview });
+  // EXC-961 read detection: a plan submitted from a cmux pane leaves that pane
+  // unread, and reading it here is enough to clear the mark — no decision
+  // required. Component-scoped like the notifier: the track effect below feeds
+  // it, and the effect after that owns its teardown.
+  const seenWatcher = createSeenWatcher({
+    onSeen: (id) => void markSeen(id),
+    target: window,
+    doc: document,
+  });
   const alerts = createAlerts(alertStore);
   let active = $derived(selection.active);
   // The variants the split-button renders: the declared set when present, else
@@ -442,27 +451,14 @@
   $effect(() => installUiGoneBeacon({ target: window }));
 
   // ----- Read detection for the cmux unread mark (EXC-961) -----
-  // A plan submitted from a cmux pane leaves that pane unread. Reading it here
-  // is enough to clear the mark — no decision required — so a continuous dwell
-  // on the plan, visible and focused, reports it as seen. Mount-once: the
-  // watcher owns its own presence listeners and its teardown.
-  let seenWatcher: SeenWatcher | undefined = $state.raw();
-  $effect(() => {
-    const watcher = createSeenWatcher({
-      onSeen: (id) => void markSeen(id),
-      target: window,
-      doc: document,
-    });
-    seenWatcher = watcher;
-    return () => {
-      seenWatcher = undefined;
-      watcher.destroy();
-    };
-  });
+  // A continuous dwell on the plan, visible and focused, reports it as seen.
+  // Mount-once: the watcher (constructed above) owns its own presence listeners,
+  // so this effect exists only to detach them at teardown.
+  $effect(() => seenWatcher.destroy);
   // Feed the watcher whatever is on screen — the derived `active` covers both a
   // selection change and the 2s poll bumping the review to a new version.
   $effect(() => {
-    seenWatcher?.track(active ? { id: active.id, version: active.version } : null);
+    seenWatcher.track(active ? { id: active.id, version: active.version } : null);
   });
 
   function onApprove(mode: ApproveVariantId) {

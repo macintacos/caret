@@ -1,3 +1,7 @@
+// Tab presence: the shared away predicate (visibility + focus) that gates the
+// desktop notifier and the read-detection dwell, plus the tab-close retraction
+// beacon below.
+//
 // Tab-close presence retraction (EXC-562). The daemon decides whether a UI tab
 // is already open — and so whether the review hook should skip foregrounding a
 // new browser tab — from how recently a tab polled GET /api/reviews. That poll

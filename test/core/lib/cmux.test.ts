@@ -74,7 +74,7 @@ test("markPaneRead warns rather than errors on a spawn failure", () => {
     throw new Error("ENOENT: cmux");
   }) as unknown as typeof Bun.spawn;
   markPaneRead(pane, { spawn: throwing, log: log.log });
-  const rec = log.recs.find((r) => r.step === "cmux");
+  const rec = log.recs.find((r) => r.step === "spawn");
   expect(rec?.level).toBe("warn");
 });
 

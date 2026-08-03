@@ -1882,6 +1882,15 @@ describe("cmux unread marks", () => {
     expect(marked).toEqual([]);
   });
 
+  test("the pane never reaches the browser's ClientReview", async () => {
+    // The ids are of no use to the UI, so they are deliberately absent from
+    // toClientReview. Pinned here so a future spread-shaped flatten can't leak
+    // them into the bundle silently.
+    await bootWithRecorder();
+    const { id } = await newReview({ cmux: pane });
+    expect(await d.getReview(id)).not.toHaveProperty("cmux");
+  });
+
   test("POST /seen is CSRF-guarded like every other write", async () => {
     await bootWithRecorder();
     const { id } = await newReview({ cmux: pane });

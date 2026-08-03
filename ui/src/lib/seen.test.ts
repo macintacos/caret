@@ -5,13 +5,18 @@ import { createSeenWatcher, SEEN_DWELL_MS, type SeenWatcher } from "$lib/seen.ts
 
 // A manual timer so the dwell window is deterministic: the watcher arms and
 // cancels through these exactly as it would the real ones, and `fire()` runs
-// whatever is currently scheduled.
+// whatever is currently scheduled. `arms()` counts arm calls rather than only
+// reporting whether one is outstanding — a cancel-then-re-arm is otherwise
+// indistinguishable from "left alone", which is exactly the distinction the
+// don't-restart-on-poll test has to make.
 function manualTimer() {
   let scheduled: (() => void) | null = null;
   let armedFor = 0;
   let handle = 0;
+  let arms = 0;
   return {
     armedFor: () => armedFor,
+    arms: () => arms,
     pending: () => scheduled !== null,
     fire() {
       const fn = scheduled;
@@ -21,6 +26,7 @@ function manualTimer() {
     setTimer: (fn: () => void, ms: number) => {
       scheduled = fn;
       armedFor = ms;
+      arms += 1;
       handle += 1;
       return handle as unknown as ReturnType<typeof setTimeout>;
     },
@@ -89,11 +95,13 @@ test("switching to another review cancels the first one's pending dwell", () => 
 });
 
 test("the poll re-delivering the same review does not restart the dwell", () => {
+  // Load-bearing: the reviews poll is 2s and the dwell is 5s, so a watcher that
+  // re-armed on every re-delivery would never fire at all.
   const { watcher, seen, timer } = makeWatcher();
   watcher.track({ id: "r1", version: 1 });
-  const armed = timer.pending();
   watcher.track({ id: "r1", version: 1 });
-  expect(timer.pending()).toBe(armed);
+  watcher.track({ id: "r1", version: 1 });
+  expect(timer.arms()).toBe(1);
   timer.fire();
   expect(seen).toEqual(["r1"]);
 });

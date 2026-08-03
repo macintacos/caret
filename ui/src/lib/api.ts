@@ -164,8 +164,10 @@ export async function putDraft(
 
 /** Tell the daemon the reviewer has read this plan, so it can clear the unread
  * mark on the cmux pane that submitted it (EXC-961). Non-essential: a failed
- * mark leaves the pane unread, which is not worth surfacing, so failure is
- * swallowed like resolveFileRefs'. */
+ * mark just leaves the pane unread, so failure is swallowed rather than thrown.
+ * Deliberately `debug` rather than the `warn` this file's other swallowed
+ * failures use — a dwell that fires just after the review resolved 404s, which
+ * is a routine race, and warning on it every time would be noise. */
 export async function markSeen(id: string): Promise<void> {
   try {
     const res = await fetch(`/api/reviews/${encodeURIComponent(id)}/seen`, { method: "POST" });

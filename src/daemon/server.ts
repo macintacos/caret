@@ -26,7 +26,7 @@ import {
   ResolveBodySchema,
 } from "@/daemon/schemas.ts";
 import { type DaemonLock, IDENTITY, isCompiledBinary } from "@/lib/build-id.ts";
-import { markPaneRead } from "@/lib/cmux.ts";
+import { markPaneRead as clearCmuxMark } from "@/lib/cmux.ts";
 import { type CaretLogger, noopLogger, shortId } from "@/lib/log.ts";
 import {
   type ApproveVariant,
@@ -179,7 +179,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     approveVariants: opts.approveVariants,
     source: opts.source,
     diagnostics: opts.diagnostics,
-    markPaneRead: opts.markPaneRead ?? ((pane) => markPaneRead(pane, { log: opts.log })),
+    markPaneRead: opts.markPaneRead ?? ((pane) => clearCmuxMark(pane, { log: opts.log })),
     log: opts.log ?? noopLogger,
   };
 }
@@ -628,8 +628,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       }
     }
     // The plan has been decided on, so the pane that submitted it no longer
-    // needs the reviewer (EXC-961). Fire-and-forget, before the deferred unblock
-    // below, so it can never delay the 200 the long-polling hook waits on.
+    // needs the reviewer (EXC-961). Fire-and-forget: markPaneRead returns as soon
+    // as the child is spawned (output discarded, unref'd), so the 200 that
+    // unblocks the long-polling hook is never held on cmux.
     if (existing.cmux) cfg.markPaneRead(existing.cmux);
     // Defer one tick so THIS 200 flushes before the hook's long-poll resolves
     // (otherwise the browser's POST can appear to race the unblock).

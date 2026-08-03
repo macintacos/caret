@@ -44,10 +44,11 @@ export function markPaneRead(pane: CmuxPane, deps: MarkPaneReadDeps = {}): void 
       ],
       { stdio: ["ignore", "ignore", "ignore"] },
     ).unref();
-  } catch {
+  } catch (err) {
     // A recoverable oddity, not a failure: caret works fine with the mark left
-    // standing. The pane ids are opaque and identifying, so they stay out of the
-    // record.
-    log.warn("cmux", "unread mark clear failed");
+    // standing. The reason (typically "cmux" absent from PATH) is the whole
+    // diagnostic; the pane ids are local opaque uuids with nothing to tell a
+    // reader, so they stay out of the record.
+    log.warn("spawn", "unread mark clear failed", { reason: String(err) });
   }
 }
