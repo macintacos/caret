@@ -381,6 +381,38 @@ test("h steps out to the crumb before it once there is no submenu left to close"
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Delta", "Echo"]);
 });
 
+test("b shuts the bar from whatever crumb the walk reached", async ({ daemon, page }) => {
+  // The key toggles the BAR, not the trailing crumb: `h` moves the open menu out
+  // onto an ancestor, so the trigger `b` opened is no longer the open one, and
+  // re-opening the trailing crumb left the ancestor's panel standing beside it —
+  // nothing dismisses it, since a programmatic click carries no pointerdown.
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+
+  await jumpTo(page, "Charlie");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
+  await parkedAt(page);
+
+  await page.keyboard.press("b");
+  const menu = page.locator(MENU);
+  await expect(menu.getByRole("menuitem")).toHaveText(["Charlie"]);
+
+  await page.keyboard.press("h");
+  await expect(menu.getByRole("menuitem")).toHaveText(["Bravo", "Delta", "Foxtrot"]);
+  await expect(menu).toHaveCount(1);
+
+  await page.keyboard.press("b");
+  await expect(menu).toHaveCount(0);
+
+  // And it opens again where it always does — the crumb the reader is on. `\`
+  // shares the binding, so the toggle is the same one from either key.
+  await page.keyboard.press("\\");
+  await expect(menu.getByRole("menuitem")).toHaveText(["Charlie"]);
+  await page.keyboard.press("h");
+  await page.keyboard.press("\\");
+  await expect(menu).toHaveCount(0);
+});
+
 test("every level of a deep walk is actually on screen", async ({ daemon, page }) => {
   // Stock shadcn-svelte leaves a submenu inside its parent panel, and that panel
   // is a scroll container (a max-height plus overflow), so from the second level

@@ -76,14 +76,26 @@
 
   // Open the crumb the reader is on — the level being read, the one `b` advertises.
   // A programmatic click carries detail: 0, which is exactly what bits-ui's trigger
-  // treats as a keyboard-ish activation, so the whole invocation is the click; a
-  // second `b` toggles back shut. bits-ui then usually moves focus onto the first
-  // row itself, since the real `b` keypress left its `isUsingKeyboard` true — but
-  // that flag also clears on pointermove, so a mouse twitch mid-open can leave focus
-  // on the content instead. Either way j/k below enter the list from the top.
+  // treats as a keyboard-ish activation, so the whole invocation is the click.
+  // bits-ui then usually moves focus onto the first row itself, since the real `b`
+  // keypress left its `isUsingKeyboard` true — but that flag also clears on
+  // pointermove, so a mouse twitch mid-open can leave focus on the content instead.
+  // Either way j/k below enter the list from the top.
   // Keyed on aria-current rather than the .current class: same element, but a
   // contract the menu depends on instead of a style hook a CSS pass could rename.
+  //
+  // The key is a toggle for the BAR, not for one crumb: whichever trigger is open
+  // is the one it shuts, because `h` walks the open menu outward onto an ancestor
+  // crumb (openPreviousCrumb below) and shutting only the trailing crumb would
+  // leave that one standing. Nothing else closes it either — a programmatic click
+  // dispatches no pointerdown, so the open menu's own dismiss-on-outside never
+  // fires and the bar ends up showing two panels at once.
   function openTrail(): void {
+    const open = barEl?.querySelector<HTMLButtonElement>('[aria-expanded="true"]') ?? null;
+    if (open !== null) {
+      open.click();
+      return;
+    }
     barEl?.querySelector<HTMLButtonElement>('.crumb[aria-current="location"]')?.click();
   }
 
