@@ -38,7 +38,7 @@
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
-  import { headingMatches, headingTrail } from "$lib/headingTrail.ts";
+  import { type HeadingNode, headingMatches, headingTrail } from "$lib/headingTrail.ts";
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import type { TocHeading } from "$lib/toc.ts";
 
@@ -62,6 +62,11 @@
 
   const trail = $derived(headingTrail(headings, activeLine));
 
+  // The headings on the reviewer's own trail, by source line: what marks "you
+  // are here" in a menu at any depth, and what stays unmarked once the walk
+  // turns off into a branch the reviewer is not in.
+  const trailLines = $derived(new Set(trail.map((crumb) => crumb.heading.line)));
+
   let barEl = $state<HTMLElement | null>(null);
 
   // Open the crumb the reader is on — the level being read, the one `b` advertises.
@@ -84,17 +89,29 @@
     untrack(() => onExposeOpen)?.(openTrail);
   });
 
-  // j/k walk the open menu, re-dispatched as the arrow keys bits-ui's own roving
-  // focus already handles — so a submenu (whose content has its own roving group)
-  // walks with the same few lines, and disabled rows, wrapping, and Enter-to-select
-  // all stay the primitive's. Handled here, on the content, rather than as a global
+  // The vim keys the open menu answers to, mapped onto the arrows bits-ui's own
+  // roving focus and submenu handling already implement (EXC-947 for the walk,
+  // EXC-957 for the hierarchy). Left/right are the primitive's SUB_CLOSE_KEYS and
+  // SUB_OPEN_KEYS, so `h` steps back out to the row that opened the submenu and
+  // `l` descends into the highlighted row's own.
+  const MENU_ARROWS: Record<string, string> = {
+    j: "ArrowDown",
+    k: "ArrowUp",
+    h: "ArrowLeft",
+    l: "ArrowRight",
+  };
+
+  // h/j/k/l walk the open menu, re-dispatched as the arrow keys above — so a
+  // submenu (whose content has its own roving group) walks with the same few
+  // lines, and disabled rows, wrapping, and Enter-to-select all stay the
+  // primitive's. Handled here, on the content, rather than as a global
   // binding, because the dispatcher suppresses nothing just because a menu owns
   // focus. That is only half of what CommentNavigator does (EXC-792): it ALSO
   // extends the dispatcher's editing-context check in App.svelte, which buys it
-  // every key at once. This claims j/k alone, so the rest of the review keys still
+  // every key at once. This claims four keys, so the rest of the review keys still
   // reach the plan while a crumb menu is open.
   //
-  // Only a bare j/k. A command modifier means the reviewer is talking to the
+  // Only bare keys. A command modifier means the reviewer is talking to the
   // browser or the OS (⌘J is Downloads), so those pass straight through — the same
   // line bits-ui's typeahead and the dispatcher's own isBareSpec draw. A shifted
   // J/K never arrives here at all: the key is then uppercase.
@@ -110,6 +127,9 @@
   //      neither), so the keydown keeps bubbling into this same handler one level
   //      up. The pre-check is what stops that second pass from dispatching a second
   //      arrow and double-stepping the walk.
+  // Job 2 is vacuous for h and l — neither is bound in keymap.ts — but they take
+  // the same path as j/k rather than a second, quieter one, so a later binding on
+  // either key cannot reach the plan from behind an open menu.
   // Arrow keys are untouched and keep working.
   function onMenuKeydown(e: KeyboardEvent): void {
     if (e.ctrlKey || e.altKey || e.metaKey) return;
@@ -127,12 +147,45 @@
       queryEl?.focus();
       return;
     }
-    const arrow = e.key === "j" ? "ArrowDown" : e.key === "k" ? "ArrowUp" : null;
-    if (arrow === null) return;
+    const arrow = MENU_ARROWS[e.key];
+    if (arrow === undefined) return;
     e.preventDefault();
     document.activeElement?.dispatchEvent(
       new KeyboardEvent("keydown", { key: arrow, bubbles: true, cancelable: true }),
     );
+  }
+
+  // Take the reviewer to a heading and leave the bar. A plain row's select closes
+  // the menu on its own; a row that nests a submenu has no select to close it, so
+  // the open crumb is toggled shut with the same programmatic click openTrail
+  // uses to open one. Scoped to the bar, where the only aria-expanded that can
+  // match is that crumb's trigger — every sub-trigger lives in bits-ui's portalled
+  // content, outside this element.
+  function jump(line: number): void {
+    barEl?.querySelector<HTMLButtonElement>('[aria-expanded="true"]')?.click();
+    onJump(line);
+  }
+
+  // A heading with children is still a destination, not only a doorway: Enter
+  // and a mouse click take the reviewer there, while `l`/ArrowRight, Space and
+  // hover open the level below it.
+  //
+  // bits-ui turns each of ITS submenu-open keys into a synthetic click on the
+  // trigger, so the two paths can only be told apart on the click's `detail` — 0
+  // for that synthetic one, non-zero for a real press, the same tell openTrail
+  // reads above. Enter never reaches that point: it is claimed here first,
+  // because bits-ui's own handler would have flattened it into the very click
+  // this cannot distinguish.
+  function onRowKeydown(e: KeyboardEvent, line: number): void {
+    if (e.key !== "Enter" || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+    e.preventDefault();
+    jump(line);
+  }
+
+  function onRowClick(e: MouseEvent, line: number): void {
+    if (e.detail === 0) return;
+    e.preventDefault();
+    jump(line);
   }
 
   // Whether the open menu is showing the filter rather than the hierarchy, and
@@ -223,30 +276,34 @@
   );
 </script>
 
-<!-- One level's sibling headings. The heading that is itself on the trail nests
-     the level below through a DropdownMenuSub, so the menus follow the heading
-     hierarchy; every other sibling is a plain row that jumps. Recursion bottoms
-     out at the innermost crumb, whose own heading has no level below it.
-     Either way that heading carries aria-current, so the row the reader is
-     already on is marked at every depth. -->
-{#snippet level(depth: number)}
-  {@const crumb = trail[depth]}
-  {#each crumb?.siblings ?? [] as heading (heading.line)}
-    {@const here = heading.line === crumb?.heading.line}
-    {#if here && depth + 1 < trail.length}
+<!-- One level of the heading tree. EVERY heading that encloses others nests them
+     through a DropdownMenuSub, not just the one on the reader's own trail
+     (EXC-957) — that limiter is what left most of the plan reachable only by
+     jumping to a section and reopening the bar. So the menus recurse the whole
+     hierarchy, bottoming out at the headings that enclose nothing, and any
+     heading in the plan is a walk away from any crumb.
+     A heading on the trail carries aria-current wherever it appears, so "you are
+     here" reads at every depth and goes quiet once the walk turns off into a
+     branch the reader is not in. -->
+{#snippet level(nodes: HeadingNode[])}
+  {#each nodes as node (node.heading.line)}
+    {@const heading = node.heading}
+    {@const here = trailLines.has(heading.line) ? "location" : undefined}
+    {#if node.children.length > 0}
       <DropdownMenu.Sub>
-        <DropdownMenu.SubTrigger aria-current="location">
+        <DropdownMenu.SubTrigger
+          aria-current={here}
+          onkeydown={(e) => onRowKeydown(e, heading.line)}
+          onclick={(e) => onRowClick(e, heading.line)}
+        >
           <span class="crumb-label" title={heading.text}>{heading.text}</span>
         </DropdownMenu.SubTrigger>
         <DropdownMenu.SubContent class="plan-crumb-menu" onkeydown={onMenuKeydown}>
-          {@render level(depth + 1)}
+          {@render level(node.children)}
         </DropdownMenu.SubContent>
       </DropdownMenu.Sub>
     {:else}
-      <DropdownMenu.Item
-        aria-current={here ? "location" : undefined}
-        onSelect={() => onJump(heading.line)}
-      >
+      <DropdownMenu.Item aria-current={here} onSelect={() => onJump(heading.line)}>
         <span class="crumb-label" title={heading.text}>{heading.text}</span>
       </DropdownMenu.Item>
     {/if}
@@ -345,7 +402,7 @@
               {#if filtering}
                 {@render filter()}
               {:else}
-                {@render level(depth)}
+                {@render level(crumb?.siblings ?? [])}
                 <!-- The `/` cap teaches the filter the way the bar's `b` cap
                      teaches the menu, on the same setting. A plain element, so
                      the menu's roving focus never offers it as a row. -->

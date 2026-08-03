@@ -1,20 +1,29 @@
 // Heading hierarchy for the plan's breadcrumbs bar. `toc.ts` models the plan's
 // headings as a flat list in document order; this module reads the tree that
-// list implies — the ancestor chain enclosing the heading being read, the
-// headings each of those can be swapped for, and the flat filter results the
-// bar offers over the whole plan. Pure and DOM-free like `toc.ts`, so the
-// parenting, sibling, and match logic is directly unit-testable.
+// list implies — the whole nesting, the ancestor chain enclosing the heading
+// being read, the flat filter results the bar offers over the plan, and how much
+// of the trail a row of a given width can hold. Pure and DOM-free like `toc.ts`,
+// so the parenting, sibling, match, and collapse logic is directly
+// unit-testable.
 
 import { filterHeadings, type TocHeading } from "$lib/toc.ts";
+
+/** A heading with the headings nested under it, in document order. */
+export interface HeadingNode {
+  heading: TocHeading;
+  /** Headings enclosed by this one, empty for a heading with nothing under it. */
+  children: HeadingNode[];
+}
 
 /** A heading in the trail, paired with the headings it can be swapped for. */
 export interface HeadingCrumb {
   heading: TocHeading;
   /**
-   * Headings at the same level under the same parent, in document order.
-   * Always contains `heading` itself.
+   * Headings at the same level under the same parent, in document order, each
+   * carrying its own subtree. Always contains `heading` itself. The subtrees are
+   * what let the bar's menus descend into a section the reader is not in.
    */
-  siblings: TocHeading[];
+  siblings: HeadingNode[];
 }
 
 /** A heading the bar's filter matched, paired with the heading enclosing it. */
@@ -44,30 +53,79 @@ function parentIndices(headings: TocHeading[]): number[] {
 }
 
 /**
+ * The plan's headings as the tree their levels imply — the top-level headings,
+ * each carrying the headings nested under it, all in document order. Built off
+ * the same `parentIndices` walk `headingTrail` and `headingMatches` climb, so
+ * the three views of the hierarchy can never disagree.
+ */
+export function headingTree(headings: TocHeading[]): HeadingNode[] {
+  const parents = parentIndices(headings);
+  const nodes: HeadingNode[] = headings.map((heading) => ({ heading, children: [] }));
+  const roots: HeadingNode[] = [];
+  for (const [index, node] of nodes.entries()) {
+    (nodes[parents[index] ?? -1]?.children ?? roots).push(node);
+  }
+  return roots;
+}
+
+/**
  * The trail of headings enclosing `activeLine` — the ancestor chain from the
  * outermost heading down to the heading sitting on that line, each paired with
- * its siblings. `activeLine` is the line `activeHeadingLine` reports, so a null
- * one (nothing scrolled into view yet) and a line holding no heading both yield
- * an empty trail rather than throwing; a plan with no headings does too.
+ * its siblings and their subtrees. `activeLine` is the line `activeHeadingLine`
+ * reports, so a null one (nothing scrolled into view yet) and a line holding no
+ * heading both yield an empty trail rather than throwing; a plan with no
+ * headings does too.
  */
 export function headingTrail(headings: TocHeading[], activeLine: number | null): HeadingCrumb[] {
-  let index = headings.findIndex((h) => h.line === activeLine);
-  if (index === -1) return [];
+  const active = headings.findIndex((h) => h.line === activeLine);
+  if (active === -1) return [];
   const parents = parentIndices(headings);
+  // The ancestor indices, outermost first. Every parent sits at a lower index
+  // than its child, so the climb terminates.
+  const chain: number[] = [];
+  for (let index = active; index !== -1; index = parents[index] ?? -1) chain.unshift(index);
   const trail: HeadingCrumb[] = [];
-  while (index !== -1) {
+  let siblings = headingTree(headings);
+  for (const index of chain) {
     const heading = headings[index];
     if (heading === undefined) break;
-    const parent = parents[index] ?? -1;
-    trail.unshift({
-      heading,
-      siblings: headings.filter(
-        (h, i) => h.level === heading.level && (parents[i] ?? -1) === parent,
-      ),
-    });
-    index = parent;
+    trail.push({ heading, siblings });
+    siblings = siblings.find((n) => n.heading.line === heading.line)?.children ?? [];
   }
   return trail;
+}
+
+/**
+ * The trail depths a row `avail` px wide can show, ascending. Every depth when
+ * the whole trail fits; otherwise the outermost depth, then as many of the
+ * innermost depths as the room left holds once the elision marker is placed —
+ * never fewer than the innermost, which is where the reader is.
+ *
+ * Widths are the natural width of each depth's crumb; `separator` is one
+ * separator plus the gaps around it, and `marker` is what inserting the elision
+ * marker costs, its own separator included. All in CSS px, measured by the bar.
+ */
+export function visibleDepths(
+  widths: number[],
+  separator: number,
+  marker: number,
+  avail: number,
+): number[] {
+  const every = widths.map((_, index) => index);
+  // Two levels have no middle to give up, so they only ever truncate.
+  if (widths.length < 3) return every;
+  const whole = widths.reduce((sum, w) => sum + w, 0) + separator * (widths.length - 1);
+  if (whole <= avail) return every;
+  const last = widths.length - 1;
+  let used = (widths[0] ?? 0) + marker + separator + (widths[last] ?? 0);
+  const tail = [last];
+  for (let depth = last - 1; depth >= 1; depth--) {
+    const cost = separator + (widths[depth] ?? 0);
+    if (used + cost > avail) break;
+    used += cost;
+    tail.unshift(depth);
+  }
+  return [0, ...tail];
 }
 
 /**

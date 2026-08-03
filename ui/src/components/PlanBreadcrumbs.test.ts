@@ -15,7 +15,19 @@ const HEADINGS: TocHeading[] = [
   { level: 2, text: "Verification", line: 20 },
 ];
 
-// Four nested levels, so the trail outgrows the three crumbs the bar shows.
+// Two branches off one parent: "Details" under "Approach" is where the reader
+// is, "Steps" under "Verification" is the branch they are not in — the headings
+// the bar could not reach before EXC-957.
+const BRANCHED: TocHeading[] = [
+  { level: 1, text: "Overview", line: 1 },
+  { level: 2, text: "Approach", line: 5 },
+  { level: 3, text: "Details", line: 9 },
+  { level: 2, text: "Verification", line: 20 },
+  { level: 3, text: "Steps", line: 24 },
+];
+
+// Four nested levels, deeper than the bar used to show before it started
+// measuring the room it has.
 const DEEP: TocHeading[] = [
   { level: 1, text: "One", line: 1 },
   { level: 2, text: "Two", line: 3 },
@@ -184,6 +196,63 @@ describe("PlanBreadcrumbs menus", () => {
     });
     await openCrumb(target, 2, flush);
     expect(menuRows().map((r) => r.getAttribute("data-slot"))).toEqual(["dropdown-menu-item"]);
+  });
+
+  // EXC-957: the menus recurse the heading tree, not the reader's trail. A
+  // sibling they are NOT on is the case the old `here &&` limiter excluded, and
+  // the reason most of a plan was unreachable from the bar.
+  test("nests a sibling's own headings even when the reader is not in that branch", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: BRANCHED,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await openCrumb(target, 1, flush);
+    expect(menuRows().map((r) => r.textContent?.trim())).toEqual(["Approach", "Verification"]);
+    // Verification encloses Steps, so it opens rather than only jumping.
+    expect(menuRows().map((r) => r.getAttribute("data-slot"))).toEqual([
+      "dropdown-menu-sub-trigger",
+      "dropdown-menu-sub-trigger",
+    ]);
+  });
+
+  test("marks only the headings on the reader's own trail", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: BRANCHED,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await openCrumb(target, 1, flush);
+    expect(menuRows().map((r) => r.getAttribute("aria-current"))).toEqual(["location", null]);
+  });
+
+  // A row that opens a submenu is still a destination. bits-ui flattens its own
+  // submenu-open keys into a synthetic click (detail 0), so only a real press
+  // navigates — which is what this dispatches.
+  test("clicking a heading that has children jumps to it rather than opening it", async () => {
+    const jumped = capture<number>();
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: BRANCHED,
+      activeLine: 9,
+      onJump: jumped.cb,
+    });
+    await openCrumb(target, 1, flush);
+    menuRows()[1]?.dispatchEvent(new MouseEvent("click", { detail: 1, bubbles: true }));
+    flush();
+    expect(jumped.last()).toBe(20);
+  });
+
+  test("leaves the plan alone when bits-ui opens the submenu through a synthetic click", async () => {
+    const jumped = capture<number>();
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: BRANCHED,
+      activeLine: 9,
+      onJump: jumped.cb,
+    });
+    await openCrumb(target, 1, flush);
+    menuRows()[1]?.click(); // detail 0 — what ArrowRight and Space produce
+    flush();
+    expect(jumped.last()).toBeUndefined();
   });
 
   test("picking a sibling jumps to its source line", async () => {
