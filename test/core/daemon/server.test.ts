@@ -1821,3 +1821,74 @@ test("a failed fire-and-forget prefs write is logged at warn", async () => {
   }
   expect(warn?.msg).toBe("approve mode write failed");
 });
+
+// ---- cmux unread marks (EXC-961) ----
+//
+// A plan submitted from a cmux pane leaves that pane unread. The daemon clears
+// it once the reviewer has decided on the plan, or has demonstrably read it
+// (POST /seen). The effect is a spawn of an external binary, so these tests
+// inject a recorder in its place and assert on the argv it would have run.
+describe("cmux unread marks", () => {
+  const pane = { workspaceId: "w1", surfaceId: "s1" };
+
+  /** Boot with a recorder standing in for the real mark-read spawn. */
+  async function bootWithRecorder(opts: BootOptions = {}) {
+    const marked: Array<{ workspaceId: string; surfaceId: string }> = [];
+    await boot({ markPaneRead: (p) => marked.push(p), ...opts });
+    return marked;
+  }
+
+  test("an approval clears the submitting pane's mark", async () => {
+    const marked = await bootWithRecorder();
+    const { id } = await newReview({ cmux: pane });
+    await resolve(id, { behavior: "allow" });
+    expect(marked).toEqual([pane]);
+  });
+
+  test("a rejection clears the submitting pane's mark", async () => {
+    const marked = await bootWithRecorder();
+    const { id } = await newReview({ cmux: pane });
+    await resolve(id, { behavior: "deny", feedback: "no" });
+    expect(marked).toEqual([pane]);
+  });
+
+  test("a review submitted outside cmux clears nothing", async () => {
+    const marked = await bootWithRecorder();
+    const { id } = await newReview();
+    await resolve(id, { behavior: "allow" });
+    expect(marked).toEqual([]);
+  });
+
+  test("POST /seen clears the submitting pane's mark and answers 204", async () => {
+    const marked = await bootWithRecorder();
+    const { id } = await newReview({ cmux: pane });
+    const res = await fetch(`${base}/api/reviews/${id}/seen`, { method: "POST" });
+    expect(res.status).toBe(204);
+    expect(marked).toEqual([pane]);
+  });
+
+  test("POST /seen for a review with no pane still answers 204", async () => {
+    const marked = await bootWithRecorder();
+    const { id } = await newReview();
+    const res = await fetch(`${base}/api/reviews/${id}/seen`, { method: "POST" });
+    expect(res.status).toBe(204);
+    expect(marked).toEqual([]);
+  });
+
+  test("POST /seen for an unknown id is 404", async () => {
+    const marked = await bootWithRecorder();
+    const res = await fetch(`${base}/api/reviews/does-not-exist/seen`, { method: "POST" });
+    expect(res.status).toBe(404);
+    expect(marked).toEqual([]);
+  });
+
+  test("POST /seen is CSRF-guarded like every other write", async () => {
+    await bootWithRecorder();
+    const { id } = await newReview({ cmux: pane });
+    const res = await fetch(`${base}/api/reviews/${id}/seen`, {
+      method: "POST",
+      headers: { Origin: "https://evil.example" },
+    });
+    expect(res.status).toBe(403);
+  });
+});

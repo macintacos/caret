@@ -16,6 +16,7 @@
 
 import type { IconName } from "$lib/icons.ts";
 import { shortId, uiLog } from "$lib/log.ts";
+import { isAway as defaultIsAway } from "$lib/presence.ts";
 
 /** Minimal surface the notifier needs from a constructed Notification. The
  * show/error events are the only display feedback the platform offers: a
@@ -172,8 +173,7 @@ export function defaultClaim(id: string): boolean | Promise<boolean> {
 
 export function createPlanNotifier(opts: PlanNotifierOptions): PlanNotifier {
   const notify = opts.notify ?? defaultNotify;
-  const isAway =
-    opts.isAway ?? (() => document.visibilityState !== "visible" || !document.hasFocus());
+  const isAway = opts.isAway ?? defaultIsAway;
   const permission = opts.permission ?? defaultPermission;
   const focus = opts.focus ?? (() => window.focus());
   const claim = opts.claim ?? defaultClaim;

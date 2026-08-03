@@ -17,6 +17,10 @@
 /** Path the close beacon posts to — the daemon clears UI presence here. */
 export const UI_GONE_PATH = "/api/ui/gone";
 
+/** Whether the user is away from this tab — hidden, or visible but unfocused.
+ * visibilityState alone misses the common visible-but-background window. */
+export const isAway = (): boolean => document.visibilityState !== "visible" || !document.hasFocus();
+
 export interface UiGoneBeaconOptions {
   /** Event source to listen on — `window` in the app. */
   target: EventTarget;

@@ -7,11 +7,12 @@
   // theme, safe mode, the keyboard-shortcut dispatcher, and the UI-gone presence
   // beacon. The behaviors themselves live in $lib/* and @/state/*; this file only
   // holds them together and lays out the TopBar + DiffPlanView.
-  import { getHealth } from "$lib/api.ts";
+  import { getHealth, markSeen } from "$lib/api.ts";
   import { approveVariants } from "$lib/approve.ts";
   import { createPlanNotifier } from "$lib/notify.ts";
   import { installUiGoneBeacon } from "$lib/presence.ts";
   import { createSafeModeGuard } from "$lib/safeMode.ts";
+  import { createSeenWatcher, type SeenWatcher } from "$lib/seen.ts";
   import {
     bind,
     createShortcutDispatcher,
@@ -439,6 +440,30 @@
   // backgrounded-but-open tab would still get a redundant new tab on the next
   // plan. Mount-once: reads no reactive state, returns its teardown.
   $effect(() => installUiGoneBeacon({ target: window }));
+
+  // ----- Read detection for the cmux unread mark (EXC-961) -----
+  // A plan submitted from a cmux pane leaves that pane unread. Reading it here
+  // is enough to clear the mark — no decision required — so a continuous dwell
+  // on the plan, visible and focused, reports it as seen. Mount-once: the
+  // watcher owns its own presence listeners and its teardown.
+  let seenWatcher: SeenWatcher | undefined = $state.raw();
+  $effect(() => {
+    const watcher = createSeenWatcher({
+      onSeen: (id) => void markSeen(id),
+      target: window,
+      doc: document,
+    });
+    seenWatcher = watcher;
+    return () => {
+      seenWatcher = undefined;
+      watcher.destroy();
+    };
+  });
+  // Feed the watcher whatever is on screen — the derived `active` covers both a
+  // selection change and the 2s poll bumping the review to a new version.
+  $effect(() => {
+    seenWatcher?.track(active ? { id: active.id, version: active.version } : null);
+  });
 
   function onApprove(mode: ApproveVariantId) {
     // Approve always routes through a confirmation (EXC-791): even with nothing
