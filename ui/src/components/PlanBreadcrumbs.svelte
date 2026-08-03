@@ -81,6 +81,7 @@
   <Breadcrumb.Root class="plan-breadcrumbs" aria-label="Plan location">
     <Breadcrumb.List>
       {#each depths as depth, index (depth)}
+        {@const current = depth === trail.length - 1}
         {#if index > 0}
           <Breadcrumb.Separator />
           <!-- A gap in the depths is the elided middle of a deep trail. -->
@@ -89,7 +90,7 @@
             <Breadcrumb.Separator />
           {/if}
         {/if}
-        <Breadcrumb.Item>
+        <Breadcrumb.Item class={current ? "crumb-item current" : "crumb-item"}>
           <DropdownMenu.Root>
             <DropdownMenu.Trigger>
               {#snippet child({ props })}
@@ -97,8 +98,8 @@
                   {...props}
                   type="button"
                   class="crumb float-chip"
-                  class:current={depth === trail.length - 1}
-                  aria-current={depth === trail.length - 1 ? "location" : undefined}
+                  class:current
+                  aria-current={current ? "location" : undefined}
                 >{trail[depth]?.heading.text}</button>
               {/snippet}
             </DropdownMenu.Trigger>
@@ -140,6 +141,18 @@
   }
   :global(.plan-breadcrumbs [data-slot="breadcrumb-item"]) {
     min-width: 0;
+  }
+  /* Give the ancestors up before the crumb the reader is actually on. Shrinking
+     every crumb equally shreds them all to a single letter as the row tightens,
+     losing the one that matters most; weighting the shrink keeps "where you are"
+     legible while its ancestors truncate. A weight rather than flex: none, so the
+     current crumb still yields when there is genuinely no room and the row never
+     pushes the app past its MIN_APP_WIDTH_PX floor. */
+  :global(.plan-breadcrumbs .crumb-item) {
+    flex-shrink: 8;
+  }
+  :global(.plan-breadcrumbs .crumb-item.current) {
+    flex-shrink: 1;
   }
   /* The chevrons and the elision marker are punctuation between crumbs, so they
      sit at the quietest ink in the row and never shrink. */
