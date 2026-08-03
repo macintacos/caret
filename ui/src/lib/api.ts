@@ -162,6 +162,25 @@ export async function putDraft(
   }
 }
 
+/** Tell the daemon the reviewer has read this plan, so it can clear the unread
+ * mark on the cmux pane that submitted it (EXC-961). Non-essential: a failed
+ * mark just leaves the pane unread, so failure is swallowed rather than thrown.
+ * Deliberately `debug` rather than the `warn` this file's other swallowed
+ * failures use — a dwell that fires just after the review resolved 404s, which
+ * is a routine race, and warning on it every time would be noise. */
+export async function markSeen(id: string): Promise<void> {
+  try {
+    const res = await fetch(`/api/reviews/${encodeURIComponent(id)}/seen`, { method: "POST" });
+    if (!res.ok) throw new HttpError(res.status);
+    uiLog.debug("ui", `review seen: ${shortId(id)}`, { reviewId: id });
+  } catch (err) {
+    uiLog.debug("ui", `review seen mark failed: ${shortId(id)}`, {
+      reviewId: id,
+      reason: String(err),
+    });
+  }
+}
+
 export async function resolveReview(id: string, body: ResolveBody): Promise<void> {
   // Intent record before the POST: the behavior plus counts/ids only — feedback
   // body text is never logged (see DENY_KEYS / redaction rules).

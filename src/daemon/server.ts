@@ -26,9 +26,11 @@ import {
   ResolveBodySchema,
 } from "@/daemon/schemas.ts";
 import { type DaemonLock, IDENTITY, isCompiledBinary } from "@/lib/build-id.ts";
+import { markPaneRead as clearCmuxMark } from "@/lib/cmux.ts";
 import { type CaretLogger, noopLogger, shortId } from "@/lib/log.ts";
 import {
   type ApproveVariant,
+  type CmuxPane,
   currentVersion,
   type DaemonDiagnostics,
   type Decision,
@@ -115,6 +117,10 @@ export interface CreateServerOptions {
    * call sites/tests that don't wire it are unaffected. runDaemon wires the prod
    * thunk, which reads live settings so a config edit hot-reloads. */
   diagnostics?: () => DaemonDiagnostics;
+  /** Clear the unread mark on the cmux pane a review was submitted from
+   * (EXC-961). Defaults to the real spawn; injectable so tests assert on the
+   * argv without spawning. Fire-and-forget — it never delays a response. */
+  markPaneRead?: (pane: CmuxPane) => void;
   /** Leveled lifecycle logger (see log.ts CaretLogger); defaults to a no-op so
    * tests stay quiet. Lifecycle events log at info, handler failures at error. */
   log?: CaretLogger;
@@ -152,6 +158,7 @@ interface ResolvedOptions {
   approveVariants: readonly ApproveVariant[] | undefined;
   source: string | undefined;
   diagnostics: (() => DaemonDiagnostics) | undefined;
+  markPaneRead: (pane: CmuxPane) => void;
   log: CaretLogger;
 }
 
@@ -172,21 +179,22 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     approveVariants: opts.approveVariants,
     source: opts.source,
     diagnostics: opts.diagnostics,
+    markPaneRead: opts.markPaneRead ?? ((pane) => clearCmuxMark(pane, { log: opts.log })),
     log: opts.log ?? noopLogger,
   };
 }
 
 // A request matched to one of the :id sub-routes, with the review id decoded and
-// the optional sub-path (/decision, /resolve, /draft, /expire, /file-refs, /file)
-// split out. /file-refs precedes /file in the alternation so the longer literal
-// wins rather than /file matching its prefix.
+// the optional sub-path (/decision, /resolve, /draft, /expire, /seen, /file-refs,
+// /file) split out. /file-refs precedes /file in the alternation so the longer
+// literal wins rather than /file matching its prefix.
 interface IdRoute {
   id: string;
   sub: string | undefined;
 }
 
 const ID_ROUTE_RE =
-  /^\/api\/reviews\/([^/]+)(\/decision|\/resolve|\/draft|\/expire|\/file-refs|\/file)?$/;
+  /^\/api\/reviews\/([^/]+)(\/decision|\/resolve|\/draft|\/expire|\/seen|\/file-refs|\/file)?$/;
 
 /** Match an /api/reviews/:id[/sub] path, decoding the id; null for any other path. */
 function matchIdRoute(path: string): IdRoute | null {
@@ -619,6 +627,11 @@ export function createServer(opts: CreateServerOptions): CaretServer {
         });
       }
     }
+    // The plan has been decided on, so the pane that submitted it no longer
+    // needs the reviewer (EXC-961). Fire-and-forget: markPaneRead returns as soon
+    // as the child is spawned (output discarded, unref'd), so the 200 that
+    // unblocks the long-polling hook is never held on cmux.
+    if (existing.cmux) cfg.markPaneRead(existing.cmux);
     // Defer one tick so THIS 200 flushes before the hook's long-poll resolves
     // (otherwise the browser's POST can appear to race the unblock).
     setTimeout(() => resolveDecision(id, decision), 0);
@@ -650,6 +663,18 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return Response.json({ ok: true });
   }
 
+  // POST /api/reviews/:id/seen — the reviewer has demonstrably read this plan
+  // (the UI's dwell watcher fired), so the pane that submitted it no longer needs
+  // their attention even though no decision has been made yet (EXC-961). Purely a
+  // signal: nothing is persisted, and a review submitted outside cmux is a
+  // no-op 204 rather than an error.
+  function handleSeen(id: string): Response {
+    const existing = store.get(id);
+    if (!existing) return notFound();
+    if (existing.cmux) cfg.markPaneRead(existing.cmux);
+    return new Response(null, { status: 204 });
+  }
+
   // Resolve a request to its handler by method + path, returning the Response.
   // The wrapper (handle) owns the cross-origin guard, idle/in-flight bookkeeping,
   // and the catch-all 500; dispatch is pure routing + business logic.
@@ -674,6 +699,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       if (method === "PUT" && sub === "/draft") return handleDraft(req, id);
       if (method === "POST" && sub === "/resolve") return handleResolve(req, id);
       if (method === "POST" && sub === "/expire") return handleExpire(id);
+      if (method === "POST" && sub === "/seen") return handleSeen(id);
     }
 
     // A hashed sibling asset (exact manifest-key match) — checked after the API

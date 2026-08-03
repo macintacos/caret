@@ -13,6 +13,7 @@ import { logFile } from "@/config/paths.ts";
 import { loadSettings, reviewTimeoutMs, type Settings } from "@/config/settings.ts";
 import { expireReview, longPoll, postReview } from "@/daemon/client.ts";
 import { ensureDaemon, prodEnsureDeps } from "@/daemon/lifecycle.ts";
+import { readCmuxPane } from "@/lib/cmux.ts";
 import { logError, logWarn, setLogLevel, setRedact } from "@/lib/log.ts";
 import type { Decision, PlanInput } from "@/lib/types.ts";
 import { appendReviewerNotesToPlanFile } from "@/plan/canonical-file.ts";
@@ -47,6 +48,7 @@ export function prodReviewDeps(s: Settings, adapter: AgentAdapter): ReviewDeps {
     postReview,
     longPoll,
     openBrowser,
+    readPane: readCmuxPane,
     timeoutMs: reviewTimeoutMs(s),
     expire: expireReview,
   };
