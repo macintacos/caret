@@ -77,6 +77,7 @@
   import SourceAnnotationThread from "@/components/SourceAnnotationThread.svelte";
   import LegacyAnnotationList from "@/components/LegacyAnnotationList.svelte";
   import SourceToc from "@/components/SourceToc.svelte";
+  import PlanBreadcrumbs from "@/components/PlanBreadcrumbs.svelte";
   import CodeCopyButton from "@/components/CodeCopyButton.svelte";
   import FileDrawer from "@/components/FileDrawer.svelte";
   import FilePreview from "@/components/FilePreview.svelte";
@@ -780,15 +781,29 @@
     const update = () => {
       const top = topVisibleLine();
       if (top != null) activeLine = activeHeadingLine(headings, top);
+      return top != null;
     };
     const onScroll = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(update);
     };
     el.addEventListener("scroll", onScroll, { passive: true });
-    update();
+    // Seed the tracked heading at load rather than leaving it null until the
+    // first scroll. The library paints its rows asynchronously after the
+    // container mounts, so a single read here measures an empty grid and gives
+    // up; retry across a bounded number of frames until one resolves — the same
+    // shape retryScrollTo uses, and for the same reason. Without it the
+    // breadcrumbs bar has no trail to render on a plan nobody has scrolled yet.
+    let seed = 0;
+    let tries = 0;
+    const seedActive = () => {
+      if (update() || ++tries >= 30) return;
+      seed = requestAnimationFrame(seedActive);
+    };
+    seed = requestAnimationFrame(seedActive);
     return () => {
       cancelAnimationFrame(raf);
+      cancelAnimationFrame(seed);
       el.removeEventListener("scroll", onScroll);
     };
   });
@@ -1134,7 +1149,7 @@
 <!-- Control row above the surface: the version-compare picker. The picker is
      always shown; its toggle disables itself when there are no other versions to
      compare (EXC-664). -->
-<div class="control-row">
+<div class="control-row" class:comparing={compareStore.comparing}>
   <!-- Contents toggle (EXC-809): always available when the single-version surface
        has a ToC to toggle, so the reviewer can hide the outline at any width. A
        float-chip icon button matching the compare control's chrome, with its
@@ -1182,6 +1197,15 @@
     onSetDiffStyle={compare.setDiffStyle}
     onSetDiffIndicators={compare.setDiffIndicators}
   />
+  <!-- Heading breadcrumbs (EXC-946): where in the plan the reviewer is, and the
+       menus to move sideways or deeper. It rides the SAME activeLine the ToC rail
+       tracks — one scroll observer serves both — and jumps through the same
+       scrollToLine, so a crumb pick lands exactly where a rail row does. Compare
+       mode tracks no heading (and clears `?heading=`), so the bar is dropped
+       there rather than left showing a stale trail. -->
+  {#if !showDiff}
+    <PlanBreadcrumbs {headings} {activeLine} onJump={(line) => api?.scrollToLine(line)} />
+  {/if}
   {#if !compareStore.comparing}
     <!-- Working-directory path (EXC-807 relocated it here from the TopBar; EXC-850
          makes it click-to-copy). The row shows the abbreviated path and copies the
@@ -1481,18 +1505,35 @@
     background: var(--chip-hover);
     color: var(--ink);
   }
-  /* The compare picker now owns the bar: it spans the row so the "Compare
-     versions" toggle sits at the left, and its display toggles (margin-left: auto,
-     in compare mode) reach the right edge. */
+  /* In compare mode the picker owns the bar: it spans the row so the "Compare
+     versions" toggle sits at the left and its display toggles (margin-left: auto)
+     reach the right edge. Reading a single version it sizes to its toggle instead,
+     so the breadcrumbs sit directly beside that toggle rather than being shoved to
+     the right edge by a stretched picker. The modifier tracks
+     `compareStore.comparing` — the same flag the .controls cluster renders on. */
   .control-row :global(.compare-picker) {
+    flex: 0 1 auto;
+  }
+  .control-row.comparing :global(.compare-picker) {
     flex: 1;
   }
-  /* The working-directory path, relocated from the TopBar (EXC-807). The
-     compare-picker's flex:1 pushes it to the row's right edge; it shrinks to an
-     ellipsis on narrow widths (the tooltip still carries the full path). Muted
-     .mono chrome, matching its former TopBar treatment. */
+  /* The heading breadcrumbs (EXC-946) take the row's middle and give it back
+     first: min-width: 0 lets the bar shrink so its crumbs ellipsise, keeping the
+     row inside the app's MIN_APP_WIDTH_PX floor the same way .cwd does below. */
+  .control-row :global(.plan-breadcrumbs) {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  /* The working-directory path, relocated from the TopBar (EXC-807). It pins
+     itself to the row's right edge with margin-left: auto rather than relying on
+     a stretched neighbour to push it there — the picker no longer stretches while
+     reading a single version, and the breadcrumbs beside it are absent on a
+     heading-less plan. It shrinks to an ellipsis on narrow widths (the tooltip
+     still carries the full path). Muted .mono chrome, matching its former TopBar
+     treatment. */
   .cwd {
     flex: 0 1 auto;
+    margin-left: auto;
     min-width: 0;
     /* Button reset — it was an inline div until EXC-850 made it click-to-copy;
        .mono owns the family, so only the size is inherited here. */
