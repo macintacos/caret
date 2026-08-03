@@ -31,20 +31,18 @@
 
   const trail = $derived(headingTrail(headings, activeLine));
 
-  // How many crumbs the bar shows before it elides the middle. Deeper trails keep
-  // the outermost heading (the section you are in) and the innermost two (your
-  // immediate parent and where you are), which is what a reader actually needs;
-  // the elided levels stay reachable through the first crumb's nested submenus.
-  // This cap bounds the trail's LENGTH, not its width — one long heading is held
-  // by the per-crumb text-overflow below, which is what actually keeps the control
-  // row inside the app's MIN_APP_WIDTH_PX floor.
-  const MAX_CRUMBS = 3;
+  // Above this depth the bar elides the middle of the trail, keeping the outermost
+  // heading and the innermost two — the reader's immediate parent and where they
+  // are. The elided levels stay reachable through the first crumb's nested
+  // submenus. This bounds the trail's LENGTH only; a single long heading is held
+  // by the per-crumb truncation below.
+  const COLLAPSE_ABOVE = 3;
 
   // The trail depths rendered, ascending. Indices rather than crumbs because the
   // sibling menus recurse by depth, and a collapsed trail must still hand the
   // right depth to `level`.
   const depths = $derived(
-    trail.length > MAX_CRUMBS
+    trail.length > COLLAPSE_ABOVE
       ? [0, trail.length - 2, trail.length - 1]
       : trail.map((_, index) => index),
   );
@@ -53,22 +51,28 @@
 <!-- One level's sibling headings. The heading that is itself on the trail nests
      the level below through a DropdownMenuSub, so the menus follow the heading
      hierarchy; every other sibling is a plain row that jumps. Recursion bottoms
-     out at the innermost crumb, whose own heading has no level below it. -->
+     out at the innermost crumb, whose own heading has no level below it.
+     Either way that heading carries aria-current, so the row the reader is
+     already on is marked at every depth. -->
 {#snippet level(depth: number)}
   {@const crumb = trail[depth]}
   {#each crumb?.siblings ?? [] as heading (heading.line)}
-    {#if heading.line === crumb?.heading.line && depth + 1 < trail.length}
+    {@const here = heading.line === crumb?.heading.line}
+    {#if here && depth + 1 < trail.length}
       <DropdownMenu.Sub>
-        <DropdownMenu.SubTrigger>
-          <span class="crumb-label">{heading.text}</span>
+        <DropdownMenu.SubTrigger aria-current="location">
+          <span class="crumb-label" title={heading.text}>{heading.text}</span>
         </DropdownMenu.SubTrigger>
-        <DropdownMenu.SubContent class="crumb-menu">
+        <DropdownMenu.SubContent class="plan-crumb-menu">
           {@render level(depth + 1)}
         </DropdownMenu.SubContent>
       </DropdownMenu.Sub>
     {:else}
-      <DropdownMenu.Item onSelect={() => onJump(heading.line)}>
-        <span class="crumb-label">{heading.text}</span>
+      <DropdownMenu.Item
+        aria-current={here ? "location" : undefined}
+        onSelect={() => onJump(heading.line)}
+      >
+        <span class="crumb-label" title={heading.text}>{heading.text}</span>
       </DropdownMenu.Item>
     {/if}
   {/each}
@@ -81,11 +85,13 @@
   <Breadcrumb.Root class="plan-breadcrumbs" aria-label="Plan location">
     <Breadcrumb.List>
       {#each depths as depth, index (depth)}
+        {@const crumb = trail[depth]}
         {@const current = depth === trail.length - 1}
+        {@const previous = depths[index - 1]}
         {#if index > 0}
           <Breadcrumb.Separator />
           <!-- A gap in the depths is the elided middle of a deep trail. -->
-          {#if depth - (depths[index - 1] ?? 0) > 1}
+          {#if previous != null && depth - previous > 1}
             <Breadcrumb.Item><Breadcrumb.Ellipsis /></Breadcrumb.Item>
             <Breadcrumb.Separator />
           {/if}
@@ -97,13 +103,14 @@
                 <button
                   {...props}
                   type="button"
-                  class="crumb float-chip"
+                  class="crumb"
                   class:current
+                  title={crumb?.heading.text}
                   aria-current={current ? "location" : undefined}
-                >{trail[depth]?.heading.text}</button>
+                >{crumb?.heading.text}</button>
               {/snippet}
             </DropdownMenu.Trigger>
-            <DropdownMenu.Content align="start" class="crumb-menu">
+            <DropdownMenu.Content align="start" class="plan-crumb-menu">
               {@render level(depth)}
             </DropdownMenu.Content>
           </DropdownMenu.Root>
@@ -116,18 +123,14 @@
 <style>
   /* The bar is chrome, not plan surface, so it wears the UI's sans beside the
      plan's monospace voice — the same split SourceToc makes (EXC-900). It sits in
-     the compare row and borrows that row's shared 1.75rem control height so the
-     trail lines up with the picker beside it. Neutral throughout: amber stays
-     reserved for the primary action and the diff's selection, so "you are here"
-     is carried by ink weight rather than hue.
+     the compare row and inherits that row's --ctl-h control height, so the trail
+     lines up with the picker beside it.
      The vendored components render outside this component's style scope, so every
-     rule here is :global and anchored on .plan-breadcrumbs / .crumb-menu. */
+     rule here is :global and anchored on .plan-breadcrumbs / .plan-crumb-menu. */
   :global(.plan-breadcrumbs) {
-    --ctl-h: 1.75rem;
     display: flex;
     align-items: center;
     height: var(--ctl-h);
-    min-width: 0;
     font-family: var(--font-sans);
   }
 
@@ -142,18 +145,6 @@
   :global(.plan-breadcrumbs [data-slot="breadcrumb-item"]) {
     min-width: 0;
   }
-  /* Give the ancestors up before the crumb the reader is actually on. Shrinking
-     every crumb equally shreds them all to a single letter as the row tightens,
-     losing the one that matters most; weighting the shrink keeps "where you are"
-     legible while its ancestors truncate. A weight rather than flex: none, so the
-     current crumb still yields when there is genuinely no room and the row never
-     pushes the app past its MIN_APP_WIDTH_PX floor. */
-  :global(.plan-breadcrumbs .crumb-item) {
-    flex-shrink: 8;
-  }
-  :global(.plan-breadcrumbs .crumb-item.current) {
-    flex-shrink: 1;
-  }
   /* The chevrons and the elision marker are punctuation between crumbs, so they
      sit at the quietest ink in the row and never shrink. */
   :global(.plan-breadcrumbs [data-slot="breadcrumb-separator"]),
@@ -161,15 +152,26 @@
     flex: none;
     color: var(--ink-faint);
   }
+  /* Give the ancestors up before the crumb the reader is actually on. Shrinking
+     every crumb equally shreds them all to a single letter as the row tightens,
+     losing the one that matters most; weighting the shrink keeps "where you are"
+     legible while its ancestors truncate. A weight rather than flex: none, so the
+     current crumb still yields when there is genuinely no room. */
+  :global(.plan-breadcrumbs .crumb-item) {
+    flex-shrink: 8;
+  }
+  :global(.plan-breadcrumbs .crumb-item.current) {
+    flex-shrink: 1;
+  }
 
-  /* Each crumb is a menu trigger on the row's neutral float-chip language, with
-     one deliberate departure: the resting fill is dropped. Three filled chips in a
-     row would read as three buttons rather than as one trail, so the chip surface
-     is spent only on interaction — .float-chip's own :hover and aria-expanded
-     rules out-specify this one and bring --chip-hover back when the reviewer
-     reaches for a crumb or opens its menu.
-     max-width + ellipsis is what holds the app's MIN_APP_WIDTH_PX floor: a long
-     heading truncates here instead of widening the control row. */
+  /* Each crumb is a menu trigger. It deliberately does NOT wear .float-chip: three
+     resting chip fills in a row read as three buttons rather than as one trail, so
+     the chip surface is spent only on interaction. The hover and menu-open states
+     below are the atom's, reproduced here rather than inherited-and-overridden, so
+     the resting look does not depend on out-specifying a shared class.
+     The unbroken min-width: 0 chain (list -> item -> button) plus the overflow
+     rules are what keep a long heading truncating instead of widening the control
+     row, and so what holds the app inside its MIN_APP_WIDTH_PX floor. */
   :global(.plan-breadcrumbs .crumb) {
     display: block;
     max-width: 14rem;
@@ -191,9 +193,16 @@
       background var(--dur-fast) var(--ease-out),
       color var(--dur-fast) var(--ease-out);
   }
+  :global(.plan-breadcrumbs .crumb:hover),
+  :global(.plan-breadcrumbs .crumb[aria-expanded="true"]) {
+    background: var(--chip-hover);
+    color: var(--ink);
+  }
   /* The innermost crumb is where the reader is, so it takes full ink while its
-     ancestors stay soft. The ramp runs opposite the rail's — that one fades with
-     depth because depth is detail there; here the deepest level is the subject. */
+     ancestors stay soft. It is marked by weight rather than by the rail's amber
+     wash: the rail is a list of destinations where amber picks one out, while
+     every crumb here is already the trail, so a second colour would compete with
+     the amber the menu below spends on the same "you are here" job. */
   :global(.plan-breadcrumbs .crumb.current) {
     color: var(--ink);
     font-weight: 600;
@@ -202,13 +211,20 @@
   /* The portalled menus keep the catalog's own row treatment; only the width is
      pinned, so a long heading truncates in its row instead of stretching the
      panel to the width of the plan's longest heading. */
-  :global(.crumb-menu) {
+  :global(.plan-crumb-menu) {
     max-width: 22rem;
   }
-  :global(.crumb-menu .crumb-label) {
+  :global(.plan-crumb-menu .crumb-label) {
     min-width: 0;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+  }
+  /* The heading the reader is already on, marked with the amber wash the menu
+     language reserves for the active choice (shadcn-rules.md § Menu highlight vs.
+     selection) — the same signal SourceToc's active row carries. */
+  :global(.plan-crumb-menu [aria-current="location"]) {
+    background: var(--accent-wash);
+    color: var(--ink);
   }
 </style>

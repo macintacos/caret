@@ -84,6 +84,9 @@ test("the trail follows the heading being read as the plan scrolls", async ({ da
   // A plan nobody has scrolled yet still reads as a location: the trail is seeded
   // once the source view paints, not only on the first scroll.
   await expect(crumbs).toHaveText(["Alpha"]);
+  // Seeding the tracked heading at load also publishes it to the URL, so a link
+  // copied before scrolling points at the section on screen.
+  await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("alpha");
 
   // Scrolling into a nested section deepens the trail rather than replacing it.
   await jumpTo(page, "Charlie");
@@ -145,4 +148,13 @@ test("compare mode drops the bar, which tracks no heading there", async ({ daemo
   await expect(page.locator(BAR)).toBeVisible();
   await page.getByRole("button", { name: /^Compare versions/ }).click();
   await expect(page.locator(BAR)).toHaveCount(0);
+
+  // With the bar gone the picker stretches again, which is what keeps its display
+  // toggles on the row's right edge — the half of the flex split the single-version
+  // specs above cannot see.
+  const controls = await page.locator(".control-row .controls").boundingBox();
+  const row = await page.locator(".control-row").boundingBox();
+  expect(controls).not.toBeNull();
+  expect(row).not.toBeNull();
+  expect(row!.x + row!.width - (controls!.x + controls!.width)).toBeLessThan(40);
 });

@@ -632,20 +632,33 @@
   // post-mount effect runs first.
   let restored = $state(false);
 
-  // Scroll to a 1-based line, retrying across a bounded number of frames until the
-  // library has painted the target row (scrollToLine returns true). The rows paint
-  // asynchronously after the container is ready, so a fresh target may not exist on
-  // the first frame; the retry lets a jump land even on a long, highlight-heavy plan.
-  // Shared by the deep-link restore and the comment navigator's reveal.
+  // How many frames anything needing a painted row waits for one. The library
+  // paints its rows asynchronously after the container is ready, so a fresh target
+  // may not exist on the first frame; the budget lets a jump land even on a long,
+  // highlight-heavy plan.
+  const PAINT_RETRY_FRAMES = 30;
+
+  /** Run `attempt` each frame until it reports success or the budget runs out.
+   * Returns a canceller for the pending frame. */
+  function retryFrames(attempt: () => boolean): () => void {
+    let raf = 0;
+    let tries = 0;
+    const step = () => {
+      if (attempt() || ++tries >= PAINT_RETRY_FRAMES) return;
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }
+
+  // Scroll to a 1-based line once the library has painted the target row
+  // (scrollToLine reports whether it had one). Shared by the deep-link restore and
+  // the comment navigator's reveal; neither outlives the view it scrolls, so the
+  // canceller goes unused here.
   function retryScrollTo(line: number): void {
     const a = api;
     if (a == null) return;
-    let tries = 0;
-    const attempt = () => {
-      if (a.scrollToLine(line) || ++tries >= 30) return;
-      requestAnimationFrame(attempt);
-    };
-    requestAnimationFrame(attempt);
+    retryFrames(() => a.scrollToLine(line));
   }
 
   // Reveal a commented line for the host (the comment navigator): scroll the plan to
@@ -778,6 +791,7 @@
     // depend on the heading set so tracking re-arms after a version change
     void headings;
     let raf = 0;
+    // Returns whether the view had painted rows to measure.
     const update = () => {
       const top = topVisibleLine();
       if (top != null) activeLine = activeHeadingLine(headings, top);
@@ -789,21 +803,12 @@
     };
     el.addEventListener("scroll", onScroll, { passive: true });
     // Seed the tracked heading at load rather than leaving it null until the
-    // first scroll. The library paints its rows asynchronously after the
-    // container mounts, so a single read here measures an empty grid and gives
-    // up; retry across a bounded number of frames until one resolves — the same
-    // shape retryScrollTo uses, and for the same reason. Without it the
-    // breadcrumbs bar has no trail to render on a plan nobody has scrolled yet.
-    let seed = 0;
-    let tries = 0;
-    const seedActive = () => {
-      if (update() || ++tries >= 30) return;
-      seed = requestAnimationFrame(seedActive);
-    };
-    seed = requestAnimationFrame(seedActive);
+    // first scroll, so a plan nobody has scrolled yet still reads as a location
+    // (the breadcrumbs bar has no trail without it, and the rail no active row).
+    const stopSeed = retryFrames(update);
     return () => {
       cancelAnimationFrame(raf);
-      cancelAnimationFrame(seed);
+      stopSeed();
       el.removeEventListener("scroll", onScroll);
     };
   });
@@ -1146,9 +1151,10 @@
   ]);
 </script>
 
-<!-- Control row above the surface: the version-compare picker. The picker is
-     always shown; its toggle disables itself when there are no other versions to
-     compare (EXC-664). -->
+<!-- Control row above the surface. The version-compare picker is always shown; its
+     toggle disables itself when there are no other versions to compare (EXC-664).
+     The contents toggle, the heading breadcrumbs, and the working-directory path
+     each earn their place conditionally alongside it. -->
 <div class="control-row" class:comparing={compareStore.comparing}>
   <!-- Contents toggle (EXC-809): always available when the single-version surface
        has a ToC to toggle, so the reviewer can hide the outline at any width. A
@@ -1209,9 +1215,9 @@
   {#if !compareStore.comparing}
     <!-- Working-directory path (EXC-807 relocated it here from the TopBar; EXC-850
          makes it click-to-copy). The row shows the abbreviated path and copies the
-         full absolute path on click — no hover popup. Right-aligned by the
-         compare-picker's flex:1, and dropped in compare mode so the picker's own
-         display toggles reclaim the right edge. -->
+         full absolute path on click — no hover popup. Right-aligned by its own
+         margin-left, and dropped in compare mode so the picker's display toggles
+         reclaim the right edge. -->
     <button
       type="button"
       class="cwd mono"
@@ -1461,6 +1467,8 @@
     padding: 0.5rem clamp(1rem, 3vw, 2rem) 0.5rem 0.75rem;
     border-bottom: 1px solid var(--rule);
     background: var(--paper-raised);
+    /* The shared control height every child in the row sizes to. */
+    --ctl-h: 1.75rem;
     /* As a .shell grid item this row defaults to min-width:auto, which floors it
        at its content's intrinsic width — so a long .cwd would push the whole app
        past the MIN_APP_WIDTH_PX (480) floor instead of ellipsising. min-width:0
@@ -1479,8 +1487,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.75rem;
-    height: 1.75rem;
+    width: var(--ctl-h);
+    height: var(--ctl-h);
     border: none;
     border-radius: var(--radius);
     cursor: pointer;
@@ -1525,11 +1533,10 @@
     min-width: 0;
   }
   /* The working-directory path, relocated from the TopBar (EXC-807). It pins
-     itself to the row's right edge with margin-left: auto rather than relying on
-     a stretched neighbour to push it there — the picker no longer stretches while
-     reading a single version, and the breadcrumbs beside it are absent on a
-     heading-less plan. It shrinks to an ellipsis on narrow widths (the tooltip
-     still carries the full path). Muted .mono chrome, matching its former TopBar
+     itself to the row's right edge with margin-left: auto rather than relying on a
+     stretched neighbour: the picker stretches only in compare mode, and the
+     breadcrumbs beside it are absent on a heading-less plan. It shrinks to an
+     ellipsis on narrow widths. Muted .mono chrome, matching its former TopBar
      treatment. */
   .cwd {
     flex: 0 1 auto;

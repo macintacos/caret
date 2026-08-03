@@ -119,6 +119,21 @@ describe("PlanBreadcrumbs landmark", () => {
     expect(shown.at(-1)?.getAttribute("aria-current")).toBe("location");
     expect(shown[0]?.getAttribute("aria-current")).toBeNull();
   });
+
+  // The `current` class is what the shrink weighting keys off, on an element that
+  // also takes a {...props} spread — so a regression here would be silent.
+  test("flags the innermost crumb and its item for the shrink weighting", () => {
+    const { target } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    expect(crumbs(target).at(-1)?.classList.contains("current")).toBe(true);
+    expect(crumbs(target)[0]?.classList.contains("current")).toBe(false);
+    const items = [...target.querySelectorAll(".crumb-item")];
+    expect(items.at(-1)?.classList.contains("current")).toBe(true);
+    expect(items[0]?.classList.contains("current")).toBe(false);
+  });
 });
 
 describe("PlanBreadcrumbs menus", () => {
@@ -130,6 +145,21 @@ describe("PlanBreadcrumbs menus", () => {
     });
     await openCrumb(target, 1, flush);
     expect(menuRows().map((r) => r.textContent?.trim())).toEqual(["Approach", "Verification"]);
+  });
+
+  // Opening "where am I" has to show which row is "here" — at every depth, including
+  // the innermost menu, where the current heading is an ordinary row.
+  test("marks the heading the reader is already on in every menu", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await openCrumb(target, 1, flush);
+    expect(menuRows().map((r) => r.getAttribute("aria-current"))).toEqual(["location", null]);
+    document.body.querySelector<HTMLElement>("[data-slot='dropdown-menu-content']")?.remove();
+    await openCrumb(target, 2, flush);
+    expect(menuRows()[0]?.getAttribute("aria-current")).toBe("location");
   });
 
   // The trail's own heading opens the level below rather than jumping in place, so
@@ -175,6 +205,21 @@ describe("PlanBreadcrumbs overflow", () => {
     const { target } = render(PlanBreadcrumbs, { headings: DEEP, activeLine: 7, onJump: () => {} });
     expect(crumbs(target).map((c) => c.textContent?.trim())).toEqual(["One", "Three", "Four"]);
     expect(target.querySelectorAll("[data-slot='breadcrumb-ellipsis']").length).toBe(1);
+  });
+
+  // The collapse only works because the elided levels stay reachable: the first
+  // crumb's menu nests each level below it, so nothing becomes unreachable.
+  test("keeps the elided levels reachable through the first crumb's submenus", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: DEEP,
+      activeLine: 7,
+      onJump: () => {},
+    });
+    await openCrumb(target, 0, flush);
+    expect(menuRows().map((r) => r.getAttribute("data-slot"))).toEqual([
+      "dropdown-menu-sub-trigger",
+    ]);
+    expect(menuRows()[0]?.textContent?.trim()).toBe("One");
   });
 
   test("shows a three-level trail whole", () => {
