@@ -15,7 +15,19 @@ const HEADINGS: TocHeading[] = [
   { level: 2, text: "Verification", line: 20 },
 ];
 
-// Four nested levels, so the trail outgrows the three crumbs the bar shows.
+// Two branches off one parent: "Details" under "Approach" is where the reader
+// is, "Steps" under "Verification" is the branch they are not in — the headings
+// the bar could not reach before EXC-957.
+const BRANCHED: TocHeading[] = [
+  { level: 1, text: "Overview", line: 1 },
+  { level: 2, text: "Approach", line: 5 },
+  { level: 3, text: "Details", line: 9 },
+  { level: 2, text: "Verification", line: 20 },
+  { level: 3, text: "Steps", line: 24 },
+];
+
+// Four nested levels, deeper than the bar used to show before it started
+// measuring the room it has.
 const DEEP: TocHeading[] = [
   { level: 1, text: "One", line: 1 },
   { level: 2, text: "Two", line: 3 },
@@ -84,7 +96,11 @@ describe("PlanBreadcrumbs trail", () => {
       "Approach",
       "Details",
     ]);
-    expect(target.querySelectorAll("[data-slot='breadcrumb-separator']").length).toBe(2);
+    // The elision marker and its own separator ride along elided, so only the
+    // chevrons actually punctuating the trail are counted.
+    expect(target.querySelectorAll("[data-slot='breadcrumb-separator']:not(.elided)").length).toBe(
+      2,
+    );
   });
 
   // The scroll observer in DiffPlanView only ever hands this component a new
@@ -162,9 +178,9 @@ describe("PlanBreadcrumbs menus", () => {
     expect(menuRows()[0]?.getAttribute("aria-current")).toBe("location");
   });
 
-  // The trail's own heading opens the level below rather than jumping in place, so
-  // one menu walks the whole hierarchy — the nesting EXC-947's j/k will step through.
-  test("the crumb's own heading nests the level below it as a submenu", async () => {
+  // A heading that encloses others opens them rather than only jumping, so one
+  // menu walks the whole hierarchy — the nesting EXC-947's j/k steps through.
+  test("a heading with headings under it opens as a submenu", async () => {
     const { target, flush } = render(PlanBreadcrumbs, {
       headings: HEADINGS,
       activeLine: 9,
@@ -184,6 +200,63 @@ describe("PlanBreadcrumbs menus", () => {
     });
     await openCrumb(target, 2, flush);
     expect(menuRows().map((r) => r.getAttribute("data-slot"))).toEqual(["dropdown-menu-item"]);
+  });
+
+  // EXC-957: the menus recurse the heading tree, not the reader's trail. A
+  // sibling they are NOT on is the case the old `here &&` limiter excluded, and
+  // the reason most of a plan was unreachable from the bar.
+  test("nests a sibling's own headings even when the reader is not in that branch", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: BRANCHED,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await openCrumb(target, 1, flush);
+    expect(menuRows().map((r) => r.textContent?.trim())).toEqual(["Approach", "Verification"]);
+    // Verification encloses Steps, so it opens rather than only jumping.
+    expect(menuRows().map((r) => r.getAttribute("data-slot"))).toEqual([
+      "dropdown-menu-sub-trigger",
+      "dropdown-menu-sub-trigger",
+    ]);
+  });
+
+  test("marks only the headings on the reader's own trail", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: BRANCHED,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await openCrumb(target, 1, flush);
+    expect(menuRows().map((r) => r.getAttribute("aria-current"))).toEqual(["location", null]);
+  });
+
+  // A row that opens a submenu is still a destination. bits-ui flattens its own
+  // submenu-open keys into a synthetic click (detail 0), so only a real press
+  // navigates — which is what this dispatches.
+  test("clicking a heading that has children jumps to it rather than opening it", async () => {
+    const jumped = capture<number>();
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: BRANCHED,
+      activeLine: 9,
+      onJump: jumped.cb,
+    });
+    await openCrumb(target, 1, flush);
+    menuRows()[1]?.dispatchEvent(new MouseEvent("click", { detail: 1, bubbles: true }));
+    flush();
+    expect(jumped.last()).toBe(20);
+  });
+
+  test("leaves the plan alone when bits-ui opens the submenu through a synthetic click", async () => {
+    const jumped = capture<number>();
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: BRANCHED,
+      activeLine: 9,
+      onJump: jumped.cb,
+    });
+    await openCrumb(target, 1, flush);
+    menuRows()[1]?.click(); // detail 0 — what ArrowRight and Space produce
+    flush();
+    expect(jumped.last()).toBeUndefined();
   });
 
   test("picking a sibling jumps to its source line", async () => {
@@ -420,16 +493,45 @@ describe("PlanBreadcrumbs filter", () => {
   });
 });
 
+// EXC-957: the trail elides on the room the row measures, not on how deep it
+// happens to be. happy-dom reports no layout, so every crumb measures zero and
+// the whole trail fits — which is what a wide row does too. The arithmetic over
+// real widths is unit-tested in lib/headingTrail.test.ts and the collapse itself
+// is e2e; what a mounted component can show is that no depth count elides
+// anything, and that the marker is a real control sitting in the trail.
 describe("PlanBreadcrumbs overflow", () => {
-  test("collapses the middle of a trail deeper than three levels", () => {
+  test("shows every level of a deep trail when the row has room for it", () => {
     const { target } = render(PlanBreadcrumbs, { headings: DEEP, activeLine: 7, onJump: () => {} });
-    expect(crumbs(target).map((c) => c.textContent?.trim())).toEqual(["One", "Three", "Four"]);
-    expect(target.querySelectorAll("[data-slot='breadcrumb-ellipsis']").length).toBe(1);
+    expect(crumbs(target).map((c) => c.textContent?.trim())).toEqual([
+      "One",
+      "Two",
+      "Three",
+      "Four",
+    ]);
   });
 
-  // The collapse only works because the elided levels stay reachable: the first
-  // crumb's menu nests each level below it, so nothing becomes unreachable.
-  test("keeps the elided levels reachable through the first crumb's submenus", async () => {
+  // The levels the row cannot hold stay in the DOM rather than being dropped
+  // from it: that is what keeps the full trail measurable while a collapsed one
+  // is on screen.
+  test("keeps the elision marker in the trail, elided, when nothing is hidden", () => {
+    const { target } = render(PlanBreadcrumbs, { headings: DEEP, activeLine: 7, onJump: () => {} });
+    const marker = target.querySelector(".crumb-ellipsis");
+    expect(marker).not.toBeNull();
+    expect(marker?.closest(".crumb-marker")?.classList.contains("elided")).toBe(true);
+  });
+
+  test("makes the elision marker a control rather than inert punctuation", () => {
+    const { target } = render(PlanBreadcrumbs, { headings: DEEP, activeLine: 7, onJump: () => {} });
+    const marker = target.querySelector(".crumb-ellipsis");
+    expect(marker?.tagName).toBe("BUTTON");
+    expect(marker?.getAttribute("aria-hidden")).toBeNull();
+    expect(marker?.getAttribute("role")).not.toBe("presentation");
+    expect(marker?.getAttribute("aria-label")).toContain("Hidden levels");
+  });
+
+  // Whatever the row can hold, the outermost crumb's menu nests every level
+  // below it, so no collapse can put a heading out of reach.
+  test("keeps every level below the outermost crumb reachable from its menu", async () => {
     const { target, flush } = render(PlanBreadcrumbs, {
       headings: DEEP,
       activeLine: 7,
@@ -440,14 +542,5 @@ describe("PlanBreadcrumbs overflow", () => {
       "dropdown-menu-sub-trigger",
     ]);
     expect(menuRows()[0]?.textContent?.trim()).toBe("One");
-  });
-
-  test("shows a three-level trail whole", () => {
-    const { target } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    expect(target.querySelector("[data-slot='breadcrumb-ellipsis']")).toBeNull();
   });
 });

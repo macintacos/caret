@@ -8,6 +8,8 @@
 // interaction semantics — both e2e concerns per browser-testing.md. The bar's pure
 // trail logic is unit-tested in ui/src/components/PlanBreadcrumbs.test.ts.
 
+import type { Page } from "@playwright/test";
+
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { jumpToHeading } from "@test/e2e/support/source-view.ts";
 
@@ -47,10 +49,55 @@ const NESTED_PLAN = [
   "",
 ].join("\n\n");
 
+// Five levels under one top-level heading, so the trail runs deeper than any row
+// can hold at the app's narrow end. The trailing "## Foxtrot" keeps Echo off the
+// end of the plan, for the same reason NESTED_PLAN carries one.
+const DEEP_PLAN = [
+  "# Alpha",
+  filler("Alpha"),
+  "## Bravo",
+  filler("Bravo"),
+  "### Charlie",
+  filler("Charlie"),
+  "#### Delta",
+  filler("Delta"),
+  "##### Echo",
+  filler("Echo"),
+  "## Foxtrot",
+  filler("Foxtrot"),
+  "",
+].join("\n\n");
+
 const BAR = ".plan-breadcrumbs";
 const CRUMB = `${BAR} button.crumb`;
+// The crumbs the row is actually showing. A level it cannot hold stays in the
+// list, out of flow, so the bar can keep measuring the trail it would need
+// (EXC-957) — which is why "visible" here is a class rather than a count.
+const SHOWN = `${BAR} .crumb-item:not(.elided) button.crumb`;
+const MARKER = `${BAR} .crumb-ellipsis`;
 const MENU = "[data-slot='dropdown-menu-content']";
+const SUBMENU = "[data-slot='dropdown-menu-sub-content']";
 const QUERY = "input[aria-label='Filter headings']";
+
+/** Where the plan is parked. Several specs below assert that walking the menus
+ * moves nothing until the reviewer commits to a heading. */
+const scrollTop = (page: Page) => page.locator(".diff-plan").evaluate((el) => el.scrollTop);
+
+/** The plan's RESTING scroll position. A jump scrolls smoothly, so a spec that
+ * goes on to assert "nothing moved" has to sample a position that has stopped
+ * moving — two identical non-zero reads — rather than the first one it sees. */
+async function parkedAt(page: Page): Promise<number> {
+  let previous = -1;
+  await expect
+    .poll(async () => {
+      const now = await scrollTop(page);
+      const settled = now > 0 && now === previous;
+      previous = now;
+      return settled;
+    })
+    .toBe(true);
+  return previous;
+}
 
 /** Arrange a reading position. The specs below reach their starting heading through
  * the very surface they go on to assert — unavoidable since EXC-949 left the bar as
@@ -150,11 +197,14 @@ test("a crumb's own heading opens the level below it without leaving the menu", 
   await jumpTo(page, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
 
-  // Open the level-2 crumb, then its own row — which nests level 3 rather than
-  // jumping in place, so one menu walks down the hierarchy.
+  // Open the level-2 crumb, then hover its own row, which nests level 3 — one
+  // menu walks down the hierarchy. Hovered rather than clicked because a click
+  // now jumps (EXC-957); only hover, `l` and ArrowRight open. And named rather
+  // than taken as "the sub-trigger", since every sibling that encloses headings
+  // opens one now, so Delta carries a chevron here too.
   await page.locator(CRUMB).nth(1).click();
-  await page.locator("[data-slot='dropdown-menu-sub-trigger']").click();
-  const submenu = page.locator("[data-slot='dropdown-menu-sub-content']");
+  await page.locator(MENU).getByRole("menuitem", { name: "Bravo" }).hover();
+  const submenu = page.locator(SUBMENU);
   await expect(submenu).toBeVisible();
   await expect(submenu.getByText("Charlie", { exact: true })).toBeVisible();
 });
@@ -192,6 +242,214 @@ test("j and k walk a nested submenu, not the plan behind it", async ({ daemon, p
   // scrolls once it crosses the scrolloff band, so the plan would sit still here
   // even with the suppression broken — but the very first stray `j` tags a row.
   await expect(page.locator("[data-caret-cursor]")).toHaveCount(0);
+});
+
+// EXC-957: the menus recurse the whole heading tree, so the bar reaches any
+// heading in the plan; h and l walk that hierarchy alongside j and k; and the
+// trail elides on the room the row measures rather than on how deep it is. Focus
+// movement, submenu reveal and layout are all real-browser behaviour, so the
+// coverage lives here (browser-testing.md).
+
+test("h and l walk into a section the reader is not in, and only Enter goes there", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+
+  await jumpTo(page, "Charlie");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
+  const parked = await parkedAt(page);
+
+  // The outermost crumb holds the top level, and every heading below it is a
+  // submenu away — including the whole Delta branch, which the reader is not in.
+  await page.locator(CRUMB).first().click();
+  await page.keyboard.press("j");
+  await page.keyboard.press("l");
+  const branches = page.locator(SUBMENU).first();
+  await expect(branches.getByRole("menuitem", { name: "Bravo" })).toBeFocused();
+
+  await page.keyboard.press("j");
+  await expect(branches.getByRole("menuitem", { name: "Delta" })).toBeFocused();
+  await page.keyboard.press("l");
+  const under = page.locator(SUBMENU).nth(1);
+  await expect(under.getByRole("menuitem", { name: "Echo" })).toBeFocused();
+
+  // Three levels of menu opened and nothing moved: only a commit navigates.
+  expect(await scrollTop(page)).toBe(parked);
+
+  // h steps back out to the row that opened the submenu.
+  await page.keyboard.press("h");
+  await expect(branches.getByRole("menuitem", { name: "Delta" })).toBeFocused();
+  expect(await scrollTop(page)).toBe(parked);
+
+  await page.keyboard.press("l");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Delta", "Echo"]);
+  await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("echo");
+});
+
+test("h steps out to the crumb before it once there is no submenu left to close", async ({
+  daemon,
+  page,
+}) => {
+  // `b` opens the crumb the reader is ON, so without this the keyboard could
+  // only ever reach that crumb's subtree while a mouse could reach the whole
+  // plan from the outermost crumb. Walking out to depth 0 and descending a
+  // different branch is the reach the issue asks for.
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+
+  await jumpTo(page, "Charlie");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
+  const parked = await parkedAt(page);
+
+  await page.keyboard.press("b");
+  const menu = page.locator(MENU);
+  await expect(menu.getByRole("menuitem")).toHaveText(["Charlie"]);
+
+  // Out to Bravo's level, then out again to Alpha's — the top of the trail.
+  await page.keyboard.press("h");
+  await expect(menu.getByRole("menuitem")).toHaveText(["Bravo", "Delta", "Foxtrot"]);
+  await page.keyboard.press("h");
+  await expect(menu.getByRole("menuitem")).toHaveText(["Alpha"]);
+  // One more has nowhere to go and leaves the menu open where it is.
+  await page.keyboard.press("h");
+  await expect(menu.getByRole("menuitem")).toHaveText(["Alpha"]);
+  expect(await scrollTop(page)).toBe(parked);
+
+  // And from there the whole plan is a descent away.
+  await page.keyboard.press("j");
+  await page.keyboard.press("l");
+  await page.keyboard.press("j");
+  await page.keyboard.press("l");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Delta", "Echo"]);
+});
+
+test("every level of a deep walk is actually on screen", async ({ daemon, page }) => {
+  // Stock shadcn-svelte leaves a submenu inside its parent panel, and that panel
+  // is a scroll container (a max-height plus overflow), so from the second level
+  // down each panel was clipped away — present in the DOM, sized, and invisible.
+  // Playwright's own visibility check does not see overflow clipping, so this
+  // hit-tests each panel's middle: a clipped one is not there to be hit.
+  await daemon.seed({ plan: DEEP_PLAN });
+  await page.goto("/");
+  await jumpTo(page, "Echo");
+
+  // Onto the top-level heading, then straight down the chain — each submenu opens
+  // with its first row focused, and in this plan that row is the next level down.
+  await page.locator(CRUMB).first().click();
+  await page.keyboard.press("j");
+  for (let level = 0; level < 4; level++) await page.keyboard.press("l");
+  await expect(page.locator(SUBMENU)).toHaveCount(4);
+
+  const painted = await page.locator(SUBMENU).evaluateAll((els) =>
+    els.map((el) => {
+      const box = el.getBoundingClientRect();
+      return el.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+    }),
+  );
+  expect(painted).toEqual([true, true, true, true]);
+});
+
+test("Enter on a heading that has children takes the reader there", async ({ daemon, page }) => {
+  // The split the whole recursion rests on: a row can both open a level and be a
+  // destination, and bits-ui flattens its own open keys into a click that looks
+  // exactly like a press. Enter must land on the heading, not on its submenu.
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+
+  await jumpTo(page, "Charlie");
+  await page.locator(CRUMB).first().click();
+  await page.keyboard.press("j");
+  await expect(page.locator(MENU).getByRole("menuitem", { name: "Alpha" })).toBeFocused();
+
+  await page.keyboard.press("Enter");
+  await expect(page.locator(MENU)).toBeHidden();
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha"]);
+});
+
+test("Escape and an outside click leave the reader exactly where they were", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+
+  await jumpTo(page, "Charlie");
+  const parked = await parkedAt(page);
+  const menu = page.locator(MENU);
+
+  // Two levels deep, then Escape.
+  await page.locator(CRUMB).first().click();
+  await page.keyboard.press("j");
+  await page.keyboard.press("l");
+  await expect(page.locator(SUBMENU).first()).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
+  expect(await scrollTop(page)).toBe(parked);
+
+  // Two levels deep again, then a click outside the bar.
+  await page.locator(CRUMB).first().click();
+  await page.keyboard.press("j");
+  await page.keyboard.press("l");
+  await expect(page.locator(SUBMENU).first()).toBeVisible();
+  await page.mouse.click(5, 5);
+  await expect(menu).toBeHidden();
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
+  expect(await scrollTop(page)).toBe(parked);
+});
+
+test("a five-level trail shows whole while the row has room for it", async ({ daemon, page }) => {
+  // The defect EXC-957 fixes: COLLAPSE_ABOVE elided anything past three levels on
+  // a depth count, so this trail shortened on a 1600px window with the row half
+  // empty. The marker stays in the list — that is what keeps the full trail
+  // measurable — but it is not on screen.
+  await daemon.seed({ plan: DEEP_PLAN });
+  await page.goto("/");
+
+  await jumpTo(page, "Echo");
+  await expect(page.locator(SHOWN)).toHaveText(["Alpha", "Bravo", "Charlie", "Delta", "Echo"]);
+  await expect(page.locator(MARKER)).toBeHidden();
+});
+
+test("the trail elides once the row cannot hold it, and the marker opens what it hid", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: DEEP_PLAN });
+  await page.goto("/");
+  await jumpTo(page, "Echo");
+  await expect(page.locator(SHOWN)).toHaveCount(5);
+
+  // MIN_APP_WIDTH_PX — the supported floor (ui/src/lib/layout.ts), where the row
+  // genuinely cannot hold five levels.
+  await page.setViewportSize({ width: 480, height: 900 });
+  await expect(page.locator(MARKER)).toBeVisible();
+  const shown = await page.locator(SHOWN).allTextContents();
+  expect(shown.length).toBeLessThan(5);
+  // Whatever is given up, the outermost level and where the reader is both stay.
+  expect(shown[0]).toBe("Alpha");
+  expect(shown.at(-1)).toBe("Echo");
+  // And the trail elides rather than pushing the app past its floor.
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    ),
+  ).toBe(true);
+
+  // The marker says what it holds rather than "more", and opens it.
+  await expect(page.locator(MARKER)).toHaveAttribute("aria-label", /Bravo/);
+  await page.locator(MARKER).click();
+  const menu = page.locator(MENU);
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: "Bravo" })).toBeVisible();
+
+  // And a swallowed level is a destination from there, not just a label.
+  await menu.getByRole("menuitem", { name: "Bravo" }).click();
+  await expect(page.locator(SHOWN)).toHaveText(["Alpha", "Bravo"]);
 });
 
 // EXC-948: `/` swaps the open menu for a flat filter over every heading. All of

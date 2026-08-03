@@ -1440,9 +1440,15 @@
   }
   /* The heading breadcrumbs (EXC-946) take the row's middle and give it back
      first: min-width: 0 lets the bar shrink so its crumbs ellipsise, keeping the
-     row inside the app's MIN_APP_WIDTH_PX floor the same way .cwd does below. */
+     row inside the app's MIN_APP_WIDTH_PX floor the same way .cwd does below.
+     It GROWS into that middle rather than sizing to its trail (EXC-957), which
+     the bar's own collapse depends on: sized to content, giving a level up would
+     shrink the bar, which would free room, which would bring the level back.
+     Nothing moves on screen — the crumbs stay left-aligned inside the wider box,
+     and the free space .cwd's margin used to absorb is now absorbed by the bar,
+     which leaves .cwd on the same right edge either way. */
   .control-row :global(.plan-breadcrumbs) {
-    flex: 0 1 auto;
+    flex: 1 1 auto;
     min-width: 0;
   }
   /* The working-directory path, relocated from the TopBar (EXC-807). It pins
