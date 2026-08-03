@@ -6,7 +6,7 @@
 
 import type { TocHeading } from "$lib/toc.ts";
 
-/** A heading in the trail, alongside the headings its menu can swap it for. */
+/** A heading in the trail, paired with the headings it can be swapped for. */
 export interface HeadingCrumb {
   heading: TocHeading;
   /**

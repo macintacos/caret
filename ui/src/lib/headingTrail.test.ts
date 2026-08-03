@@ -13,6 +13,14 @@ describe("headingTrail", () => {
     expect(headingTrail(headings, 6).map((c) => c.heading.text)).toEqual(["A", "B", "C"]);
   });
 
+  test("stops at the active heading rather than descending into its children", () => {
+    // "## B" (line 3) encloses "### C" — the most common reading position, and
+    // the one shape where a walk that ran past the active heading still looks
+    // right in every other fixture.
+    const headings = extractHeadings("# A\n\n## B\n\n### C\n");
+    expect(headingTrail(headings, 3).map((c) => c.heading.text)).toEqual(["A", "B"]);
+  });
+
   test("carries the active heading's own line on the last crumb", () => {
     const headings = extractHeadings("# A\n\nprose\n## B\n\n### C\n");
     expect(headingTrail(headings, 6).at(-1)?.heading).toEqual({ level: 3, text: "C", line: 6 });
