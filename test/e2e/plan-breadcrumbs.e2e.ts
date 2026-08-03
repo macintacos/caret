@@ -141,6 +141,41 @@ test("a crumb's own heading opens the level below it without leaving the menu", 
   await expect(submenu.getByText("Charlie", { exact: true })).toBeVisible();
 });
 
+test("j and k walk a nested submenu, not the plan behind it", async ({ daemon, page }) => {
+  // EXC-947: j/k are handled on the menu content's own keydown, and a submenu's
+  // content has its own roving group — so the walk has to keep working one level
+  // in. The key that summons the bar is pinned in review-shortcuts.e2e.ts.
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+
+  await jumpTo(page, "Charlie");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
+  const scrolled = () => page.locator(".diff-plan").evaluate((el) => el.scrollTop);
+  const before = await scrolled();
+
+  // The outermost crumb's own row nests the level below rather than jumping, so
+  // stepping onto it and pressing ArrowRight opens a submenu with real siblings.
+  await page.locator(CRUMB).first().click();
+  await page.keyboard.press("j");
+  await expect(page.locator("[data-slot='dropdown-menu-sub-trigger']").first()).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+
+  const submenu = page.locator("[data-slot='dropdown-menu-sub-content']");
+  await expect(submenu).toBeVisible();
+  await expect(submenu.getByRole("menuitem", { name: "Bravo" })).toBeFocused();
+
+  await page.keyboard.press("j");
+  await expect(submenu.getByRole("menuitem", { name: "Delta" })).toBeFocused();
+  await page.keyboard.press("j");
+  await expect(submenu.getByRole("menuitem", { name: "Foxtrot" })).toBeFocused();
+  await page.keyboard.press("k");
+  await expect(submenu.getByRole("menuitem", { name: "Delta" })).toBeFocused();
+
+  // The plan's own j/k line cursor stayed suppressed throughout — a menu that let
+  // both fire would scroll the plan out from under the reader mid-walk.
+  expect(await scrolled()).toBe(before);
+});
+
 test("compare mode drops the bar, which tracks no heading there", async ({ daemon, page }) => {
   await daemon.seedVersions(2, [`# Alpha\n\n${filler("Alpha")}\n`, NESTED_PLAN]);
   await page.goto("/");

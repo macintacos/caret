@@ -19,6 +19,32 @@ const filler = (label: string) =>
   Array.from({ length: 6 }, (_, i) => `${label} body line ${i + 1}.`).join("\n\n");
 const PLAN = ["# Alpha", filler("Alpha"), "## Bravo", filler("Bravo"), ""].join("\n\n");
 
+// The `b` specs need a trail with real siblings to walk, so each section must be
+// taller than the viewport — otherwise the whole plan stays in view and jumping
+// never changes the heading being read (the shape plan-breadcrumbs.e2e.ts uses).
+// Exactly one `#`: the daemon demotes every later top-level heading, so the
+// siblings the menu offers are the `##` level. Echo is there only so Delta is not
+// the last section — the plan scrolls barely past its own end, so a jump to the
+// final heading clamps short and tracking stays on the section above it.
+const tall = (label: string) =>
+  Array.from(
+    { length: 30 },
+    (_, i) => `${label} detail line ${i + 1} keeps this section tall.`,
+  ).join("\n");
+const NESTED_PLAN = [
+  "# Alpha",
+  tall("Alpha"),
+  "## Bravo",
+  tall("Bravo"),
+  "## Charlie",
+  tall("Charlie"),
+  "## Delta",
+  tall("Delta"),
+  "## Echo",
+  tall("Echo"),
+  "",
+].join("\n\n");
+
 async function loadPlan(page: Page): Promise<void> {
   await expect(page.locator(".diff-plan")).toBeVisible();
   await waitPastSafeModeGrace(page);
@@ -155,6 +181,60 @@ test("slash opens the plan search, not the contents filter (EXC-832)", async ({ 
   await page.keyboard.press("/");
   await expect(page.locator(".plan-search")).toBeVisible();
   await expect(filter).not.toBeFocused();
+});
+
+test("b opens the breadcrumbs bar, and j/j/Enter jumps to the highlighted heading", async ({
+  daemon,
+  page,
+}) => {
+  // EXC-947: the bar's own menus are covered in plan-breadcrumbs.e2e.ts; this pins
+  // the key that summons them and the vim walk inside them.
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+  await loadPlan(page);
+
+  // Read Bravo, so the trailing crumb's menu offers siblings worth walking.
+  await page.locator(".source-toc").getByRole("button", { name: "Bravo", exact: true }).click();
+  const crumbs = page.locator(".plan-breadcrumbs button.crumb");
+  await expect(crumbs).toHaveText(["Alpha", "Bravo"]);
+  await expect(crumbs.last()).toHaveAttribute("aria-keyshortcuts", "b");
+
+  // `b` opens that crumb's menu with focus already on a row, so the first j moves
+  // rather than being spent entering the list.
+  await page.keyboard.press("b");
+  const menu = page.locator("[data-slot='dropdown-menu-content']");
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: "Bravo" })).toBeFocused();
+
+  await page.keyboard.press("j");
+  await page.keyboard.press("j");
+  await expect(menu.getByRole("menuitem", { name: "Delta" })).toBeFocused();
+
+  // Enter lands the plan where a mouse pick would: the trail and the URL's heading
+  // mirror both report Delta.
+  await page.keyboard.press("Enter");
+  await expect(crumbs).toHaveText(["Alpha", "Delta"]);
+  await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("delta");
+});
+
+test("Escape closes the breadcrumbs menu and hands focus back to the crumb", async ({
+  daemon,
+  page,
+}) => {
+  // The dismissal half of EXC-947: a keyboard close must not strand focus on
+  // document.body, or the reviewer's next key goes nowhere.
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+  await loadPlan(page);
+
+  const crumb = page.locator(".plan-breadcrumbs button.crumb.current");
+  await page.keyboard.press("b");
+  const menu = page.locator("[data-slot='dropdown-menu-content']");
+  await expect(menu).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  await expect(crumb).toBeFocused();
 });
 
 test("backslash toggles the sidebar rail", async ({ daemon, page }) => {

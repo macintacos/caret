@@ -345,16 +345,11 @@
     background: var(--accent-wash);
     color: var(--ink);
   }
-  /* …and when the keyboard (or the pointer) lands ON that row, a hairline ring in
-     the hue it already wears. The catalog marks a highlighted row by swapping its
-     background, which this rule's wash out-specifies — so without this the one row
-     j/k passes over most often would show no movement at all. A ring rather than a
-     second, stronger amber: the row's job hasn't changed, only the keyboard's
-     position, so the highlight moves to a different PROPERTY instead of spending a
-     colour the palette reserves for selection. */
-  :global(.plan-crumb-menu [aria-current="location"][data-highlighted]) {
-    box-shadow: inset 0 0 0 1px var(--accent);
-  }
+  /* This wash out-specifies the catalog's `data-highlighted` background, so the row
+     the reader is on shows no fill change as j/k passes over it. Nothing is added
+     here for that: the app's global focus outline (base.css) rings whichever row
+     holds focus, which is the movement cue, and a second amber marker inside the
+     row would only repeat it. */
 
   /* The `b` cap: punctuation-quiet like the chevrons, and never shrinking — the
      crumbs give up width first (they ellipsise; a 1-character cap cannot). The
