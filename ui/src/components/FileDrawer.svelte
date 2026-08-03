@@ -158,7 +158,10 @@
   }
 
   /* Pinned to the lane's full size on the docking axis so the wipe clips the
-     preview rather than squishing it through every frame of the open. */
+     preview rather than squishing it through every frame of the open. The pin
+     is the lane's border-box size, so it overshoots the content box by the
+     hairline's 1px; overflow: hidden above absorbs it, and buying the pixel back
+     would cost a calc() that has to track the border width. */
   .fd-content {
     display: flex;
     flex: 0 0 var(--fd-size);
