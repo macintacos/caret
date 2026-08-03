@@ -253,6 +253,170 @@ describe("PlanBreadcrumbs keyboard invocation", () => {
   });
 });
 
+// EXC-948: `/` swaps the open menu for a flat filter over every heading in the
+// plan. Only what a mounted component shows lives here — the swap, the rows and
+// their parents, the narrowing, the empty state, the jump. The keyboard walk
+// through the results and Escape's return to the hierarchy are real focus
+// movement, so they stay e2e (browser-testing.md).
+describe("PlanBreadcrumbs filter", () => {
+  /** The open menu's own content element — where the bar claims `/`. */
+  function menuContent(): HTMLElement | null {
+    return document.body.querySelector("[data-slot='dropdown-menu-content']");
+  }
+
+  /** Press a bare key on the open menu, as a reviewer walking it would. */
+  function pressInMenu(key: string): void {
+    menuContent()?.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+  }
+
+  function queryField(): HTMLInputElement | null {
+    return document.body.querySelector("input[aria-label='Filter headings']");
+  }
+
+  function typeQuery(text: string, flush: () => void): void {
+    const field = queryField();
+    if (!field) throw new Error("no query field");
+    field.value = text;
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    flush();
+  }
+
+  /** Open the trailing crumb's menu, then swap it for the filter. */
+  async function openFilter(target: HTMLElement, flush: () => void): Promise<void> {
+    await openCrumb(target, 2, flush);
+    pressInMenu("/");
+    await flushUntil(flush, () => queryField() !== null);
+  }
+
+  test("replaces the open menu's siblings with a field over every heading", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    // The innermost crumb's menu offers one row — its own level. The filter that
+    // replaces it spans all four headings, across every level.
+    await openCrumb(target, 2, flush);
+    expect(menuRows().length).toBe(1);
+
+    pressInMenu("/");
+    await flushUntil(flush, () => queryField() !== null);
+    expect(menuRows().map((r) => r.querySelector(".crumb-label")?.textContent?.trim())).toEqual([
+      "Overview",
+      "Approach",
+      "Details",
+      "Verification",
+    ]);
+  });
+
+  test("claims the slash so the plan's own search never sees it", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await openCrumb(target, 2, flush);
+    const slash = new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true });
+    menuContent()?.dispatchEvent(slash);
+    // dispatcher.ts returns early on defaultPrevented, which is the whole
+    // mechanism keeping actions.search shut while the bar owns the key.
+    expect(slash.defaultPrevented).toBe(true);
+  });
+
+  test("names each result's enclosing heading", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await openFilter(target, flush);
+    expect(menuRows().map((r) => r.querySelector(".crumb-parent")?.textContent?.trim())).toEqual([
+      undefined, // "Overview" is top-level, so it has no parent to name
+      "Overview",
+      "Approach",
+      "Overview",
+    ]);
+  });
+
+  test("narrows the results as the query is typed", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await openFilter(target, flush);
+    typeQuery("ver", flush);
+    expect(menuRows().map((r) => r.querySelector(".crumb-label")?.textContent?.trim())).toEqual([
+      "Overview",
+      "Verification",
+    ]);
+  });
+
+  test("shows an empty state rather than a blank panel when nothing matches", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await openFilter(target, flush);
+    typeQuery("zzz", flush);
+    expect(menuRows().length).toBe(0);
+    expect(document.body.querySelector(".crumb-filter-empty")?.textContent?.trim()).toBe(
+      "No headings match",
+    );
+  });
+
+  test("jumps to a result's source line when it is picked", async () => {
+    const jumped = capture<number>();
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: jumped.cb,
+    });
+    await openFilter(target, flush);
+    typeQuery("verification", flush);
+    menuRows()[0]?.click();
+    flush();
+    expect(jumped.last()).toBe(20);
+  });
+
+  test("marks the heading the reader is on among the results", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await openFilter(target, flush);
+    expect(menuRows().map((r) => r.getAttribute("aria-current"))).toEqual([
+      null,
+      null,
+      "location",
+      null,
+    ]);
+  });
+
+  test("teaches the slash in the menu only while shortcut hints are shown", async () => {
+    const hint = () => document.body.querySelector(".crumb-menu-hint");
+    const on = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+      showShortcutHints: true,
+    });
+    await openCrumb(on.target, 2, on.flush);
+    expect(hint()?.textContent).toContain("/");
+
+    const off = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+      showShortcutHints: false,
+    });
+    await openCrumb(off.target, 2, off.flush);
+    expect(hint()).toBeNull();
+  });
+});
+
 describe("PlanBreadcrumbs overflow", () => {
   test("collapses the middle of a trail deeper than three levels", () => {
     const { target } = render(PlanBreadcrumbs, { headings: DEEP, activeLine: 7, onJump: () => {} });
