@@ -8,6 +8,7 @@ import {
   FILE_DRAWER_WIDTH_KEY,
   MIN_DRAWER_PX,
   MIN_PLAN_PX,
+  maxDrawerSize,
   readDrawerSize,
   writeDrawerSize,
 } from "$lib/fileDrawer.ts";
@@ -53,37 +54,51 @@ describe("clampDrawerSize", () => {
   });
 });
 
-describe("drawerSizeFromPointer", () => {
-  const surface = { right: 1000, bottom: 800, width: 1000, height: 800 };
-
-  test("measures a right drawer back from the surface's right edge", () => {
-    expect(drawerSizeFromPointer("right", { clientX: 600, clientY: 400 }, surface)).toBe(400);
+describe("maxDrawerSize", () => {
+  test("leaves the plan its minimum", () => {
+    expect(maxDrawerSize(1200)).toBe(1200 - MIN_PLAN_PX);
   });
 
-  test("measures a bottom drawer up from the surface's bottom edge", () => {
-    expect(drawerSizeFromPointer("bottom", { clientX: 600, clientY: 500 }, surface)).toBe(300);
+  test("never drops below the drawer's own floor", () => {
+    expect(maxDrawerSize(MIN_PLAN_PX + 10)).toBe(MIN_DRAWER_PX);
+  });
+
+  test("is the bound clampDrawerSize enforces", () => {
+    expect(clampDrawerSize(99_999, 1200)).toBe(maxDrawerSize(1200));
+  });
+});
+
+describe("drawerSizeFromPointer", () => {
+  const outer = { right: 1000, bottom: 800 };
+
+  test("measures a right drawer back from its own right edge", () => {
+    expect(drawerSizeFromPointer("right", { clientX: 600, clientY: 400 }, outer, 1000)).toBe(400);
+  });
+
+  test("measures a bottom drawer up from its own bottom edge", () => {
+    expect(drawerSizeFromPointer("bottom", { clientX: 600, clientY: 500 }, outer, 800)).toBe(300);
   });
 
   test("clamps a right drag past the plan's minimum", () => {
-    expect(drawerSizeFromPointer("right", { clientX: 10, clientY: 400 }, surface)).toBe(
+    expect(drawerSizeFromPointer("right", { clientX: 10, clientY: 400 }, outer, 1000)).toBe(
       1000 - MIN_PLAN_PX,
     );
   });
 
   test("clamps a right drag dragged past the drawer's own minimum", () => {
-    expect(drawerSizeFromPointer("right", { clientX: 995, clientY: 400 }, surface)).toBe(
+    expect(drawerSizeFromPointer("right", { clientX: 995, clientY: 400 }, outer, 1000)).toBe(
       MIN_DRAWER_PX,
     );
   });
 
   test("clamps a bottom drag past the plan's minimum", () => {
-    expect(drawerSizeFromPointer("bottom", { clientX: 600, clientY: 10 }, surface)).toBe(
+    expect(drawerSizeFromPointer("bottom", { clientX: 600, clientY: 10 }, outer, 800)).toBe(
       800 - MIN_PLAN_PX,
     );
   });
 
   test("clamps a bottom drag dragged past the drawer's own minimum", () => {
-    expect(drawerSizeFromPointer("bottom", { clientX: 600, clientY: 799 }, surface)).toBe(
+    expect(drawerSizeFromPointer("bottom", { clientX: 600, clientY: 799 }, outer, 800)).toBe(
       MIN_DRAWER_PX,
     );
   });

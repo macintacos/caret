@@ -112,9 +112,9 @@ export async function resolveFileRefs(id: string, paths: string[]): Promise<stri
   }
 }
 
-/** A line-aware excerpt of a plan-referenced file for the preview card: the
+/** A line-aware excerpt of a plan-referenced file for the preview panel: the
  * 1-based inclusive `range` when given, else a window centred on `line`, else
- * the file's head. Throws HttpError on a non-2xx so the popover can tell a
+ * the file's head. Throws HttpError on a non-2xx so the preview can tell a
  * too-large file (413) from any other failure. */
 export async function getFileExcerpt(
   id: string,

@@ -1,7 +1,7 @@
 // Standalone syntax highlighting for the filename-hover excerpt (EXC-687). The
 // @pierre/diffs library keeps its own private highlighter, so this builds a small
 // dedicated one bound to shiki's full grammar bundle and caret's themes, then
-// highlights an excerpt to the caret theme in effect — so the popover reads like
+// highlights an excerpt to the caret theme in effect — so the preview reads like
 // the plan view's own code. Grammars load lazily and cache; anything that can't
 // highlight falls back to plain text. Never throws.
 
@@ -39,8 +39,8 @@ async function resolveLanguage(hl: Highlighter, language: string): Promise<strin
 }
 
 /** Highlights `code` to themed HTML (`<pre class="shiki">…`) for the excerpt
- * popover, in the caret theme currently painted — the popover opens over the plan
- * view, so it reads as the same palette. Returns "" on any failure so the caller
+ * preview, in the caret theme currently painted — the preview docks beside the
+ * plan view, so it reads as the same palette. Returns "" on any failure so the caller
  * can fall back to rendering the code as plain text. */
 export async function highlightExcerpt(
   code: string,

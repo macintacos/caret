@@ -18,7 +18,9 @@ import { registerPrefKey } from "$lib/definePref.ts";
 /** Which edge of the plan surface the drawer docks to. */
 export type DrawerEdge = "right" | "bottom";
 
-/** Smallest useful drawer, and the plan column the drawer may never squeeze past. */
+/** Smallest useful drawer, and the plan pane the drawer may never squeeze past.
+ * MIN_PLAN_PX bounds the whole pane, which above TIGHT_WIDTH_PX also carries the
+ * ToC rail — so it is the floor on the pane, not on the source column inside it. */
 export const MIN_DRAWER_PX = 240;
 export const MIN_PLAN_PX = 320;
 
@@ -33,29 +35,36 @@ registerPrefKey(FILE_DRAWER_WIDTH_KEY);
 registerPrefKey(FILE_DRAWER_HEIGHT_KEY);
 
 /**
- * `size` bounded to a usable drawer that still leaves the plan `MIN_PLAN_PX` of
- * the `available` docking axis. When the axis is too small to hold both minimums
- * the bounds cross, and the drawer keeps its own floor rather than collapsing.
+ * The largest drawer that still leaves the plan `MIN_PLAN_PX` of the `available`
+ * docking axis — never below the drawer's own floor, so an axis too small to
+ * hold both minimums yields a usable drawer rather than a collapsed one. Exported
+ * because the resize handle reports it as `aria-valuemax`: one source for the
+ * bound the clamp enforces and the bound assistive tech is told about.
  */
+export function maxDrawerSize(available: number): number {
+  return Math.max(available - MIN_PLAN_PX, MIN_DRAWER_PX);
+}
+
+/** `size` bounded to a usable drawer that still leaves the plan its minimum. */
 export function clampDrawerSize(size: number, available: number): number {
-  const max = available - MIN_PLAN_PX;
-  if (max < MIN_DRAWER_PX) return MIN_DRAWER_PX;
-  return Math.min(Math.max(size, MIN_DRAWER_PX), max);
+  return Math.min(Math.max(size, MIN_DRAWER_PX), maxDrawerSize(available));
 }
 
 /**
  * The drawer size the pointer is asking for, already clamped. The handle sits on
- * the drawer's *inner* edge, so a right drawer measures back from the surface's
- * right edge and a bottom drawer up from its bottom edge.
+ * the drawer's *inner* edge, so the size is the distance back from the drawer's
+ * own outer edge — its right edge when docked right, its bottom edge when docked
+ * bottom, both of which sit on the surface's matching edge.
  */
 export function drawerSizeFromPointer(
   edge: DrawerEdge,
   pointer: { clientX: number; clientY: number },
-  surface: { right: number; bottom: number; width: number; height: number },
+  outer: { right: number; bottom: number },
+  available: number,
 ): number {
   return edge === "right"
-    ? clampDrawerSize(surface.right - pointer.clientX, surface.width)
-    : clampDrawerSize(surface.bottom - pointer.clientY, surface.height);
+    ? clampDrawerSize(outer.right - pointer.clientX, available)
+    : clampDrawerSize(outer.bottom - pointer.clientY, available);
 }
 
 function keyFor(edge: DrawerEdge): string {

@@ -10,8 +10,8 @@
     clampDrawerSize,
     type DrawerEdge,
     drawerSizeFromPointer,
+    maxDrawerSize,
     MIN_DRAWER_PX,
-    MIN_PLAN_PX,
   } from "$lib/fileDrawer.ts";
 
   interface Props {
@@ -19,53 +19,64 @@
     edge: DrawerEdge;
     /** The lane's current size along the docking axis, in px. */
     size: number;
+    /** The docking axis the lane and the plan divide between them, in px — what
+     * bounds a resize. Passed in rather than measured here, so the component needs
+     * no knowledge of what it is mounted inside and the bound tracks a window
+     * resize without this file reading layout. */
+    available: number;
     /** A resize the drawer is asking for, already clamped. */
     onResize: (px: number) => void;
     /** The preview itself. */
     children: Snippet;
   }
-  let { edge, size, onResize, children }: Props = $props();
+  let { edge, size, available, onResize, children }: Props = $props();
 
   /** How far one arrow-key press moves the handle. */
   const KEY_STEP_PX = 24;
 
   let root = $state<HTMLElement>();
-  let dragging = false;
+  /** The in-flight gesture: the lane's outer edge as the press found it, plus how
+   * far the grab sat from that edge — so the lane follows the pointer's movement
+   * instead of snapping its edge under the cursor. Measured once per gesture; the
+   * outer edge is the surface's own and cannot move while a drag is in progress. */
+  let drag: { outer: DOMRect; offset: number } | undefined;
 
-  /** The lane's parent (.diff-surface) — the span the drawer and the plan divide
-   * between them, and so what bounds the drag. Read live rather than cached: a
-   * window resize between gestures must not hand the clamp a stale bound. */
-  function surface(): DOMRect | undefined {
-    return root?.parentElement?.getBoundingClientRect();
-  }
-
-  function axis(rect: DOMRect | undefined): number {
-    return rect ? (edge === "right" ? rect.width : rect.height) : 0;
-  }
-
-  /** The separator's upper bound: everything past the plan's minimum column.
-   * Depends on `size`, so it re-measures on every drag frame. Floored at the
-   * current size so a lane not yet laid out still reports a coherent range
-   * rather than a maximum below where the handle already sits. */
-  const maxSize = $derived(Math.max(axis(surface()) - MIN_PLAN_PX, size));
+  /** The separator's upper bound, taken from the clamp's own bound so the range
+   * assistive tech is told can't drift from the range actually enforced. */
+  const maxSize = $derived(maxDrawerSize(available));
 
   function onPointerDown(e: PointerEvent & { currentTarget: HTMLElement }): void {
+    const outer = root?.getBoundingClientRect();
+    if (outer === undefined) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    dragging = true;
+    drag = {
+      outer,
+      offset: (edge === "right" ? outer.right - e.clientX : outer.bottom - e.clientY) - size,
+    };
     // Suppress the text selection the drag would otherwise sweep across the plan.
+    // It also suppresses the compat click, which is what keeps a release landing
+    // outside the lane from reaching DiffPlanView's dismissal handler.
     e.preventDefault();
+    // …including the focus the press would have given the handle, so take that
+    // explicitly: a reader who drags can then fine-tune with the arrow keys.
+    e.currentTarget.focus();
   }
 
   function onPointerMove(e: PointerEvent): void {
-    if (!dragging) return;
-    const rect = surface();
-    if (rect) onResize(drawerSizeFromPointer(edge, e, rect));
+    if (drag === undefined) return;
+    const shifted =
+      edge === "right"
+        ? { clientX: e.clientX + drag.offset, clientY: e.clientY }
+        : { clientX: e.clientX, clientY: e.clientY + drag.offset };
+    onResize(drawerSizeFromPointer(edge, shifted, drag.outer, available));
   }
 
-  function endDrag(e: PointerEvent & { currentTarget: HTMLElement }): void {
-    if (!dragging) return;
-    e.currentTarget.releasePointerCapture(e.pointerId);
-    dragging = false;
+  // No releasePointerCapture: capture is released implicitly once pointerup or
+  // pointercancel fires, and calling it for a pointer that is already gone throws
+  // NotFoundError — which would strand the gesture and leave a bare hover
+  // dragging the lane.
+  function endDrag(): void {
+    drag = undefined;
   }
 
   // The keyboard equivalent of the drag, through the same clamp. The handle sits
@@ -76,7 +87,7 @@
     const step = e.key === grow ? KEY_STEP_PX : e.key === shrink ? -KEY_STEP_PX : 0;
     if (step === 0) return;
     e.preventDefault();
-    onResize(clampDrawerSize(size + step, axis(surface())));
+    onResize(clampDrawerSize(size + step, available));
   }
 </script>
 
@@ -91,8 +102,7 @@
   <!-- A focusable separator is ARIA's window-splitter: it takes a tab stop and
        arrow keys, and its aria-value* report the split. svelte's a11y check reads
        `separator` as non-interactive whether or not it is focusable, so both
-       warnings are about the pattern itself. In runes mode the codes are
-       comma-separated on one comment. -->
+       warnings are about the pattern itself. -->
   <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
   <div
     class="fd-handle"
@@ -103,6 +113,7 @@
     aria-valuenow={size}
     aria-valuemin={MIN_DRAWER_PX}
     aria-valuemax={maxSize}
+    aria-valuetext="{Math.round(size)} pixels"
     onpointerdown={onPointerDown}
     onpointermove={onPointerMove}
     onpointerup={endDrag}
@@ -128,7 +139,10 @@
     /* The open wipe: the lane grows from nothing while .diff-plan (flex: 1)
        gives up the space, mirroring the ToC rail's collapse. It animates on
        MOUNT because the drawer is unmounted when closed, so there is no closed
-       class to toggle. The global #app reduced-motion rule collapses it. */
+       class to toggle. Re-docking swaps animation-name below, which restarts the
+       wipe — so an open drawer crossing the breakpoint wipes in from its new
+       edge rather than jumping there. The global #app reduced-motion rule
+       collapses all of it. */
     animation: fd-open-right var(--dur-base) var(--ease-out);
   }
   aside.fd-bottom {

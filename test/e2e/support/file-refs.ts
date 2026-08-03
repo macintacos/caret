@@ -41,6 +41,9 @@ export function fileRefCount(page: Page): Promise<number> {
  */
 export async function settleDrawer(page: Page): Promise<void> {
   await page.locator("[data-file-drawer]").evaluate(async (el) => {
-    await Promise.all(el.getAnimations().map((a) => a.finished));
+    // A re-dock swaps animation-name mid-wipe, which cancels the running
+    // animation and rejects its `finished` with AbortError. Cancelled is settled
+    // for our purposes, so swallow it rather than failing the spec.
+    await Promise.all(el.getAnimations().map((a) => a.finished.catch(() => undefined)));
   });
 }

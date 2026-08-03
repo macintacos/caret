@@ -342,8 +342,9 @@
   // own handlers, and the outside click is SWALLOWED (stopImmediatePropagation +
   // preventDefault): the first click only closes the preview and never also opens a
   // line comment; a second click then does its normal thing. A click inside the lane
-  // is left alone, so the reader can still scroll a long excerpt line, select text in
-  // it, or drag the resize handle out past the lane's edge. No pointer-trajectory
+  // is left alone, so the reader can still scroll a long excerpt line or select text
+  // in it. (A resize drag never reaches here at all: the handle's pointerdown calls
+  // preventDefault, so its release produces no click.) No pointer-trajectory
   // tracking remains — moving the cursor away no longer dismisses.
   $effect(() => {
     if (filePreview === undefined) return;
@@ -382,23 +383,28 @@
   // The whole surface the plan and the drawer divide between them. The reveal
   // effect measures THIS rather than .diff-plan: the surface's height never
   // changes, so the geometry is the same whether the effect runs before, during,
-  // or after the lane's opening wipe.
+  // or after the lane's opening wipe. Its size is *bound* (a ResizeObserver under
+  // the hood) rather than measured, so the clamp below tracks any window resize —
+  // including one that never crosses the breakpoint, which would otherwise leave
+  // the plan pane squeezed past its minimum with nothing to re-clamp it. No
+  // feedback loop: the surface's own size does not depend on the drawer's.
   let surfaceEl = $state<HTMLElement | undefined>();
-  let drawerSize = $state(0);
-  // Seed the lane from what this edge remembers, else a share of the axis it
-  // docks along. Keyed on the edge, so crossing the breakpoint re-seeds from the
-  // other edge's memory rather than carrying a width over as a height.
-  $effect(() => {
-    const edge = drawerEdge;
-    const rect = surfaceEl?.getBoundingClientRect();
-    const available = rect === undefined ? 0 : edge === "right" ? rect.width : rect.height;
-    drawerSize = clampDrawerSize(
-      readDrawerSize(edge) ?? available * DEFAULT_DRAWER_SHARE,
-      available,
-    );
+  let surfaceWidth = $state(0);
+  let surfaceHeight = $state(0);
+  const drawerAxis = $derived(drawerEdge === "right" ? surfaceWidth : surfaceHeight);
+  // What the reader last chose for each edge — storage seeds it, a drag replaces
+  // it. Held apart from the size actually rendered so their choice survives a
+  // window too narrow to honour it: narrowing shrinks the lane, widening restores
+  // what they picked. Two keys, so a right-edge drag is never a bottom-edge one.
+  const chosenSize = $state<Record<DrawerEdge, number | null>>({
+    right: readDrawerSize("right"),
+    bottom: readDrawerSize("bottom"),
   });
+  const drawerSize = $derived(
+    clampDrawerSize(chosenSize[drawerEdge] ?? drawerAxis * DEFAULT_DRAWER_SHARE, drawerAxis),
+  );
   function setDrawerSize(px: number): void {
-    drawerSize = px;
+    chosenSize[drawerEdge] = px;
     writeDrawerSize(drawerEdge, px);
   }
 
@@ -1159,6 +1165,8 @@
   class="diff-surface"
   class:dock-bottom={drawerEdge === "bottom"}
   bind:this={surfaceEl}
+  bind:clientWidth={surfaceWidth}
+  bind:clientHeight={surfaceHeight}
 >
   <div class="plan-pane">
     <!-- The vim `/` search dock (EXC-832), top-right of the plan (single-version only).
@@ -1354,8 +1362,14 @@
        docked to. Only appears for references the daemon resolved to a real file;
        compare mode has no preview, so it is gated on the single-version view. -->
   {#if !showDiff && filePreview}
+    <!-- Bound here because the {#if}'s narrowing does not reach into a snippet body. -->
     {@const openRef = filePreview}
-    <FileDrawer edge={drawerEdge} size={drawerSize} onResize={setDrawerSize}>
+    <FileDrawer
+      edge={drawerEdge}
+      size={drawerSize}
+      available={drawerAxis}
+      onResize={setDrawerSize}
+    >
       {#snippet children()}
         <FilePreview
           reviewId={reviewId}

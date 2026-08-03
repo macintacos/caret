@@ -11,7 +11,7 @@
 
 import { fileRefCount, makeProject, settleDrawer } from "@test/e2e/support/file-refs.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
-import { NARROW_WIDTH_PX } from "@ui/src/lib/layout.ts";
+import { MIN_APP_WIDTH_PX, NARROW_WIDTH_PX, TIGHT_WIDTH_PX } from "@ui/src/lib/layout.ts";
 
 // Comfortably inside the narrow regime rather than a pixel off the breakpoint,
 // so a rounding difference in matchMedia can't decide the docking edge.
@@ -90,6 +90,74 @@ test("at a wide width the drawer docks right, taking space rather than covering 
     expect(drawer?.right ?? 0).toBeCloseTo(after?.surface.right ?? -1, 0);
     // Full height of the surface: the lane is a column beside the plan.
     expect(drawer?.height ?? 0).toBeCloseTo(after?.surface.height ?? -1, 0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("the lane wipes in from the edge it docks to", async ({ daemon, page }) => {
+  // The open is an animation on the docking dimension, so the plan reflows every
+  // frame instead of the drawer appearing at full size. Recorded through
+  // animationstart rather than read off computed style: an animation-name
+  // pointing at deleted keyframes still computes, but never fires.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nEdit `src/cache.ts` to fix it.\n" });
+
+    for (const [viewport, dimension] of [
+      [WIDE, "width"],
+      [NARROW, "height"],
+    ] as const) {
+      await page.setViewportSize(viewport);
+      await page.goto("/");
+      await expect(page.locator(".diff-plan")).toBeVisible();
+      await expect.poll(() => fileRefCount(page)).toBe(1);
+
+      await page.evaluate(() => {
+        const w = window as unknown as { __wipes: { name: string; onLane: boolean }[] };
+        w.__wipes = [];
+        window.addEventListener(
+          "animationstart",
+          (e) => {
+            const t = e.target as Element | null;
+            w.__wipes.push({
+              name: e.animationName,
+              onLane: t?.hasAttribute("data-file-drawer") ?? false,
+            });
+          },
+          { capture: true },
+        );
+      });
+
+      await page.locator("[data-file-ref]").first().click();
+      await expect(page.locator("[data-file-drawer]")).toBeVisible();
+
+      // Svelte scopes keyframe names, so match the declared name rather than
+      // pinning the hash it compiles to.
+      const wipeName = dimension === "width" ? "fd-open-right" : "fd-open-bottom";
+      await expect
+        .poll(() =>
+          page.evaluate(
+            (name) =>
+              (window as unknown as { __wipes: { name: string; onLane: boolean }[] }).__wipes
+                .filter((wipe) => wipe.onLane)
+                .some((wipe) => wipe.name.includes(name)),
+            wipeName,
+          ),
+        )
+        .toBe(true);
+
+      // …and it really moves that dimension: the keyframes start the lane at 0.
+      const from = await page.locator("[data-file-drawer]").evaluate(
+        (el, dim) =>
+          el
+            .getAnimations()
+            .flatMap((a) => (a.effect instanceof KeyframeEffect ? a.effect.getKeyframes() : []))
+            .map((k) => (k as Record<string, unknown>)[dim]),
+        dimension,
+      );
+      expect(from).toContain("0px");
+    }
   } finally {
     await proj.cleanup();
   }
@@ -194,11 +262,14 @@ test("dragging the handle resizes the lane, and each edge remembers its own size
     const bottomBefore = (await laneGeometry(page))?.drawer?.height ?? 0;
     expect(bottomBefore).toBeGreaterThan(0);
 
+    // Re-docking swaps the lane's animation-name, which re-triggers the wipe, so
+    // settle again before measuring or aiming a drag at the handle.
     await page.setViewportSize(WIDE);
     await expect(page.getByRole("separator", { name: "Resize file preview" })).toHaveAttribute(
       "aria-orientation",
       "vertical",
     );
+    await settleDrawer(page);
     const startWidth = (await laneGeometry(page))?.drawer?.width ?? 0;
     expect(startWidth).toBeGreaterThan(0);
 
@@ -212,17 +283,21 @@ test("dragging the handle resizes the lane, and each edge remembers its own size
     await page.mouse.move((box?.x ?? 0) - 120, y, { steps: 8 });
     await page.mouse.up();
 
+    // Bounded on BOTH sides: "greater than" alone would also pass for a
+    // regression that snapped the lane to its maximum, or inverted the direction
+    // and then clamped there. What is pinned is that it moved by the drag.
     const dragged = startWidth + 120;
     await expect
       .poll(async () => (await laneGeometry(page))?.drawer?.width ?? 0)
       .toBeGreaterThan(dragged - 8);
+    expect((await laneGeometry(page))?.drawer?.width ?? 0).toBeLessThan(dragged + 8);
 
     // The new width survives a reload — it is remembered, not just live state.
     await page.reload();
     await openPreview(page);
-    await expect
-      .poll(async () => (await laneGeometry(page))?.drawer?.width ?? 0)
-      .toBeGreaterThan(dragged - 8);
+    const reloaded = (await laneGeometry(page))?.drawer?.width ?? 0;
+    expect(reloaded).toBeGreaterThan(dragged - 8);
+    expect(reloaded).toBeLessThan(dragged + 8);
 
     // Back at the bottom edge, the height is exactly what it was before the
     // right-edge drag: the two edges are remembered under separate keys, so
@@ -232,6 +307,7 @@ test("dragging the handle resizes the lane, and each edge remembers its own size
       "aria-orientation",
       "horizontal",
     );
+    await settleDrawer(page);
     await expect
       .poll(async () => (await laneGeometry(page))?.drawer?.height ?? 0)
       .toBeCloseTo(bottomBefore, 0);
@@ -333,6 +409,43 @@ test("clicking a second filename swaps the drawer's contents in place", async ({
         () => (window as unknown as { __drawerRemovals: number }).__drawerRemovals,
       ),
     ).toBe(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("no surface overflows the viewport at any breakpoint with the drawer open", async ({
+  daemon,
+  page,
+}) => {
+  // narrow-regression.e2e.ts sweeps the breakpoints with nothing docked; this is
+  // the same guarantee with a lane taking layout space, which is the case that
+  // could push the document wider than the window. The drawer is opened once and
+  // left open across the sweep, so each width is measured with it docked.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nEdit `src/cache.ts` to fix it.\n" });
+    await page.setViewportSize(WIDE);
+    await page.goto("/");
+    await openPreview(page);
+
+    for (const width of [
+      NARROW_WIDTH_PX + 440,
+      NARROW_WIDTH_PX,
+      NARROW_WIDTH_PX - 160,
+      TIGHT_WIDTH_PX,
+      MIN_APP_WIDTH_PX,
+    ]) {
+      await page.setViewportSize({ width, height: 900 });
+      // The lane must still be open — a width that closed it would make the
+      // overflow check below vacuous.
+      await expect(page.locator("[data-file-drawer]")).toBeVisible();
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), {
+          message: `document overflows the ${width}px viewport with the drawer open`,
+        })
+        .toBeLessThanOrEqual(1);
+    }
   } finally {
     await proj.cleanup();
   }
