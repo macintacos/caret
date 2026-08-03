@@ -8,6 +8,9 @@ import Shortcut from "./dropdown-menu-shortcut.svelte";
 import Trigger from "./dropdown-menu-trigger.svelte";
 import GroupHeading from "./dropdown-menu-group-heading.svelte";
 import Portal from "./dropdown-menu-portal.svelte";
+import Sub from "./dropdown-menu-sub.svelte";
+import SubTrigger from "./dropdown-menu-sub-trigger.svelte";
+import SubContent from "./dropdown-menu-sub-content.svelte";
 
 export {
 	Content,
@@ -22,6 +25,9 @@ export {
 	Shortcut as DropdownMenuShortcut,
 	Trigger as DropdownMenuTrigger,
 	GroupHeading as DropdownMenuGroupHeading,
+	Sub as DropdownMenuSub,
+	SubTrigger as DropdownMenuSubTrigger,
+	SubContent as DropdownMenuSubContent,
 	Group,
 	GroupHeading,
 	Item,
@@ -29,5 +35,8 @@ export {
 	Root,
 	Separator,
 	Shortcut,
+	Sub,
+	SubContent,
+	SubTrigger,
 	Trigger,
 };
