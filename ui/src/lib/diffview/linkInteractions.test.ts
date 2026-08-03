@@ -324,6 +324,10 @@ describe("composeTokenHandlers — file references", () => {
     [1, [{ startCol: 4, endCol: 13, path: "src/a.ts", line: 3 }]],
   ]);
 
+  beforeEach(() => {
+    document.body.replaceChildren();
+  });
+
   function props(charStart: number, charEnd: number) {
     return {
       lineNumber: 1,
@@ -366,6 +370,63 @@ describe("composeTokenHandlers — file references", () => {
     composed?.handlers.onTokenEnter(p, new PointerEvent("pointerenter"));
     composed?.handlers.onTokenLeave(p, new PointerEvent("pointerleave"));
     expect(clicked).toEqual([]);
+  });
+
+  // A reference emitted from a prose-labelled markdown link carries its target
+  // (EXC-954): the display text says "the researcher agent", so hover is the only
+  // way to see which file the click opens. An inline-code reference already shows
+  // its path, carries no target, and keeps EXC-687's CSS-only hover.
+  test("hovering a reference that carries a target reveals it in the tooltip", () => {
+    const withTarget: FileRefSpanMap = new Map([
+      [1, [{ startCol: 4, endCol: 13, path: "src/a.ts", target: "src/a.ts" }]],
+    ]);
+    const composed = composeTokenHandlers(undefined, withTarget, {
+      openUrl: () => {},
+      onFileRefClick: () => {},
+    });
+    const p = props(4, 13);
+    composed?.handlers.onTokenEnter(p, new PointerEvent("pointerenter"));
+    expect(tooltipText()).toBe("src/a.ts");
+    composed?.handlers.onTokenLeave(p, new PointerEvent("pointerleave"));
+    expect(tooltipText()).toBeNull();
+  });
+
+  test("hovering a reference with no target reveals no tooltip", () => {
+    const composed = composeTokenHandlers(undefined, fileRefs, {
+      openUrl: () => {},
+      onFileRefClick: () => {},
+    });
+    composed?.handlers.onTokenEnter(props(4, 13), new PointerEvent("pointerenter"));
+    expect(tooltipText()).toBeNull();
+  });
+
+  test("a file ref with a target takes hover from the link layer, not both", () => {
+    // Both layers cover the same columns. The reference wins — one tooltip, and
+    // it names the file the click will open rather than a URL.
+    const withTarget: FileRefSpanMap = new Map([
+      [1, [{ startCol: 4, endCol: 13, path: "src/a.ts", target: "src/a.ts" }]],
+    ]);
+    const composed = composeTokenHandlers(
+      new Map([[1, [span(4, 13, "https://a.test")]]]),
+      withTarget,
+      { openUrl: () => {}, onFileRefClick: () => {} },
+    );
+    composed?.handlers.onTokenEnter(props(4, 13), new PointerEvent("pointerenter"));
+    expect(document.body.querySelectorAll("[data-link-tooltip]")).toHaveLength(1);
+    expect(tooltipText()).toBe("src/a.ts");
+  });
+
+  test("a token over neither layer still falls through to the link handlers", () => {
+    const composed = composeTokenHandlers(
+      new Map([[1, [span(20, 30, "https://a.test/full")]]]),
+      fileRefs,
+      { openUrl: () => {}, onFileRefClick: () => {} },
+    );
+    const p = { ...props(20, 30), tokenText: "the docs" };
+    composed?.handlers.onTokenEnter(p, new PointerEvent("pointerenter"));
+    expect(tooltipText()).toBe("https://a.test/full");
+    composed?.handlers.onTokenLeave(p, new PointerEvent("pointerleave"));
+    expect(tooltipText()).toBeNull();
   });
 
   test("a click that misses every file reference dispatches nothing and stays unconsumed", () => {

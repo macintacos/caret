@@ -37,7 +37,12 @@
     type SourceCommenting,
   } from "$lib/diffview/commenting.ts";
   import { dismissDragHint, isDragHintDismissed } from "$lib/diffview/dragHint.ts";
-  import { buildFileRefLayer, type FileRefSpan, type FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
+  import {
+    buildFileRefLayer,
+    type FileRefSpan,
+    type FileRefSpanMap,
+    mergeFileRefSpans,
+  } from "$lib/diffview/fileRefs.ts";
   import { resolveFileRefs } from "$lib/api.ts";
   import { shortCwd } from "$lib/cwd.ts";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
@@ -268,17 +273,24 @@
     return memo.layer;
   });
 
-  // The filename-reference layer (EXC-687). Candidates are parsed from the SAME
-  // display text the view renders (linkLayer.text), so their columns line up with
-  // the tokens; memoized on that text like the link layer so a poll tick yields a
-  // stable reference.
-  let fileRefMemo: { text: string; layer: FileRefSpanMap } | undefined;
+  // The filename-reference layer (EXC-687). Two sources union here: the paths
+  // SCANNED out of the display text's inline code, and the ones the link layer
+  // EMITTED over collapsed markdown-link labels (EXC-954) — which the scan can
+  // never re-find, since the target is gone by the time it reads display text.
+  // Memoized on the link layer OBJECT, not its text: two plans can render the
+  // same display text ([a/b.md](a/b.md) and a bare a/b.md) with different emitted
+  // spans, so a text-keyed memo would serve a stale map. The layer reference is
+  // itself stable across a poll tick, so this still resolves once per plan.
+  let fileRefMemo: { layer: ReturnType<typeof buildLinkLayer>; refs: FileRefSpanMap } | undefined;
   const fileRefCandidates = $derived.by(() => {
-    const text = linkLayer.text;
-    if (fileRefMemo?.text !== text) {
-      fileRefMemo = { text, layer: buildFileRefLayer(text) };
+    const link = linkLayer;
+    if (fileRefMemo?.layer !== link) {
+      fileRefMemo = {
+        layer: link,
+        refs: mergeFileRefSpans(buildFileRefLayer(link.text), link.fileRefs),
+      };
     }
-    return fileRefMemo.layer;
+    return fileRefMemo.refs;
   });
 
   // The review's id as a value-stable derived: the 2s poll hands us a fresh review

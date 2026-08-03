@@ -30,10 +30,11 @@ export interface LinkHandlerDeps {
 }
 
 /** The file-reference click affordance the composed handlers dispatch to
- * (EXC-687; click-to-open since EXC-840). Hover is CSS-only — the override
- * sheet highlights the tagged token — so nothing dispatches on enter/leave; a
- * click on a resolved reference opens the excerpt popover and consumes the
- * event, so its line does not also open a comment. */
+ * (EXC-687; click-to-open since EXC-840). Hover dispatches nothing — the
+ * override sheet highlights the tagged token, and a reference that hides its
+ * path behind a prose label reveals it through the link tooltip; a click on a
+ * resolved reference opens the excerpt popover and consumes the event, so its
+ * line does not also open a comment. */
 export interface FileRefClickDeps {
   /** A token over a resolved file reference was clicked — the view opens the
    * excerpt popover anchored to `tokenElement`. */
@@ -192,8 +193,9 @@ export function createLinkHandlers(spanMap: LinkSpanMap, deps: LinkHandlerDeps):
  *
  * Two affordances compose here today: the link layer (click opens the URL, hover
  * shows the tooltip) and the file-reference layer (click opens the excerpt
- * popover — see EXC-687/EXC-840; its hover highlight is CSS-only in the
- * override sheet, so enter/leave dispatch nothing for it). onTokenClick records
+ * popover — see EXC-687/EXC-840; its highlight is CSS-only in the override sheet,
+ * and enter/leave only show the tooltip for a reference whose display text hides
+ * its path — a prose-labelled link, EXC-954). onTokenClick records
  * the event when a click lands on either a link span or a file reference; that
  * recorded event drives wasLinkClick, which a view's row-click handler reads to
  * stand down: the library fires this layer's onTokenClick before onLineClick
@@ -225,9 +227,23 @@ export function composeTokenHandlers(
   return {
     handlers: {
       onTokenEnter(props, event) {
+        // A reference emitted from a prose-labelled link hides its destination in
+        // the display text, so hover is the only way to see it — the same tooltip
+        // surface a link uses. A reference that shows its own path carries no
+        // target and keeps its CSS-only hover.
+        const ref = fileRefAt(props.lineNumber, props.lineCharStart, props.lineCharEnd);
+        if (ref?.target !== undefined) {
+          showTooltip(props.tokenElement, ref.target);
+          return;
+        }
         link?.onTokenEnter(props, event);
       },
       onTokenLeave(props, event) {
+        const ref = fileRefAt(props.lineNumber, props.lineCharStart, props.lineCharEnd);
+        if (ref?.target !== undefined) {
+          hideTooltip(props.tokenElement);
+          return;
+        }
         link?.onTokenLeave(props, event);
       },
       onTokenClick(props, event) {
