@@ -332,9 +332,41 @@
   // preview stays put once open; it closes only through the dismissal effect
   // below (Escape, or a click away).
   let filePreview = $state<{ path: string; line?: number; token: HTMLElement } | undefined>();
+
+  // Dismissal plays the lane's wipe in reverse before the drawer leaves, so the
+  // pane slides shut with the excerpt still in it instead of blinking out. The
+  // drawer stays mounted for that beat and `drawerClosing` puts it in its closing
+  // state; the timer then drops it. Must match FileDrawer's fd-close-* duration
+  // (--dur-base = 180ms) — a timer rather than animationend because happy-dom
+  // fires no animation events, so the unit env would strand the drawer forever.
+  const CLOSE_ANIM_MS = 180;
+  let drawerClosing = $state(false);
+  let closeTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function cancelDrawerClose(): void {
+    if (closeTimer !== undefined) clearTimeout(closeTimer);
+    closeTimer = undefined;
+    drawerClosing = false;
+  }
+
+  /** Start the closing wipe, dropping the drawer once it has played. */
+  function dismissFilePreview(): void {
+    if (filePreview === undefined || drawerClosing) return;
+    drawerClosing = true;
+    closeTimer = setTimeout(() => {
+      filePreview = undefined;
+      cancelDrawerClose();
+    }, CLOSE_ANIM_MS);
+  }
+
   function openFilePreview(ref: FileRefSpan, tokenElement: HTMLElement): void {
+    // Reopening mid-collapse: drop the pending unmount so the lane wipes back
+    // open on the same instance rather than being torn out from under it.
+    cancelDrawerClose();
     filePreview = { path: ref.path, line: ref.line, token: tokenElement };
   }
+
+  $effect(() => () => cancelDrawerClose());
 
   // Dismissal (EXC-840, superseding EXC-799's hover-intent tracker): an open
   // preview stays open until the reader dismisses it — Escape, or a click anywhere
@@ -349,12 +381,15 @@
   $effect(() => {
     if (filePreview === undefined) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      filePreview = undefined;
+      if (e.key !== "Escape" || drawerClosing) return;
+      dismissFilePreview();
       e.preventDefault();
       e.stopPropagation();
     };
     const onClick = (e: MouseEvent) => {
+      // Already sliding shut: let the click do its normal thing rather than
+      // spending it on a drawer that is on its way out.
+      if (drawerClosing) return;
       const path = e.composedPath();
       // A click on another filename passes through untouched, so SourceView's
       // token handler fires and swaps the drawer's contents on that same click
@@ -362,7 +397,7 @@
       if (path.some((n) => n instanceof Element && n.matches("[data-file-ref]"))) return;
       const drawer = document.querySelector("[data-file-drawer]");
       if (drawer != null && path.includes(drawer)) return;
-      filePreview = undefined;
+      dismissFilePreview();
       e.preventDefault();
       e.stopImmediatePropagation();
     };
@@ -1369,6 +1404,7 @@
       size={drawerSize}
       available={drawerAxis}
       onResize={setDrawerSize}
+      closing={drawerClosing}
     >
       {#snippet children()}
         <FilePreview

@@ -450,3 +450,95 @@ test("no surface overflows the viewport at any breakpoint with the drawer open",
     await proj.cleanup();
   }
 });
+
+test("the lane wipes out again when the preview is dismissed", async ({ daemon, page }) => {
+  // The close is the open run backwards on the same dimension, so the pane reads
+  // as one object sliding shut. It matters that the drawer stays mounted while
+  // it plays — a lane that unmounted first would blink out with no motion at all
+  // — so this watches the collapse start, checks the excerpt is still in the
+  // lane at that moment, and only then expects it gone.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nEdit `src/cache.ts` to fix it.\n\nJust some plain prose here.\n",
+    });
+    await page.setViewportSize(WIDE);
+    await page.goto("/");
+    await openPreview(page);
+
+    await page.evaluate(() => {
+      const w = window as unknown as { __wipes: string[] };
+      w.__wipes = [];
+      window.addEventListener(
+        "animationstart",
+        (e) => {
+          const t = e.target as Element | null;
+          if (t?.hasAttribute("data-file-drawer")) w.__wipes.push(e.animationName);
+        },
+        { capture: true },
+      );
+    });
+
+    // Dismiss by clicking a plain plan line, well outside the lane.
+    await page
+      .locator(".diffview")
+      .getByText("Just some plain prose here.", { exact: false })
+      .click();
+
+    // The collapse starts on the lane, and the excerpt is still inside it.
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          (window as unknown as { __wipes: string[] }).__wipes.some((n) =>
+            n.includes("fd-close-right"),
+          ),
+        ),
+      )
+      .toBe(true);
+
+    // …and once it has played, the lane is gone and the plan has the room back.
+    await expect(page.locator("[data-file-drawer]")).toHaveCount(0);
+    const after = await laneGeometry(page);
+    expect(after?.pane.width ?? 0).toBeCloseTo(after?.surface.width ?? -1, 0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("Escape plays the same closing wipe", async ({ daemon, page }) => {
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nEdit `src/cache.ts` to fix it.\n" });
+    await page.setViewportSize(NARROW);
+    await page.goto("/");
+    await openPreview(page);
+
+    await page.evaluate(() => {
+      const w = window as unknown as { __wipes: string[] };
+      w.__wipes = [];
+      window.addEventListener(
+        "animationstart",
+        (e) => {
+          const t = e.target as Element | null;
+          if (t?.hasAttribute("data-file-drawer")) w.__wipes.push(e.animationName);
+        },
+        { capture: true },
+      );
+    });
+
+    // Safe mode swallows keystrokes for a beat after the view gains focus, so
+    // retry the press until the lane actually starts leaving.
+    await expect(async () => {
+      await page.keyboard.press("Escape");
+      await expect(page.locator("[data-file-drawer]")).toHaveCount(0, { timeout: 500 });
+    }).toPass({ timeout: 5_000 });
+
+    // The bottom dock collapses on its own dimension, not the right one's.
+    const wipes = await page.evaluate(() => (window as unknown as { __wipes: string[] }).__wipes);
+    expect(wipes.some((n) => n.includes("fd-close-bottom"))).toBe(true);
+    expect(wipes.some((n) => n.includes("fd-close-right"))).toBe(false);
+  } finally {
+    await proj.cleanup();
+  }
+});

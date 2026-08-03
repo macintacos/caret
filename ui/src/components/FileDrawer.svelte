@@ -26,10 +26,14 @@
     available: number;
     /** A resize the drawer is asking for, already clamped. */
     onResize: (px: number) => void;
+    /** Whether the lane is playing its closing wipe. The host keeps the drawer
+     * mounted for that beat and unmounts it when the wipe ends, so the pane
+     * slides shut with the excerpt still in it rather than vanishing. */
+    closing?: boolean;
     /** The preview itself. */
     children: Snippet;
   }
-  let { edge, size, available, onResize, children }: Props = $props();
+  let { edge, size, available, onResize, closing = false, children }: Props = $props();
 
   /** How far one arrow-key press moves the handle. */
   const KEY_STEP_PX = 24;
@@ -96,6 +100,7 @@
   data-file-drawer
   aria-label="File preview"
   class:fd-bottom={edge === "bottom"}
+  class:fd-closing={closing}
   style:--fd-size="{size}px"
 >
   <div class="fd-content">{@render children()}</div>
@@ -168,6 +173,39 @@
     }
     to {
       height: var(--fd-size);
+    }
+  }
+
+  /* The close wipe: the same travel on the same dimension, run the other way, so
+     the pane reads as one object sliding shut rather than a second effect. It
+     keeps the open's --dur-base (a lane this size collapsing in --dur-fast reads
+     as a snap, not a slide) and takes the paired --ease-in, the exit curve — a
+     pane leaving accelerates away, where an entering one decelerates into place.
+     `forwards` holds the collapsed frame until the host unmounts, so the lane
+     cannot flash back to full width in the gap. Higher specificity than the
+     rules above, so it wins for whichever edge is docked. */
+  aside.fd-closing {
+    animation: fd-close-right var(--dur-base) var(--ease-in) forwards;
+    /* The pane is leaving — its handle is no longer a thing to grab. */
+    pointer-events: none;
+  }
+  aside.fd-bottom.fd-closing {
+    animation-name: fd-close-bottom;
+  }
+  @keyframes fd-close-right {
+    from {
+      width: var(--fd-size);
+    }
+    to {
+      width: 0;
+    }
+  }
+  @keyframes fd-close-bottom {
+    from {
+      height: var(--fd-size);
+    }
+    to {
+      height: 0;
     }
   }
 

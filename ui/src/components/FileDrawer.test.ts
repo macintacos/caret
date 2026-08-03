@@ -59,6 +59,29 @@ describe("FileDrawer lane", () => {
     expect(lane(bottom.target).classList.contains("fd-bottom")).toBe(true);
   });
 
+  test("marks the lane while it plays its closing wipe, and not before", () => {
+    const open = render(FileDrawer, {
+      edge: "right",
+      size: 420,
+      available: 1200,
+      onResize: () => {},
+      children,
+    });
+    expect(lane(open.target).classList.contains("fd-closing")).toBe(false);
+    const closing = render(FileDrawer, {
+      edge: "right",
+      size: 420,
+      available: 1200,
+      closing: true,
+      onResize: () => {},
+      children,
+    });
+    expect(lane(closing.target).classList.contains("fd-closing")).toBe(true);
+    // The excerpt stays rendered on the way out — the pane slides shut with its
+    // contents, it does not empty first.
+    expect(lane(closing.target).querySelector(".fd-probe")).not.toBeNull();
+  });
+
   test("renders the children snippet inside the lane", () => {
     const { target } = render(FileDrawer, {
       edge: "right",
