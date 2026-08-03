@@ -118,6 +118,13 @@ describe("DiffPlanView contents pane", () => {
   });
 });
 
+// EXC-946's heading breadcrumbs bar has no unit test here on purpose: it renders
+// only once a heading is in the reading zone, and that tracking is measured with
+// getBoundingClientRect, which happy-dom reports as all zeros — the same reason
+// the rail's active row is asserted in e2e rather than here. The bar's own trail
+// logic is unit-tested in PlanBreadcrumbs.test.ts; its mounting, scroll tracking,
+// and compare-mode absence are covered by test/e2e/plan-breadcrumbs.e2e.ts.
+
 describe("DiffPlanView gutter composer", () => {
   // The gutter `+` reveal, line-offset positioning, and the persisted create are
   // real-browser behavior covered by the Playwright e2e (diff-surface.e2e.ts).
