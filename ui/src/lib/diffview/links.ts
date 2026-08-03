@@ -18,7 +18,11 @@
 // which the view merges with the inline-code scan and decorates as a file
 // reference. Emission belongs here because fileRefs.ts reads *display* text: once
 // the link collapses, its target is gone and only this layer still knows where
-// the label landed.
+// the label landed. Two consequences worth knowing before changing this:
+// collapsing is decided on shape alone, so a target that does NOT resolve leaves
+// its label as bare prose with no affordance and no visible path; and a target
+// carrying a fragment or query (`doc/guide.md#setup`) is not path-shaped, so that
+// link stays literal.
 
 import { classify, type FileRefSpan, type FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 
@@ -42,9 +46,10 @@ export interface LinkLayer {
   text: string;
   /** Clickable spans per 1-based line. */
   spans: LinkSpanMap;
-  /** File references emitted over collapsed link labels (EXC-954). scanLine reads
-   * DISPLAY text, so a path that collapsed into prose can never be re-found — the
-   * link layer is the only place that still knows where it landed. */
+  /** File references emitted over collapsed link labels (EXC-954).
+   * buildFileRefLayer reads DISPLAY text, so a path that collapsed into prose can
+   * never be re-found — the link layer is the only place that still knows where
+   * it landed. */
   fileRefs: FileRefSpanMap;
 }
 
@@ -53,6 +58,10 @@ const SAFE_SCHEME = /^https?:\/\//i;
 function isSafeUrl(url: string): boolean {
   return SAFE_SCHEME.test(url);
 }
+
+// Any URL scheme (`ftp:`, `mailto:`, `javascript:`, …). A path never carries one
+// — `a/b.md:42` has no scheme because `/` is outside the scheme character class.
+const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 
 // A ``` (or longer) fence on its own — possibly indented, possibly with an
 // info string — toggles fenced-code mode. Matching the opener loosely is
@@ -144,8 +153,15 @@ function transformLine(
     const label = m[1] ?? "";
     const url = m[2] ?? "";
     if (!isSafeUrl(url)) {
-      // Not a URL — a path-shaped target is a file reference; anything else
-      // (a bare `guide`, a javascript: scheme) stays literal with no rewrite.
+      // Not a URL caret will open — but a target carrying any scheme, or the
+      // protocol-relative `//host/…` form, is still a URL slot rather than a
+      // path, however its tail reads. classify judges a path by its last
+      // segment, so `ftp://host/lib.ts` would otherwise pass as path-shaped and
+      // resolve against the project's own lib.ts. The scan masks URLs inside
+      // code for the same reason; this is that guard on the link side.
+      if (HAS_SCHEME.test(url) || url.startsWith("//")) continue;
+      // A path-shaped target is a file reference; anything else (a bare
+      // `guide`) stays literal with no rewrite.
       const ref = classify(url);
       if (ref === null) continue;
       rewrites.push({ start, end, display: label, href: null, file: { ...ref, target: url } });
@@ -196,15 +212,18 @@ function transformLine(
       spans.push({ startCol, endCol, href: rw.href, label: rw.display });
     }
     if (rw.file != null) {
-      // ponytail: shiki emits a collapsed link's line as one coarse prose token,
-      // and tagFileRefTokens tags only a token that STARTS at the reference — so
-      // a file link opening its line gets the glyph and one buried mid-sentence
-      // gets the click and tooltip without it. Splitting library-owned tokens is
-      // the upgrade path (EXC-866); this is the same degradation the inline-code
-      // references already accept.
-      // The target rides along only when the label hides it — a label that
-      // already shows the path needs no tooltip repeating it.
-      const target = rw.display.includes(rw.file.path) ? undefined : rw.file.target;
+      // ponytail: a reference gets the glyph only where its columns coincide
+      // with a shiki token — the backticked-path label. A bare-path or prose
+      // label collapses into one coarse prose token that tagFileRefTokens
+      // refuses (tagging it would chip the whole line), so those get the click
+      // and the tooltip without the glyph. Painting exact columns the way
+      // linkHighlight.ts does is the upgrade path (EXC-866).
+      //
+      // The target rides along only when the label hides it. Testing the raw
+      // target, not the path, is what keeps `[a/b.md](a/b.md:42)` — whose label
+      // shows the file but not the line — from suppressing the one affordance
+      // that could say which line the click lands on.
+      const target = rw.display.includes(rw.file.target) ? undefined : rw.file.target;
       fileRefs.push({ startCol, endCol, path: rw.file.path, line: rw.file.line, target });
     }
   }

@@ -124,7 +124,10 @@ const KNOWN_EXTENSIONS: ReadonlySet<string> = new Set([
  * The one definition of "path-shaped" in the codebase: the scan below applies it
  * to runs inside inline code, and the link layer applies it to a `[label](target)`
  * target before collapsing it (EXC-954). A second, drifting notion would let the
- * two decoration paths disagree about the same text. */
+ * two decoration paths disagree about the same text. Each caller adds its own
+ * URL exclusion first, since this judges a run by its last segment and a URL's
+ * tail can read as a path: the scan masks URLs inside code, the link layer
+ * rejects a target carrying a scheme. */
 export function classify(raw: string): { path: string; line?: number } | null {
   let path = raw;
   let line: number | undefined;
@@ -193,11 +196,16 @@ export function buildFileRefLayer(text: string): FileRefSpanMap {
 
 /** Unions the scanned and emitted reference maps into one candidate set. Where a
  * pair overlaps — a markdown link whose label is itself an inline-code path — the
- * SCANNED span's columns win (inline code is where a path gets its own shiki
- * token, so they place the glyph tight against the filename) and the EMITTED
- * span's path/line/target win (the link's real destination, which need not be
- * what the label says). Exactly one span survives per collision, so the label
- * never draws two glyphs. Each line's spans are sorted by startCol. */
+ * leftmost SCANNED span's columns win (inline code is where a path gets its own
+ * shiki token, so they place the glyph tight against the filename) and the
+ * EMITTED span's path/line/target win (the link's real destination, which need
+ * not be what the label says). Every span an emitted one covers collapses into
+ * that single survivor, so a label citing two paths draws one glyph pointing at
+ * the link's target rather than two, one of them at a file the link never named.
+ * Each line's spans are sorted by startCol.
+ *
+ * Both maps and their spans are treated as immutable: the result carries emitted
+ * spans by reference rather than copying them. */
 export function mergeFileRefSpans(
   scanned: FileRefSpanMap,
   emitted: FileRefSpanMap,
@@ -205,12 +213,21 @@ export function mergeFileRefSpans(
   const merged: FileRefSpanMap = new Map();
   for (const [line, spans] of scanned) merged.set(line, [...spans]);
   for (const [line, spans] of emitted) {
-    const into = merged.get(line) ?? [];
+    let into = merged.get(line) ?? [];
     for (const span of spans) {
-      const i = into.findIndex((s) => span.startCol < s.endCol && span.endCol > s.startCol);
-      const prior = i === -1 ? undefined : into[i];
-      if (prior === undefined) into.push(span);
-      else into[i] = { ...prior, path: span.path, line: span.line, target: span.target };
+      const hits = (s: FileRefSpan) => span.startCol < s.endCol && span.endCol > s.startCol;
+      const anchor = into.find(hits);
+      if (anchor === undefined) into.push(span);
+      else {
+        into = into.filter((s) => !hits(s));
+        into.push({
+          startCol: anchor.startCol,
+          endCol: anchor.endCol,
+          path: span.path,
+          line: span.line,
+          target: span.target,
+        });
+      }
     }
     merged.set(line, into);
   }

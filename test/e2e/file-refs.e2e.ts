@@ -3,6 +3,8 @@
 // that resolves to a real file in the review's cwd gets a file icon (its token
 // tagged data-file-ref in the shadow root) and a hover highlight, and CLICKING
 // it opens a syntax-highlighted excerpt popover — hovering alone never does.
+// A path written as a markdown link's target counts as a reference too
+// (EXC-954), which is what the link spec below covers.
 // The popover is a click-opened card that stays put: moving the pointer away
 // never dismisses it (EXC-840 dropped EXC-799's hover-intent tracker); it closes
 // only on Escape or a click outside it, and that dismissing click is swallowed so
@@ -80,9 +82,10 @@ test("marks only references that resolve to a real file", async ({ daemon, page 
     // missing one never does, so the count settles at 1 (not 2).
     await expect.poll(() => fileRefCount(page)).toBe(1);
 
-    // Hovering a resolved reference reveals no preview — hover is highlight-only
-    // (EXC-840); the preview waits for a click. Give the pointer pipeline a beat,
-    // then assert nothing appeared.
+    // Hovering a resolved reference reveals no preview — for an inline-code
+    // reference like this one hover is highlight-only (EXC-840); the preview
+    // waits for a click. Give the pointer pipeline a beat, then assert nothing
+    // appeared.
     await page.locator("[data-file-ref]").first().hover();
     const t0 = await page.evaluate(() => performance.now());
     await page.waitForFunction((t) => performance.now() > t + 300, t0);
@@ -142,20 +145,21 @@ test("marks references under a vendor palette too", async ({ daemon, page }) => 
 
 test("marks a markdown link whose target is a file, exactly once", async ({ daemon, page }) => {
   // EXC-954: a `[label](path)` link renders as a file reference rather than
-  // literal link syntax. Two facts hold that design up and neither is reachable
-  // from a unit — both are properties of the real shadow-root tagging:
+  // literal link syntax. What the glyph can attach to is a property of shiki's
+  // real token boundaries, so it is only observable here.
   //
-  //   - shiki must emit a collapsed link's line such that a token STARTS at the
-  //     label, or tagFileRefTokens has nothing to hang the glyph on;
-  //   - the backticked-path label — the citation shape this repo's own plans use —
-  //     must end up with ONE glyph, not two. Both decoration paths fire on it: the
-  //     link layer emits over the whole label, and the inline-code scan finds the
-  //     path inside the surviving backticks.
+  // A backticked-path label — `` [`src/other.ts`](src/other.ts) ``, the citation
+  // shape this repo's own plans use — keeps its backticks in the display text, so
+  // the path is still its own token and takes the glyph. It is also the shape
+  // where BOTH decoration paths fire: the link layer emits over the whole label
+  // and the inline-code scan finds the path inside it, so it is the one that
+  // could draw two glyphs.
   //
-  // The count is the whole assertion set: 2 (not 1) proves the backticked form
-  // decorates at all, 2 (not 3) proves it decorates only once, and 2 (not 4)
-  // proves the link to a missing file never does.
-  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  // A bare-path label collapses into ordinary prose, which shiki emits as one
+  // coarse token running to the end of the line. tagFileRefTokens refuses it —
+  // the glyph and its hover chip would wrap the whole sentence — so that shape
+  // is clickable without being marked. Both halves are asserted below.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS, "src/other.ts": CACHE_TS });
   try {
     await daemon.seed({
       cwd: proj.dir,
@@ -164,7 +168,7 @@ test("marks a markdown link whose target is a file, exactly once", async ({ daem
         "",
         "[src/cache.ts](src/cache.ts) holds the key.",
         "",
-        "[`src/cache.ts`](src/cache.ts) is where it lives.",
+        "[`src/other.ts`](src/other.ts) is where it lives.",
         "",
         "[a ghost](src/ghost.md) does not exist.",
         "",
@@ -173,15 +177,34 @@ test("marks a markdown link whose target is a file, exactly once", async ({ daem
     await page.goto("/");
     await expect(page.locator(".diff-plan")).toBeVisible();
 
-    await expect.poll(() => fileRefCount(page)).toBe(2);
+    // One glyph: the backticked label's. Not 2 — the bare-path label has no token
+    // to take it. Not 0 — the backticked label must still decorate. Not 3 — the
+    // link to a missing file never does.
+    await expect.poll(() => fileRefCount(page)).toBe(1);
 
-    // The collision-merged span is clickable, not merely visible: click the
-    // backticked link's token and the preview opens on the file it points at.
-    await page.locator("[data-file-ref]").nth(1).click();
+    // And it sits on the path alone. This is the assertion the count cannot make:
+    // a glyph drawn around the entire sentence would still count as one.
+    const tagged = await page.evaluate(() => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+      return sh?.querySelector("[data-file-ref]")?.textContent ?? null;
+    });
+    expect(tagged).toBe("src/other.ts");
+
+    // The collision-merged span is clickable, not merely visible — and the two
+    // links point at different files, so the preview's content is what proves
+    // which span was clicked.
+    await page.locator("[data-file-ref]").click();
     const preview = page.locator("[data-file-preview]");
     await expect(preview).toBeVisible();
+    await expect(preview).toContainText("src/other.ts");
+
+    // The unmarked bare-path label still opens its own file on click: it lost the
+    // glyph, not the affordance.
+    await page.keyboard.press("Escape");
+    await expect(preview).toHaveCount(0);
+    await page.locator(".diffview").getByText("holds the key.", { exact: false }).click();
+    await expect(preview).toBeVisible();
     await expect(preview).toContainText("src/cache.ts");
-    await expect(preview).toContainText("MARKER_LINE_ONE");
   } finally {
     await proj.cleanup();
   }

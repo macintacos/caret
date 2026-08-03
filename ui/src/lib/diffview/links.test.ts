@@ -4,7 +4,8 @@ import { buildFileRefLayer, mergeFileRefSpans } from "$lib/diffview/fileRefs.ts"
 import { buildLinkLayer, openLinkInNewTab } from "$lib/diffview/links.ts";
 
 // buildLinkLayer is the pure transform: plan source text -> display text +
-// a per-line span map of clickable link ranges. It is strictly per-line — it
+// a per-line span map of clickable link ranges + a per-line map of file
+// references emitted from path-shaped link targets. It is strictly per-line — it
 // never merges or splits lines, so line count is invariant. Columns in the
 // span map are 0-based, half-open [startCol, endCol) into the *display* line.
 
@@ -302,6 +303,30 @@ describe("buildLinkLayer file-path targets", () => {
     expect(ref?.line).toBe(42);
   });
 
+  test.each([
+    ["[the bundle](ftp://host/lib.ts)", "a non-http scheme"],
+    ["[click here](//evil.test/a.js)", "a protocol-relative URL"],
+    ["[mail](mailto:a@b.test/x.md)", "a mailto address"],
+  ])("%j stays literal — %s is a URL slot, not a path", (input) => {
+    // classify reads a path's tail, so a URL ending in a known extension looks
+    // path-shaped to it. The scan pairs it with a URL mask for exactly this
+    // reason; the link layer rejects the scheme instead. Without the guard these
+    // reach the daemon, whose basename fallback would resolve them to an
+    // unrelated local file and preview it.
+    const { text, spans, fileRefs } = buildLinkLayer(input);
+    expect(text).toBe(input);
+    expect(spans.get(1) ?? []).toHaveLength(0);
+    expect(fileRefs.size).toBe(0);
+  });
+
+  test("a :line target the label does not show gets the tooltip", () => {
+    // The label reads `a/b.md` but the click lands on line 42 — hover is the only
+    // place that can say so, so the target must survive the suppression rule.
+    const ref = (buildLinkLayer("[a/b.md](a/b.md:42)").fileRefs.get(1) ?? [])[0];
+    expect(ref?.line).toBe(42);
+    expect(ref?.target).toBe("a/b.md:42");
+  });
+
   test("an http link is unchanged — a link span, and no file ref", () => {
     const { text, spans, fileRefs } = buildLinkLayer("[docs](https://x.test/a.md)");
     expect(text).toBe("docs");
@@ -356,18 +381,17 @@ describe("buildLinkLayer backticked-path labels", () => {
   // The double-glyph regression guard. This is the exact composition DiffPlanView
   // performs, so it holds the collision rule green from the view's perspective.
   test.each([
-    ["[`foo/bar.ts`](foo/bar.ts)", "foo/bar.ts"],
-    ["[`a.ts`](b/c.ts)", "b/c.ts"],
-  ])("merging %j yields exactly one span, on the path inside the backticks", (input, path) => {
+    ["[`foo/bar.ts`](foo/bar.ts)", "foo/bar.ts", "foo/bar.ts"],
+    ["[`a.ts`](b/c.ts)", "b/c.ts", "a.ts"],
+  ])("merging %j yields exactly one span, on the path inside the backticks", (input, path, covered) => {
     const layer = buildLinkLayer(input);
     const merged = mergeFileRefSpans(buildFileRefLayer(layer.text), layer.fileRefs);
     const refs = merged.get(1) ?? [];
     expect(refs).toHaveLength(1);
     expect(refs[0]?.path).toBe(path);
-    // Positioned on the path itself, inside the backticks — not over them.
-    expect(layer.text.slice(refs[0]?.startCol, refs[0]?.endCol)).toBe(
-      layer.text.replaceAll("`", ""),
-    );
+    // Positioned on the label's path itself, inside the backticks — not over
+    // them — while the span's own path stays the link's target.
+    expect(layer.text.slice(refs[0]?.startCol, refs[0]?.endCol)).toBe(covered);
   });
 });
 

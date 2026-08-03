@@ -8,9 +8,11 @@ import {
   mergeFileRefSpans,
 } from "$lib/diffview/fileRefs.ts";
 
-// buildFileRefLayer is the pure detection half of the filename-hover feature
-// (EXC-687): it scans a plan's display source for path-shaped tokens *inside
-// inline-code spans* and returns per-line spans. Detection is scoped to inline
+// buildFileRefLayer is one of two detection sources for the filename-reference
+// feature (EXC-687): it scans a plan's display source for path-shaped tokens
+// *inside inline-code spans* and returns per-line spans. The other is the link
+// layer's emission over collapsed markdown-link labels (EXC-954), which
+// mergeFileRefSpans below unions with this one. This scan stays scoped to inline
 // code because that is where a path renders as its own shiki token (prose is one
 // coarse run); it is deliberately permissive on *shape* — whether a candidate is
 // a real file is the daemon's call — but keeps precision high by requiring a
@@ -170,6 +172,27 @@ describe("mergeFileRefSpans", () => {
     expect(merged.get(1)?.[0]?.startCol).toBe(1);
     expect(merged.get(1)?.[0]?.endCol).toBe(5);
     expect(merged.get(1)?.[0]?.path).toBe("a.ts");
+  });
+
+  test("every overlapping scanned span collapses, not just the first", () => {
+    // A label citing two inline-code paths — [`a.ts` and `b.ts`](c/d.ts). Both
+    // scanned spans sit under the one emitted span; leaving the second would
+    // draw a second glyph and make `b.ts` independently clickable, pointing at
+    // a file the link never named.
+    const merged = mergeFileRefSpans(
+      map([
+        1,
+        [
+          { startCol: 1, endCol: 5, path: "a.ts" },
+          { startCol: 12, endCol: 16, path: "b.ts" },
+        ],
+      ]),
+      map([1, [{ startCol: 0, endCol: 17, path: "c/d.ts", target: "c/d.ts" }]]),
+    );
+    expect(merged.get(1)).toHaveLength(1);
+    expect(merged.get(1)?.[0]?.path).toBe("c/d.ts");
+    // The leftmost scanned span places the glyph.
+    expect(merged.get(1)?.[0]?.startCol).toBe(1);
   });
 
   test("on a collision the emitted path wins — the click opens the link's target", () => {

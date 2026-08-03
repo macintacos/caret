@@ -360,10 +360,12 @@ describe("the filename-reference icon (EXC-687)", () => {
   });
 });
 
-// EXC-840: the file reference opens its preview on click; hover only highlights.
-// The affordance is CSS-only — a faint amber wash on the tagged token, the same
-// warm hue as its inline-code text — so the pins here keep it warm (not grey),
-// roomy (a chip around the reference, no layout shift), and motionless.
+// EXC-840: the file reference opens its preview on click; hover highlights it.
+// The highlight is CSS — a faint amber wash on the tagged token, the same warm
+// hue as its inline-code text — so the pins here keep it warm (not grey), roomy
+// (a chip around the reference, no layout shift), and motionless. A reference
+// carrying a link target also shows a tooltip on hover (EXC-954); that one is
+// rendered in JS and out of scope for these CSS pins.
 describe("the filename-reference hover highlight (EXC-840)", () => {
   const tokenRule =
     overrideDecls.match(/\[data-content\]\s*\[data-file-ref\]\s*\{[^}]*\}/)?.[0] ?? "";

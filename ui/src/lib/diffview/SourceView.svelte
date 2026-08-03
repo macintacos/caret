@@ -51,8 +51,9 @@
     /** Opt-in filename-reference layer (EXC-687): per-line spans for the resolved
      * file references in the display text. When present, the token starting each
      * reference is tagged (data-file-ref) so the override sheet draws the file
-     * icon and the hover highlight, and clicking it reports up so the host can
-     * show the excerpt preview (EXC-840). */
+     * icon and the hover highlight; a reference whose label hides its path also
+     * reveals that path in the link tooltip on hover (EXC-954). Clicking one
+     * reports up so the host can show the excerpt preview (EXC-840). */
     fileRefs?: FileRefSpanMap;
     /** A token over a file reference was clicked, with the token element to
      * anchor the preview to. */
