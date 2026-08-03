@@ -353,6 +353,39 @@ test("a failed reconnect logs step=reconnect, not the poll step", async () => {
   expect(recs.some((r) => r.step === "longPoll")).toBe(false);
 });
 
+// ---- cmux pane capture (EXC-961) ----
+
+/** Capture the PlanInput runReview posts, so the pane stamp is observable. */
+async function postedInput(over: Partial<Parameters<typeof runReview>[1]> = {}) {
+  let posted: PlanInput | undefined;
+  await runReview(
+    stdin,
+    reviewDeps({
+      postReview: async (_baseUrl: string, input: PlanInput) => {
+        posted = input;
+        return { id: "rid" };
+      },
+      ...over,
+    }),
+  );
+  return posted;
+}
+
+test("the cmux pane readPane reports rides onto the posted plan input", async () => {
+  const posted = await postedInput({
+    readPane: () => ({ workspaceId: "w1", surfaceId: "s1" }),
+  });
+  expect(posted?.cmux).toEqual({ workspaceId: "w1", surfaceId: "s1" });
+});
+
+test("no cmux pane is posted when readPane is unwired", async () => {
+  expect((await postedInput())?.cmux).toBeUndefined();
+});
+
+test("no cmux pane is posted when readPane reports none (not under cmux)", async () => {
+  expect((await postedInput({ readPane: () => undefined }))?.cmux).toBeUndefined();
+});
+
 // ---- plan-format guard ----
 
 function planStdin(plan: string | undefined): string {

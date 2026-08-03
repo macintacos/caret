@@ -285,6 +285,29 @@ is shared. Note also that a _hidden_ tab's poll is throttled by Chrome after ~5 
 the background, which can delay a notification by up to a minute; an unfocused-but-visible
 window polls at full rate.
 
+### cmux unread marks
+
+Under [cmux](https://github.com/coder/cmux), the pane an agent runs in gets an unread mark
+when the agent submits a plan — but the plan is reviewed in the browser, so nothing would
+otherwise clear it. caret joins the two ends: at submit time the hook captures its
+`CMUX_WORKSPACE_ID` and `CMUX_SURFACE_ID`, and the ids ride along on the review record
+(the daemon is long-lived and shared across sessions, so it never inherits any one agent's
+environment). Once the plan is reviewed, the daemon runs
+`cmux mark-notification-read --workspace <id> --surface <id>` for that one pane.
+
+Two things count as reviewed, and either clears the mark:
+
+- **You decide on the plan** — approve, reject, or request changes.
+- **You read it** — the plan on screen, the tab visible and focused, for 5 seconds
+  uninterrupted. Losing focus or hiding the tab cancels the dwell rather than pausing it,
+  so a backgrounded tab left open never clears a mark on its own.
+
+Both ids are required, and every call names both — caret never uses `--all`, so one plan's
+mark can only ever clear the pane that submitted it. There is nothing to configure: with
+either id missing the integration is silently inert, which is what running outside cmux
+looks like. If the `cmux` binary isn't on the daemon's PATH, the mark is left standing and
+one `warn` lands in the daemon log.
+
 ## Configuration
 
 ### Platform support

@@ -73,6 +73,9 @@ export async function routeIncomingPlan(
     await store.update(latest.id, (r) => {
       r.versions.push({ version, plan, annotations: [], createdAt: now });
       r.status = "pending";
+      // Re-point at the pane that actually submitted this revision; a submission
+      // carrying none leaves the original in place (EXC-961).
+      r.cmux = input.cmux ?? r.cmux;
       // Re-pended and awaiting a fresh decision: drop the prior rejection so the
       // daemon's /decision handler waits for the next decision instead of
       // re-serving the stale deny.
@@ -106,6 +109,7 @@ export async function routeIncomingPlan(
     title: input.title?.trim() || deriveTitle(plan),
     status: "pending",
     planEpoch,
+    cmux: input.cmux,
     versions: [{ version: 1, plan, annotations: [], createdAt: now }],
     createdAt: now,
     updatedAt: now,

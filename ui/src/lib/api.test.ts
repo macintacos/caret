@@ -10,6 +10,7 @@ import {
   getHealth,
   getReview,
   HttpError,
+  markSeen,
   putDraft,
   resolveFileRefs,
   resolveReview,
@@ -373,5 +374,28 @@ describe("redaction — no body text reaches the wire", () => {
     expect(text).not.toContain(FEEDBACK);
     expect(text).not.toContain(QUOTE);
     expect(text).not.toContain(COMMENT);
+  });
+});
+
+describe("markSeen", () => {
+  test("posts to the review's seen route", async () => {
+    let seen: { url: string; method: string | undefined } | undefined;
+    respond = (url, options) => {
+      seen = { url, method: options?.method };
+      return Promise.resolve(new Response(null, { status: 204 }));
+    };
+    await markSeen(ID);
+    expect(seen?.url).toContain(`/api/reviews/${ID}/seen`);
+    expect(seen?.method).toBe("POST");
+  });
+
+  test("swallows a failed request (never throws)", async () => {
+    respond = () => Promise.resolve(new Response(null, { status: 500 }));
+    expect(await markSeen(ID)).toBeUndefined();
+  });
+
+  test("swallows a network failure (never throws)", async () => {
+    respond = () => Promise.reject(new Error("offline"));
+    expect(await markSeen(ID)).toBeUndefined();
   });
 });
