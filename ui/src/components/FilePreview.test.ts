@@ -18,25 +18,11 @@ import FilePreview from "@/components/FilePreview.svelte";
 
 const ID = "r1";
 
-// A throwaway anchor rect; happy-dom has no layout, so placement is a no-op here.
-const anchor = {
-  left: 20,
-  top: 120,
-  right: 80,
-  bottom: 136,
-  width: 60,
-  height: 16,
-  x: 20,
-  y: 120,
-  toJSON: () => ({}),
-} as DOMRect;
-
 function props(over: Partial<{ path: string; line: number }> = {}) {
   return {
     reviewId: ID,
     path: over.path ?? "src/cache.ts",
     line: over.line,
-    anchor,
   };
 }
 

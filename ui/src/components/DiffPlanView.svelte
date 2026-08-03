@@ -58,7 +58,14 @@
   import { activeHeadingLine, extractHeadings, lineForSlug, shouldShowToc, slugForLine } from "$lib/toc.ts";
   import { NARROW_WIDTH_PX, TIGHT_WIDTH_PX } from "$lib/layout.ts";
   import { readTocOpen, writeTocOpen } from "$lib/tocPref.ts";
-  import { lineAtReadingZone } from "$lib/diffview/scroll.ts";
+  import {
+    clampDrawerSize,
+    DEFAULT_DRAWER_SHARE,
+    type DrawerEdge,
+    readDrawerSize,
+    writeDrawerSize,
+  } from "$lib/fileDrawer.ts";
+  import { lineAtReadingZone, REVEAL_MARGIN_BOTTOM, revealScrollDelta } from "$lib/diffview/scroll.ts";
   import {
     type Annotation,
     type ClientReview,
@@ -71,6 +78,7 @@
   import LegacyAnnotationList from "@/components/LegacyAnnotationList.svelte";
   import SourceToc from "@/components/SourceToc.svelte";
   import CodeCopyButton from "@/components/CodeCopyButton.svelte";
+  import FileDrawer from "@/components/FileDrawer.svelte";
   import FilePreview from "@/components/FilePreview.svelte";
   import Icon from "@/components/Icon.svelte";
 
@@ -319,27 +327,24 @@
   });
 
   // The file reference whose preview is open (opened by clicking its token —
-  // EXC-687/EXC-840), plus the token rect the preview anchors to. The preview is
-  // a click-opened popover that stays put — it does not chase the cursor. It
-  // closes only through the dismissal effect below (Escape, or a click away).
-  let filePreview = $state<{ path: string; line?: number; anchor: DOMRect } | undefined>();
+  // EXC-687/EXC-840), plus the token itself, which the reveal effect below
+  // measures so the clicked filename stays visible beside the drawer. The
+  // preview stays put once open; it closes only through the dismissal effect
+  // below (Escape, or a click away).
+  let filePreview = $state<{ path: string; line?: number; token: HTMLElement } | undefined>();
   function openFilePreview(ref: FileRefSpan, tokenElement: HTMLElement): void {
-    filePreview = {
-      path: ref.path,
-      line: ref.line,
-      anchor: tokenElement.getBoundingClientRect(),
-    };
+    filePreview = { path: ref.path, line: ref.line, token: tokenElement };
   }
 
-  // Dismissal (EXC-840, superseding EXC-799's hover-intent tracker): a click-opened
+  // Dismissal (EXC-840, superseding EXC-799's hover-intent tracker): an open
   // preview stays open until the reader dismisses it — Escape, or a click anywhere
-  // outside the card. Both listen in the CAPTURE phase so they run before the plan's
+  // outside the drawer. Both listen in the CAPTURE phase so they run before the plan's
   // own handlers, and the outside click is SWALLOWED (stopImmediatePropagation +
   // preventDefault): the first click only closes the preview and never also opens a
-  // line comment; a second click then does its normal thing. A click inside the card
-  // is left alone, so the reader can still scroll a long excerpt line or select text
-  // in it. No pointer-trajectory tracking remains — moving the cursor away no longer
-  // dismisses.
+  // line comment; a second click then does its normal thing. A click inside the lane
+  // is left alone, so the reader can still scroll a long excerpt line, select text in
+  // it, or drag the resize handle out past the lane's edge. No pointer-trajectory
+  // tracking remains — moving the cursor away no longer dismisses.
   $effect(() => {
     if (filePreview === undefined) return;
     const onKey = (e: KeyboardEvent) => {
@@ -349,8 +354,13 @@
       e.stopPropagation();
     };
     const onClick = (e: MouseEvent) => {
-      const card = document.querySelector("[data-file-preview]");
-      if (card != null && e.composedPath().includes(card)) return;
+      const path = e.composedPath();
+      // A click on another filename passes through untouched, so SourceView's
+      // token handler fires and swaps the drawer's contents on that same click
+      // rather than the click being spent closing the drawer.
+      if (path.some((n) => n instanceof Element && n.matches("[data-file-ref]"))) return;
+      const drawer = document.querySelector("[data-file-drawer]");
+      if (drawer != null && path.includes(drawer)) return;
       filePreview = undefined;
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -361,6 +371,63 @@
       window.removeEventListener("keydown", onKey, { capture: true });
       window.removeEventListener("click", onClick, { capture: true });
     };
+  });
+
+  // Which edge the preview docks to: the right of the plan surface when there is
+  // width to spare, the bottom once there isn't. It rides the same `narrow`
+  // subscription the compare view's split→unified flip uses, so a resize
+  // re-docks the drawer for free and there is no second breakpoint to keep in
+  // sync — and no user-facing control, since the choice is purely about room.
+  const drawerEdge = $derived<DrawerEdge>(narrow ? "bottom" : "right");
+  // The whole surface the plan and the drawer divide between them. The reveal
+  // effect measures THIS rather than .diff-plan: the surface's height never
+  // changes, so the geometry is the same whether the effect runs before, during,
+  // or after the lane's opening wipe.
+  let surfaceEl = $state<HTMLElement | undefined>();
+  let drawerSize = $state(0);
+  // Seed the lane from what this edge remembers, else a share of the axis it
+  // docks along. Keyed on the edge, so crossing the breakpoint re-seeds from the
+  // other edge's memory rather than carrying a width over as a height.
+  $effect(() => {
+    const edge = drawerEdge;
+    const rect = surfaceEl?.getBoundingClientRect();
+    const available = rect === undefined ? 0 : edge === "right" ? rect.width : rect.height;
+    drawerSize = clampDrawerSize(
+      readDrawerSize(edge) ?? available * DEFAULT_DRAWER_SHARE,
+      available,
+    );
+  });
+  function setDrawerSize(px: number): void {
+    drawerSize = px;
+    writeDrawerSize(drawerEdge, px);
+  }
+
+  // Scroll the clicked filename clear of the drawer. Only the bottom dock can
+  // cover it — a right dock shortens the plan's width, never its reading height —
+  // so the inset is the lane's height there and zero otherwise. The guarantee is
+  // free rather than a spacer trick: shortening .diff-plan raises its max scroll
+  // by the same amount, and the EXC-772 scroll-past-the-end room means even a
+  // reference on the plan's last line has somewhere to go. `drawerSize` is read
+  // untracked so dragging the handle resizes the lane without also scrolling the
+  // plan on every frame. `behavior: "auto"` because the lane is already
+  // animating, and a competing smooth scroll reads as two motions.
+  $effect(() => {
+    const token = filePreview?.token;
+    const edge = drawerEdge;
+    if (token === undefined || !token.isConnected) return;
+    const scroller = scrollEl;
+    const surface = surfaceEl?.getBoundingClientRect();
+    if (scroller === undefined || surface === undefined) return;
+    const rect = token.getBoundingClientRect();
+    const inset = untrack(() => (edge === "bottom" ? drawerSize : 0));
+    const delta = revealScrollDelta({
+      cardTop: rect.top,
+      cardBottom: rect.bottom,
+      viewTop: scroller.getBoundingClientRect().top,
+      viewBottom: surface.bottom - inset,
+      margin: REVEAL_MARGIN_BOTTOM,
+    });
+    if (delta !== 0) scroller.scrollBy({ top: delta, behavior: "auto" });
   });
 
   const baseText = $derived(compare.planFor(review.versions, compareStore.baseVersion));
@@ -1088,205 +1155,217 @@
   {/if}
 </div>
 
-<div class="diff-surface">
-  <!-- The vim `/` search dock (EXC-832), top-right of the plan (single-version only).
-       Absolutely positioned within .diff-surface so it stays put over the scrolling
-       plan. Holds either the "/ to search" hint chip (Show Hints on) or the open search
-       pill; pressing `/` swaps the chip for the pill, which expands from this same
-       top-right corner (its CSS enter animation), reading as the chip growing into the
-       field. Esc/✕ swaps back to the chip. -->
-  {#if !showDiff}
-    <div class="search-dock">
-      {#if keyboardStore.searchOpen}
-        <PlanSearch
-          bind:query={keyboardStore.searchQuery}
-          matchCount={searchMatches.length}
-          currentIndex={keyboardStore.searchIndex}
-          committed={keyboardStore.searchCommitted}
-          closing={keyboardStore.searchClosing}
-          oncommit={() => keyboard.commitSearch()}
-          onnext={() => keyboard.stepSearch(1)}
-          onprev={() => keyboard.stepSearch(-1)}
-          onclose={() => keyboard.closeSearch()}
-        />
-      {:else if showShortcutHints}
-        <div class="search-hint" role="note">
-          <Kbd class="kbd-sm">/</Kbd>
-          <span>to search</span>
-        </div>
-      {/if}
-    </div>
-  {/if}
-  <!-- The contents pane and gutter composer are the single-version surface only.
-       Compare mode is a clean diff with no ToC, no gutter, no annotations. -->
-  {#if !showDiff && hasToc}
-    <div id="plan-toc" class="toc-rail" class:collapsed={!tocShown}>
-      <SourceToc {headings} {activeLine} onJump={(line) => api?.scrollToLine(line)} />
-    </div>
-  {/if}
-  <div class="diff-plan" bind:this={scrollEl} onmouseenter={showDragHint} role="presentation">
-    {#if showDiff}
-      <!-- Compare mode: a diff between the selected version pair. Base is the
-           reference version (the default base is the current version) and renders
-           on the diff's "after" side; target is what it's compared against and
-           renders on the "before" side — so the default current-vs-previous pair
-           reads as the changes that produced the current version. Annotations and
-           the gutter are deliberately omitted. The layout switches at runtime via
-           the picker (no remount).
-
-           The side names are the version numbers, so the sticky compare header
-           reads the pair as `v{target} → v{base}` (the rename arrow is the
-           library's, free when the two names differ) — naming what is being
-           compared instead of a placeholder filename. -->
-      <SourceDiffView
-        oldDoc={{ name: `v${compareStore.targetVersion}`, text: targetText }}
-        newDoc={{ name: `v${compareStore.baseVersion}`, text: baseText }}
-        contentKey={diffContentKey}
-        options={{
-          ...readerOptions,
-          diffStyle: effectiveDiffStyle,
-          diffIndicators: compareStore.diffIndicators,
-        }}
-      />
-    {:else}
-      <!-- Live range readout: a zero-height sticky rail rendered first so it pins to
-           the top of the scroll viewport from scroll position 0 without reflowing
-           the line grid (the absolutely-positioned readout inside it takes no flow
-           space). It stays visible as the selection — mouse drag or keyboard visual
-           select — and any auto-scroll move. Reads the same ascending range the
-           composer label will, and is gone the instant the gesture ends or the
-           composer opens. aria-live so a reader hears the range grow. -->
-      <div class="drag-readout-rail" aria-hidden={rangeReadout == null}>
-        {#if rangeReadout}
-          <div class="drag-readout metric" role="status" aria-live="polite">{rangeReadout}</div>
+<div
+  class="diff-surface"
+  class:dock-bottom={drawerEdge === "bottom"}
+  bind:this={surfaceEl}
+>
+  <div class="plan-pane">
+    <!-- The vim `/` search dock (EXC-832), top-right of the plan (single-version only).
+         Absolutely positioned within .plan-pane so it stays put over the scrolling
+         plan, and so it tracks the plan's edge rather than the drawer's when one is
+         open. Holds either the "/ to search" hint chip (Show Hints on) or the open search
+         pill; pressing `/` swaps the chip for the pill, which expands from this same
+         top-right corner (its CSS enter animation), reading as the chip growing into the
+         field. Esc/✕ swaps back to the chip. -->
+    {#if !showDiff}
+      <div class="search-dock">
+        {#if keyboardStore.searchOpen}
+          <PlanSearch
+            bind:query={keyboardStore.searchQuery}
+            matchCount={searchMatches.length}
+            currentIndex={keyboardStore.searchIndex}
+            committed={keyboardStore.searchCommitted}
+            closing={keyboardStore.searchClosing}
+            oncommit={() => keyboard.commitSearch()}
+            onnext={() => keyboard.stepSearch(1)}
+            onprev={() => keyboard.stepSearch(-1)}
+            onclose={() => keyboard.closeSearch()}
+          />
+        {:else if showShortcutHints}
+          <div class="search-hint" role="note">
+            <Kbd class="kbd-sm">/</Kbd>
+            <span>to search</span>
+          </div>
         {/if}
       </div>
-      <SourceView
-        doc={{ name: "plan.md", text: linkLayer.text }}
-        links={linkLayer.spans}
-        {fileRefs}
-        onFileRefClick={openFilePreview}
-        annotations={sourceAnnotations}
-        options={readerOptions}
-        {gutter}
-        {contentKey}
-        onReady={onSourceReady}
-        onLineComment={(line) => openRange(line, line)}
-        onLineRangeComment={(start, end) => openRange(start, end)}
-        onLineRangePreview={(range) => {
-          // Starting a body drag retires the discoverability hint — it is the gesture
-          // the hint advertises (the gutter drag retires it via onLineSelectionStart).
-          if (range != null) retireDragHint();
-          dragRange = range ?? undefined;
-        }}
-        selectedRange={pending ?? visualSelection ?? null}
-        cursorLine={keyboardStore.cursorLine}
-        {searchMatches}
-        currentMatchIndex={keyboardStore.searchIndex}
-      />
-      <!-- The comment-span bracket overlay: rounded gutter rails marking each
-           comment's covered lines. It layers over the .diff-plan scroll content
-           (a child of it, positioned by the action against the host's shadow
-           [data-line] rows) so the rails scroll with the rows; it is decorative
-           (pointer-events: none). -->
-      <div use:bracketLayer={{ host, spans: bracketSpans }}></div>
-      <!-- The per-code-block copy button (EXC-692): shown at the top-right of the
-           fenced block the reviewer is hovering (tracked above). Keyed on the block
-           so moving to another block resets its copied/checkmark state. It layers over
-           the .diff-plan scroll content, so like the bracket rails it scrolls with the
-           rows. -->
-      {#if hoveredCopy}
-        {#key hoveredCopy.range.start}
-          <CodeCopyButton text={hoveredCopy.text} top={hoveredCopy.top} left={hoveredCopy.left} />
-        {/key}
-      {/if}
-      <!-- The filename-reference preview (EXC-687, click-opened since EXC-840):
-           a viewport-fixed card showing the referenced file's excerpt, anchored
-           to the clicked token. Only appears for references the daemon resolved
-           to a real file. -->
-      {#if filePreview}
-        <FilePreview
-          reviewId={reviewId}
-          path={filePreview.path}
-          line={filePreview.line}
-          anchor={filePreview.anchor}
-          {showShortcutHints}
+    {/if}
+    <!-- The contents pane and gutter composer are the single-version surface only.
+         Compare mode is a clean diff with no ToC, no gutter, no annotations. -->
+    {#if !showDiff && hasToc}
+      <div id="plan-toc" class="toc-rail" class:collapsed={!tocShown}>
+        <SourceToc {headings} {activeLine} onJump={(line) => api?.scrollToLine(line)} />
+      </div>
+    {/if}
+    <div class="diff-plan" bind:this={scrollEl} onmouseenter={showDragHint} role="presentation">
+      {#if showDiff}
+        <!-- Compare mode: a diff between the selected version pair. Base is the
+             reference version (the default base is the current version) and renders
+             on the diff's "after" side; target is what it's compared against and
+             renders on the "before" side — so the default current-vs-previous pair
+             reads as the changes that produced the current version. Annotations and
+             the gutter are deliberately omitted. The layout switches at runtime via
+             the picker (no remount).
+
+             The side names are the version numbers, so the sticky compare header
+             reads the pair as `v{target} → v{base}` (the rename arrow is the
+             library's, free when the two names differ) — naming what is being
+             compared instead of a placeholder filename. -->
+        <SourceDiffView
+          oldDoc={{ name: `v${compareStore.targetVersion}`, text: targetText }}
+          newDoc={{ name: `v${compareStore.baseVersion}`, text: baseText }}
+          contentKey={diffContentKey}
+          options={{
+            ...readerOptions,
+            diffStyle: effectiveDiffStyle,
+            diffIndicators: compareStore.diffIndicators,
+          }}
         />
-      {/if}
-      <!-- Saved comments and the open composer are projected into the library's
-           per-line annotation rows (slotInto), so they render inline between the
-           code lines at their anchor line rather than floating over them. One node
-           per line carries that line's slot; multiple comments on a line stack
-           inside it as a single ordered thread. -->
-      {#each lineThreads as thread (thread.line)}
-        <div use:slotInto={{ host, line: thread.line }}>
-          <SourceAnnotationThread
-            annotations={thread.annotations}
-            {focusedAnnotation}
-            onFocus={onFocusAnnotation}
-            onEdit={onEditAnnotation}
-            onDelete={onDeleteAnnotation}
-          />
+      {:else}
+        <!-- Live range readout: a zero-height sticky rail rendered first so it pins to
+             the top of the scroll viewport from scroll position 0 without reflowing
+             the line grid (the absolutely-positioned readout inside it takes no flow
+             space). It stays visible as the selection — mouse drag or keyboard visual
+             select — and any auto-scroll move. Reads the same ascending range the
+             composer label will, and is gone the instant the gesture ends or the
+             composer opens. aria-live so a reader hears the range grow. -->
+        <div class="drag-readout-rail" aria-hidden={rangeReadout == null}>
+          {#if rangeReadout}
+            <div class="drag-readout metric" role="status" aria-live="polite">{rangeReadout}</div>
+          {/if}
         </div>
-      {/each}
-      {#if pending}
-        <!-- Key the whole composer host container per range, not just the inner
-             SourceComposer. This <div> is the node slotInto projects into the
-             library's annotation row; keying only the composer left it mounted
-             across a range switch, so slotInto reassigned its slot in place, and
-             that reprojection stripped the just-focused editor's DOM caret while
-             CodeMirror kept its offset — the first Backspace then jumped the caret
-             to the start (EXC-780). Remounting the container gives a fresh slot
-             placement on each switch. The key still gives each line a clean
-             composer (SourceComposer/MarkdownEditor seed their text once at mount);
-             the dismissed line's text is retained as a scratch by openRange, so
-             nothing is lost. -->
-        {#key `${pending.startLine}:${pending.endLine}`}
-          <div use:slotInto={{ host, line: pending.endLine }}>
-            <SourceComposer
-              startLine={pending.startLine}
-              endLine={pending.endLine}
-              initial={pendingText}
-              onInput={(text) => (liveText = text)}
-              onSubmit={(comment) => commenting.submit(comment)}
-              onKeep={(text) => commenting.cancel(text)}
-              onDiscard={() => commenting.discardOpen()}
+        <SourceView
+          doc={{ name: "plan.md", text: linkLayer.text }}
+          links={linkLayer.spans}
+          {fileRefs}
+          onFileRefClick={openFilePreview}
+          annotations={sourceAnnotations}
+          options={readerOptions}
+          {gutter}
+          {contentKey}
+          onReady={onSourceReady}
+          onLineComment={(line) => openRange(line, line)}
+          onLineRangeComment={(start, end) => openRange(start, end)}
+          onLineRangePreview={(range) => {
+            // Starting a body drag retires the discoverability hint — it is the gesture
+            // the hint advertises (the gutter drag retires it via onLineSelectionStart).
+            if (range != null) retireDragHint();
+            dragRange = range ?? undefined;
+          }}
+          selectedRange={pending ?? visualSelection ?? null}
+          cursorLine={keyboardStore.cursorLine}
+          {searchMatches}
+          currentMatchIndex={keyboardStore.searchIndex}
+        />
+        <!-- The comment-span bracket overlay: rounded gutter rails marking each
+             comment's covered lines. It layers over the .diff-plan scroll content
+             (a child of it, positioned by the action against the host's shadow
+             [data-line] rows) so the rails scroll with the rows; it is decorative
+             (pointer-events: none). -->
+        <div use:bracketLayer={{ host, spans: bracketSpans }}></div>
+        <!-- The per-code-block copy button (EXC-692): shown at the top-right of the
+             fenced block the reviewer is hovering (tracked above). Keyed on the block
+             so moving to another block resets its copied/checkmark state. It layers over
+             the .diff-plan scroll content, so like the bracket rails it scrolls with the
+             rows. -->
+        {#if hoveredCopy}
+          {#key hoveredCopy.range.start}
+            <CodeCopyButton text={hoveredCopy.text} top={hoveredCopy.top} left={hoveredCopy.left} />
+          {/key}
+        {/if}
+        <!-- Saved comments and the open composer are projected into the library's
+             per-line annotation rows (slotInto), so they render inline between the
+             code lines at their anchor line rather than floating over them. One node
+             per line carries that line's slot; multiple comments on a line stack
+             inside it as a single ordered thread. -->
+        {#each lineThreads as thread (thread.line)}
+          <div use:slotInto={{ host, line: thread.line }}>
+            <SourceAnnotationThread
+              annotations={thread.annotations}
+              {focusedAnnotation}
+              onFocus={onFocusAnnotation}
+              onEdit={onEditAnnotation}
+              onDelete={onDeleteAnnotation}
             />
           </div>
-        {/key}
-      {/if}
-      <!-- Retained scratch drafts: an unsubmitted composer dismissed with typed
-           text leaves a quiet "Resume" marker at its line, clicking which reopens
-           the composer with the text restored. The open composer supersedes the
-           marker for its own range (the reviewer is editing it now), so skip a
-           scratch sharing the pending line. -->
-      <!-- Markers anchor to endLine (matching the composer/card), so two scratches
-           that end on the same line share one library row and stack within it —
-           an uncommon overlap, harmless: each stays clickable and resumable. -->
-      {#each scratches as scratch (scratch.key)}
-        {#if pending?.endLine !== scratch.endLine}
-          <div use:slotInto={{ host, line: scratch.endLine }}>
-            <SourceScratchMarker text={scratch.text} onResume={() => resumeScratch(scratch.key)} />
+        {/each}
+        {#if pending}
+          <!-- Key the whole composer host container per range, not just the inner
+               SourceComposer. This <div> is the node slotInto projects into the
+               library's annotation row; keying only the composer left it mounted
+               across a range switch, so slotInto reassigned its slot in place, and
+               that reprojection stripped the just-focused editor's DOM caret while
+               CodeMirror kept its offset — the first Backspace then jumped the caret
+               to the start (EXC-780). Remounting the container gives a fresh slot
+               placement on each switch. The key still gives each line a clean
+               composer (SourceComposer/MarkdownEditor seed their text once at mount);
+               the dismissed line's text is retained as a scratch by openRange, so
+               nothing is lost. -->
+          {#key `${pending.startLine}:${pending.endLine}`}
+            <div use:slotInto={{ host, line: pending.endLine }}>
+              <SourceComposer
+                startLine={pending.startLine}
+                endLine={pending.endLine}
+                initial={pendingText}
+                onInput={(text) => (liveText = text)}
+                onSubmit={(comment) => commenting.submit(comment)}
+                onKeep={(text) => commenting.cancel(text)}
+                onDiscard={() => commenting.discardOpen()}
+              />
+            </div>
+          {/key}
+        {/if}
+        <!-- Retained scratch drafts: an unsubmitted composer dismissed with typed
+             text leaves a quiet "Resume" marker at its line, clicking which reopens
+             the composer with the text restored. The open composer supersedes the
+             marker for its own range (the reviewer is editing it now), so skip a
+             scratch sharing the pending line. -->
+        <!-- Markers anchor to endLine (matching the composer/card), so two scratches
+             that end on the same line share one library row and stack within it —
+             an uncommon overlap, harmless: each stays clickable and resumable. -->
+        {#each scratches as scratch (scratch.key)}
+          {#if pending?.endLine !== scratch.endLine}
+            <div use:slotInto={{ host, line: scratch.endLine }}>
+              <SourceScratchMarker text={scratch.text} onResume={() => resumeScratch(scratch.key)} />
+            </div>
+          {/if}
+        {/each}
+        <!-- One-time hint: rendered last so it sticks to the bottom of the scroll
+             viewport, reading as ambient guidance. Surfaces the drag-to-comment
+             gesture on first gutter hover, retired for good once the reviewer drags. -->
+        {#if hintVisible}
+          <div class="drag-hint" role="note">Drag across lines to comment on a range — hold Shift to select text.</div>
+        {/if}
+        <!-- Visual line-select affordance (EXC-790): while V mode is active, a quiet
+             bottom-pinned chip names the two keys — c commits the selection to a
+             comment, Esc cancels — rendered as shadcn Kbd keycaps. Shares the
+             drag-hint's chip chrome; the amber selection band already shows the range. -->
+        {#if keyboardStore.visualAnchor != null && showShortcutHints}
+          <div class="visual-hint" role="note">
+            Selecting lines — <Kbd class="kbd-sm">c</Kbd> comment · <Kbd class="kbd-sm">Esc</Kbd> cancel
           </div>
         {/if}
-      {/each}
-      <!-- One-time hint: rendered last so it sticks to the bottom of the scroll
-           viewport, reading as ambient guidance. Surfaces the drag-to-comment
-           gesture on first gutter hover, retired for good once the reviewer drags. -->
-      {#if hintVisible}
-        <div class="drag-hint" role="note">Drag across lines to comment on a range — hold Shift to select text.</div>
       {/if}
-      <!-- Visual line-select affordance (EXC-790): while V mode is active, a quiet
-           bottom-pinned chip names the two keys — c commits the selection to a
-           comment, Esc cancels — rendered as shadcn Kbd keycaps. Shares the
-           drag-hint's chip chrome; the amber selection band already shows the range. -->
-      {#if keyboardStore.visualAnchor != null && showShortcutHints}
-        <div class="visual-hint" role="note">
-          Selecting lines — <Kbd class="kbd-sm">c</Kbd> comment · <Kbd class="kbd-sm">Esc</Kbd> cancel
-        </div>
-      {/if}
-    {/if}
+    </div>
   </div>
+  <!-- The filename-reference preview (EXC-687, docked since EXC-937): a lane
+       beside the plan holding the referenced file's excerpt. It takes layout
+       space rather than covering the plan, and wipes in from whichever edge it
+       docked to. Only appears for references the daemon resolved to a real file;
+       compare mode has no preview, so it is gated on the single-version view. -->
+  {#if !showDiff && filePreview}
+    {@const openRef = filePreview}
+    <FileDrawer edge={drawerEdge} size={drawerSize} onResize={setDrawerSize}>
+      {#snippet children()}
+        <FilePreview
+          reviewId={reviewId}
+          path={openRef.path}
+          line={openRef.line}
+          {showShortcutHints}
+        />
+      {/snippet}
+    </FileDrawer>
+  {/if}
 </div>
 
 {#if legacyAnnotations.length > 0}
@@ -1401,14 +1480,29 @@
     }
   }
 
-  /* The contents pane and source view share one row; the pane is a fixed-width
-     left lane, the source view takes the rest and scrolls on its own. */
+  /* The plan and the file drawer (EXC-937) divide this surface between them: a
+     row when the drawer docks right, a column when it docks bottom. With no
+     drawer open the plan pane is the only child and takes the whole thing. */
   .diff-surface {
     display: flex;
     min-height: 0;
     overflow: hidden;
-    /* Positioning context for the search dock (EXC-832), which floats over the plan. */
+  }
+  .diff-surface.dock-bottom {
+    flex-direction: column;
+  }
+
+  /* Everything that is the plan: the contents pane and the source view share one
+     row — the pane is a fixed-width left lane, the source view takes the rest and
+     scrolls on its own — with the search dock floating over them. It carries the
+     positioning context rather than .diff-surface, so the dock anchors to the
+     plan's own corner instead of the drawer's. */
+  .plan-pane {
     position: relative;
+    flex: 1 1 auto;
+    display: flex;
+    min-width: 0;
+    min-height: 0;
   }
 
   /* The search dock: pinned to the top-right of the plan area, clear of the scrollbar,
