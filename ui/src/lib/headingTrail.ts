@@ -8,7 +8,6 @@ import type { TocHeading } from "$lib/toc.ts";
 
 /** A heading in the trail, alongside the headings its menu can swap it for. */
 export interface HeadingCrumb {
-  /** The heading this crumb names. */
   heading: TocHeading;
   /**
    * Headings at the same level under the same parent, in document order.
@@ -19,16 +18,17 @@ export interface HeadingCrumb {
 
 // The parent of each heading, by index, or -1 for a heading with no ancestor.
 // Walks a stack of the enclosing headings at strictly increasing levels: a
-// heading pops every entry at or below its own level, then belongs to whatever
-// is left on top. Skipped levels need no special case — a `###` under a `#`
-// finds the `#` because no `##` was ever pushed — and a plan that opens at `##`
-// roots there because the stack is empty. Every ATX level is >= 1, so the empty
-// stack's 0 also ends the pop loop.
+// heading pops every entry at or deeper than its own level, then belongs to
+// whatever is left on top. Skipped levels need no special case — a `###` under
+// a `#` finds the `#` because no `##` was ever pushed — and a plan that opens
+// at `##` roots there because the stack is empty. The stack's own emptiness is
+// what ends the pop loop: without that clause a heading below level 1 pops an
+// already-empty stack forever, and `pop()` reports no error to break on.
 function parentIndices(headings: TocHeading[]): number[] {
   const parents: number[] = [];
   const ancestors: { index: number; level: number }[] = [];
   for (const [index, heading] of headings.entries()) {
-    while ((ancestors.at(-1)?.level ?? 0) >= heading.level) ancestors.pop();
+    while (ancestors.length > 0 && (ancestors.at(-1)?.level ?? 0) >= heading.level) ancestors.pop();
     parents.push(ancestors.at(-1)?.index ?? -1);
     ancestors.push({ index, level: heading.level });
   }
@@ -43,9 +43,10 @@ function parentIndices(headings: TocHeading[]): number[] {
  * an empty trail rather than throwing; a plan with no headings does too.
  */
 export function headingTrail(headings: TocHeading[], activeLine: number | null): HeadingCrumb[] {
+  let index = headings.findIndex((h) => h.line === activeLine);
+  if (index === -1) return [];
   const parents = parentIndices(headings);
   const trail: HeadingCrumb[] = [];
-  let index = headings.findIndex((h) => h.line === activeLine);
   while (index !== -1) {
     const heading = headings[index];
     if (heading === undefined) break;
