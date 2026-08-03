@@ -7,6 +7,7 @@ export const ICON_NAMES = [
   "bell-off",
   "check",
   "chevron-down",
+  "chevron-right",
   "circle-question-mark",
   "command",
   "copy",

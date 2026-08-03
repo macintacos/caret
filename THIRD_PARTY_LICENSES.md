@@ -15,6 +15,7 @@ under the ISC license.
 | `bell-off` | [ui/src/icons/bell-off.svg](ui/src/icons/bell-off.svg) | [bell-off.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/bell-off.svg) |
 | `check` | [ui/src/icons/check.svg](ui/src/icons/check.svg) | [check.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/check.svg) |
 | `chevron-down` | [ui/src/icons/chevron-down.svg](ui/src/icons/chevron-down.svg) | [chevron-down.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/chevron-down.svg) |
+| `chevron-right` | [ui/src/icons/chevron-right.svg](ui/src/icons/chevron-right.svg) | [chevron-right.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/chevron-right.svg) |
 | `circle-question-mark` | [ui/src/icons/circle-question-mark.svg](ui/src/icons/circle-question-mark.svg) | [circle-question-mark.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/circle-question-mark.svg) |
 | `command` | [ui/src/icons/command.svg](ui/src/icons/command.svg) | [command.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/command.svg) |
 | `copy` | [ui/src/icons/copy.svg](ui/src/icons/copy.svg) | [copy.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/copy.svg) |
