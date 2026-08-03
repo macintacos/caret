@@ -5,8 +5,13 @@
 	// taller than the viewport). An absolutely positioned submenu inside a
 	// scroll container is clipped by it, so from the SECOND level down a submenu
 	// was present, sized, focusable — and invisible, with the walk scrolling its
-	// parent sideways as focus chased rows nobody could see. The Content beside
-	// it is portalled for the same reason; this makes the pair consistent.
+	// parent sideways as focus chased rows nobody could see. The Content beside it
+	// already ships portalled from the registry; this makes the pair consistent.
+	//
+	// bits-ui anticipates the portalled case rather than merely tolerating it: its
+	// menu-content skips an interact-outside target that sits inside a sub-content,
+	// and its menu-sub-content has a branch for focus moving to "a descendant
+	// sub-content rendered in a portal".
 	//
 	// The cost is that a SubContent is no longer a DOM descendant of the Content
 	// that spawned it, so a keydown inside one stops bubbling through the other.
@@ -24,28 +29,28 @@
 </script>
 
 <DropdownMenuPortal>
-<DropdownMenuPrimitive.SubContent
-	bind:ref
-	data-slot="dropdown-menu-sub-content"
-	class={cn(
-		// Surface — the same popover panel as dropdown-menu-content, so a submenu is
-		// indistinguishable from the menu that spawned it
-		"bg-popover text-popover-foreground",
-		// Sizing + layout. The custom-property prefix is `menu`, NOT `dropdown-menu`
-		// as in the sibling dropdown-menu-content.svelte: bits-ui maps Content to its
-		// own dropdown-menu implementation but SubContent to the shared menu one, and
-		// each publishes these vars under its own name. With the sibling's prefix both
-		// resolve to nothing — the height clamp silently dies and the zoom animates
-		// from the panel centre instead of the trigger corner.
-		"z-50 max-h-(--bits-menu-content-available-height) min-w-32 origin-(--bits-menu-content-transform-origin) overflow-x-hidden overflow-y-auto",
-		// Shape
-		"rounded-xl border p-1 shadow-md outline-none",
-		// Open / close animation
-		"data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
-		// Directional slide-in
-		"data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-end-2 data-[side=right]:slide-in-from-start-2 data-[side=top]:slide-in-from-bottom-2",
-		className
-	)}
-	{...restProps}
-/>
+	<DropdownMenuPrimitive.SubContent
+		bind:ref
+		data-slot="dropdown-menu-sub-content"
+		class={cn(
+			// Surface — the same popover panel as dropdown-menu-content, so a submenu is
+			// indistinguishable from the menu that spawned it
+			"bg-popover text-popover-foreground",
+			// Sizing + layout. The custom-property prefix is `menu`, NOT `dropdown-menu`
+			// as in the sibling dropdown-menu-content.svelte: bits-ui maps Content to its
+			// own dropdown-menu implementation but SubContent to the shared menu one, and
+			// each publishes these vars under its own name. With the sibling's prefix both
+			// resolve to nothing — the height clamp silently dies and the zoom animates
+			// from the panel centre instead of the trigger corner.
+			"z-50 max-h-(--bits-menu-content-available-height) min-w-32 origin-(--bits-menu-content-transform-origin) overflow-x-hidden overflow-y-auto",
+			// Shape
+			"rounded-xl border p-1 shadow-md outline-none",
+			// Open / close animation
+			"data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+			// Directional slide-in
+			"data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-end-2 data-[side=right]:slide-in-from-start-2 data-[side=top]:slide-in-from-bottom-2",
+			className
+		)}
+		{...restProps}
+	/>
 </DropdownMenuPortal>

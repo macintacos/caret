@@ -197,10 +197,11 @@ test("a crumb's own heading opens the level below it without leaving the menu", 
   await jumpTo(page, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
 
-  // Open the level-2 crumb, then its own row — which nests level 3 rather than
-  // jumping in place, so one menu walks down the hierarchy. Named rather than
-  // taken as "the sub-trigger": since EXC-957 every sibling that encloses
-  // headings opens one, so Delta carries a chevron here too.
+  // Open the level-2 crumb, then hover its own row, which nests level 3 — one
+  // menu walks down the hierarchy. Hovered rather than clicked because a click
+  // now jumps (EXC-957); only hover, `l` and ArrowRight open. And named rather
+  // than taken as "the sub-trigger", since every sibling that encloses headings
+  // opens one now, so Delta carries a chevron here too.
   await page.locator(CRUMB).nth(1).click();
   await page.locator(MENU).getByRole("menuitem", { name: "Bravo" }).hover();
   const submenu = page.locator(SUBMENU);
@@ -286,6 +287,44 @@ test("h and l walk into a section the reader is not in, and only Enter goes ther
   await page.keyboard.press("Enter");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Delta", "Echo"]);
   await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("echo");
+});
+
+test("h steps out to the crumb before it once there is no submenu left to close", async ({
+  daemon,
+  page,
+}) => {
+  // `b` opens the crumb the reader is ON, so without this the keyboard could
+  // only ever reach that crumb's subtree while a mouse could reach the whole
+  // plan from the outermost crumb. Walking out to depth 0 and descending a
+  // different branch is the reach the issue asks for.
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+
+  await jumpTo(page, "Charlie");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
+  const parked = await parkedAt(page);
+
+  await page.keyboard.press("b");
+  const menu = page.locator(MENU);
+  await expect(menu.getByRole("menuitem")).toHaveText(["Charlie"]);
+
+  // Out to Bravo's level, then out again to Alpha's — the top of the trail.
+  await page.keyboard.press("h");
+  await expect(menu.getByRole("menuitem")).toHaveText(["Bravo", "Delta", "Foxtrot"]);
+  await page.keyboard.press("h");
+  await expect(menu.getByRole("menuitem")).toHaveText(["Alpha"]);
+  // One more has nowhere to go and leaves the menu open where it is.
+  await page.keyboard.press("h");
+  await expect(menu.getByRole("menuitem")).toHaveText(["Alpha"]);
+  expect(await scrollTop(page)).toBe(parked);
+
+  // And from there the whole plan is a descent away.
+  await page.keyboard.press("j");
+  await page.keyboard.press("l");
+  await page.keyboard.press("j");
+  await page.keyboard.press("l");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Delta", "Echo"]);
 });
 
 test("every level of a deep walk is actually on screen", async ({ daemon, page }) => {

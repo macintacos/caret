@@ -121,23 +121,22 @@
   // line bits-ui's typeahead and the dispatcher's own isBareSpec draw. A shifted
   // J/K never arrives here at all: the key is then uppercase.
   //
-  // The one preventDefault does three jobs, and the order each needs is guaranteed
+  // The one preventDefault does two jobs, and the order each needs is guaranteed
   // by svelte-toolbelt's composeHandlers, which re-checks defaultPrevented before
   // EVERY handler in a merged chain:
   //   1. bits-ui merges this handler ahead of its own, so the letter never reaches
   //      the menu's typeahead and jumps to some row starting with "j".
   //   2. The window dispatcher yields on defaultPrevented, so the plan's own j/k
   //      line cursor stays put behind the open menu.
-  //   3. The re-dispatched arrow below bubbles back through this same handler, and
-  //      the pre-check is what stops that second pass from dispatching a third and
-  //      double-stepping the walk.
+  // The re-dispatch below cannot loop: it carries an ARROW, which the map does not
+  // hold, so the second pass returns at the lookup rather than dispatching a
+  // third. (Before EXC-957 portalled the SubContent, a submenu's keydown also
+  // bubbled into the parent Content's copy of this handler, and defaultPrevented
+  // was what stopped that. It no longer reaches there; both still carry the
+  // handler, which is why the walk works at every depth either way.)
   // Job 2 is vacuous for h and l — neither is bound in keymap.ts — but they take
   // the same path as j/k rather than a second, quieter one, so a later binding on
   // either key cannot reach the plan from behind an open menu.
-  // A SubContent is portalled to the body since EXC-957 (see the comment on the
-  // vendored component), so a submenu's keydown no longer bubbles through the
-  // Content that spawned it. Both carry this handler, which is why the walk works
-  // at every depth either way.
   // Arrow keys are untouched and keep working.
   function onMenuKeydown(e: KeyboardEvent): void {
     if (e.ctrlKey || e.altKey || e.metaKey) return;
@@ -158,17 +157,44 @@
     const arrow = MENU_ARROWS[e.key];
     if (arrow === undefined) return;
     e.preventDefault();
+    // At the top of a crumb's own menu there is no submenu for ArrowLeft to
+    // close, so `h` steps out to the crumb before it in the trail instead. That
+    // is the "up" a reviewer means once the menu they are in is already the
+    // outermost one open — and without it the keyboard could only ever reach the
+    // subtree of whichever crumb the menu was opened on, while a mouse could
+    // reach the whole plan from the outermost one.
+    if (e.key === "h" && openPreviousCrumb()) return;
     document.activeElement?.dispatchEvent(
       new KeyboardEvent("keydown", { key: arrow, bubbles: true, cancelable: true }),
     );
   }
 
+  // Move the open menu one crumb outward, if there is one and no submenu is open
+  // beneath it. Both steps are the programmatic click openTrail uses — the first
+  // toggles the open trigger shut, the second opens its neighbour — so focus
+  // lands in the new menu exactly as `b` leaves it. Returns whether it moved, so
+  // the caller can fall through to the arrow when it did not.
+  function openPreviousCrumb(): boolean {
+    if (document.activeElement?.closest("[data-slot='dropdown-menu-sub-content']")) return false;
+    const cells = [
+      ...(barEl?.querySelectorAll<HTMLElement>(
+        ".crumb-item:not(.elided), .crumb-marker:not(.elided)",
+      ) ?? []),
+    ];
+    const open = cells.findIndex((cell) => cell.querySelector('[aria-expanded="true"]') !== null);
+    const previous = cells[open - 1]?.querySelector<HTMLButtonElement>("button");
+    if (open < 1 || previous === undefined || previous === null) return false;
+    cells[open]?.querySelector<HTMLButtonElement>("button")?.click();
+    previous.click();
+    return true;
+  }
+
   // Take the reviewer to a heading and leave the bar. A plain row's select closes
   // the menu on its own; a row that nests a submenu has no select to close it, so
-  // the open crumb is toggled shut with the same programmatic click openTrail
-  // uses to open one. Scoped to the bar, where the only aria-expanded that can
-  // match is that crumb's trigger — every sub-trigger lives in bits-ui's portalled
-  // content, outside this element.
+  // the open trigger is toggled shut with the same programmatic click openTrail
+  // uses to open one. Scoped to the bar, so the match is a crumb's trigger or the
+  // elision marker's — the two things here that open a menu — and never a
+  // sub-trigger, which lives in bits-ui's portalled content outside this element.
   function jump(line: number): void {
     barEl?.querySelector<HTMLButtonElement>('[aria-expanded="true"]')?.click();
     onJump(line);
@@ -279,9 +305,11 @@
   let listEl = $state<HTMLElement | null>(null);
   let shown = $state<number[] | null>(null);
 
-  // Null until the first measurement, and whenever the trail is no longer the one
-  // that was measured — a stale set always ends at the wrong depth, and showing
-  // the whole trail is the right guess in both cases.
+  // Null until the first measurement, and whenever the trail got deeper or
+  // shallower than the one measured — showing the whole trail is the right guess
+  // in both cases. Re-rooting at the SAME depth slips through, since the set is
+  // still the right shape; the effect below re-measures in the same flush, so
+  // the only cost is that the levels shown are one flush behind their widths.
   const depths = $derived(
     shown !== null && shown.at(-1) === trail.length - 1
       ? shown
@@ -298,16 +326,25 @@
     return names.length > 0 ? `Hidden levels: ${names.join(", ")}` : "Hidden levels";
   });
 
-  // One measurement pass. `.measuring` puts every level back in flow at its
-  // natural width and stops the crumbs shrinking, so what is read is the trail
-  // the row would need rather than the one it is showing. Added and removed
-  // inside a single task, so the frozen state is never painted.
+  // One measurement pass. `.measuring` puts every level back in flow and stops
+  // the list shrinking, so what is read is the trail the row would need rather
+  // than the one it is showing. Added and removed inside a single task, so the
+  // frozen state is never painted.
   //
   // The width the trail is measured against is the BAR's, less the keycap that
-  // rides past it — not the list's own. The bar takes the control row's middle
-  // (`flex: 1` in DiffPlanView), so its width does not move when the trail
-  // collapses; measuring the list instead would shrink the target every time a
-  // level was given up, and the collapse would eat itself.
+  // rides past it — not the list's own, which is exactly as wide as whatever the
+  // trail currently shows. The bar takes the control row's middle (`flex: 1` in
+  // DiffPlanView), so while the row has free space its width is fixed by the row
+  // rather than by its content.
+  //
+  // Once the row over-fills, the bar shrinks in proportion to its content, so
+  // giving up a level DOES widen the room left and can bring one back. That
+  // settles rather than oscillating because every step of the loop is monotone:
+  // visibleDepths keeps more levels as `avail` grows, the bar's share grows with
+  // the levels shown, and a monotone map over a chain of at most six levels
+  // reaches a fixed point. Breaking that monotonicity — a level whose measured
+  // width shrinks as the row tightens, say — is what would turn this into a
+  // resize loop.
   function measure(): void {
     const list = listEl;
     const bar = barEl;
@@ -345,9 +382,10 @@
     return () => observer.disconnect();
   });
 
-  // Re-measure when the levels change or the row resizes. Writing `shown` cannot
-  // feed back in: the bar's width is independent of what the trail shows, so
-  // neither dependency moves as a result.
+  // Re-measure when the levels change or the row resizes. Writing `shown` can
+  // feed back in — on an over-full row the bar's width follows its content — but
+  // only monotonically, so the loop settles in a step or two rather than running
+  // (see the note on measure()).
   $effect(() => {
     void trail;
     void barWidth;
@@ -539,6 +577,10 @@
     align-items: center;
     height: var(--ctl-h);
     font-family: var(--font-sans);
+    /* The containing block for the levels the row cannot hold, which go out of
+       flow rather than out of the list (see .elided below). Without it they
+       resolve against whatever ancestor happens to be positioned. */
+    position: relative;
   }
 
   /* The vendored list wraps by default. In a fixed-height row a second line would
@@ -569,20 +611,24 @@
   :global(.plan-breadcrumbs .elided) {
     position: absolute;
     visibility: hidden;
-    pointer-events: none;
   }
 
-  /* The measurement pass: every level back in flow at its natural width, with the
-     crumbs' shrink weighting off, so what is read is the trail the row would need
-     rather than the one it is showing. The class is added and removed inside one
-     task, so this state is never painted. */
+  /* The measurement pass: every level back in flow, and the LIST itself stops
+     shrinking, so it sits at its content width and there is no negative free
+     space for the crumbs' shrink weighting below to distribute. What is read is
+     therefore the trail the row would need rather than the one it is showing.
+     Stopping the list rather than exempting each crumb matters: an exemption
+     would tie with the `.current` weighting below at equal specificity and lose
+     to it on order, leaving the reader's own crumb — and only that one — measured
+     shrunk, in exactly the case the measurement exists for.
+     The class is added and removed inside one task, so this state is never
+     painted. */
+  :global(.plan-breadcrumbs .measuring) {
+    flex: none;
+  }
   :global(.plan-breadcrumbs .measuring .elided) {
     position: static;
     visibility: visible;
-  }
-  :global(.plan-breadcrumbs .measuring .crumb-item),
-  :global(.plan-breadcrumbs .measuring .crumb-marker) {
-    flex: none;
   }
   /* The separator is a list-item, so the vendored icon inside it is placed by
      inline layout and rides the text baseline — which leaves the chevron a couple

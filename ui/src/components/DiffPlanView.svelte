@@ -1443,9 +1443,10 @@
      row inside the app's MIN_APP_WIDTH_PX floor the same way .cwd does below.
      It GROWS into that middle rather than sizing to its trail (EXC-957), which
      the bar's own collapse depends on: sized to content, giving a level up would
-     shrink the bar, which would free room, which would bring the level back. The
-     crumbs stay left-aligned inside the wider box and .cwd keeps the right edge
-     by its own margin, so nothing moves on screen. */
+     shrink the bar, which would free room, which would bring the level back.
+     Nothing moves on screen — the crumbs stay left-aligned inside the wider box,
+     and the free space .cwd's margin used to absorb is now absorbed by the bar,
+     which leaves .cwd on the same right edge either way. */
   .control-row :global(.plan-breadcrumbs) {
     flex: 1 1 auto;
     min-width: 0;

@@ -59,7 +59,13 @@ function parentIndices(headings: TocHeading[]): number[] {
  * the three views of the hierarchy can never disagree.
  */
 export function headingTree(headings: TocHeading[]): HeadingNode[] {
-  const parents = parentIndices(headings);
+  return treeOver(headings, parentIndices(headings));
+}
+
+// The tree, given a parent walk the caller already has. Split out so
+// `headingTrail` — which needs the same walk to climb the ancestor chain — pays
+// for it once rather than twice on every scroll tick.
+function treeOver(headings: TocHeading[], parents: number[]): HeadingNode[] {
   const nodes: HeadingNode[] = headings.map((heading) => ({ heading, children: [] }));
   const roots: HeadingNode[] = [];
   for (const [index, node] of nodes.entries()) {
@@ -85,7 +91,7 @@ export function headingTrail(headings: TocHeading[], activeLine: number | null):
   const chain: number[] = [];
   for (let index = active; index !== -1; index = parents[index] ?? -1) chain.unshift(index);
   const trail: HeadingCrumb[] = [];
-  let siblings = headingTree(headings);
+  let siblings = treeOver(headings, parents);
   for (const index of chain) {
     const heading = headings[index];
     if (heading === undefined) break;

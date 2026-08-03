@@ -178,9 +178,9 @@ describe("PlanBreadcrumbs menus", () => {
     expect(menuRows()[0]?.getAttribute("aria-current")).toBe("location");
   });
 
-  // The trail's own heading opens the level below rather than jumping in place, so
-  // one menu walks the whole hierarchy — the nesting EXC-947's j/k will step through.
-  test("the crumb's own heading nests the level below it as a submenu", async () => {
+  // A heading that encloses others opens them rather than only jumping, so one
+  // menu walks the whole hierarchy — the nesting EXC-947's j/k steps through.
+  test("a heading with headings under it opens as a submenu", async () => {
     const { target, flush } = render(PlanBreadcrumbs, {
       headings: HEADINGS,
       activeLine: 9,
