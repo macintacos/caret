@@ -285,3 +285,32 @@ test("already-stored versions are never reformatted by a later ingest", async ()
   expect(b).toMatchObject({ id: a.id, action: "append", version: 2 });
   expect(store.get(a.id)?.versions[0]?.plan).toBe(UNWRAPPED);
 });
+
+// ---- cmux pane (EXC-961) ----
+
+const pane = { workspaceId: "w1", surfaceId: "s1" };
+
+test("a new thread records the cmux pane it was submitted from", async () => {
+  const r = await routeIncomingPlan(input({ cmux: pane }), store);
+  expect(store.get(r.id)?.cmux).toEqual(pane);
+});
+
+test("a new thread has no cmux pane when the plan carries none", async () => {
+  const r = await routeIncomingPlan(input(), store);
+  expect(store.get(r.id)?.cmux).toBeUndefined();
+});
+
+test("a revision re-points the review at the pane that submitted it", async () => {
+  const a = await routeIncomingPlan(input({ cmux: pane }), store);
+  await reject(a.id);
+  const other = { workspaceId: "w2", surfaceId: "s2" };
+  await routeIncomingPlan(input({ cmux: other }), store);
+  expect(store.get(a.id)?.cmux).toEqual(other);
+});
+
+test("a revision carrying no pane keeps the original", async () => {
+  const a = await routeIncomingPlan(input({ cmux: pane }), store);
+  await reject(a.id);
+  await routeIncomingPlan(input(), store);
+  expect(store.get(a.id)?.cmux).toEqual(pane);
+});

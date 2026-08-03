@@ -174,6 +174,9 @@ export interface Review {
    * (not version-scoped like annotations): it has no anchor in a specific plan
    * text. Optional because pre-existing on-disk reviews predate the field. */
   generalCommentDraft?: string;
+  /** The cmux pane the latest version was submitted from (see CmuxPane).
+   * Deliberately absent from ClientReview — the browser never needs the ids. */
+  cmux?: CmuxPane;
   createdAt: number;
   updatedAt: number;
   decision?: Decision;
@@ -202,12 +205,26 @@ export interface ClientReview {
   decision?: Decision;
 }
 
+/**
+ * The cmux terminal pane an agent submitted a plan from, captured from the hook
+ * process's CMUX_WORKSPACE_ID / CMUX_SURFACE_ID. Rides on the review record
+ * because the daemon is long-lived and shared across sessions, so it never
+ * inherits any one agent's cmux environment.
+ */
+export interface CmuxPane {
+  workspaceId: string;
+  surfaceId: string;
+}
+
 /** Body of POST /api/reviews (an incoming plan from the hook). */
 export interface PlanInput {
   sessionId?: string;
   cwd?: string;
   title?: string;
   plan?: string;
+  /** The cmux pane this plan was submitted from, when the hook ran under cmux.
+   * Absent otherwise — the integration is silently inert outside cmux. */
+  cmux?: CmuxPane;
   /** Absolute path to the on-disk plan file the agent reads its plan from
    * (Claude Code's `~/.claude/plans/<name>.md`, surfaced as `tool_input.planFilePath`).
    * caret rewrites this file with the canonical formatted plan so the agent's

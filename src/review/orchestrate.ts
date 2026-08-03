@@ -14,7 +14,7 @@ import { logFile } from "@/config/paths.ts";
 // the daemon at runtime.
 import type { EnsureOptions } from "@/daemon/lifecycle.ts";
 import { type ErrorContext, logDebug, logError, logInfo, shortId } from "@/lib/log.ts";
-import { type Decision, errorMessage, type PlanInput } from "@/lib/types.ts";
+import { type CmuxPane, type Decision, errorMessage, type PlanInput } from "@/lib/types.ts";
 import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "@/plan/format.ts";
 
 /** A fail-safe deny the core constructs when an unreviewed plan must never ship.
@@ -43,6 +43,11 @@ export interface ReviewDeps {
    * a transient drop so the caller can reconnect. */
   longPoll: (baseUrl: string, id: string) => Promise<Decision | null>;
   openBrowser: (url: string) => void;
+  /** The cmux pane this hook process runs in, so the daemon can clear its unread
+   * mark once the plan is reviewed (EXC-961). Injected because the pane comes
+   * from the environment, which the core never reads itself. Optional: absent
+   * for tests and the dev driver, and reports undefined outside cmux. */
+  readPane?: () => CmuxPane | undefined;
   timeoutMs: number;
   /** Best-effort: tell the daemon the hook is abandoning this review, so it
    * doesn't hold a pending orphan (EXC-454). Failures are swallowed. */
@@ -125,6 +130,10 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decisi
     step = "ensureDaemon";
     baseUrl = await deps.ensureDaemon();
     step = "postReview";
+    // Stamp the originating cmux pane, if any, so the daemon can clear that
+    // pane's unread mark once the plan is reviewed — the daemon is long-lived
+    // and shared, so it never inherits this hook's cmux environment (EXC-961).
+    input.cmux = deps.readPane?.();
     const { id, hasLiveClient } = await deps.postReview(baseUrl, input);
     // From here every record — decision and error alike — carries the reviewId,
     // stitching this stream against the daemon's review/resolve records.

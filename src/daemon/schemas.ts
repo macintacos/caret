@@ -25,6 +25,13 @@ export const PlanInputSchema: z.ZodType<PlanInput> = z
     // agent's plan of record matches the review (see plan-file.ts). zod strips
     // unknown keys, so it must be declared here to survive the POST body parse.
     planFilePath: z.string().optional(),
+    // The originating cmux pane (EXC-961). Both ids are required for a pane to
+    // survive: a half-set pair would name a workspace without a surface, and
+    // clearing at that granularity would hit panes unrelated to caret.
+    cmux: z
+      .object({ workspaceId: z.string().min(1), surfaceId: z.string().min(1) })
+      .optional()
+      .catch(undefined),
   })
   .catch({});
 
