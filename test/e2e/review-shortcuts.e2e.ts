@@ -12,6 +12,7 @@
 import type { Page } from "@playwright/test";
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { jumpToHeading } from "@test/e2e/support/source-view.ts";
 
 // Two headings, so the plan has a trail with something to navigate.
 const filler = (label: string) =>
@@ -192,15 +193,10 @@ test("b opens the breadcrumbs bar, and j/j/Enter jumps to the highlighted headin
   await page.goto("/");
   await loadPlan(page);
 
-  // Read Bravo, so the trailing crumb's menu offers siblings worth walking. Reached
-  // through the bar's own flat filter (EXC-948), the only one-step route to an
-  // arbitrary heading since EXC-949 removed the contents rail.
+  // Read Bravo, so the trailing crumb's menu offers siblings worth walking.
   const crumbs = page.locator(".plan-breadcrumbs button.crumb");
   await expect(crumbs.last()).toBeVisible();
-  await crumbs.last().click();
-  await page.keyboard.press("/");
-  await page.locator("input[aria-label='Filter headings']").fill("Bravo");
-  await page.keyboard.press("Enter");
+  await jumpToHeading(page, "Bravo");
   await expect(crumbs).toHaveText(["Alpha", "Bravo"]);
   await expect(crumbs.last()).toHaveAttribute("aria-keyshortcuts", "b");
 
@@ -262,9 +258,9 @@ test("backslash opens the breadcrumbs bar, the same as b", async ({ daemon, page
   await page.keyboard.press("\\");
   await expect(menu).toBeVisible();
 
-  // And it toggles shut again, the same as `b` does — the key is the whole
-  // invocation, not a one-way open.
-  await page.keyboard.press("Escape");
+  // And a second `\` shuts it, the same as `b` does: the key is the whole
+  // invocation, not a one-way open. Escape's dismissal is a different contract and
+  // is pinned by its own spec above.
+  await page.keyboard.press("\\");
   await expect(menu).toBeHidden();
-  await expect(crumb).toBeFocused();
 });

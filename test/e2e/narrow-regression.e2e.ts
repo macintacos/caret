@@ -2,9 +2,10 @@
 // EXC-770 responsive effort. The per-surface specs (topbar-overflow,
 // version-compare, pinned-chrome, dialog-narrow) each own one surface in detail;
 // this spec asserts the *whole* review UI stays usable at the canonical breakpoints
-// — the TopBar's secondary actions stay reachable, and no surface pushes the
-// document past the viewport. Width- and layout-driven behavior
-// only a browser can decide (doc/agents/browser-testing.md), so it lives here.
+// — heading navigation and the TopBar's secondary actions stay reachable, comment
+// cards stay inside the plan column, and no surface pushes the document past the
+// viewport. Width- and layout-driven behavior only a browser can decide
+// (doc/agents/browser-testing.md), so it lives here.
 //
 // Breakpoints are imported from ui/src/lib/layout.ts — the canonical source the
 // @media px literals mirror, and the same node-free constants playwright.config.ts
@@ -54,6 +55,43 @@ test("heading navigation stays reachable at a narrow width", async ({ daemon, pa
   await expect(crumb).toBeVisible();
   await crumb.click();
   await expect(page.locator("[data-slot='dropdown-menu-content']")).toBeVisible();
+});
+
+test("a seeded comment card fits within the plan column at a narrow width", async ({
+  daemon,
+  page,
+}) => {
+  // The inline comment card (SourceAnnotationThread) caps at min(46rem, 100%), so a
+  // comment never overflows its plan column even when the column is squeezed. The
+  // sweep above cannot catch this: the card overflows a column that scrolls
+  // internally, so document.scrollWidth never moves. Originally EXC-809 criterion 2
+  // in toc-collapse.e2e.ts; it outlived the rail EXC-949 deleted, so it moved here.
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    annotations: [
+      {
+        id: "ann-1",
+        startLine: 7,
+        endLine: 8,
+        comment:
+          "A comment long enough to wrap across a couple of lines once the plan column is squeezed to a narrow width.",
+      },
+    ],
+  });
+  await page.setViewportSize({ width: 500, height: 900 });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  // Measured on the comment text (which the capped card bounds) in viewport
+  // coordinates, so the shadow-projected card and its light-DOM container are
+  // directly comparable.
+  const comment = page.getByText("A comment long enough to wrap").first();
+  await expect(comment).toBeVisible();
+  const commentBox = await comment.boundingBox();
+  const planBox = await page.locator(".diff-plan").boundingBox();
+  expect(commentBox).not.toBeNull();
+  expect(planBox).not.toBeNull();
+  expect(commentBox!.x + commentBox!.width).toBeLessThanOrEqual(planBox!.x + planBox!.width + 1);
 });
 
 test("TopBar secondary actions stay reachable via the overflow menu at a narrow width", async ({

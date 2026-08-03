@@ -23,6 +23,9 @@ const chromeComponents = [
   "components/EmptyState.svelte",
   "components/TopBar.svelte",
   "components/ReviewSwitcher.svelte",
+  // The plan's heading-navigation chrome: took SourceToc's place in this list when
+  // EXC-949 deleted the rail, so the surface keeps its motion-token coverage.
+  "components/PlanBreadcrumbs.svelte",
   "components/CommentNavigator.svelte",
   "components/NotifyBell.svelte",
   "components/VersionBadge.svelte",

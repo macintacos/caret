@@ -1,14 +1,14 @@
 // Dev-flagged source-view surface (EXC-583). With the flag on, the plan renders
 // as line-numbered markdown source through the @pierre/diffs wrapper instead of
 // the legacy plan view + contents rail. The heading breadcrumbs bar jumps to
-// headings, the line gutter creates comments (EXC-584), and approve and
-// request-changes still round-trip. The view instance must survive the 2s poll
-// with no scroll reset.
+// headings, the line gutter creates comments (EXC-584), and approve and request-
+// changes still round-trip. The view instance must survive the 2s poll with no
+// scroll reset.
 
 import type { Locator, Page } from "@playwright/test";
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
-import { lineCenterY, revealGutterPlus } from "@test/e2e/support/source-view.ts";
+import { jumpToHeading, lineCenterY, revealGutterPlus } from "@test/e2e/support/source-view.ts";
 
 // A plan tall enough to scroll the source view past one viewport.
 const TALL_PLAN = `# Tall Plan\n\n${Array.from({ length: 120 }, (_, i) => `Line ${i + 1} of the plan body, long enough to overflow the viewport.`).join("\n\n")}\n`;
@@ -94,18 +94,6 @@ test("request-changes with a general comment round-trips on the source-view surf
 // A multi-heading plan with tall sections so a jump produces a visible scroll.
 const padding = Array.from({ length: 40 }, (_, i) => `Filler line ${i + 1}.`).join("\n\n");
 const TOC_PLAN = `# Overview\n\n${padding}\n\n## Approach\n\n${padding}\n\n## Verification\n\n${padding}\n`;
-
-/** Jump the plan to `heading` through the breadcrumbs bar's flat filter — the
- * surface that replaced the contents rail (EXC-949). Waiting out the safe-mode
- * grace is required, not defensive: it is a window-level CAPTURE listener calling
- * stopImmediatePropagation, so a `/` inside the grace never reaches the menu. */
-async function jumpToHeading(page: Page, heading: string): Promise<void> {
-  await waitPastSafeModeGrace(page);
-  await page.locator(".plan-breadcrumbs button.crumb.current").click();
-  await page.keyboard.press("/");
-  await page.locator("input[aria-label='Filter headings']").fill(heading);
-  await page.keyboard.press("Enter");
-}
 
 /** Offset (px) of the heading line whose source text is `text` from the top of
  * the scroll container, or +Infinity if that line isn't rendered. */

@@ -130,7 +130,7 @@ describe("headingMatches", () => {
     expect(headingMatches(extractHeadings("# A\n\n## B\n"), "a")[0]?.parent).toBeNull();
   });
 
-  test("matches case-insensitively on a substring, as the rail's filter did", () => {
+  test("matches case-insensitively on a substring", () => {
     const headings = extractHeadings("# Verification\n");
     expect(headingMatches(headings, "RIFICA").map((m) => m.heading.text)).toEqual(["Verification"]);
   });

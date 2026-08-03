@@ -684,10 +684,10 @@
   });
 
   // The source line of the heading currently in the reading zone. Tracked from
-  // the scroll container's topmost rendered line so the pane highlights the
-  // section being read.
+  // the scroll container's topmost rendered line so the breadcrumbs bar reports
+  // the section being read.
   let activeLine = $state<number | null>(null);
-  // The scroll container (the .diff-plan element), used by the ToC tracking to
+  // The scroll container (the .diff-plan element), used by the heading tracking to
   // read the topmost visible line.
   let scrollEl = $state<HTMLElement | undefined>();
   // Opens the breadcrumbs bar's trailing crumb, handed over by the bar itself
@@ -766,7 +766,7 @@
   // zone, throttled with rAF so a scroll burst settles into one read. The view
   // paints each line as <div data-line="N"> in a shadow root; lineAtReadingZone
   // picks the line sitting at the same offset jumps park headings at, so the
-  // tracked section matches where a ToC click lands rather than the row above it.
+  // tracked section matches where a crumb jump lands rather than the heading above it.
   function topVisibleLine(): number | null {
     const rows = scrollEl?.querySelector(".diffview")?.shadowRoot?.querySelectorAll<HTMLElement>(
       "[data-line]",
@@ -806,7 +806,7 @@
     el.addEventListener("scroll", onScroll, { passive: true });
     // Seed the tracked heading at load rather than leaving it null until the
     // first scroll, so a plan nobody has scrolled yet still reads as a location
-    // (the breadcrumbs bar has no trail without it, and the rail no active row).
+    // (the breadcrumbs bar has no trail without it).
     const stopSeed = retryFrames(update);
     return () => {
       cancelAnimationFrame(raf);
@@ -949,7 +949,8 @@
       ),
     );
     // `/` opens the plan search (EXC-832), repurposed from EXC-789's focus-filter.
-    // Plan-content only; not gated on the ToC — search needs no rail.
+    // Plan-content only; not gated on the plan having headings — search is over
+    // text, not structure.
     offs.push(
       shortcuts.register(
         bind("actions.search", {
@@ -991,16 +992,9 @@
     // render condition uses, so they are inert in compare mode. The optional call
     // covers a heading-less plan too, where the bar renders nothing and never
     // handed an open action back.
-    for (const id of ["actions.headingNav", "actions.toggleSidebar"]) {
-      offs.push(
-        shortcuts.register(
-          bind(id, {
-            run: () => openHeadingNav?.(),
-            enabled: () => !showDiff,
-          }),
-        ),
-      );
-    }
+    const openBar = { run: () => openHeadingNav?.(), enabled: () => !showDiff };
+    offs.push(shortcuts.register(bind("actions.headingNav", openBar)));
+    offs.push(shortcuts.register(bind("actions.toggleSidebar", openBar)));
     return () => {
       for (const off of offs) off();
     };
@@ -1510,8 +1504,9 @@
   }
 
   /* Everything that is the plan: the source view fills this pane and scrolls on
-     its own, with the search dock floating over it. The pane carries the
-     positioning context rather than .diff-surface, so the dock anchors to the
+     its own, with the search dock floating over it. `display: flex` plus
+     .diff-plan's `flex: 1` is what makes the source view fill it. The pane carries
+     the positioning context rather than .diff-surface, so the dock anchors to the
      plan's own corner instead of the drawer's. */
   .plan-pane {
     position: relative;

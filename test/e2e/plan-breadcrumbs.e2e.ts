@@ -9,6 +9,7 @@
 // trail logic is unit-tested in ui/src/components/PlanBreadcrumbs.test.ts.
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { jumpToHeading } from "@test/e2e/support/source-view.ts";
 
 // Each section must be taller than the viewport, so scrolling to a later one
 // genuinely changes which heading is being read rather than leaving the whole plan
@@ -51,23 +52,11 @@ const CRUMB = `${BAR} button.crumb`;
 const MENU = "[data-slot='dropdown-menu-content']";
 const QUERY = "input[aria-label='Filter headings']";
 
-/** Scroll the plan to any heading through the bar's own flat filter (EXC-948) —
- * since EXC-949 removed the contents rail, this is the only surface that reaches
- * an arbitrary heading in one step, so the specs below arrange their starting
- * position through the very thing they go on to assert.
- *
- * Waiting out the safe-mode grace is load-bearing, not defensive: the guard is a
- * window-level CAPTURE listener that calls stopImmediatePropagation, so a `/`
- * inside the grace never reaches the menu's own handler and the filter silently
- * never opens. The query is filled rather than typed, and Enter from the field
- * selects the first result — one match, given the distinct section names above. */
-async function jumpTo(page: import("@playwright/test").Page, heading: string): Promise<void> {
-  await waitPastSafeModeGrace(page);
-  await page.locator(`${CRUMB}.current`).click();
-  await page.keyboard.press("/");
-  await page.locator(QUERY).fill(heading);
-  await page.keyboard.press("Enter");
-}
+/** Arrange a reading position. The specs below reach their starting heading through
+ * the very surface they go on to assert — unavoidable since EXC-949 left the bar as
+ * the only way to reach an arbitrary heading — so the gesture is the shared one in
+ * support/source-view.ts rather than a private copy that could drift from it. */
+const jumpTo = jumpToHeading;
 
 test("the bar sits in the control row between the compare picker and the path", async ({
   daemon,
@@ -115,6 +104,18 @@ test("the trail follows the heading being read as the plan scrolls", async ({ da
 
   // The innermost crumb is where the reader is.
   await expect(crumbs.last()).toHaveAttribute("aria-current", "location");
+});
+
+test("a ?heading= deep link opens the plan at that section", async ({ daemon, page }) => {
+  // The INBOUND half of the `?heading=` mirror (EXC-641): every other heading
+  // assertion in the suite reads the param after a jump, so without this one the
+  // restore path — lineForSlug plus DiffPlanView's `restored` effect — has only a
+  // pure unit test and nothing exercising it end to end. It moved here when EXC-949
+  // deleted toc-active-heading.e2e.ts, which had carried it against the rail's rows.
+  const id = await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto(`/?review=${id}&heading=echo`);
+
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Delta", "Echo"]);
 });
 
 test("picking a sibling from a crumb's menu scrolls the plan to that heading", async ({
@@ -206,7 +207,6 @@ test("b then / then a query then Enter jumps across the hierarchy", async ({ dae
   // reach Echo from here without closing and reopening at two other depths.
   await jumpTo(page, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
-  await waitPastSafeModeGrace(page);
 
   await page.keyboard.press("b");
   const menu = page.locator(MENU);
@@ -311,7 +311,6 @@ test("Escape restores the hierarchical menu without leaving the bar", async ({ d
 
   await jumpTo(page, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
-  await waitPastSafeModeGrace(page);
 
   const menu = page.locator(MENU);
   await page.keyboard.press("b");
@@ -362,7 +361,6 @@ test("/ reaches the filter from inside a submenu too", async ({ daemon, page }) 
 
   await jumpTo(page, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
-  await waitPastSafeModeGrace(page);
 
   // Open the outermost crumb and step into its submenu, as the nested-walk spec does.
   await page.locator(CRUMB).first().click();

@@ -505,10 +505,10 @@
     color: var(--ink);
   }
   /* The innermost crumb is where the reader is, so it takes full ink while its
-     ancestors stay soft. It is marked by weight rather than by the rail's amber
-     wash: the rail is a list of destinations where amber picks one out, while
-     every crumb here is already the trail, so a second colour would compete with
-     the amber the menu below spends on the same "you are here" job. */
+     ancestors stay soft. Marked by weight rather than by colour: every crumb is
+     already the trail, so an amber wash here would carry no information the
+     position does not, and would compete with the amber the menu below spends on
+     the same "you are here" job. */
   :global(.plan-breadcrumbs .crumb.current) {
     color: var(--ink);
     font-weight: 600;
@@ -528,9 +528,9 @@
   }
   /* The heading the reader is already on, marked with the amber wash the menu
      language reserves for the active choice (shadcn-rules.md § Menu highlight vs.
-     selection). Being unlayered,
-     it also out-specifies the catalog's layered `data-highlighted` background, so
-     the row the reader is on needs the rule below to show any movement under j/k. */
+     selection). Being unlayered, it also out-specifies the catalog's layered
+     `data-highlighted` background, so the row the reader is on needs the rule
+     below to show any movement under j/k. */
   :global(.plan-crumb-menu [aria-current="location"]) {
     background: var(--accent-wash);
     color: var(--ink);

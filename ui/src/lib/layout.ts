@@ -23,8 +23,8 @@ export const REFERENCE_WIDTH_PX = 1400;
  * - {@link MIN_APP_WIDTH_PX} (≈ ⅓ of a 1440 display) — the supported minimum.
  *   `.shell` takes it as a `min-width` floor, so below it the window scrolls
  *   horizontally instead of the layout collapsing further.
- * - {@link TIGHT_WIDTH_PX} — the ~⅓-screen regime: TopBar controls go icon-only,
- *   pinned chrome stacks, and the comment navigator unpins into a bottom sheet.
+ * - {@link TIGHT_WIDTH_PX} — the ~⅓-screen regime: TopBar controls go icon-only
+ *   and the pinned comment navigator unpins into a full-bleed bottom sheet.
  * - {@link NARROW_WIDTH_PX} — the ~½-screen regime: TopBar consolidation,
  *   unified compare diff, and cwd relocation begin at/below this width.
  */
