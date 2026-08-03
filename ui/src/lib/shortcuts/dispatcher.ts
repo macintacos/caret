@@ -66,7 +66,7 @@ export function createShortcutDispatcher(opts: ShortcutDispatcherOptions): Short
 
   function onKeyDown(ev: Event): void {
     const e = ev as KeyboardEvent;
-    // Yield to a focused widget that already handled the key (e.g. the ToC
+    // Yield to a focused widget that already handled the key (e.g. the breadcrumbs
     // filter's Arrow/Enter) and to Safe Mode's capture-phase swallow.
     if (e.defaultPrevented) return;
     // Only dispatchable entries fire; display-only entries (the editor chords)

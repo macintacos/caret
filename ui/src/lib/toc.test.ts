@@ -5,7 +5,6 @@ import {
   extractHeadings,
   filterHeadings,
   lineForSlug,
-  shouldShowToc,
   slugForLine,
   type TocHeading,
 } from "$lib/toc.ts";
@@ -68,22 +67,6 @@ describe("extractHeadings", () => {
   test("returns an empty list for text with no headings", () => {
     expect(extractHeadings("just some prose\n\nmore prose\n")).toEqual([]);
     expect(extractHeadings("")).toEqual([]);
-  });
-});
-
-describe("shouldShowToc", () => {
-  test("suppresses below two headings", () => {
-    const one: TocHeading[] = [{ level: 1, text: "Only", line: 1 }];
-    expect(shouldShowToc([])).toBe(false);
-    expect(shouldShowToc(one)).toBe(false);
-  });
-
-  test("shows from two headings up", () => {
-    const two: TocHeading[] = [
-      { level: 1, text: "A", line: 1 },
-      { level: 2, text: "B", line: 3 },
-    ];
-    expect(shouldShowToc(two)).toBe(true);
   });
 });
 

@@ -15,7 +15,6 @@ import {
   shouldShowOnboarding,
 } from "$lib/prefs.ts";
 import { SHORTCUT_HINTS_KEY } from "$lib/shortcutHintsPref.ts";
-import { TOC_OPEN_KEY } from "$lib/tocPref.ts";
 
 afterEach(() => {
   localStorage.clear();
@@ -29,7 +28,6 @@ describe("knownPrefKeys()", () => {
     expect(knownPrefKeys()).toContain(DARK_SLOT_KEY);
     expect(knownPrefKeys()).toContain(DIFF_INDICATORS_KEY);
     expect(knownPrefKeys()).toContain(DIFF_STYLE_KEY);
-    expect(knownPrefKeys()).toContain(TOC_OPEN_KEY);
     expect(knownPrefKeys()).toContain(ONBOARDED_KEY);
     expect(knownPrefKeys()).toContain(SHORTCUT_HINTS_KEY);
   });

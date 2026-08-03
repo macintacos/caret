@@ -2,8 +2,8 @@
 // is shown as formatted markdown source, so navigation is line-based: headings
 // are scanned out of the raw lines (fence-aware) and carry their 1-based source
 // line, which matches the @pierre/diffs `data-line` numbering used to scroll.
-// Pure and DOM-free, so the extractor, suppression, active-line, and filter
-// logic are all directly unit-testable.
+// Pure and DOM-free, so the extractor, active-line, and filter logic are all
+// directly unit-testable.
 
 /** A heading found in the plan source. */
 export interface TocHeading {
@@ -45,15 +45,6 @@ export function extractHeadings(source: string): TocHeading[] {
     headings.push({ level, text, line: i + 1 });
   }
   return headings;
-}
-
-/**
- * Whether the ToC pane should render. Suppressed for plans with no headings
- * (nothing to navigate) and for a single heading (a one-row pane is noise, not
- * navigation); a pane earns its place from two headings up.
- */
-export function shouldShowToc(headings: TocHeading[]): boolean {
-  return headings.length >= 2;
 }
 
 /**
