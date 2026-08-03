@@ -200,6 +200,59 @@ describe("PlanBreadcrumbs menus", () => {
   });
 });
 
+// EXC-947: the bar's keyboard surface. Only the wiring a mounted component can show
+// lives here — the exposed open handle, the advertised key, the hint cap. The j/k
+// walk itself is real focus movement, so it stays e2e (browser-testing.md).
+describe("PlanBreadcrumbs keyboard invocation", () => {
+  test("hands the parent an open handle that opens the trailing crumb's menu", async () => {
+    const exposed = capture<() => void>();
+    const { flush } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+      onExposeOpen: exposed.cb,
+    });
+    flush();
+    const open = exposed.last();
+    expect(typeof open).toBe("function");
+
+    open?.();
+    await flushUntil(flush, () => menuRows().length > 0);
+    // The INNERMOST crumb — the level being read — not the outermost. Details is
+    // the only level-3 heading under Approach, so a one-row menu identifies it.
+    expect(menuRows().map((r) => r.textContent?.trim())).toEqual(["Details"]);
+  });
+
+  test("advertises b on the crumb the key opens, and only there", () => {
+    const { target } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    const shown = crumbs(target);
+    expect(shown.at(-1)?.getAttribute("aria-keyshortcuts")).toBe("b");
+    expect(shown[0]?.getAttribute("aria-keyshortcuts")).toBeNull();
+  });
+
+  test("teaches b with a keycap only while shortcut hints are shown", () => {
+    const hint = (el: HTMLElement) => el.querySelector("[data-slot='kbd']");
+    const { target: on } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+      showShortcutHints: true,
+    });
+    expect(hint(on)?.textContent?.trim()).toBe("b");
+    const { target: off } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+      showShortcutHints: false,
+    });
+    expect(hint(off)).toBeNull();
+  });
+});
+
 describe("PlanBreadcrumbs overflow", () => {
   test("collapses the middle of a trail deeper than three levels", () => {
     const { target } = render(PlanBreadcrumbs, { headings: DEEP, activeLine: 7, onJump: () => {} });

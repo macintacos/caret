@@ -13,9 +13,18 @@
   //
   // Presentational: no state of its own, the trail is derived, and the parent owns
   // both the heading set and the scroll tracking that moves `activeLine`.
+  //
+  // EXC-947: keyboard-drivable too. `b` (registered by DiffPlanView) invokes the
+  // trailing crumb through the `onExposeOpen` handle below, and j/k walk the open
+  // menu's rows — including a submenu's — by re-dispatching as the arrow keys the
+  // menu already handles.
+  import { untrack } from "svelte";
+
   import * as Breadcrumb from "$lib/components/ui/breadcrumb/index.js";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
+  import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { headingTrail } from "$lib/headingTrail.ts";
+  import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import type { TocHeading } from "$lib/toc.ts";
 
   interface Props {
@@ -25,11 +34,77 @@
     activeLine: number | null;
     /** Jump the view to a heading's 1-based source line. */
     onJump: (line: number) => void;
+    /** Whether the `b` keycap is shown (EXC-826/EXC-947). When off, the cap hides;
+     * the key itself still works. */
+    showShortcutHints?: boolean;
+    /** Hand the parent a closure that opens the trailing crumb's menu, so the `b`
+     * binding can invoke the bar without reaching into its markup. Mirrors
+     * DiffPlanView's own `onExposeReveal` handle. */
+    onExposeOpen?: (open: () => void) => void;
   }
 
-  let { headings, activeLine, onJump }: Props = $props();
+  let { headings, activeLine, onJump, showShortcutHints = false, onExposeOpen }: Props = $props();
 
   const trail = $derived(headingTrail(headings, activeLine));
+
+  let barEl = $state<HTMLElement | null>(null);
+
+  // Open the crumb the reader is on — the level being read, the one `b` advertises.
+  // A programmatic click carries detail: 0, which is exactly what bits-ui's trigger
+  // treats as a keyboard-ish activation, so the whole invocation is the click; a
+  // second `b` toggles back shut. bits-ui then usually moves focus onto the first
+  // row itself, since the real `b` keypress left its `isUsingKeyboard` true — but
+  // that flag also clears on pointermove, so a mouse twitch mid-open can leave focus
+  // on the content instead. Either way j/k below enter the list from the top.
+  // Keyed on aria-current rather than the .current class: same element, but a
+  // contract the menu depends on instead of a style hook a CSS pass could rename.
+  function openTrail(): void {
+    barEl?.querySelector<HTMLButtonElement>('.crumb[aria-current="location"]')?.click();
+  }
+
+  // Hand the open action up once. `untrack` keeps onExposeOpen from becoming a
+  // dependency; openTrail reads the live `barEl`, so exposing it before the bar
+  // paints is safe (it simply no-ops until there is a crumb).
+  $effect(() => {
+    untrack(() => onExposeOpen)?.(openTrail);
+  });
+
+  // j/k walk the open menu, re-dispatched as the arrow keys bits-ui's own roving
+  // focus already handles — so a submenu (whose content has its own roving group)
+  // walks with the same few lines, and disabled rows, wrapping, and Enter-to-select
+  // all stay the primitive's. Handled here, on the content, rather than as a global
+  // binding, because the dispatcher suppresses nothing just because a menu owns
+  // focus. That is only half of what CommentNavigator does (EXC-792): it ALSO
+  // extends the dispatcher's editing-context check in App.svelte, which buys it
+  // every key at once. This claims j/k alone, so the rest of the review keys still
+  // reach the plan while a crumb menu is open.
+  //
+  // Only a bare j/k. A command modifier means the reviewer is talking to the
+  // browser or the OS (⌘J is Downloads), so those pass straight through — the same
+  // line bits-ui's typeahead and the dispatcher's own isBareSpec draw. A shifted
+  // J/K never arrives here at all: the key is then uppercase.
+  //
+  // The one preventDefault does three jobs, and the order each needs is guaranteed
+  // by svelte-toolbelt's composeHandlers, which re-checks defaultPrevented before
+  // EVERY handler in a merged chain:
+  //   1. bits-ui merges this handler ahead of its own, so the letter never reaches
+  //      the menu's typeahead and jumps to some row starting with "j".
+  //   2. The window dispatcher yields on defaultPrevented, so the plan's own j/k
+  //      line cursor stays put behind the open menu.
+  //   3. A SubContent is a DOM DESCENDANT of its parent Content (bits-ui portals
+  //      neither), so the keydown keeps bubbling into this same handler one level
+  //      up. The pre-check is what stops that second pass from dispatching a second
+  //      arrow and double-stepping the walk.
+  // Arrow keys are untouched and keep working.
+  function onMenuKeydown(e: KeyboardEvent): void {
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    const arrow = e.key === "j" ? "ArrowDown" : e.key === "k" ? "ArrowUp" : null;
+    if (arrow === null) return;
+    e.preventDefault();
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: arrow, bubbles: true, cancelable: true }),
+    );
+  }
 
   // Above this depth the bar elides the middle of the trail, keeping the outermost
   // heading and the innermost two — the reader's immediate parent and where they
@@ -63,7 +138,7 @@
         <DropdownMenu.SubTrigger aria-current="location">
           <span class="crumb-label" title={heading.text}>{heading.text}</span>
         </DropdownMenu.SubTrigger>
-        <DropdownMenu.SubContent class="plan-crumb-menu">
+        <DropdownMenu.SubContent class="plan-crumb-menu" onkeydown={onMenuKeydown}>
           {@render level(depth + 1)}
         </DropdownMenu.SubContent>
       </DropdownMenu.Sub>
@@ -82,7 +157,7 @@
      scrolled — renders no bar at all. There is deliberately no minimum-heading
      gate beyond that: a one-heading plan still has a location. -->
 {#if trail.length > 0}
-  <Breadcrumb.Root class="plan-breadcrumbs" aria-label="Plan location">
+  <Breadcrumb.Root bind:ref={barEl} class="plan-breadcrumbs" aria-label="Plan location">
     <Breadcrumb.List>
       {#each depths as depth, index (depth)}
         {@const crumb = trail[depth]}
@@ -107,16 +182,25 @@
                   class:current
                   title={crumb?.heading.text}
                   aria-current={current ? "location" : undefined}
+                  aria-keyshortcuts={current ? ariaKeyshortcutsFor("actions.headingNav") : undefined}
                 >{#key crumb?.heading.line}<span class="crumb-text">{crumb?.heading.text}</span>{/key}</button>
               {/snippet}
             </DropdownMenu.Trigger>
-            <DropdownMenu.Content align="start" class="plan-crumb-menu">
+            <DropdownMenu.Content align="start" class="plan-crumb-menu" onkeydown={onMenuKeydown}>
               {@render level(depth)}
             </DropdownMenu.Content>
           </DropdownMenu.Root>
         </Breadcrumb.Item>
       {/each}
     </Breadcrumb.List>
+    <!-- The `b` cap teaches the key, gated on the shortcut-hints setting like the
+         compare toggle's `d`. It rides just past the crumb it opens — the trailing
+         one — rather than leading the bar, which would read as labelling the whole
+         trail. Outside the list, since that list is an <ol> of <li> crumbs, and
+         outside the crumb button, whose ellipsis truncation would eat it. -->
+    {#if showShortcutHints}
+      <Kbd class="kbd-sm crumb-cap" aria-hidden="true">b</Kbd>
+    {/if}
   </Breadcrumb.Root>
 {/if}
 
@@ -276,9 +360,29 @@
   }
   /* The heading the reader is already on, marked with the amber wash the menu
      language reserves for the active choice (shadcn-rules.md § Menu highlight vs.
-     selection) — the same signal SourceToc's active row carries. */
+     selection) — the same signal SourceToc's active row carries. Being unlayered,
+     it also out-specifies the catalog's layered `data-highlighted` background, so
+     the row the reader is on needs the rule below to show any movement under j/k. */
   :global(.plan-crumb-menu [aria-current="location"]) {
     background: var(--accent-wash);
     color: var(--ink);
+  }
+  /* Walking onto the row the reader is already on: the wash warms toward the same
+     --chip-hover every other highlighted row takes, so the amber keeps saying "you
+     are here" while the fill still says "the keyboard is on it". The app's global
+     focus outline lands here too, but only by cascade — base.css sits outside
+     @layer base and so beats the item recipe's `outline-hidden` — and the recipe
+     means to suppress it, so the fill is what this leans on. */
+  :global(.plan-crumb-menu [aria-current="location"][data-highlighted]) {
+    background: color-mix(in lab, var(--accent-wash), var(--chip-hover) 40%);
+  }
+
+  /* The `b` cap: punctuation-quiet like the chevrons, and never shrinking — the
+     crumbs give up width first (they ellipsise; a 1-character cap cannot). The
+     keycap atom draws from currentColor, so the faint ink here is the whole tint. */
+  :global(.plan-breadcrumbs .crumb-cap) {
+    flex: none;
+    margin-inline-start: 0.3rem;
+    color: var(--ink-faint);
   }
 </style>
