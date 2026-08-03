@@ -1,10 +1,11 @@
 // Heading hierarchy for the plan's breadcrumbs bar. `toc.ts` models the plan's
 // headings as a flat list in document order; this module reads the tree that
-// list implies — the ancestor chain enclosing the heading being read, and the
-// headings each of those can be swapped for. Pure and DOM-free like `toc.ts`,
-// so the parenting and sibling logic is directly unit-testable.
+// list implies — the ancestor chain enclosing the heading being read, the
+// headings each of those can be swapped for, and the flat filter results the
+// bar offers over the whole plan. Pure and DOM-free like `toc.ts`, so the
+// parenting, sibling, and match logic is directly unit-testable.
 
-import type { TocHeading } from "$lib/toc.ts";
+import { filterHeadings, type TocHeading } from "$lib/toc.ts";
 
 /** A heading in the trail, paired with the headings it can be swapped for. */
 export interface HeadingCrumb {
@@ -14,6 +15,13 @@ export interface HeadingCrumb {
    * Always contains `heading` itself.
    */
   siblings: TocHeading[];
+}
+
+/** A heading the bar's filter matched, paired with the heading enclosing it. */
+export interface HeadingMatch {
+  heading: TocHeading;
+  /** The enclosing heading's text, or null for a heading with no ancestor. */
+  parent: string | null;
 }
 
 // The parent of each heading, by index, or -1 for a heading with no ancestor.
@@ -60,4 +68,25 @@ export function headingTrail(headings: TocHeading[], activeLine: number | null):
     index = parent;
   }
   return trail;
+}
+
+/**
+ * Headings matching `query`, in document order, each carrying the text of the
+ * heading enclosing it. Matching is `filterHeadings`' — case-insensitive
+ * substring over the whole plan, so an empty query returns every heading — and
+ * the parent comes from the same walk `headingTrail` climbs, so the two views
+ * of the hierarchy can never disagree. The parent is what keeps two identically
+ * titled sections apart in a flat list.
+ */
+export function headingMatches(headings: TocHeading[], query: string): HeadingMatch[] {
+  const parents = parentIndices(headings);
+  // Keyed on the source line, the handle the rest of this module and toc.ts
+  // already identify a heading by.
+  const parentText = new Map(
+    headings.map((h, index) => [h.line, headings[parents[index] ?? -1]?.text ?? null]),
+  );
+  return filterHeadings(headings, query).map((heading) => ({
+    heading,
+    parent: parentText.get(heading.line) ?? null,
+  }));
 }
