@@ -187,6 +187,56 @@ test("picking a sibling from a crumb's menu scrolls the plan to that heading", a
   await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("delta");
 });
 
+test("picking a heading leaves the bar instead of parking a focus ring on the crumb", async ({
+  daemon,
+  page,
+}) => {
+  // A pick hands the reviewer to the plan, so that close skips the menu's focus
+  // return: a crumb left focused wears the app's focus ring over a plan the
+  // reviewer has already moved on to. Only a pick — Escape still hands focus back
+  // to the crumb (review-shortcuts.e2e.ts), since a dismissal leaves them in the bar.
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+
+  await jumpTo(page, "Bravo");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo"]);
+
+  await page.locator(CRUMB).last().click();
+  const menu = page.locator(MENU);
+  await expect(menu).toBeVisible();
+  await menu.getByRole("menuitem", { name: "Delta" }).press("Enter");
+
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Delta"]);
+  await expect(menu).toBeHidden();
+  // Focus sits on the body, which the plan's window-level keys are happy with —
+  // nothing in the bar is left ringed.
+  await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe("BODY");
+});
+
+test("a picked heading takes the line cursor with it, scrolling to one does not", async ({
+  daemon,
+  page,
+}) => {
+  // The cursor is where the reviewer's next motion, comment or visual selection
+  // starts from, so a deliberate pick carries it to the chosen heading — the same
+  // coherence a line click gets. Scrolling is not a choice: the trail re-roots on
+  // every wheel tick and must leave the cursor where the reviewer put it.
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+  await waitPastSafeModeGrace(page);
+
+  const cursor = page.locator(".diffview [data-content] [data-line][data-caret-cursor]");
+  await page.locator(".diff-plan").evaluate((el) => el.scrollBy(0, 2000));
+  // The trail deepened, so the scroll really did move the reading position — and
+  // still no cursor exists.
+  await expect.poll(() => page.locator(CRUMB).count()).toBeGreaterThan(1);
+  await expect(cursor).toHaveCount(0);
+
+  await jumpTo(page, "Delta");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Delta"]);
+  await expect(cursor).toHaveText("## Delta");
+});
+
 test("a crumb's own heading opens the level below it without leaving the menu", async ({
   daemon,
   page,
@@ -240,8 +290,12 @@ test("j and k walk a nested submenu, not the plan behind it", async ({ daemon, p
   // The plan's own j/k line cursor never engaged. Asserted on the cursor tag rather
   // than on scrollTop: a freshly-placed cursor lands on the reading line and only
   // scrolls once it crosses the scrolloff band, so the plan would sit still here
-  // even with the suppression broken — but the very first stray `j` tags a row.
-  await expect(page.locator("[data-caret-cursor]")).toHaveCount(0);
+  // even with the suppression broken — but the very first stray `j` steps the row
+  // it sits on. That row is Charlie's own heading, put there by the pick that
+  // arranged this reading position rather than by anything in the walk above.
+  await expect(page.locator(".diffview [data-content] [data-caret-cursor]")).toHaveText(
+    "### Charlie",
+  );
 });
 
 // EXC-957: the menus recurse the whole heading tree, so the bar reaches any

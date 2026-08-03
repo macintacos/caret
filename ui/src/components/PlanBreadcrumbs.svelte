@@ -189,6 +189,22 @@
     return true;
   }
 
+  // Whether the menu is closing because the reviewer picked a heading. A pick
+  // hands them to the plan, so that close skips the primitive's focus return
+  // (onCloseAutoFocus below) — otherwise the crumb keeps a focus ring over a plan
+  // the reviewer has already moved on to. Escape is deliberately untouched:
+  // dismissing a menu leaves the reviewer in the bar, where the crumb is exactly
+  // where focus belongs.
+  let leaving = false;
+
+  // Take the reviewer to a heading. Landing focus on the body costs nothing here
+  // — the plan's own keys are window-level, and `b` summons the bar back — which
+  // is the same trade the search HUD makes when Enter commits a query and blurs.
+  function goTo(line: number): void {
+    leaving = true;
+    onJump(line);
+  }
+
   // Take the reviewer to a heading and leave the bar. A plain row's select closes
   // the menu on its own; a row that nests a submenu has no select to close it, so
   // the open trigger is toggled shut with the same programmatic click openTrail
@@ -197,7 +213,7 @@
   // sub-trigger, which lives in bits-ui's portalled content outside this element.
   function jump(line: number): void {
     barEl?.querySelector<HTMLButtonElement>('[aria-expanded="true"]')?.click();
-    onJump(line);
+    goTo(line);
   }
 
   // A heading with children is still a destination, not only a doorway: Enter
@@ -423,7 +439,7 @@
         </DropdownMenu.SubContent>
       </DropdownMenu.Sub>
     {:else}
-      <DropdownMenu.Item aria-current={here} onSelect={() => onJump(heading.line)}>
+      <DropdownMenu.Item aria-current={here} onSelect={() => goTo(heading.line)}>
         <span class="crumb-label" title={heading.text}>{heading.text}</span>
       </DropdownMenu.Item>
     {/if}
@@ -447,7 +463,7 @@
   {#each matches as match (match.heading.line)}
     <DropdownMenu.Item
       aria-current={match.heading.line === activeLine ? "location" : undefined}
-      onSelect={() => onJump(match.heading.line)}
+      onSelect={() => goTo(match.heading.line)}
     >
       <span class="crumb-label" title={match.heading.text}>{match.heading.text}</span>
       {#if match.parent}
@@ -484,6 +500,14 @@
       class="plan-crumb-menu"
       aria-keyshortcuts="/"
       onkeydown={onMenuKeydown}
+      onCloseAutoFocus={(e) => {
+        // Only a pick suppresses the return. Every other close — Escape, a click
+        // outside, Tab — hands focus back to the trigger as the primitive
+        // intends, so a dismissal never strands the reviewer's next key.
+        if (!leaving) return;
+        leaving = false;
+        e.preventDefault();
+      }}
       onEscapeKeydown={(e) => {
         // While filtering, Escape is a step back to the hierarchy rather than a
         // dismissal: bits-ui closes only if this event was not defaultPrevented.

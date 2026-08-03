@@ -663,6 +663,17 @@
     retryScrollTo(line);
   }
 
+  // Take the reviewer to a heading they picked in the breadcrumbs bar. The line
+  // cursor goes with them: a pick is a deliberate move, so it relocates the cursor
+  // exactly as a line click does in openRange below, and the reviewer's next
+  // motion, comment or visual selection starts from the heading they chose.
+  // Scrolling never lands here — the trail re-roots on the scroll observer, and
+  // only a pick calls onJump — so reading around leaves the cursor untouched.
+  function pickHeading(line: number): void {
+    keyboardStore.cursorLine = line;
+    api?.scrollToLine(line);
+  }
+
   // Captures the imperative API and, on the first ready, restores a deep-linked
   // heading (`?heading=<slug>`) by resolving the slug to its source line and
   // scrolling to it once. takeHeadingSlug() clears the param, so a later SourceView
@@ -1162,7 +1173,7 @@
       {headings}
       {activeLine}
       {showShortcutHints}
-      onJump={(line) => api?.scrollToLine(line)}
+      onJump={pickHeading}
       onExposeOpen={(open) => (openHeadingNav = open)}
     />
   {/if}
