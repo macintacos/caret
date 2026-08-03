@@ -140,6 +140,53 @@ test("marks references under a vendor palette too", async ({ daemon, page }) => 
   }
 });
 
+test("marks a markdown link whose target is a file, exactly once", async ({ daemon, page }) => {
+  // EXC-954: a `[label](path)` link renders as a file reference rather than
+  // literal link syntax. Two facts hold that design up and neither is reachable
+  // from a unit — both are properties of the real shadow-root tagging:
+  //
+  //   - shiki must emit a collapsed link's line such that a token STARTS at the
+  //     label, or tagFileRefTokens has nothing to hang the glyph on;
+  //   - the backticked-path label — the citation shape this repo's own plans use —
+  //     must end up with ONE glyph, not two. Both decoration paths fire on it: the
+  //     link layer emits over the whole label, and the inline-code scan finds the
+  //     path inside the surviving backticks.
+  //
+  // The count is the whole assertion set: 2 (not 1) proves the backticked form
+  // decorates at all, 2 (not 3) proves it decorates only once, and 2 (not 4)
+  // proves the link to a missing file never does.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: [
+        "# Refs",
+        "",
+        "[src/cache.ts](src/cache.ts) holds the key.",
+        "",
+        "[`src/cache.ts`](src/cache.ts) is where it lives.",
+        "",
+        "[a ghost](src/ghost.md) does not exist.",
+        "",
+      ].join("\n"),
+    });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+
+    await expect.poll(() => fileRefCount(page)).toBe(2);
+
+    // The collision-merged span is clickable, not merely visible: click the
+    // backticked link's token and the preview opens on the file it points at.
+    await page.locator("[data-file-ref]").nth(1).click();
+    const preview = page.locator("[data-file-preview]");
+    await expect(preview).toBeVisible();
+    await expect(preview).toContainText("src/cache.ts");
+    await expect(preview).toContainText("MARKER_LINE_ONE");
+  } finally {
+    await proj.cleanup();
+  }
+});
+
 test("clicking a real reference reveals a highlighted excerpt centered on its line", async ({
   daemon,
   page,
