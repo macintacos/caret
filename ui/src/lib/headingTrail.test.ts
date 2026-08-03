@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { headingTrail } from "$lib/headingTrail.ts";
+import { headingMatches, headingTrail } from "$lib/headingTrail.ts";
 import { extractHeadings, type TocHeading } from "$lib/toc.ts";
 
 // Fixtures deliberately space their headings apart, so a heading's source line
@@ -89,5 +89,57 @@ describe("headingTrail", () => {
 
   test("returns an empty trail when the active line holds no heading", () => {
     expect(headingTrail(extractHeadings("# A\n\n## B\n"), 99)).toEqual([]);
+  });
+});
+
+// The flat side of the same tree: where headingTrail answers "what encloses the
+// heading I am reading", these answer "which headings match, and what encloses
+// each of them" — the bar's filter, which spans the whole plan rather than one
+// level's siblings.
+describe("headingMatches", () => {
+  test("returns every heading in document order for an empty query", () => {
+    const headings = extractHeadings("# A\n\n## B\n\n### C\n");
+    expect(headingMatches(headings, "").map((m) => m.heading.text)).toEqual(["A", "B", "C"]);
+  });
+
+  test("matches across levels rather than one level's siblings", () => {
+    // "Setup" sits at level 1 and "Setup notes" at level 3 under a different
+    // branch: a filter scoped to one level could never return both.
+    const headings = extractHeadings("# Setup\n\n## Build\n\n### Setup notes\n");
+    expect(headingMatches(headings, "setup").map((m) => m.heading.text)).toEqual([
+      "Setup",
+      "Setup notes",
+    ]);
+  });
+
+  test("names each match's enclosing heading", () => {
+    const headings = extractHeadings("# A\n\n## B\n\n### C\n");
+    expect(headingMatches(headings, "c")).toEqual([
+      { heading: { level: 3, text: "C", line: 5 }, parent: "B" },
+    ]);
+  });
+
+  test("distinguishes identically titled headings by their parent", () => {
+    // The case the bar exists to survive: two "Details" sections that a flat
+    // list would otherwise render as the same row twice.
+    const headings = extractHeadings("# A\n\n## Details\n\n# B\n\n## Details\n");
+    expect(headingMatches(headings, "details").map((m) => m.parent)).toEqual(["A", "B"]);
+  });
+
+  test("reports no parent for a heading with no ancestor", () => {
+    expect(headingMatches(extractHeadings("# A\n\n## B\n"), "a")[0]?.parent).toBeNull();
+  });
+
+  test("matches case-insensitively on a substring, as the rail's filter did", () => {
+    const headings = extractHeadings("# Verification\n");
+    expect(headingMatches(headings, "RIFICA").map((m) => m.heading.text)).toEqual(["Verification"]);
+  });
+
+  test("returns nothing when no heading matches", () => {
+    expect(headingMatches(extractHeadings("# A\n\n## B\n"), "zzz")).toEqual([]);
+  });
+
+  test("returns nothing for a plan with no headings", () => {
+    expect(headingMatches([], "")).toEqual([]);
   });
 });
