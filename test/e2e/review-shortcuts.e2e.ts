@@ -19,19 +19,19 @@ const filler = (label: string) =>
   Array.from({ length: 6 }, (_, i) => `${label} body line ${i + 1}.`).join("\n\n");
 const PLAN = ["# Alpha", filler("Alpha"), "## Bravo", filler("Bravo"), ""].join("\n\n");
 
-// The `b` specs need a trail with real siblings to walk, so each section must be
-// taller than the viewport — otherwise the whole plan stays in view and jumping
-// never changes the heading being read (the shape plan-breadcrumbs.e2e.ts uses).
-// Exactly one `#`: the daemon demotes every later top-level heading, so the
-// siblings the menu offers are the `##` level. Echo is there only so Delta is not
-// the last section — the plan scrolls barely past its own end, so a jump to the
-// final heading clamps short and tracking stays on the section above it.
+// The `b` specs need a trail whose innermost crumb has real siblings to walk: one
+// `#` root over a flat run of `##` sections, each taller than the viewport so that
+// jumping genuinely changes the heading being read. The single `#` is not a style
+// choice — plan-breadcrumbs.e2e.ts explains why the daemon leaves no other kind.
+// Echo is there only so Delta is not the last section: the plan scrolls barely past
+// its own end, so a jump to the final heading clamps short and tracking stays on
+// the section above it.
 const tall = (label: string) =>
   Array.from(
     { length: 30 },
     (_, i) => `${label} detail line ${i + 1} keeps this section tall.`,
   ).join("\n");
-const NESTED_PLAN = [
+const TALL_PLAN = [
   "# Alpha",
   tall("Alpha"),
   "## Bravo",
@@ -189,7 +189,7 @@ test("b opens the breadcrumbs bar, and j/j/Enter jumps to the highlighted headin
 }) => {
   // EXC-947: the bar's own menus are covered in plan-breadcrumbs.e2e.ts; this pins
   // the key that summons them and the vim walk inside them.
-  await daemon.seed({ plan: NESTED_PLAN });
+  await daemon.seed({ plan: TALL_PLAN });
   await page.goto("/");
   await loadPlan(page);
 
@@ -223,11 +223,14 @@ test("Escape closes the breadcrumbs menu and hands focus back to the crumb", asy
 }) => {
   // The dismissal half of EXC-947: a keyboard close must not strand focus on
   // document.body, or the reviewer's next key goes nowhere.
-  await daemon.seed({ plan: NESTED_PLAN });
+  await daemon.seed({ plan: TALL_PLAN });
   await page.goto("/");
   await loadPlan(page);
 
+  // The trail is seeded a few frames after the plan paints, so wait for the crumb
+  // itself — pressing `b` before it exists is a silent no-op.
   const crumb = page.locator(".plan-breadcrumbs button.crumb.current");
+  await expect(crumb).toBeVisible();
   await page.keyboard.press("b");
   const menu = page.locator("[data-slot='dropdown-menu-content']");
   await expect(menu).toBeVisible();

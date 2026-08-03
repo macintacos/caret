@@ -110,10 +110,9 @@ describe("CANONICAL_KEYMAP", () => {
   });
 
   test("reserves b for the heading breadcrumbs in the Actions group, rendered as a B cap", () => {
-    // EXC-947: `b` invokes the heading breadcrumbs bar. A bare lowercase letter with no
-    // command modifier, so keyCaps derives the capital from the key's case and
-    // ariaKeyshortcuts derives the lowercase key the dispatcher actually matches — the
-    // same shape actions.toggleDiff (`d`) and actions.searchNext (`n`) take.
+    // EXC-947: `b` invokes the heading breadcrumbs bar. The cap and the advertised
+    // hint are derived from the same `key`, so the bar's aria-keyshortcuts cannot
+    // drift from what the dispatcher fires on.
     const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.headingNav");
     if (!entry) throw new Error("actions.headingNav missing");
     expect(entry.group).toBe("actions");

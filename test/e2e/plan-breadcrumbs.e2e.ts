@@ -150,8 +150,6 @@ test("j and k walk a nested submenu, not the plan behind it", async ({ daemon, p
 
   await jumpTo(page, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
-  const scrolled = () => page.locator(".diff-plan").evaluate((el) => el.scrollTop);
-  const before = await scrolled();
 
   // The outermost crumb's own row nests the level below rather than jumping, so
   // stepping onto it and pressing ArrowRight opens a submenu with real siblings.
@@ -171,9 +169,11 @@ test("j and k walk a nested submenu, not the plan behind it", async ({ daemon, p
   await page.keyboard.press("k");
   await expect(submenu.getByRole("menuitem", { name: "Delta" })).toBeFocused();
 
-  // The plan's own j/k line cursor stayed suppressed throughout — a menu that let
-  // both fire would scroll the plan out from under the reader mid-walk.
-  expect(await scrolled()).toBe(before);
+  // The plan's own j/k line cursor never engaged. Asserted on the cursor tag rather
+  // than on scrollTop: a freshly-placed cursor lands on the reading line and only
+  // scrolls once it crosses the scrolloff band, so the plan would sit still here
+  // even with the suppression broken — but the very first stray `j` tags a row.
+  await expect(page.locator("[data-caret-cursor]")).toHaveCount(0);
 });
 
 test("compare mode drops the bar, which tracks no heading there", async ({ daemon, page }) => {

@@ -161,8 +161,7 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
   // EXC-947: opens the heading breadcrumbs bar's trailing crumb — the level being
   // read — so the trail is reachable without the mouse. A bare lowercase letter, no
   // command modifier and no cap override: keyCaps derives the capital from the key's
-  // case, the same shape `d` and `n` take. `\` stays with actions.toggleSidebar; this
-  // entry claims `b` only.
+  // case, the same shape `d` and `n` take.
   { id: "actions.headingNav", keys: [{ key: "b" }], group: "actions", label: "Open breadcrumbs" },
   // Settings — the Settings modal's scoped affordances, display-only (EXC-849/876).
   ...SETTINGS_SHORTCUTS,

@@ -695,8 +695,10 @@
   // read the topmost visible line.
   let scrollEl = $state<HTMLElement | undefined>();
   // Opens the breadcrumbs bar's trailing crumb, handed over by the bar itself
-  // (EXC-947). Undefined until the bar mounts — in compare mode, or on a plan with
-  // no headings, there is nothing to open and the `b` binding no-ops.
+  // (EXC-947). Undefined until the bar first mounts, and it keeps the last closure
+  // afterwards — entering compare mode unmounts the bar without clearing this. What
+  // makes `b` inert there is the binding's own !showDiff guard; the closure would
+  // no-op anyway, since it reads a `barEl` the unmount set back to null.
   let openHeadingNav: (() => void) | undefined;
 
   // The plan's keyboard surface (EXC-875): the vim line cursor (EXC-788), visual
