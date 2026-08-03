@@ -24,22 +24,6 @@ the UI. That is fine — it belongs to the fixture.
 
 The renderer is `marked` (GFM on, `breaks` off) → DOMPurify (strict allowlist) → Shiki (dual-theme). The sections below each target a slice of that pipeline. Edit this file and the dev driver reseeds it, so it doubles as a live scratchpad for renderer work.
 
-## Contents
-
-1. [Headings](#headings)
-2. [Inline formatting](#inline-formatting)
-3. [Lists](#lists)
-4. [Blockquotes](#blockquotes)
-5. [Tables](#tables)
-6. [Code blocks](#code-blocks)
-7. [Horizontal rules](#horizontal-rules)
-8. [Overflow and edge cases](#overflow-and-edge-cases)
-9. [Reflow exemptions](#reflow-exemptions)
-10. [Sanitizer probes](#sanitizer-probes)
-11. [Filename references](#filename-references)
-
----
-
 ## Headings
 
 The first heading in the document is normalized to an `h1` regardless of its authored level; every heading below keeps its level so the heading breadcrumbs trail and scrollspy have a full ladder.
@@ -59,6 +43,142 @@ Body copy under an `h5`.
 ###### Heading level six
 
 Body copy under an `h6` — the deepest level, often rendered close to body size.
+
+The section below carries the heading *tree*, as opposed to this one's ladder of levels.
+
+## Heading navigation
+
+**Everything under this heading is invented.** The subsystems, modules, owners and numbers below are fixture data — none of it describes anything caret does, ships, or plans to. It is scaffolding for the heading breadcrumbs bar (EXC-946/EXC-957), which needs a hierarchy worth walking: the tree nests six levels deep, fans out wider than a menu can show at once, repeats a name under two different parents, skips a level, and carries headings long, short and strange enough to push the trail through every state it has. Open the bar with `b`, walk it with `h`/`j`/`k`/`l`, jump with Enter, and filter every heading in the plan with `/`.
+
+### Fake subsystem: Ferris telemetry
+
+The deep branch. Reading the innermost heading under it puts six crumbs in the bar — more than a narrow window holds, so the middle collapses behind the elision marker and comes back as the window widens.
+
+#### Intake
+
+Two stages sit below, so this crumb's menu opens on a pair of siblings rather than a single row.
+
+##### Decode
+
+The stage that supposedly turns a fake wire payload into fake records.
+
+###### Verify the checksum
+
+The deepest heading in the plan — level six, with a sibling beside it, so the bottom of the walk is a menu rather than a dead end.
+
+###### Stamp the arrival clock
+
+Sibling of the step above: same level, same parent, one line apart.
+
+##### Fan out
+
+A stage with nothing under it, so its row is a plain destination rather than a doorway into a submenu.
+
+#### Retention
+
+Exactly one heading sits under this one — the narrowest menu the bar ever draws.
+
+##### Compact the fake archive
+
+The only child of Retention.
+
+### Fake subsystem: Carousel billing
+
+Ten siblings sit under this heading, enough that its menu scrolls instead of showing every row at once. The ledger below is invented too, down to the last decimal.
+
+| Fake ledger      | Owner | Records | Drift |
+| ---------------- | ----- | ------: | ----: |
+| carousel-invoice | avery |  12,904 |  0.2% |
+| carousel-refund  | blair |   1,338 |  1.7% |
+| carousel-dunning | casey |     412 |  0.0% |
+| carousel-payout  | devon |   8,067 |  0.4% |
+
+#### Invoices
+
+Fake module one of ten.
+
+#### Refunds
+
+Fake module two of ten.
+
+#### Dunning
+
+Fake module three of ten.
+
+#### Proration
+
+Fake module four of ten.
+
+#### Credits
+
+Fake module five of ten.
+
+#### Taxes
+
+Fake module six of ten.
+
+#### Payouts
+
+Fake module seven of ten.
+
+#### Chargebacks
+
+Fake module eight of ten.
+
+#### Statements
+
+Fake module nine of ten.
+
+#### Reconciliation
+
+Fake module ten of ten — the last row of a menu that had to scroll to reach it.
+
+### Fake subsystem: Bumper-car routing
+
+Two probes live here: a heading whose text repeats one from Carousel billing, and a level the tree skips outright.
+
+#### Invoices
+
+The second heading in the plan called "Invoices". The filter (`/`) names the enclosing heading beside each row, which is the only thing telling this one from its namesake under Carousel billing; their anchors differ too, the later occurrence taking a `-1` suffix.
+
+###### Verify the checksum
+
+A level-six heading directly under a level four: no level five was ever opened, so this roots at Invoices above rather than at anything between them. It repeats a name from the Ferris branch as well, giving the filter a second pair to keep apart.
+
+### Fake subsystem: Odd headings
+
+The shapes that are awkward to *render* rather than awkward to nest.
+
+#### A fake heading whose text runs on well past the width any crumb can show, so the bar has to truncate it with an ellipsis and the menu row does the same, while the whole string stays in the hover title
+
+Long enough to collapse the trail on its own, even in a wide window.
+
+#### Fee
+
+About as short as a heading gets — useful beside the monster above for watching how the bar hands out width.
+
+#### `reconcileFakeLedger()` — a heading carrying inline code
+
+Heading text is read from the plan SOURCE, so the backticks travel into the crumb and the menu row rather than rendering as code there; only the heading in the plan body renders them.
+
+#### 🎡 🎠 🎢
+
+No letters or digits at all: slugifying leaves nothing behind, so the anchor falls back to `section`.
+
+#### Closing hashes are stripped ####
+
+ATX closing hashes are trimmed off the heading text, so the crumb reads without the trailing `####`.
+
+#### Ünïcödé, 你好, مرحبا
+
+Mixed scripts in one heading, to confirm the crumb, the menu row and the anchor all survive them.
+
+A `#` inside a fence is code, not a heading, so nothing in the block below should ever reach the bar:
+
+```text
+# Not a heading
+## Also not a heading
+```
 
 ## Inline formatting
 
