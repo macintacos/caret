@@ -16,8 +16,13 @@
 		// Surface — the same popover panel as dropdown-menu-content, so a submenu is
 		// indistinguishable from the menu that spawned it
 		"bg-popover text-popover-foreground",
-		// Sizing + layout
-		"z-50 max-h-(--bits-dropdown-menu-content-available-height) min-w-32 origin-(--bits-dropdown-menu-content-transform-origin) overflow-x-hidden overflow-y-auto",
+		// Sizing + layout. The custom-property prefix is `menu`, NOT `dropdown-menu`
+		// as in the sibling dropdown-menu-content.svelte: bits-ui maps Content to its
+		// own dropdown-menu implementation but SubContent to the shared menu one, and
+		// each publishes these vars under its own name. With the sibling's prefix both
+		// resolve to nothing — the height clamp silently dies and the zoom animates
+		// from the panel centre instead of the trigger corner.
+		"z-50 max-h-(--bits-menu-content-available-height) min-w-32 origin-(--bits-menu-content-transform-origin) overflow-x-hidden overflow-y-auto",
 		// Shape
 		"rounded-xl border p-1 shadow-md outline-none",
 		// Open / close animation

@@ -2,9 +2,11 @@
 	// caret vendors icons rather than depending on @lucide/svelte (EXC-754 parent
 	// decision). The stock component imported `@lucide/svelte/icons/more-horizontal`
 	// here; that glyph is Lucide "ellipsis", already in the vendored registry, so it
-	// renders through Icon.svelte. Icon wraps the SVG in a <span>, which the sibling
-	// `[&>svg]:size-4` rule can no longer reach, so the size rides Icon's own prop —
-	// the rule is kept for a caller who supplies their own <svg>.
+	// renders through Icon.svelte. Icon wraps the SVG in a <span>, so the sibling
+	// `[&>svg]:size-4` child selector no longer reaches it and the size rides Icon's
+	// own prop instead. That rule is now inert — the props are WithoutChildren, so no
+	// caller can supply an <svg> either — but it is left as the CLI wrote it so this
+	// file stays diffable against a re-run of `shadcn-svelte add breadcrumb`.
 	import Icon from "@/components/Icon.svelte";
 	import { cn, type WithElementRef, type WithoutChildren } from "$lib/utils.js";
 	import type { HTMLAttributes } from "svelte/elements";

@@ -3,8 +3,9 @@
 	import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
 	// caret vendors icons rather than depending on @lucide/svelte (EXC-754 parent
 	// decision). The stock `@lucide/svelte/icons/chevron-right` import is replaced by
-	// the vendored glyph through Icon.svelte, which sizes itself via its own prop
-	// rather than the `[&_svg]` rules below (it wraps the SVG in a <span>).
+	// the vendored glyph through Icon.svelte. The `[&_svg …]` rules below are
+	// descendant selectors, so they do reach the <svg> Icon nests inside its wrapper
+	// <span>; `size={16}` sizes that wrapper to agree with them rather than fight.
 	import Icon from "@/components/Icon.svelte";
 
 	let {
@@ -30,6 +31,8 @@
 		"[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
 		// Inset rows get leading space so their labels align under icon rows
 		"data-inset:ps-8",
+		// Disabled row
+		"data-disabled:pointer-events-none data-disabled:opacity-50",
 		// Highlighted (hover / keyboard) row
 		"data-highlighted:bg-accent data-highlighted:text-accent-foreground",
 		// While its submenu is open the row stays highlighted, so the trail from the
