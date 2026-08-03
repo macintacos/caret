@@ -96,7 +96,11 @@ describe("PlanBreadcrumbs trail", () => {
       "Approach",
       "Details",
     ]);
-    expect(target.querySelectorAll("[data-slot='breadcrumb-separator']").length).toBe(2);
+    // The elision marker and its own separator ride along elided, so only the
+    // chevrons actually punctuating the trail are counted.
+    expect(target.querySelectorAll("[data-slot='breadcrumb-separator']:not(.elided)").length).toBe(
+      2,
+    );
   });
 
   // The scroll observer in DiffPlanView only ever hands this component a new
@@ -489,16 +493,45 @@ describe("PlanBreadcrumbs filter", () => {
   });
 });
 
+// EXC-957: the trail elides on the room the row measures, not on how deep it
+// happens to be. happy-dom reports no layout, so every crumb measures zero and
+// the whole trail fits — which is what a wide row does too. The arithmetic over
+// real widths is unit-tested in lib/headingTrail.test.ts and the collapse itself
+// is e2e; what a mounted component can show is that no depth count elides
+// anything, and that the marker is a real control sitting in the trail.
 describe("PlanBreadcrumbs overflow", () => {
-  test("collapses the middle of a trail deeper than three levels", () => {
+  test("shows every level of a deep trail when the row has room for it", () => {
     const { target } = render(PlanBreadcrumbs, { headings: DEEP, activeLine: 7, onJump: () => {} });
-    expect(crumbs(target).map((c) => c.textContent?.trim())).toEqual(["One", "Three", "Four"]);
-    expect(target.querySelectorAll("[data-slot='breadcrumb-ellipsis']").length).toBe(1);
+    expect(crumbs(target).map((c) => c.textContent?.trim())).toEqual([
+      "One",
+      "Two",
+      "Three",
+      "Four",
+    ]);
   });
 
-  // The collapse only works because the elided levels stay reachable: the first
-  // crumb's menu nests each level below it, so nothing becomes unreachable.
-  test("keeps the elided levels reachable through the first crumb's submenus", async () => {
+  // The levels the row cannot hold stay in the DOM rather than being dropped
+  // from it: that is what keeps the full trail measurable while a collapsed one
+  // is on screen.
+  test("keeps the elision marker in the trail, elided, when nothing is hidden", () => {
+    const { target } = render(PlanBreadcrumbs, { headings: DEEP, activeLine: 7, onJump: () => {} });
+    const marker = target.querySelector(".crumb-ellipsis");
+    expect(marker).not.toBeNull();
+    expect(marker?.closest(".crumb-marker")?.classList.contains("elided")).toBe(true);
+  });
+
+  test("makes the elision marker a control rather than inert punctuation", () => {
+    const { target } = render(PlanBreadcrumbs, { headings: DEEP, activeLine: 7, onJump: () => {} });
+    const marker = target.querySelector(".crumb-ellipsis");
+    expect(marker?.tagName).toBe("BUTTON");
+    expect(marker?.getAttribute("aria-hidden")).toBeNull();
+    expect(marker?.getAttribute("role")).not.toBe("presentation");
+    expect(marker?.getAttribute("aria-label")).toContain("Hidden levels");
+  });
+
+  // Whatever the row can hold, the outermost crumb's menu nests every level
+  // below it, so no collapse can put a heading out of reach.
+  test("keeps every level below the outermost crumb reachable from its menu", async () => {
     const { target, flush } = render(PlanBreadcrumbs, {
       headings: DEEP,
       activeLine: 7,
@@ -509,14 +542,5 @@ describe("PlanBreadcrumbs overflow", () => {
       "dropdown-menu-sub-trigger",
     ]);
     expect(menuRows()[0]?.textContent?.trim()).toBe("One");
-  });
-
-  test("shows a three-level trail whole", () => {
-    const { target } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    expect(target.querySelector("[data-slot='breadcrumb-ellipsis']")).toBeNull();
   });
 });
