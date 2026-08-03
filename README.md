@@ -28,10 +28,11 @@ bunx --no-cache @macintacos/caret@latest install
 That one command is the whole install. It detects which agents you have —
 [Claude Code](https://claude.com/claude-code), [OpenCode](https://opencode.ai), or both —
 asks which of them to install into, and registers the _published_ caret with each:
-prebuilt artifacts, the `/caret:*` slash commands, and the rumdl plan formatter, with no
-`git clone` and no compile step. Where it can't ask — off a terminal — it installs into
-every agent it detected. `--target claude` or `--target claude,opencode` pins the agents
-non-interactively, and `--dry-run` previews the run without changing anything.
+prebuilt artifacts, the `/caret:*` slash commands, and the [rumdl](https://rumdl.dev/)
+plan formatter, with no `git clone` and no compile step. Where it can't ask — off a
+terminal — it installs into every agent it detected. `--target claude` or
+`--target claude,opencode` pins the agents non-interactively, and `--dry-run` previews the
+run without changing anything.
 
 Restart the agent afterward — OpenCode installs the plugin package on its next start —
 then try `/caret:demo`, which presents a short fake plan to exercise the flow.
