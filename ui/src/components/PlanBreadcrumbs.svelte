@@ -107,7 +107,7 @@
                   class:current
                   title={crumb?.heading.text}
                   aria-current={current ? "location" : undefined}
-                >{crumb?.heading.text}</button>
+                >{#key crumb?.heading.line}<span class="crumb-text">{crumb?.heading.text}</span>{/key}</button>
               {/snippet}
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="start" class="plan-crumb-menu">
@@ -152,6 +152,15 @@
     flex: none;
     color: var(--ink-faint);
   }
+  /* The separator is a list-item, so the vendored icon inside it is placed by
+     inline layout and rides the text baseline — which leaves the chevron a couple
+     of pixels above the crumbs it punctuates. Centring it as a flex box puts the
+     glyph on the row's axis, where the crumb boxes and the elision marker (already
+     flex, from the vendored component) sit. */
+  :global(.plan-breadcrumbs [data-slot="breadcrumb-separator"]) {
+    display: flex;
+    align-items: center;
+  }
   /* Give the ancestors up before the crumb the reader is actually on. Shrinking
      every crumb equally shreds them all to a single letter as the row tightens,
      losing the one that matters most; weighting the shrink keeps "where you are"
@@ -162,6 +171,47 @@
   }
   :global(.plan-breadcrumbs .crumb-item.current) {
     flex-shrink: 1;
+  }
+
+  /* The trail re-roots continuously as the reader scrolls, and an instant swap at
+     that cadence reads as flicker. A crumb that genuinely appears — a new level,
+     or the whole bar on first paint — eases in, and its separator travels with it,
+     so a deepening trail reads as the trail extending rather than as a jump. A
+     crumb that survives a re-root keeps its key and never re-animates, which is
+     what keeps the motion quiet while scrolling within one level.
+     Reduced motion is not handled here: the single global rule in app.css already
+     neutralises this for the whole light-DOM root. */
+  @keyframes crumb-in {
+    from {
+      opacity: 0;
+      transform: translateX(-0.25rem);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  :global(.plan-breadcrumbs .crumb-item),
+  :global(.plan-breadcrumbs [data-slot="breadcrumb-separator"]) {
+    animation: crumb-in var(--dur-base) var(--ease-out);
+  }
+
+  /* Walking to a sibling at the same depth keeps the crumb mounted and swaps only
+     its text, so the label carries a fade of its own — the change the mount
+     animation above can never observe. Opacity alone, and from part-way rather
+     than from zero: a transform does not apply to the inline box the crumb's
+     ellipsis truncation depends on, and a full fade-from-nothing reads as a blink
+     at scroll cadence. */
+  @keyframes crumb-text-in {
+    from {
+      opacity: 0.4;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  :global(.plan-breadcrumbs .crumb-text) {
+    animation: crumb-text-in var(--dur-fast) var(--ease-out);
   }
 
   /* Each crumb is a menu trigger. It deliberately does NOT wear .float-chip: three
