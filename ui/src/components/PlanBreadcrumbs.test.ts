@@ -63,7 +63,7 @@ describe("PlanBreadcrumbs trail", () => {
     expect(target.querySelector("nav")).toBeNull();
   });
 
-  // No minimum-heading gate: unlike the ToC rail, one heading is still a location.
+  // No minimum-heading gate: one heading is still a location.
   test("renders a single crumb for a one-heading plan", () => {
     const { target } = render(PlanBreadcrumbs, {
       headings: [{ level: 1, text: "Only", line: 1 }],

@@ -107,8 +107,8 @@ button {
    grew the TopBar ~6px). We restore chrome defaults here, kept IN @layer base so
    it wins over Preflight (declared after it) yet still loses to shadcn's own
    utility classes in @layer utilities — so the copied components size themselves.
-   Controls that set their own size/leading (the toc filter, the dialog
-   selects/textarea) override this via their unlayered component styles. */
+   Controls that set their own size/leading (the breadcrumbs heading filter, the
+   dialog selects/textarea) override this via their unlayered component styles. */
 @layer base {
   /* Bridge Tailwind v4's default border color to caret's rule token. v4 changed
      the `border` utility's fallback color to `currentColor` (v3 defaulted to a

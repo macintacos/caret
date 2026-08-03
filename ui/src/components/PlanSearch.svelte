@@ -57,7 +57,7 @@
 
   // Field-mode keys: Enter commits, Escape closes. Handled here, not the global
   // dispatcher (which suppresses bare keys while a field is focused), so the pill
-  // owns its own field — the same local-handler idiom SourceToc's filter uses.
+  // owns its own field — the same local-handler idiom the breadcrumbs filter uses.
   function onKeydown(e: KeyboardEvent) {
     if (e.key === "Enter") {
       e.preventDefault();

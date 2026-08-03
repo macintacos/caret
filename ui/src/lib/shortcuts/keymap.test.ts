@@ -98,15 +98,33 @@ describe("CANONICAL_KEYMAP", () => {
     expect(ariaKeyshortcutsFor("actions.reject")).toBe("Shift+R");
   });
 
-  test("reserves \\ for the sidebar toggle in the Actions group, rendered as a \\ cap", () => {
-    // EXC-830: toggles the plan's ToC rail (the sidebar). A bare backslash, no
-    // command modifier — the cap derives straight from the key, no explicit override.
+  test("reserves \\ as the breadcrumbs bar's second key, rendered as a \\ cap", () => {
+    // EXC-949 retired the ToC rail `\` used to toggle and handed the key to the
+    // breadcrumbs bar. A bare backslash, no command modifier — the cap derives
+    // straight from the key, no explicit override.
     const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.toggleSidebar");
     if (!entry) throw new Error("actions.toggleSidebar missing");
     expect(entry.group).toBe("actions");
-    expect(entry.label).toBe("Toggle sidebar");
+    expect(entry.label).toBe("Open breadcrumbs (alt)");
     expect(specSignature(entry.keys)).toBe("\\");
     expect(keyCaps(entry.keys)).toEqual([["\\"]]);
+  });
+
+  test("\\ and b reach the breadcrumbs bar as two reservations, not one two-key entry", () => {
+    // `keys` models a key SEQUENCE (gg, ]]), so an alternatives set has no
+    // representation in a single entry: two keys onto one action is two
+    // reservations sharing a `run`. Both must stay separate and single-key, or `\`
+    // would silently become the first half of a chord nobody can complete.
+    const alt = CANONICAL_KEYMAP.find((e) => e.id === "actions.toggleSidebar");
+    const primary = CANONICAL_KEYMAP.find((e) => e.id === "actions.headingNav");
+    if (!alt || !primary) throw new Error("breadcrumbs keymap entries missing");
+    expect(alt.keys).toHaveLength(1);
+    expect(primary.keys).toHaveLength(1);
+    expect(alt.group).toBe(primary.group);
+    // Distinct labels: the help modal lists both, and two identical rows would
+    // read as a rendering bug rather than as an alias.
+    expect(alt.label).not.toBe(primary.label);
+    expect(ariaKeyshortcutsFor("actions.toggleSidebar")).toBe("\\");
   });
 
   test("reserves b for the heading breadcrumbs in the Actions group, rendered as a B cap", () => {
@@ -134,10 +152,11 @@ describe("CANONICAL_KEYMAP", () => {
     expect(keyCaps(bottom.keys)).toEqual([["shift", "G"]]);
   });
 
-  test("owns / for plan search (EXC-832), repointed from the ToC filter", () => {
+  test("owns / for plan search (EXC-832), repointed from the contents filter", () => {
     // EXC-832 repurposes / from "focus contents filter" (EXC-789) to a vim-style
-    // full-text search of the plan; the focus-filter binding is gone, and the ToC
-    // filter keeps no keybinding for now (parks EXC-793).
+    // full-text search of the plan; the focus-filter binding is gone. The
+    // breadcrumbs bar's `/` (EXC-948) lives inside an open crumb menu and is handled
+    // there, so it never reaches this table.
     const search = CANONICAL_KEYMAP.find((e) => e.id === "actions.search");
     if (!search) throw new Error("actions.search missing");
     expect(search.group).toBe("actions");

@@ -1,22 +1,19 @@
 // Dev-flagged source-view surface (EXC-583). With the flag on, the plan renders
 // as line-numbered markdown source through the @pierre/diffs wrapper instead of
-// the legacy plan view + contents rail. A left-hand filterable contents pane
-// jumps to headings, the line gutter creates comments (EXC-584), and approve and
-// request-changes still round-trip. The view instance must survive the 2s poll
-// with no scroll reset.
+// the legacy plan view + contents rail. The heading breadcrumbs bar jumps to
+// headings, the line gutter creates comments (EXC-584), and approve and request-
+// changes still round-trip. The view instance must survive the 2s poll with no
+// scroll reset.
 
 import type { Locator, Page } from "@playwright/test";
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
-import { lineCenterY, revealGutterPlus } from "@test/e2e/support/source-view.ts";
+import { jumpToHeading, lineCenterY, revealGutterPlus } from "@test/e2e/support/source-view.ts";
 
 // A plan tall enough to scroll the source view past one viewport.
 const TALL_PLAN = `# Tall Plan\n\n${Array.from({ length: 120 }, (_, i) => `Line ${i + 1} of the plan body, long enough to overflow the viewport.`).join("\n\n")}\n`;
 
-test("renders the plan as markdown source, with no legacy plan view or contents rail", async ({
-  daemon,
-  page,
-}) => {
+test("renders the plan as markdown source, with no legacy plan view", async ({ daemon, page }) => {
   await daemon.seed();
   await page.goto("/");
 
@@ -25,9 +22,8 @@ test("renders the plan as markdown source, with no legacy plan view or contents 
   await expect(page.locator(".diff-plan")).toBeVisible();
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
 
-  // The legacy surface is absent: no rendered-HTML article, no legacy rail.
+  // The legacy surface is absent: no rendered-HTML article.
   await expect(page.locator("article.plan")).toHaveCount(0);
-  await expect(page.locator("nav.toc")).toHaveCount(0);
 });
 
 test("scroll position survives the 2-second poll tick", async ({ daemon, page }) => {
@@ -93,73 +89,11 @@ test("request-changes with a general comment round-trips on the source-view surf
   expect(review?.decision?.feedback).toContain(feedback);
 });
 
-// ----- Filterable contents pane (EXC-580) -----
+// ----- Heading jump scroll geometry -----
 
 // A multi-heading plan with tall sections so a jump produces a visible scroll.
 const padding = Array.from({ length: 40 }, (_, i) => `Filler line ${i + 1}.`).join("\n\n");
 const TOC_PLAN = `# Overview\n\n${padding}\n\n## Approach\n\n${padding}\n\n## Verification\n\n${padding}\n`;
-
-test("shows a filterable contents pane and jumps to a heading's line", async ({ daemon, page }) => {
-  await daemon.seed({ plan: TOC_PLAN });
-  await page.goto("/");
-
-  const view = page.locator(".diff-plan");
-  await expect(view).toBeVisible();
-
-  // The pane lists every heading.
-  const pane = page.getByRole("navigation", { name: "Plan contents" });
-  await expect(pane).toBeVisible();
-  await expect(pane.locator(".toc-row")).toHaveCount(3);
-
-  // Filtering hides non-matching rows (hide-non-matches default).
-  await pane.getByRole("textbox", { name: "Filter headings" }).fill("veri");
-  await expect(pane.locator(".toc-row")).toHaveCount(1);
-  await expect(pane.locator(".toc-row")).toHaveText("Verification");
-
-  // Clicking the filtered heading jumps the source view down to its line.
-  await pane.locator(".toc-row").click();
-  await expect.poll(async () => view.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
-});
-
-test("keyboard navigation in the contents pane jumps to the cursored heading", async ({
-  daemon,
-  page,
-}) => {
-  await daemon.seed({ plan: TOC_PLAN });
-  await page.goto("/");
-
-  const view = page.locator(".diff-plan");
-  await expect(view).toBeVisible();
-  const pane = page.getByRole("navigation", { name: "Plan contents" });
-  await expect(pane.locator(".toc-row")).toHaveCount(3);
-  // The window-level safe-mode guard swallows keystrokes inside the grace window
-  // it arms at mount; wait it out so the arrow keys reach the filter input.
-  await waitPastSafeModeGrace(page);
-
-  // Focus the filter input (which owns the keyboard cursor) and walk down to the
-  // third heading: ArrowDown moves the cursor from -1 → 0 → 1 → 2.
-  const filter = pane.getByRole("textbox", { name: "Filter headings" });
-  await filter.click();
-  await page.keyboard.press("ArrowDown");
-  await page.keyboard.press("ArrowDown");
-  await page.keyboard.press("ArrowDown");
-
-  // The third row (Verification) is the cursored one.
-  await expect(pane.locator(".toc-row.cursor")).toHaveText("Verification");
-
-  // Enter jumps the source view down to that heading's line.
-  await page.keyboard.press("Enter");
-  await expect.poll(async () => view.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
-});
-
-test("suppresses the contents pane for a single-heading plan", async ({ daemon, page }) => {
-  await daemon.seed({ plan: "# Only Heading\n\nNo other sections to navigate.\n" });
-  await page.goto("/");
-
-  await expect(page.locator(".diff-plan")).toBeVisible();
-  await expect(page.getByText("No other sections to navigate")).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Plan contents" })).toHaveCount(0);
-});
 
 /** Offset (px) of the heading line whose source text is `text` from the top of
  * the scroll container, or +Infinity if that line isn't rendered. */
@@ -184,13 +118,11 @@ test("a heading jump lands the heading at the top of the view, however far it is
 
   const view = page.locator(".diff-plan");
   await expect(view).toBeVisible();
-  const pane = page.getByRole("navigation", { name: "Plan contents" });
-  await expect(pane.locator(".toc-row")).toHaveCount(3);
 
   // Jump to the farthest heading; the smooth scroll should settle it just below
   // the top edge (a small breathing-room offset), not short of it or in the
   // middle of the view. expect.poll rides out the animation.
-  await pane.getByRole("button", { name: "Verification" }).click();
+  await jumpToHeading(page, "Verification");
   await expect.poll(() => headingTopOffset(page, "## Verification")).toBeLessThanOrEqual(20);
   expect(await headingTopOffset(page, "## Verification")).toBeGreaterThanOrEqual(0);
 });

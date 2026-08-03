@@ -1,8 +1,8 @@
 <script lang="ts">
   // Source-view plan surface: renders the active plan version's stored text as
   // line-numbered markdown source through the diffview SourceView wrapper, with
-  // a left-hand filterable contents pane and a line gutter for creating comments.
-  // The contents pane jumps the source view to a heading's line. Hovering a line
+  // a heading breadcrumbs bar in the control row and a line gutter for creating
+  // comments. The bar jumps the source view to a heading's line. Hovering a line
   // shows the built-in gutter `+`; clicking it opens an inline composer at the
   // selected line or range, and submitting creates a line-anchored
   // {startLine, endLine} annotation in the autosave working copy. Saved comments
@@ -16,7 +16,7 @@
   //
   // When the review has multiple stored versions, a compare control lets the
   // reviewer diff any two of them (base vs. target) through the SourceDiffView
-  // wrapper, switching the split/unified layout at runtime. The contents pane,
+  // wrapper, switching the split/unified layout at runtime. The breadcrumbs bar,
   // gutter, and annotations belong to the single-version view only — compare mode
   // is a clean read-only diff with none of them.
   import { untrack } from "svelte";
@@ -40,7 +40,6 @@
   import { buildFileRefLayer, type FileRefSpan, type FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
   import { resolveFileRefs } from "$lib/api.ts";
   import { shortCwd } from "$lib/cwd.ts";
-  import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { buildLinkLayer } from "$lib/diffview/links.ts";
   import { readDiffStyle, writeDiffStyle } from "$lib/diffStylePref.ts";
@@ -53,11 +52,10 @@
   import type { SourceViewGutter } from "$lib/diffview/options.ts";
   import type { SourceViewApi, SourceViewOptions } from "$lib/diffview/types.ts";
   import type { ThemeId } from "$lib/theme.ts";
-  import { ariaKeyshortcutsFor, bind, defaultIsEditingContext, shortcuts } from "$lib/shortcuts/index.ts";
+  import { bind, defaultIsEditingContext, shortcuts } from "$lib/shortcuts/index.ts";
   import type { CursorMotion } from "$lib/diffview/lineCursor.ts";
-  import { activeHeadingLine, extractHeadings, lineForSlug, shouldShowToc, slugForLine } from "$lib/toc.ts";
-  import { NARROW_WIDTH_PX, TIGHT_WIDTH_PX } from "$lib/layout.ts";
-  import { readTocOpen, writeTocOpen } from "$lib/tocPref.ts";
+  import { activeHeadingLine, extractHeadings, lineForSlug, slugForLine } from "$lib/toc.ts";
+  import { NARROW_WIDTH_PX } from "$lib/layout.ts";
   import {
     clampDrawerSize,
     DEFAULT_DRAWER_SHARE,
@@ -76,12 +74,10 @@
   import SourceScratchMarker from "@/components/SourceScratchMarker.svelte";
   import SourceAnnotationThread from "@/components/SourceAnnotationThread.svelte";
   import LegacyAnnotationList from "@/components/LegacyAnnotationList.svelte";
-  import SourceToc from "@/components/SourceToc.svelte";
   import PlanBreadcrumbs from "@/components/PlanBreadcrumbs.svelte";
   import CodeCopyButton from "@/components/CodeCopyButton.svelte";
   import FileDrawer from "@/components/FileDrawer.svelte";
   import FilePreview from "@/components/FilePreview.svelte";
-  import Icon from "@/components/Icon.svelte";
 
   interface Props {
     /** The review whose current plan version is rendered. */
@@ -688,10 +684,10 @@
   });
 
   // The source line of the heading currently in the reading zone. Tracked from
-  // the scroll container's topmost rendered line so the pane highlights the
-  // section being read.
+  // the scroll container's topmost rendered line so the breadcrumbs bar reports
+  // the section being read.
   let activeLine = $state<number | null>(null);
-  // The scroll container (the .diff-plan element), used by the ToC tracking to
+  // The scroll container (the .diff-plan element), used by the heading tracking to
   // read the topmost visible line.
   let scrollEl = $state<HTMLElement | undefined>();
   // Opens the breadcrumbs bar's trailing crumb, handed over by the bar itself
@@ -770,7 +766,7 @@
   // zone, throttled with rAF so a scroll burst settles into one read. The view
   // paints each line as <div data-line="N"> in a shadow root; lineAtReadingZone
   // picks the line sitting at the same offset jumps park headings at, so the
-  // tracked section matches where a ToC click lands rather than the row above it.
+  // tracked section matches where a crumb jump lands rather than the heading above it.
   function topVisibleLine(): number | null {
     const rows = scrollEl?.querySelector(".diffview")?.shadowRoot?.querySelectorAll<HTMLElement>(
       "[data-line]",
@@ -810,7 +806,7 @@
     el.addEventListener("scroll", onScroll, { passive: true });
     // Seed the tracked heading at load rather than leaving it null until the
     // first scroll, so a plan nobody has scrolled yet still reads as a location
-    // (the breadcrumbs bar has no trail without it, and the rail no active row).
+    // (the breadcrumbs bar has no trail without it).
     const stopSeed = retryFrames(update);
     return () => {
       cancelAnimationFrame(raf);
@@ -926,37 +922,14 @@
 
   // Mirror the active heading's slug into `?heading=` so a copied URL reopens the
   // review at the section being read (composing with deepLink.ts's `?review=`).
-  // Compare mode has no ToC and no tracked heading, so the param clears there.
+  // Compare mode tracks no heading (and drops the breadcrumbs bar), so the param
+  // clears there.
   // Held until restore consumes any incoming `?heading=` (see `restored`).
   $effect(() => {
     if (!restored) return;
     const slug = activeLine != null ? slugForLine(headings, activeLine) : null;
     setHeadingSlug(showDiff ? null : slug);
   });
-
-  // Collapsible ToC rail (EXC-809). The toggle is always available (whenever the
-  // plan has a contents pane), and the reviewer's open/collapsed choice persists
-  // across plans and reloads (tocPref.ts). Absent a saved choice, the first load
-  // defaults by width — collapsed below --w-tight so a narrow window isn't
-  // crushed, open otherwise. That width default is read ONCE at mount, so a later
-  // resize never yanks the rail away from a reviewer mid-read; only their toggle
-  // (or a saved choice) changes it. The matchMedia guard keeps the happy-dom unit
-  // env (no matchMedia) on the open default.
-  const tocDefaultOpen = !(
-    typeof matchMedia === "function" &&
-    matchMedia(`(max-width: ${TIGHT_WIDTH_PX - 1}px)`).matches
-  );
-  let tocPref = $state<boolean | null>(readTocOpen());
-  const tocShown = $derived(tocPref ?? tocDefaultOpen);
-
-  // The toggle only earns a place when there is a contents pane to toggle — the
-  // same >=2-heading gate SourceToc self-applies (toc.ts § shouldShowToc).
-  const hasToc = $derived(shouldShowToc(headings));
-
-  function toggleToc(): void {
-    tocPref = !tocShown;
-    writeTocOpen(tocPref);
-  }
 
   // The compare-toggle + plan-search shortcuts, live entries over EXC-786's
   // reservations. Registered while the single-version view is mounted (i.e. an active
@@ -976,7 +949,8 @@
       ),
     );
     // `/` opens the plan search (EXC-832), repurposed from EXC-789's focus-filter.
-    // Plan-content only; not gated on the ToC — search needs no rail.
+    // Plan-content only; not gated on the plan having headings — search is over
+    // text, not structure.
     offs.push(
       shortcuts.register(
         bind("actions.search", {
@@ -1011,29 +985,16 @@
         }),
       ),
     );
-    // `\` toggles the ToC rail (EXC-830), the same toggleToc the float-chip runs.
-    // Same guard as the toggle button's `{#if !showDiff && hasToc}`: inert in
-    // compare mode or when the plan has no contents pane.
-    offs.push(
-      shortcuts.register(
-        bind("actions.toggleSidebar", {
-          run: toggleToc,
-          enabled: () => !showDiff && hasToc,
-        }),
-      ),
-    );
-    // `b` opens the heading breadcrumbs bar's trailing crumb (EXC-947), gated on
-    // the same `!showDiff` the bar's own render condition uses so the key is inert
-    // in compare mode. The optional call covers a heading-less plan too, where the
-    // bar renders nothing and never handed an open action back.
-    offs.push(
-      shortcuts.register(
-        bind("actions.headingNav", {
-          run: () => openHeadingNav?.(),
-          enabled: () => !showDiff,
-        }),
-      ),
-    );
+    // `b` opens the heading breadcrumbs bar's trailing crumb (EXC-947), and `\`
+    // does the same since EXC-949 retired the ToC rail it used to toggle — two
+    // reservations over one action, which is how the keymap spells alternative
+    // keys (see keymap.ts). Both are gated on the same `!showDiff` the bar's own
+    // render condition uses, so they are inert in compare mode. The optional call
+    // covers a heading-less plan too, where the bar renders nothing and never
+    // handed an open action back.
+    const openBar = { run: () => openHeadingNav?.(), enabled: () => !showDiff };
+    offs.push(shortcuts.register(bind("actions.headingNav", openBar)));
+    offs.push(shortcuts.register(bind("actions.toggleSidebar", openBar)));
     return () => {
       for (const off of offs) off();
     };
@@ -1171,40 +1132,9 @@
 
 <!-- Control row above the surface. The version-compare picker is always shown; its
      toggle disables itself when there are no other versions to compare (EXC-664).
-     The contents toggle, the heading breadcrumbs, and the working-directory path
-     each earn their place conditionally alongside it. -->
+     The heading breadcrumbs and the working-directory path each earn their place
+     conditionally alongside it. -->
 <div class="control-row" class:comparing={compareStore.comparing}>
-  <!-- Contents toggle (EXC-809): always available when the single-version surface
-       has a ToC to toggle, so the reviewer can hide the outline at any width. A
-       float-chip icon button matching the compare control's chrome, with its
-       colour logic inverted from that control: a collapsed rail carries the
-       --accent-wash marker to advertise the hidden outline, and an open rail drops
-       back to the resting float-chip (see the .toc-toggle rule). -->
-  {#if !showDiff && hasToc}
-    <Tooltip.Provider delayDuration={0}>
-      <Tooltip.Root>
-        <Tooltip.Trigger>
-          {#snippet child({ props })}
-            <button
-              {...props}
-              type="button"
-              class="toc-toggle float-chip"
-              aria-label="Toggle sidebar"
-              aria-keyshortcuts={ariaKeyshortcutsFor("actions.toggleSidebar")}
-              aria-expanded={tocShown}
-              aria-controls="plan-toc"
-              onclick={toggleToc}
-            >
-              <Icon name="panel-left" size={14} />
-            </button>
-          {/snippet}
-        </Tooltip.Trigger>
-        <Tooltip.Content>
-          {tocShown ? "Hide sidebar" : "Show sidebar"} <Kbd class="kbd-sm">\</Kbd>
-        </Tooltip.Content>
-      </Tooltip.Root>
-    </Tooltip.Provider>
-  {/if}
   <VersionComparePicker
     versions={review.versions}
     comparing={compareStore.comparing}
@@ -1222,9 +1152,9 @@
     onSetDiffIndicators={compare.setDiffIndicators}
   />
   <!-- Heading breadcrumbs (EXC-946): where in the plan the reviewer is, and the
-       menus to move sideways or deeper. It rides the SAME activeLine the ToC rail
-       tracks — one scroll observer serves both — and jumps through the same
-       scrollToLine, so a crumb pick lands exactly where a rail row does. Compare
+       menus to move sideways or deeper — the plan's only heading-navigation
+       surface since EXC-949 retired the contents rail. It rides the activeLine
+       the scroll observer below tracks and jumps through scrollToLine. Compare
        mode tracks no heading (and clears `?heading=`), so the bar is dropped
        there rather than left showing a stale trail. -->
   {#if !showDiff}
@@ -1287,13 +1217,8 @@
         {/if}
       </div>
     {/if}
-    <!-- The contents pane and gutter composer are the single-version surface only.
-         Compare mode is a clean diff with no ToC, no gutter, no annotations. -->
-    {#if !showDiff && hasToc}
-      <div id="plan-toc" class="toc-rail" class:collapsed={!tocShown}>
-        <SourceToc {headings} {activeLine} onJump={(line) => api?.scrollToLine(line)} />
-      </div>
-    {/if}
+    <!-- The gutter composer is the single-version surface only. Compare mode is a
+         clean diff with no gutter and no annotations. -->
     <div class="diff-plan" bind:this={scrollEl} onmouseenter={showDragHint} role="presentation">
       {#if showDiff}
         <!-- Compare mode: a diff between the selected version pair. Base is the
@@ -1480,15 +1405,14 @@
   /* The control bar above the surface. Carries the bar chrome (raised paper,
      hairline rule) for the version-compare picker: the "Compare versions" toggle
      sits at the left, and (in compare mode) the layout / indicator toggles are
-     pushed to the right edge. The left padding is the rail's inner padding
-     (SourceToc's 0.75rem), not the row's usual clamp inset, so the first control
-     (the contents toggle) left-aligns with the filter input directly below it —
-     both then sit 0.75rem from the shared surface edge. */
+     pushed to the right edge. The horizontal inset is the app's shared bar inset
+     (the same clamp the TopBar and the shell use), symmetric now that EXC-949
+     removed the contents rail the left edge used to align with. */
   .control-row {
     display: flex;
     align-items: center;
     gap: 0.85rem;
-    padding: 0.5rem clamp(1rem, 3vw, 2rem) 0.5rem 0.75rem;
+    padding: 0.5rem clamp(1rem, 3vw, 2rem);
     border-bottom: 1px solid var(--rule);
     background: var(--paper-raised);
     /* The shared control height every child in the row sizes to. */
@@ -1502,41 +1426,6 @@
     min-width: 0;
   }
 
-  /* The narrow-width contents toggle (EXC-809): a float-chip icon button sized to
-     the compare row's control height (1.75rem). The two states below invert the
-     compare toggle's colour logic (see there) — the box and centering are all
-     that's set here. flex: none keeps it from shrinking as the row tightens. */
-  .toc-toggle {
-    flex: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--ctl-h);
-    height: var(--ctl-h);
-    border: none;
-    border-radius: var(--radius);
-    cursor: pointer;
-  }
-  /* Inverted from the compare toggle on purpose: a HIDDEN rail (aria-expanded
-     false) wears the amber active marker (--accent-wash) to advertise the tucked-
-     away outline, while a SHOWN rail drops to the resting float-chip so the open,
-     expected state reads quiet. The .control-row prefix lifts specificity over
-     app.css's neutral button.float-chip[aria-expanded="true"] brightening (which
-     would otherwise light up the shown state); each state keeps a :hover variant
-     so the button still responds to the pointer. */
-  .control-row .toc-toggle[aria-expanded="false"]:not(:disabled),
-  .control-row .toc-toggle[aria-expanded="false"]:not(:disabled):hover {
-    background: var(--accent-wash);
-    color: var(--ink);
-  }
-  .control-row .toc-toggle[aria-expanded="true"]:not(:disabled) {
-    background: var(--chip);
-    color: var(--ink-soft);
-  }
-  .control-row .toc-toggle[aria-expanded="true"]:not(:disabled):hover {
-    background: var(--chip-hover);
-    color: var(--ink);
-  }
   /* In compare mode the picker owns the bar: it spans the row so the "Compare
      versions" toggle sits at the left and its display toggles (margin-left: auto)
      reach the right edge. Reading a single version it sizes to its toggle instead,
@@ -1614,10 +1503,10 @@
     flex-direction: column;
   }
 
-  /* Everything that is the plan: the contents pane and the source view share one
-     row — the pane is a fixed-width left lane, the source view takes the rest and
-     scrolls on its own — with the search dock floating over them. It carries the
-     positioning context rather than .diff-surface, so the dock anchors to the
+  /* Everything that is the plan: the source view fills this pane and scrolls on
+     its own, with the search dock floating over it. `display: flex` plus
+     .diff-plan's `flex: 1` is what makes the source view fill it. The pane carries
+     the positioning context rather than .diff-surface, so the dock anchors to the
      plan's own corner instead of the drawer's. */
   .plan-pane {
     position: relative;
@@ -1662,30 +1551,6 @@
     to {
       opacity: 1;
     }
-  }
-
-  /* The ToC rail lane (EXC-809). A fixed 15rem flex lane whose width animates to 0
-     on collapse, so the flex row reflows every frame and .diff-plan (flex: 1)
-     slides in to fill the space rather than jumping. overflow: hidden clips the
-     rail as the lane narrows (a wipe, not a squish) — the inner .source-toc is
-     pinned to its full width below so it stays put while the lane closes over it.
-     Collapsing by width (not display:none / unmount) keeps the rail's filter and
-     the parent's active-line tracking intact across a round-trip. The global #app
-     reduced-motion guard zeroes the transition, so it snaps when the OS asks. */
-  .toc-rail {
-    flex: none;
-    display: flex;
-    width: 15rem;
-    overflow: hidden;
-    transition: width var(--dur-base) var(--ease-out);
-  }
-  .toc-rail.collapsed {
-    width: 0;
-  }
-  /* Pin the rail to its full width so the animating lane clips it rather than
-     flex-shrinking its content; the flex parent stretches it to full height. */
-  .toc-rail > :global(.source-toc) {
-    flex: 0 0 15rem;
   }
 
   /* Fills the content row and scrolls on its own; the SourceView renders its

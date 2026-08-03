@@ -131,8 +131,9 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
   },
   {
     // EXC-832: / opens a vim-style full-text search of the plan, repurposed from
-    // EXC-789's focus-contents-filter — this ticket owns /. The ToC filter keeps no
-    // keybinding for now (parks EXC-793).
+    // EXC-789's focus-contents-filter — this ticket owns / at the plan surface. The
+    // breadcrumbs bar's own `/` (EXC-948) is scoped to an open crumb menu and is
+    // handled there, so it needs no reservation here.
     id: "actions.search",
     keys: [{ key: "/" }],
     group: "actions",
@@ -155,14 +156,24 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
     group: "actions",
     label: "Toggle comments",
   },
-  // EXC-830: toggles the plan's ToC rail (the sidebar). A bare backslash with no
-  // command modifier; the cap derives straight from the key (no override needed).
-  { id: "actions.toggleSidebar", keys: [{ key: "\\" }], group: "actions", label: "Toggle sidebar" },
   // EXC-947: opens the heading breadcrumbs bar's trailing crumb — the level being
   // read — so the trail is reachable without the mouse. A bare lowercase letter, no
   // command modifier and no cap override: keyCaps derives the capital from the key's
   // case, the same shape `d` and `n` take.
   { id: "actions.headingNav", keys: [{ key: "b" }], group: "actions", label: "Open breadcrumbs" },
+  // EXC-949 retired the ToC rail this key used to toggle (EXC-830) and handed `\` to
+  // the breadcrumbs bar, so the plan has one heading-navigation surface reachable by
+  // two keys. Two reservations rather than one entry with two keys, because
+  // ShortcutEntry.keys models a key SEQUENCE (gg, ]]) and has no spelling for a set
+  // of alternatives; DiffPlanView registers both ids against the same `run`. The
+  // label carries the "(alt)" so the `?` help lists an alias rather than what would
+  // otherwise read as a duplicated row.
+  {
+    id: "actions.toggleSidebar",
+    keys: [{ key: "\\" }],
+    group: "actions",
+    label: "Open breadcrumbs (alt)",
+  },
   // Settings — the Settings modal's scoped affordances, display-only (EXC-849/876).
   ...SETTINGS_SHORTCUTS,
   // Help

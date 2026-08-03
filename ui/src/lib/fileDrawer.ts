@@ -7,9 +7,9 @@
 // unit-testable without a browser, mirroring diffview/lineDrag.ts.
 //
 // The two edges remember their sizes under two keys, which is what makes
-// resizing the right drawer leave the bottom drawer's height alone. Like
-// tocPref.ts, the read/write pair is bespoke rather than a definePref factory —
-// a clamped number fits neither the flag nor the enum shape — and both fail safe
+// resizing the right drawer leave the bottom drawer's height alone. The
+// read/write pair is bespoke rather than a definePref factory — a clamped number
+// fits neither the flag nor the enum shape — and both fail safe
 // and never throw, degrading to "nothing remembered" rather than breaking the
 // view. registerPrefKey puts both keys in the `--fresh` reset set.
 
@@ -19,8 +19,7 @@ import { registerPrefKey } from "$lib/definePref.ts";
 export type DrawerEdge = "right" | "bottom";
 
 /** Smallest useful drawer, and the plan pane the drawer may never squeeze past.
- * MIN_PLAN_PX bounds the whole pane, which above TIGHT_WIDTH_PX also carries the
- * ToC rail — so it is the floor on the pane, not on the source column inside it. */
+ * MIN_PLAN_PX bounds the whole pane rather than the source column inside it. */
 export const MIN_DRAWER_PX = 240;
 export const MIN_PLAN_PX = 320;
 

@@ -94,34 +94,9 @@ describe("DiffPlanView rendering", () => {
   });
 });
 
-describe("DiffPlanView contents pane", () => {
-  test("shows the ToC pane with a row per heading for a multi-heading plan", async () => {
-    const review = reviewFixture({
-      currentPlan: "# Context\n\nintro\n\n## Approach\n\nbody\n\n## Verification\n\nv\n",
-    });
-    const { target } = render(DiffPlanView, props({ review }));
-    const pane = await until(() => target.querySelector(".source-toc") != null);
-    expect(pane).toBe(true);
-    expect(target.querySelectorAll(".source-toc .toc-row")).toHaveLength(3);
-    const labels = [...target.querySelectorAll(".source-toc .toc-row")].map((r) =>
-      r.textContent?.trim(),
-    );
-    expect(labels).toEqual(["Context", "Approach", "Verification"]);
-  });
-
-  test("suppresses the ToC pane for a single-heading plan", async () => {
-    const review = reviewFixture({ currentPlan: "# Only\n\njust one heading\n" });
-    const { target } = render(DiffPlanView, props({ review }));
-    // Wait for the source view to paint, then assert the pane is absent.
-    await until(() => shadow(target)?.textContent?.includes("just one heading") ?? false);
-    expect(target.querySelector(".source-toc")).toBeNull();
-  });
-});
-
 // EXC-946's heading breadcrumbs bar has no unit test here on purpose: it renders
 // only once a heading is in the reading zone, and that tracking is measured with
-// getBoundingClientRect, which happy-dom reports as all zeros — the same reason
-// the rail's active row is asserted in e2e rather than here. The bar's own trail
+// getBoundingClientRect, which happy-dom reports as all zeros. The bar's own trail
 // logic is unit-tested in PlanBreadcrumbs.test.ts; its mounting, scroll tracking,
 // and compare-mode absence are covered by test/e2e/plan-breadcrumbs.e2e.ts.
 

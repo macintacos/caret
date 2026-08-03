@@ -42,7 +42,7 @@ The renderer is `marked` (GFM on, `breaks` off) → DOMPurify (strict allowlist)
 
 ## Headings
 
-The first heading in the document is normalized to an `h1` regardless of its authored level; every heading below keeps its level so the table-of-contents rail and scrollspy have a full ladder.
+The first heading in the document is normalized to an `h1` regardless of its authored level; every heading below keeps its level so the heading breadcrumbs trail and scrollspy have a full ladder.
 
 ### Heading level three
 

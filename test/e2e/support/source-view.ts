@@ -7,6 +7,8 @@
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
+import { waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+
 /** The vertical center (viewport px) of a 1-based source line's row. Throws when
  * the line is not rendered, so a wrong line number fails here rather than as an
  * unrelated miss on whatever the resulting coordinates happened to hit. */
@@ -24,10 +26,10 @@ export async function lineCenterY(page: Page, line: number): Promise<number> {
 }
 
 /** Reveal the gutter `+` on `line` by moving the mouse over its left edge. The
- * source view's gutter sits at the left of the .diff-plan scroll container, which
- * the contents pane shifts right when present — so anchor the hover to that
- * container's left edge rather than the viewport's. The 6px inset lands inside
- * the gutter column without reaching the line-number cell. */
+ * source view's gutter sits at the left of the .diff-plan scroll container — so
+ * anchor the hover to that container's left edge rather than the viewport's,
+ * which keeps working wherever the pane sits. The 6px inset lands inside the
+ * gutter column without reaching the line-number cell. */
 export async function revealGutterPlus(page: Page, line: number): Promise<Locator> {
   const y = await lineCenterY(page, line);
   const x = await page.locator(".diff-plan").evaluate((el) => el.getBoundingClientRect().x + 6);
@@ -35,4 +37,27 @@ export async function revealGutterPlus(page: Page, line: number): Promise<Locato
   const plus = page.locator(".diffview [data-utility-button]");
   await expect(plus).toBeVisible();
   return plus;
+}
+
+/** Scroll the plan to any heading through the breadcrumbs bar's flat filter — the
+ * surface that replaced the contents rail (EXC-949), and the only one that reaches
+ * an arbitrary heading in one step. Several specs arrange a reading position this
+ * way, so the gesture lives here rather than being re-derived per spec.
+ *
+ * Two waits are load-bearing rather than defensive. Safe mode guards keydown on
+ * `window` in the CAPTURE phase and calls stopImmediatePropagation, so a `/` inside
+ * its grace never reaches the menu's own handler and the filter silently never
+ * opens. And `/` is handled on the menu's Content element, so it only lands once
+ * bits-ui's open-auto-focus has moved focus inside the portalled panel — waiting for
+ * the panel makes a miss fail here instead of 30s later on the query field.
+ *
+ * The query is filled rather than typed, and Enter from the field selects the first
+ * result, so callers pass a heading whose text is unique within the plan. */
+export async function jumpToHeading(page: Page, heading: string): Promise<void> {
+  await waitPastSafeModeGrace(page);
+  await page.locator(".plan-breadcrumbs button.crumb.current").click();
+  await expect(page.locator("[data-slot='dropdown-menu-content']")).toBeVisible();
+  await page.keyboard.press("/");
+  await page.locator("input[aria-label='Filter headings']").fill(heading);
+  await page.keyboard.press("Enter");
 }

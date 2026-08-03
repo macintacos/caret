@@ -27,8 +27,9 @@
 
 /* ----- App shell: plan + annotation-gutter grid ----- */
 /* Keep .shell, #app, and body free of `transform` / `filter` / `perspective` /
-   `will-change`: any of those establishes a containing block for the fixed TOC
-   rail (Toc.svelte `.toc`) and would break its viewport pin. */
+   `will-change`: any of those establishes a containing block for the viewport-
+   pinned chrome that sits outside this grid — the comment navigator
+   (CommentNavigator.svelte `.comment-navigator`) — and would break its pin. */
 .shell {
   display: grid;
   /* Rows: TopBar | optional daemon-replaced banner | content | bottom status bar
@@ -39,7 +40,7 @@
   /* Supported-minimum floor: below --w-min the shell overflows the viewport and
      the window scrolls horizontally rather than collapsing the layout further.
      min-width is safe under the transform/containment caveat above — it
-     establishes no containing block, so the fixed TOC rail's pin still holds
+     establishes no containing block, so the pinned chrome's anchor still holds
      (container-type would not, which is why the substrate is tokens + a floor,
      not a query container). No visual change at current widths: --w-min sits far
      below any real viewport. */

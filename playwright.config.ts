@@ -47,8 +47,8 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         // After the device spread (which pins 1280x720): widen to the reference
-        // layout width plus headroom so the source view and its contents pane
-        // both have room — derived from the constant so the e2e viewport tracks
+        // layout width plus headroom so the source view has room for the full
+        // plan column — derived from the constant so the e2e viewport tracks
         // the reference width instead of being coupled to it by prose.
         viewport: { width: REFERENCE_WIDTH_PX + 200, height: 900 },
         // EXC-773: caret's default appearance mode follows the OS, so the
