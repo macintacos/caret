@@ -184,7 +184,11 @@
     color: var(--ink-soft);
     font-family: inherit;
     font-size: var(--text-sm);
-    line-height: calc(var(--ctl-h) - 0.25rem);
+    /* A button centres its own content vertically, so the label rides the same
+       baseline as the picker's chip beside it. Pinning line-height to the box
+       height instead fights that centring and lands the baseline half a pixel
+       high — enough to read as "not quite sitting right" against the chip. */
+    line-height: normal;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
