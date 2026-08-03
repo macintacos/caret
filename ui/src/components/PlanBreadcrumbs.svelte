@@ -106,12 +106,17 @@
   function onMenuKeydown(e: KeyboardEvent): void {
     if (e.ctrlKey || e.altKey || e.metaKey) return;
     // `/` trades the hierarchy for the flat filter, from whatever depth of the
-    // menu is open. The preventDefault is load-bearing twice over: it keeps the
-    // key out of the menu's typeahead, and the window dispatcher yields on
-    // defaultPrevented, so the plan's own `/` search stays shut behind the bar.
+    // menu is open, and — once filtering — takes the reviewer back to the query
+    // from a row they walked to, the same second job it does in the comment
+    // navigator. It never arrives from the field itself, which stops its own
+    // keys, so a `/` there is typed into the query.
+    // The preventDefault is load-bearing twice over: it keeps the key out of the
+    // menu's typeahead, and the window dispatcher yields on defaultPrevented, so
+    // the plan's own `/` search stays shut behind the bar.
     if (e.key === "/") {
       e.preventDefault();
       filtering = true;
+      queryEl?.focus();
       return;
     }
     const arrow = e.key === "j" ? "ArrowDown" : e.key === "k" ? "ArrowUp" : null;
