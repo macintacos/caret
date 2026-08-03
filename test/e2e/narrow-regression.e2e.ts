@@ -1,9 +1,9 @@
 // EXC-814: narrow-width cohesion regression — the integration guard for the
-// EXC-770 responsive effort. The per-surface specs (toc-collapse, topbar-overflow,
+// EXC-770 responsive effort. The per-surface specs (topbar-overflow,
 // version-compare, pinned-chrome, dialog-narrow) each own one surface in detail;
 // this spec asserts the *whole* review UI stays usable at the canonical breakpoints
-// — the ToC toggle works, the TopBar's secondary actions stay reachable, and no
-// surface pushes the document past the viewport. Width- and layout-driven behavior
+// — the TopBar's secondary actions stay reachable, and no surface pushes the
+// document past the viewport. Width- and layout-driven behavior
 // only a browser can decide (doc/agents/browser-testing.md), so it lives here.
 //
 // Breakpoints are imported from ui/src/lib/layout.ts — the canonical source the
@@ -25,8 +25,8 @@ test("no surface overflows the viewport horizontally across the breakpoint sweep
   // The layout is designed to fit down to MIN_APP_WIDTH_PX and only scroll
   // horizontally *below* that floor, so at each breakpoint the document must not
   // exceed the viewport. A long cwd used to blow the floor by ~50px (EXC-814); the
-  // guarantee now holds whether the ToC rail is open or collapsed (the plan's wide
-  // code scrolls inside its own pane, not the document). expect.poll absorbs the
+  // plan's wide code scrolls inside its own pane rather than the document, so it
+  // cannot blow the floor either. expect.poll absorbs the
   // matchMedia-driven reflow after each resize; the 1px slack covers sub-pixel
   // rounding of scrollWidth, well under any real regression.
   for (const width of [NARROW_WIDTH_PX, TIGHT_WIDTH_PX, MIN_APP_WIDTH_PX]) {
@@ -39,29 +39,21 @@ test("no surface overflows the viewport horizontally across the breakpoint sweep
   }
 });
 
-test("the ToC toggle stays usable at a narrow width", async ({ daemon, page }) => {
+test("heading navigation stays reachable at a narrow width", async ({ daemon, page }) => {
   await daemon.seed();
   await page.setViewportSize({ width: TIGHT_WIDTH_PX, height: 900 });
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
 
-  const toggle = page.getByRole("button", { name: "Toggle sidebar" });
-  const rail = page.locator("#plan-toc");
-  await expect(toggle).toBeVisible();
-
-  // Toggling flips aria-expanded and zeroes/restores the rail lane, from whatever
-  // the width-driven default is. toc-collapse.e2e.ts owns the default + persistence
-  // detail; here we only guard that the control still works in the narrow regime.
-  const startedExpanded = (await toggle.getAttribute("aria-expanded")) === "true";
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-expanded", String(!startedExpanded));
-  if (startedExpanded) {
-    await expect(rail).toHaveCSS("width", "0px");
-  } else {
-    await expect(rail).not.toHaveCSS("width", "0px");
-  }
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-expanded", String(startedExpanded));
+  // The breadcrumbs bar took over from the contents rail (EXC-949), and it is the
+  // row's first control to give up space as the window tightens — so the narrow
+  // regime is exactly where it could be squeezed out of reach. plan-breadcrumbs.e2e.ts
+  // owns the bar's own behaviour; here we only guard that it survives the squeeze
+  // with its menu still openable.
+  const crumb = page.locator(".plan-breadcrumbs button.crumb.current");
+  await expect(crumb).toBeVisible();
+  await crumb.click();
+  await expect(page.locator("[data-slot='dropdown-menu-content']")).toBeVisible();
 });
 
 test("TopBar secondary actions stay reachable via the overflow menu at a narrow width", async ({

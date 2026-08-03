@@ -24,10 +24,10 @@ export async function lineCenterY(page: Page, line: number): Promise<number> {
 }
 
 /** Reveal the gutter `+` on `line` by moving the mouse over its left edge. The
- * source view's gutter sits at the left of the .diff-plan scroll container, which
- * the contents pane shifts right when present — so anchor the hover to that
- * container's left edge rather than the viewport's. The 6px inset lands inside
- * the gutter column without reaching the line-number cell. */
+ * source view's gutter sits at the left of the .diff-plan scroll container — so
+ * anchor the hover to that container's left edge rather than the viewport's,
+ * which keeps working wherever the pane sits. The 6px inset lands inside the
+ * gutter column without reaching the line-number cell. */
 export async function revealGutterPlus(page: Page, line: number): Promise<Locator> {
   const y = await lineCenterY(page, line);
   const x = await page.locator(".diff-plan").evaluate((el) => el.getBoundingClientRect().x + 6);

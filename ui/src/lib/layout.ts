@@ -3,7 +3,7 @@
 
 /**
  * The reference layout width, in CSS px: the viewport at which the source view
- * and its contents pane have room for the full plan column alongside the pane.
+ * has room for the full plan column without wrapping its lines.
  * playwright.config.ts derives its e2e viewport from this constant (with
  * headroom) so the e2e layout tracks the reference width instead of being
  * coupled to it by prose alone; `layout.test.ts` asserts that derivation.
@@ -23,8 +23,8 @@ export const REFERENCE_WIDTH_PX = 1400;
  * - {@link MIN_APP_WIDTH_PX} (≈ ⅓ of a 1440 display) — the supported minimum.
  *   `.shell` takes it as a `min-width` floor, so below it the window scrolls
  *   horizontally instead of the layout collapsing further.
- * - {@link TIGHT_WIDTH_PX} — the ~⅓-screen regime: ToC auto-collapses, TopBar
- *   controls go icon-only, pinned chrome stacks.
+ * - {@link TIGHT_WIDTH_PX} — the ~⅓-screen regime: TopBar controls go icon-only,
+ *   pinned chrome stacks, and the comment navigator unpins into a bottom sheet.
  * - {@link NARROW_WIDTH_PX} — the ~½-screen regime: TopBar consolidation,
  *   unified compare diff, and cwd relocation begin at/below this width.
  */

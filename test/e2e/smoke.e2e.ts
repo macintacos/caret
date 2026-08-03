@@ -1,9 +1,9 @@
-// Smoke: a seeded plan renders on the source view — heading lines, the contents
-// pane, and body content are all visible.
+// Smoke: a seeded plan renders on the source view — heading lines, the heading
+// breadcrumbs bar, and body content are all visible.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 
-test("a seeded plan renders headings, contents pane, and body content", async ({
+test("a seeded plan renders headings, the breadcrumbs bar, and body content", async ({
   daemon,
   page,
 }) => {
@@ -19,9 +19,9 @@ test("a seeded plan renders headings, contents pane, and body content", async ({
   await expect(plan.getByText("Background")).toBeVisible();
   await expect(plan.getByText("warm copy of each manifest")).toBeVisible();
 
-  // The contents pane lists the plan's headings.
-  const pane = page.getByRole("navigation", { name: "Plan contents" });
-  await expect(pane).toBeVisible();
-  await expect(pane.getByText("Approach")).toBeVisible();
-  await expect(pane.getByText("Verification")).toBeVisible();
+  // The breadcrumbs bar places the reader in the plan (EXC-949 made it the only
+  // heading-navigation surface, so the smoke check moved here from the rail).
+  const bar = page.getByRole("navigation", { name: "Plan location" });
+  await expect(bar).toBeVisible();
+  await expect(bar.locator("button.crumb").first()).toHaveText("Widget Cache Refactor");
 });

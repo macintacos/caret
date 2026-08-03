@@ -23,8 +23,8 @@ export interface Pref<T> {
 const PREF_KEYS = new Set<string>();
 
 /** Register a preference key. For the factories below, and for a pref whose
- * read/write is too bespoke to fold into a factory (the tri-state ToC toggle) but
- * which still must join the `--fresh` reset set. */
+ * read/write is too bespoke to fold into a factory (the file drawer's clamped
+ * per-edge sizes) but which still must join the `--fresh` reset set. */
 export function registerPrefKey(key: string): void {
   PREF_KEYS.add(key);
 }

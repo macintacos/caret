@@ -16,7 +16,7 @@
   //
   // When the review has multiple stored versions, a compare control lets the
   // reviewer diff any two of them (base vs. target) through the SourceDiffView
-  // wrapper, switching the split/unified layout at runtime. The contents pane,
+  // wrapper, switching the split/unified layout at runtime. The breadcrumbs bar,
   // gutter, and annotations belong to the single-version view only — compare mode
   // is a clean read-only diff with none of them.
   import { untrack } from "svelte";

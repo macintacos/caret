@@ -6,7 +6,7 @@
   // the list by comment text (never the plan text). It is persistent chrome, not a
   // modal: clicking a row leaves it open so the reviewer can walk the list while the
   // plan scrolls behind it, and it dismisses only on Escape, the close button, or a
-  // re-toggle. Mirrors the SourceToc contents pane's filter-then-jump idiom.
+  // re-toggle. Mirrors the breadcrumbs bar's filter-then-jump idiom.
   //
   // EXC-792: keyboard-driven too — Shift+C summons it (the status-strip tally
   // advertises the key), j/k walk the rows, Enter reveals a comment while the
@@ -199,10 +199,9 @@
 <style>
   /* Viewport-pinned, docked just above the bottom status bar (EXC-787). position:
      fixed keeps it out of the shell grid — a root sibling of .shell — so it never
-     disturbs the layout or the ToC rail's containing block. z-index sits above the
-     Toc rail (30), below the modal scrim (100) and safe-mode toast (200). A quiet
-     paper-raised card. The bottom offset clears the status bar (its height token
-     plus a small gap). */
+     disturbs the layout. z-index sits above the plan surface, below the modal
+     scrim (100) and safe-mode toast (200). A quiet paper-raised card. The bottom
+     offset clears the status bar (its height token plus a small gap). */
   .comment-navigator {
     position: fixed;
     right: 0.7rem;
@@ -221,7 +220,7 @@
   }
   /* At ≤ --w-tight the navigator unpins from the right corner and widens to a
      full-bleed bottom sheet (EXC-812) — it keeps the base bottom offset, clearing
-     the status bar, and may sit over the ToC rail (intended). The px literal
+     the status bar, and may sit over the plan surface (intended). The px literal
      mirrors lib/layout.ts's TIGHT_WIDTH_PX (640) minus one — @media can't read the
      --w-* token. Wide widths keep the right-docked 21rem card. */
   @media (max-width: 639px) {

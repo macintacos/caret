@@ -142,7 +142,7 @@
     background: var(--paper);
     border-left: 1px solid var(--rule);
     /* The open wipe: the lane grows from nothing while .diff-plan (flex: 1)
-       gives up the space, mirroring the ToC rail's collapse. It animates on
+       gives up the space. It animates on
        MOUNT because the drawer is unmounted when closed, so there is no closed
        class to toggle. Re-docking swaps animation-name below, which restarts the
        wipe — so an open drawer crossing the breakpoint wipes in from its new

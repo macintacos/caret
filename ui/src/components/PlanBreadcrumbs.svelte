@@ -1,10 +1,10 @@
 <script lang="ts">
-  // Heading breadcrumbs bar for the source-view plan surface (EXC-946). Where the
-  // contents rail answers "what is in this plan", the bar answers "where am I in
-  // it": the ancestor chain enclosing the heading being read, updating as the
-  // reviewer scrolls. It reads the same line-anchored heading model the rail does
-  // (toc.ts) through headingTrail.ts, and reports a pick as a source line, so a
-  // crumb jump lands exactly where a rail jump does.
+  // Heading breadcrumbs bar for the source-view plan surface (EXC-946), and since
+  // EXC-949 retired the contents rail, the plan's only heading-navigation surface.
+  // It answers "where am I in this plan": the ancestor chain enclosing the heading
+  // being read, updating as the reviewer scrolls. It reads the line-anchored
+  // heading model in toc.ts through headingTrail.ts, and reports a pick as a source
+  // line, which the parent turns into a scroll.
   //
   // Each crumb opens the headings it can be swapped for at that level. The crumb's
   // OWN heading opens the level below as a submenu instead of jumping in place —
@@ -374,9 +374,9 @@
 
 <style>
   /* The bar is chrome, not plan surface, so it wears the UI's sans beside the
-     plan's monospace voice — the same split SourceToc makes (EXC-900). It sits in
-     the compare row and inherits that row's --ctl-h control height, so the trail
-     lines up with the picker beside it.
+     plan's monospace voice (the split EXC-900 drew). It sits in the compare row
+     and inherits that row's --ctl-h control height, so the trail lines up with
+     the picker beside it.
      The vendored components render outside this component's style scope, so every
      rule here is :global and anchored on .plan-breadcrumbs / .plan-crumb-menu. */
   :global(.plan-breadcrumbs) {
@@ -528,7 +528,7 @@
   }
   /* The heading the reader is already on, marked with the amber wash the menu
      language reserves for the active choice (shadcn-rules.md § Menu highlight vs.
-     selection) — the same signal SourceToc's active row carries. Being unlayered,
+     selection). Being unlayered,
      it also out-specifies the catalog's layered `data-highlighted` background, so
      the row the reader is on needs the rule below to show any movement under j/k. */
   :global(.plan-crumb-menu [aria-current="location"]) {
@@ -545,9 +545,9 @@
     background: color-mix(in lab, var(--accent-wash), var(--chip-hover) 40%);
   }
 
-  /* The field is the shadcn Input molded the way the ToC rail's filter molds it:
-     surface, border, and focus ring stay the recipe's (bridged tokens), so only
-     the pinning and the menu's compact voice are set here. */
+  /* The field is the shadcn Input molded lightly: surface, border, and focus ring
+     stay the recipe's (bridged tokens), so only the pinning and the menu's compact
+     voice are set here. */
   :global(.plan-crumb-menu .crumb-filter-field) {
     height: 2rem;
     margin-bottom: 0.25rem;

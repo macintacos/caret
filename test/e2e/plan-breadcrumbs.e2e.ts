@@ -12,7 +12,7 @@ import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.
 
 // Each section must be taller than the viewport, so scrolling to a later one
 // genuinely changes which heading is being read rather than leaving the whole plan
-// in view (the same shape toc-active-heading.e2e.ts uses).
+// in view.
 const filler = (label: string) =>
   Array.from(
     { length: 30 },
@@ -48,10 +48,26 @@ const NESTED_PLAN = [
 
 const BAR = ".plan-breadcrumbs";
 const CRUMB = `${BAR} button.crumb`;
+const MENU = "[data-slot='dropdown-menu-content']";
+const QUERY = "input[aria-label='Filter headings']";
 
-/** Scroll the plan to a heading through the ToC rail, which both surfaces share. */
-const jumpTo = (page: import("@playwright/test").Page, heading: string) =>
-  page.locator(".source-toc").getByRole("button", { name: heading, exact: true }).click();
+/** Scroll the plan to any heading through the bar's own flat filter (EXC-948) —
+ * since EXC-949 removed the contents rail, this is the only surface that reaches
+ * an arbitrary heading in one step, so the specs below arrange their starting
+ * position through the very thing they go on to assert.
+ *
+ * Waiting out the safe-mode grace is load-bearing, not defensive: the guard is a
+ * window-level CAPTURE listener that calls stopImmediatePropagation, so a `/`
+ * inside the grace never reaches the menu's own handler and the filter silently
+ * never opens. The query is filled rather than typed, and Enter from the field
+ * selects the first result — one match, given the distinct section names above. */
+async function jumpTo(page: import("@playwright/test").Page, heading: string): Promise<void> {
+  await waitPastSafeModeGrace(page);
+  await page.locator(`${CRUMB}.current`).click();
+  await page.keyboard.press("/");
+  await page.locator(QUERY).fill(heading);
+  await page.keyboard.press("Enter");
+}
 
 test("the bar sits in the control row between the compare picker and the path", async ({
   daemon,
@@ -62,7 +78,8 @@ test("the bar sits in the control row between the compare picker and the path", 
 
   const bar = page.locator(`.control-row ${BAR}`);
   await expect(bar).toBeVisible();
-  // A named nav landmark, so the rail's role in the a11y tree survives its removal.
+  // A named nav landmark: the plan's heading navigation keeps a role in the a11y
+  // tree now that the contents rail's own landmark is gone (EXC-949).
   await expect(bar).toHaveAttribute("aria-label", "Plan location");
 
   // Left of the working-directory path, right of the compare picker.
@@ -116,8 +133,8 @@ test("picking a sibling from a crumb's menu scrolls the plan to that heading", a
   await expect(menu).toBeVisible();
   await menu.getByText("Delta", { exact: true }).click();
 
-  // The pick lands the heading where a ToC row jump does: the plan is now reading
-  // Delta, which the trail and the URL's heading mirror both report.
+  // The pick lands the plan on Delta, which the trail and the URL's heading mirror
+  // both report.
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Delta"]);
   await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("delta");
 });
@@ -180,8 +197,6 @@ test("j and k walk a nested submenu, not the plan behind it", async ({ daemon, p
 // it is real browser behaviour — the key claim against the plan's own search, the
 // roving walk through a set that changes under it, and Escape's step back to the
 // hierarchy — so it lives here rather than in the component unit.
-const MENU = "[data-slot='dropdown-menu-content']";
-const QUERY = "input[aria-label='Filter headings']";
 
 test("b then / then a query then Enter jumps across the hierarchy", async ({ daemon, page }) => {
   await daemon.seed({ plan: NESTED_PLAN });

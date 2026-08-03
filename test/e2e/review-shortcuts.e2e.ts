@@ -1,7 +1,7 @@
 // Review-verdict + chrome keyboard shortcuts. Approve (a), request changes (r),
 // reject (shift+R, EXC-913), toggle compare/diff (d), open plan search (/,
-// EXC-832), toggle the sidebar (\), and open settings (,) are all wired through
-// the shortcut engine (EXC-786). These are real-browser keyboard behaviors — a
+// EXC-832), open the heading breadcrumbs (b and \), and open settings (,) are all
+// wired through the shortcut engine (EXC-786). These are real-browser keyboard behaviors — a
 // keydown routed through the global dispatcher into the same guarded path a click
 // takes — so they live here, not in a unit (browser-testing.md). Every action is
 // driven with a REAL keystroke.
@@ -13,8 +13,7 @@ import type { Page } from "@playwright/test";
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 
-// Two headings so the contents pane (ToC) renders (toc.ts § shouldShowToc needs
-// >= 2), giving the `/` shortcut a filter to focus.
+// Two headings, so the plan has a trail with something to navigate.
 const filler = (label: string) =>
   Array.from({ length: 6 }, (_, i) => `${label} body line ${i + 1}.`).join("\n\n");
 const PLAN = ["# Alpha", filler("Alpha"), "## Bravo", filler("Bravo"), ""].join("\n\n");
@@ -172,15 +171,15 @@ test("slash opens the plan search, not the contents filter (EXC-832)", async ({ 
   await page.goto("/");
   await loadPlan(page);
 
-  // EXC-832 repurposed / from focusing the ToC filter (EXC-789) to opening a vim-style
-  // plan search; the filter keeps no keybinding now (parks EXC-793). The full search
-  // flow lives in plan-search.e2e.ts — here we only pin the key's new owner.
-  const filter = page.getByLabel("Filter headings");
-  await expect(filter).not.toHaveAttribute("aria-keyshortcuts", "/");
+  // EXC-832 repurposed / from focusing the contents filter (EXC-789) to opening a
+  // vim-style plan search. The breadcrumbs bar's own `/` (EXC-948) lives inside an
+  // open crumb menu, so with no menu up the key belongs to the search outright and
+  // no heading filter is mounted to steal it. The full search flow lives in
+  // plan-search.e2e.ts — here we only pin the key's owner at the plan surface.
+  await expect(page.getByLabel("Filter headings")).toHaveCount(0);
 
   await page.keyboard.press("/");
   await expect(page.locator(".plan-search")).toBeVisible();
-  await expect(filter).not.toBeFocused();
 });
 
 test("b opens the breadcrumbs bar, and j/j/Enter jumps to the highlighted heading", async ({
@@ -193,9 +192,15 @@ test("b opens the breadcrumbs bar, and j/j/Enter jumps to the highlighted headin
   await page.goto("/");
   await loadPlan(page);
 
-  // Read Bravo, so the trailing crumb's menu offers siblings worth walking.
-  await page.locator(".source-toc").getByRole("button", { name: "Bravo", exact: true }).click();
+  // Read Bravo, so the trailing crumb's menu offers siblings worth walking. Reached
+  // through the bar's own flat filter (EXC-948), the only one-step route to an
+  // arbitrary heading since EXC-949 removed the contents rail.
   const crumbs = page.locator(".plan-breadcrumbs button.crumb");
+  await expect(crumbs.last()).toBeVisible();
+  await crumbs.last().click();
+  await page.keyboard.press("/");
+  await page.locator("input[aria-label='Filter headings']").fill("Bravo");
+  await page.keyboard.press("Enter");
   await expect(crumbs).toHaveText(["Alpha", "Bravo"]);
   await expect(crumbs.last()).toHaveAttribute("aria-keyshortcuts", "b");
 
@@ -240,28 +245,26 @@ test("Escape closes the breadcrumbs menu and hands focus back to the crumb", asy
   await expect(crumb).toBeFocused();
 });
 
-test("backslash toggles the sidebar rail", async ({ daemon, page }) => {
-  // EXC-830: `\` fires the same toggleToc the sidebar float-chip runs. The rail
-  // collapses by animating its lane width to 0 (not display:none), so the state
-  // reads off the toggle's aria-expanded plus the #plan-toc lane width — mirroring
-  // toc-collapse.e2e.ts. The fixture viewport is wide, so the rail starts open.
-  await daemon.seed({ plan: PLAN });
+test("backslash opens the breadcrumbs bar, the same as b", async ({ daemon, page }) => {
+  // EXC-949 retired the ToC rail `\` used to toggle (EXC-830) and pointed the key at
+  // the breadcrumbs bar instead, so the plan's one heading-navigation surface answers
+  // to both keys. Two keymap reservations share one action, which the unit suite pins
+  // (keymap.test.ts); what needs a browser is that the second key really does reach
+  // the menu through the dispatcher.
+  await daemon.seed({ plan: TALL_PLAN });
   await page.goto("/");
   await loadPlan(page);
 
-  const toggle = page.getByRole("button", { name: "Toggle sidebar" });
-  const rail = page.locator("#plan-toc");
-  await expect(toggle).toHaveAttribute("aria-keyshortcuts", "\\");
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
-  await expect(rail).not.toHaveCSS("width", "0px");
+  const crumb = page.locator(".plan-breadcrumbs button.crumb.current");
+  await expect(crumb).toBeVisible();
 
-  // `\` collapses the rail…
+  const menu = page.locator("[data-slot='dropdown-menu-content']");
   await page.keyboard.press("\\");
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
-  await expect(rail).toHaveCSS("width", "0px");
+  await expect(menu).toBeVisible();
 
-  // …and `\` again reopens it.
-  await page.keyboard.press("\\");
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
-  await expect(rail).not.toHaveCSS("width", "0px");
+  // And it toggles shut again, the same as `b` does — the key is the whole
+  // invocation, not a one-way open.
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  await expect(crumb).toBeFocused();
 });
