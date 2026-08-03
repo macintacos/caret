@@ -109,6 +109,20 @@ describe("CANONICAL_KEYMAP", () => {
     expect(keyCaps(entry.keys)).toEqual([["\\"]]);
   });
 
+  test("reserves b for the heading breadcrumbs in the Actions group, rendered as a B cap", () => {
+    // EXC-947: `b` invokes the heading breadcrumbs bar. A bare lowercase letter with no
+    // command modifier, so keyCaps derives the capital from the key's case and
+    // ariaKeyshortcuts derives the lowercase key the dispatcher actually matches — the
+    // same shape actions.toggleDiff (`d`) and actions.searchNext (`n`) take.
+    const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.headingNav");
+    if (!entry) throw new Error("actions.headingNav missing");
+    expect(entry.group).toBe("actions");
+    expect(entry.label).toBe("Open breadcrumbs");
+    expect(specSignature(entry.keys)).toBe("b");
+    expect(keyCaps(entry.keys)).toEqual([["B"]]);
+    expect(ariaKeyshortcutsFor("actions.headingNav")).toBe("b");
+  });
+
   test("derives shift + letter caps for the bare shifted vim keys (no cap override)", () => {
     // EXC-831: V and G are bare shifted keys (uppercase key, no command modifier and
     // no explicit cap); keyCaps derives the shift affordance from the key's case, so
