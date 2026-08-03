@@ -1,6 +1,9 @@
 // Clickable links on the source-view surface. The plan renders as markdown
 // source through @pierre/diffs; the link layer simplifies `[label](url)` to its
-// label and records a clickable span carrying the http(s) href. A real token
+// label and records a clickable span carrying the http(s) href. A target that is
+// a path rather than a URL also simplifies, but emits a file reference instead of
+// a clickable span (EXC-954) — that path is covered by file-refs.e2e.ts, not
+// here, and nothing in it can reach window.open. A real token
 // click runs through the library's per-token pointer pipeline (which only exists
 // in a real browser — see SourceViewLinks.test.ts), so the click-opens-a-tab
 // path and the dangerous-scheme guard are exercised here as e2e, while the pure

@@ -12,6 +12,11 @@
 // qualifies on *shape* only (last path segment ends in a known file extension,
 // optionally trailed by :line[:col]); whether it is a real file is resolved
 // server-side, so a candidate that doesn't exist gets no icon and no affordance.
+//
+// The scan is not the only source of references: the link layer emits its own
+// over collapsed markdown-link labels, whose paths never survive into the display
+// text as inline code. mergeFileRefSpans unions the two into the one candidate
+// set the view resolves and tags.
 
 /** A candidate filename reference on a single display line. Columns are 0-based,
  * half-open [startCol, endCol) into the display line's text; endCol includes any
@@ -23,6 +28,10 @@ export interface FileRefSpan {
   path: string;
   /** 1-based line number from a `path:line` reference, if present. */
   line?: number;
+  /** The link target this reference was emitted from, when the display text does
+   * not already show it (a prose-labelled markdown link). Hover reveals it in the
+   * link tooltip; an inline-code reference leaves it unset. */
+  target?: string;
 }
 
 /** Per-line spans, keyed by 1-based display line number. Lines with no
@@ -110,8 +119,16 @@ const KNOWN_EXTENSIONS: ReadonlySet<string> = new Set([
 ]);
 
 /** Classifies a raw candidate run into a path + optional line, or null when it
- * is not file-shaped (no known extension, or a bare `.ext` with no name). */
-function classify(raw: string): { path: string; line?: number } | null {
+ * is not file-shaped (no known extension, or a bare `.ext` with no name).
+ *
+ * The one definition of "path-shaped" in the codebase: the scan below applies it
+ * to runs inside inline code, and the link layer applies it to a `[label](target)`
+ * target before collapsing it (EXC-954). A second, drifting notion would let the
+ * two decoration paths disagree about the same text. Each caller adds its own
+ * URL exclusion first, since this judges a run by its last segment and a URL's
+ * tail can read as a path: the scan masks URLs inside code, the link layer
+ * rejects a target carrying a scheme. */
+export function classify(raw: string): { path: string; line?: number } | null {
   let path = raw;
   let line: number | undefined;
   const suffix = LINE_SUFFIX.exec(raw);
@@ -175,4 +192,45 @@ export function buildFileRefLayer(text: string): FileRefSpanMap {
     if (spans.length > 0) map.set(i + 1, spans);
   }
   return map;
+}
+
+/** Unions the scanned and emitted reference maps into one candidate set. Where a
+ * pair overlaps — a markdown link whose label is itself an inline-code path — the
+ * leftmost SCANNED span's columns win (inline code is where a path gets its own
+ * shiki token, so they place the glyph tight against the filename) and the
+ * EMITTED span's path/line/target win (the link's real destination, which need
+ * not be what the label says). Every span an emitted one covers collapses into
+ * that single survivor, so a label citing two paths draws one glyph pointing at
+ * the link's target rather than two, one of them at a file the link never named.
+ * Each line's spans are sorted by startCol.
+ *
+ * Both maps and their spans are treated as immutable: the result carries emitted
+ * spans by reference rather than copying them. */
+export function mergeFileRefSpans(
+  scanned: FileRefSpanMap,
+  emitted: FileRefSpanMap,
+): FileRefSpanMap {
+  const merged: FileRefSpanMap = new Map();
+  for (const [line, spans] of scanned) merged.set(line, [...spans]);
+  for (const [line, spans] of emitted) {
+    let into = merged.get(line) ?? [];
+    for (const span of spans) {
+      const hits = (s: FileRefSpan) => span.startCol < s.endCol && span.endCol > s.startCol;
+      const anchor = into.find(hits);
+      if (anchor === undefined) into.push(span);
+      else {
+        into = into.filter((s) => !hits(s));
+        into.push({
+          startCol: anchor.startCol,
+          endCol: anchor.endCol,
+          path: span.path,
+          line: span.line,
+          target: span.target,
+        });
+      }
+    }
+    merged.set(line, into);
+  }
+  for (const spans of merged.values()) spans.sort((a, b) => a.startCol - b.startCol);
+  return merged;
 }

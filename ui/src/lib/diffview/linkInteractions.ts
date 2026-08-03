@@ -30,10 +30,11 @@ export interface LinkHandlerDeps {
 }
 
 /** The file-reference click affordance the composed handlers dispatch to
- * (EXC-687; click-to-open since EXC-840). Hover is CSS-only — the override
- * sheet highlights the tagged token — so nothing dispatches on enter/leave; a
- * click on a resolved reference opens the excerpt popover and consumes the
- * event, so its line does not also open a comment. */
+ * (EXC-687; click-to-open since EXC-840). No dep is dispatched on hover: the
+ * override sheet highlights the tagged token, and a reference carrying a
+ * `target` — one whose label hides its path — reveals it through the link
+ * tooltip (EXC-954). A click on a resolved reference opens the excerpt popover
+ * and consumes the event, so its line does not also open a comment. */
 export interface FileRefClickDeps {
   /** A token over a resolved file reference was clicked — the view opens the
    * excerpt popover anchored to `tokenElement`. */
@@ -91,7 +92,8 @@ function tooltipMount(tokenElement: HTMLElement): ParentNode {
   return tokenElement.ownerDocument.body ?? tokenElement.ownerDocument;
 }
 
-/** Reveals the hover tooltip: a caret-surface bubble carrying the full href,
+/** Reveals the hover tooltip: a caret-surface bubble carrying the full target —
+ * a link's href, or a file reference's path when its label hides it —
  * mounted in the token's root (the diffview shadow root) so it renders on
  * caret's surface inside the same tree as the code. Its colors come from the
  * host-level --diffs-link-tooltip-* bridge vars (declared once on the .diffview
@@ -192,8 +194,9 @@ export function createLinkHandlers(spanMap: LinkSpanMap, deps: LinkHandlerDeps):
  *
  * Two affordances compose here today: the link layer (click opens the URL, hover
  * shows the tooltip) and the file-reference layer (click opens the excerpt
- * popover — see EXC-687/EXC-840; its hover highlight is CSS-only in the
- * override sheet, so enter/leave dispatch nothing for it). onTokenClick records
+ * popover — see EXC-687/EXC-840; its highlight is CSS-only in the override
+ * sheet, and enter/leave only show the tooltip for a reference whose display
+ * text hides its path — a prose-labelled link, EXC-954). onTokenClick records
  * the event when a click lands on either a link span or a file reference; that
  * recorded event drives wasLinkClick, which a view's row-click handler reads to
  * stand down: the library fires this layer's onTokenClick before onLineClick
@@ -225,9 +228,23 @@ export function composeTokenHandlers(
   return {
     handlers: {
       onTokenEnter(props, event) {
+        // A reference emitted from a prose-labelled link hides its destination in
+        // the display text, so hover is the only way to see it — the same tooltip
+        // surface a link uses. A reference that shows its own path carries no
+        // target and keeps its CSS-only hover.
+        const ref = fileRefAt(props.lineNumber, props.lineCharStart, props.lineCharEnd);
+        if (ref?.target !== undefined) {
+          showTooltip(props.tokenElement, ref.target);
+          return;
+        }
         link?.onTokenEnter(props, event);
       },
       onTokenLeave(props, event) {
+        const ref = fileRefAt(props.lineNumber, props.lineCharStart, props.lineCharEnd);
+        if (ref?.target !== undefined) {
+          hideTooltip(props.tokenElement);
+          return;
+        }
         link?.onTokenLeave(props, event);
       },
       onTokenClick(props, event) {

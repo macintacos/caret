@@ -496,7 +496,7 @@ If anything in the paragraph above escapes the sanitizer — an alert fires, an 
 
 ## Filename references
 
-EXC-687: a filename written in **inline code** that resolves to a real file under the review's working directory gets a small file icon to its left, and clicking the reference opens a syntax-highlighted excerpt of that file — the head of the file, or a window centered on the referenced line when the reference carries a `:line`. The affordance is scoped to inline code (a bare-prose path renders as one coarse token with nowhere to hang the icon), and a path that does not resolve stays completely inert — no icon, no preview — so a made-up reference never masquerades as a link.
+EXC-687: a filename written in **inline code** that resolves to a real file under the review's working directory gets a small file icon to its left, and clicking the reference opens a syntax-highlighted excerpt of that file — the head of the file, or a window centered on the referenced line when the reference carries a `:line`. A bare path in prose is not detected here — it renders as one coarse token with nowhere to hang the icon — and a path that does not resolve stays completely inert — no icon, no preview — so a made-up reference never masquerades as a link. Inline code is one of two ways to write a reference; markdown links are the other, below.
 
 The list below points at long-lived files, and leans on paths and line numbers that stay meaningful as their contents drift, so the check keeps working as the tree around it changes. Every path needs a known extension to be tagged at all, which is why extensionless files like `LICENSE` are absent. Click each to verify:
 
@@ -509,6 +509,25 @@ The list below points at long-lived files, and leans on paths and line numbers t
 - `doc/ADVANCED.md:300` — a long file opened mid-way, so both strips carry large counts. Click `↑` and `↓` repeatedly to walk the window out to line 1 and to the last line; each strip disappears when its side runs out, and an upward click should not throw away the line you were reading.
 - `src/cli.ts` — real source rather than config: a line too long for the drawer scrolls sideways inside the excerpt rather than being cut off, and dragging the drawer's inner edge wider brings more of it into view.
 - `src/does-not-exist.ts` — a path deliberately **not** in the repo: it must show **no** icon and **no** preview. If it ever sprouts one, the existence gate has regressed.
+
+### As markdown links
+
+EXC-954: a markdown link whose **target** is a path is a reference too. The link collapses to its label — brackets and parens gone, the path never written twice — and the label becomes the click target for the same preview. Nothing here is a web link: a filesystem path is never handed to the browser, so none of these open a tab.
+
+Where the **icon** lands is the thing to look at, and it follows the token the label leaves behind. A backticked label keeps its backticks, so the path stays its own token and takes the icon anywhere on the line. A bare-path or prose label collapses into ordinary prose, which is one coarse token running to the end of the line — marking that would drag the icon and its hover chip across the whole sentence, so those get the click without the icon.
+
+Each bullet below carries exactly one link and no other reference, so whatever icons you count on a line came from that link alone. Hover each to confirm the chip hugs the filename and never the sentence:
+
+- [`package.json`](package.json) — a backticked-path label, the citation shape caret's own plans use. It keeps its backticks and their inline-code styling, and shows **exactly one** icon: both detection paths fire on this shape, so a second icon here would be a regression.
+- Mid-sentence, [`README.md`](README.md) still takes its icon, because the backticks give it a token of its own wherever it sits.
+- [README.md](README.md) — a bare-path label. The path shows, plainly styled, with **no** icon; clicking the words still opens the preview.
+- [the caret dev workflow](doc/ADVANCED.md) — a prose label: the words survive and the path does not appear at all. Hovering reveals the target in a tooltip, the only way to see where the click goes.
+- [the deep middle of a long file](doc/ADVANCED.md:300) — a target carrying a line number: opens centered on line 300 with both strips showing, and the tooltip carries the line as well as the path.
+- [`mise.toml`](package.json) — a label and target that **disagree**: the click opens the target, never the file the label names. Read the tooltip before clicking. The icon still sits inside the backticks.
+- [a plan that moved](doc/does-not-exist.md) — an unresolved target: the label reads as plain prose with no icon, no chip, and no preview, and its line still opens a comment composer on click.
+- [docs](guide) — a target that is not path-shaped: stays **literal**, brackets and all, exactly as before.
+- [the bundle](ftp://example.com/lib.ts) — a target carrying a scheme: also stays literal. It ends in a known extension, but a URL slot is not a path, and resolving it against the repo would preview an unrelated local file.
+- [the caret repo](https://github.com/macintacos/caret) — an ordinary http link, unchanged: no icon, and clicking it opens a tab.
 
 ---
 

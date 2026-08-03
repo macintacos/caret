@@ -85,6 +85,16 @@ test("does not tag a coarse token that only contains the reference mid-run", () 
   expect(tagged(host)).toEqual([]);
 });
 
+test("does not tag a coarse token that starts at the reference but runs past it", () => {
+  // A file link collapsed into prose: shiki emits the whole line as one token,
+  // which begins exactly where the reference does. Tagging it would draw the
+  // glyph and the hover chip around the entire sentence, so the icon is omitted
+  // rather than misplaced — the same call the mid-run guard above makes.
+  host = root(row(1, ["src/foo.ts holds the key."]));
+  tagFileRefTokens(host, map([[1, [{ startCol: 0, endCol: 10, path: "src/foo.ts" }]]]));
+  expect(tagged(host)).toEqual([]);
+});
+
 test("is a no-op for a line whose row is not rendered", () => {
   host = root(row(1, ["only ", "here.ts"]));
   expect(() =>

@@ -1,10 +1,18 @@
 import { describe, expect, test } from "bun:test";
 
-import { buildFileRefLayer, type FileRefSpan } from "$lib/diffview/fileRefs.ts";
+import {
+  buildFileRefLayer,
+  classify,
+  type FileRefSpan,
+  type FileRefSpanMap,
+  mergeFileRefSpans,
+} from "$lib/diffview/fileRefs.ts";
 
-// buildFileRefLayer is the pure detection half of the filename-hover feature
-// (EXC-687): it scans a plan's display source for path-shaped tokens *inside
-// inline-code spans* and returns per-line spans. Detection is scoped to inline
+// buildFileRefLayer is one of two detection sources for the filename-reference
+// feature (EXC-687): it scans a plan's display source for path-shaped tokens
+// *inside inline-code spans* and returns per-line spans. The other is the link
+// layer's emission over collapsed markdown-link labels (EXC-954), which
+// mergeFileRefSpans below unions with this one. This scan stays scoped to inline
 // code because that is where a path renders as its own shiki token (prose is one
 // coarse run); it is deliberately permissive on *shape* — whether a candidate is
 // a real file is the daemon's call — but keeps precision high by requiring a
@@ -97,5 +105,105 @@ describe("confinement is the daemon's job, not the parser's", () => {
   test("still emits a candidate span for a ../ escape (the daemon refuses it)", () => {
     const s = spanFor("edit `../lib/x.ts` please", "../lib/x.ts");
     expect(s?.path).toBe("../lib/x.ts");
+  });
+});
+
+// classify is the one definition of "path-shaped" in the codebase. It is exported
+// so the link layer applies the SAME gate to a `[label](target)` target before
+// collapsing it (EXC-954) — a second, drifting notion of what looks like a file
+// would let the two decoration paths disagree about the same text.
+describe("classify", () => {
+  test("accepts a path with a known extension", () => {
+    expect(classify("a/b.md")).toEqual({ path: "a/b.md", line: undefined });
+  });
+
+  test("splits a trailing :line off the path", () => {
+    expect(classify("a/b.md:42")).toEqual({ path: "a/b.md", line: 42 });
+  });
+
+  test("rejects a run with no file extension", () => {
+    expect(classify("guide")).toBeNull();
+  });
+});
+
+// mergeFileRefSpans unions the references the layers SCAN out of inline code with
+// the ones the link layer EMITS over collapsed labels (EXC-954). The two can land
+// on the same text — a markdown link whose label is itself an inline-code path —
+// and two overlapping spans would tag two tokens and draw two glyphs, so the
+// merge must collapse each collision to exactly one span.
+describe("mergeFileRefSpans", () => {
+  const map = (...entries: [number, FileRefSpan[]][]): FileRefSpanMap => new Map(entries);
+
+  test("unions spans from disjoint lines", () => {
+    const merged = mergeFileRefSpans(
+      map([1, [{ startCol: 0, endCol: 6, path: "a/b.md" }]]),
+      map([3, [{ startCol: 2, endCol: 8, path: "c/d.ts" }]]),
+    );
+    expect(merged.get(1)?.map((s) => s.path)).toEqual(["a/b.md"]);
+    expect(merged.get(3)?.map((s) => s.path)).toEqual(["c/d.ts"]);
+  });
+
+  test("keeps a non-overlapping emitted span on a line that also has a scanned one", () => {
+    const merged = mergeFileRefSpans(
+      map([1, [{ startCol: 0, endCol: 6, path: "a/b.md" }]]),
+      map([1, [{ startCol: 20, endCol: 26, path: "c/d.ts" }]]),
+    );
+    expect(merged.get(1)).toHaveLength(2);
+  });
+
+  test("sorts each line's spans by startCol", () => {
+    const merged = mergeFileRefSpans(
+      map([1, [{ startCol: 20, endCol: 26, path: "late.ts" }]]),
+      map([1, [{ startCol: 0, endCol: 8, path: "early.ts" }]]),
+    );
+    expect(merged.get(1)?.map((s) => s.path)).toEqual(["early.ts", "late.ts"]);
+  });
+
+  test("an overlapping pair collapses to one span — the label never draws two glyphs", () => {
+    // The backticked-path label `` [`a.ts`](a.ts) ``: the scan finds the path
+    // inside the backticks, the link layer emits over the whole label.
+    const merged = mergeFileRefSpans(
+      map([1, [{ startCol: 1, endCol: 5, path: "a.ts" }]]),
+      map([1, [{ startCol: 0, endCol: 6, path: "a.ts", target: "a.ts" }]]),
+    );
+    expect(merged.get(1)).toHaveLength(1);
+    // The scanned columns win — inline code is where a path gets its own shiki
+    // token, so they place the glyph tight against the filename.
+    expect(merged.get(1)?.[0]?.startCol).toBe(1);
+    expect(merged.get(1)?.[0]?.endCol).toBe(5);
+    expect(merged.get(1)?.[0]?.path).toBe("a.ts");
+  });
+
+  test("every overlapping scanned span collapses, not just the first", () => {
+    // A label citing two inline-code paths — [`a.ts` and `b.ts`](c/d.ts). Both
+    // scanned spans sit under the one emitted span; leaving the second would
+    // draw a second glyph and make `b.ts` independently clickable, pointing at
+    // a file the link never named.
+    const merged = mergeFileRefSpans(
+      map([
+        1,
+        [
+          { startCol: 1, endCol: 5, path: "a.ts" },
+          { startCol: 12, endCol: 16, path: "b.ts" },
+        ],
+      ]),
+      map([1, [{ startCol: 0, endCol: 17, path: "c/d.ts", target: "c/d.ts" }]]),
+    );
+    expect(merged.get(1)).toHaveLength(1);
+    expect(merged.get(1)?.[0]?.path).toBe("c/d.ts");
+    // The leftmost scanned span places the glyph.
+    expect(merged.get(1)?.[0]?.startCol).toBe(1);
+  });
+
+  test("on a collision the emitted path wins — the click opens the link's target", () => {
+    // `` [`a.ts`](b/c.ts) ``: the label names one file, the link points at another.
+    const merged = mergeFileRefSpans(
+      map([1, [{ startCol: 1, endCol: 5, path: "a.ts" }]]),
+      map([1, [{ startCol: 0, endCol: 6, path: "b/c.ts", line: 7, target: "b/c.ts:7" }]]),
+    );
+    expect(merged.get(1)).toHaveLength(1);
+    expect(merged.get(1)?.[0]?.path).toBe("b/c.ts");
+    expect(merged.get(1)?.[0]?.line).toBe(7);
+    expect(merged.get(1)?.[0]?.target).toBe("b/c.ts:7");
   });
 });

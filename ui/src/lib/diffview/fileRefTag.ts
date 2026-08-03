@@ -22,24 +22,28 @@ export function tagFileRefTokens(root: ParentNode, spanMap: FileRefSpanMap): voi
     const rowEl = root.querySelector(`[data-content] > [data-line="${line}"]`);
     if (rowEl === null) continue;
     for (const span of spans) {
-      tagTokenAt(rowEl, span.startCol);
+      tagTokenAt(rowEl, span.startCol, span.endCol);
     }
   }
 }
 
-// Tags the direct-child token that BEGINS at `startCol`. Tokens partition the
-// line, so a running length locates the boundary. Requiring the token to start
-// exactly at the reference (not merely contain it) keeps the icon off a coarse
-// token that spans more than the path — the icon then sits immediately left of
-// the filename, or is omitted rather than misplaced when no token starts there.
-function tagTokenAt(rowEl: Element, startCol: number): void {
+// Tags the direct-child token that BEGINS at `startCol` and stays within
+// `endCol`. Tokens partition the line, so a running length locates the boundary.
+// Both bounds are required so the icon never lands on a coarse token that spans
+// more than the path: one merely CONTAINING the reference starts too early, and
+// a collapsed link's prose token starts exactly at it but runs to the end of the
+// line — tagging that would draw the glyph and the hover chip around the whole
+// sentence. The icon sits immediately left of the filename, or is omitted rather
+// than misplaced when no token fits.
+function tagTokenAt(rowEl: Element, startCol: number, endCol: number): void {
   let col = 0;
   for (const token of rowEl.children) {
+    const len = token.textContent?.length ?? 0;
     if (col === startCol) {
-      token.setAttribute(FILE_REF_ATTR, "");
+      if (col + len <= endCol) token.setAttribute(FILE_REF_ATTR, "");
       return;
     }
     if (col > startCol) return;
-    col += token.textContent?.length ?? 0;
+    col += len;
   }
 }
