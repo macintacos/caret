@@ -47,3 +47,6 @@ playwright/.cache/
 !/CLAUDE.md
 
 .tokensave/
+
+# Ad-hoc playwright-cli exploration output (browser-testing.md: never committed)
+.playwright-cli/
