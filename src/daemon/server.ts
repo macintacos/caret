@@ -26,9 +26,11 @@ import {
   ResolveBodySchema,
 } from "@/daemon/schemas.ts";
 import { type DaemonLock, IDENTITY, isCompiledBinary } from "@/lib/build-id.ts";
+import { markPaneRead } from "@/lib/cmux.ts";
 import { type CaretLogger, noopLogger, shortId } from "@/lib/log.ts";
 import {
   type ApproveVariant,
+  type CmuxPane,
   currentVersion,
   type DaemonDiagnostics,
   type Decision,
@@ -115,6 +117,10 @@ export interface CreateServerOptions {
    * call sites/tests that don't wire it are unaffected. runDaemon wires the prod
    * thunk, which reads live settings so a config edit hot-reloads. */
   diagnostics?: () => DaemonDiagnostics;
+  /** Clear the unread mark on the cmux pane a review was submitted from
+   * (EXC-961). Defaults to the real spawn; injectable so tests assert on the
+   * argv without spawning. Fire-and-forget — it never delays a response. */
+  markPaneRead?: (pane: CmuxPane) => void;
   /** Leveled lifecycle logger (see log.ts CaretLogger); defaults to a no-op so
    * tests stay quiet. Lifecycle events log at info, handler failures at error. */
   log?: CaretLogger;
@@ -152,6 +158,7 @@ interface ResolvedOptions {
   approveVariants: readonly ApproveVariant[] | undefined;
   source: string | undefined;
   diagnostics: (() => DaemonDiagnostics) | undefined;
+  markPaneRead: (pane: CmuxPane) => void;
   log: CaretLogger;
 }
 
@@ -172,6 +179,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     approveVariants: opts.approveVariants,
     source: opts.source,
     diagnostics: opts.diagnostics,
+    markPaneRead: opts.markPaneRead ?? ((pane) => markPaneRead(pane, { log: opts.log })),
     log: opts.log ?? noopLogger,
   };
 }
@@ -619,6 +627,10 @@ export function createServer(opts: CreateServerOptions): CaretServer {
         });
       }
     }
+    // The plan has been decided on, so the pane that submitted it no longer
+    // needs the reviewer (EXC-961). Fire-and-forget, before the deferred unblock
+    // below, so it can never delay the 200 the long-polling hook waits on.
+    if (existing.cmux) cfg.markPaneRead(existing.cmux);
     // Defer one tick so THIS 200 flushes before the hook's long-poll resolves
     // (otherwise the browser's POST can appear to race the unblock).
     setTimeout(() => resolveDecision(id, decision), 0);
