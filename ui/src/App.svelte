@@ -747,7 +747,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    padding: 0.6rem clamp(1rem, 3vw, 2rem);
+    padding: 0.6rem var(--bar-inset);
     background: var(--accent-wash);
     color: var(--ink);
     border: 0;

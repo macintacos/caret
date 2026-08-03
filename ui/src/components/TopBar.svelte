@@ -296,7 +296,7 @@
     display: flex;
     align-items: center;
     gap: 1rem;
-    padding: 0.7rem clamp(1rem, 3vw, 2rem);
+    padding: 0.7rem var(--bar-inset);
     border-bottom: 1px solid var(--rule);
     background: var(--paper-raised);
     position: relative;

@@ -1416,14 +1416,14 @@
   /* The control bar above the surface. Carries the bar chrome (raised paper,
      hairline rule) for the version-compare picker: the "Compare versions" toggle
      sits at the left, and (in compare mode) the layout / indicator toggles are
-     pushed to the right edge. The horizontal inset is the app's shared bar inset
-     (the same clamp the TopBar and the shell use), symmetric now that EXC-949
-     removed the contents rail the left edge used to align with. */
+     pushed to the right edge. The horizontal inset is the app's shared --bar-inset
+     (the same the TopBar and the shell use), symmetric now that EXC-949 removed
+     the contents rail the left edge used to align with. */
   .control-row {
     display: flex;
     align-items: center;
     gap: 0.85rem;
-    padding: 0.5rem clamp(1rem, 3vw, 2rem);
+    padding: 0.5rem var(--bar-inset);
     border-bottom: 1px solid var(--rule);
     background: var(--paper-raised);
     /* The shared control height every child in the row sizes to. */

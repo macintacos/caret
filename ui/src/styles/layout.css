@@ -23,6 +23,10 @@
      width and update together. Each rule caps it with min(…, calc(100% - 2rem)) to
      keep the small-screen inset. */
   --confirm-dialog-width: 40rem;
+  /* Horizontal inset shared by every full-width bar that stacks at the top of the
+     app — the TopBar, the compare/breadcrumbs control row, and the daemon banner
+     between them — so their left and right edges line up as one column. */
+  --bar-inset: clamp(0.5rem, 1vw, 0.85rem);
 }
 
 /* ----- App shell: plan + annotation-gutter grid ----- */
