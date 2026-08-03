@@ -694,6 +694,10 @@
   // The scroll container (the .diff-plan element), used by the ToC tracking to
   // read the topmost visible line.
   let scrollEl = $state<HTMLElement | undefined>();
+  // Opens the breadcrumbs bar's trailing crumb, handed over by the bar itself
+  // (EXC-947). Undefined until the bar mounts — in compare mode, or on a plan with
+  // no headings, there is nothing to open and the `b` binding no-ops.
+  let openHeadingNav: (() => void) | undefined;
 
   // The plan's keyboard surface (EXC-875): the vim line cursor (EXC-788), visual
   // line-select (EXC-790), and the `/` full-text search HUD (EXC-832) in one
@@ -1016,6 +1020,18 @@
         }),
       ),
     );
+    // `b` opens the heading breadcrumbs bar's trailing crumb (EXC-947), gated on
+    // the same `!showDiff` the bar's own render condition uses so the key is inert
+    // in compare mode. The optional call covers a heading-less plan too, where the
+    // bar renders nothing and never handed an open action back.
+    offs.push(
+      shortcuts.register(
+        bind("actions.headingNav", {
+          run: () => openHeadingNav?.(),
+          enabled: () => !showDiff,
+        }),
+      ),
+    );
     return () => {
       for (const off of offs) off();
     };
@@ -1210,7 +1226,13 @@
        mode tracks no heading (and clears `?heading=`), so the bar is dropped
        there rather than left showing a stale trail. -->
   {#if !showDiff}
-    <PlanBreadcrumbs {headings} {activeLine} onJump={(line) => api?.scrollToLine(line)} />
+    <PlanBreadcrumbs
+      {headings}
+      {activeLine}
+      {showShortcutHints}
+      onJump={(line) => api?.scrollToLine(line)}
+      onExposeOpen={(open) => (openHeadingNav = open)}
+    />
   {/if}
   {#if !compareStore.comparing}
     <!-- Working-directory path (EXC-807 relocated it here from the TopBar; EXC-850
