@@ -8,16 +8,15 @@
 // one chunk still colours the next. Grammars load lazily and cache; anything that
 // can't highlight falls back to plain text. Never throws.
 
-import { hastToHtml } from "shiki/core";
-import type { GrammarState } from "shiki/types";
+import { type GrammarState, hastToHtml } from "shiki/core";
 
 import { REGISTERED_SHIKI_THEMES } from "$lib/caret-theme.ts";
 import { createHighlighter } from "$lib/diffview/shiki-bundle.ts";
 import type { ThemeId } from "$lib/theme.ts";
 
 type Highlighter = Awaited<ReturnType<typeof createHighlighter>>;
-type Hast = ReturnType<Highlighter["codeToHast"]>;
-type HastNode = Hast | Hast["children"][number];
+type HastRoot = ReturnType<Highlighter["codeToHast"]>;
+type HastNode = HastRoot | HastRoot["children"][number];
 
 let highlighterPromise: Promise<Highlighter> | undefined;
 const loadedLanguages = new Set<string>();
@@ -65,7 +64,8 @@ export async function highlightExcerpt(
 }
 
 /** Where a chunk's grammar left off — hand it back as the next chunk's `state`.
- * Opaque: only shiki reads it, and only for the same language and theme. */
+ * Opaque: only shiki reads it. It belongs to the language and theme that
+ * produced it; handed to a different one, that chunk comes back with no rows. */
 export type ChunkState = GrammarState;
 
 /** One highlighted chunk of a file. */
@@ -74,8 +74,9 @@ export interface HighlightedChunk {
    * into a row's `<code>`. Empty when highlighting failed, so the caller renders
    * the raw text instead. */
   rows: string[];
-  /** The grammar state after the chunk's last line, or undefined when the
-   * grammar carries none (plain text). */
+  /** The grammar state after the chunk's last line. Undefined both when the
+   * grammar carries none (plain text) and when the chunk failed — either way the
+   * next chunk starts clean, so the lines below may miscolour. */
   state?: ChunkState;
 }
 
@@ -83,7 +84,8 @@ export interface HighlightedChunk {
 // hastToHtml(codeToHast(…)), so a row is byte-for-byte the line's markup inside
 // the `<pre>` blob highlightExcerpt returns — the excerpt and a chunk of it
 // render identically. Walked rather than indexed through `pre > code` so the
-// rows survive a wrapper shiki decides to add.
+// rows survive a wrapper shiki decides to add; the class match assumes shiki's
+// untransformed `line`, which holds because nothing here registers a transformer.
 function chunkRows(node: HastNode, rows: string[] = []): string[] {
   if (node.type === "element" && node.properties.class === "line")
     rows.push(hastToHtml({ type: "root", children: node.children }));
@@ -94,7 +96,8 @@ function chunkRows(node: HastNode, rows: string[] = []): string[] {
 /** Highlights one chunk of a file, continuing from where the previous chunk's
  * grammar left off, so a block comment or template literal that opens above the
  * chunk still colours the lines below it. Passing no `state` starts fresh, which
- * is what the file's first chunk wants.
+ * is what the file's first chunk wants. State flows forward only — a chunk above
+ * the current window still needs a pass from the file's start.
  *
  * `code` must hold whole lines and no trailing newline — shiki would read one as
  * a further, empty line. Never throws: a chunk that can't be highlighted comes

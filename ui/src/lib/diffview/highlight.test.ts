@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { beforeAll, expect, test } from "bun:test";
 
 import { type ChunkState, highlightChunk, highlightExcerpt } from "$lib/diffview/highlight.ts";
 
@@ -73,6 +73,14 @@ async function inChunks(lines: string[], size: number, carry = true): Promise<st
 
 const whole = (lines: string[]): Promise<string[]> => inChunks(lines, lines.length);
 
+// shiki compiles a grammar's patterns lazily, at first tokenize, and that cost
+// counts against its 500ms per-line tokenize limit — enough for a cold grammar to
+// bail mid-line and leave the rest of that line unstyled. Pay it up front, so the
+// comparisons below measure carried grammar state rather than who tokenized first.
+beforeAll(async () => {
+  for (const fixture of [BLOCK_COMMENT, TEMPLATE_LITERAL]) await whole(fixture);
+});
+
 test("chunks carrying grammar state colour a straddling block comment like one pass", async () => {
   expect(await inChunks(BLOCK_COMMENT, 3)).toEqual(await whole(BLOCK_COMMENT));
 });
@@ -81,10 +89,12 @@ test("chunks carrying grammar state colour a straddling template literal like on
   expect(await inChunks(TEMPLATE_LITERAL, 3)).toEqual(await whole(TEMPLATE_LITERAL));
 });
 
-// Guards the two tests above against passing vacuously: without the carried
-// state the split genuinely miscolours, so equality is the API's doing.
+// Guards both tests above against passing vacuously: each fixture genuinely
+// miscolours when the state is dropped, so the equality above is the API's doing
+// and not a fixture that stopped straddling its boundary.
 test("dropping the carried state miscolours the lines after a boundary", async () => {
-  expect(await inChunks(BLOCK_COMMENT, 3, false)).not.toEqual(await whole(BLOCK_COMMENT));
+  for (const fixture of [BLOCK_COMMENT, TEMPLATE_LITERAL])
+    expect(await inChunks(fixture, 3, false)).not.toEqual(await whole(fixture));
 });
 
 test("returns one row per line, so rows pair with line numbers by index", async () => {
@@ -98,6 +108,7 @@ test("a row is the line's HTML as highlightExcerpt emits it", async () => {
   const code = BLOCK_COMMENT.join("\n");
   const html = await highlightExcerpt(code, "typescript", "caret-dark");
   const { rows } = await highlightChunk(code, "typescript", "caret-dark");
+  expect(rows).toHaveLength(BLOCK_COMMENT.length);
   for (const row of rows) expect(html).toContain(`<span class="line">${row}</span>`);
 });
 
@@ -105,4 +116,14 @@ test("falls back to plain text for an unknown grammar without throwing", async (
   const chunk = await highlightChunk("hello world\nsecond line", "not-a-real-lang", "caret-light");
   expect(chunk.rows).toHaveLength(2);
   expect(chunk.rows.join("")).toContain("hello world");
+});
+
+// The never-throws guarantee with the failure injected rather than assumed: a
+// state belongs to the grammar that produced it, and shiki rejects a mismatch
+// outright. The chunk has to come back rowless for the caller to render plain,
+// never as a rejection the preview has to catch.
+test("a state from another language yields no rows instead of throwing", async () => {
+  const { state } = await highlightChunk("const x = 1;", "typescript", "caret-dark");
+  expect(state).toBeDefined();
+  expect(await highlightChunk("print(1)", "python", "caret-dark", state)).toEqual({ rows: [] });
 });
