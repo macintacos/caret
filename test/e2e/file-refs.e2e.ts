@@ -66,6 +66,32 @@ function citedRowInRegion(page: import("@playwright/test").Page): Promise<{
   });
 }
 
+/** The washed band a cited range paints: the mounted `.fp-target` rows' line
+ * numbers, and where the band's two edges sit inside the scrolling code region.
+ * Rows are windowed (EXC-970), so for a band taller than the region this reports
+ * the mounted part of it — which is the part a reader can see. */
+function citedBandInRegion(page: import("@playwright/test").Page): Promise<{
+  lines: number[];
+  top: number;
+  bottom: number;
+  region: number;
+} | null> {
+  return page.evaluate(() => {
+    const code = document.querySelector("[data-file-preview] .fp-code");
+    const rows = [...document.querySelectorAll("[data-file-preview] .fp-target")];
+    const first = rows[0];
+    const last = rows.at(-1);
+    if (code === null || first === undefined || last === undefined) return null;
+    const c = code.getBoundingClientRect();
+    return {
+      lines: rows.map((r) => Number(r.querySelector(".fp-lnum")?.textContent?.trim())),
+      top: first.getBoundingClientRect().top - c.top,
+      bottom: last.getBoundingClientRect().bottom - c.top,
+      region: c.height,
+    };
+  });
+}
+
 /** Scroll the preview's code region to one of its ends, the way a reader
  * arrives at a boundary. A wheel gesture emits many scroll events; one
  * assignment plus the event it fires carries the same signal, and the
@@ -373,6 +399,164 @@ test("clicking a real reference reveals a highlighted excerpt centered on its li
     const t1 = await page.evaluate(() => performance.now());
     await page.waitForFunction((t) => performance.now() > t + 300, t1);
     await expect(preview).toBeVisible();
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+// EXC-938. A `path:start-end` reference cites a whole span, and the preview used
+// to wash one line of it and centre on that — the other cited lines read as
+// context. These four specs cover what only real layout can answer: which rows
+// carry the wash, where the band lands in the scrolling region, what happens when
+// the span outgrows the region or runs past the file's end, and whether the end
+// line is part of the click target at all.
+test("a cited range washes every line it names, framed with context on both sides", async ({
+  daemon,
+  page,
+}) => {
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nThe key is built across `src/cache.ts:40-44` today.\n",
+    });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+    await page.locator("[data-file-ref]").first().click();
+
+    const preview = page.locator("[data-file-preview]");
+    await expect(preview).toBeVisible();
+    await settleDrawer(page);
+
+    // The window is the citation padded by the daemon's own radius on each side,
+    // so the span is read in context rather than flush against the window's ends.
+    await expect(preview.locator(".fp-range")).toHaveText(`lines 10–74 of ${CACHE_TS_LINES}`);
+
+    // Exactly the five cited lines are washed — not one, and not the padding.
+    const band = await citedBandInRegion(page);
+    expect(band?.lines).toEqual([40, 41, 42, 43, 44]);
+    // …and the whole band opens on screen, both edges inside the region.
+    expect(band?.top ?? -1).toBeGreaterThanOrEqual(0);
+    expect(band?.bottom ?? Infinity).toBeLessThanOrEqual(band?.region ?? 0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("a range taller than the region opens at its first line, not centred", async ({
+  daemon,
+  page,
+}) => {
+  // Centring a span taller than what shows would put its first line above the
+  // fold, so the reader would open the preview already past the start of what
+  // they clicked. The framing term goes to zero instead, which parks the span's
+  // head at the top edge — no branch, and nothing to tune.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nThe whole middle, `src/cache.ts:100-250`, moves.\n",
+    });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+    await page.locator("[data-file-ref]").first().click();
+
+    const preview = page.locator("[data-file-preview]");
+    await expect(preview).toBeVisible();
+    await settleDrawer(page);
+
+    const band = await citedBandInRegion(page);
+    // The band starts at the citation's own first line, sitting at the region's
+    // top edge — within a pixel, the browser quantizing a fractional scrollTop.
+    expect(band?.lines[0]).toBe(100);
+    expect(Math.abs(band?.top ?? Number.NaN)).toBeLessThanOrEqual(1);
+    // And it really is taller than the region, or the assertion above would hold
+    // for a centred span too.
+    expect(band?.bottom ?? 0).toBeGreaterThan(band?.region ?? Infinity);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("a range running past the file's end still opens, framed on its last lines", async ({
+  daemon,
+  page,
+}) => {
+  // A plan written against a file that has since shrunk. The daemon clamps the
+  // fetched range to the file, so the wash and the framing have to clamp with it
+  // rather than reaching for rows that do not exist.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nThe tail, `src/cache.ts:295-400`, is gone.\n",
+    });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+    await page.locator("[data-file-ref]").first().click();
+
+    const preview = page.locator("[data-file-preview]");
+    await expect(preview).toBeVisible();
+    await settleDrawer(page);
+
+    // The window ends at the file's last line, and no row past it exists to
+    // frame. Where it STARTS is not this spec's business: the clamped window is
+    // shorter than the region, so the auto-loader grows it upward on sight
+    // (EXC-969) — which is correct, and would make an exact start brittle.
+    await expect(preview.locator(".fp-range")).toHaveText(
+      new RegExp(`^lines \\d+–${CACHE_TS_LINES} of ${CACHE_TS_LINES}$`),
+    );
+    const band = await citedBandInRegion(page);
+    expect(band?.lines).toEqual([295, 296, 297, 298, 299, 300]);
+    expect(band?.top ?? -1).toBeGreaterThanOrEqual(0);
+    expect(band?.bottom ?? Infinity).toBeLessThanOrEqual(band?.region ?? 0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("clicking a range reference's end-line tail opens the preview", async ({ daemon, page }) => {
+  // The click-target half of the fix. The span's endCol is what the pointer
+  // hit-test resolves against, so before the parser learned ranges the `-44`
+  // tail sat outside the reference entirely — visibly part of it, and dead.
+  // Only a real token hit-test in the shadow root can tell the two apart.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nThe key is built across `src/cache.ts:40-44` today.\n",
+    });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+
+    // The tagged token covers the whole reference, end line included. Aim at the
+    // centre of its last character through a Range over that character, not at
+    // the token's own right edge: the file glyph is drawn inside the token's box,
+    // so the box is wider than its text and an edge-relative point lands past it.
+    const tail = await page.evaluate(() => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+      const el = sh?.querySelector("[data-file-ref]");
+      const text = el?.firstChild;
+      if (el == null || text == null) return null;
+      const length = text.textContent?.length ?? 0;
+      const range = document.createRange();
+      range.setStart(text, length - 1);
+      range.setEnd(text, length);
+      const r = range.getBoundingClientRect();
+      return { text: el.textContent, x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    });
+    expect(tail?.text).toBe("src/cache.ts:40-44");
+
+    // Click that last character — the `4` of `-44`, nowhere near the path.
+    await page.mouse.click(tail?.x ?? 0, tail?.y ?? 0);
+    const preview = page.locator("[data-file-preview]");
+    await expect(preview).toBeVisible();
+    await expect(preview).toContainText("src/cache.ts");
+    await expect(preview.locator(".fp-range")).toHaveText(`lines 10–74 of ${CACHE_TS_LINES}`);
   } finally {
     await proj.cleanup();
   }
@@ -984,9 +1168,14 @@ for (const cited of [150, 42]) {
         // is measured next, and the row may not be mounted yet.
         await renderedRows(page, opened?.scrollTop ?? 0);
         const moved = await citedRowInRegion(page);
-        // Exact, not within a pixel: the same rows at a scroll offset restored
-        // from the browser's own reading of it, so the rect is the same rect.
-        expect(moved?.offset ?? Number.NaN).toBe(opened?.offset ?? Number.NaN);
+        // The same rows at the offset the panel opened at, so the rect is the
+        // same rect — to within the float error of round-tripping a fractional
+        // scrollTop through the browser, which is nanometres and not a row. The
+        // margin this spec actually discriminates on is a whole opening offset
+        // (asserted above), so a pixel of slack here costs it nothing.
+        expect(
+          Math.abs((moved?.offset ?? Number.NaN) - (opened?.offset ?? Number.NaN)),
+        ).toBeLessThanOrEqual(1);
 
         release();
         await expect(preview.locator(".fp-range")).not.toHaveText(framed ?? " ");

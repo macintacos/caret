@@ -525,8 +525,18 @@
     // which parks its first line at the top — the overflow behaviour, no branch.
     const last = Math.min(endLine ?? line, lastLine(preview));
     const spanH = (last - line + 1) * rowH;
-    region.scrollTop = padTop + index * rowH - Math.max(0, (viewportH - spanH) / 2);
-    syncScroll();
+    const top = padTop + index * rowH - Math.max(0, (viewportH - spanH) / 2);
+    // One flush before scrolling. The spacers standing in for the unmounted rows
+    // are derived from the geometry measured just now, and the region can only be
+    // scrolled as far as they reach — so moving in this same flush is clamped to
+    // a scroll range that has yet to grow, landing short of the cited rows. It
+    // shows up on a span, which is framed further down the window than a single
+    // line ever is, and is silent on one line only because that lands under the
+    // clamp.
+    void tick().then(() => {
+      region.scrollTop = top;
+      syncScroll();
+    });
   });
 
   const lineWord = (n: number) => (n === 1 ? "line" : "lines");
