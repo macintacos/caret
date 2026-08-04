@@ -9,7 +9,10 @@
   // chunk at a time and unprompted, until the whole file is reachable without
   // leaving the review — a downward step costs one chunk however many came
   // before. There is nothing to click for it: the boundaries carry no control,
-  // because reading on is the gesture that loads. The header carries an "esc to
+  // because reading on is the gesture that loads. Only the rows near the viewport
+  // are mounted (EXC-970): scrolling on is what loads a whole file, so a spacer
+  // above and below carries the height of everything the window left out and the
+  // DOM stays a screenful however much has arrived. The header carries an "esc to
   // close" hint — the panel stays put until dismissed (Escape, or a click away;
   // DiffPlanView owns that).
   import { tick, untrack } from "svelte";
@@ -18,6 +21,7 @@
   import { getFileExcerpt, HttpError } from "$lib/api.ts";
   import { type ChunkState, highlightChunk } from "$lib/diffview/highlight.ts";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
+  import { rowWindow } from "$lib/previewWindow.ts";
   import type { ThemeId } from "$lib/theme.ts";
 
   interface Props {
@@ -81,8 +85,16 @@
   // under two screens on a typical lane — so its two edges sit close together,
   // and a slacker threshold would reach both of them before the reader had moved
   // and spend two round trips on a window nobody has read yet.
+  //
+  // The measured row height is the figure to divide by, not `scrollHeight` over
+  // the row count: rows are windowed (EXC-970), so `scrollHeight` is the region's
+  // spacers plus its mounted rows, and it carries the code region's own padding
+  // on top. It still measures the whole region — that is what the spacers are
+  // for, and what keeps `pendingEdge`'s distance-to-the-end honest — but dividing
+  // it by the row count charges that padding to every row. `rowH` is one row's
+  // real height; the division stands in only before a row has been laid out.
   function step(region: HTMLElement, rows: number): { threshold: number; chunk: number } {
-    const rowHeight = region.scrollHeight / Math.max(1, rows);
+    const rowHeight = rowH > 0 ? rowH : region.scrollHeight / Math.max(1, rows);
     const visible = Math.ceil(region.clientHeight / Math.max(1, rowHeight));
     return { threshold: region.clientHeight / 4, chunk: Math.max(MIN_CHUNK, visible * 2) };
   }
@@ -249,8 +261,11 @@
         await tick();
         // Every revealed line sits above what the reader was looking at, so
         // adding the growth back to the offset holds their place exactly. The
+        // spacers carry the unmounted rows' height, so the growth the region
+        // reports is the chunk's whether or not its rows were mounted. The
         // browser clamps the result when the region is taller than its content.
         region.scrollTop = before.top + (region.scrollHeight - before.height);
+        syncScroll();
       }
       return true;
     } catch {
@@ -299,46 +314,97 @@
   }
 
   let codeEl = $state<HTMLElement>();
+  // The code region's live geometry, which is what decides how much of the
+  // loaded region is worth mounting. Row height is measured off a real row
+  // rather than computed from the type scale — see previewWindow.ts for the
+  // fixed-height assumption it stands on.
+  let scrollTop = $state(0);
+  let viewportH = $state(0);
+  let rowH = $state(0);
 
-  // The one case a scroll handler structurally cannot cover: a region shorter
-  // than its viewport can't be scrolled, so it emits no event, and the rest of
-  // the file would be unreachable with nothing left to click. Watching the
-  // region's own box catches it — the first callback lands once the lane has a
-  // height, and again whenever it changes.
+  /** Take the region's scroll offset back into state — on scroll, and after each
+   * programmatic scroll, so the mounted rows never trail a jump by a frame. */
+  function syncScroll(): void {
+    scrollTop = codeEl?.scrollTop ?? 0;
+  }
+
+  // Keep the region's height and its row height current: the lane animates open
+  // and is resizable by the reader, so neither is measured once. Rows are
+  // uniform, so the first one answers for all of them — measured off its rect
+  // rather than offsetHeight, which rounds to whole pixels: a line-height of
+  // 20.34px read back as 20 loses a third of a pixel per row, which over a
+  // thousand rows is a scrollbar that no longer reaches the file's end.
   //
-  // Deliberately *only* that case. A region that can scroll waits for the reader
-  // to actually scroll it, so opening a preview never spends a round trip on a
-  // window nobody has read yet, however tall the lane happens to be.
+  // The same callback covers the one case a scroll handler structurally cannot:
+  // a region shorter than its viewport can't be scrolled, so it emits no event,
+  // and the rest of the file would be unreachable with nothing left to click.
+  // Deliberately *only* that case — a region that can scroll waits for the
+  // reader to actually scroll it, so opening a preview never spends a round trip
+  // on a window nobody has read yet, however tall the lane happens to be.
   $effect(() => {
+    // `== null`: bind:this hands back null — not undefined — when the region is
+    // torn down, which is every time the reference changes.
     const region = codeEl;
-    if (region === undefined) return;
+    if (region == null) return;
+    const measure = () => {
+      viewportH = region.clientHeight;
+      const height = region.querySelector(".fp-row")?.getBoundingClientRect().height ?? 0;
+      if (height > 0) rowH = height;
+    };
+    measure();
     const observer = new ResizeObserver(() => {
+      measure();
       if (region.scrollHeight > region.clientHeight) return;
       void fillEdges();
     });
     observer.observe(region);
     return () => observer.disconnect();
   });
+
+  // The mounted slice, and the spacer heights standing in for the rest. Before
+  // the region has been laid out — and under happy-dom, which never lays out —
+  // this is every row, so the panel is whole rather than empty while it waits.
+  const win = $derived(
+    rowWindow({
+      total: preview.kind === "ready" ? preview.rows.length : 0,
+      rowHeight: rowH,
+      scrollTop,
+      viewportHeight: viewportH,
+    }),
+  );
+  const rendered = $derived(
+    preview.kind === "ready" ? preview.rows.slice(win.first, win.first + win.count) : [],
+  );
+  // The widest loaded line, in columns. The spacers carry it as a min-width, so
+  // the horizontal range covers every loaded line rather than only the mounted
+  // ones — otherwise scrolling down a file of long lines would shrink the range
+  // and drag the reader back toward column one.
+  // ponytail: a tab counts as one column here, so a tab-indented file's widest
+  // line under-measures and that row's own box sets the range, as it does today.
+  const cols = $derived(
+    preview.kind === "ready" ? preview.lines.reduce((w, l) => Math.max(w, l.length), 0) : 0,
+  );
+
   let centred = false;
-  // Bring the cited line into view on first open. The opening window is taller
+  // Bring the cited line into view on first open. The opening region is taller
   // than the code region, so the marked row would otherwise sit below the fold.
-  // scrollTop directly rather than scrollIntoView, which would also scroll the
-  // plan view beside the drawer.
+  // Computed from the row's index rather than read off `.fp-target`, which the
+  // window need not have mounted; scrollTop directly rather than scrollIntoView,
+  // which would also scroll the plan view beside the drawer.
   $effect(() => {
     if (preview.kind !== "ready" || centred || line === undefined) return;
     const region = codeEl;
-    // Wait for the region to have a settled height: centring against one that
-    // has yet to be laid out puts the row wherever the later height lands.
-    if (region === undefined || region.clientHeight === 0) return;
+    // Wait for a measured region: centring against one that has yet to be laid
+    // out puts the row wherever the later height lands.
+    if (region === undefined || viewportH === 0 || rowH === 0) return;
     centred = true;
-    // A reference citing a line past EOF gets a window clamped to the last line,
-    // so no row is marked and there is nothing to centre — stop looking.
-    const row = region.querySelector<HTMLElement>(".fp-target");
-    if (row === null) return;
-    region.scrollTop +=
-      row.getBoundingClientRect().top -
-      region.getBoundingClientRect().top -
-      (region.clientHeight - row.offsetHeight) / 2;
+    // A reference citing a line past EOF gets a region clamped to the last line,
+    // so no row carries it and there is nothing to centre — stop looking.
+    const index = line - preview.startLine;
+    if (index < 0 || index >= preview.rows.length) return;
+    const padTop = Number.parseFloat(getComputedStyle(region).paddingTop) || 0;
+    region.scrollTop = padTop + index * rowH - (viewportH - rowH) / 2;
+    syncScroll();
   });
 
   const lineWord = (n: number) => (n === 1 ? "line" : "lines");
@@ -381,16 +447,22 @@
       bind:this={codeEl}
       class="fp-code"
       style:--fp-gutter={meta.gutter}
-      onscroll={() => void fillEdges()}
+      style:--fp-cols={cols}
+      onscroll={() => {
+        syncScroll();
+        void fillEdges();
+      }}
       onwheel={() => void fillEdges()}
     >
-      {#each preview.rows as row (row.num)}
+      <div class="fp-spacer" style:height="{win.above}px" aria-hidden="true"></div>
+      {#each rendered as row (row.num)}
         <div class="fp-row" class:fp-target={row.num === line}>
           <span class="fp-lnum">{row.num}</span
           >{#if row.html !== undefined}<code class="fp-lcode">{@html row.html}</code
             >{:else}<code class="fp-lcode">{row.text}</code>{/if}
         </div>
       {/each}
+      <div class="fp-spacer" style:height="{win.below}px" aria-hidden="true"></div>
     </div>
   {:else if preview.kind === "too-large"}
     <div class="fp-message" data-preview-state="too-large">This file is too large to preview.</div>
@@ -497,6 +569,16 @@
   }
   .fp-row {
     display: flex;
+  }
+  /* Stand-ins for the rows the window left unmounted. Height: the block they
+     replace, so the scrollbar measures the whole loaded region and an unmounted
+     row is indistinguishable from a scrolled-past one. Width: the widest loaded
+     line, so the horizontal range covers every line rather than only the mounted
+     ones — the gutter's own width plus the 1.4rem + 1.6rem of padding and the
+     hairline between them. Both spacers are always present, at zero height when
+     there is nothing to stand in for, so the width is too. Nothing paints. */
+  .fp-spacer {
+    min-width: calc(var(--fp-gutter, 2ch) + var(--fp-cols, 0) * 1ch + 3rem + 1px);
   }
   /* The referenced line — washed so the reader's eye lands on it. Uses caret's
      content-mark amber (--mark, the same attention wash source annotations use)
