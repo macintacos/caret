@@ -4,8 +4,9 @@
   // syntax-highlighted excerpt of the file a plan references. Shown only for
   // references the daemon confirmed are real files (DiffPlanView gates it on the
   // resolved set), so it never promises a preview it can't deliver. The excerpt
-  // centers on the reference's line when it carries one, else the file's head,
-  // and scrolling near either end of it grows the region that way (EXC-969), one
+  // frames the lines the reference cites — one line, or the whole `:start-end`
+  // span (EXC-938), every one of them washed — else the file's head, and
+  // scrolling near either end of it grows the region that way (EXC-969), one
   // chunk at a time and unprompted, until the whole file is reachable without
   // leaving the review — a downward step costs one chunk however many came
   // before. There is nothing to click for it: the boundaries carry no control,
@@ -24,6 +25,7 @@
   // away; DiffPlanView owns that).
   import { tick, untrack } from "svelte";
 
+  import { EXCERPT_RADIUS } from "@core/config/constants";
   import { appearance } from "@/state/appearance.svelte.ts";
   import { getFileExcerpt, HttpError } from "$lib/api.ts";
   import { type ChunkState, highlightChunk } from "$lib/diffview/highlight.ts";
@@ -35,14 +37,18 @@
     reviewId: string;
     /** The referenced path (without any `:line`). */
     path: string;
-    /** 1-based line to center the excerpt on, if the reference carried one. */
+    /** 1-based line to frame the excerpt on, if the reference carried one. For a
+     * cited range this is its first line. */
     line?: number;
+    /** 1-based inclusive last line of a cited range (`path:154-162`). Always ≥
+     * `line`; absent for a single-line reference, which frames one row as before. */
+    endLine?: number;
     /** Whether the shortcut-hint affordances are shown (EXC-826); gates the
      * header's "esc to close" chip. Defaults to shown; Escape still closes the
      * preview regardless. */
     showShortcutHints?: boolean;
   }
-  let { reviewId, path, line, showShortcutHints = true }: Props = $props();
+  let { reviewId, path, line, endLine, showShortcutHints = true }: Props = $props();
 
   // One rendered source line: its real file line number, plus either the
   // highlighted token HTML (shiki) or the raw text (plain fallback).
@@ -164,7 +170,7 @@
     // Carrying the old file's offset over would window the new one around a row
     // it may not even have, leaving a spacer where the opening chunk should be.
     scrollTop = 0;
-    centred = false;
+    framed = false;
     preview = next;
     departing = false;
   }
@@ -179,6 +185,7 @@
     const id = reviewId;
     const p = path;
     const ln = line;
+    const end = endLine;
     let cancelled = false;
     // A reference clicked while another file is already up keeps that file's
     // rows on screen to leave with (see .fp-leaving); a first open has nothing
@@ -187,12 +194,23 @@
       departing = true;
     } else {
       preview = { kind: "loading" };
-      centred = false;
+      framed = false;
       scrollTop = 0;
     }
     void (async () => {
       try {
-        const excerpt = await getFileExcerpt(id, p, ln);
+        // A cited RANGE is framed through the endpoint's existing 1-based
+        // inclusive range — the same one expand() threads for chunk growth —
+        // padded by the daemon's own radius so the span gets the context a
+        // single-line reference already gets. The Math.max is load-bearing:
+        // handleFileExcerpt parses params with /^\d+$/, so a negative start
+        // would be dropped and a reference near a file's head would silently
+        // degrade to a head preview. With no range the call is unchanged.
+        const range =
+          ln !== undefined && end !== undefined
+            ? { start: Math.max(1, ln - EXCERPT_RADIUS), end: end + EXCERPT_RADIUS }
+            : undefined;
+        const excerpt = await getFileExcerpt(id, p, ln, range);
         const themeId = untrack(() => appearance.themeId);
         const painted = await paint(excerpt.lines, excerpt.startLine, excerpt.language, themeId);
         if (cancelled) return;
@@ -268,9 +286,11 @@
     const id = reviewId;
     const p = path;
     const ln = line;
+    const end = endLine;
     // The parent reuses one instance across references; a chunk whose reference
     // moved on while it was in flight belongs to a file no longer on screen.
-    const superseded = () => id !== reviewId || p !== path || ln !== line;
+    const superseded = () =>
+      id !== reviewId || p !== path || ln !== line || end !== endLine;
     try {
       const excerpt = await getFileExcerpt(id, p, undefined, range);
       if (superseded()) return false;
@@ -481,24 +501,31 @@
     preview.kind === "ready" ? preview.lines.reduce((w, l) => Math.max(w, columns(l)), 0) : 0,
   );
 
-  let centred = false;
-  // Bring the cited line into view on first open. The opening region is taller
-  // than the code region, so the marked row would otherwise sit below the fold.
-  // Computed from the row's index rather than read off `.fp-target`, which the
-  // window need not have mounted; scrollTop directly rather than scrollIntoView,
-  // which would also scroll the plan view beside the drawer.
+  let framed = false;
+  // Bring the cited span into view on first open. The opening region is taller
+  // than the code region, so the marked rows would otherwise sit below the fold.
+  // Computed from the first row's index rather than read off `.fp-target`, which
+  // the window need not have mounted; scrollTop directly rather than
+  // scrollIntoView, which would also scroll the plan view beside the drawer.
   $effect(() => {
-    if (preview.kind !== "ready" || centred || line === undefined) return;
+    if (preview.kind !== "ready" || framed || line === undefined) return;
     const region = codeEl;
-    // Wait for a measured region: centring against one that has yet to be laid
-    // out puts the row wherever the later height lands.
+    // Wait for a measured region: framing against one that has yet to be laid
+    // out puts the rows wherever the later height lands.
     if (region === null || viewportH === 0 || rowH === 0) return;
-    centred = true;
+    framed = true;
     // A reference citing a line past EOF gets a region clamped to the last line,
-    // so no row carries it and there is nothing to centre — stop looking.
+    // so no row carries it and there is nothing to frame — stop looking.
     const index = line - preview.startLine;
     if (index < 0 || index >= preview.rows.length) return;
-    region.scrollTop = padTop + index * rowH - (viewportH - rowH) / 2;
+    // Centre the whole span, clamping its end to the region: the daemon already
+    // clamps the fetched range to the file, so there is no row past the last one
+    // to frame. A single-line reference has spanH === rowH and reduces to
+    // centring that one row; a span taller than the region drives the term to 0,
+    // which parks its first line at the top — the overflow behaviour, no branch.
+    const last = Math.min(endLine ?? line, lastLine(preview));
+    const spanH = (last - line + 1) * rowH;
+    region.scrollTop = padTop + index * rowH - Math.max(0, (viewportH - spanH) / 2);
     syncScroll();
   });
 
@@ -577,7 +604,10 @@
       >
         <div class="fp-spacer" style:height="{win.above}px" aria-hidden="true"></div>
         {#each rendered as row (row.num)}
-          <div class="fp-row" class:fp-target={row.num === line}>
+          <div
+            class="fp-row"
+            class:fp-target={line !== undefined && row.num >= line && row.num <= (endLine ?? line)}
+          >
             <span class="fp-lnum">{row.num}</span
             >{#if row.html !== undefined}<code class="fp-lcode">{@html row.html}</code
               >{:else}<code class="fp-lcode">{row.text}</code>{/if}
@@ -736,10 +766,17 @@
   .fp-spacer {
     min-width: calc(var(--fp-gutter, 2ch) + var(--fp-cols, 0) * 1ch + 3rem + 1px);
   }
-  /* The referenced line — washed so the reader's eye lands on it. Uses caret's
+  /* The referenced lines — washed so the reader's eye lands on them. Uses caret's
      content-mark amber (--mark, the same attention wash source annotations use)
      with a metadata-accent line number, NOT the brand-solid accent fill. Only a
-     reference that carried a :line has a target row; head previews mark nothing. */
+     reference that carried a :line has target rows; head previews mark nothing.
+
+     A cited range washes every one of its lines, contiguous rows reading as one
+     band, and each keeps the accent gutter rather than reserving it for the
+     span's first line: a range taller than the region opens parked at its head,
+     so a reader who scrolls into the middle of one would otherwise see a wash
+     with no accent anywhere and lose the only signal that they are still inside
+     the citation. */
   .fp-target {
     background: var(--mark);
   }

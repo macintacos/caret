@@ -1,6 +1,7 @@
 import "@ui/test-mount.ts";
 import { afterEach, beforeAll, describe, expect, test } from "bun:test";
 
+import { EXCERPT_RADIUS } from "@core/config/constants";
 import type { FileExcerpt } from "@core/lib/types";
 import { until } from "@test/support/poll.ts";
 import { type LogCapture, logCapture } from "@ui/test-helpers.ts";
@@ -26,11 +27,12 @@ import { highlightChunk, MAX_HIGHLIGHT_LINE_CHARS } from "$lib/diffview/highligh
 
 const ID = "r1";
 
-function props(over: Partial<{ path: string; line: number }> = {}) {
+function props(over: Partial<{ path: string; line: number; endLine: number }> = {}) {
   return {
     reviewId: ID,
     path: over.path ?? "src/cache.ts",
     line: over.line,
+    endLine: over.endLine,
   };
 }
 
@@ -282,6 +284,53 @@ describe("FilePreview target line", () => {
     const marked = target.querySelectorAll(".fp-target");
     expect(marked).toHaveLength(1);
     expect(marked[0]?.querySelector(".fp-lnum")?.textContent?.trim()).toBe("37");
+  });
+
+  test("marks every line of a cited range, and nothing outside it", async () => {
+    // A `path:30-34` reference cites five lines; washing one would leave the
+    // other four indistinguishable from the context around them.
+    cap = serveExcerpt(excerptFixture(25, 25, 122));
+    const { target } = render(FilePreview, props({ line: 30, endLine: 34 }));
+    await until(() => target.querySelector(".fp-target") != null);
+    const marked = [...target.querySelectorAll(".fp-target")].map((row) =>
+      row.querySelector(".fp-lnum")?.textContent?.trim(),
+    );
+    expect(marked).toEqual(["30", "31", "32", "33", "34"]);
+  });
+
+  test("asks for the cited span padded by the daemon's own window radius", async () => {
+    // Reusing the excerpt endpoint's existing range rather than adding a second
+    // mechanism: the span plus a radius of context on each side, which is the
+    // framing a single-line reference already gets.
+    const served = serveWindowed(600, 180);
+    cap = served;
+    render(FilePreview, props({ line: 154, endLine: 162 }));
+    await until(() => served.urls.length > 0);
+    expect(lastRange(served.urls)).toBe(
+      `start=${154 - EXCERPT_RADIUS}&end=${162 + EXCERPT_RADIUS}`,
+    );
+  });
+
+  test("a range near the file's head still asks for a valid start", async () => {
+    // The daemon parses params with /^\d+$/, so a negative start is dropped, the
+    // range comes back undefined, and the reference would silently degrade to a
+    // head preview instead of framing what it cites.
+    const served = serveWindowed(600, 180);
+    cap = served;
+    render(FilePreview, props({ line: 3, endLine: 9 }));
+    await until(() => served.urls.length > 0);
+    expect(lastRange(served.urls)).toBe(`start=1&end=${9 + EXCERPT_RADIUS}`);
+  });
+
+  test("a reference with no range asks for a bare line, exactly as before", async () => {
+    const served = serveWindowed(600, 180);
+    cap = served;
+    render(FilePreview, props({ line: 154 }));
+    await until(() => served.urls.length > 0);
+    const params = new URLSearchParams((served.urls[0] ?? "").split("?")[1] ?? "");
+    expect(params.get("line")).toBe("154");
+    expect(params.get("start")).toBeNull();
+    expect(params.get("end")).toBeNull();
   });
 
   test("highlights nothing for a head preview with no line", async () => {

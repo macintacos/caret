@@ -221,7 +221,8 @@ export function buildFileRefLayer(text: string): FileRefSpanMap {
  * pair overlaps — a markdown link whose label is itself an inline-code path — the
  * leftmost SCANNED span's columns win (inline code is where a path gets its own
  * shiki token, so they place the glyph tight against the filename) and the
- * EMITTED span's path/line/target win (the link's real destination, which need
+ * EMITTED span's path, cited lines and target win (the link's real destination,
+ * which need
  * not be what the label says). Every span an emitted one covers collapses into
  * that single survivor, so a label citing two paths draws one glyph pointing at
  * the link's target rather than two, one of them at a file the link never named.
@@ -248,6 +249,7 @@ export function mergeFileRefSpans(
           endCol: anchor.endCol,
           path: span.path,
           line: span.line,
+          endLine: span.endLine,
           target: span.target,
         });
       }

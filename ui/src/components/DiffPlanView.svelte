@@ -340,7 +340,9 @@
   // measures so the clicked filename stays visible beside the drawer. The
   // preview stays put once open; it closes only through the dismissal effect
   // below (Escape, or a click away).
-  let filePreview = $state<{ path: string; line?: number; token: HTMLElement } | undefined>();
+  let filePreview = $state<
+    { path: string; line?: number; endLine?: number; token: HTMLElement } | undefined
+  >();
 
   // Dismissal plays the lane's wipe in reverse before the drawer leaves, so the
   // pane slides shut with the excerpt still in it instead of blinking out. The
@@ -372,7 +374,7 @@
     // Reopening mid-collapse: drop the pending unmount so the lane wipes back
     // open on the same instance rather than being torn out from under it.
     cancelDrawerClose();
-    filePreview = { path: ref.path, line: ref.line, token: tokenElement };
+    filePreview = { path: ref.path, line: ref.line, endLine: ref.endLine, token: tokenElement };
   }
 
   $effect(() => () => cancelDrawerClose());
@@ -1413,6 +1415,7 @@
           reviewId={reviewId}
           path={openRef.path}
           line={openRef.line}
+          endLine={openRef.endLine}
           {showShortcutHints}
         />
       {/snippet}

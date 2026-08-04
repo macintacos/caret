@@ -301,6 +301,16 @@ describe("buildLinkLayer file-path targets", () => {
     const ref = refsOnLine("[x](a/b.md:42)", 1)[0];
     expect(ref?.path).toBe("a/b.md");
     expect(ref?.line).toBe(42);
+    expect(ref?.endLine).toBeUndefined();
+  });
+
+  test("a :start-end range on the target survives to the emitted ref", () => {
+    // The preview frames the whole cited span, so the end line has to reach it
+    // from a link target exactly as it does from an inline-code reference.
+    const ref = refsOnLine("[x](a/b.md:42-50)", 1)[0];
+    expect(ref?.path).toBe("a/b.md");
+    expect(ref?.line).toBe(42);
+    expect(ref?.endLine).toBe(50);
   });
 
   test.each([

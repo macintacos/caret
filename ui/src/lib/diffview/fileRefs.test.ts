@@ -239,6 +239,20 @@ describe("mergeFileRefSpans", () => {
     expect(merged.get(1)?.[0]?.startCol).toBe(1);
   });
 
+  test("a collapsed collision keeps the emitted span's cited range", () => {
+    // The survivor is rebuilt field by field, so a range dropped here would
+    // leave the preview framing one line of a span the link plainly cites.
+    const merged = mergeFileRefSpans(
+      map([1, [{ startCol: 1, endCol: 5, path: "a.ts" }]]),
+      map([
+        1,
+        [{ startCol: 0, endCol: 6, path: "b/c.ts", line: 7, endLine: 19, target: "b/c.ts:7-19" }],
+      ]),
+    );
+    expect(merged.get(1)?.[0]?.line).toBe(7);
+    expect(merged.get(1)?.[0]?.endLine).toBe(19);
+  });
+
   test("on a collision the emitted path wins — the click opens the link's target", () => {
     // `` [`a.ts`](b/c.ts) ``: the label names one file, the link points at another.
     const merged = mergeFileRefSpans(

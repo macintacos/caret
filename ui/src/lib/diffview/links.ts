@@ -141,7 +141,7 @@ function transformLine(
     end: number;
     display: string;
     href: string | null;
-    file?: { path: string; line?: number; target: string };
+    file?: { path: string; line?: number; endLine?: number; target: string };
   };
   const rewrites: Rewrite[] = [];
   const consumed: Range[] = [];
@@ -224,7 +224,14 @@ function transformLine(
       // shows the file but not the line — from suppressing the one affordance
       // that could say which line the click lands on.
       const target = rw.display.includes(rw.file.target) ? undefined : rw.file.target;
-      fileRefs.push({ startCol, endCol, path: rw.file.path, line: rw.file.line, target });
+      fileRefs.push({
+        startCol,
+        endCol,
+        path: rw.file.path,
+        line: rw.file.line,
+        endLine: rw.file.endLine,
+        target,
+      });
     }
   }
   display += source.slice(cursor);

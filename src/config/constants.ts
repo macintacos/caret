@@ -33,6 +33,13 @@ export const PLAN_REJECTED_MESSAGE =
  * (hook killed before the deny ships). */
 export const HOOK_TIMEOUT_S = 3900;
 
+/** Lines of context on each side of a referenced `:line` — the ± window the
+ * daemon builds around a file reference (`readFileExcerpt` in src/plan/excerpt.ts).
+ * Shared here because the preview panel pads a cited RANGE by the same radius
+ * before asking for it, so the two framings agree by construction rather than by
+ * a number copied into the browser bundle. */
+export const EXCERPT_RADIUS = 30;
+
 /** "Never idle out" sentinel for the idle-shutdown delay (ms): the max
  * setTimeout delay (2^31-1). A larger value overflows the 32-bit timer and
  * clamps to ~1ms, firing the idle shutdown immediately — the trap this guards

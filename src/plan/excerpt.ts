@@ -16,15 +16,15 @@ import {
 } from "node:fs";
 import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
+import { EXCERPT_RADIUS } from "@/config/constants.ts";
 import type { FileExcerpt } from "@/lib/types.ts";
 
 // The opening window is sized to show enough of the file to judge a plan against
 // it without leaving the review; the card scrolls internally past that, and its
 // boundary strips expand the window through an explicit range until the reader
 // reaches line 1 and the last line. Only MAX_EXCERPT_BYTES bounds how wide a
-// window can get.
-/** Lines of context on each side of a referenced `:line` (the ±window). */
-export const EXCERPT_RADIUS = 30;
+// window can get. EXCERPT_RADIUS lives in @/config/constants.ts because the
+// browser reads it too — this module imports node:fs, so the UI cannot.
 /** Lines shown from the top when a reference carries no line number. */
 export const EXCERPT_HEAD_LINES = 60;
 /**
