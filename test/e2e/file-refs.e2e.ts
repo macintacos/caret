@@ -581,11 +581,16 @@ test("scrolling walks the preview to both ends of the file", async ({ daemon, pa
         timeout: 1_000,
       });
     }).toPass({ timeout: 20_000 });
-    await expect(preview).toContainText("MARKER_LINE_DEEP");
     // Every line is loaded, so the header stops framing a slice — while the DOM
-    // still holds only the rows around the offset (EXC-970), which is what the
+    // holds only the rows around the offset (EXC-970), which is what the
     // windowing spec below measures.
     await expect(preview.locator(".fp-range")).toHaveText(`${CACHE_TS_LINES} lines`);
+    // The middle of the file came along with the walk, rather than the region
+    // having skipped to its end: scroll back to line 150 and its marker is there.
+    // Mounted only while the reader is there, which is the point of windowing.
+    const walked = await renderedRows(page, 0);
+    await renderedRows(page, 149 * (walked?.rowHeight ?? 0));
+    await expect(preview).toContainText("MARKER_LINE_DEEP");
   } finally {
     await proj.cleanup();
   }
