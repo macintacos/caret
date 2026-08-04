@@ -202,6 +202,18 @@ function stubLayout(target: HTMLElement, initialTop = 0): (top: number) => void 
   };
 }
 
+/** Press a key on the code region, without moving it.
+ *
+ * A key that actually scrolls also fires a scroll event, so the loaded path is
+ * already covered by `scrollTo`. What is left to the key alone is the region
+ * pinned at its scroll limit, where the press moves nothing — which is exactly
+ * the state a failed chunk leaves behind. */
+function pressKey(target: HTMLElement, key: string): void {
+  target
+    .querySelector(".fp-code")
+    ?.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+}
+
 /** Scroll to the region's last full screen — within the threshold of its
  * bottom edge, whatever the region currently holds. */
 function scrollToBottom(target: HTMLElement, scrollTo: (top: number) => void): void {
@@ -516,6 +528,91 @@ describe("FilePreview scroll loading", () => {
     expect(lineNumbers(target)).toHaveLength(60);
     expect(lineNumbers(target).at(-1)).toBe("60");
     expect(target.querySelector(".fp-path")?.textContent).toBe("src/other.ts");
+  });
+});
+
+describe("FilePreview keyboard reach", () => {
+  test("the code region takes a tab stop and names the file it holds", async () => {
+    // EXC-972: with the boundary strips gone (EXC-969) the panel had no focusable
+    // control left, and Chrome and Safari keep a plain overflow:auto div out of
+    // the tab order — so the file past the opening window was unreachable without
+    // a pointer. The tab stop is what the browser's own key scrolling hangs off.
+    cap = serveExcerpt(excerptFixture(25, 5, 122));
+    const { target } = render(FilePreview, props({ line: 30 }));
+    await until(() => target.querySelector(".fp-code") != null);
+
+    const region = target.querySelector(".fp-code") as HTMLElement;
+    expect(region.getAttribute("tabindex")).toBe("0");
+    // Named, so the stop announces what it holds rather than "group, blank".
+    expect(region.getAttribute("role")).toBe("region");
+    expect(region.getAttribute("aria-label")).toBe("Contents of src/cache.ts");
+  });
+
+  test("the header's range is the live region a landed chunk speaks through", async () => {
+    // The rows themselves must not be live — a chunk adds hundreds at once. The
+    // range is the one short sentence worth hearing, and it changes exactly when
+    // the region grows.
+    const served = serveWindowed(300, 60);
+    cap = served;
+    const { target } = render(FilePreview, props());
+    await until(() => target.querySelector(".fp-range") != null);
+    expect(target.querySelector(".fp-range")?.getAttribute("role")).toBe("status");
+    expect(target.querySelector(".fp-code")?.getAttribute("aria-live")).toBeNull();
+
+    // And it is the same element across a load, so the live region is already in
+    // place when the text it announces changes.
+    const range = target.querySelector(".fp-range");
+    const scrollTo = stubLayout(target);
+    scrollToBottom(target, scrollTo);
+    await until(() => lineNumbers(target).length > 60);
+    expect(target.querySelector(".fp-range")).toBe(range);
+    expect(range?.textContent?.trim()).toBe("lines 1–120 of 300");
+  });
+
+  test("a key press retries a chunk when the region is pinned at its limit", async () => {
+    // The keyboard's half of the wheel retry. A failed chunk leaves the region
+    // against its scroll limit, where the next key press moves nothing and so
+    // fires no scroll event — and the wheel is not an affordance a keyboard
+    // reader has. Without the keydown handler they would be stranded there.
+    const served = serveWindowed(300, 60);
+    cap = served;
+    const { target } = render(FilePreview, props());
+    await until(() => target.querySelector(".fp-code") != null);
+    const scrollTo = stubLayout(target);
+    served.failNext();
+
+    scrollToBottom(target, scrollTo);
+    await until(() => served.urls.length === 2);
+    expect(lineNumbers(target)).toHaveLength(60);
+
+    // Pinned now: the press is the only event that fires, and it has to be enough.
+    await until(() => {
+      pressKey(target, "PageDown");
+      return lineNumbers(target).length > 60;
+    });
+    expect(lineNumbers(target)).toHaveLength(120);
+    expect(lineNumbers(target).at(-1)).toBe("120");
+  });
+
+  test("a key that does not scroll asks for nothing", async () => {
+    // Escape closes the preview (DiffPlanView owns that) and typing goes nowhere;
+    // neither is a reader moving through the file, so neither should spend a
+    // round trip.
+    const served = serveWindowed(300, 60);
+    cap = served;
+    const { target } = render(FilePreview, props());
+    await until(() => target.querySelector(".fp-code") != null);
+    const scrollTo = stubLayout(target);
+    served.failNext();
+
+    scrollToBottom(target, scrollTo);
+    await until(() => served.urls.length === 2);
+
+    pressKey(target, "Escape");
+    pressKey(target, "a");
+    await until(() => served.urls.length > 2, 200);
+    expect(served.urls).toHaveLength(2);
+    expect(lineNumbers(target)).toHaveLength(60);
   });
 });
 
