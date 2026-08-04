@@ -2,14 +2,22 @@
 // @pierre/diffs library keeps its own private highlighter, so this builds a small
 // dedicated one bound to shiki's full grammar bundle and caret's themes, then
 // highlights an excerpt to the caret theme in effect — so the preview reads like
-// the plan view's own code. Grammars load lazily and cache; anything that can't
-// highlight falls back to plain text. Never throws.
+// the plan view's own code. Two entry points share it: highlightExcerpt colours a
+// whole window in one pass, highlightChunk colours a file a piece at a time and
+// hands back the grammar state each piece ended on, so a construct that opens in
+// one chunk still colours the next. Grammars load lazily and cache; anything that
+// can't highlight falls back to plain text. Never throws.
+
+import { hastToHtml } from "shiki/core";
+import type { GrammarState } from "shiki/types";
 
 import { REGISTERED_SHIKI_THEMES } from "$lib/caret-theme.ts";
 import { createHighlighter } from "$lib/diffview/shiki-bundle.ts";
 import type { ThemeId } from "$lib/theme.ts";
 
 type Highlighter = Awaited<ReturnType<typeof createHighlighter>>;
+type Hast = ReturnType<Highlighter["codeToHast"]>;
+type HastNode = Hast | Hast["children"][number];
 
 let highlighterPromise: Promise<Highlighter> | undefined;
 const loadedLanguages = new Set<string>();
@@ -53,5 +61,58 @@ export async function highlightExcerpt(
     return hl.codeToHtml(code, { lang, theme: themeId });
   } catch {
     return "";
+  }
+}
+
+/** Where a chunk's grammar left off — hand it back as the next chunk's `state`.
+ * Opaque: only shiki reads it, and only for the same language and theme. */
+export type ChunkState = GrammarState;
+
+/** One highlighted chunk of a file. */
+export interface HighlightedChunk {
+  /** The chunk's lines, one entry each: that line's token HTML, ready to drop
+   * into a row's `<code>`. Empty when highlighting failed, so the caller renders
+   * the raw text instead. */
+  rows: string[];
+  /** The grammar state after the chunk's last line, or undefined when the
+   * grammar carries none (plain text). */
+  state?: ChunkState;
+}
+
+// Stringify each `.line` element's children. shiki's codeToHtml is
+// hastToHtml(codeToHast(…)), so a row is byte-for-byte the line's markup inside
+// the `<pre>` blob highlightExcerpt returns — the excerpt and a chunk of it
+// render identically. Walked rather than indexed through `pre > code` so the
+// rows survive a wrapper shiki decides to add.
+function chunkRows(node: HastNode, rows: string[] = []): string[] {
+  if (node.type === "element" && node.properties.class === "line")
+    rows.push(hastToHtml({ type: "root", children: node.children }));
+  else if ("children" in node) for (const child of node.children) chunkRows(child, rows);
+  return rows;
+}
+
+/** Highlights one chunk of a file, continuing from where the previous chunk's
+ * grammar left off, so a block comment or template literal that opens above the
+ * chunk still colours the lines below it. Passing no `state` starts fresh, which
+ * is what the file's first chunk wants.
+ *
+ * `code` must hold whole lines and no trailing newline — shiki would read one as
+ * a further, empty line. Never throws: a chunk that can't be highlighted comes
+ * back with no rows, for the caller to render as plain text. */
+export async function highlightChunk(
+  code: string,
+  language: string,
+  themeId: ThemeId,
+  state?: ChunkState,
+): Promise<HighlightedChunk> {
+  try {
+    const hl = await highlighter();
+    const lang = await resolveLanguage(hl, language);
+    // codeToHast tokenizes once and stashes the ending state against the tree it
+    // returns, so getLastGrammarState reads it back rather than tokenizing again.
+    const root = hl.codeToHast(code, { lang, theme: themeId, grammarState: state });
+    return { rows: chunkRows(root), state: hl.getLastGrammarState(root) };
+  } catch {
+    return { rows: [] };
   }
 }
