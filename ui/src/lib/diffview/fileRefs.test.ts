@@ -53,6 +53,55 @@ describe("detection (inside inline code)", () => {
     const s = spanFor("at `src/x.ts:29:5` there", "src/x.ts:29:5");
     expect(s?.path).toBe("src/x.ts");
     expect(s?.line).toBe(29);
+    // A column is not a range end — the second number is where the reference
+    // sits on line 29, not a ninth line to frame.
+    expect(s?.endLine).toBeUndefined();
+  });
+
+  test("parses a :start-end range, covering the whole run in the span", () => {
+    // The span is the click target, so the end-line tail has to be inside it —
+    // a reader clicking `-162` is clicking the reference they can see.
+    const s = spanFor("read `doc/ADVANCED.md:154-162` first", "doc/ADVANCED.md:154-162");
+    expect(s?.path).toBe("doc/ADVANCED.md");
+    expect(s?.line).toBe(154);
+    expect(s?.endLine).toBe(162);
+  });
+
+  test.each([
+    ["en dash", "doc/ADVANCED.md:154–162"],
+    ["L-prefixed", "doc/ADVANCED.md:L154-L162"],
+    ["hash L-prefixed", "doc/ADVANCED.md#L154-L162"],
+    ["hash after colon", "doc/ADVANCED.md:#L154-L162"],
+  ])("parses the %s range spelling", (_name, run) => {
+    const s = spanFor(`read \`${run}\` first`, run);
+    expect(s?.path).toBe("doc/ADVANCED.md");
+    expect(s?.line).toBe(154);
+    expect(s?.endLine).toBe(162);
+  });
+
+  test.each([
+    ["a bare #L line", "doc/ADVANCED.md#L154"],
+    ["a :L line", "doc/ADVANCED.md:L154"],
+  ])("parses %s the same as a plain :line", (_name, run) => {
+    const s = spanFor(`read \`${run}\` first`, run);
+    expect(s?.path).toBe("doc/ADVANCED.md");
+    expect(s?.line).toBe(154);
+    expect(s?.endLine).toBeUndefined();
+  });
+
+  test("reads a numeric #fragment as an anchor, not as a line", () => {
+    // `#` without an `L` introduces a URL fragment. Treating `#3` as line 3
+    // would make a link to a numbered anchor open a file preview instead.
+    const s = spanFor("see `doc/ADVANCED.md#3` there", "doc/ADVANCED.md");
+    expect(s?.path).toBe("doc/ADVANCED.md");
+    expect(s?.line).toBeUndefined();
+  });
+
+  test("a range missing its end is just a line, and the span stops before the dash", () => {
+    const s = spanFor("read `doc/ADVANCED.md:154-` first", "doc/ADVANCED.md:154");
+    expect(s?.path).toBe("doc/ADVANCED.md");
+    expect(s?.line).toBe(154);
+    expect(s?.endLine).toBeUndefined();
   });
 
   test("detects multiple references, each in its own code span", () => {
@@ -119,6 +168,16 @@ describe("classify", () => {
 
   test("splits a trailing :line off the path", () => {
     expect(classify("a/b.md:42")).toEqual({ path: "a/b.md", line: 42 });
+  });
+
+  test("splits a trailing :start-end range off the path", () => {
+    expect(classify("a/b.md:42-50")).toEqual({ path: "a/b.md", line: 42, endLine: 50 });
+  });
+
+  test("normalizes a reversed range, so every consumer gets line <= endLine", () => {
+    // Normalized here rather than downstream: one place, and the preview's
+    // membership test and framing math can then assume the pair is ordered.
+    expect(classify("a/b.md:50-42")).toEqual({ path: "a/b.md", line: 42, endLine: 50 });
   });
 
   test("rejects a run with no file extension", () => {
@@ -193,6 +252,20 @@ describe("mergeFileRefSpans", () => {
     expect(merged.get(1)?.[0]?.path).toBe("c/d.ts");
     // The leftmost scanned span places the glyph.
     expect(merged.get(1)?.[0]?.startCol).toBe(1);
+  });
+
+  test("a collapsed collision keeps the emitted span's cited range", () => {
+    // The survivor is rebuilt field by field, so a range dropped here would
+    // leave the preview framing one line of a span the link plainly cites.
+    const merged = mergeFileRefSpans(
+      map([1, [{ startCol: 1, endCol: 5, path: "a.ts" }]]),
+      map([
+        1,
+        [{ startCol: 0, endCol: 6, path: "b/c.ts", line: 7, endLine: 19, target: "b/c.ts:7-19" }],
+      ]),
+    );
+    expect(merged.get(1)?.[0]?.line).toBe(7);
+    expect(merged.get(1)?.[0]?.endLine).toBe(19);
   });
 
   test("on a collision the emitted path wins — the click opens the link's target", () => {

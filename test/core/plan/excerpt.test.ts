@@ -12,9 +12,9 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { EXCERPT_RADIUS } from "@/config/constants.ts";
 import {
   EXCERPT_HEAD_LINES,
-  EXCERPT_RADIUS,
   isFileTooLargeToPreview,
   MAX_EXCERPT_BYTES,
   readFileExcerpt,
