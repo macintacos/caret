@@ -5,11 +5,13 @@
   // references the daemon confirmed are real files (DiffPlanView gates it on the
   // resolved set), so it never promises a preview it can't deliver. The excerpt
   // centers on the reference's line when it carries one, else the file's head,
-  // and the boundary strips grow that region toward the file's ends on click,
-  // one chunk at a time, until the whole file is reachable without leaving the
-  // review — a downward step costs one chunk however many came before. The header
-  // carries an "esc to close" hint — the panel stays put until dismissed (Escape,
-  // or a click away; DiffPlanView owns that).
+  // and scrolling near either end of it grows the region that way (EXC-969), one
+  // chunk at a time and unprompted, until the whole file is reachable without
+  // leaving the review — a downward step costs one chunk however many came
+  // before. There is nothing to click for it: the boundaries carry no control,
+  // because reading on is the gesture that loads. The header carries an "esc to
+  // close" hint — the panel stays put until dismissed (Escape, or a click away;
+  // DiffPlanView owns that).
   import { tick, untrack } from "svelte";
 
   import { appearance } from "@/state/appearance.svelte.ts";
@@ -61,10 +63,29 @@
   // nothing here and cost a signal per row read.
   let preview = $state.raw<Preview>({ kind: "loading" });
 
-  /** Lines one strip click adds to that side of the loaded region. */
-  const EXPAND_STEP = 50;
+  /** Floor on a chunk, so a short viewport still walks a file at a sane rate. */
+  const MIN_CHUNK = 50;
 
   const lastLine = (loaded: Ready) => loaded.startLine + loaded.lines.length - 1;
+
+  // How near an edge starts a load, and how many lines arrive when one does,
+  // both off the region's own measurements rather than a fixed count: a quarter
+  // screen of slack, two screens of content.
+  //
+  // The step is deliberately much larger than the threshold. That is what makes
+  // a gesture cost exactly one round trip — the chunk that lands carries the
+  // edge back out of range, so the fill loop stops instead of walking the file.
+  //
+  // A quarter screen rather than a half is what leaves a freshly opened preview
+  // alone. The opening window is ~60 lines with the cited line centred in it —
+  // under two screens on a typical lane — so its two edges sit close together,
+  // and a slacker threshold would reach both of them before the reader had moved
+  // and spend two round trips on a window nobody has read yet.
+  function step(region: HTMLElement, rows: number): { threshold: number; chunk: number } {
+    const rowHeight = region.scrollHeight / Math.max(1, rows);
+    const visible = Math.ceil(region.clientHeight / Math.max(1, rowHeight));
+    return { threshold: region.clientHeight / 4, chunk: Math.max(MIN_CHUNK, visible * 2) };
+  }
 
   // Colour a contiguous span beginning at `startLine` and pair each line with its
   // real file line number. Line numbers always come from the span
@@ -152,12 +173,9 @@
     })();
   });
 
-  // Reactive so the strips can show they are busy: a click that lands while a
-  // chunk is in flight is dropped, and the wait is the load of one step.
-  let expanding = $state(false);
-  // Fetch the next chunk toward `direction` and add it to the region. Either way
-  // only the new lines are asked for, and the rows already on screen stay put
-  // while they load, so the panel never blanks.
+  // Fetch the next chunk toward `direction` and add it to the region, reporting
+  // whether it grew. Either way only the new lines are asked for, and the rows
+  // already on screen stay put while they load, so the panel never blanks.
   //
   // Downward the chunk continues the region's grammar, so only it is coloured and
   // a step costs the same at the fortieth expansion as at the first. Upward is
@@ -165,34 +183,31 @@
   // it, and nothing above it is loaded — so the whole region is recoloured from
   // its new first line. A theme that moved while the chunk was in flight takes
   // that same path, so the two halves can't end up in different palettes.
-  // ponytail: two ceilings left. Upward recolouring is linear in the region, so
+  // ponytail: one ceiling left. Upward recolouring is linear in the region, so
   // walking to the file's head is quadratic — caching each chunk's ending grammar
-  // state would let a prepend keep the rows below it. And a fixed EXPAND_STEP
-  // means a 20k-line file is hundreds of clicks from end to end; a step that
-  // tracks the visible row count is that one's upgrade path.
-  async function expand(direction: "up" | "down"): Promise<void> {
-    if (preview.kind !== "ready" || expanding) return;
+  // state would let a prepend keep the rows below it.
+  async function expand(direction: "up" | "down"): Promise<boolean> {
+    const region = codeEl;
+    if (preview.kind !== "ready" || region === undefined) return false;
     const loaded = preview;
+    const { chunk: span } = step(region, loaded.rows.length);
     const range =
       direction === "up"
-        ? { start: Math.max(1, loaded.startLine - EXPAND_STEP), end: loaded.startLine - 1 }
-        : { start: lastLine(loaded) + 1, end: lastLine(loaded) + EXPAND_STEP };
+        ? { start: Math.max(1, loaded.startLine - span), end: loaded.startLine - 1 }
+        : { start: lastLine(loaded) + 1, end: lastLine(loaded) + span };
     const id = reviewId;
     const p = path;
     const ln = line;
-    const region = codeEl;
-    const before =
-      region === undefined ? null : { top: region.scrollTop, height: region.scrollHeight };
+    const before = { top: region.scrollTop, height: region.scrollHeight };
     // The parent reuses one instance across references; a chunk whose reference
     // moved on while it was in flight belongs to a file no longer on screen.
     const superseded = () => id !== reviewId || p !== path || ln !== line;
-    expanding = true;
     try {
       const excerpt = await getFileExcerpt(id, p, undefined, range);
-      if (superseded()) return;
+      if (superseded()) return false;
       // The daemon clamps a range to the file, so a file edited down to fewer
       // lines than the region already holds answers with a line already on
-      // screen. Take its count — that is what retires the strip — and add
+      // screen. Take its count — that is what retires this side — and add
       // nothing, rather than putting one line number in two rows.
       const abuts =
         direction === "up"
@@ -200,7 +215,7 @@
           : excerpt.startLine === lastLine(loaded) + 1;
       if (!abuts) {
         preview = { ...loaded, totalLines: excerpt.totalLines };
-        return;
+        return false;
       }
       const themeId = untrack(() => appearance.themeId);
       const startLine = direction === "up" ? excerpt.startLine : loaded.startLine;
@@ -221,7 +236,7 @@
       } else {
         painted = await paint(lines, startLine, loaded.language, themeId);
       }
-      if (superseded()) return;
+      if (superseded()) return false;
       preview = {
         ...loaded,
         totalLines: excerpt.totalLines,
@@ -230,21 +245,80 @@
         themeId,
         ...painted,
       };
-      if (direction === "up" && region !== undefined && before !== null) {
+      if (direction === "up") {
         await tick();
         // Every revealed line sits above what the reader was looking at, so
         // adding the growth back to the offset holds their place exactly. The
         // browser clamps the result when the region is taller than its content.
         region.scrollTop = before.top + (region.scrollHeight - before.height);
       }
+      return true;
     } catch {
-      // Keep the loaded region on screen; the strip stays clickable.
+      // Keep the loaded region on screen and stop, rather than retrying into a
+      // daemon that just refused: the next scroll is the reader's retry.
+      return false;
+    }
+  }
+
+  // Which end of the region, if either, is close enough to want its next chunk.
+  // Downward first: a reader who has scrolled to a boundary is far more often
+  // heading further into the file than back out of it.
+  function pendingEdge(): "up" | "down" | undefined {
+    const region = codeEl;
+    const framing = meta;
+    if (region === undefined || framing === undefined || preview.kind !== "ready") return undefined;
+    // An unmeasured region — the lane mid-wipe, or a panel not yet laid out —
+    // has no proximity to read and would size a chunk off a zero height.
+    if (region.clientHeight === 0) return undefined;
+    const { threshold } = step(region, preview.rows.length);
+    const toBottom = region.scrollHeight - region.scrollTop - region.clientHeight;
+    if (framing.below > 0 && toBottom <= threshold) return "down";
+    if (framing.above > 0 && region.scrollTop <= threshold) return "up";
+    return undefined;
+  }
+
+  let filling = false;
+  // Load toward whichever edge is in reach, and keep going while one still is —
+  // that repetition is what lets scrolling alone reach the end of the file. It
+  // settles rather than runs away: each landed chunk is two screens against a
+  // half-screen threshold, so it carries the edge out of reach, and a side that
+  // hits the file's end stops offering a direction. Single-flight, so the flurry
+  // of scroll events one wheel gesture emits asks for a range once.
+  async function fillEdges(): Promise<void> {
+    if (filling) return;
+    filling = true;
+    try {
+      for (;;) {
+        const direction = pendingEdge();
+        if (direction === undefined) return;
+        if (!(await expand(direction))) return;
+      }
     } finally {
-      expanding = false;
+      filling = false;
     }
   }
 
   let codeEl = $state<HTMLElement>();
+
+  // The one case a scroll handler structurally cannot cover: a region shorter
+  // than its viewport can't be scrolled, so it emits no event, and the rest of
+  // the file would be unreachable with nothing left to click. Watching the
+  // region's own box catches it — the first callback lands once the lane has a
+  // height, and again whenever it changes.
+  //
+  // Deliberately *only* that case. A region that can scroll waits for the reader
+  // to actually scroll it, so opening a preview never spends a round trip on a
+  // window nobody has read yet, however tall the lane happens to be.
+  $effect(() => {
+    const region = codeEl;
+    if (region === undefined) return;
+    const observer = new ResizeObserver(() => {
+      if (region.scrollHeight > region.clientHeight) return;
+      void fillEdges();
+    });
+    observer.observe(region);
+    return () => observer.disconnect();
+  });
   let centred = false;
   // Bring the cited line into view on first open. The opening window is taller
   // than the code region, so the marked row would otherwise sit below the fold.
@@ -269,10 +343,10 @@
 
   const lineWord = (n: number) => (n === 1 ? "line" : "lines");
 
-  // Framing for the loaded region: how much file sits above/below it (so the
-  // boundary strips can say so), the header label, and the digit width the
-  // line-number gutter needs. A region covering the whole file reads as the full
-  // file, not a slice.
+  // Framing for the loaded region: how much file sits above/below it (which is
+  // what tells `pendingEdge` a side still has somewhere to go), the header
+  // label, and the digit width the line-number gutter needs. A region covering
+  // the whole file reads as the full file, not a slice.
   const meta = $derived.by(() => {
     if (preview.kind !== "ready") return undefined;
     const { startLine, totalLines } = preview;
@@ -299,19 +373,17 @@
     </span>
   </div>
   {#if preview.kind === "ready" && meta}
-    {#if meta.above > 0}
-      <button
-        type="button"
-        class="fp-edge fp-edge-top"
-        aria-label="{meta.above} {lineWord(meta.above)} above — show {Math.min(
-          EXPAND_STEP,
-          meta.above,
-        )} more"
-        aria-busy={expanding}
-        onclick={() => expand("up")}>↑ {meta.above} {lineWord(meta.above)} above</button
-      >
-    {/if}
-    <div bind:this={codeEl} class="fp-code" style:--fp-gutter={meta.gutter}>
+    <!-- onwheel alongside onscroll because a region pinned at its scroll limit
+         stops emitting scroll events, and the reader still turning the wheel is
+         exactly the retry after a chunk that failed to arrive — the only retry
+         left, now that the boundary carries no control. -->
+    <div
+      bind:this={codeEl}
+      class="fp-code"
+      style:--fp-gutter={meta.gutter}
+      onscroll={() => void fillEdges()}
+      onwheel={() => void fillEdges()}
+    >
       {#each preview.rows as row (row.num)}
         <div class="fp-row" class:fp-target={row.num === line}>
           <span class="fp-lnum">{row.num}</span
@@ -320,18 +392,6 @@
         </div>
       {/each}
     </div>
-    {#if meta.below > 0}
-      <button
-        type="button"
-        class="fp-edge fp-edge-bottom"
-        aria-label="{meta.below} {lineWord(meta.below)} below — show {Math.min(
-          EXPAND_STEP,
-          meta.below,
-        )} more"
-        aria-busy={expanding}
-        onclick={() => expand("down")}>↓ {meta.below} {lineWord(meta.below)} below</button
-      >
-    {/if}
   {:else if preview.kind === "too-large"}
     <div class="fp-message" data-preview-state="too-large">This file is too large to preview.</div>
   {:else if preview.kind === "error"}
@@ -343,9 +403,9 @@
 
 <style>
   /* The preview panel: an in-flow column filling the lane it is docked in, on the
-     app's own paper. A column so the header and both strips stay pinned while
-     only .fp-code scrolls between them, and it takes the lane whole so a growing
-     region pages inside the panel rather than stretching it. */
+     app's own paper. A column so the header stays pinned while only .fp-code
+     scrolls beneath it, and it takes the lane whole so a growing region pages
+     inside the panel rather than stretching it. */
   .file-preview {
     display: flex;
     flex-direction: column;
@@ -413,55 +473,17 @@
     color: var(--ink-faint);
     white-space: nowrap;
   }
-  /* The boundary strips: a recessed (paper-sunk) band above and/or below the
-     loaded region saying how much file it omits — and the control that reaches
-     it. A click loads the next chunk toward that end, so the count is both the
-     label and the affordance; the strip retires once its side hits the file's
-     edge. A button with the UA border and font dropped, so it keeps reading as
-     part of the panel until the pointer or keyboard lands on it. */
-  .fp-edge {
-    flex: 0 0 auto;
-    border: 0;
-    padding: 0.25rem 0.6rem;
-    font-family: var(--font-mono);
-    font-size: var(--text-2xs);
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    text-align: center;
-    color: var(--ink-soft);
-    background: var(--paper-sunk);
-    user-select: none;
-    transition: color var(--dur-fast) var(--ease-out);
-  }
-  .fp-edge:hover {
-    color: var(--ink);
-  }
-  /* Inset the app-wide focus ring rather than restyling it: the drawer lane clips
-     the panel, so an outset ring on a flush-edge strip would be cut off. */
-  .fp-edge:focus-visible {
-    outline-offset: -2px;
-  }
-  /* A chunk is loading, and this click would be dropped — say so rather than
-     looking live and doing nothing. */
-  .fp-edge[aria-busy="true"] {
-    color: var(--ink-faint);
-    cursor: progress;
-  }
-  .fp-edge-top {
-    border-bottom: 1px solid var(--rule);
-  }
-  .fp-edge-bottom {
-    border-top: 1px solid var(--rule);
-  }
   /* The loaded region: one flex row per source line — a sticky line-number gutter
      that stays put as long lines scroll horizontally, plus the line's highlighted
      code. This is the panel's only scrolling region, in both axes: once the
-     region outgrows the lane's height it pages here, between a pinned header and
-     pinned strips. The code reads at the plan source view's own grid — the same
-     font stack, --text-base size, --leading-normal rhythm, and tabular figures
-     the .diffview bridge sets (app.css) — so an excerpt looks like a window onto
-     the plan, not a smaller sibling. The header and boundary strips stay at the
-     --text-2xs label size. */
+     region outgrows the lane's height it pages here, beneath a pinned header.
+     Scrolling it is also what fetches the next chunk, so it runs flush to the
+     panel's bottom edge with nothing under it — a band there would read as a
+     control, which is the affordance EXC-969 removed. The code reads at the plan
+     source view's own grid — the same font stack, --text-base size,
+     --leading-normal rhythm, and tabular figures the .diffview bridge sets
+     (app.css) — so an excerpt looks like a window onto the plan, not a smaller
+     sibling. The header stays at the --text-2xs label size. */
   .fp-code {
     flex: 1;
     min-height: 0;
