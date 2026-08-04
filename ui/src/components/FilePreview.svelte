@@ -9,15 +9,19 @@
   // chunk at a time and unprompted, until the whole file is reachable without
   // leaving the review — a downward step costs one chunk however many came
   // before. There is nothing to click for it: the boundaries carry no control,
-  // because reading on is the gesture that loads. Only the rows near the viewport
-  // are mounted (EXC-970): scrolling on is what loads a whole file, so a spacer
-  // above and below carries the height of everything the window left out and the
-  // DOM stays a screenful however much has arrived. That trades away reach for
-  // anything that walks the DOM — find-in-page and assistive tech see the mounted
-  // rows, not the whole loaded region — which is the standing cost of windowing;
-  // the header's line range is what still names the whole of it, and carries the
-  // "esc to close" hint besides. The panel stays put until dismissed (Escape, or
-  // a click away; DiffPlanView owns that).
+  // because reading on is the gesture that loads — and reading on is a keyboard
+  // gesture too (EXC-972): the region takes a tab stop, so the browser's own key
+  // scrolling walks the file exactly as the wheel does. Only the rows near the
+  // viewport are mounted (EXC-970): scrolling on is what loads a whole file, so a
+  // spacer above and below carries the height of everything the window left out
+  // and the DOM stays a screenful however much has arrived. That trades away
+  // reach for anything that walks the DOM — find-in-page and assistive tech see
+  // the mounted rows, not the whole loaded region — which is the standing cost of
+  // windowing; the header's line range is what still names the whole of it, and
+  // is a live region besides, so a landed chunk is announced as one sentence
+  // rather than as rows that may not even be mounted. It carries the "esc to
+  // close" hint too. The panel stays put until dismissed (Escape, or a click
+  // away; DiffPlanView owns that).
   import { tick, untrack } from "svelte";
 
   import { appearance } from "@/state/appearance.svelte.ts";
@@ -321,6 +325,17 @@
     }
   }
 
+  // The keys a focused scroll container moves on. The browser does the moving —
+  // nothing here calls preventDefault — so the scroll they cause loads chunks
+  // through `onscroll` exactly as a wheel notch does. This handler is the
+  // keyboard's half of the `onwheel` retry: a region already pinned at its scroll
+  // limit emits no scroll event, so a key press that moves nothing has to ask on
+  // its own, and it is the only retry a keyboard reader has.
+  const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"]);
+  function onKeyDown(e: KeyboardEvent): void {
+    if (SCROLL_KEYS.has(e.key)) void fillEdges();
+  }
+
   let codeEl = $state<HTMLElement | null>(null);
   // The code region's live geometry, which is what decides how much of the
   // loaded region is worth mounting. Row height is measured off a real row
@@ -453,7 +468,12 @@
     <span class="fp-badge">Preview</span>
     <span class="fp-path">{preview.kind === "ready" ? preview.path : path}</span>
     <span class="fp-header-end">
-      {#if meta}<span class="fp-range">{meta.label}</span>{/if}
+      <!-- The range doubles as the growth announcement: a chunk landing rewrites
+           it, and role="status" hands a screen reader that one short sentence
+           ("lines 1–180 of 300") instead of the hundreds of rows that arrived.
+           The span itself outlives every load — only its text changes — so the
+           live region is in place long before the first chunk. -->
+      {#if meta}<span class="fp-range" role="status">{meta.label}</span>{/if}
       {#if showShortcutHints}
         <span class="fp-hint"><Kbd class="kbd-sm">esc</Kbd> to close</span>
       {/if}
@@ -463,10 +483,23 @@
     <!-- onwheel alongside onscroll because a region pinned at its scroll limit
          stops emitting scroll events, and the reader still turning the wheel is
          exactly the retry after a chunk that failed to arrive — the only retry
-         left, now that the boundary carries no control. -->
+         left, now that the boundary carries no control. onkeydown is the same
+         retry for a reader who has no wheel.
+
+         The tab stop is what makes reading on a keyboard gesture at all
+         (EXC-972): Chrome and Safari leave a plain overflow:auto div out of the
+         tab order, so removing the boundary strips took the panel's only
+         focusable control with them. With it back, the browser's own key
+         scrolling walks the file and nothing here has to reimplement it. svelte
+         reads `region` as non-interactive whether or not it is focusable, so
+         both warnings below are about the pattern itself. -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
     <div
       bind:this={codeEl}
       class="fp-code"
+      role="region"
+      tabindex="0"
+      aria-label="Contents of {preview.path}"
       style:--fp-gutter={meta.gutter}
       style:--fp-cols={cols}
       onscroll={() => {
@@ -474,6 +507,7 @@
         void fillEdges();
       }}
       onwheel={() => void fillEdges()}
+      onkeydown={onKeyDown}
     >
       <div class="fp-spacer" style:height="{win.above}px" aria-hidden="true"></div>
       {#each rendered as row (row.num)}
@@ -587,6 +621,13 @@
     line-height: var(--leading-normal);
     font-feature-settings: "tnum";
     color: var(--ink);
+  }
+  /* Inset the app-wide focus ring (base.css) rather than restyling it: the drawer
+     lane clips the panel, and the region runs flush to its edges, so an outset
+     ring would be cut off on three sides. Same treatment .fp-edge carried before
+     EXC-969 retired it. */
+  .fp-code:focus-visible {
+    outline-offset: -2px;
   }
   .fp-row {
     display: flex;

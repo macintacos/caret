@@ -11,7 +11,9 @@
 // it doesn't also do its normal thing (open a line comment). Reading past the
 // opening window costs no click either: scrolling near an end of the code region
 // loads the next chunk toward it (EXC-969), which needs real layout and so lives
-// here. The resolve + read + shadow-DOM token tagging + real hover/click only
+// here — as does reaching the same ends from the keyboard (EXC-972), which needs
+// a tab order and native key scrolling besides. The resolve + read + shadow-DOM
+// token tagging + real hover/click only
 // exist in a browser against a real daemon reading a real cwd, so they are
 // exercised here too; the pure detection, resolution, and excerpt math stay
 // units (fileRefs / fileRefTag / plan-files / api tests).
@@ -591,6 +593,111 @@ test("scrolling walks the preview to both ends of the file", async ({ daemon, pa
     const walked = await renderedRows(page, 0);
     await renderedRows(page, 149 * (walked?.rowHeight ?? 0));
     await expect(preview).toContainText("MARKER_LINE_DEEP");
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("a keyboard reader walks the preview to both ends with no pointer", async ({
+  daemon,
+  page,
+}) => {
+  // EXC-972. EXC-969 tied reading on to a scroll gesture and dropped the
+  // boundary strips with it, which took the panel's only focusable control:
+  // Chrome and Safari keep a plain overflow:auto div out of the tab order, so a
+  // keyboard reader could open the preview and then reach none of the file past
+  // its opening window. A tab order, a focus ring, and native key scrolling only
+  // exist in a real browser, so this is the only layer that can tell whether the
+  // fix works — and with rows windowed (EXC-970) it is also the only layer where
+  // the rows a key press reaches are the ones a reader would see. Everything
+  // after the opening click below is keys: no wheel, no scrollTop assignment.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
+    });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+    await page.locator("[data-file-ref]").first().click();
+
+    const preview = page.locator("[data-file-preview]");
+    await expect(preview).toBeVisible();
+    await settleDrawer(page);
+
+    // A named landmark, so the stop announces what it holds rather than landing
+    // the reader on an anonymous box.
+    await expect(page.getByRole("region", { name: "Contents of src/cache.ts" })).toBeVisible();
+
+    // Tab until focus lands on it. The claim is that it is IN the tab order, so
+    // the stops are walked rather than the element focused directly — and the
+    // plan behind the drawer must hold still while that happens, the same hazard
+    // that made the centring effect use scrollTop over scrollIntoView.
+    const planScrollTop = () =>
+      page.evaluate(() => document.querySelector(".diff-plan")?.scrollTop ?? -1);
+    let planBeforeTab = -1;
+    let focused = false;
+    for (let i = 0; i < 40 && !focused; i++) {
+      planBeforeTab = await planScrollTop();
+      await page.keyboard.press("Tab");
+      focused = await page.evaluate(
+        () => document.activeElement?.classList.contains("fp-code") ?? false,
+      );
+    }
+    expect(focused).toBe(true);
+    expect(await planScrollTop()).toBe(planBeforeTab);
+
+    // The app's own focus ring, inset: the lane clips the panel and the region
+    // runs flush to its edges, so an outset ring would be cut off on three sides.
+    const ring = await preview.locator(".fp-code").evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return {
+        focusVisible: el.matches(":focus-visible"),
+        style: cs.outlineStyle,
+        width: Number.parseFloat(cs.outlineWidth),
+        offset: cs.outlineOffset,
+      };
+    });
+    expect(ring.focusVisible).toBe(true);
+    expect(ring.style).not.toBe("none");
+    expect(ring.width).toBeGreaterThan(0);
+    expect(ring.offset).toBe("-2px");
+
+    // End walks down a chunk at a time — each press scrolls the region, and that
+    // scroll loads the next chunk exactly as a wheel notch would — until the
+    // file's last line is the one under the reader.
+    await expect(async () => {
+      await page.keyboard.press("End");
+      await expect(preview.locator(".fp-lnum").last()).toHaveText(String(CACHE_TS_LINES), {
+        timeout: 1_000,
+      });
+    }).toPass({ timeout: 20_000 });
+
+    // …and Home walks back up to the first, so the whole file is reachable from
+    // the keyboard alone. Focus never left the region to do either.
+    await expect(async () => {
+      await page.keyboard.press("Home");
+      await expect(preview.locator(".fp-lnum").first()).toHaveText("1", { timeout: 1_000 });
+    }).toPass({ timeout: 20_000 });
+    await expect(preview).toContainText("MARKER_LINE_ONE");
+    expect(
+      await page.evaluate(() => document.activeElement?.classList.contains("fp-code") ?? false),
+    ).toBe(true);
+
+    // The header frames the whole file now, through the live region a screen
+    // reader hears that growth in — the rows themselves are windowed, so they
+    // are the wrong thing to announce.
+    await expect(preview.locator(".fp-range")).toHaveText(`${CACHE_TS_LINES} lines`);
+    await expect(preview.locator(".fp-range")).toHaveAttribute("role", "status");
+    // And nothing was put back at the boundaries to achieve any of it.
+    await expect(preview.locator("button")).toHaveCount(0);
+
+    // Escape still closes the preview from inside the region, where focus sits.
+    await expect(async () => {
+      await page.keyboard.press("Escape");
+      await expect(preview).toHaveCount(0, { timeout: 500 });
+    }).toPass({ timeout: 5_000 });
   } finally {
     await proj.cleanup();
   }
