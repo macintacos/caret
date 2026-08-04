@@ -222,7 +222,7 @@
     const id = reviewId;
     const p = path;
     const ln = line;
-    const before = { top: region.scrollTop, height: region.scrollHeight };
+    const before = { height: region.scrollHeight };
     // The parent reuses one instance across references; a chunk whose reference
     // moved on while it was in flight belongs to a file no longer on screen.
     const superseded = () => id !== reviewId || p !== path || ln !== line;
@@ -272,11 +272,19 @@
       if (direction === "up") {
         await tick();
         // Every revealed line sits above what the reader was looking at, so
-        // adding the growth back to the offset holds their place exactly. The
-        // spacers carry the unmounted rows' height, so the growth the region
-        // reports is the chunk's whether or not its rows were mounted. The
-        // browser clamps the result when the region is taller than its content.
-        region.scrollTop = before.top + (region.scrollHeight - before.height);
+        // adding the growth to the offset holds their place exactly. The spacers
+        // carry the unmounted rows' height, so the growth the region reports is
+        // the chunk's whether or not its rows were mounted (EXC-970). The browser
+        // clamps the result when the region is taller than its content.
+        //
+        // The offset is read here rather than captured before the fetch: loading
+        // is scroll-driven (EXC-969) and key-driven (EXC-972), so the gesture
+        // that asked for this chunk is usually still going when it lands, and
+        // restoring the offset it started from would discard everything the
+        // reader scrolled in between — sliding the cited line out from under
+        // their eye, which is the jump this panel exists to avoid. Only the
+        // height is captured beforehand, because a delta needs both ends.
+        region.scrollTop += region.scrollHeight - before.height;
         syncScroll();
       }
       return true;
