@@ -10,8 +10,10 @@
 // token: prose is tokenized as one coarse run, so a path inside it has no token
 // boundary to hang the icon on or to hit-test a click against. A token
 // qualifies on *shape* only (last path segment ends in a known file extension,
-// optionally trailed by :line[:col]); whether it is a real file is resolved
-// server-side, so a candidate that doesn't exist gets no icon and no affordance.
+// optionally trailed by a line reference — `:line`, `:line:col`, or a
+// `:start-end` range, each also spellable with `#`/`L` as in `#L154-L162`);
+// whether it is a real file is resolved server-side, so a candidate that doesn't
+// exist gets no icon and no affordance.
 //
 // The scan is not the only source of references: the link layer emits its own
 // over collapsed markdown-link labels, whose paths never survive into the display
@@ -19,15 +21,20 @@
 // set the view resolves and tags.
 
 /** A candidate filename reference on a single display line. Columns are 0-based,
- * half-open [startCol, endCol) into the display line's text; endCol includes any
- * trailing `:line[:col]` so a click anywhere on the reference resolves. */
+ * half-open [startCol, endCol) into the display line's text; endCol includes the
+ * whole trailing line reference — the range's end line included — so a click
+ * anywhere on the reference resolves. */
 export interface FileRefSpan {
   startCol: number;
   endCol: number;
   /** The referenced path, without the trailing `:line`. */
   path: string;
-  /** 1-based line number from a `path:line` reference, if present. */
+  /** 1-based line number from a `path:line` reference, if present. For a range
+   * this is its start. */
   line?: number;
+  /** 1-based inclusive end of a cited range (`path:154-162`), if the reference
+   * carried one. Always ≥ `line`; absent for a single-line reference. */
+  endLine?: number;
   /** The link target this reference was emitted from, when the display text does
    * not already show it (a prose-labelled markdown link). Hover reveals it in the
    * link tooltip; an inline-code reference leaves it unset. */
@@ -50,13 +57,21 @@ const INLINE_CODE = /(`+)(.*?)\1/g;
 // code-spanned URL is never mistaken for a file reference.
 const URL_RE = /\bhttps?:\/\/\S+/gi;
 
-// A maximal run of path characters, optionally trailed by :line[:col]. The class
-// admits leading `.`/`/` so a `../x.ts` or `/abs/x.ts` reference is captured
-// whole (and then refused server-side) rather than mis-parsed from its tail.
-const CANDIDATE_RE = /[A-Za-z0-9._/~-]+(?::\d+(?::\d+)?)?/g;
+// A maximal run of path characters, optionally trailed by a line reference:
+// `:154`, `#L154`, `:154:9` (line + column), or a range `:154-162` /
+// `:#L154–L162`. The class admits leading `.`/`/` so a `../x.ts` or `/abs/x.ts`
+// reference is captured whole (and then refused server-side) rather than
+// mis-parsed from its tail. Matching the whole run — the range's end line
+// included — is what puts the entire reference inside the span, and so inside
+// the click target.
+const CANDIDATE_RE = /[A-Za-z0-9._/~-]+(?:(?::#?|#)L?\d+(?:[-–]L?\d+|:\d+)?)?/g;
 
-// Splits a candidate's trailing `:line[:col]` off the path.
-const LINE_SUFFIX = /^(.+?):(\d+)(?::\d+)?$/;
+// Splits a candidate's trailing line reference off the path: group 2 is the
+// start line, group 3 the range's end when it carries one. The separator admits
+// `:`, `#`, and the `:#` the two collide into, and `L?` covers the `L154` /
+// `#L154` spellings. A `:\d+` tail is a column and is dropped — that alternative
+// sits after the range one, which is what keeps `path:154:162` unambiguous.
+const LINE_SUFFIX = /^(.+?)(?::#?|#)L?(\d+)(?:[-–]L?(\d+)|:\d+)?$/;
 
 // The final `.ext` of a path's last segment (extension must start with a letter
 // or digit; the membership test below narrows it to real file kinds).
@@ -118,8 +133,10 @@ const KNOWN_EXTENSIONS: ReadonlySet<string> = new Set([
   "conf",
 ]);
 
-/** Classifies a raw candidate run into a path + optional line, or null when it
- * is not file-shaped (no known extension, or a bare `.ext` with no name).
+/** Classifies a raw candidate run into a path + optional cited line or range,
+ * or null when it is not file-shaped (no known extension, or a bare `.ext` with
+ * no name). A reversed range is normalized here rather than downstream, so every
+ * consumer gets `line <= endLine` by construction.
  *
  * The one definition of "path-shaped" in the codebase: the scan below applies it
  * to runs inside inline code, and the link layer applies it to a `[label](target)`
@@ -128,13 +145,18 @@ const KNOWN_EXTENSIONS: ReadonlySet<string> = new Set([
  * URL exclusion first, since this judges a run by its last segment and a URL's
  * tail can read as a path: the scan masks URLs inside code, the link layer
  * rejects a target carrying a scheme. */
-export function classify(raw: string): { path: string; line?: number } | null {
+export function classify(raw: string): { path: string; line?: number; endLine?: number } | null {
   let path = raw;
   let line: number | undefined;
+  let endLine: number | undefined;
   const suffix = LINE_SUFFIX.exec(raw);
   if (suffix) {
     path = suffix[1] as string;
     line = Number(suffix[2]);
+    if (suffix[3] !== undefined) {
+      endLine = Number(suffix[3]);
+      if (endLine < line) [line, endLine] = [endLine, line];
+    }
   }
   const base = path.split("/").pop() ?? "";
   const ext = EXTENSION.exec(base)?.[1]?.toLowerCase();
@@ -142,7 +164,7 @@ export function classify(raw: string): { path: string; line?: number } | null {
   // Require a real name before the extension dot, so a bare ".ts" or a dotfile
   // like ".env" (which isn't a `name.ext` reference) is not a candidate.
   if (base.length <= ext.length + 1) return null;
-  return { path, line };
+  return { path, line, endLine };
 }
 
 function scanLine(source: string): FileRefSpan[] {
@@ -168,6 +190,7 @@ function scanLine(source: string): FileRefSpan[] {
         endCol: base + localEnd,
         path: ref.path,
         line: ref.line,
+        endLine: ref.endLine,
       });
     }
   }

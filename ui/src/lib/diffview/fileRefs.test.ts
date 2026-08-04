@@ -53,6 +53,40 @@ describe("detection (inside inline code)", () => {
     const s = spanFor("at `src/x.ts:29:5` there", "src/x.ts:29:5");
     expect(s?.path).toBe("src/x.ts");
     expect(s?.line).toBe(29);
+    // A column is not a range end — the second number is where the reference
+    // sits on line 29, not a ninth line to frame.
+    expect(s?.endLine).toBeUndefined();
+  });
+
+  test("parses a :start-end range, covering the whole run in the span", () => {
+    // The span is the click target, so the end-line tail has to be inside it —
+    // a reader clicking `-162` is clicking the reference they can see.
+    const s = spanFor("read `doc/ADVANCED.md:154-162` first", "doc/ADVANCED.md:154-162");
+    expect(s?.path).toBe("doc/ADVANCED.md");
+    expect(s?.line).toBe(154);
+    expect(s?.endLine).toBe(162);
+  });
+
+  test.each([
+    ["en dash", "doc/ADVANCED.md:154–162"],
+    ["L-prefixed", "doc/ADVANCED.md:L154-L162"],
+    ["hash L-prefixed", "doc/ADVANCED.md#L154-L162"],
+    ["hash after colon", "doc/ADVANCED.md:#L154-L162"],
+  ])("parses the %s range spelling", (_name, run) => {
+    const s = spanFor(`read \`${run}\` first`, run);
+    expect(s?.path).toBe("doc/ADVANCED.md");
+    expect(s?.line).toBe(154);
+    expect(s?.endLine).toBe(162);
+  });
+
+  test.each([
+    ["a bare #L line", "doc/ADVANCED.md#L154"],
+    ["a :L line", "doc/ADVANCED.md:L154"],
+  ])("parses %s the same as a plain :line", (_name, run) => {
+    const s = spanFor(`read \`${run}\` first`, run);
+    expect(s?.path).toBe("doc/ADVANCED.md");
+    expect(s?.line).toBe(154);
+    expect(s?.endLine).toBeUndefined();
   });
 
   test("detects multiple references, each in its own code span", () => {
@@ -119,6 +153,16 @@ describe("classify", () => {
 
   test("splits a trailing :line off the path", () => {
     expect(classify("a/b.md:42")).toEqual({ path: "a/b.md", line: 42 });
+  });
+
+  test("splits a trailing :start-end range off the path", () => {
+    expect(classify("a/b.md:42-50")).toEqual({ path: "a/b.md", line: 42, endLine: 50 });
+  });
+
+  test("normalizes a reversed range, so every consumer gets line <= endLine", () => {
+    // Normalized here rather than downstream: one place, and the preview's
+    // membership test and framing math can then assume the pair is ordered.
+    expect(classify("a/b.md:50-42")).toEqual({ path: "a/b.md", line: 42, endLine: 50 });
   });
 
   test("rejects a run with no file extension", () => {
