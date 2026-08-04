@@ -23,7 +23,7 @@ By **default the skill only launches dev and opens the browser**. It drives the 
   click through the UI.
 - **An instruction** (e.g. `/run-caret open the latest review and approve the plan`) —
   launch + open as above, then drive the UI to carry out the instruction via
-  `/superpowers-chrome:browsing` (see § Driving the UI).
+  `/playwright-cli` (see § Driving the UI).
 
 ## Why a dedicated skill
 
@@ -111,8 +111,97 @@ Drive the UI only when **either** holds:
   during the session), **or**
 - an agent is running this skill to verify some functionality against a live instance.
 
-In those cases, use `/superpowers-chrome:browsing` to navigate to `$url` and perform the
-action. Outside those cases the skill stops after opening the browser (step 4).
+In those cases, use `/playwright-cli` to navigate to `$url` and perform the action.
+Outside those cases the skill stops after opening the browser (step 4).
+
+## An isolated instance, for verification under concurrency
+
+Everything above shares one persistent state dir — which is why step 1 says to reuse a
+running dev instance rather than launch a second. That makes `mise run dev` the wrong tool
+whenever another agent may also be running caret: two of them clobber each other's
+`daemon.lock`, and the failure surfaces minutes later as an app that stopped responding
+rather than as a boot error.
+
+When an agent needs a live instance **to verify a change** — the case that has to work
+while siblings are doing the same — boot the e2e daemon under its own state dir instead.
+It is the same `createServer` the production daemon uses (see
+`test/e2e/support/daemon-entry.ts` for why the boot path is deliberately separate), it
+takes an OS-assigned port, and it reads no `config.toml`, so nothing about the developer's
+own setup leaks in.
+
+### 1. Build the UI it will serve
+
+The daemon serves the built artifact and resolves it once at boot, so build before booting
+and reboot after any later UI change:
+
+```sh
+mise run build ui
+```
+
+### 2. Boot it, holding stdin open
+
+The daemon self-reaps when stdin closes. That matters more than it looks:
+**`… &` inside a Bash call closes the pipe when the call returns**, and the daemon dies a
+few minutes later — mid-drive, so it reads as a flaky app rather than a dead server. Run
+it as the **foreground command of a backgrounded Bash call** instead, with `sleep` holding
+stdin:
+
+```sh
+sleep 100000 | env XDG_STATE_HOME="$(mktemp -d)" bun test/e2e/support/daemon-entry.ts
+```
+
+It refuses to start without `XDG_STATE_HOME`, so the real `~/.local/state/caret` can never
+be touched. Give every instance its own directory — sharing one is the same clobbering
+problem in a new hat.
+
+### 3. Read the port from the handshake
+
+stdout carries exactly one JSON line; all logs go to stderr so the handshake cannot be
+corrupted:
+
+```sh
+port=$(grep -o '{"port":[0-9]*}' "<daemon-output-file>" | head -1 | grep -o '[0-9]*')
+```
+
+### 4. Seed a review
+
+The same `POST /api/reviews` the hook makes. `cwd` is what file references resolve against
+— point it at a real checkout and a plan citing `path:line` gets working references:
+
+```sh
+curl -s -X POST "http://127.0.0.1:$port/api/reviews" \
+  -H 'Content-Type: application/json' \
+  -d '{"sessionId":"<uuid>","cwd":"<abs path>","plan":"# Plan\n\nSee `src/x.ts:42`.\n"}'
+```
+
+### 5. Skip onboarding before any focus work
+
+The first-run notifications dialog **traps focus**. Any tab-order, keyboard or focus-ring
+check will otherwise spend its whole budget on "Enable notifications" / "Maybe later":
+
+```js
+localStorage.setItem("caret.onboarded", "1"); // then reload
+```
+
+The committed e2e fixture does not need this — the dialog never appears there — so it is
+not discoverable from the specs. It applies to the ad-hoc instance only.
+
+### 6. Tear down
+
+Close the browser, kill the daemon (`pkill -f daemon-entry.ts`), and remove the state dir
+and any `.playwright-cli/` artifacts. Commit none of them.
+
+### Measuring one
+
+Two Bun traps, both of which fail quietly rather than loudly:
+
+- **`process.memoryUsage().heapUsed` does not count JSC strings.** A measurement over
+  string-heavy work — file contents, highlighted HTML — reports a number near zero and
+  looks like a result. Use `heapStats().heapSize` from `bun:jsc`, which counts them.
+- **A Bun script piping to a file block-buffers stdout**, so a long measurement shows
+  nothing until it exits. Write results incrementally with `appendFileSync`, and run one
+  case per process under `timeout` so a pathological case costs one case rather than the
+  whole run.
 
 ## Guardrails
 
