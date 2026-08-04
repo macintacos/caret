@@ -8,7 +8,7 @@ import { render } from "@ui/test-mount.ts";
 import { reactiveProps } from "@ui/test-props.svelte.ts";
 import FilePreview from "@/components/FilePreview.svelte";
 import { appearance } from "@/state/appearance.svelte.ts";
-import { highlightChunk } from "$lib/diffview/highlight.ts";
+import { highlightChunk, MAX_HIGHLIGHT_LINE_CHARS } from "$lib/diffview/highlight.ts";
 
 // The filename preview (EXC-687) shows an excerpt of a referenced file. These
 // pin the reader affordances layered on top of the highlighted code: per-line
@@ -289,6 +289,33 @@ describe("FilePreview target line", () => {
     const { target } = render(FilePreview, props());
     await until(() => target.querySelector(".fp-row") != null);
     expect(target.querySelector(".fp-target")).toBeNull();
+  });
+
+  test("marks a referenced line that is too long to highlight", async () => {
+    // A chunk holding a line past MAX_HIGHLIGHT_LINE_CHARS renders plain
+    // (EXC-973), so the cited row arrives as raw text in place of token markup.
+    // The wash is a per-row class keyed on the line number, not something hung
+    // off the highlighted markup, so it has to land on that path too — and it is
+    // reachable, since the ceiling admits files that carry such lines.
+    const long = `const blob = "${"x".repeat(MAX_HIGHLIGHT_LINE_CHARS)}";`;
+    cap = serveExcerpt({
+      path: "src/cache.ts",
+      language: "typescript",
+      startLine: 25,
+      endLine: 27,
+      totalLines: 122,
+      lines: ["const before = 1;", long, "const after = 3;"],
+    });
+    const { target } = render(FilePreview, props({ line: 26 }));
+    await until(() => target.querySelector(".fp-target") != null);
+    const marked = target.querySelectorAll(".fp-target");
+    expect(marked).toHaveLength(1);
+    expect(marked[0]?.querySelector(".fp-lnum")?.textContent?.trim()).toBe("26");
+    // Plain: the row's code holds the line as a text node, with no token
+    // elements under it — the path this test exists to reach.
+    const code = marked[0]?.querySelector(".fp-lcode");
+    expect(code?.textContent).toBe(long);
+    expect(code?.children).toHaveLength(0);
   });
 });
 
