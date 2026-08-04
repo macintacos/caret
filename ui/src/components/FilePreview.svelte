@@ -129,6 +129,28 @@
     };
   }
 
+  // Whether the region on screen belongs to a reference the reader has already
+  // moved off. It stays mounted and animates away while the next one loads, so a
+  // switch reads as a departure rather than a blank — the panel not blanking
+  // mid-load is the same property expand() preserves for chunk arrival.
+  let departing = $state(false);
+
+  // Take the newly loaded region: reset the offset and the centring latch in the
+  // same step that puts it on screen. Both belong here rather than at the top of
+  // the fetch, because until this moment the rows on screen are the *previous*
+  // reference's — winding their offset back to zero would jump the outgoing file
+  // to its first line just as it starts to leave.
+  function settle(next: Preview): void {
+    // The new region is a fresh, unscrolled `.fp-code` — the {#key} on the
+    // loaded path recreates it — and nothing scrolls it back to the top for us.
+    // Carrying the old file's offset over would window the new one around a row
+    // it may not even have, leaving a spacer where the opening chunk should be.
+    scrollTop = 0;
+    centred = false;
+    preview = next;
+    departing = false;
+  }
+
   // Fetch the opening chunk. Re-runs when the target reference changes
   // (DiffPlanView reuses this instance for a newly-clicked reference), dropping
   // everything the previous reference accumulated, and deliberately depends on
@@ -140,20 +162,23 @@
     const p = path;
     const ln = line;
     let cancelled = false;
-    preview = { kind: "loading" };
-    centred = false;
-    // The new region gets a fresh, unscrolled `.fp-code`, and nothing scrolls it
-    // back to the top for us. Carrying the old file's offset over would window
-    // the new one around a row it may not even have, leaving a spacer where the
-    // opening chunk should be.
-    scrollTop = 0;
+    // A reference clicked while another file is already up keeps that file's
+    // rows on screen to leave with (see .fp-leaving); a first open has nothing
+    // to hold and shows the loading message as before.
+    if (untrack(() => preview).kind === "ready") {
+      departing = true;
+    } else {
+      preview = { kind: "loading" };
+      centred = false;
+      scrollTop = 0;
+    }
     void (async () => {
       try {
         const excerpt = await getFileExcerpt(id, p, ln);
         const themeId = untrack(() => appearance.themeId);
         const painted = await paint(excerpt.lines, excerpt.startLine, excerpt.language, themeId);
         if (cancelled) return;
-        preview = {
+        settle({
           kind: "ready",
           path: excerpt.path,
           language: excerpt.language,
@@ -162,13 +187,14 @@
           lines: excerpt.lines,
           themeId,
           ...painted,
-        };
+        });
       } catch (err) {
         if (cancelled) return;
         // A file past the daemon's preview ceiling is its own state: the reader
         // is told why there's nothing to show, not that the load broke.
-        preview =
-          err instanceof HttpError && err.status === 413 ? { kind: "too-large" } : { kind: "error" };
+        settle(
+          err instanceof HttpError && err.status === 413 ? { kind: "too-large" } : { kind: "error" },
+        );
       }
     })();
     return () => {
@@ -507,31 +533,39 @@
          reads `region` as non-interactive whether or not it is focusable, so
          both warnings below are about the pattern itself. -->
     <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
-    <div
-      bind:this={codeEl}
-      class="fp-code"
-      role="region"
-      tabindex="0"
-      aria-label="Contents of {preview.path}"
-      style:--fp-gutter={meta.gutter}
-      style:--fp-cols={cols}
-      onscroll={() => {
-        syncScroll();
-        void fillEdges();
-      }}
-      onwheel={() => void fillEdges()}
-      onkeydown={onKeyDown}
-    >
-      <div class="fp-spacer" style:height="{win.above}px" aria-hidden="true"></div>
-      {#each rendered as row (row.num)}
-        <div class="fp-row" class:fp-target={row.num === line}>
-          <span class="fp-lnum">{row.num}</span
-          >{#if row.html !== undefined}<code class="fp-lcode">{@html row.html}</code
-            >{:else}<code class="fp-lcode">{row.text}</code>{/if}
-        </div>
-      {/each}
-      <div class="fp-spacer" style:height="{win.below}px" aria-hidden="true"></div>
-    </div>
+    <!-- Keyed on the LOADED path, not the prop: the region an arriving file gets
+         has to be a new element, both so it starts unscrolled and so its enter
+         animation runs. Keying on the prop instead would destroy the outgoing
+         region the moment the reader clicked, leaving nothing to animate away.
+         A chunk landing does not change the key, so growth stays motionless. -->
+    {#key preview.path}
+      <div
+        bind:this={codeEl}
+        class="fp-code"
+        class:fp-leaving={departing}
+        role="region"
+        tabindex="0"
+        aria-label="Contents of {preview.path}"
+        style:--fp-gutter={meta.gutter}
+        style:--fp-cols={cols}
+        onscroll={() => {
+          syncScroll();
+          void fillEdges();
+        }}
+        onwheel={() => void fillEdges()}
+        onkeydown={onKeyDown}
+      >
+        <div class="fp-spacer" style:height="{win.above}px" aria-hidden="true"></div>
+        {#each rendered as row (row.num)}
+          <div class="fp-row" class:fp-target={row.num === line}>
+            <span class="fp-lnum">{row.num}</span
+            >{#if row.html !== undefined}<code class="fp-lcode">{@html row.html}</code
+              >{:else}<code class="fp-lcode">{row.text}</code>{/if}
+          </div>
+        {/each}
+        <div class="fp-spacer" style:height="{win.below}px" aria-hidden="true"></div>
+      </div>
+    {/key}
   {:else if preview.kind === "too-large"}
     <div class="fp-message" data-preview-state="too-large">This file is too large to preview.</div>
   {:else if preview.kind === "error"}
@@ -642,6 +676,25 @@
     line-height: var(--leading-normal);
     font-feature-settings: "tnum";
     color: var(--ink);
+    /* A whole screen of code arriving in one frame reads as a cut. It settles up
+       into place instead, on the chrome's enter curve. Only opacity and
+       transform move: neither is a layout property, so the region's clientHeight
+       and scrollHeight — which size the window (EXC-970), place the cited line
+       (EXC-971) and bracket a prepend (EXC-969) — are the same mid-animation as
+       after it. The travel is half AlertHost's 8px because this surface is the
+       whole lane rather than a card, and the same distance on it reads as a
+       lurch. */
+    animation: fp-in var(--dur-base) var(--ease-out);
+  }
+  /* The outgoing file, still on screen while the next one loads. It leaves the
+     way the next arrives from, so a switch reads as one movement rather than two
+     unrelated ones, and `forwards` holds it cleared until the {#key} replaces it
+     — a fetch slower than the animation must not flash the old rows back. It
+     also stops taking gestures on the way out: a scroll landing here would ask
+     for a chunk of the file the reader has just left. */
+  .fp-code.fp-leaving {
+    animation: fp-out var(--dur-fast) var(--ease-in) forwards;
+    pointer-events: none;
   }
   /* Inset the app-wide focus ring (base.css) rather than restyling it: the drawer
      lane clips the panel, and the region runs flush to its edges, so an outset
@@ -705,5 +758,34 @@
     padding: 0.5rem 0.6rem;
     color: var(--ink-soft);
     font-size: var(--text-2xs);
+    /* One line of text rather than a screenful, so it takes the shorter
+       duration — long enough not to pop, short enough that a reader waiting to
+       be told the file is too large is not watching it arrive. */
+    animation: fp-in var(--dur-fast) var(--ease-out);
+  }
+  /* Both halves travel the same 4px in the same direction: contents rise into
+     place, and the file being replaced keeps rising as it goes. Reduced motion is
+     not handled here — the global kill-switch in styles/base.css collapses every
+     animation under #app, and per doc/agents/svelte-rules.md no component honors
+     the preference on its own. */
+  @keyframes fp-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes fp-out {
+    from {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    to {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
   }
 </style>

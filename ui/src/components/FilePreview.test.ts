@@ -677,3 +677,110 @@ describe("FilePreview theme changes", () => {
     expect(served.urls).toHaveLength(fetches);
   });
 });
+
+describe("FilePreview settling", () => {
+  // EXC-975. The panel animates its contents in, and lets an outgoing file leave
+  // before the next arrives. happy-dom runs no animations, so what is pinned here
+  // is the state the CSS hangs off — which element is on screen, and when it
+  // carries `.fp-leaving` — not the motion itself. That the region visibly
+  // settles, and that its geometry is unmoved while it does, needs real layout
+  // and stays with the Playwright e2e.
+
+  /**
+   * Serve excerpts, holding every request made after `gateNext()` until
+   * `release()`. Standing in for a reference whose fetch is still in flight,
+   * which is the whole window the outgoing file is on screen for.
+   */
+  function serveGated(count: number, totalLines: number) {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let gated = false;
+    const cap = logCapture(async (url) => {
+      if (!url.includes("/file?")) return new Response(null, { status: 204 });
+      if (gated) await gate;
+      const params = new URLSearchParams(url.slice(url.indexOf("?") + 1));
+      const body: FileExcerpt = {
+        ...excerptFixture(1, count, totalLines),
+        path: params.get("path") ?? "src/cache.ts",
+      };
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    return Object.assign(cap, {
+      release,
+      gateNext: () => {
+        gated = true;
+      },
+    });
+  }
+
+  test("the outgoing file stays on screen, marked leaving, while the next loads", async () => {
+    // The blank the reader used to get here was the one place the panel emptied
+    // mid-load — expand() already keeps the rows up while a chunk is in flight,
+    // and a reference change is the switch they trigger most deliberately.
+    const served = serveGated(20, 300);
+    cap = served;
+    const live = reactiveProps({ reviewId: ID, path: "src/cache.ts" });
+    const { target, flush } = render(FilePreview, live);
+    await until(() => target.querySelector(".fp-code") != null);
+    expect(target.querySelector(".fp-path")?.textContent).toBe("src/cache.ts");
+
+    served.gateNext();
+    live.path = "src/other.ts";
+    flush();
+    await until(() => target.querySelector(".fp-code.fp-leaving") != null);
+
+    // Still the old file's rows, and no loading message: there is something to
+    // animate away, which is the point.
+    const leaving = target.querySelector(".fp-code.fp-leaving");
+    expect(leaving).not.toBeNull();
+    expect(lineNumbers(target)).toHaveLength(20);
+    expect(target.querySelector('[data-preview-state="loading"]')).toBeNull();
+
+    served.release();
+    await until(() => target.querySelector(".fp-path")?.textContent === "src/other.ts");
+    // The mark clears with the arrival, and the region is a new element — a
+    // reused one would neither restart the enter animation nor start unscrolled.
+    expect(target.querySelector(".fp-code.fp-leaving")).toBeNull();
+    expect(target.querySelector(".fp-code")).not.toBe(leaving);
+  });
+
+  test("a first open has nothing to hold and shows the loading message", async () => {
+    // The departure only applies where a file is already up. Opening onto an
+    // empty panel still announces that it is loading rather than showing nothing.
+    const served = serveGated(20, 300);
+    cap = served;
+    served.gateNext();
+    const { target } = render(FilePreview, props());
+    await until(() => target.querySelector('[data-preview-state="loading"]') != null);
+
+    expect(target.querySelector('[data-preview-state="loading"]')).not.toBeNull();
+    expect(target.querySelector(".fp-code")).toBeNull();
+
+    served.release();
+    await until(() => target.querySelector(".fp-code") != null);
+    expect(target.querySelector(".fp-code.fp-leaving")).toBeNull();
+  });
+
+  test("a landed chunk leaves the region in place, unmarked and unreplaced", async () => {
+    // Growth must not animate: the region is keyed on the loaded path, so a
+    // chunk adds rows to the element already on screen. Recreating it per chunk
+    // would restart the enter animation mid-scroll and, worse, reset the offset
+    // that expand() and the cited-line anchoring both compute against.
+    cap = serveWindowed(300, 60);
+    const { target } = render(FilePreview, props());
+    await until(() => target.querySelector(".fp-code") != null);
+    const before = target.querySelector(".fp-code");
+    const scrollTo = stubLayout(target);
+
+    scrollToBottom(target, scrollTo);
+    await until(() => lineNumbers(target).length === 120);
+
+    expect(target.querySelector(".fp-code")).toBe(before);
+    expect(target.querySelector(".fp-code.fp-leaving")).toBeNull();
+  });
+});
