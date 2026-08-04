@@ -25,6 +25,7 @@
 import { fileRefCount, makeProject, settleDrawer } from "@test/e2e/support/file-refs.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { OVERSCAN_ROWS } from "@ui/src/lib/previewWindow.ts";
+import { MAX_EXCERPT_BYTES } from "@/plan/excerpt.ts";
 
 // A 300-line source file with unique markers on lines 1, 42, and 150, so a
 // preview can be told apart as "head" vs "centered on :42" and a window's reach
@@ -927,8 +928,11 @@ test("a file too large to preview says so, rather than reading as a load failure
 }) => {
   // Past MAX_EXCERPT_BYTES the daemon has nothing to show, and the reason is worth
   // distinguishing: "too large" is a property of the file, "couldn't load" reads
-  // as something broken. Synthetic filler, just over the 2 MiB ceiling.
-  const HUGE = `${"// filler\n".repeat(220_000)}`;
+  // as something broken. Synthetic filler sized off the ceiling itself rather
+  // than a literal, so it cannot quietly fall under it the next time the ceiling
+  // moves the way it did in EXC-973 — generated here, never committed.
+  const FILLER = "// filler\n";
+  const HUGE = FILLER.repeat(Math.ceil(MAX_EXCERPT_BYTES / FILLER.length) + 1);
   const proj = await makeProject({ "src/huge.ts": HUGE });
   try {
     await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nOpen `src/huge.ts` to see it.\n" });
