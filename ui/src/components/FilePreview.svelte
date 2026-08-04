@@ -222,7 +222,6 @@
     const id = reviewId;
     const p = path;
     const ln = line;
-    const before = { top: region.scrollTop, height: region.scrollHeight };
     // The parent reuses one instance across references; a chunk whose reference
     // moved on while it was in flight belongs to a file no longer on screen.
     const superseded = () => id !== reviewId || p !== path || ln !== line;
@@ -261,6 +260,9 @@
         painted = await paint(lines, startLine, loaded.language, themeId);
       }
       if (superseded()) return false;
+      // Bracket the prepend, not the fetch: this is the last read before the
+      // region's content height changes, and a downward chunk never needs it.
+      const heightBefore = direction === "up" ? region.scrollHeight : 0;
       preview = {
         ...loaded,
         totalLines: excerpt.totalLines,
@@ -272,11 +274,22 @@
       if (direction === "up") {
         await tick();
         // Every revealed line sits above what the reader was looking at, so
-        // adding the growth back to the offset holds their place exactly. The
-        // spacers carry the unmounted rows' height, so the growth the region
-        // reports is the chunk's whether or not its rows were mounted. The
-        // browser clamps the result when the region is taller than its content.
-        region.scrollTop = before.top + (region.scrollHeight - before.height);
+        // adding the growth to the offset holds their place exactly. The spacers
+        // carry the unmounted rows' height, so the growth the region reports is
+        // the chunk's whether or not its rows were mounted (EXC-970). The browser
+        // clamps the result when the region is taller than its content, and
+        // rounds `scrollHeight` to whole pixels, so the shift is the chunk's
+        // height to within one — the slack the e2e allows.
+        //
+        // The offset is read here rather than captured before the fetch: loading
+        // is scroll-driven (EXC-969) and key-driven (EXC-972), so the gesture
+        // that asked for this chunk is usually still going when it lands, and
+        // restoring the offset it started from would discard everything the
+        // reader scrolled in between, sliding the line they were on out from
+        // under them. Only the height is captured beforehand, because a delta
+        // needs both ends. Reading it live is also what makes `overflow-anchor:
+        // none` on `.fp-code` load-bearing rather than tidy — see that rule.
+        region.scrollTop += region.scrollHeight - heightBefore;
         syncScroll();
       }
       return true;
@@ -616,6 +629,14 @@
     min-height: 0;
     padding: 0.4rem 0;
     overflow: auto;
+    /* This region anchors itself: an upward load shifts scrollTop by the height
+       the prepended chunk added (see expand()). The browser's own scroll
+       anchoring compensates for that same growth, so leaving it on double-counts
+       — but only when a mounted row survives the prepend to anchor to, which is
+       why it shows up on a chunk truncated at the file's head and not on a
+       full-sized one, where every keyed row is replaced. Off, so the arithmetic
+       stands on its own rather than on which regime the reader happens to be in. */
+    overflow-anchor: none;
     font-family: var(--font-mono);
     font-size: var(--text-base);
     line-height: var(--leading-normal);
