@@ -1,7 +1,7 @@
 import "@ui/test-mount.ts";
 import { afterEach, beforeAll, describe, expect, test } from "bun:test";
 
-import { EXCERPT_RADIUS } from "@core/config/constants";
+import { EXCERPT_RADIUS, MAX_CITED_SPAN_LINES } from "@core/config/constants";
 import type { FileExcerpt } from "@core/lib/types";
 import { until } from "@test/support/poll.ts";
 import { type LogCapture, logCapture } from "@ui/test-helpers.ts";
@@ -322,7 +322,7 @@ describe("FilePreview target line", () => {
     expect(lastRange(served.urls)).toBe(`start=1&end=${9 + EXCERPT_RADIUS}`);
   });
 
-  test("a reference with no range asks for a bare line, exactly as before", async () => {
+  test("a reference with no range asks for a bare line, with no range params", async () => {
     const served = serveWindowed(600, 180);
     cap = served;
     render(FilePreview, props({ line: 154 }));
@@ -331,6 +331,21 @@ describe("FilePreview target line", () => {
     expect(params.get("line")).toBe("154");
     expect(params.get("start")).toBeNull();
     expect(params.get("end")).toBeNull();
+  });
+
+  test("a citation of thousands of lines still opens a bounded window", async () => {
+    // The span is the one fetch size a plan rather than the viewport decides.
+    // Uncapped, the opening window is highlighted and mounted whole — before the
+    // region has a row height to window by — so a `:1-9999` citation would put
+    // every one of those rows in the DOM on open. The rest arrives the way the
+    // rest of any file does, by reading on.
+    const served = serveWindowed(9000, 180);
+    cap = served;
+    render(FilePreview, props({ line: 100, endLine: 8000 }));
+    await until(() => served.urls.length > 0);
+    expect(lastRange(served.urls)).toBe(
+      `start=${100 - EXCERPT_RADIUS}&end=${100 + MAX_CITED_SPAN_LINES + EXCERPT_RADIUS}`,
+    );
   });
 
   test("highlights nothing for a head preview with no line", async () => {

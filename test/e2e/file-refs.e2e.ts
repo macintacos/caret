@@ -404,12 +404,12 @@ test("clicking a real reference reveals a highlighted excerpt centered on its li
   }
 });
 
-// EXC-938. A `path:start-end` reference cites a whole span, and the preview used
-// to wash one line of it and centre on that — the other cited lines read as
-// context. These four specs cover what only real layout can answer: which rows
-// carry the wash, where the band lands in the scrolling region, what happens when
-// the span outgrows the region or runs past the file's end, and whether the end
-// line is part of the click target at all.
+// EXC-938. A `path:start-end` reference cites a whole span, and the preview
+// frames it: every cited line washed, context around it, and the end line inside
+// the click target. These four specs cover what only real layout can answer —
+// which rows carry the wash, where the band lands in the scrolling region, what
+// happens when the span outgrows the region or runs past the file's end, and
+// whether the end line is clickable at all.
 test("a cited range washes every line it names, framed with context on both sides", async ({
   daemon,
   page,
@@ -509,20 +509,25 @@ test("a range running past the file's end still opens, framed on its last lines"
     await expect(preview.locator(".fp-range")).toHaveText(
       new RegExp(`^lines \\d+–${CACHE_TS_LINES} of ${CACHE_TS_LINES}$`),
     );
-    const band = await citedBandInRegion(page);
-    expect(band?.lines).toEqual([295, 296, 297, 298, 299, 300]);
-    expect(band?.top ?? -1).toBeGreaterThanOrEqual(0);
-    expect(band?.bottom ?? Infinity).toBeLessThanOrEqual(band?.region ?? 0);
+    // Retried, unlike the other two range specs: this is the one whose window
+    // the auto-loader is still growing, and a chunk landing between the two
+    // measurements would read the band mid-shift.
+    await expect(async () => {
+      const band = await citedBandInRegion(page);
+      expect(band?.lines).toEqual([295, 296, 297, 298, 299, 300]);
+      expect(band?.top ?? -1).toBeGreaterThanOrEqual(0);
+      expect(band?.bottom ?? Infinity).toBeLessThanOrEqual(band?.region ?? 0);
+    }).toPass({ timeout: 10_000 });
   } finally {
     await proj.cleanup();
   }
 });
 
 test("clicking a range reference's end-line tail opens the preview", async ({ daemon, page }) => {
-  // The click-target half of the fix. The span's endCol is what the pointer
-  // hit-test resolves against, so before the parser learned ranges the `-44`
-  // tail sat outside the reference entirely — visibly part of it, and dead.
-  // Only a real token hit-test in the shadow root can tell the two apart.
+  // The click-target half of the feature. The span's endCol is what the pointer
+  // hit-test resolves against, so a `-44` tail outside the span is visibly part
+  // of the reference and dead to a click. Only a real token hit-test in the
+  // shadow root can tell the two apart.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
     await daemon.seed({
@@ -1169,10 +1174,10 @@ for (const cited of [150, 42]) {
         await renderedRows(page, opened?.scrollTop ?? 0);
         const moved = await citedRowInRegion(page);
         // The same rows at the offset the panel opened at, so the rect is the
-        // same rect — to within the float error of round-tripping a fractional
-        // scrollTop through the browser, which is nanometres and not a row. The
-        // margin this spec actually discriminates on is a whole opening offset
-        // (asserted above), so a pixel of slack here costs it nothing.
+        // same rect: a fractional scrollTop does not round-trip bit-exact
+        // through the browser, so this is within a pixel rather than equal. The
+        // margin the spec discriminates on is a whole opening offset (asserted
+        // above), so a pixel of slack here costs it nothing.
         expect(
           Math.abs((moved?.offset ?? Number.NaN) - (opened?.offset ?? Number.NaN)),
         ).toBeLessThanOrEqual(1);

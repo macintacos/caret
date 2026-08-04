@@ -89,6 +89,21 @@ describe("detection (inside inline code)", () => {
     expect(s?.endLine).toBeUndefined();
   });
 
+  test("reads a numeric #fragment as an anchor, not as a line", () => {
+    // `#` without an `L` introduces a URL fragment. Treating `#3` as line 3
+    // would make a link to a numbered anchor open a file preview instead.
+    const s = spanFor("see `doc/ADVANCED.md#3` there", "doc/ADVANCED.md");
+    expect(s?.path).toBe("doc/ADVANCED.md");
+    expect(s?.line).toBeUndefined();
+  });
+
+  test("a range missing its end is just a line, and the span stops before the dash", () => {
+    const s = spanFor("read `doc/ADVANCED.md:154-` first", "doc/ADVANCED.md:154");
+    expect(s?.path).toBe("doc/ADVANCED.md");
+    expect(s?.line).toBe(154);
+    expect(s?.endLine).toBeUndefined();
+  });
+
   test("detects multiple references, each in its own code span", () => {
     const spans = only("both `a.ts` and `b/c.css` matter");
     expect(spans.map((s) => s.path).sort()).toEqual(["a.ts", "b/c.css"]);

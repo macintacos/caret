@@ -40,6 +40,15 @@ export const HOOK_TIMEOUT_S = 3900;
  * a number copied into the browser bundle. */
 export const EXCERPT_RADIUS = 30;
 
+/** Most cited lines an opening file preview fetches at once. Every other excerpt
+ * request is bounded by geometry — a ±radius window, a head window, or a chunk
+ * sized off the viewport — but a `path:start-end` reference is sized by whatever
+ * the plan wrote, and the panel highlights and mounts the opening window whole
+ * before it has a row height to window by. A longer citation opens parked at its
+ * first line and the rest arrives through the panel's own scroll-driven growth,
+ * which is what the reader would do with it anyway. */
+export const MAX_CITED_SPAN_LINES = 200;
+
 /** "Never idle out" sentinel for the idle-shutdown delay (ms): the max
  * setTimeout delay (2^31-1). A larger value overflows the 32-bit timer and
  * clamps to ~1ms, firing the idle shutdown immediately — the trap this guards

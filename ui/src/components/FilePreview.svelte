@@ -25,7 +25,7 @@
   // away; DiffPlanView owns that).
   import { tick, untrack } from "svelte";
 
-  import { EXCERPT_RADIUS } from "@core/config/constants";
+  import { EXCERPT_RADIUS, MAX_CITED_SPAN_LINES } from "@core/config/constants";
   import { appearance } from "@/state/appearance.svelte.ts";
   import { getFileExcerpt, HttpError } from "$lib/api.ts";
   import { type ChunkState, highlightChunk } from "$lib/diffview/highlight.ts";
@@ -41,7 +41,7 @@
      * cited range this is its first line. */
     line?: number;
     /** 1-based inclusive last line of a cited range (`path:154-162`). Always ≥
-     * `line`; absent for a single-line reference, which frames one row as before. */
+     * `line`; absent for a single-line reference, which frames that one row. */
     endLine?: number;
     /** Whether the shortcut-hint affordances are shown (EXC-826); gates the
      * header's "esc to close" chip. Defaults to shown; Escape still closes the
@@ -94,10 +94,12 @@
   // edge back out of range, so the fill loop stops instead of walking the file.
   //
   // A quarter screen rather than a half is what leaves a freshly opened preview
-  // alone. The opening window is ~60 lines with the cited line centred in it —
-  // under two screens on a typical lane — so its two edges sit close together,
-  // and a slacker threshold would reach both of them before the reader had moved
-  // and spend two round trips on a window nobody has read yet.
+  // alone. A bare-line reference opens a ~60-line window centred on the cited
+  // line — under two screens on a typical lane — so its two edges sit close
+  // together, and a slacker threshold would reach both of them before the reader
+  // had moved and spend two round trips on a window nobody has read yet. A cited
+  // range widens that window by its own span, which only pushes the edges
+  // further apart; MAX_CITED_SPAN_LINES is what stops it widening without end.
   //
   // The measured row height is the figure to divide by, not `scrollHeight` over
   // the row count: rows are windowed (EXC-970), so `scrollHeight` is the region's
@@ -141,7 +143,7 @@
   // mid-load is the same property expand() preserves for chunk arrival.
   let departing = $state(false);
 
-  // Take the newly loaded region: reset the offset and the centring latch in the
+  // Take the newly loaded region: reset the offset and the framing latch in the
   // same step that puts it on screen. Both belong here rather than at the top of
   // the fetch, because until this moment the rows on screen are the *previous*
   // reference's — winding their offset back to zero would jump the outgoing file
@@ -202,13 +204,22 @@
         // A cited RANGE is framed through the endpoint's existing 1-based
         // inclusive range — the same one expand() threads for chunk growth —
         // padded by the daemon's own radius so the span gets the context a
-        // single-line reference already gets. The Math.max is load-bearing:
-        // handleFileExcerpt parses params with /^\d+$/, so a negative start
-        // would be dropped and a reference near a file's head would silently
-        // degrade to a head preview. With no range the call is unchanged.
+        // single-line reference already gets. With no range only `line` goes,
+        // and the daemon builds its own ±window around it.
+        //
+        // Both clamps are load-bearing rather than defensive. handleFileExcerpt
+        // parses params with /^\d+$/, so a negative start would be dropped, the
+        // range would come back undefined, and a reference near a file's head
+        // would silently degrade to a head preview. And the span is the one
+        // fetch size a plan rather than the viewport decides, so a citation of
+        // thousands of lines would be highlighted and mounted whole on open —
+        // MAX_CITED_SPAN_LINES is what keeps that bounded.
         const range =
           ln !== undefined && end !== undefined
-            ? { start: Math.max(1, ln - EXCERPT_RADIUS), end: end + EXCERPT_RADIUS }
+            ? {
+                start: Math.max(1, ln - EXCERPT_RADIUS),
+                end: Math.min(end, ln + MAX_CITED_SPAN_LINES) + EXCERPT_RADIUS,
+              }
             : undefined;
         const excerpt = await getFileExcerpt(id, p, ln, range);
         const themeId = untrack(() => appearance.themeId);
@@ -289,8 +300,7 @@
     const end = endLine;
     // The parent reuses one instance across references; a chunk whose reference
     // moved on while it was in flight belongs to a file no longer on screen.
-    const superseded = () =>
-      id !== reviewId || p !== path || ln !== line || end !== endLine;
+    const superseded = () => id !== reviewId || p !== path || ln !== line || end !== endLine;
     try {
       const excerpt = await getFileExcerpt(id, p, undefined, range);
       if (superseded()) return false;
@@ -534,6 +544,9 @@
     // line ever is, and is silent on one line only because that lands under the
     // clamp.
     void tick().then(() => {
+      // A reference switched in the meantime replaced the region ({#key}), and
+      // that new one has its own framing to do.
+      if (codeEl !== region) return;
       region.scrollTop = top;
       syncScroll();
     });
@@ -548,14 +561,16 @@
   const meta = $derived.by(() => {
     if (preview.kind !== "ready") return undefined;
     const { startLine, totalLines } = preview;
-    const endLine = lastLine(preview);
+    // The loaded REGION's last line, which is not the `endLine` prop (a cited
+    // range's last line) — the region routinely reaches well past a citation.
+    const regionEnd = lastLine(preview);
     const above = startLine - 1;
-    const below = totalLines - endLine;
+    const below = totalLines - regionEnd;
     const whole = above === 0 && below === 0;
     const label = whole
       ? `${totalLines} ${lineWord(totalLines)}`
-      : `lines ${startLine}–${endLine} of ${totalLines}`;
-    return { above, below, label, gutter: `${String(endLine).length}ch` };
+      : `lines ${startLine}–${regionEnd} of ${totalLines}`;
+    return { above, below, label, gutter: `${String(regionEnd).length}ch` };
   });
 </script>
 

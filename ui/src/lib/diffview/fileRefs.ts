@@ -64,14 +64,19 @@ const URL_RE = /\bhttps?:\/\/\S+/gi;
 // mis-parsed from its tail. Matching the whole run — the range's end line
 // included — is what puts the entire reference inside the span, and so inside
 // the click target.
-const CANDIDATE_RE = /[A-Za-z0-9._/~-]+(?:(?::#?|#)L?\d+(?:[-–]L?\d+|:\d+)?)?/g;
+const CANDIDATE_RE = /[A-Za-z0-9._/~-]+(?:(?::L?|:?#L)\d+(?:[-–]L?\d+|:\d+)?)?/g;
 
 // Splits a candidate's trailing line reference off the path: group 2 is the
-// start line, group 3 the range's end when it carries one. The separator admits
-// `:`, `#`, and the `:#` the two collide into, and `L?` covers the `L154` /
-// `#L154` spellings. A `:\d+` tail is a column and is dropped — that alternative
-// sits after the range one, which is what keeps `path:154:162` unambiguous.
-const LINE_SUFFIX = /^(.+?)(?::#?|#)L?(\d+)(?:[-–]L?(\d+)|:\d+)?$/;
+// start line, group 3 the range's end when it carries one. A `:\d+` tail is a
+// column and is dropped — that alternative sits after the range one, which is
+// what keeps `path:154:162` unambiguous.
+//
+// The separator is `:`, `#L`, or the `:#L` the two collide into, and never a
+// bare `#` before the digits: `#` alone introduces a URL fragment, and
+// `doc/guide.md#3` is a link to a numbered anchor rather than a citation of
+// line 3. Requiring the `L` there is what keeps a fragment target inert, the
+// same guarantee links.ts documents for `doc/guide.md#setup`.
+const LINE_SUFFIX = /^(.+?)(?::L?|:?#L)(\d+)(?:[-–]L?(\d+)|:\d+)?$/;
 
 // The final `.ext` of a path's last segment (extension must start with a letter
 // or digit; the membership test below narrows it to real file kinds).
@@ -222,8 +227,8 @@ export function buildFileRefLayer(text: string): FileRefSpanMap {
  * leftmost SCANNED span's columns win (inline code is where a path gets its own
  * shiki token, so they place the glyph tight against the filename) and the
  * EMITTED span's path, cited lines and target win (the link's real destination,
- * which need
- * not be what the label says). Every span an emitted one covers collapses into
+ * which need not be what the label says). Every span an emitted one covers
+ * collapses into
  * that single survivor, so a label citing two paths draws one glyph pointing at
  * the link's target rather than two, one of them at a file the link never named.
  * Each line's spans are sorted by startCol.
