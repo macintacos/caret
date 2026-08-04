@@ -373,11 +373,16 @@
     </span>
   </div>
   {#if preview.kind === "ready" && meta}
+    <!-- onwheel alongside onscroll because a region pinned at its scroll limit
+         stops emitting scroll events, and the reader still turning the wheel is
+         exactly the retry after a chunk that failed to arrive — the only retry
+         left, now that the boundary carries no control. -->
     <div
       bind:this={codeEl}
       class="fp-code"
       style:--fp-gutter={meta.gutter}
       onscroll={() => void fillEdges()}
+      onwheel={() => void fillEdges()}
     >
       {#each preview.rows as row (row.num)}
         <div class="fp-row" class:fp-target={row.num === line}>

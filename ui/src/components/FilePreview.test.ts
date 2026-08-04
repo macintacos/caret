@@ -175,9 +175,9 @@ const VIEWPORT_PX = 30 * ROW_PX;
  * snapshot: a chunk that lands has to carry the edge back out of range, and a
  * frozen height would let the fill loop run forever.
  */
-function stubLayout(target: HTMLElement): (top: number) => void {
+function stubLayout(target: HTMLElement, initialTop = 0): (top: number) => void {
   const region = target.querySelector(".fp-code") as HTMLElement;
-  let scrollTop = 0;
+  let scrollTop = initialTop;
   Object.defineProperty(region, "clientHeight", { get: () => VIEWPORT_PX, configurable: true });
   Object.defineProperty(region, "scrollHeight", {
     get: () => region.querySelectorAll(".fp-row").length * ROW_PX,
@@ -191,8 +191,14 @@ function stubLayout(target: HTMLElement): (top: number) => void {
     configurable: true,
   });
   return (top: number) => {
-    scrollTop = top;
-    region.dispatchEvent(new Event("scroll"));
+    // Whatever the notch moved, then the notch itself — the pair a real wheel
+    // gesture emits, in that order. At the scroll limit the region does not
+    // move, so the wheel event is the only half that still fires.
+    if (top !== scrollTop) {
+      scrollTop = top;
+      region.dispatchEvent(new Event("scroll"));
+    }
+    region.dispatchEvent(new Event("wheel"));
   };
 }
 
@@ -375,10 +381,12 @@ describe("FilePreview scroll loading", () => {
   test("scrolling near the top prepends the chunk above, fetching only its lines", async () => {
     const served = serveWindowed(300, 60);
     cap = served;
-    // Centred on line 100, so the opening window is 70–129 with file on both sides.
+    // Centred on line 100, so the opening window is 70–129 with file on both
+    // sides, and the reader starts parked in the middle of it rather than
+    // already against an edge.
     const { target } = render(FilePreview, props({ line: 100 }));
     await until(() => target.querySelector(".fp-code") != null);
-    const scrollTo = stubLayout(target);
+    const scrollTo = stubLayout(target, VIEWPORT_PX / 2);
     expect(lineNumbers(target)[0]).toBe("70");
 
     scrollTo(0);
@@ -480,7 +488,9 @@ describe("FilePreview scroll loading", () => {
     expect(target.querySelector('[data-preview-state="error"]')).toBeNull();
 
     // Scrolling again is the retry, and a reader scrolls continuously — each
-    // event is a fresh chance, so the region must take one of them.
+    // event is a fresh chance, so the region must take one of them. The failure
+    // left it pinned at its limit, so these gestures move nothing: only the
+    // wheel event still fires, and it has to be enough on its own.
     await until(() => {
       scrollToBottom(target, scrollTo);
       return lineNumbers(target).length > 60;
