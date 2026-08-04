@@ -140,6 +140,24 @@
   // the fetch, because until this moment the rows on screen are the *previous*
   // reference's — winding their offset back to zero would jump the outgoing file
   // to its first line just as it starts to leave.
+  // Hold the swap until the outgoing region has actually finished leaving.
+  // A warm local daemon answers well inside one frame, and the departure would
+  // otherwise be set and cleared before the browser ever painted it — the
+  // animation would play only when the fetch happened to be slow, which is the
+  // one thing a reader would never predict. Waiting on the region's own
+  // animations rather than on a duration keeps the timing in the stylesheet with
+  // the tokens; a fetch slower than the animation finds it already finished and
+  // waits for nothing. `getAnimations` is also the guard for happy-dom, which
+  // lays nothing out and runs no animations.
+  async function awaitDeparture(): Promise<void> {
+    const region = codeEl;
+    if (region === null || typeof region.getAnimations !== "function") return;
+    // The class reaches the DOM on the next flush; asking before that finds no
+    // animation to wait for and returns instantly.
+    await tick();
+    await Promise.allSettled(region.getAnimations().map((animation) => animation.finished));
+  }
+
   function settle(next: Preview): void {
     // The new region is a fresh, unscrolled `.fp-code` — the {#key} on the
     // loaded path recreates it — and nothing scrolls it back to the top for us.
@@ -177,6 +195,8 @@
         const excerpt = await getFileExcerpt(id, p, ln);
         const themeId = untrack(() => appearance.themeId);
         const painted = await paint(excerpt.lines, excerpt.startLine, excerpt.language, themeId);
+        if (cancelled) return;
+        if (untrack(() => departing)) await awaitDeparture();
         if (cancelled) return;
         settle({
           kind: "ready",

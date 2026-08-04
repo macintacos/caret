@@ -1270,3 +1270,72 @@ test("clicking a reference does not also open the line's comment composer", asyn
     await proj.cleanup();
   }
 });
+
+test("switching references lets the outgoing file leave before the next arrives", async ({
+  daemon,
+  page,
+}) => {
+  // EXC-975. The panel used to blank to "Loading…" between two references —
+  // the one place it emptied mid-load, and the switch the reader triggers most
+  // deliberately. Now the outgoing rows stay up and animate away while the next
+  // file loads. This needs a real browser: happy-dom runs no animations, so the
+  // unit suite can only pin which element carries .fp-leaving, not that the
+  // departure is ever painted.
+  //
+  // The excerpt request is gated open, because that is the whole window the
+  // outgoing file is on screen for. Ungated, a warm local daemon can answer
+  // inside a frame — which is exactly the case awaitDeparture() exists to stop
+  // from swallowing the animation, and is asserted after the gate is released.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS, "src/other.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nFirst `src/cache.ts:42`, then `src/other.ts:150`.\n",
+    });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+    await expect.poll(() => fileRefCount(page)).toBe(2);
+
+    await page.locator("[data-file-ref]").first().click();
+    await expect(page.locator(".fp-path")).toHaveText("src/cache.ts");
+    await settleDrawer(page);
+
+    // Hold the second file's excerpt in flight.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route("**/file?*", async (route) => {
+      await gate;
+      await route.continue();
+    });
+
+    await page.locator("[data-file-ref]").nth(1).click();
+
+    // The first file is still on screen, marked as leaving, and there is no
+    // loading message — there is something to animate away, which is the point.
+    await expect(page.locator(".fp-code.fp-leaving")).toHaveCount(1);
+    await expect(page.locator(".fp-path")).toHaveText("src/cache.ts");
+    await expect(page.locator('[data-preview-state="loading"]')).toHaveCount(0);
+    // On the exit curve, at the exit duration — both off the tokens.
+    await expect(page.locator(".fp-code")).toHaveCSS("animation-duration", "0.12s");
+    await expect(page.locator(".fp-code")).toHaveCSS(
+      "animation-timing-function",
+      "cubic-bezier(0.4, 0, 1, 1)",
+    );
+
+    release();
+
+    // The second file replaces it in a NEW region — a reused one would neither
+    // restart the enter animation nor start unscrolled — on the enter curve.
+    await expect(page.locator(".fp-path")).toHaveText("src/other.ts");
+    await expect(page.locator(".fp-code")).toHaveCount(1);
+    await expect(page.locator(".fp-code.fp-leaving")).toHaveCount(0);
+    await expect(page.locator(".fp-code")).toHaveCSS(
+      "animation-timing-function",
+      "cubic-bezier(0.22, 1, 0.36, 1)",
+    );
+  } finally {
+    await proj.cleanup();
+  }
+});
