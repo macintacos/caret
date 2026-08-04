@@ -484,9 +484,9 @@ test("the boundary strips expand the window until the whole file is reachable", 
     const bottom = preview.locator(".fp-edge-bottom");
     await expect(top).toBeVisible();
 
-    // Walk upward until the top strip retires: the window then starts at line 1.
-    // One click per attempt, retried — a click landing while the widened window
-    // is still in flight is deliberately dropped, so the walk must be poll-shaped
+    // Walk upward until the top strip retires: the region then starts at line 1.
+    // One click per attempt, retried — a click landing while the next chunk is
+    // still in flight is deliberately dropped, so the walk must be poll-shaped
     // rather than a fixed burst of clicks.
     await expect(async () => {
       if ((await top.count()) > 0) await top.click();

@@ -54,18 +54,22 @@ function serveStatus(status: number): LogCapture {
 
 /**
  * Install a fetch double that serves a slice of a `totalLines`-line file for
- * whatever window the card asks for, recording each requested URL. An explicit
- * `start`/`end` is honoured (clamped to the file, as the daemon does); a bare
- * `line` is centred in a `headLines` window; neither answers the opening window
- * `[1, headLines]`. Echoes the requested path, so a reference change is visible
- * in the served body. The lines read as JSON so `language: "json"` colours them.
+ * whatever window the card asks for, recording each requested URL. With neither
+ * a range nor a line it answers the opening window `[1, headLines]`; a bare
+ * `line` is centred in a `headLines` window; an explicit `start`/`end` is
+ * clamped to the file exactly as `readFileExcerpt` clamps it, so a range past a
+ * shrunk file comes back as its last line rather than as nothing. `shrinkTo`
+ * moves the file's line count mid-test, standing in for an edit under an open
+ * preview. Echoes the requested path, so a reference change is visible in the
+ * served body. The lines read as JSON so `language: "json"` colours them.
  */
 function serveWindowed(
   totalLines: number,
   headLines: number,
   language = "text",
-): LogCapture & { urls: string[] } {
+): LogCapture & { urls: string[]; shrinkTo: (lines: number) => void } {
   const urls: string[] = [];
+  const file = { total: totalLines };
   const cap = logCapture((url) => {
     if (!url.includes("/file?")) return Promise.resolve(new Response(null, { status: 204 }));
     urls.push(url);
@@ -75,20 +79,20 @@ function serveWindowed(
     const rawLine = params.get("line");
     const startLine =
       rawStart !== null
-        ? Math.max(1, Number(rawStart))
+        ? Math.min(Math.max(1, Number(rawStart)), file.total)
         : rawLine !== null
           ? Math.max(1, Number(rawLine) - Math.floor(headLines / 2))
           : 1;
     const endLine =
       rawEnd === null
-        ? Math.min(totalLines, startLine + headLines - 1)
-        : Math.min(totalLines, Number(rawEnd));
+        ? Math.min(file.total, startLine + headLines - 1)
+        : Math.min(file.total, Math.max(Number(rawEnd), startLine));
     const body: FileExcerpt = {
       path: params.get("path") ?? "src/cache.ts",
       language,
       startLine,
       endLine,
-      totalLines,
+      totalLines: file.total,
       lines: Array.from(
         { length: endLine - startLine + 1 },
         (_, i) => `  "line": ${startLine + i},`,
@@ -101,7 +105,12 @@ function serveWindowed(
       }),
     );
   });
-  return Object.assign(cap, { urls });
+  return Object.assign(cap, {
+    urls,
+    shrinkTo: (lines: number) => {
+      file.total = lines;
+    },
+  });
 }
 
 /** An excerpt of `count` lines starting at `startLine` in a `totalLines` file. */
@@ -342,6 +351,25 @@ describe("FilePreview expansion", () => {
     expect(target.querySelector(".fp-edge-top")).toBeNull();
   });
 
+  test("a file that shrank under the preview retires the strip instead of repeating lines", async () => {
+    // The daemon clamps a range to the file, so a file edited down to fewer lines
+    // than the region already holds answers with a line that is already on screen.
+    // Appending it would put the same line number in two rows, which Svelte's
+    // keyed each throws on; the count it reports is what retires the strip.
+    const served = serveWindowed(300, 60);
+    cap = served;
+    const { target } = render(FilePreview, props());
+    await until(() => target.querySelector(".fp-edge-bottom") != null);
+    served.shrinkTo(60);
+
+    clickStrip(target, "bottom");
+    await until(() => target.querySelector(".fp-edge-bottom") == null);
+    const nums = lineNumbers(target);
+    expect(nums).toHaveLength(60);
+    expect(new Set(nums).size).toBe(60);
+    expect(target.querySelector(".fp-range")?.textContent?.trim()).toBe("60 lines");
+  });
+
   test("a new reference discards the chunks the previous one accumulated", async () => {
     cap = serveWindowed(300, 60);
     // The parent reuses one instance across references, so the accumulated span
@@ -372,12 +400,14 @@ describe("FilePreview theme changes", () => {
   test("a theme switch repaints every loaded chunk, not just the newest", async () => {
     appearance.setMode("light");
     appearance.setSlot("light", "caret-light");
-    cap = serveWindowed(300, 60, "json");
+    const served = serveWindowed(300, 60, "json");
+    cap = served;
     const { target } = render(FilePreview, props());
     await until(() => target.querySelector(".fp-lcode span") != null);
     clickStrip(target, "bottom");
     await until(() => lineNumbers(target).length === 110);
     const before = rowColours(target);
+    const fetches = served.urls.length;
     expect(before[0]).toContain("color");
 
     appearance.setSlot("light", "github-light");
@@ -388,5 +418,7 @@ describe("FilePreview theme changes", () => {
     const after = rowColours(target);
     expect(after).toHaveLength(before.length);
     for (const [i, colours] of after.entries()) expect(colours).not.toBe(before[i]);
+    // The raw text was already here; recolouring it costs no round trip.
+    expect(served.urls).toHaveLength(fetches);
   });
 });
