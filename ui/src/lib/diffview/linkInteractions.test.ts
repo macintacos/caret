@@ -5,17 +5,16 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 
 import type { FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
-import {
-  composeTokenHandlers,
-  createLinkHandlers,
-  hitTestSpan,
-} from "$lib/diffview/linkInteractions.ts";
+import { composeTokenHandlers, createLinkHandlers } from "$lib/diffview/linkInteractions.ts";
 import type { LinkSpan, LinkSpanMap } from "$lib/diffview/links.ts";
 
 // linkInteractions turns a per-line link span map into the token-event handlers
 // the @pierre/diffs File view accepts (onTokenClick / onTokenEnter /
-// onTokenLeave). The hit-test and the open/hover effects are pure and injected,
-// so the whole layer is unit-testable without a real window or a mounted view.
+// onTokenLeave). The column hit-test and the open/hover effects are pure and
+// injected, so the whole layer is unit-testable without a real window or a
+// mounted view. What the layer does with a token COARSER than the span it carries
+// — shiki's one-token prose line, where the pointer's position decides — needs
+// real layout, so that half lives in links.e2e.ts.
 
 const span = (startCol: number, endCol: number, href: string): LinkSpan => ({
   startCol,
@@ -39,38 +38,53 @@ function tooltipText(): string | null {
   return document.body.querySelector("[data-link-tooltip]")?.textContent ?? null;
 }
 
-describe("hitTestSpan", () => {
-  test("returns the span when the token range overlaps it", () => {
-    const spans = [span(4, 12, "https://a.test")];
-    expect(hitTestSpan(spans, 4, 12)?.href).toBe("https://a.test");
-    // Partial overlap (token inside the span) still hits.
-    expect(hitTestSpan(spans, 6, 8)?.href).toBe("https://a.test");
-    // Overlap at the leading edge.
-    expect(hitTestSpan(spans, 2, 6)?.href).toBe("https://a.test");
-  });
-
-  test("returns undefined when the token range is outside every span", () => {
-    const spans = [span(4, 12, "https://a.test")];
-    expect(hitTestSpan(spans, 0, 4)).toBeUndefined(); // ends exactly at startCol
-    expect(hitTestSpan(spans, 12, 16)).toBeUndefined(); // starts exactly at endCol
-    expect(hitTestSpan(spans, 20, 24)).toBeUndefined();
-  });
-
-  test("picks the correct span when a line has several", () => {
-    const spans = [span(0, 1, "https://a.test"), span(6, 8, "https://b.test")];
-    expect(hitTestSpan(spans, 0, 1)?.href).toBe("https://a.test");
-    expect(hitTestSpan(spans, 6, 8)?.href).toBe("https://b.test");
-  });
-
-  test("an empty span list never hits", () => {
-    expect(hitTestSpan([], 0, 10)).toBeUndefined();
-  });
-});
-
 describe("createLinkHandlers onTokenClick", () => {
   function mapOf(line: number, spans: LinkSpan[]): LinkSpanMap {
     return new Map([[line, spans]]);
   }
+
+  /** The href opened for a click on the token covering [charStart, charEnd), or
+   * undefined when none was. */
+  function openedFor(spans: LinkSpan[], charStart: number, charEnd: number): string | undefined {
+    const opened: string[] = [];
+    createLinkHandlers(mapOf(1, spans), { openUrl: (href) => opened.push(href) }).onTokenClick(
+      {
+        lineNumber: 1,
+        lineCharStart: charStart,
+        lineCharEnd: charEnd,
+        tokenText: "x",
+        tokenElement: fakeTokenElement(),
+      },
+      new MouseEvent("click"),
+    );
+    return opened[0];
+  }
+
+  // Columns are 0-based and half-open on both sides, so a token ending exactly at
+  // a span's startCol (or starting exactly at its endCol) is not on the link. A
+  // token that merely overlaps — the coarse prose-line case — is a candidate; the
+  // pointer's position then decides, which needs real layout and so is pinned in
+  // links.e2e.ts rather than here.
+  test("a token overlapping a span is a candidate for it", () => {
+    const spans = [span(4, 12, "https://a.test")];
+    expect(openedFor(spans, 4, 12)).toBe("https://a.test");
+    expect(openedFor(spans, 6, 8)).toBe("https://a.test"); // token inside the span
+    expect(openedFor(spans, 2, 6)).toBe("https://a.test"); // overlap at the leading edge
+  });
+
+  test("a token touching no span opens nothing", () => {
+    const spans = [span(4, 12, "https://a.test")];
+    expect(openedFor(spans, 0, 4)).toBeUndefined(); // ends exactly at startCol
+    expect(openedFor(spans, 12, 16)).toBeUndefined(); // starts exactly at endCol
+    expect(openedFor(spans, 20, 24)).toBeUndefined();
+    expect(openedFor([], 0, 10)).toBeUndefined();
+  });
+
+  test("picks the correct span when a line has several", () => {
+    const spans = [span(0, 1, "https://a.test"), span(6, 8, "https://b.test")];
+    expect(openedFor(spans, 0, 1)).toBe("https://a.test");
+    expect(openedFor(spans, 6, 8)).toBe("https://b.test");
+  });
 
   test("opens the href when a click lands in a link span", () => {
     const opened: string[] = [];

@@ -289,10 +289,26 @@ test("marks a markdown link whose target is a file, exactly once", async ({ daem
     await expect(preview).toContainText("src/other.ts");
 
     // The unmarked bare-path label still opens its own file on click: it lost the
-    // glyph, not the affordance.
+    // glyph, not the affordance. Its coarse token is the whole sentence, so the
+    // two ends of that one token are two different things: the label opens the
+    // file, the prose after it does not.
     await page.keyboard.press("Escape");
     await expect(preview).toHaveCount(0);
-    await page.locator(".diffview").getByText("holds the key.", { exact: false }).click();
+    const sentence = await page
+      .locator(".diffview")
+      .getByText("holds the key.", { exact: false })
+      .boundingBox();
+    const midY = sentence!.y + sentence!.height / 2;
+
+    // Past the label, over "holds the key." — no preview, and the row's own
+    // click affordance runs instead.
+    await page.mouse.click(sentence!.x + sentence!.width - 4, midY);
+    await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
+    expect(await preview.count()).toBe(0);
+    await page.keyboard.press("Escape");
+
+    // On the label itself — the reference opens.
+    await page.mouse.click(sentence!.x + 4, midY);
     await expect(preview).toBeVisible();
     await expect(preview).toContainText("src/cache.ts");
   } finally {

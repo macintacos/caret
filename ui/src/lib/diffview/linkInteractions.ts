@@ -1,13 +1,20 @@
 // Token-event handlers for the source view's link layer. The @pierre/diffs
 // File view emits per-token pointer events carrying the token's line number and
-// character range; these handlers hit-test that range against the link span map
-// and, on a hit, open the URL (click) or reveal a caret-themed tooltip and a
+// character range; these handlers resolve that to the span under the pointer and,
+// on a hit, open the URL (click) or reveal a caret-themed tooltip and a
 // pointer cursor (hover). No line content is mutated — the span map is keyed by
 // line number, so this stays correct as the library virtualizes rows in and
 // out. The URL-open effect is injected so the layer is unit-testable.
+//
+// The token's character range is only the first filter. Shiki emits a prose line
+// as ONE token, so that range routinely covers the whole line: a link's affordance
+// would then run the width of the row. What the pointer is over decides — see
+// spanAtPointer — and for the same reason hover tracks pointer movement *within* a
+// token rather than only its enter/leave.
 
 import type { FileRefSpan, FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 import type { LinkSpan, LinkSpanMap } from "$lib/diffview/links.ts";
+import { rangeForSpan } from "$lib/diffview/searchHighlight.ts";
 
 /** The slice of @pierre/diffs' TokenEventBase the link click handler reads. */
 interface TokenClickProps {
@@ -147,39 +154,87 @@ function hideTooltip(tokenElement: HTMLElement): void {
   for (const el of tooltipMount(tokenElement).querySelectorAll(`[${TOOLTIP_ATTR}]`)) el.remove();
 }
 
-/** Returns the first column span on the line whose range overlaps the token's
- * half-open [charStart, charEnd) range, or undefined if the token touches none.
- * Ranges are 0-based and half-open, so a token ending exactly at a span's
- * startCol (or starting exactly at its endCol) does not count as a hit. Generic
- * over the span shape so both link and file-reference spans hit-test through it. */
-export function hitTestSpan<T extends { startCol: number; endCol: number }>(
-  spans: T[],
-  charStart: number,
-  charEnd: number,
+type ColumnSpan = { startCol: number; endCol: number };
+
+/** Whether a span's half-open [startCol, endCol) columns overlap the token's.
+ * Half-open on both sides, so a token ending exactly at a span's startCol (or
+ * starting exactly at its endCol) does not count. */
+function overlapsToken(span: ColumnSpan, charStart: number, charEnd: number): boolean {
+  return charStart < span.endCol && charEnd > span.startCol;
+}
+
+/**
+ * Whether the pointer is over the span's rendered columns.
+ *
+ * Column overlap cannot answer this on its own: shiki emits a prose line as ONE
+ * token, so a token's [lineCharStart, lineCharEnd) range routinely spans the
+ * whole line and overlaps a span the pointer is nowhere near — which is what made
+ * the entire row behave as the link. The span's own columns do have
+ * geometry: the same Range the link highlight paints from (rangeForSpan, over the
+ * token's `data-line` row) yields the boxes the label actually occupies, so the
+ * pointer is tested against those.
+ *
+ * Returns true when that geometry cannot be measured — no row, unresolvable
+ * columns, or an environment without layout (happy-dom units) — leaving the
+ * coarse column hit in force rather than dropping the affordance entirely.
+ */
+function pointerOverSpan(tokenElement: HTMLElement, span: ColumnSpan, event: MouseEvent): boolean {
+  const row = tokenElement.closest("[data-line]");
+  if (row === null) return true;
+  const range = rangeForSpan(row, span.startCol, span.endCol);
+  const rects = range === null ? [] : [...range.getClientRects()];
+  if (rects.length === 0) return true;
+  return rects.some(
+    (r) =>
+      event.clientX >= r.left &&
+      event.clientX <= r.right &&
+      event.clientY >= r.top &&
+      event.clientY <= r.bottom,
+  );
+}
+
+/** The span the pointer is actually over. Every affordance in this layer resolves
+ * through here so none of them can outgrow the text it decorates. */
+function spanAtPointer<T extends ColumnSpan>(
+  spans: T[] | undefined,
+  props: TokenHoverProps,
+  event: MouseEvent,
 ): T | undefined {
-  return spans.find((s) => charStart < s.endCol && charEnd > s.startCol);
+  return spans?.find((s) => {
+    if (!overlapsToken(s, props.lineCharStart, props.lineCharEnd)) return false;
+    // A token that lies WITHIN the span's columns is the span, so the token box
+    // the library already hit-tested is the hit area — decoration included, which
+    // is what keeps a click on a file reference's icon (drawn as the token's own
+    // ::before, left of its first character) opening that reference. Only a token
+    // WIDER than the span — shiki's one-token prose line — needs narrowing.
+    if (props.lineCharStart >= s.startCol && props.lineCharEnd <= s.endCol) return true;
+    return pointerOverSpan(props.tokenElement, s, event);
+  });
 }
 
 export function createLinkHandlers(spanMap: LinkSpanMap, deps: LinkHandlerDeps): LinkHandlers {
-  const spanFor = (props: TokenClickProps): LinkSpan | undefined => {
-    const lineSpans = spanMap.get(props.lineNumber);
-    if (lineSpans == null) return undefined;
-    return hitTestSpan(lineSpans, props.lineCharStart, props.lineCharEnd);
-  };
+  const spanFor = (props: TokenHoverProps, event: MouseEvent): LinkSpan | undefined =>
+    spanAtPointer(spanMap.get(props.lineNumber), props, event);
 
   return {
-    onTokenClick(props) {
-      const span = spanFor(props);
+    onTokenClick(props, event) {
+      const span = spanFor(props, event);
       if (span != null) deps.openUrl(span.href);
     },
-    onTokenEnter(props) {
-      const span = spanFor(props);
-      if (span == null) return;
+    onTokenEnter(props, event) {
+      const span = spanFor(props, event);
+      // Also the pointer-moved-off-the-link case: this runs on every move within
+      // the hovered token (see composeTokenHandlers), so a miss must retract the
+      // tooltip and the cursor, not merely decline to show them.
+      if (span == null) {
+        hideTooltip(props.tokenElement);
+        props.tokenElement.style.cursor = "";
+        return;
+      }
       showTooltip(props.tokenElement, span.href);
       props.tokenElement.style.cursor = "pointer";
     },
     onTokenLeave(props) {
-      if (spanFor(props) == null) return;
       hideTooltip(props.tokenElement);
       props.tokenElement.style.cursor = "";
     },
@@ -215,48 +270,64 @@ export function composeTokenHandlers(
   const hasFileRefs = fileRefs != null && fileRefs.size > 0;
   if (link === undefined && !hasFileRefs) return undefined;
 
-  const fileRefAt = (
-    lineNumber: number,
-    charStart: number,
-    charEnd: number,
-  ): FileRefSpan | undefined => {
-    const spans = fileRefs?.get(lineNumber);
-    return spans === undefined ? undefined : hitTestSpan(spans, charStart, charEnd);
+  const fileRefAt = (props: TokenHoverProps, event: MouseEvent): FileRefSpan | undefined =>
+    spanAtPointer(fileRefs?.get(props.lineNumber), props, event);
+
+  // Reveal or retract the hover affordances for wherever the pointer sits now.
+  // A reference emitted from a prose-labelled link hides its destination in the
+  // display text, so hover is the only way to see it — the same tooltip surface a
+  // link uses. A reference that shows its own path carries no target and keeps its
+  // CSS-only hover.
+  const applyHover = (props: TokenHoverProps, event: PointerEvent): void => {
+    const ref = fileRefAt(props, event);
+    if (ref?.target !== undefined) {
+      showTooltip(props.tokenElement, ref.target);
+      return;
+    }
+    if (link !== undefined) {
+      link.onTokenEnter(props, event); // shows on a hit, retracts on a miss
+      return;
+    }
+    hideTooltip(props.tokenElement);
+  };
+
+  // A token is often a whole prose line, so the pointer crosses in and out of a
+  // link's columns *within* one token and the library fires no further
+  // enter/leave. Entering arms a pointermove that re-resolves the affordance on
+  // every move; leaving disarms it. Only one token is hovered at a time, so a
+  // single armed listener covers the view.
+  let armed: { element: HTMLElement; move: (event: PointerEvent) => void } | undefined;
+  const disarm = (): void => {
+    armed?.element.removeEventListener("pointermove", armed.move);
+    armed = undefined;
   };
 
   let consumedClickEvent: Event | undefined;
   return {
     handlers: {
       onTokenEnter(props, event) {
-        // A reference emitted from a prose-labelled link hides its destination in
-        // the display text, so hover is the only way to see it — the same tooltip
-        // surface a link uses. A reference that shows its own path carries no
-        // target and keeps its CSS-only hover.
-        const ref = fileRefAt(props.lineNumber, props.lineCharStart, props.lineCharEnd);
-        if (ref?.target !== undefined) {
-          showTooltip(props.tokenElement, ref.target);
-          return;
-        }
-        link?.onTokenEnter(props, event);
+        disarm();
+        const move = (moved: PointerEvent) => applyHover(props, moved);
+        props.tokenElement.addEventListener("pointermove", move);
+        armed = { element: props.tokenElement, move };
+        applyHover(props, event);
       },
       onTokenLeave(props, event) {
-        const ref = fileRefAt(props.lineNumber, props.lineCharStart, props.lineCharEnd);
-        if (ref?.target !== undefined) {
-          hideTooltip(props.tokenElement);
-          return;
-        }
+        disarm();
+        // The pointer left the token: retract whatever was showing. A reference
+        // tooltip has no link handler behind it, so hide unconditionally too.
         link?.onTokenLeave(props, event);
+        hideTooltip(props.tokenElement);
       },
       onTokenClick(props, event) {
-        const ref = fileRefAt(props.lineNumber, props.lineCharStart, props.lineCharEnd);
+        const ref = fileRefAt(props, event);
         if (ref !== undefined) {
           consumedClickEvent = event;
           deps.onFileRefClick?.(ref, props.tokenElement);
           return;
         }
         if (link === undefined) return;
-        const spans = spanMap?.get(props.lineNumber);
-        if (spans != null && hitTestSpan(spans, props.lineCharStart, props.lineCharEnd) != null) {
+        if (spanAtPointer(spanMap?.get(props.lineNumber), props, event) !== undefined) {
           consumedClickEvent = event;
         }
         link.onTokenClick(props, event);
