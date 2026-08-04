@@ -1,20 +1,24 @@
 import "@ui/test-mount.ts";
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeAll, describe, expect, test } from "bun:test";
 
 import type { FileExcerpt } from "@core/lib/types";
 import { until } from "@test/support/poll.ts";
 import { type LogCapture, logCapture } from "@ui/test-helpers.ts";
 import { render } from "@ui/test-mount.ts";
+import { reactiveProps } from "@ui/test-props.svelte.ts";
 import FilePreview from "@/components/FilePreview.svelte";
+import { appearance } from "@/state/appearance.svelte.ts";
+import { highlightChunk } from "$lib/diffview/highlight.ts";
 
 // The filename preview (EXC-687) shows an excerpt of a referenced file. These
 // pin the reader affordances layered on top of the highlighted code: per-line
 // numbers off the file's real line offset, a header that frames it as a slice
 // ("lines a–b of N"), boundary strips that say how much file sits above/below
-// the window and expand it toward those ends on click, and the distinct
-// too-large-to-preview state. The syntax highlighting itself and everything that
-// needs real layout (scroll anchoring, the height cap) are covered by the
-// highlight unit test and the Playwright e2e.
+// the loaded region and load the next chunk toward those ends on click, the
+// repaint that keeps the whole region in one palette across a theme switch, and
+// the distinct too-large-to-preview state. The syntax highlighting itself and
+// everything that needs real layout (scroll anchoring, the height cap) are
+// covered by the highlight unit test and the Playwright e2e.
 
 const ID = "r1";
 
@@ -50,10 +54,17 @@ function serveStatus(status: number): LogCapture {
 
 /**
  * Install a fetch double that serves a slice of a `totalLines`-line file for
- * whatever window the card asks for, recording each requested URL. With no
- * `start`/`end` it answers the opening window `[1, headLines]`.
+ * whatever window the card asks for, recording each requested URL. An explicit
+ * `start`/`end` is honoured (clamped to the file, as the daemon does); a bare
+ * `line` is centred in a `headLines` window; neither answers the opening window
+ * `[1, headLines]`. Echoes the requested path, so a reference change is visible
+ * in the served body. The lines read as JSON so `language: "json"` colours them.
  */
-function serveWindowed(totalLines: number, headLines: number): LogCapture & { urls: string[] } {
+function serveWindowed(
+  totalLines: number,
+  headLines: number,
+  language = "text",
+): LogCapture & { urls: string[] } {
   const urls: string[] = [];
   const cap = logCapture((url) => {
     if (!url.includes("/file?")) return Promise.resolve(new Response(null, { status: 204 }));
@@ -61,16 +72,27 @@ function serveWindowed(totalLines: number, headLines: number): LogCapture & { ur
     const params = new URLSearchParams(url.slice(url.indexOf("?") + 1));
     const rawStart = params.get("start");
     const rawEnd = params.get("end");
-    const startLine = rawStart === null ? 1 : Math.max(1, Number(rawStart));
+    const rawLine = params.get("line");
+    const startLine =
+      rawStart !== null
+        ? Math.max(1, Number(rawStart))
+        : rawLine !== null
+          ? Math.max(1, Number(rawLine) - Math.floor(headLines / 2))
+          : 1;
     const endLine =
-      rawEnd === null ? Math.min(totalLines, headLines) : Math.min(totalLines, Number(rawEnd));
+      rawEnd === null
+        ? Math.min(totalLines, startLine + headLines - 1)
+        : Math.min(totalLines, Number(rawEnd));
     const body: FileExcerpt = {
-      path: "src/cache.ts",
-      language: "text",
+      path: params.get("path") ?? "src/cache.ts",
+      language,
       startLine,
       endLine,
       totalLines,
-      lines: Array.from({ length: endLine - startLine + 1 }, (_, i) => `line ${startLine + i}`),
+      lines: Array.from(
+        { length: endLine - startLine + 1 },
+        (_, i) => `  "line": ${startLine + i},`,
+      ),
     };
     return Promise.resolve(
       new Response(JSON.stringify(body), {
@@ -105,6 +127,23 @@ afterEach(() => {
 
 const lineNumbers = (target: HTMLElement) =>
   [...target.querySelectorAll(".fp-lnum")].map((e) => e.textContent?.trim());
+
+/** Each rendered line's token colours, joined — the signature a repaint moves. */
+const rowColours = (target: HTMLElement) =>
+  [...target.querySelectorAll(".fp-lcode")].map((row) =>
+    [...row.querySelectorAll("span")].map((s) => s.getAttribute("style")).join("|"),
+  );
+
+const clickStrip = (target: HTMLElement, side: "top" | "bottom") =>
+  (target.querySelector(`.fp-edge-${side}`) as HTMLButtonElement).click();
+
+// shiki compiles a grammar's patterns lazily, at first tokenize, and that cost
+// counts against its 500ms per-line limit — enough for a cold grammar to bail
+// mid-line and leave the rest unstyled. Pay it up front, so a colour assertion
+// below measures the repaint rather than who tokenized first.
+beforeAll(async () => {
+  await highlightChunk('  "line": 1,', "json", appearance.themeId);
+});
 
 describe("FilePreview line numbers", () => {
   test("numbers each line from the excerpt's real file offset", async () => {
@@ -249,21 +288,46 @@ describe("FilePreview expansion", () => {
     expect(name).toContain((bottom?.textContent ?? "").replace("↓ ", "").trim());
   });
 
-  test("clicking a strip widens the window toward that end of the file", async () => {
+  test("clicking a strip appends the next chunk, fetching only its lines", async () => {
     const served = serveWindowed(300, 60);
     cap = served;
     const { target } = render(FilePreview, props());
     await until(() => target.querySelector(".fp-edge-bottom") != null);
     expect(target.querySelector(".fp-edge-bottom")?.textContent).toContain("240");
 
-    (target.querySelector(".fp-edge-bottom") as HTMLButtonElement).click();
+    clickStrip(target, "bottom");
+    await until(() => lineNumbers(target).length > 60);
+
+    // Only the lines past the window are asked for; the 60 already on screen are
+    // not refetched, so a step costs the same whether it is the first or the
+    // fortieth.
+    const last = served.urls.at(-1) ?? "";
+    expect(last).toContain("start=61");
+    expect(last).toContain("end=110");
+    // …and the chunk lands under what was already there, not in place of it.
+    expect(lineNumbers(target)).toHaveLength(110);
+    expect(lineNumbers(target)[0]).toBe("1");
+    expect(lineNumbers(target).at(-1)).toBe("110");
+    expect(target.querySelector(".fp-edge-bottom")?.textContent).toContain("190");
+  });
+
+  test("clicking the top strip prepends the chunk above, fetching only its lines", async () => {
+    const served = serveWindowed(300, 60);
+    cap = served;
+    // Centred on line 100, so the opening window is 70–129 with file on both sides.
+    const { target } = render(FilePreview, props({ line: 100 }));
+    await until(() => target.querySelector(".fp-edge-top") != null);
+    expect(lineNumbers(target)[0]).toBe("70");
+
+    clickStrip(target, "top");
     await until(() => lineNumbers(target).length > 60);
 
     const last = served.urls.at(-1) ?? "";
-    expect(last).toContain("start=1");
-    expect(last).toContain("end=110");
-    expect(lineNumbers(target).at(-1)).toBe("110");
-    expect(target.querySelector(".fp-edge-bottom")?.textContent).toContain("190");
+    expect(last).toContain("start=20");
+    expect(last).toContain("end=69");
+    expect(lineNumbers(target)).toHaveLength(110);
+    expect(lineNumbers(target)[0]).toBe("20");
+    expect(lineNumbers(target).at(-1)).toBe("129");
   });
 
   test("a strip disappears once its side reaches the end of the file", async () => {
@@ -272,9 +336,57 @@ describe("FilePreview expansion", () => {
     cap = served;
     const { target } = render(FilePreview, props());
     await until(() => target.querySelector(".fp-edge-bottom") != null);
-    (target.querySelector(".fp-edge-bottom") as HTMLButtonElement).click();
+    clickStrip(target, "bottom");
     await until(() => target.querySelector(".fp-edge-bottom") == null);
     expect(lineNumbers(target).at(-1)).toBe("70");
     expect(target.querySelector(".fp-edge-top")).toBeNull();
+  });
+
+  test("a new reference discards the chunks the previous one accumulated", async () => {
+    cap = serveWindowed(300, 60);
+    // The parent reuses one instance across references, so the accumulated span
+    // has to go with the old one rather than framing the new file.
+    const live = reactiveProps({ reviewId: ID, path: "src/cache.ts" });
+    const { target, flush } = render(FilePreview, live);
+    await until(() => target.querySelector(".fp-edge-bottom") != null);
+    clickStrip(target, "bottom");
+    await until(() => lineNumbers(target).length === 110);
+
+    live.path = "src/other.ts";
+    flush();
+    await until(() => lineNumbers(target).length === 60);
+    expect(lineNumbers(target)).toHaveLength(60);
+    expect(lineNumbers(target).at(-1)).toBe("60");
+    expect(target.querySelector(".fp-path")?.textContent).toBe("src/other.ts");
+  });
+});
+
+describe("FilePreview theme changes", () => {
+  const mode = appearance.mode;
+  const slot = appearance.slots.light;
+  afterEach(() => {
+    appearance.setSlot("light", slot);
+    appearance.setMode(mode);
+  });
+
+  test("a theme switch repaints every loaded chunk, not just the newest", async () => {
+    appearance.setMode("light");
+    appearance.setSlot("light", "caret-light");
+    cap = serveWindowed(300, 60, "json");
+    const { target } = render(FilePreview, props());
+    await until(() => target.querySelector(".fp-lcode span") != null);
+    clickStrip(target, "bottom");
+    await until(() => lineNumbers(target).length === 110);
+    const before = rowColours(target);
+    expect(before[0]).toContain("color");
+
+    appearance.setSlot("light", "github-light");
+    await until(() => rowColours(target)[0] !== before[0]);
+
+    // Every row moved to the new palette — repainting only the newest chunk would
+    // leave the first sixty in the old one, and the panel half a theme behind.
+    const after = rowColours(target);
+    expect(after).toHaveLength(before.length);
+    for (const [i, colours] of after.entries()) expect(colours).not.toBe(before[i]);
   });
 });
