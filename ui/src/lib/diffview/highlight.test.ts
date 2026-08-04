@@ -1,6 +1,11 @@
 import { beforeAll, expect, test } from "bun:test";
 
-import { type ChunkState, highlightChunk, highlightExcerpt } from "$lib/diffview/highlight.ts";
+import {
+  type ChunkState,
+  highlightChunk,
+  highlightExcerpt,
+  MAX_HIGHLIGHT_LINE_CHARS,
+} from "$lib/diffview/highlight.ts";
 
 // Thin glue over shiki; the full visual render is covered by e2e. These pin the
 // contract: highlighted HTML for a known grammar, plain fallback otherwise.
@@ -126,4 +131,23 @@ test("a state from another language yields no rows instead of throwing", async (
   const { state } = await highlightChunk("const x = 1;", "typescript", "caret-dark");
   expect(state).toBeDefined();
   expect(await highlightChunk("print(1)", "python", "caret-dark", state)).toEqual({ rows: [] });
+});
+
+// One very long line is the cost row virtualization cannot window away — it is a
+// single row — and a TextMate grammar's cost on a line is quadratic in its
+// length: an unbroken 16 KiB run takes ~40 s to tokenize with this bundle, which
+// is a frozen main thread, not a slow render. Past MAX_HIGHLIGHT_LINE_CHARS the
+// chunk takes the rowless path instead, which is the same fallback a chunk that
+// failed to highlight already uses (EXC-973).
+test("a chunk carrying an over-long line yields no rows instead of tokenizing it", async () => {
+  const long = "a".repeat(MAX_HIGHLIGHT_LINE_CHARS + 1);
+  const code = `const before = 1;\n${long}\nconst after = 2;`;
+  expect(await highlightChunk(code, "typescript", "caret-dark")).toEqual({ rows: [] });
+});
+
+test("a line at the limit still highlights", async () => {
+  const atLimit = `const s = "${"a".repeat(MAX_HIGHLIGHT_LINE_CHARS - 13)}";`;
+  expect(atLimit).toHaveLength(MAX_HIGHLIGHT_LINE_CHARS);
+  const chunk = await highlightChunk(atLimit, "typescript", "caret-dark");
+  expect(chunk.rows).toHaveLength(1);
 });

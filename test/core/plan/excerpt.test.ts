@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -185,6 +194,19 @@ test("reports a file over MAX_EXCERPT_BYTES as too large to preview", () => {
   expect(readFileExcerpt(cwd, "huge.ts")).toBeNull();
 });
 
+// The ceiling moved from 2 MiB to 10 MiB (EXC-973) once chunked serving and row
+// virtualization stopped a preview from costing a whole file at once. This is
+// the file that changed answer: comfortably past the old ceiling, well under the
+// new one.
+test("previews a file past the old 2 MiB ceiling", () => {
+  const count = Math.ceil((3 * 1024 * 1024) / 100);
+  write("mid.ts", `${"x".repeat(99)}\n`.repeat(count));
+  const ex = readFileExcerpt(cwd, "mid.ts");
+  expect(isFileTooLargeToPreview(cwd, "mid.ts")).toBe(false);
+  expect(ex?.totalLines).toBe(count);
+  expect(ex?.lines).toHaveLength(EXCERPT_HEAD_LINES);
+});
+
 test("does not report a small, a missing, or an escaping file as too large", () => {
   write("small.ts", numberedLines(5));
   // An oversized file outside cwd answers false because it never resolves, not
@@ -200,4 +222,69 @@ test("does not report a small, a missing, or an escaping file as too large", () 
   } finally {
     rmSync(outsideDir, { recursive: true, force: true });
   }
+});
+
+// ----- one read per file, not one per chunk -----
+
+// A preview grows a chunk at a time (EXC-969), so a scroll through a file is
+// many range requests for the same file. Each one used to re-read and re-split
+// the whole thing; at the new ceiling that would have made the daemon the
+// bottleneck the raised ceiling was supposed to remove.
+
+// root reads straight through a 0o000 file, so the proof below doesn't hold there.
+const asRoot = process.getuid?.() === 0;
+
+test.skipIf(asRoot)("serves successive chunks of one file without re-reading it", () => {
+  write("big.ts", numberedLines(400));
+  expect(readFileExcerpt(cwd, "big.ts", undefined, { start: 1, end: 148 })?.lines).toHaveLength(
+    148,
+  );
+
+  // Take away read permission. stat still answers — so the size check and the
+  // cache's own identity check both still pass — but a re-read would throw. A
+  // second chunk that still arrives, with the right lines, can only have been
+  // served from the memoized split.
+  chmodSync(join(cwd, "big.ts"), 0o000);
+  try {
+    const second = readFileExcerpt(cwd, "big.ts", undefined, { start: 149, end: 296 });
+    expect(second?.lines).toHaveLength(148);
+    expect(second?.lines[0]).toBe("line 149");
+    expect(second?.lines.at(-1)).toBe("line 296");
+    expect(second?.totalLines).toBe(400);
+  } finally {
+    chmodSync(join(cwd, "big.ts"), 0o600);
+  }
+});
+
+test("re-reads after the file changes rather than serving a stale copy", () => {
+  write("edited.ts", numberedLines(10));
+  expect(readFileExcerpt(cwd, "edited.ts")?.lines[0]).toBe("line 1");
+
+  // A different byte count, so the entry is invalidated on size alone — no
+  // reliance on how finely two writes are separated in time.
+  write("edited.ts", `changed\n${numberedLines(20)}`);
+  const after = readFileExcerpt(cwd, "edited.ts");
+  expect(after?.lines[0]).toBe("changed");
+  expect(after?.totalLines).toBe(21);
+});
+
+test("re-reads a same-size edit, so size alone is not what validates an entry", () => {
+  write("same.ts", numberedLines(5));
+  expect(readFileExcerpt(cwd, "same.ts")?.lines[0]).toBe("line 1");
+
+  // Same byte count, so only the timestamp separates the two versions. Advanced
+  // explicitly rather than trusting two writes to land in different ticks.
+  const abs = join(cwd, "same.ts");
+  writeFileSync(abs, numberedLines(5).replace("line 1", "LINE 1"));
+  const later = new Date(Date.now() + 2000);
+  utimesSync(abs, later, later);
+  expect(readFileExcerpt(cwd, "same.ts")?.lines[0]).toBe("LINE 1");
+});
+
+test("keeps one file's cached lines from answering for another", () => {
+  write("one.ts", numberedLines(10));
+  write("two.ts", `${"other 1"}\n${"other 2"}\n`);
+  expect(readFileExcerpt(cwd, "one.ts")?.lines[0]).toBe("line 1");
+  expect(readFileExcerpt(cwd, "two.ts")?.lines[0]).toBe("other 1");
+  expect(readFileExcerpt(cwd, "one.ts")?.lines[0]).toBe("line 1");
 });

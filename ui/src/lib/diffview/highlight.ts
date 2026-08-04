@@ -69,6 +69,26 @@ export async function highlightExcerpt(
  * produced it; handed to a different one, that chunk comes back with no rows. */
 export type ChunkState = GrammarState;
 
+/**
+ * Longest line shiki is asked to tokenize, in UTF-16 code units.
+ *
+ * A TextMate grammar re-tries its alternations at every position in a line, so
+ * the cost of one line is quadratic in its length. Measured against this
+ * bundle, on a line of one unbroken run: ~0.4 s at 1 KiB, ~3.1 s at 4 KiB,
+ * ~12 s at 8 KiB, ~40 s at 16 KiB — a main-thread freeze, on a file
+ * `MAX_EXCERPT_BYTES` would happily admit, and one that no amount of row
+ * virtualization can window away because it is a single row. (Minified source
+ * is nowhere near as bad — its many short tokens let the tokenizer make
+ * progress — but a base64 blob, a data URI or a long CSV row is exactly the
+ * pathological shape.)
+ *
+ * 1 KiB is where a single line's worst case still lands in the same order as a
+ * whole ~148-line chunk's (~127 ms) rather than multiples of it. Lines of
+ * ordinary source sit far below it; what sits above is generated, minified or
+ * not really text, and reads no worse uncoloured.
+ */
+export const MAX_HIGHLIGHT_LINE_CHARS = 1024;
+
 /** One highlighted chunk of a file. */
 export interface HighlightedChunk {
   /** The chunk's lines, one entry each: that line's token HTML, ready to drop
@@ -102,13 +122,20 @@ function chunkRows(node: HastNode, rows: string[] = []): string[] {
  *
  * `code` must hold whole lines and no trailing newline — shiki would read one as
  * a further, empty line. Never throws: a chunk that can't be highlighted comes
- * back with no rows, for the caller to render as plain text. */
+ * back with no rows, for the caller to render as plain text. A chunk carrying a
+ * line past `MAX_HIGHLIGHT_LINE_CHARS` takes that same path rather than
+ * tokenizing it — see that constant for the freeze it is avoiding. */
 export async function highlightChunk(
   code: string,
   language: string,
   themeId: ThemeId,
   state?: ChunkState,
 ): Promise<HighlightedChunk> {
+  // ponytail: the whole chunk falls back, not just the offending line, because
+  // rowless-means-plain is the failure contract the caller already implements.
+  // Splitting the chunk around the long line would keep its ~147 neighbours
+  // coloured, if a file that has such lines ever proves worth the seam.
+  if (code.split("\n").some((l) => l.length > MAX_HIGHLIGHT_LINE_CHARS)) return { rows: [] };
   try {
     const hl = await highlighter();
     const lang = await resolveLanguage(hl, language);
