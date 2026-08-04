@@ -5,17 +5,18 @@
   // references the daemon confirmed are real files (DiffPlanView gates it on the
   // resolved set), so it never promises a preview it can't deliver. The excerpt
   // centers on the reference's line when it carries one, else the file's head,
-  // and the boundary strips widen that window toward the file's ends on click
-  // until the whole file is reachable without leaving the review. The header
+  // and the boundary strips grow that region toward the file's ends on click,
+  // one chunk at a time, until the whole file is reachable without leaving the
+  // review — a downward step costs one chunk however many came before. The header
   // carries an "esc to close" hint — the panel stays put until dismissed (Escape,
   // or a click away; DiffPlanView owns that).
   import { tick, untrack } from "svelte";
 
   import { appearance } from "@/state/appearance.svelte.ts";
   import { getFileExcerpt, HttpError } from "$lib/api.ts";
-  import { highlightExcerpt } from "$lib/diffview/highlight.ts";
+  import { type ChunkState, highlightChunk } from "$lib/diffview/highlight.ts";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
-  import type { FileExcerpt } from "@core/lib/types";
+  import type { ThemeId } from "$lib/theme.ts";
 
   interface Props {
     reviewId: string;
@@ -37,71 +38,63 @@
     html?: string;
     text?: string;
   }
-  type Preview =
-    | { kind: "loading" }
-    | { kind: "error" }
-    | { kind: "too-large" }
-    | { kind: "ready"; excerpt: FileExcerpt; rows: Row[] };
+  // The loaded region: contiguous, grown one chunk at a time. `lines` is the raw
+  // text — kept so a theme switch can recolour without refetching a byte — and
+  // `rows` its rendered form, one entry per line. `state` is the grammar state
+  // the region's last line ended on, which is where the next chunk below it
+  // starts from; `themeId` is the palette `rows` were coloured in.
+  interface Ready {
+    kind: "ready";
+    path: string;
+    language: string;
+    totalLines: number;
+    startLine: number;
+    lines: string[];
+    rows: Row[];
+    themeId: ThemeId;
+    state?: ChunkState;
+  }
+  type Preview = { kind: "loading" } | { kind: "error" } | { kind: "too-large" } | Ready;
   // Raw, not deep-proxied: `preview` is only ever replaced wholesale, and its
   // `rows` array is one object per source line — unbounded once the reader
   // expands toward a large file's ends. Proxying every row would buy reactivity
   // nothing here and cost a signal per row read.
   let preview = $state.raw<Preview>({ kind: "loading" });
 
-  /** Lines one strip click adds to that side of the window. */
+  /** Lines one strip click adds to that side of the loaded region. */
   const EXPAND_STEP = 50;
 
-  // Split shiki's `<pre><code>` blob into one HTML string per line (the inner
-  // token spans of each `.line`), so each source line can render in its own
-  // numbered row. Returns null when there's nothing to split (highlight failed),
-  // so the caller falls back to plain text.
-  function splitHighlightedLines(html: string): string[] | null {
-    if (html === "") return null;
-    const tpl = document.createElement("template");
-    tpl.innerHTML = html;
-    const lines = tpl.content.querySelectorAll(".line");
-    return lines.length > 0 ? [...lines].map((el) => el.innerHTML) : null;
+  const lastLine = (loaded: Ready) => loaded.startLine + loaded.lines.length - 1;
+
+  // Colour a contiguous span beginning at `startLine` and pair each line with its
+  // real file line number. Line numbers always come from the span
+  // (authoritative); the highlighted HTML is used only when there is exactly one
+  // row per line, so a drift can never mislabel a line.
+  async function paint(
+    lines: string[],
+    startLine: number,
+    language: string,
+    themeId: ThemeId,
+    state?: ChunkState,
+  ): Promise<{ rows: Row[]; state?: ChunkState }> {
+    const chunk = await highlightChunk(lines.join("\n"), language, themeId, state);
+    const useHtml = chunk.rows.length === lines.length;
+    return {
+      rows: lines.map((text, i) => ({
+        num: startLine + i,
+        html: useHtml ? chunk.rows[i] : undefined,
+        text: useHtml ? undefined : text,
+      })),
+      state: chunk.state,
+    };
   }
 
-  // Pair each excerpt line with its real file line number. Line numbers always
-  // come from the excerpt (authoritative); the highlighted HTML is used only when
-  // it splits into exactly one span per line, so a numbering drift can never
-  // mislabel a line.
-  function buildRows(excerpt: FileExcerpt, html: string): Row[] {
-    const highlighted = splitHighlightedLines(html);
-    const useHtml = highlighted !== null && highlighted.length === excerpt.lines.length;
-    return excerpt.lines.map((text, i) => ({
-      num: excerpt.startLine + i,
-      html: useHtml ? highlighted[i] : undefined,
-      text: useHtml ? undefined : text,
-    }));
-  }
-
-  // Fetch one window and pair it with its highlighted rows. The live theme is
-  // resolved per fetch — a panel open for one reference needn't track a theme
-  // switch that happens while it is open, so the read is untracked rather than a
-  // dependency that would re-fetch the excerpt on every switch.
-  async function load(
-    id: string,
-    p: string,
-    ln: number | undefined,
-    range?: { start: number; end: number },
-  ): Promise<Extract<Preview, { kind: "ready" }>> {
-    // An explicit range wins over `line` server-side, so don't send both — one
-    // window per request, with no precedence for a future edit to invert.
-    const excerpt = await getFileExcerpt(id, p, range === undefined ? ln : undefined, range);
-    const html = await highlightExcerpt(
-      excerpt.lines.join("\n"),
-      excerpt.language,
-      untrack(() => appearance.themeId),
-    );
-    return { kind: "ready", excerpt, rows: buildRows(excerpt, html) };
-  }
-
-  // Fetch the opening window. Re-runs when the target reference changes
-  // (DiffPlanView reuses this instance for a newly-clicked reference), and
-  // deliberately depends on nothing else — expansion is a handler, not an
-  // effect, so a widened window never re-enters here.
+  // Fetch the opening chunk. Re-runs when the target reference changes
+  // (DiffPlanView reuses this instance for a newly-clicked reference), dropping
+  // everything the previous reference accumulated, and deliberately depends on
+  // nothing else — expansion is a handler, not an effect, so a grown region never
+  // re-enters here. The theme is read untracked for the same reason: a switch
+  // recolours what is loaded (see the repaint effect) rather than refetching it.
   $effect(() => {
     const id = reviewId;
     const p = path;
@@ -111,8 +104,20 @@
     centred = false;
     void (async () => {
       try {
-        const ready = await load(id, p, ln);
-        if (!cancelled) preview = ready;
+        const excerpt = await getFileExcerpt(id, p, ln);
+        const themeId = untrack(() => appearance.themeId);
+        const painted = await paint(excerpt.lines, excerpt.startLine, excerpt.language, themeId);
+        if (cancelled) return;
+        preview = {
+          kind: "ready",
+          path: excerpt.path,
+          language: excerpt.language,
+          totalLines: excerpt.totalLines,
+          startLine: excerpt.startLine,
+          lines: excerpt.lines,
+          themeId,
+          ...painted,
+        };
       } catch (err) {
         if (cancelled) return;
         // A file past the daemon's preview ceiling is its own state: the reader
@@ -126,47 +131,114 @@
     };
   });
 
+  // A theme switch recolours every line already loaded, so the panel is never
+  // part one palette and part another, and never left in a palette the app has
+  // moved off. Nothing is refetched — the raw text is already here. Both inputs
+  // are tracked, so this reconciles whichever moves: a switch, or a write that
+  // landed carrying the theme read before it. Re-entry costs two comparisons —
+  // a region already in the live palette returns at once — so it settles rather
+  // than looping.
+  $effect(() => {
+    const themeId = appearance.themeId;
+    const loaded = preview;
+    if (loaded.kind !== "ready" || loaded.themeId === themeId) return;
+    void (async () => {
+      const painted = await paint(loaded.lines, loaded.startLine, loaded.language, themeId);
+      // A later switch or an expansion landed first, and painted in the theme
+      // showing now; this pass is stale either way.
+      const live = untrack(() => preview);
+      if (live !== loaded || untrack(() => appearance.themeId) !== themeId) return;
+      preview = { ...loaded, themeId, ...painted };
+    })();
+  });
+
   // Reactive so the strips can show they are busy: a click that lands while a
-  // widened window is in flight is dropped, and the wait grows with the window.
+  // chunk is in flight is dropped, and the wait is the load of one step.
   let expanding = $state(false);
-  // Widen the window one step toward `direction` and refetch it whole. Refetching
-  // rather than splicing in a delta chunk is what keeps the colouring right:
-  // shiki needs the full window to close multi-line constructs (a block comment,
-  // a template literal) that begin outside a fragment. The current rows stay on
-  // screen while the wider window loads, so the panel never blanks.
-  // ponytail: both costs here scale with the file — re-highlighting redoes the
-  // whole widened window each step, and a fixed EXPAND_STEP means a 20k-line file
-  // is hundreds of clicks from end to end. Chunked or virtualized rendering, and
-  // a step that tracks the visible row count, are the upgrade paths if either bites.
+  // Fetch the next chunk toward `direction` and add it to the region. Either way
+  // only the new lines are asked for, and the rows already on screen stay put
+  // while they load, so the panel never blanks.
+  //
+  // Downward the chunk continues the region's grammar, so only it is coloured and
+  // a step costs the same at the fortieth expansion as at the first. Upward is
+  // the awkward direction — colouring a chunk correctly needs everything above
+  // it, and nothing above it is loaded — so the whole region is recoloured from
+  // its new first line. A theme that moved while the chunk was in flight takes
+  // that same path, so the two halves can't end up in different palettes.
+  // ponytail: two ceilings left. Upward recolouring is linear in the region, so
+  // walking to the file's head is quadratic — caching each chunk's ending grammar
+  // state would let a prepend keep the rows below it. And a fixed EXPAND_STEP
+  // means a 20k-line file is hundreds of clicks from end to end; a step that
+  // tracks the visible row count is that one's upgrade path.
   async function expand(direction: "up" | "down"): Promise<void> {
     if (preview.kind !== "ready" || expanding) return;
-    const { startLine, endLine } = preview.excerpt;
+    const loaded = preview;
     const range =
       direction === "up"
-        ? { start: Math.max(1, startLine - EXPAND_STEP), end: endLine }
-        : { start: startLine, end: endLine + EXPAND_STEP };
+        ? { start: Math.max(1, loaded.startLine - EXPAND_STEP), end: loaded.startLine - 1 }
+        : { start: lastLine(loaded) + 1, end: lastLine(loaded) + EXPAND_STEP };
     const id = reviewId;
     const p = path;
     const ln = line;
     const region = codeEl;
     const before =
       region === undefined ? null : { top: region.scrollTop, height: region.scrollHeight };
+    // The parent reuses one instance across references; a chunk whose reference
+    // moved on while it was in flight belongs to a file no longer on screen.
+    const superseded = () => id !== reviewId || p !== path || ln !== line;
     expanding = true;
     try {
-      const ready = await load(id, p, ln, range);
-      // The parent reuses one instance across references; drop a window whose
-      // reference moved on while it was in flight.
-      if (id !== reviewId || p !== path || ln !== line) return;
-      preview = ready;
+      const excerpt = await getFileExcerpt(id, p, undefined, range);
+      if (superseded()) return;
+      // The daemon clamps a range to the file, so a file edited down to fewer
+      // lines than the region already holds answers with a line already on
+      // screen. Take its count — that is what retires the strip — and add
+      // nothing, rather than putting one line number in two rows.
+      const abuts =
+        direction === "up"
+          ? excerpt.endLine === loaded.startLine - 1
+          : excerpt.startLine === lastLine(loaded) + 1;
+      if (!abuts) {
+        preview = { ...loaded, totalLines: excerpt.totalLines };
+        return;
+      }
+      const themeId = untrack(() => appearance.themeId);
+      const startLine = direction === "up" ? excerpt.startLine : loaded.startLine;
+      const lines =
+        direction === "up"
+          ? [...excerpt.lines, ...loaded.lines]
+          : [...loaded.lines, ...excerpt.lines];
+      let painted: { rows: Row[]; state?: ChunkState };
+      if (direction === "down" && themeId === loaded.themeId) {
+        const chunk = await paint(
+          excerpt.lines,
+          excerpt.startLine,
+          loaded.language,
+          themeId,
+          loaded.state,
+        );
+        painted = { rows: [...loaded.rows, ...chunk.rows], state: chunk.state };
+      } else {
+        painted = await paint(lines, startLine, loaded.language, themeId);
+      }
+      if (superseded()) return;
+      preview = {
+        ...loaded,
+        totalLines: excerpt.totalLines,
+        startLine,
+        lines,
+        themeId,
+        ...painted,
+      };
       if (direction === "up" && region !== undefined && before !== null) {
         await tick();
         // Every revealed line sits above what the reader was looking at, so
         // adding the growth back to the offset holds their place exactly. The
-        // browser clamps the result when the window is shorter than the region.
+        // browser clamps the result when the region is taller than its content.
         region.scrollTop = before.top + (region.scrollHeight - before.height);
       }
     } catch {
-      // Keep the current window on screen; the strip stays clickable.
+      // Keep the loaded region on screen; the strip stays clickable.
     } finally {
       expanding = false;
     }
@@ -197,13 +269,14 @@
 
   const lineWord = (n: number) => (n === 1 ? "line" : "lines");
 
-  // Framing for the excerpt: how much file sits above/below the window (so the
+  // Framing for the loaded region: how much file sits above/below it (so the
   // boundary strips can say so), the header label, and the digit width the
-  // line-number gutter needs. A window covering the whole file reads as the full
+  // line-number gutter needs. A region covering the whole file reads as the full
   // file, not a slice.
   const meta = $derived.by(() => {
     if (preview.kind !== "ready") return undefined;
-    const { startLine, endLine, totalLines } = preview.excerpt;
+    const { startLine, totalLines } = preview;
+    const endLine = lastLine(preview);
     const above = startLine - 1;
     const below = totalLines - endLine;
     const whole = above === 0 && below === 0;
@@ -217,7 +290,7 @@
 <div class="file-preview" data-file-preview>
   <div class="fp-header">
     <span class="fp-badge">Preview</span>
-    <span class="fp-path">{preview.kind === "ready" ? preview.excerpt.path : path}</span>
+    <span class="fp-path">{preview.kind === "ready" ? preview.path : path}</span>
     <span class="fp-header-end">
       {#if meta}<span class="fp-range">{meta.label}</span>{/if}
       {#if showShortcutHints}
@@ -271,8 +344,8 @@
 <style>
   /* The preview panel: an in-flow column filling the lane it is docked in, on the
      app's own paper. A column so the header and both strips stay pinned while
-     only .fp-code scrolls between them, and it takes the lane whole so a widened
-     window pages inside the panel rather than stretching it. */
+     only .fp-code scrolls between them, and it takes the lane whole so a growing
+     region pages inside the panel rather than stretching it. */
   .file-preview {
     display: flex;
     flex-direction: column;
@@ -341,8 +414,8 @@
     white-space: nowrap;
   }
   /* The boundary strips: a recessed (paper-sunk) band above and/or below the
-     window saying how much file it omits — and the control that reaches it. A
-     click widens the window one step toward that end, so the count is both the
+     loaded region saying how much file it omits — and the control that reaches
+     it. A click loads the next chunk toward that end, so the count is both the
      label and the affordance; the strip retires once its side hits the file's
      edge. A button with the UA border and font dropped, so it keeps reading as
      part of the panel until the pointer or keyboard lands on it. */
@@ -368,8 +441,8 @@
   .fp-edge:focus-visible {
     outline-offset: -2px;
   }
-  /* A widened window is loading, and this click would be dropped — say so rather
-     than looking live and doing nothing. */
+  /* A chunk is loading, and this click would be dropped — say so rather than
+     looking live and doing nothing. */
   .fp-edge[aria-busy="true"] {
     color: var(--ink-faint);
     cursor: progress;
@@ -380,10 +453,10 @@
   .fp-edge-bottom {
     border-top: 1px solid var(--rule);
   }
-  /* The excerpt: one flex row per source line — a sticky line-number gutter that
-     stays put as long lines scroll horizontally, plus the line's highlighted
+  /* The loaded region: one flex row per source line — a sticky line-number gutter
+     that stays put as long lines scroll horizontally, plus the line's highlighted
      code. This is the panel's only scrolling region, in both axes: once the
-     window outgrows the lane's height it pages here, between a pinned header and
+     region outgrows the lane's height it pages here, between a pinned header and
      pinned strips. The code reads at the plan source view's own grid — the same
      font stack, --text-base size, --leading-normal rhythm, and tabular figures
      the .diffview bridge sets (app.css) — so an excerpt looks like a window onto

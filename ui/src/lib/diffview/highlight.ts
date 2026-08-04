@@ -45,10 +45,11 @@ async function resolveLanguage(hl: Highlighter, language: string): Promise<strin
   }
 }
 
-/** Highlights `code` to themed HTML (`<pre class="shiki">…`) for the excerpt
- * preview, in the caret theme currently painted — the preview docks beside the
- * plan view, so it reads as the same palette. Returns "" on any failure so the caller
- * can fall back to rendering the code as plain text. */
+/** Highlights `code` to themed HTML (`<pre class="shiki">…`) in one pass, in a
+ * caret palette. Not the preview's own path — FilePreview colours a chunk at a
+ * time through highlightChunk — but the reference the chunk rows are measured
+ * against, byte for byte, in highlight.test.ts. Returns "" on any failure so a
+ * caller can fall back to rendering the code as plain text. */
 export async function highlightExcerpt(
   code: string,
   language: string,
