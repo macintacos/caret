@@ -100,6 +100,7 @@ function renderedRows(
   last: number | null;
   rowHeight: number;
   scrollHeight: number;
+  scrollWidth: number;
   clientHeight: number;
   coversRegion: boolean;
 } | null> {
@@ -125,6 +126,7 @@ function renderedRows(
       last: rows.at(-1)?.num ?? null,
       rowHeight,
       scrollHeight: code.scrollHeight,
+      scrollWidth: code.scrollWidth,
       clientHeight: code.clientHeight,
       // No blank band: the mounted rows reach both edges of the region, give or
       // take the region's own vertical padding at the very top and bottom.
@@ -669,6 +671,56 @@ test("a fully loaded preview keeps only a screenful of rows in the DOM", async (
     expectScreenful(end);
     expectRowsAreTheirLines(end);
     expect(end?.coversRegion).toBe(true);
+
+    // The horizontal range is the widest *loaded* line's, not the widest mounted
+    // one's — the file's longest line is line 42, which only the first of these
+    // three positions mounts. Were the range to follow the mounted rows, a
+    // reader scrolled right on a long line would be dragged back toward column
+    // one the moment that line scrolled out of the window.
+    expect(middle?.scrollWidth).toBe(top?.scrollWidth);
+    expect(end?.scrollWidth).toBe(top?.scrollWidth);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("swapping the reference re-frames the panel from the new file's first line", async ({
+  daemon,
+  page,
+}) => {
+  // A click on another filename passes through the dismissal handler untouched,
+  // so the drawer swaps contents on that same click and FilePreview keeps its
+  // instance. The scroll offset the window reads is component state, and the
+  // fresh `.fp-code` it is read against is back at zero — so an offset carried
+  // over from the previous file would window the new one around a row far down
+  // it, leaving the reader looking at a spacer where the head should be.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS, "src/other.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nDeep in `src/cache.ts:150`, then `src/other.ts` from the top.\n",
+    });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+    await expect.poll(() => fileRefCount(page)).toBe(2);
+
+    // The first reference cites line 150, so opening it scrolls the region.
+    await page.locator("[data-file-ref]").first().click();
+    const preview = page.locator("[data-file-preview]");
+    await expect(preview).toBeVisible();
+    await settleDrawer(page);
+    await expect(preview.locator(".fp-target .fp-lnum")).toHaveText("150");
+    expect((await citedRowInRegion(page))?.scrollTop ?? 0).toBeGreaterThan(0);
+
+    // The second cites no line, so its panel opens at the file's head.
+    await page.locator("[data-file-ref]").nth(1).click();
+    await expect(preview).toContainText("src/other.ts");
+    await expect(preview.locator(".fp-range")).toHaveText(`lines 1–60 of ${CACHE_TS_LINES}`);
+    const swapped = await renderedRows(page);
+    expect(swapped?.first).toBe(1);
+    expect(swapped?.coversRegion).toBe(true);
+    expectRowsAreTheirLines(swapped);
+    await expect(preview).toContainText("MARKER_LINE_ONE");
   } finally {
     await proj.cleanup();
   }

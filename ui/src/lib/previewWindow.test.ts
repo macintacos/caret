@@ -106,10 +106,13 @@ describe("rowWindow row selection", () => {
     expect(w.below).toBe(0);
   });
 
-  test("a rubber-band scroll past the bottom still mounts the last row", () => {
-    const w = rowWindow({ total: 1000, rowHeight: 20, scrollTop: 40_000, viewportHeight: 400 });
-    expect(w.count).toBeGreaterThan(0);
-    expect(w.first + w.count).toBe(1000);
+  test("a rubber-band scroll past the bottom still mounts a screenful", () => {
+    // Not merely the one row that technically sits at that offset: a window
+    // clamped to the last row would leave the region blank above it.
+    const past = rowWindow({ total: 1000, rowHeight: 20, scrollTop: 40_000, viewportHeight: 400 });
+    const end = rowWindow({ total: 1000, rowHeight: 20, scrollTop: 19_600, viewportHeight: 400 });
+    expect(past).toEqual(end);
+    expect(past.first + past.count).toBe(1000);
   });
 });
 

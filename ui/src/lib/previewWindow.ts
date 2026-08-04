@@ -28,6 +28,9 @@ export interface RowWindowInput {
   /** Rows the loaded region holds, mounted or not. */
   total: number;
   rowHeight: number;
+  /** How far the viewport's top sits below the **first row's** top. A scroller
+   * with leading padding owes that padding back before passing its `scrollTop`,
+   * or every row lands a fraction of a row late. */
   scrollTop: number;
   viewportHeight: number;
   overscan?: number;
@@ -58,15 +61,16 @@ export function rowWindow({
   if (rowHeight <= 0 || viewportHeight <= 0) {
     return { first: 0, count: total, above: 0, below: 0 };
   }
-  // Clamped to the last row so a rubber-band overscroll past either end still
-  // names a real slice rather than an empty one off the end of the region.
-  const first = Math.min(
-    Math.max(0, Math.floor(scrollTop / rowHeight) - overscan),
-    Math.max(0, total - 1),
-  );
   // The rows the viewport covers, plus the one straddling its bottom edge, plus
   // the overscan at both ends.
   const span = Math.ceil(viewportHeight / rowHeight) + 1 + overscan * 2;
-  const count = Math.max(0, Math.min(total - first, span));
+  // Clamped to a full span at both ends, so an offset past either end of the
+  // region still mounts a screenful rather than collapsing to the one row that
+  // technically exists there — which is the blank band the overscan is for.
+  const first = Math.min(
+    Math.max(0, Math.floor(scrollTop / rowHeight) - overscan),
+    Math.max(0, total - span),
+  );
+  const count = Math.min(total - first, span);
   return { first, count, above: first * rowHeight, below: (total - first - count) * rowHeight };
 }

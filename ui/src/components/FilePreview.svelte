@@ -12,9 +12,12 @@
   // because reading on is the gesture that loads. Only the rows near the viewport
   // are mounted (EXC-970): scrolling on is what loads a whole file, so a spacer
   // above and below carries the height of everything the window left out and the
-  // DOM stays a screenful however much has arrived. The header carries an "esc to
-  // close" hint — the panel stays put until dismissed (Escape, or a click away;
-  // DiffPlanView owns that).
+  // DOM stays a screenful however much has arrived. That trades away reach for
+  // anything that walks the DOM — find-in-page and assistive tech see the mounted
+  // rows, not the whole loaded region — which is the standing cost of windowing;
+  // the header's line range is what still names the whole of it, and carries the
+  // "esc to close" hint besides. The panel stays put until dismissed (Escape, or
+  // a click away; DiffPlanView owns that).
   import { tick, untrack } from "svelte";
 
   import { appearance } from "@/state/appearance.svelte.ts";
@@ -135,6 +138,11 @@
     let cancelled = false;
     preview = { kind: "loading" };
     centred = false;
+    // The new region gets a fresh, unscrolled `.fp-code`, and nothing scrolls it
+    // back to the top for us. Carrying the old file's offset over would window
+    // the new one around a row it may not even have, leaving a spacer where the
+    // opening chunk should be.
+    scrollTop = 0;
     void (async () => {
       try {
         const excerpt = await getFileExcerpt(id, p, ln);
@@ -200,7 +208,7 @@
   // state would let a prepend keep the rows below it.
   async function expand(direction: "up" | "down"): Promise<boolean> {
     const region = codeEl;
-    if (preview.kind !== "ready" || region === undefined) return false;
+    if (preview.kind !== "ready" || region === null) return false;
     const loaded = preview;
     const { chunk: span } = step(region, loaded.rows.length);
     const range =
@@ -281,7 +289,7 @@
   function pendingEdge(): "up" | "down" | undefined {
     const region = codeEl;
     const framing = meta;
-    if (region === undefined || framing === undefined || preview.kind !== "ready") return undefined;
+    if (region === null || framing === undefined || preview.kind !== "ready") return undefined;
     // An unmeasured region — the lane mid-wipe, or a panel not yet laid out —
     // has no proximity to read and would size a chunk off a zero height.
     if (region.clientHeight === 0) return undefined;
@@ -313,14 +321,17 @@
     }
   }
 
-  let codeEl = $state<HTMLElement>();
+  let codeEl = $state<HTMLElement | null>(null);
   // The code region's live geometry, which is what decides how much of the
   // loaded region is worth mounting. Row height is measured off a real row
   // rather than computed from the type scale — see previewWindow.ts for the
-  // fixed-height assumption it stands on.
+  // fixed-height assumption it stands on. `padTop` is the region's own leading
+  // padding, which sits above the first row and so is not part of any row's
+  // offset.
   let scrollTop = $state(0);
   let viewportH = $state(0);
   let rowH = $state(0);
+  let padTop = $state(0);
 
   /** Take the region's scroll offset back into state — on scroll, and after each
    * programmatic scroll, so the mounted rows never trail a jump by a frame. */
@@ -342,12 +353,11 @@
   // reader to actually scroll it, so opening a preview never spends a round trip
   // on a window nobody has read yet, however tall the lane happens to be.
   $effect(() => {
-    // `== null`: bind:this hands back null — not undefined — when the region is
-    // torn down, which is every time the reference changes.
     const region = codeEl;
-    if (region == null) return;
+    if (region === null) return;
     const measure = () => {
       viewportH = region.clientHeight;
+      padTop = Number.parseFloat(getComputedStyle(region).paddingTop) || 0;
       const height = region.querySelector(".fp-row")?.getBoundingClientRect().height ?? 0;
       if (height > 0) rowH = height;
     };
@@ -368,21 +378,33 @@
     rowWindow({
       total: preview.kind === "ready" ? preview.rows.length : 0,
       rowHeight: rowH,
-      scrollTop,
+      // Owed back because the padding sits above the first row: rowWindow reads
+      // the offset from that row's top, not from the scroller's own origin.
+      scrollTop: scrollTop - padTop,
       viewportHeight: viewportH,
     }),
   );
   const rendered = $derived(
     preview.kind === "ready" ? preview.rows.slice(win.first, win.first + win.count) : [],
   );
-  // The widest loaded line, in columns. The spacers carry it as a min-width, so
-  // the horizontal range covers every loaded line rather than only the mounted
-  // ones — otherwise scrolling down a file of long lines would shrink the range
-  // and drag the reader back toward column one.
-  // ponytail: a tab counts as one column here, so a tab-indented file's widest
-  // line under-measures and that row's own box sets the range, as it does today.
+  // Columns a line occupies under `white-space: pre` and the default eight-column
+  // tab stop, which is the width its row will actually take in a monospace face.
+  // ponytail: a wide glyph (CJK, emoji) counts as one column, so a line of them
+  // under-measures and that row's own box sets the range while it is mounted.
+  const TAB_COLUMNS = 8;
+  const columns = (line: string): number => {
+    let width = 0;
+    for (const ch of line) {
+      width = ch === "\t" ? (Math.floor(width / TAB_COLUMNS) + 1) * TAB_COLUMNS : width + 1;
+    }
+    return width;
+  };
+  // The widest loaded line. The spacers carry it as a min-width, so the
+  // horizontal range covers every loaded line rather than only the mounted ones
+  // — otherwise scrolling down a file of long lines would shrink the range and
+  // drag the reader back toward column one.
   const cols = $derived(
-    preview.kind === "ready" ? preview.lines.reduce((w, l) => Math.max(w, l.length), 0) : 0,
+    preview.kind === "ready" ? preview.lines.reduce((w, l) => Math.max(w, columns(l)), 0) : 0,
   );
 
   let centred = false;
@@ -396,13 +418,12 @@
     const region = codeEl;
     // Wait for a measured region: centring against one that has yet to be laid
     // out puts the row wherever the later height lands.
-    if (region === undefined || viewportH === 0 || rowH === 0) return;
+    if (region === null || viewportH === 0 || rowH === 0) return;
     centred = true;
     // A reference citing a line past EOF gets a region clamped to the last line,
     // so no row carries it and there is nothing to centre — stop looking.
     const index = line - preview.startLine;
     if (index < 0 || index >= preview.rows.length) return;
-    const padTop = Number.parseFloat(getComputedStyle(region).paddingTop) || 0;
     region.scrollTop = padTop + index * rowH - (viewportH - rowH) / 2;
     syncScroll();
   });
