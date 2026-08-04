@@ -85,6 +85,15 @@ function expectCitedRowVisible(m: Awaited<ReturnType<typeof citedRowInRegion>>):
   expect(m?.offset ?? Infinity).toBeLessThanOrEqual((m?.region ?? 0) - (m?.row ?? 0));
 }
 
+/** Where the cited row sits once the region is scrolled to its top: its offset
+ * now, plus however far the region is scrolled — scrolling up moves content down
+ * by exactly that much. Reading the position that way rather than measuring it
+ * after the scroll is what keeps the assertion off the race, since the chunk the
+ * scroll fires can land before a second measurement gets taken. */
+function atTop(m: Awaited<ReturnType<typeof citedRowInRegion>>): number {
+  return (m?.offset ?? Number.NaN) + (m?.scrollTop ?? Number.NaN);
+}
+
 /**
  * What the preview's code region actually holds, optionally after scrolling it
  * to `scrollTo` first. Rows are windowed (EXC-970), so the DOM holds a screenful
@@ -875,8 +884,89 @@ test("loading upward keeps the reader's line in view", async ({ daemon, page }) 
     await expect(preview.locator(".fp-range")).toHaveText(`lines 1–72 of ${CACHE_TS_LINES}`);
 
     // Still on screen inside the region — not pushed off either edge by the 11
-    // lines that just appeared above it.
-    expectCitedRowVisible(await citedRowInRegion(page));
+    // lines that just appeared above it — and not merely on screen: exactly where
+    // it was. Scrolling to the top left the cited row `offset + scrollTop` down
+    // the region, and a chunk landing above it must not move it a pixel. The
+    // slack is one: the browser quantizes a fractional scrollTop to whole CSS px.
+    const after = await citedRowInRegion(page);
+    expectCitedRowVisible(after);
+    expect(Math.abs((after?.offset ?? Number.NaN) - atTop(before))).toBeLessThanOrEqual(1);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("an upward chunk landing mid-gesture keeps the cited line under the reader", async ({
+  daemon,
+  page,
+}) => {
+  // The companion to the spec above, for a reader who has NOT stopped. Loading is
+  // scroll-driven (EXC-969), so the gesture that fires a load is usually still
+  // going when it lands: the anchor has to shift the offset the reader holds
+  // *now* by the height that arrived, not restore the one they held when the
+  // fetch left. Restoring the stale one throws away everything they scrolled in
+  // between and slides the cited line out from under their eye — which needs a
+  // real scroller and a real in-flight request, so it lives here.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      // Deep enough that the chunk arriving above is a screenful rather than the
+      // 11 lines a `:42` reference leaves — the reader needs room to move.
+      plan: "# Refs\n\nThe deep key lives in `src/cache.ts:150` today.\n",
+    });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+    await page.locator("[data-file-ref]").first().click();
+
+    const preview = page.locator("[data-file-preview]");
+    await expect(preview).toBeVisible();
+    await settleDrawer(page);
+    await expect(preview.locator(".fp-target")).toHaveCount(1);
+    const opened = await citedRowInRegion(page);
+    expect(opened?.scrollTop ?? 0).toBeGreaterThan(0);
+    expectCitedRowVisible(opened);
+
+    // Hold the next excerpt request open so a gesture can outrun it, the way a
+    // real one does. A promise the spec resolves, never a delay — a fixed sleep
+    // would race the very window it is waiting on.
+    let release = (): void => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let requests = 0;
+    await page.route(
+      (url) => url.pathname.endsWith("/file"),
+      async (route) => {
+        requests++;
+        await held;
+        await route.continue();
+      },
+    );
+
+    // Reaching the top edge fires the upward load…
+    const framed = await preview.locator(".fp-range").textContent();
+    await scrollRegion(page, "top");
+    await expect.poll(() => requests).toBe(1);
+
+    // …and the reader carries on while it is in flight, back down to where the
+    // panel opened. Single-flight, so this scroll asks for nothing further.
+    await renderedRows(page, opened?.scrollTop ?? 0);
+    const moved = await citedRowInRegion(page);
+    expect(moved?.offset ?? Number.NaN).toBe(opened?.offset ?? Number.NaN);
+
+    release();
+    await expect(preview.locator(".fp-range")).not.toHaveText(framed ?? "");
+
+    // The chunk landed entirely above the reader, so the cited line is still
+    // exactly where they left it — the region moved down by what arrived rather
+    // than back to the offset the fetch started from.
+    const after = await citedRowInRegion(page);
+    expectCitedRowVisible(after);
+    expect(
+      Math.abs((after?.offset ?? Number.NaN) - (moved?.offset ?? Number.NaN)),
+    ).toBeLessThanOrEqual(1);
   } finally {
     await proj.cleanup();
   }
