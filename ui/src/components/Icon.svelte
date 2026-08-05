@@ -18,6 +18,7 @@
   import cornerUpLeft from "@/icons/corner-up-left.svg?raw";
   import ellipsis from "@/icons/ellipsis.svg?raw";
   import file from "@/icons/file.svg?raw";
+  import folder from "@/icons/folder.svg?raw";
   import gitCompare from "@/icons/git-compare.svg?raw";
   import keyboard from "@/icons/keyboard.svg?raw";
   import monitor from "@/icons/monitor.svg?raw";
@@ -44,6 +45,7 @@
     "corner-up-left": cornerUpLeft,
     ellipsis,
     file,
+    folder,
     "git-compare": gitCompare,
     keyboard,
     monitor,

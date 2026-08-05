@@ -23,6 +23,7 @@ under the ISC license.
 | `corner-up-left` | [ui/src/icons/corner-up-left.svg](ui/src/icons/corner-up-left.svg) | [corner-up-left.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/corner-up-left.svg) |
 | `ellipsis` | [ui/src/icons/ellipsis.svg](ui/src/icons/ellipsis.svg) | [ellipsis.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/ellipsis.svg) |
 | `file` | [ui/src/icons/file.svg](ui/src/icons/file.svg) | [file.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/file.svg) |
+| `folder` | [ui/src/icons/folder.svg](ui/src/icons/folder.svg) | [folder.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/folder.svg) |
 | `git-compare` | [ui/src/icons/git-compare.svg](ui/src/icons/git-compare.svg) | [git-compare.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/git-compare.svg) |
 | `keyboard` | [ui/src/icons/keyboard.svg](ui/src/icons/keyboard.svg) | [keyboard.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/keyboard.svg) |
 | `monitor` | [ui/src/icons/monitor.svg](ui/src/icons/monitor.svg) | [monitor.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/monitor.svg) |
