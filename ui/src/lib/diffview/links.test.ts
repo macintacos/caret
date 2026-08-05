@@ -291,23 +291,41 @@ describe("buildLinkLayer file-path targets", () => {
 
   test.each([
     ["an extensionless single segment", "see [docs](guide) for more"],
+    ["the same segment with a trailing slash", "see [docs](guide/) for more"],
     ["a fragment target", "see [Setup](doc/guide.md#setup) for more"],
     ["a query target", "see [the page](docs/index?v=1) for more"],
-  ])("a target that is not a plain path stays literal (%s) — no rewrite, no ref", (_name, input) => {
-    // Two refusals in one shape. A single extensionless segment is a word, not a
-    // path specific enough to hide `[]()` for. A target carrying a fragment or a
-    // query is a URL slot however its head reads — the guarantee the extension
-    // test used to give incidentally, since it read `md#setup` as the extension.
+    ["a scheme-less URL", "see [caret](github.com/macintacos/caret) for more"],
+    ["a home-relative path", "see [the notes](~/notes/plan.md) for more"],
+    ["a path climbing out of cwd", "see [the shared lib](../shared/src) for more"],
+  ])("a target that is not a citable path stays literal (%s)", (_name, input) => {
+    // Four refusals in one shape, each costing nothing but visible markup where
+    // collapsing would cost the destination outright. A single extensionless
+    // segment is a word, not a citation — and adding a slash to it does not make
+    // it one, which is the whole trailing-slash-is-not-a-discriminator rule
+    // applied at its sharpest. A fragment or query makes the target a URL slot
+    // however its head reads. So does a dotted first segment: `github.com/…`
+    // would otherwise collapse to a bare label with its destination nowhere. And
+    // `~` and `../` are targets no resolve could ever answer.
     const { text, spans, fileRefs } = buildLinkLayer(input);
     expect(text).toBe(input);
     expect(spans.get(1) ?? []).toHaveLength(0);
     expect(fileRefs.size).toBe(0);
   });
 
+  test("a scoped-package path is still a citable file target", () => {
+    // `@` is a path character here for exactly one reason: node_modules really
+    // does hold `@types`. Refusing it would have narrowed a target that already
+    // collapsed on its extension.
+    const ref = (buildLinkLayer("[types](node_modules/@types/node/index.d.ts)").fileRefs.get(1) ??
+      [])[0];
+    expect(ref?.path).toBe("node_modules/@types/node/index.d.ts");
+  });
+
   // A DIRECTORY target collapses on exactly the terms a file one does (EXC-956).
-  // The trailing slash is not consulted at any point: both spellings take the
-  // same branch and emit the same span, and what the path IS comes back from the
-  // daemon's resolve, which keys its answer by the requested string — so the
+  // The trailing slash never decides anything: both spellings take the same
+  // branch and emit the same span — as do `guide` and `guide/` above, which is
+  // the other half of the same claim — and what the path IS comes back from the
+  // daemon's resolve, which keys its answer by the requested string, so the
   // slash has to survive onto `path` verbatim.
   test.each([
     ["without a trailing slash", "see [the daemon](src/daemon) for more", "src/daemon"],

@@ -362,21 +362,22 @@ test("a linked directory opens the tree and a linked file opens the preview", as
       // Backticked labels, the citation shape caret's own plans use: the label
       // keeps a token of its own, so the glyph lands on it. The directory carries
       // a trailing slash and the file does not — a difference neither the link
-      // layer nor the resolve is allowed to read anything into.
-      plan: "# Refs\n\nRead [`src/`](src/) and then [`src/cache.ts`](src/cache.ts).\n",
+      // layer nor the resolve is allowed to read anything into, and the slash
+      // has to reach the daemon intact, since the response is keyed by the
+      // string that was requested.
+      plan: "# Refs\n\nRead [`src/lib/`](src/lib/) and then [`src/cache.ts`](src/cache.ts).\n",
     });
     await page.goto("/");
     await expect(page.locator(".diff-plan")).toBeVisible();
 
     // The `[]()` is gone; both labels survive and carry their kind.
-    await expect(page.locator(".diffview").getByText("](src/)")).toHaveCount(0);
-    await expect(page.locator('[data-file-ref="directory"]')).toHaveText("src/");
+    await expect(page.locator(".diffview").getByText("](src/lib/)")).toHaveCount(0);
+    await expect(page.locator('[data-file-ref="directory"]')).toHaveText("src/lib/");
     await expect(page.locator('[data-file-ref=""]')).toHaveText("src/cache.ts");
 
     await page.locator('[data-file-ref="directory"]').click();
     await expect(page.locator(card)).toBeVisible();
-    await expect(page.locator(`${card} .ft-path`)).toHaveText("src/");
-    await expect(page.locator(row("cache.ts"))).toBeVisible();
+    await expect(page.locator(row("util.ts"))).toBeVisible();
 
     // The file link on the same plan opens the excerpt instead, and the card
     // gives way to it — one click, because a reference click is let through.
@@ -402,7 +403,10 @@ test("a prose-labelled directory link collapses and still opens the tree", async
     await expect(page.locator(".diff-plan")).toBeVisible();
 
     // The label survives verbatim — it is never rewritten to the path — and the
-    // markup around it is gone.
+    // markup around it is gone. The glyph lands because the label is the whole
+    // line and so is its own token; put prose beside it and the line becomes one
+    // coarse run that tagFileRefTokens refuses, which is the documented shape a
+    // prose label usually has (see links.ts).
     await expect(page.locator(".diffview").getByText("](src/lib)")).toHaveCount(0);
     await expect(page.locator('[data-file-ref="directory"]')).toHaveText("the library tree");
 
@@ -427,19 +431,28 @@ test("an unresolved directory link collapses its markup but gets no affordance",
   // either way; the existence gate is what decides there is nothing to click.
   const proj = await makeProject(NESTED);
   try {
-    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\n[a folder that moved](src/nowhere)\n" });
+    await daemon.seed({
+      // The second line carries a reference that DOES resolve, so waiting for its
+      // tag is a real sync point for the resolve round trip. Without one, the
+      // count-zero assertion below is true before the response even lands and
+      // would pass whether or not the gate works.
+      cwd: proj.dir,
+      plan: "# Refs\n\n[a folder that moved](src/nowhere)\n\nThe tree under `src` matters.\n",
+    });
     await page.goto("/");
     await expect(page.locator(".diff-plan")).toBeVisible();
+    await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
 
     await expect(page.locator(".diffview").getByText("a folder that moved")).toBeVisible();
     await expect(page.locator(".diffview").getByText("](src/nowhere)")).toHaveCount(0);
-    await expect(page.locator("[data-file-ref]")).toHaveCount(0);
+    // Exactly the one from `src` — the collapsed label added none.
+    await expect(page.locator("[data-file-ref]")).toHaveCount(1);
 
     await page.locator(".diffview").getByText("a folder that moved").click();
-    // Nothing to await, so give the click pipeline a beat before asserting that
-    // neither surface appeared.
-    const t0 = await page.evaluate(() => performance.now());
-    await page.waitForFunction((t) => performance.now() > t + 300, t0);
+    // The label consumed nothing, so the row's own handler ran and opened the
+    // composer. That is both a claim worth making and the ordered beat the two
+    // negative assertions need — a fixed wait would race the state it rules out.
+    await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
     await expect(page.locator(card)).toHaveCount(0);
     await expect(page.locator("[data-file-preview]")).toHaveCount(0);
   } finally {
