@@ -201,6 +201,15 @@ test("returns null when the reference does not resolve", async () => {
   expect(await readFileExcerpt(cwd, "ghost.ts", 5)).toBeNull();
 });
 
+test("returns null for a directory, and never reports one as too large", async () => {
+  // Directories resolve now, so "only a file is ever read" stopped being a
+  // property of resolution and became one of these two call sites. Both are
+  // pinned here, or the guarantee has no falsifier.
+  mkdirSync(join(cwd, "src/daemon"), { recursive: true });
+  expect(await readFileExcerpt(cwd, "src/daemon")).toBeNull();
+  expect(await isFileTooLargeToPreview(cwd, "src/daemon")).toBe(false);
+});
+
 // ----- readFileExcerpt with an explicit range -----
 
 test("honours an explicit range, ignoring the line", async () => {

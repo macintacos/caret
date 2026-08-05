@@ -1,4 +1,4 @@
-// Cross-cutting constants with no behavior. Pure TS, no node imports — so the
+// Cross-cutting constants and the pure predicates over them. Pure TS, no node imports — so the
 // browser bundle and config files (ui/vite.config.ts) can import these
 // without dragging in the daemon's node-only dependency chain.
 
@@ -108,9 +108,10 @@ const KNOWN_FILE_EXTENSIONS: ReadonlySet<string> = new Set([
 ]);
 
 /** Whether `path`'s last segment reads as `name.ext` for one of the extensions a
- * plan is likely to cite. Requires a real name before the dot, so a bare `.ts` or
- * a dotfile like `.env` is not file-shaped by this test — both are still valid
- * references, they just don't earn the two narrowings above. */
+ * plan is likely to cite. Requires a real name before the dot, so a bare `.ts`, a
+ * dotfile like `.env`, and anything ending in `/` are all false here. They are
+ * still perfectly good references — this only decides whether the two narrowings
+ * above apply, and neither should fire on a name it cannot read as a file. */
 export function hasKnownFileExtension(path: string): boolean {
   const base = path.split("/").pop() ?? "";
   const dot = base.lastIndexOf(".");

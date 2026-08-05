@@ -7,7 +7,7 @@
 // local-file reader. A reference that resolves to nothing yields null, and the
 // UI then shows no icon and no affordance.
 
-import { type Dirent, readFileSync, type Stats, statSync } from "node:fs";
+import { type Dirent, readFileSync, type Stats } from "node:fs";
 import { readdir, realpath, stat } from "node:fs/promises";
 import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -112,9 +112,13 @@ function safeRealpath(path: string): Promise<string | null> {
 }
 
 /** A resolved reference: the canonical path on disk, and what it turned out to be. */
-interface ResolvedRef {
+export interface ResolvedRef {
   path: string;
   kind: FileRefKind;
+}
+
+function safeStat(path: string): Promise<Stats | null> {
+  return stat(path).catch(() => null);
 }
 
 // What `abs` is when it is a real file or directory inside `cwdReal`, else null.
@@ -126,7 +130,7 @@ async function contained(cwdReal: string, abs: string): Promise<ResolvedRef | nu
   const real = await safeRealpath(abs);
   if (real === null) return null;
   if (real !== cwdReal && !real.startsWith(cwdReal + sep)) return null;
-  const stats = await stat(real).catch(() => null);
+  const stats = await safeStat(real);
   if (stats === null) return null;
   if (stats.isFile()) return { path: real, kind: "file" };
   return stats.isDirectory() ? { path: real, kind: "directory" } : null;
@@ -168,9 +172,9 @@ async function basenameSearch(cwdReal: string, name: string): Promise<string | n
  * target escapes `cwd`.
  *
  * Async because the file-refs route resolves a whole plan's candidates at once
- * and interleaves them; one caller resolving a single path pays a `realpath` of
- * `cwd` it could have hoisted, which is a cached path-walk and not worth a second
- * batch-shaped entry point to avoid.
+ * and interleaves them. Each call realpaths `cwd` itself, so that route pays one
+ * such walk per candidate rather than one per batch — warm and cached, and not
+ * on its own worth a second batch-shaped entry point beside this one.
  */
 export async function resolveInCwd(cwd: string, candidate: string): Promise<ResolvedRef | null> {
   if (cwd === "" || !isAbsolute(cwd)) return null;
@@ -194,14 +198,6 @@ export async function resolveInCwd(cwd: string, candidate: string): Promise<Reso
   return found === null ? null : { path: found, kind: "file" };
 }
 
-function safeStat(path: string): Stats | null {
-  try {
-    return statSync(path);
-  } catch {
-    return null;
-  }
-}
-
 /**
  * True when `candidate` resolves to a real file inside `cwd` that exceeds
  * `MAX_EXCERPT_BYTES` — the one case `readFileExcerpt`'s null hides that the UI
@@ -213,7 +209,7 @@ function safeStat(path: string): Stats | null {
 export async function isFileTooLargeToPreview(cwd: string, candidate: string): Promise<boolean> {
   const hit = await resolveInCwd(cwd, candidate);
   if (hit === null || hit.kind !== "file") return false;
-  const stats = safeStat(hit.path);
+  const stats = await safeStat(hit.path);
   return stats !== null && stats.size > MAX_EXCERPT_BYTES;
 }
 
@@ -284,7 +280,7 @@ export async function readFileExcerpt(
   if (hit === null || hit.kind !== "file") return null;
   const abs = hit.path;
 
-  const stats = safeStat(abs);
+  const stats = await safeStat(abs);
   if (stats === null || stats.size > MAX_EXCERPT_BYTES) return null;
 
   const allLines = readLines(abs, stats);

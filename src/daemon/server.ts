@@ -485,24 +485,39 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   //
   // De-duped BEFORE the cap, so a plan repeating one path can't crowd out the
   // ones behind it, and resolved in parallel — the wider candidate gate makes
-  // this a few hundred stats on a long plan, which a sequential loop would walk
-  // one blocking syscall at a time.
+  // this a few hundred resolves on a long plan, which a sequential loop would
+  // walk one blocking syscall at a time.
   async function handleFileRefs(req: Request, id: string): Promise<Response> {
     const r = store.get(id);
     if (!r) return notFound();
     const { paths } = await parseBody(req, FileRefsBodySchema);
-    const unique = [...new Set(paths)].slice(0, MAX_FILE_REFS);
-    const hits = await Promise.all(unique.map((p) => resolveInCwd(r.cwd, p)));
-    const resolved: Record<string, FileRefKind> = {};
-    unique.forEach((p, i) => {
-      const hit = hits[i];
-      if (hit) resolved[p] = hit.kind;
-    });
+    // Collected with a break rather than de-duping the whole array and then
+    // slicing, so the cap bounds the WORK and not just the result: the body is
+    // untrusted, and FileRefsBodySchema deliberately carries no `max()` on the
+    // array (one would trip its `.catch([])` and degrade the whole body).
+    const seen = new Set<string>();
+    const unique: string[] = [];
+    for (const p of paths) {
+      if (seen.has(p)) continue;
+      seen.add(p);
+      if (unique.push(p) === MAX_FILE_REFS) break;
+    }
+    const entries = await Promise.all(
+      unique.map(async (p) => {
+        const hit = await resolveInCwd(r.cwd, p);
+        return hit === null ? null : ([p, hit.kind] as const);
+      }),
+    );
+    const resolved: Record<string, FileRefKind> = Object.fromEntries(
+      entries.filter((e) => e !== null),
+    );
     // Counts only — a candidate is plan text, and plan text is never logged.
-    const dirs = Object.values(resolved).filter((k) => k === "directory").length;
+    // `requested` is what makes the cap visible: without it a plan truncated at
+    // MAX_FILE_REFS reads exactly like one that fit.
     log.debug("request", `file-refs resolved: ${Object.keys(resolved).length}/${unique.length}`, {
       reviewId: id,
-      directories: dirs,
+      requested: paths.length,
+      directories: Object.values(resolved).filter((k) => k === "directory").length,
     });
     return Response.json({ resolved } satisfies FileRefsResponse);
   }

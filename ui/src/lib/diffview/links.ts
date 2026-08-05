@@ -21,8 +21,9 @@
 // the label landed. Two consequences worth knowing before changing this:
 // collapsing is decided on shape alone, so a target that does NOT resolve leaves
 // its label as bare prose with no affordance and no visible path; and a target
-// carrying a fragment or query (`doc/guide.md#setup`) is not path-shaped, so that
-// link stays literal.
+// carrying a fragment or query (`doc/guide.md#setup`) is not file-shaped — the
+// extension test below reads its extension as `md#setup` — so that link stays
+// literal.
 
 import { hasKnownFileExtension } from "@core/config/constants";
 import { classify, type FileRefSpan, type FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
@@ -163,13 +164,10 @@ function transformLine(
       if (HAS_SCHEME.test(url) || url.startsWith("//")) continue;
       // A FILE-shaped target is a file reference; anything else (a bare `guide`,
       // or a directory like `src/daemon`) stays literal with no rewrite. The
-      // extension test is this layer's alone: the inline-code scan offers any
-      // plausible path token to the daemon because an unresolved candidate costs
-      // nothing visible, whereas collapsing a link's `[]()` is decided on shape
-      // before anything resolves — so widening it here would hide the markup of
-      // every prose-worded link whose target happens to read as a path.
-      // Directories join in at EXC-956, once a folder reference has an
-      // affordance to carry.
+      // extension test narrows classify's shared path-shaped gate to this call
+      // site alone, because collapsing `[]()` happens before anything resolves —
+      // widening it would hide the markup of every prose-worded link whose
+      // target merely reads as a path. Directories join at EXC-956.
       const ref = classify(url);
       if (ref === null || !hasKnownFileExtension(ref.path)) continue;
       rewrites.push({ start, end, display: label, href: null, file: { ...ref, target: url } });

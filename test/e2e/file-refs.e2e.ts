@@ -249,8 +249,13 @@ test("resolves a cited directory but affords nothing for it", async ({ daemon, p
     });
     expect(tagged).toEqual(["src/cache.ts"]);
 
-    // And clicking a directory opens nothing: it is ordinary inline code.
-    await page.getByText("src/lib/", { exact: true }).click();
+    // And clicking a directory opens nothing: it is ordinary inline code. A bare
+    // toHaveCount(0) is satisfied on its first poll and so would race the state
+    // update it is meant to rule out — give the click a beat to have opened
+    // something first, the same way the hover assertion above does.
+    await page.locator(".diffview").getByText("src/lib/", { exact: true }).click();
+    const t = await page.evaluate(() => performance.now());
+    await page.waitForFunction((from) => performance.now() > from + 300, t);
     await expect(page.locator("[data-file-preview]")).toHaveCount(0);
   } finally {
     await proj.cleanup();

@@ -1,8 +1,9 @@
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 
 import {
   BUN_SOCKET_IDLE_CAP_S,
   deriveIdleTimeoutSec,
+  hasKnownFileExtension,
   IDLE_TIMEOUT_HEADROOM_S,
   MAX_HEARTBEAT_MS,
 } from "@/config/constants.ts";
@@ -47,4 +48,33 @@ test("the headroom stays intact at the heartbeat ceiling (clamp never bites in r
 test("the default heartbeat derives a comfortable idleTimeout", () => {
   // 8000ms heartbeat → ceil(8) + 5s headroom = 13s, well above the heartbeat.
   expect(deriveIdleTimeoutSec(8_000)).toBe(13);
+});
+
+// hasKnownFileExtension is the narrowing both runtimes apply on top of the
+// path-shaped gate (EXC-916): the link layer collapses `[label](target)` only
+// for a file-shaped target, and the daemon's bounded basename walk fires only
+// for a file-shaped name. Its edges decide whether a reference gets an
+// affordance and whether a 5,000-dirent walk runs, so they are pinned here.
+describe("hasKnownFileExtension", () => {
+  test.each([
+    ["a bare filename", "api.ts"],
+    ["a path's last segment", "ui/src/lib/api.ts"],
+    ["an uppercase extension", "README.MD"],
+    ["a multi-dot name", "vite.config.ts"],
+  ])("accepts %s", (_name, path) => {
+    expect(hasKnownFileExtension(path)).toBe(true);
+  });
+
+  test.each([
+    ["an extensionless word", "dist"],
+    ["a directory path", "src/daemon"],
+    ["a trailing slash, which leaves no last segment", "src/daemon/"],
+    ["a dotfile, which has no name before the dot", ".env"],
+    ["a bare extension", ".ts"],
+    ["an unknown extension", "obj.property"],
+    ["a fragment glued to the extension", "doc/guide.md#setup"],
+    ["the empty string", ""],
+  ])("refuses %s", (_name, path) => {
+    expect(hasKnownFileExtension(path)).toBe(false);
+  });
 });

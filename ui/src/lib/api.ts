@@ -106,7 +106,9 @@ export async function resolveFileRefs(
         body: JSON.stringify({ paths }),
       }),
     );
-    return resolved;
+    // `?? {}` keeps the never-throws promise above honest against a 2xx whose
+    // body is missing the field: the consumer walks this with Object.entries.
+    return resolved ?? {};
   } catch (err) {
     uiLog.warn("request", `file refs resolve failed: ${shortId(id)}`, {
       reviewId: id,
