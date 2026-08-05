@@ -258,6 +258,32 @@ export interface FileRefsResponse {
   resolved: Record<string, FileRefKind>;
 }
 
+/** One immediate child of a listed directory. */
+export interface DirEntry {
+  /** The entry's own name — never a path, so a row can't smuggle a traversal. */
+  name: string;
+  kind: FileRefKind;
+  /** Present, and true, only on a directory the daemon will not enumerate: one
+   * in the skip set (node_modules, dist, build, coverage, out) or a dotted name.
+   * The row is still shown — it is simply not expandable. */
+  skipped?: boolean;
+}
+
+/** Response of GET /api/reviews/:id/dir — one level of a directory a plan
+ * referenced, so the folder preview expands lazily rather than shipping a whole
+ * subtree (EXC-917). */
+export interface DirListing {
+  /** The listed directory relative to the review's cwd (display + de-dup key),
+   * empty for the cwd itself. */
+  path: string;
+  /** This level's entries, directories first then by name, capped at
+   * `MAX_DIR_ENTRIES`. */
+  entries: DirEntry[];
+  /** Listable entries at this level before the cap, so the UI can say how many
+   * were elided. Equal to `entries.length` when nothing was truncated. */
+  total: number;
+}
+
 /** A bounded, line-aware read excerpt of a plan-referenced file, served by GET
  * /api/reviews/:id/file for the hover preview (EXC-687). */
 export interface FileExcerpt {

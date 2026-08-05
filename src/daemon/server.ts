@@ -43,6 +43,7 @@ import {
   type RouteResult,
   toClientReview,
 } from "@/lib/types.ts";
+import { listDirectory } from "@/plan/directory.ts";
 import { isFileTooLargeToPreview, readFileExcerpt, resolveInCwd } from "@/plan/excerpt.ts";
 import { createDecisions } from "@/review/decisions.ts";
 import type { Store } from "@/review/store.ts";
@@ -188,15 +189,15 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
 
 // A request matched to one of the :id sub-routes, with the review id decoded and
 // the optional sub-path (/decision, /resolve, /draft, /expire, /seen, /file-refs,
-// /file) split out. /file-refs precedes /file in the alternation so the longer
-// literal wins rather than /file matching its prefix.
+// /file, /dir) split out. /file-refs precedes /file in the alternation so the
+// longer literal wins rather than /file matching its prefix.
 interface IdRoute {
   id: string;
   sub: string | undefined;
 }
 
 const ID_ROUTE_RE =
-  /^\/api\/reviews\/([^/]+)(\/decision|\/resolve|\/draft|\/expire|\/seen|\/file-refs|\/file)?$/;
+  /^\/api\/reviews\/([^/]+)(\/decision|\/resolve|\/draft|\/expire|\/seen|\/file-refs|\/file|\/dir)?$/;
 
 /** Match an /api/reviews/:id[/sub] path, decoding the id; null for any other path. */
 function matchIdRoute(path: string): IdRoute | null {
@@ -547,6 +548,34 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return (await isFileTooLargeToPreview(r.cwd, path)) ? tooLarge() : notFound();
   }
 
+  // GET /api/reviews/:id/dir?root=&path= — one level of a directory the plan
+  // referenced, so the folder preview expands lazily instead of loading a whole
+  // subtree (EXC-917). `root` is the referenced directory the reader started
+  // from; `path` is the level being asked for and defaults to `root`, which is
+  // what lets the descent guard count depth from the reference rather than from
+  // cwd. Confined to the review's cwd exactly as the file routes are, and a
+  // single 404 covers every refusal — a missing directory, an escape, and a
+  // descent past the guard rail are indistinguishable to the caller.
+  //
+  // Counts only reach the log: a directory's contents are the reader's project.
+  async function handleDirListing(req: Request, id: string): Promise<Response> {
+    const r = store.get(id);
+    if (!r) return notFound();
+    const params = new URL(req.url).searchParams;
+    const listing = await listDirectory(
+      r.cwd,
+      params.get("root") ?? "",
+      params.get("path") ?? undefined,
+    );
+    if (listing === null) return notFound();
+    log.debug("request", `dir listed: ${listing.entries.length} entries`, {
+      reviewId: id,
+      total: listing.total,
+      returned: listing.entries.length,
+    });
+    return Response.json(listing);
+  }
+
   // GET /api/reviews/:id/decision — the hook's long-poll for a decision.
   async function handleDecision(id: string): Promise<Response> {
     // A decision may already be recorded: in memory (a deny keeps the review) or
@@ -722,6 +751,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       const { id, sub } = route;
       if (method === "GET" && !sub) return handleGetReview(id);
       if (method === "GET" && sub === "/file") return handleFileExcerpt(req, id);
+      if (method === "GET" && sub === "/dir") return handleDirListing(req, id);
       if (method === "POST" && sub === "/file-refs") return handleFileRefs(req, id);
       if (method === "GET" && sub === "/decision") return handleDecision(id);
       if (method === "PUT" && sub === "/draft") return handleDraft(req, id);
