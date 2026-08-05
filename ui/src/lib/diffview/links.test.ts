@@ -289,8 +289,16 @@ describe("buildLinkLayer file-path targets", () => {
     expect(text.slice(ref?.startCol ?? 0, ref?.endCol ?? 0)).toBe("the researcher agent");
   });
 
-  test("a target that is not path-shaped stays literal — no rewrite, no ref", () => {
-    const input = "see [docs](guide) for more";
+  test.each([
+    ["an extensionless word", "see [docs](guide) for more"],
+    ["a directory", "see [the daemon](src/daemon) for more"],
+    ["a trailing-slash directory", "see [the daemon](src/daemon/) for more"],
+  ])("a target that is not file-shaped stays literal (%s) — no rewrite, no ref", (_name, input) => {
+    // The inline-code scan offers any plausible path token to the daemon, but a
+    // link only collapses when its target looks like a FILE: collapsing is
+    // decided on shape alone, so widening this would hide the `[]()` of every
+    // prose-worded link whose target happens to read as a path. Directories join
+    // in at EXC-956, once a folder reference has an affordance to carry.
     const { text, spans, fileRefs } = buildLinkLayer(input);
     expect(text).toBe(input);
     expect(spans.get(1) ?? []).toHaveLength(0);

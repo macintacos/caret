@@ -8,12 +8,13 @@
 // Detection is scoped to inline-code spans (`…`), which is where caret's plans
 // cite files and — decisively — the only place a path renders as its own shiki
 // token: prose is tokenized as one coarse run, so a path inside it has no token
-// boundary to hang the icon on or to hit-test a click against. A token
-// qualifies on *shape* only (last path segment ends in a known file extension,
-// optionally trailed by a line reference — `:line`, `:line:col`, or a
-// `:start-end` range, each also spellable with `#`/`L` as in `#L154-L162`);
-// whether it is a real file is resolved server-side, so a candidate that doesn't
-// exist gets no icon and no affordance.
+// boundary to hang the icon on or to hit-test a click against. Within a span a
+// token qualifies on a bare plausibility floor — its last segment holds a letter
+// — optionally trailed by a line reference (`:line`, `:line:col`, or a
+// `:start-end` range, each also spellable with `#`/`L` as in `#L154-L162`). What
+// a candidate actually IS, file or directory or nothing, is resolved server-side
+// against the review's cwd (EXC-916); a candidate that resolves to neither gets
+// no icon and no affordance.
 //
 // The scan is not the only source of references: the link layer emits its own
 // over collapsed markdown-link labels, whose paths never survive into the display
@@ -78,78 +79,27 @@ const CANDIDATE_RE = /[A-Za-z0-9._/~-]+(?:(?::L?|:?#L)\d+(?:[-–]L?\d+|:\d+)?)?
 // same guarantee links.ts documents for `doc/guide.md#setup`.
 const LINE_SUFFIX = /^(.+?)(?::L?|:?#L)(\d+)(?:[-–]L?(\d+)|:\d+)?$/;
 
-// The final `.ext` of a path's last segment (extension must start with a letter
-// or digit; the membership test below narrows it to real file kinds).
-const EXTENSION = /\.([A-Za-z0-9]+)$/;
-
-// File extensions that count as a reference. Broad enough to cover the source and
-// config kinds a plan cites, narrow enough that prose ("e.g", "obj.property")
-// and numbers ("3.14") never qualify. The daemon is the real existence gate; this
-// set just keeps the candidate batch tight and precise.
-const KNOWN_EXTENSIONS: ReadonlySet<string> = new Set([
-  "ts",
-  "tsx",
-  "mts",
-  "cts",
-  "js",
-  "jsx",
-  "mjs",
-  "cjs",
-  "svelte",
-  "vue",
-  "json",
-  "jsonc",
-  "css",
-  "scss",
-  "less",
-  "html",
-  "htm",
-  "xml",
-  "svg",
-  "md",
-  "mdx",
-  "py",
-  "rb",
-  "rs",
-  "go",
-  "java",
-  "kt",
-  "c",
-  "h",
-  "cc",
-  "cpp",
-  "hpp",
-  "sh",
-  "bash",
-  "zsh",
-  "toml",
-  "yaml",
-  "yml",
-  "ini",
-  "sql",
-  "graphql",
-  "gql",
-  "php",
-  "swift",
-  "dart",
-  "txt",
-  "lock",
-  "cfg",
-  "conf",
-]);
-
-/** Classifies a raw candidate run into a path + optional cited line or range,
- * or null when it is not file-shaped (no known extension, or a bare `.ext` with
- * no name). A reversed range is normalized here rather than downstream, so every
- * consumer gets `line <= endLine` by construction.
+/** Classifies a raw candidate run into a path + optional cited line or range, or
+ * null when it is not plausibly a path at all. A reversed range is normalized
+ * here rather than downstream, so every consumer gets `line <= endLine` by
+ * construction.
  *
  * The one definition of "path-shaped" in the codebase: the scan below applies it
  * to runs inside inline code, and the link layer applies it to a `[label](target)`
  * target before collapsing it (EXC-954). A second, drifting notion would let the
- * two decoration paths disagree about the same text. Each caller adds its own
- * URL exclusion first, since this judges a run by its last segment and a URL's
- * tail can read as a path: the scan masks URLs inside code, the link layer
- * rejects a target carrying a scheme. */
+ * two decoration paths disagree about the same text. The floor is deliberately
+ * low — one letter in the last segment, trailing slashes ignored — because the
+ * filesystem is what knows whether a token is a file, a directory, or nothing
+ * (EXC-916), and a shape test that guessed would keep `src/daemon/` invisible.
+ * What it does buy is silence on the tokens no filesystem could answer for:
+ * `3.14`, `42`, `1.2.3`.
+ *
+ * A caller that needs the stricter "looks like a FILE" question asks
+ * `hasKnownFileExtension` on top; the link layer does, since collapsing a link's
+ * `[]()` on a guess is visible where an unresolved candidate is not. Each caller
+ * also adds its own URL exclusion first, since this judges a run by its last
+ * segment and a URL's tail can read as a path: the scan masks URLs inside code,
+ * the link layer rejects a target carrying a scheme. */
 export function classify(raw: string): { path: string; line?: number; endLine?: number } | null {
   let path = raw;
   let line: number | undefined;
@@ -163,12 +113,12 @@ export function classify(raw: string): { path: string; line?: number; endLine?: 
       if (endLine < line) [line, endLine] = [endLine, line];
     }
   }
-  const base = path.split("/").pop() ?? "";
-  const ext = EXTENSION.exec(base)?.[1]?.toLowerCase();
-  if (ext === undefined || !KNOWN_EXTENSIONS.has(ext)) return null;
-  // Require a real name before the extension dot, so a bare ".ts" or a dotfile
-  // like ".env" (which isn't a `name.ext` reference) is not a candidate.
-  if (base.length <= ext.length + 1) return null;
+  // Trailing slashes are stripped before reading the last segment — `src/daemon/`
+  // names the same thing as `src/daemon`, and the slash is not a discriminator.
+  // The path itself keeps the slash, so the response the daemon keys by the
+  // requested string still matches the span.
+  const base = path.replace(/\/+$/, "").split("/").pop() ?? "";
+  if (!/[A-Za-z]/.test(base)) return null;
   return { path, line, endLine };
 }
 

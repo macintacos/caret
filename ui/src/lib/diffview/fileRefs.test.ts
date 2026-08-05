@@ -14,11 +14,11 @@ import {
 // layer's emission over collapsed markdown-link labels (EXC-954), which
 // mergeFileRefSpans below unions with this one. This scan stays scoped to inline
 // code because that is where a path renders as its own shiki token (prose is one
-// coarse run); it is deliberately permissive on *shape* — whether a candidate is
-// a real file is the daemon's call — but keeps precision high by requiring a
-// known file extension, so an in-code "e.g" or "3.14" never becomes a candidate.
-// Columns index the display line so they line up with the rendered tokens; line
-// numbers are 1-based.
+// coarse run). Shape is only a plausibility floor — the filesystem, not the
+// parser, decides what a token is (EXC-916) — so a bare word, a directory, and a
+// dotfile are all offered to the daemon, and only a token with no letter in its
+// last segment ("3.14", "42") is refused outright. Columns index the display line
+// so they line up with the rendered tokens; line numbers are 1-based.
 
 function only(text: string): FileRefSpan[] {
   const map = buildFileRefLayer(text);
@@ -104,6 +104,23 @@ describe("detection (inside inline code)", () => {
     expect(s?.endLine).toBeUndefined();
   });
 
+  test("detects a directory written with a trailing slash", () => {
+    // The slash is not a discriminator — it is carried through to the daemon,
+    // which is the only thing that knows this is a directory (EXC-916).
+    const s = spanFor("see `src/daemon/` there", "src/daemon/");
+    expect(s?.path).toBe("src/daemon/");
+  });
+
+  test("detects a bare extensionless word", () => {
+    const s = spanFor("look in `dist` now", "dist");
+    expect(s?.path).toBe("dist");
+  });
+
+  test("detects a dotfile", () => {
+    const s = spanFor("edit `.env` first", ".env");
+    expect(s?.path).toBe(".env");
+  });
+
   test("detects multiple references, each in its own code span", () => {
     const spans = only("both `a.ts` and `b/c.css` matter");
     expect(spans.map((s) => s.path).sort()).toEqual(["a.ts", "b/c.css"]);
@@ -116,14 +133,24 @@ describe("detection (inside inline code)", () => {
   });
 });
 
-describe("precision — non-files in code are not detected", () => {
+describe("the plausibility floor", () => {
   test.each([
-    ["`e.g` here", "prose abbreviation"],
     ["the ratio `3.14` exactly", "decimal number"],
-    ["either `and/or` both", "slash word, no extension"],
-    ["call `obj.property` on it", "member access, unknown extension"],
+    ["at line `42` there", "bare number"],
+    ["version `1.2.3` shipped", "dotted version"],
+    ["pass `--` to stop", "punctuation only"],
   ])("ignores %j (%s)", (text) => {
     expect(buildFileRefLayer(text).size).toBe(0);
+  });
+
+  test.each([
+    ["`e.g` here", "prose abbreviation"],
+    ["either `and/or` both", "slash word"],
+    ["call `obj.property` on it", "member access"],
+  ])("offers %j (%s) to the daemon anyway", (text) => {
+    // Cheap to refuse server-side (one stat, and no basename walk without a
+    // known extension), and refusing it here is the guess EXC-916 removes.
+    expect(buildFileRefLayer(text).size).toBe(1);
   });
 });
 
@@ -159,8 +186,10 @@ describe("confinement is the daemon's job, not the parser's", () => {
 
 // classify is the one definition of "path-shaped" in the codebase. It is exported
 // so the link layer applies the SAME gate to a `[label](target)` target before
-// collapsing it (EXC-954) — a second, drifting notion of what looks like a file
-// would let the two decoration paths disagree about the same text.
+// collapsing it (EXC-954) — a second, drifting notion of what looks like a path
+// would let the two decoration paths disagree about the same text. The link layer
+// then narrows further on its own, which is why `guide` classifies here yet still
+// leaves a link literal.
 describe("classify", () => {
   test("accepts a path with a known extension", () => {
     expect(classify("a/b.md")).toEqual({ path: "a/b.md", line: undefined });
@@ -180,8 +209,21 @@ describe("classify", () => {
     expect(classify("a/b.md:50-42")).toEqual({ path: "a/b.md", line: 42, endLine: 50 });
   });
 
-  test("rejects a run with no file extension", () => {
-    expect(classify("guide")).toBeNull();
+  test.each([
+    ["an extensionless word", "guide", "guide"],
+    ["a trailing-slash directory", "src/daemon/", "src/daemon/"],
+    ["a dotfile", ".env", ".env"],
+  ])("accepts %s", (_name, raw, path) => {
+    expect(classify(raw)).toEqual({ path, line: undefined });
+  });
+
+  test.each([
+    ["a bare number", "42"],
+    ["a decimal", "3.14"],
+    ["a dotted version", "1.2.3"],
+    ["punctuation with no name", "--"],
+  ])("rejects %s — no letter to make it a plausible path", (_name, raw) => {
+    expect(classify(raw)).toBeNull();
   });
 });
 

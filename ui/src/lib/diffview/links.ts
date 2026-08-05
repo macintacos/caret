@@ -12,7 +12,7 @@
 // as literal source text and produce no span. Fenced code blocks and inline
 // code spans are passed through untouched for source fidelity.
 //
-// A link whose target is path-shaped is the third case: it collapses like any
+// A link whose target is file-shaped is the third case: it collapses like any
 // link but records NO clickable span — openUrl must never be handed a filesystem
 // path — and instead emits a FileRefSpan over the collapsed label (EXC-954),
 // which the view merges with the inline-code scan and decorates as a file
@@ -24,6 +24,7 @@
 // carrying a fragment or query (`doc/guide.md#setup`) is not path-shaped, so that
 // link stays literal.
 
+import { hasKnownFileExtension } from "@core/config/constants";
 import { classify, type FileRefSpan, type FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 
 /** A clickable link range on a single display line. Columns are 0-based,
@@ -160,10 +161,17 @@ function transformLine(
       // resolve against the project's own lib.ts. The scan masks URLs inside
       // code for the same reason; this is that guard on the link side.
       if (HAS_SCHEME.test(url) || url.startsWith("//")) continue;
-      // A path-shaped target is a file reference; anything else (a bare
-      // `guide`) stays literal with no rewrite.
+      // A FILE-shaped target is a file reference; anything else (a bare `guide`,
+      // or a directory like `src/daemon`) stays literal with no rewrite. The
+      // extension test is this layer's alone: the inline-code scan offers any
+      // plausible path token to the daemon because an unresolved candidate costs
+      // nothing visible, whereas collapsing a link's `[]()` is decided on shape
+      // before anything resolves — so widening it here would hide the markup of
+      // every prose-worded link whose target happens to read as a path.
+      // Directories join in at EXC-956, once a folder reference has an
+      // affordance to carry.
       const ref = classify(url);
-      if (ref === null) continue;
+      if (ref === null || !hasKnownFileExtension(ref.path)) continue;
       rewrites.push({ start, end, display: label, href: null, file: { ...ref, target: url } });
       consumed.push({ start, end });
       continue;
