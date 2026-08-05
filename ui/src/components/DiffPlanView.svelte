@@ -72,6 +72,7 @@
   import {
     type Annotation,
     type ClientReview,
+    type FileRefKind,
     isLegacyAnnotation,
     isLineAnnotation,
   } from "@core/lib/types";
@@ -299,44 +300,48 @@
   // string, so effects keyed on it fire only when the review actually switches.
   const reviewId = $derived(review.id);
 
-  // Which candidate paths resolve to a real FILE in the review's cwd — the daemon
-  // is the existence gate and reports a kind per path, and the plan view affords
-  // files only: a directory resolves but is dropped here, so it draws no glyph
-  // and no click target until the folder popover exists to open (EXC-918).
+  // What each candidate path resolves to in the review's cwd — the daemon is the
+  // existence gate and the only thing that can say file vs. directory (EXC-916).
+  // Both kinds are kept: a file draws the file glyph and opens the excerpt
+  // preview, a directory draws the folder glyph and opens the folder tree
+  // (EXC-918). A path absent from the map resolved to nothing and stays inert.
   // Resolved once per candidate-set change: both dependencies below (the memoized
   // candidate map and the value-stable reviewId) hold their reference across a
   // poll tick, so an unchanged plan never re-resolves — which is what kept the
   // icons and the open hover preview from flickering every 2s. Cleared up front
   // so a plan edit or review switch drops stale icons at once.
-  let resolvedPaths = $state<Set<string>>(new Set());
+  let resolvedKinds = $state<Map<string, FileRefKind>>(new Map());
   $effect(() => {
     const candidates = fileRefCandidates;
     const id = reviewId;
     const paths = [...new Set([...candidates.values()].flat().map((s) => s.path))];
-    resolvedPaths = new Set();
+    resolvedKinds = new Map();
     if (paths.length === 0) return;
     let cancelled = false;
     void resolveFileRefs(id, paths).then((kinds) => {
       if (cancelled) return;
-      resolvedPaths = new Set(
-        Object.entries(kinds)
-          .filter(([, kind]) => kind === "file")
-          .map(([path]) => path),
-      );
+      resolvedKinds = new Map(Object.entries(kinds));
     });
     return () => {
       cancelled = true;
     };
   });
 
-  // The active file-reference spans: candidates confirmed real. Undefined when
-  // none resolve, so SourceView wires no file-ref affordance in that common case.
+  // The active reference spans: candidates confirmed real, each carrying what the
+  // daemon said it is. The kind is attached to a COPY of the span rather than
+  // written onto the memoized candidate — that map is keyed on the plan text and
+  // survives a review switch, so mutating it would carry one review's kinds into
+  // the next. Undefined when none resolve, so SourceView wires no reference
+  // affordance in that common case.
   const fileRefs = $derived.by(() => {
-    const resolved = resolvedPaths;
-    if (resolved.size === 0) return undefined;
+    const kinds = resolvedKinds;
+    if (kinds.size === 0) return undefined;
     const active: FileRefSpanMap = new Map();
     for (const [line, spans] of fileRefCandidates) {
-      const keep = spans.filter((s) => resolved.has(s.path));
+      const keep = spans.flatMap((s) => {
+        const kind = kinds.get(s.path);
+        return kind === undefined ? [] : [{ ...s, kind }];
+      });
       if (keep.length > 0) active.set(line, keep);
     }
     return active.size > 0 ? active : undefined;

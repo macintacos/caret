@@ -21,6 +21,8 @@
 // text as inline code. mergeFileRefSpans unions the two into the one candidate
 // set the view resolves and tags.
 
+import type { FileRefKind } from "@core/lib/types";
+
 /** A candidate filename reference on a single display line. Columns are 0-based,
  * half-open [startCol, endCol) into the display line's text; endCol includes the
  * whole trailing line reference — the range's end line included — so a click
@@ -40,6 +42,12 @@ export interface FileRefSpan {
    * not already show it (a prose-labelled markdown link). Hover reveals it in the
    * link tooltip; an inline-code reference leaves it unset. */
   target?: string;
+  /** What the daemon resolved this path to on disk (EXC-916). Absent on a raw
+   * candidate — detection is pure and never guesses — and set by the view once
+   * the resolve lands, because it decides both which glyph the token draws and
+   * which surface a click opens: an excerpt preview for a file, the folder tree
+   * for a directory (EXC-918). */
+  kind?: FileRefKind;
 }
 
 /** Per-line spans, keyed by 1-based display line number. Lines with no

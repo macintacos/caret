@@ -95,6 +95,28 @@ test("does not tag a coarse token that starts at the reference but runs past it"
   expect(tagged(host)).toEqual([]);
 });
 
+// EXC-918: the daemon says what a reference resolved to, and the tag carries it
+// so the override sheet can draw a folder glyph instead of a file one. A file
+// keeps the valueless attribute it has always had, so its markup is unchanged
+// and every `[data-file-ref]` selector still matches both kinds.
+test("tags a directory reference with the directory kind", () => {
+  host = root(row(1, ["open ", "src/lib", " next"]));
+  tagFileRefTokens(
+    host,
+    map([[1, [{ startCol: 5, endCol: 12, path: "src/lib", kind: "directory" }]]]),
+  );
+  expect(host.querySelector("[data-file-ref]")?.getAttribute("data-file-ref")).toBe("directory");
+});
+
+test("leaves a file reference's tag valueless", () => {
+  host = root(row(1, ["edit ", "src/foo.ts", " now"]));
+  tagFileRefTokens(
+    host,
+    map([[1, [{ startCol: 5, endCol: 15, path: "src/foo.ts", kind: "file" }]]]),
+  );
+  expect(host.querySelector("[data-file-ref]")?.getAttribute("data-file-ref")).toBe("");
+});
+
 test("is a no-op for a line whose row is not rendered", () => {
   host = root(row(1, ["only ", "here.ts"]));
   expect(() =>
