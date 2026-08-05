@@ -102,9 +102,11 @@ const LINE_SUFFIX = /^(.+?)(?::L?|:?#L)(\d+)(?:[-–]L?(\d+)|:\d+)?$/;
  * What it does buy is silence on the tokens no filesystem could answer for:
  * `3.14`, `42`, `1.2.3`.
  *
- * A caller that needs the stricter "looks like a FILE" question asks
- * `hasKnownFileExtension` on top; the link layer does, since collapsing a link's
- * `[]()` on a guess is visible where an unresolved candidate is not. Each caller
+ * A caller that needs a stricter gate narrows on top; the link layer does, since
+ * collapsing a link's `[]()` on a guess is visible where an unresolved candidate
+ * is not — it requires the target to be made only of path characters and to be
+ * specific enough to cite, which is a multi-segment path or a single segment
+ * carrying a known file extension. Each caller
  * also adds its own URL exclusion first, since this judges a run by its last
  * segment and a URL's tail can read as a path: the scan masks URLs inside code,
  * the link layer rejects a target carrying a scheme. */

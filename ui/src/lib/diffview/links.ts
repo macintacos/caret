@@ -12,18 +12,21 @@
 // as literal source text and produce no span. Fenced code blocks and inline
 // code spans are passed through untouched for source fidelity.
 //
-// A link whose target is file-shaped is the third case: it collapses like any
+// A link whose target is path-shaped is the third case: it collapses like any
 // link but records NO clickable span — openUrl must never be handed a filesystem
-// path — and instead emits a FileRefSpan over the collapsed label (EXC-954),
-// which the view merges with the inline-code scan and decorates as a file
-// reference. Emission belongs here because fileRefs.ts reads *display* text: once
-// the link collapses, its target is gone and only this layer still knows where
-// the label landed. Two consequences worth knowing before changing this:
-// collapsing is decided on shape alone, so a target that does NOT resolve leaves
-// its label as bare prose with no affordance and no visible path; and a target
-// carrying a fragment or query (`doc/guide.md#setup`) is not file-shaped — the
-// extension test below reads its extension as `md#setup` — so that link stays
-// literal.
+// path — and instead emits a FileRefSpan over the collapsed label (EXC-954,
+// widened to directories by EXC-956), which the view merges with the inline-code
+// scan and decorates as a reference. Emission belongs here because fileRefs.ts
+// reads *display* text: once the link collapses, its target is gone and only this
+// layer still knows where the label landed. Two consequences worth knowing before
+// changing this: collapsing is decided on shape alone, so a target that does NOT
+// resolve leaves its label as bare prose with no affordance and no visible path;
+// and a target carrying a fragment or query (`doc/guide.md#setup`) is a URL slot
+// rather than a path, so that link stays literal.
+//
+// The span says only where a path was cited, never what it is. A file and a
+// directory emit the identical shape, and the daemon's resolve (EXC-916) is what
+// later decides which glyph the token draws and which surface a click opens.
 
 import { hasKnownFileExtension } from "@core/config/constants";
 import { classify, type FileRefSpan, type FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
@@ -82,6 +85,13 @@ const INLINE_LINK = /\[([^\]]*)\]\(((?:[^\s()]|\([^\s()]*\))+)\)/g;
 
 // `<url>` autolink — angle-bracketed, no spaces inside.
 const AUTOLINK = /<([^>\s]+)>/g;
+
+// A link target made only of path characters — the same class fileRefs.ts scans
+// candidates with. Matching the WHOLE target is the point: it is what refuses a
+// fragment, a query, or a percent-escape, none of which a filesystem path
+// carries. The gate below tests it against classify's path, so a `:line` tail is
+// already off by then.
+const PATH_TARGET = /^[A-Za-z0-9._/~-]+$/;
 
 // A bare URL run: http(s):// followed by non-space, non-bracket chars, with one
 // level of balanced parens allowed inside (Wikipedia-style paths). Trailing
@@ -162,14 +172,22 @@ function transformLine(
       // resolve against the project's own lib.ts. The scan masks URLs inside
       // code for the same reason; this is that guard on the link side.
       if (HAS_SCHEME.test(url) || url.startsWith("//")) continue;
-      // A FILE-shaped target is a file reference; anything else (a bare `guide`,
-      // or a directory like `src/daemon`) stays literal with no rewrite. The
-      // extension test narrows classify's shared path-shaped gate to this call
-      // site alone, because collapsing `[]()` happens before anything resolves —
-      // widening it would hide the markup of every prose-worded link whose
-      // target merely reads as a path. Directories join at EXC-956.
+      // A path-shaped target is a reference; anything else stays literal with no
+      // rewrite. Two narrowings sit on top of classify's shared gate at this call
+      // site alone, because collapsing `[]()` happens before anything resolves,
+      // and a target that turns out to be nothing has already lost its markup.
+      //
+      // PATH_TARGET is the first: a fragment or query makes a target a URL slot
+      // however its head reads, so `doc/guide.md#setup` stays a link to an anchor.
+      // The second is specificity — a multi-segment path, or a single segment
+      // naming a file by extension. A bare `guide` is a word, not a citation.
+      //
+      // Neither reads the trailing slash. `src/daemon` and `src/daemon/` take the
+      // identical branch, and whether the path is a file or a directory is the
+      // daemon's answer to give (EXC-916), not this layer's to guess.
       const ref = classify(url);
-      if (ref === null || !hasKnownFileExtension(ref.path)) continue;
+      if (ref === null || !PATH_TARGET.test(ref.path)) continue;
+      if (!ref.path.includes("/") && !hasKnownFileExtension(ref.path)) continue;
       rewrites.push({ start, end, display: label, href: null, file: { ...ref, target: url } });
       consumed.push({ start, end });
       continue;
