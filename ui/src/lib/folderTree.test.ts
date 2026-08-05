@@ -1,7 +1,14 @@
 import { expect, test } from "bun:test";
 
-import type { DirEntry } from "@core/lib/types";
-import { anchorCard, cwdPath, levelPaths, treeKey } from "$lib/folderTree.ts";
+import type { DirEntry, DirListing } from "@core/lib/types";
+import {
+  anchorCard,
+  createLevels,
+  cwdPath,
+  type LevelRow,
+  levelPaths,
+  treeKey,
+} from "$lib/folderTree.ts";
 
 // The two bits of path arithmetic the folder popover stands on: turning one
 // daemon-served level into the path strings @pierre/trees models a tree from,
@@ -117,4 +124,113 @@ test("parks the card at the top margin when it fits neither below nor above", ()
   expect(
     anchorCard({ top: 150, bottom: 170, left: 20 }, CARD, { width: 1000, height: 260 }, 16).top,
   ).toBe(16);
+});
+
+// The card's per-level bookkeeping. This is where the decisions live — what is
+// worth fetching, and what a row is allowed to say about itself — so it is
+// pinned here rather than through a mounted card behind a shadow root.
+
+const dirRow = (path: string, isExpanded = true): LevelRow => ({
+  kind: "directory",
+  path,
+  isExpanded,
+});
+const fileRow = (path: string): LevelRow => ({ kind: "file", path, isExpanded: false });
+const listing = (entries: DirEntry[], total = entries.length): DirListing => ({
+  path: "src",
+  entries,
+  total,
+});
+
+test("claims an expanded directory whose level has not arrived", () => {
+  const levels = createLevels();
+  expect(levels.claim([dirRow("lib/")])).toEqual(["lib"]);
+});
+
+test("claims nothing for a collapsed directory or a file", () => {
+  const levels = createLevels();
+  expect(levels.claim([dirRow("lib/", false), fileRow("a.ts")])).toEqual([]);
+});
+
+test("does not claim the same level twice while it is in flight", () => {
+  // The controller emits on focus and selection as well as expansion, so the
+  // walk runs several times per click; only the first may take the work.
+  const levels = createLevels();
+  expect(levels.claim([dirRow("lib/")])).toEqual(["lib"]);
+  expect(levels.claim([dirRow("lib/")])).toEqual([]);
+});
+
+test("does not re-claim a level that has arrived", () => {
+  const levels = createLevels();
+  levels.claim([dirRow("lib/")]);
+  levels.record("lib", listing([{ name: "a.ts", kind: "file" }]));
+  expect(levels.claim([dirRow("lib/")])).toEqual([]);
+});
+
+test("never claims a directory the daemon declines to enumerate", () => {
+  const levels = createLevels();
+  levels.record("", listing([{ name: "node_modules", kind: "directory", skipped: true }]));
+  expect(levels.claim([dirRow("node_modules/")])).toEqual([]);
+});
+
+test("does not re-claim a level the daemon refused", () => {
+  // The route answers a permanent refusal — a descent past its depth guard —
+  // with the same 404 as a transient one, and the walk runs on every emit. So a
+  // failed level that stayed claimable would re-ask for the rest of the card's
+  // life.
+  const levels = createLevels();
+  levels.claim([dirRow("deep/")]);
+  levels.fail("deep");
+  expect(levels.claim([dirRow("deep/")])).toEqual([]);
+});
+
+test("records a level as the tree paths to add", () => {
+  const levels = createLevels();
+  expect(
+    levels.record(
+      "lib",
+      listing([
+        { name: "deep", kind: "directory" },
+        { name: "a.ts", kind: "file" },
+      ]),
+    ),
+  ).toEqual(["lib/deep/", "lib/a.ts"]);
+});
+
+test("says nothing about a directory with nothing to report", () => {
+  const levels = createLevels();
+  levels.record("", listing([{ name: "lib", kind: "directory" }]));
+  expect(levels.note(dirRow("lib/"))).toBeNull();
+});
+
+test("says nothing about a file row", () => {
+  const levels = createLevels();
+  expect(levels.note(fileRow("a.ts"))).toBeNull();
+});
+
+test("reports a skipped directory only once it is opened", () => {
+  const levels = createLevels();
+  levels.record("", listing([{ name: "dist", kind: "directory", skipped: true }]));
+  expect(levels.note(dirRow("dist/", false))).toBeNull();
+  expect(levels.note(dirRow("dist/"))).toEqual({ text: "not listed" });
+});
+
+test("reports a refused level on its own row", () => {
+  const levels = createLevels();
+  levels.fail("deep");
+  expect(levels.note(dirRow("deep/"))).toEqual({ text: "couldn't load" });
+});
+
+test("reports how many rows a capped level elided", () => {
+  const levels = createLevels();
+  levels.record("wide", listing([{ name: "a.ts", kind: "file" }], 9));
+  expect(levels.note(dirRow("wide/"))).toEqual({ text: "+8 more" });
+});
+
+test("keys a skipped child off its parent, so a row's own path finds it", () => {
+  // The two spellings meeting: `record` builds the key from a parent plus a
+  // name, `note` reduces the row's reported path. They have to agree.
+  const levels = createLevels();
+  levels.record("lib/", listing([{ name: ".git", kind: "directory", skipped: true }]));
+  expect(levels.note(dirRow("lib/.git/"))).toEqual({ text: "not listed" });
 });

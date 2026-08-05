@@ -7,6 +7,7 @@
 // data-file-ref. The library repaints rows (async highlight, content-key
 // recreate), so the caller re-runs this via a MutationObserver.
 
+import type { FileRefKind } from "@core/lib/types";
 import type { FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 
 const FILE_REF_ATTR = "data-file-ref";
@@ -23,11 +24,7 @@ export function tagFileRefTokens(root: ParentNode, spanMap: FileRefSpanMap): voi
     const rowEl = root.querySelector(`[data-content] > [data-line="${line}"]`);
     if (rowEl === null) continue;
     for (const span of spans) {
-      // The kind rides on the attribute's VALUE rather than a second attribute,
-      // so `[data-file-ref]` — which every selector, hit-test and e2e probe here
-      // already uses — keeps matching both kinds, and only the one rule that
-      // swaps the glyph has to name a value (coreStyles.ts).
-      tagTokenAt(rowEl, span.startCol, span.endCol, span.kind === "directory" ? "directory" : "");
+      tagTokenAt(rowEl, span.startCol, span.endCol, span.kind);
     }
   }
 }
@@ -40,12 +37,25 @@ export function tagFileRefTokens(root: ParentNode, spanMap: FileRefSpanMap): voi
 // line — tagging that would draw the glyph and the hover chip around the whole
 // sentence. The icon sits immediately left of the filename, or is omitted rather
 // than misplaced when no token fits.
-function tagTokenAt(rowEl: Element, startCol: number, endCol: number, kind: string): void {
+//
+// The kind rides on the attribute's VALUE rather than a second attribute, so
+// `[data-file-ref]` — which every selector, hit-test and e2e probe already uses
+// — keeps matching both kinds, and only the one rule that swaps the glyph names
+// a value (coreStyles.ts). A file keeps the valueless attribute it has always
+// had, so its markup is byte-identical to before kinds existed. The mapping
+// lives here, in one place, rather than at the call site.
+function tagTokenAt(
+  rowEl: Element,
+  startCol: number,
+  endCol: number,
+  kind: FileRefKind | undefined,
+): void {
+  const value = kind === "directory" ? "directory" : "";
   let col = 0;
   for (const token of rowEl.children) {
     const len = token.textContent?.length ?? 0;
     if (col === startCol) {
-      if (col + len <= endCol) token.setAttribute(FILE_REF_ATTR, kind);
+      if (col + len <= endCol) token.setAttribute(FILE_REF_ATTR, value);
       return;
     }
     if (col > startCol) return;

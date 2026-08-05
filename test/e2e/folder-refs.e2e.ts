@@ -117,6 +117,76 @@ test("expanding a folder fetches that level and only that level", async ({ daemo
   }
 });
 
+test("a directory holding only another directory still expands in one click", async ({
+  daemon,
+  page,
+}) => {
+  // The library flattens a chain of single-child directories into one row by
+  // default, and reports that row as the chain's TERMINAL. Under one-level-at-a-
+  // time loading that turns the first click into a no-op the reader can see: the
+  // row they clicked renames itself from `only` to `only/deeper` and reads as
+  // collapsed the moment its level lands. `flattenEmptyDirectories: false` is
+  // what prevents it, and nothing else in the suite has a level of exactly one
+  // directory to catch a regression.
+  const proj = await makeProject({ "src/only/deeper/leaf.ts": "export {};\n" });
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nA chain lives under `src`.\n" });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+    await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
+    await page.locator('[data-file-ref="directory"]').click();
+    await expect(page.locator(card)).toBeVisible();
+
+    // The row is the directory itself, not the chain compacted into its tail.
+    await expect(page.locator(rows)).toHaveCount(1);
+    await expect(page.locator(row("only/"))).toBeVisible();
+
+    // One click opens it, and it stays open with its child beneath it.
+    await page.locator(row("only/")).click();
+    await expect(page.locator(row("only/"))).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator(row("only/deeper/"))).toBeVisible();
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("the tree can be entered and walked from the keyboard", async ({ daemon, page }) => {
+  // Every element the library renders is `tabIndex -1` until something sets its
+  // focused path, so without the card focusing its first row on open the tree is
+  // reachable by pointer only. Tab order and native key handling are real-browser
+  // behaviour, so this is the only layer that can tell whether the fix holds.
+  const proj = await makeProject(NESTED);
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nThe tree under `src` matters.\n" });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+    await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
+    await page.locator('[data-file-ref="directory"]').click();
+    await expect(page.locator(card)).toBeVisible();
+
+    // The first row carries the tab stop — the whole tree is `-1` without it.
+    await expect(page.locator(row("lib/"))).toHaveAttribute("tabindex", "0");
+
+    // Walk the tab order to it rather than focusing it directly: the claim is
+    // that it IS in the tab order.
+    const inCard = () =>
+      page.evaluate(() => document.activeElement?.tagName === "FILE-TREE-CONTAINER");
+    await expect(async () => {
+      await page.keyboard.press("Tab");
+      expect(await inCard()).toBe(true);
+    }).toPass({ timeout: 15_000 });
+
+    // ArrowRight expands the focused row, and that expansion fetches its level
+    // exactly as a click would — the reason the loader is driven off the model
+    // rather than off a click handler.
+    await page.keyboard.press("ArrowRight");
+    await expect(page.locator(row("lib/"))).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator(row("lib/util.ts"))).toBeVisible();
+  } finally {
+    await proj.cleanup();
+  }
+});
+
 test("clicking a file row does nothing", async ({ daemon, page }) => {
   // Files are inert by design: the card is for navigating a directory's shape,
   // and a file row is a leaf of that shape, not a link. So a click opens no

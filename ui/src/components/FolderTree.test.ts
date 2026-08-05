@@ -36,7 +36,7 @@ function props(over: Partial<{ path: string; showShortcutHints: boolean }> = {})
   return {
     reviewId: ID,
     path: over.path ?? "src/lib",
-    anchor: document.createElement("span"),
+    anchor: { top: 100, bottom: 120, left: 40 },
     ...(over.showShortcutHints === undefined ? {} : { showShortcutHints: over.showShortcutHints }),
   };
 }

@@ -30,9 +30,14 @@
     FileTreeRowDecorationContext,
   } from "@pierre/trees";
 
-  import type { DirEntry } from "@core/lib/types";
   import { getDirListing } from "$lib/api.ts";
-  import { anchorCard, cwdPath, levelPaths, treeKey } from "$lib/folderTree.ts";
+  import {
+    anchorCard,
+    CARD_MARGIN,
+    createLevels,
+    cwdPath,
+    type Levels,
+  } from "$lib/folderTree.ts";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
 
   interface Props {
@@ -41,8 +46,12 @@
      * anchor every /dir request carries: the route counts its descent guard from
      * this path, so a level asked for without it is a 404. */
     path: string;
-    /** The clicked token, measured once to place the card. */
-    anchor: HTMLElement;
+    /** The clicked reference's box, captured at click time — a rect rather than
+     * the element, because the card is placed once and never tracks it, and the
+     * plan surface can be torn down (compare mode) while the card still holds
+     * this. A detached element would measure all zeros and park the card in the
+     * viewport's corner. */
+    anchor: { top: number; bottom: number; left: number };
     /** Whether the shortcut-hint affordances are shown (EXC-826); gates the
      * header's "esc to close" chip. Escape closes the card regardless. */
     showShortcutHints?: boolean;
@@ -60,37 +69,14 @@
   // The root level's tree paths, which is also the signal to mount the tree.
   let rootPaths = $state.raw<string[] | undefined>();
 
-  // Per-level bookkeeping, deliberately NOT reactive: the row decoration closes
-  // over these and the library re-reads it on every render, and every write below
-  // is followed by something that repaints. Keys are canonical tree paths (no
-  // trailing slash), matching what a visible row reports.
+  // The per-level bookkeeping (folderTree.ts), and the daemon's own canonical
+  // path for the card's root, which every deeper request is built from.
+  // Deliberately NOT reactive: the row decoration closes over `levels` and the
+  // library re-reads it on every render, and every write below is followed by
+  // something that repaints.
+  let levels: Levels = createLevels();
   let rootPath = "";
-  const loaded = new Set<string>();
-  const pending = new Set<string>();
-  const skipped = new Set<string>();
-  const failed = new Set<string>();
-  const elidedBy = new Map<string, number>();
   let tree: FileTree | undefined;
-
-  const join = (parent: string, name: string) => (parent === "" ? name : `${parent}/${name}`);
-
-  // The daemon marks a directory it will not enumerate on sight (node_modules,
-  // dist, a dotted name). The mark is advisory — it would still list one asked
-  // for directly — but the card takes it: a plan citing a directory means the
-  // shape of the reader's project, not the shape of its dependencies.
-  function noteSkipped(parent: string, entries: readonly DirEntry[]): void {
-    for (const e of entries) {
-      if (e.skipped === true) skipped.add(join(parent, e.name));
-    }
-  }
-
-  function reset(): void {
-    loaded.clear();
-    pending.clear();
-    skipped.clear();
-    failed.clear();
-    elidedBy.clear();
-  }
 
   // Open on the referenced directory's immediate children, collapsed, in one
   // round trip. Re-runs when the reference changes — DiffPlanView reuses this
@@ -102,20 +88,19 @@
     let cancelled = false;
     view = { kind: "loading" };
     rootPaths = undefined;
-    reset();
+    levels = createLevels();
     void (async () => {
       try {
         const listing = await getDirListing(id, root, "");
         if (cancelled) return;
         rootPath = listing.path;
-        loaded.add("");
-        noteSkipped("", listing.entries);
-        if (listing.entries.length === 0) {
+        const paths = levels.record("", listing);
+        if (paths.length === 0) {
           view = { kind: "empty" };
           return;
         }
         view = { kind: "ready", elided: listing.total - listing.entries.length };
-        rootPaths = levelPaths("", listing.entries);
+        rootPaths = paths;
       } catch {
         if (!cancelled) view = { kind: "error" };
       }
@@ -129,32 +114,37 @@
   let card = $state<HTMLElement | null>(null);
   let placed = $state<{ top: number; left: number } | undefined>();
 
-  // Place the card once, against its own measured size — the header's path and
-  // the tree's first level both size it, so a placement computed before they
-  // render would flip on the wrong height.
+  // Place the card against its own measured size, once it has settled into the
+  // size it will keep. `view.kind` is read into the effect's dependency set on
+  // purpose: the card is a header and one line of text while it loads, and
+  // ~20rem taller once `.ft-open` applies, so measuring at mount — which is all
+  // `tick()` would ever wait for — would flip against a height five times too
+  // small and hang a full-size card off the bottom of the viewport. It stays put
+  // afterwards: the reader dismisses this card rather than scrolling with it.
   $effect(() => {
     const el = card;
-    const token = anchor;
-    if (el === null) return;
+    const box = anchor;
+    if (el === null || view.kind === "loading") return;
     void tick().then(() => {
       if (card !== el) return;
-      const box = el.getBoundingClientRect();
+      const self = el.getBoundingClientRect();
       placed = anchorCard(
-        token.getBoundingClientRect(),
-        { width: box.width, height: box.height },
+        box,
+        { width: self.width, height: self.height },
         { width: window.innerWidth, height: window.innerHeight },
         CARD_MARGIN,
       );
     });
   });
 
-  /** How close to a viewport edge the card may sit, in px. */
-  const CARD_MARGIN = 12;
-
   // Kill the library's own transitions under reduced motion. They live inside its
   // shadow root, which the global `#app` rule in styles/base.css cannot reach, and
   // `unsafeCSS` is the library's documented way in. Nothing else is injected here
   // — the palette rides CSS custom properties, which inherit through the boundary.
+  //
+  // The bare `*` that svelte-rules.md forbids in the light DOM is right here: the
+  // shadow root IS the bound, so this reaches the library's own elements and
+  // nothing else — which is exactly what the global rule's two anchors buy.
   const TREE_REDUCED_MOTION = `
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after {
@@ -164,20 +154,8 @@
     }
   `;
 
-  // What a directory row says about itself beyond its name. At most one applies:
-  // a skipped directory is never fetched, so it can neither fail nor elide.
   function rowDecoration({ row }: FileTreeRowDecorationContext): FileTreeRowDecoration | null {
-    if (row.kind !== "directory") return null;
-    // A row reports a directory's path with its trailing slash; the bookkeeping
-    // above is keyed by treeKey. See folderTree.ts's treeKey for why the two
-    // spellings exist at all.
-    const key = treeKey(row.path);
-    // Only once opened: before that the row is an ordinary folder, and saying so
-    // up front would read as a warning about a directory nobody asked to see.
-    if (skipped.has(key)) return row.isExpanded ? { text: "not listed" } : null;
-    if (failed.has(key)) return { text: "couldn't load" };
-    const elided = elidedBy.get(key);
-    return elided === undefined ? null : { text: `+${elided} more` };
+    return levels.note(row);
   }
 
   // Fetch one level and fold it in. `batch` rather than a loop of `add` so the
@@ -187,39 +165,31 @@
     try {
       const listing = await getDirListing(reviewId, path, cwdPath(rootPath, treePath));
       if (owner !== tree) return;
-      loaded.add(treePath);
-      noteSkipped(treePath, listing.entries);
-      const elided = listing.total - listing.entries.length;
-      if (elided > 0) elidedBy.set(treePath, elided);
-      const adds = levelPaths(treePath, listing.entries);
+      const adds = levels.record(treePath, listing);
       if (adds.length > 0) {
         owner.batch(adds.map((p) => ({ type: "add" as const, path: p })));
         return;
       }
     } catch {
       if (owner !== tree) return;
-      failed.add(treePath);
-    } finally {
-      pending.delete(treePath);
+      levels.fail(treePath);
     }
     // An empty or refused level adds no path, so nothing repainted it — and the
     // row is left claiming to be open with nothing under it. Ask for the repaint
-    // that would otherwise have come free with a mutation.
+    // that would otherwise have come free with a mutation. This never re-enters
+    // `syncExpansions`: render() repaints without notifying subscribers.
     owner.render({});
   }
 
-  // Every expanded directory whose level has not arrived asks for it. Driven off
-  // the model rather than off a click so the keyboard path (a focused row's
-  // ArrowRight) loads exactly as the pointer path does.
+  // Every expanded directory whose level nobody has asked for asks for it.
+  // Driven off the model rather than off a click so a row expanded from the
+  // keyboard loads exactly as one expanded by pointer does — the card focuses
+  // its first row on open, so arrow keys reach the library's own key handling.
+  //
+  // `getVisibleCount() - 1` because the library's range end is inclusive.
   function syncExpansions(owner: FileTree): void {
-    for (const row of owner.getVisibleRows(0, owner.getVisibleCount())) {
-      if (row.kind !== "directory" || !row.isExpanded) continue;
-      // Key form, not the row's own spelling: see rowDecoration above.
-      const key = treeKey(row.path);
-      if (loaded.has(key) || pending.has(key) || skipped.has(key)) continue;
-      pending.add(key);
-      void loadLevel(owner, key);
-    }
+    const rows = owner.getVisibleRows(0, Math.max(0, owner.getVisibleCount() - 1));
+    for (const treePath of levels.claim(rows)) void loadLevel(owner, treePath);
   }
 
   // Mount the tree once its container exists and the first level has arrived.
@@ -235,6 +205,14 @@
       // A row at caret's own density rather than the library's roomier 30px
       // default, so a level reads as a listing beside the plan's mono text.
       itemHeight: 22,
+      // Off, though the library defaults it ON. Flattening compacts a chain of
+      // single-child directories into one row reporting the chain's TERMINAL —
+      // which under one-level-at-a-time loading means the row a reader just
+      // clicked renames itself and reads as collapsed the moment its level
+      // lands, so the click appears to have done nothing. Compaction would have
+      // to prefetch the whole chain to be honest, which is a level the reader
+      // never asked for.
+      flattenEmptyDirectories: false,
       // The library's drag-and-drop, rename, mutation, context-menu, git-status
       // and search surfaces are all left unwired: this is a read-only view of a
       // directory a plan cited, and every one of them would offer to act on the
@@ -250,6 +228,12 @@
     // this creates a real <file-tree-container> with its own shadow root — the
     // same container-managed posture @pierre/diffs has.
     owner.render({ containerWrapper: container });
+    // Every element the library renders is tabIndex -1, so without this the card
+    // is reachable only by pointer: the reader who opened it with a click could
+    // not then walk it with the arrow keys. Focusing the first row hands the
+    // library's own key handling somewhere to start. Escape still closes the
+    // card from here — DiffPlanView listens on `window`, in the capture phase.
+    owner.focusFirstItem();
     const unsubscribe = owner.subscribe(() => syncExpansions(owner));
     return () => {
       unsubscribe();
@@ -258,13 +242,6 @@
     };
   });
 
-  const message = $derived(
-    view.kind === "empty"
-      ? "This folder is empty."
-      : view.kind === "error"
-        ? "Couldn't read this folder."
-        : "Loading…",
-  );
 </script>
 
 <div
@@ -293,8 +270,12 @@
   </div>
   {#if view.kind === "ready"}
     <div class="ft-tree" bind:this={host}></div>
+  {:else if view.kind === "empty"}
+    <div class="ft-message" data-folder-state="empty">This folder is empty.</div>
+  {:else if view.kind === "error"}
+    <div class="ft-message" data-folder-state="error">Couldn't read this folder.</div>
   {:else}
-    <div class="ft-message" data-folder-state={view.kind}>{message}</div>
+    <div class="ft-message" data-folder-state="loading">Loading…</div>
   {/if}
 </div>
 
@@ -303,7 +284,12 @@
      it opened from (anchorCard) and sized to hold a level without dominating the
      plan behind it. z-index clears the TopBar (30) and the plan's own sticky rails
      while staying under the portalled shadcn overlays (z-50), so it paints over
-     the chrome and never over a modal. */
+     the chrome and never over a modal — and under the comment navigator (45),
+     which is a persistent dock rather than a surface the reader dismisses.
+
+     `position: fixed` here depends on the invariant styles/layout.css states:
+     no `transform` / `filter` / `perspective` / `will-change` on `.shell`, `#app`
+     or `body`, any of which would make one of them the containing block. */
   .folder-tree {
     position: fixed;
     z-index: 40;

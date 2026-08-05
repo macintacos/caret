@@ -390,11 +390,16 @@
     filePreview = { path: ref.path, line: ref.line, endLine: ref.endLine, token: tokenElement };
   }
 
-  // The directory reference whose tree is open (EXC-918), plus the token the card
-  // is placed against. A viewport-fixed card rather than the file preview's lane:
-  // a folder has no `:line` to bound it, so the surface is one to navigate rather
+  // The directory reference whose tree is open (EXC-918), plus the clicked
+  // token's box. A viewport-fixed card rather than the file preview's lane: a
+  // folder has no `:line` to bound it, so the surface is one to navigate rather
   // than to peek at, and it is dismissed rather than lived beside.
-  let folderTree = $state<{ path: string; token: HTMLElement } | undefined>();
+  //
+  // The RECT rather than the element: the card places itself once and never
+  // tracks the token, and the plan surface it belongs to is torn out whenever
+  // compare mode opens — a detached element measures all zeros, which would park
+  // the card in the viewport's corner and keep the dead subtree alive besides.
+  let folderTree = $state<{ path: string; rect: DOMRect } | undefined>();
 
   // One reference click, two surfaces. The daemon said which this is (EXC-916),
   // so the branch is on the kind the span carries rather than on the path's shape
@@ -404,7 +409,7 @@
   function openFileRef(ref: FileRefSpan, tokenElement: HTMLElement): void {
     if (ref.kind === "directory") {
       dismissFilePreview();
-      folderTree = { path: ref.path, token: tokenElement };
+      folderTree = { path: ref.path, rect: tokenElement.getBoundingClientRect() };
       return;
     }
     folderTree = undefined;
@@ -412,6 +417,15 @@
   }
 
   $effect(() => () => cancelDrawerClose());
+
+  // A review switch drops the open card. Its contents belong to the previous
+  // review's cwd, and the 2s poll can swap the review under a reader who left
+  // one open — so without this the card sits over a different plan describing a
+  // directory tree that has nothing to do with it.
+  $effect(() => {
+    void reviewId;
+    folderTree = undefined;
+  });
 
   // The folder card's dismissal, mirroring the file preview's below: Escape, or a
   // click outside the card, both in the CAPTURE phase so they run before the
@@ -1496,12 +1510,7 @@
      the preview is. -->
 {#if !showDiff && folderTree}
   {@const openDir = folderTree}
-  <FolderTree
-    reviewId={reviewId}
-    path={openDir.path}
-    anchor={openDir.token}
-    {showShortcutHints}
-  />
+  <FolderTree reviewId={reviewId} path={openDir.path} anchor={openDir.rect} {showShortcutHints} />
 {/if}
 
 {#if legacyAnnotations.length > 0}

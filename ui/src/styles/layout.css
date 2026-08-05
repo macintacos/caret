@@ -31,9 +31,11 @@
 
 /* ----- App shell: plan + annotation-gutter grid ----- */
 /* Keep .shell, #app, and body free of `transform` / `filter` / `perspective` /
-   `will-change`: any of those establishes a containing block for the viewport-
-   pinned chrome that sits outside this grid — the comment navigator
-   (CommentNavigator.svelte `.comment-navigator`) — and would break its pin. */
+   `will-change`: any of those establishes a containing block for the
+   viewport-pinned chrome and would break its pin. Two surfaces depend on this —
+   the comment navigator (CommentNavigator.svelte `.comment-navigator`), which
+   sits outside this grid, and the folder-reference card (FolderTree.svelte
+   `.folder-tree`), which renders inside it and so depends on it more directly. */
 .shell {
   display: grid;
   /* Rows: TopBar | optional daemon-replaced banner | content | bottom status bar
