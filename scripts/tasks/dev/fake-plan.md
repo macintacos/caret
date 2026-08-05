@@ -547,9 +547,17 @@ Each bullet below carries exactly one link and no other reference, so whatever i
 - [a stretch of the dev guide](doc/ADVANCED.md:200-212) — a target carrying a **range**: the label hides it entirely, so the tooltip is the only place the span is visible before the click, and the preview washes all thirteen lines.
 - [`mise.toml`](package.json) — a label and target that **disagree**: the click opens the target, never the file the label names. Read the tooltip before clicking. The icon still sits inside the backticks.
 - [a plan that moved](doc/does-not-exist.md) — an unresolved target: the label reads as plain prose with no icon, no chip, and no preview, and its line still opens a comment composer on click.
-- [docs](guide) — a target that is not path-shaped: stays **literal**, brackets and all, exactly as before.
+- [docs](guide) — a single extensionless segment: stays **literal**, brackets and all. It could be a directory, but nothing in the text says so, and the brackets come off before anything resolves.
 - [the bundle](ftp://example.com/lib.ts) — a target carrying a scheme: also stays literal. It ends in a known extension, but a URL slot is not a path, and resolving it against the repo would preview an unrelated local file.
 - [the caret repo](https://github.com/macintacos/caret) — an ordinary http link, unchanged: no icon, and clicking it opens a tab.
+
+EXC-956: a link whose target is a **directory** collapses on exactly the same terms, and the click opens the folder tree rather than a file preview. Kind is never read off the target's spelling — `doc/agents` and `doc/agents/` are the same citation, and the daemon is what tells them apart from a file. What this layer does read is whether the target is specific enough to be a path at all: a multi-segment target, or a single segment naming a file by extension.
+
+- [`doc/agents/`](doc/agents/) — a backticked-path directory label: the **folder** glyph rather than the file one, and a click that opens the tree rooted at `doc/agents`. Set it beside the file rows above — nothing differs but the glyph and the surface.
+- [the agent rules](doc/agents) — the same directory behind a prose label and written without the slash: the same card on click, and the path visible only in the tooltip.
+- [a folder that moved](doc/nowhere/) — an unresolved directory target: the brackets go, and nothing else arrives. The existence gate does not care which kind it was going to be.
+- [the source root](src) — a single bare segment that really is a directory: stays **literal** anyway, for the reason `guide` above does. Widening far enough to catch it would strip the markup off every prose link whose target happens to be one word.
+- [Setup](doc/ADVANCED.md#setup) — a target carrying a fragment: **literal** too. That is a link to an anchor within a document, not a citation of the document.
 
 ---
 

@@ -346,6 +346,107 @@ test("a level wider than the daemon's cap says how many rows it elided", async (
   }
 });
 
+// A directory cited as a markdown LINK is a folder reference too (EXC-956). The
+// link collapses to its label and the label becomes the click target, exactly as
+// a file-targeted one does since EXC-954 — and which surface opens is still the
+// daemon's answer rather than the syntax's, so the two kinds sort themselves out
+// on the same plan.
+test("a linked directory opens the tree and a linked file opens the preview", async ({
+  daemon,
+  page,
+}) => {
+  const proj = await makeProject(NESTED);
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      // Backticked labels, the citation shape caret's own plans use: the label
+      // keeps a token of its own, so the glyph lands on it. The directory carries
+      // a trailing slash and the file does not — a difference neither the link
+      // layer nor the resolve is allowed to read anything into.
+      plan: "# Refs\n\nRead [`src/`](src/) and then [`src/cache.ts`](src/cache.ts).\n",
+    });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+
+    // The `[]()` is gone; both labels survive and carry their kind.
+    await expect(page.locator(".diffview").getByText("](src/)")).toHaveCount(0);
+    await expect(page.locator('[data-file-ref="directory"]')).toHaveText("src/");
+    await expect(page.locator('[data-file-ref=""]')).toHaveText("src/cache.ts");
+
+    await page.locator('[data-file-ref="directory"]').click();
+    await expect(page.locator(card)).toBeVisible();
+    await expect(page.locator(`${card} .ft-path`)).toHaveText("src/");
+    await expect(page.locator(row("cache.ts"))).toBeVisible();
+
+    // The file link on the same plan opens the excerpt instead, and the card
+    // gives way to it — one click, because a reference click is let through.
+    await page.locator('[data-file-ref=""]').click();
+    await expect(page.locator("[data-file-preview]")).toBeVisible();
+    await expect(page.locator(card)).toHaveCount(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("a prose-labelled directory link collapses and still opens the tree", async ({
+  daemon,
+  page,
+}) => {
+  // Only the link layer can produce this reference: the target is gone from the
+  // display text by the time the inline-code scan reads it, so a card opening
+  // here is proof the emitted span survived the merge and the resolve.
+  const proj = await makeProject(NESTED);
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\n[the library tree](src/lib)\n" });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+
+    // The label survives verbatim — it is never rewritten to the path — and the
+    // markup around it is gone.
+    await expect(page.locator(".diffview").getByText("](src/lib)")).toHaveCount(0);
+    await expect(page.locator('[data-file-ref="directory"]')).toHaveText("the library tree");
+
+    // The path is nowhere in the display text, so hover is the only place it can
+    // appear. It reads the LINK's target, which the span carries for exactly this.
+    await page.locator('[data-file-ref="directory"]').hover();
+    await expect(page.locator("[data-link-tooltip]")).toHaveText("src/lib");
+
+    await page.locator(".diffview").getByText("the library tree").click();
+    await expect(page.locator(card)).toBeVisible();
+    await expect(page.locator(`${card} .ft-path`)).toHaveText("src/lib");
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("an unresolved directory link collapses its markup but gets no affordance", async ({
+  daemon,
+  page,
+}) => {
+  // Collapsing is decided on shape, before anything resolves, so the markup goes
+  // either way; the existence gate is what decides there is nothing to click.
+  const proj = await makeProject(NESTED);
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\n[a folder that moved](src/nowhere)\n" });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+
+    await expect(page.locator(".diffview").getByText("a folder that moved")).toBeVisible();
+    await expect(page.locator(".diffview").getByText("](src/nowhere)")).toHaveCount(0);
+    await expect(page.locator("[data-file-ref]")).toHaveCount(0);
+
+    await page.locator(".diffview").getByText("a folder that moved").click();
+    // Nothing to await, so give the click pipeline a beat before asserting that
+    // neither surface appeared.
+    const t0 = await page.evaluate(() => performance.now());
+    await page.waitForFunction((t) => performance.now() > t + 300, t0);
+    await expect(page.locator(card)).toHaveCount(0);
+    await expect(page.locator("[data-file-preview]")).toHaveCount(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
 test("an empty directory says so rather than opening a blank card", async ({ daemon, page }) => {
   const proj = await makeProject({ "keep.ts": "export {};\n" });
   try {
