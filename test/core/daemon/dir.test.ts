@@ -14,6 +14,11 @@ import { MAX_DIR_DEPTH, MAX_DIR_ENTRIES } from "@/plan/directory.ts";
 // resolution the file routes use, so the escape assertions below matter as much
 // as the happy path: the daemon must not become an arbitrary local-directory
 // lister any more than it is an arbitrary file reader.
+//
+// This is also `@/plan/directory.ts`'s suite, rather than a second one at
+// test/core/plan/directory.test.ts: every claim it makes is route-shaped (a
+// status code, a wire body, a log record), so asserting them over real HTTP is
+// asserting them where they are true.
 
 let store: string; // the daemon's own state dir
 let cwd: string; // the review's project dir, populated with real files
@@ -108,8 +113,43 @@ test("dir truncates a wide level and reports the true total", async () => {
 
 test("dir lists the root itself when no path is given", async () => {
   write("src/a.ts");
+  dir("src/nested");
   const id = await d.seed({ cwd });
-  expect((await listed(id, "src")).path).toBe("src");
+  expect(await listed(id, "src")).toEqual(await listed(id, "src", "src"));
+});
+
+test("dir gives a contained symlink its target's kind and drops one that escapes", async () => {
+  const outside = mkdtempSync(join(tmpdir(), "caret-dir-outside-"));
+  try {
+    write("src/real.ts");
+    dir("src/realdir");
+    symlinkSync(join(cwd, "src/real.ts"), join(cwd, "src/to-file"));
+    symlinkSync(join(cwd, "src/realdir"), join(cwd, "src/to-dir"));
+    symlinkSync(outside, join(cwd, "src/to-outside"));
+    const id = await d.seed({ cwd });
+    const body = await listed(id, "src");
+    // A link takes its target's kind, and the escaping one is no row at all —
+    // so it is absent from `total` as well as from `entries`.
+    expect(body.entries).toEqual([
+      { name: "realdir", kind: "directory" },
+      { name: "to-dir", kind: "directory" },
+      { name: "real.ts", kind: "file" },
+      { name: "to-file", kind: "file" },
+    ]);
+    expect(body.total).toBe(4);
+  } finally {
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test("dir still enumerates a skipped directory when asked for it directly", async () => {
+  write("src/node_modules/pkg/index.js");
+  const id = await d.seed({ cwd });
+  // `skipped` is a hint to the UI, never a refusal here: a plan is entitled to
+  // cite `node_modules/foo`, and that citation must still preview.
+  expect((await listed(id, "src/node_modules")).entries).toEqual([
+    { name: "pkg", kind: "directory" },
+  ]);
 });
 
 test("dir serves a descendant exactly MAX_DIR_DEPTH below the root", async () => {
@@ -177,10 +217,12 @@ test("dir logs entry counts at debug level and never an entry name", async () =>
     const id = await logged.seed({ cwd });
     const res = await fetch(`${logged.url}/api/reviews/${id}/dir?root=src`);
     expect(res.status).toBe(200);
-    const rec = recs.find((r) => r.msg.startsWith("dir listed"));
-    expect(rec?.level).toBe("debug");
-    expect(rec?.step).toBe("request");
-    expect(rec?.extra).toMatchObject({ reviewId: id, total: 2, returned: 2 });
+    // Pinned on the record's durable shape — step, level, structured counts —
+    // rather than its message prose, which is free to be reworded.
+    const requests = recs.filter((r) => r.step === "request");
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.level).toBe("debug");
+    expect(requests[0]?.extra).toMatchObject({ reviewId: id, total: 2, returned: 2 });
     expectNeverLogsBody(recs, ["top-secret-filename.ts", "confidential-directory"]);
   } finally {
     logged.stop();

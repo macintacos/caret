@@ -3,27 +3,33 @@
 // recursive walk here: a plan is entitled to cite `node_modules/`, and one level
 // of it is already thousands of entries.
 //
-// Containment is not re-decided here. Both the referenced root and the level
-// being asked for go through `resolveInCwd` (@/plan/excerpt.ts), so a `../`
-// escape, an absolute path, and a symlinked directory whose target leaves the
-// review's cwd are refused by exactly the code that refuses them for the file
-// routes. What this module adds on top is the descent guard: a level must sit
-// under the referenced root and no more than MAX_DIR_DEPTH below it, so a client
-// that keeps asking for the next level down eventually hits a floor.
+// Containment is not re-decided here. The referenced root, the level being asked
+// for, and every symlinked entry all go through `resolveInCwd`
+// (@/plan/excerpt.ts), so a `../` escape, an absolute path, and a symlink whose
+// target leaves the review's cwd are refused by exactly the code that refuses
+// them for the file routes.
+//
+// What this module adds on top is the descent guard, and it is worth being
+// precise about what it bounds: `root` is client-supplied and unverified, so the
+// guard caps one expansion chain from one anchor — re-anchoring `root` deeper
+// restarts the count. Containment in `cwd`, not this, is what bounds *what* a
+// caller can reach; the guard bounds how far one chain of requests will walk.
 
 import type { Dirent } from "node:fs";
-import { readdir, realpath } from "node:fs/promises";
-import { relative, sep } from "node:path";
+import { readdir } from "node:fs/promises";
+import { join, relative, sep } from "node:path";
 
-import type { DirEntry, DirListing } from "@/lib/types.ts";
-import { resolveInCwd, SKIP_DIRS } from "@/plan/excerpt.ts";
+import type { DirEntry, DirListing, FileRefKind } from "@/lib/types.ts";
+import { resolveInCwd, SKIP_DIRS, safeRealpath } from "@/plan/excerpt.ts";
 
 /** Entries returned for one level. A wider level is truncated to this, with the
  * true count reported separately so the UI can say how many it elided. */
 export const MAX_DIR_ENTRIES = 500;
 
-/** How far below the referenced root a level may sit. A guard rail on the
- * client's descent, not a property of any real tree. */
+/** How far below the referenced root one level may sit — a cap on a single
+ * expansion chain, not a property of any real tree. Client-relative: the anchor
+ * it counts from is the caller's own `root`, so this is a guard rail against a
+ * runaway expansion, never a confidentiality boundary. */
 export const MAX_DIR_DEPTH = 10;
 
 // Directories first, then by name — what a tree wants, and what makes the cap
@@ -34,19 +40,21 @@ function byKindThenName(a: DirEntry, b: DirEntry): number {
   return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
 }
 
-function toEntry(dirent: Dirent): DirEntry {
-  if (!dirent.isDirectory()) return { name: dirent.name, kind: "file" };
-  const skipped = SKIP_DIRS.has(dirent.name) || dirent.name.startsWith(".");
-  return skipped
-    ? { name: dirent.name, kind: "directory", skipped: true }
-    : { name: dirent.name, kind: "directory" };
+// A dotted name joins the skip set for the same reason `basenameSearch` refuses
+// it: `.git`/`.venv`-shaped trees are large and never what a plan means to show.
+// The mark is advisory — see `DirEntry.skipped`.
+function entryFor(name: string, kind: FileRefKind): DirEntry {
+  if (kind === "file") return { name, kind };
+  return SKIP_DIRS.has(name) || name.startsWith(".")
+    ? { name, kind, skipped: true }
+    : { name, kind };
 }
 
 /**
- * One level of `path` — defaulting to `root` itself — as `DirEntry` rows, where
- * `root` is the directory the plan referenced and both are resolved against the
- * review's `cwd`. Returns null when either fails to resolve to a real contained
- * directory, when `path` is not under `root`, or when it sits more than
+ * One level of `path` — or of `root` itself when `path` is empty — as `DirEntry`
+ * rows, where `root` is the directory the plan referenced and both are resolved
+ * against the review's `cwd`. Returns null when either fails to resolve to a real
+ * contained directory, when `path` is not under `root`, or when it sits more than
  * `MAX_DIR_DEPTH` levels below it. Never throws.
  *
  * The single null answer is deliberate: the route turns it into one 404, so a
@@ -55,12 +63,12 @@ function toEntry(dirent: Dirent): DirEntry {
 export async function listDirectory(
   cwd: string,
   root: string,
-  path?: string,
+  path: string,
 ): Promise<DirListing | null> {
   const rootHit = await resolveInCwd(cwd, root);
   if (rootHit === null || rootHit.kind !== "directory") return null;
 
-  const target = path === undefined || path === "" ? rootHit : await resolveInCwd(cwd, path);
+  const target = path === "" ? rootHit : await resolveInCwd(cwd, path);
   if (target === null || target.kind !== "directory") return null;
 
   // Both paths are canonical by now, so this is pure arithmetic on real paths —
@@ -76,15 +84,29 @@ export async function listDirectory(
     return null;
   }
 
-  // Only files and directories become rows. A symlink dirent reports as neither
-  // (withFileTypes describes the link, not its target), so links, sockets and
-  // devices are dropped rather than reported as some third kind — the same
-  // refusal `resolveInCwd` makes. `total` counts what survives that filter, so
-  // `total - entries.length` is exactly what the cap elided.
-  const entries = dirents.filter((d) => d.isFile() || d.isDirectory()).map(toEntry);
+  // A symlink dirent describes the link, not its target, so its kind is the
+  // target's — decided by the same resolver the routes use, which is what keeps
+  // a link pointing out of cwd from becoming a row. Resolved together rather
+  // than in sequence, since each costs a realpath. Anything that is neither file
+  // nor directory nor link (a socket, a device, a fifo) is not a reference and
+  // is simply not a row.
+  const entries: DirEntry[] = [];
+  const links: Dirent[] = [];
+  for (const d of dirents) {
+    if (d.isFile()) entries.push(entryFor(d.name, "file"));
+    else if (d.isDirectory()) entries.push(entryFor(d.name, "directory"));
+    else if (d.isSymbolicLink()) links.push(d);
+  }
+  const targets = await Promise.all(links.map((d) => resolveInCwd(cwd, join(target.path, d.name))));
+  targets.forEach((hit, i) => {
+    const link = links[i];
+    if (hit !== null && link !== undefined) entries.push(entryFor(link.name, hit.kind));
+  });
   entries.sort(byKindThenName);
 
-  const cwdReal = await realpath(cwd).catch(() => cwd);
+  // `total` counts the rows this level has, before the cap — so
+  // `total - entries.length` is exactly what the cap elided.
+  const cwdReal = (await safeRealpath(cwd)) ?? cwd;
   return {
     path: relative(cwdReal, target.path),
     entries: entries.slice(0, MAX_DIR_ENTRIES),

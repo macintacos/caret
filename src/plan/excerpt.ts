@@ -51,8 +51,9 @@ export const MAX_EXCERPT_BYTES = 10 * 1024 * 1024;
 const MAX_SCAN_ENTRIES = 5000;
 
 /** Heavy or irrelevant subtrees the basename search never descends into, and
- * that the directory listing shows as un-enumerated rows (`@/plan/directory.ts`).
- * One set so the two refusals can't drift apart. */
+ * that the directory listing marks as not-expandable rows
+ * (`@/plan/directory.ts`). One set so the walk's refusal and the listing's
+ * marker can't drift apart. */
 export const SKIP_DIRS = new Set(["node_modules", "dist", "build", "coverage", "out"]);
 
 // Extension → shiki grammar name. Only the common source/config kinds are
@@ -109,7 +110,8 @@ function languageForPath(path: string): string {
   return EXT_LANGUAGE[extname(path).toLowerCase()] ?? "text";
 }
 
-function safeRealpath(path: string): Promise<string | null> {
+/** `path`'s canonical form, or null when it can't be resolved. */
+export function safeRealpath(path: string): Promise<string | null> {
   return realpath(path).catch(() => null);
 }
 

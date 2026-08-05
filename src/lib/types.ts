@@ -263,15 +263,22 @@ export interface DirEntry {
   /** The entry's own name — never a path, so a row can't smuggle a traversal. */
   name: string;
   kind: FileRefKind;
-  /** Present, and true, only on a directory the daemon will not enumerate: one
-   * in the skip set (node_modules, dist, build, coverage, out) or a dotted name.
-   * The row is still shown — it is simply not expandable. */
+  /** Present, and true, only on a directory the UI should not offer to expand:
+   * one in the skip set (node_modules, dist, build, coverage, out) or a dotted
+   * name. Advisory — the daemon still lists such a directory when asked for it
+   * directly, because a plan is entitled to cite `node_modules/foo`. */
   skipped?: boolean;
 }
 
 /** Response of GET /api/reviews/:id/dir — one level of a directory a plan
  * referenced, so the folder preview expands lazily rather than shipping a whole
- * subtree (EXC-917). */
+ * subtree (EXC-917).
+ *
+ * A level is a view, not an inventory: only files and directories are rows (a
+ * symlink counts as whichever its target is, and one pointing out of the review's
+ * cwd is dropped along with sockets and devices), and the tail past the cap is
+ * not reachable through this route at all — `total` is what lets the UI say how
+ * much it is not showing. */
 export interface DirListing {
   /** The listed directory relative to the review's cwd (display + de-dup key),
    * empty for the cwd itself. */
@@ -279,8 +286,8 @@ export interface DirListing {
   /** This level's entries, directories first then by name, capped at
    * `MAX_DIR_ENTRIES`. */
   entries: DirEntry[];
-  /** Listable entries at this level before the cap, so the UI can say how many
-   * were elided. Equal to `entries.length` when nothing was truncated. */
+  /** Rows this level has before the cap, so the UI can say how many were elided.
+   * Equal to `entries.length` when nothing was truncated. */
   total: number;
 }
 
