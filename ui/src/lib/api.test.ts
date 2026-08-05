@@ -107,16 +107,20 @@ describe("resolveReview instrumentation", () => {
 });
 
 describe("resolveFileRefs", () => {
-  test("returns the resolved subset from the response", async () => {
-    respond = () => Promise.resolve(jsonResponse({ resolved: ["src/foo.ts"] }));
-    expect(await resolveFileRefs(ID, ["src/foo.ts", "src/ghost.ts"])).toEqual(["src/foo.ts"]);
+  test("returns each resolved path's kind, omitting what did not resolve", async () => {
+    respond = () =>
+      Promise.resolve(jsonResponse({ resolved: { "src/foo.ts": "file", "src/lib": "directory" } }));
+    expect(await resolveFileRefs(ID, ["src/foo.ts", "src/lib", "src/ghost.ts"])).toEqual({
+      "src/foo.ts": "file",
+      "src/lib": "directory",
+    });
   });
 
   test("posts the candidate paths to the review's file-refs route", async () => {
     let seen: { url: string; body: unknown } | undefined;
     respond = (url, options) => {
       seen = { url, body: JSON.parse(String(options?.body)) };
-      return Promise.resolve(jsonResponse({ resolved: [] }));
+      return Promise.resolve(jsonResponse({ resolved: {} }));
     };
     await resolveFileRefs(ID, ["a.ts"]);
     expect(seen?.url).toContain(`/api/reviews/${ID}/file-refs`);
@@ -127,15 +131,15 @@ describe("resolveFileRefs", () => {
     let called = false;
     respond = () => {
       called = true;
-      return Promise.resolve(jsonResponse({ resolved: [] }));
+      return Promise.resolve(jsonResponse({ resolved: {} }));
     };
-    expect(await resolveFileRefs(ID, [])).toEqual([]);
+    expect(await resolveFileRefs(ID, [])).toEqual({});
     expect(called).toBe(false);
   });
 
-  test("degrades to an empty list (never throws) on a failed request", async () => {
+  test("degrades to nothing resolved (never throws) on a failed request", async () => {
     respond = () => Promise.resolve(new Response(null, { status: 500 }));
-    expect(await resolveFileRefs(ID, ["a.ts"])).toEqual([]);
+    expect(await resolveFileRefs(ID, ["a.ts"])).toEqual({});
   });
 });
 

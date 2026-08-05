@@ -299,13 +299,15 @@
   // string, so effects keyed on it fire only when the review actually switches.
   const reviewId = $derived(review.id);
 
-  // Which candidate paths resolve to a real file in the review's cwd — the daemon
-  // is the existence gate, so only these get the icon + hover. Resolved once per
-  // candidate-set change: both dependencies below (the memoized candidate map and
-  // the value-stable reviewId) hold their reference across a poll tick, so an
-  // unchanged plan never re-resolves — which is what kept the icons and the open
-  // hover preview from flickering every 2s. Cleared up front so a plan edit or
-  // review switch drops stale icons at once.
+  // Which candidate paths resolve to a real FILE in the review's cwd — the daemon
+  // is the existence gate and reports a kind per path, and the plan view affords
+  // files only: a directory resolves but is dropped here, so it draws no glyph
+  // and no click target until the folder popover exists to open (EXC-918).
+  // Resolved once per candidate-set change: both dependencies below (the memoized
+  // candidate map and the value-stable reviewId) hold their reference across a
+  // poll tick, so an unchanged plan never re-resolves — which is what kept the
+  // icons and the open hover preview from flickering every 2s. Cleared up front
+  // so a plan edit or review switch drops stale icons at once.
   let resolvedPaths = $state<Set<string>>(new Set());
   $effect(() => {
     const candidates = fileRefCandidates;
@@ -314,8 +316,13 @@
     resolvedPaths = new Set();
     if (paths.length === 0) return;
     let cancelled = false;
-    void resolveFileRefs(id, paths).then((resolved) => {
-      if (!cancelled) resolvedPaths = new Set(resolved);
+    void resolveFileRefs(id, paths).then((kinds) => {
+      if (cancelled) return;
+      resolvedPaths = new Set(
+        Object.entries(kinds)
+          .filter(([, kind]) => kind === "file")
+          .map(([path]) => path),
+      );
     });
     return () => {
       cancelled = true;

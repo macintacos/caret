@@ -243,11 +243,19 @@ export interface RouteResult {
   expired: string[];
 }
 
-/** Response of POST /api/reviews/:id/file-refs — the subset of the requested
- * candidate paths that resolve to a real file inside the review's cwd. The UI
- * shows the filename icon + hover only for these (EXC-687). */
+/** What a plan's path reference turned out to be on disk. The filesystem is the
+ * only thing that knows, so the parser never guesses from the token's shape —
+ * not even from a trailing slash (EXC-916). */
+export type FileRefKind = "file" | "directory";
+
+/** Response of POST /api/reviews/:id/file-refs — for each requested candidate
+ * path that resolves inside the review's cwd, what it resolved to. Keyed by the
+ * path exactly as requested, so a caller can look up the span it came from; a
+ * candidate that resolves to nothing is absent rather than present-and-null. The
+ * plan view affords files only, so a `directory` here draws no glyph until the
+ * folder popover lands (EXC-918). */
 export interface FileRefsResponse {
-  resolved: string[];
+  resolved: Record<string, FileRefKind>;
 }
 
 /** A bounded, line-aware read excerpt of a plan-referenced file, served by GET

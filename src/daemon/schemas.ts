@@ -35,11 +35,18 @@ export const PlanInputSchema: z.ZodType<PlanInput> = z
   })
   .catch({});
 
-// POST /api/reviews/:id/file-refs: the candidate filename strings the UI parsed
-// from a plan, asking which resolve to a real file. A non-array or non-object
-// body degrades to an empty list (nothing resolves), matching the lenient
-// boundary the other schemas keep. The handler caps how many it will resolve.
-export const MAX_FILE_REFS = 200;
+// POST /api/reviews/:id/file-refs: the candidate path strings the UI parsed from
+// a plan, asking what each one resolves to. A non-array or non-object body
+// degrades to an empty list (nothing resolves), matching the lenient boundary
+// the other schemas keep. The handler de-dupes, then caps how many it resolves.
+//
+// The cap is roomy because the candidate gate is: since EXC-916 every plausible
+// path token inside inline code is offered, not only the ones ending in a known
+// extension, so a long plan can reach several hundred distinct tokens. A cap
+// that truncated would silently drop real citations from the tail of a plan,
+// and the work per candidate — one realpath and one stat, issued in parallel —
+// is cheap enough that the headroom costs nothing on a plan that never needs it.
+export const MAX_FILE_REFS = 1000;
 export const FileRefsBodySchema = z
   .object({ paths: z.array(z.string()).catch([]) })
   .catch({ paths: [] });

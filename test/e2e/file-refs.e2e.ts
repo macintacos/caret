@@ -224,6 +224,39 @@ test("marks only references that resolve to a real file", async ({ daemon, page 
   }
 });
 
+// EXC-916 moved the file/directory question to the filesystem, so a cited
+// directory now resolves — but the plan view still affords files only, and will
+// until the folder popover exists to open (EXC-918). "No affordance" is only
+// true if nothing got tagged, and tagging happens in the shadow root after a
+// real round-trip against a real cwd, so it is asserted here rather than as a
+// unit.
+test("resolves a cited directory but affords nothing for it", async ({ daemon, page }) => {
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS, "src/lib/util.ts": "export {};\n" });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nEdit `src/cache.ts`, which sits beside `src/lib` and `src/lib/`.\n",
+    });
+    await page.goto("/");
+    await expect(page.locator(".diff-plan")).toBeVisible();
+
+    // Exactly one tagged token, and it is the file — both directory spellings
+    // resolve on the daemon and are dropped by the view.
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+    const tagged = await page.evaluate(() => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+      return [...(sh?.querySelectorAll("[data-file-ref]") ?? [])].map((el) => el.textContent);
+    });
+    expect(tagged).toEqual(["src/cache.ts"]);
+
+    // And clicking a directory opens nothing: it is ordinary inline code.
+    await page.getByText("src/lib/", { exact: true }).click();
+    await expect(page.locator("[data-file-preview]")).toHaveCount(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
 // EXC-896: tagging depends on shiki emitting the opening backtick as a token of its
 // own, which only holds while the backtick and the path resolve to different colors.
 // A vendor palette highlights with that vendor's published theme, where the two are

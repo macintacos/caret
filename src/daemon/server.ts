@@ -35,13 +35,15 @@ import {
   type DaemonDiagnostics,
   type Decision,
   type DraftBody,
+  type FileRefKind,
+  type FileRefsResponse,
   type HealthIdentity,
   type PlanInput,
   type ResolveBody,
   type RouteResult,
   toClientReview,
 } from "@/lib/types.ts";
-import { isFileTooLargeToPreview, readFileExcerpt, resolveFileInCwd } from "@/plan/excerpt.ts";
+import { isFileTooLargeToPreview, readFileExcerpt, resolveInCwd } from "@/plan/excerpt.ts";
 import { createDecisions } from "@/review/decisions.ts";
 import type { Store } from "@/review/store.ts";
 import { routeIncomingPlan } from "@/review/threading.ts";
@@ -475,23 +477,34 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return r ? Response.json(toClientReview(r)) : notFound();
   }
 
-  // POST /api/reviews/:id/file-refs — of the candidate filename strings the UI
-  // parsed from this review's plan, which resolve to a real file inside the
-  // review's cwd. Existence only (no reads): it drives the plan view's filename
-  // icon, which must appear only for real files. Deduped and capped.
+  // POST /api/reviews/:id/file-refs — of the candidate path strings the UI
+  // parsed from this review's plan, which resolve inside the review's cwd and
+  // what each one is. Kind comes from the filesystem, never from the token's
+  // shape (EXC-916). Existence only, no reads: it drives the plan view's
+  // reference affordance, which must appear only for something real.
+  //
+  // De-duped BEFORE the cap, so a plan repeating one path can't crowd out the
+  // ones behind it, and resolved in parallel — the wider candidate gate makes
+  // this a few hundred stats on a long plan, which a sequential loop would walk
+  // one blocking syscall at a time.
   async function handleFileRefs(req: Request, id: string): Promise<Response> {
     const r = store.get(id);
     if (!r) return notFound();
     const { paths } = await parseBody(req, FileRefsBodySchema);
-    const seen = new Set<string>();
-    const resolved: string[] = [];
-    for (const p of paths.slice(0, MAX_FILE_REFS)) {
-      if (seen.has(p)) continue;
-      seen.add(p);
-      if (resolveFileInCwd(r.cwd, p) !== null) resolved.push(p);
-    }
-    log.debug("request", `file-refs resolved: ${resolved.length}/${seen.size}`, { reviewId: id });
-    return Response.json({ resolved });
+    const unique = [...new Set(paths)].slice(0, MAX_FILE_REFS);
+    const hits = await Promise.all(unique.map((p) => resolveInCwd(r.cwd, p)));
+    const resolved: Record<string, FileRefKind> = {};
+    unique.forEach((p, i) => {
+      const hit = hits[i];
+      if (hit) resolved[p] = hit.kind;
+    });
+    // Counts only — a candidate is plan text, and plan text is never logged.
+    const dirs = Object.values(resolved).filter((k) => k === "directory").length;
+    log.debug("request", `file-refs resolved: ${Object.keys(resolved).length}/${unique.length}`, {
+      reviewId: id,
+      directories: dirs,
+    });
+    return Response.json({ resolved } satisfies FileRefsResponse);
   }
 
   // GET /api/reviews/:id/file?path=&line=&start=&end= — a line-aware excerpt of
@@ -501,7 +514,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // ends. Resolution is confined to the review's cwd; a path that doesn't
   // resolve (missing, or escaping cwd) is a 404, and a file too large to preview
   // is a 413 so the UI can say so. File contents are never logged.
-  function handleFileExcerpt(req: Request, id: string): Response {
+  async function handleFileExcerpt(req: Request, id: string): Promise<Response> {
     const r = store.get(id);
     if (!r) return notFound();
     const params = new URL(req.url).searchParams;
@@ -514,9 +527,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     const start = num("start");
     const end = num("end");
     const range = start !== undefined && end !== undefined ? { start, end } : undefined;
-    const excerpt = readFileExcerpt(r.cwd, path, line, range);
+    const excerpt = await readFileExcerpt(r.cwd, path, line, range);
     if (excerpt) return Response.json(excerpt);
-    return isFileTooLargeToPreview(r.cwd, path) ? tooLarge() : notFound();
+    return (await isFileTooLargeToPreview(r.cwd, path)) ? tooLarge() : notFound();
   }
 
   // GET /api/reviews/:id/decision — the hook's long-poll for a decision.

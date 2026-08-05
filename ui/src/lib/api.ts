@@ -7,6 +7,7 @@ import type {
   ClientReview,
   DaemonDiagnostics,
   FileExcerpt,
+  FileRefKind,
   FileRefsResponse,
   HealthIdentity,
   PersistedScratch,
@@ -86,13 +87,17 @@ export async function getReview(id: string): Promise<ClientReview> {
   }
 }
 
-/** Of the plan's candidate filename references, which resolve to a real file
- * inside the review's cwd — the daemon is the existence gate, so the plan view's
- * filename icon appears only for these. Non-essential: a failed request degrades
- * to an empty list (no icons) rather than throwing, and an empty candidate list
- * skips the round trip entirely. */
-export async function resolveFileRefs(id: string, paths: string[]): Promise<string[]> {
-  if (paths.length === 0) return [];
+/** Of the plan's candidate path references, which resolve inside the review's
+ * cwd and what each one is — the daemon holds the filesystem, so it is both the
+ * existence gate and the only thing that can say file vs. directory (EXC-916).
+ * A path that resolves to nothing is absent from the result. Non-essential: a
+ * failed request degrades to nothing resolved (no icons) rather than throwing,
+ * and an empty candidate list skips the round trip entirely. */
+export async function resolveFileRefs(
+  id: string,
+  paths: string[],
+): Promise<Record<string, FileRefKind>> {
+  if (paths.length === 0) return {};
   try {
     const { resolved } = await json<FileRefsResponse>(
       await fetch(`/api/reviews/${encodeURIComponent(id)}/file-refs`, {
@@ -108,7 +113,7 @@ export async function resolveFileRefs(id: string, paths: string[]): Promise<stri
       candidateCount: paths.length,
       reason: String(err),
     });
-    return [];
+    return {};
   }
 }
 

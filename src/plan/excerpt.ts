@@ -1,23 +1,18 @@
-// Resolves a plan's filename reference to a real file inside the review's cwd
-// and reads a line-aware excerpt for the preview card (EXC-687). The browser
-// can't touch the filesystem, so the daemon does both — keyed off the review
-// record's cwd, never a client-supplied base. Resolution is confined to cwd: a
-// `../` or symlink target that escapes it resolves to null, so the daemon never
-// becomes an arbitrary local-file reader. A reference that resolves to no real
-// file yields null, and the UI then shows no icon and no affordance.
+// Resolves a plan's path reference against the review's cwd — reporting whether
+// it is a file or a directory (EXC-916) — and reads a line-aware excerpt of a
+// file for the preview card (EXC-687). The browser can't touch the filesystem,
+// so the daemon does both, keyed off the review record's cwd and never a
+// client-supplied base. Resolution is confined to cwd: a `../` or symlink target
+// that escapes it resolves to null, so the daemon never becomes an arbitrary
+// local-file reader. A reference that resolves to nothing yields null, and the
+// UI then shows no icon and no affordance.
 
-import {
-  type Dirent,
-  readdirSync,
-  readFileSync,
-  realpathSync,
-  type Stats,
-  statSync,
-} from "node:fs";
+import { type Dirent, readFileSync, type Stats, statSync } from "node:fs";
+import { readdir, realpath, stat } from "node:fs/promises";
 import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-import { EXCERPT_RADIUS } from "@/config/constants.ts";
-import type { FileExcerpt } from "@/lib/types.ts";
+import { EXCERPT_RADIUS, hasKnownFileExtension } from "@/config/constants.ts";
+import type { FileExcerpt, FileRefKind } from "@/lib/types.ts";
 
 // The opening window is sized to show enough of the file to judge a plan against
 // it without leaving the review; the card scrolls internally past that, and its
@@ -112,27 +107,29 @@ function languageForPath(path: string): string {
   return EXT_LANGUAGE[extname(path).toLowerCase()] ?? "text";
 }
 
-function safeRealpath(path: string): string | null {
-  try {
-    return realpathSync(path);
-  } catch {
-    return null;
-  }
+function safeRealpath(path: string): Promise<string | null> {
+  return realpath(path).catch(() => null);
 }
 
-// The canonical path of `abs` when it is a real regular file inside `cwdReal`,
-// else null. realpath resolves symlinks first, so a link whose target escapes
-// cwd is rejected here rather than followed out of the tree.
-function containedFile(cwdReal: string, abs: string): string | null {
-  const real = safeRealpath(abs);
+/** A resolved reference: the canonical path on disk, and what it turned out to be. */
+interface ResolvedRef {
+  path: string;
+  kind: FileRefKind;
+}
+
+// What `abs` is when it is a real file or directory inside `cwdReal`, else null.
+// realpath resolves symlinks first, so a link whose target escapes cwd is
+// rejected here rather than followed out of the tree — which now covers a
+// symlinked directory too. Anything that is neither file nor directory (a
+// socket, a device) is refused outright rather than reported as some third kind.
+async function contained(cwdReal: string, abs: string): Promise<ResolvedRef | null> {
+  const real = await safeRealpath(abs);
   if (real === null) return null;
   if (real !== cwdReal && !real.startsWith(cwdReal + sep)) return null;
-  try {
-    if (!statSync(real).isFile()) return null;
-  } catch {
-    return null;
-  }
-  return real;
+  const stats = await stat(real).catch(() => null);
+  if (stats === null) return null;
+  if (stats.isFile()) return { path: real, kind: "file" };
+  return stats.isDirectory() ? { path: real, kind: "directory" } : null;
 }
 
 // Breadth-first search for a file named `name` under cwdReal, returning the
@@ -140,15 +137,14 @@ function containedFile(cwdReal: string, abs: string): string | null {
 // to symlinked directories (withFileTypes reports the link, not its target), so
 // it can neither loop nor escape the tree. This is the "intelligent guess" for a
 // reference that gives only a basename.
-function basenameSearch(cwdReal: string, name: string): string | null {
-  if (name === "") return null;
+async function basenameSearch(cwdReal: string, name: string): Promise<string | null> {
   let scanned = 0;
   const queue: string[] = [cwdReal];
   while (queue.length > 0) {
     const currentDir = queue.shift() as string;
     let entries: Dirent[];
     try {
-      entries = readdirSync(currentDir, { withFileTypes: true });
+      entries = await readdir(currentDir, { withFileTypes: true });
     } catch {
       continue;
     }
@@ -165,26 +161,37 @@ function basenameSearch(cwdReal: string, name: string): string | null {
 }
 
 /**
- * Resolves a plan's filename reference to a real file's canonical absolute path,
- * confined to `cwd`. Tries `cwd`-relative resolution first; on a miss, falls
- * back to a bounded basename search under `cwd`. Returns null when `cwd` is not
- * an absolute path, when nothing matches, or when the target escapes `cwd`.
+ * Resolves a plan's path reference to its canonical absolute path and kind,
+ * confined to `cwd`. Tries `cwd`-relative resolution first; on a miss, a bare
+ * file-shaped name falls back to a bounded basename search under `cwd`. Returns
+ * null when `cwd` is not an absolute path, when nothing matches, or when the
+ * target escapes `cwd`.
+ *
+ * Async because the file-refs route resolves a whole plan's candidates at once
+ * and interleaves them; one caller resolving a single path pays a `realpath` of
+ * `cwd` it could have hoisted, which is a cached path-walk and not worth a second
+ * batch-shaped entry point to avoid.
  */
-export function resolveFileInCwd(cwd: string, candidate: string): string | null {
+export async function resolveInCwd(cwd: string, candidate: string): Promise<ResolvedRef | null> {
   if (cwd === "" || !isAbsolute(cwd)) return null;
-  const cwdReal = safeRealpath(cwd);
+  const cwdReal = await safeRealpath(cwd);
   if (cwdReal === null) return null;
 
   const cleaned = candidate.trim();
   if (cleaned === "") return null;
 
-  const direct = containedFile(cwdReal, resolve(cwdReal, cleaned));
+  const direct = await contained(cwdReal, resolve(cwdReal, cleaned));
   if (direct !== null) return direct;
 
-  // Only the basename matters to the fallback; a directory hint that didn't
-  // resolve directly can't help narrow a filesystem-wide search here.
-  const name = cleaned.split("/").pop() ?? "";
-  return basenameSearch(cwdReal, name);
+  // The fallback walks the tree, so it is spent only where it can pay off: a
+  // bare name that reads like a file. A token carrying a directory hint already
+  // said where to look and missed — guessing past that would land a reference on
+  // a same-named file somewhere else entirely — and an extensionless one would
+  // fire the walk on every `--flag` and `someVariable` a plan mentions, now that
+  // the candidate gate offers those too (EXC-916).
+  if (cleaned.includes("/") || !hasKnownFileExtension(cleaned)) return null;
+  const found = await basenameSearch(cwdReal, cleaned);
+  return found === null ? null : { path: found, kind: "file" };
 }
 
 function safeStat(path: string): Stats | null {
@@ -200,13 +207,13 @@ function safeStat(path: string): Stats | null {
  * `MAX_EXCERPT_BYTES` — the one case `readFileExcerpt`'s null hides that the UI
  * shows differently. Answered on the error path only, so the common path pays
  * nothing for the extra resolve; on that path a reference that resolves to
- * nothing re-runs `resolveFileInCwd`'s bounded basename search, which is why
- * this is not called before `readFileExcerpt`. Never throws.
+ * nothing re-runs `resolveInCwd`'s bounded basename search, which is why this is
+ * not called before `readFileExcerpt`. Never throws.
  */
-export function isFileTooLargeToPreview(cwd: string, candidate: string): boolean {
-  const abs = resolveFileInCwd(cwd, candidate);
-  if (abs === null) return false;
-  const stats = safeStat(abs);
+export async function isFileTooLargeToPreview(cwd: string, candidate: string): Promise<boolean> {
+  const hit = await resolveInCwd(cwd, candidate);
+  if (hit === null || hit.kind !== "file") return false;
+  const stats = safeStat(hit.path);
   return stats !== null && stats.size > MAX_EXCERPT_BYTES;
 }
 
@@ -238,7 +245,7 @@ function splitLines(content: string): string[] {
  * The lines of the file at canonical path `abs`, or null when it can't be read
  * or holds binary content — memoized against `stats`.
  *
- * `abs` must be a path `resolveFileInCwd` just returned. That is what keeps the
+ * `abs` must be a path `resolveInCwd` just returned. That is what keeps the
  * memo out of the security boundary: containment is re-decided from `cwd` on
  * every request before this is reached, so an entry is only ever *reachable*
  * through a reference that passed the check on that same request — the cache
@@ -267,14 +274,15 @@ function readLines(abs: string, stats: Stats): string[] | null {
  * yields at least one line. Returns null when the reference doesn't resolve, the
  * file is too large, or its content is binary. Never throws.
  */
-export function readFileExcerpt(
+export async function readFileExcerpt(
   cwd: string,
   candidate: string,
   line?: number,
   range?: { start: number; end: number },
-): FileExcerpt | null {
-  const abs = resolveFileInCwd(cwd, candidate);
-  if (abs === null) return null;
+): Promise<FileExcerpt | null> {
+  const hit = await resolveInCwd(cwd, candidate);
+  if (hit === null || hit.kind !== "file") return null;
+  const abs = hit.path;
 
   const stats = safeStat(abs);
   if (stats === null || stats.size > MAX_EXCERPT_BYTES) return null;
@@ -300,7 +308,7 @@ export function readFileExcerpt(
     endLine = Math.min(totalLines, EXCERPT_HEAD_LINES);
   }
 
-  const cwdReal = safeRealpath(cwd) ?? cwd;
+  const cwdReal = (await safeRealpath(cwd)) ?? cwd;
   return {
     path: relative(cwdReal, abs),
     language: languageForPath(abs),
