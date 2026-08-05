@@ -1,11 +1,12 @@
 import "@ui/test-setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import type { Annotation, FileExcerpt, ResolveBody } from "@core/lib/types";
+import type { Annotation, DirListing, FileExcerpt, ResolveBody } from "@core/lib/types";
 import { type LogCapture, logCapture } from "@ui/test-helpers.ts";
 import {
   getApproveMode,
   getDiagnostics,
+  getDirListing,
   getFileExcerpt,
   getHealth,
   getReview,
@@ -184,6 +185,45 @@ describe("getFileExcerpt", () => {
   test("throws HttpError on a non-2xx response", async () => {
     respond = () => Promise.resolve(new Response(null, { status: 404 }));
     await expect(getFileExcerpt(ID, "ghost.ts")).rejects.toBeInstanceOf(HttpError);
+  });
+});
+
+describe("getDirListing", () => {
+  const listing: DirListing = {
+    path: "src/lib",
+    entries: [
+      { name: "deep", kind: "directory" },
+      { name: "util.ts", kind: "file" },
+    ],
+    total: 2,
+  };
+
+  test("returns the level for a resolved directory", async () => {
+    respond = () => Promise.resolve(jsonResponse(listing));
+    expect(await getDirListing(ID, "src/lib", "")).toEqual(listing);
+  });
+
+  test("sends both the anchor and the level on the review's dir route", async () => {
+    // The pair is what makes the route's descent guard meaningful, so `root`
+    // travels on every request rather than only the first — a level asked for
+    // without its anchor is a 404.
+    let seenUrl = "";
+    respond = (url) => {
+      seenUrl = url;
+      return Promise.resolve(jsonResponse(listing));
+    };
+    await getDirListing(ID, "src/my lib", "src/my lib/deep");
+    const parsed = new URL(seenUrl, "http://localhost");
+    expect(parsed.pathname).toBe(`/api/reviews/${ID}/dir`);
+    expect(parsed.searchParams.get("root")).toBe("src/my lib");
+    expect(parsed.searchParams.get("path")).toBe("src/my lib/deep");
+  });
+
+  test("throws HttpError on a non-2xx response", async () => {
+    // One 404 covers every refusal the route makes — a missing directory, an
+    // escape, a descent past the guard — so the card has one failure to render.
+    respond = () => Promise.resolve(new Response(null, { status: 404 }));
+    await expect(getDirListing(ID, "src/lib", "src/ghost")).rejects.toBeInstanceOf(HttpError);
   });
 });
 
