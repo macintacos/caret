@@ -11,6 +11,22 @@
 import type { DirEntry } from "@core/lib/types";
 
 /**
+ * A path the tree reported, reduced to the single spelling this module and the
+ * card index by.
+ *
+ * The slash is the whole reason this exists. @pierre/trees reads a trailing slash
+ * as "this path is a directory" on the way in, and materializes a directory's
+ * path with that same slash on the way out — so a row reports `references/` for
+ * the directory `levelPaths` fed it as `references/`. Used raw, that string is a
+ * second spelling of one directory: prefixing the next level with it yields
+ * `references//x.md`, and every `loaded` / `skipped` / `elidedBy` lookup misses,
+ * so the level is fetched again and lands somewhere nothing will look for it.
+ */
+export function treeKey(path: string): string {
+  return path.replace(/\/+$/, "");
+}
+
+/**
  * One served level as the tree-relative path strings @pierre/trees takes, under
  * the tree-relative directory `parent` ("" for the card's own root).
  *
@@ -21,7 +37,8 @@ import type { DirEntry } from "@core/lib/types";
  * chevron and nothing to expand.
  */
 export function levelPaths(parent: string, entries: readonly DirEntry[]): string[] {
-  const prefix = parent === "" ? "" : `${parent}/`;
+  const base = treeKey(parent);
+  const prefix = base === "" ? "" : `${base}/`;
   return entries.map((e) => `${prefix}${e.name}${e.kind === "directory" ? "/" : ""}`);
 }
 
@@ -35,6 +52,38 @@ export function levelPaths(parent: string, entries: readonly DirEntry[]): string
  * a leading "/" — an absolute path, which `resolveInCwd` refuses outright.
  */
 export function cwdPath(rootPath: string, treePath: string): string {
-  if (treePath === "") return rootPath;
-  return rootPath === "" ? treePath : `${rootPath}/${treePath}`;
+  const rel = treeKey(treePath);
+  if (rel === "") return rootPath;
+  return rootPath === "" ? rel : `${rootPath}/${rel}`;
+}
+
+/** The gap between a reference and the card it opens, in px. */
+const ANCHOR_GAP = 6;
+
+/**
+ * Where the viewport-fixed card sits when opened from `anchor`: hanging below it
+ * when there is room, flipped above when there is not, and always inside the
+ * viewport by `margin`. Measured once, at open — the card is dismissed by the
+ * next click or Escape, so it does not track the plan scrolling underneath it.
+ *
+ * The top clamp is what covers a viewport too short for the card either way: the
+ * flip lands at the margin and the tree pages inside itself, rather than the card
+ * starting off-screen with its header out of reach.
+ */
+export function anchorCard(
+  anchor: { top: number; bottom: number; left: number },
+  card: { width: number; height: number },
+  viewport: { width: number; height: number },
+  margin: number,
+): { top: number; left: number } {
+  const below = anchor.bottom + ANCHOR_GAP;
+  const top =
+    below + card.height + margin <= viewport.height
+      ? below
+      : Math.max(margin, anchor.top - ANCHOR_GAP - card.height);
+  const left = Math.min(
+    Math.max(margin, anchor.left),
+    Math.max(margin, viewport.width - card.width - margin),
+  );
+  return { top, left };
 }

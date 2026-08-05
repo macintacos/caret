@@ -84,6 +84,7 @@
   import CodeCopyButton from "@/components/CodeCopyButton.svelte";
   import FileDrawer from "@/components/FileDrawer.svelte";
   import FilePreview from "@/components/FilePreview.svelte";
+  import FolderTree from "@/components/FolderTree.svelte";
 
   interface Props {
     /** The review whose current plan version is rendered. */
@@ -389,7 +390,61 @@
     filePreview = { path: ref.path, line: ref.line, endLine: ref.endLine, token: tokenElement };
   }
 
+  // The directory reference whose tree is open (EXC-918), plus the token the card
+  // is placed against. A viewport-fixed card rather than the file preview's lane:
+  // a folder has no `:line` to bound it, so the surface is one to navigate rather
+  // than to peek at, and it is dismissed rather than lived beside.
+  let folderTree = $state<{ path: string; token: HTMLElement } | undefined>();
+
+  // One reference click, two surfaces. The daemon said which this is (EXC-916),
+  // so the branch is on the kind the span carries rather than on the path's shape
+  // — the whole point of resolving server-side. Opening either dismisses the
+  // other: they share the same dismissing-click machinery below, and two of them
+  // listening at once would race for the same click.
+  function openFileRef(ref: FileRefSpan, tokenElement: HTMLElement): void {
+    if (ref.kind === "directory") {
+      dismissFilePreview();
+      folderTree = { path: ref.path, token: tokenElement };
+      return;
+    }
+    folderTree = undefined;
+    openFilePreview(ref, tokenElement);
+  }
+
   $effect(() => () => cancelDrawerClose());
+
+  // The folder card's dismissal, mirroring the file preview's below: Escape, or a
+  // click outside the card, both in the CAPTURE phase so they run before the
+  // plan's own handlers. `composedPath` is what makes this work over a surface
+  // behind a shadow root — a click on a tree row still carries the card.
+  //
+  // A click on another reference is let through UNSWALLOWED: the card closes, and
+  // that same click reaches the token handler, which opens whichever surface the
+  // reference it landed on calls for. Any other outside click is swallowed, so
+  // dismissing the card never also opens a line comment.
+  $effect(() => {
+    if (folderTree === undefined) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      folderTree = undefined;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    const onClick = (e: MouseEvent) => {
+      const path = e.composedPath();
+      if (path.some((n) => n instanceof Element && n.matches("[data-folder-tree]"))) return;
+      folderTree = undefined;
+      if (path.some((n) => n instanceof Element && n.matches("[data-file-ref]"))) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    };
+    window.addEventListener("keydown", onKey, { capture: true });
+    window.addEventListener("click", onClick, { capture: true });
+    return () => {
+      window.removeEventListener("keydown", onKey, { capture: true });
+      window.removeEventListener("click", onClick, { capture: true });
+    };
+  });
 
   // Dismissal (EXC-840, superseding EXC-799's hover-intent tracker): an open
   // preview stays open until the reader dismisses it — Escape, or a click anywhere
@@ -1297,7 +1352,7 @@
           doc={{ name: "plan.md", text: linkLayer.text }}
           links={linkLayer.spans}
           {fileRefs}
-          onFileRefClick={openFilePreview}
+          onFileRefClick={openFileRef}
           annotations={sourceAnnotations}
           options={readerOptions}
           {gutter}
@@ -1434,6 +1489,20 @@
     </FileDrawer>
   {/if}
 </div>
+
+<!-- The folder-reference tree (EXC-918). A viewport-fixed card rather than a lane
+     in the surface above, so it sits outside that flex row entirely; compare mode
+     has no reference affordances, so it is gated on the single-version view like
+     the preview is. -->
+{#if !showDiff && folderTree}
+  {@const openDir = folderTree}
+  <FolderTree
+    reviewId={reviewId}
+    path={openDir.path}
+    anchor={openDir.token}
+    {showShortcutHints}
+  />
+{/if}
 
 {#if legacyAnnotations.length > 0}
   <LegacyAnnotationList annotations={legacyAnnotations} />
