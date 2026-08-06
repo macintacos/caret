@@ -146,35 +146,50 @@ export function demoVersions(final: string, count: number): string[] {
   return versions;
 }
 
-/** One comment body per anchor, so the panel's grouping and search filter have
- * distinct text to work with rather than three copies of one line. */
-const DEMO_COMMENT_BODIES = [
-  "this section needs a concrete failure mode.",
-  "spell out who owns the rollback if this lands badly.",
-  "tighten this down to one sentence.",
-];
+/** The demo comments, each pinned to the span of the plan it actually talks
+ * about. Positional anchors (a fixed fraction of the way down the file) put the
+ * comment on whatever text happened to sit there — a code-fence line, a
+ * mid-sentence wrap — so the panel read as nonsense against its own line, and
+ * the compare view had nothing meaningful to reveal.
+ *
+ * Every `anchor` is a span the 90-col ingest reflow cannot split (a table row, a
+ * list item's opening) and that no DEMO_EDITS group rewrites, so it resolves the
+ * same way in every version; the dev-driver unit suite pins each to exactly one
+ * fixture line and the bootstrap suite re-checks them against the STORED text.
+ * Bodies stay distinct so the panel's grouping and search filter have real text
+ * to work with rather than three copies of one line. */
+export const DEMO_COMMENTS = [
+  {
+    anchor: "| carousel-refund",
+    body: "this row's drift is the outlier in the table — say whether it's in scope or noise.",
+  },
+  {
+    anchor: "| Code highlight",
+    body: "give this coverage number a denominator; as written there's nothing to check it against.",
+  },
+  {
+    anchor: "`src/does-not-exist.ts`",
+    body: "spell out what a reviewer should see if this negative case ever regresses.",
+  },
+] as const;
 
-/** Fake line-anchored comments for one bootstrapped dev version, anchored at
- * deterministic non-blank lines roughly ¼ / ½ / ¾ of the way through the plan.
- * A short plan degrades to fewer comments rather than to out-of-range anchors.
- * Ids are deterministic (`dev-v{version}-c{n}`) so the unit suite can name one,
+/** Fake line-anchored comments for one bootstrapped dev version, one per
+ * DEMO_COMMENTS entry whose anchor the plan carries — a plan that carries none
+ * (anything but the fixture) gets no comments rather than arbitrary ones. Ids are
+ * deterministic and dense (`dev-v{version}-c{n}`) so the unit suite can name one,
  * and bodies name their version so the compare view's version badge is visibly
  * exercised. Callers pass the STORED plan text — the daemon reflows every plan at
- * ingest, so anchors computed from a submitted plan do not index what is served. */
+ * ingest, so anchors resolved against a submitted plan do not index what is served. */
 export function demoAnnotations(plan: string, version: number): LineAnnotation[] {
   const lines = plan.split("\n");
-  // 1-based line numbers of the anchorable (non-blank) lines.
-  const anchors = lines.flatMap((line, i) => (line.trim() ? [i + 1] : []));
-  // Deduped, so a plan too short to spread three anchors across yields fewer
-  // comments instead of stacking them all on its one line.
-  const picked = [
-    ...new Set([0.25, 0.5, 0.75].flatMap((f) => anchors[Math.floor(anchors.length * f)] ?? [])),
-  ];
-  return picked.map((line, i) => ({
+  return DEMO_COMMENTS.flatMap(({ anchor, body }) => {
+    const i = lines.findIndex((line) => line.includes(anchor));
+    return i === -1 ? [] : [{ line: i + 1, body }];
+  }).map(({ line, body }, i) => ({
     id: `dev-v${version}-c${i + 1}`,
     startLine: line,
     endLine: line,
-    comment: `v${version}: ${DEMO_COMMENT_BODIES[i]}`,
+    comment: `v${version}: ${body}`,
   }));
 }
 
