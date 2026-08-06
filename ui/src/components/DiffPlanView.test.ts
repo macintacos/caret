@@ -223,14 +223,16 @@ describe("DiffPlanView version compare", () => {
   });
 
   // EXC-872: compare state lives here, but the comment panel is a root sibling of
-  // .shell — so the compared range is reported upward for App to point the panel at.
-  test("reports the compared range on entering compare mode, ordered low to high", async () => {
-    const calls: Array<{ from: number; to: number } | null> = [];
+  // .shell — so the compared versions are reported upward for App to point the panel
+  // at. EXC-1041: reported as the two documents the diff renders, not as a sorted
+  // range, so the panel knows which side each version's comments jump to.
+  test("reports the compared versions on entering compare mode, before and after", async () => {
+    const calls: Array<{ before: number; after: number } | null> = [];
     const { target } = render(
       DiffPlanView,
       props({
         review: multiVersionFixture(3),
-        onCompareChange: (r: { from: number; to: number } | null) => calls.push(r),
+        onCompareChange: (r: { before: number; after: number } | null) => calls.push(r),
       }),
     );
     await until(() => calls.length > 0);
@@ -238,17 +240,18 @@ describe("DiffPlanView version compare", () => {
 
     target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
     await until(() => calls.at(-1) != null);
-    // Default pair is base=v3 (after), target=v2 (before) — reported v2–v3 either way.
-    expect(calls.at(-1)).toEqual({ from: 2, to: 3 });
+    // Default pair is base=v3, target=v2, and the diff renders oldDoc=target /
+    // newDoc=base — so v2 is the before side and v3 the after.
+    expect(calls.at(-1)).toEqual({ before: 2, after: 3 });
   });
 
   test("reports null once compare mode is left", async () => {
-    const calls: Array<{ from: number; to: number } | null> = [];
+    const calls: Array<{ before: number; after: number } | null> = [];
     const { target } = render(
       DiffPlanView,
       props({
         review: multiVersionFixture(3),
-        onCompareChange: (r: { from: number; to: number } | null) => calls.push(r),
+        onCompareChange: (r: { before: number; after: number } | null) => calls.push(r),
       }),
     );
     const toggle = target.querySelector<HTMLButtonElement>(".compare-toggle")!;
