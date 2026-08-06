@@ -446,8 +446,8 @@ describe("commentIndex", () => {
       lineC("b", 5, 6, "second"),
     ]);
     expect(entries).toEqual([
-      { id: "a", line: 3, label: "Line 3", text: "tighten this", draft: false },
-      { id: "b", line: 6, label: "Lines 5–6", text: "second", draft: false },
+      { id: "a", line: 3, label: "Line 3", text: "tighten this", draft: false, linkable: true },
+      { id: "b", line: 6, label: "Lines 5–6", text: "second", draft: false, linkable: true },
     ]);
   });
 
@@ -474,7 +474,7 @@ describe("commentIndex", () => {
 
   test("includes unsent scratches as draft entries, keyed and trimmed", () => {
     expect(commentIndex([], [scratch(3, 3, "  half a thought  ")])).toEqual([
-      { id: "3:3", line: 3, label: "Line 3", text: "half a thought", draft: true },
+      { id: "3:3", line: 3, label: "Line 3", text: "half a thought", draft: true, linkable: true },
     ]);
   });
 
@@ -484,8 +484,15 @@ describe("commentIndex", () => {
       [scratch(2, 2, "unsent draft")],
     );
     expect(entries).toEqual([
-      { id: "2:2", line: 2, label: "Line 2", text: "unsent draft", draft: true },
-      { id: "committed", line: 10, label: "Line 10", text: "placed comment", draft: false },
+      { id: "2:2", line: 2, label: "Line 2", text: "unsent draft", draft: true, linkable: true },
+      {
+        id: "committed",
+        line: 10,
+        label: "Line 10",
+        text: "placed comment",
+        draft: false,
+        linkable: true,
+      },
     ]);
   });
 });
@@ -512,9 +519,35 @@ describe("versionCommentIndex", () => {
       3,
     );
     expect(entries).toEqual([
-      { id: "v1:a", version: 1, line: 3, label: "Line 3", text: "first", draft: false },
-      { id: "v2:b", version: 2, line: 4, label: "Line 4", text: "middle", draft: false },
-      { id: "v3:c", version: 3, line: 5, label: "Line 5", text: "last", draft: false },
+      {
+        id: "v1:a",
+        version: 1,
+        line: 3,
+        label: "Line 3",
+        text: "first",
+        draft: false,
+        linkable: true,
+        side: "before",
+      },
+      {
+        id: "v2:b",
+        version: 2,
+        line: 4,
+        label: "Line 4",
+        text: "middle",
+        draft: false,
+        linkable: false,
+      },
+      {
+        id: "v3:c",
+        version: 3,
+        line: 5,
+        label: "Line 5",
+        text: "last",
+        draft: false,
+        linkable: true,
+        side: "after",
+      },
     ]);
   });
 
@@ -537,17 +570,114 @@ describe("versionCommentIndex", () => {
       2,
     );
     expect(entries).toEqual([
-      { id: "v1:x", version: 1, line: 3, label: "Line 3", text: "v1 take", draft: false },
-      { id: "v2:x", version: 2, line: 3, label: "Line 3", text: "v2 take", draft: false },
+      {
+        id: "v1:x",
+        version: 1,
+        line: 3,
+        label: "Line 3",
+        text: "v1 take",
+        draft: false,
+        linkable: true,
+        side: "before",
+      },
+      {
+        id: "v2:x",
+        version: 2,
+        line: 3,
+        label: "Line 3",
+        text: "v2 take",
+        draft: false,
+        linkable: true,
+        side: "after",
+      },
     ]);
   });
 
-  test("normalizes a reversed range to the same list", () => {
+  test("stamps the compared endpoints with the side each renders on, and links them", () => {
+    const entries = versionCommentIndex(
+      [version(1, [lineC("a", 3, 3, "on before")]), version(3, [lineC("c", 5, 5, "on after")])],
+      1,
+      3,
+    );
+    expect(entries).toMatchObject([
+      { id: "v1:a", side: "before", linkable: true },
+      { id: "v3:c", side: "after", linkable: true },
+    ]);
+  });
+
+  test("lists an in-range version that is neither endpoint without a side or a link", () => {
+    const entries = versionCommentIndex(
+      [
+        version(1, [lineC("a", 3, 3, "before side")]),
+        version(2, [lineC("b", 4, 4, "not on screen")]),
+        version(3, [lineC("c", 5, 5, "after side")]),
+      ],
+      1,
+      3,
+    );
+    expect(entries[1]).toMatchObject({ id: "v2:b", linkable: false });
+    expect(entries[1]?.side).toBeUndefined();
+  });
+
+  test("swaps the sides when the pair is picked in reverse", () => {
     const versions = [
       version(1, [lineC("a", 3, 3, "first")]),
       version(2, [lineC("b", 4, 4, "second")]),
     ];
-    expect(versionCommentIndex(versions, 2, 1)).toEqual(versionCommentIndex(versions, 1, 2));
+    expect(versionCommentIndex(versions, 2, 1).map((e) => e.side)).toEqual(["after", "before"]);
+  });
+
+  test("keeps a reversed range listing the same versions in the same order", () => {
+    const versions = [
+      version(1, [lineC("a", 3, 3, "first")]),
+      version(2, [lineC("b", 4, 4, "second")]),
+    ];
+    expect(versionCommentIndex(versions, 2, 1).map((e) => e.id)).toEqual(
+      versionCommentIndex(versions, 1, 2).map((e) => e.id),
+    );
+  });
+
+  test("heads a version's group with its general comment, unlabelled and unlinkable", () => {
+    const entries = versionCommentIndex(
+      [{ ...version(1, [lineC("a", 3, 3, "inline")]), generalComment: "  rethink the rollout  " }],
+      1,
+      1,
+    );
+    expect(entries).toEqual([
+      {
+        id: "v1:general",
+        version: 1,
+        label: "",
+        text: "rethink the rollout",
+        draft: false,
+        general: true,
+        linkable: false,
+      },
+      {
+        id: "v1:a",
+        version: 1,
+        line: 3,
+        label: "Line 3",
+        text: "inline",
+        draft: false,
+        side: "before",
+        linkable: true,
+      },
+    ]);
+  });
+
+  test("emits no general entry for a version predating the field", () => {
+    const entries = versionCommentIndex([version(1, [lineC("a", 3, 3, "inline")])], 1, 1);
+    expect(entries.map((e) => e.id)).toEqual(["v1:a"]);
+  });
+
+  test("emits no general entry for a blank general comment", () => {
+    const entries = versionCommentIndex(
+      [{ ...version(1, [lineC("a", 3, 3, "inline")]), generalComment: "   " }],
+      1,
+      1,
+    );
+    expect(entries.map((e) => e.id)).toEqual(["v1:a"]);
   });
 
   test("excludes versions outside the range", () => {
