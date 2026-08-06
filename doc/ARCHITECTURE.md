@@ -8,8 +8,9 @@ install it, and basic usage, start there.
 
 ## How it works
 
-Every plan makes the same round trip: your coding agent hands it to caret, caret puts it
-in front of you in the browser, and your decision goes back to the agent as its answer.
+Every plan makes the same round trip: your coding agent hands it to caret, caret serves it
+to you in your browser from a loopback HTTP daemon on your own machine, and your decision
+goes back to the agent as its answer.
 
 ```mermaid
 sequenceDiagram
@@ -19,8 +20,8 @@ sequenceDiagram
     participant U as Review UI
 
     A->>H: the plan, on stdin
-    Note over H: the agent adapter parses it into a core plan
-    H->>D: POST /api/reviews, starting the daemon if it is not up
+    Note over H: caret normalizes it into its own tool-agnostic form
+    H->>D: POST /api/reviews, starting the daemon if prewarm has not
     H->>U: opens the plan in your browser
     U->>D: loads the review
     H->>D: long-polls for a decision
@@ -29,7 +30,7 @@ sequenceDiagram
     D-->>H: the decision
     H-->>A: the adapter emits the agent's decision
     opt changes requested
-        A->>H: a revised plan, as a new version of the same review
+        A->>H: a revised plan, on a fresh run, as a new version of the same review
     end
 ```
 
@@ -149,9 +150,10 @@ clears it.
 OpenCode has no `ExitPlanMode` hook to intercept, so caret wires in as an
 **in-process plugin** rather than a command hook. The plugin (shipped in the
 `@macintacos/caret` package) registers a `caret_review_plan` tool and steers the Plan
-agent to call it; the tool's `execute()` spawns `caret review` (`CARET_AGENT=opencode`),
-blocks on your decision in the browser, and returns an approval or a change request (the
-reviewer feedback, without the plan echoed back) the agent revises and resubmits — see
+agent to call it; the tool's `execute()` spawns `caret review` (`CARET_AGENT=opencode`)
+with the plan on its stdin — the same entry point Claude's hook uses — blocks on your
+decision in the browser, and returns an approval or a change request (the reviewer
+feedback, without the plan echoed back) the agent revises and resubmits — see
 [Calling the review tool from your own skill](#calling-the-review-tool-from-your-own-skill)
 for who may call it and how to call it yourself. The whole daemon/review pipeline is
 reused unchanged — the plugin is the OpenCode-side counterpart to Claude's `hooks.json`.
@@ -279,7 +281,7 @@ src/adapters/       the coding-agent adapter axis — the AgentAdapter interface
 ui/                 Svelte 5 multi-asset SPA (Vite) embedded into the binary via the build-generated asset manifest, served by the daemon by URL path · src/state/ runes state modules · src/icons/ vendored Lucide SVGs
 hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode + PostToolUse/ExitPlanMode) — Claude-adapter packaging
 commands/           /caret:demo · /caret:debug · /caret:discovery — Claude-adapter packaging (agent-specific behavioral prose)
-opencode/           the plugin OpenCode loads — the review tool, the planning steer, and the config-hook mutation — OpenCode-adapter packaging
+opencode/           the plugin OpenCode loads — the review tool, the planning steer, the config-hook mutation, and commands/ (OpenCode's own copies of the three above) — OpenCode-adapter packaging
 test/               core/ (tool-agnostic suites) · adapters/<tool>/ (per-adapter suites + fixtures) · opencode/ (the repo-root opencode/ package) · e2e/ (Playwright) · structure/ (repo-shape invariants) · scripts/ (release + dev tooling) · support/ (shared scaffolding)
 scripts/            dev and release tooling for the checkout, plus the caret entrypoint shim's test
 ```
