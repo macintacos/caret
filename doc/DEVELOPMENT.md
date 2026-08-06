@@ -135,7 +135,8 @@ Where a knob has more than one source they resolve in order: a **flag** beats an
 **default**. Arming the seeder is the exception — `--notify`, `[dev.notify].enabled`, and
 a positive `CARET_DEV_NEW_REVIEW_MS` each arm it on their own, and none of them can turn
 it off. The config keys are documented in full under
-[Config file](CONFIGURING.md#config-file).
+[The `[dev]` table](CONFIGURING.md#the-dev-table), and the environment variables under
+[Dev-only](CONFIGURING.md#dev-only).
 
 | Flag                | Env var                 | `config.dev.toml`        | Default   | Effect                                                                                    |
 | ------------------- | ----------------------- | ------------------------ | --------- | ----------------------------------------------------------------------------------------- |
