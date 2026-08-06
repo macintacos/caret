@@ -7,6 +7,8 @@
   // theme, safe mode, the keyboard-shortcut dispatcher, and the UI-gone presence
   // beacon. The behaviors themselves live in $lib/* and @/state/*; this file only
   // holds them together and lays out the TopBar + DiffPlanView.
+  import { untrack } from "svelte";
+
   import { getHealth, markSeen } from "$lib/api.ts";
   import { approveVariants } from "$lib/approve.ts";
   import { createPlanNotifier } from "$lib/notify.ts";
@@ -35,7 +37,9 @@
     commentIndex,
     coveredLineCount,
     pendingItems,
+    versionCommentIndex,
   } from "$lib/feedback.ts";
+  import { NARROW_WIDTH_PX } from "$lib/layout.ts";
   import {
     clearKnownPrefs,
     freshResetApplied,
@@ -241,10 +245,43 @@
   // Distinct source lines the pending line-anchored comments cover (union of
   // ranges), for the status strip's at-a-glance "N comments · M lines" readout.
   let coveredLines = $derived(coveredLineCount(work.annotations));
+  // The compared version range while the diff is on screen, null otherwise —
+  // DiffPlanView owns compare state and reports it upward (EXC-872), because the
+  // navigator is a root sibling of .shell rather than a child of the view.
+  let compareRange = $state<{ from: number; to: number } | null>(null);
   // The plan's inline comments + unsent drafts as a navigable, searchable index for
   // the comment navigator — committed line-anchored comments plus the retained
-  // composer scratches (flagged draft), in document order.
-  let comments = $derived(commentIndex(work.annotations, scratches));
+  // composer scratches (flagged draft), in document order. While comparing, the
+  // panel lists the comments left on every version in the compared range instead,
+  // each badged with its source version; drafts are single-version only.
+  let comments = $derived(
+    compareRange && active
+      ? versionCommentIndex(active.versions, compareRange.from, compareRange.to)
+      : commentIndex(work.annotations, scratches),
+  );
+
+  // Auto-open the panel on entering compare mode when the range has comments, and
+  // restore what the reviewer had on the way out (EXC-872). Keyed on the
+  // enter/leave TRANSITION, not on the range, so re-picking a version pair never
+  // reopens a panel that was dismissed. Below --w-narrow the panel is a full-bleed
+  // sheet over the diff, so there it stays a toggle — same breakpoint and same
+  // matchMedia defense DiffPlanView uses for its forced-unified layout.
+  let comparingBefore = false;
+  let showCommentsBefore = false;
+  $effect(() => {
+    const comparing = compareRange !== null;
+    if (comparing === comparingBefore) return;
+    comparingBefore = comparing;
+    if (comparing) {
+      showCommentsBefore = showComments;
+      const narrow =
+        typeof matchMedia === "function" &&
+        matchMedia(`(max-width: ${NARROW_WIDTH_PX - 1}px)`).matches;
+      if (untrack(() => comments).length > 0 && !narrow) showComments = true;
+    } else {
+      showComments = showCommentsBefore;
+    }
+  });
 
   // Reveal a comment from the navigator: focus it (the source view highlights the
   // card in amber and expands it) and scroll the plan to its line.
@@ -570,6 +607,7 @@
       onDeleteAnnotation={autosave.deleteAnnotation}
       onFocusAnnotation={autosave.focusAnnotation}
       onExposeReveal={(r) => (revealLine = r)}
+      onCompareChange={(r) => (compareRange = r)}
       {onCopyCwd}
       {showShortcutHints}
       {settingsRev}
@@ -587,8 +625,8 @@
     {commit}
     {isDev}
     active={active !== null}
-    {pendingCount}
-    {coveredLines}
+    pendingCount={compareRange ? comments.length : pendingCount}
+    coveredLines={compareRange ? 0 : coveredLines}
     reviewVersion={active?.version ?? 1}
     connected={selection.connected}
     commentsOpen={showComments}
@@ -609,6 +647,9 @@
   activeId={autosave.focusedAnnotation}
   onReveal={revealComment}
   onClose={() => (showComments = false)}
+  readonly={compareRange !== null}
+  focusOnOpen={compareRange === null}
+  title={compareRange ? `Comments in v${compareRange.from}–v${compareRange.to}` : "Comments"}
   {showShortcutHints}
 />
 

@@ -6,9 +6,10 @@
 //
 // The factory owns the selected version pair (base = current, target = previous
 // by default), whether compare mode is active, the diff layout, and the gutter
-// indicators. It does NOT render anything and never reads annotations — compare
-// mode is annotation-free by contract (annotations belong to the single-version
-// view).
+// indicators. It does NOT render anything and never reads annotations: the diff
+// SURFACE is annotation-free by contract — no gutter, no inline cards — and the
+// comments left on the compared versions surface read-only in the docked comment
+// panel instead (EXC-872).
 
 import type { PlanVersion } from "@core/lib/types";
 import type { DiffIndicators, DiffStyle } from "$lib/diffview/types.ts";
