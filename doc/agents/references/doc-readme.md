@@ -15,10 +15,11 @@ When to edit it:
 
 - The contents or shape of `doc/` change — a new subdirectory, a new kind of doc, a moved
   file.
-- A page it routes into gains, loses, or renames a section a row points at. `rumdl`'s
-  MD051 fails the lint gate on a fragment that stops resolving — including across files —
-  but nothing catches a row whose "what you want to do" wording has drifted from what the
-  section it points at actually covers. That part is on you.
+- A page it routes into gains, loses, or renames a section a row points at. A whole-tree
+  `mise run lint` catches a fragment that stops resolving — `rumdl`'s MD051 resolves a
+  cross-file fragment only when the target file is in the same scan, so the pre-commit
+  hook, which sees only staged files, will not. Nothing catches a row whose "what you want
+  to do" wording has drifted from what the section actually covers; that part is on you.
 
 Keep it a router: one row per reader goal, linking onward rather than duplicating content.
 It already points at `agents/documentation-rules.md` as the doc map.

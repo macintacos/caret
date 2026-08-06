@@ -21,9 +21,9 @@ Two couplings to respect.
 [`CONTRIBUTING.md`](../../../CONTRIBUTING.md), [`ARCHITECTURE.md`](../../ARCHITECTURE.md),
 and the router in [`doc/README.md`](../../README.md) all link
 `DEVELOPMENT.md#development`; the router also points at `### The tasks CLI`. `rumdl`'s
-MD051 does check cross-file fragments, so renaming or flattening one of these fails the
-lint gate rather than breaking silently — but the gate can't tell you the new name is
-worse, or that a router row's wording no longer matches the section it lands on.
+MD051 resolves a cross-file fragment only when the file it points into is in the same
+scan, so a whole-tree `mise run lint` catches the break but the pre-commit hook — staged
+files only — does not. Rename one of these and run the full gate, not just the hook.
 
 `scripts/tasks/dev/fake-plan.md` cites this file **by line** — `:124`, `:154-162`,
 `:200-212` — and its bullets assert what the preview does with them: the `:154-162` bullet
