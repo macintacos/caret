@@ -48,7 +48,8 @@ digraph caret_docs_router {
 - **`README.md`** (repo root) — the lean, user-facing front door: what caret is, install,
   basic usage, and pointers onward. It leads with the install audience; the advanced and
   contributor-facing depth lives in the four `doc/` reference pages below, which it links
-  to. How to edit it: [`references/readme.md`](references/readme.md).
+  to directly or reaches through [`doc/README.md`](../README.md). How to edit it:
+  [`references/readme.md`](references/readme.md).
 - **`doc/CONFIGURING.md`** — the configuration reference behind `README.md`: platform
   support, the `config.toml` file, the full `CARET_*` tables, and plan formatting. How to
   edit it: [`references/configuring.md`](references/configuring.md).
