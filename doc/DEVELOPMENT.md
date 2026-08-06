@@ -22,10 +22,11 @@ mise run build            # compile bin/caret-native + build the UI
 mise run build --install  # …then install THIS local build into your detected agent(s)
 ```
 
-`mise run build --install` is the dev loop: it registers the freshly built checkout with
-Claude Code (via a private dev marketplace) and OpenCode and cycles the daemon — see
-[Development](#development) below and [CONTRIBUTING.md](../CONTRIBUTING.md). It needs
-[`git`](https://git-scm.com) and [mise](https://mise.jdx.dev) — the first `mise run`
+`mise run build --install` is the _install_ loop, not the development loop: it registers
+the freshly built checkout with Claude Code (via a private dev marketplace) and OpenCode
+and cycles the daemon — see [Development](#development) below and
+[CONTRIBUTING.md](../CONTRIBUTING.md). Day to day, reach for `mise run dev` instead. It
+needs [`git`](https://git-scm.com) and [mise](https://mise.jdx.dev) — the first `mise run`
 installs [`bun`](https://bun.sh) and the rest of the pinned toolchain; the
 [`claude`](https://claude.com/claude-code) CLI is required only for the Claude target.
 
@@ -110,16 +111,16 @@ hook path: each request-changes appends a revision section quoting your feedback
 resubmits, and approve re-seeds a fresh plan, with real hook records landing in the dev
 state dir's `caret.log`. The recurring extra-review seeder is off by default. Arm it three
 ways: pass `mise run dev --notify`, set `enabled = true` under `[dev.notify]` in
-`config.toml` to persist it on across runs, or set a positive `CARET_DEV_NEW_REVIEW_MS`.
-When armed, it seeds a genuinely-new review (fresh session, fresh review id) every 15
-seconds by default, capped at three unresolved extras at a time — grant notifications,
-background the tab, and the next seed fires a clickable desktop notification. The cadence
-and the pending cap come from `[dev.notify]` (`interval_ms` / `max_pending`), and
-`CARET_DEV_NEW_REVIEW_MS` overrides the cadence; the driver logs the seeder's armed/off
-state at boot either way. One notification gotcha: browser notification grants are
-per-origin **including the port**, so when an orphaned dev server squats Vite's port and a
-new session auto-increments to the next one, the UI lands on a fresh origin whose
-permission is back to "default" — the bell shows the "?" again and new plans log
+`config.dev.toml` to persist it on across runs, or set a positive
+`CARET_DEV_NEW_REVIEW_MS`. When armed, it seeds a genuinely-new review (fresh session,
+fresh review id) every 15 seconds by default, capped at three unresolved extras at a time
+— grant notifications, background the tab, and the next seed fires a clickable desktop
+notification. The cadence and the pending cap come from `[dev.notify]` (`interval_ms` /
+`max_pending`), and `CARET_DEV_NEW_REVIEW_MS` overrides the cadence; the driver logs the
+seeder's armed/off state at boot either way. One notification gotcha: browser notification
+grants are per-origin **including the port**, so when an orphaned dev server squats Vite's
+port and a new session auto-increments to the next one, the UI lands on a fresh origin
+whose permission is back to "default" — the bell shows the "?" again and new plans log
 `plan notification skipped (permission)`. Re-grant via the bell, or kill the straggler
 holding the port (`lsof -nP -iTCP:5173 -sTCP:LISTEN`). Everything is reaped on Ctrl-C, and
 the dev daemon never reads or writes a globally-installed caret's reviews or config — it

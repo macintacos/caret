@@ -235,7 +235,7 @@ export async function run(opts: DriverOptions): Promise<void> {
   // genuinely-new review — fresh session, fresh review id — every interval
   // tick, so backgrounding the tab demos a real "new plan" desktop
   // notification with no setup. EXC-558: armed by `--notify`, by
-  // [dev.notify].enabled in config.toml (persists across runs), or by a
+  // [dev.notify].enabled in config.dev.toml (persists across runs), or by a
   // positive CARET_DEV_NEW_REVIEW_MS; the cadence and pending cap come from
   // [dev.notify] (CARET_DEV_NEW_REVIEW_MS overrides the cadence). Loud at boot
   // either way — a silent no-op is indistinguishable from a broken notification.
