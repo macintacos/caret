@@ -5,8 +5,8 @@ tasks CLI, and icons.*
 
 Part of the deep reference behind [README.md](../README.md). For what caret is, how to
 install it, and basic usage, start there. [CONTRIBUTING.md](../CONTRIBUTING.md) is the
-one-page front door — prerequisites, the first build, and where tests live. This page is
-the full catalog behind it.
+one-page front door — prerequisites, the everyday tasks, and where tests live. This page
+is the full catalog behind it.
 
 > [!TIP]
 > **`mise run dev` is the local development loop.** It runs the daemon and the UI straight
