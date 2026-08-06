@@ -196,6 +196,10 @@ describe("CommentNavigator in compare mode", () => {
     expect(row.tagName).toBe("LI");
     expect(row.querySelector(".nav-item-ref")!.textContent).toBe("General");
     expect(row.textContent).toContain("rethink the rollout");
+    // v1 IS one of the rendered sides — the row is inert because it anchors
+    // nowhere, not because its version is missing from the diff. (Asserted on
+    // the tag's text: bun stalls pretty-printing a happy-dom node on failure.)
+    expect(row.querySelector(".nav-unlinked-tag")?.textContent ?? null).toBeNull();
   });
 
   test("still exposes .nav-item rows, so j/k roving focus keeps working", () => {

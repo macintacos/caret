@@ -109,7 +109,8 @@ describe("scrollToDiffLine", () => {
     line: number;
     /** data-alt-line: the other side's number. Omitted on a change row. */
     altLine?: number;
-    /** data-line-type, e.g. context / addition / change-deletion. */
+    /** data-line-type — one of the library's LineTypes: change-deletion,
+     * change-addition, context, context-expanded. */
     type: string;
     /** Viewport top the stubbed rect reports, so assertions can name the row. */
     top: number;
@@ -117,7 +118,7 @@ describe("scrollToDiffLine", () => {
 
   /** A scroll container wrapping a shadow host whose root holds the library's
    * per-layout <code> columns, keyed by their data-* marker. */
-  function harness(columns: Record<string, DiffRow[]>): Harness {
+  function diffHarness(columns: Record<string, DiffRow[]>): Harness {
     const scroller = document.createElement("div");
     scroller.style.overflowY = "auto";
     const host = document.createElement("div");
@@ -145,7 +146,7 @@ describe("scrollToDiffLine", () => {
 
   // One change at line 2: the same number addresses a different row on each side.
   const split = (): Harness =>
-    harness({
+    diffHarness({
       deletions: [{ line: 2, type: "change-deletion", top: 100 }],
       additions: [{ line: 2, type: "change-addition", top: 300 }],
     });
@@ -155,12 +156,12 @@ describe("scrollToDiffLine", () => {
   // So before-line 3 and after-line 3 are different rows — the case that only the
   // data-alt-line term can resolve.
   const unified = (): Harness =>
-    harness({
+    diffHarness({
       unified: [
         { line: 1, altLine: 1, type: "context", top: 50 },
         { line: 2, type: "change-deletion", top: 100 },
         { line: 2, type: "change-addition", top: 150 },
-        { line: 3, type: "addition", top: 200 },
+        { line: 3, type: "change-addition", top: 200 },
         { line: 4, altLine: 3, type: "context", top: 250 },
       ],
     });

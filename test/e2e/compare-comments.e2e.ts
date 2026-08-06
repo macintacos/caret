@@ -173,13 +173,20 @@ test("resolves a compare comment's line against its own side (unified)", async (
   await expect.poll(() => rowsAtTop(page)).toContain("beta body line 19");
 });
 
-// Split gives each side its own column and aligns the two BY LINE NUMBER, so line
-// 41 sits at the same offset in both — the sides cannot be told apart by where the
-// view lands, and a scroll assertion there proves reach, not side. What it does
-// pin is the split branch of the row lookup (the scoped data-deletions /
-// data-additions queries), which is separate code from unified's: get it wrong and
-// no row resolves, the reveal is a no-op, and the diff never leaves the top.
-test("reveals a compare comment past the fold (split)", async ({ daemon, page }) => {
+// Split gives each side its own column. Under THIS fixture the two columns end up
+// aligned line-for-line — the blank line between every body line is common to both
+// documents, so the diff pairs them one to one and v2's extra leading paragraph
+// lands as its own rows — which puts line 41 at the same offset on both sides. So
+// a scroll assertion here proves reach, not side; the unified test above owns
+// side-awareness. What this pins is the split branch of the row lookup (the scoped
+// data-deletions / data-additions queries), separate code from unified's: get it
+// wrong and no row resolves, the reveal is a no-op, and the diff never leaves the
+// top. Re-entering compare mode also exercises the diff api being re-handed on
+// remount, which is why the second half of this test toggles back through it.
+test("reveals a compare comment past the fold (split), including after a round trip", async ({
+  daemon,
+  page,
+}) => {
   await seedSideAnchors(daemon);
   await page.goto("/");
   const nav = await openSideAnchors(page, "Split");
@@ -193,6 +200,21 @@ test("reveals a compare comment past the fold (split)", async ({ daemon, page })
 
   // The after-side row for the same line is its column's own line 41, alongside it.
   await expect.poll(() => rowsAtTop(page)).toContain("beta body line 19");
+
+  // Leave compare mode and come back: the diff view unmounts and remounts, so the
+  // reveal now runs against a freshly handed api rather than the first one. A
+  // stale handle here would scroll nothing.
+  // The layout radios are compare-only, so their absence is the signal the diff
+  // really unmounted rather than merely re-rendering.
+  const compareToggle = page.getByRole("button", { name: "Compare versions" });
+  await compareToggle.click();
+  await expect(page.getByRole("radio", { name: "Split" })).toBeHidden();
+  await compareToggle.click();
+  await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "split");
+  await expect.poll(() => scrollTop()).toBe(0);
+
+  await nav.locator("button.nav-item").filter({ hasText: "before-side anchor" }).click();
+  await expect.poll(() => rowsAtTop(page)).toContain("alpha body line 20");
 });
 
 test("lists every version's comments in the compared range, each badged with its version", async ({
@@ -245,21 +267,28 @@ test("lists a general comment retained at deny, with no line to jump to", async 
   daemon,
   page,
 }) => {
-  // The reviewer typed general feedback against v1 and then denied it — which is
-  // exactly what addVersion does internally, so this is the production path that
-  // retains it on the version rather than a hand-built fixture.
-  const id = await daemon.seed({ plan: V1 });
-  await daemon.putDraft(id, { generalCommentDraft: "rethink the rollout before v2" });
-  await daemon.addVersion(id, V2);
+  // Request changes: the reviewer's general comment is composed into the feedback
+  // the deny carries, which is what the daemon keys retention on. Threaded by hand
+  // rather than through addVersion, whose deny sends a canned message instead —
+  // that is the Reject shape, and a Reject deliberately keeps nothing.
+  const sessionId = "11111111-2222-3333-4444-555555555555";
+  const general = "rethink the rollout before v2";
+  const id = await daemon.seed({ sessionId, plan: V1 });
+  await daemon.putDraft(id, { generalCommentDraft: general });
+  await daemon.resolve(id, "deny", general);
+  await daemon.seed({ sessionId, plan: V2 });
   await page.goto("/");
   const nav = await openComparePanel(page);
 
-  const general = nav.locator(".nav-item").filter({ hasText: "rethink the rollout before v2" });
-  await expect(general).toHaveCount(1);
+  const row = nav.locator(".nav-item").filter({ hasText: general });
+  await expect(row).toHaveCount(1);
   // Unanchored: labelled General in place of a line reference, and inert.
-  await expect(general.locator(".nav-item-ref")).toHaveText("General");
-  await expect(general.locator(".nav-version-tag")).toHaveText("v1");
+  await expect(row.locator(".nav-item-ref")).toHaveText("General");
+  await expect(row.locator(".nav-version-tag")).toHaveText("v1");
   await expect(nav.locator("button.nav-item")).toHaveCount(0);
+  // v1 is the diff's before side, so the row is inert for want of a line — not
+  // because its version is missing from the diff.
+  await expect(row.locator(".nav-unlinked-tag")).toHaveCount(0);
 });
 
 test("two versions commenting on the same line list as two rows", async ({ daemon, page }) => {

@@ -658,12 +658,17 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     await store.update(id, (r) => {
       r.decision = decision;
       r.status = decision.behavior === "allow" ? "approved" : "rejected";
-      // A deny's general comment outlives its draft: keep it on the version it
-      // was written against, so a later revision can show what was asked for.
-      // Only on deny — an approve drops the review from memory, so nothing
-      // would ever list it.
+      // A submitted general comment outlives its draft: keep it on the version
+      // it was written against, so a later revision can show what was asked for.
+      // Gated on the deny having actually carried it — Request changes composes
+      // it into the feedback verbatim, while a plain Reject sends a canned
+      // message after telling the reviewer the draft would NOT be sent, so
+      // keeping it there would record feedback they chose to discard. An approve
+      // is terminal (store.remove drops the review), so nothing would list one.
       const general = r.generalCommentDraft?.trim();
-      if (general && decision.behavior === "deny") currentVersion(r).generalComment = general;
+      if (general && decision.behavior === "deny" && decision.feedback?.includes(general)) {
+        currentVersion(r).generalComment = general;
+      }
       // Clear the unsent draft as part of resolving (both paths): a deny keeps
       // the review on disk as rejected and must not retain stale text; an
       // approve removes it (store.remove flushes "" first).

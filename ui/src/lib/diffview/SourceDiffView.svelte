@@ -60,10 +60,7 @@
     if (container == null || notified) return;
     notified = true;
     const el = container;
-    onReady?.({
-      scrollToLine: (line, side) => scrollToDiffLine(el, line, side),
-      host: el,
-    });
+    onReady?.({ scrollToLine: (line, side) => scrollToDiffLine(el, line, side) });
   });
 
   // Mount-once effect: reads no reactive state, returns the teardown.

@@ -269,6 +269,14 @@
       : commentIndex(work.annotations, scratches),
   );
 
+  // The panel's heading. While comparing it names the compared span low-to-high,
+  // whichever way round the reviewer picked the pair.
+  let commentsTitle = $derived(
+    compareRange
+      ? `Comments in v${Math.min(compareRange.before, compareRange.after)}–v${Math.max(compareRange.before, compareRange.after)}`
+      : "Comments",
+  );
+
   // Reveal a comment from the navigator: focus it (the source view highlights the
   // card in amber and expands it) and scroll the view to its line. A row the index
   // marked unlinkable has nothing on screen to scroll to, so it does neither.
@@ -643,9 +651,7 @@
   onReveal={revealComment}
   onClose={() => (showComments = false)}
   compare={compareRange !== null}
-  title={compareRange
-    ? `Comments in v${Math.min(compareRange.before, compareRange.after)}–v${Math.max(compareRange.before, compareRange.after)}`
-    : "Comments"}
+  title={commentsTitle}
   {showShortcutHints}
 />
 

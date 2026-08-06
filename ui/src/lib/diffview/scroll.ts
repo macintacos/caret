@@ -94,9 +94,9 @@ export function scrollToDiffLine(container: HTMLElement, line: number, side: Dif
   // scoped query suffices. Unified has one column that carries the *addition*
   // content wherever both sides exist — so a context row holds the after number in
   // data-line and the before number in data-alt-line, while a change renders as two
-  // rows. $="deletion" covers both "deletion" and "change-deletion". The columns
-  // are mutually exclusive, so trying every selector is correct in either layout
-  // and no diffStyle has to be threaded down here.
+  // rows. $="deletion" matches change-deletion without pinning the exact token.
+  // The columns are mutually exclusive, so trying every selector is correct in
+  // either layout and no diffStyle has to be threaded down here.
   const selectors =
     side === "after"
       ? [

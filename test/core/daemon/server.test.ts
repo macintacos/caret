@@ -801,10 +801,27 @@ test("deny keeps the general comment on the version it was written against", asy
   await boot();
   const { id } = await newReview();
   await putDraft(id, { generalCommentDraft: "rethink the rollout" });
-  await resolve(id, { behavior: "deny", feedback: "fix it" });
+  // Request changes composes the general comment into the feedback it sends —
+  // its first section, verbatim — so the submitted text carries it.
+  await resolve(id, {
+    behavior: "deny",
+    feedback: "rethink the rollout\n\nInline comments:\n\n1. Line 3:\n   fix it",
+  });
   // The feedback outlives the draft: it stays readable against the version it
   // reviewed, while the review-scoped draft still clears.
   expect(store.get(id)?.versions.at(-1)?.generalComment).toBe("rethink the rollout");
+  expect(store.get(id)?.generalCommentDraft).toBe("");
+});
+
+test("a deny that did not carry the general comment records nothing", async () => {
+  await boot();
+  const { id } = await newReview();
+  await putDraft(id, { generalCommentDraft: "rethink the rollout" });
+  // The Reject path sends a canned message rather than the composed feedback,
+  // and the reviewer confirmed past a guard saying the draft would not be sent —
+  // so there is nothing submitted to keep against the version.
+  await resolve(id, { behavior: "deny", feedback: "Plan rejected. Wait for the user." });
+  expect(store.get(id)?.versions.at(-1)?.generalComment).toBeUndefined();
   expect(store.get(id)?.generalCommentDraft).toBe("");
 });
 

@@ -146,10 +146,11 @@ export interface CommentIndexEntry {
   /** True for an unsent composer scratch — a draft the reviewer typed but never
    * committed as a comment. The navigator marks these distinctly. */
   draft: boolean;
-  /** Whether revealing this entry can scroll a view to it. Always true in the
-   * single-version index; in the compare index, true only for the two versions
-   * actually rendered, so a comment from a version in the range but off screen
-   * lists as a non-interactive row. */
+  /** Whether this entry addresses a document the view is currently rendering.
+   * Always true in the single-version index; in the compare index, true only for
+   * the two versions actually rendered, so a comment from a version in the range
+   * but off screen lists as a non-interactive row. A linkable entry can still
+   * fail to scroll — see scrollToDiffLine's collapsed-band ceiling. */
   linkable: boolean;
   /** Which of the compared diff's two documents this entry's version renders as.
    * Compare index only, and only on the two endpoints — a line number alone is

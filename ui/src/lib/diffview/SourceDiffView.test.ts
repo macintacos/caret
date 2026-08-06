@@ -42,7 +42,6 @@ describe("SourceDiffView onReady", () => {
       onReady: ready.cb,
     });
     await until(() => shadow(target)?.textContent?.includes("line three") ?? false);
-    expect(ready.last()?.host).toBe(target.querySelector(".diffview") as HTMLElement);
 
     // Line 2 changed: "line two" on the before side, "line three" on the after.
     expect(ready.last()?.scrollToLine(2, "after")).toBe(true);

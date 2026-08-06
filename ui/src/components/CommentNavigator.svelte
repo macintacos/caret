@@ -172,8 +172,11 @@
              unsent-comments guard already uses for the same feedback. -->
         <span class="nav-item-ref metric">{entry.general ? "General" : entry.label}</span>
         {#if entry.version != null}<span class="nav-version-tag metric">v{entry.version}</span>{/if}
-        {#if entry.version != null && !entry.linkable}<span class="nav-unlinked-tag"
-            >not in diff</span
+        <!-- Keyed on the version being absent from the diff, not on the row
+             being inert: a general row is inert too, but its version may well be
+             on screen — it just has no line to jump to, which "General" says. -->
+        {#if entry.version != null && entry.side == null && !entry.general}<span
+            class="nav-unlinked-tag">not in diff</span
           >{/if}
         {#if entry.draft}<span class="nav-draft-tag metric">draft</span>{/if}
       </span>
@@ -430,10 +433,10 @@
     border-radius: var(--radius);
   }
   /* The unlinked tag: this comment's version is in the compared range but is
-     rendered on neither side, so the row has nowhere to jump to. Same solid
-     neutral pill as the version tag it follows — the two read as one statement of
-     provenance ("v2, not in diff") — but set as a phrase rather than a token, so
-     it drops the tag tracking and the uppercase. */
+     rendered on neither side, so the row has nowhere to jump to. Shares the
+     version tag's solid neutral pill — the two read as one statement of
+     provenance ("v2, not in diff") — and only drops the tracking, which sets off
+     a token like "v2" but strings out a phrase. */
   .nav-unlinked-tag {
     font-size: var(--text-2xs);
     font-weight: 600;

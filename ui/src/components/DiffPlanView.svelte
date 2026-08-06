@@ -18,8 +18,10 @@
   // reviewer diff any two of them (base vs. target) through the SourceDiffView
   // wrapper, switching the split/unified layout at runtime. The breadcrumbs bar,
   // gutter, and inline annotation cards belong to the single-version view only —
-  // compare mode is a clean read-only diff surface with none of them; the compared
-  // versions' comments still surface read-only in the docked panel.
+  // compare mode is a clean diff surface with none of them; the compared versions'
+  // comments surface in the docked panel instead, revealing their line on the side
+  // they belong to for the two rendered versions and listing non-interactively for
+  // anything in between.
   import { untrack } from "svelte";
   import SourceView from "$lib/diffview/SourceView.svelte";
   import SourceDiffView from "$lib/diffview/SourceDiffView.svelte";
@@ -796,6 +798,9 @@
     if (showDiff) {
       const d = diffApi;
       if (d == null) return;
+      // Every linkable compare entry carries a side, so the fallback is only
+      // reached by a caller that omitted one; "after" is the base version — the
+      // side a reviewer reads as "the plan as it stands".
       retryFrames(() => d.scrollToLine(line, side ?? "after"));
       return;
     }

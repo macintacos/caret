@@ -8,8 +8,9 @@
 // by default), whether compare mode is active, the diff layout, and the gutter
 // indicators. It does NOT render anything and never reads annotations: the diff
 // SURFACE is annotation-free by contract — no gutter, no inline cards — and the
-// comments left on the compared versions surface read-only in the docked comment
-// panel instead (EXC-872).
+// comments left on the compared versions surface in the docked comment panel
+// instead, where a comment on either rendered version reveals its line on that
+// side and anything in between lists non-interactively (EXC-872, EXC-1041).
 
 import type { PlanVersion } from "@core/lib/types";
 import type { DiffIndicators, DiffStyle } from "$lib/diffview/types.ts";
