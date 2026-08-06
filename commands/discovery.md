@@ -12,7 +12,7 @@ or feedback bodies, nor any log contents — it exists to be shared.
 
 First ask the user (via `AskUserQuestion`) which format they want:
 
-- **JSON** — for sharing or feeding to tooling.
+- **JSON** — for feeding to tooling.
 - **Human-readable** — for scanning in the conversation.
 
 Then run the matching invocation:
@@ -24,8 +24,8 @@ Then run the matching invocation:
 
 End your output with the command's stdout **verbatim** in a fenced code block —
 ` ```json ` for the JSON format, plain ` ``` ` for the human-readable one — so the user
-can copy it straight out and share it. Add nothing inside the block and do not summarize
-away sections; the report is already redacted and complete. A degraded section (e.g.
+can copy it out in one piece. Add nothing inside the block and do not summarize away
+sections; the report is already redacted and complete. A degraded section (e.g.
 `daemon error: …` or `"error": "…"`) is normal when the daemon is down — present it as-is
 rather than treating it as a failure of this command.
 
