@@ -8,7 +8,12 @@
 // reference into the stored plan version, so the agent can find the feedback even
 // when its own line numbering differs.
 
-import { type Annotation, isLegacyAnnotation, isLineAnnotation } from "@core/lib/types";
+import {
+  type Annotation,
+  isLegacyAnnotation,
+  isLineAnnotation,
+  type PlanVersion,
+} from "@core/lib/types";
 import { type ComposerScratch, rangeLabel } from "$lib/diffview/commenting.ts";
 
 /** Collapses any run of whitespace (incl. newlines) to a single space. */
@@ -139,6 +144,10 @@ export interface CommentIndexEntry {
   /** True for an unsent composer scratch — a draft the reviewer typed but never
    * committed as a comment. The navigator marks these distinctly. */
   draft: boolean;
+  /** The plan version this comment was left on. Present only for the
+   * cross-version compare index; absent in the single-version index, where
+   * every comment belongs to the version on screen. */
+  version?: number;
 }
 
 /** The navigable list of the plan's inline comments + unsent drafts, in document
@@ -171,6 +180,37 @@ export function commentIndex(
     });
   }
   return entries.sort((x, y) => x.line - y.line);
+}
+
+/** Every line-anchored, non-blank comment on the versions in the inclusive range
+ * [from, to], ordered by version then by line — so the list groups by version.
+ * Comments are never merged across versions: two comments on the same line from
+ * different versions are two entries, each carrying its own version. Ids are
+ * prefixed with the version because the entry is display-only here (no reveal),
+ * so the id serves only as a stable {#each} key. */
+export function versionCommentIndex(
+  versions: PlanVersion[],
+  from: number,
+  to: number,
+): CommentIndexEntry[] {
+  const lo = Math.min(from, to);
+  const hi = Math.max(from, to);
+  return versions
+    .filter((v) => v.version >= lo && v.version <= hi)
+    .sort((a, b) => a.version - b.version)
+    .flatMap((v) =>
+      pendingInline(v.annotations)
+        .filter(isLineAnnotation)
+        .map((a) => ({
+          id: `v${v.version}:${a.id}`,
+          line: a.endLine,
+          label: rangeLabel(a.startLine, a.endLine),
+          text: a.comment.trim(),
+          draft: false,
+          version: v.version,
+        }))
+        .sort((x, y) => x.line - y.line),
+    );
 }
 
 /** Narrows the comment index to entries whose text matches a search query

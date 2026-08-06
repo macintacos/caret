@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import type { Annotation } from "@core/lib/types";
+import type { Annotation, PlanVersion } from "@core/lib/types";
 import type { ComposerScratch } from "$lib/diffview/commenting.ts";
 import {
   commentIndex,
@@ -12,6 +12,7 @@ import {
   pendingItems,
   pendingLineCount,
   sourceLines,
+  versionCommentIndex,
 } from "$lib/feedback.ts";
 
 // A synthetic plan whose lines are individually identifiable, so a quoted block
@@ -486,6 +487,99 @@ describe("commentIndex", () => {
       { id: "2:2", line: 2, label: "Line 2", text: "unsent draft", draft: true },
       { id: "committed", line: 10, label: "Line 10", text: "placed comment", draft: false },
     ]);
+  });
+});
+
+const version = (n: number, annotations: Annotation[]): PlanVersion => ({
+  version: n,
+  plan: PLAN,
+  annotations,
+  createdAt: 0,
+});
+
+// The compare view's cross-version index: every comment left on the versions in
+// the compared range, grouped by version so the docked panel can badge each one
+// with where it came from.
+describe("versionCommentIndex", () => {
+  test("aggregates every version in the range, not just its endpoints", () => {
+    const entries = versionCommentIndex(
+      [
+        version(1, [lineC("a", 3, 3, "first")]),
+        version(2, [lineC("b", 4, 4, "middle")]),
+        version(3, [lineC("c", 5, 5, "last")]),
+      ],
+      1,
+      3,
+    );
+    expect(entries).toEqual([
+      { id: "v1:a", version: 1, line: 3, label: "Line 3", text: "first", draft: false },
+      { id: "v2:b", version: 2, line: 4, label: "Line 4", text: "middle", draft: false },
+      { id: "v3:c", version: 3, line: 5, label: "Line 5", text: "last", draft: false },
+    ]);
+  });
+
+  test("orders by version first, then by anchor line", () => {
+    const entries = versionCommentIndex(
+      [
+        version(1, [lineC("late", 9, 9, "z"), lineC("early", 2, 2, "a")]),
+        version(2, [lineC("v2", 1, 1, "b")]),
+      ],
+      1,
+      2,
+    );
+    expect(entries.map((e) => e.id)).toEqual(["v1:early", "v1:late", "v2:v2"]);
+  });
+
+  test("keeps same-line comments from different versions as separate entries", () => {
+    const entries = versionCommentIndex(
+      [version(1, [lineC("x", 3, 3, "v1 take")]), version(2, [lineC("x", 3, 3, "v2 take")])],
+      1,
+      2,
+    );
+    expect(entries).toEqual([
+      { id: "v1:x", version: 1, line: 3, label: "Line 3", text: "v1 take", draft: false },
+      { id: "v2:x", version: 2, line: 3, label: "Line 3", text: "v2 take", draft: false },
+    ]);
+  });
+
+  test("normalizes a reversed range to the same list", () => {
+    const versions = [
+      version(1, [lineC("a", 3, 3, "first")]),
+      version(2, [lineC("b", 4, 4, "second")]),
+    ];
+    expect(versionCommentIndex(versions, 2, 1)).toEqual(versionCommentIndex(versions, 1, 2));
+  });
+
+  test("excludes versions outside the range", () => {
+    const entries = versionCommentIndex(
+      [
+        version(1, [lineC("a", 3, 3, "before")]),
+        version(2, [lineC("b", 4, 4, "inside")]),
+        version(3, [lineC("c", 5, 5, "after")]),
+      ],
+      2,
+      2,
+    );
+    expect(entries.map((e) => e.id)).toEqual(["v2:b"]);
+  });
+
+  test("excludes legacy and blank-comment annotations, matching commentIndex", () => {
+    const entries = versionCommentIndex(
+      [
+        version(1, [
+          ann({ comment: "legacy note" }),
+          lineC("blank", 3, 3, "   "),
+          lineC("real", 4, 4, "kept"),
+        ]),
+      ],
+      1,
+      1,
+    );
+    expect(entries.map((e) => e.id)).toEqual(["v1:real"]);
+  });
+
+  test("returns [] when no version falls in the range", () => {
+    expect(versionCommentIndex([version(1, [lineC("a", 3, 3, "x")])], 5, 7)).toEqual([]);
   });
 });
 
