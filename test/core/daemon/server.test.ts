@@ -797,6 +797,35 @@ test("resolve clears the draft on the approve path", async () => {
   expect((await store.persisted(id))?.generalCommentDraft).toBe("");
 });
 
+test("deny keeps the general comment on the version it was written against", async () => {
+  await boot();
+  const { id } = await newReview();
+  await putDraft(id, { generalCommentDraft: "rethink the rollout" });
+  await resolve(id, { behavior: "deny", feedback: "fix it" });
+  // The feedback outlives the draft: it stays readable against the version it
+  // reviewed, while the review-scoped draft still clears.
+  expect(store.get(id)?.versions.at(-1)?.generalComment).toBe("rethink the rollout");
+  expect(store.get(id)?.generalCommentDraft).toBe("");
+});
+
+test("deny with a blank general comment draft records nothing", async () => {
+  await boot();
+  const { id } = await newReview();
+  await putDraft(id, { generalCommentDraft: "   " });
+  await resolve(id, { behavior: "deny", feedback: "fix it" });
+  expect(store.get(id)?.versions.at(-1)?.generalComment).toBeUndefined();
+});
+
+test("approve records no general comment on the version", async () => {
+  await boot();
+  const { id } = await newReview();
+  await putDraft(id, { generalCommentDraft: "unsent feedback" });
+  await resolve(id, { behavior: "allow" });
+  // Approve is terminal — the review leaves memory, so a retained comment could
+  // never be listed.
+  expect((await store.persisted(id))?.versions.at(-1)?.generalComment).toBeUndefined();
+});
+
 test("cross-origin mutating requests are blocked (CSRF guard)", async () => {
   await boot();
   const foreign = await fetch(`${base}/api/reviews`, {
