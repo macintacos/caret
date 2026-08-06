@@ -74,18 +74,18 @@ digraph caret_docs_router {
   behind `CLAUDE.md`'s digraph. This routing reference lives among them. How to add or
   edit one: [`references/agent-rules.md`](references/agent-rules.md).
 - **`doc/README.md`** — the router for the `doc/` directory: a table mapping what a reader
-  wants to do to the page that answers it, across the four reference pages and
-  `doc/agents/`. How to edit it: [`references/doc-readme.md`](references/doc-readme.md).
+  wants to do to the page that answers it, across the four reference pages, `doc/agents/`,
+  and the two repo-root docs (`README.md` and `CONTRIBUTING.md`). How to edit it:
+  [`references/doc-readme.md`](references/doc-readme.md).
 
 ## Audience, stated at the top of every new doc
 
-`CLAUDE.md`, the `doc/agents/*.md` rule files, and this file's `references/` pointers are
-**agent-facing**. `README.md`, `CONTRIBUTING.md`, `doc/README.md`, and the four reference
-pages — `doc/CONFIGURING.md`, `doc/RUNNING.md`, `doc/ARCHITECTURE.md`, and
-`doc/DEVELOPMENT.md` — are **human-facing**. Under `doc/`, those four plus `doc/README.md`
-are human-facing; everything under `doc/agents/` is agent-facing. State the audience
-explicitly at the top of each new doc so a reader knows in one line whether it is written
-for them.
+`README.md`, `CONTRIBUTING.md`, and everything directly under `doc/` — `doc/README.md`
+plus the four reference pages (`CONFIGURING.md`, `RUNNING.md`, `ARCHITECTURE.md`,
+`DEVELOPMENT.md`) — are **human-facing**. `CLAUDE.md` and everything under `doc/agents/` —
+the rule files and this file's `references/` pointers — are **agent-facing**. State the
+audience explicitly at the top of each new doc so a reader knows in one line whether it is
+written for them.
 
 Diagrams follow the same split, **deliberately**: human-facing docs use **mermaid**, which
 GitHub renders inline, and agent-facing docs use **graphviz**, which agents read as text.

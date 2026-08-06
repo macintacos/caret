@@ -5,10 +5,11 @@
 `doc/README.md` is the router for the `doc/` directory. It leads with a table mapping what
 a reader wants to do to the page that answers it — the four reference pages
 ([`CONFIGURING.md`](../../CONFIGURING.md), [`RUNNING.md`](../../RUNNING.md),
-[`ARCHITECTURE.md`](../../ARCHITECTURE.md), [`DEVELOPMENT.md`](../../DEVELOPMENT.md)) and
-[`agents/`](../) — and says nothing more about a page than the row that gets a reader
-there. It is delineated from the top-level `README.md`, which is the user-facing guide:
-this one routes, it does not explain.
+[`ARCHITECTURE.md`](../../ARCHITECTURE.md), [`DEVELOPMENT.md`](../../DEVELOPMENT.md)),
+[`agents/`](../), and the two repo-root docs (`README.md` for install, `CONTRIBUTING.md`
+for first-time local setup). The table says nothing more about a page than the row that
+gets a reader there; only the `agents/` section below it expands, because `agents/` is a
+directory rather than a page and a bare listing is not a destination.
 
 When to edit it:
 

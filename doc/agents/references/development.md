@@ -18,11 +18,12 @@ When to edit it:
 Two couplings to respect.
 
 `## Development` is load-bearing as an anchor:
-[`CONTRIBUTING.md`](../../../CONTRIBUTING.md) and
-[`ARCHITECTURE.md`](../../ARCHITECTURE.md) both link `DEVELOPMENT.md#development`, and
-`rumdl`'s MD051 does not check cross-file fragments — so renaming or flattening it breaks
-those links silently. Same for `### The tasks CLI` and `### Icons` if anything ever points
-at them.
+[`CONTRIBUTING.md`](../../../CONTRIBUTING.md), [`ARCHITECTURE.md`](../../ARCHITECTURE.md),
+and the router in [`doc/README.md`](../../README.md) all link
+`DEVELOPMENT.md#development`; the router also points at `### The tasks CLI`. `rumdl`'s
+MD051 does check cross-file fragments, so renaming or flattening one of these fails the
+lint gate rather than breaking silently — but the gate can't tell you the new name is
+worse, or that a router row's wording no longer matches the section it lands on.
 
 `scripts/tasks/dev/fake-plan.md` cites this file **by line** — `:124`, `:154-162`,
 `:200-212` — and its bullets assert what the preview does with them: the `:154-162` bullet
