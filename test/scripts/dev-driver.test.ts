@@ -419,6 +419,15 @@ test("bootstrapReview grows the primary review to several varied versions before
   for (const v of review!.versions) {
     expect(v.annotations).toHaveLength(3);
     expect(v.annotations[0]?.comment).toStartWith(`v${v.version}: `);
+    // Anchored against the STORED plan, which the ingest reflow rewrote — an
+    // anchor computed from the submitted text would land off the end or on a
+    // blank line here.
+    const lines = v.plan.split("\n");
+    for (const a of v.annotations) {
+      const line = a as { startLine: number; endLine: number };
+      expect(line.endLine).toBeLessThanOrEqual(lines.length);
+      expect(lines[line.startLine - 1]?.trim()).not.toBe("");
+    }
   }
   // The review is left rejected; the interactive loop re-pends it by appending
   // its own next revision from the returned state. The returned plan carries that

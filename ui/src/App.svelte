@@ -256,30 +256,44 @@
   // each badged with its source version; drafts are single-version only.
   let comments = $derived(
     compareRange && active
-      ? versionCommentIndex(active.versions, compareRange.from, compareRange.to)
+      ? versionCommentIndex(
+          // The current version's comments live in the working copy until the
+          // debounced save and the next poll land, so the served version carries
+          // a stale set; older versions are server-only and already settled.
+          active.versions.map((v) =>
+            v.version === active.version ? { ...v, annotations: work.annotations } : v,
+          ),
+          compareRange.from,
+          compareRange.to,
+        )
       : commentIndex(work.annotations, scratches),
   );
 
   // Auto-open the panel on entering compare mode when the range has comments, and
-  // restore what the reviewer had on the way out (EXC-872). Keyed on the
-  // enter/leave TRANSITION, not on the range, so re-picking a version pair never
-  // reopens a panel that was dismissed. Below --w-narrow the panel is a full-bleed
-  // sheet over the diff, so there it stays a toggle — same breakpoint and same
-  // matchMedia defense DiffPlanView uses for its forced-unified layout.
+  // close it again on the way out (EXC-872). Keyed on the enter/leave TRANSITION,
+  // not on the range, so re-picking a version pair never reopens a panel that was
+  // dismissed; and `autoOpened` means leaving undoes only what this effect did, so
+  // a panel the reviewer opened or dismissed mid-compare is left as they left it.
+  // Below --w-narrow the diff is forced unified and space is scarce, so the panel
+  // stays a deliberate toggle there — same breakpoint and same matchMedia defense
+  // DiffPlanView uses for that forced layout.
   let comparingBefore = false;
-  let showCommentsBefore = false;
+  let autoOpened = false;
   $effect(() => {
     const comparing = compareRange !== null;
     if (comparing === comparingBefore) return;
     comparingBefore = comparing;
     if (comparing) {
-      showCommentsBefore = showComments;
       const narrow =
         typeof matchMedia === "function" &&
         matchMedia(`(max-width: ${NARROW_WIDTH_PX - 1}px)`).matches;
-      if (untrack(() => comments).length > 0 && !narrow) showComments = true;
-    } else {
-      showComments = showCommentsBefore;
+      // untracked: the index changes on every poll tick, and the auto-open must
+      // key on the enter/leave transition alone.
+      autoOpened = !showComments && !narrow && untrack(() => comments).length > 0;
+      if (autoOpened) showComments = true;
+    } else if (autoOpened) {
+      autoOpened = false;
+      showComments = false;
     }
   });
 
@@ -618,7 +632,11 @@
 
   <!-- The bottom status bar (EXC-787): the row-4 grid child consolidating the
        build/version badge (left), the plan-review status (right, when active),
-       and the keyboard ? affordance (far right). A grid child, so it reserves
+       and the keyboard ? affordance (far right). While comparing, its tally
+       counts what the panel it toggles actually lists, so the button and its
+       panel can't disagree, and 0 covered lines is how the "· M lines" readout
+       (which measures the current version) is suppressed; the approve guard
+       reads guardItems, not these, so no verdict logic moves. A grid child, so it reserves
        space at the bottom; the CommentNavigator docks just above it. -->
   <StatusBar
     {version}

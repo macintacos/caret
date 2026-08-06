@@ -40,7 +40,8 @@
      * without a user gesture (compare mode's auto-open), so it never steals focus
      * from the diff or yanks a screen reader. */
     focusOnOpen?: boolean;
-    /** Header title, e.g. "Comments in v1–v4" while comparing. */
+    /** Header title, e.g. "Comments in v1–v4" while comparing. Doubles as the
+     * panel's aria-label, so it is the landmark's accessible name too. */
     title?: string;
   }
   let {
@@ -201,7 +202,10 @@
         {#each visible as entry (entry.id)}
           {#if readonly}
             <!-- Read-only compare row: a focusable list item, not a button, so j/k
-                 still walk the list but nothing advertises a click that goes nowhere. -->
+                 still walk the list but nothing advertises a click that goes nowhere.
+                 tabindex="-1" keeps a non-interactive row out of the tab order (a
+                 nonnegative one is the a11y_no_noninteractive_tabindex anti-pattern);
+                 the list is reached with j/k, or with Enter from the search field. -->
             <li class="nav-item" tabindex="-1">{@render rowBody(entry)}</li>
           {:else}
             <li>

@@ -139,9 +139,10 @@ test("a compared range with no comments leaves the panel closed", async ({ daemo
 
   await page.getByRole("button", { name: "Compare versions" }).click();
 
-  // Compare mode really is on (the diff surface rendered) — the panel simply had
-  // no reason to open.
-  await expect(page.locator(".diffview")).toBeVisible();
+  // Compare mode really is on — `.diffview` wraps the single-version reader too,
+  // so prove it by the diff layout the library renders. The panel simply had no
+  // reason to open.
+  await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "split");
   await expect(page.locator(".comment-navigator")).toBeHidden();
 });
 
@@ -161,6 +162,54 @@ test("auto-opening the panel leaves focus outside it", async ({ daemon, page }) 
   );
   expect(insidePanel).toBe(false);
   await expect(compare).toBeFocused();
+});
+
+test("a panel the reviewer opened while comparing survives leaving compare mode", async ({
+  daemon,
+  page,
+}) => {
+  // Only v1 carries a comment, so the default pair (v2–v3) auto-opens nothing —
+  // the reviewer opens the panel themselves. Leaving compare mode must undo only
+  // what the auto-open did, which here is nothing.
+  const id = await daemon.seed({ plan: V1 });
+  await daemon.putDraft(id, { annotations: [ann("a1", 3, "alpha needs a rollback path")] });
+  await daemon.addVersion(id, V2);
+  await daemon.addVersion(id, V3);
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  const nav = page.locator(".comment-navigator");
+  const compare = page.getByRole("button", { name: "Compare versions" });
+  await compare.click();
+  await expect(nav).toBeHidden();
+
+  await page.locator("button.comments-toggle").click();
+  await expect(nav).toBeVisible();
+
+  await compare.click();
+  await expect(nav).toBeVisible();
+});
+
+test("below --w-narrow the panel stays a toggle rather than auto-opening", async ({
+  daemon,
+  page,
+}) => {
+  // At this width the panel is a bottom sheet over the diff, so opening it
+  // unasked would bury what the reviewer came to compare.
+  await page.setViewportSize({ width: 800, height: 900 });
+  await seedCommentedVersions(daemon);
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  const nav = page.locator(".comment-navigator");
+  await page.getByRole("button", { name: "Compare versions" }).click();
+  await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "single");
+  await expect(nav).toBeHidden();
+
+  // The tally still opens it on request, listing the range's comments.
+  await page.locator("button.comments-toggle").click();
+  await expect(nav.locator(".nav-title")).toHaveText("Comments in v2–v3");
+  await expect(nav.locator(".nav-item")).toHaveCount(3);
 });
 
 test("leaving compare mode restores the single-version list", async ({ daemon, page }) => {

@@ -1,9 +1,13 @@
 <script lang="ts">
   // A persistent, low-profile plan-review status readout: a flat row of segments
   // in the bottom status bar (EXC-787), reporting the live metadata of
-  // the plan under review in the mono/tabular technical voice. It reads the same
-  // pending-comment state RequestChangesDialog and the approve guard consume, so
-  // it is the always-on answer to "how many comments am I about to send".
+  // the plan under review in the mono/tabular technical voice. In the
+  // single-version view its tally reads the same pending-comment state
+  // RequestChangesDialog and the approve guard consume — the always-on answer to
+  // "how many comments am I about to send". While the reviewer is comparing
+  // versions, the host points it at the compared range's comments instead
+  // (EXC-872), because the tally is the comment panel's toggle and the two must
+  // agree; the approve guard's own count is unaffected either way.
   //
   // It self-gates on `active`: absent when no review is up (EmptyState owns that
   // state), present otherwise. Connection state appears here once — distinct from

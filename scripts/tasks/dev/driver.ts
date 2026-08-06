@@ -18,7 +18,7 @@ import { claudeAdapter } from "@/adapters/claude/index.ts";
 import { NEVER_IDLE_MS } from "@/config/constants.ts";
 import { DEFAULT_PORT, devSeeder, loadSettings, type Settings } from "@/config/settings.ts";
 import { expireReview, longPoll, postReview, waitForHealth } from "@/daemon/client.ts";
-import type { ClientReview, LineAnnotation } from "@/lib/types.ts";
+import type { ClientReview } from "@/lib/types.ts";
 import { type ReviewDeps, runReview } from "@/review/orchestrate.ts";
 import {
   appendRevision,
@@ -130,16 +130,11 @@ export function assertDevEnv(): void {
 }
 
 /** Record a reviewer-style deny on the primary session's pending review, so the
- * next bootstrap submission threads onto it as a new version. Returns once the
- * deny is recorded; the concurrently-running runReview then observes the
- * decision and returns. Given `annotations`, drafts them onto the review first:
- * they are version-scoped, so seeding them has to happen while this version is
- * still the current one. */
-async function denyPendingReview(
-  base: string,
-  feedback: string,
-  annotations?: LineAnnotation[],
-): Promise<void> {
+ * next bootstrap submission threads onto it as a new version. Seeds the version's
+ * fake comments first — annotations are version-scoped, so they have to land while
+ * this version is still the current one. Returns once the deny is recorded; the
+ * concurrently-running runReview then observes the decision and returns. */
+async function denyPendingReview(base: string, feedback: string): Promise<void> {
   // The bootstrap is the only writer this early, so the session has exactly one
   // pending review; poll briefly for runReview's POST to land before resolving.
   for (let i = 0; i < 100; i++) {
@@ -149,15 +144,18 @@ async function denyPendingReview(
         (r) => r.sessionId === DEV_SESSION && r.status === "pending",
       );
       if (pending) {
-        if (annotations) {
-          // The same public draft route the UI's autosave uses (handleDraft).
-          const draft = await fetch(`${base}/api/reviews/${pending.id}/draft`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ annotations }),
-          });
-          if (!draft.ok) throw new Error(`bootstrap draft failed: ${draft.status}`);
-        }
+        // Anchor against the STORED plan, not the one just submitted: every
+        // incoming plan is reflowed at ingest (formatPlanMarkdown), so the
+        // submitted text's line numbers do not index what the reviewer sees.
+        // The same public draft route the UI's autosave uses (handleDraft).
+        const draft = await fetch(`${base}/api/reviews/${pending.id}/draft`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            annotations: demoAnnotations(pending.currentPlan, pending.version),
+          }),
+        });
+        if (!draft.ok) throw new Error(`bootstrap draft failed: ${draft.status}`);
         const out = await fetch(`${base}/api/reviews/${pending.id}/resolve`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -193,11 +191,7 @@ export async function bootstrapReview(
   for (let i = 0; i < plans.length; i++) {
     // runReview blocks on the decision long-poll; the deny is what unblocks it.
     const reviewing = runReview(hookStdin(plans[i] as string), deps);
-    await denyPendingReview(
-      base,
-      `Bootstrap revision ${i + 1} for the dev review.`,
-      demoAnnotations(plans[i] as string, i + 1),
-    );
+    await denyPendingReview(base, `Bootstrap revision ${i + 1} for the dev review.`);
     await reviewing;
   }
   log(`bootstrapped the dev review to ${plans.length} versions`);

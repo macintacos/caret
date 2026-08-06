@@ -157,10 +157,10 @@ const DEMO_COMMENT_BODIES = [
 /** Fake line-anchored comments for one bootstrapped dev version, anchored at
  * deterministic non-blank lines roughly ¼ / ½ / ¾ of the way through the plan.
  * A short plan degrades to fewer comments rather than to out-of-range anchors.
- * Ids are deterministic (`dev-v{version}-c{n}`) so a spec or a manual check can
- * name one, and bodies name their version so the compare view's version badge
- * is visibly exercised. Dev-only: this module ships in scripts/, never in a
- * build. */
+ * Ids are deterministic (`dev-v{version}-c{n}`) so the unit suite can name one,
+ * and bodies name their version so the compare view's version badge is visibly
+ * exercised. Callers pass the STORED plan text — the daemon reflows every plan at
+ * ingest, so anchors computed from a submitted plan do not index what is served. */
 export function demoAnnotations(plan: string, version: number): LineAnnotation[] {
   const lines = plan.split("\n");
   // 1-based line numbers of the anchorable (non-blank) lines.
