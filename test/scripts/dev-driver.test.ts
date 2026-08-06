@@ -270,23 +270,24 @@ const DEV_GUIDE_LINES = (await Bun.file(`${import.meta.dir}/../../${DEV_GUIDE}`)
   .split("\n");
 
 // Parsed out of the fixture rather than copied here: a second copy is a second thing
-// to keep in sync, which is the bug class this guards. One pass catches both
-// spellings the fixture writes — inline code and a markdown link target — plus the
-// `#L`/`:L` forms a code host produces, so a citation rewritten into one of those
-// can't quietly fall out of scope. A `#fragment` target carries no digits and is a
-// link into the page, not a citation of a line. Scoped to this one page on purpose:
-// `mise.toml:900` is cited past the end deliberately, to demonstrate the clamp.
+// to keep in sync, which is the bug class this guards. The suffix grammar mirrors
+// LINE_SUFFIX in ui/src/lib/diffview/fileRefs.ts — the one definition of a line
+// citation — so a spelling the renderer accepts cannot quietly fall out of this scan,
+// and one it refuses cannot sneak in. A bare `#` before the digits is refused there
+// and here: `doc/DEVELOPMENT.md#3-setup` links to a numbered anchor rather than citing
+// line 3. Scoped to this one page on purpose — `mise.toml:900` is cited past the end
+// deliberately, to demonstrate the clamp.
 const DEV_GUIDE_CITATIONS = [
-  ...PLAN_V1.matchAll(/doc\/DEVELOPMENT\.md[#:]L?(\d+)(?:-L?(\d+))?/g),
+  ...PLAN_V1.matchAll(/doc\/DEVELOPMENT\.md(?::L?|:?#L)(\d+)(?:[-–]L?(\d+)|:\d+)?/g),
 ].map((m) => ({ text: m[0], start: Number(m[1]), end: Number(m[2] ?? m[1]) }));
 
 test("every doc/DEVELOPMENT.md citation in the fixture lands on a real, non-blank line", () => {
   // A fixture that stopped citing the page would otherwise satisfy the loop below
   // vacuously — the guard has to have something to guard.
   expect(DEV_GUIDE_CITATIONS.length).toBeGreaterThan(0);
-  // The anchor is the line the preview marks and parks on, and the one EXC-1037
-  // caught landing blank mid-pass with every other check still green. Blank lines
-  // *inside* a cited span are ordinary prose spacing and are not a break.
+  // The anchor is the line the preview marks and parks on; a blank anchor is the
+  // break this guards (EXC-1037). Blank lines *inside* a cited span are ordinary
+  // prose spacing and are not a break.
   const broken = DEV_GUIDE_CITATIONS.flatMap((c) => {
     if (c.end > DEV_GUIDE_LINES.length) {
       return [`${c.text} cites past the end of ${DEV_GUIDE} (${DEV_GUIDE_LINES.length} lines)`];
@@ -299,11 +300,13 @@ test("every doc/DEVELOPMENT.md citation in the fixture lands on a real, non-blan
   expect(broken).toEqual([]);
 });
 
-test("doc/DEVELOPMENT.md is long enough for the fixture's window claims", () => {
-  // The preview pads a cited span by EXCERPT_RADIUS at both ends before asking for
-  // it (ui/src/components/FilePreview.svelte), bounded by MAX_CITED_SPAN_LINES —
-  // that padding is the "reaches 30 lines past the span at each end" the fixture's
-  // bullets claim. Derived from the citations, so moving one moves the floor with it.
+test("doc/DEVELOPMENT.md is long enough for the fixture's citation windows", () => {
+  // Every citation is fetched with EXCERPT_RADIUS lines of context past its end —
+  // padded by the panel for a range (ui/src/components/FilePreview.svelte), by the
+  // daemon for a bare line (readFileExcerpt in src/plan/excerpt.ts) — bounded by
+  // MAX_CITED_SPAN_LINES. Under that floor the window clamps short, which is what
+  // would make the `:154-162` bullet's "reaches 30 lines past the span" false.
+  // Derived from the citations, so moving one moves the floor with it.
   const short = DEV_GUIDE_CITATIONS.map((c) => ({
     text: c.text,
     floor: Math.min(c.end, c.start + MAX_CITED_SPAN_LINES) + EXCERPT_RADIUS,
@@ -311,7 +314,7 @@ test("doc/DEVELOPMENT.md is long enough for the fixture's window claims", () => 
     .filter((c) => DEV_GUIDE_LINES.length < c.floor)
     .map(
       (c) =>
-        `${DEV_GUIDE} is ${DEV_GUIDE_LINES.length} lines; ${c.text} needs at least ${c.floor} for its window to reach ${EXCERPT_RADIUS} lines past the citation`,
+        `${DEV_GUIDE} is ${DEV_GUIDE_LINES.length} lines; ${c.text} needs at least ${c.floor}, or its preview window clamps short of the ${EXCERPT_RADIUS} lines of context it asks for`,
     );
   expect(short).toEqual([]);
 });

@@ -28,10 +28,11 @@ files only — does not. Rename one of these and run the full gate, not just the
 `scripts/tasks/dev/fake-plan.md` cites this file **by line** — `:124`, `:154-162`,
 `:200-212` — and its bullets assert what the preview does with them.
 [`test/scripts/dev-driver.test.ts`](../../../test/scripts/dev-driver.test.ts) guards the
-citations: it parses them out of the fixture and fails if one lands past the end of this
-page or on a blank line, or if the page is too short for the preview's window to reach
-past the deepest one. What it cannot check is how the result renders, so a pass that
-reshapes this page still wants one `mise run dev` and a click on each.
+citations: it parses them out of the fixture and fails if one runs past the end of this
+page, if the line a citation opens on is blank, or if the page is too short for the
+preview's window to reach past the deepest one. What it cannot check is how the result
+renders, so a pass that reshapes this page still wants one `mise run dev` and a click on
+each.
 
 Use the `/doc-coauthoring` skill for any substantive prose pass — it keeps the section
 on-audience and scannable.
