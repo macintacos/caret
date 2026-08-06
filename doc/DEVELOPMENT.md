@@ -9,10 +9,10 @@ one-page front door — prerequisites, the first build, and where tests live. Th
 the full catalog behind it.
 
 > [!TIP]
-> **`mise run dev` is the local development loop.** It builds and serves the _current_
-> checkout, so the UI in front of you is always up to date, and it is fully isolated — an
-> ephemeral port, an ephemeral state dir, and its own `config.dev.toml` — so it never
-> touches, reads, or overwrites your installed caret. Reach for it by default.
+> **`mise run dev` is the local development loop.** It runs the daemon and the UI straight
+> from the _current_ checkout, so your edits are live with no rebuild — and it is fully
+> isolated: an ephemeral port, an ephemeral state dir, and its own `config.dev.toml` — so
+> it never touches, reads, or overwrites your installed caret. Reach for it by default.
 >
 > **`mise run build --install` overwrites your installed build.** It rewrites Claude Code
 > plugin state, points OpenCode's `plugin` array at the checkout, and takes over the
@@ -69,10 +69,9 @@ That works because every task sources `scripts/bootstrap.sh` before it reaches b
 whichever task you run first installs the pinned tools, the JS deps, and the generated
 palette before doing its own job.
 
-The one thing the bootstrap deliberately excludes is the e2e Chromium download, so run
-`mise run setup` once before `mise run test e2e` or `mise run preflight`. It runs the same
-three steps plus Chromium — and on a fresh clone its own forwarder has already run the
-three, so it goes straight to the download.
+The one thing the bootstrap deliberately excludes is the e2e Chromium download, which is
+why `mise run setup` exists alongside it — same three steps, plus Chromium. On a fresh
+clone its own forwarder has already run the three, so it goes straight to the download.
 
 One wrinkle worth knowing about ahead of time: in a non-interactive shell, a clone whose
 mise config you have not trusted is a hard error rather than a prompt. `mise trust`
@@ -114,9 +113,11 @@ OS-assigned port. The dev task discovers the real port from the daemon's lock fi
 port and state dir, and Vite auto-increments its UI port per session. Everything is reaped
 on Ctrl-C.
 
-Open the UI at the `Local:` URL Vite prints on boot — not the installed build's
-`caret.localhost:42718`, which is a different daemon serving a different build. Vite's
-port is its own: it is not the daemon port, and `--port` below does not pin it.
+Open the UI at the `Local:` URL Vite prints on boot. Tell it from your installed build by
+the **port**, not the host — Vite prints the same `caret.localhost` vanity origin the
+installed build uses (EXC-426, cosmetic; the bind stays `localhost`). `42718` is the
+installed daemon; anything else is your dev session. Vite's port is its own: it is not the
+daemon port, and `--port` below does not pin it.
 
 The isolation is total. The dev daemon never reads or writes a globally-installed caret's
 reviews or config: it reads `config.dev.toml`, not your production `config.toml` (see
@@ -129,9 +130,11 @@ in the dev state dir's `caret.log`.
 
 #### Knobs
 
-Each knob is available three ways, and they resolve in that order: a **flag** beats an
+Where a knob has more than one source they resolve in order: a **flag** beats an
 **environment variable**, which beats **`config.dev.toml`**, which beats the built-in
-**default**. The config keys are documented in full under
+**default**. Arming the seeder is the exception — `--notify`, `[dev.notify].enabled`, and
+a positive `CARET_DEV_NEW_REVIEW_MS` each arm it on their own, and none of them can turn
+it off. The config keys are documented in full under
 [Config file](CONFIGURING.md#config-file).
 
 | Flag                | Env var                 | `config.dev.toml`        | Default   | Effect                                                                                    |
@@ -256,17 +259,17 @@ forwarder sets `#MISE raw_args=true` so mise hands every argument — including 
 | `build` — bare, `ui`, `bin`, `bundle`               | `scripts/tasks/build.ts`        | Bare is the umbrella; `mise run build bin` reaches a target.                      |
 | `test` — bare / `unit`, `e2e`                       | `scripts/tasks/test.ts`         | Bare and `unit` are the same bun target; `e2e` is Playwright.                     |
 | `smoke` — bare, `bin`, `bundle`                     | `scripts/tasks/smoke.ts`        | Bare smokes both artifacts.                                                       |
-| `lint`, `format`, `caret`                           | `scripts/tasks/lint.ts` et al.  | Passthroughs: every argument reaches the underlying tool.                         |
+| `lint`, `format`, `caret`                           | `scripts/tasks/lint.ts` et al.  | Passthroughs: operands and flags reach the underlying tool. Only `caret` forwards a bare `--help`. |
 | `setup`                                             | `scripts/tasks/setup.ts`        | The bootstrap's three steps, plus the e2e Chromium.                               |
 | `preflight`                                         | `scripts/preflight.ts`          | The one task with real Commander options: `--json`, `-v`, `--grep`, `--task`.     |
 | `release` — `compute`, `baseline`, `prepare`, `finalize` | `scripts/tasks/release/command.ts` | JSON on stdout so `/release-caret` can parse it.                            |
 
-Every task module is a sibling of the CLI in `scripts/tasks/`, named after its group. Code
-shared across tasks lives in `scripts/tasks/lib/`: `exec.ts` (the `runForward` /
-`execAndExit` spawn helpers), `signals.ts` (the cleanup-on-exit/signal wiring the
-supervising tasks share), and `smoke-probe.ts` (the over-the-wire UI probe both smoke
-targets run). Every subcommand's parsing contract is unit-tested in
-`test/scripts/tasks-cli.test.ts`.
+Task modules are siblings of the CLI in `scripts/tasks/`, named after their group; the
+table above names the two that are not. Code shared across tasks lives in
+`scripts/tasks/lib/`: `exec.ts` (the `runForward` / `execAndExit` spawn helpers),
+`signals.ts` (the cleanup-on-exit/signal wiring the supervising tasks share), and
+`smoke-probe.ts` (the over-the-wire UI probe both smoke targets run). Every subcommand's
+parsing contract is unit-tested in `test/scripts/tasks-cli.test.ts`.
 
 Two groups diverge from the plain-module shape. `release` keeps its own JSON-on-stdout
 error discipline — Commander help and errors to stderr, a typed JSON result per action —
