@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Pre-push gate: lint, unit + e2e tests, build, and artifact smoke, run concurrently"
+#MISE description="Pre-push gate: lint, unit + e2e tests, build, and artifact smoke, run concurrently — scoped to the diff unless --full"
 #MISE raw_args=true
 # Fresh-clone guard (scripts/bootstrap.sh); `|| exit 1` is its caller contract.
 # shellcheck source=/dev/null

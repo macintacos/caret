@@ -208,8 +208,9 @@ export interface TaskSelection {
  */
 export const MARKDOWN_READ_BY_TESTS: readonly string[] = [
   "scripts/tasks/dev/fake-plan.md", // test/scripts/dev-driver.test.ts reads it and asserts on its content
+  "doc/ARCHITECTURE.md", // test/adapters/opencode/docs-cache-path.test.ts checks the `rm -rf` path it prints
   "THIRD_PARTY_LICENSES.md", // ui/src/lib/icons.test.ts checks its table against the icon registry
-  "doc/DEVELOPMENT.md", // fake-plan.md cites it by line; that citation is guarded under `test`
+  "doc/DEVELOPMENT.md", // no test reads it yet — pre-listed for EXC-1045's guard over fake-plan.md's line citations
 ];
 
 function fullGate(reason: string): TaskSelection {
@@ -260,8 +261,11 @@ export async function changedPaths(): Promise<string[] | null> {
   const base = merged.text().trim();
   if (merged.exitCode !== 0 || base === "") return null;
   // `git diff <commit>` compares the WORKING TREE to that commit, so one call
-  // covers committed, staged and unstaged changes alike.
-  const diff = await $`git diff --name-only ${base}`.nothrow().quiet();
+  // covers committed, staged and unstaged changes alike. `--no-renames` is
+  // load-bearing: rename detection is on by default and reports only the
+  // destination, so renaming a MARKDOWN_READ_BY_TESTS entry would hide the old
+  // path and skip the very `test` run that would catch the break.
+  const diff = await $`git diff --no-renames --name-only ${base}`.nothrow().quiet();
   const untracked = await $`git ls-files --others --exclude-standard`.nothrow().quiet();
   if (diff.exitCode !== 0 || untracked.exitCode !== 0) return null;
   const lines = `${diff.text()}\n${untracked.text()}`.split("\n").map((line) => line.trim());
@@ -300,11 +304,18 @@ export async function runPreflight(deps: {
   const selection = deps.selection ?? FULL_GATE;
   const selected = new Set(selection.tasks);
   const immediateTasks = IMMEDIATE.filter((name) => selected.has(name));
-  // A dependent is dropped when its own gate task is out of the run too. The
-  // selections built above never split a pair, so this only makes the "every
-  // gating task resolves its gate" invariant below unhittable rather than
-  // merely unhit — a dependent kept without its gate would await forever.
-  const dependentTasks = DEPENDENT.filter((d) => selected.has(d.name) && selected.has(d.after));
+  // A dependent runs only if its gate SURVIVES INTO THE RUN — not merely if the
+  // gate is in `selection`. Testing membership instead would keep `smoke` for a
+  // selection holding `smoke` and `build bin` but not `build ui`: `build bin` is
+  // dropped, yet its gate is still created and nobody ever resolves it, so
+  // `smoke` awaits forever and the run HANGS rather than fails. DEPENDENT is
+  // ordered gate-before-dependent, so one pass over it reaches the fixpoint.
+  const running = new Set<string>(immediateTasks);
+  const dependentTasks = DEPENDENT.filter((d) => {
+    if (!selected.has(d.name) || !running.has(d.after)) return false;
+    running.add(d.name);
+    return true;
+  });
 
   const results = new Map<string, TaskResult>();
   // One gate per task something waits on, each resolving "did it pass?". EVERY

@@ -100,15 +100,16 @@ plus the filters in effect) and a `result` document carrying each task's status 
 overall `ok` boolean. The exit code is unchanged (`0` pass, `1` fail).
 
 **The gate scopes itself to your diff, so `ok` does not always mean all six tasks ran.** A
-change where every path is Markdown runs `lint` alone — plus `test` when it touches
-Markdown a test reads from disk (`scripts/tasks/dev/fake-plan.md`,
-`THIRD_PARTY_LICENSES.md`, `doc/DEVELOPMENT.md`). Anything else runs the full six, as does
-an empty or unreadable diff. Read the `start` document's `selection` object before you
-report a run as green: `{"narrowed": true, "reason": "…"}` means you proved less than the
-whole gate, and `schemaVersion` is `2` precisely because `ok` now means "every task that
-ran passed". `--full` forces all six — it is the one preflight flag that works without
-`--json` too. Note that `lint` always scans the whole tree even when the gate narrows, so
-cross-file link fragments stay checked.
+change where every path is Markdown runs `lint` alone — plus `test` when it touches one of
+the Markdown files a test reads from disk (`MARKDOWN_READ_BY_TESTS` in
+`scripts/preflight.ts`: `scripts/tasks/dev/fake-plan.md`, `doc/ARCHITECTURE.md`,
+`THIRD_PARTY_LICENSES.md`, and `doc/DEVELOPMENT.md`). Anything else runs the full six, as
+does an empty or unreadable diff. Read the `start` document's `selection` object before
+you report a run as green: `{"narrowed": true, "reason": "…"}` means you proved less than
+the whole gate, and `schemaVersion` is `2` precisely because `ok` now means "every task
+that ran passed". `--full` forces all six — it is the one preflight flag that works
+without `--json` too. Note that `lint` always scans the whole tree even when the gate
+narrows, so cross-file link fragments stay checked.
 
 `mise run preflight --json` is the call you want almost every time.
 **Failures show their output by default**, so you can act immediately — and if a task's

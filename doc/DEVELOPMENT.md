@@ -57,7 +57,7 @@ mise run test e2e   # Playwright browser e2e (isolated daemon, Chromium)
 mise run lint       # read-only gate: formatting + Biome lint + tsc + svelte-check
 mise run format     # Biome (write)
 mise run smoke      # smoke the shipped artifacts; also `smoke bin` / `smoke bundle`
-mise run preflight  # pre-push gate: lint + tests (unit ∥ e2e) + build + smoke, concurrent
+mise run preflight  # pre-push gate: lint + tests (unit ∥ e2e) + build + smoke, scoped to the diff
 ```
 
 ### Bootstrapping a fresh clone
@@ -316,16 +316,21 @@ The gate scopes itself to the diff (EXC-1042). It reads the paths your working t
 changes against its merge base with `origin/HEAD` — the committed, staged and unstaged
 diff, plus untracked files — and picks a task set from them:
 
-- **Every changed path is Markdown** → `lint` alone. Nothing else can observe a Markdown
-  change: no test reads `doc/*.md`, `README.md`, `CONTRIBUTING.md` or `CLAUDE.md`, and
-  `build ui`, `build bin`, `test e2e` and `smoke` never see docs at all.
-- **…and one of them is Markdown a test reads from disk** → `lint` and `test`. Three files
-  qualify today, listed as `MARKDOWN_READ_BY_TESTS` in `scripts/preflight.ts`:
+- **Every changed path is Markdown, and none is on the exception list below** → `lint`
+  alone. `build ui`, `build bin`, `test e2e` and `smoke` cannot see docs at all, and the
+  remaining Markdown is read by no test.
+- **…and one of them is on the exception list** → `lint` and `test`. A handful of Markdown
+  files really are read from disk at test time, so `test` can observe a change to them.
+  They are listed as `MARKDOWN_READ_BY_TESTS` in `scripts/preflight.ts`:
   `scripts/tasks/dev/fake-plan.md` (`test/scripts/dev-driver.test.ts` asserts on its
-  content), `THIRD_PARTY_LICENSES.md` (`ui/src/lib/icons.test.ts` checks its table against
-  the icon registry), and `doc/DEVELOPMENT.md` (the fake plan cites it by line).
+  content), `doc/ARCHITECTURE.md` (`test/adapters/opencode/docs-cache-path.test.ts` checks
+  the `rm -rf` cache path it prints), and `THIRD_PARTY_LICENSES.md`
+  (`ui/src/lib/icons.test.ts` checks its table against the icon registry).
+  `doc/DEVELOPMENT.md` is listed ahead of its guard, for the line citations the fake plan
+  makes into this page.
   **Add to that list whenever a test starts reading a Markdown file at run time** — the
-  suite checks that each listed path still exists, but nothing can catch an omission.
+  suite checks that each listed path still exists, but nothing can catch an omission, and
+  an omission silently stops running a real check.
 - **Anything else** → all six, exactly as before. That covers a non-Markdown path, an
   empty diff, and a diff that could not be read at all (no `origin/HEAD`, a shallow
   clone). The default is always the full gate; narrowing is an optimisation, never a

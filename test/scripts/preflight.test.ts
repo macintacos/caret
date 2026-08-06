@@ -350,8 +350,8 @@ async function spawnedFor(paths: readonly string[] | null): Promise<string[]> {
 }
 
 test("a Markdown-only diff narrows the gate to lint alone", async () => {
-  expect(await spawnedFor(["doc/ARCHITECTURE.md", "README.md"])).toEqual(["lint"]);
-  expect(selectTasks(["doc/ARCHITECTURE.md", "README.md"]).narrowed).toBe(true);
+  expect(await spawnedFor(["doc/CONFIGURING.md", "README.md"])).toEqual(["lint"]);
+  expect(selectTasks(["doc/CONFIGURING.md", "README.md"]).narrowed).toBe(true);
 });
 
 // These are the Markdown files a unit test READS FROM DISK, so `test` can
@@ -359,7 +359,7 @@ test("a Markdown-only diff narrows the gate to lint alone", async () => {
 // path, three separate reasons to exist — looping covers a fourth entry for free.
 test("Markdown a test reads from disk keeps `test` in the narrowed gate", async () => {
   for (const path of MARKDOWN_READ_BY_TESTS) {
-    expect(await spawnedFor(["doc/ARCHITECTURE.md", path])).toEqual(["lint", "test"]);
+    expect(await spawnedFor(["doc/CONFIGURING.md", path])).toEqual(["lint", "test"]);
   }
 });
 
@@ -373,8 +373,8 @@ test("every MARKDOWN_READ_BY_TESTS entry still exists on disk", () => {
 });
 
 test("a single non-Markdown path runs the full six-task gate", async () => {
-  expect(await spawnedFor(["doc/ARCHITECTURE.md", "src/daemon.ts"])).toEqual(ALL_TASKS);
-  expect(selectTasks(["doc/ARCHITECTURE.md", "src/daemon.ts"]).narrowed).toBe(false);
+  expect(await spawnedFor(["doc/CONFIGURING.md", "src/daemon.ts"])).toEqual(ALL_TASKS);
+  expect(selectTasks(["doc/CONFIGURING.md", "src/daemon.ts"]).narrowed).toBe(false);
 });
 
 // The two conservative defaults. An empty list satisfies "every changed path is
@@ -405,13 +405,44 @@ test("without the override, resolveSelection narrows from the diff it reads", as
   expect(selection.narrowed).toBe(true);
 });
 
-// The git plumbing against this repository. The branch's own diff is not stable
-// enough to assert on (it is empty once merged), so this pins only the shape —
-// but a renamed flag or a failed merge-base collapses it to null and fails here.
-test("changedPaths reads a path list out of git", async () => {
+// `selection` is a public dep, so a caller can hand runPreflight a set the
+// narrowing logic would never build. This one names `smoke` and `build bin` but
+// not the `build ui` that gates them: a filter testing gate MEMBERSHIP rather
+// than gate SURVIVAL keeps `smoke`, creates a `build bin` gate nobody resolves,
+// and the run never returns. Race it against a timeout so the regression fails
+// this assertion instead of parking the whole suite.
+test("a selection missing a gate task drops the dependent rather than hanging", async () => {
+  const { calls, spawnTask } = fakeSpawner();
+  const run = runPreflight({
+    spawnTask,
+    renderer: "silent",
+    selection: { tasks: ["lint", "build bin", "smoke"], narrowed: true, reason: "split pair" },
+  });
+  const outcome = await Promise.race([run, Bun.sleep(2000).then(() => "HUNG" as const)]);
+
+  expect(outcome).not.toBe("HUNG");
+  expect(calls.map((c) => c.name)).toEqual(["lint"]);
+});
+
+// The git plumbing against this repository. The contract has two branches — a
+// path list, or null when the diff cannot be read — and which one applies turns
+// on whether this checkout resolves `origin/HEAD`, so assert the matching one
+// rather than assuming a cloned layout. The branch's own diff is not stable
+// enough to assert on: it is empty once this work merges.
+test("changedPaths honours its contract against this checkout", async () => {
+  const hasOriginHead =
+    Bun.spawnSync(["git", "rev-parse", "--verify", "--quiet", "origin/HEAD"]).exitCode === 0;
   const paths = await changedPaths();
+
+  if (!hasOriginHead) {
+    expect(paths).toBeNull(); // no merge base to diff against → the full-gate fallback
+    return;
+  }
   expect(paths).not.toBeNull();
-  for (const path of paths ?? []) expect(path.length).toBeGreaterThan(0);
+  // Every entry is a usable relative path: no blanks, no stray whitespace that
+  // would defeat the `.md` suffix test or the exception-list lookup.
+  for (const path of paths ?? []) expect(path).toBe(path.trim());
+  expect((paths ?? []).filter((path) => path === "")).toEqual([]);
 });
 
 // --json report builders (EXC-471) ------------------------------------------
@@ -440,7 +471,7 @@ test("buildStartReport: unset filters render as null/zero", () => {
 // Criterion 4: a scoped run must never read as a full green run. The start doc
 // carries both the shortened task list and an explicit narrowed flag + reason.
 test("buildStartReport surfaces a narrowed selection and why", () => {
-  const selection = selectTasks(["doc/ARCHITECTURE.md"]);
+  const selection = selectTasks(["doc/CONFIGURING.md"]);
   const start = buildStartReport({ json: true, verbosity: 0, full: false, tasks: [] }, selection);
 
   expect(start.tasks).toEqual(["lint"]);

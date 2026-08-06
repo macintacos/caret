@@ -32,8 +32,9 @@ mise run dev        # isolated daemon + a fake plan + the Vite UI on an ephemera
 mise run preflight  # the pre-push gate: lint + unit/e2e tests + build + artifact smoke
 ```
 
-`mise run preflight` is the gate to pass before pushing. The full task catalog (`build`,
-`test`, `smoke`, `lint`, `format`) is documented in
+`mise run preflight` is the gate to pass before pushing. It scopes itself to your diff, so
+a Markdown-only change runs fewer than the full six tasks — `--full` forces all of them.
+The full task catalog (`build`, `test`, `smoke`, `lint`, `format`) is documented in
 [`doc/DEVELOPMENT.md`](doc/DEVELOPMENT.md#development).
 
 ## Where tests live
