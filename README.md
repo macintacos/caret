@@ -95,16 +95,16 @@ port, the review timeout, the log level — it reads an optional `config.toml` a
 environment variables. Every key, every variable, and their defaults are in
 [`doc/CONFIGURING.md`](doc/CONFIGURING.md).
 
-## Diagnosing your install
+## Diagnostics
 
 - `/caret:discovery` prints a one-shot, read-only diagnostics snapshot of your install —
-  always redacted, and never containing plan, prompt, or feedback bodies.
+  always redacted, and it never contains plan, prompt, or feedback bodies, nor any log
+  contents.
 - `/caret:debug` reviews the current session's plans and recent errors.
 
-Logs are a different matter: they are written raw by default. Scrub one with
-`caret redact` before you paste it anywhere — a chat, a gist, an AI assistant. Where the
-logs live and how to scrub them is in
-[`doc/RUNNING.md`](doc/RUNNING.md#logging--debugging).
+Logs are written raw by default. `caret redact` writes scrubbed `*.redacted.log` copies
+alongside them — paste one of those into a chat, a gist, or an AI assistant, never the
+original. [`doc/RUNNING.md`](doc/RUNNING.md#logging--debugging) says where they live.
 
 ## Documentation
 
