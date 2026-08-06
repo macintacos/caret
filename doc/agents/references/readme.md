@@ -7,8 +7,9 @@ with the install/usage audience and stays focused — what caret is, install, ba
 and pointers onward. The advanced and contributor-facing depth lives in the `doc/`
 reference pages — [`CONFIGURING.md`](../../CONFIGURING.md),
 [`RUNNING.md`](../../RUNNING.md), [`ARCHITECTURE.md`](../../ARCHITECTURE.md), and
-[`DEVELOPMENT.md`](../../DEVELOPMENT.md) — which the README links to; when content gets
-deep, it lands there, not here.
+[`DEVELOPMENT.md`](../../DEVELOPMENT.md) — which the README links to directly or reaches
+through [`doc/README.md`](../../README.md); when content gets deep, it lands there, not
+here.
 
 When to edit it:
 
