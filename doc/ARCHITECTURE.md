@@ -8,9 +8,40 @@ install it, and basic usage, start there.
 
 ## How it works
 
-Claude Code's hooks invoke `bin/caret`, a small entrypoint shim that runs caret's
-subcommands. The shim execs the platform-native compiled binary (`bin/caret-native`) when
-a `mise run build` produced one, and otherwise runs the `bun` bundle (`dist/cli.js`) that
+Every plan makes the same round trip: your coding agent hands it to caret, caret puts it
+in front of you in the browser, and your decision goes back to the agent as its answer.
+
+```mermaid
+sequenceDiagram
+    participant A as Coding agent
+    participant H as caret review
+    participant D as caret daemon
+    participant U as Review UI
+
+    A->>H: the plan, on stdin
+    Note over H: the agent adapter parses it into a core plan
+    H->>D: POST /api/reviews, starting the daemon if it is not up
+    H->>U: opens the plan in your browser
+    U->>D: loads the review
+    H->>D: long-polls for a decision
+    Note over H,D: the hook blocks here, up to review.timeout_s
+    U->>D: approve, or request changes
+    D-->>H: the decision
+    H-->>A: the adapter emits the agent's decision
+    opt changes requested
+        A->>H: a revised plan, as a new version of the same review
+    end
+```
+
+> [!IMPORTANT]
+> **Fail-safe = deny.** On a bad payload, an unreachable daemon, a timeout, a signal, or
+> daemon death, caret emits `deny` with an explanation — it never auto-approves an
+> unreviewed plan.
+
+Your agent reaches caret through `bin/caret`, a small entrypoint shim that runs caret's
+subcommands: Claude Code fires it as a hook, OpenCode's plugin spawns it from a tool. The
+shim execs the platform-native compiled binary (`bin/caret-native`) when a
+`mise run build` produced one, and otherwise runs the `bun` bundle (`dist/cli.js`) that
 the marketplace and npm installs ship.
 
 ### Architecture: tool-agnostic core + agent adapter
@@ -25,19 +56,23 @@ adapter raw hook stdin and a core decision; the adapter hands back a normalized 
 tool-specific stdout response. The dependency runs one way — an adapter imports core
 types, never the reverse.
 
-`src/adapters/claude/` is the reference implementation, for Claude Code, and the default
-adapter. `src/adapters/codex/` is a second adapter for the OpenAI Codex CLI that proves
-the boundary is real: it is **default-off and provisional** — its PermissionRequest wire
-contract is modeled from Codex docs and not yet verified against a live Codex session, and
-it ships no Codex packaging (no installer or hook manifests). `src/adapters/opencode/` is
-a third adapter, for OpenCode — and unlike codex it ships real packaging: an in-process
-plugin and its own installer. OpenCode is plugin-shaped, not command-hook-shaped, so caret
-registers a `caret_review_plan` tool that bridges to `caret review` rather than a hook
-(see [`agents/opencode-integration.md`](agents/opencode-integration.md)). Select an
-adapter with `CARET_AGENT=codex` or `CARET_AGENT=opencode`; with no selector caret uses
-Claude, so the shipped Claude plugin keeps working unchanged. The hooks table and
-decision-JSON block below, and the behavioral prose in `commands/*.md`, describe
-**Claude-adapter** surface — they are agent-specific, not core behavior.
+Three adapters ship today. Pick one with `CARET_AGENT`; with no selector caret uses
+Claude, so the shipped Claude plugin keeps working unchanged.
+
+| Adapter | `CARET_AGENT` | How it wires in | What ships | Status |
+| ------- | ------------- | --------------- | ---------- | ------ |
+| **Claude Code** — `src/adapters/claude/` | `claude` (the default) | Three plan-mode hooks; the `PermissionRequest`/`ExitPlanMode` one intercepts the plan | The `caret@caret` plugin, from caret's own marketplace | Reference implementation |
+| **OpenCode** — `src/adapters/opencode/` | `opencode` | An in-process plugin registering a `caret_review_plan` tool — OpenCode has no plan hook to intercept | The `@macintacos/caret` npm package, plus its own installer | Shipping |
+| **Codex CLI** — `src/adapters/codex/` | `codex` | A `PermissionRequest` hook, modeled from Codex's docs | Nothing — no installer, no hook manifests | Provisional, default-off |
+
+> [!WARNING]
+> The Codex adapter's wire contract is modeled from Codex documentation and has never been
+> verified against a live Codex session. It is there to prove the boundary is real, not to
+> be relied on.
+
+The hooks table and decision-JSON block below, and the behavioral prose in
+`commands/*.md`, describe **Claude-adapter** surface — they are agent-specific, not core
+behavior.
 
 ### The Claude Code adapter
 
@@ -80,10 +115,6 @@ the chosen variant to a session `setMode` permission and emits the resulting
 { "hookSpecificOutput": { "hookEventName": "PermissionRequest",
   "decision": { "behavior": "deny", "message": "<formatted annotations + comment>" } } }
 ```
-
-**Fail-safe = deny.** On a bad payload, an unreachable daemon, a timeout, a signal, or
-daemon death, caret emits `deny` with an explanation — it never auto-approves an
-unreviewed plan.
 
 **Why the review has a timeout.** The `caret review` hook long-polls the daemon for the
 reviewer's decision, but Claude Code kills any hook that outruns its `timeout` budget —
@@ -159,10 +190,14 @@ nothing. Restart OpenCode afterward. Clearing the cache by hand is:
 rm -rf ~/.cache/opencode/packages/@macintacos/caret*
 ```
 
-The glob is load-bearing: OpenCode names one cache dir per **verbatim** specifier, so a
-bare `@macintacos/caret` entry and every pinned `@macintacos/caret@<version>` get separate
-dirs, and all of them have to go. Pinning `"@macintacos/caret@<version>"` in the array and
-bumping it yourself is the other way to control which version loads.
+> [!NOTE]
+> The glob is load-bearing. OpenCode names one cache dir per **verbatim** specifier, so a
+> bare `@macintacos/caret` entry and every pinned `@macintacos/caret@<version>` get
+> separate dirs, and all of them have to go — drop the `*` and the command exits 0 having
+> deleted nothing.
+
+Pinning `"@macintacos/caret@<version>"` in the array and bumping it yourself is the other
+way to control which version loads.
 
 Omit `--target` and `caret install` picks for you: it detects which agents you have
 (`claude` on your PATH; `opencode` on your PATH or an existing OpenCode config dir) and
@@ -240,11 +275,12 @@ src/ui/             the daemon's bridge to the embedded Svelte UI — asset reso
 src/config/         settings, preferences, resolved paths, and shared constants
 src/lib/            cross-cutting foundation — wire-contract types, logging, and small shared utilities
 src/commands/       per-subcommand entrypoints (one file per subcommand)
-src/adapters/       the coding-agent adapter axis — the AgentAdapter interface and registry, plus one directory per tool (Claude Code default, Codex provisional)
+src/adapters/       the coding-agent adapter axis — the AgentAdapter interface and registry, plus one directory per tool (claude · opencode · codex)
 ui/                 Svelte 5 multi-asset SPA (Vite) embedded into the binary via the build-generated asset manifest, served by the daemon by URL path · src/state/ runes state modules · src/icons/ vendored Lucide SVGs
 hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode + PostToolUse/ExitPlanMode) — Claude-adapter packaging
 commands/           /caret:demo · /caret:debug · /caret:discovery — Claude-adapter packaging (agent-specific behavioral prose)
-test/               core/ (tool-agnostic suites) · adapters/claude/ + adapters/codex/ (per-adapter suites + fixtures) · scripts/ (release + dev tooling) · support/ (shared scaffolding)
+opencode/           the plugin OpenCode loads — the review tool, the planning steer, and the config-hook mutation — OpenCode-adapter packaging
+test/               core/ (tool-agnostic suites) · adapters/<tool>/ (per-adapter suites + fixtures) · opencode/ (the repo-root opencode/ package) · e2e/ (Playwright) · structure/ (repo-shape invariants) · scripts/ (release + dev tooling) · support/ (shared scaffolding)
 scripts/            dev and release tooling for the checkout, plus the caret entrypoint shim's test
 ```
 
