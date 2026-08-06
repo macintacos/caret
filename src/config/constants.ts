@@ -1,4 +1,4 @@
-// Cross-cutting constants with no behavior. Pure TS, no node imports — so the
+// Cross-cutting constants and the pure predicates over them. Pure TS, no node imports — so the
 // browser bundle and config files (ui/vite.config.ts) can import these
 // without dragging in the daemon's node-only dependency chain.
 
@@ -48,6 +48,75 @@ export const EXCERPT_RADIUS = 30;
  * first line and the rest arrives through the panel's own scroll-driven growth,
  * which is what the reader would do with it anyway. */
 export const MAX_CITED_SPAN_LINES = 200;
+
+// File extensions a plan's prose is likely to cite. Neither runtime uses this to
+// decide what a reference *is* — the filesystem answers that (EXC-916) — so it is
+// only ever a narrowing on top: the link layer collapses a `[label](target)` only
+// for a file-shaped target, and the daemon's bounded basename search fires only
+// for a name shaped like one. Broad enough to cover the source and config kinds a
+// plan cites, narrow enough that `obj.property` and `e.g` cost nothing.
+const KNOWN_FILE_EXTENSIONS: ReadonlySet<string> = new Set([
+  "ts",
+  "tsx",
+  "mts",
+  "cts",
+  "js",
+  "jsx",
+  "mjs",
+  "cjs",
+  "svelte",
+  "vue",
+  "json",
+  "jsonc",
+  "css",
+  "scss",
+  "less",
+  "html",
+  "htm",
+  "xml",
+  "svg",
+  "md",
+  "mdx",
+  "py",
+  "rb",
+  "rs",
+  "go",
+  "java",
+  "kt",
+  "c",
+  "h",
+  "cc",
+  "cpp",
+  "hpp",
+  "sh",
+  "bash",
+  "zsh",
+  "toml",
+  "yaml",
+  "yml",
+  "ini",
+  "sql",
+  "graphql",
+  "gql",
+  "php",
+  "swift",
+  "dart",
+  "txt",
+  "lock",
+  "cfg",
+  "conf",
+]);
+
+/** Whether `path`'s last segment reads as `name.ext` for one of the extensions a
+ * plan is likely to cite. Requires a real name before the dot, so a bare `.ts`, a
+ * dotfile like `.env`, and anything ending in `/` are all false here. They are
+ * still perfectly good references — this only decides whether the two narrowings
+ * above apply, and neither should fire on a name it cannot read as a file. */
+export function hasKnownFileExtension(path: string): boolean {
+  const base = path.split("/").pop() ?? "";
+  const dot = base.lastIndexOf(".");
+  return dot > 0 && KNOWN_FILE_EXTENSIONS.has(base.slice(dot + 1).toLowerCase());
+}
 
 /** "Never idle out" sentinel for the idle-shutdown delay (ms): the max
  * setTimeout delay (2^31-1). A larger value overflows the 32-bit timer and

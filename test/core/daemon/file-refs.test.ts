@@ -5,7 +5,8 @@ import { join } from "node:path";
 
 import { bootDaemon, type TestDaemon } from "@test/support/daemon.ts";
 import { EXCERPT_RADIUS } from "@/config/constants.ts";
-import type { FileExcerpt } from "@/lib/types.ts";
+import { MAX_FILE_REFS } from "@/daemon/schemas.ts";
+import type { FileExcerpt, FileRefsResponse } from "@/lib/types.ts";
 import { MAX_EXCERPT_BYTES } from "@/plan/excerpt.ts";
 
 // The two review-scoped file routes back the plan view's filename preview
@@ -63,12 +64,38 @@ function fileExcerpt(
 
 // ----- POST /api/reviews/:id/file-refs -----
 
-test("file-refs returns only the paths that resolve to a real file", async () => {
+async function resolvedKinds(id: string, paths: string[]): Promise<Record<string, string>> {
+  return ((await (await fileRefs(id, paths)).json()) as FileRefsResponse).resolved;
+}
+
+test("file-refs answers with each path's kind, and omits what does not resolve", async () => {
+  write("src/foo.ts", "x");
+  mkdirSync(join(cwd, "src/daemon"), { recursive: true });
+  const id = await d.seed({ cwd });
+  const res = await fileRefs(id, ["src/foo.ts", "src/daemon", "src/ghost.ts"]);
+  expect(res.status).toBe(200);
+  expect((await res.json()) as FileRefsResponse).toEqual({
+    resolved: { "src/foo.ts": "file", "src/daemon": "directory" },
+  });
+});
+
+test("file-refs resolves a directory written with a trailing slash", async () => {
+  mkdirSync(join(cwd, "src/daemon"), { recursive: true });
+  const id = await d.seed({ cwd });
+  // Keyed by the string the client sent, so the span it came from still matches.
+  expect(await resolvedKinds(id, ["src/daemon/"])).toEqual({ "src/daemon/": "directory" });
+});
+
+test("file-refs refuses a path that escapes the review's cwd", async () => {
+  const id = await d.seed({ cwd });
+  expect(await resolvedKinds(id, ["../..", "/etc", "/etc/hosts"])).toEqual({});
+});
+
+test("file-refs de-dupes before capping, so repeats do not consume the budget", async () => {
   write("src/foo.ts", "x");
   const id = await d.seed({ cwd });
-  const res = await fileRefs(id, ["src/foo.ts", "src/ghost.ts"]);
-  expect(res.status).toBe(200);
-  expect((await res.json()) as { resolved: string[] }).toEqual({ resolved: ["src/foo.ts"] });
+  const paths = [...Array.from({ length: MAX_FILE_REFS }, () => "dupe.ts"), "src/foo.ts"];
+  expect(await resolvedKinds(id, paths)).toEqual({ "src/foo.ts": "file" });
 });
 
 test("file-refs 404s for an unknown review", async () => {
@@ -83,7 +110,7 @@ test("file-refs tolerates a malformed body", async () => {
     body: "not json",
   });
   expect(res.status).toBe(200);
-  expect((await res.json()) as { resolved: string[] }).toEqual({ resolved: [] });
+  expect((await res.json()) as FileRefsResponse).toEqual({ resolved: {} });
 });
 
 // ----- GET /api/reviews/:id/file -----
@@ -116,6 +143,15 @@ test("file refuses a ../ escape and an absolute path outside cwd", async () => {
 
 test("file 404s for an unknown review", async () => {
   expect((await fileExcerpt("nope", "a.ts")).status).toBe(404);
+});
+
+test("file 404s for a directory rather than reading something else", async () => {
+  // Before kinds, `path=src` fell through to a basename search that could serve
+  // an unrelated FILE named `src`. It resolves as a directory now, and the
+  // excerpt route affords files only.
+  write("src/a.ts", numbered(10));
+  const id = await d.seed({ cwd });
+  expect((await fileExcerpt(id, "src")).status).toBe(404);
 });
 
 test("file honours an explicit start/end window over the line", async () => {

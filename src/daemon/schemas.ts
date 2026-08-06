@@ -35,11 +35,23 @@ export const PlanInputSchema: z.ZodType<PlanInput> = z
   })
   .catch({});
 
-// POST /api/reviews/:id/file-refs: the candidate filename strings the UI parsed
-// from a plan, asking which resolve to a real file. A non-array or non-object
-// body degrades to an empty list (nothing resolves), matching the lenient
-// boundary the other schemas keep. The handler caps how many it will resolve.
-export const MAX_FILE_REFS = 200;
+// POST /api/reviews/:id/file-refs: the candidate path strings the UI parsed from
+// a plan, asking what each one resolves to. A non-array or non-object body
+// degrades to an empty list (nothing resolves), matching the lenient boundary
+// the other schemas keep. The handler de-dupes, then caps how many it resolves.
+//
+// The cap is roomy because the candidate gate is: since EXC-916 every plausible
+// path token inside inline code is offered, not only the ones ending in a known
+// extension, so a long plan can reach several hundred distinct tokens. A cap
+// that truncated would silently drop real citations from the tail of a plan.
+//
+// What the cap really bounds is the expensive branch, and that is not the stat.
+// A hit costs one realpath and one stat; a MISS costs those plus — when the
+// token is slash-free and file-shaped — a bounded basename walk of up to
+// MAX_SCAN_ENTRIES dirents. That walk is what a large cap buys, so the same
+// EXC-916 narrowing that made the walk rare (a slash or an unknown extension
+// stops it outright) is what makes this number affordable.
+export const MAX_FILE_REFS = 1000;
 export const FileRefsBodySchema = z
   .object({ paths: z.array(z.string()).catch([]) })
   .catch({ paths: [] });

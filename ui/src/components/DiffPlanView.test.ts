@@ -400,7 +400,7 @@ describe("DiffPlanView file-reference resolution", () => {
     const cap = logCapture((url) => {
       if (url.includes("/file-refs")) {
         fileRefCalls++;
-        return Promise.resolve(jsonResponse({ resolved: ["src/foo.ts"] }));
+        return Promise.resolve(jsonResponse({ resolved: { "src/foo.ts": "file" } }));
       }
       return Promise.resolve(new Response(null, { status: 204 }));
     });
@@ -429,7 +429,7 @@ describe("DiffPlanView file-reference resolution", () => {
     const cap = logCapture((url) => {
       if (url.includes("/file-refs")) {
         fileRefCalls++;
-        return Promise.resolve(jsonResponse({ resolved: [] }));
+        return Promise.resolve(jsonResponse({ resolved: {} }));
       }
       return Promise.resolve(new Response(null, { status: 204 }));
     });
