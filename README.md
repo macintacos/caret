@@ -65,9 +65,10 @@ agent applies an update. In OpenCode, caret toasts you at startup when a newer r
 out; a plain `install` at a terminal runs its own check against npm and asks before taking
 it.
 
-See [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md#how-it-works) for the by-hand equivalents,
-for pinning a version in OpenCode's config, and for what each agent's install touches and
-how its integration works.
+See [the OpenCode adapter](doc/ARCHITECTURE.md#the-opencode-adapter) for the by-hand
+equivalents, for pinning a version in OpenCode's `plugin` array, and for what each agent's
+install touches; [the Claude Code adapter](doc/ARCHITECTURE.md#the-claude-code-adapter)
+covers the hooks caret registers there.
 
 ## Using caret
 
