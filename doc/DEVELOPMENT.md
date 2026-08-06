@@ -262,7 +262,7 @@ forwarder sets `#MISE raw_args=true` so mise hands every argument — including 
 | `smoke` — bare, `bin`, `bundle`                     | `scripts/tasks/smoke.ts`        | Bare smokes both artifacts.                                                       |
 | `lint`, `format`, `caret`                           | `scripts/tasks/lint.ts` et al.  | Passthroughs: operands and flags reach the underlying tool. Only `caret` forwards a bare `--help`. |
 | `setup`                                             | `scripts/tasks/setup.ts`        | The bootstrap's three steps, plus the e2e Chromium.                               |
-| `preflight`                                         | `scripts/preflight.ts`          | The one task with real Commander options: `--json`, `-v`, `--grep`, `--task`.     |
+| `preflight`                                         | `scripts/preflight.ts`          | The one task with real Commander options: `--json`, `-v`, `--grep`, `--task`, `--full`. |
 | `release` — `compute`, `baseline`, `prepare`, `finalize` | `scripts/tasks/release/command.ts` | JSON on stdout so `/release-caret` can parse it.                            |
 
 Task modules are siblings of the CLI in `scripts/tasks/`, named after their group; the
@@ -309,6 +309,43 @@ one, so the only build smoke pays for in-gate is `build bundle`, which no other 
 `smoke` is deliberately last in the task array: listr2 fills its concurrency slots in
 order, so a lower `CARET_PREFLIGHT_JOBS` can't park `smoke` in a slot while the
 `build bin` it waits on is still queued.
+
+#### Which tasks the gate runs
+
+The gate scopes itself to the diff (EXC-1042). It reads the paths your working tree
+changes against its merge base with `origin/HEAD` — the committed, staged and unstaged
+diff, plus untracked files — and picks a task set from them:
+
+- **Every changed path is Markdown** → `lint` alone. Nothing else can observe a Markdown
+  change: no test reads `doc/*.md`, `README.md`, `CONTRIBUTING.md` or `CLAUDE.md`, and
+  `build ui`, `build bin`, `test e2e` and `smoke` never see docs at all.
+- **…and one of them is Markdown a test reads from disk** → `lint` and `test`. Three files
+  qualify today, listed as `MARKDOWN_READ_BY_TESTS` in `scripts/preflight.ts`:
+  `scripts/tasks/dev/fake-plan.md` (`test/scripts/dev-driver.test.ts` asserts on its
+  content), `THIRD_PARTY_LICENSES.md` (`ui/src/lib/icons.test.ts` checks its table against
+  the icon registry), and `doc/DEVELOPMENT.md` (the fake plan cites it by line).
+  **Add to that list whenever a test starts reading a Markdown file at run time** — the
+  suite checks that each listed path still exists, but nothing can catch an omission.
+- **Anything else** → all six, exactly as before. That covers a non-Markdown path, an
+  empty diff, and a diff that could not be read at all (no `origin/HEAD`, a shallow
+  clone). The default is always the full gate; narrowing is an optimisation, never a
+  weakening.
+
+`mise run preflight --full` forces all six regardless. Unlike `-v` / `--grep` / `--task`,
+it is not `--json`-only — the human display narrows too, so it needs the same escape
+hatch.
+
+The narrowing is never silent. In `--json` mode the `start` document carries a `selection`
+object (`narrowed` plus a `reason`) alongside the shortened `tasks` list; the human
+summary prints the same reason on a `scope:` line. This is also why the report
+`schemaVersion` is `2`: `ok` now means "every task that ran passed", not "all six passed".
+
+**Only _which tasks_ run is scoped — never which files a task sees.** Every task is still
+spawned as a bare `mise run <task>`, and `lint` in particular must keep scanning the whole
+tree: `rumdl` resolves an MD051 cross-file link fragment only when the file it points into
+is in the same scan, so a lint handed just the changed files would quietly stop checking
+every cross-file anchor whose target is unchanged. `doc/` is held together almost entirely
+by those links.
 
 #### Adding a task
 
