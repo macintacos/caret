@@ -210,7 +210,7 @@ export const MARKDOWN_READ_BY_TESTS: readonly string[] = [
   "scripts/tasks/dev/fake-plan.md", // test/scripts/dev-driver.test.ts reads it and asserts on its content
   "doc/ARCHITECTURE.md", // test/adapters/opencode/docs-cache-path.test.ts checks the `rm -rf` path it prints
   "THIRD_PARTY_LICENSES.md", // ui/src/lib/icons.test.ts checks its table against the icon registry
-  "doc/DEVELOPMENT.md", // no test reads it yet — pre-listed for EXC-1045's guard over fake-plan.md's line citations
+  "doc/DEVELOPMENT.md", // test/scripts/dev-driver.test.ts checks fake-plan.md's line citations into it
 ];
 
 function fullGate(reason: string): TaskSelection {

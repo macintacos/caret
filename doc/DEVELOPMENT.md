@@ -324,13 +324,12 @@ diff, plus untracked files — and picks a task set from them:
   They are listed as `MARKDOWN_READ_BY_TESTS` in `scripts/preflight.ts`:
   `scripts/tasks/dev/fake-plan.md` (`test/scripts/dev-driver.test.ts` asserts on its
   content), `doc/ARCHITECTURE.md` (`test/adapters/opencode/docs-cache-path.test.ts` checks
-  the `rm -rf` cache path it prints), and `THIRD_PARTY_LICENSES.md`
-  (`ui/src/lib/icons.test.ts` checks its table against the icon registry).
-  `doc/DEVELOPMENT.md` is listed ahead of its guard, for the line citations the fake plan
-  makes into this page.
-  **Add to that list whenever a test starts reading a Markdown file at run time** — the
-  suite checks that each listed path still exists, but nothing can catch an omission, and
-  an omission silently stops running a real check.
+  the `rm -rf` cache path it prints), `THIRD_PARTY_LICENSES.md`
+  (`ui/src/lib/icons.test.ts` checks its table against the icon registry), and this page
+  (`test/scripts/dev-driver.test.ts` checks the line citations the fake plan makes into
+  it). **Add to that list whenever a test starts reading a Markdown file at run time** —
+  the suite checks that each listed path still exists, but nothing can catch an omission,
+  and an omission silently stops running a real check.
 - **Anything else** → all six, exactly as before. That covers a non-Markdown path, an
   empty diff, and a diff that could not be read at all (no `origin/HEAD`, a shallow
   clone). The default is always the full gate; narrowing is an optimisation, never a

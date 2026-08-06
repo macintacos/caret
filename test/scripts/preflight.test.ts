@@ -363,6 +363,21 @@ test("Markdown a test reads from disk keeps `test` in the narrowed gate", async 
   }
 });
 
+// EXC-1045's obligation, named rather than left to the loop above. Its guards in
+// test/scripts/dev-driver.test.ts check that fake-plan.md's line citations into
+// doc/DEVELOPMENT.md still land on real lines — and both files are plain
+// Markdown, so the naive "all changed paths are Markdown → skip `test`" rule
+// would skip exactly the diffs that guard exists for. Either path must reach it,
+// alone or together.
+test("a docs-only diff touching the fake plan or the dev guide still runs `test`", async () => {
+  expect(await spawnedFor(["doc/DEVELOPMENT.md"])).toEqual(["lint", "test"]);
+  expect(await spawnedFor(["scripts/tasks/dev/fake-plan.md"])).toEqual(["lint", "test"]);
+  expect(await spawnedFor(["doc/DEVELOPMENT.md", "scripts/tasks/dev/fake-plan.md"])).toEqual([
+    "lint",
+    "test",
+  ]);
+});
+
 // A renamed or deleted fixture would silently orphan its entry, and the gate
 // would quietly stop running `test` for the file that replaced it.
 test("every MARKDOWN_READ_BY_TESTS entry still exists on disk", () => {
