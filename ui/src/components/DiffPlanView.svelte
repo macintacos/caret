@@ -17,8 +17,9 @@
   // When the review has multiple stored versions, a compare control lets the
   // reviewer diff any two of them (base vs. target) through the SourceDiffView
   // wrapper, switching the split/unified layout at runtime. The breadcrumbs bar,
-  // gutter, and annotations belong to the single-version view only — compare mode
-  // is a clean read-only diff with none of them.
+  // gutter, and inline annotation cards belong to the single-version view only —
+  // compare mode is a clean read-only diff surface with none of them; the compared
+  // versions' comments still surface read-only in the docked panel.
   import { untrack } from "svelte";
   import SourceView from "$lib/diffview/SourceView.svelte";
   import SourceDiffView from "$lib/diffview/SourceDiffView.svelte";
@@ -118,6 +119,11 @@
      * (the comment navigator) can scroll the plan to a commented line. A call before
      * the view paints is a bounded-retry no-op. */
     onExposeReveal?: (reveal: (line: number) => void) => void;
+    /** Report the compared version range upward (null when not comparing), so App
+     * can point the single CommentNavigator instance at the cross-version index.
+     * Compare state lives here (compareStore), but the panel is a root sibling of
+     * .shell — same expose-upward idiom as onExposeReveal. */
+    onCompareChange?: (range: { from: number; to: number } | null) => void;
     /** The active caret theme, forwarded to the shadow-DOM diff view so its shiki
      * highlighting is painted in the selected palette (EXC-730, EXC-752). Omitted
      * leaves the library on caret's pair following the system preference. */
@@ -145,6 +151,7 @@
     pendingText = "",
     scratches = [],
     onExposeReveal,
+    onCompareChange,
     themeId,
     showShortcutHints = true,
     settingsRev = 0,
@@ -165,7 +172,9 @@
 
   // Compare state: the component owns the reactive store (runes live here) and
   // the factory mutates it; the layout-preference read/write are injected so the
-  // factory stays pure. Annotation display is never wired here. The version/style
+  // factory stays pure. Annotation display is never wired into the diff surface —
+  // the compared versions' comments surface in the docked panel, which the host
+  // drives off onCompareChange (EXC-872). The version/style
   // fields are placeholders — the init effect below sets the real default pair
   // and persisted layout as soon as the active review is established.
   let compareStore = $state<CompareStore>({
@@ -209,6 +218,20 @@
 
   const canCompare = $derived(compare.canCompare(review.versions));
   const showDiff = $derived(canCompare && compareStore.comparing);
+
+  // Report the compared range to the host, ordered low-to-high whichever way the
+  // reviewer picked the pair, so App can point the docked comment panel at the
+  // cross-version index (EXC-872). Re-fires whenever the pair or the mode changes.
+  $effect(() => {
+    onCompareChange?.(
+      showDiff
+        ? {
+            from: Math.min(compareStore.targetVersion, compareStore.baseVersion),
+            to: Math.max(compareStore.targetVersion, compareStore.baseVersion),
+          }
+        : null,
+    );
+  });
 
   // Below --w-narrow, split's two side-by-side columns can't fit, so the compare
   // diff is forced to unified (EXC-811). This overrides the rendered layout only —
@@ -1323,17 +1346,19 @@
         {/if}
       </div>
     {/if}
-    <!-- The gutter composer is the single-version surface only. Compare mode is a
-         clean diff with no gutter and no annotations. -->
+    <!-- The gutter composer is the single-version surface only. The compare diff
+         is a clean surface with no gutter and no inline annotations; the compared
+         versions' comments read in the docked panel instead (EXC-872). -->
     <div class="diff-plan" bind:this={scrollEl} onmouseenter={showDragHint} role="presentation">
       {#if showDiff}
         <!-- Compare mode: a diff between the selected version pair. Base is the
              reference version (the default base is the current version) and renders
              on the diff's "after" side; target is what it's compared against and
              renders on the "before" side — so the default current-vs-previous pair
-             reads as the changes that produced the current version. Annotations and
-             the gutter are deliberately omitted. The layout switches at runtime via
-             the picker (no remount).
+             reads as the changes that produced the current version. Inline
+             annotations and the gutter are deliberately omitted from this surface —
+             the comments themselves list in the docked panel. The layout switches
+             at runtime via the picker (no remount).
 
              The side names are the version numbers, so the sticky compare header
              reads the pair as `v{target} → v{base}` (the rename arrow is the

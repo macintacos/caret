@@ -25,6 +25,7 @@ import {
   DEFAULT_NUM_VERSIONS,
   DEV_SESSION,
   type DriverState,
+  demoAnnotations,
   demoVersions,
   extraPlan,
   hookStdin,
@@ -129,9 +130,10 @@ export function assertDevEnv(): void {
 }
 
 /** Record a reviewer-style deny on the primary session's pending review, so the
- * next bootstrap submission threads onto it as a new version. Returns once the
- * deny is recorded; the concurrently-running runReview then observes the
- * decision and returns. */
+ * next bootstrap submission threads onto it as a new version. Seeds the version's
+ * fake comments first — annotations are version-scoped, so they have to land while
+ * this version is still the current one. Returns once the deny is recorded; the
+ * concurrently-running runReview then observes the decision and returns. */
 async function denyPendingReview(base: string, feedback: string): Promise<void> {
   // The bootstrap is the only writer this early, so the session has exactly one
   // pending review; poll briefly for runReview's POST to land before resolving.
@@ -142,6 +144,18 @@ async function denyPendingReview(base: string, feedback: string): Promise<void> 
         (r) => r.sessionId === DEV_SESSION && r.status === "pending",
       );
       if (pending) {
+        // Anchor against the STORED plan, not the one just submitted: every
+        // incoming plan is reflowed at ingest (formatPlanMarkdown), so the
+        // submitted text's line numbers do not index what the reviewer sees.
+        // The same public draft route the UI's autosave uses (handleDraft).
+        const draft = await fetch(`${base}/api/reviews/${pending.id}/draft`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            annotations: demoAnnotations(pending.currentPlan, pending.version),
+          }),
+        });
+        if (!draft.ok) throw new Error(`bootstrap draft failed: ${draft.status}`);
         const out = await fetch(`${base}/api/reviews/${pending.id}/resolve`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },

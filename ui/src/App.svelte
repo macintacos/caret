@@ -7,6 +7,8 @@
   // theme, safe mode, the keyboard-shortcut dispatcher, and the UI-gone presence
   // beacon. The behaviors themselves live in $lib/* and @/state/*; this file only
   // holds them together and lays out the TopBar + DiffPlanView.
+  import { untrack } from "svelte";
+
   import { getHealth, markSeen } from "$lib/api.ts";
   import { approveVariants } from "$lib/approve.ts";
   import { createPlanNotifier } from "$lib/notify.ts";
@@ -35,7 +37,9 @@
     commentIndex,
     coveredLineCount,
     pendingItems,
+    versionCommentIndex,
   } from "$lib/feedback.ts";
+  import { NARROW_WIDTH_PX } from "$lib/layout.ts";
   import {
     clearKnownPrefs,
     freshResetApplied,
@@ -241,10 +245,57 @@
   // Distinct source lines the pending line-anchored comments cover (union of
   // ranges), for the status strip's at-a-glance "N comments · M lines" readout.
   let coveredLines = $derived(coveredLineCount(work.annotations));
+  // The compared version range while the diff is on screen, null otherwise —
+  // DiffPlanView owns compare state and reports it upward (EXC-872), because the
+  // navigator is a root sibling of .shell rather than a child of the view.
+  let compareRange = $state<{ from: number; to: number } | null>(null);
   // The plan's inline comments + unsent drafts as a navigable, searchable index for
   // the comment navigator — committed line-anchored comments plus the retained
-  // composer scratches (flagged draft), in document order.
-  let comments = $derived(commentIndex(work.annotations, scratches));
+  // composer scratches (flagged draft), in document order. While comparing, the
+  // panel lists the comments left on every version in the compared range instead,
+  // each badged with its source version; drafts are single-version only.
+  let comments = $derived(
+    compareRange && active
+      ? versionCommentIndex(
+          // The current version's comments live in the working copy until the
+          // debounced save and the next poll land, so the served version carries
+          // a stale set; older versions are server-only and already settled.
+          active.versions.map((v) =>
+            v.version === active.version ? { ...v, annotations: work.annotations } : v,
+          ),
+          compareRange.from,
+          compareRange.to,
+        )
+      : commentIndex(work.annotations, scratches),
+  );
+
+  // Auto-open the panel on entering compare mode when the range has comments, and
+  // close it again on the way out (EXC-872). Keyed on the enter/leave TRANSITION,
+  // not on the range, so re-picking a version pair never reopens a panel that was
+  // dismissed; and `autoOpened` means leaving undoes only what this effect did, so
+  // a panel the reviewer opened or dismissed mid-compare is left as they left it.
+  // Below --w-narrow the diff is forced unified and space is scarce, so the panel
+  // stays a deliberate toggle there — same breakpoint and same matchMedia defense
+  // DiffPlanView uses for that forced layout.
+  let comparingBefore = false;
+  let autoOpened = false;
+  $effect(() => {
+    const comparing = compareRange !== null;
+    if (comparing === comparingBefore) return;
+    comparingBefore = comparing;
+    if (comparing) {
+      const narrow =
+        typeof matchMedia === "function" &&
+        matchMedia(`(max-width: ${NARROW_WIDTH_PX - 1}px)`).matches;
+      // untracked: the index changes on every poll tick, and the auto-open must
+      // key on the enter/leave transition alone.
+      autoOpened = !showComments && !narrow && untrack(() => comments).length > 0;
+      if (autoOpened) showComments = true;
+    } else if (autoOpened) {
+      autoOpened = false;
+      showComments = false;
+    }
+  });
 
   // Reveal a comment from the navigator: focus it (the source view highlights the
   // card in amber and expands it) and scroll the plan to its line.
@@ -570,6 +621,7 @@
       onDeleteAnnotation={autosave.deleteAnnotation}
       onFocusAnnotation={autosave.focusAnnotation}
       onExposeReveal={(r) => (revealLine = r)}
+      onCompareChange={(r) => (compareRange = r)}
       {onCopyCwd}
       {showShortcutHints}
       {settingsRev}
@@ -580,15 +632,19 @@
 
   <!-- The bottom status bar (EXC-787): the row-4 grid child consolidating the
        build/version badge (left), the plan-review status (right, when active),
-       and the keyboard ? affordance (far right). A grid child, so it reserves
+       and the keyboard ? affordance (far right). While comparing, its tally
+       counts what the panel it toggles actually lists, so the button and its
+       panel can't disagree, and 0 covered lines is how the "· M lines" readout
+       (which measures the current version) is suppressed; the approve guard
+       reads guardItems, not these, so no verdict logic moves. A grid child, so it reserves
        space at the bottom; the CommentNavigator docks just above it. -->
   <StatusBar
     {version}
     {commit}
     {isDev}
     active={active !== null}
-    {pendingCount}
-    {coveredLines}
+    pendingCount={compareRange ? comments.length : pendingCount}
+    coveredLines={compareRange ? 0 : coveredLines}
     reviewVersion={active?.version ?? 1}
     connected={selection.connected}
     commentsOpen={showComments}
@@ -609,6 +665,9 @@
   activeId={autosave.focusedAnnotation}
   onReveal={revealComment}
   onClose={() => (showComments = false)}
+  readonly={compareRange !== null}
+  focusOnOpen={compareRange === null}
+  title={compareRange ? `Comments in v${compareRange.from}–v${compareRange.to}` : "Comments"}
   {showShortcutHints}
 />
 

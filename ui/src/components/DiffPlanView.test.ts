@@ -222,6 +222,44 @@ describe("DiffPlanView version compare", () => {
     expect(header?.hasAttribute("data-sticky")).toBe(true);
   });
 
+  // EXC-872: compare state lives here, but the comment panel is a root sibling of
+  // .shell — so the compared range is reported upward for App to point the panel at.
+  test("reports the compared range on entering compare mode, ordered low to high", async () => {
+    const calls: Array<{ from: number; to: number } | null> = [];
+    const { target } = render(
+      DiffPlanView,
+      props({
+        review: multiVersionFixture(3),
+        onCompareChange: (r: { from: number; to: number } | null) => calls.push(r),
+      }),
+    );
+    await until(() => calls.length > 0);
+    expect(calls.at(-1)).toBeNull();
+
+    target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
+    await until(() => calls.at(-1) != null);
+    // Default pair is base=v3 (after), target=v2 (before) — reported v2–v3 either way.
+    expect(calls.at(-1)).toEqual({ from: 2, to: 3 });
+  });
+
+  test("reports null once compare mode is left", async () => {
+    const calls: Array<{ from: number; to: number } | null> = [];
+    const { target } = render(
+      DiffPlanView,
+      props({
+        review: multiVersionFixture(3),
+        onCompareChange: (r: { from: number; to: number } | null) => calls.push(r),
+      }),
+    );
+    const toggle = target.querySelector<HTMLButtonElement>(".compare-toggle")!;
+    toggle.click();
+    await until(() => calls.at(-1) != null);
+    const entered = calls.length;
+    toggle.click();
+    await until(() => calls.length > entered);
+    expect(calls.at(-1)).toBeNull();
+  });
+
   test("the persisted layout preference drives the initial diff style", async () => {
     localStorage.setItem("caret.diffStyle", "unified");
     const { target } = render(DiffPlanView, props({ review: multiVersionFixture(3) }));
