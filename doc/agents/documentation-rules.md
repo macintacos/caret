@@ -50,7 +50,7 @@ digraph caret_docs_router {
   contributor-facing depth lives in the four `doc/` reference pages below, which it links
   to. How to edit it: [`references/readme.md`](references/readme.md).
 - **`doc/CONFIGURING.md`** — the configuration reference behind `README.md`: platform
-  support, the `config.toml` file, the full `CARET_*` table, and plan formatting. How to
+  support, the `config.toml` file, the full `CARET_*` tables, and plan formatting. How to
   edit it: [`references/configuring.md`](references/configuring.md).
 - **`doc/RUNNING.md`** — caret in use: desktop notifications, cmux unread marks, and
   logging & debugging. How to edit it: [`references/running.md`](references/running.md).

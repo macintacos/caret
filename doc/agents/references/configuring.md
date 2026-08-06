@@ -4,8 +4,9 @@
 
 `doc/CONFIGURING.md` is the human-facing configuration reference behind
 [`README.md`](../../../README.md): platform support, the `config.toml` file and its
-tables, the full `CARET_*` environment-variable table, and plan formatting (rumdl). It is
-the one place a reader looks up a key, its default, and what it does.
+tables, the full `CARET_*` environment-variable tables (runtime, dev-only, and
+preflight-only), and plan formatting (rumdl). It is the one place a reader looks up a key,
+its default, and what it does.
 
 When to edit it:
 
