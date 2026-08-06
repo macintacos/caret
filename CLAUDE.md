@@ -40,7 +40,7 @@ digraph caret_rules_router {
     "What does the change touch?" -> "Load doc/agents/settings-rules.md" [label="adding a config.toml key or CARET_* env var"];
     "What does the change touch?" -> "Load doc/agents/icon-rules.md" [label="adding or working with vendored icons"];
     "What does the change touch?" -> "Load doc/agents/opencode-integration.md" [label="OpenCode adapter, plugin, or install (caret install --target opencode)"];
-    "What does the change touch?" -> "Load doc/agents/documentation-rules.md" [label="documentation: which doc to update — README, the doc/ reference pages (CONFIGURING, RUNNING, ARCHITECTURE, DEVELOPMENT), CONTRIBUTING, the doc/ index, or the doc map itself"];
+    "What does the change touch?" -> "Load doc/agents/documentation-rules.md" [label="documentation: which doc to update — README, the doc/ reference pages (CONFIGURING, RUNNING, ARCHITECTURE, DEVELOPMENT), CONTRIBUTING, the doc/ router, or the doc map itself"];
 }
 ```
 
