@@ -6,7 +6,7 @@
 // live in scripts/tasks/dev/driver.ts.
 
 import { PLAN_REJECTED_MESSAGE } from "@/config/constants.ts";
-import type { Decision } from "@/lib/types.ts";
+import type { Decision, LineAnnotation } from "@/lib/types.ts";
 
 /** Session id for the single dev review; stable for the process lifetime so a
  * revision threads into the same review instead of forking a new one, but
@@ -144,6 +144,38 @@ export function demoVersions(final: string, count: number): string[] {
     versions.unshift(older);
   }
   return versions;
+}
+
+/** One comment body per anchor, so the panel's grouping and search filter have
+ * distinct text to work with rather than three copies of one line. */
+const DEMO_COMMENT_BODIES = [
+  "this section needs a concrete failure mode.",
+  "spell out who owns the rollback if this lands badly.",
+  "tighten this down to one sentence.",
+];
+
+/** Fake line-anchored comments for one bootstrapped dev version, anchored at
+ * deterministic non-blank lines roughly ¼ / ½ / ¾ of the way through the plan.
+ * A short plan degrades to fewer comments rather than to out-of-range anchors.
+ * Ids are deterministic (`dev-v{version}-c{n}`) so a spec or a manual check can
+ * name one, and bodies name their version so the compare view's version badge
+ * is visibly exercised. Dev-only: this module ships in scripts/, never in a
+ * build. */
+export function demoAnnotations(plan: string, version: number): LineAnnotation[] {
+  const lines = plan.split("\n");
+  // 1-based line numbers of the anchorable (non-blank) lines.
+  const anchors = lines.flatMap((line, i) => (line.trim() ? [i + 1] : []));
+  // Deduped, so a plan too short to spread three anchors across yields fewer
+  // comments instead of stacking them all on its one line.
+  const picked = [
+    ...new Set([0.25, 0.5, 0.75].flatMap((f) => anchors[Math.floor(anchors.length * f)] ?? [])),
+  ];
+  return picked.map((line, i) => ({
+    id: `dev-v${version}-c${i + 1}`,
+    startLine: line,
+    endLine: line,
+    comment: `v${version}: ${DEMO_COMMENT_BODIES[i]}`,
+  }));
 }
 
 /** Driver-side submission state: the plan to (re)submit and how many revision

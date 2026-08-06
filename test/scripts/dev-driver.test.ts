@@ -21,6 +21,7 @@ import {
   DEFAULT_NUM_VERSIONS,
   DEMO_EDIT_GROUPS,
   DEV_SESSION,
+  demoAnnotations,
   demoVersions,
   extraPlan,
   hookStdin,
@@ -209,6 +210,54 @@ test("every DEMO_EDIT_GROUPS `from` span still exists in the fixture", () => {
   }
 });
 
+// ---- demoAnnotations ----
+
+test("demoAnnotations anchors inside the plan and never on a blank line", () => {
+  const lines = PLAN_V1.split("\n");
+  const anns = demoAnnotations(PLAN_V1, 2);
+  expect(anns).toHaveLength(3);
+  for (const a of anns) {
+    expect(a.startLine).toBeGreaterThanOrEqual(1);
+    expect(a.endLine).toBeGreaterThanOrEqual(a.startLine);
+    expect(a.endLine).toBeLessThanOrEqual(lines.length);
+    expect(lines[a.startLine - 1]?.trim()).not.toBe("");
+  }
+  // Spread through the document rather than bunched at the top.
+  expect(new Set(anns.map((a) => a.startLine)).size).toBe(3);
+});
+
+test("demoAnnotations yields deterministic ids and version-naming bodies", () => {
+  const anns = demoAnnotations(PLAN_V1, 2);
+  expect(anns.map((a) => a.id)).toEqual(["dev-v2-c1", "dev-v2-c2", "dev-v2-c3"]);
+  // Every body names its version (the panel's version badge) and differs from
+  // its siblings (the panel's search filter).
+  for (const a of anns) expect(a.comment).toStartWith("v2: ");
+  expect(new Set(anns.map((a) => a.comment)).size).toBe(3);
+  // Same input, same output — a spec or a manual check can name one by id.
+  expect(demoAnnotations(PLAN_V1, 2)).toEqual(anns);
+  expect(demoAnnotations(PLAN_V1, 3).map((a) => a.id)).toEqual([
+    "dev-v3-c1",
+    "dev-v3-c2",
+    "dev-v3-c3",
+  ]);
+});
+
+test("demoAnnotations degrades to fewer comments on a short plan, never out of range", () => {
+  const short = "# Tiny\n\nOne line.\n";
+  const lines = short.split("\n");
+  const anns = demoAnnotations(short, 1);
+  expect(anns.length).toBeGreaterThan(0);
+  expect(anns.length).toBeLessThan(3);
+  for (const a of anns) {
+    expect(a.endLine).toBeLessThanOrEqual(lines.length);
+    expect(lines[a.startLine - 1]?.trim()).not.toBe("");
+  }
+  // Ids stay dense — the dropped anchors leave no gap in the numbering.
+  expect(anns.map((a) => a.id)).toEqual(anns.map((_, i) => `dev-v1-c${i + 1}`));
+  // A plan with no non-blank line has nothing to anchor to.
+  expect(demoAnnotations("\n\n", 1)).toEqual([]);
+});
+
 // ---- parsePositiveInt (shared by the driver flag and the CLI option) ----
 
 test("parsePositiveInt accepts positive integers and names the flag on error", () => {
@@ -364,6 +413,13 @@ test("bootstrapReview grows the primary review to several varied versions before
   expect(plans.at(-1)).toContain("92%");
   expect(plans.at(-1)).not.toContain("88%");
   expect(plans.at(-2)).toContain("88%");
+  // Every version carries its own fake comments, drafted before the deny that
+  // ends it — annotations are version-scoped, so this is what gives the compare
+  // view something to show on both sides of a pair.
+  for (const v of review!.versions) {
+    expect(v.annotations).toHaveLength(3);
+    expect(v.annotations[0]?.comment).toStartWith(`v${v.version}: `);
+  }
   // The review is left rejected; the interactive loop re-pends it by appending
   // its own next revision from the returned state. The returned plan carries that
   // next revision so the loop's first post is a fresh version, not a duplicate.
