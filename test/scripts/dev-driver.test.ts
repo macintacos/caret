@@ -19,6 +19,7 @@ import {
 import {
   appendRevision,
   DEFAULT_NUM_VERSIONS,
+  DEMO_COMMENTS,
   DEMO_EDIT_GROUPS,
   DEV_SESSION,
   demoAnnotations,
@@ -226,6 +227,29 @@ test("demoAnnotations anchors inside the plan and never on a blank line", () => 
   expect(new Set(anns.map((a) => a.startLine)).size).toBe(3);
 });
 
+test("demoAnnotations anchors each comment on the line its text is about", () => {
+  // The point of the fixture: a reviewer reading "give this coverage number a
+  // denominator" must find it on the coverage row, not on whatever prose happens
+  // to sit a fixed fraction of the way down the file.
+  const lines = PLAN_V1.split("\n");
+  const anns = demoAnnotations(PLAN_V1, 2);
+  expect(anns).toHaveLength(DEMO_COMMENTS.length);
+  anns.forEach((a, i) => {
+    expect(lines[a.startLine - 1]).toContain(DEMO_COMMENTS[i]?.anchor as string);
+    expect(a.comment).toContain(DEMO_COMMENTS[i]?.body as string);
+    expect(a.endLine).toBe(a.startLine);
+  });
+});
+
+// Fixture-drift guard, the anchor twin of the DEMO_EDIT_GROUPS one: an anchor
+// that no longer matches drops its comment silently, and one that matches twice
+// pins it to whichever copy comes first. Both fail loudly here instead.
+test("every DEMO_COMMENTS anchor still matches the fixture exactly once", () => {
+  for (const { anchor } of DEMO_COMMENTS) {
+    expect(PLAN_V1.split(anchor)).toHaveLength(2);
+  }
+});
+
 test("demoAnnotations yields deterministic ids and version-naming bodies", () => {
   const anns = demoAnnotations(PLAN_V1, 2);
   expect(anns.map((a) => a.id)).toEqual(["dev-v2-c1", "dev-v2-c2", "dev-v2-c3"]);
@@ -242,19 +266,15 @@ test("demoAnnotations yields deterministic ids and version-naming bodies", () =>
   ]);
 });
 
-test("demoAnnotations degrades to fewer comments on a short plan, never out of range", () => {
-  const short = "# Tiny\n\nOne line.\n";
-  const lines = short.split("\n");
-  const anns = demoAnnotations(short, 1);
-  expect(anns.length).toBeGreaterThan(0);
-  expect(anns.length).toBeLessThan(3);
-  for (const a of anns) {
-    expect(a.endLine).toBeLessThanOrEqual(lines.length);
-    expect(lines[a.startLine - 1]?.trim()).not.toBe("");
-  }
-  // Ids stay dense — the dropped anchors leave no gap in the numbering.
-  expect(anns.map((a) => a.id)).toEqual(anns.map((_, i) => `dev-v1-c${i + 1}`));
-  // A plan with no non-blank line has nothing to anchor to.
+test("demoAnnotations drops the anchors a plan does not carry, keeping ids dense", () => {
+  // Only the second anchor is present, so one comment lands — numbered c1, not
+  // c2: a dropped anchor leaves no gap for a spec or a manual check to trip over.
+  const partial = `# Tiny\n\n${DEMO_COMMENTS[1]?.anchor} shipped | 92% |\n`;
+  const anns = demoAnnotations(partial, 1);
+  expect(anns.map((a) => a.id)).toEqual(["dev-v1-c1"]);
+  expect(anns[0]?.comment).toContain(DEMO_COMMENTS[1]?.body as string);
+  // A plan carrying none of them — any plan that isn't the fixture — gets none.
+  expect(demoAnnotations("# Tiny\n\nOne line.\n", 1)).toEqual([]);
   expect(demoAnnotations("\n\n", 1)).toEqual([]);
 });
 
@@ -489,6 +509,14 @@ test("bootstrapReview grows the primary review to several varied versions before
       expect(line.endLine).toBeLessThanOrEqual(lines.length);
       expect(lines[line.startLine - 1]?.trim()).not.toBe("");
     }
+    // …and on the line each comment is about. This is the end-to-end guard the
+    // unit anchor test can't be: the reflow rewraps prose and the demo edits
+    // change word lengths, so only the real submit → reflow → store path proves
+    // every anchor still resolves, in every version, to the line the reviewer sees.
+    v.annotations.forEach((a, i) => {
+      const line = (a as { startLine: number }).startLine;
+      expect(lines[line - 1]).toContain(DEMO_COMMENTS[i]?.anchor as string);
+    });
   }
   // The review is left rejected; the interactive loop re-pends it by appending
   // its own next revision from the returned state. The returned plan carries that

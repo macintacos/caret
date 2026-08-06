@@ -32,14 +32,10 @@
     /** Whether the shortcut-hint key caps are shown (EXC-826/EXC-792). When off,
      * the footer key legend hides; the keys themselves still work. */
     showShortcutHints: boolean;
-    /** Read-only mode (compare): rows render as non-interactive list items rather
-     * than reveal buttons — a compare-mode comment has no unambiguous scroll
-     * target, so there is nothing to click through to (EXC-872 v1 non-goal). */
-    readonly?: boolean;
-    /** Whether opening moves focus into the list. False when the panel opens
-     * without a user gesture (compare mode's auto-open), so it never steals focus
-     * from the diff or yanks a screen reader. */
-    focusOnOpen?: boolean;
+    /** Whether this is the cross-version compare list. Only the empty-state copy
+     * reads it — whether a given row reveals is the row's own `linkable`, since a
+     * compare list mixes rendered and off-screen versions. */
+    compare?: boolean;
     /** Header title, e.g. "Comments in v1–v4" while comparing. Doubles as the
      * panel's aria-label, so it is the landmark's accessible name too. */
     title?: string;
@@ -51,8 +47,7 @@
     onReveal,
     onClose,
     showShortcutHints,
-    readonly = false,
-    focusOnOpen = true,
+    compare = false,
     title = "Comments",
   }: Props = $props();
 
@@ -84,14 +79,13 @@
       return;
     }
     hadFocus = true;
-    if (!focusOnOpen) return;
     const revealed = (asideEl?.querySelector(".nav-item.active") ?? null) as HTMLElement | null;
     (revealed ?? rows()[0] ?? searchEl)?.focus({ preventScroll: true });
   });
 
-  // The rows in filtered order — the roving-focus targets for j/k. Buttons in the
-  // single-version view, list items in read-only compare mode; both carry
-  // .nav-item, so the keyboard model is the same either way.
+  // The rows in filtered order — the roving-focus targets for j/k. A row that can
+  // reveal is a button; one that cannot is a list item. Both carry .nav-item, so
+  // the keyboard model is the same either way.
   function rows(): HTMLElement[] {
     return asideEl ? ([...asideEl.querySelectorAll(".nav-item")] as HTMLElement[]) : [];
   }
@@ -173,8 +167,17 @@
 
     {#snippet rowBody(entry: CommentIndexEntry)}
       <span class="nav-item-head">
-        <span class="nav-item-ref metric">{entry.label}</span>
+        <!-- A general entry has no range to name, so "General" takes the reference
+             slot — the same quiet voice as "Line 3", matching the vocabulary the
+             unsent-comments guard already uses for the same feedback. -->
+        <span class="nav-item-ref metric">{entry.general ? "General" : entry.label}</span>
         {#if entry.version != null}<span class="nav-version-tag metric">v{entry.version}</span>{/if}
+        <!-- Keyed on the version being absent from the diff, not on the row
+             being inert: a general row is inert too, but its version may well be
+             on screen — it just has no line to jump to, which "General" says. -->
+        {#if entry.version != null && entry.side == null && !entry.general}<span
+            class="nav-unlinked-tag">not in diff</span
+          >{/if}
         {#if entry.draft}<span class="nav-draft-tag metric">draft</span>{/if}
       </span>
       <!-- Underline the run(s) matching the live search query. Kept on one
@@ -191,7 +194,7 @@
       <p class="nav-empty">
         {#if comments.length > 0}
           No comments match your search.
-        {:else if readonly}
+        {:else if compare}
           No comments on these versions.
         {:else}
           No inline comments yet.
@@ -200,12 +203,14 @@
     {:else}
       <ul class="nav-list" aria-label="Comment list">
         {#each visible as entry (entry.id)}
-          {#if readonly}
-            <!-- Read-only compare row: a focusable list item, not a button, so j/k
-                 still walk the list but nothing advertises a click that goes nowhere.
-                 tabindex="-1" keeps a non-interactive row out of the tab order (a
-                 nonnegative one is the a11y_no_noninteractive_tabindex anti-pattern);
-                 the list is reached with j/k, or with Enter from the search field. -->
+          {#if !entry.linkable}
+            <!-- Nothing on screen to scroll to (a general comment, or one left on a
+                 version in the compared range but rendered on neither side): a
+                 focusable list item, not a button, so j/k still walk the list but
+                 nothing advertises a click that goes nowhere. tabindex="-1" keeps a
+                 non-interactive row out of the tab order (a nonnegative one is the
+                 a11y_no_noninteractive_tabindex anti-pattern); the list is reached
+                 with j/k, or with Enter from the search field. -->
             <li class="nav-item" tabindex="-1">{@render rowBody(entry)}</li>
           {:else}
             <li>
@@ -232,9 +237,7 @@
            taught there rather than repeated inside the open view. -->
       <footer class="nav-hints" aria-hidden="true">
         <span class="nav-hint"><Kbd class="kbd-sm">j</Kbd><Kbd class="kbd-sm">k</Kbd> move</span>
-        {#if !readonly}
-          <span class="nav-hint"><Kbd class="kbd-sm">↵</Kbd> reveal</span>
-        {/if}
+        <span class="nav-hint"><Kbd class="kbd-sm">↵</Kbd> reveal</span>
         <span class="nav-hint"><Kbd class="kbd-sm">/</Kbd> search</span>
         <span class="nav-hint"><Kbd class="kbd-sm">Esc</Kbd> close</span>
       </footer>
@@ -380,7 +383,7 @@
   .nav-item:hover {
     background: var(--paper-sunk);
   }
-  /* A read-only compare row is a list item, not a button: no pointer, no hover
+  /* A row with nothing to reveal is a list item, not a button: no pointer, no hover
      lift, so nothing promises a click that leads nowhere. It keeps the focus ring,
      which j/k still moves. */
   li.nav-item {
@@ -424,6 +427,19 @@
     font-size: var(--text-2xs);
     font-weight: 600;
     letter-spacing: 0.08em;
+    color: var(--ink-faint);
+    padding: 0 0.3rem;
+    border: 1px solid var(--rule-strong);
+    border-radius: var(--radius);
+  }
+  /* The unlinked tag: this comment's version is in the compared range but is
+     rendered on neither side, so the row has nowhere to jump to. Shares the
+     version tag's solid neutral pill — the two read as one statement of
+     provenance ("v2, not in diff") — and only drops the tracking, which sets off
+     a token like "v2" but strings out a phrase. */
+  .nav-unlinked-tag {
+    font-size: var(--text-2xs);
+    font-weight: 600;
     color: var(--ink-faint);
     padding: 0 0.3rem;
     border: 1px solid var(--rule-strong);

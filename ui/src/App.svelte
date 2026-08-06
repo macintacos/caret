@@ -7,8 +7,6 @@
   // theme, safe mode, the keyboard-shortcut dispatcher, and the UI-gone presence
   // beacon. The behaviors themselves live in $lib/* and @/state/*; this file only
   // holds them together and lays out the TopBar + DiffPlanView.
-  import { untrack } from "svelte";
-
   import { getHealth, markSeen } from "$lib/api.ts";
   import { approveVariants } from "$lib/approve.ts";
   import { createPlanNotifier } from "$lib/notify.ts";
@@ -39,7 +37,6 @@
     pendingItems,
     versionCommentIndex,
   } from "$lib/feedback.ts";
-  import { NARROW_WIDTH_PX } from "$lib/layout.ts";
   import {
     clearKnownPrefs,
     freshResetApplied,
@@ -49,6 +46,7 @@
   import { readShortcutHints } from "$lib/shortcutHintsPref.ts";
   import { SETTINGS_REGISTRY, type StagedField } from "$lib/settingsRegistry.ts";
   import { type ComposerScratch, createSourceCommenting } from "$lib/diffview/commenting.ts";
+  import type { DiffSide } from "$lib/diffview/types.ts";
   import type { ApproveVariant, ApproveVariantId, Annotation, PersistedScratch } from "@core/lib/types";
 
   import * as Alert from "$lib/components/ui/alert/index.js";
@@ -115,7 +113,7 @@
   // tally). The reveal action DiffPlanView hands up on mount, used to scroll the
   // plan to a navigated comment's line; undefined until the source view paints.
   let showComments = $state(false);
-  let revealLine = $state<((line: number) => void) | undefined>();
+  let revealLine = $state<((line: number, side?: DiffSide) => void) | undefined>();
   // The approve variant a pending-comment guard is holding: the mode the reviewer
   // chose, parked until they confirm or divert. Null = no guard open.
   let pendingApproveMode = $state<ApproveVariantId | null>(null);
@@ -245,10 +243,12 @@
   // Distinct source lines the pending line-anchored comments cover (union of
   // ranges), for the status strip's at-a-glance "N comments · M lines" readout.
   let coveredLines = $derived(coveredLineCount(work.annotations));
-  // The compared version range while the diff is on screen, null otherwise —
-  // DiffPlanView owns compare state and reports it upward (EXC-872), because the
-  // navigator is a root sibling of .shell rather than a child of the view.
-  let compareRange = $state<{ from: number; to: number } | null>(null);
+  // The two versions being diffed while compare mode is on screen, null otherwise
+  // — DiffPlanView owns compare state and reports it upward (EXC-872), because the
+  // navigator is a root sibling of .shell rather than a child of the view. Ordered
+  // as the diff renders them (before = the old document), not sorted, so the panel
+  // can tell which side a comment jumps to.
+  let compareRange = $state<{ before: number; after: number } | null>(null);
   // The plan's inline comments + unsent drafts as a navigable, searchable index for
   // the comment navigator — committed line-anchored comments plus the retained
   // composer scratches (flagged draft), in document order. While comparing, the
@@ -263,45 +263,30 @@
           active.versions.map((v) =>
             v.version === active.version ? { ...v, annotations: work.annotations } : v,
           ),
-          compareRange.from,
-          compareRange.to,
+          compareRange.before,
+          compareRange.after,
         )
       : commentIndex(work.annotations, scratches),
   );
 
-  // Auto-open the panel on entering compare mode when the range has comments, and
-  // close it again on the way out (EXC-872). Keyed on the enter/leave TRANSITION,
-  // not on the range, so re-picking a version pair never reopens a panel that was
-  // dismissed; and `autoOpened` means leaving undoes only what this effect did, so
-  // a panel the reviewer opened or dismissed mid-compare is left as they left it.
-  // Below --w-narrow the diff is forced unified and space is scarce, so the panel
-  // stays a deliberate toggle there — same breakpoint and same matchMedia defense
-  // DiffPlanView uses for that forced layout.
-  let comparingBefore = false;
-  let autoOpened = false;
-  $effect(() => {
-    const comparing = compareRange !== null;
-    if (comparing === comparingBefore) return;
-    comparingBefore = comparing;
-    if (comparing) {
-      const narrow =
-        typeof matchMedia === "function" &&
-        matchMedia(`(max-width: ${NARROW_WIDTH_PX - 1}px)`).matches;
-      // untracked: the index changes on every poll tick, and the auto-open must
-      // key on the enter/leave transition alone.
-      autoOpened = !showComments && !narrow && untrack(() => comments).length > 0;
-      if (autoOpened) showComments = true;
-    } else if (autoOpened) {
-      autoOpened = false;
-      showComments = false;
-    }
-  });
+  // The panel's heading. While comparing it names the compared span low-to-high,
+  // whichever way round the reviewer picked the pair.
+  let commentsTitle = $derived(
+    compareRange
+      ? `Comments in v${Math.min(compareRange.before, compareRange.after)}–v${Math.max(compareRange.before, compareRange.after)}`
+      : "Comments",
+  );
 
   // Reveal a comment from the navigator: focus it (the source view highlights the
-  // card in amber and expands it) and scroll the plan to its line.
+  // card in amber and expands it) and scroll the view to its line. A row the index
+  // marked unlinkable has nothing on screen to scroll to, so it does neither.
+  // Focusing is single-version only: a compare entry's id carries a `v3:` prefix
+  // that matches no card, so focusing it would strand a bogus id in the working
+  // copy for the reviewer to find after leaving compare mode.
   function revealComment(entry: CommentIndexEntry) {
-    autosave.focusAnnotation(entry.id);
-    revealLine?.(entry.line);
+    if (!entry.linkable || entry.line == null) return;
+    if (compareRange === null) autosave.focusAnnotation(entry.id);
+    revealLine?.(entry.line, entry.side);
   }
 
   // ----- Working-copy reload -----
@@ -665,9 +650,8 @@
   activeId={autosave.focusedAnnotation}
   onReveal={revealComment}
   onClose={() => (showComments = false)}
-  readonly={compareRange !== null}
-  focusOnOpen={compareRange === null}
-  title={compareRange ? `Comments in v${compareRange.from}–v${compareRange.to}` : "Comments"}
+  compare={compareRange !== null}
+  title={commentsTitle}
   {showShortcutHints}
 />
 

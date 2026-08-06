@@ -18,8 +18,10 @@
   // reviewer diff any two of them (base vs. target) through the SourceDiffView
   // wrapper, switching the split/unified layout at runtime. The breadcrumbs bar,
   // gutter, and inline annotation cards belong to the single-version view only —
-  // compare mode is a clean read-only diff surface with none of them; the compared
-  // versions' comments still surface read-only in the docked panel.
+  // compare mode is a clean diff surface with none of them; the compared versions'
+  // comments surface in the docked panel instead, revealing their line on the side
+  // they belong to for the two rendered versions and listing non-interactively for
+  // anything in between.
   import { untrack } from "svelte";
   import SourceView from "$lib/diffview/SourceView.svelte";
   import SourceDiffView from "$lib/diffview/SourceDiffView.svelte";
@@ -56,7 +58,12 @@
   import VersionComparePicker from "@/components/VersionComparePicker.svelte";
   import PlanSearch from "@/components/PlanSearch.svelte";
   import type { SourceViewGutter } from "$lib/diffview/options.ts";
-  import type { SourceViewApi, SourceViewOptions } from "$lib/diffview/types.ts";
+  import type {
+    DiffSide,
+    SourceDiffViewApi,
+    SourceViewApi,
+    SourceViewOptions,
+  } from "$lib/diffview/types.ts";
   import type { ThemeId } from "$lib/theme.ts";
   import { bind, defaultIsEditingContext, shortcuts } from "$lib/shortcuts/index.ts";
   import type { CursorMotion } from "$lib/diffview/lineCursor.ts";
@@ -115,15 +122,19 @@
     /** App's mirror of `commenting.scratches()` — the retained drafts, one Resume marker
      * per range. */
     scratches?: ComposerScratch[];
-    /** Hand the host a reveal(line) action once the source view mounts, so a sibling
-     * (the comment navigator) can scroll the plan to a commented line. A call before
-     * the view paints is a bounded-retry no-op. */
-    onExposeReveal?: (reveal: (line: number) => void) => void;
-    /** Report the compared version range upward (null when not comparing), so App
-     * can point the single CommentNavigator instance at the cross-version index.
-     * Compare state lives here (compareStore), but the panel is a root sibling of
-     * .shell — same expose-upward idiom as onExposeReveal. */
-    onCompareChange?: (range: { from: number; to: number } | null) => void;
+    /** Hand the host a reveal(line, side) action once the source view mounts, so a
+     * sibling (the comment navigator) can scroll to a commented line. The side is
+     * read only while comparing, where a line number alone names a row on either
+     * document; the single-version view ignores it. A call before the view paints
+     * is a bounded-retry no-op. */
+    onExposeReveal?: (reveal: (line: number, side?: DiffSide) => void) => void;
+    /** Report the compared versions upward (null when not comparing), so App can
+     * point the single CommentNavigator instance at the cross-version index.
+     * `before`/`after` name the two documents the diff renders — not a sorted
+     * range — so the panel can tell which side a comment's version is on. Compare
+     * state lives here (compareStore), but the panel is a root sibling of .shell —
+     * same expose-upward idiom as onExposeReveal. */
+    onCompareChange?: (versions: { before: number; after: number } | null) => void;
     /** The active caret theme, forwarded to the shadow-DOM diff view so its shiki
      * highlighting is painted in the selected palette (EXC-730, EXC-752). Omitted
      * leaves the library on caret's pair following the system preference. */
@@ -219,16 +230,15 @@
   const canCompare = $derived(compare.canCompare(review.versions));
   const showDiff = $derived(canCompare && compareStore.comparing);
 
-  // Report the compared range to the host, ordered low-to-high whichever way the
-  // reviewer picked the pair, so App can point the docked comment panel at the
-  // cross-version index (EXC-872). Re-fires whenever the pair or the mode changes.
+  // Report the compared versions to the host, so App can point the docked comment
+  // panel at the cross-version index (EXC-872). The assignment matches what the
+  // SourceDiffView below renders — oldDoc is the target, newDoc the base — rather
+  // than being sorted, so the panel knows which side each version's comments jump
+  // to. Re-fires whenever the pair or the mode changes.
   $effect(() => {
     onCompareChange?.(
       showDiff
-        ? {
-            from: Math.min(compareStore.targetVersion, compareStore.baseVersion),
-            to: Math.max(compareStore.targetVersion, compareStore.baseVersion),
-          }
+        ? { before: compareStore.targetVersion, after: compareStore.baseVersion }
         : null,
     );
   });
@@ -623,6 +633,10 @@
   // the host element whose annotation slots we project comments into.
   let api = $state<SourceViewApi | undefined>();
   const host = $derived(api?.host);
+  // The compare view's counterpart, captured the same way. Undefined until the
+  // diff mounts, and it keeps the last instance after compare mode closes — the
+  // reveal below only reaches for it while showDiff, so a stale one is inert.
+  let diffApi = $state<SourceDiffViewApi | undefined>();
 
   // The code block the reviewer is hovering, with its top-right anchor in .diff-plan
   // content coordinates — drives the copy button (EXC-692). Undefined when the pointer
@@ -775,9 +789,21 @@
     retryFrames(() => a.scrollToLine(line));
   }
 
-  // Reveal a commented line for the host (the comment navigator): scroll the plan to
-  // it. Reads the live `api`, so a call before the view mounts is a no-op.
-  function revealLine(line: number): void {
+  // Reveal a commented line for the host (the comment navigator): scroll whichever
+  // view is on screen to it. While comparing, the side picks which of the diff's
+  // two documents the line names; otherwise it is ignored and the single-version
+  // view scrolls. Both read their live api, so a call before the view mounts is a
+  // no-op, and both spend the same paint budget waiting for the row.
+  function revealLine(line: number, side?: DiffSide): void {
+    if (showDiff) {
+      const d = diffApi;
+      if (d == null) return;
+      // Every linkable compare entry carries a side, so the fallback is only
+      // reached by a caller that omitted one; "after" is the base version — the
+      // side a reviewer reads as "the plan as it stands".
+      retryFrames(() => d.scrollToLine(line, side ?? "after"));
+      return;
+    }
     retryScrollTo(line);
   }
 
@@ -1373,6 +1399,7 @@
             diffStyle: effectiveDiffStyle,
             diffIndicators: compareStore.diffIndicators,
           }}
+          onReady={(a) => (diffApi = a)}
         />
       {:else}
         <!-- Live range readout: a zero-height sticky rail rendered first so it pins to

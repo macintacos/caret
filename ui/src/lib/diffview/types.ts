@@ -47,6 +47,23 @@ export interface SourceViewApi {
   host: HTMLElement;
 }
 
+/** Which of a diff's two documents a line belongs to: the before (old) side or
+ * the after (new) side. */
+export type DiffSide = "before" | "after";
+
+/** Imperative handle a SourceDiffView hands its parent once mounted — the
+ * diff-view counterpart to SourceViewApi. Separate because every line address in
+ * a diff needs a side: the same number names a different row on each. Narrower
+ * than SourceViewApi deliberately: the compare surface carries no annotation
+ * slots and no line cursor, so it exposes no host and no cursor follow. */
+export interface SourceDiffViewApi {
+  /** Scrolls the view so the 1-based line on `side` is at the top of the viewport.
+   * Returns whether a matching row was found — false (a no-op) when the line is
+   * outside the rendered range, sits inside a collapsed band, or the view has not
+   * painted yet. */
+  scrollToLine(line: number, side: DiffSide): boolean;
+}
+
 /** Display options caret exposes for the single-document view. */
 export interface SourceViewOptions {
   /** Line overflow behavior (library default: scroll). */

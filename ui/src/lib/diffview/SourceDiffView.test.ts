@@ -2,10 +2,14 @@ import "@ui/test-mount.ts";
 import { describe, expect, test } from "bun:test";
 
 import { until } from "@test/support/poll.ts";
-import { render } from "@ui/test-mount.ts";
+import { capture, render } from "@ui/test-mount.ts";
 import { reactiveProps } from "@ui/test-props.svelte.ts";
 import SourceDiffView from "$lib/diffview/SourceDiffView.svelte";
-import type { SourceDiffViewOptions, SourceDocument } from "$lib/diffview/types.ts";
+import type {
+  SourceDiffViewApi,
+  SourceDiffViewOptions,
+  SourceDocument,
+} from "$lib/diffview/types.ts";
 
 // Real-library diff rendering under happy-dom; see SourceView.test.ts for the
 // shadow-root + async-paint conventions these assertions follow.
@@ -25,6 +29,24 @@ describe("SourceDiffView rendering", () => {
       return text.includes("line two") && text.includes("line three");
     });
     expect(painted).toBe(true);
+  });
+});
+
+describe("SourceDiffView onReady", () => {
+  test("hands the parent an api that resolves a line on either side of the diff", async () => {
+    const ready = capture<SourceDiffViewApi>();
+    const { target } = render(SourceDiffView, {
+      oldDoc,
+      newDoc,
+      contentKey: "r1:v1:v2",
+      onReady: ready.cb,
+    });
+    await until(() => shadow(target)?.textContent?.includes("line three") ?? false);
+
+    // Line 2 changed: "line two" on the before side, "line three" on the after.
+    expect(ready.last()?.scrollToLine(2, "after")).toBe(true);
+    expect(ready.last()?.scrollToLine(2, "before")).toBe(true);
+    expect(ready.last()?.scrollToLine(99, "after")).toBe(false);
   });
 });
 

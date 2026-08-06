@@ -125,6 +125,10 @@ export interface PlanVersion {
    * typed but did not submit against this version's text. Optional because
    * pre-existing on-disk versions predate the field. */
   composerScratches?: PersistedScratch[];
+  /** The submitted general comment — the unanchored feedback the reviewer sent
+   * with the deny that closed this version. Optional because pre-existing
+   * on-disk versions predate the field. */
+  generalComment?: string;
   createdAt: number;
 }
 

@@ -12,6 +12,7 @@
 // page when the app overflows the viewport, landing the heading in the wrong
 // place. Scrolling the resolved container to an explicit top is exact and lands
 // the same regardless of the current scroll position or window size.
+import type { DiffSide } from "$lib/diffview/types.ts";
 
 /** Breathing room (px) above a jumped-to row so the heading isn't flush against
  * the very top edge of the scroll container. */
@@ -43,15 +44,10 @@ function prefersReducedMotion(): boolean {
   return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-/**
- * Scrolls the source view so the row for 1-based `line` rests near the top of the
- * scroll container, animating unless the user prefers reduced motion. Returns
- * whether a matching row was found (false when the line is outside the rendered
- * range or the view has not painted yet).
- */
-export function scrollToLine(container: HTMLElement, line: number): boolean {
-  const row = container.shadowRoot?.querySelector<HTMLElement>(`[data-line="${line}"]`);
-  if (row == null) return false;
+/** Scrolls `container`'s nearest scroll parent so `row` rests near the top,
+ * animating unless the user prefers reduced motion. The geometry the
+ * single-document and diff reveals share, once each has resolved its own row. */
+function scrollRowIntoView(container: HTMLElement, row: HTMLElement): void {
   const behavior: ScrollBehavior = prefersReducedMotion() ? "auto" : "smooth";
 
   const scroller = nearestScrollParent(container);
@@ -59,7 +55,7 @@ export function scrollToLine(container: HTMLElement, line: number): boolean {
   // library row's own scrollIntoView so the jump still works.
   if (scroller == null) {
     row.scrollIntoView({ block: "start", behavior });
-    return true;
+    return;
   }
 
   // scrollTop that puts the row's top SCROLL_OFFSET_TOP below the container's top
@@ -69,6 +65,55 @@ export function scrollToLine(container: HTMLElement, line: number): boolean {
   const hostRect = scroller.getBoundingClientRect();
   const top = Math.max(0, scroller.scrollTop + (rowRect.top - hostRect.top) - SCROLL_OFFSET_TOP);
   scroller.scrollTo({ top, behavior });
+}
+
+/**
+ * Scrolls the source view so the row for 1-based `line` rests near the top of the
+ * scroll container, animating unless the user prefers reduced motion. Returns
+ * whether a matching row was found (false when the line is outside the rendered
+ * range or the view has not painted yet).
+ */
+export function scrollToLine(container: HTMLElement, line: number): boolean {
+  const row = container.shadowRoot?.querySelector<HTMLElement>(`[data-line="${line}"]`);
+  if (row == null) return false;
+  scrollRowIntoView(container, row);
+  return true;
+}
+
+/**
+ * Scrolls the diff view so the row for 1-based `line` on `side` rests near the top
+ * of the scroll container. The diff counterpart to scrollToLine: a line number
+ * alone is ambiguous across two documents, so the side picks which row it names.
+ * Returns whether a matching row was found.
+ */
+export function scrollToDiffLine(container: HTMLElement, line: number, side: DiffSide): boolean {
+  // The library wraps each rendered column in a <code> marked data-unified (one
+  // column) or data-deletions/data-additions (two), and stamps each row with
+  // data-line (its own side's number), data-alt-line (the other side's, absent on
+  // a change row) and data-line-type. Split gives each side its own column, so a
+  // scoped query suffices. Unified has one column that carries the *addition*
+  // content wherever both sides exist — so a context row holds the after number in
+  // data-line and the before number in data-alt-line, while a change renders as two
+  // rows. $="deletion" matches change-deletion without pinning the exact token.
+  // The columns are mutually exclusive, so trying every selector is correct in
+  // either layout and no diffStyle has to be threaded down here.
+  const selectors =
+    side === "after"
+      ? [
+          `[data-additions] [data-line="${line}"]`,
+          `[data-unified] [data-line="${line}"]:not([data-line-type$="deletion"])`,
+        ]
+      : [
+          `[data-deletions] [data-line="${line}"]`,
+          `[data-unified] [data-line="${line}"][data-line-type$="deletion"]`,
+          `[data-unified] [data-alt-line="${line}"]:not([data-line-type$="deletion"])`,
+        ];
+  const row = container.shadowRoot?.querySelector<HTMLElement>(selectors.join(","));
+  // ponytail: a line inside a collapsed unchanged band has no row, so this is a
+  // no-op — the same semantics scrollToLine has for an unpainted line. Auto-expand
+  // the containing band (the library's expandedHunks) if the miss matters.
+  if (row == null) return false;
+  scrollRowIntoView(container, row);
   return true;
 }
 

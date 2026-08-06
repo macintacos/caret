@@ -11,8 +11,15 @@ import type { CommentIndexEntry } from "$lib/feedback.ts";
 // real keystrokes in comment-navigator.e2e.ts rather than here.
 
 const comments: CommentIndexEntry[] = [
-  { id: "a", line: 3, label: "Line 3", text: "Cache the cold path", draft: false },
-  { id: "b", line: 6, label: "Lines 5–6", text: "Tighten verification", draft: false },
+  { id: "a", line: 3, label: "Line 3", text: "Cache the cold path", draft: false, linkable: true },
+  {
+    id: "b",
+    line: 6,
+    label: "Lines 5–6",
+    text: "Tighten verification",
+    draft: false,
+    linkable: true,
+  },
 ];
 
 const base = {
@@ -79,8 +86,15 @@ describe("CommentNavigator", () => {
 
   test("marks a draft (unsent scratch) row distinctly but keeps it clickable", () => {
     const withDraft: CommentIndexEntry[] = [
-      { id: "a", line: 3, label: "Line 3", text: "committed", draft: false },
-      { id: "s:1", line: 9, label: "Line 9", text: "half-typed draft", draft: true },
+      { id: "a", line: 3, label: "Line 3", text: "committed", draft: false, linkable: true },
+      {
+        id: "s:1",
+        line: 9,
+        label: "Line 9",
+        text: "half-typed draft",
+        draft: true,
+        linkable: true,
+      },
     ];
     let revealed: CommentIndexEntry | undefined;
     const { target } = render(CommentNavigator, {
@@ -99,40 +113,100 @@ describe("CommentNavigator", () => {
   });
 });
 
-// The read-only versioned mode the compare view drives (EXC-872): the same panel
-// listing comments from several plan versions, each badged with its source, with
-// nothing to click through to.
+// The versioned mode the compare view drives (EXC-872, EXC-1041): the same panel
+// listing comments from several plan versions, each badged with its source. A
+// comment left on one of the two rendered versions reveals; one from a version
+// in the range but off screen lists non-interactively.
 describe("CommentNavigator in compare mode", () => {
   const versioned: CommentIndexEntry[] = [
-    { id: "v1:a", version: 1, line: 3, label: "Line 3", text: "v1 note", draft: false },
-    { id: "v2:b", version: 2, line: 6, label: "Lines 5–6", text: "v2 note", draft: false },
+    // v1 and v3 are the compared pair; v2 is in the range but rendered nowhere.
+    {
+      id: "v1:a",
+      version: 1,
+      line: 3,
+      label: "Line 3",
+      text: "v1 note",
+      draft: false,
+      linkable: true,
+      side: "before",
+    },
+    {
+      id: "v2:b",
+      version: 2,
+      line: 6,
+      label: "Lines 5–6",
+      text: "v2 note",
+      draft: false,
+      linkable: false,
+    },
+    {
+      id: "v3:c",
+      version: 3,
+      line: 9,
+      label: "Line 9",
+      text: "v3 note",
+      draft: false,
+      linkable: true,
+      side: "after",
+    },
   ];
-  const compare = { ...base, comments: versioned, readonly: true, focusOnOpen: false };
+  const compare = { ...base, comments: versioned, compare: true };
 
   test("badges each row with the version its comment was left on", () => {
     const { target } = render(CommentNavigator, compare);
     const tags = [...target.querySelectorAll(".nav-version-tag")].map((t) => t.textContent);
-    expect(tags).toEqual(["v1", "v2"]);
+    expect(tags).toEqual(["v1", "v2", "v3"]);
   });
 
-  test("renders no row buttons — a compare comment has no reveal target", () => {
+  test("renders a linkable row as a reveal button and an unlinkable one as a list item", () => {
     const { target } = render(CommentNavigator, compare);
-    expect(target.querySelector(".nav-list button")).toBeNull();
+    const items = [...target.querySelectorAll(".nav-item")];
+    expect(items.map((el) => el.tagName)).toEqual(["BUTTON", "LI", "BUTTON"]);
+  });
+
+  test("clicking a linkable row reveals that comment, side and all", () => {
+    let revealed: CommentIndexEntry | undefined;
+    const { target } = render(CommentNavigator, { ...compare, onReveal: (e) => (revealed = e) });
+    target.querySelectorAll<HTMLButtonElement>("button.nav-item")[1]!.click();
+    expect(revealed).toMatchObject({ id: "v3:c", line: 9, side: "after" });
+  });
+
+  test("marks an unlinkable row as absent from the diff", () => {
+    const { target } = render(CommentNavigator, compare);
+    const items = [...target.querySelectorAll(".nav-item")];
+    expect(items[1]!.querySelector(".nav-unlinked-tag")!.textContent).toContain("not in diff");
+    expect(items[0]!.querySelector(".nav-unlinked-tag")).toBeNull();
+    expect(items[2]!.querySelector(".nav-unlinked-tag")).toBeNull();
+  });
+
+  test("labels a general row General, with no line reference and no reveal", () => {
+    const general: CommentIndexEntry[] = [
+      {
+        id: "v1:general",
+        version: 1,
+        label: "",
+        text: "rethink the rollout",
+        draft: false,
+        general: true,
+        linkable: false,
+      },
+    ];
+    const { target } = render(CommentNavigator, { ...compare, comments: general });
+    const row = target.querySelector(".nav-item")!;
+    expect(row.tagName).toBe("LI");
+    expect(row.querySelector(".nav-item-ref")!.textContent).toBe("General");
+    expect(row.textContent).toContain("rethink the rollout");
+    // v1 IS one of the rendered sides — the row is inert because it anchors
+    // nowhere, not because its version is missing from the diff. (Asserted on
+    // the tag's text: bun stalls pretty-printing a happy-dom node on failure.)
+    expect(row.querySelector(".nav-unlinked-tag")?.textContent ?? null).toBeNull();
   });
 
   test("still exposes .nav-item rows, so j/k roving focus keeps working", () => {
     const { target } = render(CommentNavigator, compare);
     const items = target.querySelectorAll(".nav-item");
-    expect(items.length).toBe(2);
-    expect(items[0]!.getAttribute("tabindex")).toBe("-1");
-  });
-
-  test("leaves focus outside the panel when it opens without a user gesture", () => {
-    const { target, flush } = render(CommentNavigator, compare);
-    flush();
-    expect(target.querySelector(".comment-navigator")!.contains(document.activeElement)).toBe(
-      false,
-    );
+    expect(items.length).toBe(3);
+    expect(items[1]!.getAttribute("tabindex")).toBe("-1");
   });
 
   test("shows the compare empty state when the range has no comments", () => {
@@ -141,17 +215,17 @@ describe("CommentNavigator in compare mode", () => {
   });
 
   test("titles the panel with the compared range", () => {
-    const { target } = render(CommentNavigator, { ...compare, title: "Comments in v1–v2" });
-    expect(target.querySelector(".nav-title")!.textContent).toBe("Comments in v1–v2");
+    const { target } = render(CommentNavigator, { ...compare, title: "Comments in v1–v3" });
+    expect(target.querySelector(".nav-title")!.textContent).toBe("Comments in v1–v3");
     expect(target.querySelector(".comment-navigator")!.getAttribute("aria-label")).toBe(
-      "Comments in v1–v2",
+      "Comments in v1–v3",
     );
   });
 
-  test("drops the reveal key cap from the legend, keeping the rest", () => {
+  test("keeps the reveal key cap in the legend — compare rows reveal now", () => {
     const { target } = render(CommentNavigator, { ...compare, showShortcutHints: true });
     const hints = target.querySelector(".nav-hints")!.textContent;
-    expect(hints).not.toContain("reveal");
+    expect(hints).toContain("reveal");
     expect(hints).toContain("move");
     expect(hints).toContain("search");
     expect(hints).toContain("close");

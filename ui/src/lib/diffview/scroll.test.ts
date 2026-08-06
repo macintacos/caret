@@ -10,6 +10,7 @@ import {
   revealCard,
   revealScrollDelta,
   SCROLL_OFFSET_TOP,
+  scrollToDiffLine,
   scrollToLine,
 } from "$lib/diffview/scroll.ts";
 
@@ -77,6 +78,139 @@ describe("scrollToLine", () => {
     if (row != null) row.scrollIntoView = () => (scrolledIntoView = true);
     expect(scrollToLine(host, 5)).toBe(true);
     expect(scrolledIntoView).toBe(true);
+  });
+});
+
+// scrollToDiffLine addresses a line on a named side of a two-document diff.
+// @pierre/diffs wraps each rendered column in a <code> carrying data-unified (one
+// column) or data-deletions + data-additions (two), and stamps every row with
+// data-line (its own side's number), data-alt-line (the other side's, absent on a
+// change row) and data-line-type. These tests build both layouts by hand; happy-dom
+// has no layout, so each row's rect is stubbed with a distinct top and the resolved
+// row is named by the scroll target it produces (rowTop - SCROLL_OFFSET_TOP, since
+// the unstubbed scroller reports an all-zero rect and scrollTop 0).
+describe("scrollToDiffLine", () => {
+  function rect(top: number): DOMRect {
+    return {
+      top,
+      bottom: top,
+      left: 0,
+      right: 0,
+      width: 0,
+      height: 0,
+      x: 0,
+      y: top,
+      toJSON() {},
+    } as DOMRect;
+  }
+
+  interface DiffRow {
+    /** data-line: this row's own side's 1-based number. */
+    line: number;
+    /** data-alt-line: the other side's number. Omitted on a change row. */
+    altLine?: number;
+    /** data-line-type — one of the library's LineTypes: change-deletion,
+     * change-addition, context, context-expanded. */
+    type: string;
+    /** Viewport top the stubbed rect reports, so assertions can name the row. */
+    top: number;
+  }
+
+  /** A scroll container wrapping a shadow host whose root holds the library's
+   * per-layout <code> columns, keyed by their data-* marker. */
+  function diffHarness(columns: Record<string, DiffRow[]>): Harness {
+    const scroller = document.createElement("div");
+    scroller.style.overflowY = "auto";
+    const host = document.createElement("div");
+    const root = host.attachShadow({ mode: "open" });
+    for (const [column, rows] of Object.entries(columns)) {
+      const code = document.createElement("code");
+      code.setAttribute(`data-${column}`, "");
+      for (const spec of rows) {
+        const row = document.createElement("div");
+        row.setAttribute("data-line", String(spec.line));
+        if (spec.altLine != null) row.setAttribute("data-alt-line", String(spec.altLine));
+        row.setAttribute("data-line-type", spec.type);
+        row.getBoundingClientRect = () => rect(spec.top);
+        code.append(row);
+      }
+      root.append(code);
+    }
+    const scrollCalls: ScrollToOptions[] = [];
+    scroller.scrollTo = ((opts: ScrollToOptions) =>
+      scrollCalls.push(opts)) as typeof scroller.scrollTo;
+    scroller.append(host);
+    document.body.append(scroller);
+    return { host, scrollCalls };
+  }
+
+  // One change at line 2: the same number addresses a different row on each side.
+  const split = (): Harness =>
+    diffHarness({
+      deletions: [{ line: 2, type: "change-deletion", top: 100 }],
+      additions: [{ line: 2, type: "change-addition", top: 300 }],
+    });
+
+  // The same diff in one column, plus an addition that offsets the numbering:
+  // before 1 ctx / 2 changed / 3 ctx, after 1 ctx / 2 changed / 3 added / 4 ctx.
+  // So before-line 3 and after-line 3 are different rows — the case that only the
+  // data-alt-line term can resolve.
+  const unified = (): Harness =>
+    diffHarness({
+      unified: [
+        { line: 1, altLine: 1, type: "context", top: 50 },
+        { line: 2, type: "change-deletion", top: 100 },
+        { line: 2, type: "change-addition", top: 150 },
+        { line: 3, type: "change-addition", top: 200 },
+        { line: 4, altLine: 3, type: "context", top: 250 },
+      ],
+    });
+
+  test("split: the after side resolves the additions column", () => {
+    const { host, scrollCalls } = split();
+    expect(scrollToDiffLine(host, 2, "after")).toBe(true);
+    expect(scrollCalls[0]?.top).toBe(300 - SCROLL_OFFSET_TOP);
+  });
+
+  test("split: the before side resolves the deletions column", () => {
+    const { host, scrollCalls } = split();
+    expect(scrollToDiffLine(host, 2, "before")).toBe(true);
+    expect(scrollCalls[0]?.top).toBe(100 - SCROLL_OFFSET_TOP);
+  });
+
+  test("unified: the after side resolves an addition row", () => {
+    const { host, scrollCalls } = unified();
+    expect(scrollToDiffLine(host, 3, "after")).toBe(true);
+    expect(scrollCalls[0]?.top).toBe(200 - SCROLL_OFFSET_TOP);
+  });
+
+  test("unified: the before side resolves a deletion row", () => {
+    const { host, scrollCalls } = unified();
+    expect(scrollToDiffLine(host, 2, "before")).toBe(true);
+    expect(scrollCalls[0]?.top).toBe(100 - SCROLL_OFFSET_TOP);
+  });
+
+  test("unified: the after side skips the deletion row sharing the line number", () => {
+    // The change-deletion row carries data-line 2 too and comes first in document
+    // order, so only the line-type exclusion lands the jump on the addition.
+    const { host, scrollCalls } = unified();
+    expect(scrollToDiffLine(host, 2, "after")).toBe(true);
+    expect(scrollCalls[0]?.top).toBe(150 - SCROLL_OFFSET_TOP);
+  });
+
+  test("unified: the before side resolves a context row by its data-alt-line number", () => {
+    // Before-line 3 is context, rendered once carrying the after number (4) in
+    // data-line — the row is only reachable through data-alt-line.
+    const { host, scrollCalls } = unified();
+    expect(scrollToDiffLine(host, 3, "before")).toBe(true);
+    expect(scrollCalls[0]?.top).toBe(250 - SCROLL_OFFSET_TOP);
+  });
+
+  test("returns false when no row carries the requested line on that side", () => {
+    // The before document ends at line 3; nothing renders for a before-line 4.
+    const { host, scrollCalls } = unified();
+    expect(scrollToDiffLine(host, 4, "before")).toBe(false);
+    expect(scrollCalls.length).toBe(0);
   });
 });
 

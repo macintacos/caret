@@ -15,6 +15,7 @@ import {
   type PlanVersion,
 } from "@core/lib/types";
 import { type ComposerScratch, rangeLabel } from "$lib/diffview/commenting.ts";
+import type { DiffSide } from "$lib/diffview/types.ts";
 
 /** Collapses any run of whitespace (incl. newlines) to a single space. */
 function flatten(text: string): string {
@@ -127,23 +128,37 @@ export function pendingItems(
   return items;
 }
 
-/** A line-anchored comment as a navigable index entry for the comment navigator:
- * the id to focus, the source line to scroll to (its endLine, where the annotation
- * thread or scratch marker renders), a short range label, and the trimmed text. */
+/** A comment as a navigable index entry for the comment navigator: the id to
+ * focus, the source line to scroll to (its endLine, where the annotation thread
+ * or scratch marker renders), a short range label, and the trimmed text. */
 export interface CommentIndexEntry {
   /** The annotation id (a committed comment) or the scratch key (a draft) —
    * focusing it highlights the card in the source view; a scratch key focuses
    * nothing, so a draft reveal just scrolls to its marker. */
   id: string;
-  /** 1-based source line the entry anchors to (its endLine). */
-  line: number;
-  /** "Line N" / "Lines N–M". */
+  /** 1-based source line the entry anchors to (its endLine). Absent on a general
+   * entry, which is feedback about the version as a whole and anchors nowhere. */
+  line?: number;
+  /** "Line N" / "Lines N–M", or "" for a general entry, which spans no range. */
   label: string;
   /** The comment/draft text, trimmed. */
   text: string;
   /** True for an unsent composer scratch — a draft the reviewer typed but never
    * committed as a comment. The navigator marks these distinctly. */
   draft: boolean;
+  /** Whether this entry addresses a document the view is currently rendering.
+   * Always true in the single-version index; in the compare index, true only for
+   * the two versions actually rendered, so a comment from a version in the range
+   * but off screen lists as a non-interactive row. A linkable entry can still
+   * fail to scroll — see scrollToDiffLine's collapsed-band ceiling. */
+  linkable: boolean;
+  /** Which of the compared diff's two documents this entry's version renders as.
+   * Compare index only, and only on the two endpoints — a line number alone is
+   * ambiguous across two documents, so the reveal needs the side to disambiguate. */
+  side?: DiffSide;
+  /** True for the version's general comment — unanchored feedback the reviewer
+   * submitted with the deny that closed it. The navigator tags these distinctly. */
+  general?: boolean;
   /** The plan version this comment was left on. Present only for the
    * cross-version compare index; absent in the single-version index, where
    * every comment belongs to the version on screen. */
@@ -168,6 +183,7 @@ export function commentIndex(
       label: rangeLabel(a.startLine, a.endLine),
       text: a.comment.trim(),
       draft: false,
+      linkable: true,
     });
   }
   for (const s of scratches) {
@@ -177,29 +193,43 @@ export function commentIndex(
       label: rangeLabel(s.startLine, s.endLine),
       text: s.text.trim(),
       draft: true,
+      linkable: true,
     });
   }
-  return entries.sort((x, y) => x.line - y.line);
+  return entries.sort(byLine);
 }
 
-/** Every line-anchored, non-blank comment on the versions in the inclusive range
- * [from, to], ordered by version then by line — so the list groups by version.
+/** Orders entries by anchor line ascending. A general entry has no line and so
+ * sorts to the head of its group — lines are 1-based, so nothing can precede it. */
+function byLine(x: CommentIndexEntry, y: CommentIndexEntry): number {
+  return (x.line ?? 0) - (y.line ?? 0);
+}
+
+/** Every non-blank comment on the versions between the compared `before` and
+ * `after` versions inclusive — each version's general comment, then its
+ * line-anchored ones — ordered by version, so the list groups by version.
  * Comments are never merged across versions: two comments on the same line from
  * different versions are two entries, each carrying its own version. Ids are
- * prefixed with the version because the entry is display-only here (no reveal),
- * so the id serves only as a stable {#each} key. */
+ * prefixed with the version so they stay unique as {#each} keys.
+ *
+ * `before` and `after` name the two documents the diff renders, so their order
+ * is meaningful even though the range they bound is not: an entry from either
+ * one is stamped with the side it appears on and marked linkable, while a
+ * version in between renders nowhere and lists non-interactively. */
 export function versionCommentIndex(
   versions: PlanVersion[],
-  from: number,
-  to: number,
+  before: number,
+  after: number,
 ): CommentIndexEntry[] {
-  const lo = Math.min(from, to);
-  const hi = Math.max(from, to);
+  const lo = Math.min(before, after);
+  const hi = Math.max(before, after);
   return versions
     .filter((v) => v.version >= lo && v.version <= hi)
     .sort((a, b) => a.version - b.version)
-    .flatMap((v) =>
-      pendingInline(v.annotations)
+    .flatMap((v) => {
+      const side: DiffSide | undefined =
+        v.version === before ? "before" : v.version === after ? "after" : undefined;
+      const entries: CommentIndexEntry[] = pendingInline(v.annotations)
         .filter(isLineAnnotation)
         .map((a) => ({
           id: `v${v.version}:${a.id}`,
@@ -207,10 +237,24 @@ export function versionCommentIndex(
           label: rangeLabel(a.startLine, a.endLine),
           text: a.comment.trim(),
           draft: false,
+          linkable: side != null,
+          ...(side != null && { side }),
           version: v.version,
-        }))
-        .sort((x, y) => x.line - y.line),
-    );
+        }));
+      const general = v.generalComment?.trim();
+      if (general) {
+        entries.push({
+          id: `v${v.version}:general`,
+          label: "",
+          text: general,
+          draft: false,
+          general: true,
+          linkable: false,
+          version: v.version,
+        });
+      }
+      return entries.sort(byLine);
+    });
 }
 
 /** Narrows the comment index to entries whose text matches a search query
