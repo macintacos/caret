@@ -21,14 +21,14 @@ sequenceDiagram
 
     A->>H: the plan, on stdin
     Note over H: caret normalizes it into its own tool-agnostic form
-    H->>D: POST /api/reviews, starting the daemon if prewarm has not
+    H->>D: POST /api/reviews, starting the daemon if it is not already up
     H->>U: opens the plan in your browser
     U->>D: loads the review
     H->>D: long-polls for a decision
-    Note over H,D: the hook blocks here, up to review.timeout_s
+    Note over H,D: the caret process blocks here, up to review.timeout_s
     U->>D: approve, or request changes
     D-->>H: the decision
-    H-->>A: the adapter emits the agent's decision
+    H-->>A: allow, or deny with the reviewer's feedback
     opt changes requested
         A->>H: a revised plan, on a fresh run, as a new version of the same review
     end
@@ -57,14 +57,15 @@ adapter raw hook stdin and a core decision; the adapter hands back a normalized 
 tool-specific stdout response. The dependency runs one way — an adapter imports core
 types, never the reverse.
 
-Three adapters ship today. Pick one with `CARET_AGENT`; with no selector caret uses
-Claude, so the shipped Claude plugin keeps working unchanged.
+caret registers three adapters today. Claude's is the reference implementation the other
+two are measured against. Pick one with `CARET_AGENT`; with no selector caret uses Claude,
+so the shipped Claude plugin keeps working unchanged.
 
 | Adapter | `CARET_AGENT` | How it wires in | What ships | Status |
 | ------- | ------------- | --------------- | ---------- | ------ |
-| **Claude Code** — `src/adapters/claude/` | `claude` (the default) | Three plan-mode hooks; the `PermissionRequest`/`ExitPlanMode` one intercepts the plan | The `caret@caret` plugin, from caret's own marketplace | Reference implementation |
-| **OpenCode** — `src/adapters/opencode/` | `opencode` | An in-process plugin registering a `caret_review_plan` tool — OpenCode has no plan hook to intercept | The `@macintacos/caret` npm package, plus its own installer | Shipping |
-| **Codex CLI** — `src/adapters/codex/` | `codex` | A `PermissionRequest` hook, modeled from Codex's docs | Nothing — no installer, no hook manifests | Provisional, default-off |
+| **Claude Code** — `src/adapters/claude/` | `claude` (the default) | Three plan-mode hooks; the `PermissionRequest`/`ExitPlanMode` one intercepts the plan | The `caret@caret` plugin, from caret's own marketplace | Stable (default) |
+| **OpenCode** — `src/adapters/opencode/` | `opencode` | An in-process plugin registering a `caret_review_plan` tool — OpenCode has no plan hook to intercept | The `@macintacos/caret` npm package, plus its own installer | Stable |
+| **Codex CLI** — `src/adapters/codex/` | `codex` | A `PermissionRequest` hook | Nothing — no installer, no hook manifests | Provisional, default-off |
 
 > [!WARNING]
 > The Codex adapter's wire contract is modeled from Codex documentation and has never been
@@ -186,7 +187,9 @@ re-resolves on next start **or**, for a stale pinned entry, bumps the pin in the
 place — a bump deliberately leaves the cache alone, since the new specifier gets its own
 cache dir. A plain `caret install` runs the same check and asks first at a terminal; off
 one, with no flag, it names the gap and the command that would close it and changes
-nothing. Restart OpenCode afterward. Clearing the cache by hand is:
+nothing. Restart OpenCode afterward. Pinning `"@macintacos/caret@<version>"` in the array
+and bumping it yourself is the other way to control which version loads. Clearing the
+cache by hand is:
 
 ```sh
 rm -rf ~/.cache/opencode/packages/@macintacos/caret*
@@ -195,11 +198,8 @@ rm -rf ~/.cache/opencode/packages/@macintacos/caret*
 > [!NOTE]
 > The glob is load-bearing. OpenCode names one cache dir per **verbatim** specifier, so a
 > bare `@macintacos/caret` entry and every pinned `@macintacos/caret@<version>` get
-> separate dirs, and all of them have to go — drop the `*` and the command exits 0 having
-> deleted nothing.
-
-Pinning `"@macintacos/caret@<version>"` in the array and bumping it yourself is the other
-way to control which version loads.
+> separate dirs, and all of them have to go. Drop the `*` and the pinned dirs survive, so
+> OpenCode reloads the stale copy from one of them.
 
 Omit `--target` and `caret install` picks for you: it detects which agents you have
 (`claude` on your PATH; `opencode` on your PATH or an existing OpenCode config dir) and
@@ -281,9 +281,10 @@ src/adapters/       the coding-agent adapter axis — the AgentAdapter interface
 ui/                 Svelte 5 multi-asset SPA (Vite) embedded into the binary via the build-generated asset manifest, served by the daemon by URL path · src/state/ runes state modules · src/icons/ vendored Lucide SVGs
 hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode + PostToolUse/ExitPlanMode) — Claude-adapter packaging
 commands/           /caret:demo · /caret:debug · /caret:discovery — Claude-adapter packaging (agent-specific behavioral prose)
-opencode/           the plugin OpenCode loads — the review tool, the planning steer, the config-hook mutation, and commands/ (OpenCode's own copies of the three above) — OpenCode-adapter packaging
+opencode/           the plugin OpenCode loads — the review tool, the planning steer, the config-hook mutation, and commands/ (the same three commands, rewritten for OpenCode) — OpenCode-adapter packaging
 test/               core/ (tool-agnostic suites) · adapters/<tool>/ (per-adapter suites + fixtures) · opencode/ (the repo-root opencode/ package) · e2e/ (Playwright) · structure/ (repo-shape invariants) · scripts/ (release + dev tooling) · support/ (shared scaffolding)
 scripts/            dev and release tooling for the checkout, plus the caret entrypoint shim's test
+bin/                the caret entrypoint shim (bin/caret) — the only tracked file here; a local build drops the compiled binary and the UI assets beside it
 ```
 
 The polished diff/compare viewer for plan versions is a planned fast-follow.
