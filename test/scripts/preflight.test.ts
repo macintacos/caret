@@ -9,6 +9,10 @@
 // filtering, --task scoping, and the error doc — plus the CLI's invalid-`--grep`
 // exit path. The --json flags themselves are parsed by the tasks CLI's commander
 // tree, so that parse contract is pinned in tasks-cli.test.ts (EXC-737).
+//
+// Diff-scoped selection (EXC-1042) is asserted on the tasks the orchestrator
+// actually SPAWNS for a given changed-file list, not on the selection object it
+// was handed — a selection the DAG ignored would still fail those tests.
 
 import { expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -18,10 +22,14 @@ import {
   buildErrorReport,
   buildResultReport,
   buildStartReport,
+  changedPaths,
   createProcessGroupController,
+  MARKDOWN_READ_BY_TESTS,
+  resolveSelection,
   runPreflight,
   type SpawnOutcome,
   type SpawnTask,
+  selectTasks,
 } from "@scripts/preflight.ts";
 import { waitFor } from "@test/support/poll.ts";
 
@@ -329,19 +337,163 @@ test("a failed task aborts in-flight siblings that honor the signal (recorded sk
   expect(r.results.get("smoke")?.status).toBe("skipped");
 });
 
+// Diff-scoped task selection (EXC-1042) -------------------------------------
+
+/** Run the real gate with the selection `paths` produces and report the tasks
+ * that actually spawned. Asserting on the spawns rather than on the returned
+ * task array is what makes these tests observe the narrowing instead of
+ * restating it — a selection the orchestrator ignored would still fail here. */
+async function spawnedFor(paths: readonly string[] | null): Promise<string[]> {
+  const { calls, spawnTask } = fakeSpawner();
+  await runPreflight({ spawnTask, renderer: "silent", selection: selectTasks(paths) });
+  return calls.map((c) => c.name).sort();
+}
+
+test("a Markdown-only diff narrows the gate to lint alone", async () => {
+  expect(await spawnedFor(["doc/CONFIGURING.md", "README.md"])).toEqual(["lint"]);
+  expect(selectTasks(["doc/CONFIGURING.md", "README.md"]).narrowed).toBe(true);
+});
+
+// These are the Markdown files a unit test READS FROM DISK, so `test` can
+// observe a change to one even though every changed path is Markdown. One code
+// path, three separate reasons to exist — looping covers a fourth entry for free.
+test("Markdown a test reads from disk keeps `test` in the narrowed gate", async () => {
+  for (const path of MARKDOWN_READ_BY_TESTS) {
+    expect(await spawnedFor(["doc/CONFIGURING.md", path])).toEqual(["lint", "test"]);
+  }
+});
+
+// EXC-1045's obligation, named rather than left to the loop above. Its guards in
+// test/scripts/dev-driver.test.ts check that fake-plan.md's line citations into
+// doc/DEVELOPMENT.md still land on real lines — and both files are plain
+// Markdown, so the naive "all changed paths are Markdown → skip `test`" rule
+// would skip exactly the diffs that guard exists for. Either path must reach it,
+// alone or together.
+test("a docs-only diff touching the fake plan or the dev guide still runs `test`", async () => {
+  expect(await spawnedFor(["doc/DEVELOPMENT.md"])).toEqual(["lint", "test"]);
+  expect(await spawnedFor(["scripts/tasks/dev/fake-plan.md"])).toEqual(["lint", "test"]);
+  expect(await spawnedFor(["doc/DEVELOPMENT.md", "scripts/tasks/dev/fake-plan.md"])).toEqual([
+    "lint",
+    "test",
+  ]);
+});
+
+// A renamed or deleted fixture would silently orphan its entry, and the gate
+// would quietly stop running `test` for the file that replaced it.
+test("every MARKDOWN_READ_BY_TESTS entry still exists on disk", () => {
+  expect(MARKDOWN_READ_BY_TESTS.length).toBeGreaterThan(0);
+  for (const path of MARKDOWN_READ_BY_TESTS) {
+    expect(existsSync(join(import.meta.dir, "../..", path))).toBe(true);
+  }
+});
+
+test("a single non-Markdown path runs the full six-task gate", async () => {
+  expect(await spawnedFor(["doc/CONFIGURING.md", "src/daemon.ts"])).toEqual(ALL_TASKS);
+  expect(selectTasks(["doc/CONFIGURING.md", "src/daemon.ts"]).narrowed).toBe(false);
+});
+
+// The two conservative defaults. An empty list satisfies "every changed path is
+// Markdown" vacuously, which would narrow a run whose diff we simply failed to
+// see — so an unreadable diff and an empty one both fall back to the whole gate.
+test("an unreadable or empty diff runs the full gate", async () => {
+  expect(await spawnedFor(null)).toEqual(ALL_TASKS);
+  expect(await spawnedFor([])).toEqual(ALL_TASKS);
+});
+
+test("--full runs the full gate and never reads the diff", async () => {
+  let reads = 0;
+  const selection = await resolveSelection(true, async () => {
+    reads++;
+    return ["README.md"];
+  });
+  const { calls, spawnTask } = fakeSpawner();
+  await runPreflight({ spawnTask, renderer: "silent", selection });
+
+  expect(calls.map((c) => c.name).sort()).toEqual(ALL_TASKS);
+  expect(selection.narrowed).toBe(false);
+  expect(reads).toBe(0); // the override short-circuits the git read entirely
+});
+
+test("without the override, resolveSelection narrows from the diff it reads", async () => {
+  const selection = await resolveSelection(false, async () => ["README.md"]);
+  expect(selection.tasks).toEqual(["lint"]);
+  expect(selection.narrowed).toBe(true);
+});
+
+// `selection` is a public dep, so a caller can hand runPreflight a set the
+// narrowing logic would never build. This one names `smoke` and `build bin` but
+// not the `build ui` that gates them: a filter testing gate MEMBERSHIP rather
+// than gate SURVIVAL keeps `smoke`, creates a `build bin` gate nobody resolves,
+// and the run never returns. Race it against a timeout so the regression fails
+// this assertion instead of parking the whole suite.
+test("a selection missing a gate task drops the dependent rather than hanging", async () => {
+  const { calls, spawnTask } = fakeSpawner();
+  const run = runPreflight({
+    spawnTask,
+    renderer: "silent",
+    selection: { tasks: ["lint", "build bin", "smoke"], narrowed: true, reason: "split pair" },
+  });
+  const outcome = await Promise.race([run, Bun.sleep(2000).then(() => "HUNG" as const)]);
+
+  expect(outcome).not.toBe("HUNG");
+  expect(calls.map((c) => c.name)).toEqual(["lint"]);
+});
+
+// The git plumbing against this repository. The contract has two branches — a
+// path list, or null when the diff cannot be read — and which one applies turns
+// on whether this checkout resolves `origin/HEAD`, so assert the matching one
+// rather than assuming a cloned layout. The branch's own diff is not stable
+// enough to assert on: it is empty once this work merges.
+test("changedPaths honours its contract against this checkout", async () => {
+  const hasOriginHead =
+    Bun.spawnSync(["git", "rev-parse", "--verify", "--quiet", "origin/HEAD"]).exitCode === 0;
+  const paths = await changedPaths();
+
+  if (!hasOriginHead) {
+    expect(paths).toBeNull(); // no merge base to diff against → the full-gate fallback
+    return;
+  }
+  expect(paths).not.toBeNull();
+  // Every entry is a usable relative path: no blanks, no stray whitespace that
+  // would defeat the `.md` suffix test or the exception-list lookup.
+  for (const path of paths ?? []) expect(path).toBe(path.trim());
+  expect((paths ?? []).filter((path) => path === "")).toEqual([]);
+});
+
 // --json report builders (EXC-471) ------------------------------------------
 
 test("buildStartReport echoes the parsed filters and lists planned tasks", () => {
-  const start = buildStartReport({ json: true, verbosity: 2, grep: "err", tasks: ["test"] });
+  const start = buildStartReport({
+    json: true,
+    verbosity: 2,
+    full: false,
+    grep: "err",
+    tasks: ["test"],
+  });
   expect(start.event).toBe("start");
-  expect(start.schemaVersion).toBe(1);
+  expect(start.schemaVersion).toBe(2);
   expect(start.tasks).toEqual(["lint", "test", "build ui", "test e2e", "build bin", "smoke"]);
   expect(start.filters).toEqual({ verbosity: 2, grep: "err", tasks: ["test"] });
+  // No selection argument → the full gate, reported as such.
+  expect(start.selection.narrowed).toBe(false);
 });
 
 test("buildStartReport: unset filters render as null/zero", () => {
-  const start = buildStartReport({ json: true, verbosity: 0, tasks: [] });
+  const start = buildStartReport({ json: true, verbosity: 0, full: false, tasks: [] });
   expect(start.filters).toEqual({ verbosity: 0, grep: null, tasks: null });
+});
+
+// Criterion 4: a scoped run must never read as a full green run. The start doc
+// carries both the shortened task list and an explicit narrowed flag + reason.
+test("buildStartReport surfaces a narrowed selection and why", () => {
+  const selection = selectTasks(["doc/CONFIGURING.md"]);
+  const start = buildStartReport({ json: true, verbosity: 0, full: false, tasks: [] }, selection);
+
+  expect(start.tasks).toEqual(["lint"]);
+  expect(start.selection.narrowed).toBe(true);
+  expect(start.selection.reason).toContain("Markdown");
+  // The one thing narrowing must never imply: that lint saw less of the tree.
+  expect(start.selection.reason).toContain("whole tree");
 });
 
 test("buildResultReport level 0: passing tasks carry status only", async () => {
@@ -350,7 +502,7 @@ test("buildResultReport level 0: passing tasks carry status only", async () => {
   const report = buildResultReport(r.results);
 
   expect(report.event).toBe("result");
-  expect(report.schemaVersion).toBe(1);
+  expect(report.schemaVersion).toBe(2);
   expect(report.ok).toBe(true);
   expect(report.tasks.map((t) => t.name)).toEqual([
     "lint",
@@ -523,7 +675,7 @@ test("buildErrorReport: shape for an invalid --grep pattern", () => {
   const err = buildErrorReport("invalid --grep pattern: [");
   expect(err).toEqual({
     event: "error",
-    schemaVersion: 1,
+    schemaVersion: 2,
     message: "invalid --grep pattern: [",
   });
 });
@@ -552,7 +704,7 @@ test(
     expect(exit).toBe(2);
     expect(JSON.parse(stdout.trim())).toEqual({
       event: "error",
-      schemaVersion: 1,
+      schemaVersion: 2,
       message: "invalid --grep pattern: [",
     });
   },

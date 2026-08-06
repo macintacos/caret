@@ -409,8 +409,24 @@ describe("tasks CLI: preflight command", () => {
     expect(buildProgram().commands.map((c) => c.name())).toContain("preflight");
   });
 
-  test("bare invocation: json off, verbosity 0, no grep, no tasks", async () => {
-    expect(await parsePreflightArgs([])).toEqual({ json: false, verbosity: 0, tasks: [] });
+  test("bare invocation: json off, verbosity 0, full off, no grep, no tasks", async () => {
+    expect(await parsePreflightArgs([])).toEqual({
+      json: false,
+      verbosity: 0,
+      full: false,
+      tasks: [],
+    });
+  });
+
+  // --full is the one preflight flag that is not --json-only: the gate scopes
+  // itself to the diff in both output modes (EXC-1042), so it parses on its own.
+  test("--full parses without --json", async () => {
+    expect(await parsePreflightArgs(["--full"])).toEqual({
+      json: false,
+      verbosity: 0,
+      full: true,
+      tasks: [],
+    });
   });
 
   test("parses --json, counts -vv, reads --grep, collects repeatable --task", async () => {
@@ -425,7 +441,7 @@ describe("tasks CLI: preflight command", () => {
         "--task",
         "test",
       ]),
-    ).toEqual({ json: true, verbosity: 2, grep: "err.*", tasks: ["lint", "test"] });
+    ).toEqual({ json: true, verbosity: 2, full: false, grep: "err.*", tasks: ["lint", "test"] });
   });
 
   test("also accepts the separate -v -v and the =value forms", async () => {
@@ -438,13 +454,14 @@ describe("tasks CLI: preflight command", () => {
         "--task=lint",
         "--task=test",
       ]),
-    ).toEqual({ json: true, verbosity: 2, grep: "err.*", tasks: ["lint", "test"] });
+    ).toEqual({ json: true, verbosity: 2, full: false, grep: "err.*", tasks: ["lint", "test"] });
   });
 
   test("an empty --grep= is treated as no filter, not a match-everything pattern", async () => {
     expect(await parsePreflightArgs(["--json", "--grep="])).toEqual({
       json: true,
       verbosity: 0,
+      full: false,
       tasks: [],
     });
   });

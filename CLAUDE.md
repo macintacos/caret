@@ -40,7 +40,7 @@ digraph caret_rules_router {
     "What does the change touch?" -> "Load doc/agents/settings-rules.md" [label="adding a config.toml key or CARET_* env var"];
     "What does the change touch?" -> "Load doc/agents/icon-rules.md" [label="adding or working with vendored icons"];
     "What does the change touch?" -> "Load doc/agents/opencode-integration.md" [label="OpenCode adapter, plugin, or install (caret install --target opencode)"];
-    "What does the change touch?" -> "Load doc/agents/documentation-rules.md" [label="documentation: which doc to update — README, doc/ADVANCED.md, CONTRIBUTING, the doc/ index, or the doc map itself"];
+    "What does the change touch?" -> "Load doc/agents/documentation-rules.md" [label="documentation: which doc to update — README, the doc/ reference pages (CONFIGURING, RUNNING, ARCHITECTURE, DEVELOPMENT), CONTRIBUTING, the doc/ router, or the doc map itself"];
 }
 ```
 
@@ -95,9 +95,21 @@ after editing a file in the same turn — give it a beat, or trust your edit.
 `mise run preflight` is the pre-push gate — lint, unit + e2e tests, build, and artifact
 smoke, run concurrently. When **you** (an agent) run it, pass `--json`.
 `mise run preflight --json` replaces the live human display with two compact JSON
-documents on stdout, one per line: a `start` document (the planned tasks plus the filters
-in effect) and a `result` document carrying each task's status and an overall `ok`
-boolean. The exit code is unchanged (`0` pass, `1` fail).
+documents on stdout, one per line: a `start` document (the planned tasks, why that set,
+plus the filters in effect) and a `result` document carrying each task's status and an
+overall `ok` boolean. The exit code is unchanged (`0` pass, `1` fail).
+
+**The gate scopes itself to your diff, so `ok` does not always mean all six tasks ran.** A
+change where every path is Markdown runs `lint` alone — plus `test` when it touches one of
+the Markdown files a test reads from disk (`MARKDOWN_READ_BY_TESTS` in
+`scripts/preflight.ts`: `scripts/tasks/dev/fake-plan.md`, `doc/ARCHITECTURE.md`,
+`THIRD_PARTY_LICENSES.md`, and `doc/DEVELOPMENT.md`). Anything else runs the full six, as
+does an empty or unreadable diff. Read the `start` document's `selection` object before
+you report a run as green: `{"narrowed": true, "reason": "…"}` means you proved less than
+the whole gate, and `schemaVersion` is `2` precisely because `ok` now means "every task
+that ran passed". `--full` forces all six — it is the one preflight flag that works
+without `--json` too. Note that `lint` always scans the whole tree even when the gate
+narrows, so cross-file link fragments stay checked.
 
 `mise run preflight --json` is the call you want almost every time.
 **Failures show their output by default**, so you can act immediately — and if a task's
