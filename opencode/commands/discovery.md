@@ -1,5 +1,5 @@
 ---
-description: Gather a redacted caret diagnostics snapshot ready to paste into a bug report
+description: Gather a redacted caret diagnostics snapshot ready to share
 ---
 
 caret's `discovery` subcommand prints a one-shot, read-only snapshot of the local install
@@ -11,7 +11,7 @@ bodies — it exists to be shared.
 
 First ask the user (briefly) which format they want:
 
-- **JSON** — for pasting into a bug report or feeding to tooling.
+- **JSON** — for sharing or feeding to tooling.
 - **Human-readable** — for scanning in the conversation.
 
 Then run the matching invocation (the `CARET_AGENT=opencode` selector makes the install
@@ -23,7 +23,7 @@ CARET_AGENT=opencode "__CARET_BIN__" discovery          # human-readable
 ```
 
 End your output with the command's stdout **verbatim** in a fenced code block so the user
-can copy it straight into a bug report. Add nothing inside the block and do not summarize
+can copy it straight out and share it. Add nothing inside the block and do not summarize
 sections away — the report is already redacted and complete. A degraded section (e.g.
 `daemon error: …`) is normal when the daemon is down; present it as-is.
 

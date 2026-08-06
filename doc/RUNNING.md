@@ -141,13 +141,13 @@ only genuine failures sit at error.
   sizes and error/warn counts, install/runtime info, and system basics. Human-readable by
   default; `caret discovery --json` prints the same report as one JSON document (schema
   marker `caret-discovery/1`). Unlike the logs, the report is **always redacted** — it
-  exists to be pasted into bug reports — and it never contains plan/prompt/feedback bodies
-  or log contents. Probes are individually bounded and degrade per-section, so the command
-  exits 0 even when the daemon is down.
+  exists to be shared — and it never contains plan/prompt/feedback bodies or log contents.
+  Probes are individually bounded and degrade per-section, so the command exits 0 even
+  when the daemon is down.
 - `/caret:discovery` — the slash command that wraps it: asks whether you want JSON or
   human-readable output, runs the subcommand, and ends with the report in a code block
-  ready to paste into a bug report. Complements `/caret:debug` (the session timeline):
-  discovery is the point-in-time snapshot of the installation.
+  ready to share. Complements `/caret:debug` (the session timeline): discovery is the
+  point-in-time snapshot of the installation.
 
 Contributors should see `agents/logging-rules.md` for the logging conventions — when to
 log, levels, and message style.
