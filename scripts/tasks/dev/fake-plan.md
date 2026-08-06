@@ -510,6 +510,16 @@ The list below points at long-lived files, and leans on paths and line numbers t
 - `src/cli.ts` — real source rather than config: a line too long for the drawer scrolls sideways inside the excerpt rather than being cut off, and dragging the drawer's inner edge wider brings more of it into view.
 - `src/does-not-exist.ts` — a path deliberately **not** in the repo: it must show **no** icon and **no** preview. If it ever sprouts one, the existence gate has regressed.
 
+### Folder references
+
+EXC-918: a reference that resolves to a **directory** gets a folder glyph rather than a file one, and clicking it opens an interactive tree rooted at that path — its immediate children, collapsed, fetched one level at a time as you open folders. Files in the tree are inert: clicking one does nothing. Escape closes the card, as does a click anywhere outside it, but a click **inside** it does not, so the tree can be navigated. The card is honest about what it is not showing: a level wider than the daemon's cap says how many rows it elided, and a directory the daemon declines to enumerate says `not listed` when you open it instead of appearing empty.
+
+- `src` — the repo's own source root: the folder glyph, and a card whose first level is `src/`'s immediate children. Open `daemon` or `plan` inside it to watch a level arrive; each one is its own round trip.
+- `ui/src/icons` — a directory of nothing but files, so every row in it is inert. Clicking any of them must do nothing at all.
+- `ui` — its level holds `dist`, a directory the daemon declines to enumerate. It is a row like any other, so the card matches what is on disk, but opening it reports `not listed` rather than thousands of build outputs. The same goes for `node_modules` and for any dotted name.
+- `doc/agents` — a small directory, useful beside `src` for seeing the card at its shortest.
+- `src/does-not-exist` — a directory deliberately **not** in the repo: **no** glyph, and nothing on click. The same existence gate the missing file above tests, on the other kind.
+
 ### Line ranges
 
 EXC-938: a reference can cite a **span** rather than a single line, and the preview frames the whole of it — every cited line washed, the usual context around it, and the end-line tail inside the click target rather than dangling outside it. Click the last character of each reference below, not its path, to check that half.

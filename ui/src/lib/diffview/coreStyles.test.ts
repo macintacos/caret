@@ -360,6 +360,29 @@ describe("the filename-reference icon (EXC-687)", () => {
   });
 });
 
+// EXC-918: the daemon reports a kind per reference, and a directory's token is
+// tagged data-file-ref="directory" (fileRefTag.ts). The rule swaps the mask and
+// nothing else — the glyph is the only thing that distinguishes a folder — so
+// the tint, the hover wash, the pointer cursor and the chip padding all keep
+// cascading from the rules above, whose valueless attribute selector matches a
+// directory token too.
+describe("the folder-reference glyph (EXC-918)", () => {
+  const folderRule =
+    overrideDecls.match(
+      /\[data-content\]\s*\[data-file-ref="directory"\]::before\s*\{[^}]*\}/,
+    )?.[0] ?? "";
+
+  test("swaps in the folder mask for a directory reference", () => {
+    expect(folderRule).not.toBe("");
+    expect(folderRule).toMatch(/mask:\s*\$\{FOLDER_ICON_MASK\}/);
+  });
+
+  test("overrides nothing but the mask, so the file rule's tint and box still apply", () => {
+    expect(folderRule).not.toContain("background-color");
+    expect(folderRule).not.toContain("content:");
+  });
+});
+
 // EXC-840: the file reference opens its preview on click; hover highlights it.
 // The highlight is CSS — a faint amber wash on the tagged token, the same warm
 // hue as its inline-code text — so the pins here keep it warm (not grey), roomy

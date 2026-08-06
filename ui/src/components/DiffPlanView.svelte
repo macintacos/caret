@@ -72,6 +72,7 @@
   import {
     type Annotation,
     type ClientReview,
+    type FileRefKind,
     isLegacyAnnotation,
     isLineAnnotation,
   } from "@core/lib/types";
@@ -83,6 +84,7 @@
   import CodeCopyButton from "@/components/CodeCopyButton.svelte";
   import FileDrawer from "@/components/FileDrawer.svelte";
   import FilePreview from "@/components/FilePreview.svelte";
+  import FolderTree from "@/components/FolderTree.svelte";
 
   interface Props {
     /** The review whose current plan version is rendered. */
@@ -299,44 +301,48 @@
   // string, so effects keyed on it fire only when the review actually switches.
   const reviewId = $derived(review.id);
 
-  // Which candidate paths resolve to a real FILE in the review's cwd — the daemon
-  // is the existence gate and reports a kind per path, and the plan view affords
-  // files only: a directory resolves but is dropped here, so it draws no glyph
-  // and no click target until the folder popover exists to open (EXC-918).
+  // What each candidate path resolves to in the review's cwd — the daemon is the
+  // existence gate and the only thing that can say file vs. directory (EXC-916).
+  // Both kinds are kept: a file draws the file glyph and opens the excerpt
+  // preview, a directory draws the folder glyph and opens the folder tree
+  // (EXC-918). A path absent from the map resolved to nothing and stays inert.
   // Resolved once per candidate-set change: both dependencies below (the memoized
   // candidate map and the value-stable reviewId) hold their reference across a
   // poll tick, so an unchanged plan never re-resolves — which is what kept the
   // icons and the open hover preview from flickering every 2s. Cleared up front
   // so a plan edit or review switch drops stale icons at once.
-  let resolvedPaths = $state<Set<string>>(new Set());
+  let resolvedKinds = $state<Map<string, FileRefKind>>(new Map());
   $effect(() => {
     const candidates = fileRefCandidates;
     const id = reviewId;
     const paths = [...new Set([...candidates.values()].flat().map((s) => s.path))];
-    resolvedPaths = new Set();
+    resolvedKinds = new Map();
     if (paths.length === 0) return;
     let cancelled = false;
     void resolveFileRefs(id, paths).then((kinds) => {
       if (cancelled) return;
-      resolvedPaths = new Set(
-        Object.entries(kinds)
-          .filter(([, kind]) => kind === "file")
-          .map(([path]) => path),
-      );
+      resolvedKinds = new Map(Object.entries(kinds));
     });
     return () => {
       cancelled = true;
     };
   });
 
-  // The active file-reference spans: candidates confirmed real. Undefined when
-  // none resolve, so SourceView wires no file-ref affordance in that common case.
+  // The active reference spans: candidates confirmed real, each carrying what the
+  // daemon said it is. The kind is attached to a COPY of the span rather than
+  // written onto the memoized candidate — that map is keyed on the plan text and
+  // survives a review switch, so mutating it would carry one review's kinds into
+  // the next. Undefined when none resolve, so SourceView wires no reference
+  // affordance in that common case.
   const fileRefs = $derived.by(() => {
-    const resolved = resolvedPaths;
-    if (resolved.size === 0) return undefined;
+    const kinds = resolvedKinds;
+    if (kinds.size === 0) return undefined;
     const active: FileRefSpanMap = new Map();
     for (const [line, spans] of fileRefCandidates) {
-      const keep = spans.filter((s) => resolved.has(s.path));
+      const keep = spans.flatMap((s) => {
+        const kind = kinds.get(s.path);
+        return kind === undefined ? [] : [{ ...s, kind }];
+      });
       if (keep.length > 0) active.set(line, keep);
     }
     return active.size > 0 ? active : undefined;
@@ -384,7 +390,75 @@
     filePreview = { path: ref.path, line: ref.line, endLine: ref.endLine, token: tokenElement };
   }
 
+  // The directory reference whose tree is open (EXC-918), plus the clicked
+  // token's box. A viewport-fixed card rather than the file preview's lane: a
+  // folder has no `:line` to bound it, so the surface is one to navigate rather
+  // than to peek at, and it is dismissed rather than lived beside.
+  //
+  // The RECT rather than the element: the card places itself once and never
+  // tracks the token, and the plan surface it belongs to is torn out whenever
+  // compare mode opens — a detached element measures all zeros, which would park
+  // the card in the viewport's corner and keep the dead subtree alive besides.
+  let folderTree = $state<{ path: string; rect: DOMRect } | undefined>();
+
+  // One reference click, two surfaces. The daemon said which this is (EXC-916),
+  // so the branch is on the kind the span carries rather than on the path's shape
+  // — the whole point of resolving server-side. Opening either dismisses the
+  // other: they share the same dismissing-click machinery below, and two of them
+  // listening at once would race for the same click.
+  function openFileRef(ref: FileRefSpan, tokenElement: HTMLElement): void {
+    if (ref.kind === "directory") {
+      dismissFilePreview();
+      folderTree = { path: ref.path, rect: tokenElement.getBoundingClientRect() };
+      return;
+    }
+    folderTree = undefined;
+    openFilePreview(ref, tokenElement);
+  }
+
   $effect(() => () => cancelDrawerClose());
+
+  // A review switch drops the open card. Its contents belong to the previous
+  // review's cwd, and the 2s poll can swap the review under a reader who left
+  // one open — so without this the card sits over a different plan describing a
+  // directory tree that has nothing to do with it.
+  $effect(() => {
+    void reviewId;
+    folderTree = undefined;
+  });
+
+  // The folder card's dismissal, mirroring the file preview's below: Escape, or a
+  // click outside the card, both in the CAPTURE phase so they run before the
+  // plan's own handlers. `composedPath` is what makes this work over a surface
+  // behind a shadow root — a click on a tree row still carries the card.
+  //
+  // A click on another reference is let through UNSWALLOWED: the card closes, and
+  // that same click reaches the token handler, which opens whichever surface the
+  // reference it landed on calls for. Any other outside click is swallowed, so
+  // dismissing the card never also opens a line comment.
+  $effect(() => {
+    if (folderTree === undefined) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      folderTree = undefined;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    const onClick = (e: MouseEvent) => {
+      const path = e.composedPath();
+      if (path.some((n) => n instanceof Element && n.matches("[data-folder-tree]"))) return;
+      folderTree = undefined;
+      if (path.some((n) => n instanceof Element && n.matches("[data-file-ref]"))) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    };
+    window.addEventListener("keydown", onKey, { capture: true });
+    window.addEventListener("click", onClick, { capture: true });
+    return () => {
+      window.removeEventListener("keydown", onKey, { capture: true });
+      window.removeEventListener("click", onClick, { capture: true });
+    };
+  });
 
   // Dismissal (EXC-840, superseding EXC-799's hover-intent tracker): an open
   // preview stays open until the reader dismisses it — Escape, or a click anywhere
@@ -1292,7 +1366,7 @@
           doc={{ name: "plan.md", text: linkLayer.text }}
           links={linkLayer.spans}
           {fileRefs}
-          onFileRefClick={openFilePreview}
+          onFileRefClick={openFileRef}
           annotations={sourceAnnotations}
           options={readerOptions}
           {gutter}
@@ -1429,6 +1503,15 @@
     </FileDrawer>
   {/if}
 </div>
+
+<!-- The folder-reference tree (EXC-918). A viewport-fixed card rather than a lane
+     in the surface above, so it sits outside that flex row entirely; compare mode
+     has no reference affordances, so it is gated on the single-version view like
+     the preview is. -->
+{#if !showDiff && folderTree}
+  {@const openDir = folderTree}
+  <FolderTree reviewId={reviewId} path={openDir.path} anchor={openDir.rect} {showShortcutHints} />
+{/if}
 
 {#if legacyAnnotations.length > 0}
   <LegacyAnnotationList annotations={legacyAnnotations} />

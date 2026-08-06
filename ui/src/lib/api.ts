@@ -6,6 +6,7 @@ import type {
   ApproveVariantId,
   ClientReview,
   DaemonDiagnostics,
+  DirListing,
   FileExcerpt,
   FileRefKind,
   FileRefsResponse,
@@ -136,6 +137,20 @@ export async function getFileExcerpt(
     params.set("end", String(range.end));
   }
   return json(await fetch(`/api/reviews/${encodeURIComponent(id)}/file?${params}`));
+}
+
+/** One level of a directory the plan referenced, for the folder popover's lazy
+ * expansion (EXC-917). `root` is the anchor the reader started expanding from —
+ * the reference as written in the prose — and `path` is the level being asked
+ * for, empty to mean the anchor itself. The pair is what lets the route bound the
+ * descent, so `root` travels on every request rather than only the first.
+ *
+ * Throws HttpError on a non-2xx. The route answers every refusal with one 404 —
+ * a missing directory, an escape, a descent past the guard rail — so the card has
+ * a single failure state to render rather than a taxonomy it can't act on. */
+export async function getDirListing(id: string, root: string, path: string): Promise<DirListing> {
+  const params = new URLSearchParams({ root, path });
+  return json(await fetch(`/api/reviews/${encodeURIComponent(id)}/dir?${params}`));
 }
 
 /** Autosaves the reviewer's working draft: inline annotations, the review-scoped

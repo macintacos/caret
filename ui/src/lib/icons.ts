@@ -15,6 +15,7 @@ export const ICON_NAMES = [
   "corner-up-left",
   "ellipsis",
   "file",
+  "folder",
   "git-compare",
   "keyboard",
   "monitor",

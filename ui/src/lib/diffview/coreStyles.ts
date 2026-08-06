@@ -5,12 +5,15 @@
 // content column collapses to zero width and only the line-number gutter shows.
 
 import fileIconRaw from "@/icons/file.svg?raw";
+import folderIconRaw from "@/icons/folder.svg?raw";
 import { DIFFS_CORE_STYLES } from "$lib/diffview/diffsCoreStyles.ts";
 
 // The vendored Lucide `file` glyph as a CSS mask source (EXC-687). Rendered as a
 // mask rather than an <img> so it takes the ink color of the surrounding text via
 // background-color, matching how Icon.svelte colors an SVG through currentColor.
 const FILE_ICON_MASK = `url("data:image/svg+xml,${encodeURIComponent(fileIconRaw)}")`;
+// Its counterpart for a reference the daemon resolved to a directory (EXC-918).
+const FOLDER_ICON_MASK = `url("data:image/svg+xml,${encodeURIComponent(folderIconRaw)}")`;
 
 // caret's adjustments layered over the vendored core stylesheet. The gutter and
 // content sit in adjacent grid columns with no gap, which reads cramped — line
@@ -458,6 +461,18 @@ const CARET_OVERRIDES = `
     background-color: var(--ink-faint);
     -webkit-mask: ${FILE_ICON_MASK} no-repeat center / contain;
     mask: ${FILE_ICON_MASK} no-repeat center / contain;
+  }
+
+  /* EXC-918: a reference the daemon resolved to a DIRECTORY draws the folder
+     glyph instead. The mask is all that changes — the rule above already sized,
+     tinted and spaced the box, and every other [data-file-ref] rule below (the
+     pointer cursor, the chip padding, the hover wash) matches a directory token
+     too, because the kind rides on the attribute's value rather than a second
+     attribute. So a folder reference reads as the same pressable chip, pointing
+     at a different surface. */
+  [data-content] [data-file-ref="directory"]::before {
+    -webkit-mask: ${FOLDER_ICON_MASK} no-repeat center / contain;
+    mask: ${FOLDER_ICON_MASK} no-repeat center / contain;
   }
 
   /* EXC-840: the reference opens its preview on click, so the token reads as a
