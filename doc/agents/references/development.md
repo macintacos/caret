@@ -15,6 +15,13 @@ When to edit it:
 - Keep `CONTRIBUTING.md` the short front door — it orients a new contributor in a page and
   points here for the full catalog.
 
+One coupling to respect. `scripts/tasks/dev/fake-plan.md` cites this file **by line** —
+`:124`, `:154-162`, `:200-212` — and its bullets assert what the preview does with them:
+the `:154-162` bullet needs at least 192 lines here and the `:200-212` bullet at least
+212, and `:124` is meant to sit mid-file with a large strip above and below. Nothing in CI
+guards any of that. If a pass shortens this page, recheck those three citations by running
+`mise run dev` and clicking them.
+
 Use the `/doc-coauthoring` skill for any substantive prose pass — it keeps the section
 on-audience and scannable.
 

@@ -212,16 +212,16 @@ order, so a lower `CARET_PREFLIGHT_JOBS` can't park `smoke` in a slot while the
 `mise run dev` takes `--num-versions <n>` (how many versions the primary dev review opens
 with; default 4, a positive integer), `--notify` (arm the extra-review seeder), and
 `--port` / `--state-dir` / `--persist` (the port, state dir, and state-persistence
-overrides described under [Configuring](CONFIGURING.md)). Its orchestration — resolve the
-port mode and state dir (`scripts/tasks/dev/dev-env.ts`), spawn the daemon, pino-pretty,
-and Vite, run the protocol driver in-process (so commander parses `--num-versions` once,
-with no re-spawned child to reap), discover the daemon's bound port from its lock, and
-reap every child on exit — lives in `scripts/tasks/dev/run.ts`. Note `Bun.spawn` snapshots
-`process.env` at startup and ignores later mutations, so env overrides (`XDG_STATE_HOME`,
-`CARET_IDLE_MS`, `CARET_PORT`) are passed explicitly to each child rather than set on
-`process.env`; the smoke targets (`scripts/tasks/smoke.ts`) follow the same
-daemon-supervision pattern, and their shared over-the-wire probe is unit-tested in
-`test/scripts/smoke-probe.test.ts`.
+overrides described under [Configuration](CONFIGURING.md#config-file)). Its orchestration
+— resolve the port mode and state dir (`scripts/tasks/dev/dev-env.ts`), spawn the daemon,
+pino-pretty, and Vite, run the protocol driver in-process (so commander parses
+`--num-versions` once, with no re-spawned child to reap), discover the daemon's bound port
+from its lock, and reap every child on exit — lives in `scripts/tasks/dev/run.ts`. Note
+`Bun.spawn` snapshots `process.env` at startup and ignores later mutations, so env
+overrides (`XDG_STATE_HOME`, `CARET_IDLE_MS`, `CARET_PORT`) are passed explicitly to each
+child rather than set on `process.env`; the smoke targets (`scripts/tasks/smoke.ts`)
+follow the same daemon-supervision pattern, and their shared over-the-wire probe is
+unit-tested in `test/scripts/smoke-probe.test.ts`.
 
 This replaces per-task bash scripts carrying `#USAGE` flag specs. Those worked but were
 fragile: mise runs file tasks under macOS `/bin/bash` 3.2, where expanding an empty
