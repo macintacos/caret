@@ -102,12 +102,12 @@ const LINE_SUFFIX = /^(.+?)(?::L?|:?#L)(\d+)(?:[-–]L?(\d+)|:\d+)?$/;
  * What it does buy is silence on the tokens no filesystem could answer for:
  * `3.14`, `42`, `1.2.3`.
  *
- * A caller that needs the stricter "looks like a FILE" question asks
- * `hasKnownFileExtension` on top; the link layer does, since collapsing a link's
- * `[]()` on a guess is visible where an unresolved candidate is not. Each caller
- * also adds its own URL exclusion first, since this judges a run by its last
- * segment and a URL's tail can read as a path: the scan masks URLs inside code,
- * the link layer rejects a target carrying a scheme. */
+ * A caller that needs a stricter gate narrows on top, and the link layer does,
+ * since collapsing a link's `[]()` on a guess is visible where an unresolved
+ * candidate is not; links.ts owns those clauses. Each caller also adds its own
+ * URL exclusion first, since this judges a run by its last segment and a URL's
+ * tail can read as a path: the scan masks URLs inside code, the link layer
+ * rejects a target that names a scheme or a host. */
 export function classify(raw: string): { path: string; line?: number; endLine?: number } | null {
   let path = raw;
   let line: number | undefined;

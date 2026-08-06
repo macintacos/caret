@@ -51,9 +51,10 @@ export const MAX_CITED_SPAN_LINES = 200;
 
 // File extensions a plan's prose is likely to cite. Neither runtime uses this to
 // decide what a reference *is* — the filesystem answers that (EXC-916) — so it is
-// only ever a narrowing on top: the link layer collapses a `[label](target)` only
-// for a file-shaped target, and the daemon's bounded basename search fires only
-// for a name shaped like one. Broad enough to cover the source and config kinds a
+// only ever a narrowing on top: the link layer folds it into a broader gate — a
+// `[label](target)` collapses when the target names a file by extension or spans
+// more than one segment (EXC-956) — and the daemon's bounded basename search
+// fires only for a name shaped like one. Broad enough to cover the source and config kinds a
 // plan cites, narrow enough that `obj.property` and `e.g` cost nothing.
 const KNOWN_FILE_EXTENSIONS: ReadonlySet<string> = new Set([
   "ts",
