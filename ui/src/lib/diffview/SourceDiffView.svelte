@@ -6,9 +6,11 @@
   import { createDiffViewLifecycle } from "$lib/diffview/instance.ts";
   import { preloadFenceLanguages, scanFenceLanguages } from "$lib/diffview/languages.ts";
   import { type SourceDiffViewLibOptions, toFileDiffOptions } from "$lib/diffview/options.ts";
+  import { scrollToDiffLine } from "$lib/diffview/scroll.ts";
   import { registerCaretDiffThemes } from "$lib/diffview/theme.ts";
   import type {
     SourceDiffLineAnnotation,
+    SourceDiffViewApi,
     SourceDiffViewOptions,
     SourceDocument,
   } from "$lib/diffview/types.ts";
@@ -28,9 +30,14 @@
     contentKey: string;
     options?: SourceDiffViewOptions;
     annotations?: SourceDiffLineAnnotation[];
+    /** Fires once the view's container is bound, handing the parent an
+     * imperative API (currently side-aware scroll-to-line) that closes over the
+     * container. Lets callers jump the view without reaching into the library's
+     * DOM. */
+    onReady?: (api: SourceDiffViewApi) => void;
   }
 
-  let { oldDoc, newDoc, contentKey, options = {}, annotations }: Props = $props();
+  let { oldDoc, newDoc, contentKey, options = {}, annotations, onReady }: Props = $props();
 
   // The container div is component markup, so the instance must not remove
   // it on cleanUp — construct container-managed (third constructor arg).
@@ -43,6 +50,21 @@
   let container: HTMLElement | undefined = $state();
 
   const libOptions = $derived(toFileDiffOptions(options));
+
+  // Hand the parent the scroll-to-line API + host once the container exists. The
+  // container is stable for the component's life, and `notified` keeps this to a
+  // single hand-off even though `onReady`'s identity can change across parent
+  // re-renders (the parent passes an inline arrow).
+  let notified = false;
+  $effect(() => {
+    if (container == null || notified) return;
+    notified = true;
+    const el = container;
+    onReady?.({
+      scrollToLine: (line, side) => scrollToDiffLine(el, line, side),
+      host: el,
+    });
+  });
 
   // Mount-once effect: reads no reactive state, returns the teardown.
   $effect(() => () => lifecycle.destroy());
