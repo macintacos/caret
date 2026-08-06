@@ -264,6 +264,8 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
   // options (not passthrough): `-v` counts up (`-vv` → 2) and `--task` is
   // repeatable. The action funnels the parsed flags into a JsonArgs and hands
   // them to runPreflightCli (the gate orchestrator in scripts/preflight.ts).
+  // `--full` is the one flag that is NOT --json-only: the gate scopes itself to
+  // the diff in both output modes, so both need the same escape hatch.
   program
     .command("preflight")
     .description(
@@ -272,6 +274,10 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
     .option(
       "--json",
       "Emit machine-readable JSON (two NDJSON docs on stdout) instead of the live display",
+    )
+    .option(
+      "--full",
+      "Run every task regardless of the diff (a Markdown-only change otherwise narrows the gate)",
     )
     .option(
       "-v, --verbose",
@@ -290,7 +296,12 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
       // Commander types a no-arg flag carrying a count reducer as `number | true`;
       // the reducer plus the `0` default make it always a number at runtime.
       const verbosity = typeof opts.verbose === "number" ? opts.verbose : 0;
-      const args: JsonArgs = { json: opts.json ?? false, verbosity, tasks: opts.task };
+      const args: JsonArgs = {
+        json: opts.json ?? false,
+        verbosity,
+        full: opts.full ?? false,
+        tasks: opts.task,
+      };
       // A truthy check (not `!== undefined`): an empty `--grep=` means no filter,
       // not a match-everything `new RegExp("")`.
       if (opts.grep) args.grep = opts.grep;

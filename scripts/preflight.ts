@@ -21,6 +21,12 @@
 // receive rather than the source tree: preflight proves the source works, smoke
 // proves the binary and the npm bundle do.
 //
+// Which of those tasks run is scoped to the diff (EXC-1042): a change confined
+// to Markdown runs `lint` alone, plus `test` when it touches Markdown a test
+// reads from disk. Everything else runs all six, as does a diff that cannot be
+// read at all. See § Diff-scoped task selection below — including why the
+// narrowing never extends to the file list a task is handed.
+//
 // DI mirrors scripts/tasks/release/command.ts: the spawn collaborator is injected so
 // test/scripts/preflight.test.ts can drive the DAG without running real tasks.
 // The tasks CLI's `preflight` subcommand (scripts/tasks/cli.ts) is the entry
@@ -36,6 +42,7 @@ import { type ChildProcess, type SpawnOptions, spawn } from "node:child_process"
 import { once } from "node:events";
 import { availableParallelism } from "node:os";
 import type { Readable } from "node:stream";
+import { $ } from "bun";
 
 import { Listr, type ListrTask } from "listr2";
 
@@ -85,7 +92,14 @@ export interface PreflightOutcome {
 export interface PreflightStartReport {
   event: "start";
   schemaVersion: number;
+  /** The tasks this run will spawn — a subset of the six when `selection.narrowed`. */
   tasks: string[];
+  /**
+   * Why this task set (EXC-1042). A scoped run must never read as a full green
+   * run, so the narrowing and its cause are stated rather than left implicit in
+   * a shorter `tasks` array.
+   */
+  selection: { narrowed: boolean; reason: string };
   /** Echoes the parsed output filters so the consumer can confirm its flags parsed. */
   filters: { verbosity: number; grep: string | null; tasks: string[] | null };
 }
@@ -116,11 +130,14 @@ export interface PreflightErrorReport {
   message: string;
 }
 
-/** The --json-mode flags (parsed by the tasks CLI's commander tree). All are
- * inert without --json. */
+/** The preflight flags, parsed by the tasks CLI's commander tree. All are inert
+ * without --json EXCEPT `full`, which selects the task set for both output
+ * modes — the human path narrows too, so it needs the same escape hatch. */
 export interface JsonArgs {
   json: boolean;
   verbosity: number;
+  /** Run every task regardless of the diff (EXC-1042). */
+  full: boolean;
   grep?: string;
   tasks: string[];
 }
@@ -154,8 +171,115 @@ const DEPENDENT: readonly Dependent[] = [
 const TASK_ORDER = [...IMMEDIATE, ...DEPENDENT.map((d) => d.name)];
 
 // Bumpable integer so machine consumers detect a breaking shape change,
-// mirroring scripts/tasks/release/contract.ts.
-const SCHEMA_VERSION = 1;
+// mirroring scripts/tasks/release/contract.ts. 2 (EXC-1042): the gate can now
+// run a subset, so `ok` means "every task that RAN passed" rather than "all six
+// passed" — a real semantic change for anything keying off the result document.
+const SCHEMA_VERSION = 2;
+
+// Diff-scoped task selection (EXC-1042) --------------------------------------
+//
+// A change that touches only Markdown cannot be observed by `build ui`,
+// `build bin`, `test e2e`, or `smoke`, so the gate runs only the tasks that
+// could actually fail on it.
+//
+// The narrowing applies to WHICH TASKS RUN, never to which files a task sees:
+// every task is still spawned as a bare `mise run <task>`. That distinction is
+// load-bearing for `lint`. rumdl resolves an MD051 cross-file link fragment only
+// when the file it points into is in the same scan, so a lint handed just the
+// changed files would silently stop checking every cross-file anchor whose
+// target is unchanged — and doc/ is held together almost entirely by those.
+
+/** Which tasks this run will spawn, and why that set. */
+export interface TaskSelection {
+  /** The tasks to run, a subset of TASK_ORDER. */
+  readonly tasks: readonly string[];
+  /** True when the diff narrowed the set below the full gate. */
+  readonly narrowed: boolean;
+  /** Why this set — surfaced in the start document and the human summary. */
+  readonly reason: string;
+}
+
+/**
+ * Markdown files a unit test READS FROM DISK. A diff confined to Markdown still
+ * has to run `test` when it touches one of these, because `test` can observe the
+ * change. Add an entry whenever a test starts reading a Markdown file at run
+ * time — the suite guards that every path listed here still exists, but nothing
+ * can guard an omission.
+ */
+export const MARKDOWN_READ_BY_TESTS: readonly string[] = [
+  "scripts/tasks/dev/fake-plan.md", // test/scripts/dev-driver.test.ts reads it and asserts on its content
+  "THIRD_PARTY_LICENSES.md", // ui/src/lib/icons.test.ts checks its table against the icon registry
+  "doc/DEVELOPMENT.md", // fake-plan.md cites it by line; that citation is guarded under `test`
+];
+
+function fullGate(reason: string): TaskSelection {
+  return { tasks: TASK_ORDER, narrowed: false, reason };
+}
+
+/** The default when no selection is supplied: everything. */
+const FULL_GATE = fullGate("the full gate");
+
+/**
+ * The task set for a run, given the paths its diff touched — `null` when the
+ * diff could not be read at all. Conservative by construction: anything other
+ * than a non-empty, entirely-Markdown list runs the whole gate.
+ */
+export function selectTasks(changed: readonly string[] | null): TaskSelection {
+  if (changed === null) {
+    return fullGate("the changed-file set could not be read — running the full gate");
+  }
+  // An empty list satisfies "every changed path is Markdown" vacuously, which
+  // would narrow a run whose diff we merely failed to see. Treat it as unknown.
+  if (changed.length === 0) return fullGate("no changed files detected — running the full gate");
+
+  const nonMarkdown = changed.filter((path) => !path.endsWith(".md"));
+  if (nonMarkdown.length > 0) {
+    return fullGate(
+      `${nonMarkdown.length} of ${changed.length} changed paths are not Markdown — running the full gate`,
+    );
+  }
+
+  const readByTests = changed.filter((path) => MARKDOWN_READ_BY_TESTS.includes(path));
+  const also = readByTests.length > 0 ? `, and \`test\` reads ${readByTests.join(", ")}` : "";
+  return {
+    tasks: readByTests.length > 0 ? ["lint", "test"] : ["lint"],
+    narrowed: true,
+    reason: `all ${changed.length} changed paths are Markdown${also}; \`lint\` still scans the whole tree`,
+  };
+}
+
+/**
+ * Paths this working tree changes relative to its merge base with the default
+ * branch: the committed, staged and unstaged diff, plus untracked files — a new
+ * source file is a change well before it is added. Returns null on any failure
+ * (no `origin/HEAD`, a shallow clone, git off PATH), so the caller falls back to
+ * the full gate rather than narrowing on a diff it could not see.
+ */
+export async function changedPaths(): Promise<string[] | null> {
+  const merged = await $`git merge-base HEAD origin/HEAD`.nothrow().quiet();
+  const base = merged.text().trim();
+  if (merged.exitCode !== 0 || base === "") return null;
+  // `git diff <commit>` compares the WORKING TREE to that commit, so one call
+  // covers committed, staged and unstaged changes alike.
+  const diff = await $`git diff --name-only ${base}`.nothrow().quiet();
+  const untracked = await $`git ls-files --others --exclude-standard`.nothrow().quiet();
+  if (diff.exitCode !== 0 || untracked.exitCode !== 0) return null;
+  const lines = `${diff.text()}\n${untracked.text()}`.split("\n").map((line) => line.trim());
+  return [...new Set(lines.filter((line) => line !== ""))];
+}
+
+/**
+ * The selection for one CLI run. `--full` short-circuits the git read entirely,
+ * so the override holds even where the diff could not have been computed.
+ * `readChanged` is injected so the override's short-circuit is observable.
+ */
+export async function resolveSelection(
+  full: boolean,
+  readChanged: () => Promise<readonly string[] | null> = changedPaths,
+): Promise<TaskSelection> {
+  if (full) return fullGate("--full: the full gate was requested explicitly");
+  return selectTasks(await readChanged());
+}
 
 // Shared by the human summary and the --json output so the remediation text
 // can't drift between the two surfaces.
@@ -170,7 +294,18 @@ export async function runPreflight(deps: {
   renderer?: "default" | "silent";
   /** Max tasks in flight (EXC-587); defaults to the host's CPU count. */
   concurrency?: number;
+  /** Which tasks to run (EXC-1042); defaults to the full gate. */
+  selection?: TaskSelection;
 }): Promise<PreflightOutcome> {
+  const selection = deps.selection ?? FULL_GATE;
+  const selected = new Set(selection.tasks);
+  const immediateTasks = IMMEDIATE.filter((name) => selected.has(name));
+  // A dependent is dropped when its own gate task is out of the run too. The
+  // selections built above never split a pair, so this only makes the "every
+  // gating task resolves its gate" invariant below unhittable rather than
+  // merely unhit — a dependent kept without its gate would await forever.
+  const dependentTasks = DEPENDENT.filter((d) => selected.has(d.name) && selected.has(d.after));
+
   const results = new Map<string, TaskResult>();
   // One gate per task something waits on, each resolving "did it pass?". EVERY
   // EXIT PATH OF A GATING TASK MUST RESOLVE ITS GATE — `build bin` is a gate and
@@ -179,7 +314,7 @@ export async function runPreflight(deps: {
   // and `smoke` awaits a promise nobody settles: the gate hangs instead of
   // failing.
   const gates = new Map<string, PromiseWithResolvers<boolean>>();
-  for (const { after } of DEPENDENT) {
+  for (const { after } of dependentTasks) {
     if (!gates.has(after)) gates.set(after, Promise.withResolvers<boolean>());
   }
   // EXC-587: the first task to fail aborts every in-flight sibling. A spawner
@@ -250,7 +385,7 @@ export async function runPreflight(deps: {
     };
   };
 
-  const listr = new Listr([...IMMEDIATE.map(immediate), ...DEPENDENT.map(dependent)], {
+  const listr = new Listr([...immediateTasks.map(immediate), ...dependentTasks.map(dependent)], {
     // EXC-587: a finite cap (host CPU count by default) instead of the prior
     // `true` (→ Infinity), so a constrained or stacked host can't oversubscribe;
     // CARET_PREFLIGHT_JOBS lowers it further. ≥ the task count is a no-op, so
@@ -270,12 +405,15 @@ export async function runPreflight(deps: {
   await listr.run();
 
   const exitCode = [...results.values()].some((r) => r.status === "failed") ? 1 : 0;
-  return { results, exitCode, summary: buildSummary(results) };
+  return { results, exitCode, summary: buildSummary(results, selection) };
 }
 
-function buildSummary(results: Map<string, TaskResult>): string {
+function buildSummary(results: Map<string, TaskResult>, selection: TaskSelection): string {
   const icons: Record<TaskStatus, string> = { passed: "✔", failed: "✘", skipped: "○" };
   const lines = ["preflight summary:"];
+  // A narrowed run prints why, so a short green summary is never mistaken for
+  // the whole gate having passed (the human twin of the start doc's `selection`).
+  if (selection.narrowed) lines.push(`  scope: ${selection.reason}`);
   for (const name of TASK_ORDER) {
     const result = results.get(name);
     if (!result) continue;
@@ -318,14 +456,17 @@ function outputDetail(
   return "none"; // skipped — nothing ran
 }
 
-/** Planned task set + the filters in effect, emitted to stdout before the run in --json mode. */
+/** Planned task set, why it is that set, and the filters in effect — emitted to
+ * stdout before the run in --json mode. */
 export function buildStartReport(
-  args: JsonArgs = { json: true, verbosity: 0, tasks: [] },
+  args: JsonArgs = { json: true, verbosity: 0, full: false, tasks: [] },
+  selection: TaskSelection = FULL_GATE,
 ): PreflightStartReport {
   return {
     event: "start",
     schemaVersion: SCHEMA_VERSION,
-    tasks: [...TASK_ORDER],
+    tasks: [...selection.tasks],
+    selection: { narrowed: selection.narrowed, reason: selection.reason },
     filters: {
       verbosity: args.verbosity,
       grep: args.grep ?? null,
@@ -583,6 +724,9 @@ export async function runPreflightCli(args: JsonArgs): Promise<void> {
   installSignalHandlers(controller);
   const spawnTask = makeSpawnMiseTask(controller);
   const concurrency = parseJobs(process.env.CARET_PREFLIGHT_JOBS);
+  // Resolved once, ahead of either output mode, so the human summary and the
+  // --json start document always describe the same run (EXC-1042).
+  const selection = await resolveSelection(args.full);
 
   if (!args.json) {
     if (args.verbosity > 0 || args.grep !== undefined || args.tasks.length > 0) {
@@ -594,6 +738,7 @@ export async function runPreflightCli(args: JsonArgs): Promise<void> {
       spawnTask,
       renderer: "default",
       concurrency,
+      selection,
     });
     process.stdout.write(`\n${summary}\n`);
     process.exitCode = exitCode;
@@ -613,11 +758,12 @@ export async function runPreflightCli(args: JsonArgs): Promise<void> {
     }
   }
 
-  process.stdout.write(`${JSON.stringify(buildStartReport(args))}\n`);
+  process.stdout.write(`${JSON.stringify(buildStartReport(args, selection))}\n`);
   const { results, exitCode } = await runPreflight({
     spawnTask,
     renderer: "silent",
     concurrency,
+    selection,
   });
   process.stdout.write(
     `${JSON.stringify(buildResultReport(results, { verbosity: args.verbosity, grep, tasks: args.tasks }))}\n`,
