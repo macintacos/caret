@@ -8,37 +8,61 @@ install it, and basic usage, start there.
 
 ## Desktop notifications
 
-When a new plan lands while caret is in the background — tab hidden or window unfocused —
-the page fires a desktop notification; clicking it focuses the tab and opens that review
-(a notification click is a user gesture, the one focus path browsers reliably allow). The
-bell badge in the top bar shows the current permission with a distinct indicator — a green
-dot when granted, a red dot when blocked, and a subtle-purple "?" when undecided. It
-requests permission on click when undecided, and
-**sends a test notification on click when granted**. On a first-ever run, an onboarding
-modal introduces desktop notifications and offers to enable them. Page-context only, no
-service worker: the tab must be open.
+### When one fires
+
+A new plan landing while caret is in the background — tab hidden or window unfocused —
+fires a desktop notification. Clicking it focuses the tab and opens that review (a
+notification click is a user gesture, the one focus path browsers reliably allow).
+
+> [!NOTE]
+> Page-context only, no service worker: the tab must be open.
+
+### Where the permission lives
+
+The bell badge in the top bar shows the current permission with a distinct indicator:
+
+| Indicator         | Permission |
+| ----------------- | ---------- |
+| Green dot         | Granted    |
+| Red dot           | Blocked    |
+| Subtle-purple "?" | Undecided  |
+
+Clicking the bell requests permission when the permission is undecided, and
+**sends a test notification** when it is granted. On a first-ever run, an onboarding modal
+introduces desktop notifications and offers to enable them.
 
 The same permission state has a roomier home in **Settings → Notifications**, which reads
-it live (On / Blocked / Off) with the same enable / test affordance as the bell. Open
-Settings from the top-bar button or `,` — a two-pane dialog you can filter with `/`, and
-`?` opens the keyboard-shortcuts help from anywhere.
+it live — On / Blocked / Off for those same three states — with the same enable / test
+affordance as the bell. Open Settings from the top-bar button or `,` — a two-pane dialog
+you can filter with `/`, and `?` opens the keyboard-shortcuts help from anywhere.
 
-Grants are **per-origin** (scheme + host + port). The installed build opens the review UI
-at the vanity origin `http://caret.localhost:42718`, which is a different origin from
-`mise run dev`'s Vite server (`localhost:5173`) — so a grant made in dev does **not**
-carry over. On the installed build, grant notifications once on `caret.localhost:42718`
-via the bell (it shows the undecided "?" state until you do). While the grant stays
-undecided, a new plan logs `plan notification skipped (permission)` at info in the daemon
-log, so a missing grant is visible without enabling debug logging.
+### Grants are per-origin
+
+> [!IMPORTANT]
+> A grant covers one origin (scheme + host + port). The installed build opens the review
+> UI at the vanity origin `http://caret.localhost:42718`; `mise run dev` serves it from
+> Vite at `localhost:5173`. A grant made in dev does **not** carry over.
+
+On the installed build, grant notifications once on `caret.localhost:42718` via the bell —
+it shows the undecided "?" state until you do. While the grant stays undecided, a new plan
+logs `plan notification skipped (permission)` at info in the daemon log, so a missing
+grant is visible without enabling debug logging.
+
+### When no toast appears
 
 If the test click produces no toast, the page's side worked (the daemon log shows the
 fired/shown records) and the OS is suppressing it — a granted notification the OS blocks
-fails silently, with no error the page can catch. On macOS check, in order: System
-Settings → Notifications → your browser ("Allow notifications" on, alert style not
-"None"), Focus / Do Not Disturb, and the "when mirroring or sharing" toggle if a display
-is shared. Note also that a _hidden_ tab's poll is throttled by Chrome after ~5 minutes in
-the background, which can delay a notification by up to a minute; an unfocused-but-visible
-window polls at full rate.
+fails silently, with no error the page can catch. On macOS, check in order:
+
+1. System Settings → Notifications → your browser: "Allow notifications" on, alert style
+   not "None".
+2. Focus / Do Not Disturb.
+3. The "when mirroring or sharing" toggle, if a display is shared.
+
+> [!NOTE]
+> A *hidden* tab's poll is throttled by Chrome after ~5 minutes in the background, which
+> can delay a notification by up to a minute. An unfocused-but-visible window polls at
+> full rate.
 
 ## cmux unread marks
 
@@ -57,33 +81,51 @@ Two things count as reviewed, and either clears the mark:
   uninterrupted. Losing focus or hiding the tab cancels the dwell rather than pausing it,
   so a backgrounded tab left open never clears a mark on its own.
 
-Both ids are required, and every call names both — caret never uses `--all`, so one plan's
-mark can only ever clear the pane that submitted it. There is nothing to configure: with
-either id missing the integration is silently inert, which is what running outside cmux
-looks like. If the `cmux` binary isn't on the daemon's PATH, the mark is left standing and
-one `warn` lands in the daemon log.
+Three things follow from that design:
+
+- Both ids are required, and every call names both — caret never uses `--all`, so one
+  plan's mark can only ever clear the pane that submitted it.
+- There is nothing to configure: with either id missing the integration is silently inert,
+  which is what running outside cmux looks like.
+- If the `cmux` binary isn't on the daemon's PATH, the mark is left standing and one
+  `warn` lands in the daemon log.
 
 ## Logging & Debugging
 
-Logs live under `$XDG_STATE_HOME/caret` when set, otherwise `~/.local/state/caret`:
+### Where the logs live
 
-- `caret.log` — NDJSON records from the short-lived `caret review` hook process.
-- `daemon.log` — the detached daemon's stdout/stderr: the same NDJSON shape (tagged with
-  `pid`), possibly interleaved with raw non-JSON crash output.
+Under `$XDG_STATE_HOME/caret` when set, otherwise `~/.local/state/caret`:
+
+| File         | What's in it                                                                                                                        |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `caret.log`  | NDJSON records from the short-lived `caret review` hook process.                                                                    |
+| `daemon.log` | The detached daemon's stdout/stderr: the same NDJSON shape (tagged with `pid`), possibly interleaved with raw non-JSON crash output. |
 
 Browser-UI events ship to the daemon in batches (`POST /api/logs`) and land in
 `daemon.log` tagged `source: "ui"`, subject to the same `[logging]` level and redact
 settings as everything else.
 
-Each record is one JSON object per line (pino): `level` (numeric — 20 debug, 30 info, 40
-warn, 50 error), `time` (ISO 8601 UTC, e.g. `2026-06-04T21:25:40.038Z`), `step` (a short
-fixed token), `source` (the emitting process — `"hook"`, `"daemon"`, or `"ui"`), `caller`
-(the `file:line` of the emitting call site — on hook and daemon records; bridged UI
-records omit it), `msg`, plus structured extras. Normal operation logs at info; only
-genuine failures sit at error.
+### What a record carries
 
-To raise verbosity, set `level = "debug"` in `config.toml`'s `[logging]` table (see
-[Configuration](CONFIGURING.md#config-file)). It hot-reloads — no restart needed.
+Each record is one JSON object per line (pino):
+
+| Field    | Value                                                                                                     |
+| -------- | ----------------------------------------------------------------------------------------------------------- |
+| `level`  | Numeric — 20 debug, 30 info, 40 warn, 50 error.                                                           |
+| `time`   | ISO 8601 UTC, e.g. `2026-06-04T21:25:40.038Z`.                                                            |
+| `step`   | A short fixed token.                                                                                      |
+| `source` | The emitting process — `"hook"`, `"daemon"`, or `"ui"`.                                                   |
+| `caller` | The `file:line` of the emitting call site. On hook and daemon records only; bridged UI records omit it.    |
+| `msg`    | The message.                                                                                              |
+
+Structured extras ride alongside those fields. Normal operation logs at info; only genuine
+failures sit at error.
+
+> [!TIP]
+> To raise verbosity, set `level = "debug"` in `config.toml`'s `[logging]` table (see
+> [Config file](CONFIGURING.md#config-file)). It hot-reloads — no restart needed.
+
+### Diagnostics
 
 - `/caret:debug` — the slash command that reviews the current session —
   pending/approved/rejected/expired plans (from the on-disk review records) plus recent

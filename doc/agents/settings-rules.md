@@ -10,7 +10,8 @@ reference.
   (existing keys follow this pattern, e.g. `level: ... // EXC-398`).
 - **Reference doc.** Document it in `doc/CONFIGURING.md`: config-file keys as a row in the
   relevant table under `## Config file` (e.g. the `[logging]` table), environment
-  variables as a row in the `## Environment variables` table.
+  variables as a row in the **Runtime** table under `## Environment variables` — unless
+  the var is dev-only or preflight-only, which have their own tables there.
 - **Hot-reload.** If the setting is read live, note its hot-reload semantics — the
   settings service re-reads `config.toml` on change, so daemon-held settings take effect
   without a restart.
