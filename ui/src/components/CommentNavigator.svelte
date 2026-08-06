@@ -32,8 +32,28 @@
     /** Whether the shortcut-hint key caps are shown (EXC-826/EXC-792). When off,
      * the footer key legend hides; the keys themselves still work. */
     showShortcutHints: boolean;
+    /** Read-only mode (compare): rows render as non-interactive list items rather
+     * than reveal buttons — a compare-mode comment has no unambiguous scroll
+     * target, so there is nothing to click through to (EXC-872 v1 non-goal). */
+    readonly?: boolean;
+    /** Whether opening moves focus into the list. False when the panel opens
+     * without a user gesture (compare mode's auto-open), so it never steals focus
+     * from the diff or yanks a screen reader. */
+    focusOnOpen?: boolean;
+    /** Header title, e.g. "Comments in v1–v4" while comparing. */
+    title?: string;
   }
-  let { open, comments, activeId, onReveal, onClose, showShortcutHints }: Props = $props();
+  let {
+    open,
+    comments,
+    activeId,
+    onReveal,
+    onClose,
+    showShortcutHints,
+    readonly = false,
+    focusOnOpen = true,
+    title = "Comments",
+  }: Props = $props();
 
   let query = $state("");
   const visible = $derived(filterComments(comments, query));
@@ -63,13 +83,16 @@
       return;
     }
     hadFocus = true;
+    if (!focusOnOpen) return;
     const revealed = (asideEl?.querySelector(".nav-item.active") ?? null) as HTMLElement | null;
     (revealed ?? rows()[0] ?? searchEl)?.focus({ preventScroll: true });
   });
 
-  // The row buttons in filtered order — the roving-focus targets for j/k.
-  function rows(): HTMLButtonElement[] {
-    return asideEl ? ([...asideEl.querySelectorAll(".nav-item")] as HTMLButtonElement[]) : [];
+  // The rows in filtered order — the roving-focus targets for j/k. Buttons in the
+  // single-version view, list items in read-only compare mode; both carry
+  // .nav-item, so the keyboard model is the same either way.
+  function rows(): HTMLElement[] {
+    return asideEl ? ([...asideEl.querySelectorAll(".nav-item")] as HTMLElement[]) : [];
   }
   // Move roving focus by `delta` from the focused row, clamped to the ends. When
   // focus isn't on a row yet (e.g. the close button), either direction enters the
@@ -77,7 +100,7 @@
   function focusRelative(delta: number): void {
     const list = rows();
     if (list.length === 0) return;
-    const cur = list.indexOf(document.activeElement as HTMLButtonElement);
+    const cur = list.indexOf(document.activeElement as HTMLElement);
     const next = cur < 0 ? 0 : Math.min(Math.max(cur + delta, 0), list.length - 1);
     list[next]?.focus();
   }
@@ -126,10 +149,10 @@
     bind:this={asideEl}
     id="comment-navigator"
     class="comment-navigator"
-    aria-label="Comments in this plan"
+    aria-label={title}
   >
     <header class="nav-head">
-      <span class="nav-title metric">Comments</span>
+      <span class="nav-title metric">{title}</span>
       <span class="nav-count metric">{comments.length}</span>
       <button type="button" class="nav-close" aria-label="Close comments" onclick={onClose}>
         <span aria-hidden="true">&times;</span>
@@ -147,36 +170,53 @@
       />
     </div>
 
+    {#snippet rowBody(entry: CommentIndexEntry)}
+      <span class="nav-item-head">
+        <span class="nav-item-ref metric">{entry.label}</span>
+        {#if entry.version != null}<span class="nav-version-tag metric">v{entry.version}</span>{/if}
+        {#if entry.draft}<span class="nav-draft-tag metric">draft</span>{/if}
+      </span>
+      <!-- Underline the run(s) matching the live search query. Kept on one
+           line so no whitespace text node splits the segments (the text is
+           white-space: pre-wrap). -->
+      <span class="nav-item-text"
+        >{#each highlightMatches(entry.text, query) as seg}{#if seg.match}<mark class="nav-match"
+              >{seg.text}</mark
+            >{:else}{seg.text}{/if}{/each}</span
+      >
+    {/snippet}
+
     {#if visible.length === 0}
       <p class="nav-empty">
-        {comments.length === 0 ? "No inline comments yet." : "No comments match your search."}
+        {#if comments.length > 0}
+          No comments match your search.
+        {:else if readonly}
+          No comments on these versions.
+        {:else}
+          No inline comments yet.
+        {/if}
       </p>
     {:else}
       <ul class="nav-list" aria-label="Comment list">
         {#each visible as entry (entry.id)}
-          <li>
-            <button
-              type="button"
-              class="nav-item"
-              class:active={entry.id === activeId}
-              class:draft={entry.draft}
-              aria-current={entry.id === activeId ? "true" : undefined}
-              onclick={() => onReveal(entry)}
-            >
-              <span class="nav-item-head">
-                <span class="nav-item-ref metric">{entry.label}</span>
-                {#if entry.draft}<span class="nav-draft-tag metric">draft</span>{/if}
-              </span>
-              <!-- Underline the run(s) matching the live search query. Kept on one
-                   line so no whitespace text node splits the segments (the text is
-                   white-space: pre-wrap). -->
-              <span class="nav-item-text"
-                >{#each highlightMatches(entry.text, query) as seg}{#if seg.match}<mark
-                      class="nav-match">{seg.text}</mark
-                    >{:else}{seg.text}{/if}{/each}</span
+          {#if readonly}
+            <!-- Read-only compare row: a focusable list item, not a button, so j/k
+                 still walk the list but nothing advertises a click that goes nowhere. -->
+            <li class="nav-item" tabindex="-1">{@render rowBody(entry)}</li>
+          {:else}
+            <li>
+              <button
+                type="button"
+                class="nav-item"
+                class:active={entry.id === activeId}
+                class:draft={entry.draft}
+                aria-current={entry.id === activeId ? "true" : undefined}
+                onclick={() => onReveal(entry)}
               >
-            </button>
-          </li>
+                {@render rowBody(entry)}
+              </button>
+            </li>
+          {/if}
         {/each}
       </ul>
     {/if}
@@ -188,7 +228,9 @@
            taught there rather than repeated inside the open view. -->
       <footer class="nav-hints" aria-hidden="true">
         <span class="nav-hint"><Kbd class="kbd-sm">j</Kbd><Kbd class="kbd-sm">k</Kbd> move</span>
-        <span class="nav-hint"><Kbd class="kbd-sm">↵</Kbd> reveal</span>
+        {#if !readonly}
+          <span class="nav-hint"><Kbd class="kbd-sm">↵</Kbd> reveal</span>
+        {/if}
         <span class="nav-hint"><Kbd class="kbd-sm">/</Kbd> search</span>
         <span class="nav-hint"><Kbd class="kbd-sm">Esc</Kbd> close</span>
       </footer>
@@ -334,6 +376,15 @@
   .nav-item:hover {
     background: var(--paper-sunk);
   }
+  /* A read-only compare row is a list item, not a button: no pointer, no hover
+     lift, so nothing promises a click that leads nowhere. It keeps the focus ring,
+     which j/k still moves. */
+  li.nav-item {
+    cursor: default;
+  }
+  li.nav-item:hover {
+    background: none;
+  }
   /* A draft (an unsent composer scratch) reads as provisional: a dashed left rule +
      a "draft" tag, distinct from a committed comment's solid frame. */
   .nav-item.draft {
@@ -361,6 +412,18 @@
     font-weight: 600;
     letter-spacing: 0.02em;
     color: var(--ink-faint);
+  }
+  /* The version tag: which plan revision a compare-mode comment was left on. Same
+     quiet neutral pill as the draft tag, but solid-bordered — a version is a fact,
+     where a draft is provisional. */
+  .nav-version-tag {
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--ink-faint);
+    padding: 0 0.3rem;
+    border: 1px solid var(--rule-strong);
+    border-radius: var(--radius);
   }
   /* The draft tag: a quiet uppercase pill marking an unsent scratch as provisional,
      kept neutral so amber stays the navigation cue. */

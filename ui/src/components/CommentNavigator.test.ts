@@ -98,3 +98,62 @@ describe("CommentNavigator", () => {
     expect(revealed?.id).toBe("s:1");
   });
 });
+
+// The read-only versioned mode the compare view drives (EXC-872): the same panel
+// listing comments from several plan versions, each badged with its source, with
+// nothing to click through to.
+describe("CommentNavigator in compare mode", () => {
+  const versioned: CommentIndexEntry[] = [
+    { id: "v1:a", version: 1, line: 3, label: "Line 3", text: "v1 note", draft: false },
+    { id: "v2:b", version: 2, line: 6, label: "Lines 5–6", text: "v2 note", draft: false },
+  ];
+  const compare = { ...base, comments: versioned, readonly: true, focusOnOpen: false };
+
+  test("badges each row with the version its comment was left on", () => {
+    const { target } = render(CommentNavigator, compare);
+    const tags = [...target.querySelectorAll(".nav-version-tag")].map((t) => t.textContent);
+    expect(tags).toEqual(["v1", "v2"]);
+  });
+
+  test("renders no row buttons — a compare comment has no reveal target", () => {
+    const { target } = render(CommentNavigator, compare);
+    expect(target.querySelector(".nav-list button")).toBeNull();
+  });
+
+  test("still exposes .nav-item rows, so j/k roving focus keeps working", () => {
+    const { target } = render(CommentNavigator, compare);
+    const items = target.querySelectorAll(".nav-item");
+    expect(items.length).toBe(2);
+    expect(items[0]!.getAttribute("tabindex")).toBe("-1");
+  });
+
+  test("leaves focus outside the panel when it opens without a user gesture", () => {
+    const { target, flush } = render(CommentNavigator, compare);
+    flush();
+    expect(target.querySelector(".comment-navigator")!.contains(document.activeElement)).toBe(
+      false,
+    );
+  });
+
+  test("shows the compare empty state when the range has no comments", () => {
+    const { target } = render(CommentNavigator, { ...compare, comments: [] });
+    expect(target.querySelector(".nav-empty")!.textContent).toContain("No comments on these");
+  });
+
+  test("titles the panel with the compared range", () => {
+    const { target } = render(CommentNavigator, { ...compare, title: "Comments in v1–v2" });
+    expect(target.querySelector(".nav-title")!.textContent).toBe("Comments in v1–v2");
+    expect(target.querySelector(".comment-navigator")!.getAttribute("aria-label")).toBe(
+      "Comments in v1–v2",
+    );
+  });
+
+  test("drops the reveal key cap from the legend, keeping the rest", () => {
+    const { target } = render(CommentNavigator, { ...compare, showShortcutHints: true });
+    const hints = target.querySelector(".nav-hints")!.textContent;
+    expect(hints).not.toContain("reveal");
+    expect(hints).toContain("move");
+    expect(hints).toContain("search");
+    expect(hints).toContain("close");
+  });
+});
