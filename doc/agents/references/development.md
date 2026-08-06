@@ -26,11 +26,12 @@ scan, so a whole-tree `mise run lint` catches the break but the pre-commit hook 
 files only — does not. Rename one of these and run the full gate, not just the hook.
 
 `scripts/tasks/dev/fake-plan.md` cites this file **by line** — `:124`, `:154-162`,
-`:200-212` — and its bullets assert what the preview does with them: the `:154-162` bullet
-needs at least 192 lines here and the `:200-212` bullet at least 212, and `:124` is meant
-to sit mid-file with a large strip above and below. Nothing in CI guards any of that. If a
-pass shortens this page, recheck those three citations by running `mise run dev` and
-clicking them.
+`:200-212` — and its bullets assert what the preview does with them.
+[`test/scripts/dev-driver.test.ts`](../../../test/scripts/dev-driver.test.ts) guards the
+citations: it parses them out of the fixture and fails if one lands past the end of this
+page or on a blank line, or if the page is too short for the preview's window to reach
+past the deepest one. What it cannot check is how the result renders, so a pass that
+reshapes this page still wants one `mise run dev` and a click on each.
 
 Use the `/doc-coauthoring` skill for any substantive prose pass — it keeps the section
 on-audience and scannable.

@@ -5,7 +5,7 @@ import { bootDaemon, type TestDaemon } from "@test/support/daemon.ts";
 import { setupTempStateDir } from "@test/support/env.ts";
 import { waitFor } from "@test/support/poll.ts";
 import { expectNeverLogsBody } from "@test/support/redaction.ts";
-import { PLAN_REJECTED_MESSAGE } from "@/config/constants.ts";
+import { EXCERPT_RADIUS, MAX_CITED_SPAN_LINES, PLAN_REJECTED_MESSAGE } from "@/config/constants.ts";
 import { setLogLevel } from "@/lib/log.ts";
 import { hasUntaggedCodeBlock } from "@/plan/format.ts";
 import { runReview } from "@/review/orchestrate.ts";
@@ -256,6 +256,64 @@ test("demoAnnotations degrades to fewer comments on a short plan, never out of r
   expect(anns.map((a) => a.id)).toEqual(anns.map((_, i) => `dev-v1-c${i + 1}`));
   // A plan with no non-blank line has nothing to anchor to.
   expect(demoAnnotations("\n\n", 1)).toEqual([]);
+});
+
+// ---- citation guard: fake-plan.md → doc/DEVELOPMENT.md (EXC-1045) ----
+
+// The fixture cites doc/DEVELOPMENT.md by line, and the bullets around those
+// citations assert what the preview does with them. Read the page the way the
+// excerpt reader counts it — splitLines in src/plan/excerpt.ts drops the phantom
+// element a trailing newline leaves — so a line number here means the editor's line.
+const DEV_GUIDE = "doc/DEVELOPMENT.md";
+const DEV_GUIDE_LINES = (await Bun.file(`${import.meta.dir}/../../${DEV_GUIDE}`).text())
+  .replace(/\n$/, "")
+  .split("\n");
+
+// Parsed out of the fixture rather than copied here: a second copy is a second thing
+// to keep in sync, which is the bug class this guards. One pass catches both
+// spellings the fixture writes — inline code and a markdown link target — plus the
+// `#L`/`:L` forms a code host produces, so a citation rewritten into one of those
+// can't quietly fall out of scope. A `#fragment` target carries no digits and is a
+// link into the page, not a citation of a line. Scoped to this one page on purpose:
+// `mise.toml:900` is cited past the end deliberately, to demonstrate the clamp.
+const DEV_GUIDE_CITATIONS = [
+  ...PLAN_V1.matchAll(/doc\/DEVELOPMENT\.md[#:]L?(\d+)(?:-L?(\d+))?/g),
+].map((m) => ({ text: m[0], start: Number(m[1]), end: Number(m[2] ?? m[1]) }));
+
+test("every doc/DEVELOPMENT.md citation in the fixture lands on a real, non-blank line", () => {
+  // A fixture that stopped citing the page would otherwise satisfy the loop below
+  // vacuously — the guard has to have something to guard.
+  expect(DEV_GUIDE_CITATIONS.length).toBeGreaterThan(0);
+  // The anchor is the line the preview marks and parks on, and the one EXC-1037
+  // caught landing blank mid-pass with every other check still green. Blank lines
+  // *inside* a cited span are ordinary prose spacing and are not a break.
+  const broken = DEV_GUIDE_CITATIONS.flatMap((c) => {
+    if (c.end > DEV_GUIDE_LINES.length) {
+      return [`${c.text} cites past the end of ${DEV_GUIDE} (${DEV_GUIDE_LINES.length} lines)`];
+    }
+    if (DEV_GUIDE_LINES[c.start - 1]?.trim() === "") {
+      return [`${c.text} anchors on line ${c.start} of ${DEV_GUIDE}, which is blank`];
+    }
+    return [];
+  });
+  expect(broken).toEqual([]);
+});
+
+test("doc/DEVELOPMENT.md is long enough for the fixture's window claims", () => {
+  // The preview pads a cited span by EXCERPT_RADIUS at both ends before asking for
+  // it (ui/src/components/FilePreview.svelte), bounded by MAX_CITED_SPAN_LINES —
+  // that padding is the "reaches 30 lines past the span at each end" the fixture's
+  // bullets claim. Derived from the citations, so moving one moves the floor with it.
+  const short = DEV_GUIDE_CITATIONS.map((c) => ({
+    text: c.text,
+    floor: Math.min(c.end, c.start + MAX_CITED_SPAN_LINES) + EXCERPT_RADIUS,
+  }))
+    .filter((c) => DEV_GUIDE_LINES.length < c.floor)
+    .map(
+      (c) =>
+        `${DEV_GUIDE} is ${DEV_GUIDE_LINES.length} lines; ${c.text} needs at least ${c.floor} for its window to reach ${EXCERPT_RADIUS} lines past the citation`,
+    );
+  expect(short).toEqual([]);
 });
 
 // ---- parsePositiveInt (shared by the driver flag and the CLI option) ----
