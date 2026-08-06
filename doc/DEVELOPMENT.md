@@ -62,14 +62,17 @@ mise run preflight  # pre-push gate: lint + tests (unit ∥ e2e) + build + smoke
 
 ### Bootstrapping a fresh clone
 
-There is no separate setup step: a fresh clone can go straight to
-`mise run build --install` or `mise run lint`.
+A fresh clone can go straight to `mise run dev` or `mise run lint` — there is no setup
+step to run first.
 
 That works because every task sources `scripts/bootstrap.sh` before it reaches bun, so
 whichever task you run first installs the pinned tools, the JS deps, and the generated
-palette before doing its own job. `mise run setup` runs those same three steps and adds
-the e2e Chromium download the bootstrap deliberately excludes — on a fresh clone its own
-forwarder has already run the three, so it goes straight to Chromium.
+palette before doing its own job.
+
+The one thing the bootstrap deliberately excludes is the e2e Chromium download, so run
+`mise run setup` once before `mise run test e2e` or `mise run preflight`. It runs the same
+three steps plus Chromium — and on a fresh clone its own forwarder has already run the
+three, so it goes straight to the download.
 
 One wrinkle worth knowing about ahead of time: in a non-interactive shell, a clone whose
 mise config you have not trusted is a hard error rather than a prompt. `mise trust`
@@ -111,6 +114,10 @@ OS-assigned port. The dev task discovers the real port from the daemon's lock fi
 port and state dir, and Vite auto-increments its UI port per session. Everything is reaped
 on Ctrl-C.
 
+Open the UI at the `Local:` URL Vite prints on boot — not the installed build's
+`caret.localhost:42718`, which is a different daemon serving a different build. Vite's
+port is its own: it is not the daemon port, and `--port` below does not pin it.
+
 The isolation is total. The dev daemon never reads or writes a globally-installed caret's
 reviews or config: it reads `config.dev.toml`, not your production `config.toml` (see
 [Config file](CONFIGURING.md#config-file)).
@@ -129,7 +136,7 @@ Each knob is available three ways, and they resolve in that order: a **flag** be
 
 | Flag                | Env var                 | `config.dev.toml`        | Default   | Effect                                                                                    |
 | ------------------- | ----------------------- | ------------------------ | --------- | ----------------------------------------------------------------------------------------- |
-| `--port <n>`        | `CARET_DEV_PORT`        | `[dev].port`             | ephemeral | Bind a fixed port instead of `--ephemeral`. Any free port but `42718`; one session at a time. |
+| `--port <n>`        | `CARET_DEV_PORT`        | `[dev].port`             | ephemeral | Bind a fixed daemon port instead of `--ephemeral`. Any free port but `42718` (the production default); one session at a time. |
 | `--state-dir <dir>` | `CARET_DEV_STATE_DIR`   | `[dev].state_dir`        | ephemeral | Keep dev state across restarts.                                                           |
 | `--persist`         | —                       | —                        | off       | Keep even the ephemeral state dir on exit, so you can read its `caret.log`.               |
 | `--notify`          | `CARET_DEV_NEW_REVIEW_MS` † | `[dev.notify].enabled` | off      | Arm the recurring extra-review seeder.                                                    |
@@ -186,13 +193,15 @@ The install loop: it swaps your agents over to this checkout. After building, it
 After a `/reload-plugins` (or a Claude Code restart), `/caret:*` resolves to your local
 build.
 
-The handoff retires a current-build daemon automatically. A long-running daemon from an
-_older_ build — no retire endpoint, no lock file — can't be retired and keeps serving
-until you restart it once: `kill` its pid, and any review respawns the fresh build.
-
 Because it mutates your Claude plugin state and daemon, `--install` is for local
 development only, never CI. `bin/caret install --from-local --dry-run` previews the
 install steps without performing them.
+
+Two things can leave an old build serving after a successful `--install`, and both look
+identical from the browser. The first: the handoff retires a current-build daemon
+automatically, but a long-running daemon from an _older_ build — no retire endpoint, no
+lock file — can't be retired and keeps serving until you restart it once. `kill` its pid,
+and any review respawns the fresh build. The second is below.
 
 > [!WARNING]
 > **Abandoned reviews hold an old build alive.** A `caret review` blocks until the
@@ -217,7 +226,10 @@ drive.
 For when to write an e2e spec versus a `bun test` unit versus throwaway exploration, see
 [`agents/browser-testing.md`](agents/browser-testing.md).
 
-For a quick local trial without installing, load the plugin from a checkout instead:
+### A quick trial without installing
+
+To exercise caret's hooks from a checkout without registering anything, load the plugin
+directly for one Claude Code session:
 
 ```sh
 mise run build
@@ -299,9 +311,12 @@ order, so a lower `CARET_PREFLIGHT_JOBS` can't park `smoke` in a slot while the
 1. Register a subcommand on the tasks CLI.
 2. Put its logic in a `scripts/tasks/<name>.ts` module — shared helpers go in
    `scripts/tasks/lib/`.
-3. Add a one-line forwarder `.mise/tasks/<name>` =
+3. Add a forwarder `.mise/tasks/<name>` — copy an existing one. It is the fresh-clone
+   guard (`source .../scripts/bootstrap.sh || exit 1`) above
    `exec bun scripts/tasks/cli.ts <name> "$@"`, carrying `#MISE raw_args=true` so the CLI
    owns `--help`, plus any `#MISE description=` and `#MISE depends=[...]` the task needs.
+4. Cover its parsing contract in `test/scripts/tasks-cli.test.ts`, alongside every other
+   subcommand's.
 
 The task file stays **bash**, not bun. mise derives the task name from the extensionless
 filename, and an extensionless TypeScript file can be neither Biome-linted nor
