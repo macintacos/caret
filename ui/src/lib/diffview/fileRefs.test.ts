@@ -61,30 +61,30 @@ describe("detection (inside inline code)", () => {
   test("parses a :start-end range, covering the whole run in the span", () => {
     // The span is the click target, so the end-line tail has to be inside it —
     // a reader clicking `-162` is clicking the reference they can see.
-    const s = spanFor("read `doc/ADVANCED.md:154-162` first", "doc/ADVANCED.md:154-162");
-    expect(s?.path).toBe("doc/ADVANCED.md");
+    const s = spanFor("read `doc/DEVELOPMENT.md:154-162` first", "doc/DEVELOPMENT.md:154-162");
+    expect(s?.path).toBe("doc/DEVELOPMENT.md");
     expect(s?.line).toBe(154);
     expect(s?.endLine).toBe(162);
   });
 
   test.each([
-    ["en dash", "doc/ADVANCED.md:154–162"],
-    ["L-prefixed", "doc/ADVANCED.md:L154-L162"],
-    ["hash L-prefixed", "doc/ADVANCED.md#L154-L162"],
-    ["hash after colon", "doc/ADVANCED.md:#L154-L162"],
+    ["en dash", "doc/DEVELOPMENT.md:154–162"],
+    ["L-prefixed", "doc/DEVELOPMENT.md:L154-L162"],
+    ["hash L-prefixed", "doc/DEVELOPMENT.md#L154-L162"],
+    ["hash after colon", "doc/DEVELOPMENT.md:#L154-L162"],
   ])("parses the %s range spelling", (_name, run) => {
     const s = spanFor(`read \`${run}\` first`, run);
-    expect(s?.path).toBe("doc/ADVANCED.md");
+    expect(s?.path).toBe("doc/DEVELOPMENT.md");
     expect(s?.line).toBe(154);
     expect(s?.endLine).toBe(162);
   });
 
   test.each([
-    ["a bare #L line", "doc/ADVANCED.md#L154"],
-    ["a :L line", "doc/ADVANCED.md:L154"],
+    ["a bare #L line", "doc/DEVELOPMENT.md#L154"],
+    ["a :L line", "doc/DEVELOPMENT.md:L154"],
   ])("parses %s the same as a plain :line", (_name, run) => {
     const s = spanFor(`read \`${run}\` first`, run);
-    expect(s?.path).toBe("doc/ADVANCED.md");
+    expect(s?.path).toBe("doc/DEVELOPMENT.md");
     expect(s?.line).toBe(154);
     expect(s?.endLine).toBeUndefined();
   });
@@ -92,14 +92,14 @@ describe("detection (inside inline code)", () => {
   test("reads a numeric #fragment as an anchor, not as a line", () => {
     // `#` without an `L` introduces a URL fragment. Treating `#3` as line 3
     // would make a link to a numbered anchor open a file preview instead.
-    const s = spanFor("see `doc/ADVANCED.md#3` there", "doc/ADVANCED.md");
-    expect(s?.path).toBe("doc/ADVANCED.md");
+    const s = spanFor("see `doc/DEVELOPMENT.md#3` there", "doc/DEVELOPMENT.md");
+    expect(s?.path).toBe("doc/DEVELOPMENT.md");
     expect(s?.line).toBeUndefined();
   });
 
   test("a range missing its end is just a line, and the span stops before the dash", () => {
-    const s = spanFor("read `doc/ADVANCED.md:154-` first", "doc/ADVANCED.md:154");
-    expect(s?.path).toBe("doc/ADVANCED.md");
+    const s = spanFor("read `doc/DEVELOPMENT.md:154-` first", "doc/DEVELOPMENT.md:154");
+    expect(s?.path).toBe("doc/DEVELOPMENT.md");
     expect(s?.line).toBe(154);
     expect(s?.endLine).toBeUndefined();
   });
