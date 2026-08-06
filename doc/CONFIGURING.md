@@ -8,8 +8,10 @@ install it, and basic usage, start there.
 
 ## Platform support
 
-caret is **macOS-first**. It runs on Linux and Windows, but those branches are exercised
-primarily on macOS, so treat them as best-effort.
+caret is **macOS-first**. It runs on Linux and Windows, but those paths are best-effort:
+the platform-specific branches below are exercised primarily on macOS, and the
+process-discovery probe behind `caret discovery` (`src/discovery.ts`) shells out to the
+BSD-flavored `ps -axo pid=,comm=` everywhere.
 
 The review-URL opener (`openBrowser` in `src/commands/review.ts`) ships one branch per
 platform:
@@ -20,11 +22,8 @@ platform:
 | Linux    | `xdg-open`     |
 | Windows  | `cmd /c start` |
 
-The process-discovery probe behind `caret discovery` (`src/discovery.ts`) shells out to
-the BSD-flavored `ps -axo pid=,comm=`.
-
 > [!NOTE]
-> If the browser doesn't open on Linux or Windows, or discovery shows no processes, the
+> If the browser doesn't open, or discovery shows no processes, on Linux or Windows: the
 > review URL caret prints to stderr is the fallback.
 
 ## Config file
@@ -37,8 +36,8 @@ caret reads optional settings from a TOML file. Which file, in precedence order:
 | `XDG_CONFIG_HOME` is set   | `$XDG_CONFIG_HOME/caret/config.toml` |
 | otherwise                  | `~/.config/caret/config.toml`        |
 
-`mise run dev` is the first row in practice: it points `CARET_CONFIG_FILE` at a separate
-`config.dev.toml` in the same directory.
+`mise run dev` takes the first of those: it points `CARET_CONFIG_FILE` at a separate
+`config.dev.toml` beside your `config.toml`.
 
 > [!NOTE]
 > A dev instance never reads or writes your production config, and its state and logs are
@@ -50,7 +49,7 @@ The file and every key in it are optional:
 - An invalid file never crashes caret: it keeps the last valid parse, or the defaults if
   there has never been one.
 - Settings hot-reload — the file is re-read on change, with no daemon restart needed. The
-  `[daemon]` and `[review]` tunables are the exception; see below.
+  `[daemon]`, `[review]`, and `[dev]` tunables are the exceptions; see below.
 
 ### The `[logging]` table
 
@@ -100,10 +99,6 @@ timeout_s = 3600
 Dev-only settings for `mise run dev`: a fixed daemon port, a persistent state dir, and the
 recurring extra-review notification seeder.
 
-> [!IMPORTANT]
-> Put `[dev]` in `config.dev.toml` — the config `mise run dev` reads (see
-> [Config file](#config-file)) — not in the production `config.toml`.
-
 > [!WARNING]
 > `[dev]` is **ignored in a production build**. Its only consumers are the dev tooling
 > (`mise run dev`, `scripts/tasks/dev/*`), which never ships in the compiled binary, and
@@ -117,6 +112,10 @@ recurring extra-review notification seeder.
 | `dev.notify.enabled`     | `false` | When `true`, the extra-review seeder runs without `mise run dev --notify` (persist it on). |
 | `dev.notify.interval_ms` | `15000` | Seeder cadence in milliseconds — a genuinely-new review every interval.                   |
 | `dev.notify.max_pending` | `3`     | Cap on unresolved extra reviews; the seeder pauses while at the cap.                       |
+
+> [!IMPORTANT]
+> Put `[dev]` in `config.dev.toml` — the config `mise run dev` reads (see
+> [Config file](#config-file)) — not in the production `config.toml`.
 
 These keys are **captured at startup** when `mise run dev` boots (not hot-reloaded); the
 matching `CARET_DEV_*` environment variables override them.
@@ -149,13 +148,14 @@ to the config file, then the default.
 | `CARET_HEARTBEAT_MS` | `daemon.heartbeat_ms` | `8000`           | Decision long-poll heartbeat window (ms). The socket `idleTimeout` derives from it, so values ≥ 250000 are invalid.                                                                                                                                                                                     |
 | `CARET_AGENT`        | —                     | `claude`         | Which coding-agent adapter to drive. `claude` (default) or `codex` (provisional, default-off — see [Architecture](ARCHITECTURE.md#architecture-tool-agnostic-core--agent-adapter)).                                                                                                                      |
 | `XDG_STATE_HOME`     | —                     | `~/.local/state` | Unresolved reviews persist under `$XDG_STATE_HOME/caret/reviews/` and rehydrate on restart.                                                                                                                                                                                                             |
-| `CARET_CONFIG_FILE`  | —                     | _(resolved above)_ | Absolute path to the settings file, overriding the [resolved `config.toml` location](#config-file). `mise run dev` sets it to `config.dev.toml`; `--fresh` sets it to a nonexistent path so dev boots from built-in defaults.                                                                                             |
+| `CARET_CONFIG_FILE`  | —                     | _(see [Config file](#config-file))_ | Absolute path to the settings file, overriding the resolved `config.toml` location. `mise run dev` sets it to `config.dev.toml`; `--fresh` sets it to a nonexistent path so dev boots from built-in defaults.                                                                                             |
 | `CARET_RUMDL_BIN`    | —                     | _(downloads)_    | Absolute path to an existing rumdl binary for plan formatting, overriding the on-first-use download of the pinned v0.2.47 into `$XDG_STATE_HOME/caret/rumdl/`. Blank counts as unset. Useful for offline / air-gapped installs or reusing a system rumdl.                                                 |
 | `CARET_OPENCODE_BIN` | —                     | _(packaged)_     | Absolute path to the caret binary the OpenCode plugin spawns — for `caret review` and the daemon prewarm alike — overriding the one shipped beside the plugin in the `@macintacos/caret` package. Blank counts as unset. The way to point a published-package OpenCode install at a local build.          |
 
 ### Dev-only
 
-Read by `mise run dev` and its tooling; inert in a production build.
+Set by `mise run dev` and its tooling. The `CARET_DEV_*` vars shadow `[dev]` keys, which
+never reach a production build.
 
 | Env var                   | Config key               | Default | Purpose                                                                                                                                                                                                              |
 | ------------------------- | ------------------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -190,7 +190,7 @@ however caret was installed (Claude plugin or OpenCode).
 > is never used: which version reflows your plans must not depend on what the machine
 > happens to have installed.
 
-What follows from that rule:
+How that plays out:
 
 - **Reuse is version-pinned.** The binary already at caret's path is reused only when it
   reports exactly the pinned version; an older copy left by a previous caret, or a file

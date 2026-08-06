@@ -27,21 +27,22 @@ The bell badge in the top bar shows the current permission with a distinct indic
 | Red dot           | Blocked    |
 | Subtle-purple "?" | Undecided  |
 
-Clicking the bell requests permission when the permission is undecided, and
-**sends a test notification** when it is granted. On a first-ever run, an onboarding modal
-introduces desktop notifications and offers to enable them.
+Clicking the bell requests permission when undecided, and **sends a test notification**
+when granted. On a first-ever run, an onboarding modal introduces desktop notifications
+and offers to enable them.
 
 The same permission state has a roomier home in **Settings → Notifications**, which reads
 it live — On / Blocked / Off for those same three states — with the same enable / test
 affordance as the bell. Open Settings from the top-bar button or `,` — a two-pane dialog
 you can filter with `/`, and `?` opens the keyboard-shortcuts help from anywhere.
 
-### Grants are per-origin
+### Where a grant applies
 
 > [!IMPORTANT]
-> A grant covers one origin (scheme + host + port). The installed build opens the review
-> UI at the vanity origin `http://caret.localhost:42718`; `mise run dev` serves it from
-> Vite at `localhost:5173`. A grant made in dev does **not** carry over.
+> Grants are **per-origin** (scheme + host + port). The installed build opens the review
+> UI at the vanity origin `http://caret.localhost:42718`, a different origin from
+> `mise run dev`'s Vite server (`localhost:5173`) — so a grant made in dev does **not**
+> carry over.
 
 On the installed build, grant notifications once on `caret.localhost:42718` via the bell —
 it shows the undecided "?" state until you do. While the grant stays undecided, a new plan
@@ -71,17 +72,18 @@ when the agent submits a plan — but the plan is reviewed in the browser, so no
 otherwise clear it. caret joins the two ends: at submit time the hook captures its
 `CMUX_WORKSPACE_ID` and `CMUX_SURFACE_ID`, and the ids ride along on the review record
 (the daemon is long-lived and shared across sessions, so it never inherits any one agent's
-environment). Once the plan is reviewed, the daemon runs
-`cmux mark-notification-read --workspace <id> --surface <id>` for that one pane.
+environment).
 
-Two things count as reviewed, and either clears the mark:
+Once the plan is reviewed, the daemon runs
+`cmux mark-notification-read --workspace <id> --surface <id>` for that one pane. Two
+things count as reviewed, and either clears the mark:
 
 - **You decide on the plan** — approve, reject, or request changes.
 - **You read it** — the plan on screen, the tab visible and focused, for 5 seconds
   uninterrupted. Losing focus or hiding the tab cancels the dwell rather than pausing it,
   so a backgrounded tab left open never clears a mark on its own.
 
-Three things follow from that design:
+Three details worth knowing:
 
 - Both ids are required, and every call names both — caret never uses `--all`, so one
   plan's mark can only ever clear the pane that submitted it.
@@ -94,7 +96,7 @@ Three things follow from that design:
 
 ### Where the logs live
 
-Under `$XDG_STATE_HOME/caret` when set, otherwise `~/.local/state/caret`:
+Logs live under `$XDG_STATE_HOME/caret` when set, otherwise `~/.local/state/caret`:
 
 | File         | What's in it                                                                                                                        |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -116,10 +118,9 @@ Each record is one JSON object per line (pino):
 | `step`   | A short fixed token.                                                                                      |
 | `source` | The emitting process — `"hook"`, `"daemon"`, or `"ui"`.                                                   |
 | `caller` | The `file:line` of the emitting call site. On hook and daemon records only; bridged UI records omit it.    |
-| `msg`    | The message.                                                                                              |
 
-Structured extras ride alongside those fields. Normal operation logs at info; only genuine
-failures sit at error.
+Every record also carries `msg`, plus structured extras. Normal operation logs at info;
+only genuine failures sit at error.
 
 > [!TIP]
 > To raise verbosity, set `level = "debug"` in `config.toml`'s `[logging]` table (see
