@@ -5,8 +5,9 @@
 `CONTRIBUTING.md` is the short, human-facing front door for developing caret:
 `bun install`, the `mise` task workflow (`mise run dev`, `mise run preflight`), and where
 tests live. Keep it **minimal** — it orients a new contributor and then points at
-`README.md` (the user-facing guide), `doc/ADVANCED.md` (the deep reference), and
-`doc/agents/` (the rules-of-the-road) for depth. Don't let it grow into a second README.
+`README.md` (the user-facing guide), the `doc/` reference pages (`CONFIGURING.md`,
+`RUNNING.md`, `ARCHITECTURE.md`, `DEVELOPMENT.md`), and `doc/agents/` (the
+rules-of-the-road) for depth. Don't let it grow into a second README.
 
 When to edit it:
 
@@ -15,7 +16,7 @@ When to edit it:
 - The test layout moves.
 
 Environment variables are referenced by **key name only** here; values and the full tables
-live in `doc/ADVANCED.md`. Never put secrets or secret-shaped values in this file.
+live in `doc/CONFIGURING.md`. Never put secrets or secret-shaped values in this file.
 
 Use the `/doc-coauthoring` skill for substantive prose passes.
 

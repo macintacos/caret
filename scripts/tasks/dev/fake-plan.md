@@ -506,7 +506,7 @@ The list below points at long-lived files, and leans on paths and line numbers t
 - `README.md:3` — a line near the top: the window clamps at line 1, so a bottom strip shows and there is **no** top strip.
 - `mise.toml` — a file shorter than the 60-line opening window: the whole file shows, with **no** strips on either side, and the header reads a plain line count instead of a range.
 - `mise.toml:900` — a line far past the end: the window clamps to the last line rather than opening empty, and **nothing** is marked, since the cited line doesn't exist.
-- `doc/ADVANCED.md:300` — a long file opened mid-way, so both strips carry large counts. Click `↑` and `↓` repeatedly to walk the window out to line 1 and to the last line; each strip disappears when its side runs out, and an upward click should not throw away the line you were reading.
+- `doc/DEVELOPMENT.md:124` — a long file opened mid-way, so both strips carry large counts. Click `↑` and `↓` repeatedly to walk the window out to line 1 and to the last line; each strip disappears when its side runs out, and an upward click should not throw away the line you were reading.
 - `src/cli.ts` — real source rather than config: a line too long for the drawer scrolls sideways inside the excerpt rather than being cut off, and dragging the drawer's inner edge wider brings more of it into view.
 - `src/does-not-exist.ts` — a path deliberately **not** in the repo: it must show **no** icon and **no** preview. If it ever sprouts one, the existence gate has regressed.
 
@@ -524,7 +524,7 @@ EXC-918: a reference that resolves to a **directory** gets a folder glyph rather
 
 EXC-938: a reference can cite a **span** rather than a single line, and the preview frames the whole of it — every cited line washed, the usual context around it, and the end-line tail inside the click target rather than dangling outside it. Click the last character of each reference below, not its path, to check that half.
 
-- `doc/ADVANCED.md:154-162` — nine cited lines: all nine are washed as one band, and the window reaches 30 lines past the span at each end rather than starting where the citation does.
+- `doc/DEVELOPMENT.md:154-162` — nine cited lines: all nine are washed as one band, and the window reaches 30 lines past the span at each end rather than starting where the citation does.
 - `README.md:3-9` — a span near the file's head: the window clamps at line 1 instead of asking for a line before it, so the preview opens on the file rather than degrading to a head view.
 - `src/cli.ts:10-110` — a span taller than the panel: it opens parked on its **first** line rather than centred, so reading starts where the citation does; the rest is a scroll away.
 - `mise.toml:5-900` — a span running past the end: it clamps to the last line, and only the lines that exist are washed.
@@ -542,9 +542,9 @@ Each bullet below carries exactly one link and no other reference, so whatever i
 - [`package.json`](package.json) — a backticked-path label, the citation shape caret's own plans use. It keeps its backticks and their inline-code styling, and shows **exactly one** icon: both detection paths fire on this shape, so a second icon here would be a regression.
 - Mid-sentence, [`README.md`](README.md) still takes its icon, because the backticks give it a token of its own wherever it sits.
 - [README.md](README.md) — a bare-path label. The path shows, plainly styled, with **no** icon; clicking the words still opens the preview.
-- [the caret dev workflow](doc/ADVANCED.md) — a prose label: the words survive and the path does not appear at all. Hovering reveals the target in a tooltip, the only way to see where the click goes.
-- [the deep middle of a long file](doc/ADVANCED.md:300) — a target carrying a line number: opens centered on line 300 with both strips showing, and the tooltip carries the line as well as the path.
-- [a stretch of the dev guide](doc/ADVANCED.md:200-212) — a target carrying a **range**: the label hides it entirely, so the tooltip is the only place the span is visible before the click, and the preview washes all thirteen lines.
+- [the caret dev workflow](doc/DEVELOPMENT.md) — a prose label: the words survive and the path does not appear at all. Hovering reveals the target in a tooltip, the only way to see where the click goes.
+- [the deep middle of a long file](doc/DEVELOPMENT.md:124) — a target carrying a line number: opens centered on line 124 with both strips showing, and the tooltip carries the line as well as the path.
+- [a stretch of the dev guide](doc/DEVELOPMENT.md:200-212) — a target carrying a **range**: the label hides it entirely, so the tooltip is the only place the span is visible before the click, and the preview washes all thirteen lines.
 - [`mise.toml`](package.json) — a label and target that **disagree**: the click opens the target, never the file the label names. Read the tooltip before clicking. The icon still sits inside the backticks.
 - [a plan that moved](doc/does-not-exist.md) — an unresolved target: the label reads as plain prose with no icon, no chip, and no preview, and its line still opens a comment composer on click.
 - [docs](guide) — a single extensionless segment: stays **literal**, brackets and all. It could be a directory, but nothing in the text says so, and whether the brackets come off is decided before anything resolves.
@@ -557,7 +557,7 @@ EXC-956: a link whose target is a **directory** collapses on exactly the same te
 - [the agent rules](doc/agents) — the same directory behind a prose label and written without the slash: the same card on click, and the path visible only in the tooltip. No glyph, because the label sits mid-sentence — a prose label takes one only when it has the line to itself.
 - [a folder that moved](doc/nowhere/) — an unresolved directory target: the brackets go, and nothing else arrives. The existence gate does not care which kind it was going to be.
 - [the source root](src) and [the same root](src/) — one bare segment that really is a directory, spelled both ways: both stay **literal**, for the reason `guide` above does. The slash changes nothing, which is the point; widening far enough to catch either would strip the markup off every prose link whose target happens to be one word.
-- [Setup](doc/ADVANCED.md#setup) — a target carrying a fragment: **literal** too. That is a link to an anchor within a document, not a citation of the document.
+- [Setup](doc/DEVELOPMENT.md#setup) — a target carrying a fragment: **literal** too. That is a link to an anchor within a document, not a citation of the document.
 - [the caret repo, again](github.com/macintacos/caret) — a scheme-less URL: **literal**. It reads as a multi-segment path, but collapsing it would leave the label with its destination recorded nowhere — not in the text, and not in a tooltip either, since only a resolved reference gets one.
 
 ---

@@ -48,8 +48,8 @@ bunx --no-cache @macintacos/caret@latest install --refresh
 `--target` pins the agents the same way it does on install, and restarting each one
 applies the update. In OpenCode, caret toasts you at startup when a newer release is out;
 a plain `install` at a terminal runs its own check against npm and asks before taking it.
-See [`doc/ADVANCED.md`](doc/ADVANCED.md#how-it-works) for the by-hand equivalents and for
-pinning a version in OpenCode's config.
+See [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md#how-it-works) for the by-hand equivalents
+and for pinning a version in OpenCode's config.
 
 **Uninstall.** The same command, one flag:
 
@@ -58,8 +58,8 @@ bunx --no-cache @macintacos/caret@latest install --uninstall
 ```
 
 It offers the same chooser in reverse, and `--target` pins it the same way. See
-[`doc/ADVANCED.md`](doc/ADVANCED.md#how-it-works) for what each agent's install touches
-and how the integrations work.
+[`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md#how-it-works) for what each agent's install
+touches and how the integrations work.
 
 ## Using caret
 
@@ -79,7 +79,7 @@ a switcher.
 **In OpenCode**, you don't have to wait to be intercepted: caret registers a
 `caret_review_plan` tool your agent can call directly, so a skill of your own can route
 its approval step through the same review UI. Claude Code has no equivalent — see
-[`doc/ADVANCED.md`](doc/ADVANCED.md#calling-the-review-tool-from-your-own-skill).
+[`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md#calling-the-review-tool-from-your-own-skill).
 
 ## Configuration
 
@@ -87,7 +87,7 @@ caret runs with sensible defaults and needs no configuration. To tune it, it rea
 optional `config.toml` and `CARET_*` environment variables (for example the daemon port or
 the review timeout); logs are written raw by default. The full list of keys, their
 defaults, and the environment variables is in
-[`doc/ADVANCED.md`](doc/ADVANCED.md#configuration).
+[`doc/CONFIGURING.md`](doc/CONFIGURING.md).
 
 ## Reporting bugs
 
@@ -96,18 +96,23 @@ defaults, and the environment variables is in
 - `/caret:debug` reviews the current session's plans and recent errors.
 
 Details, plus how to scrub logs with `caret redact`, are in
-[`doc/ADVANCED.md`](doc/ADVANCED.md#logging--debugging).
+[`doc/RUNNING.md`](doc/RUNNING.md#logging--debugging).
 
 ## Platform support
 
 caret is **macOS-first**; Linux and Windows are best-effort. See
-[`doc/ADVANCED.md`](doc/ADVANCED.md#platform-support) for the details.
+[`doc/CONFIGURING.md`](doc/CONFIGURING.md#platform-support) for the details.
 
 ## Documentation
 
-- [`doc/ADVANCED.md`](doc/ADVANCED.md) — the deep reference: build-from-source,
-  architecture, the agent adapters, the full configuration surface, and the development
-  workflow.
+- [`doc/CONFIGURING.md`](doc/CONFIGURING.md) — platform support, the config file, the
+  `CARET_*` environment variables, and plan formatting.
+- [`doc/RUNNING.md`](doc/RUNNING.md) — desktop notifications, cmux unread marks, and
+  logging & debugging.
+- [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md) — how caret works: the core/adapter
+  boundary, the agent adapters, the review tool, and the source layout.
+- [`doc/DEVELOPMENT.md`](doc/DEVELOPMENT.md) — build from source, the dev workflow, the
+  tasks CLI, and icons.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — develop caret locally: setup, the `mise` workflow,
   and where tests live.
 - [`doc/`](doc/) — contributor rules-of-the-road, routed from [CLAUDE.md](CLAUDE.md).
