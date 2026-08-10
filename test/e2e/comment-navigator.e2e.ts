@@ -4,6 +4,7 @@
 // scratches show as distinct "draft" rows. Clicking any row scrolls the plan to it
 // (and focuses/highlights a committed comment's card). Escape dismisses the panel.
 
+import { commentNavigator, commentTally } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
@@ -26,9 +27,9 @@ test("opens from the strip, filters + underlines by text, and reveals comments a
   await waitPastSafeModeGrace(page);
 
   // The tally counts comments + drafts and toggles the navigator.
-  const toggle = page.getByRole("button", { name: /^\d+ comments?$/ });
+  const toggle = commentTally(page);
   await expect(toggle).toContainText("3");
-  const nav = page.getByRole("complementary", { name: "Comments" });
+  const nav = commentNavigator(page);
   await expect(nav).toBeHidden();
   await toggle.click();
   await expect(nav).toBeVisible();

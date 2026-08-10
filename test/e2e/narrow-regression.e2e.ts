@@ -12,6 +12,7 @@
 // already derives its viewport from — so this spec tracks the real breakpoints
 // instead of hardcoding regime literals.
 
+import { currentCrumb } from "@test/e2e/support/chrome.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
 import { MIN_APP_WIDTH_PX, NARROW_WIDTH_PX, TIGHT_WIDTH_PX } from "@ui/src/lib/layout.ts";
@@ -52,9 +53,7 @@ test("heading navigation stays reachable at a narrow width", async ({ daemon, pa
   // regime is exactly where it could be squeezed out of reach. plan-breadcrumbs.e2e.ts
   // owns the bar's own behaviour; here we only guard that it survives the squeeze
   // with its menu still openable.
-  const crumb = page
-    .getByRole("navigation", { name: "Plan location" })
-    .locator('button[aria-current="location"]');
+  const crumb = currentCrumb(page);
   await expect(crumb).toBeVisible();
   await crumb.click();
   await expect(page.locator("[data-slot='dropdown-menu-content']")).toBeVisible();

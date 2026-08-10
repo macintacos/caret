@@ -1,21 +1,26 @@
-// Shared source-view gestures for the e2e specs. @pierre/diffs renders every
-// source line inside the .diffview host's open shadow root, keyed by
-// data-line-index on the row and data-line-number-content on its gutter cell.
-// That DOM contract is the library's, not caret's — it moves when the library
-// moves — so the specs that drive the gutter read it from here rather than each
-// re-deriving it (typescript-rules.md § Shared-helper policy).
+// The source view's DOM contracts, in one place (typescript-rules.md § Shared-helper
+// policy). Two kinds live here. @pierre/diffs renders every source line inside the
+// .diffview host's open shadow root, keyed by data-line-index on the row and
+// data-line-number-content on its gutter cell — that contract is the library's, not
+// caret's, and it moves when the library moves. And caret's own plan scroll container
+// (PLAN_SURFACE) plus the readiness wait nearly every spec opens with, so a rename of
+// either reaches one edit rather than every spec.
+//
+// Locators for the chrome AROUND the plan — the navigator, the tally, the breadcrumbs
+// — live in chrome.ts, where they are named by role rather than by class.
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
+import { currentCrumb } from "@test/e2e/support/chrome.ts";
 import { waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 
 /**
  * The plan's scroll container.
  *
- * `DiffPlanView` marks it `role="presentation"` deliberately, so it is out of the
- * accessibility tree and there is no role to query — an attribute anchor is the
- * correct locator here, not a fallback. Naming it once means a class rename is one
- * edit rather than every spec that waits for the plan.
+ * `DiffPlanView` marks it `role="presentation"` deliberately, so the element itself
+ * carries no semantics for assistive tech and there is no role to query; it has no
+ * `data-*` hook either, which leaves the class as the only handle. Naming it once
+ * means a rename is one edit rather than every spec that waits for the plan.
  */
 export const PLAN_SURFACE = ".diff-plan";
 
@@ -49,7 +54,7 @@ export async function lineCenterY(page: Page, line: number): Promise<number> {
 }
 
 /** Reveal the gutter `+` on `line` by moving the mouse over its left edge. The
- * source view's gutter sits at the left of the .diff-plan scroll container — so
+ * source view's gutter sits at the left of the plan surface — so
  * anchor the hover to that container's left edge rather than the viewport's,
  * which keeps working wherever the pane sits. The 6px inset lands inside the
  * gutter column without reaching the line-number cell. */
@@ -78,7 +83,7 @@ export async function revealGutterPlus(page: Page, line: number): Promise<Locato
  * result, so callers pass a heading whose text is unique within the plan. */
 export async function jumpToHeading(page: Page, heading: string): Promise<void> {
   await waitPastSafeModeGrace(page);
-  await page.locator(".plan-breadcrumbs button.crumb.current").click();
+  await currentCrumb(page).click();
   await expect(page.locator("[data-slot='dropdown-menu-content']")).toBeVisible();
   await page.keyboard.press("/");
   await page.locator("input[aria-label='Filter headings']").fill(heading);

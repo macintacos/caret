@@ -17,7 +17,7 @@ test("wide: secondaries are inline and the overflow menu is hidden", async ({ da
 
   await expect(page.getByRole("button", { name: "Reject" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Request changes" })).toBeVisible();
-  await expect(page.locator(".overflow-trigger")).toBeHidden();
+  await expect(page.getByRole("button", { name: "More actions" })).toBeHidden();
   // The Approve control reads inline at wide width.
   await expect(page.locator(".approve-slot .split-primary")).toBeVisible();
 });

@@ -12,6 +12,7 @@
 
 import type { Page } from "@playwright/test";
 
+import { commentNavigator, commentTally, rows } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
@@ -38,8 +39,8 @@ test("Shift+C summons the navigator, focuses the list, and advertises its shortc
   await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
   await waitPastSafeModeGrace(page);
 
-  const nav = page.getByRole("complementary", { name: "Comments" });
-  const toggle = page.getByRole("button", { name: /^\d+ comments?$/ });
+  const nav = commentNavigator(page);
+  const toggle = commentTally(page);
   await expect(toggle).toHaveAttribute("aria-keyshortcuts", "Shift+C");
   await expect(nav).toBeHidden();
 
@@ -47,7 +48,7 @@ test("Shift+C summons the navigator, focuses the list, and advertises its shortc
   await page.keyboard.press("C");
   await expect(nav).toBeVisible();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
-  await expect(nav.getByRole("listitem").getByRole("button").first()).toBeFocused();
+  await expect(rows(nav).first()).toBeFocused();
 
   // Space reveals the focused comment (native button activation, like Enter) and
   // keeps the panel open.
@@ -74,8 +75,8 @@ test("j/k walk the rows; Enter reveals without dismissing; / drops into search",
   await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
   await waitPastSafeModeGrace(page);
 
-  const nav = page.getByRole("complementary", { name: "Comments" });
-  const items = nav.getByRole("listitem").getByRole("button");
+  const nav = commentNavigator(page);
+  const items = rows(nav);
 
   await page.keyboard.press("C");
   await expect(items.first()).toBeFocused();
@@ -113,8 +114,8 @@ test("the navigator captures j/k, so the plan cursor stays put while it holds fo
   await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
   await waitPastSafeModeGrace(page);
 
-  const nav = page.getByRole("complementary", { name: "Comments" });
-  const items = nav.getByRole("listitem").getByRole("button");
+  const nav = commentNavigator(page);
+  const items = rows(nav);
   await expect(cursor(page)).toHaveCount(0);
 
   // Open the navigator and walk it with j — the plan must NOT gain a cursor.

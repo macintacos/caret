@@ -11,6 +11,7 @@
 
 import type { Page } from "@playwright/test";
 
+import { crumbs, currentCrumb } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { jumpToHeading, planSurface } from "@test/e2e/support/source-view.ts";
 
@@ -194,11 +195,10 @@ test("b opens the breadcrumbs bar, and j/j/Enter jumps to the highlighted headin
   await loadPlan(page);
 
   // Read Bravo, so the trailing crumb's menu offers siblings worth walking.
-  const crumbs = page.getByRole("navigation", { name: "Plan location" }).getByRole("button");
-  await expect(crumbs.last()).toBeVisible();
+  await expect(crumbs(page).last()).toBeVisible();
   await jumpToHeading(page, "Bravo");
-  await expect(crumbs).toHaveText(["Alpha", "Bravo"]);
-  await expect(crumbs.last()).toHaveAttribute("aria-keyshortcuts", "b");
+  await expect(crumbs(page)).toHaveText(["Alpha", "Bravo"]);
+  await expect(crumbs(page).last()).toHaveAttribute("aria-keyshortcuts", "b");
 
   // `b` opens that crumb's menu with focus already on a row, so the first j moves
   // rather than being spent entering the list.
@@ -214,7 +214,7 @@ test("b opens the breadcrumbs bar, and j/j/Enter jumps to the highlighted headin
   // Enter lands the plan where a mouse pick would: the trail and the URL's heading
   // mirror both report Delta.
   await page.keyboard.press("Enter");
-  await expect(crumbs).toHaveText(["Alpha", "Delta"]);
+  await expect(crumbs(page)).toHaveText(["Alpha", "Delta"]);
   await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("delta");
 });
 
@@ -230,9 +230,7 @@ test("Escape closes the breadcrumbs menu and hands focus back to the crumb", asy
 
   // The trail is seeded a few frames after the plan paints, so wait for the crumb
   // itself — pressing `b` before it exists is a silent no-op.
-  const crumb = page
-    .getByRole("navigation", { name: "Plan location" })
-    .locator('button[aria-current="location"]');
+  const crumb = currentCrumb(page);
   await expect(crumb).toBeVisible();
   await page.keyboard.press("b");
   const menu = page.locator("[data-slot='dropdown-menu-content']");
@@ -253,9 +251,7 @@ test("backslash opens the breadcrumbs bar, the same as b", async ({ daemon, page
   await page.goto("/");
   await loadPlan(page);
 
-  const crumb = page
-    .getByRole("navigation", { name: "Plan location" })
-    .locator('button[aria-current="location"]');
+  const crumb = currentCrumb(page);
   await expect(crumb).toBeVisible();
 
   const menu = page.locator("[data-slot='dropdown-menu-content']");

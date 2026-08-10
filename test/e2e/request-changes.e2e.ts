@@ -3,18 +3,11 @@
 // daemon-side via GET /api/reviews/:id (a deny keeps the review in memory as
 // `rejected` with the decision riding on it), not just by UI disappearance.
 
-import type { Page } from "@playwright/test";
-
+import { discardConfirm } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
 const FEEDBACK = "Please tighten the verification section.";
-
-/** The discard confirmation bubble (ConfirmPopover): role="alertdialog", named by
- * the question it asks. Playwright's getByRole("dialog") does NOT match
- * role="alertdialog", which is why the sibling dialogs' idiom never transferred. */
-const discardConfirm = (page: Page) =>
-  page.getByRole("alertdialog", { name: "Discard this comment?" });
 
 test("dialog opens, Escape closes, Cmd/Ctrl+Enter submits a rejection with feedback", async ({
   daemon,

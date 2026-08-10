@@ -7,6 +7,7 @@
 
 import type { Locator, Page } from "@playwright/test";
 
+import { discardConfirm } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import {
   jumpToHeading,
@@ -15,12 +16,6 @@ import {
   planSurface,
   revealGutterPlus,
 } from "@test/e2e/support/source-view.ts";
-
-/** The discard confirmation bubble (ConfirmPopover): role="alertdialog", named by
- * the question it asks. Playwright's getByRole("dialog") does NOT match
- * role="alertdialog", which is why the sibling dialogs' idiom never transferred. */
-const discardConfirm = (page: Page) =>
-  page.getByRole("alertdialog", { name: "Discard this comment?" });
 
 // A plan tall enough to scroll the source view past one viewport.
 const TALL_PLAN = `# Tall Plan\n\n${Array.from({ length: 120 }, (_, i) => `Line ${i + 1} of the plan body, long enough to overflow the viewport.`).join("\n\n")}\n`;

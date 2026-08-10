@@ -6,6 +6,7 @@
 // doc/agents/browser-testing.md); the queue's auto-dismiss timing is unit-tested
 // deterministically in ui/src/state/alerts.test.ts.
 
+import { alerts } from "@test/e2e/support/chrome.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
@@ -36,8 +37,9 @@ test("clicking the cwd path copies the absolute path and shows a success alert",
   await cwd.click();
 
   // A success alert appears bottom-right.
-  const alert = page.locator("[data-variant='success']");
+  const alert = alerts(page);
   await expect(alert).toBeVisible();
+  await expect(alert).toHaveAttribute("data-variant", "success");
   await expect(alert).toContainText("Copied path to clipboard");
 
   // The clipboard carries the FULL absolute path, not the abbreviated display.
@@ -57,9 +59,9 @@ test("success alerts stack and a dismiss removes one", async ({ daemon, page }) 
   await cwd.click();
 
   // Two copies in quick succession stack (oldest on top, newer underneath).
-  await expect(page.getByRole("status")).toHaveCount(2);
+  await expect(alerts(page)).toHaveCount(2);
 
   // Dismissing the first via its × leaves the other standing.
-  await page.getByRole("status").first().getByRole("button", { name: "Dismiss" }).click();
-  await expect(page.getByRole("status")).toHaveCount(1);
+  await alerts(page).first().getByRole("button", { name: "Dismiss" }).click();
+  await expect(alerts(page)).toHaveCount(1);
 });

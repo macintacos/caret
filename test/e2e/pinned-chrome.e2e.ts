@@ -7,6 +7,7 @@
 // Layout and positioning are real-browser concerns (browser-testing.md), so this
 // asserts on visibility + bounding-box geometry, not a component unit.
 
+import { commentNavigator, commentTally } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
 
@@ -69,10 +70,10 @@ test("the comment navigator opens from the bar tally and docks above the bar", a
   await waitPastSafeModeGrace(page);
 
   const bar = page.getByRole("contentinfo", { name: "Status bar" });
-  const nav = page.getByRole("complementary", { name: "Comments" });
+  const nav = commentNavigator(page);
 
   // The comment tally lives in the bar's status strip and toggles the navigator.
-  await page.getByRole("button", { name: /^\d+ comments?$/ }).click();
+  await commentTally(page).click();
   await expect(nav).toBeVisible();
 
   // The navigator docks ABOVE the bar — the two don't overlap.
@@ -101,8 +102,8 @@ test("at narrow width the navigator widens to a full-bleed sheet above the bar",
   await planSurface(page);
   await waitPastSafeModeGrace(page);
 
-  const nav = page.getByRole("complementary", { name: "Comments" });
-  await page.getByRole("button", { name: /^\d+ comments?$/ }).click();
+  const nav = commentNavigator(page);
+  await commentTally(page).click();
   await expect(nav).toBeVisible();
 
   const navBox = await nav.boundingBox();
@@ -129,8 +130,8 @@ test("at wide width the navigator stays a right-docked card above the bar", asyn
   await planSurface(page);
   await waitPastSafeModeGrace(page);
 
-  const nav = page.getByRole("complementary", { name: "Comments" });
-  await page.getByRole("button", { name: /^\d+ comments?$/ }).click();
+  const nav = commentNavigator(page);
+  await commentTally(page).click();
   await expect(nav).toBeVisible();
 
   const navBox = await nav.boundingBox();

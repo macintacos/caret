@@ -8,6 +8,7 @@
 
 import type { Page } from "@playwright/test";
 
+import { commentNavigator, commentTally } from "@test/e2e/support/chrome.ts";
 import { type Daemon, expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
 
@@ -105,8 +106,8 @@ async function rowsAtTop(page: Page): Promise<string> {
 async function openComparePanel(page: Page) {
   await planSurface(page);
   await page.getByRole("button", { name: "Compare versions" }).click();
-  await page.getByRole("button", { name: /^\d+ comments?$/ }).click();
-  const nav = page.getByRole("complementary", { name: "Comments" });
+  await commentTally(page).click();
+  const nav = commentNavigator(page);
   await expect(nav).toBeVisible();
   return nav;
 }
@@ -119,8 +120,8 @@ test("entering compare mode leaves the panel closed; the tally opens it", async 
   await page.goto("/");
   await planSurface(page);
 
-  const nav = page.getByRole("complementary", { name: "Comments" });
-  const toggle = page.getByRole("button", { name: /^\d+ comments?$/ });
+  const nav = commentNavigator(page);
+  const toggle = commentTally(page);
 
   // The tally is the entry point in the single-version view…
   await toggle.click();
@@ -144,8 +145,8 @@ async function openSideAnchors(page: Page, layout: "Split" | "Unified") {
   await planSurface(page);
   await page.getByRole("button", { name: "Compare versions" }).click();
   await page.getByRole("radio", { name: layout }).click();
-  await page.getByRole("button", { name: /^\d+ comments?$/ }).click();
-  const nav = page.getByRole("complementary", { name: "Comments" });
+  await commentTally(page).click();
+  const nav = commentNavigator(page);
   await expect(nav).toBeVisible();
   return nav;
 }
@@ -337,8 +338,8 @@ test("the panel is dismissable with Escape and with the status-strip tally", asy
   await page.getByRole("button", { name: "Compare versions" }).click();
 
   // The tally counts the compared range's comments (v2's two plus v3's one).
-  const nav = page.getByRole("complementary", { name: "Comments" });
-  const toggle = page.getByRole("button", { name: /^\d+ comments?$/ });
+  const nav = commentNavigator(page);
+  const toggle = commentTally(page);
   await expect(toggle).toContainText("3");
 
   await toggle.click();
