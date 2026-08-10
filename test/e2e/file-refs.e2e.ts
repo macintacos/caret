@@ -1415,7 +1415,7 @@ test("the open preview survives the review poll without repaint churn", async ({
       }).observe(document.body, { childList: true, subtree: true });
     });
 
-    await waitForTwoPollTicks(page); // two 2s poll ticks, pointer parked
+    await waitForTwoPollTicks(page); // pointer parked across the ticks
 
     // The token node must be the SAME one (marker intact) — a repaint would have
     // replaced it — and the preview must never have been torn down.
@@ -1456,7 +1456,7 @@ test("the open preview fetches the excerpt once, not on every poll tick", async 
     await expect(page.locator("[data-file-preview]")).toBeVisible();
     const afterOpen = excerptFetches;
 
-    // Park the pointer across two poll ticks: no further excerpt fetches.
+    // Pointer parked: the fetch effect must not re-fire on a tick.
     await waitForTwoPollTicks(page);
     expect(excerptFetches).toBe(afterOpen);
     expect(afterOpen).toBeLessThanOrEqual(2);
