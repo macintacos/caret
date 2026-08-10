@@ -482,11 +482,7 @@ test("the Notifications pane reflects the permission and its test affordance fir
   // Granted → the diagnosis affordance; clicking it constructs exactly one toast
   // through the live path (the same probe the granted bell offers).
   await dialog.getByRole("button", { name: "Send a test notification" }).click();
-  await page.waitForFunction(
-    () => (window as unknown as NotesWindow).__notes.length === 1,
-    undefined,
-    { timeout: 5_000 },
-  );
+  await page.waitForFunction(() => (window as unknown as NotesWindow).__notes.length === 1);
 });
 
 // Settings search (EXC-845): the query filters the nav + fields across categories, `/`

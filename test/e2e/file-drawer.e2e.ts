@@ -532,7 +532,7 @@ test("Escape plays the same closing wipe", async ({ daemon, page }) => {
     await expect(async () => {
       await page.keyboard.press("Escape");
       await expect(page.locator("[data-file-drawer]")).toHaveCount(0, { timeout: 500 });
-    }).toPass({ timeout: 5_000 });
+    }).toPass();
 
     // The bottom dock collapses on its own dimension, not the right one's.
     const wipes = await page.evaluate(() => (window as unknown as { __wipes: string[] }).__wipes);

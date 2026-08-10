@@ -174,7 +174,7 @@ test("the tree can be entered and walked from the keyboard", async ({ daemon, pa
     await expect(async () => {
       await page.keyboard.press("Tab");
       expect(await inCard()).toBe(true);
-    }).toPass({ timeout: 15_000 });
+    }).toPass();
 
     // ArrowRight expands the focused row, and that expansion fetches its level
     // exactly as a click would — the reason the loader is driven off the model
@@ -273,7 +273,7 @@ test("Escape closes the card", async ({ daemon, page }) => {
     await expect(async () => {
       await page.keyboard.press("Escape");
       await expect(page.locator(card)).toHaveCount(0, { timeout: 500 });
-    }).toPass({ timeout: 5_000 });
+    }).toPass();
   } finally {
     await proj.cleanup();
   }

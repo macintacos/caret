@@ -65,38 +65,66 @@ The split mirrors the test layers:
 
 ### Timeouts are budgets for the loaded host
 
-`playwright.config.ts` raises the per-test budget to 60s and the assertion budget to 15s,
-over Playwright's 30s/5s defaults, and `retries: 0` stays (EXC-1050). Both numbers exist
-because the suite's real home is `mise run preflight`, not an idle machine: the gate runs
-`test` (unit), `build bin`, and `smoke` alongside `test e2e`, on top of six e2e workers
-that already saturate the cores. Measured on a 12-core host, the unit suite takes 31s
-standalone and 88s inside the gate — everything sharing that window is roughly 3x slower,
-so a suite whose deadlines were calibrated standalone reds the gate for reasons that have
-nothing to do with the change under test.
+Every deadline the suite runs under lives in `playwright.config.ts` (EXC-1050), and each
+is sized for the machine the suite actually runs on rather than an idle one. Playwright's
+own defaults — 30s per test, 5s per assertion — assume the suite owns the host, and inside
+`mise run preflight` it does not: `lint` and `test` (unit) are already running when
+`test e2e` starts, `build bin` and `smoke` land during it, and six e2e workers each
+driving a Chromium tree plus a spawned daemon saturate the cores before any of that
+arrives. On a 12-core host the unit suite measures 31s standalone against 88s inside the
+gate — 2.8x. That figure is the unit suite's; e2e's own factor was never measured, and
+2.8x is the working number the budgets are sized against.
 
-The per-test budget is the one that binds. Playwright ships **no** default `actionTimeout`
-or `navigationTimeout`, so `locator.click()`, `page.goto()`, and `page.waitForFunction()`
-retry against the *test* budget rather than one of their own — a starved action quietly
-eats the whole thing, and the run dies on a timeout that names the test rather than the
-step inside it. Don't paper over a slow spec with a per-call `{ timeout: … }` override; if
-a spec needs more than the config gives it, that is a finding about the spec.
+**The contention is cross-task, landing on top of intra-e2e saturation the worker cap
+deliberately accepts.** Both halves are real and the distinction decides the fix: at the
+shipped 50% cap the suite passes standalone and reds only inside the gate, so the sibling
+tasks are what tips it — but they tip a host the suite had already filled on its own. The
+consequence is that a flake here is never a property of the spec that happened to red. It
+selects whichever test was mid-flight when the host stalled, so the failing set differs
+run to run, and chasing the named spec finds nothing wrong with it.
 
-**Never reach for `retries`.** A retry re-runs the test: it hides that the first attempt
-failed, doubles the worst case, and leaves the contention invisible. A deadline hides
-nothing — the test still runs once, still asserts the same thing, still fails when the app
-is wrong — and it is free on the happy path, because a web-first assertion resolves the
-instant its condition is true. A flake is a bug to be named, not a run to be repeated.
+The per-test budget is the one that binds, because Playwright ships **no** default
+`actionTimeout`, `navigationTimeout`, or `toPass` budget. `locator.click()`,
+`page.goto()`, `page.waitForFunction()`, and a bare `toPass()` all fall through to
+whichever deadline is left — usually the test's — so a starved step quietly eats the whole
+thing and the run dies on a timeout naming the test rather than the step inside it.
+`expect.timeout` does **not** reach `toPass`, which is why the config sets it separately.
+
+Two rules follow, and both are about direction rather than magnitude:
+
+- **A per-call `{ timeout: … }` that *raises* a budget above the config is the smell** —
+  if a spec needs more than the suite gives it, that is a finding about the spec, not a
+  number to bump. *Lowering* one is sanctioned and load-bearing: the inner
+  `toBeHidden({ timeout: 500 })` inside the `toPass()` retry loops in
+  `approve-options.e2e.ts`, `review-switcher.e2e.ts`, `folder-refs.e2e.ts`, and
+  `file-drawer.e2e.ts` has to fail fast so the loop can press the key again.
+- **Never reach for `retries`.** A retry re-runs the test: it hides that the first attempt
+  failed, doubles the worst case, and leaves the contention invisible. A deadline hides
+  nothing — the test still runs once, still asserts the same thing, still fails when the
+  app is wrong — and it is free on the happy path, because a web-first assertion resolves
+  the instant its condition is true. A flake is a bug to name, not a run to repeat.
+
+**Adjusting the numbers.** The assertion budget is ~3x Playwright's default, tracking the
+measured contention factor; the per-test budget is 2x, the point at which the throttle
+probe below turned red into green where 30s could not. Re-derive both the same way rather
+than nudging them — and if a re-measurement moves the factor, the config is the one place
+the values live.
 
 **Reproducing load-induced failure on demand.** Two levers, neither needing a code change:
 
 - **Real contention**, closest to the gate: raise the worker cap past the core count, e.g.
   `CARET_E2E_WORKERS=<2x cores> mise run test e2e`. Faithful, but stochastic — what it
-  turns up depends on what else the host is doing, and the failing set differs run to run.
-- **Deterministic**, for asking whether one spec has headroom: drive it from a throwaway
-  `playwright-cli` probe that CPU-throttles the renderer over CDP
+  turns up depends on what else the host is doing. It is also deliberately the fan-out
+  EXC-587 capped, so don't SIGKILL such a run and do check for stray `chromium`/daemon
+  processes afterwards; an interrupted oversubscribed run is exactly the orphan storm the
+  cap exists to prevent.
+- **Deterministic**, and the one to reach for when a specific spec is in question: drive
+  it from a throwaway `playwright-cli` probe that CPU-throttles the renderer over CDP
   (`Emulation.setCPUThrottlingRate`), which widens every browser-side wait by a fixed
-  factor. Probes like this are exploration and are **never committed** — write the finding
-  down, then delete the probe.
+  factor. Escalate the rate until it reds — the two specs EXC-1050 was filed against
+  survive 60x and fail 4/4 at 90x — then confirm the fix against the same rate. Probes
+  like this are exploration and are **never committed**: write the finding down, delete
+  the probe.
 
 ## Artifact hygiene
 
