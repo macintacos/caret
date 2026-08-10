@@ -15,7 +15,12 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { discardConfirm } from "@test/e2e/support/chrome.ts";
-import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import {
+  expect,
+  test,
+  waitForTwoPollTicks,
+  waitPastSafeModeGrace,
+} from "@test/e2e/support/fixtures.ts";
 import {
   jumpToHeading,
   lineCenterY,
@@ -41,11 +46,9 @@ test("scroll position survives the 2-second poll tick", async ({ daemon, page })
   await expect.poll(async () => view.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
   const before = await view.evaluate((el) => el.scrollTop);
 
-  // Wait out more than two poll ticks (the poll re-delivers the same version
-  // every 2s); a remount on an unchanged version would reset scrollTop to 0.
-  // web-first: poll the condition rather than a fixed sleep.
-  const t0 = await page.evaluate(() => performance.now());
-  await page.waitForFunction((t) => performance.now() > t + 5000, t0);
+  // Wait out two poll ticks (the poll re-delivers the same version every 2s); a
+  // remount on an unchanged version would reset scrollTop to 0.
+  await waitForTwoPollTicks(page);
 
   // Same scroll offset — the instance was preserved, not remounted.
   expect(await view.evaluate((el) => el.scrollTop)).toBe(before);

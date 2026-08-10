@@ -23,7 +23,7 @@
 // content is throwaway, non-identifying scaffolding — never a real plan.
 
 import { fileRefCount, makeProject, settleDrawer } from "@test/e2e/support/file-refs.ts";
-import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { expect, test, waitForTwoPollTicks } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 import { OVERSCAN_ROWS } from "@ui/src/lib/previewWindow.ts";
 import { MAX_EXCERPT_BYTES } from "@/plan/excerpt.ts";
@@ -1415,7 +1415,7 @@ test("the open preview survives the review poll without repaint churn", async ({
       }).observe(document.body, { childList: true, subtree: true });
     });
 
-    await page.waitForTimeout(5200); // > two 2s poll ticks, pointer parked
+    await waitForTwoPollTicks(page); // two 2s poll ticks, pointer parked
 
     // The token node must be the SAME one (marker intact) — a repaint would have
     // replaced it — and the preview must never have been torn down.
@@ -1456,8 +1456,8 @@ test("the open preview fetches the excerpt once, not on every poll tick", async 
     await expect(page.locator("[data-file-preview]")).toBeVisible();
     const afterOpen = excerptFetches;
 
-    // Park the pointer across more than two poll ticks: no further excerpt fetches.
-    await page.waitForTimeout(5200);
+    // Park the pointer across two poll ticks: no further excerpt fetches.
+    await waitForTwoPollTicks(page);
     expect(excerptFetches).toBe(afterOpen);
     expect(afterOpen).toBeLessThanOrEqual(2);
   } finally {

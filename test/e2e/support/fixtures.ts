@@ -318,4 +318,24 @@ export async function waitPastSafeModeGrace(page: Page): Promise<void> {
   await page.waitForFunction((t) => performance.now() > t + 350, t0);
 }
 
+/**
+ * Wait until the review poll has delivered two more list responses.
+ *
+ * The UI re-fetches GET /api/reviews every 2s (ui/src/state/polling.svelte.ts).
+ * Specs asserting a NEGATIVE across that poll — nothing remounted, nothing
+ * re-fetched, scroll did not reset — need the poll to have actually ticked twice,
+ * which is a network event, not an elapsed duration. Waiting on the responses is
+ * both the web-first form and the honest one: a fixed sleep either undershoots a
+ * loaded host or overshoots an idle one, and it never says what it is waiting for.
+ *
+ * Two, not one: one tick could have been in flight when the assertion's setup
+ * finished, so the second is the first that provably observed the settled state.
+ */
+export async function waitForTwoPollTicks(page: Page): Promise<void> {
+  let seen = 0;
+  await page.waitForResponse(
+    (res) => new URL(res.url()).pathname === "/api/reviews" && ++seen >= 2,
+  );
+}
+
 export { expect };
