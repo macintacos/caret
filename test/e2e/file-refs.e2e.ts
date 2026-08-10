@@ -24,6 +24,7 @@
 
 import { fileRefCount, makeProject, settleDrawer } from "@test/e2e/support/file-refs.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 import { OVERSCAN_ROWS } from "@ui/src/lib/previewWindow.ts";
 import { MAX_EXCERPT_BYTES } from "@/plan/excerpt.ts";
 
@@ -192,7 +193,7 @@ test("marks only references that resolve to a real file", async ({ daemon, page 
       plan: "# Refs\n\nEdit `src/cache.ts` to fix it.\n\nThe helper `src/ghost.ts` is missing.\n",
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
 
     // The real reference gets exactly one icon once the daemon confirms it; the
     // missing one never does, so the count settles at 1 (not 2).
@@ -242,7 +243,7 @@ test("routes a click to the excerpt preview or the folder tree, by kind", async 
       plan: "# Refs\n\nEdit `src/cache.ts`, which sits beside `src/lib` and `src/lib/`.\n",
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
 
     // Three tagged tokens: the file, and both spellings of the directory — the
     // trailing slash is not a discriminator, the filesystem is.
@@ -290,7 +291,7 @@ test("marks references under a vendor palette too", async ({ daemon, page }) => 
     });
     await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nEdit `src/cache.ts` to fix it.\n" });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect(page.locator("html")).toHaveAttribute("style", /--paper:\s*#21222c/i);
 
     await expect.poll(() => fileRefCount(page)).toBe(1);
@@ -342,7 +343,7 @@ test("marks a markdown link whose target is a file, exactly once", async ({ daem
       ].join("\n"),
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
 
     // One glyph: the backticked label's. Not 2 — the bare-path label has no token
     // to take it. Not 0 — the backticked label must still decorate. Not 3 — the
@@ -404,7 +405,7 @@ test("clicking a real reference reveals a highlighted excerpt centered on its li
       plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
 
     // Wait for the icon (async resolve), then click the tagged token.
     await expect.poll(() => fileRefCount(page)).toBe(1);
@@ -472,7 +473,7 @@ test("a cited range washes every line it names, framed with context on both side
       plan: "# Refs\n\nThe key is built across `src/cache.ts:40-44` today.\n",
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect.poll(() => fileRefCount(page)).toBe(1);
     await page.locator("[data-file-ref]").first().click();
 
@@ -510,7 +511,7 @@ test("a range taller than the region opens at its first line, not centred", asyn
       plan: "# Refs\n\nThe whole middle, `src/cache.ts:100-250`, moves.\n",
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect.poll(() => fileRefCount(page)).toBe(1);
     await page.locator("[data-file-ref]").first().click();
 
@@ -545,7 +546,7 @@ test("a range running past the file's end still opens, framed on its last lines"
       plan: "# Refs\n\nThe tail, `src/cache.ts:295-400`, is gone.\n",
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect.poll(() => fileRefCount(page)).toBe(1);
     await page.locator("[data-file-ref]").first().click();
 
@@ -586,7 +587,7 @@ test("clicking a range reference's end-line tail opens the preview", async ({ da
       plan: "# Refs\n\nThe key is built across `src/cache.ts:40-44` today.\n",
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect.poll(() => fileRefCount(page)).toBe(1);
 
     // The tagged token covers the whole reference, end line included. Aim at the
@@ -634,7 +635,7 @@ test("the preview omits the esc-to-close hint when shortcut hints are off", asyn
     });
     await page.addInitScript(() => localStorage.setItem("caret.shortcutHints", "off"));
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
 
     await expect.poll(() => fileRefCount(page)).toBe(1);
     await page.locator("[data-file-ref]").first().click();
@@ -667,7 +668,7 @@ test("clicking outside the preview dismisses it, swallowing that first click", a
       plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n\nJust some plain prose here.\n",
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
 
     await expect.poll(() => fileRefCount(page)).toBe(1);
     await page.locator("[data-file-ref]").first().click();
@@ -709,7 +710,7 @@ test("pressing Escape dismisses the open preview", async ({ daemon, page }) => {
       plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
 
     await expect.poll(() => fileRefCount(page)).toBe(1);
     await page.locator("[data-file-ref]").first().click();
@@ -746,7 +747,7 @@ test("the preview fills its lane and pages inside itself", async ({ daemon, page
   try {
     await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nOpen `src/big.ts` to see it.\n" });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect.poll(() => fileRefCount(page)).toBe(1);
 
     await page.locator("[data-file-ref]").first().click();
@@ -823,7 +824,7 @@ test("scrolling walks the preview to both ends of the file", async ({ daemon, pa
       plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect.poll(() => fileRefCount(page)).toBe(1);
     await page.locator("[data-file-ref]").first().click();
 
@@ -884,7 +885,7 @@ test("a keyboard reader walks the preview to both ends with no pointer", async (
       plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect.poll(() => fileRefCount(page)).toBe(1);
     await page.locator("[data-file-ref]").first().click();
 
@@ -983,7 +984,7 @@ test("a fully loaded preview keeps only a screenful of rows in the DOM", async (
   try {
     await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nOpen `src/cache.ts` here.\n" });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect.poll(() => fileRefCount(page)).toBe(1);
     await page.locator("[data-file-ref]").first().click();
 
@@ -1079,7 +1080,7 @@ test("swapping the reference re-frames the panel from the new file's first line"
       plan: "# Refs\n\nDeep in `src/cache.ts:150`, then `src/other.ts` from the top.\n",
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect.poll(() => fileRefCount(page)).toBe(2);
 
     // The first reference cites line 150, so opening it scrolls the region.
@@ -1116,7 +1117,7 @@ test("loading upward keeps the reader's line in view", async ({ daemon, page }) 
       plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect.poll(() => fileRefCount(page)).toBe(1);
     await page.locator("[data-file-ref]").first().click();
 
@@ -1179,7 +1180,7 @@ for (const cited of [150, 42]) {
         plan: `# Refs\n\nThe key lives in \`src/cache.ts:${cited}\` today.\n`,
       });
       await page.goto("/");
-      await expect(page.locator(".diff-plan")).toBeVisible();
+      await planSurface(page);
       await expect.poll(() => fileRefCount(page)).toBe(1);
       await page.locator("[data-file-ref]").first().click();
 
@@ -1270,7 +1271,7 @@ test("the cited line is in view on open, wherever the reference sits", async ({ 
       plan: `# Refs\n\n${filler}\n\nThe cache key lives in \`src/cache.ts:42\` today.\n`,
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect.poll(() => fileRefCount(page)).toBe(1);
 
     // The reference must actually sit well down the plan for this to be the case
@@ -1310,7 +1311,7 @@ test("a file too large to preview says so, rather than reading as a load failure
   try {
     await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nOpen `src/huge.ts` to see it.\n" });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect.poll(() => fileRefCount(page)).toBe(1);
 
     await page.locator("[data-file-ref]").first().click();
@@ -1337,7 +1338,7 @@ test("the preview renders code in the plan view's own font, not the browser defa
   try {
     await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nOpen `src/cache.ts` here.\n" });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect.poll(() => fileRefCount(page)).toBe(1);
 
     await page.locator("[data-file-ref]").first().click();
@@ -1386,7 +1387,7 @@ test("the open preview survives the review poll without repaint churn", async ({
       plan: "# Refs\n\nEdit `src/cache.ts` to fix it.\n\nMore prose so the view has rows.\n",
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect.poll(() => fileRefCount(page)).toBe(1);
 
     await page.locator("[data-file-ref]").first().click();
@@ -1449,7 +1450,7 @@ test("the open preview fetches the excerpt once, not on every poll tick", async 
       if (req.url().includes("/file?")) excerptFetches++;
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect.poll(() => fileRefCount(page)).toBe(1);
 
     await page.locator("[data-file-ref]").first().click();
@@ -1473,7 +1474,7 @@ test("a reference with no line shows the head of the file", async ({ daemon, pag
       plan: "# Refs\n\nReview `src/cache.ts` in full before merging.\n",
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
 
     await expect.poll(() => fileRefCount(page)).toBe(1);
     await page.locator("[data-file-ref]").first().click();
@@ -1513,7 +1514,7 @@ test("clicking a reference does not also open the line's comment composer", asyn
       plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
 
     await expect.poll(() => fileRefCount(page)).toBe(1);
     await page.locator("[data-file-ref]").first().click();
@@ -1554,7 +1555,7 @@ test("switching references lets the outgoing file leave before the next arrives"
       plan: "# Refs\n\nFirst `src/cache.ts:42`, then `src/other.ts:150`.\n",
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect.poll(() => fileRefCount(page)).toBe(2);
 
     await page.locator("[data-file-ref]").first().click();

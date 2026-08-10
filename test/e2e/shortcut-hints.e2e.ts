@@ -8,6 +8,7 @@
 // KNOWN_PREF_KEY that clearKnownPrefs removes), like the theme pref.
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 const keyboardButton = "button[aria-label='Keyboard shortcuts']";
 const topbarHints = ".topbar [data-slot='kbd']";
@@ -23,7 +24,7 @@ test("the Settings toggle hides the shortcut affordances live and persists", asy
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // Default on: the keyboard button, the TopBar key-cap hints, and the comment
   // tally's ⇧C cap are all shown.
@@ -50,7 +51,7 @@ test("the Settings toggle hides the shortcut affordances live and persists", asy
   // The choice persists across a reload (browser localStorage), so the affordances
   // stay hidden with no daemon state.
   await page.reload();
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.locator(keyboardButton)).toBeHidden();
 
   // Hiding the hint chrome must not strand the docs: ? still opens the help modal.
@@ -65,7 +66,7 @@ test("with hints off, V-mode still selects lines but the hint chip stays hidden"
 }) => {
   await daemon.seed({ plan: PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
 
   // Turn shortcut hints off (applies at once), then Esc to close so keystrokes reach

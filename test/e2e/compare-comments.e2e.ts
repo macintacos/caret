@@ -9,6 +9,7 @@
 import type { Page } from "@playwright/test";
 
 import { type Daemon, expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
 
 // Three versions whose bodies each carry a unique, greppable line, with a blank
 // line between them so line 3 and line 5 are real anchors in every version.
@@ -102,7 +103,7 @@ async function rowsAtTop(page: Page): Promise<string> {
 /** Enter compare mode and open the comment panel through the status-strip tally
  * — the only way in, now that entering compare mode opens nothing by itself. */
 async function openComparePanel(page: Page) {
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await page.getByRole("button", { name: "Compare versions" }).click();
   await page.locator("button.comments-toggle").click();
   const nav = page.locator(".comment-navigator");
@@ -116,7 +117,7 @@ test("entering compare mode leaves the panel closed; the tally opens it", async 
 }) => {
   await seedCommentedVersions(daemon);
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   const nav = page.locator(".comment-navigator");
   const toggle = page.locator("button.comments-toggle");
@@ -140,7 +141,7 @@ test("entering compare mode leaves the panel closed; the tally opens it", async 
 
 /** Enter compare mode in `layout` with the side-anchor fixture, and open the panel. */
 async function openSideAnchors(page: Page, layout: "Split" | "Unified") {
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await page.getByRole("button", { name: "Compare versions" }).click();
   await page.getByRole("radio", { name: layout }).click();
   await page.locator("button.comments-toggle").click();
@@ -191,7 +192,7 @@ test("reveals a compare comment past the fold (split), including after a round t
   await page.goto("/");
   const nav = await openSideAnchors(page, "Split");
 
-  const scrollTop = () => page.locator(".diff-plan").evaluate((el) => el.scrollTop);
+  const scrollTop = () => page.locator(PLAN_SURFACE).evaluate((el) => el.scrollTop);
   expect(await scrollTop()).toBe(0);
 
   await nav.locator("button.nav-item").filter({ hasText: "before-side anchor" }).click();
@@ -311,7 +312,7 @@ test("the panel is dismissable with Escape and with the status-strip tally", asy
 }) => {
   await seedCommentedVersions(daemon);
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
   await page.getByRole("button", { name: "Compare versions" }).click();
 

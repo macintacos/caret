@@ -8,6 +8,7 @@
 // (per doc/agents/browser-testing.md).
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 // Read the geometry that proves a modal is capped, not clipped: its box stays
 // within the viewport AND its content is taller than the box (so the cap is
@@ -77,7 +78,7 @@ test("a tall alert-dialog is height-capped to the viewport and scrolls instead o
   });
   await page.setViewportSize({ width: 1000, height: 160 });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   // Reject with pending comments opens the confirmation guard (UnsentCommentsDialog

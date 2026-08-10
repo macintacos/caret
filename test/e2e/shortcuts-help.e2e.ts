@@ -7,6 +7,7 @@
 // inside the post-focus grace window is swallowed by Safe Mode (safe-mode.e2e.ts).
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 test("? opens and toggles the help; the bar button opens it; search filters", async ({
   daemon,
@@ -14,7 +15,7 @@ test("? opens and toggles the help; the bar button opens it; search filters", as
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   const dialog = page.locator("[data-slot='dialog-content']");
@@ -50,7 +51,7 @@ test("? opens and toggles the help; the bar button opens it; search filters", as
 test("the search narrows the listed shortcuts", async ({ daemon, page }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   const dialog = page.locator("[data-slot='dialog-content']");
@@ -69,7 +70,7 @@ test("/ focuses the search input without typing a slash; the field shows a / hin
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   const dialog = page.locator("[data-slot='dialog-content']");

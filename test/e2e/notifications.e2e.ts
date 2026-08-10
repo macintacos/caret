@@ -19,6 +19,7 @@
 
 import { SECOND_PLAN } from "@test/e2e/support/fixture-plan.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { PLAN_SURFACE } from "@test/e2e/support/source-view.ts";
 
 // Captured constructions of the stubbed Notification (see initStub).
 interface CapturedNote {
@@ -75,7 +76,7 @@ test("a new plan while the tab is hidden notifies; its click selects the review"
   await page.addInitScript(initStub, "granted");
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan").getByText("Widget Cache Refactor")).toBeVisible();
+  await expect(page.locator(PLAN_SURFACE).getByText("Widget Cache Refactor")).toBeVisible();
 
   // The badge reflects the granted permission (green bell).
   await expect(page.getByRole("button", { name: "Notifications: granted" })).toBeVisible();
@@ -103,7 +104,7 @@ test("a new plan while the tab is hidden notifies; its click selects the review"
     n?.onclick?.();
   });
   await expect(page).toHaveURL(new RegExp(`review=${second}`));
-  await expect(page.locator(".diff-plan").getByText("Gadget Renderer Cleanup")).toBeVisible();
+  await expect(page.locator(PLAN_SURFACE).getByText("Gadget Renderer Cleanup")).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as StubWindow).__notes[0]?.closed)).toBe(
     true,
   );

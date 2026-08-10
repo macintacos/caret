@@ -13,6 +13,7 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 // Tall enough that the cursor has room to move, with three headings so the plan
 // reflows to a stable multi-line shape.
@@ -58,7 +59,7 @@ async function readCursorLine(page: Page, notLine = -1): Promise<number> {
 }
 
 async function loadPlan(page: Page): Promise<void> {
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
   await waitPastSafeModeGrace(page);
 }

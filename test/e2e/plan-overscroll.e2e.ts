@@ -5,6 +5,7 @@
 
 import { TALL_PLAN } from "@test/e2e/support/fixture-plan.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 // TALL_PLAN is several viewports tall, so there is genuine scrolling to the
 // bottom and a clearly-rendered last line to measure.
@@ -13,8 +14,7 @@ test("the reader can scroll past the end of the plan", async ({ daemon, page }) 
   await daemon.seed({ plan: TALL_PLAN });
   await page.goto("/");
 
-  const view = page.locator(".diff-plan");
-  await expect(view).toBeVisible();
+  const view = await planSurface(page);
 
   // Scroll to the very bottom and wait for it to settle at max scroll.
   await view.evaluate((el) => el.scrollTo({ top: el.scrollHeight }));

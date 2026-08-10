@@ -6,6 +6,7 @@
 // a plain approve would silently drop.
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 // The approve confirmation is a role="dialog" (dismissible on outside click,
 // EXC-791) titled "Approve this plan?" — named so the locator never collides with
@@ -18,7 +19,7 @@ test("approving opens a confirmation and resolves on confirm (UI and API)", asyn
 }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // Approve no longer resolves straight through: it opens a bare "are you sure?"
   // confirm (nothing queued, so no pending-comment warning).
@@ -38,7 +39,7 @@ test("approving opens a confirmation and resolves on confirm (UI and API)", asyn
 test("Enter confirms the bare approve dialog", async ({ daemon, page }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   await page.getByRole("button", { name: "Approve", exact: true }).click();
@@ -56,7 +57,7 @@ test("a reviewer note rides the approval to the agent's decision (EXC-791)", asy
 }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   const confirm = page.getByRole("dialog", APPROVE_CONFIRM);
@@ -84,7 +85,7 @@ test("clicking outside dismisses the approve dialog and leaves the review pendin
 }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   const confirm = page.getByRole("dialog", APPROVE_CONFIRM);
@@ -108,7 +109,7 @@ test("a pending inline comment guards approve and routes to request-changes inta
   });
 
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // Approve opens a confirmation naming the count — it does NOT resolve.
   const guard = page.getByRole("dialog", APPROVE_CONFIRM);
@@ -154,7 +155,7 @@ test("the approve guard fits its three-button footer without a horizontal scroll
   });
 
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   const guard = page.getByRole("dialog", APPROVE_CONFIRM);
   await page.getByRole("button", { name: "Approve", exact: true }).click();
@@ -180,7 +181,7 @@ test("an uncommitted composer scratch guards approve (EXC-745)", async ({ daemon
   });
 
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   // The scratch rehydrated on load — its Resume marker is proof it reached the UI.
   await expect(page.getByRole("button", { name: "Resume unsent comment" })).toBeVisible();
 
@@ -204,7 +205,7 @@ test("a lone general-comment draft guards approve (EXC-742)", async ({ daemon, p
   await daemon.putDraft(id, { generalCommentDraft: "reconsider the migration order" });
 
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // Approve must open the guard, not resolve: the unsent general comment is
   // feedback a plain approve would leave behind.
@@ -227,7 +228,7 @@ test("'Approve anyway' on the guard resolves as an allow", async ({ daemon, page
   });
 
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   const guard = page.getByRole("dialog", APPROVE_CONFIRM);
   await page.getByRole("button", { name: "Approve", exact: true }).click();
@@ -246,7 +247,7 @@ test("Enter confirms the approve guard, resolving it as an allow", async ({ daem
   });
 
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   const guard = page.getByRole("dialog", APPROVE_CONFIRM);
@@ -270,7 +271,7 @@ test("Escape dismisses the approve guard and leaves the review pending", async (
   });
 
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   const guard = page.getByRole("dialog", APPROVE_CONFIRM);
@@ -293,7 +294,7 @@ test("Cancel dismisses the approve guard and leaves the review pending", async (
   });
 
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   const guard = page.getByRole("dialog", APPROVE_CONFIRM);

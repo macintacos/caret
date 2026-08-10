@@ -9,7 +9,7 @@ import type { Locator, Page } from "@playwright/test";
 
 import { TALL_PLAN } from "@test/e2e/support/fixture-plan.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
-import { revealGutterPlus } from "@test/e2e/support/source-view.ts";
+import { PLAN_SURFACE, planSurface, revealGutterPlus } from "@test/e2e/support/source-view.ts";
 
 // TALL_PLAN is several viewports tall, so a composer can open well below the fold
 // and there is always somewhere to scroll to.
@@ -63,7 +63,7 @@ async function afterFrames(page: Page, count: number): Promise<void> {
 }
 
 async function loadPlan(page: Page): Promise<void> {
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
 }
 
@@ -89,7 +89,7 @@ test("a composer opened on the last visible line scrolls itself fully into view"
   await loadPlan(page);
 
   // Park a third of the way down, so there is plan above and below the composer.
-  const view = page.locator(".diff-plan");
+  const view = page.locator(PLAN_SURFACE);
   await view.evaluate((el) => el.scrollTo({ top: Math.round(el.scrollHeight / 3) }));
   await expect.poll(() => view.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
   const before = await view.evaluate((el) => el.scrollTop);
@@ -116,7 +116,7 @@ test("a composer that already fits leaves the view exactly where it was", async 
   await page.goto("/");
   await loadPlan(page);
 
-  const view = page.locator(".diff-plan");
+  const view = page.locator(PLAN_SURFACE);
   const before = await view.evaluate((el) => el.scrollTop);
 
   // Line 3 is body text near the top, with the whole viewport below it.
@@ -143,7 +143,7 @@ test("re-opening a saved comment for editing inherits the same reveal", async ({
   await page.goto("/");
   await loadPlan(page);
 
-  const view = page.locator(".diff-plan");
+  const view = page.locator(PLAN_SURFACE);
   await view.evaluate((el) => el.scrollTo({ top: Math.round(el.scrollHeight / 3) }));
   await expect.poll(() => view.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
 

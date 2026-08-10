@@ -5,6 +5,7 @@
 // (and focuses/highlights a committed comment's card). Escape dismisses the panel.
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 test("opens from the strip, filters + underlines by text, and reveals comments and drafts", async ({
   daemon,
@@ -21,7 +22,7 @@ test("opens from the strip, filters + underlines by text, and reveals comments a
     composerScratches: [{ startLine: 20, endLine: 20, text: "an unsent thought to finish later" }],
   });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   // The tally counts comments + drafts and toggles the navigator.

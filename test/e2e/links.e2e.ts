@@ -14,6 +14,7 @@
 // navigation: the test owns the seam the daemon serves, not the wider web.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 const SAFE_URL = "https://docs.example.test/widget-cache";
 // An http link (display collapses to its label), a plain-prose row with no link
@@ -77,7 +78,7 @@ async function rowPoints(
 test("clicking a link token opens its http URL in a new tab", async ({ daemon, page }) => {
   await daemon.seed({ plan: LINK_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // The inline link renders as its label only; the raw URL syntax is gone.
   await expect(page.getByText("the cache docs")).toBeVisible();
@@ -101,7 +102,7 @@ test("clicking a link token does not also open the line's comment composer", asy
 }) => {
   await daemon.seed({ plan: LINK_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // The read-write source view wires BOTH the link layer and row-click
   // commenting, so a single event reaches the token-click handler (which opens
@@ -142,7 +143,7 @@ test("clicking the link's row away from its label opens no tab, only the compose
 }) => {
   await daemon.seed({ plan: LINK_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("the cache docs")).toBeVisible();
   await stubWindowOpen(page);
 
@@ -162,7 +163,7 @@ test("clicking the link's row away from its label opens no tab, only the compose
 test("hovering the link's row away from its label reveals no tooltip", async ({ daemon, page }) => {
   await daemon.seed({ plan: LINK_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("the cache docs")).toBeVisible();
 
   const { onLabel, offLabel } = await rowPoints(page);
@@ -181,7 +182,7 @@ test("hovering a link token reveals a caret tooltip with the full href, not a na
 }) => {
   await daemon.seed({ plan: LINK_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   const link = page.getByText("the cache docs");
   await expect(link).toBeVisible();
@@ -218,7 +219,7 @@ test("hovering a link token reveals a caret tooltip with the full href, not a na
 test("a link is marked before any hover, over its label only", async ({ daemon, page }) => {
   await daemon.seed({ plan: LINK_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("the cache docs")).toBeVisible();
 
   // The display collapse leaves a link tokenized as ordinary prose, so
@@ -244,7 +245,7 @@ test("a link is marked before any hover, over its label only", async ({ daemon, 
 test("hovering an ordinary code token reveals no tooltip", async ({ daemon, page }) => {
   await daemon.seed({ plan: LINK_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // "cold-standby" is plain prose on a row with no link at all; hovering it
   // produces no tooltip. Kept off the link's line so the check is about the
@@ -264,7 +265,7 @@ test("hovering an ordinary code token reveals no tooltip", async ({ daemon, page
 test("clicking a dangerous-scheme token opens no tab", async ({ daemon, page }) => {
   await daemon.seed({ plan: LINK_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // The javascript:-scheme link is left as literal markdown source with no
   // clickable span, so its label token "this control" carries no link.

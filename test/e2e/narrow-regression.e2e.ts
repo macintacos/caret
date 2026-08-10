@@ -13,6 +13,7 @@
 // instead of hardcoding regime literals.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
 import { MIN_APP_WIDTH_PX, NARROW_WIDTH_PX, TIGHT_WIDTH_PX } from "@ui/src/lib/layout.ts";
 
 test("no surface overflows the viewport horizontally across the breakpoint sweep", async ({
@@ -21,7 +22,7 @@ test("no surface overflows the viewport horizontally across the breakpoint sweep
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // The layout is designed to fit down to MIN_APP_WIDTH_PX and only scroll
   // horizontally *below* that floor, so at each breakpoint the document must not
@@ -44,7 +45,7 @@ test("heading navigation stays reachable at a narrow width", async ({ daemon, pa
   await daemon.seed();
   await page.setViewportSize({ width: TIGHT_WIDTH_PX, height: 900 });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // The breadcrumbs bar took over from the contents rail (EXC-949), and it is the
   // row's first control to give up space as the window tightens — so the narrow
@@ -80,7 +81,7 @@ test("a seeded comment card fits within the plan column at a narrow width", asyn
   });
   await page.setViewportSize({ width: 500, height: 900 });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // Measured on the comment text (which the capped card bounds) in viewport
   // coordinates, so the shadow-projected card and its light-DOM container are
@@ -88,7 +89,7 @@ test("a seeded comment card fits within the plan column at a narrow width", asyn
   const comment = page.getByText("A comment long enough to wrap").first();
   await expect(comment).toBeVisible();
   const commentBox = await comment.boundingBox();
-  const planBox = await page.locator(".diff-plan").boundingBox();
+  const planBox = await page.locator(PLAN_SURFACE).boundingBox();
   expect(commentBox).not.toBeNull();
   expect(planBox).not.toBeNull();
   expect(commentBox!.x + commentBox!.width).toBeLessThanOrEqual(planBox!.x + planBox!.width + 1);
@@ -101,7 +102,7 @@ test("TopBar secondary actions stay reachable via the overflow menu at a narrow 
   await daemon.seed();
   await page.setViewportSize({ width: TIGHT_WIDTH_PX, height: 900 });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // Below --w-narrow the inline Reject / Request-changes buttons collapse into the
   // "More actions" overflow menu (EXC-810); the integration guarantee is that they

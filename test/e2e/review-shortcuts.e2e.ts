@@ -12,7 +12,7 @@
 import type { Page } from "@playwright/test";
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
-import { jumpToHeading } from "@test/e2e/support/source-view.ts";
+import { jumpToHeading, planSurface } from "@test/e2e/support/source-view.ts";
 
 // Two headings, so the plan has a trail with something to navigate.
 const filler = (label: string) =>
@@ -46,7 +46,7 @@ const TALL_PLAN = [
 ].join("\n\n");
 
 async function loadPlan(page: Page): Promise<void> {
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 }
 
@@ -74,7 +74,7 @@ test("a opens the approve guard (never a raw approve) and Escape dismisses it", 
   // The review is still pending — the guard has not resolved anything.
   await page.keyboard.press("Escape");
   await expect(confirm).toBeHidden();
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 });
 
 test("r opens the request-changes dialog", async ({ daemon, page }) => {
@@ -112,7 +112,7 @@ test("shift+R opens the reject guard and Escape dismisses it", async ({ daemon, 
 
   await page.keyboard.press("Escape");
   await expect(confirm).toBeHidden();
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 });
 
 test("comma opens Settings even with no active review; a, r and shift+R no-op there", async ({

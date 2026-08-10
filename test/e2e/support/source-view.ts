@@ -9,6 +9,29 @@ import { expect, type Locator, type Page } from "@playwright/test";
 
 import { waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 
+/**
+ * The plan's scroll container.
+ *
+ * `DiffPlanView` marks it `role="presentation"` deliberately, so it is out of the
+ * accessibility tree and there is no role to query — an attribute anchor is the
+ * correct locator here, not a fallback. Naming it once means a class rename is one
+ * edit rather than every spec that waits for the plan.
+ */
+export const PLAN_SURFACE = ".diff-plan";
+
+/**
+ * Resolve once the seeded plan has rendered.
+ *
+ * Nearly every spec opens by waiting for the plan before it does anything else, so
+ * the wait lives here rather than being re-derived per spec. Returns the container
+ * for the callers that go on to scroll it or scope a query inside it.
+ */
+export async function planSurface(page: Page): Promise<Locator> {
+  const plan = page.locator(PLAN_SURFACE);
+  await expect(plan).toBeVisible();
+  return plan;
+}
+
 /** The vertical center (viewport px) of a 1-based source line's row. Throws when
  * the line is not rendered, so a wrong line number fails here rather than as an
  * unrelated miss on whatever the resulting coordinates happened to hit. */
@@ -32,7 +55,7 @@ export async function lineCenterY(page: Page, line: number): Promise<number> {
  * gutter column without reaching the line-number cell. */
 export async function revealGutterPlus(page: Page, line: number): Promise<Locator> {
   const y = await lineCenterY(page, line);
-  const x = await page.locator(".diff-plan").evaluate((el) => el.getBoundingClientRect().x + 6);
+  const x = await page.locator(PLAN_SURFACE).evaluate((el) => el.getBoundingClientRect().x + 6);
   await page.mouse.move(x, y);
   const plus = page.locator(".diffview [data-utility-button]");
   await expect(plus).toBeVisible();

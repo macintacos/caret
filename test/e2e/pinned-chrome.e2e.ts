@@ -8,6 +8,7 @@
 // asserts on visibility + bounding-box geometry, not a component unit.
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
 
 // A right-docked 21rem card is at most this wide; the full-bleed sheet is wider.
 const CARD_MAX_PX = 21 * 16 + 4; // 21rem + rounding headroom
@@ -20,7 +21,7 @@ test("the status bar spans full width, reserves space, and holds the segments", 
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   const bar = page.locator(".status-bar");
@@ -37,7 +38,7 @@ test("the status bar spans full width, reserves space, and holds the segments", 
 
   // Reserves space: the plan's scroll area ends at (or above) the bar's top edge,
   // rather than the bar overlaying the last lines.
-  const planBox = await page.locator(".diff-plan").boundingBox();
+  const planBox = await page.locator(PLAN_SURFACE).boundingBox();
   expect(planBox).not.toBeNull();
   expect(planBox!.y + planBox!.height).toBeLessThanOrEqual(barBox!.y + 1);
 
@@ -64,7 +65,7 @@ test("the comment navigator opens from the bar tally and docks above the bar", a
     annotations: [{ id: "ann-1", startLine: 7, endLine: 7, comment: "warm cache path" }],
   });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   const bar = page.locator(".status-bar");
@@ -97,7 +98,7 @@ test("at narrow width the navigator widens to a full-bleed sheet above the bar",
   });
   await page.setViewportSize({ width: 500, height: 900 });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   const nav = page.locator(".comment-navigator");
@@ -125,7 +126,7 @@ test("at wide width the navigator stays a right-docked card above the bar", asyn
   });
   // The default fixture viewport is wide, so none of the narrow-width rules apply.
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   const nav = page.locator(".comment-navigator");

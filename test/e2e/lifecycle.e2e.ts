@@ -8,6 +8,7 @@
 
 import { SECOND_PLAN } from "@test/e2e/support/fixture-plan.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { PLAN_SURFACE } from "@test/e2e/support/source-view.ts";
 
 test("switching between two pending reviews shows the right plan", async ({ daemon, page }) => {
   await daemon.seed();
@@ -16,7 +17,7 @@ test("switching between two pending reviews shows the right plan", async ({ daem
 
   // Oldest-first: the first seed is active. The heading shows as source text in
   // the source view; scope to the view so the switcher's copy doesn't collide.
-  const plan = page.locator(".diff-plan");
+  const plan = page.locator(PLAN_SURFACE);
   await expect(plan.getByText("Widget Cache Refactor")).toBeVisible();
 
   // The switcher (a shadcn DropdownMenu since EXC-760) carries both — count "2";
@@ -34,7 +35,7 @@ test("?review=<id> deep-links directly to that review", async ({ daemon, page })
   await page.goto(`/?review=${encodeURIComponent(second)}`);
 
   // Without the deep link the oldest review would win; the param overrides.
-  await expect(page.locator(".diff-plan").getByText("Gadget Renderer Cleanup")).toBeVisible();
+  await expect(page.locator(PLAN_SURFACE).getByText("Gadget Renderer Cleanup")).toBeVisible();
 });
 
 test("a review posted while the page is open appears without a reload", async ({
@@ -43,7 +44,7 @@ test("a review posted while the page is open appears without a reload", async ({
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan").getByText("Widget Cache Refactor")).toBeVisible();
+  await expect(page.locator(PLAN_SURFACE).getByText("Widget Cache Refactor")).toBeVisible();
 
   // Seed through the API while the page is open: the 2s poll must pick it up.
   await daemon.seed({ plan: SECOND_PLAN });

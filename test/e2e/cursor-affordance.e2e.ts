@@ -7,11 +7,12 @@
 // so the diff library's own buttons are naturally out of scope.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 test("every enabled button and menu action shows the pointer cursor", async ({ daemon, page }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // Every button the user can actually click: visible and enabled. A disabled
   // control ([disabled] or aria-disabled) correctly keeps the default arrow, so it
@@ -65,7 +66,7 @@ test("compare-versions controls and version options show the pointer cursor", as
 }) => {
   await daemon.seedVersions(3, ["# Plan\n\nalpha\n", "# Plan\n\nbeta\n", "# Plan\n\ngamma\n"]);
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await page.getByRole("button", { name: "Compare versions" }).click();
 
   // Every interactive control in the compare bar: the version chips plus the

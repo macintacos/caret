@@ -8,6 +8,7 @@
 // whether the surface actually leaves afterwards, is browser behavior.
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 const settingsDialog = "[data-slot='dialog-content']";
 
@@ -36,7 +37,7 @@ test("closing a modal plays its exit before the surface leaves the DOM", async (
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   await openSettings(page);
@@ -78,7 +79,7 @@ test("re-opening a modal mounts it fresh", async ({ daemon, page }) => {
   // happens) is pinned in modalPresence.test.ts.
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   await openSettings(page);
@@ -107,7 +108,7 @@ test("a confirm guard unmounts too — the alertdialog branch of the shell", asy
     annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain cold cost" }],
   });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   await page.getByRole("button", { name: "Reject", exact: true }).click();
@@ -123,7 +124,7 @@ test("a modal still unmounts under reduced motion", async ({ daemon, page }) => 
   await page.emulateMedia({ reducedMotion: "reduce" });
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   await openSettings(page);

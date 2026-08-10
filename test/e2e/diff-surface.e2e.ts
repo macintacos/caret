@@ -8,7 +8,13 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
-import { jumpToHeading, lineCenterY, revealGutterPlus } from "@test/e2e/support/source-view.ts";
+import {
+  jumpToHeading,
+  lineCenterY,
+  PLAN_SURFACE,
+  planSurface,
+  revealGutterPlus,
+} from "@test/e2e/support/source-view.ts";
 
 // A plan tall enough to scroll the source view past one viewport.
 const TALL_PLAN = `# Tall Plan\n\n${Array.from({ length: 120 }, (_, i) => `Line ${i + 1} of the plan body, long enough to overflow the viewport.`).join("\n\n")}\n`;
@@ -19,7 +25,7 @@ test("renders the plan as markdown source, with no legacy plan view", async ({ d
 
   // The source-view container is mounted; the plan source text is visible
   // (Playwright pierces the library's shadow root for text).
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
 
   // The legacy surface is absent: no rendered-HTML article.
@@ -30,8 +36,7 @@ test("scroll position survives the 2-second poll tick", async ({ daemon, page })
   await daemon.seed({ plan: TALL_PLAN });
   await page.goto("/");
 
-  const view = page.locator(".diff-plan");
-  await expect(view).toBeVisible();
+  const view = await planSurface(page);
   await expect(page.getByText("Line 1 of the plan body")).toBeVisible();
 
   // Scroll down, then assert the position settled at a non-zero offset.
@@ -54,7 +59,7 @@ test("scroll position survives the 2-second poll tick", async ({ daemon, page })
 test("approving resolves the review on the source-view surface", async ({ daemon, page }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // Approve opens a confirmation (EXC-791); confirming resolves the review.
   await page.getByRole("button", { name: "Approve", exact: true }).click();
@@ -72,7 +77,7 @@ test("request-changes with a general comment round-trips on the source-view surf
 }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   const feedback = "Please tighten the verification section.";
@@ -116,8 +121,7 @@ test("a heading jump lands the heading at the top of the view, however far it is
   await daemon.seed({ plan: TOC_PLAN });
   await page.goto("/");
 
-  const view = page.locator(".diff-plan");
-  await expect(view).toBeVisible();
+  await planSurface(page);
 
   // Jump to the farthest heading; the smooth scroll should settle it just below
   // the top edge (a small breathing-room offset), not short of it or in the
@@ -211,7 +215,7 @@ async function dragLineBody(
   const startY = await lineCenterY(page, startLine);
   const endY = await lineCenterY(page, endLine);
   const x = await page
-    .locator(".diff-plan")
+    .locator(PLAN_SURFACE)
     .evaluate((el) => el.getBoundingClientRect().x + el.getBoundingClientRect().width / 2);
   if (opts.shift) await page.keyboard.down("Shift");
   await page.mouse.move(x, startY);
@@ -227,7 +231,7 @@ test("creating a single-line annotation from the gutter persists it line-anchore
 }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
 
   // Line 3 is the "This plan reorganizes…" paragraph in the fixture plan.
@@ -256,7 +260,7 @@ test("Tab nests the current list item in the comment composer", async ({ daemon,
   // strips only the whole-comment edges) can't hide the indent.
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
@@ -281,7 +285,7 @@ test("Tab inserts four spaces outside a list in the comment composer", async ({ 
   // Text on both sides keeps the run off the whole-comment edges submit trims.
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
@@ -305,7 +309,7 @@ test("Tab indents every line of a multi-line selection", async ({ daemon, page }
   // leading unselected line keeps the indented block off the trimmed edges.
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
@@ -340,7 +344,7 @@ test("Escape blurs the edit editor, then a second Escape saves the change", asyn
     annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "original" }],
   });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
 
   const card = page.locator("[data-annotation-card]");
@@ -370,7 +374,7 @@ test("Escape blurs the composer, then a second Escape keeps the draft", async ({
   // scratch) rather than discarding it — the non-destructive "clicked away" path.
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
@@ -407,7 +411,7 @@ test("typing in a composer opened while another is open keeps the caret in place
   // even while the bug is present.
   const id = await daemon.seed({ plan: RANGE_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
@@ -451,7 +455,7 @@ test("an unsubmitted composer scratch survives a page reload (EXC-744)", async (
 }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
 
   // Type a comment on line 3 and Keep it for later instead of submitting: it is
@@ -476,7 +480,7 @@ test("an unsubmitted composer scratch survives a page reload (EXC-744)", async (
   // Reload. Before the fix the marker vanished (scratches lived only in memory);
   // now it rehydrates from the persisted scratch.
   await page.reload();
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   const restored = page.getByRole("button", { name: "Resume unsent comment" });
   await expect(restored).toBeVisible();
   await expect(restored).toContainText("Half-written thought to finish later.");
@@ -500,7 +504,7 @@ test("creating a range annotation from the gutter persists the correct line span
   // the working (light) path; EXC-751 owns the dark case.
   await page.addInitScript(() => localStorage.setItem("caret.theme.mode", "light"));
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();
   // The submit chord below is this test's first keydown, ~330ms after mount — 30ms
   // clear of the 300ms safe-mode grace, and less under load. Unguarded, the guard
@@ -540,7 +544,7 @@ test("a shift-extend selection reaches the composer with an ascending range", as
   // ascending Lines X–Y the drag does, so the keyboard path stays equivalent.
   const id = await daemon.seed({ plan: RANGE_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();
 
   await shiftExtendSelection(page, 4, 9);
@@ -570,7 +574,7 @@ test("a bottom-up drag normalizes to an ascending span", async ({ daemon, page }
   // normalization against regression, the invariant the live readout shares.
   const id = await daemon.seed({ plan: RANGE_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();
 
   // Drag from line 9 up to line 5 — the gesture runs bottom-up.
@@ -605,7 +609,7 @@ test("dragging across the code body opens the range composer on release", async 
   // separate + click. Submitting persists the ascending {startLine, endLine}.
   const id = await daemon.seed({ plan: RANGE_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();
 
   await dragLineBody(page, 4, 8);
@@ -636,7 +640,7 @@ test("holding Shift while dragging the code body opens no composer (text-select 
   // too flaky in headless Chromium to assert on).
   await daemon.seed({ plan: RANGE_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();
 
   await dragLineBody(page, 4, 8, { shift: true });
@@ -653,11 +657,11 @@ test("a plain code-body drag suppresses native text selection", async ({ daemon,
   // the computed user-select — is what actually proves the fix.)
   await daemon.seed({ plan: RANGE_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();
 
   const x = await page
-    .locator(".diff-plan")
+    .locator(PLAN_SURFACE)
     .evaluate((el) => el.getBoundingClientRect().x + el.getBoundingClientRect().width / 2);
   const readUserSelect = () =>
     page.evaluate(() => {
@@ -688,7 +692,7 @@ test("a live readout previews the range during the drag and clears on release", 
   // readout tracks it before release; on release it disappears with no residue.
   await daemon.seed({ plan: RANGE_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();
 
   const readout = page.locator(".drag-readout");
@@ -720,7 +724,7 @@ test("dismissing the composer clears the line-selection highlight", async ({ dae
   // lingers on the line after the reviewer moves on.
   await daemon.seed({ plan: RANGE_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();
   await waitPastSafeModeGrace(page); // Escape is absorbed during the safe-mode grace
 
@@ -758,7 +762,7 @@ test("a drag selection renders the selected lines in caret amber, not library-bl
   // real Chromium build, not just in the static stylesheet.
   await daemon.seed({ plan: RANGE_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();
 
   await selectGutterRange(page, 5, 8);
@@ -819,7 +823,7 @@ test("a drag selection still highlights when the plan has an overflowing code-bl
 
   await daemon.seed({ plan: WIDE_CODE_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("Intro prose here.")).toBeVisible();
 
   // Precondition: the wide block overflowed and was carded — the exact DOM shape that used to
@@ -877,7 +881,7 @@ test("renders a fenced code block as a tagged, darker panel on its own rows (EXC
   // prose rows are left alone.
   await daemon.seed({ plan: CODE_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("Some intro prose here.")).toBeVisible();
 
   const readPanel = () =>
@@ -1111,7 +1115,7 @@ test("the row highlight and gutter + follow the row under a stationary cursor as
   // must instead follow the row now under the pointer, with the mouse never moving.
   await daemon.seed({ plan: TALL_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("Line 1 of the plan body")).toBeVisible();
 
   // Park the cursor on a specific content row; the library highlights it and mounts
@@ -1154,7 +1158,7 @@ test("numeric chrome renders with tabular figures end to end", async ({ daemon, 
   // build, not just static stylesheet text.
   await daemon.seed({ plan: RANGE_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();
 
   // A diff line-number cell resolves font-feature-settings to the tabular tag.
@@ -1184,7 +1188,7 @@ test("dismissing an empty composer with Escape leaves no residue", async ({ daem
   // as a scratch (see the scratch-draft tests below). This pins the empty case.
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
   // Past Safe Mode's grace/suppression window, which would otherwise swallow the
   // first keystroke (the Escape) as an accidental interruption.
@@ -1220,7 +1224,7 @@ function scratchMarker(page: Page): Locator {
 test("Keep for later retains a returnable Resume marker", async ({ daemon, page }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
@@ -1254,7 +1258,7 @@ test("the Discard button discards a typed draft, leaving no Resume marker", asyn
 }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
@@ -1278,7 +1282,7 @@ test("canceling a Discard keeps the composer open", async ({ daemon, page }) => 
   // Canceling backs out and leaves the composer (and its draft) in place.
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
@@ -1303,7 +1307,7 @@ test("resuming a kept scratch then Discarding removes the marker and un-persists
   // removed, not merely hidden.
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
@@ -1339,7 +1343,7 @@ test("clicking the Resume marker reopens the composer with the text restored", a
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
@@ -1363,7 +1367,7 @@ test("clicking the Resume marker reopens the composer with the text restored", a
 test("a resumed scratch can be completed into a persisted annotation", async ({ daemon, page }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
@@ -1402,7 +1406,7 @@ test("opening a different range retains the in-progress text as a scratch", asyn
   // opens the new range.
   await daemon.seed({ plan: RANGE_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
@@ -1436,7 +1440,7 @@ test("opening a different range starts the new composer empty, not seeded with t
   // text must not bleed into the fresh composer — each range is its own draft.
   await daemon.seed({ plan: RANGE_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
@@ -1460,7 +1464,7 @@ test("scratch drafts clear when a new plan version arrives", async ({ daemon, pa
   // mirrors the existing discard-on-content-change guard for the open composer.
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
@@ -1508,7 +1512,7 @@ test("the Request Changes dialog lists an unsent scratch, collapsed and uncounte
 }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
@@ -1536,7 +1540,7 @@ test("the Request Changes dialog lists an unsent scratch, collapsed and uncounte
 test("Saving a scratch graduates it into the sent feedback", async ({ daemon, page }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
@@ -1564,7 +1568,7 @@ test("Saving a scratch graduates it into the sent feedback", async ({ daemon, pa
 test("Discarding a scratch removes it and never sends it", async ({ daemon, page }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
@@ -1597,7 +1601,7 @@ test("submitting with an unsaved scratch sends only committed comments", async (
   // makes the submit possible; the scratch left unsent must not reach feedback.
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
   await waitPastSafeModeGrace(page);
 
@@ -1640,7 +1644,7 @@ test("a created annotation shows an inline card that doesn't overlay the code", 
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
 
   await createAnnotation(page, 3, "Quantify the cold cost.");
@@ -1670,7 +1674,7 @@ test("a created annotation shows an inline card that doesn't overlay the code", 
 test("two comments on the same line render as one ordered thread", async ({ daemon, page }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
 
   // Two comments anchored to the same line. The library reserves one annotation
@@ -1693,7 +1697,7 @@ test("clicking a line's content opens a comment composer for that line", async (
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // A plain click on the line's prose (not the gutter, not a link) opens the
   // composer anchored to that line — no need to hit the small hover `+`.
@@ -1715,7 +1719,7 @@ test("hovering a line body reveals the + and lifts that line's background, scope
   // declaration — and that the lift is scoped to the hovered line, not the view.
   await daemon.seed({ plan: RANGE_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();
 
   // At rest — mouse parked off any line — the gutter `+` is not shown.
@@ -1727,7 +1731,7 @@ test("hovering a line body reveals the + and lifts that line's background, scope
   // clear of the gutter, to prove the whole line is the hover target.
   const y = await lineCenterY(page, 3);
   const cx = await page
-    .locator(".diff-plan")
+    .locator(PLAN_SURFACE)
     .evaluate((el) => el.getBoundingClientRect().x + el.getBoundingClientRect().width / 2);
   await page.mouse.move(cx, y);
 
@@ -1770,7 +1774,7 @@ test("text selected on a line is preserved and a click opens no composer", async
   // selection, not the document one — the subtlety its own comment warns about.
   await daemon.seed({ plan: RANGE_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();
 
   // Select the line's prose inside the shadow root — proving it is selectable (copy
@@ -1807,7 +1811,7 @@ test("text selected on a line is preserved and a click opens no composer", async
 test("an inline card collapses to a chip and expands again", async ({ daemon, page }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
 
   await createAnnotation(page, 3, "Tighten this paragraph.");
@@ -1832,7 +1836,7 @@ test("the composer reveal and the card swap share one opacity-only token transit
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
 
   // Reads the computed reveal: the scoped animation-name (Svelte hashes it, so it
@@ -1883,7 +1887,7 @@ test("the saved card's trash Discard wobbles on hover", async ({ daemon, page })
   // global reduced-motion rule would collapse only its duration, never the name.
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await createAnnotation(page, 3, "Whimsy, please.");
 
   const discard = page.locator("[data-annotation-card]").getByRole("button", { name: "Discard" });
@@ -1897,7 +1901,7 @@ test("the saved card's trash Discard wobbles on hover", async ({ daemon, page })
 test("deleting an inline card removes the annotation", async ({ daemon, page }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
 
   await createAnnotation(page, 3, "Drop this section.");
@@ -1921,7 +1925,7 @@ test("canceling a delete keeps the inline card", async ({ daemon, page }) => {
   // leave the card and its persisted annotation untouched (EXC-749).
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
 
   await createAnnotation(page, 3, "Keep this section.");
@@ -1939,7 +1943,7 @@ test("canceling a delete keeps the inline card", async ({ daemon, page }) => {
 test("editing an inline card rewrites the comment and persists it", async ({ daemon, page }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
 
   await createAnnotation(page, 3, "Original note.");
@@ -1978,7 +1982,7 @@ test("editing a saved comment focuses the editor so the caret tracks typing", as
   // CM at where the slotted content's focus actually lives.
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
   // End and the typed "XY" below are this test's only keydowns and both are
   // load-bearing; a swallowed End also puts Safe Mode's 2s suppression over the
@@ -2020,7 +2024,7 @@ test("a rendered inline comment shows list markers (ordered and unordered)", asy
     ],
   });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   const card = page.locator("[data-annotation-card]");
   await card.locator(".chip").click();
   await expect(card.locator(".body")).toBeVisible();
@@ -2043,8 +2047,7 @@ test("clicking a line near the top opens its composer without jumping the scroll
   // Opening must leave the scroll position put.
   await daemon.seed({ plan: TALL_PLAN });
   await page.goto("/");
-  const view = page.locator(".diff-plan");
-  await expect(view).toBeVisible();
+  const view = await planSurface(page);
   await expect(page.getByText("Line 1 of the plan body")).toBeVisible();
   await view.evaluate((el) => {
     el.scrollTop = 0;
@@ -2066,7 +2069,7 @@ test("clicking a line focuses the comment field immediately", async ({ daemon, p
   // just-autofocused editor unless slotInto restores it.
   await daemon.seed({ plan: TALL_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("Line 1 of the plan body")).toBeVisible();
 
   await page.getByText("Line 1 of the plan body").click();
@@ -2083,7 +2086,7 @@ test("highlights fenced code blocks with per-language syntax colors", async ({ d
   // rather than the single un-highlighted color it had before.
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("function warm")).toBeVisible();
 
   await expect
@@ -2214,7 +2217,7 @@ test("a multi-line comment paints a gutter bracket spanning its whole range", as
   // from startLine to endLine — a 13-line span (4–16) on the body text.
   await daemon.seed({ plan: BRACKET_PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();
 
   // Source lines: line 1 is the heading, line 2 blank, then "Body line N" lands on
@@ -2254,8 +2257,7 @@ test("a multi-line comment paints a gutter bracket spanning its whole range", as
 test("the comment bracket tracks its lines through a scroll", async ({ daemon, page }) => {
   await daemon.seed({ plan: BRACKET_PLAN });
   await page.goto("/");
-  const view = page.locator(".diff-plan");
-  await expect(view).toBeVisible();
+  const view = await planSurface(page);
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();
 
   await createRangeAnnotation(page, 5, 13, "Track me through scroll.");
@@ -2286,7 +2288,7 @@ for (const colorScheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme });
     await daemon.seed({ plan: BRACKET_PLAN });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect(page.getByText("Body line 1 content here.")).toBeVisible();
 
     await createRangeAnnotation(page, 5, 17, "Color me amber.");

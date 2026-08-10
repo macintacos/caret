@@ -7,13 +7,14 @@
 // sessions → two pending reviews) so a switch is observable in the trigger.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 test("switches the active plan through the dropdown, both ways", async ({ daemon, page }) => {
   await daemon.seed({ title: "Plan Alpha", cwd: "/tmp/proj-alpha" });
   await daemon.seed({ title: "Plan Beta", cwd: "/tmp/proj-beta" });
 
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // The trigger shows a count Badge for the two pending plans.
   const trigger = page.locator(".switcher-trigger");
@@ -44,7 +45,7 @@ test("Escape closes the switcher menu, leaving the active plan unchanged", async
   await daemon.seed({ title: "Plan Beta", cwd: "/tmp/proj-beta" });
 
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   const trigger = page.locator(".switcher-trigger");
   await trigger.click();

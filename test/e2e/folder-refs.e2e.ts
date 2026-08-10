@@ -22,6 +22,7 @@ import { join } from "node:path";
 
 import { makeProject } from "@test/e2e/support/file-refs.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 import { MAX_DIR_ENTRIES } from "@/plan/directory.ts";
 
 /** A project whose `src` holds one file and one nested directory, so a card
@@ -50,7 +51,7 @@ test("a directory reference draws a folder glyph and a file reference a file one
       plan: "# Refs\n\nEdit `src/cache.ts`, which lives under `src/lib`.\n",
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
 
     await expect(page.locator("[data-file-ref]")).toHaveCount(2);
     await expect(page.locator('[data-file-ref="directory"]')).toHaveText("src/lib");
@@ -70,7 +71,7 @@ test("clicking a directory reference opens its immediate children, collapsed", a
   try {
     await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nThe tree under `src` matters.\n" });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
 
     await page.locator('[data-file-ref="directory"]').click();
@@ -96,7 +97,7 @@ test("expanding a folder fetches that level and only that level", async ({ daemo
   try {
     await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nThe tree under `src` matters.\n" });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
     await page.locator('[data-file-ref="directory"]').click();
     await expect(page.locator(card)).toBeVisible();
@@ -132,7 +133,7 @@ test("a directory holding only another directory still expands in one click", as
   try {
     await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nA chain lives under `src`.\n" });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
     await page.locator('[data-file-ref="directory"]').click();
     await expect(page.locator(card)).toBeVisible();
@@ -159,7 +160,7 @@ test("the tree can be entered and walked from the keyboard", async ({ daemon, pa
   try {
     await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nThe tree under `src` matters.\n" });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
     await page.locator('[data-file-ref="directory"]').click();
     await expect(page.locator(card)).toBeVisible();
@@ -195,7 +196,7 @@ test("clicking a file row does nothing", async ({ daemon, page }) => {
   try {
     await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nThe tree under `src` matters.\n" });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
     await page.locator('[data-file-ref="directory"]').click();
     await expect(page.locator(card)).toBeVisible();
@@ -232,7 +233,7 @@ test("a click inside the card leaves it open, a click outside closes it", async 
       plan: "# Refs\n\nThe tree under `src` matters.\n\nJust some plain prose here.\n",
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
     await page.locator('[data-file-ref="directory"]').click();
     await expect(page.locator(card)).toBeVisible();
@@ -262,7 +263,7 @@ test("Escape closes the card", async ({ daemon, page }) => {
   try {
     await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nThe tree under `src` matters.\n" });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
     await page.locator('[data-file-ref="directory"]').click();
     await expect(page.locator(card)).toBeVisible();
@@ -294,7 +295,7 @@ test("a skipped directory is a row, and opening it reports that it is not listed
   try {
     await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nThe tree under `src` matters.\n" });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
     await page.locator('[data-file-ref="directory"]').click();
     await expect(page.locator(card)).toBeVisible();
@@ -333,7 +334,7 @@ test("a level wider than the daemon's cap says how many rows it elided", async (
   try {
     await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nEverything sits in `wide`.\n" });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
     await page.locator('[data-file-ref="directory"]').click();
     await expect(page.locator(card)).toBeVisible();
@@ -368,7 +369,7 @@ test("a linked directory opens the tree and a linked file opens the preview", as
       plan: "# Refs\n\nRead [`src/lib/`](src/lib/) and then [`src/cache.ts`](src/cache.ts).\n",
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
 
     // The `[]()` is gone; both labels survive and carry their kind.
     await expect(page.locator(".diffview").getByText("](src/lib/)")).toHaveCount(0);
@@ -400,7 +401,7 @@ test("a prose-labelled directory link collapses and still opens the tree", async
   try {
     await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\n[the library tree](src/lib)\n" });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
 
     // The label survives verbatim — it is never rewritten to the path — and the
     // markup around it is gone. The glyph lands because the label is the whole
@@ -440,7 +441,7 @@ test("an unresolved directory link collapses its markup but gets no affordance",
       plan: "# Refs\n\n[a folder that moved](src/nowhere)\n\nThe tree under `src` matters.\n",
     });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
 
     await expect(page.locator(".diffview").getByText("a folder that moved")).toBeVisible();
@@ -466,7 +467,7 @@ test("an empty directory says so rather than opening a blank card", async ({ dae
     await mkdir(join(proj.dir, "hollow"));
     await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nNothing lives in `hollow` yet.\n" });
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
     await page.locator('[data-file-ref="directory"]').click();
 

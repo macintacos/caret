@@ -7,6 +7,7 @@
 // deterministically in ui/src/state/alerts.test.ts.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 // Deep enough that shortCwd abbreviates the display (…/Play/caret) while the copy
 // carries the whole absolute path — so the test proves the two genuinely differ.
@@ -20,7 +21,7 @@ test("clicking the cwd path copies the absolute path and shows a success alert",
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
 
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   const cwd = page.locator(".control-row button.cwd");
   await expect(cwd).toBeVisible();
@@ -49,7 +50,7 @@ test("success alerts stack and a dismiss removes one", async ({ daemon, page }) 
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
 
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   const cwd = page.locator(".control-row button.cwd");
   await cwd.click();

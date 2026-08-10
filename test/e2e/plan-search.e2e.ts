@@ -11,6 +11,7 @@
 import type { Page } from "@playwright/test";
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 const filler = (label: string) =>
   Array.from({ length: 8 }, (_, i) => `${label} filler line ${i + 1}.`).join("\n\n");
@@ -37,7 +38,7 @@ const cursor = (page: Page) =>
   page.locator(".diffview [data-content] [data-line][data-caret-cursor]");
 
 async function loadPlan(page: Page): Promise<void> {
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
   await waitPastSafeModeGrace(page);
 }
