@@ -189,8 +189,9 @@ let inFlightInstall: Promise<string> | undefined;
  * — an older build cached by a previous caret, or a file that won't run, is
  * replaced (downloadRumdl renames the new one over it). A `rumdl` on PATH is
  * never consulted: plan formatting must not vary with whatever the machine
- * happens to have installed. `CARET_RUMDL_BIN` remains the one explicit opt-out,
- * for a caller who is deliberately supplying their own binary.
+ * happens to have installed. `CARET_RUMDL_BIN` opts out of the *download*, not
+ * out of that thesis: it is taken only when it too reports `RUMDL_VERSION`, and
+ * anything else there falls through to the pinned acquisition below.
  *
  * The config is written idempotently on every call so it always tracks the
  * current state dir. */
@@ -202,7 +203,9 @@ export async function ensureRumdl(
   writeFileSync(config, RUMDL_CONFIG);
 
   const override = process.env.CARET_RUMDL_BIN?.trim();
-  if (override) return { bin: override, config, installed: false };
+  if (override && (await installedVersion(override)) === RUMDL_VERSION) {
+    return { bin: override, config, installed: false };
+  }
 
   const bin = rumdlBin();
   if ((await installedVersion(bin)) === RUMDL_VERSION) return { bin, config, installed: false };
