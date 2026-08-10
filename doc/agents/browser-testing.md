@@ -63,6 +63,41 @@ The split mirrors the test layers:
   options, which `safeMode.test.ts` drives deterministically. Follow that pattern for new
   timing logic so the behavior is unit-testable without an e2e.
 
+### Timeouts are budgets for the loaded host
+
+`playwright.config.ts` raises the per-test budget to 60s and the assertion budget to 15s,
+over Playwright's 30s/5s defaults, and `retries: 0` stays (EXC-1050). Both numbers exist
+because the suite's real home is `mise run preflight`, not an idle machine: the gate runs
+`test` (unit), `build bin`, and `smoke` alongside `test e2e`, on top of six e2e workers
+that already saturate the cores. Measured on a 12-core host, the unit suite takes 31s
+standalone and 88s inside the gate — everything sharing that window is roughly 3x slower,
+so a suite whose deadlines were calibrated standalone reds the gate for reasons that have
+nothing to do with the change under test.
+
+The per-test budget is the one that binds. Playwright ships **no** default `actionTimeout`
+or `navigationTimeout`, so `locator.click()`, `page.goto()`, and `page.waitForFunction()`
+retry against the *test* budget rather than one of their own — a starved action quietly
+eats the whole thing, and the run dies on a timeout that names the test rather than the
+step inside it. Don't paper over a slow spec with a per-call `{ timeout: … }` override; if
+a spec needs more than the config gives it, that is a finding about the spec.
+
+**Never reach for `retries`.** A retry re-runs the test: it hides that the first attempt
+failed, doubles the worst case, and leaves the contention invisible. A deadline hides
+nothing — the test still runs once, still asserts the same thing, still fails when the app
+is wrong — and it is free on the happy path, because a web-first assertion resolves the
+instant its condition is true. A flake is a bug to be named, not a run to be repeated.
+
+**Reproducing load-induced failure on demand.** Two levers, neither needing a code change:
+
+- **Real contention**, closest to the gate: raise the worker cap past the core count, e.g.
+  `CARET_E2E_WORKERS=<2x cores> mise run test e2e`. Faithful, but stochastic — what it
+  turns up depends on what else the host is doing, and the failing set differs run to run.
+- **Deterministic**, for asking whether one spec has headroom: drive it from a throwaway
+  `playwright-cli` probe that CPU-throttles the renderer over CDP
+  (`Emulation.setCPUThrottlingRate`), which widens every browser-side wait by a fixed
+  factor. Probes like this are exploration and are **never committed** — write the finding
+  down, then delete the probe.
+
 ## Artifact hygiene
 
 Keep fixture plans **synthetic and non-identifying** — they are seeded data, not real

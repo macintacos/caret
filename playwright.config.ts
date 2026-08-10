@@ -22,6 +22,10 @@ export default defineConfig({
   testDir: "test/e2e",
   testMatch: "**/*.e2e.ts",
   fullyParallel: true,
+  // EXC-1050: no retries. A retry would hide the contention the budgets below
+  // absorb, and double the worst case; a starved-but-correct test instead
+  // passes on its single run, because those deadlines are sized for the loaded
+  // host rather than an idle one.
   retries: 0,
   forbidOnly: true,
   // EXC-587: bound the fan-out. Each worker drives a Chromium tree plus a
@@ -33,6 +37,20 @@ export default defineConfig({
   // (the path that orphans Chromium). Generous so it can't flake a slow or
   // loaded host's normal pass.
   globalTimeout: 15 * 60 * 1000,
+  // EXC-1050: budgets for the LOADED host, not an idle one. Playwright's
+  // defaults (30s per test, 5s per assertion) assume the suite owns the
+  // machine, and inside `mise run preflight` it does not: the gate runs `test`
+  // (unit), `build bin`, and `smoke` alongside `test e2e` on top of six e2e
+  // workers that already saturate the cores, and the unit suite measures 31s
+  // standalone against 88s inside the gate — 2.8x. The per-test budget is the
+  // one that binds, because Playwright applies no default actionTimeout or
+  // navigationTimeout, so a starved `click`/`goto`/`waitForFunction` retries
+  // against this number rather than one of its own. Raising a deadline is not
+  // a retry: the test still runs once and still fails when the app is wrong,
+  // and a web-first assertion resolves the instant it is true, so neither line
+  // costs a passing run anything. globalTimeout above still bounds a wedge.
+  timeout: 60 * 1000,
+  expect: { timeout: 15 * 1000 },
   // Non-interactive reporter so the preflight gate can't hang on a TTY pager.
   reporter: "list",
   use: {
