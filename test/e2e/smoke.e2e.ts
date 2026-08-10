@@ -2,11 +2,13 @@
 // breadcrumbs bar, and body content are all visible.
 //
 // A plain render assertion, so it is technically unit-able — and it stays here
-// deliberately. This is the suite's harness canary: it is the one test whose
-// failure says the fixture, the spawned daemon, the built ui/dist, and the page
-// load are working at all, which no mounted-component unit can tell you. The
-// component-level half of the same claim is ui/src/components/DiffPlanView.test.ts
-// ("renders the plan source text into the source view").
+// deliberately. It is the suite's harness canary: the one test whose ONLY job is
+// this claim, so when it reds the fault is the fixture, the spawned daemon, the
+// built ui/dist, or the page load rather than any feature. No mounted-component
+// unit can isolate that. The plan-source half of the claim is a unit in
+// ui/src/components/DiffPlanView.test.ts ("renders the plan source text into the
+// source view"); the breadcrumbs half is in PlanBreadcrumbs.test.ts, which
+// DiffPlanView.test.ts points at for exactly this reason.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";

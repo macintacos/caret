@@ -8,8 +8,8 @@
 // shift-extend selection gestures, the smooth-scroll geometry, and the colors and
 // font features resolved inside the library's shadow root are hit-testing, layout,
 // and computed style that happy-dom does not do — all e2e concerns per
-// doc/agents/browser-testing.md. The pure halves stay units: the component's own
-// render branches, annotation threading, compare mode, and scratch rehydration in
+// doc/agents/browser-testing.md. The component's prop-driven halves — its render
+// branches, annotation display, and scratch rehydration — are units in
 // ui/src/components/DiffPlanView.test.ts.
 
 import type { Locator, Page } from "@playwright/test";
