@@ -7,8 +7,13 @@
 // fullyParallel workers collision-free. The fixture runs under the Playwright
 // (node) runner; only the daemon child needs Bun, so it is spawned with `bun`
 // explicitly.
+//
+// Boot is not the whole cost a test pays for its daemon, and reading it as the
+// floor is what hid EXC-1053 for so long: the FIRST seed() also acquires rumdl to
+// format its plan, which is 520ms against a cold state dir and 11ms against the
+// pre-resolved binary pinnedRumdl() hands the daemon below.
 
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -20,6 +25,7 @@ import { test as base, expect, type Page } from "@playwright/test";
 
 import { waitForHealth } from "@/daemon/client.ts";
 import type { ClientReview, DraftBody, PlanInput, RouteResult } from "@/lib/types.ts";
+import { RUMDL_VERSION } from "@/plan/rumdl.ts";
 
 import { FIXTURE_PLAN } from "./fixture-plan.ts";
 
@@ -120,11 +126,62 @@ function awaitPortLine(child: ChildProcess, stderr: () => string): Promise<numbe
 // setTimeout rather than Bun.sleep (the src probe defaults to Bun.sleep).
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+/** Run `cmd` and return its trimmed stdout, or "" if it can't be run at all. */
+function output(cmd: string, args: string[]): string {
+  try {
+    return execFileSync(cmd, args, {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return "";
+  }
+}
+
+let resolvedRumdl: string | undefined;
+
+/**
+ * The pinned rumdl to hand every daemon, resolved once per worker process.
+ *
+ * ensureRumdl() (src/plan/rumdl.ts) is version-gated against $XDG_STATE_HOME, and
+ * every test gets a fresh throwaway one — so without this the first POST
+ * /api/reviews of every test downloads the pinned 5.6MB release from GitHub,
+ * formats one plan with it, and deletes it at teardown. That is ~1.7GB per suite
+ * run on the critical path of all 308 tests (EXC-1053), and it also makes the
+ * suite depend on github.com being reachable.
+ *
+ * The bun suite already solves this the same way: test/support/rumdl-preload.ts
+ * (EXC-828) sets CARET_RUMDL_BIN from PATH through bunfig.toml's [test] preload.
+ * Playwright doesn't read bunfig, so this is that resolution for the node runner
+ * — same source (PATH, i.e. the mise-pinned tool), so the two can't drift.
+ *
+ * Loud on purpose. A binary that is missing or reports the wrong version is NOT
+ * an error downstream — ensureRumdl just falls back to the download — so failing
+ * quietly here would silently restore the whole cost.
+ */
+function pinnedRumdl(): string {
+  if (resolvedRumdl) return resolvedRumdl;
+  const bin = process.env.CARET_RUMDL_BIN?.trim() || output("which", ["rumdl"]);
+  const version = bin ? output(bin, ["--version"]).split(/\s+/).at(-1) : "";
+  if (version !== RUMDL_VERSION) {
+    throw new Error(
+      `caret e2e: no rumdl ${RUMDL_VERSION} to hand the daemon — resolved ${bin || "nothing"}, ` +
+        `reporting ${version || "nothing"}. Run \`mise install\` (mise.toml pins it) or set ` +
+        "CARET_RUMDL_BIN; without it every test downloads the pinned release into its own " +
+        "throwaway state dir.",
+    );
+  }
+  resolvedRumdl = bin;
+  return bin;
+}
+
 export const test = base.extend<{ daemon: Daemon }>({
   // Playwright requires the first fixture argument to be an object-destructuring
   // pattern even when no upstream fixtures are consumed.
   // biome-ignore lint/correctness/noEmptyPattern: Playwright fixture signature
   daemon: async ({}, use) => {
+    // Before mkdtemp so an unresolvable rumdl can't leak a state dir.
+    const rumdl = pinnedRumdl();
     // Ephemeral, isolated state: the daemon's reviews/prefs/logs all live under
     // this dir and are wiped at teardown. The user's real state is never touched.
     const stateDir = await mkdtemp(join(tmpdir(), "caret-e2e."));
@@ -134,6 +191,7 @@ export const test = base.extend<{ daemon: Daemon }>({
       env: {
         ...process.env,
         XDG_STATE_HOME: stateDir,
+        CARET_RUMDL_BIN: rumdl,
       },
       stdio: ["pipe", "pipe", "pipe"],
     });
