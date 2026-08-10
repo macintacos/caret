@@ -5,6 +5,14 @@
 // rendered version scrolls the diff to that line on that comment's side; one from
 // a version in the range but on neither side lists non-interactively, and a
 // general comment retained at deny lists with no line at all.
+//
+// Everything here needs a real browser. Every case is reached by real clicks
+// through the status strip into the docked panel, the jump asserts scroll
+// geometry inside the library's shadow root, and the retained-at-deny case only
+// exists after a full deny → revision round-trip against a live daemon — e2e
+// concerns per doc/agents/browser-testing.md. The panel's own pure list shaping —
+// version badges, which rows reveal, the general-comment row — stays a unit, in
+// ui/src/components/CommentNavigator.test.ts.
 
 import type { Page } from "@playwright/test";
 

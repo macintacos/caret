@@ -5,6 +5,11 @@
 // Multi-review seeds rely on the fixture's per-call UUID sessionId default:
 // the daemon SUPERSEDES a same-session pending review, so sharing a session
 // would silently collapse two seeds into one.
+//
+// Everything here needs a real browser. The deep link is a real navigation whose
+// query string the app reads at boot, and the unprompted arrival is the 2s
+// decision poll against a live daemon — both e2e concerns per
+// doc/agents/browser-testing.md, not something a mounted component can show.
 
 import { SECOND_PLAN } from "@test/e2e/support/fixture-plan.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
