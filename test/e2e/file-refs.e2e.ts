@@ -1234,7 +1234,7 @@ for (const cited of [150, 42]) {
         ).toBeLessThanOrEqual(1);
 
         release();
-        await expect(preview.locator(".fp-range")).not.toHaveText(framed ?? " ");
+        await expect(preview.locator(".fp-range")).not.toHaveText(framed ?? "\0");
 
         // The chunk landed entirely above the reader, so the cited line is still
         // exactly where they left it — the region moved down by what arrived
