@@ -24,7 +24,7 @@ test("the status bar spans full width, reserves space, and holds the segments", 
   await planSurface(page);
   await waitPastSafeModeGrace(page);
 
-  const bar = page.locator(".status-bar");
+  const bar = page.getByRole("contentinfo", { name: "Status bar" });
   await expect(bar).toBeVisible();
 
   const viewport = page.viewportSize();
@@ -68,11 +68,11 @@ test("the comment navigator opens from the bar tally and docks above the bar", a
   await planSurface(page);
   await waitPastSafeModeGrace(page);
 
-  const bar = page.locator(".status-bar");
-  const nav = page.locator(".comment-navigator");
+  const bar = page.getByRole("contentinfo", { name: "Status bar" });
+  const nav = page.getByRole("complementary", { name: "Comments" });
 
   // The comment tally lives in the bar's status strip and toggles the navigator.
-  await page.locator("button.comments-toggle").click();
+  await page.getByRole("button", { name: /^\d+ comments?$/ }).click();
   await expect(nav).toBeVisible();
 
   // The navigator docks ABOVE the bar — the two don't overlap.
@@ -101,8 +101,8 @@ test("at narrow width the navigator widens to a full-bleed sheet above the bar",
   await planSurface(page);
   await waitPastSafeModeGrace(page);
 
-  const nav = page.locator(".comment-navigator");
-  await page.locator("button.comments-toggle").click();
+  const nav = page.getByRole("complementary", { name: "Comments" });
+  await page.getByRole("button", { name: /^\d+ comments?$/ }).click();
   await expect(nav).toBeVisible();
 
   const navBox = await nav.boundingBox();
@@ -111,7 +111,7 @@ test("at narrow width the navigator widens to a full-bleed sheet above the bar",
   expect(navBox!.x).toBeLessThanOrEqual(EDGE_INSET_PX);
   expect(navBox!.width).toBeGreaterThan(CARD_MAX_PX);
   // Still docks above the full-width bar.
-  const barBox = await page.locator(".status-bar").boundingBox();
+  const barBox = await page.getByRole("contentinfo", { name: "Status bar" }).boundingBox();
   expect(barBox).not.toBeNull();
   expect(navBox!.y + navBox!.height).toBeLessThanOrEqual(barBox!.y + 1);
 });
@@ -129,8 +129,8 @@ test("at wide width the navigator stays a right-docked card above the bar", asyn
   await planSurface(page);
   await waitPastSafeModeGrace(page);
 
-  const nav = page.locator(".comment-navigator");
-  await page.locator("button.comments-toggle").click();
+  const nav = page.getByRole("complementary", { name: "Comments" });
+  await page.getByRole("button", { name: /^\d+ comments?$/ }).click();
   await expect(nav).toBeVisible();
 
   const navBox = await nav.boundingBox();

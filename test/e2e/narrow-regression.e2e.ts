@@ -52,7 +52,9 @@ test("heading navigation stays reachable at a narrow width", async ({ daemon, pa
   // regime is exactly where it could be squeezed out of reach. plan-breadcrumbs.e2e.ts
   // owns the bar's own behaviour; here we only guard that it survives the squeeze
   // with its menu still openable.
-  const crumb = page.locator(".plan-breadcrumbs button.crumb.current");
+  const crumb = page
+    .getByRole("navigation", { name: "Plan location" })
+    .locator('button[aria-current="location"]');
   await expect(crumb).toBeVisible();
   await crumb.click();
   await expect(page.locator("[data-slot='dropdown-menu-content']")).toBeVisible();
@@ -108,8 +110,8 @@ test("TopBar secondary actions stay reachable via the overflow menu at a narrow 
   // "More actions" overflow menu (EXC-810); the integration guarantee is that they
   // remain reachable there rather than disappearing. topbar-overflow.e2e.ts owns the
   // per-variant detail.
-  await expect(page.locator(".reject")).toBeHidden();
-  await expect(page.locator(".request")).toBeHidden();
+  await expect(page.getByRole("button", { name: "Reject" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Request changes" })).toBeHidden();
   const overflow = page.getByRole("button", { name: "More actions" });
   await expect(overflow).toBeVisible();
   await overflow.click();

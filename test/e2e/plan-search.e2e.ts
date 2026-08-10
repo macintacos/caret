@@ -32,7 +32,7 @@ const PLAN = [
   "",
 ].join("\n\n");
 
-const pill = (page: Page) => page.locator(".plan-search");
+const pill = (page: Page) => page.getByRole("search");
 const field = (page: Page) => page.locator("input[aria-label='Search plan']");
 const cursor = (page: Page) =>
   page.locator(".diffview [data-content] [data-line][data-caret-cursor]");

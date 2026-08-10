@@ -180,7 +180,7 @@ test("slash opens the plan search, not the contents filter (EXC-832)", async ({ 
   await expect(page.getByLabel("Filter headings")).toHaveCount(0);
 
   await page.keyboard.press("/");
-  await expect(page.locator(".plan-search")).toBeVisible();
+  await expect(page.getByRole("search")).toBeVisible();
 });
 
 test("b opens the breadcrumbs bar, and j/j/Enter jumps to the highlighted heading", async ({
@@ -194,7 +194,7 @@ test("b opens the breadcrumbs bar, and j/j/Enter jumps to the highlighted headin
   await loadPlan(page);
 
   // Read Bravo, so the trailing crumb's menu offers siblings worth walking.
-  const crumbs = page.locator(".plan-breadcrumbs button.crumb");
+  const crumbs = page.getByRole("navigation", { name: "Plan location" }).getByRole("button");
   await expect(crumbs.last()).toBeVisible();
   await jumpToHeading(page, "Bravo");
   await expect(crumbs).toHaveText(["Alpha", "Bravo"]);
@@ -230,7 +230,9 @@ test("Escape closes the breadcrumbs menu and hands focus back to the crumb", asy
 
   // The trail is seeded a few frames after the plan paints, so wait for the crumb
   // itself — pressing `b` before it exists is a silent no-op.
-  const crumb = page.locator(".plan-breadcrumbs button.crumb.current");
+  const crumb = page
+    .getByRole("navigation", { name: "Plan location" })
+    .locator('button[aria-current="location"]');
   await expect(crumb).toBeVisible();
   await page.keyboard.press("b");
   const menu = page.locator("[data-slot='dropdown-menu-content']");
@@ -251,7 +253,9 @@ test("backslash opens the breadcrumbs bar, the same as b", async ({ daemon, page
   await page.goto("/");
   await loadPlan(page);
 
-  const crumb = page.locator(".plan-breadcrumbs button.crumb.current");
+  const crumb = page
+    .getByRole("navigation", { name: "Plan location" })
+    .locator('button[aria-current="location"]');
   await expect(crumb).toBeVisible();
 
   const menu = page.locator("[data-slot='dropdown-menu-content']");

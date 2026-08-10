@@ -430,7 +430,7 @@ test("clicking a real reference reveals a highlighted excerpt centered on its li
     // a gesture, so nothing has arrived yet. The header is what names the loaded
     // region — the gutter names only the mounted rows, which is a narrower set
     // once the panel has scrolled to the cited line (EXC-970).
-    await expect(preview.locator(".fp-range")).toHaveText(`lines 12–72 of ${CACHE_TS_LINES}`);
+    await expect(preview.getByRole("status")).toHaveText(`lines 12–72 of ${CACHE_TS_LINES}`);
     // And there is nothing at either boundary to click — the strips are gone,
     // so a reintroduced one fails here rather than only looking wrong.
     await expect(preview.locator("button")).toHaveCount(0);
@@ -483,7 +483,7 @@ test("a cited range washes every line it names, framed with context on both side
 
     // The window is the citation padded by the daemon's own radius on each side,
     // so the span is read in context rather than flush against the window's ends.
-    await expect(preview.locator(".fp-range")).toHaveText(`lines 10–74 of ${CACHE_TS_LINES}`);
+    await expect(preview.getByRole("status")).toHaveText(`lines 10–74 of ${CACHE_TS_LINES}`);
 
     // Exactly the five cited lines are washed — not one, and not the padding.
     const band = await citedBandInRegion(page);
@@ -558,7 +558,7 @@ test("a range running past the file's end still opens, framed on its last lines"
     // frame. Where it STARTS is not this spec's business: the clamped window is
     // shorter than the region, so the auto-loader grows it upward on sight
     // (EXC-969) — which is correct, and would make an exact start brittle.
-    await expect(preview.locator(".fp-range")).toHaveText(
+    await expect(preview.getByRole("status")).toHaveText(
       new RegExp(`^lines \\d+–${CACHE_TS_LINES} of ${CACHE_TS_LINES}$`),
     );
     // Retried, unlike the other two range specs: this is the one whose window
@@ -613,7 +613,7 @@ test("clicking a range reference's end-line tail opens the preview", async ({ da
     const preview = page.locator("[data-file-preview]");
     await expect(preview).toBeVisible();
     await expect(preview).toContainText("src/cache.ts");
-    await expect(preview.locator(".fp-range")).toHaveText(`lines 10–74 of ${CACHE_TS_LINES}`);
+    await expect(preview.getByRole("status")).toHaveText(`lines 10–74 of ${CACHE_TS_LINES}`);
   } finally {
     await proj.cleanup();
   }
@@ -759,7 +759,7 @@ test("the preview fills its lane and pages inside itself", async ({ daemon, page
     // The whole 60-line opening window is loaded, not a handful of lines. How
     // many of those rows are mounted is the window's business (EXC-970); what
     // this spec is about is that the panel pages them inside its own lane.
-    await expect(preview.locator(".fp-range")).toHaveText("lines 1–60 of 400");
+    await expect(preview.getByRole("status")).toHaveText("lines 1–60 of 400");
 
     const geometry = await page.evaluate(() => {
       const panel = document.querySelector("[data-file-preview]") as HTMLElement | null;
@@ -807,7 +807,7 @@ test("the preview fills its lane and pages inside itself", async ({ daemon, page
     expect(geometry?.codeScrollWidth ?? 0).toBeGreaterThan(geometry?.codeClientWidth ?? Infinity);
 
     // The header still announces the remainder; reaching it is a scroll away.
-    await expect(preview.locator(".fp-range")).toHaveText("lines 1–60 of 400");
+    await expect(preview.getByRole("status")).toHaveText("lines 1–60 of 400");
   } finally {
     await proj.cleanup();
   }
@@ -853,7 +853,7 @@ test("scrolling walks the preview to both ends of the file", async ({ daemon, pa
     // Every line is loaded, so the header stops framing a slice — while the DOM
     // holds only the rows around the offset (EXC-970), which is what the
     // windowing spec below measures.
-    await expect(preview.locator(".fp-range")).toHaveText(`${CACHE_TS_LINES} lines`);
+    await expect(preview.getByRole("status")).toHaveText(`${CACHE_TS_LINES} lines`);
     // The middle of the file came along with the walk, rather than the region
     // having skipped to its end: scroll back to line 150 and its marker is there.
     // Mounted only while the reader is there, which is the point of windowing.
@@ -955,8 +955,7 @@ test("a keyboard reader walks the preview to both ends with no pointer", async (
     // The header frames the whole file now, through the live region a screen
     // reader hears that growth in — the rows themselves are windowed, so they
     // are the wrong thing to announce.
-    await expect(preview.locator(".fp-range")).toHaveText(`${CACHE_TS_LINES} lines`);
-    await expect(preview.locator(".fp-range")).toHaveAttribute("role", "status");
+    await expect(preview.getByRole("status")).toHaveText(`${CACHE_TS_LINES} lines`);
     // And nothing was put back at the boundaries to achieve any of it.
     await expect(preview.locator("button")).toHaveCount(0);
 
@@ -996,7 +995,7 @@ test("a fully loaded preview keeps only a screenful of rows in the DOM", async (
     // repeated scroll rather than a click; it settles once nothing is left below.
     await expect(async () => {
       await scrollRegion(page, "bottom");
-      await expect(preview.locator(".fp-range")).toHaveText(`${CACHE_TS_LINES} lines`, {
+      await expect(preview.getByRole("status")).toHaveText(`${CACHE_TS_LINES} lines`, {
         timeout: 1_000,
       });
     }).toPass({ timeout: 30_000 });
@@ -1094,7 +1093,7 @@ test("swapping the reference re-frames the panel from the new file's first line"
     // The second cites no line, so its panel opens at the file's head.
     await page.locator("[data-file-ref]").nth(1).click();
     await expect(preview).toContainText("src/other.ts");
-    await expect(preview.locator(".fp-range")).toHaveText(`lines 1–60 of ${CACHE_TS_LINES}`);
+    await expect(preview.getByRole("status")).toHaveText(`lines 1–60 of ${CACHE_TS_LINES}`);
     const swapped = await renderedRows(page);
     expect(swapped?.first).toBe(1);
     expect(swapped?.coversRegion).toBe(true);
@@ -1138,7 +1137,7 @@ test("loading upward keeps the reader's line in view", async ({ daemon, page }) 
     // is precisely what leaves those newly revealed lines unmounted (EXC-970), so
     // the header's range is the signal.
     await scrollRegion(page, "top");
-    await expect(preview.locator(".fp-range")).toHaveText(`lines 1–72 of ${CACHE_TS_LINES}`);
+    await expect(preview.getByRole("status")).toHaveText(`lines 1–72 of ${CACHE_TS_LINES}`);
 
     // Still on screen inside the region — not pushed off either edge by the 11
     // lines that just appeared above it — and not merely on screen: exactly where
@@ -1213,7 +1212,7 @@ for (const cited of [150, 42]) {
         );
 
         // Reaching the top edge fires the upward load…
-        const framed = await preview.locator(".fp-range").textContent();
+        const framed = await preview.getByRole("status").textContent();
         expect(framed).not.toBeNull();
         await scrollRegion(page, "top");
         await expect.poll(() => requests).toBe(1);
@@ -1235,7 +1234,7 @@ for (const cited of [150, 42]) {
         ).toBeLessThanOrEqual(1);
 
         release();
-        await expect(preview.locator(".fp-range")).not.toHaveText(framed ?? "\0");
+        await expect(preview.getByRole("status")).not.toHaveText(framed ?? "\0");
 
         // The chunk landed entirely above the reader, so the cited line is still
         // exactly where they left it — the region moved down by what arrived
@@ -1489,7 +1488,7 @@ test("a reference with no line shows the head of the file", async ({ daemon, pag
     // The gutter starts at line 1 and — since the head window omits the file's
     // tail — the header frames it as a slice of the 300.
     await expect(preview.locator(".fp-lnum").first()).toHaveText("1");
-    await expect(preview.locator(".fp-range")).toHaveText("lines 1–60 of 300");
+    await expect(preview.getByRole("status")).toHaveText("lines 1–60 of 300");
 
     // No reference line → nothing is highlighted (the highlight is a :line cue).
     await expect(preview.locator(".fp-target")).toHaveCount(0);

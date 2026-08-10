@@ -3,10 +3,18 @@
 // daemon-side via GET /api/reviews/:id (a deny keeps the review in memory as
 // `rejected` with the decision riding on it), not just by UI disappearance.
 
+import type { Page } from "@playwright/test";
+
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
 const FEEDBACK = "Please tighten the verification section.";
+
+/** The discard confirmation bubble (ConfirmPopover): role="alertdialog", named by
+ * the question it asks. Playwright's getByRole("dialog") does NOT match
+ * role="alertdialog", which is why the sibling dialogs' idiom never transferred. */
+const discardConfirm = (page: Page) =>
+  page.getByRole("alertdialog", { name: "Discard this comment?" });
 
 test("dialog opens, Escape closes, Cmd/Ctrl+Enter submits a rejection with feedback", async ({
   daemon,
@@ -150,10 +158,10 @@ test("discarding an unsent comment asks to confirm before dropping it (EXC-762)"
   // bubble portals to the body (viewport-aware, EXC-762), so it's a page locator,
   // not a descendant of the dialog element.
   await row.locator(".discard").click();
-  await expect(page.locator(".confirm-popover")).toBeVisible();
+  await expect(discardConfirm(page)).toBeVisible();
   await expect(row).toHaveCount(1);
   // Confirming completes the drop.
-  await page.locator(".confirm-popover").getByRole("button", { name: "Discard" }).click();
+  await discardConfirm(page).getByRole("button", { name: "Discard" }).click();
   await expect(dialog.locator(".scratch-row")).toHaveCount(0);
 });
 
@@ -210,13 +218,13 @@ test("discarding a committed inline comment drops it and leaves the dialog open 
 
   // Discard opens the confirmation; nothing is dropped yet.
   await dialog.locator(".inline-row .discard").click();
-  await expect(page.locator(".confirm-popover")).toBeVisible();
+  await expect(discardConfirm(page)).toBeVisible();
   await expect(dialog.locator(".inline-row")).toHaveCount(1);
 
   // Confirming drops the comment AND the dialog must stay open — the confirm click
   // (on a bubble portaled to document.body, outside the dialog content) must reach
   // its button, not fall through to the modal's outside-dismiss (EXC-765).
-  await page.locator(".confirm-popover").getByRole("button", { name: "Discard" }).click();
+  await discardConfirm(page).getByRole("button", { name: "Discard" }).click();
   await expect(dialog).toBeVisible();
   await expect(dialog.locator(".inline-row")).toHaveCount(0);
 });

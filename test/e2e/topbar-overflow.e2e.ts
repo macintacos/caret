@@ -15,8 +15,8 @@ test("wide: secondaries are inline and the overflow menu is hidden", async ({ da
   await page.goto("/");
   await planSurface(page);
 
-  await expect(page.locator(".reject")).toBeVisible();
-  await expect(page.locator(".request")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Reject" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Request changes" })).toBeVisible();
   await expect(page.locator(".overflow-trigger")).toBeHidden();
   // The Approve control reads inline at wide width.
   await expect(page.locator(".approve-slot .split-primary")).toBeVisible();
@@ -41,8 +41,8 @@ test("narrow: secondaries collapse into the overflow menu, count preserved", asy
   await page.setViewportSize({ width: 500, height: 800 });
 
   // The inline secondaries hide; the overflow trigger takes their place.
-  await expect(page.locator(".reject")).toBeHidden();
-  await expect(page.locator(".request")).toBeHidden();
+  await expect(page.getByRole("button", { name: "Reject" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Request changes" })).toBeHidden();
   const trigger = page.getByRole("button", { name: "More actions" });
   await expect(trigger).toBeVisible();
   // The pending count rides the trigger so it stays visible in the collapsed row.

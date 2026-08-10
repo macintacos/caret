@@ -38,8 +38,8 @@ test("Shift+C summons the navigator, focuses the list, and advertises its shortc
   await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
   await waitPastSafeModeGrace(page);
 
-  const nav = page.locator(".comment-navigator");
-  const toggle = page.locator("button.comments-toggle");
+  const nav = page.getByRole("complementary", { name: "Comments" });
+  const toggle = page.getByRole("button", { name: /^\d+ comments?$/ });
   await expect(toggle).toHaveAttribute("aria-keyshortcuts", "Shift+C");
   await expect(nav).toBeHidden();
 
@@ -47,7 +47,7 @@ test("Shift+C summons the navigator, focuses the list, and advertises its shortc
   await page.keyboard.press("C");
   await expect(nav).toBeVisible();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
-  await expect(nav.locator(".nav-item").first()).toBeFocused();
+  await expect(nav.getByRole("listitem").getByRole("button").first()).toBeFocused();
 
   // Space reveals the focused comment (native button activation, like Enter) and
   // keeps the panel open.
@@ -74,8 +74,8 @@ test("j/k walk the rows; Enter reveals without dismissing; / drops into search",
   await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
   await waitPastSafeModeGrace(page);
 
-  const nav = page.locator(".comment-navigator");
-  const items = nav.locator(".nav-item");
+  const nav = page.getByRole("complementary", { name: "Comments" });
+  const items = nav.getByRole("listitem").getByRole("button");
 
   await page.keyboard.press("C");
   await expect(items.first()).toBeFocused();
@@ -88,7 +88,7 @@ test("j/k walk the rows; Enter reveals without dismissing; / drops into search",
   await page.keyboard.press("Enter");
   await expect(page.locator('[data-annotation-card="ann-2"]')).toHaveClass(/focused/);
   await expect(nav).toBeVisible();
-  await expect(nav.locator(".nav-item.active")).toContainText("verify the sidecar replay");
+  await expect(nav.locator('[aria-current="true"]')).toContainText("verify the sidecar replay");
 
   // "/" jumps into the search field; filtering narrows the list; Enter hands
   // focus back to the (filtered) list so j/k resume.
@@ -113,8 +113,8 @@ test("the navigator captures j/k, so the plan cursor stays put while it holds fo
   await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
   await waitPastSafeModeGrace(page);
 
-  const nav = page.locator(".comment-navigator");
-  const items = nav.locator(".nav-item");
+  const nav = page.getByRole("complementary", { name: "Comments" });
+  const items = nav.getByRole("listitem").getByRole("button");
   await expect(cursor(page)).toHaveCount(0);
 
   // Open the navigator and walk it with j — the plan must NOT gain a cursor.

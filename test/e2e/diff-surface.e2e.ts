@@ -16,6 +16,12 @@ import {
   revealGutterPlus,
 } from "@test/e2e/support/source-view.ts";
 
+/** The discard confirmation bubble (ConfirmPopover): role="alertdialog", named by
+ * the question it asks. Playwright's getByRole("dialog") does NOT match
+ * role="alertdialog", which is why the sibling dialogs' idiom never transferred. */
+const discardConfirm = (page: Page) =>
+  page.getByRole("alertdialog", { name: "Discard this comment?" });
+
 // A plan tall enough to scroll the source view past one viewport.
 const TALL_PLAN = `# Tall Plan\n\n${Array.from({ length: 120 }, (_, i) => `Line ${i + 1} of the plan body, long enough to overflow the viewport.`).join("\n\n")}\n`;
 
@@ -1268,7 +1274,7 @@ test("the Discard button discards a typed draft, leaving no Resume marker", asyn
   await composerInput(composer).fill("drop this via the button");
   await composer.getByRole("button", { name: "Discard" }).click();
   // Confirm the discard (EXC-749).
-  await page.locator(".confirm-popover .confirm").click();
+  await discardConfirm(page).getByRole("button", { name: "Discard" }).click();
 
   await expect(composer).toHaveCount(0);
   await expect(scratchMarker(page)).toHaveCount(0);
@@ -1292,9 +1298,9 @@ test("canceling a Discard keeps the composer open", async ({ daemon, page }) => 
   await composerInput(composer).fill("do not lose me");
   await composer.getByRole("button", { name: "Discard" }).click();
 
-  await expect(page.locator(".confirm-popover")).toBeVisible();
-  await page.locator(".confirm-popover .cancel").click();
-  await expect(page.locator(".confirm-popover")).toHaveCount(0);
+  await expect(discardConfirm(page)).toBeVisible();
+  await discardConfirm(page).getByRole("button", { name: "Keep editing" }).click();
+  await expect(discardConfirm(page)).toHaveCount(0);
   await expect(composer).toBeVisible();
 });
 
@@ -1328,7 +1334,7 @@ test("resuming a kept scratch then Discarding removes the marker and un-persists
   await expect(composer).toBeVisible();
   await composer.getByRole("button", { name: "Discard" }).click();
   // Confirm the discard (EXC-749).
-  await page.locator(".confirm-popover .confirm").click();
+  await discardConfirm(page).getByRole("button", { name: "Discard" }).click();
 
   await expect(composer).toHaveCount(0);
   await expect(scratchMarker(page)).toHaveCount(0);
@@ -1579,7 +1585,7 @@ test("Discarding a scratch removes it and never sends it", async ({ daemon, page
   await dialog.locator(".scratch-row .discard").click();
   // The confirm bubble portals to the body (viewport-aware, EXC-762), so it's a
   // page locator rather than a descendant of the dialog element.
-  await page.locator(".confirm-popover").getByRole("button", { name: "Discard" }).click();
+  await discardConfirm(page).getByRole("button", { name: "Discard" }).click();
 
   // The scratch is gone from the dialog, and the underlying Resume marker is gone
   // too — Discard drops it from the review entirely.
@@ -1911,7 +1917,7 @@ test("deleting an inline card removes the annotation", async ({ daemon, page }) 
 
   await page.locator("[data-annotation-card]").getByRole("button", { name: "Discard" }).click();
   // Discarding a submitted comment can't be undone, so confirm first (EXC-749).
-  await page.locator(".confirm-popover .confirm").click();
+  await discardConfirm(page).getByRole("button", { name: "Discard" }).click();
 
   // The card leaves the DOM and the delete persists through /draft.
   await expect(page.locator("[data-annotation-card]")).toHaveCount(0);
@@ -1931,9 +1937,9 @@ test("canceling a delete keeps the inline card", async ({ daemon, page }) => {
   await createAnnotation(page, 3, "Keep this section.");
   await page.locator("[data-annotation-card]").getByRole("button", { name: "Discard" }).click();
 
-  await expect(page.locator(".confirm-popover")).toBeVisible();
-  await page.locator(".confirm-popover .cancel").click();
-  await expect(page.locator(".confirm-popover")).toHaveCount(0);
+  await expect(discardConfirm(page)).toBeVisible();
+  await discardConfirm(page).getByRole("button", { name: "Cancel" }).click();
+  await expect(discardConfirm(page)).toHaveCount(0);
   await expect(page.locator("[data-annotation-card]")).toHaveCount(1);
   await expect
     .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)

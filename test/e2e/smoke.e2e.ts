@@ -23,5 +23,5 @@ test("a seeded plan renders headings, the breadcrumbs bar, and body content", as
   // heading-navigation surface, so the smoke check moved here from the rail).
   const bar = page.getByRole("navigation", { name: "Plan location" });
   await expect(bar).toBeVisible();
-  await expect(bar.locator("button.crumb").first()).toHaveText("Widget Cache Refactor");
+  await expect(bar.getByRole("button").first()).toHaveText("Widget Cache Refactor");
 });

@@ -632,7 +632,7 @@ test("the bar's / never reaches the plan's own search, and gives it back on clos
   await waitPastSafeModeGrace(page);
 
   const menu = page.locator(MENU);
-  const search = page.locator(".plan-search");
+  const search = page.getByRole("search");
   await page.keyboard.press("b");
   await page.keyboard.press("/");
   await expect(menu.locator(QUERY)).toBeFocused();

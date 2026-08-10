@@ -36,7 +36,7 @@ test("clicking the cwd path copies the absolute path and shows a success alert",
   await cwd.click();
 
   // A success alert appears bottom-right.
-  const alert = page.locator(".alert-item[data-variant='success']");
+  const alert = page.locator("[data-variant='success']");
   await expect(alert).toBeVisible();
   await expect(alert).toContainText("Copied path to clipboard");
 
@@ -57,9 +57,9 @@ test("success alerts stack and a dismiss removes one", async ({ daemon, page }) 
   await cwd.click();
 
   // Two copies in quick succession stack (oldest on top, newer underneath).
-  await expect(page.locator(".alert-item")).toHaveCount(2);
+  await expect(page.getByRole("status")).toHaveCount(2);
 
   // Dismissing the first via its × leaves the other standing.
-  await page.locator(".alert-item").first().locator(".alert-dismiss").click();
-  await expect(page.locator(".alert-item")).toHaveCount(1);
+  await page.getByRole("status").first().getByRole("button", { name: "Dismiss" }).click();
+  await expect(page.getByRole("status")).toHaveCount(1);
 });
