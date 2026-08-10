@@ -96,6 +96,14 @@ test("at a wide width the drawer docks right, taking space rather than covering 
   }
 });
 
+/** One `animationstart` observation, carrying the keyframes of the animation
+ * that fired it — captured at that instant because they are unreadable after. */
+interface Wipe {
+  name: string;
+  onLane: boolean;
+  keyframes: Record<string, unknown>[];
+}
+
 test("the lane wipes in from the edge it docks to", async ({ daemon, page }) => {
   // The open is an animation on the docking dimension, so the plan reflows every
   // frame instead of the drawer appearing at full size. Recorded through
@@ -114,8 +122,13 @@ test("the lane wipes in from the edge it docks to", async ({ daemon, page }) => 
       await planSurface(page);
       await expect.poll(() => fileRefCount(page)).toBe(1);
 
+      // The keyframes are read HERE, inside the listener, not from a later
+      // getAnimations() call: the wipe runs for --dur-base (180ms) and then
+      // leaves the element's animation list empty forever, so any read that
+      // costs a round-trip is racing a window it loses on a loaded host.
+      // animationstart is the one instant the animation is guaranteed live.
       await page.evaluate(() => {
-        const w = window as unknown as { __wipes: { name: string; onLane: boolean }[] };
+        const w = window as unknown as { __wipes: Wipe[] };
         w.__wipes = [];
         window.addEventListener(
           "animationstart",
@@ -124,6 +137,9 @@ test("the lane wipes in from the edge it docks to", async ({ daemon, page }) => 
             w.__wipes.push({
               name: e.animationName,
               onLane: t?.hasAttribute("data-file-drawer") ?? false,
+              keyframes: (t?.getAnimations() ?? []).flatMap((a) =>
+                a.effect instanceof KeyframeEffect ? a.effect.getKeyframes() : [],
+              ),
             });
           },
           { capture: true },
@@ -140,7 +156,7 @@ test("the lane wipes in from the edge it docks to", async ({ daemon, page }) => 
         .poll(() =>
           page.evaluate(
             (name) =>
-              (window as unknown as { __wipes: { name: string; onLane: boolean }[] }).__wipes
+              (window as unknown as { __wipes: Wipe[] }).__wipes
                 .filter((wipe) => wipe.onLane)
                 .some((wipe) => wipe.name.includes(name)),
             wipeName,
@@ -149,13 +165,13 @@ test("the lane wipes in from the edge it docks to", async ({ daemon, page }) => 
         .toBe(true);
 
       // …and it really moves that dimension: the keyframes start the lane at 0.
-      const from = await page.locator("[data-file-drawer]").evaluate(
-        (el, dim) =>
-          el
-            .getAnimations()
-            .flatMap((a) => (a.effect instanceof KeyframeEffect ? a.effect.getKeyframes() : []))
+      const from = await page.evaluate(
+        ([name, dim]) =>
+          (window as unknown as { __wipes: Wipe[] }).__wipes
+            .filter((wipe) => wipe.onLane && wipe.name.includes(name))
+            .flatMap((wipe) => wipe.keyframes)
             .map((k) => (k as Record<string, unknown>)[dim]),
-        dimension,
+        [wipeName, dimension] as [string, string],
       );
       expect(from).toContain("0px");
     }
