@@ -45,6 +45,25 @@ export function rows(navigator: Locator): Locator {
   return navigator.locator(".nav-item");
 }
 
+/** The Request Changes dialog's committed inline comments, one `listitem` each.
+ * `RequestChangesDialog.svelte` renders both row groups as real lists, so a
+ * screen reader gets a count and a position — and a spec gets a role to bind to
+ * where `.inline-row` / `.scratch-row` used to be the only handle (EXC-1057).
+ * The two lists are named apart because both are mounted at once while a comment
+ * is being demoted, and the sections wrapping them carry their tally in their own
+ * accessible name. A per-row action queried inside one of these needs
+ * `exact: true`: the row's own disclosure trigger takes its name from the comment
+ * text, and `name` matches on substring by default, so a comment reading "discard
+ * this draft" otherwise collects the trigger alongside the Discard button. */
+export function inlineRows(dialog: Locator): Locator {
+  return dialog.getByRole("list", { name: "Inline comments" }).getByRole("listitem");
+}
+
+/** The Request Changes dialog's unsent composer scratches, one `listitem` each. */
+export function unsentRows(dialog: Locator): Locator {
+  return dialog.getByRole("list", { name: "Unsent comments" }).getByRole("listitem");
+}
+
 /** The alert host's live regions. Scoped to the host because `role="status"` is
  * also carried by the safe-mode toast, the drag readout, and the file preview's
  * range — an unscoped query would couple this to all of them. */

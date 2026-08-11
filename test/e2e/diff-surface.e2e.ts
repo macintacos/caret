@@ -14,7 +14,7 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { discardConfirm } from "@test/e2e/support/chrome.ts";
+import { discardConfirm, unsentRows } from "@test/e2e/support/chrome.ts";
 import {
   expect,
   test,
@@ -1483,7 +1483,7 @@ test("the Request Changes dialog lists an unsent scratch, collapsed and uncounte
   const section = dialog.locator(".scratches");
   await expect(section).toBeVisible();
   await expect(section).toContainText("Unsent comments");
-  await expect(dialog.locator(".scratch-row")).toHaveCount(1);
+  await expect(unsentRows(dialog)).toHaveCount(1);
   await expect(section).toContainText("an unsent thought on line 3");
 
   // It does not count as a committed comment: the empty-state still shows and
@@ -1509,9 +1509,9 @@ test("Saving a scratch graduates it into the sent feedback", async ({ daemon, pa
   // Save it — the action sits outside the collapsed disclosure (EXC-746), so no
   // expand is needed. The scratch leaves the unsent list and becomes a committed
   // comment: the count summary and the preview now include it.
-  await dialog.locator(".scratch-row .save").click();
+  await unsentRows(dialog).getByRole("button", { name: "Save", exact: true }).click();
 
-  await expect(dialog.locator(".scratch-row")).toHaveCount(0);
+  await expect(unsentRows(dialog)).toHaveCount(0);
   await expect(dialog.locator(".scratches")).toHaveCount(0);
   await expect(dialog.locator(".summary")).toContainText("1 comment");
   await expect(dialog.locator(".preview pre")).toContainText("save me into the review");
@@ -1536,7 +1536,7 @@ test("Discarding a scratch removes it and never sends it", async ({ daemon, page
 
   // Discard sits outside the collapsed disclosure (EXC-746), so no expand is needed.
   // It asks to confirm before dropping the draft (EXC-762).
-  await dialog.locator(".scratch-row .discard").click();
+  await unsentRows(dialog).getByRole("button", { name: "Discard", exact: true }).click();
   // The confirm bubble portals to the body (viewport-aware, EXC-762), so it's a
   // page locator rather than a descendant of the dialog element.
   await discardConfirm(page).getByRole("button", { name: "Discard" }).click();

@@ -3,7 +3,7 @@
 // daemon-side via GET /api/reviews/:id (a deny keeps the review in memory as
 // `rejected` with the decision riding on it), not just by UI disappearance.
 
-import { discardConfirm } from "@test/e2e/support/chrome.ts";
+import { discardConfirm, inlineRows, unsentRows } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
@@ -113,7 +113,7 @@ test("a scratch's Save shows without expanding the row and graduates it into the
   // hidden, so a reviewer could hit "Send for revision" and drop the draft never
   // having seen Save. A unit test can't catch this — happy-dom keeps the collapsed
   // disclosure's content mounted — so this real-Chromium visibility check is the guard.
-  const save = dialog.locator(".scratch-row .save");
+  const save = unsentRows(dialog).getByRole("button", { name: "Save", exact: true });
   await expect(save).toBeVisible();
 
   // Saving graduates the scratch into a committed comment: the live preview now
@@ -145,17 +145,18 @@ test("discarding an unsent comment asks to confirm before dropping it (EXC-762)"
   await page.getByRole("button", { name: "Request changes" }).click();
   await expect(dialog).toBeVisible();
 
-  const row = dialog.locator(".scratch-row");
+  const row = unsentRows(dialog);
   await expect(row).toHaveCount(1);
   // Discard opens a confirmation bubble — the scratch is NOT dropped yet. The
   // bubble portals to the body (viewport-aware, EXC-762), so it's a page locator,
-  // not a descendant of the dialog element.
-  await row.locator(".discard").click();
+  // not a descendant of the dialog element — which is also why scoping the row's
+  // own Discard to the list item can't collect the bubble's confirm button.
+  await row.getByRole("button", { name: "Discard", exact: true }).click();
   await expect(discardConfirm(page)).toBeVisible();
   await expect(row).toHaveCount(1);
   // Confirming completes the drop.
   await discardConfirm(page).getByRole("button", { name: "Discard" }).click();
-  await expect(dialog.locator(".scratch-row")).toHaveCount(0);
+  await expect(row).toHaveCount(0);
 });
 
 test("marking an inline comment as a draft demotes it into Unsent and out of the send (EXC-762)", async ({
@@ -176,16 +177,16 @@ test("marking an inline comment as a draft demotes it into Unsent and out of the
   await expect(dialog).toBeVisible();
 
   // It starts as a committed inline comment, and Send is enabled.
-  await expect(dialog.locator(".inline-row")).toHaveCount(1);
-  await expect(dialog.locator(".scratch-row")).toHaveCount(0);
+  await expect(inlineRows(dialog)).toHaveCount(1);
+  await expect(unsentRows(dialog)).toHaveCount(0);
   const send = dialog.getByRole("button", { name: "Send for revision" });
   await expect(send).toBeEnabled();
 
   // Mark as draft demotes it: it leaves the inline list, appears under Unsent, and
   // with nothing left to include the primary action disables.
-  await dialog.locator(".inline-row .mark-draft").click();
-  await expect(dialog.locator(".inline-comments")).toHaveCount(0);
-  const scratchRow = dialog.locator(".scratch-row");
+  await inlineRows(dialog).getByRole("button", { name: "Mark as draft", exact: true }).click();
+  await expect(dialog.getByRole("list", { name: "Inline comments" })).toHaveCount(0);
+  const scratchRow = unsentRows(dialog);
   await expect(scratchRow).toHaveCount(1);
   await expect(scratchRow).toContainText("explain the cold cost");
   await expect(send).toBeDisabled();
@@ -207,19 +208,19 @@ test("discarding a committed inline comment drops it and leaves the dialog open 
   const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
   await page.getByRole("button", { name: "Request changes" }).click();
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator(".inline-row")).toHaveCount(1);
+  await expect(inlineRows(dialog)).toHaveCount(1);
 
   // Discard opens the confirmation; nothing is dropped yet.
-  await dialog.locator(".inline-row .discard").click();
+  await inlineRows(dialog).getByRole("button", { name: "Discard", exact: true }).click();
   await expect(discardConfirm(page)).toBeVisible();
-  await expect(dialog.locator(".inline-row")).toHaveCount(1);
+  await expect(inlineRows(dialog)).toHaveCount(1);
 
   // Confirming drops the comment AND the dialog must stay open — the confirm click
   // (on a bubble portaled to document.body, outside the dialog content) must reach
   // its button, not fall through to the modal's outside-dismiss (EXC-765).
   await discardConfirm(page).getByRole("button", { name: "Discard" }).click();
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator(".inline-row")).toHaveCount(0);
+  await expect(inlineRows(dialog)).toHaveCount(0);
 });
 
 test("an inline comment reveals a nested Context with the anchored source lines (EXC-762)", async ({
@@ -244,7 +245,9 @@ test("an inline comment reveals a nested Context with the anchored source lines 
   // in the inline comment's own expansion, so it takes two clicks to reveal.
   const context = dialog.locator(".context-lines");
   await expect(context).toBeHidden();
-  await dialog.locator(".inline-row .row-head .row-trigger").click();
+  // The row's own disclosure trigger stays a class selector: its accessible name
+  // is name-from-content over the comment text, i.e. fixture data.
+  await inlineRows(dialog).locator(".row-head .row-trigger").click();
   await dialog.locator(".context-trigger").click();
   await expect(context).toBeVisible();
   // It quotes the actual plan lines the comment anchors to, not the abbreviated
