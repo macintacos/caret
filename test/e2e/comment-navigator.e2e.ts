@@ -3,6 +3,15 @@
 // the list by the comment text and underlines the matched substring live; unsent
 // scratches show as distinct "draft" rows. Clicking any row scrolls the plan to it
 // (and focuses/highlights a committed comment's card). Escape dismisses the panel.
+//
+// The panel's own list shaping from props — a row per comment, the distinct
+// draft row, the current-row marking, the empty state — is already a unit in
+// ui/src/components/CommentNavigator.test.ts. What this adds is what that unit
+// cannot reach: the rows are built from a working copy the daemon persisted and
+// served back rather than from props, a reveal is asserted by its effect on the
+// plan's own annotation card — cross-component wiring the unit can only observe
+// as a callback — and Escape is a real keystroke past the Safe Mode grace
+// window.
 
 import { commentNavigator, commentTally } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";

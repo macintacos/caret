@@ -7,6 +7,15 @@
 // synthetic focus event and typing immediately reproduces the race that real
 // refocus timing makes flaky to drive headless. The 2s suppression window is
 // absorbed by the auto-retrying toHaveCount(0) — no fixed sleeps.
+//
+// The guard's logic is already a unit and stays one: ui/src/lib/safeMode.ts
+// takes now / graceMs / durationMs, so safeMode.test.ts drives the grace
+// boundary, the swallowing, re-arming and the auto-release on an injected clock
+// with no waiting at all. What only a browser adds is the wiring around it —
+// that App.svelte re-arms on a real `window` focus event, that a real keydown is
+// the thing being swallowed, and that the toast paints and then leaves on its
+// own — which is why this spec is deliberately one test rather than a re-run of
+// the unit's twelve.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";

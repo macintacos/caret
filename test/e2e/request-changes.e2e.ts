@@ -2,6 +2,18 @@
 // and the review resolves as a rejection CARRYING the typed feedback — asserted
 // daemon-side via GET /api/reviews/:id (a deny keeps the review in memory as
 // `rejected` with the decision riding on it), not just by UI disappearance.
+//
+// Everything here needs a real browser or the live daemon. The general comment
+// is a CodeMirror textbox, so the autofocus, the ⌘/Ctrl+Enter chord and the Esc
+// that originates inside it are real-browser behavior; the dialog's disclosures
+// are collapsed rather than unmounted, a distinction happy-dom cannot make (see
+// the Context case below); and the seeded drafts reach the UI only after the
+// daemon persists and serves back a working copy, which no mounted component
+// can be handed as props. The pure halves stay units: the dialog's own counts,
+// empty state, preview text and submit gating in
+// ui/src/components/RequestChangesDialog.test.ts, the line references and
+// abbreviated quotes in ui/src/lib/feedback.test.ts, and the deny request body
+// in ui/src/state/resolve.test.ts.
 
 import { discardConfirm, inlineRows, unsentRows } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";

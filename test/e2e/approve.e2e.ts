@@ -4,6 +4,16 @@
 // is a dismissible dialog: Enter confirms; Escape, the Cancel button, and a click
 // outside all dismiss. With pending inline comments it additionally previews what
 // a plain approve would silently drop.
+//
+// Everything here needs a real browser or the live daemon. The verdict is only
+// observable over HTTP — GET /api/reviews/:id for the stored decision, and the
+// pending list for the cases that must NOT resolve — which is daemon state no
+// mounted component can be handed as props. The dismissal semantics are real
+// gestures (Enter, Escape, a backdrop click at 5,5), and the footer check is a
+// measured scrollWidth. The pure halves are units: the guard's own shaping — the
+// pluralized count, the preview rows, the approve vocabulary, the notes field —
+// in ui/src/components/UnsentCommentsDialog.test.ts, and the request body it
+// submits, reviewer notes included, in ui/src/state/resolve.test.ts.
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";

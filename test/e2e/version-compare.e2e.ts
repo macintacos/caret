@@ -5,6 +5,22 @@
 // and the chosen layout persists across reloads. EXC-804 adds a count of the other
 // comparable versions on the toggle and a "(current)" marker on the newest picker
 // row; both are covered at the end of this file.
+//
+// Everything here needs a real browser or the live daemon. The multi-version
+// state only exists after real POSTs the daemon stores and serves back, which no
+// mounted component can be handed as props; "without a remount" is asserted as
+// the same <pre> element changing data-diff-type, and scroll retention as a real
+// offset across that switch; and the colour and collapsed-context cases read
+// computed styles resolved inside the library's shadow root. Both blind spots
+// doc/agents/browser-testing.md names apply here, because the appearance in play
+// is declared outside the test body: the emphasis and separator cases override
+// the colorScheme playwright.config.ts pins to dark, and the badge cases seed
+// the mode into localStorage instead, each saying why inline. The pure halves
+// stay units: the pair selection and compare-mode state machine in
+// ui/src/state/compare.test.ts, the toggle's disabled state, count and
+// accessible name in ui/src/components/VersionComparePicker.test.ts, and the
+// preference read/write in ui/src/lib/diffStylePref.test.ts and
+// diffIndicatorsPref.test.ts.
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
