@@ -236,7 +236,10 @@ default is 5000ms, a quiet-host number. What breaks first under the gate is not 
 CPU-heavy test but the SPAWN-heavy one: `test/scripts/dev-driver.test.ts` posts several
 plan versions through the real submit → reflow → store path and each reflow spawns rumdl,
 so it measures a few hundred ms standalone and crosses 5s in the gate — better than 10x,
-against a suite average nearer 2.8x.
+against a suite average nearer 2.8x. Observed twice independently: in this issue's own
+ten-run validation, and by EXC-1059, whose diff touched `test/e2e/` and one doc and so
+could not reach the unit suite at all — three of its four runs at one unchanged commit red
+on exactly these tests, the fourth green.
 
 - **Contended** — the lane's `--timeout 30000`, in `scripts/tasks/test.ts` and mirrored on
   `package.json`'s `test`, exactly as `--conditions browser` is (see `bunfig.toml`). This
