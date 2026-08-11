@@ -79,15 +79,17 @@
       return;
     }
     hadFocus = true;
-    const revealed = (asideEl?.querySelector(".nav-item.active") ?? null) as HTMLElement | null;
+    const revealed = (asideEl?.querySelector('[data-nav-row][aria-current="true"]') ??
+      null) as HTMLElement | null;
     (revealed ?? rows()[0] ?? searchEl)?.focus({ preventScroll: true });
   });
 
   // The rows in filtered order — the roving-focus targets for j/k. A row that can
-  // reveal is a button; one that cannot is a list item. Both carry .nav-item, so
-  // the keyboard model is the same either way.
+  // reveal is a button; one that cannot is a list item. Both carry data-nav-row —
+  // the contract this query, the reveal lookup above, and the e2e rows() helper
+  // all bind to, kept off the styling class so a restyle cannot break j/k.
   function rows(): HTMLElement[] {
-    return asideEl ? ([...asideEl.querySelectorAll(".nav-item")] as HTMLElement[]) : [];
+    return asideEl ? ([...asideEl.querySelectorAll("[data-nav-row]")] as HTMLElement[]) : [];
   }
   // Move roving focus by `delta` from the focused row, clamped to the ends. When
   // focus isn't on a row yet (e.g. the close button), either direction enters the
@@ -211,12 +213,13 @@
                  non-interactive row out of the tab order (a nonnegative one is the
                  a11y_no_noninteractive_tabindex anti-pattern); the list is reached
                  with j/k, or with Enter from the search field. -->
-            <li class="nav-item" tabindex="-1">{@render rowBody(entry)}</li>
+            <li class="nav-item" data-nav-row tabindex="-1">{@render rowBody(entry)}</li>
           {:else}
             <li>
               <button
                 type="button"
                 class="nav-item"
+                data-nav-row
                 class:active={entry.id === activeId}
                 class:draft={entry.draft}
                 aria-current={entry.id === activeId ? "true" : undefined}

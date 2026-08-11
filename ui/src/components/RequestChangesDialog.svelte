@@ -185,83 +185,91 @@
           Inline comments
           <Badge variant="outline" class="tally">{inlineCount}</Badge>
         </span>
-        {#each inlineComments as a (a.id)}
-          {@const context = isLineAnnotation(a) ? sourceLines(a.startLine, a.endLine, planText) : []}
-          <div class="inline-row">
-            <Collapsible.Root class="inline-disclosure">
-              <!-- Row head: the disclosure trigger and the per-comment actions on
-                   one centered line. The actions ride the head (never the collapsing
-                   body) so they show without expanding (the EXC-746 guard). -->
-              <div class="row-head">
-                <Collapsible.Trigger class="row-trigger">
-                  <Icon name="chevron-down" size={14} />
-                  <span class="anchor metric">
-                    {isLineAnnotation(a) ? rangeLabel(a.startLine, a.endLine) : "Comment"}
-                  </span>
-                  <span class="snippet">{a.comment}</span>
-                </Collapsible.Trigger>
-                <div class="inline-actions">
-                  {#if isLineAnnotation(a)}
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      class="float-chip mark-draft"
-                      onclick={() => onDraftAnnotation(a)}
-                    >
-                      Mark as draft
-                    </Button>
-                  {/if}
-                  <span class="confirm-wrap">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      class="float-chip discard"
-                      onclick={(e) => {
-                        confirmingAnnotation = a.id;
-                        confirmAnchor = e.currentTarget as HTMLElement;
-                      }}
-                    >
-                      Discard
-                    </Button>
-                    {#if confirmingAnnotation === a.id}
-                      <ConfirmPopover
-                        question="Discard this comment?"
-                        confirmLabel="Discard"
-                        align="start"
-                        anchor={confirmAnchor ?? undefined}
-                        onConfirm={() => {
-                          onDiscardAnnotation(a.id);
-                          confirmingAnnotation = null;
-                        }}
-                        onCancel={() => (confirmingAnnotation = null)}
-                      />
+        <!-- A real list, so assistive tech gets a count and each row's position
+             instead of a flat run of buttons (EXC-1057). Unnamed on purpose: the
+             enclosing section is already a named region, and a name here would be
+             announced twice and duplicate the label's text a third time. -->
+        <ul class="row-list">
+          {#each inlineComments as a (a.id)}
+            {@const context = isLineAnnotation(a)
+              ? sourceLines(a.startLine, a.endLine, planText)
+              : []}
+            <li class="inline-row">
+              <Collapsible.Root class="inline-disclosure">
+                <!-- Row head: the disclosure trigger and the per-comment actions on
+                     one centered line. The actions ride the head (never the collapsing
+                     body) so they show without expanding (the EXC-746 guard). -->
+                <div class="row-head">
+                  <Collapsible.Trigger class="row-trigger">
+                    <Icon name="chevron-down" size={14} />
+                    <span class="anchor metric">
+                      {isLineAnnotation(a) ? rangeLabel(a.startLine, a.endLine) : "Comment"}
+                    </span>
+                    <span class="snippet">{a.comment}</span>
+                  </Collapsible.Trigger>
+                  <div class="inline-actions">
+                    {#if isLineAnnotation(a)}
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        class="float-chip mark-draft"
+                        onclick={() => onDraftAnnotation(a)}
+                      >
+                        Mark as draft
+                      </Button>
                     {/if}
-                  </span>
+                    <span class="confirm-wrap">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        class="float-chip discard"
+                        onclick={(e) => {
+                          confirmingAnnotation = a.id;
+                          confirmAnchor = e.currentTarget as HTMLElement;
+                        }}
+                      >
+                        Discard
+                      </Button>
+                      {#if confirmingAnnotation === a.id}
+                        <ConfirmPopover
+                          question="Discard this comment?"
+                          confirmLabel="Discard"
+                          align="start"
+                          anchor={confirmAnchor ?? undefined}
+                          onConfirm={() => {
+                            onDiscardAnnotation(a.id);
+                            confirmingAnnotation = null;
+                          }}
+                          onCancel={() => (confirmingAnnotation = null)}
+                        />
+                      {/if}
+                    </span>
+                  </div>
                 </div>
-              </div>
-              <Collapsible.Content>
-                <div class="row-body">
-                  <pre class="row-text">{a.comment}</pre>
-                  <!-- Nested, collapsed-by-default: the actual source lines the
-                       comment anchors to, so the reviewer can read the code it was
-                       written against without leaving the dialog (EXC-762). Only for
-                       line-anchored comments with a live anchor. -->
-                  {#if context.length > 0}
-                    <Collapsible.Root class="context-disclosure">
-                      <Collapsible.Trigger class="row-trigger context-trigger">
-                        <Icon name="chevron-down" size={14} />
-                        <span class="context-label">Context</span>
-                      </Collapsible.Trigger>
-                      <Collapsible.Content>
-                        <pre class="context-lines">{context.join("\n")}</pre>
-                      </Collapsible.Content>
-                    </Collapsible.Root>
-                  {/if}
-                </div>
-              </Collapsible.Content>
-            </Collapsible.Root>
-          </div>
-        {/each}
+                <Collapsible.Content>
+                  <div class="row-body">
+                    <pre class="row-text">{a.comment}</pre>
+                    <!-- Nested, collapsed-by-default: the actual source lines the
+                         comment anchors to, so the reviewer can read the code it was
+                         written against without leaving the dialog (EXC-762). Only for
+                         line-anchored comments with a live anchor. -->
+                    {#if context.length > 0}
+                      <Collapsible.Root class="context-disclosure">
+                        <Collapsible.Trigger class="row-trigger context-trigger">
+                          <Icon name="chevron-down" size={14} />
+                          <span class="context-label">Context</span>
+                        </Collapsible.Trigger>
+                        <Collapsible.Content>
+                          <pre class="context-lines">{context.join("\n")}</pre>
+                        </Collapsible.Content>
+                      </Collapsible.Root>
+                    {/if}
+                  </div>
+                </Collapsible.Content>
+              </Collapsible.Root>
+            </li>
+          {/each}
+        </ul>
       </section>
     {/if}
 
@@ -281,58 +289,60 @@
         <p class="scratches-note">
           Comments you started but never sent. Save one to include it, or discard it.
         </p>
-        {#each scratches as s (s.key)}
-          <div class="scratch-row">
-            <Collapsible.Root class="scratch-disclosure">
-              <div class="row-head">
-                <Collapsible.Trigger class="row-trigger">
-                  <Icon name="chevron-down" size={14} />
-                  <span class="anchor metric">{rangeLabel(s.startLine, s.endLine)}</span>
-                  <span class="snippet">{s.text}</span>
-                </Collapsible.Trigger>
-                <div class="scratch-actions">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    class="float-chip save"
-                    onclick={() => onSaveScratch(s.key)}
-                  >
-                    Save
-                  </Button>
-                  <span class="confirm-wrap">
+        <ul class="row-list">
+          {#each scratches as s (s.key)}
+            <li class="scratch-row">
+              <Collapsible.Root class="scratch-disclosure">
+                <div class="row-head">
+                  <Collapsible.Trigger class="row-trigger">
+                    <Icon name="chevron-down" size={14} />
+                    <span class="anchor metric">{rangeLabel(s.startLine, s.endLine)}</span>
+                    <span class="snippet">{s.text}</span>
+                  </Collapsible.Trigger>
+                  <div class="scratch-actions">
                     <Button
                       variant="secondary"
                       size="sm"
-                      class="float-chip discard"
-                      onclick={(e) => {
-                        confirmingScratch = s.key;
-                        confirmAnchor = e.currentTarget as HTMLElement;
-                      }}
+                      class="float-chip save"
+                      onclick={() => onSaveScratch(s.key)}
                     >
-                      Discard
+                      Save
                     </Button>
-                    {#if confirmingScratch === s.key}
-                      <ConfirmPopover
-                        question="Discard this comment?"
-                        confirmLabel="Discard"
-                        align="start"
-                        anchor={confirmAnchor ?? undefined}
-                        onConfirm={() => {
-                          onDiscardScratch(s.key);
-                          confirmingScratch = null;
+                    <span class="confirm-wrap">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        class="float-chip discard"
+                        onclick={(e) => {
+                          confirmingScratch = s.key;
+                          confirmAnchor = e.currentTarget as HTMLElement;
                         }}
-                        onCancel={() => (confirmingScratch = null)}
-                      />
-                    {/if}
-                  </span>
+                      >
+                        Discard
+                      </Button>
+                      {#if confirmingScratch === s.key}
+                        <ConfirmPopover
+                          question="Discard this comment?"
+                          confirmLabel="Discard"
+                          align="start"
+                          anchor={confirmAnchor ?? undefined}
+                          onConfirm={() => {
+                            onDiscardScratch(s.key);
+                            confirmingScratch = null;
+                          }}
+                          onCancel={() => (confirmingScratch = null)}
+                        />
+                      {/if}
+                    </span>
+                  </div>
                 </div>
-              </div>
-              <Collapsible.Content>
-                <pre class="row-text">{s.text}</pre>
-              </Collapsible.Content>
-            </Collapsible.Root>
-          </div>
-        {/each}
+                <Collapsible.Content>
+                  <pre class="row-text">{s.text}</pre>
+                </Collapsible.Content>
+              </Collapsible.Root>
+            </li>
+          {/each}
+        </ul>
       </section>
     {/if}
 
@@ -453,6 +463,13 @@
     align-items: center;
     gap: 0.4rem;
     margin-bottom: 0.4rem;
+  }
+  /* Both row groups are real lists (EXC-1057); the ul carries no spacing of its
+     own, which lives on .inline-row / .scratch-row below. */
+  .row-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
   }
   .inline-row {
     border-left: 3px solid var(--rule-strong);

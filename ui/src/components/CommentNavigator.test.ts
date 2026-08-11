@@ -39,7 +39,7 @@ describe("CommentNavigator", () => {
 
   test("lists one navigable row per comment, with its range label and text", () => {
     const { target } = render(CommentNavigator, base);
-    const items = target.querySelectorAll(".nav-item");
+    const items = target.querySelectorAll("[data-nav-row]");
     expect(items.length).toBe(2);
     expect(items[0]!.textContent).toContain("Line 3");
     expect(items[0]!.textContent).toContain("Cache the cold path");
@@ -48,7 +48,7 @@ describe("CommentNavigator", () => {
   test("clicking a row reveals that comment", () => {
     let revealed: CommentIndexEntry | undefined;
     const { target } = render(CommentNavigator, { ...base, onReveal: (e) => (revealed = e) });
-    target.querySelectorAll<HTMLButtonElement>(".nav-item")[1]!.click();
+    target.querySelectorAll<HTMLButtonElement>("[data-nav-row]")[1]!.click();
     expect(revealed?.id).toBe("b");
   });
 
@@ -102,7 +102,7 @@ describe("CommentNavigator", () => {
       comments: withDraft,
       onReveal: (e) => (revealed = e),
     });
-    const items = target.querySelectorAll<HTMLButtonElement>(".nav-item");
+    const items = target.querySelectorAll<HTMLButtonElement>("[data-nav-row]");
     // Only the scratch row is a draft, and it carries the tag.
     expect(items[0]!.classList.contains("draft")).toBe(false);
     expect(items[1]!.classList.contains("draft")).toBe(true);
@@ -160,7 +160,7 @@ describe("CommentNavigator in compare mode", () => {
 
   test("renders a linkable row as a reveal button and an unlinkable one as a list item", () => {
     const { target } = render(CommentNavigator, compare);
-    const items = [...target.querySelectorAll(".nav-item")];
+    const items = [...target.querySelectorAll("[data-nav-row]")];
     expect(items.map((el) => el.tagName)).toEqual(["BUTTON", "LI", "BUTTON"]);
   });
 
@@ -173,7 +173,7 @@ describe("CommentNavigator in compare mode", () => {
 
   test("marks an unlinkable row as absent from the diff", () => {
     const { target } = render(CommentNavigator, compare);
-    const items = [...target.querySelectorAll(".nav-item")];
+    const items = [...target.querySelectorAll("[data-nav-row]")];
     expect(items[1]!.querySelector(".nav-unlinked-tag")!.textContent).toContain("not in diff");
     expect(items[0]!.querySelector(".nav-unlinked-tag")).toBeNull();
     expect(items[2]!.querySelector(".nav-unlinked-tag")).toBeNull();
@@ -192,7 +192,7 @@ describe("CommentNavigator in compare mode", () => {
       },
     ];
     const { target } = render(CommentNavigator, { ...compare, comments: general });
-    const row = target.querySelector(".nav-item")!;
+    const row = target.querySelector("[data-nav-row]")!;
     expect(row.tagName).toBe("LI");
     expect(row.querySelector(".nav-item-ref")!.textContent).toBe("General");
     expect(row.textContent).toContain("rethink the rollout");
@@ -202,9 +202,9 @@ describe("CommentNavigator in compare mode", () => {
     expect(row.querySelector(".nav-unlinked-tag")?.textContent ?? null).toBeNull();
   });
 
-  test("still exposes .nav-item rows, so j/k roving focus keeps working", () => {
+  test("still exposes [data-nav-row] rows, so j/k roving focus keeps working", () => {
     const { target } = render(CommentNavigator, compare);
-    const items = target.querySelectorAll(".nav-item");
+    const items = target.querySelectorAll("[data-nav-row]");
     expect(items.length).toBe(3);
     expect(items[1]!.getAttribute("tabindex")).toBe("-1");
   });

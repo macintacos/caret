@@ -27,10 +27,25 @@
   <DropdownMenu.Root>
     <DropdownMenu.Trigger>
       {#snippet child({ props })}
-        <Button {...props} variant="secondary" size="sm" class="switcher-trigger float-chip">
+        <!-- The trigger names itself rather than taking its name from its content,
+             which would run the active plan's title together with the count Badge
+             ("Widget Cache Refactor 2") — a name that says nothing about the control
+             and changes on every switch. The count rides the accessible description
+             through a hidden span, which the accname algorithm still reads because
+             aria-describedby references it directly. Which review is active is
+             announced by the checked item when the menu opens, below. -->
+        <Button
+          {...props}
+          variant="secondary"
+          size="sm"
+          class="switcher-trigger float-chip"
+          aria-label="Switch review"
+          aria-describedby="switcher-count"
+        >
           <span class="title">{stripTitleLinks(active?.title ?? "—")}</span>
           <Badge variant="secondary" class="count metric">{reviews.length}</Badge>
           <span class="chev"><Icon name="chevron-down" size={14} /></span>
+          <span id="switcher-count" hidden>{reviews.length} reviews pending</span>
         </Button>
       {/snippet}
     </DropdownMenu.Trigger>
@@ -45,7 +60,10 @@
             <span class="m-meta mono">{shortCwd(r.cwd)}</span>
           </span>
           {#if r.id === activeId}
-            <span class="opt-check"><Icon name="check" size={14} /></span>
+            <!-- Labelled, not decorative: with the trigger named "Switch review" this
+                 check is the only thing that says which review is active, so it has
+                 to reach the accessibility tree. -->
+            <span class="opt-check"><Icon name="check" size={14} label="Active review" /></span>
           {/if}
         </DropdownMenu.Item>
       {/each}
