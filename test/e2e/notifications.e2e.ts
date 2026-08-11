@@ -86,11 +86,7 @@ test("a new plan while the tab is hidden notifies; its click selects the review"
     (window as unknown as StubWindow).__vis = "hidden";
   });
   const second = await daemon.seed({ plan: SECOND_PLAN });
-  await page.waitForFunction(
-    () => (window as unknown as StubWindow).__notes.length > 0,
-    undefined,
-    { timeout: 5_000 },
-  );
+  await page.waitForFunction(() => (window as unknown as StubWindow).__notes.length > 0);
 
   const note = await page.evaluate(() => {
     const [n] = (window as unknown as StubWindow).__notes;
@@ -126,10 +122,8 @@ test("clicking the granted bell fires a test notification", async ({ daemon, pag
   await page.goto("/");
 
   await page.getByRole("button", { name: "Notifications: granted" }).click();
-  await page.waitForFunction(
-    () => (window as unknown as StubWindow).__notes.some((n) => n.title === "🥕 Test notification"),
-    undefined,
-    { timeout: 5_000 },
+  await page.waitForFunction(() =>
+    (window as unknown as StubWindow).__notes.some((n) => n.title === "🥕 Test notification"),
   );
 });
 

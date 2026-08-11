@@ -48,11 +48,9 @@ test("a review posted while the page is open appears without a reload", async ({
   // Seed through the API while the page is open: the 2s poll must pick it up.
   await daemon.seed({ plan: SECOND_PLAN });
 
-  // The switcher's count Badge flips to 2 with no reload; generous auto-retry
-  // timeout covers the poll interval (never a fixed sleep). The trigger itself
+  // The switcher's count Badge flips to 2 with no reload; the suite's assertion
+  // budget absorbs the poll interval (never a fixed sleep). The trigger itself
   // only appears once there's a second review, so this also waits for the
   // single→multiple switch.
-  await expect(page.locator(".switcher-trigger").locator(".count")).toHaveText("2", {
-    timeout: 5_000,
-  });
+  await expect(page.locator(".switcher-trigger").locator(".count")).toHaveText("2");
 });

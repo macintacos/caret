@@ -985,7 +985,7 @@ test("hovering a code block reveals a copy button that copies the code (EXC-692)
   const clip = await page.evaluate(() => navigator.clipboard.readText());
   expect(clip).toBe("const x: number = compute();\nreturn x + 1;");
   // …and it reverts to the copy glyph.
-  await expect(page.getByRole("button", { name: "Copy code" })).toBeVisible({ timeout: 3000 });
+  await expect(page.getByRole("button", { name: "Copy code" })).toBeVisible();
 });
 
 // Two distinct fenced blocks separated by prose, with trailing filler for scroll room.
