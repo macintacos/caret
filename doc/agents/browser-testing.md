@@ -25,12 +25,11 @@ The bullets above decide the common case; the hard cases are decided in the spec
 **A spec opens with a header paragraph naming what in it needs a real browser and which
 file holds the pure half** — `folder-refs`, `settings`, `plan-breadcrumbs`,
 `topbar-overflow`, `vanity-origin`, `smoke`, `diff-surface`, `lifecycle`, and
-`compare-comments` carry the fullest examples, and since EXC-1059 backfilled the last
-seven every spec has a header and every header names the layer choice. That paragraph is
-the whole mechanism: it makes "is this spec in the right layer?" a question you answer by
-reading the file, so there is no register to keep in sync (EXC-1052). Write one for every
-new spec — coverage *and* the layer half, since no spec is left modelling the shorter
-form.
+`compare-comments` carry the fullest examples; every spec has a header, and every header
+names the layer choice (EXC-1052, EXC-1059). That paragraph is the whole mechanism: it
+makes "is this spec in the right layer?" a question you answer by reading the file, so
+there is no register to keep in sync. Write one for every new spec — coverage *and* the
+layer half.
 
 Two things make a spec look unit-able when it is not, and neither is visible from the test
 body:
@@ -297,31 +296,37 @@ Shared locators live in `test/e2e/support/chrome.ts` (the chrome around the plan
 
 ## Absence and invisibility
 
-**Assert `toHaveCount(0)` where the claim is that the element is gone; keep `toBeHidden()`
-only where the component keeps it mounted.** `toBeHidden()` is satisfied by a hidden
-element, an absent one, and a renamed one alike, so on a class or `data-*` locator it
-passes on a node that is still sitting in the DOM — erasing the difference between "the
-overflow menu replaced this control" and "this control stopped painting" (EXC-1059).
+**`toBeHidden()` is satisfied by a hidden element, an absent one, and a renamed one
+alike**, so on its own it cannot tell "this control is no longer offered" from "this
+control is still mounted and stopped painting". Where the claim is absence,
+`toHaveCount(0)` says so (EXC-1059).
 
-Three of the suite's fifty-seven sites are the invisibility case and say so inline:
-`.approve-slot` is `display: none` inside a `@media` block in `TopBar.svelte`,
-`request-changes`' `.context-lines` sits inside a collapsed disclosure, and
-`plan-breadcrumbs`' `.crumb-ellipsis` is deliberately left in the list so the full trail
-keeps measuring. Every other site converted.
+**The matcher follows what the locator can resolve to, not what the assertion feels
+like.** A class or `data-*` selector *can* resolve to a hidden node, so there the two
+matchers genuinely differ and the component decides which is true — `.safe-mode-toast` is
+`{#if safeMode}` in `App.svelte` and is absent, while `.approve-slot` is `display: none`
+inside a `@media` block in `TopBar.svelte` and is merely invisible. A role-and-name
+locator *cannot* resolve to a hidden node at all, because Playwright's role engine matches
+only the accessibility tree and `display: none` takes an element out of it; there the two
+matchers are equivalent whatever the component does, and `toHaveCount(0)` is the spelling
+to use for saying plainly what is being proven. Read the component before converting a
+class or `data-*` site; a role site needs no such reading.
 
-**On a role-and-name locator the two matchers coincide**, because Playwright's role engine
-only matches what is in the accessibility tree and `display: none` takes an element out of
-it. `getByRole(…)` with either matcher therefore passes for hidden, absent *and* renamed,
-so converting one buys a clearer statement of intent rather than recovered coverage. The
-coverage is recovered on the class and `data-*` sites — which is exactly where the locator
-policy above says those selectors legitimately live.
+Three sites are the invisibility case and say so where they sit: `.approve-slot`
+(`topbar-overflow.e2e.ts`), `request-changes`' `.context-lines` inside a collapsed
+disclosure, and `plan-breadcrumbs`' `.crumb-ellipsis`, deliberately left in the list so
+the full trail keeps measuring. They are the only `toBeHidden()` calls under `test/e2e/`.
+
+**What this recovers is the still-mounted case, and only that.** A renamed class and a
+renamed accessible name both still pass silently under either matcher — which is why the
+locator policy above carries more weight here than the choice of assertion does.
 
 **The rule is not AST-decidable, so it is not gated.** A parser sees
 `expect(x).toBeHidden()` and nothing more; what decides the call is whether a Svelte
 component wraps the node in `{#if}` or hides it with `display: none`, in a file the spec
 never names. A detector that cannot be right without reading another file is the § What is
-gated bar exactly, so this stays prose. To settle one site cheaply, convert it and run the
-spec: a still-mounted node reds on the spot, which is how the three above were found.
+gated bar exactly, so this stays prose. To settle a site cheaply, convert it and run the
+spec: a still-mounted node reds on the spot.
 
 ## What is gated, and what stays prose
 

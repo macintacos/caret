@@ -11,11 +11,12 @@
 // mounted component can be handed as props; "without a remount" is asserted as
 // the same <pre> element changing data-diff-type, and scroll retention as a real
 // offset across that switch; and the colour and collapsed-context cases read
-// computed styles resolved inside the library's shadow root. Both blind spots
-// doc/agents/browser-testing.md names apply here, because the appearance in play
-// is declared outside the test body: the emphasis and separator cases override
-// the colorScheme playwright.config.ts pins to dark, and the badge cases seed
-// the mode into localStorage instead, each saying why inline. The pure halves
+// computed styles resolved inside the library's shadow root. The config blind
+// spot doc/agents/browser-testing.md names is live here and is answered rather
+// than inherited: playwright.config.ts pins colorScheme to dark, so the emphasis
+// and separator cases parameterize page.emulateMedia over both schemes, and the
+// badge cases seed the mode into localStorage instead because that palette must
+// settle before first paint. The pure halves
 // stay units: the pair selection and compare-mode state machine in
 // ui/src/state/compare.test.ts, the toggle's disabled state, count and
 // accessible name in ui/src/components/VersionComparePicker.test.ts, and the

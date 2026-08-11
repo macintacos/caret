@@ -5,6 +5,12 @@
 // browser behavior, not happy-dom units (doc/agents/browser-testing.md). The
 // fixture daemon declares no adapter variants, so Approve renders as the
 // split-button (WIRE_FALLBACK set), i.e. .split-primary / .split-toggle.
+//
+// TopBar.svelte performs every swap here with `display: none` in a @media block,
+// so no control is ever unmounted. The role queries below still read as absences
+// because a display:none element is out of the accessibility tree; the one class
+// locator, .approve-slot, resolves to the mounted node and so asserts hidden
+// (doc/agents/browser-testing.md § Absence and invisibility).
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
@@ -108,11 +114,7 @@ test("tight: Approve moves into the overflow menu", async ({ daemon, page }) => 
   await planSurface(page);
   await page.setViewportSize({ width: 600, height: 800 }); // below --w-tight (640)
 
-  // The inline Approve control is gone; only ⋯ + bell + settings remain right.
-  // toBeHidden, not toHaveCount(0): TopBar.svelte hides the slot with `display:
-  // none` under @media (max-width: 639px), so the node stays mounted at every
-  // width and only stops painting. The role queries above read as absences
-  // because a display:none element is out of the accessibility tree.
+  // The inline Approve control is off; only ⋯ + bell + settings remain right.
   await expect(page.locator(".approve-slot")).toBeHidden();
 
   // Approve — with its variants — is reachable in the overflow menu, and

@@ -492,14 +492,12 @@ test("a five-level trail shows whole while the row has room for it", async ({ da
   // The defect EXC-957 fixes: COLLAPSE_ABOVE elided anything past three levels on
   // a depth count, so this trail shortened on a 1600px window with the row half
   // empty. The marker stays in the list — that is what keeps the full trail
-  // measurable — but it is not on screen.
+  // measurable — but it is not on screen, hence toBeHidden over toHaveCount(0).
   await daemon.seed({ plan: DEEP_PLAN });
   await page.goto("/");
 
   await jumpTo(page, "Echo");
   await expect(page.locator(SHOWN)).toHaveText(["Alpha", "Bravo", "Charlie", "Delta", "Echo"]);
-  // toBeHidden, not toHaveCount(0): as the comment above says, the marker stays
-  // in the list so the full trail keeps measuring — invisible, not absent.
   await expect(page.locator(MARKER)).toBeHidden();
 });
 

@@ -1682,7 +1682,7 @@ test("hovering a line body reveals the + and lifts that line's background, scope
   await planSurface(page);
   await expect(page.getByText("Body line 1 content here.")).toBeVisible();
 
-  // At rest — mouse parked off any line — the gutter `+` is not shown.
+  // At rest — mouse parked off any line — the library renders no gutter `+` at all.
   await page.mouse.move(0, 0);
   const plus = page.locator(".diffview [data-utility-button]");
   await expect(plus).toHaveCount(0);
