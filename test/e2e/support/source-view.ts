@@ -9,10 +9,10 @@
 // Locators for the chrome AROUND the plan — the navigator, the tally, the breadcrumbs
 // — live in chrome.ts, where they are named by role rather than by class.
 
-import { expect, type Locator, type Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import { currentCrumb } from "@test/e2e/support/chrome.ts";
-import { waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { expect, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 
 /**
  * The plan's scroll container.

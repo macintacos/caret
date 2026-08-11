@@ -3,14 +3,15 @@
 // Per-test (not per-run) because the review list is global daemon state and
 // several specs assert exact review sets (switcher = exactly two, deep link,
 // poll pickup); there is no DELETE endpoint to clean a shared daemon between
-// tests. Boot is ~100-200ms, and OS-assigned ports (daemon-entry.ts) make
-// fullyParallel workers collision-free. The fixture runs under the Playwright
-// (node) runner; only the daemon child needs Bun, so it is spawned with `bun`
-// explicitly.
+// tests. Boot is ~64ms serial and ~137ms at six workers, and OS-assigned ports
+// (daemon-entry.ts) make fullyParallel workers collision-free. The fixture runs
+// under the Playwright (node) runner; only the daemon child needs Bun, so it is
+// spawned with `bun` explicitly.
 //
-// Boot is not the whole cost a test pays for its daemon: the first seed() also
-// acquires rumdl to format its plan, which is why pinnedRumdl() below hands the
-// daemon a pre-resolved binary rather than letting it download one (EXC-1053).
+// Boot is not the whole cost a test pays for its daemon: the first seed() adds
+// ~11ms on top, and that figure holds only because pinnedRumdl() below hands the
+// daemon a pre-resolved binary rather than letting it acquire rumdl to format
+// its plan (EXC-1053).
 
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -63,11 +64,36 @@ export interface Daemon {
   addVersion(id: string, plan: string): Promise<void>;
 }
 
+/**
+ * The suite's own test options, set from `playwright.config.ts`.
+ *
+ * Playwright's `[default, { option: true }]` fixture form is how a custom
+ * fixture's knob reaches the config, which is where every other deadline the
+ * suite runs under already lives (doc/agents/browser-testing.md § Timeouts are
+ * budgets for the loaded host). The config is the one that binds; the default in
+ * `test.extend` below only applies to a run that loads this fixture under some
+ * other config.
+ */
+export interface E2EOptions {
+  /**
+   * The daemon-boot budget, spent once per phase rather than across both: the
+   * stdout port handshake takes it as a real deadline, then the `/health` poll
+   * spends it again as `bootTimeoutMs / 50` probes at 50ms. The poll is an
+   * attempt count, not a clock — `httpHealth` carries its own 500ms abort, so
+   * against a daemon that listens but never answers it runs well past this
+   * number and Playwright's per-test `timeout` is what fires.
+   */
+  bootTimeoutMs: number;
+}
+
 const DAEMON_ENTRY = fileURLToPath(new URL("./daemon-entry.ts", import.meta.url));
-const BOOT_TIMEOUT_MS = 15_000;
 
 /** Resolve the one `{"port": N}` line daemon-entry.ts prints to stdout. */
-function awaitPortLine(child: ChildProcess, stderr: () => string): Promise<number> {
+function awaitPortLine(
+  child: ChildProcess,
+  stderr: () => string,
+  timeoutMs: number,
+): Promise<number> {
   return new Promise<number>((resolve, reject) => {
     let buf = "";
     const onData = (chunk: Buffer) => {
@@ -102,11 +128,9 @@ function awaitPortLine(child: ChildProcess, stderr: () => string): Promise<numbe
     };
     const timer = setTimeout(() => {
       settle(() =>
-        reject(
-          new Error(`caret e2e daemon: no port line within ${BOOT_TIMEOUT_MS}ms\n${stderr()}`),
-        ),
+        reject(new Error(`caret e2e daemon: no port line within ${timeoutMs}ms\n${stderr()}`)),
       );
-    }, BOOT_TIMEOUT_MS);
+    }, timeoutMs);
     // Settle exactly once, then detach everything so late events are inert.
     const settle = (fn: () => void) => {
       clearTimeout(timer);
@@ -179,11 +203,9 @@ function pinnedRumdl(): string {
   return bin;
 }
 
-export const test = base.extend<{ daemon: Daemon }>({
-  // Playwright requires the first fixture argument to be an object-destructuring
-  // pattern even when no upstream fixtures are consumed.
-  // biome-ignore lint/correctness/noEmptyPattern: Playwright fixture signature
-  daemon: async ({}, use) => {
+export const test = base.extend<E2EOptions & { daemon: Daemon }>({
+  bootTimeoutMs: [15_000, { option: true }],
+  daemon: async ({ bootTimeoutMs }, use) => {
     // Before mkdtemp so an unresolvable rumdl can't leak a state dir.
     const rumdl = pinnedRumdl();
     // Ephemeral, isolated state: the daemon's reviews/prefs/logs all live under
@@ -204,10 +226,15 @@ export const test = base.extend<{ daemon: Daemon }>({
     const stderr = () => Buffer.concat(stderrChunks).toString();
 
     try {
-      const port = await awaitPortLine(child, stderr);
+      const port = await awaitPortLine(child, stderr, bootTimeoutMs);
       const url = `http://127.0.0.1:${port}`;
-      // ~15s budget at 50ms intervals (BOOT_TIMEOUT_MS / 50), node-runner sleep.
-      await waitForHealth(url, { attempts: BOOT_TIMEOUT_MS / 50, intervalMs: 50, sleep });
+      // The same budget again, spent as probes rather than as a deadline (see
+      // E2EOptions); node-runner sleep.
+      await waitForHealth(url, {
+        attempts: Math.ceil(bootTimeoutMs / 50),
+        intervalMs: 50,
+        sleep,
+      });
 
       await use({
         url,
