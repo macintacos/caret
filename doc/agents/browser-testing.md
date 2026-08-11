@@ -232,6 +232,13 @@ not a concession (EXC-1051). Three things disqualify a role query: no role in th
 accessibility tree at all, a role carrying no accessible name, and — the case that catches
 people — a name that is really fixture data. Each gets a bullet below.
 
+**A disqualification is sometimes a finding about the app, not about the spec.** Where the
+missing role or name is a real gap for assistive tech, the fix belongs in the component
+and the conversion follows for free — but a test-only diff is the wrong place to make it,
+so the honest move is to note it, leave the class selector, and file it. EXC-1051 did
+exactly that for three of the entries below and EXC-1057 closed them, which is why two of
+them now read the other way round.
+
 - **Where no accessible target exists, say so rather than apologising.** The plan surface
   is `<div class="diff-plan" role="presentation">`
   (`ui/src/components/DiffPlanView.svelte:1378`), deliberately out of the accessibility
@@ -246,19 +253,36 @@ people — a name that is really fixture data. Each gets a bullet below.
   `ConfirmPopover` (`ui/src/components/ConfirmPopover.svelte:147-148`) went so long
   queried by class despite publishing both a role and an `aria-label`. Ask for
   `getByRole("alertdialog", { name })`.
-- **A class that *production* code queries is a contract, not a styling hook.**
-  `ui/src/components/CommentNavigator.svelte:90` reads `.nav-item` to build its keyboard
-  list, so a spec addressing `.nav-item` is addressing the same thing the component
-  depends on. Leave those as they are and say why in the spec — narrowing one to a role
-  query silently drops the coupling the test was covering.
+- **A selector *production* code queries is a contract, not a styling hook.**
+  `ui/src/components/CommentNavigator.svelte` reads `[data-nav-row]` to build its keyboard
+  list, so a spec addressing it is addressing the same thing the component depends on.
+  Leave those as they are and say why in the spec — narrowing one to a role query silently
+  drops the coupling the test was covering. Write such a contract as a `data-*` attribute
+  rather than a class (EXC-1057): a class reads as a styling hook, so nothing warns the
+  next restyle that renaming it breaks the component, while the attribute states what it
+  is where that person will see it. This is not the `data-testid` the EXC-1040 policy bars
+  — the difference is that production code, not a spec, is the one that reads it.
 - **Scope a role locator to a `data-*` anchor before adding markup.** When a role has no
   accessible name — `role="status"` is not name-from-content, and two components publish
   it — scoping resolves the collision with no change to the app
   (`page.locator("[data-file-preview]").getByRole("status")`). Two cases predicted to need
   a new `aria-label` were solved this way instead.
-- **Never bind to a name that is fixture data.** `.switcher-trigger` stays a class: its
-  accessible name is the plan title plus a count badge, so a name query would hard-code
-  the fixture and stop matching the thing under test.
+- **A control whose name would be its content should name itself.** The review-switcher
+  trigger computed as `button "Widget Cache Refactor 2"` — the active plan's title run
+  together with its count Badge, changing on every switch and saying nothing about the
+  control. It now carries `aria-label="Switch review"`, with the count on its accessible
+  description via an `aria-describedby` to a `hidden` span (the accname algorithm reads a
+  hidden node that a description references directly). Query it through `reviewSwitcher()`
+  and assert the count with `toHaveAccessibleDescription`. The same shape fits any chrome
+  control that renders live data inside a button.
+- **Never bind to a name that is fixture data.** `RequestChangesDialog`'s `.row-trigger`
+  stays a class: its name is name-from-content over the comment text, so a name query
+  there hard-codes the fixture. The trap extends to any action queried *inside* such a
+  row, because Playwright matches `name` on substring by default — a row-scoped
+  `getByRole("button", { name: "Discard" })` also collects a trigger whose comment reads
+  "discard this draft". Pass `exact: true`, as `inlineRows` / `unsentRows` in `chrome.ts`
+  document. `.switcher-trigger` was this bullet's example until EXC-1057 gave the trigger
+  an `aria-label` of its own; see the entry above it.
 
 Shared locators live in `test/e2e/support/chrome.ts` (the chrome around the plan) and
 `test/e2e/support/source-view.ts` (the plan surface itself) — one idiom, one home.
