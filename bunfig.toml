@@ -12,6 +12,10 @@
 # `bun test` therefore resolves svelte's server runtime, which ui/test-mount.ts
 # detects and rejects with an actionable error rather than the cryptic mount()
 # crash (EXC-537).
+#
+# `--timeout` rides on those same two entry points for the same reason (EXC-1056):
+# `[test]` has no `timeout` key, and a preload calling `setDefaultTimeout` reaches
+# only some files of a multi-file run. See scripts/tasks/test.ts.
 [test]
 # rumdl-preload points the plan formatter (src/plan/rumdl.ts) at the mise-pinned
 # rumdl so tests run offline; svelte-preload compiles .svelte for the UI suite.

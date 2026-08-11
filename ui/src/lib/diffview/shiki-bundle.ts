@@ -85,6 +85,40 @@ export const createCaretRegexEngine = () =>
   });
 
 /**
+ * The tokenize options every caret highlight pass carries, spread into each
+ * `codeToTokensBase` / `codeToHast` / `codeToHtml` call (EXC-1056).
+ *
+ * shiki defaults `tokenizeTimeLimit` to 500ms and hands it to vscode-textmate, which
+ * spends it as WALL CLOCK inside its scan loop: once the budget is gone the line is
+ * abandoned where it stands, and everything from there to end-of-line comes back as a
+ * single token wearing whatever scope was in force. Nothing throws and nothing is
+ * logged, so a caller cannot tell a truncated line from a real one — a code line simply
+ * stops being highlighted part-way, and a test asserting on a token finds it missing.
+ *
+ * That makes tokenization a function of host load rather than of its input, which is
+ * exactly the wrong dependency for either surface. The first tokenize in a process
+ * spends ~800ms translating a grammar's patterns (the engine compiles them lazily, and
+ * the transpiler itself is JIT-cold), and under contention — `mise run preflight` runs
+ * six tasks at once — even a warmed pass crosses 500ms.
+ *
+ * `0` disables the check outright rather than raising it, because any finite budget is
+ * the same bug with a different threshold. What replaces it is a bound on the INPUT:
+ * `MAX_HIGHLIGHT_LINE_CHARS` (diffview/highlight.ts) refuses the pathological long line
+ * the time limit was really guarding against, and being a function of the code being
+ * highlighted it holds identically on an idle host and a saturated one.
+ *
+ * That bound is applied by the CALLER rather than through shiki's own
+ * `tokenizeMaxLineLength`, which sits in this same options object and would look like
+ * the obvious home for it. shiki skips an over-long line WITHOUT advancing the grammar
+ * state, so a block comment or template literal opening on a skipped line would leave
+ * every line below it miscoloured; caret's callers refuse the whole chunk instead,
+ * which is the failure their surrounding code already contracts for. Carrying
+ * `tokenizeMaxLineLength` here as well would hide that decision behind a second bound
+ * that never fires.
+ */
+export const CARET_TOKENIZE_OPTIONS = { tokenizeTimeLimit: 0 } as const;
+
+/**
  * A `createHighlighter` bound to the full language bundle + caret's themes, built
  * the way shiki's own bundles are (createBundledHighlighter). The library calls
  * this to construct its shared highlighter; binding it to the full set means a

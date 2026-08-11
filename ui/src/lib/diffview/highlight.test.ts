@@ -145,6 +145,14 @@ test("a chunk carrying an over-long line yields no rows instead of tokenizing it
   expect(await highlightChunk(code, "typescript", "caret-dark")).toEqual({ rows: [] });
 });
 
+// The same bound on the other entry point (EXC-1056), where it is load-bearing for a
+// second reason: with shiki's wall-clock budget off, the line length is the only thing
+// left between an excerpt and that ~40 s tokenize.
+test("an excerpt carrying an over-long line yields no HTML instead of tokenizing it", async () => {
+  const long = "a".repeat(MAX_HIGHLIGHT_LINE_CHARS + 1);
+  expect(await highlightExcerpt(`const before = 1;\n${long}`, "typescript", "caret-dark")).toBe("");
+});
+
 test("a line at the limit still highlights", async () => {
   const atLimit = `const s = "${"a".repeat(MAX_HIGHLIGHT_LINE_CHARS - 13)}";`;
   expect(atLimit).toHaveLength(MAX_HIGHLIGHT_LINE_CHARS);

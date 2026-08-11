@@ -3,9 +3,11 @@ import { describe, expect, test } from "bun:test";
 import { bundledLanguages as fullShikiBundle } from "shiki/bundle/full";
 import { createHighlighterCore } from "shiki/core";
 
+import { shikiThemeFor } from "$lib/caret-theme.ts";
 import {
   bundledLanguages,
   bundledThemes,
+  CARET_TOKENIZE_OPTIONS,
   createCaretRegexEngine,
 } from "$lib/diffview/shiki-bundle.ts";
 
@@ -44,6 +46,60 @@ describe("the shiki bundle", () => {
 
   test("bundledThemes is empty — caret renders only its own registered themes", () => {
     expect(Object.keys(bundledThemes)).toEqual([]);
+  });
+});
+
+// EXC-1056: shiki defaults `tokenizeTimeLimit` to 500ms and vscode-textmate spends it
+// as WALL CLOCK inside its scan loop — once the budget is gone the line is abandoned
+// where it stands and its remainder comes back as one token wearing whatever scope was
+// in force. Nothing is thrown and nothing is logged, so the caller cannot tell a
+// truncated line from a real one. That made every shiki call in this repo a function of
+// host load rather than of its input, which is what reddened the preflight gate: the
+// first tokenize in a bun process alone costs ~800ms (the engine translates a grammar's
+// patterns lazily, through JIT-cold transpiler code), and under gate contention even a
+// warmed one crosses 500ms.
+//
+// Both halves are asserted, because the value alone would say nothing about why it is
+// that value: the constant disables the budget, and a budget that is NOT disabled really
+// does silently truncate. The second half is what makes this a regression pin rather than
+// a restatement — if shiki ever stops truncating, it reds and this workaround can go.
+describe("caret's tokenize options", () => {
+  // One line, tokenized rich enough to need many patterns: `Row` is the token that
+  // disappears when the line is abandoned mid-scan (it merges into the run that follows).
+  const SAMPLE = "function build(rows: Row[]): string {";
+
+  /** A fresh highlighter, which is what makes the starved call deterministic: a new
+   * engine carries an empty pattern cache, so its first tokenize pays the translation
+   * cost and blows any budget this tight regardless of the host. */
+  async function highlighter() {
+    return await createHighlighterCore({
+      themes: [shikiThemeFor("caret-dark")],
+      langs: [import("shiki/langs/tsx.mjs")],
+      engine: createCaretRegexEngine(),
+    });
+  }
+
+  test("carry no wall-clock budget at all", () => {
+    expect(CARET_TOKENIZE_OPTIONS.tokenizeTimeLimit).toBe(0);
+  });
+
+  test("keep a line whole where a wall-clock budget truncates it", async () => {
+    // A highlighter each, so the budget is the only thing that differs between the
+    // two calls. Sharing one would leave the second running on a warm engine, where
+    // any budget survives — it would agree with this assertion while proving nothing
+    // about the option under test. Both are disposed: shiki warns once a process has
+    // made ten, and this file plus caret-theme.test.ts sit right on that line.
+    const base = { lang: "tsx", theme: "caret-dark" } as const;
+    const cold = await highlighter();
+    const starved = cold.codeToTokensBase(SAMPLE, { ...base, tokenizeTimeLimit: 1 });
+    cold.dispose();
+
+    const fresh = await highlighter();
+    const whole = fresh.codeToTokensBase(SAMPLE, { ...base, ...CARET_TOKENIZE_OPTIONS });
+    fresh.dispose();
+
+    expect(starved[0]?.map((t) => t.content)).not.toContain("Row");
+    expect(whole[0]?.map((t) => t.content)).toContain("Row");
   });
 });
 

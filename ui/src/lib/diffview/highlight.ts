@@ -11,7 +11,7 @@
 import { type GrammarState, hastToHtml } from "shiki/core";
 
 import { REGISTERED_SHIKI_THEMES } from "$lib/caret-theme.ts";
-import { createHighlighter } from "$lib/diffview/shiki-bundle.ts";
+import { CARET_TOKENIZE_OPTIONS, createHighlighter } from "$lib/diffview/shiki-bundle.ts";
 import type { ThemeId } from "$lib/theme.ts";
 
 type Highlighter = Awaited<ReturnType<typeof createHighlighter>>;
@@ -49,16 +49,18 @@ async function resolveLanguage(hl: Highlighter, language: string): Promise<strin
  * caret palette. Not the preview's own path — FilePreview colours a chunk at a
  * time through highlightChunk — but the reference the chunk rows are measured
  * against, byte for byte, in highlight.test.ts. Returns "" on any failure so a
- * caller can fall back to rendering the code as plain text. */
+ * caller can fall back to rendering the code as plain text, and takes that same
+ * path for an excerpt carrying a line past `MAX_HIGHLIGHT_LINE_CHARS`. */
 export async function highlightExcerpt(
   code: string,
   language: string,
   themeId: ThemeId,
 ): Promise<string> {
+  if (hasUnhighlightableLine(code)) return "";
   try {
     const hl = await highlighter();
     const lang = await resolveLanguage(hl, language);
-    return hl.codeToHtml(code, { lang, theme: themeId });
+    return hl.codeToHtml(code, { lang, theme: themeId, ...CARET_TOKENIZE_OPTIONS });
   } catch {
     return "";
   }
@@ -86,8 +88,20 @@ export type ChunkState = GrammarState;
  * whole ~148-line chunk's (~127 ms) rather than multiples of it. Lines of
  * ordinary source sit far below it; what sits above is generated, minified or
  * not really text, and reads no worse uncoloured.
+ *
+ * It is the ONLY bound on that cost, and deliberately so: shiki's own
+ * `tokenizeTimeLimit` is off (`CARET_TOKENIZE_OPTIONS`), because a wall-clock
+ * budget truncates an ordinary line on a busy host and says nothing about it.
+ * A bound on the input holds identically whatever else the machine is doing.
  */
 export const MAX_HIGHLIGHT_LINE_CHARS = 1024;
+
+/** Whether `code` holds a line past `MAX_HIGHLIGHT_LINE_CHARS`, which both entry
+ * points refuse wholesale rather than tokenize — see the `ponytail:` note in
+ * highlightChunk for why the offending line's neighbours go down with it. */
+function hasUnhighlightableLine(code: string): boolean {
+  return code.split("\n").some((line) => line.length > MAX_HIGHLIGHT_LINE_CHARS);
+}
 
 /** One highlighted chunk of a file. */
 export interface HighlightedChunk {
@@ -135,13 +149,18 @@ export async function highlightChunk(
   // rowless-means-plain is the failure contract the caller already implements.
   // Splitting the chunk around the long line would keep its ~147 neighbours
   // coloured, if a file that has such lines ever proves worth the seam.
-  if (code.split("\n").some((l) => l.length > MAX_HIGHLIGHT_LINE_CHARS)) return { rows: [] };
+  if (hasUnhighlightableLine(code)) return { rows: [] };
   try {
     const hl = await highlighter();
     const lang = await resolveLanguage(hl, language);
     // codeToHast tokenizes once and stashes the ending state against the tree it
     // returns, so getLastGrammarState reads it back rather than tokenizing again.
-    const root = hl.codeToHast(code, { lang, theme: themeId, grammarState: state });
+    const root = hl.codeToHast(code, {
+      lang,
+      theme: themeId,
+      grammarState: state,
+      ...CARET_TOKENIZE_OPTIONS,
+    });
     return { rows: chunkRows(root), state: hl.getLastGrammarState(root) };
   } catch {
     return { rows: [] };

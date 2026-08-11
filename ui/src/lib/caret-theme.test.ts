@@ -4,7 +4,7 @@ import { createHighlighterCore } from "shiki/core";
 
 import { CARET_SHIKI_THEMES, type CaretShikiThemeId } from "$lib/caret-shiki.ts";
 import { REGISTERED_SHIKI_THEMES, shikiThemeFor, shikiThemeForPalette } from "$lib/caret-theme.ts";
-import { createCaretRegexEngine } from "$lib/diffview/shiki-bundle.ts";
+import { CARET_TOKENIZE_OPTIONS, createCaretRegexEngine } from "$lib/diffview/shiki-bundle.ts";
 import { type ColorToken, type ShikiThemeId, THEME_IDS, THEMES, type ThemeId } from "$lib/theme.ts";
 import { CARET_COLOR_PLACEMENT, CARET_DARK, CARET_LIGHT } from "$lib/themes/caret.ts";
 import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
@@ -290,7 +290,7 @@ describe("fenced-code fence line", () => {
       engine: createCaretRegexEngine(),
     });
     const md = ["```ts", "code", "```"].join("\n");
-    return shared.codeToTokensBase(md, { lang: "markdown", theme: id });
+    return shared.codeToTokensBase(md, { lang: "markdown", theme: id, ...CARET_TOKENIZE_OPTIONS });
   }
 
   for (const id of THEME_IDS) {
@@ -339,7 +339,13 @@ describe("inline-code file references stay tokenized for fileRefTag", () => {
       langs: [import("shiki/langs/markdown.mjs")],
       engine: createCaretRegexEngine(),
     });
-    return shared.codeToTokensBase(LINE, { lang: "markdown", theme: id })[0] ?? [];
+    return (
+      shared.codeToTokensBase(LINE, {
+        lang: "markdown",
+        theme: id,
+        ...CARET_TOKENIZE_OPTIONS,
+      })[0] ?? []
+    );
   }
 
   for (const id of THEME_IDS) {
@@ -369,7 +375,7 @@ describe("dracula fenced-code block", () => {
     });
     const md = ["```ts", "const x = 1", "```"].join("\n");
     const body = hl
-      .codeToTokensBase(md, { lang: "markdown", theme: "dracula" })[1]
+      .codeToTokensBase(md, { lang: "markdown", theme: "dracula", ...CARET_TOKENIZE_OPTIONS })[1]
       ?.find((t) => t.content === "const");
     expect(body?.color?.toLowerCase()).toBe("#ff79c6");
   });
@@ -402,7 +408,7 @@ describe("caret themes over a real TypeScript sample", () => {
       langs: [import("shiki/langs/tsx.mjs")],
       engine: createCaretRegexEngine(),
     });
-    return shared.codeToTokensBase(SAMPLE, { lang: "tsx", theme: id });
+    return shared.codeToTokensBase(SAMPLE, { lang: "tsx", theme: id, ...CARET_TOKENIZE_OPTIONS });
   }
 
   /** The color of one token, found on the line that holds it — the sample repeats
@@ -535,7 +541,11 @@ describe("caret themes over a diff fence", () => {
       langs: [import("shiki/langs/markdown.mjs"), import("shiki/langs/diff.mjs")],
       engine: createCaretRegexEngine(),
     });
-    return shared.codeToTokensBase(PATCH, { lang: "markdown", theme: id });
+    return shared.codeToTokensBase(PATCH, {
+      lang: "markdown",
+      theme: id,
+      ...CARET_TOKENIZE_OPTIONS,
+    });
   }
 
   for (const [id, p] of CARET_RECORDS) {

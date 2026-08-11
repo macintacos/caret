@@ -225,6 +225,79 @@ the values live.
   like this are exploration and are **never committed**: write the finding down, delete
   the probe.
 
+### The unit lane holds the same rules, and one the e2e side does not
+
+The lane runs under the gate too, and reddened it for weeks (EXC-1056). Everything above
+transfers — a deadline is a budget for the loaded host, and `retries` is never the answer
+— but the lane's own flake arrived from a direction none of it covers.
+
+**Two deadlines, and which one a slow test wants depends on WHY it is slow.** bun's own
+default is 5000ms, a quiet-host number. What breaks first under the gate is not the
+CPU-heavy test but the SPAWN-heavy one: `test/scripts/dev-driver.test.ts` posts several
+plan versions through the real submit → reflow → store path and each reflow spawns rumdl,
+so it measures a few hundred ms standalone and crosses 5s in the gate — better than 10x,
+against a suite average nearer 2.8x. Observed twice independently: in this issue's own
+ten-run validation, and by EXC-1059, whose diff touched `test/e2e/` and one doc and so
+could not reach the unit suite at all — three of its four runs at one unchanged commit red
+on exactly these tests, the fourth green.
+
+- **Contended** — the lane's `--timeout 30000`, in `scripts/tasks/test.ts` and mirrored on
+  `package.json`'s `test`, exactly as `--conditions browser` is (see `bunfig.toml`). This
+  is the gate's budget, and it rides the entry points the gate uses.
+- **Intrinsically slow** — a per-test third argument, and one test has one: the shiki
+  pattern sweep's `60_000`, ~10s of real work. That form reaches EVERY entry point,
+  including a bare `bun test <file>`, which is what the lane flag cannot do — so a test
+  that is genuinely slow needs it, and a test that is merely contended must not use it.
+  Reaching for the literal to paper over contention buries the distinction.
+
+Neither is a retry. The test still runs once and asserts the same thing, so nothing is
+hidden; a budget only stops the suite asserting the machine was idle. Both stay finite so
+a genuine hang is still bounded.
+
+**Do not try to unify them into one number.** `bunfig.toml`'s `[test]` has no `timeout`
+key — bun ignores one silently — and a preload calling `setDefaultTimeout`, which would
+reach all three entry points at once, applies to only some files of a multi-file run on
+bun 1.3. Both were tried and reverted.
+
+**A deadline inside a dependency is the same bug, without the error.** shiki defaults
+`tokenizeTimeLimit` to 500ms and spends it as wall clock inside vscode-textmate's scan
+loop: when it runs out the line is abandoned where it stands and its remainder comes back
+as a single token wearing whatever scope was in force. Nothing throws and nothing is
+logged, so a caller cannot tell a truncated line from a real one — a test finds a token
+missing, and a reviewer on a busy machine gets a line that stops being highlighted
+part-way. That is worse than a timeout, which at least says so.
+
+So caret runs with it off. `CARET_TOKENIZE_OPTIONS`
+(`ui/src/lib/diffview/shiki-bundle.ts`) is spread into every tokenize call, and `0` rather
+than a larger number because any finite wall-clock budget is the same bug at a different
+threshold. What replaces it is a bound on the *input*: `MAX_HIGHLIGHT_LINE_CHARS`
+(`ui/src/lib/diffview/highlight.ts`) refuses the pathological long line the time limit was
+really guarding, and holds identically on an idle host and a saturated one. Gated (§ What
+is gated).
+
+shiki ships an input bound of its own — `tokenizeMaxLineLength`, in the same options bag —
+and caret does **not** use it, which is a decision rather than an oversight. shiki skips
+an over-long line without advancing the grammar state, so a block comment opening on a
+skipped line would silently miscolour every row below it. caret's callers refuse the whole
+chunk instead, which is the failure the surrounding code already contracts for. Reach for
+`tokenizeMaxLineLength` only at a call site with no chunk to fall back to.
+
+**Reproducing it on demand** needs no load at all, which is what made this one findable
+where the e2e flakes were not. The first tokenize in a bun process spends ~800ms
+translating a grammar's patterns through JIT-cold transpiler code, so it blows the 500ms
+budget on its own — filter the suite down to the offending describe and the failure is
+deterministic:
+
+```bash
+bun test --conditions browser ui/src/lib/caret-theme.test.ts \
+  -t "caret themes over a real TypeScript sample"
+```
+
+Tightening the budget instead (`tokenizeTimeLimit: 1`) reproduces the collapse at any load
+and is what `shiki-bundle.test.ts` pins the mechanism with. **A test that passes only
+because an earlier test in the file warmed something is the shape to watch for** — that
+spec passed 90/90 as a whole file and failed 100% of the time alone.
+
 ## Locators
 
 **Query by role and accessible name where the element publishes one that is stable; use a
@@ -340,6 +413,24 @@ it costs the Playwright suite nothing — and fails the build on four of the rul
 | no file under `test/e2e/` named for a unit suffix | § Spec naming — the collision crashes `bun test` |
 | no **value** import of `@playwright/test` under `test/e2e/`, `fixtures.ts` aside | § The harness contract — `test` and `expect` come from `fixtures.ts` |
 | no non-zero `retries` | § Timeouts are budgets for the loaded host |
+
+`test/structure/tokenize-conventions.test.ts` gates the fifth, over `src/` and `ui/src/`
+instead: every shiki tokenize call carries `tokenizeTimeLimit`, and outside a `*.test.ts`
+it carries a literal `0` or the spread (§ The unit lane holds the same rules, and one the
+e2e side does not). A test may starve the tokenizer on purpose — that is what pins the
+mechanism — so the value half applies to production files only, which is a category the
+walk reads off the path rather than a list it appends to. It is a separate suite because
+it walks a different tree, not a different kind of rule; it meets the same bar, needing no
+allowlist and no judgment.
+
+Two surfaces it deliberately does not reach. `.svelte` files are outside the walk (none
+tokenizes today, and its glob is `**/*.ts`). And `@pierre/diffs` keeps its own private
+highlighter: it sets `tokenizeMaxLineLength: 1000` but takes shiki's 500ms default, so the
+plan and source views — the code a reviewer actually reads — still tokenize against the
+wall clock on an ordinary line. Its renderer options expose no `tokenizeTimeLimit` to
+thread, and wrapping the highlighter would strip the only bound standing between a
+pathological line and a frozen main thread. That is a standing finding for upstream, not
+an exception carved here.
 
 Each is decided from the **TypeScript AST**, never from text, and that is what keeps the
 gate **allowlist-free**. A parser sees calls and imports, so `fixtures.ts`'s header
