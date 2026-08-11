@@ -186,10 +186,10 @@
           <Badge variant="outline" class="tally">{inlineCount}</Badge>
         </span>
         <!-- A real list, so assistive tech gets a count and each row's position
-             instead of a flat run of buttons (EXC-1057). Named apart from the
-             scratch list below because both are mounted at once while a comment is
-             being demoted, and each section's own name carries its tally. -->
-        <ul class="row-list" aria-label="Inline comments">
+             instead of a flat run of buttons (EXC-1057). Unnamed on purpose: the
+             enclosing section is already a named region, and a name here would be
+             announced twice and duplicate the label's text a third time. -->
+        <ul class="row-list">
           {#each inlineComments as a (a.id)}
             {@const context = isLineAnnotation(a)
               ? sourceLines(a.startLine, a.endLine, planText)
@@ -289,7 +289,7 @@
         <p class="scratches-note">
           Comments you started but never sent. Save one to include it, or discard it.
         </p>
-        <ul class="row-list" aria-label="Unsent comments">
+        <ul class="row-list">
           {#each scratches as s (s.key)}
             <li class="scratch-row">
               <Collapsible.Root class="scratch-disclosure">
@@ -464,8 +464,8 @@
     gap: 0.4rem;
     margin-bottom: 0.4rem;
   }
-  /* Both row groups are real lists (EXC-1057), so the ul only needs its default
-     marker and inset cleared — the rows keep the spacing they already had. */
+  /* Both row groups are real lists (EXC-1057); the ul carries no spacing of its
+     own, which lives on .inline-row / .scratch-row below. */
   .row-list {
     list-style: none;
     margin: 0;

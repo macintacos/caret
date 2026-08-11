@@ -185,7 +185,7 @@ test("marking an inline comment as a draft demotes it into Unsent and out of the
   // Mark as draft demotes it: it leaves the inline list, appears under Unsent, and
   // with nothing left to include the primary action disables.
   await inlineRows(dialog).getByRole("button", { name: "Mark as draft", exact: true }).click();
-  await expect(dialog.getByRole("list", { name: "Inline comments" })).toHaveCount(0);
+  await expect(dialog.getByRole("region", { name: "Inline comments" })).toHaveCount(0);
   const scratchRow = unsentRows(dialog);
   await expect(scratchRow).toHaveCount(1);
   await expect(scratchRow).toContainText("explain the cold cost");

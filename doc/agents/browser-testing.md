@@ -235,9 +235,7 @@ people — a name that is really fixture data. Each gets a bullet below.
 **A disqualification is sometimes a finding about the app, not about the spec.** Where the
 missing role or name is a real gap for assistive tech, the fix belongs in the component
 and the conversion follows for free — but a test-only diff is the wrong place to make it,
-so the honest move is to note it, leave the class selector, and file it. EXC-1051 did
-exactly that for three of the entries below and EXC-1057 closed them, which is why two of
-them now read the other way round.
+so the honest move is to note it, leave the class selector, and file it.
 
 - **Where no accessible target exists, say so rather than apologising.** The plan surface
   is `<div class="diff-plan" role="presentation">`
@@ -274,15 +272,23 @@ them now read the other way round.
   description via an `aria-describedby` to a `hidden` span (the accname algorithm reads a
   hidden node that a description references directly). Query it through `reviewSwitcher()`
   and assert the count with `toHaveAccessibleDescription`. The same shape fits any chrome
-  control that renders live data inside a button.
+  control that renders live data inside a button — but check where the displaced content
+  lands, because `aria-label` suppresses name-from-content: the switcher's active title is
+  announced by the menu's checked item (a labelled `Icon`, not a decorative one) rather
+  than by the trigger.
+- **A group that is already a named region does not need its list named too.** The Request
+  Changes dialog's two comment groups are each a `<ul>` inside a
+  `<section aria-labelledby>`; naming the list as well announces the same string twice and
+  puts a third copy of it in the markup. Reach the rows through the region instead —
+  `inlineRows` / `unsentRows` in `chrome.ts` do, matching the region's name as a substring
+  so its tally never has to be spelled out.
 - **Never bind to a name that is fixture data.** `RequestChangesDialog`'s `.row-trigger`
   stays a class: its name is name-from-content over the comment text, so a name query
   there hard-codes the fixture. The trap extends to any action queried *inside* such a
   row, because Playwright matches `name` on substring by default — a row-scoped
   `getByRole("button", { name: "Discard" })` also collects a trigger whose comment reads
   "discard this draft". Pass `exact: true`, as `inlineRows` / `unsentRows` in `chrome.ts`
-  document. `.switcher-trigger` was this bullet's example until EXC-1057 gave the trigger
-  an `aria-label` of its own; see the entry above it.
+  document.
 
 Shared locators live in `test/e2e/support/chrome.ts` (the chrome around the plan) and
 `test/e2e/support/source-view.ts` (the plan surface itself) — one idiom, one home.

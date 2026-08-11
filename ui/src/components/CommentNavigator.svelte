@@ -85,11 +85,9 @@
   });
 
   // The rows in filtered order — the roving-focus targets for j/k. A row that can
-  // reveal is a button; one that cannot is a list item. Both carry data-nav-row,
-  // so the keyboard model is the same either way. The attribute — not the
-  // .nav-item styling class — is what this query and the reveal lookup above bind
-  // to, and what the e2e suite's rows() helper reads: a contract production code
-  // depends on, stated in the markup so restyling cannot silently break it.
+  // reveal is a button; one that cannot is a list item. Both carry data-nav-row —
+  // the contract this query, the reveal lookup above, and the e2e rows() helper
+  // all bind to, kept off the styling class so a restyle cannot break j/k.
   function rows(): HTMLElement[] {
     return asideEl ? ([...asideEl.querySelectorAll("[data-nav-row]")] as HTMLElement[]) : [];
   }

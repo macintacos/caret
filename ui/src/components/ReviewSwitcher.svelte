@@ -2,8 +2,6 @@
   // The active-plan switcher. With one review it's an inert label; with several
   // it's a shadcn DropdownMenu (EXC-760) whose trigger carries the active title
   // and a count Badge, and whose items list each plan's title + abbreviated cwd.
-  // The trigger publishes a stable accessible name of its own ("Switch review")
-  // and hands the count to its accessible description (EXC-1057).
   // The hand-rolled listbox + click-away scrim it replaced are gone — bits-ui
   // owns open/close, Escape, outside-click, and focus.
   import { shortCwd } from "$lib/cwd.ts";
@@ -29,12 +27,13 @@
   <DropdownMenu.Root>
     <DropdownMenu.Trigger>
       {#snippet child({ props })}
-        <!-- The trigger names itself. Left to name-from-content it computed as the
-             active plan's title run together with the count Badge ("Widget Cache
-             Refactor 2") — a name that changes on every switch and says nothing
-             about what the control does. The count is not lost: it rides the
-             accessible description through a hidden span, which the accname
-             algorithm still reads because aria-describedby references it directly. -->
+        <!-- The trigger names itself rather than taking its name from its content,
+             which would run the active plan's title together with the count Badge
+             ("Widget Cache Refactor 2") — a name that says nothing about the control
+             and changes on every switch. The count rides the accessible description
+             through a hidden span, which the accname algorithm still reads because
+             aria-describedby references it directly. Which review is active is
+             announced by the checked item when the menu opens, below. -->
         <Button
           {...props}
           variant="secondary"
@@ -61,7 +60,10 @@
             <span class="m-meta mono">{shortCwd(r.cwd)}</span>
           </span>
           {#if r.id === activeId}
-            <span class="opt-check"><Icon name="check" size={14} /></span>
+            <!-- Labelled, not decorative: with the trigger named "Switch review" this
+                 check is the only thing that says which review is active, so it has
+                 to reach the accessibility tree. -->
+            <span class="opt-check"><Icon name="check" size={14} label="Active review" /></span>
           {/if}
         </DropdownMenu.Item>
       {/each}
