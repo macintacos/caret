@@ -8,7 +8,9 @@
 
 import type { Page } from "@playwright/test";
 
+import { commentNavigator, commentTally } from "@test/e2e/support/chrome.ts";
 import { type Daemon, expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
 
 // Three versions whose bodies each carry a unique, greppable line, with a blank
 // line between them so line 3 and line 5 are real anchors in every version.
@@ -102,10 +104,10 @@ async function rowsAtTop(page: Page): Promise<string> {
 /** Enter compare mode and open the comment panel through the status-strip tally
  * — the only way in, now that entering compare mode opens nothing by itself. */
 async function openComparePanel(page: Page) {
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await page.getByRole("button", { name: "Compare versions" }).click();
-  await page.locator("button.comments-toggle").click();
-  const nav = page.locator(".comment-navigator");
+  await commentTally(page).click();
+  const nav = commentNavigator(page);
   await expect(nav).toBeVisible();
   return nav;
 }
@@ -116,10 +118,10 @@ test("entering compare mode leaves the panel closed; the tally opens it", async 
 }) => {
   await seedCommentedVersions(daemon);
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
-  const nav = page.locator(".comment-navigator");
-  const toggle = page.locator("button.comments-toggle");
+  const nav = commentNavigator(page);
+  const toggle = commentTally(page);
 
   // The tally is the entry point in the single-version view…
   await toggle.click();
@@ -135,16 +137,16 @@ test("entering compare mode leaves the panel closed; the tally opens it", async 
 
   await toggle.click();
   await expect(nav).toBeVisible();
-  await expect(nav.locator(".nav-title")).toHaveText("Comments in v2–v3");
+  await expect(nav).toHaveAccessibleName("Comments in v2–v3");
 });
 
 /** Enter compare mode in `layout` with the side-anchor fixture, and open the panel. */
 async function openSideAnchors(page: Page, layout: "Split" | "Unified") {
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await page.getByRole("button", { name: "Compare versions" }).click();
   await page.getByRole("radio", { name: layout }).click();
-  await page.locator("button.comments-toggle").click();
-  const nav = page.locator(".comment-navigator");
+  await commentTally(page).click();
+  const nav = commentNavigator(page);
   await expect(nav).toBeVisible();
   return nav;
 }
@@ -163,13 +165,21 @@ test("resolves a compare comment's line against its own side (unified)", async (
 
   // Both comments are on line 41. On v1 — the before side — that is "alpha body
   // line 20".
-  await nav.locator("button.nav-item").filter({ hasText: "before-side anchor" }).click();
+  await nav
+    .getByRole("listitem")
+    .getByRole("button")
+    .filter({ hasText: "before-side anchor" })
+    .click();
   await expect.poll(() => rowsAtTop(page)).toContain("alpha body line 20");
 
   // On v2 — the after side — the same number is "beta body line 19", two body
   // lines earlier because of v2's extra leading paragraph. Resolving line 41 off
   // the before side would park "alpha body line 20" here instead.
-  await nav.locator("button.nav-item").filter({ hasText: "after-side anchor" }).click();
+  await nav
+    .getByRole("listitem")
+    .getByRole("button")
+    .filter({ hasText: "after-side anchor" })
+    .click();
   await expect.poll(() => rowsAtTop(page)).toContain("beta body line 19");
 });
 
@@ -191,10 +201,14 @@ test("reveals a compare comment past the fold (split), including after a round t
   await page.goto("/");
   const nav = await openSideAnchors(page, "Split");
 
-  const scrollTop = () => page.locator(".diff-plan").evaluate((el) => el.scrollTop);
+  const scrollTop = () => page.locator(PLAN_SURFACE).evaluate((el) => el.scrollTop);
   expect(await scrollTop()).toBe(0);
 
-  await nav.locator("button.nav-item").filter({ hasText: "before-side anchor" }).click();
+  await nav
+    .getByRole("listitem")
+    .getByRole("button")
+    .filter({ hasText: "before-side anchor" })
+    .click();
   await expect.poll(() => rowsAtTop(page)).toContain("alpha body line 20");
   expect(await scrollTop()).toBeGreaterThan(0);
 
@@ -213,7 +227,11 @@ test("reveals a compare comment past the fold (split), including after a round t
   await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "split");
   await expect.poll(() => scrollTop()).toBe(0);
 
-  await nav.locator("button.nav-item").filter({ hasText: "before-side anchor" }).click();
+  await nav
+    .getByRole("listitem")
+    .getByRole("button")
+    .filter({ hasText: "before-side anchor" })
+    .click();
   await expect.poll(() => rowsAtTop(page)).toContain("alpha body line 20");
 });
 
@@ -228,16 +246,18 @@ test("lists every version's comments in the compared range, each badged with its
   // Widen the pair to base v3 / target v1 so the range spans all three versions.
   await page.getByLabel("Target version").click();
   await page.getByRole("menuitemradio", { name: "v1" }).click();
-  await expect(nav.locator(".nav-title")).toHaveText("Comments in v1–v3");
+  await expect(nav).toHaveAccessibleName("Comments in v1–v3");
 
   // Every comment on v1, v2 and v3, ordered by version then by line, each row
   // tagged with the version it was left on.
-  await expect(nav.locator(".nav-item")).toHaveCount(4);
+  await expect(nav.getByRole("listitem")).toHaveCount(4);
   await expect(nav.locator(".nav-version-tag")).toHaveText(["v1", "v2", "v2", "v3"]);
-  await expect(nav.locator(".nav-item").nth(0)).toContainText("alpha needs a rollback path");
-  await expect(nav.locator(".nav-item").nth(1)).toContainText("beta drops the rollback path");
-  await expect(nav.locator(".nav-item").nth(2)).toContainText("beta retry budget looks thin");
-  await expect(nav.locator(".nav-item").nth(3)).toContainText("gamma reinstates the rollback path");
+  await expect(nav.getByRole("listitem").nth(0)).toContainText("alpha needs a rollback path");
+  await expect(nav.getByRole("listitem").nth(1)).toContainText("beta drops the rollback path");
+  await expect(nav.getByRole("listitem").nth(2)).toContainText("beta retry budget looks thin");
+  await expect(nav.getByRole("listitem").nth(3)).toContainText(
+    "gamma reinstates the rollback path",
+  );
 });
 
 test("marks an in-range comment from a version on neither side as not in the diff", async ({
@@ -251,16 +271,18 @@ test("marks an in-range comment from a version on neither side as not in the dif
   // v1 vs v3: v2 is inside the range but rendered on neither side of the diff.
   await page.getByLabel("Target version").click();
   await page.getByRole("menuitemradio", { name: "v1" }).click();
-  await expect(nav.locator(".nav-item")).toHaveCount(4);
+  await expect(nav.getByRole("listitem")).toHaveCount(4);
 
   // The two v2 rows are the only ones that carry the marker, and they are list
   // items rather than buttons — nothing offers a jump that goes nowhere.
-  const stranded = nav.locator(".nav-item").filter({ has: page.locator(".nav-unlinked-tag") });
+  const stranded = nav.getByRole("listitem").filter({ has: page.locator(".nav-unlinked-tag") });
   await expect(stranded).toHaveCount(2);
   await expect(stranded.locator(".nav-version-tag")).toHaveText(["v2", "v2"]);
   await expect(stranded.locator(".nav-unlinked-tag").first()).toHaveText("not in diff");
-  await expect(nav.locator("li.nav-item")).toHaveCount(2);
-  await expect(nav.locator("button.nav-item")).toHaveCount(2);
+  await expect(nav.getByRole("listitem").filter({ hasNot: page.getByRole("button") })).toHaveCount(
+    2,
+  );
+  await expect(nav.getByRole("listitem").getByRole("button")).toHaveCount(2);
 });
 
 test("lists a general comment retained at deny, with no line to jump to", async ({
@@ -280,12 +302,12 @@ test("lists a general comment retained at deny, with no line to jump to", async 
   await page.goto("/");
   const nav = await openComparePanel(page);
 
-  const row = nav.locator(".nav-item").filter({ hasText: general });
+  const row = nav.getByRole("listitem").filter({ hasText: general });
   await expect(row).toHaveCount(1);
   // Unanchored: labelled General in place of a line reference, and inert.
   await expect(row.locator(".nav-item-ref")).toHaveText("General");
   await expect(row.locator(".nav-version-tag")).toHaveText("v1");
-  await expect(nav.locator("button.nav-item")).toHaveCount(0);
+  await expect(nav.getByRole("listitem").getByRole("button")).toHaveCount(0);
   // v1 is the diff's before side, so the row is inert for want of a line — not
   // because its version is missing from the diff.
   await expect(row.locator(".nav-unlinked-tag")).toHaveCount(0);
@@ -298,7 +320,7 @@ test("two versions commenting on the same line list as two rows", async ({ daemo
 
   // v2 and v3 both comment on line 3 of their own text; the range's entries are
   // keyed per version, so neither collapses into the other.
-  const onLine3 = nav.locator(".nav-item").filter({ hasText: "Line 3" });
+  const onLine3 = nav.getByRole("listitem").filter({ hasText: "Line 3" });
   await expect(onLine3).toHaveCount(2);
   await expect(onLine3.locator(".nav-version-tag")).toHaveText(["v2", "v3"]);
   await expect(onLine3.nth(0)).toContainText("beta drops the rollback path");
@@ -311,13 +333,13 @@ test("the panel is dismissable with Escape and with the status-strip tally", asy
 }) => {
   await seedCommentedVersions(daemon);
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
   await page.getByRole("button", { name: "Compare versions" }).click();
 
   // The tally counts the compared range's comments (v2's two plus v3's one).
-  const nav = page.locator(".comment-navigator");
-  const toggle = page.locator("button.comments-toggle");
+  const nav = commentNavigator(page);
+  const toggle = commentTally(page);
   await expect(toggle).toContainText("3");
 
   await toggle.click();
@@ -335,14 +357,16 @@ test("leaving compare mode restores the single-version list", async ({ daemon, p
   await seedCommentedVersions(daemon);
   await page.goto("/");
   const nav = await openComparePanel(page);
-  await expect(nav.locator(".nav-item")).toHaveCount(3);
+  await expect(nav.getByRole("listitem")).toHaveCount(3);
 
   // The panel is the reviewer's own now, so leaving compare mode leaves it up —
   // it just swaps back to the current version's own index: no version badges,
   // and the plain title.
   await page.getByRole("button", { name: "Compare versions" }).click();
-  await expect(nav.locator(".nav-title")).toHaveText("Comments");
-  await expect(nav.locator("button.nav-item")).toHaveCount(1);
-  await expect(nav.locator("button.nav-item")).toContainText("gamma reinstates the rollback path");
+  await expect(nav).toHaveAccessibleName("Comments");
+  await expect(nav.getByRole("listitem").getByRole("button")).toHaveCount(1);
+  await expect(nav.getByRole("listitem").getByRole("button")).toContainText(
+    "gamma reinstates the rollback path",
+  );
   await expect(nav.locator(".nav-version-tag")).toHaveCount(0);
 });

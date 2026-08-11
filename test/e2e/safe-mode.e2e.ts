@@ -9,6 +9,7 @@
 // absorbed by the auto-retrying toBeHidden — no fixed sleeps.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 test("a keystroke right after refocus triggers safe mode, which then releases", async ({
   daemon,
@@ -16,7 +17,7 @@ test("a keystroke right after refocus triggers safe mode, which then releases", 
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // Re-open the grace window, then type inside it.
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));

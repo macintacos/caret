@@ -12,6 +12,7 @@
 // config — is what a fresh origin resolves against.
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 const topbarHints = ".topbar [data-slot='kbd']";
 const keyboardButton = "button[aria-label='Keyboard shortcuts']";
@@ -52,7 +53,7 @@ test("opens the Appearance pane with theme, hints, and the folded-in Diff view s
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   await openSettings(page);
 
@@ -87,7 +88,7 @@ test("opens the Appearance pane with theme, hints, and the folded-in Diff view s
 test("a fresh origin follows the system, in both directions", async ({ daemon, page }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
   // Flipping the OS retints the running app — no reload, no re-pick.
@@ -103,7 +104,7 @@ test("pinning a mode overrides the system and persists across a reload", async (
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   await openSettings(page);
 
@@ -120,7 +121,7 @@ test("pinning a mode overrides the system and persists across a reload", async (
 
   // And the choice survives a reload (browser localStorage, no daemon state).
   await page.reload();
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
 });
 
@@ -130,7 +131,7 @@ test("both theme slots stay visible, and the IN USE marker tracks the live one",
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   await openSettings(page);
 
@@ -159,7 +160,7 @@ test("picking a slot's palette applies it immediately when that slot is live", a
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
   await openSettings(page);
@@ -194,7 +195,7 @@ function rowColors(page: import("@playwright/test").Page, text: string): Promise
 test("picking a vendor palette retints the chrome and the code", async ({ daemon, page }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // The emulated OS is dark, so the dark slot is live: caret dark, amber headings.
   // Computed styles come back in decimal, so the two assertions below spell caret
@@ -240,7 +241,7 @@ test("a pre-mode caret.theme pick migrates to an explicit mode", async ({ daemon
   await page.addInitScript(() => localStorage.setItem("caret.theme", "caret-light"));
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // The stored light pick became mode=light, which holds against the dark OS.
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
@@ -257,7 +258,7 @@ test("hovering a theme option previews its palette beside the menu, without appl
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   // The emulated OS is dark, so the dark slot is live.
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
@@ -312,7 +313,7 @@ test("hovering a theme option previews its palette beside the menu, without appl
 test("keyboard-highlighting a theme option previews it too (EXC-753)", async ({ daemon, page }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   await openSettings(page);
   // This spec's first keypress lands ~120ms after the plan renders, well inside the
@@ -341,7 +342,7 @@ test("reopening the theme menu after a switch keeps the preview beside the menu,
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   await openSettings(page);
 
@@ -381,7 +382,7 @@ test("reopening the theme menu after a switch keeps the preview beside the menu,
 test("toggling shortcut hints applies immediately and persists", async ({ daemon, page }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.locator(topbarHints).first()).toBeVisible();
 
   await openSettings(page);
@@ -394,7 +395,7 @@ test("toggling shortcut hints applies immediately and persists", async ({ daemon
 
   // Persists across a reload.
   await page.reload();
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.locator(keyboardButton)).toBeHidden();
 });
 
@@ -427,7 +428,7 @@ test("changing the diff Layout in Settings reflows an open compare diff live", a
 test("Esc closes the settings modal", async ({ daemon, page }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   await openSettings(page);
   await waitPastSafeModeGrace(page);
@@ -441,7 +442,7 @@ test("only the selected category is filled — an unselected nav row is transpar
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   await openSettings(page);
 
@@ -464,7 +465,7 @@ test("the Notifications pane reflects the permission and its test affordance fir
   await page.addInitScript(initGrantedNotification);
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   await openSettings(page);
 
@@ -495,7 +496,7 @@ test("the search filters the nav and fields across categories; clearing restores
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   await openSettings(page);
   const dialog = page.getByRole("dialog", { name: "Settings" });
@@ -532,7 +533,7 @@ test("`/` focuses the search from anywhere in the modal; once focused, `/` types
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   await openSettings(page);
   await waitPastSafeModeGrace(page);
@@ -555,7 +556,7 @@ test("Esc in the search clears the query and returns focus to the dialog; a seco
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   await openSettings(page);
   await waitPastSafeModeGrace(page);
@@ -587,7 +588,7 @@ test("? stacks the shortcuts help over Settings; / routes to the topmost modal's
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   await openSettings(page);
   await waitPastSafeModeGrace(page);
@@ -628,7 +629,7 @@ test("drives the full journey: edit Appearance live, search across categories, o
   await page.addInitScript(initGrantedNotification);
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   // Fresh origin: caret dark, with the shortcut-hint chrome showing.
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(page.locator(topbarHints).first()).toBeVisible();
@@ -684,7 +685,7 @@ test("while Settings is open, the review shortcuts are inert underneath", async 
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   await openSettings(page);
   await waitPastSafeModeGrace(page);
@@ -707,7 +708,7 @@ test("? over Settings lists only the settings-view shortcuts, not the review key
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   await openSettings(page);
   await waitPastSafeModeGrace(page);

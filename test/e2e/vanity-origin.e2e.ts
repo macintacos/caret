@@ -8,6 +8,7 @@
 // fixture daemon bound on 127.0.0.1.
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 const FEEDBACK = "Please tighten the verification section.";
 
@@ -22,7 +23,7 @@ test("approve under caret.localhost resolves the review", async ({ daemon, page 
   const id = await daemon.seed();
   // The deep-link shape the hook actually opens, under the vanity origin.
   await page.goto(`${vanityOrigin(daemon.url)}/?review=${id}`);
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // Approve opens a confirmation (EXC-791); confirming it issues the mutating
   // POST /api/reviews/:id/resolve, which carries the browser-computed
@@ -39,7 +40,7 @@ test("approve under caret.localhost resolves the review", async ({ daemon, page 
 test("request changes under caret.localhost rejects with feedback", async ({ daemon, page }) => {
   const id = await daemon.seed();
   await page.goto(`${vanityOrigin(daemon.url)}/?review=${id}`);
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });

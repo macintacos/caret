@@ -7,16 +7,17 @@
 // split-button (WIRE_FALLBACK set), i.e. .split-primary / .split-toggle.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 test("wide: secondaries are inline and the overflow menu is hidden", async ({ daemon, page }) => {
   await daemon.seed();
   // Fixture viewport is REFERENCE_WIDTH_PX + 200 = 1600, above every breakpoint.
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
-  await expect(page.locator(".reject")).toBeVisible();
-  await expect(page.locator(".request")).toBeVisible();
-  await expect(page.locator(".overflow-trigger")).toBeHidden();
+  await expect(page.getByRole("button", { name: "Reject" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Request changes" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "More actions" })).toBeHidden();
   // The Approve control reads inline at wide width.
   await expect(page.locator(".approve-slot .split-primary")).toBeVisible();
 });
@@ -35,13 +36,13 @@ test("narrow: secondaries collapse into the overflow menu, count preserved", asy
     ],
   });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   await page.setViewportSize({ width: 500, height: 800 });
 
   // The inline secondaries hide; the overflow trigger takes their place.
-  await expect(page.locator(".reject")).toBeHidden();
-  await expect(page.locator(".request")).toBeHidden();
+  await expect(page.getByRole("button", { name: "Reject" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Request changes" })).toBeHidden();
   const trigger = page.getByRole("button", { name: "More actions" });
   await expect(trigger).toBeVisible();
   // The pending count rides the trigger so it stays visible in the collapsed row.
@@ -63,7 +64,7 @@ test("narrow: the reject action still resolves from the overflow menu", async ({
 }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await page.setViewportSize({ width: 500, height: 800 });
 
   await page.getByRole("button", { name: "More actions" }).click();
@@ -86,7 +87,7 @@ test("the right-hand controls stay on-screen across a width sweep", async ({ dae
     plan: `# ${"caret dev — markdown rendering stress test ".repeat(2)}\n\n## Section\n\nBody.\n`,
   });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   for (const width of [1100, 1000, 900, 800, 720, 640, 560, 500, 480]) {
     await page.setViewportSize({ width, height: 400 });
@@ -104,7 +105,7 @@ test("the right-hand controls stay on-screen across a width sweep", async ({ dae
 test("tight: Approve moves into the overflow menu", async ({ daemon, page }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await page.setViewportSize({ width: 600, height: 800 }); // below --w-tight (640)
 
   // The inline Approve control is gone; only ⋯ + bell + settings remain right.
@@ -131,7 +132,7 @@ test("narrow: bell and settings stay visible while a long title truncates", asyn
     plan: `# ${"Extremely long plan title that would overflow the narrow header ".repeat(3)}\n\n## Section\n\nBody.\n`,
   });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await page.setViewportSize({ width: 500, height: 800 });
 
   // Every right-hand control stays on screen...
@@ -152,7 +153,7 @@ test("the overflow Reject row carries the Shift+R cap (EXC-913)", async ({ daemo
   await daemon.seed();
   await page.setViewportSize({ width: 500, height: 800 });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   await page.getByRole("button", { name: "More actions" }).click();
   const cap = page.getByRole("menuitem", { name: "Reject" }).locator("[data-slot='kbd']");
@@ -170,7 +171,7 @@ test("the overflow Reject glyph is red like its label", async ({ daemon, page })
   await daemon.seed();
   await page.setViewportSize({ width: 500, height: 800 });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   await page.getByRole("button", { name: "More actions" }).click();
   const reject = page.getByRole("menuitem", { name: "Reject" });

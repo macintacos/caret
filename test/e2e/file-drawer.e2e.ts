@@ -11,6 +11,7 @@
 
 import { fileRefCount, makeProject, settleDrawer } from "@test/e2e/support/file-refs.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
 import { MIN_APP_WIDTH_PX, NARROW_WIDTH_PX, TIGHT_WIDTH_PX } from "@ui/src/lib/layout.ts";
 
 // Comfortably inside the narrow regime rather than a pixel off the breakpoint,
@@ -46,7 +47,7 @@ function laneGeometry(page: import("@playwright/test").Page): Promise<{
 /** Open the preview for the first resolved reference in the plan, and wait out
  * the lane's opening wipe so every rect below is measured at its settled size. */
 async function openPreview(page: import("@playwright/test").Page): Promise<void> {
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect.poll(() => fileRefCount(page)).toBeGreaterThan(0);
   await page.locator("[data-file-ref]").first().click();
   await expect(page.locator("[data-file-drawer]")).toBeVisible();
@@ -110,7 +111,7 @@ test("the lane wipes in from the edge it docks to", async ({ daemon, page }) => 
     ] as const) {
       await page.setViewportSize(viewport);
       await page.goto("/");
-      await expect(page.locator(".diff-plan")).toBeVisible();
+      await planSurface(page);
       await expect.poll(() => fileRefCount(page)).toBe(1);
 
       await page.evaluate(() => {
@@ -336,12 +337,12 @@ test("a reference on the plan's last line is still visible once the bottom drawe
     });
     await page.setViewportSize(NARROW);
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect.poll(() => fileRefCount(page)).toBe(1);
 
     // Scroll the plan to its end so the reference is the bottom-most thing on
     // screen — the worst case for a lane opening underneath it.
-    await page.locator(".diff-plan").evaluate((el) => {
+    await page.locator(PLAN_SURFACE).evaluate((el) => {
       el.scrollTop = el.scrollHeight;
     });
     await page.locator("[data-file-ref]").first().click();
@@ -379,7 +380,7 @@ test("clicking a second filename swaps the drawer's contents in place", async ({
     });
     await page.setViewportSize(WIDE);
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     await expect.poll(() => fileRefCount(page)).toBe(2);
 
     await page.locator("[data-file-ref]").first().click();

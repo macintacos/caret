@@ -2,6 +2,7 @@
 // breadcrumbs bar, and body content are all visible.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 test("a seeded plan renders headings, the breadcrumbs bar, and body content", async ({
   daemon,
@@ -10,8 +11,7 @@ test("a seeded plan renders headings, the breadcrumbs bar, and body content", as
   await daemon.seed();
   await page.goto("/");
 
-  const plan = page.locator(".diff-plan");
-  await expect(plan).toBeVisible();
+  const plan = await planSurface(page);
 
   // Heading and body lines show as markdown source (Playwright pierces the
   // library's shadow root for text).

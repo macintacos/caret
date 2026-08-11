@@ -6,7 +6,9 @@
 // doc/agents/browser-testing.md); the queue's auto-dismiss timing is unit-tested
 // deterministically in ui/src/state/alerts.test.ts.
 
+import { alerts } from "@test/e2e/support/chrome.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 // Deep enough that shortCwd abbreviates the display (…/Play/caret) while the copy
 // carries the whole absolute path — so the test proves the two genuinely differ.
@@ -20,7 +22,7 @@ test("clicking the cwd path copies the absolute path and shows a success alert",
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
 
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   const cwd = page.locator(".control-row button.cwd");
   await expect(cwd).toBeVisible();
@@ -35,8 +37,9 @@ test("clicking the cwd path copies the absolute path and shows a success alert",
   await cwd.click();
 
   // A success alert appears bottom-right.
-  const alert = page.locator(".alert-item[data-variant='success']");
+  const alert = alerts(page);
   await expect(alert).toBeVisible();
+  await expect(alert).toHaveAttribute("data-variant", "success");
   await expect(alert).toContainText("Copied path to clipboard");
 
   // The clipboard carries the FULL absolute path, not the abbreviated display.
@@ -49,16 +52,16 @@ test("success alerts stack and a dismiss removes one", async ({ daemon, page }) 
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
 
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   const cwd = page.locator(".control-row button.cwd");
   await cwd.click();
   await cwd.click();
 
   // Two copies in quick succession stack (oldest on top, newer underneath).
-  await expect(page.locator(".alert-item")).toHaveCount(2);
+  await expect(alerts(page)).toHaveCount(2);
 
   // Dismissing the first via its × leaves the other standing.
-  await page.locator(".alert-item").first().locator(".alert-dismiss").click();
-  await expect(page.locator(".alert-item")).toHaveCount(1);
+  await alerts(page).first().getByRole("button", { name: "Dismiss" }).click();
+  await expect(alerts(page)).toHaveCount(1);
 });

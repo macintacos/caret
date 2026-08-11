@@ -3,7 +3,9 @@
 // daemon-side via GET /api/reviews/:id (a deny keeps the review in memory as
 // `rejected` with the decision riding on it), not just by UI disappearance.
 
+import { discardConfirm } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 const FEEDBACK = "Please tighten the verification section.";
 
@@ -13,7 +15,7 @@ test("dialog opens, Escape closes, Cmd/Ctrl+Enter submits a rejection with feedb
 }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
@@ -59,7 +61,7 @@ test("a line-anchored annotation reaches Decision.feedback as a line reference p
   });
 
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   // Open the dialog and submit with no general comment — the seeded annotation
@@ -99,7 +101,7 @@ test("a scratch's Save shows without expanding the row and graduates it into the
   });
 
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
@@ -136,7 +138,7 @@ test("discarding an unsent comment asks to confirm before dropping it (EXC-762)"
   });
 
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
@@ -149,10 +151,10 @@ test("discarding an unsent comment asks to confirm before dropping it (EXC-762)"
   // bubble portals to the body (viewport-aware, EXC-762), so it's a page locator,
   // not a descendant of the dialog element.
   await row.locator(".discard").click();
-  await expect(page.locator(".confirm-popover")).toBeVisible();
+  await expect(discardConfirm(page)).toBeVisible();
   await expect(row).toHaveCount(1);
   // Confirming completes the drop.
-  await page.locator(".confirm-popover").getByRole("button", { name: "Discard" }).click();
+  await discardConfirm(page).getByRole("button", { name: "Discard" }).click();
   await expect(dialog.locator(".scratch-row")).toHaveCount(0);
 });
 
@@ -166,7 +168,7 @@ test("marking an inline comment as a draft demotes it into Unsent and out of the
   });
 
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
@@ -199,7 +201,7 @@ test("discarding a committed inline comment drops it and leaves the dialog open 
   });
 
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
@@ -209,13 +211,13 @@ test("discarding a committed inline comment drops it and leaves the dialog open 
 
   // Discard opens the confirmation; nothing is dropped yet.
   await dialog.locator(".inline-row .discard").click();
-  await expect(page.locator(".confirm-popover")).toBeVisible();
+  await expect(discardConfirm(page)).toBeVisible();
   await expect(dialog.locator(".inline-row")).toHaveCount(1);
 
   // Confirming drops the comment AND the dialog must stay open — the confirm click
   // (on a bubble portaled to document.body, outside the dialog content) must reach
   // its button, not fall through to the modal's outside-dismiss (EXC-765).
-  await page.locator(".confirm-popover").getByRole("button", { name: "Discard" }).click();
+  await discardConfirm(page).getByRole("button", { name: "Discard" }).click();
   await expect(dialog).toBeVisible();
   await expect(dialog.locator(".inline-row")).toHaveCount(0);
 });
@@ -230,7 +232,7 @@ test("an inline comment reveals a nested Context with the anchored source lines 
   });
 
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });

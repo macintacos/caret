@@ -6,6 +6,7 @@
 // references.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 // Same-origin only: the index links external Google Fonts (a separate CDN
 // origin), whose reachability is not what this spec proves and would make the
@@ -58,8 +59,7 @@ test("daemon serves the hashed-asset build with zero failed same-origin requests
 
   // The plan painting confirms the entry bundle executed; web-first assertion
   // absorbs hydration timing.
-  const plan = page.locator(".diff-plan");
-  await expect(plan).toBeVisible();
+  const plan = await planSurface(page);
   await expect(plan.getByText("Widget Cache Refactor")).toBeVisible();
 
   // A hashed JS bundle and a hashed CSS file were served from /assets/ — the
@@ -118,7 +118,7 @@ test("a code-split shiki grammar chunk is served over the wire and applies", asy
   // per-token light variable inside the library's shadow root is the web-first
   // signal that the grammar chunk loaded and applied — it absorbs the async
   // import + init without a fixed sleep.
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect
     .poll(() =>
       page.evaluate(() => {

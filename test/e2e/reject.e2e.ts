@@ -6,6 +6,7 @@
 // riding on it), not just by UI disappearance.
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 test("rejecting resolves the review as a deny carrying the wait message", async ({
   daemon,
@@ -13,7 +14,7 @@ test("rejecting resolves the review as a deny carrying the wait message", async 
 }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // Reject always confirms (EXC-685), even with nothing queued: the top-bar
   // button opens a plain "are you sure?" dialog — no "won't be sent" warning.
@@ -47,7 +48,7 @@ test("a pending inline comment guards reject; 'Reject anyway' sends only the wai
   });
 
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   // Reject now opens the confirmation naming the count — it does NOT resolve.
@@ -76,7 +77,7 @@ test("Escape dismisses the reject guard and leaves the review pending", async ({
   });
 
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   const guard = page.getByRole("alertdialog");
@@ -95,7 +96,7 @@ test("a backdrop click does NOT dismiss the reject guard (deliberate verdict, EX
 }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   await page.getByRole("button", { name: "Reject", exact: true }).click();
   const guard = page.getByRole("alertdialog");

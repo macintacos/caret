@@ -11,7 +11,7 @@
 import type { Page } from "@playwright/test";
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
-import { jumpToHeading } from "@test/e2e/support/source-view.ts";
+import { jumpToHeading, PLAN_SURFACE } from "@test/e2e/support/source-view.ts";
 
 // Each section must be taller than the viewport, so scrolling to a later one
 // genuinely changes which heading is being read rather than leaving the whole plan
@@ -81,7 +81,7 @@ const QUERY = "input[aria-label='Filter headings']";
 
 /** Where the plan is parked. Several specs below assert that walking the menus
  * moves nothing until the reviewer commits to a heading. */
-const scrollTop = (page: Page) => page.locator(".diff-plan").evaluate((el) => el.scrollTop);
+const scrollTop = (page: Page) => page.locator(PLAN_SURFACE).evaluate((el) => el.scrollTop);
 
 /** The plan's RESTING scroll position. A jump scrolls smoothly, so a spec that
  * goes on to assert "nothing moved" has to sample a position that has stopped
@@ -226,7 +226,7 @@ test("a picked heading takes the line cursor with it, scrolling to one does not"
   await waitPastSafeModeGrace(page);
 
   const cursor = page.locator(".diffview [data-content] [data-line][data-caret-cursor]");
-  await page.locator(".diff-plan").evaluate((el) => el.scrollBy(0, 2000));
+  await page.locator(PLAN_SURFACE).evaluate((el) => el.scrollBy(0, 2000));
   // The trail deepened, so the scroll really did move the reading position — and
   // still no cursor exists.
   await expect.poll(() => page.locator(CRUMB).count()).toBeGreaterThan(1);
@@ -632,7 +632,7 @@ test("the bar's / never reaches the plan's own search, and gives it back on clos
   await waitPastSafeModeGrace(page);
 
   const menu = page.locator(MENU);
-  const search = page.locator(".plan-search");
+  const search = page.getByRole("search");
   await page.keyboard.press("b");
   await page.keyboard.press("/");
   await expect(menu.locator(QUERY)).toBeFocused();

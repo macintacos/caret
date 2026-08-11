@@ -12,7 +12,9 @@
 
 import type { Page } from "@playwright/test";
 
+import { commentNavigator, commentTally, rows } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 // The focused plan-cursor marker (SourceView tags the focused row data-caret-cursor;
 // Playwright's CSS engine pierces the library's open shadow root).
@@ -33,12 +35,12 @@ test("Shift+C summons the navigator, focuses the list, and advertises its shortc
   const id = await daemon.seed();
   await daemon.putDraft(id, { annotations: ANNOTATIONS });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
   await waitPastSafeModeGrace(page);
 
-  const nav = page.locator(".comment-navigator");
-  const toggle = page.locator("button.comments-toggle");
+  const nav = commentNavigator(page);
+  const toggle = commentTally(page);
   await expect(toggle).toHaveAttribute("aria-keyshortcuts", "Shift+C");
   await expect(nav).toBeHidden();
 
@@ -46,7 +48,7 @@ test("Shift+C summons the navigator, focuses the list, and advertises its shortc
   await page.keyboard.press("C");
   await expect(nav).toBeVisible();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
-  await expect(nav.locator(".nav-item").first()).toBeFocused();
+  await expect(rows(nav).first()).toBeFocused();
 
   // Space reveals the focused comment (native button activation, like Enter) and
   // keeps the panel open.
@@ -69,12 +71,12 @@ test("j/k walk the rows; Enter reveals without dismissing; / drops into search",
   const id = await daemon.seed();
   await daemon.putDraft(id, { annotations: ANNOTATIONS });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
   await waitPastSafeModeGrace(page);
 
-  const nav = page.locator(".comment-navigator");
-  const items = nav.locator(".nav-item");
+  const nav = commentNavigator(page);
+  const items = rows(nav);
 
   await page.keyboard.press("C");
   await expect(items.first()).toBeFocused();
@@ -87,7 +89,7 @@ test("j/k walk the rows; Enter reveals without dismissing; / drops into search",
   await page.keyboard.press("Enter");
   await expect(page.locator('[data-annotation-card="ann-2"]')).toHaveClass(/focused/);
   await expect(nav).toBeVisible();
-  await expect(nav.locator(".nav-item.active")).toContainText("verify the sidecar replay");
+  await expect(nav.locator('[aria-current="true"]')).toContainText("verify the sidecar replay");
 
   // "/" jumps into the search field; filtering narrows the list; Enter hands
   // focus back to the (filtered) list so j/k resume.
@@ -108,12 +110,12 @@ test("the navigator captures j/k, so the plan cursor stays put while it holds fo
   const id = await daemon.seed();
   await daemon.putDraft(id, { annotations: ANNOTATIONS });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
   await waitPastSafeModeGrace(page);
 
-  const nav = page.locator(".comment-navigator");
-  const items = nav.locator(".nav-item");
+  const nav = commentNavigator(page);
+  const items = rows(nav);
   await expect(cursor(page)).toHaveCount(0);
 
   // Open the navigator and walk it with j — the plan must NOT gain a cursor.

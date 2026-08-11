@@ -7,6 +7,7 @@
 // are kept in sync deliberately.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 async function openAdvanced(page: import("@playwright/test").Page) {
   await page.getByRole("button", { name: "Settings" }).click();
@@ -19,7 +20,7 @@ async function openAdvanced(page: import("@playwright/test").Page) {
 test("renders the diagnostics blocks and copies one to the clipboard", async ({ daemon, page }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   await openAdvanced(page);
   const pane = page.locator("[data-advanced-pane]");
@@ -56,7 +57,7 @@ test("degrades daemon/system/config per-block when diagnostics fails; version su
   // Fail only the diagnostics probe — health (VERSION) is untouched.
   await page.route("**/api/diagnostics", (route) => route.abort());
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   await openAdvanced(page);
   const pane = page.locator("[data-advanced-pane]");

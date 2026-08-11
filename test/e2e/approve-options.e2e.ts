@@ -7,11 +7,12 @@
 // WIRE_FALLBACK set (Approve / Approve & accept edits / Approve & auto mode).
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 test("the options menu approves the review in a chosen variant", async ({ daemon, page }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // Open the split-button's variant menu — both non-default variants are listed.
   await page.getByRole("button", { name: "Approve options" }).click();
@@ -32,7 +33,7 @@ test("the options menu approves the review in a chosen variant", async ({ daemon
 test("Escape closes the options menu and leaves the review pending", async ({ daemon, page }) => {
   const id = await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   const item = page.getByRole("menuitem", { name: "Approve & auto mode" });
   await page.getByRole("button", { name: "Approve options" }).click();

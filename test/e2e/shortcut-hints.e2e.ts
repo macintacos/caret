@@ -7,12 +7,13 @@
 // reset is unit-covered (ui/src/lib/prefs.test.ts: SHORTCUT_HINTS_KEY is a
 // KNOWN_PREF_KEY that clearKnownPrefs removes), like the theme pref.
 
+import { commentTally } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 const keyboardButton = "button[aria-label='Keyboard shortcuts']";
 const topbarHints = ".topbar [data-slot='kbd']";
 // The ⇧C cap the status-strip comment tally advertises (EXC-792).
-const tallyKey = ".comments-toggle [data-slot='kbd']";
 
 // A short multi-line plan so the cursor can move and enter V-mode.
 const PLAN = ["# Alpha", "Alpha one.", "Alpha two.", "Alpha three.", ""].join("\n\n");
@@ -23,13 +24,13 @@ test("the Settings toggle hides the shortcut affordances live and persists", asy
 }) => {
   await daemon.seed();
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // Default on: the keyboard button, the TopBar key-cap hints, and the comment
   // tally's ⇧C cap are all shown.
   await expect(page.locator(keyboardButton)).toBeVisible();
   await expect(page.locator(topbarHints).first()).toBeVisible();
-  await expect(page.locator(tallyKey).first()).toBeVisible();
+  await expect(commentTally(page).locator("[data-slot='kbd']").first()).toBeVisible();
 
   // Open Settings; the switch reads on.
   await page.getByRole("button", { name: "Settings" }).click();
@@ -44,13 +45,13 @@ test("the Settings toggle hides the shortcut affordances live and persists", asy
   await expect(page.getByText("Shortcut hints updated")).toBeVisible();
   await expect(page.locator(keyboardButton)).toBeHidden();
   await expect(page.locator(topbarHints)).toHaveCount(0);
-  await expect(page.locator(tallyKey)).toHaveCount(0);
+  await expect(commentTally(page).locator("[data-slot='kbd']")).toHaveCount(0);
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
 
   // The choice persists across a reload (browser localStorage), so the affordances
   // stay hidden with no daemon state.
   await page.reload();
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.locator(keyboardButton)).toBeHidden();
 
   // Hiding the hint chrome must not strand the docs: ? still opens the help modal.
@@ -65,7 +66,7 @@ test("with hints off, V-mode still selects lines but the hint chip stays hidden"
 }) => {
   await daemon.seed({ plan: PLAN });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
 
   // Turn shortcut hints off (applies at once), then Esc to close so keystrokes reach

@@ -13,6 +13,7 @@
 import type { Page } from "@playwright/test";
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 // Tall enough that G and the half-page jump actually scroll, with three headings
 // so ]]/[[ have distinct targets.
@@ -73,7 +74,7 @@ async function readCursorLine(page: Page, notLine = -1): Promise<number> {
 }
 
 async function loadPlan(page: Page): Promise<void> {
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   // The rows paint asynchronously; wait for one before driving motion so the
   // cursor lands on a real row (and topVisibleLine has something to seed from).
   await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();

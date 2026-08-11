@@ -7,6 +7,7 @@
 // row; both are covered at the end of this file.
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 // Three versions whose bodies each carry a unique, greppable line so a diff
 // between a chosen pair is verifiable by visible text.
@@ -17,7 +18,7 @@ const V3 = "# Plan\n\ngamma line three\n";
 test("the compare control is disabled for a single-version review", async ({ daemon, page }) => {
   await daemon.seed({ plan: V1 });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   // EXC-664: the picker is always present; with nothing to compare its toggle is
   // disabled (greyed out) rather than hidden.
   await expect(page.locator(".compare-picker")).toBeVisible();
@@ -32,7 +33,7 @@ test("the compare control is disabled for a single-version review", async ({ dae
 test("entering compare mode diffs a chosen non-default pair", async ({ daemon, page }) => {
   await daemon.seedVersions(3, [V1, V2, V3]);
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
 
   // The picker is available; compare mode is off by default (single-version
   // view), so the body shows the current version.
@@ -81,8 +82,7 @@ test("toggling layout preserves the diff scroll position", async ({ daemon, page
   await page.goto("/");
   await page.getByRole("button", { name: "Compare versions" }).click();
 
-  const view = page.locator(".diff-plan");
-  await expect(view).toBeVisible();
+  const view = await planSurface(page);
   await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "split");
 
   // Scroll the diff down and let the offset settle.
@@ -110,8 +110,7 @@ test("the compare header stays pinned to the top and reads the version pair", as
   await page.goto("/");
   await page.getByRole("button", { name: "Compare versions" }).click();
 
-  const view = page.locator(".diff-plan");
-  await expect(view).toBeVisible();
+  const view = await planSurface(page);
   // The header reads the default pair: target=v1 on the before side (the rename
   // "from"), base=v2 as the title — surfacing what is compared, not a filename.
   const header = page.locator(".diffview [data-diffs-header]").first();
@@ -469,7 +468,7 @@ for (const [themeId, scheme] of [
     await page.addInitScript((s) => localStorage.setItem("caret.theme.mode", s), scheme);
     await daemon.seedVersions(3, [V1, V2, V3]);
     await page.goto("/");
-    await expect(page.locator(".diff-plan")).toBeVisible();
+    await planSurface(page);
     // The seeded choice actually took effect. Without this the colour assertion
     // below could silently be checking the default theme twice.
     await expect(page.locator("html")).toHaveAttribute("data-theme", scheme);

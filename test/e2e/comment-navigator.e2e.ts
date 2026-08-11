@@ -4,7 +4,9 @@
 // scratches show as distinct "draft" rows. Clicking any row scrolls the plan to it
 // (and focuses/highlights a committed comment's card). Escape dismisses the panel.
 
+import { commentNavigator, commentTally } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 test("opens from the strip, filters + underlines by text, and reveals comments and drafts", async ({
   daemon,
@@ -21,19 +23,19 @@ test("opens from the strip, filters + underlines by text, and reveals comments a
     composerScratches: [{ startLine: 20, endLine: 20, text: "an unsent thought to finish later" }],
   });
   await page.goto("/");
-  await expect(page.locator(".diff-plan")).toBeVisible();
+  await planSurface(page);
   await waitPastSafeModeGrace(page);
 
   // The tally counts comments + drafts and toggles the navigator.
-  const toggle = page.locator("button.comments-toggle");
+  const toggle = commentTally(page);
   await expect(toggle).toContainText("3");
-  const nav = page.locator(".comment-navigator");
+  const nav = commentNavigator(page);
   await expect(nav).toBeHidden();
   await toggle.click();
   await expect(nav).toBeVisible();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
 
-  const items = nav.locator(".nav-item");
+  const items = nav.getByRole("listitem");
   await expect(items).toHaveCount(3);
 
   // The unsent scratch is a distinct draft row (tag + text).
@@ -51,14 +53,14 @@ test("opens from the strip, filters + underlines by text, and reveals comments a
   await expect(items.first()).toContainText("verify the sidecar replay");
 
   // Clicking a committed comment reveals it — the source card focuses (highlights).
-  await items.first().click();
+  await items.first().getByRole("button").click();
   await expect(page.locator('[data-annotation-card="ann-2"]')).toHaveClass(/focused/);
-  await expect(nav.locator(".nav-item.active")).toContainText("verify the sidecar replay");
+  await expect(nav.locator('[aria-current="true"]')).toContainText("verify the sidecar replay");
 
   // A draft reveals the same way (the row goes active); clear the search to see it.
   await search.fill("");
   await nav.locator(".nav-item.draft").click();
-  await expect(nav.locator(".nav-item.active.draft")).toContainText("an unsent thought");
+  await expect(nav.locator('[aria-current="true"].draft')).toContainText("an unsent thought");
 
   // Escape dismisses the panel.
   await page.keyboard.press("Escape");
