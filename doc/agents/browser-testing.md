@@ -39,7 +39,7 @@ body:
   through `revealGutterPlus` (`test/e2e/support/source-view.ts:61`), which does
   `getBoundingClientRect()` and then `page.mouse.move()`. Inline the helper before
   concluding a spec is pure logic.
-- **Browser dependence declared in the config.** `playwright.config.ts:70` emulates
+- **Browser dependence declared in the config.** `playwright.config.ts:77` emulates
   `colorScheme: "dark"`, so a spec asserting what a fresh origin paints is doing media
   emulation with nothing in its body that says so. Read the config's `use` block too.
 
@@ -82,14 +82,14 @@ inside a spec.
   those deltas — speculative abstraction for one extra call site — so the parallel boot is
   documented current-state in `daemon-entry.ts`'s header rather than abstracted away
   (EXC-547).
-- **A spec takes `test` and `expect` from the fixture, never from `@playwright/test`.**
-  Importing them from `test/e2e/support/fixtures.ts` is what binds a spec to the isolated
-  daemon; importing Playwright's own `test` is how one ends up standing a daemon up by
-  hand. Types are a different matter — `import type { Page, Locator }` is erased, and is
-  what every spec already does. The rule is about specs: the harness modules under
-  `test/e2e/support/` are where Playwright's own exports are legitimately reached, which
-  is where `fixtures.ts` extends `test as base` and re-exports `expect`. Gated for specs
-  (§ What is gated).
+- **`test` and `expect` come from the fixture, never from `@playwright/test`.** Importing
+  them from `test/e2e/support/fixtures.ts` is what binds a spec to the isolated daemon;
+  importing Playwright's own `test` is how one ends up standing a daemon up by hand. Types
+  are a different matter — `import type { Page, Locator }` is erased, and is what every
+  spec already does. **`fixtures.ts` is the single module under `test/e2e/` that reaches
+  Playwright's own exports** — it extends `test as base` and re-exports `expect`, and
+  every other module in the tree, harness modules included, takes them from it (EXC-1058;
+  `source-view.ts` was the last exception). Gated across the whole tree (§ What is gated).
 - **Seed through the public API.** Reviews are created by `POST /api/reviews`, the same
   surface a real hook uses — never by reaching into the store directly.
 - **No external daemon, no dev driver.** A spec must not reuse a running daemon, depend on
@@ -152,6 +152,16 @@ whichever deadline is left — usually the test's — so a starved step quietly 
 thing and the run dies on a timeout naming the test rather than the step inside it.
 `expect.timeout` does **not** reach `toPass`, which is why the config sets it separately.
 
+**One of the budgets is not one of Playwright's own knobs.** `bootTimeoutMs` bounds a
+test's daemon coming up — the stdout port handshake `test/e2e/support/fixtures.ts` waits
+on, then the `/health` poll after it at 50ms intervals — and Playwright ships no built-in
+option that governs a spawned child process. It reaches the config as a **test option**
+instead: the fixture declares it `[15_000, { option: true }]`, and `defineConfig`'s `use`
+block sets the value that binds (EXC-1058). It was a module constant only `fixtures.ts`
+could see, which left the one deadline a genuinely slow host hits *first* as the one
+deadline nobody could tune. Re-derive it like the others: it is a process spawn plus an
+HTTP handshake, so it moves with host load and with nothing in the app.
+
 Two rules follow, and both are about direction rather than magnitude:
 
 - **A per-call `{ timeout: … }` that *raises* a budget above the config is the smell** —
@@ -176,7 +186,7 @@ the tuning target. They predate the rule; a sixth needs an argument of the same 
 deadline.** The suite writes
 `await page.waitForFunction((t) => performance.now() > t + N, t0)` in eleven places and
 they are not all the same thing. `waitPastSafeModeGrace`
-(`test/e2e/support/fixtures.ts:320`) is an honest wait: `ui/src/lib/safeMode.ts` arms a
+(`test/e2e/support/fixtures.ts:336`) is an honest wait: `ui/src/lib/safeMode.ts` arms a
 300ms grace window at mount, and the helper captures `t0` *after* mount is asserted then
 waits to `t0 + 350` on the same `performance.now()` clock the guard reads — so it cannot
 race a slow hydrate, and the window's expiry has no DOM signal to poll. The other ten are
@@ -184,7 +194,7 @@ sleeps wearing that costume: "give the pointer pipeline a beat, then assert noth
 appeared", where the number names nothing in the app. **The discriminator is whether code
 in `ui/` holds a deadline on that clock at that number.** If it does, the wait is honest.
 If it does not, you have written `page.waitForTimeout` with extra steps — reach for
-`waitForTwoPollTicks` (`fixtures.ts:338`) or a `page.waitForResponse` on the event that
+`waitForTwoPollTicks` (`fixtures.ts:354`) or a `page.waitForResponse` on the event that
 must not happen, both of which say what they are waiting for. The ten are a standing
 finding, not a licence to add an eleventh.
 
@@ -259,7 +269,7 @@ it costs the Playwright suite nothing — and fails the build on four of the rul
 | --- | --- |
 | no `waitForTimeout` call under `test/e2e/` | § Timing discipline |
 | no file under `test/e2e/` named for a unit suffix | § Spec naming — the collision crashes `bun test` |
-| no **value** import of `@playwright/test` in a spec | § The harness contract — `test` and `expect` come from `fixtures.ts` |
+| no **value** import of `@playwright/test` under `test/e2e/`, `fixtures.ts` aside | § The harness contract — `test` and `expect` come from `fixtures.ts` |
 | no non-zero `retries` | § Timeouts are budgets for the loaded host |
 
 Each is decided from the **TypeScript AST**, never from text, and that is what keeps the
@@ -272,6 +282,14 @@ only inside the options object Playwright reads it from (`defineConfig`,
 `test.describe.configure`, or a config's default export) rather than anywhere the word
 appears — which is what stops an unrelated `{ retries: 3 }` in a `page.evaluate` payload
 from becoming the first exception.
+
+**Naming `fixtures.ts` in the import rule is not that first exception.** The rule *is*
+"Playwright's values enter the tree at exactly one module", so the module has to be named
+for the rule to say anything at all — the same way `playwright.config.ts` is named because
+it is where `defineConfig` is legitimately called. An allowlist entry excuses a file from
+a rule that still applies to it; this one states where the rule's boundary sits, and
+moving a value import to a different harness module reds the gate exactly as it should
+(EXC-1058).
 
 **The bar for gating a rule is that it needs no allowlist**, and that bar sorts the rules
 cleanly. An allowlist entry excusing a place the *detector* is wrong is a detector defect
