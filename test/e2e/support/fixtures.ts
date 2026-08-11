@@ -9,9 +9,9 @@
 // spawned with `bun` explicitly.
 //
 // Boot is not the whole cost a test pays for its daemon: the first seed() adds
-// ~11ms on top, and it also acquires rumdl to format its plan, which is why
-// pinnedRumdl() below hands the daemon a pre-resolved binary rather than letting
-// it download one (EXC-1053).
+// ~11ms on top, and that figure holds only because pinnedRumdl() below hands the
+// daemon a pre-resolved binary rather than letting it acquire rumdl to format
+// its plan (EXC-1053).
 
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -75,8 +75,14 @@ export interface Daemon {
  * other config.
  */
 export interface E2EOptions {
-  /** Budget for a test's daemon to come up: the stdout port handshake, then the
-   * `/health` poll that follows it at 50ms intervals. */
+  /**
+   * The daemon-boot budget, spent once per phase rather than across both: the
+   * stdout port handshake takes it as a real deadline, then the `/health` poll
+   * spends it again as `bootTimeoutMs / 50` probes at 50ms. The poll is an
+   * attempt count, not a clock — `httpHealth` carries its own 500ms abort, so
+   * against a daemon that listens but never answers it runs well past this
+   * number and Playwright's per-test `timeout` is what fires.
+   */
   bootTimeoutMs: number;
 }
 
@@ -222,8 +228,13 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
     try {
       const port = await awaitPortLine(child, stderr, bootTimeoutMs);
       const url = `http://127.0.0.1:${port}`;
-      // The same budget again, spent at 50ms intervals; node-runner sleep.
-      await waitForHealth(url, { attempts: bootTimeoutMs / 50, intervalMs: 50, sleep });
+      // The same budget again, spent as probes rather than as a deadline (see
+      // E2EOptions); node-runner sleep.
+      await waitForHealth(url, {
+        attempts: Math.ceil(bootTimeoutMs / 50),
+        intervalMs: 50,
+        sleep,
+      });
 
       await use({
         url,

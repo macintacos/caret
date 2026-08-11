@@ -45,10 +45,20 @@ const REPO_ROOT = join(import.meta.dir, "..", "..");
 
 const E2E_DIR = "test/e2e";
 const CONFIG = "playwright.config.ts";
-// The one module under E2E_DIR that reaches Playwright's own exports — see the
-// import rule in `offences` below.
 const FIXTURES = `${E2E_DIR}/support/fixtures.ts`;
 const PLAYWRIGHT = "@playwright/test";
+
+/**
+ * The two scanned modules that construct Playwright's own runner: the config
+ * calls `defineConfig`, and `fixtures.ts` extends `test as base` and re-exports
+ * `expect`.
+ *
+ * Not an allowlist — this set *is* the import rule's subject. The rule says
+ * Playwright's values enter the tree at exactly one module, which cannot be
+ * stated without naming that module; an allowlist entry would instead excuse a
+ * file from a rule that still applies to it.
+ */
+const PLAYWRIGHT_BOUNDARY = new Set([CONFIG, FIXTURES]);
 
 // Nothing below reads `.parent`, so the parse skips building those links.
 const NO_PARENT_NODES = false;
@@ -188,7 +198,7 @@ function offences(source: string, path: string): string[] {
       }
     }
 
-    if (!isConfig && path !== FIXTURES && importsPlaywrightValue(node)) {
+    if (!PLAYWRIGHT_BOUNDARY.has(path) && importsPlaywrightValue(node)) {
       found.push(`${lineOf(sf, node)}: ${PLAYWRIGHT} value import`);
     }
 

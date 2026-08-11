@@ -39,7 +39,7 @@ body:
   through `revealGutterPlus` (`test/e2e/support/source-view.ts:61`), which does
   `getBoundingClientRect()` and then `page.mouse.move()`. Inline the helper before
   concluding a spec is pure logic.
-- **Browser dependence declared in the config.** `playwright.config.ts:77` emulates
+- **Browser dependence declared in the config.** `playwright.config.ts:78` emulates
   `colorScheme: "dark"`, so a spec asserting what a fresh origin paints is doing media
   emulation with nothing in its body that says so. Read the config's `use` block too.
 
@@ -88,8 +88,8 @@ inside a spec.
   are a different matter — `import type { Page, Locator }` is erased, and is what every
   spec already does. **`fixtures.ts` is the single module under `test/e2e/` that reaches
   Playwright's own exports** — it extends `test as base` and re-exports `expect`, and
-  every other module in the tree, harness modules included, takes them from it (EXC-1058;
-  `source-view.ts` was the last exception). Gated across the whole tree (§ What is gated).
+  every other module in the tree, harness modules included, takes them from it (EXC-1058).
+  Gated across the whole tree (§ What is gated).
 - **Seed through the public API.** Reviews are created by `POST /api/reviews`, the same
   surface a real hook uses — never by reaching into the store directly.
 - **No external daemon, no dev driver.** A spec must not reuse a running daemon, depend on
@@ -152,15 +152,19 @@ whichever deadline is left — usually the test's — so a starved step quietly 
 thing and the run dies on a timeout naming the test rather than the step inside it.
 `expect.timeout` does **not** reach `toPass`, which is why the config sets it separately.
 
-**One of the budgets is not one of Playwright's own knobs.** `bootTimeoutMs` bounds a
-test's daemon coming up — the stdout port handshake `test/e2e/support/fixtures.ts` waits
-on, then the `/health` poll after it at 50ms intervals — and Playwright ships no built-in
-option that governs a spawned child process. It reaches the config as a **test option**
-instead: the fixture declares it `[15_000, { option: true }]`, and `defineConfig`'s `use`
+**One of the budgets is not one of Playwright's own knobs.** `bootTimeoutMs` sizes a
+test's daemon coming up, and Playwright ships no built-in option that governs a spawned
+child process — so it reaches the config as a **test option** instead: the fixture
+declares it with the `[default, { option: true }]` tuple form, and `defineConfig`'s `use`
 block sets the value that binds (EXC-1058). It was a module constant only `fixtures.ts`
 could see, which left the one deadline a genuinely slow host hits *first* as the one
-deadline nobody could tune. Re-derive it like the others: it is a process spawn plus an
-HTTP handshake, so it moves with host load and with nothing in the app.
+deadline nobody could tune. Read it as one number spent twice rather than as a total: the
+stdout port handshake takes it as a real deadline, then the `/health` poll spends it again
+as `bootTimeoutMs / 50` probes. That second half is an **attempt count, not a clock** —
+`httpHealth` carries its own 500ms abort, so against a daemon that listens but never
+answers the poll runs well past the number and the per-test budget is what fires.
+Re-derive it like the others: it is a process spawn plus an HTTP handshake, so it moves
+with host load and with nothing in the app.
 
 Two rules follow, and both are about direction rather than magnitude:
 
@@ -186,7 +190,7 @@ the tuning target. They predate the rule; a sixth needs an argument of the same 
 deadline.** The suite writes
 `await page.waitForFunction((t) => performance.now() > t + N, t0)` in eleven places and
 they are not all the same thing. `waitPastSafeModeGrace`
-(`test/e2e/support/fixtures.ts:336`) is an honest wait: `ui/src/lib/safeMode.ts` arms a
+(`test/e2e/support/fixtures.ts:347`) is an honest wait: `ui/src/lib/safeMode.ts` arms a
 300ms grace window at mount, and the helper captures `t0` *after* mount is asserted then
 waits to `t0 + 350` on the same `performance.now()` clock the guard reads — so it cannot
 race a slow hydrate, and the window's expiry has no DOM signal to poll. The other ten are
@@ -194,7 +198,7 @@ sleeps wearing that costume: "give the pointer pipeline a beat, then assert noth
 appeared", where the number names nothing in the app. **The discriminator is whether code
 in `ui/` holds a deadline on that clock at that number.** If it does, the wait is honest.
 If it does not, you have written `page.waitForTimeout` with extra steps — reach for
-`waitForTwoPollTicks` (`fixtures.ts:354`) or a `page.waitForResponse` on the event that
+`waitForTwoPollTicks` (`fixtures.ts:365`) or a `page.waitForResponse` on the event that
 must not happen, both of which say what they are waiting for. The ten are a standing
 finding, not a licence to add an eleventh.
 
