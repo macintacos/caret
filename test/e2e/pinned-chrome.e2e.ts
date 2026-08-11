@@ -85,7 +85,7 @@ test("the comment navigator opens from the bar tally and docks above the bar", a
 
   // Escape closes the navigator; the bar stays.
   await page.keyboard.press("Escape");
-  await expect(nav).toBeHidden();
+  await expect(nav).toHaveCount(0);
   await expect(bar).toBeVisible();
 });
 

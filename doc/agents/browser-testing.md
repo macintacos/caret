@@ -25,11 +25,11 @@ The bullets above decide the common case; the hard cases are decided in the spec
 **A spec opens with a header paragraph naming what in it needs a real browser and which
 file holds the pure half** — `folder-refs`, `settings`, `plan-breadcrumbs`,
 `topbar-overflow`, `vanity-origin`, `smoke`, `diff-surface`, `lifecycle`, and
-`compare-comments` carry the fullest examples; every spec has a header, and most name the
-layer choice. That paragraph is the whole mechanism: it makes "is this spec in the right
-layer?" a question you answer by reading the file, so there is no register to keep in sync
-(EXC-1052). Write one for every new spec, and add the layer half to any header that is
-still only describing coverage.
+`compare-comments` carry the fullest examples; every spec has a header, and every header
+names the layer choice (EXC-1052, EXC-1059). That paragraph is the whole mechanism: it
+makes "is this spec in the right layer?" a question you answer by reading the file, so
+there is no register to keep in sync. Write one for every new spec — coverage *and* the
+layer half.
 
 Two things make a spec look unit-able when it is not, and neither is visible from the test
 body:
@@ -171,9 +171,10 @@ Two rules follow, and both are about direction rather than magnitude:
 - **A per-call `{ timeout: … }` that *raises* a budget above the config is the smell** —
   if a spec needs more than the suite gives it, that is a finding about the spec, not a
   number to bump. *Lowering* one is sanctioned and load-bearing: the inner
-  `toBeHidden({ timeout: 500 })` inside the `toPass()` retry loops in
-  `approve-options.e2e.ts`, `review-switcher.e2e.ts`, `folder-refs.e2e.ts`, and
-  `file-drawer.e2e.ts` has to fail fast so the loop can press the key again.
+  `toHaveCount(0, { timeout: 500 })` inside the `toPass()` retry loops in
+  `approve-options.e2e.ts`, `review-switcher.e2e.ts`, `folder-refs.e2e.ts`,
+  `file-refs.e2e.ts` (twice), and `file-drawer.e2e.ts` has to fail fast so the loop can
+  press the key again.
 - **Never reach for `retries`.** A retry re-runs the test: it hides that the first attempt
   failed, doubles the worst case, and leaves the contention invisible. A deadline hides
   nothing — the test still runs once, still asserts the same thing, still fails when the
@@ -293,6 +294,40 @@ so the honest move is to note it, leave the class selector, and file it.
 Shared locators live in `test/e2e/support/chrome.ts` (the chrome around the plan) and
 `test/e2e/support/source-view.ts` (the plan surface itself) — one idiom, one home.
 
+## Absence and invisibility
+
+**`toBeHidden()` is satisfied by a hidden element, an absent one, and a renamed one
+alike**, so on its own it cannot tell "this control is no longer offered" from "this
+control is still mounted and stopped painting". Where the claim is absence,
+`toHaveCount(0)` says so (EXC-1059).
+
+**The matcher follows what the locator can resolve to, not what the assertion feels
+like.** A class or `data-*` selector *can* resolve to a hidden node, so there the two
+matchers genuinely differ and the component decides which is true — `.safe-mode-toast` is
+`{#if safeMode}` in `App.svelte` and is absent, while `.approve-slot` is `display: none`
+inside a `@media` block in `TopBar.svelte` and is merely invisible. A role-and-name
+locator *cannot* resolve to a hidden node at all, because Playwright's role engine matches
+only the accessibility tree and `display: none` takes an element out of it; there the two
+matchers are equivalent whatever the component does, and `toHaveCount(0)` is the spelling
+to use for saying plainly what is being proven. Read the component before converting a
+class or `data-*` site; a role site needs no such reading.
+
+Three sites are the invisibility case and say so where they sit: `.approve-slot`
+(`topbar-overflow.e2e.ts`), `request-changes`' `.context-lines` inside a collapsed
+disclosure, and `plan-breadcrumbs`' `.crumb-ellipsis`, deliberately left in the list so
+the full trail keeps measuring. They are the only `toBeHidden()` calls under `test/e2e/`.
+
+**What this recovers is the still-mounted case, and only that.** A renamed class and a
+renamed accessible name both still pass silently under either matcher — which is why the
+locator policy above carries more weight here than the choice of assertion does.
+
+**The rule is not AST-decidable, so it is not gated.** A parser sees
+`expect(x).toBeHidden()` and nothing more; what decides the call is whether a Svelte
+component wraps the node in `{#if}` or hides it with `display: none`, in a file the spec
+never names. A detector that cannot be right without reading another file is the § What is
+gated bar exactly, so this stays prose. To settle a site cheaply, convert it and run the
+spec: a still-mounted node reds on the spot.
+
 ## What is gated, and what stays prose
 
 `test/structure/e2e-conventions.test.ts` runs under `bun test` — not under `test e2e`, so
@@ -330,10 +365,10 @@ cleanly. An allowlist entry excusing a place the *detector* is wrong is a detect
 — fix the detector. An allowlist entry excusing a place the *rule* is wrong means the rule
 needs judgment, so it belongs in this file rather than in the suite. That is why the
 eleven `performance.now()` waits, the five raised `toPass` budgets, the locator policy,
-and the layer-choice convention are all written above and none of them are enforced below:
-every one needs someone to read a component, an app timer, or a fixture before deciding,
-and a gate shipped with a list of "these ones are fine" teaches appending rather than
-thinking.
+the layer-choice convention, and the absence-versus-invisibility rule are all written
+above and none of them are enforced below: every one needs someone to read a component, an
+app timer, or a fixture before deciding, and a gate shipped with a list of "these ones are
+fine" teaches appending rather than thinking.
 
 ## Artifact hygiene
 

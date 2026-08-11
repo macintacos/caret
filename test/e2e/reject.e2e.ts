@@ -4,6 +4,16 @@
 // so composed comments are never silently dropped. Asserted daemon-side via
 // GET /api/reviews/:id (a deny keeps the review as `rejected` with the decision
 // riding on it), not just by UI disappearance.
+//
+// That daemon read is the layer choice: what these tests prove is that the deny
+// survived a real HTTP round-trip into the daemon's own retained review, which
+// no mounted component can be handed as props. The browser half is the guard's
+// deliberately asymmetric dismissal — Escape closes it, a backdrop click does
+// not — driven as real gestures. The pure halves stay units: the guard's reject
+// vocabulary, count and preview rows in
+// ui/src/components/UnsentCommentsDialog.test.ts, and the canned
+// reject-and-wait body (including that it never carries the queued inline
+// comments) in ui/src/state/resolve.test.ts.
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
@@ -84,7 +94,7 @@ test("Escape dismisses the reject guard and leaves the review pending", async ({
   await page.getByRole("button", { name: "Reject", exact: true }).click();
   await expect(guard).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(guard).toBeHidden();
+  await expect(guard).toHaveCount(0);
 
   // The review is untouched.
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);

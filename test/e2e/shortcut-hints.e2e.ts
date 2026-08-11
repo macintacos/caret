@@ -43,7 +43,7 @@ test("the Settings toggle hides the shortcut affordances live and persists", asy
   await toggle.click();
   await expect(toggle).not.toBeChecked();
   await expect(page.getByText("Shortcut hints updated")).toBeVisible();
-  await expect(page.locator(keyboardButton)).toBeHidden();
+  await expect(page.locator(keyboardButton)).toHaveCount(0);
   await expect(page.locator(topbarHints)).toHaveCount(0);
   await expect(commentTally(page).locator("[data-slot='kbd']")).toHaveCount(0);
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
@@ -52,7 +52,7 @@ test("the Settings toggle hides the shortcut affordances live and persists", asy
   // stay hidden with no daemon state.
   await page.reload();
   await planSurface(page);
-  await expect(page.locator(keyboardButton)).toBeHidden();
+  await expect(page.locator(keyboardButton)).toHaveCount(0);
 
   // Hiding the hint chrome must not strand the docs: ? still opens the help modal.
   await waitPastSafeModeGrace(page);
@@ -80,7 +80,7 @@ test("with hints off, V-mode still selects lines but the hint chip stays hidden"
   // and the modal stays open (the guard window re-arms on the toggle interaction).
   await waitPastSafeModeGrace(page);
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog", { name: "Settings" })).toBeHidden();
+  await expect(page.getByRole("dialog", { name: "Settings" })).toHaveCount(0);
 
   // Enter V-mode (gg → V → j): the shortcut itself is NOT gated, so the amber
   // selection band still spans two lines — but the "c comment · Esc cancel" chip

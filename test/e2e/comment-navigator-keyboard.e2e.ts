@@ -42,7 +42,7 @@ test("Shift+C summons the navigator, focuses the list, and advertises its shortc
   const nav = commentNavigator(page);
   const toggle = commentTally(page);
   await expect(toggle).toHaveAttribute("aria-keyshortcuts", "Shift+C");
-  await expect(nav).toBeHidden();
+  await expect(nav).toHaveCount(0);
 
   // Shift+C opens it and drops focus on the first row, so j/k work immediately.
   await page.keyboard.press("C");
@@ -60,7 +60,7 @@ test("Shift+C summons the navigator, focuses the list, and advertises its shortc
   // while the panel holds focus, so Esc is the way out) and returns focus to the
   // summon tally (WAI-ARIA dismissable pattern).
   await page.keyboard.press("Escape");
-  await expect(nav).toBeHidden();
+  await expect(nav).toHaveCount(0);
   await expect(toggle).toBeFocused();
 });
 
@@ -128,7 +128,7 @@ test("the navigator captures j/k, so the plan cursor stays put while it holds fo
 
   // Closing hands the keyboard back: the same j now drives the plan cursor.
   await page.keyboard.press("Escape");
-  await expect(nav).toBeHidden();
+  await expect(nav).toHaveCount(0);
   await page.keyboard.press("j");
   await expect(cursor(page)).toHaveCount(1);
 });

@@ -390,13 +390,13 @@ test("toggling shortcut hints applies immediately and persists", async ({ daemon
   // Toggle off: the hint chrome disappears live (no Save), and a toast confirms it.
   await page.getByRole("switch", { name: "Shortcut hints" }).click();
   await expect(page.locator(topbarHints)).toHaveCount(0);
-  await expect(page.locator(keyboardButton)).toBeHidden();
+  await expect(page.locator(keyboardButton)).toHaveCount(0);
   await expect(page.getByText("Shortcut hints updated")).toBeVisible();
 
   // Persists across a reload.
   await page.reload();
   await planSurface(page);
-  await expect(page.locator(keyboardButton)).toBeHidden();
+  await expect(page.locator(keyboardButton)).toHaveCount(0);
 });
 
 test("changing the diff Layout in Settings reflows an open compare diff live", async ({
@@ -433,7 +433,7 @@ test("Esc closes the settings modal", async ({ daemon, page }) => {
   await openSettings(page);
   await waitPastSafeModeGrace(page);
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog", { name: "Settings" })).toBeHidden();
+  await expect(page.getByRole("dialog", { name: "Settings" })).toHaveCount(0);
 });
 
 test("only the selected category is filled — an unselected nav row is transparent", async ({
@@ -574,7 +574,7 @@ test("Esc in the search clears the query and returns focus to the dialog; a seco
 
   // Stage two: a second Esc, now with focus on the dialog content, dismisses.
   await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
+  await expect(dialog).toHaveCount(0);
 });
 
 // Modal stacking + keyboard flow (EXC-849): `?` opens the shortcuts help ABOVE Settings,

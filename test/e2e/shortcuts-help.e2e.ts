@@ -37,7 +37,7 @@ test("? opens and toggles the help; the bar button opens it; search filters", as
   // ? again toggles it closed (the search input is not focused, so the dispatcher
   // still sees the bare ?).
   await page.keyboard.press("?");
-  await expect(dialog).toBeHidden();
+  await expect(dialog).toHaveCount(0);
 
   // The status-bar keyboard button opens the same modal.
   await page.locator("button[aria-label='Keyboard shortcuts']").click();
@@ -45,7 +45,7 @@ test("? opens and toggles the help; the bar button opens it; search filters", as
 
   // Escape dismisses it.
   await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
+  await expect(dialog).toHaveCount(0);
 });
 
 test("the search narrows the listed shortcuts", async ({ daemon, page }) => {

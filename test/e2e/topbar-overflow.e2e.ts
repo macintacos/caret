@@ -5,6 +5,12 @@
 // browser behavior, not happy-dom units (doc/agents/browser-testing.md). The
 // fixture daemon declares no adapter variants, so Approve renders as the
 // split-button (WIRE_FALLBACK set), i.e. .split-primary / .split-toggle.
+//
+// TopBar.svelte performs every swap here with `display: none` in a @media block,
+// so no control is ever unmounted. The role queries below still read as absences
+// because a display:none element is out of the accessibility tree; the one class
+// locator, .approve-slot, resolves to the mounted node and so asserts hidden
+// (doc/agents/browser-testing.md § Absence and invisibility).
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
@@ -17,7 +23,7 @@ test("wide: secondaries are inline and the overflow menu is hidden", async ({ da
 
   await expect(page.getByRole("button", { name: "Reject" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Request changes" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "More actions" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "More actions" })).toHaveCount(0);
   // The Approve control reads inline at wide width.
   await expect(page.locator(".approve-slot .split-primary")).toBeVisible();
 });
@@ -41,8 +47,8 @@ test("narrow: secondaries collapse into the overflow menu, count preserved", asy
   await page.setViewportSize({ width: 500, height: 800 });
 
   // The inline secondaries hide; the overflow trigger takes their place.
-  await expect(page.getByRole("button", { name: "Reject" })).toBeHidden();
-  await expect(page.getByRole("button", { name: "Request changes" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Reject" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Request changes" })).toHaveCount(0);
   const trigger = page.getByRole("button", { name: "More actions" });
   await expect(trigger).toBeVisible();
   // The pending count rides the trigger so it stays visible in the collapsed row.
@@ -108,7 +114,7 @@ test("tight: Approve moves into the overflow menu", async ({ daemon, page }) => 
   await planSurface(page);
   await page.setViewportSize({ width: 600, height: 800 }); // below --w-tight (640)
 
-  // The inline Approve control is gone; only ⋯ + bell + settings remain right.
+  // The inline Approve control is off; only ⋯ + bell + settings remain right.
   await expect(page.locator(".approve-slot")).toBeHidden();
 
   // Approve — with its variants — is reachable in the overflow menu, and

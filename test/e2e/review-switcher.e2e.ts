@@ -60,7 +60,7 @@ test("Escape closes the switcher menu, leaving the active plan unchanged", async
   // it (no fixed sleep — toPass polls the web-first assertion).
   await expect(async () => {
     await page.keyboard.press("Escape");
-    await expect(alpha).toBeHidden({ timeout: 500 });
+    await expect(alpha).toHaveCount(0, { timeout: 500 });
   }).toPass();
   // The title is untouched — Escape dismisses without selecting.
   await expect(trigger.locator(".title")).toHaveText(before ?? "");

@@ -4,6 +4,16 @@
 // is a dismissible dialog: Enter confirms; Escape, the Cancel button, and a click
 // outside all dismiss. With pending inline comments it additionally previews what
 // a plain approve would silently drop.
+//
+// Everything here needs a real browser or the live daemon. The verdict is only
+// observable over HTTP — GET /api/reviews/:id for the stored decision, and the
+// pending list for the cases that must NOT resolve — which is daemon state no
+// mounted component can be handed as props. The dismissal semantics are real
+// gestures (Enter, Escape, a backdrop click at 5,5), and the footer check is a
+// measured scrollWidth. The pure halves are units: the guard's own shaping — the
+// pluralized count, the preview rows, the approve vocabulary, the notes field —
+// in ui/src/components/UnsentCommentsDialog.test.ts, and the request body it
+// submits, reviewer notes included, in ui/src/state/resolve.test.ts.
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
@@ -94,7 +104,7 @@ test("clicking outside dismisses the approve dialog and leaves the review pendin
   // A click on the backdrop (top-left corner, off the centered panel) dismisses —
   // the approve confirm is a dialog, not an alertdialog (EXC-791).
   await page.mouse.click(5, 5);
-  await expect(confirm).toBeHidden();
+  await expect(confirm).toHaveCount(0);
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
 });
 
@@ -278,7 +288,7 @@ test("Escape dismisses the approve guard and leaves the review pending", async (
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(guard).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(guard).toBeHidden();
+  await expect(guard).toHaveCount(0);
 
   // The review is untouched and the approve button still works.
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
@@ -304,6 +314,6 @@ test("Cancel dismisses the approve guard and leaves the review pending", async (
   // The explicit Cancel button routes to onCancel (distinct from Escape) — it
   // closes the guard and sends nothing.
   await guard.getByRole("button", { name: "Cancel" }).click();
-  await expect(guard).toBeHidden();
+  await expect(guard).toHaveCount(0);
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
 });

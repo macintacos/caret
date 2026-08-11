@@ -44,7 +44,7 @@ test("Escape closes the options menu and leaves the review pending", async ({ da
   // it (no fixed sleep — toPass polls the web-first assertion).
   await expect(async () => {
     await page.keyboard.press("Escape");
-    await expect(item).toBeHidden({ timeout: 500 });
+    await expect(item).toHaveCount(0, { timeout: 500 });
   }).toPass();
   // Nothing was approved — the menu is just a picker, not an action.
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);

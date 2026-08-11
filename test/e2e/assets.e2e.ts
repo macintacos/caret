@@ -4,6 +4,14 @@
 // the real ui/dist/ tree through the same asset seam the binary uses, so a green
 // run here proves the hashed-asset build is served end-to-end with no broken
 // references.
+//
+// This is a daemon-and-wire test before it is a browser test: the claim is
+// about the response statuses and code-split chunk URLs the daemon produces
+// while serving the built tree, plus the console errors that load raises —
+// none of which a mounted component can be handed as props, and a unit would
+// have to stub the very transport this exists to prove. The browser half is
+// only that the entry bundle executed and a grammar chunk applied, both read as
+// painted output. There is deliberately no pure half to split out.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";

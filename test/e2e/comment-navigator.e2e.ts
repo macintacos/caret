@@ -3,6 +3,17 @@
 // the list by the comment text and underlines the matched substring live; unsent
 // scratches show as distinct "draft" rows. Clicking any row scrolls the plan to it
 // (and focuses/highlights a committed comment's card). Escape dismisses the panel.
+//
+// The panel's own list shaping from props — a row per comment, the distinct
+// draft row, the current-row marking, the empty state — is already a unit in
+// ui/src/components/CommentNavigator.test.ts. What this adds is what that unit
+// cannot reach: the rows are built from a working copy the daemon persisted and
+// served back rather than from props; the live search filter and its .nav-match
+// underline are typed into the bound input as real keystrokes, which that unit's
+// own header defers here for exactly that reason; a reveal is asserted by its
+// effect on the plan's own annotation card — cross-component wiring the unit can
+// only observe as a callback — and Escape is a real keystroke past the Safe Mode
+// grace window.
 
 import { commentNavigator, commentTally } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
@@ -30,7 +41,7 @@ test("opens from the strip, filters + underlines by text, and reveals comments a
   const toggle = commentTally(page);
   await expect(toggle).toContainText("3");
   const nav = commentNavigator(page);
-  await expect(nav).toBeHidden();
+  await expect(nav).toHaveCount(0);
   await toggle.click();
   await expect(nav).toBeVisible();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
@@ -64,5 +75,5 @@ test("opens from the strip, filters + underlines by text, and reveals comments a
 
   // Escape dismisses the panel.
   await page.keyboard.press("Escape");
-  await expect(nav).toBeHidden();
+  await expect(nav).toHaveCount(0);
 });

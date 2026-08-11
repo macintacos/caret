@@ -2,6 +2,18 @@
 // and the review resolves as a rejection CARRYING the typed feedback — asserted
 // daemon-side via GET /api/reviews/:id (a deny keeps the review in memory as
 // `rejected` with the decision riding on it), not just by UI disappearance.
+//
+// Everything here needs a real browser or the live daemon. The general comment
+// is a CodeMirror textbox, so the autofocus, the ⌘/Ctrl+Enter chord and the Esc
+// that originates inside it are real-browser behavior; the dialog's disclosures
+// are collapsed rather than unmounted, a distinction happy-dom cannot make (see
+// the Context case below); and the seeded drafts reach the UI only after the
+// daemon persists and serves back a working copy, which no mounted component
+// can be handed as props. The pure halves stay units: the dialog's own counts,
+// empty state, preview text and submit gating in
+// ui/src/components/RequestChangesDialog.test.ts, the line references and
+// abbreviated quotes in ui/src/lib/feedback.test.ts, and the deny request body
+// in ui/src/state/resolve.test.ts.
 
 import { discardConfirm, inlineRows, unsentRows } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
@@ -29,7 +41,7 @@ test("dialog opens, Escape closes, Cmd/Ctrl+Enter submits a rejection with feedb
   await expect(dialog).toBeVisible();
   await expect(editor).toBeFocused();
   await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
+  await expect(dialog).toHaveCount(0);
 
   // Reopen → type feedback → Cmd/Ctrl+Enter submits. fill() focuses the editor
   // and populates it (CodeMirror registers it), leaving focus there so the chord
@@ -243,6 +255,8 @@ test("an inline comment reveals a nested Context with the anchored source lines 
   // Both disclosures are collapsed by default (a real-browser check — happy-dom
   // can't tell a collapsed disclosure from an open one). The Context lives nested
   // in the inline comment's own expansion, so it takes two clicks to reveal.
+  // toBeHidden, not toHaveCount(0): a collapsed disclosure keeps its content
+  // mounted, which is the whole reason this check needs a real browser.
   const context = dialog.locator(".context-lines");
   await expect(context).toBeHidden();
   // The row's own disclosure trigger stays a class selector: its accessible name
