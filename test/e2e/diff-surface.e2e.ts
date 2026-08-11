@@ -1,9 +1,16 @@
 // Dev-flagged source-view surface (EXC-583). With the flag on, the plan renders
 // as line-numbered markdown source through the @pierre/diffs wrapper instead of
 // the legacy plan view + contents rail. The heading breadcrumbs bar jumps to
-// headings, the line gutter creates comments (EXC-584), and approve and request-
-// changes still round-trip. The view instance must survive the 2s poll with no
-// scroll reset.
+// headings and the line gutter creates comments (EXC-584). The view instance must
+// survive the 2s poll with no scroll reset.
+//
+// Everything here needs a real browser. The gutter `+` reveal, the drag and
+// shift-extend selection gestures, the smooth-scroll geometry, and the colors and
+// font features resolved inside the library's shadow root are hit-testing, layout,
+// and computed style that happy-dom does not do — all e2e concerns per
+// doc/agents/browser-testing.md. The component's prop-driven halves — its render
+// branches, annotation display, and scratch rehydration — are units in
+// ui/src/components/DiffPlanView.test.ts.
 
 import type { Locator, Page } from "@playwright/test";
 
@@ -19,19 +26,6 @@ import {
 
 // A plan tall enough to scroll the source view past one viewport.
 const TALL_PLAN = `# Tall Plan\n\n${Array.from({ length: 120 }, (_, i) => `Line ${i + 1} of the plan body, long enough to overflow the viewport.`).join("\n\n")}\n`;
-
-test("renders the plan as markdown source, with no legacy plan view", async ({ daemon, page }) => {
-  await daemon.seed();
-  await page.goto("/");
-
-  // The source-view container is mounted; the plan source text is visible
-  // (Playwright pierces the library's shadow root for text).
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
-
-  // The legacy surface is absent: no rendered-HTML article.
-  await expect(page.locator("article.plan")).toHaveCount(0);
-});
 
 test("scroll position survives the 2-second poll tick", async ({ daemon, page }) => {
   await daemon.seed({ plan: TALL_PLAN });
@@ -55,44 +49,6 @@ test("scroll position survives the 2-second poll tick", async ({ daemon, page })
 
   // Same scroll offset — the instance was preserved, not remounted.
   expect(await view.evaluate((el) => el.scrollTop)).toBe(before);
-});
-
-test("approving resolves the review on the source-view surface", async ({ daemon, page }) => {
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-
-  // Approve opens a confirmation (EXC-791); confirming resolves the review.
-  await page.getByRole("button", { name: "Approve", exact: true }).click();
-  const confirm = page.getByRole("dialog", { name: "Approve this plan?" });
-  await expect(confirm).toBeVisible();
-  await confirm.getByRole("button", { name: "Approve", exact: true }).click();
-
-  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
-  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).not.toContain(id);
-});
-
-test("request-changes with a general comment round-trips on the source-view surface", async ({
-  daemon,
-  page,
-}) => {
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await waitPastSafeModeGrace(page);
-
-  const feedback = "Please tighten the verification section.";
-  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
-  await page.getByRole("button", { name: "Request changes" }).click();
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole("textbox", { name: "General comment" }).fill(feedback);
-  await page.keyboard.press("ControlOrMeta+Enter");
-
-  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
-  await expect.poll(async () => (await daemon.getReview(id)).body?.decision?.behavior).toBe("deny");
-  const review = (await daemon.getReview(id)).body;
-  expect(review?.status).toBe("rejected");
-  expect(review?.decision?.feedback).toContain(feedback);
 });
 
 // ----- Heading jump scroll geometry -----
