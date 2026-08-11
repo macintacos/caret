@@ -231,24 +231,30 @@ The lane runs under the gate too, and reddened it for weeks (EXC-1056). Everythi
 transfers — a deadline is a budget for the loaded host, and `retries` is never the answer
 — but the lane's own flake arrived from a direction none of it covers.
 
-**Its default deadline is 30s, and it is set in a preload.** bun's own default is 5000ms,
-a quiet-host number. What breaks first under the gate is not the CPU-heavy test but the
-SPAWN-heavy one: `test/scripts/dev-driver.test.ts` posts several plan versions through the
-real submit → reflow → store path and each reflow spawns rumdl, which measures a few
-hundred ms standalone and crosses 5s in the gate — better than 10x, against a suite
-average nearer 2.8x. `test/support/timeout-preload.ts` calls `setDefaultTimeout`, and
-`bunfig.toml` registers it.
+**Two deadlines, and which one a slow test wants depends on WHY it is slow.** bun's own
+default is 5000ms, a quiet-host number. What breaks first under the gate is not the
+CPU-heavy test but the SPAWN-heavy one: `test/scripts/dev-driver.test.ts` posts several
+plan versions through the real submit → reflow → store path and each reflow spawns rumdl,
+so it measures a few hundred ms standalone and crosses 5s in the gate — better than 10x,
+against a suite average nearer 2.8x.
 
-**A preload, specifically, because the lane has three entry points** — `mise run test`,
-`package.json`'s `test`, and a bare `bun test <file>`, which is how anyone runs one suite.
-A `--timeout` flag reaches only the one it is written on, and a test green under one
-invocation and red under another is worse than the coarser default it buys; that was tried
-and reverted. A preload runs under all three, so the skew cannot arise. `bunfig.toml`'s
-`[test]` has no `timeout` key — bun ignores it silently — so the preload is the only home.
+- **Contended** — the lane's `--timeout 30000`, in `scripts/tasks/test.ts` and mirrored on
+  `package.json`'s `test`, exactly as `--conditions browser` is (see `bunfig.toml`). This
+  is the gate's budget, and it rides the entry points the gate uses.
+- **Intrinsically slow** — a per-test third argument, and one test has one: the shiki
+  pattern sweep's `60_000`, ~10s of real work. That form reaches EVERY entry point,
+  including a bare `bun test <file>`, which is what the lane flag cannot do — so a test
+  that is genuinely slow needs it, and a test that is merely contended must not use it.
+  Reaching for the literal to paper over contention buries the distinction.
 
-A test may still override with `test()`'s third argument, and one does: the shiki pattern
-sweep's `60_000`. Keep those meaning "this test is intrinsically slower than the lane",
-never "this test is contended" — contention is the default's job.
+Neither is a retry. The test still runs once and asserts the same thing, so nothing is
+hidden; a budget only stops the suite asserting the machine was idle. Both stay finite so
+a genuine hang is still bounded.
+
+**Do not try to unify them into one number.** `bunfig.toml`'s `[test]` has no `timeout`
+key — bun ignores one silently — and a preload calling `setDefaultTimeout`, which would
+reach all three entry points at once, applies to only some files of a multi-file run on
+bun 1.3. Both were tried and reverted.
 
 **A deadline inside a dependency is the same bug, without the error.** shiki defaults
 `tokenizeTimeLimit` to 500ms and spends it as wall clock inside vscode-textmate's scan

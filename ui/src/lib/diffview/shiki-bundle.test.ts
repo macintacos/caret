@@ -87,16 +87,16 @@ describe("caret's tokenize options", () => {
     // A highlighter each, so the budget is the only thing that differs between the
     // two calls. Sharing one would leave the second running on a warm engine, where
     // any budget survives — it would agree with this assertion while proving nothing
-    // about the option under test.
+    // about the option under test. Both are disposed: shiki warns once a process has
+    // made ten, and this file plus caret-theme.test.ts sit right on that line.
     const base = { lang: "tsx", theme: "caret-dark" } as const;
-    const starved = (await highlighter()).codeToTokensBase(SAMPLE, {
-      ...base,
-      tokenizeTimeLimit: 1,
-    });
-    const whole = (await highlighter()).codeToTokensBase(SAMPLE, {
-      ...base,
-      ...CARET_TOKENIZE_OPTIONS,
-    });
+    const cold = await highlighter();
+    const starved = cold.codeToTokensBase(SAMPLE, { ...base, tokenizeTimeLimit: 1 });
+    cold.dispose();
+
+    const fresh = await highlighter();
+    const whole = fresh.codeToTokensBase(SAMPLE, { ...base, ...CARET_TOKENIZE_OPTIONS });
+    fresh.dispose();
 
     expect(starved[0]?.map((t) => t.content)).not.toContain("Row");
     expect(whole[0]?.map((t) => t.content)).toContain("Row");
