@@ -2,6 +2,8 @@
   // The active-plan switcher. With one review it's an inert label; with several
   // it's a shadcn DropdownMenu (EXC-760) whose trigger carries the active title
   // and a count Badge, and whose items list each plan's title + abbreviated cwd.
+  // The trigger publishes a stable accessible name of its own ("Switch review")
+  // and hands the count to its accessible description (EXC-1057).
   // The hand-rolled listbox + click-away scrim it replaced are gone — bits-ui
   // owns open/close, Escape, outside-click, and focus.
   import { shortCwd } from "$lib/cwd.ts";
@@ -27,10 +29,24 @@
   <DropdownMenu.Root>
     <DropdownMenu.Trigger>
       {#snippet child({ props })}
-        <Button {...props} variant="secondary" size="sm" class="switcher-trigger float-chip">
+        <!-- The trigger names itself. Left to name-from-content it computed as the
+             active plan's title run together with the count Badge ("Widget Cache
+             Refactor 2") — a name that changes on every switch and says nothing
+             about what the control does. The count is not lost: it rides the
+             accessible description through a hidden span, which the accname
+             algorithm still reads because aria-describedby references it directly. -->
+        <Button
+          {...props}
+          variant="secondary"
+          size="sm"
+          class="switcher-trigger float-chip"
+          aria-label="Switch review"
+          aria-describedby="switcher-count"
+        >
           <span class="title">{stripTitleLinks(active?.title ?? "—")}</span>
           <Badge variant="secondary" class="count metric">{reviews.length}</Badge>
           <span class="chev"><Icon name="chevron-down" size={14} /></span>
+          <span id="switcher-count" hidden>{reviews.length} reviews pending</span>
         </Button>
       {/snippet}
     </DropdownMenu.Trigger>

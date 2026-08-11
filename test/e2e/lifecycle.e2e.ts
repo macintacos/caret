@@ -12,6 +12,7 @@
 // against a live daemon — all e2e concerns per doc/agents/browser-testing.md, not
 // something a mounted component can show.
 
+import { reviewSwitcher } from "@test/e2e/support/chrome.ts";
 import { SECOND_PLAN } from "@test/e2e/support/fixture-plan.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { PLAN_SURFACE } from "@test/e2e/support/source-view.ts";
@@ -26,10 +27,10 @@ test("switching between two pending reviews shows the right plan", async ({ daem
   const plan = page.locator(PLAN_SURFACE);
   await expect(plan.getByText("Widget Cache Refactor")).toBeVisible();
 
-  // The switcher (a shadcn DropdownMenu since EXC-760) carries both — count "2";
-  // open it and pick the other review from the menu.
-  const trigger = page.locator(".switcher-trigger");
-  await expect(trigger.locator(".count")).toHaveText("2");
+  // The switcher (a shadcn DropdownMenu since EXC-760) carries both — the pending
+  // count rides its accessible description; open it and pick the other review.
+  const trigger = reviewSwitcher(page);
+  await expect(trigger).toHaveAccessibleDescription("2 reviews pending");
   await trigger.click();
   await page.getByRole("menuitem", { name: /Gadget Renderer Cleanup/ }).click();
   await expect(plan.getByText("Gadget Renderer Cleanup")).toBeVisible();
@@ -55,9 +56,9 @@ test("a review posted while the page is open appears without a reload", async ({
   // Seed through the API while the page is open: the 2s poll must pick it up.
   await daemon.seed({ plan: SECOND_PLAN });
 
-  // The switcher's count Badge flips to 2 with no reload; the suite's assertion
-  // budget absorbs the poll interval (never a fixed sleep). The trigger itself
-  // only appears once there's a second review, so this also waits for the
+  // The switcher's count flips to 2 with no reload; the suite's assertion budget
+  // absorbs the poll interval (never a fixed sleep). The trigger itself only
+  // appears once there's a second review, so this also waits for the
   // single→multiple switch.
-  await expect(page.locator(".switcher-trigger").locator(".count")).toHaveText("2");
+  await expect(reviewSwitcher(page)).toHaveAccessibleDescription("2 reviews pending");
 });

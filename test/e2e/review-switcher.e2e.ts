@@ -6,6 +6,7 @@
 // doc/agents/browser-testing.md). Two distinct plans are seeded (distinct
 // sessions → two pending reviews) so a switch is observable in the trigger.
 
+import { reviewSwitcher } from "@test/e2e/support/chrome.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
@@ -16,10 +17,11 @@ test("switches the active plan through the dropdown, both ways", async ({ daemon
   await page.goto("/");
   await planSurface(page);
 
-  // The trigger shows a count Badge for the two pending plans.
-  const trigger = page.locator(".switcher-trigger");
+  // The trigger shows a count Badge for the two pending plans, and publishes that
+  // count as its accessible description (the name stays the stable "Switch review").
+  const trigger = reviewSwitcher(page);
   await expect(trigger).toBeVisible();
-  await expect(trigger.locator(".count")).toHaveText("2");
+  await expect(trigger).toHaveAccessibleDescription("2 reviews pending");
 
   // Open the menu: both plans are listed as menu items.
   await trigger.click();
@@ -47,7 +49,7 @@ test("Escape closes the switcher menu, leaving the active plan unchanged", async
   await page.goto("/");
   await planSurface(page);
 
-  const trigger = page.locator(".switcher-trigger");
+  const trigger = reviewSwitcher(page);
   await trigger.click();
   const alpha = page.getByRole("menuitem", { name: "Plan Alpha" });
   await expect(alpha).toBeVisible();

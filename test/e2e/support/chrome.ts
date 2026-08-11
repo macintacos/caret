@@ -13,6 +13,15 @@ export function commentNavigator(page: Page): Locator {
   return page.getByRole("complementary", { name: "Comments" });
 }
 
+/** The review switcher's trigger (`ReviewSwitcher.svelte`). It names itself
+ * "Switch review" rather than letting the name come from its content, which would
+ * be the active plan's title concatenated with the pending count — fixture data on
+ * both halves, and nothing saying the control is a switcher. The count rides the
+ * trigger's accessible description instead ("N reviews pending"). */
+export function reviewSwitcher(page: Page): Locator {
+  return page.getByRole("button", { name: "Switch review" });
+}
+
 /** The status strip's comment tally, which is also the navigator's toggle. Its
  * accessible name is the count and the noun ("3 comments"); the shortcut cap beside
  * them is aria-hidden, so it stays out. */
