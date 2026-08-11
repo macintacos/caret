@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import type { E2EOptions } from "./test/e2e/support/fixtures.ts";
 import { REFERENCE_WIDTH_PX } from "./ui/src/lib/layout.ts";
 
 // EXC-587: worker cap from CARET_E2E_WORKERS — a positive int, else the "50%"
@@ -18,7 +19,7 @@ const e2eWorkers: number | string = (() => {
 // them up — the two runners stay disjoint. Each test boots its own isolated
 // daemon via test/e2e/support/fixtures.ts (OS-assigned port, ephemeral state),
 // so there is no static baseURL or webServer here.
-export default defineConfig({
+export default defineConfig<E2EOptions>({
   testDir: "test/e2e",
   testMatch: "**/*.e2e.ts",
   fullyParallel: true,
@@ -47,6 +48,12 @@ export default defineConfig({
   // Non-interactive reporter so the preflight gate can't hang on a TTY pager.
   reporter: "list",
   use: {
+    // EXC-1058: the fixture's daemon-boot budget — the stdout port handshake
+    // plus the /health poll after it — reached through Playwright's option
+    // fixture (test/e2e/support/fixtures.ts), since none of Playwright's own
+    // knobs bounds a spawned child process. Here rather than in the fixture so
+    // every deadline the suite runs under is tunable in this one file.
+    bootTimeoutMs: 15 * 1000,
     // Failure artifacts only; they can capture rendered plan text, so they
     // stay gitignored and local (never-log-identifiable-data posture).
     trace: "retain-on-failure",
