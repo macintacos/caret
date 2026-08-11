@@ -231,14 +231,24 @@ The lane runs under the gate too, and reddened it for weeks (EXC-1056). Everythi
 transfers — a deadline is a budget for the loaded host, and `retries` is never the answer
 — but the lane's own flake arrived from a direction none of it covers.
 
-**Its budgets stay per test.** The unit lane runs on bun's 5000ms default, and one test
-overrides it: the shiki pattern sweep in `shiki-bundle.test.ts`, ~10s of real work against
-a `60_000` cap. That is the whole picture, and a lane-wide `--timeout` was tried and
-rejected — the lane has three entry points (`mise run test`, `package.json`'s `test`, and
-a bare `bun test <file>`, which is how anyone runs one suite), a flag reaches only the
-first, and a test green under one invocation and red under another is worse than the
-coarser default it buys. Raise the one test that needs it, where a reader of that test can
-see the number.
+**Its default deadline is 30s, and it is set in a preload.** bun's own default is 5000ms,
+a quiet-host number. What breaks first under the gate is not the CPU-heavy test but the
+SPAWN-heavy one: `test/scripts/dev-driver.test.ts` posts several plan versions through the
+real submit → reflow → store path and each reflow spawns rumdl, which measures a few
+hundred ms standalone and crosses 5s in the gate — better than 10x, against a suite
+average nearer 2.8x. `test/support/timeout-preload.ts` calls `setDefaultTimeout`, and
+`bunfig.toml` registers it.
+
+**A preload, specifically, because the lane has three entry points** — `mise run test`,
+`package.json`'s `test`, and a bare `bun test <file>`, which is how anyone runs one suite.
+A `--timeout` flag reaches only the one it is written on, and a test green under one
+invocation and red under another is worse than the coarser default it buys; that was tried
+and reverted. A preload runs under all three, so the skew cannot arise. `bunfig.toml`'s
+`[test]` has no `timeout` key — bun ignores it silently — so the preload is the only home.
+
+A test may still override with `test()`'s third argument, and one does: the shiki pattern
+sweep's `60_000`. Keep those meaning "this test is intrinsically slower than the lane",
+never "this test is contended" — contention is the default's job.
 
 **A deadline inside a dependency is the same bug, without the error.** shiki defaults
 `tokenizeTimeLimit` to 500ms and spends it as wall clock inside vscode-textmate's scan

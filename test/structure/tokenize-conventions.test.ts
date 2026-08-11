@@ -10,13 +10,13 @@
 // the way `e2e-conventions.test.ts` reads `isSpec`/`isConfig`. A category is not an
 // allowlist: nothing here is a filename anyone appends to.
 //
-// shiki's default is 500ms of WALL CLOCK,
-// enforced inside vscode-textmate's scan loop — spend it and the line is abandoned
-// where it stands, its remainder returned as one token wearing whatever scope was
-// in force, with nothing thrown and nothing logged. A call that omits the option is
-// therefore not a slow call but a silently wrong one, on exactly the runs where a
-// host is busy: it reddened `mise run preflight` at random for weeks, and it
-// half-highlights a reviewer's code on a loaded machine.
+// shiki's default is 500ms of WALL CLOCK, enforced inside vscode-textmate's scan
+// loop — spend it and the line is abandoned where it stands, its remainder returned
+// as one token wearing whatever scope was in force, with nothing thrown and nothing
+// logged. A call that omits the option is therefore not a slow call but a silently
+// wrong one, on exactly the runs where a host is busy: it reddened
+// `mise run preflight` at random for weeks, and it half-highlights a reviewer's code
+// on a loaded machine.
 //
 // Gated rather than left as prose because it needs no allowlist and no judgment:
 // the option belongs on every one of these calls, with no case where omitting it is
