@@ -10,10 +10,10 @@
 //   2. no file under test/e2e/ named for a unit suffix — `bun test` collects
 //      *.test.ts, *_test.ts, *.spec.ts and *_spec.ts repo-wide and would crash
 //      on a Playwright spec swept in under any of them;
-//   3. no *value* import of @playwright/test in a spec — `test` and `expect`
-//      come from support/fixtures.ts, which is what stops a spec standing up a
-//      daemon of its own (a bare `import type` is fine and is what all of them
-//      currently do);
+//   3. no *value* import of @playwright/test anywhere under test/e2e/ except
+//      support/fixtures.ts — `test` and `expect` come from there, which is what
+//      stops a spec standing up a daemon of its own (a bare `import type` is
+//      fine and is what every other module currently does);
 //   4. no non-zero `retries` — a retry hides the contention the budgets exist
 //      to absorb, and it is the rule most likely to be reached for at 2am.
 //
@@ -45,6 +45,9 @@ const REPO_ROOT = join(import.meta.dir, "..", "..");
 
 const E2E_DIR = "test/e2e";
 const CONFIG = "playwright.config.ts";
+// The one module under E2E_DIR that reaches Playwright's own exports — see the
+// import rule in `offences` below.
+const FIXTURES = `${E2E_DIR}/support/fixtures.ts`;
 const PLAYWRIGHT = "@playwright/test";
 
 // Nothing below reads `.parent`, so the parse skips building those links.
@@ -140,13 +143,14 @@ function optionObjects(node: ts.Node): ts.ObjectLiteralExpression[] {
 /**
  * Every gated violation in `source`, as `<line>: <rule>` strings.
  *
- * `path` decides which rules apply, because two of them are about a spec's
+ * `path` decides which rules apply, because two of them are about a module's
  * relationship to the harness rather than about the code in isolation: the
- * import rule governs specs only (support/fixtures.ts legitimately imports
- * `test as base` to extend it, and the other harness modules reach Playwright
- * for types), and the `retries` rule governs the config and the specs, the only
- * two places in committed source Playwright reads the knob from — a `--retries`
- * flag on the command line is a third, and out of a source gate's reach. The
+ * import rule governs every scanned module except the two that construct
+ * Playwright's own runner — the config, which calls `defineConfig`, and
+ * `fixtures.ts`, which extends `test as base` and re-exports `expect` — and the
+ * `retries` rule governs the config and the specs, the only two places in
+ * committed source Playwright reads the knob from; a `--retries` flag on the
+ * command line is a third, and out of a source gate's reach. The
  * `waitForTimeout` ban applies everywhere the suite runs, harness included.
  *
  * A `retries` that is not a literal `0` is reported even where it might resolve
@@ -184,7 +188,7 @@ function offences(source: string, path: string): string[] {
       }
     }
 
-    if (isSpec && importsPlaywrightValue(node)) {
+    if (!isConfig && path !== FIXTURES && importsPlaywrightValue(node)) {
       found.push(`${lineOf(sf, node)}: ${PLAYWRIGHT} value import`);
     }
 
@@ -278,8 +282,13 @@ test("the harness rule separates a value import of @playwright/test from a type 
   // …but the same syntax in type position is erased, and 15 specs write it.
   expect(offences('let p: import("@playwright/test").Page;', "a.e2e.ts")).toEqual([]);
 
-  // The harness is where extending Playwright's own `test` belongs.
-  expect(offences(decl("{ test as base }"), "support/fixtures.ts")).toEqual([]);
+  // fixtures.ts is the boundary: extending Playwright's own `test` belongs
+  // there and nowhere else under test/e2e/, so a sibling harness module reaching
+  // for a value is the same offence a spec's would be.
+  expect(offences(decl("{ test as base }"), FIXTURES)).toEqual([]);
+  expect(offences(decl("{ expect }"), "test/e2e/support/source-view.ts")).toEqual(offence);
+  // The config constructs the runner, so its own value import is not drift.
+  expect(offences(decl("{ defineConfig, devices }"), CONFIG)).toEqual([]);
   // A value import of anything else is not this rule's business.
   expect(offences('import { join } from "node:path";', "a.e2e.ts")).toEqual([]);
 });
