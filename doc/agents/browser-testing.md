@@ -19,12 +19,50 @@ testing (EXC-453):
   `playwright-cli` skill. Its scripts and output are **never committed**; reach for it to
   learn, then write the real test in one of the two layers above.
 
+## Which layer a spec belongs in
+
+The bullets above decide the common case; the hard cases are decided in the spec itself.
+**A spec opens with a header paragraph naming what in it needs a real browser and which
+file holds the pure half** — `folder-refs`, `settings`, `plan-breadcrumbs`,
+`topbar-overflow`, `vanity-origin`, `smoke`, `diff-surface`, `lifecycle`, and
+`compare-comments` carry the fullest examples; every spec has a header, and most name the
+layer choice. That paragraph is the whole mechanism: it makes "is this spec in the right
+layer?" a question you answer by reading the file, so there is no register to keep in sync
+(EXC-1052). Write one for every new spec, and add the layer half to any header that is
+still only describing coverage.
+
+Two things make a spec look unit-able when it is not, and neither is visible from the test
+body:
+
+- **Browser dependence behind a helper.** `createAnnotation`
+  (`test/e2e/diff-surface.e2e.ts:1587`) reads as a few lines of intent, but it routes
+  through `revealGutterPlus` (`test/e2e/support/source-view.ts:61`), which does
+  `getBoundingClientRect()` and then `page.mouse.move()`. Inline the helper before
+  concluding a spec is pure logic.
+- **Browser dependence declared in the config.** `playwright.config.ts:70` emulates
+  `colorScheme: "dark"`, so a spec asserting what a fresh origin paints is doing media
+  emulation with nothing in its body that says so. Read the config's `use` block too.
+
+A layer-choice note is only as good as someone re-reading the files it names.
+
+**The axis that actually decides it is not "browser vs. logic" but "what does the fixture
+daemon produce that props cannot".** `compare-comments` looks like a browser test and is
+really a daemon test: what it needs is interleaved `addVersion` / `putDraft` state across
+a real HTTP round-trip, which no mounted component can be handed as props. Ask that
+question first — the browser question is often the less interesting half.
+
+One spec sits against that axis deliberately. `smoke.e2e.ts` is a pure render assertion
+and stays, because it is the harness canary: the one spec whose only job is that the
+fixture, the spawned daemon, the built `ui/dist`, and the page load all work. Its header
+says so; don't "fix" it into a unit.
+
 ## Spec naming
 
 Specs are named `*.e2e.ts`, deliberately distinct from the unit suffixes. `bun test`
-collects `*.test.ts` **and** `*.spec.ts` repo-wide, so a Playwright spec under either of
-those names would be swept into the unit runner and crash it. `.e2e.ts` keeps the two
-runners disjoint — Playwright owns `test/e2e/`, `bun test` owns the rest.
+collects all four of `*.test.ts`, `*_test.ts`, `*.spec.ts` and `*_spec.ts` repo-wide, so a
+Playwright spec under any of those names would be swept into the unit runner and crash it.
+`.e2e.ts` keeps the two runners disjoint — Playwright owns `test/e2e/`, `bun test` owns
+the rest.
 
 ## The harness contract
 
@@ -44,11 +82,35 @@ inside a spec.
   those deltas — speculative abstraction for one extra call site — so the parallel boot is
   documented current-state in `daemon-entry.ts`'s header rather than abstracted away
   (EXC-547).
+- **A spec takes `test` and `expect` from the fixture, never from `@playwright/test`.**
+  Importing them from `test/e2e/support/fixtures.ts` is what binds a spec to the isolated
+  daemon; importing Playwright's own `test` is how one ends up standing a daemon up by
+  hand. Types are a different matter — `import type { Page, Locator }` is erased, and is
+  what every spec already does. The rule is about specs: the harness modules under
+  `test/e2e/support/` are where Playwright's own exports are legitimately reached, which
+  is where `fixtures.ts` extends `test as base` and re-exports `expect`. Gated for specs
+  (§ What is gated).
 - **Seed through the public API.** Reviews are created by `POST /api/reviews`, the same
   surface a real hook uses — never by reaching into the store directly.
 - **No external daemon, no dev driver.** A spec must not reuse a running daemon, depend on
   `mise run dev`, or drive the dev driver. The `test e2e` task builds the UI first, so
   specs always exercise the shipped artifact, not a Vite dev server.
+- **What a test pays for that isolation, as two costs rather than one.** Fixture boot is
+  ~64ms serial and ~137ms at six workers; the test's first `seed()` adds ~11ms on top.
+  Name them apart wherever they are quoted, `fixtures.ts`'s header included —
+  **a claim that folds two costs into one is how a suite hides a 40% overhead.** Here that
+  overhead was ~520ms per test, spent acquiring `rumdl` from scratch into each ephemeral
+  state dir (roughly 1.7GB of downloads per suite run), and it went unlooked-for while
+  boot was the only number anyone had (EXC-1053). What closed it is handing the daemon a
+  pre-resolved binary through `CARET_RUMDL_BIN` (see `doc/CONFIGURING.md`; the variable is
+  version-gated, so a bare command name is no longer resolved through `PATH`). The fixture
+  **hard-fails** when no `rumdl` reporting `RUMDL_VERSION` is available — deliberately,
+  because a bad binary degrades silently to storing plans raw, changing the canonical text
+  every spec asserts against.
+- **What stays expensive on purpose.** Per-test isolation is not negotiable (EXC-587), and
+  `trace: "retain-on-failure"` costs ~90-180ms per test that is discarded on every pass.
+  It is kept because it is the only failure diagnostic an unattended `mise run preflight`
+  leaves behind.
 
 ## Timing discipline
 
@@ -104,6 +166,28 @@ Two rules follow, and both are about direction rather than magnitude:
   app is wrong — and it is free on the happy path, because a web-first assertion resolves
   the instant its condition is true. A flake is a bug to name, not a run to repeat.
 
+The raising rule has five standing exceptions, all in `file-refs.e2e.ts`: four
+`toPass({ timeout: 20_000 })` (lines 842, 852, 942, 949) and one `30_000` (line 1001),
+guarding loops that walk a 300-line file's virtualised preview to both ends through real
+chunked loading. That is product cost, and the fixture's 300 lines — not the budget — is
+the tuning target. They predate the rule; a sixth needs an argument of the same kind.
+
+**A `waitForFunction` on the clock is a fixed sleep unless the app holds the same
+deadline.** The suite writes
+`await page.waitForFunction((t) => performance.now() > t + N, t0)` in eleven places and
+they are not all the same thing. `waitPastSafeModeGrace`
+(`test/e2e/support/fixtures.ts:320`) is an honest wait: `ui/src/lib/safeMode.ts` arms a
+300ms grace window at mount, and the helper captures `t0` *after* mount is asserted then
+waits to `t0 + 350` on the same `performance.now()` clock the guard reads — so it cannot
+race a slow hydrate, and the window's expiry has no DOM signal to poll. The other ten are
+sleeps wearing that costume: "give the pointer pipeline a beat, then assert nothing
+appeared", where the number names nothing in the app. **The discriminator is whether code
+in `ui/` holds a deadline on that clock at that number.** If it does, the wait is honest.
+If it does not, you have written `page.waitForTimeout` with extra steps — reach for
+`waitForTwoPollTicks` (`fixtures.ts:338`) or a `page.waitForResponse` on the event that
+must not happen, both of which say what they are waiting for. The ten are a standing
+finding, not a licence to add an eleventh.
+
 **Adjusting the numbers.** The assertion budget is ~3x Playwright's default, tracking the
 measured contention factor; the per-test budget is 2x, the point at which the throttle
 probe below turned red into green where 30s could not. Re-derive both the same way rather
@@ -125,6 +209,79 @@ the values live.
   survive 60x and fail 4/4 at 90x — then confirm the fix against the same rate. Probes
   like this are exploration and are **never committed**: write the finding down, delete
   the probe.
+
+## Locators
+
+**Query by role and accessible name where the element publishes one that is stable; use a
+`data-*` or class selector where it does not.** Both halves are the policy — the second is
+not a concession (EXC-1051). Three things disqualify a role query: no role in the
+accessibility tree at all, a role carrying no accessible name, and — the case that catches
+people — a name that is really fixture data. Each gets a bullet below.
+
+- **Where no accessible target exists, say so rather than apologising.** The plan surface
+  is `<div class="diff-plan" role="presentation">`
+  (`ui/src/components/DiffPlanView.svelte:1378`), deliberately out of the accessibility
+  tree; the `@pierre/diffs` code grid, the file-preview internals, and CodeMirror's DOM
+  are third-party or presentational markup with no meaningful roles. That is
+  **362 of the suite's 581 class-selector calls — 62%** (EXC-1049's inventory; re-derive
+  it the same way rather than trusting the number). What that surface wants is stability,
+  not semantics: prefer `[data-*]`, and reach the plan through `planSurface()` /
+  `PLAN_SURFACE` (`test/e2e/support/source-view.ts`) rather than writing a fresh
+  `.diff-plan` literal per spec.
+- **`getByRole("dialog")` does not match `role="alertdialog"`.** That is why
+  `ConfirmPopover` (`ui/src/components/ConfirmPopover.svelte:147-148`) went so long
+  queried by class despite publishing both a role and an `aria-label`. Ask for
+  `getByRole("alertdialog", { name })`.
+- **A class that *production* code queries is a contract, not a styling hook.**
+  `ui/src/components/CommentNavigator.svelte:90` reads `.nav-item` to build its keyboard
+  list, so a spec addressing `.nav-item` is addressing the same thing the component
+  depends on. Leave those as they are and say why in the spec — narrowing one to a role
+  query silently drops the coupling the test was covering.
+- **Scope a role locator to a `data-*` anchor before adding markup.** When a role has no
+  accessible name — `role="status"` is not name-from-content, and two components publish
+  it — scoping resolves the collision with no change to the app
+  (`page.locator("[data-file-preview]").getByRole("status")`). Two cases predicted to need
+  a new `aria-label` were solved this way instead.
+- **Never bind to a name that is fixture data.** `.switcher-trigger` stays a class: its
+  accessible name is the plan title plus a count badge, so a name query would hard-code
+  the fixture and stop matching the thing under test.
+
+Shared locators live in `test/e2e/support/chrome.ts` (the chrome around the plan) and
+`test/e2e/support/source-view.ts` (the plan surface itself) — one idiom, one home.
+
+## What is gated, and what stays prose
+
+`test/structure/e2e-conventions.test.ts` runs under `bun test` — not under `test e2e`, so
+it costs the Playwright suite nothing — and fails the build on four of the rules above
+(EXC-1054):
+
+| Rule | Stated in |
+| --- | --- |
+| no `waitForTimeout` call under `test/e2e/` | § Timing discipline |
+| no file under `test/e2e/` named for a unit suffix | § Spec naming — the collision crashes `bun test` |
+| no **value** import of `@playwright/test` in a spec | § The harness contract — `test` and `expect` come from `fixtures.ts` |
+| no non-zero `retries` | § Timeouts are budgets for the loaded host |
+
+Each is decided from the **TypeScript AST**, never from text, and that is what keeps the
+gate **allowlist-free**. A parser sees calls and imports, so `fixtures.ts`'s header
+explaining the sleep rule, and a spec's own comment about why it does not sleep, are
+simply not violations. A text rule would have to carve out every one of them, and each
+carve-out is a place the next author learns to add one more. The same discipline decides
+how narrowly each rule aims: `retries` is an ordinary English word, so that rule matches
+only inside the options object Playwright reads it from (`defineConfig`,
+`test.describe.configure`, or a config's default export) rather than anywhere the word
+appears — which is what stops an unrelated `{ retries: 3 }` in a `page.evaluate` payload
+from becoming the first exception.
+
+**The bar for gating a rule is that it needs no allowlist**, and that bar sorts the rules
+cleanly. An allowlist entry excusing a place the *detector* is wrong is a detector defect
+— fix the detector. An allowlist entry excusing a place the *rule* is wrong means the rule
+needs judgment, so it belongs in this file rather than in the suite. That is why the
+eleven `performance.now()` waits, the five raised `toPass` budgets, the locator policy,
+and the layer-choice convention are all written above and none of them are enforced below:
+every one needs someone to read a component, an app timer, or a fixture before deciding,
+and a gate shipped with a list of "these ones are fine" teaches appending rather than
+thinking.
 
 ## Artifact hygiene
 
