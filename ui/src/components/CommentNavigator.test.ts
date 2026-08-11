@@ -202,9 +202,9 @@ describe("CommentNavigator in compare mode", () => {
     expect(row.querySelector(".nav-unlinked-tag")?.textContent ?? null).toBeNull();
   });
 
-  test("still exposes .nav-item rows, so j/k roving focus keeps working", () => {
+  test("still exposes [data-nav-row] rows, so j/k roving focus keeps working", () => {
     const { target } = render(CommentNavigator, compare);
-    const items = target.querySelectorAll(".nav-item");
+    const items = target.querySelectorAll("[data-nav-row]");
     expect(items.length).toBe(3);
     expect(items[1]!.getAttribute("tabindex")).toBe("-1");
   });

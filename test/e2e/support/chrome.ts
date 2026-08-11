@@ -37,12 +37,13 @@ export function discardConfirm(page: Page): Locator {
 }
 
 /** The navigator's rows, in filtered order — the roving-focus targets for j/k.
- * `CommentNavigator.svelte`'s own `rows()` reads `.nav-item`, deliberately the
- * union of the inert `<li>` rows and the revealable ones' `<button>`; that union
- * has no role that names it, so the class is the component's contract rather than
- * a styling hook. Scoped to a navigator locator so it cannot reach a second panel. */
+ * `CommentNavigator.svelte`'s own `rows()` reads `[data-nav-row]`, deliberately
+ * the union of the inert `<li>` rows and the revealable ones' `<button>`; that
+ * union has no role that names it, so the attribute states the contract in the
+ * markup rather than leaving it resting on a styling class (EXC-1057). Scoped to
+ * a navigator locator so it cannot reach a second panel. */
 export function rows(navigator: Locator): Locator {
-  return navigator.locator(".nav-item");
+  return navigator.locator("[data-nav-row]");
 }
 
 /** The Request Changes dialog's committed inline comments, one `listitem` each.

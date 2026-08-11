@@ -39,7 +39,7 @@ test("opens from the strip, filters + underlines by text, and reveals comments a
   await expect(items).toHaveCount(3);
 
   // The unsent scratch is a distinct draft row (tag + text).
-  const draft = nav.locator(".nav-item.draft");
+  const draft = nav.locator("[data-nav-row].draft");
   await expect(draft).toHaveCount(1);
   await expect(draft).toContainText("draft");
   await expect(draft).toContainText("an unsent thought to finish later");
@@ -59,7 +59,7 @@ test("opens from the strip, filters + underlines by text, and reveals comments a
 
   // A draft reveals the same way (the row goes active); clear the search to see it.
   await search.fill("");
-  await nav.locator(".nav-item.draft").click();
+  await nav.locator("[data-nav-row].draft").click();
   await expect(nav.locator('[aria-current="true"].draft')).toContainText("an unsent thought");
 
   // Escape dismisses the panel.
