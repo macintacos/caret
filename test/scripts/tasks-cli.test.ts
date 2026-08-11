@@ -185,13 +185,25 @@ describe("tasks CLI: task command lines", () => {
     ]);
   });
 
-  test("test runs bun test --conditions browser", () => {
-    expect(testCommand([])).toEqual(["bun", "test", "--conditions", "browser"]);
+  // The --timeout is the unit lane's one budget (EXC-1056), sized for the loaded host
+  // the preflight gate actually runs on rather than for an idle one. It is emitted
+  // ahead of the forwarded args so a caller can still override it per invocation.
+  test("test runs bun test --conditions browser under the lane's timeout budget", () => {
+    expect(testCommand([])).toEqual([
+      "bun",
+      "test",
+      "--conditions",
+      "browser",
+      "--timeout",
+      "60000",
+    ]);
     expect(testCommand(["--test-name-pattern", "x"])).toEqual([
       "bun",
       "test",
       "--conditions",
       "browser",
+      "--timeout",
+      "60000",
       "--test-name-pattern",
       "x",
     ]);

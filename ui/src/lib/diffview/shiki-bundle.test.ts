@@ -3,9 +3,11 @@ import { describe, expect, test } from "bun:test";
 import { bundledLanguages as fullShikiBundle } from "shiki/bundle/full";
 import { createHighlighterCore } from "shiki/core";
 
+import { shikiThemeFor } from "$lib/caret-theme.ts";
 import {
   bundledLanguages,
   bundledThemes,
+  CARET_TOKENIZE_OPTIONS,
   createCaretRegexEngine,
 } from "$lib/diffview/shiki-bundle.ts";
 
@@ -44,6 +46,53 @@ describe("the shiki bundle", () => {
 
   test("bundledThemes is empty — caret renders only its own registered themes", () => {
     expect(Object.keys(bundledThemes)).toEqual([]);
+  });
+});
+
+// EXC-1056: shiki defaults `tokenizeTimeLimit` to 500ms and vscode-textmate spends it
+// as WALL CLOCK inside its scan loop — once the budget is gone the line is abandoned
+// where it stands and its remainder comes back as one token wearing whatever scope was
+// in force. Nothing is thrown and nothing is logged, so the caller cannot tell a
+// truncated line from a real one. That made every shiki call in this repo a function of
+// host load rather than of its input, which is what reddened the preflight gate: the
+// first tokenize in a bun process alone costs ~800ms (the engine translates a grammar's
+// patterns lazily, through JIT-cold transpiler code), and under gate contention even a
+// warmed one crosses 500ms.
+//
+// Both halves are asserted, because the value alone would say nothing about why it is
+// that value: the constant disables the budget, and a budget that is NOT disabled really
+// does silently truncate. The second half is what makes this a regression pin rather than
+// a restatement — if shiki ever stops truncating, it reds and this workaround can go.
+describe("caret's tokenize options", () => {
+  // One line, tokenized rich enough to need many patterns: `Row` is the token that
+  // disappears when the line is abandoned mid-scan (it merges into the run that follows).
+  const SAMPLE = "function build(rows: Row[]): string {";
+
+  /** A fresh highlighter, which is what makes the starved call deterministic: a new
+   * engine carries an empty pattern cache, so its first tokenize pays the translation
+   * cost and blows any budget this tight regardless of the host. */
+  async function highlighter() {
+    return await createHighlighterCore({
+      themes: [shikiThemeFor("caret-dark")],
+      langs: [import("shiki/langs/tsx.mjs")],
+      engine: createCaretRegexEngine(),
+    });
+  }
+
+  test("carry no wall-clock budget at all", () => {
+    expect(CARET_TOKENIZE_OPTIONS.tokenizeTimeLimit).toBe(0);
+  });
+
+  test("keep a line whole where a wall-clock budget truncates it", async () => {
+    const hl = await highlighter();
+    const base = { lang: "tsx", theme: "caret-dark" } as const;
+
+    // Starved first, on the cold engine: 1ms cannot survive the first scan.
+    const starved = hl.codeToTokensBase(SAMPLE, { ...base, tokenizeTimeLimit: 1 });
+    const whole = hl.codeToTokensBase(SAMPLE, { ...base, ...CARET_TOKENIZE_OPTIONS });
+
+    expect(starved[0]?.map((t) => t.content)).not.toContain("Row");
+    expect(whole[0]?.map((t) => t.content)).toContain("Row");
   });
 });
 
@@ -115,6 +164,10 @@ function collectPatterns(node: unknown, out: Set<string>) {
 // thing a shiki bump can invalidate. The ~9s is paid on every run deliberately:
 // behind an opt-in flag it would never actually run, and an unverified claim about
 // these 14,234 patterns is what let EXC-911 hide for as long as it did.
+//
+// It carries no timeout of its own (EXC-1056): the unit lane's budget covers it, and
+// a per-test literal sized on a quiet host is what put the gate's slowest test ~6x
+// from its own deadline. See UNIT_TEST_TIMEOUT_MS in scripts/tasks/test.ts.
 describe("every bundled pattern translates strictly", () => {
   test("no pattern fails to compile through caret's regexConstructor", async () => {
     const patterns = new Set<string>();
@@ -137,5 +190,5 @@ describe("every bundled pattern translates strictly", () => {
     expect(failures).toEqual([]);
     // Non-vacuity again: an empty pattern set would pass the check above.
     expect(patterns.size).toBeGreaterThan(10_000);
-  }, 60_000);
+  });
 });

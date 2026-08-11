@@ -14,9 +14,35 @@ import { execAndExit, runForward } from "@/tasks/lib/exec.ts";
 // ui/test-svelte-preload.ts); the backend suite passes unchanged under it. Extra
 // args (a path, --test-name-pattern, …) are forwarded to `bun test`.
 
-/** The argv `test unit` runs, plus forwarded args. */
+/**
+ * Per-test timeout for the whole unit lane, in milliseconds (EXC-1056).
+ *
+ * bun's own default is 5000, which sizes every test against an idle host. Inside
+ * `mise run preflight` the lane never has one: lint, both builds, the e2e suite and
+ * smoke run alongside it, and the unit suite measures 31s standalone against 88s in
+ * the gate (2.8x — the same figure `doc/agents/browser-testing.md` sizes the e2e
+ * budgets against). The slowest test in the suite translates all 14,234 bundled shiki
+ * patterns and takes ~10s on its own, so 5000 leaves it no room at all.
+ *
+ * 60s is a budget, not a retry: the test still runs once and still asserts the same
+ * thing, so nothing is hidden — a deadline only stops the suite claiming the machine
+ * was idle. It stays finite so a genuine hang is still bounded. One number for the
+ * lane, here, rather than a literal sprinkled per test.
+ */
+const UNIT_TEST_TIMEOUT_MS = 60_000;
+
+/** The argv `test unit` runs, plus forwarded args. The timeout precedes them so a
+ * caller passing its own `--timeout` still wins. */
 export function testCommand(args: string[]): string[] {
-  return ["bun", "test", "--conditions", "browser", ...args];
+  return [
+    "bun",
+    "test",
+    "--conditions",
+    "browser",
+    "--timeout",
+    String(UNIT_TEST_TIMEOUT_MS),
+    ...args,
+  ];
 }
 
 export async function runTest(args: string[]): Promise<never> {
