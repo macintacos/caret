@@ -97,7 +97,8 @@ export type ChunkState = GrammarState;
 export const MAX_HIGHLIGHT_LINE_CHARS = 1024;
 
 /** Whether `code` holds a line past `MAX_HIGHLIGHT_LINE_CHARS`, which both entry
- * points refuse rather than tokenize. */
+ * points refuse wholesale rather than tokenize — see the `ponytail:` note in
+ * highlightChunk for why the offending line's neighbours go down with it. */
 function hasUnhighlightableLine(code: string): boolean {
   return code.split("\n").some((line) => line.length > MAX_HIGHLIGHT_LINE_CHARS);
 }

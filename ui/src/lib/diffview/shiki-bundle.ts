@@ -106,6 +106,15 @@ export const createCaretRegexEngine = () =>
  * `MAX_HIGHLIGHT_LINE_CHARS` (diffview/highlight.ts) refuses the pathological long line
  * the time limit was really guarding against, and being a function of the code being
  * highlighted it holds identically on an idle host and a saturated one.
+ *
+ * That bound is applied by the CALLER rather than through shiki's own
+ * `tokenizeMaxLineLength`, which sits in this same options object and would look like
+ * the obvious home for it. shiki skips an over-long line WITHOUT advancing the grammar
+ * state, so a block comment or template literal opening on a skipped line would leave
+ * every line below it miscoloured; caret's callers refuse the whole chunk instead,
+ * which is the failure their surrounding code already contracts for. Carrying
+ * `tokenizeMaxLineLength` here as well would hide that decision behind a second bound
+ * that never fires.
  */
 export const CARET_TOKENIZE_OPTIONS = { tokenizeTimeLimit: 0 } as const;
 
