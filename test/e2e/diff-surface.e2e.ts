@@ -1685,7 +1685,7 @@ test("hovering a line body reveals the + and lifts that line's background, scope
   // At rest — mouse parked off any line — the gutter `+` is not shown.
   await page.mouse.move(0, 0);
   const plus = page.locator(".diffview [data-utility-button]");
-  await expect(plus).toBeHidden();
+  await expect(plus).toHaveCount(0);
 
   // Hover the body of line 3 ("Body line 1") at the view's horizontal centre, well
   // clear of the gutter, to prove the whole line is the hover target.

@@ -148,7 +148,7 @@ test("undecided permission shows the attention-tinted, requestable badge", async
   const tip = page
     .locator("[data-slot='tooltip-content']")
     .filter({ hasText: "Enable desktop notifications for new plans" });
-  await expect(tip).toBeHidden();
+  await expect(tip).toHaveCount(0);
   await bell.hover();
   await expect(tip).toBeVisible();
 });
@@ -167,6 +167,6 @@ test("first-run onboarding invites a new user to enable notifications", async ({
   // "Maybe later" records onboarding as seen and returns to the app; the bell
   // (now reachable) still reflects the undecided state.
   await page.getByRole("button", { name: "Maybe later" }).click();
-  await expect(enable).toBeHidden();
+  await expect(enable).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Notifications: default" })).toBeVisible();
 });

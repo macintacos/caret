@@ -6,7 +6,7 @@
 // guard's grace window on every `window` focus event, so dispatching a
 // synthetic focus event and typing immediately reproduces the race that real
 // refocus timing makes flaky to drive headless. The 2s suppression window is
-// absorbed by the auto-retrying toBeHidden — no fixed sleeps.
+// absorbed by the auto-retrying toHaveCount(0) — no fixed sleeps.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
@@ -34,5 +34,5 @@ test("a keystroke right after refocus triggers safe mode, which then releases", 
 
   // ...and the window releases on its own (2s duration, inside the suite's
   // assertion budget).
-  await expect(toast).toBeHidden();
+  await expect(toast).toHaveCount(0);
 });

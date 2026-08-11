@@ -137,13 +137,13 @@ test("entering compare mode leaves the panel closed; the tally opens it", async 
   await toggle.click();
   await expect(nav).toBeVisible();
   await toggle.click();
-  await expect(nav).toBeHidden();
+  await expect(nav).toHaveCount(0);
 
   // …and entering compare mode does not change that: the diff comes up with the
   // panel still shut, and the same tally opens it on the compared range.
   await page.getByRole("button", { name: "Compare versions" }).click();
   await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "split");
-  await expect(nav).toBeHidden();
+  await expect(nav).toHaveCount(0);
 
   await toggle.click();
   await expect(nav).toBeVisible();
@@ -232,7 +232,7 @@ test("reveals a compare comment past the fold (split), including after a round t
   // really unmounted rather than merely re-rendering.
   const compareToggle = page.getByRole("button", { name: "Compare versions" });
   await compareToggle.click();
-  await expect(page.getByRole("radio", { name: "Split" })).toBeHidden();
+  await expect(page.getByRole("radio", { name: "Split" })).toHaveCount(0);
   await compareToggle.click();
   await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "split");
   await expect.poll(() => scrollTop()).toBe(0);
@@ -355,12 +355,12 @@ test("the panel is dismissable with Escape and with the status-strip tally", asy
   await toggle.click();
   await expect(nav).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(nav).toBeHidden();
+  await expect(nav).toHaveCount(0);
 
   await toggle.click();
   await expect(nav).toBeVisible();
   await toggle.click();
-  await expect(nav).toBeHidden();
+  await expect(nav).toHaveCount(0);
 });
 
 test("leaving compare mode restores the single-version list", async ({ daemon, page }) => {

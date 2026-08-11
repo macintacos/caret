@@ -84,7 +84,7 @@ test("Escape dismisses the reject guard and leaves the review pending", async ({
   await page.getByRole("button", { name: "Reject", exact: true }).click();
   await expect(guard).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(guard).toBeHidden();
+  await expect(guard).toHaveCount(0);
 
   // The review is untouched.
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);

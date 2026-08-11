@@ -94,7 +94,7 @@ test("clicking outside dismisses the approve dialog and leaves the review pendin
   // A click on the backdrop (top-left corner, off the centered panel) dismisses —
   // the approve confirm is a dialog, not an alertdialog (EXC-791).
   await page.mouse.click(5, 5);
-  await expect(confirm).toBeHidden();
+  await expect(confirm).toHaveCount(0);
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
 });
 
@@ -278,7 +278,7 @@ test("Escape dismisses the approve guard and leaves the review pending", async (
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(guard).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(guard).toBeHidden();
+  await expect(guard).toHaveCount(0);
 
   // The review is untouched and the approve button still works.
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
@@ -304,6 +304,6 @@ test("Cancel dismisses the approve guard and leaves the review pending", async (
   // The explicit Cancel button routes to onCancel (distinct from Escape) — it
   // closes the guard and sends nothing.
   await guard.getByRole("button", { name: "Cancel" }).click();
-  await expect(guard).toBeHidden();
+  await expect(guard).toHaveCount(0);
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
 });

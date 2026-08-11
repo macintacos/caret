@@ -29,7 +29,7 @@ test("dialog opens, Escape closes, Cmd/Ctrl+Enter submits a rejection with feedb
   await expect(dialog).toBeVisible();
   await expect(editor).toBeFocused();
   await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
+  await expect(dialog).toHaveCount(0);
 
   // Reopen → type feedback → Cmd/Ctrl+Enter submits. fill() focuses the editor
   // and populates it (CodeMirror registers it), leaving focus there so the chord
@@ -243,6 +243,8 @@ test("an inline comment reveals a nested Context with the anchored source lines 
   // Both disclosures are collapsed by default (a real-browser check — happy-dom
   // can't tell a collapsed disclosure from an open one). The Context lives nested
   // in the inline comment's own expansion, so it takes two clicks to reveal.
+  // toBeHidden, not toHaveCount(0): a collapsed disclosure keeps its content
+  // mounted, which is the whole reason this check needs a real browser.
   const context = dialog.locator(".context-lines");
   await expect(context).toBeHidden();
   // The row's own disclosure trigger stays a class selector: its accessible name

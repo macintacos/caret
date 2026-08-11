@@ -207,7 +207,7 @@ test("picking a heading leaves the bar instead of parking a focus ring on the cr
   await menu.getByRole("menuitem", { name: "Delta" }).press("Enter");
 
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Delta"]);
-  await expect(menu).toBeHidden();
+  await expect(menu).toHaveCount(0);
   // Focus sits on the body, which the plan's window-level keys are happy with —
   // nothing in the bar is left ringed.
   await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe("BODY");
@@ -452,7 +452,7 @@ test("Enter on a heading that has children takes the reader there", async ({ dae
   await expect(page.locator(MENU).getByRole("menuitem", { name: "Alpha" })).toBeFocused();
 
   await page.keyboard.press("Enter");
-  await expect(page.locator(MENU)).toBeHidden();
+  await expect(page.locator(MENU)).toHaveCount(0);
   await expect(page.locator(CRUMB)).toHaveText(["Alpha"]);
 });
 
@@ -473,7 +473,7 @@ test("Escape and an outside click leave the reader exactly where they were", asy
   await page.keyboard.press("l");
   await expect(page.locator(SUBMENU).first()).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(menu).toBeHidden();
+  await expect(menu).toHaveCount(0);
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
   expect(await scrollTop(page)).toBe(parked);
 
@@ -483,7 +483,7 @@ test("Escape and an outside click leave the reader exactly where they were", asy
   await page.keyboard.press("l");
   await expect(page.locator(SUBMENU).first()).toBeVisible();
   await page.mouse.click(5, 5);
-  await expect(menu).toBeHidden();
+  await expect(menu).toHaveCount(0);
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
   expect(await scrollTop(page)).toBe(parked);
 });
@@ -498,6 +498,8 @@ test("a five-level trail shows whole while the row has room for it", async ({ da
 
   await jumpTo(page, "Echo");
   await expect(page.locator(SHOWN)).toHaveText(["Alpha", "Bravo", "Charlie", "Delta", "Echo"]);
+  // toBeHidden, not toHaveCount(0): as the comment above says, the marker stays
+  // in the list so the full trail keeps measuring — invisible, not absent.
   await expect(page.locator(MARKER)).toBeHidden();
 });
 
@@ -644,7 +646,7 @@ test("the bar's / never reaches the plan's own search, and gives it back on clos
   // plan then opens the search pill exactly as it does with the bar untouched.
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
-  await expect(menu).toBeHidden();
+  await expect(menu).toHaveCount(0);
   await page.keyboard.press("/");
   await expect(search).toBeVisible();
 });
@@ -671,7 +673,7 @@ test("Escape restores the hierarchical menu without leaving the bar", async ({ d
   await expect(menu.getByRole("menuitem", { name: "Charlie" })).toBeFocused();
 
   await page.keyboard.press("Escape");
-  await expect(menu).toBeHidden();
+  await expect(menu).toHaveCount(0);
   await expect(page.locator(CRUMB).last()).toBeFocused();
 });
 
@@ -693,7 +695,7 @@ test("Tab leaves the filter rather than being swallowed by the query field", asy
   await expect(menu.locator(QUERY)).toBeFocused();
 
   await page.keyboard.press("Tab");
-  await expect(menu).toBeHidden();
+  await expect(menu).toHaveCount(0);
 });
 
 test("/ reaches the filter from inside a submenu too", async ({ daemon, page }) => {

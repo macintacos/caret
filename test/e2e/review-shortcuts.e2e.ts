@@ -68,13 +68,13 @@ test("a opens the approve guard (never a raw approve) and Escape dismisses it", 
   // `a` routes through the unsent-comments guard — the same "Approve this plan?"
   // confirmation the button opens, never a straight resolve.
   const confirm = page.getByRole("dialog", { name: "Approve this plan?" });
-  await expect(confirm).toBeHidden();
+  await expect(confirm).toHaveCount(0);
   await page.keyboard.press("a");
   await expect(confirm).toBeVisible();
 
   // The review is still pending — the guard has not resolved anything.
   await page.keyboard.press("Escape");
-  await expect(confirm).toBeHidden();
+  await expect(confirm).toHaveCount(0);
   await planSurface(page);
 });
 
@@ -89,7 +89,7 @@ test("r opens the request-changes dialog", async ({ daemon, page }) => {
   );
 
   const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
-  await expect(dialog).toBeHidden();
+  await expect(dialog).toHaveCount(0);
   await page.keyboard.press("r");
   await expect(dialog).toBeVisible();
 });
@@ -107,12 +107,12 @@ test("shift+R opens the reject guard and Escape dismisses it", async ({ daemon, 
   // Shift+R routes through onReject's confirm — the same alertdialog the button
   // opens, never a raw deny. Resolution behavior is covered by reject.e2e.ts.
   const confirm = page.getByRole("alertdialog");
-  await expect(confirm).toBeHidden();
+  await expect(confirm).toHaveCount(0);
   await page.keyboard.press("R");
   await expect(confirm).toBeVisible();
 
   await page.keyboard.press("Escape");
-  await expect(confirm).toBeHidden();
+  await expect(confirm).toHaveCount(0);
   await planSurface(page);
 });
 
@@ -134,13 +134,15 @@ test("comma opens Settings even with no active review; a, r and shift+R no-op th
   await page.keyboard.press("a");
   await page.keyboard.press("r");
   await page.keyboard.press("R");
-  await expect(page.getByRole("dialog", { name: "Approve this plan?" })).toBeHidden();
-  await expect(page.getByRole("dialog", { name: "Send the plan back for revision" })).toBeHidden();
-  await expect(page.getByRole("alertdialog")).toBeHidden();
+  await expect(page.getByRole("dialog", { name: "Approve this plan?" })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Send the plan back for revision" })).toHaveCount(
+    0,
+  );
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
 
   // Settings opens regardless.
   const settings = page.getByRole("dialog", { name: "Settings" });
-  await expect(settings).toBeHidden();
+  await expect(settings).toHaveCount(0);
   await page.keyboard.press(",");
   await expect(settings).toBeVisible();
 });
@@ -237,7 +239,7 @@ test("Escape closes the breadcrumbs menu and hands focus back to the crumb", asy
   await expect(menu).toBeVisible();
 
   await page.keyboard.press("Escape");
-  await expect(menu).toBeHidden();
+  await expect(menu).toHaveCount(0);
   await expect(crumb).toBeFocused();
 });
 
@@ -262,5 +264,5 @@ test("backslash opens the breadcrumbs bar, the same as b", async ({ daemon, page
   // invocation, not a one-way open. Escape's dismissal is a different contract and
   // is pinned by its own spec above.
   await page.keyboard.press("\\");
-  await expect(menu).toBeHidden();
+  await expect(menu).toHaveCount(0);
 });

@@ -109,8 +109,8 @@ test("TopBar secondary actions stay reachable via the overflow menu at a narrow 
   // "More actions" overflow menu (EXC-810); the integration guarantee is that they
   // remain reachable there rather than disappearing. topbar-overflow.e2e.ts owns the
   // per-variant detail.
-  await expect(page.getByRole("button", { name: "Reject" })).toBeHidden();
-  await expect(page.getByRole("button", { name: "Request changes" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Reject" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Request changes" })).toHaveCount(0);
   const overflow = page.getByRole("button", { name: "More actions" });
   await expect(overflow).toBeVisible();
   await overflow.click();

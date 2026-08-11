@@ -30,7 +30,7 @@ test("opens from the strip, filters + underlines by text, and reveals comments a
   const toggle = commentTally(page);
   await expect(toggle).toContainText("3");
   const nav = commentNavigator(page);
-  await expect(nav).toBeHidden();
+  await expect(nav).toHaveCount(0);
   await toggle.click();
   await expect(nav).toBeVisible();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
@@ -64,5 +64,5 @@ test("opens from the strip, filters + underlines by text, and reveals comments a
 
   // Escape dismisses the panel.
   await page.keyboard.press("Escape");
-  await expect(nav).toBeHidden();
+  await expect(nav).toHaveCount(0);
 });
