@@ -7,8 +7,12 @@
 // fullyParallel workers collision-free. The fixture runs under the Playwright
 // (node) runner; only the daemon child needs Bun, so it is spawned with `bun`
 // explicitly.
+//
+// Boot is not the whole cost a test pays for its daemon: the first seed() also
+// acquires rumdl to format its plan, which is why pinnedRumdl() below hands the
+// daemon a pre-resolved binary rather than letting it download one (EXC-1053).
 
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -20,6 +24,7 @@ import { test as base, expect, type Page } from "@playwright/test";
 
 import { waitForHealth } from "@/daemon/client.ts";
 import type { ClientReview, DraftBody, PlanInput, RouteResult } from "@/lib/types.ts";
+import { RUMDL_VERSION } from "@/plan/rumdl.ts";
 
 import { FIXTURE_PLAN } from "./fixture-plan.ts";
 
@@ -120,11 +125,67 @@ function awaitPortLine(child: ChildProcess, stderr: () => string): Promise<numbe
 // setTimeout rather than Bun.sleep (the src probe defaults to Bun.sleep).
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+/** Run `cmd` and return its trimmed stdout, or "" on any failure — absent,
+ * non-zero, or still running at the timeout. execFileSync blocks the node event
+ * loop, so the timeout is what keeps a wedged probe from wedging the worker past
+ * every Playwright deadline. */
+function tryOutput(cmd: string, args: string[]): string {
+  try {
+    return execFileSync(cmd, args, {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 5_000,
+    }).trim();
+  } catch {
+    return "";
+  }
+}
+
+let resolvedRumdl: string | undefined;
+
+/**
+ * The pinned rumdl to hand every daemon, resolved once per worker process.
+ *
+ * ensureRumdl() (src/plan/rumdl.ts) is version-gated against $XDG_STATE_HOME, and
+ * every test gets a fresh throwaway one — so without this the first POST
+ * /api/reviews of every test downloads the pinned 5.6MB release from GitHub,
+ * formats one plan with it, and deletes it at teardown. That is ~1.7GB per suite
+ * run on the critical path of every test (EXC-1053), and it also makes the suite
+ * depend on github.com being reachable.
+ *
+ * The bun suite already solves this the same way: test/support/rumdl-preload.ts
+ * (EXC-828) sets CARET_RUMDL_BIN from PATH through bunfig.toml's [test] preload.
+ * Playwright doesn't read bunfig, so this is that resolution for the node runner
+ * — same source (PATH, i.e. the mise-pinned tool), so they resolve the same
+ * binary.
+ *
+ * Loud on purpose. A binary that is missing or reports the wrong version is NOT
+ * an error downstream — ensureRumdl just falls back to the download — so failing
+ * quietly here would silently restore the whole cost.
+ */
+function pinnedRumdl(): string {
+  if (resolvedRumdl) return resolvedRumdl;
+  const bin = process.env.CARET_RUMDL_BIN?.trim() || tryOutput("which", ["rumdl"]);
+  const version = bin ? tryOutput(bin, ["--version"]).split(/\s+/).at(-1) : "";
+  if (version !== RUMDL_VERSION) {
+    throw new Error(
+      `caret e2e: no rumdl ${RUMDL_VERSION} to hand the daemon — resolved ${bin || "nothing"}, ` +
+        `reporting ${version || "nothing"}. Run \`mise install\` (mise.toml pins it) or set ` +
+        "CARET_RUMDL_BIN; without it every test downloads the pinned release into its own " +
+        "throwaway state dir.",
+    );
+  }
+  resolvedRumdl = bin;
+  return bin;
+}
+
 export const test = base.extend<{ daemon: Daemon }>({
   // Playwright requires the first fixture argument to be an object-destructuring
   // pattern even when no upstream fixtures are consumed.
   // biome-ignore lint/correctness/noEmptyPattern: Playwright fixture signature
   daemon: async ({}, use) => {
+    // Before mkdtemp so an unresolvable rumdl can't leak a state dir.
+    const rumdl = pinnedRumdl();
     // Ephemeral, isolated state: the daemon's reviews/prefs/logs all live under
     // this dir and are wiped at teardown. The user's real state is never touched.
     const stateDir = await mkdtemp(join(tmpdir(), "caret-e2e."));
@@ -134,6 +195,7 @@ export const test = base.extend<{ daemon: Daemon }>({
       env: {
         ...process.env,
         XDG_STATE_HOME: stateDir,
+        CARET_RUMDL_BIN: rumdl,
       },
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -258,6 +320,26 @@ export const test = base.extend<{ daemon: Daemon }>({
 export async function waitPastSafeModeGrace(page: Page): Promise<void> {
   const t0 = await page.evaluate(() => performance.now());
   await page.waitForFunction((t) => performance.now() > t + 350, t0);
+}
+
+/**
+ * Wait until the review poll has delivered two more list responses.
+ *
+ * The UI re-fetches GET /api/reviews every 2s (ui/src/state/polling.svelte.ts).
+ * Specs asserting a NEGATIVE across that poll — nothing remounted, nothing
+ * re-fetched, scroll did not reset — need the poll to have actually ticked twice,
+ * which is a network event, not an elapsed duration. Waiting on the responses is
+ * both the web-first form and the honest one: a fixed sleep either undershoots a
+ * loaded host or overshoots an idle one, and it never says what it is waiting for.
+ *
+ * Two, not one: one tick could have been in flight when the assertion's setup
+ * finished, so the second is the first that provably observed the settled state.
+ */
+export async function waitForTwoPollTicks(page: Page): Promise<void> {
+  let seen = 0;
+  await page.waitForResponse(
+    (res) => new URL(res.url()).pathname === "/api/reviews" && ++seen >= 2,
+  );
 }
 
 export { expect };

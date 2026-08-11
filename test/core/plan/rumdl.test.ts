@@ -103,6 +103,19 @@ async function withoutOverride<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/** Run `fn` with the CARET_RUMDL_BIN override pointed at `bin`, restoring
+ * whatever the test preload left there. */
+async function withOverride<T>(bin: string, fn: () => Promise<T>): Promise<T> {
+  const prev = process.env.CARET_RUMDL_BIN;
+  process.env.CARET_RUMDL_BIN = bin;
+  try {
+    return await fn();
+  } finally {
+    if (prev === undefined) delete process.env.CARET_RUMDL_BIN;
+    else process.env.CARET_RUMDL_BIN = prev;
+  }
+}
+
 /** An executable stand-in for rumdl that reports `version` the way the real one
  * does (`rumdl <semver>` on stdout). */
 async function fakeRumdlAt(path: string, version: string): Promise<void> {
@@ -184,6 +197,38 @@ test("ensureRumdl ignores a rumdl on PATH and installs to caret's own location",
     } finally {
       process.env.PATH = prevPath;
     }
+  });
+});
+
+test("ensureRumdl uses a CARET_RUMDL_BIN that reports the pinned version", async () => {
+  const supplied = join(await mkdtemp(join(tmpdir(), "caret-rumdl-override-")), "rumdl");
+  await fakeRumdlAt(supplied, RUMDL_VERSION);
+
+  await withOverride(supplied, async () => {
+    const { bin, installed } = await ensureRumdl(async () => {
+      throw new Error("must not install over an override that is already the pinned version");
+    });
+
+    expect(bin).toBe(supplied);
+    expect(installed).toBe(false);
+  });
+});
+
+test("ensureRumdl ignores a CARET_RUMDL_BIN that is not the pinned version", async () => {
+  // The override skips the download, not the version thesis (EXC-1053): a binary
+  // that reports anything else falls through to caret's own pinned acquisition
+  // rather than silently reflowing plans with a version caret didn't choose.
+  const stale = join(await mkdtemp(join(tmpdir(), "caret-rumdl-override-")), "rumdl");
+  await fakeRumdlAt(stale, "0.2.30");
+
+  await withOverride(stale, async () => {
+    const { calls, install } = recordingInstaller();
+
+    const { bin, installed } = await ensureRumdl(install);
+
+    expect(bin).toBe(rumdlBin());
+    expect(installed).toBe(true);
+    expect(calls).toEqual([rumdlBin()]);
   });
 });
 

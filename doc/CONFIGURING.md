@@ -149,7 +149,7 @@ to the config file, then the default.
 | `CARET_AGENT`        | —                     | `claude`         | Which coding-agent adapter to drive. `claude` (default) or `codex` (provisional, default-off — see [Architecture](ARCHITECTURE.md#architecture-tool-agnostic-core--agent-adapter)).                                                                                                                      |
 | `XDG_STATE_HOME`     | —                     | `~/.local/state` | Unresolved reviews persist under `$XDG_STATE_HOME/caret/reviews/` and rehydrate on restart.                                                                                                                                                                                                             |
 | `CARET_CONFIG_FILE`  | —                     | _(see [Config file](#config-file))_ | Absolute path to the settings file, overriding the resolved `config.toml` location. `mise run dev` sets it to `config.dev.toml`; `--fresh` sets it to a nonexistent path so dev boots from built-in defaults.                                                                                             |
-| `CARET_RUMDL_BIN`    | —                     | _(downloads)_    | Absolute path to an existing rumdl binary for plan formatting, overriding the on-first-use download of the pinned v0.2.47 into `$XDG_STATE_HOME/caret/rumdl/`. Blank counts as unset. Useful for offline / air-gapped installs or reusing a system rumdl.                                                 |
+| `CARET_RUMDL_BIN`    | —                     | _(downloads)_    | Absolute path to an existing rumdl binary for plan formatting, overriding the on-first-use download of the pinned v0.2.47 into `$XDG_STATE_HOME/caret/rumdl/`. Taken only when it reports that same pinned version; anything else falls back to the download. Blank counts as unset. Useful for offline / air-gapped installs or reusing a system rumdl. |
 | `CARET_OPENCODE_BIN` | —                     | _(packaged)_     | Absolute path to the caret binary the OpenCode plugin spawns — for `caret review` and the daemon prewarm alike — overriding the one shipped beside the plugin in the `@macintacos/caret` package. Blank counts as unset. The way to point a published-package OpenCode install at a local build.          |
 
 ### Dev-only
@@ -200,5 +200,6 @@ How that plays out:
   warning rather than a failed install — the first plan retries.
 - **Formatting never loses a plan.** If a plan can't be formatted (rumdl missing, offline,
   or an unsupported platform), caret stores it unchanged and logs one warning.
-- **`CARET_RUMDL_BIN` is the one opt-out.** Point it at a binary of your own and caret
-  uses that instead, unchecked.
+- **`CARET_RUMDL_BIN` opts out of the download, not the pin.** Point it at a rumdl of your
+  own and caret uses that instead of downloading — but only when it reports the pinned
+  version too; anything else falls back to the download.
