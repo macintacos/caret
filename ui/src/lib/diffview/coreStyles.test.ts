@@ -28,6 +28,20 @@ function caretOverrides(src: string): string {
 
 const overrides = caretOverrides(coreStyles);
 
+// CARET_OVERRIDES is a template literal, so one backtick anywhere inside it — most often
+// in a CSS comment quoting markdown syntax — closes it early. Every assertion below then
+// scans a truncated sheet and dozens fail at once, naming rules that are perfectly fine;
+// three tickets in a row have spent a debugging cycle on that cascade. This is the one
+// assertion that says what actually happened, and it runs before any of them.
+test("the override sheet closes where it should, with no stray backtick inside it", () => {
+  const opened = coreStyles.indexOf("const CARET_OVERRIDES = `");
+  const closed = coreStyles.indexOf("\n`;", opened);
+  expect(opened).toBeGreaterThan(-1);
+  // The captured body reaches the sheet's real end rather than stopping at a backtick
+  // partway through it.
+  expect(overrides.length).toBe(closed - (opened + "const CARET_OVERRIDES = `".length) + 1);
+});
+
 // The override body with /* … */ comments stripped. The comments legitimately name
 // [data-gutter]/[data-content] and corner properties in prose, which would let a
 // selector regex span from a comment into an unrelated rule — so structural
@@ -1222,5 +1236,72 @@ describe("blockquote level bars (EXC-863)", () => {
     // The marker child carries the bar; fading it with the ink it replaced would
     // dim the one thing that has to stay legible at depth.
     expect(subdueRule).toMatch(/:not\(\[data-md-quote\]\)/);
+  });
+});
+
+// EXC-862: thematic breaks. Transform-in-place like the level bars above — the `---`
+// stays in the row and the rule is drawn over it — but the mechanism is the load-bearing
+// half here, and it is the one thing a stylesheet regex can actually pin. A pass that
+// APPENDED a node would loop the repaint observer inside a table cell (EXC-870), and a
+// declaration that changed the row's height would drift the gutter numbers; both failures
+// are invisible in a diff and obvious in this suite.
+describe("thematic breaks (EXC-862)", () => {
+  const ruleRule = rulesFor(String.raw`\[data-md-rule\]`).find((r) =>
+    r.includes("background-image:"),
+  );
+  const inkRule = rulesFor(String.raw`\[data-md-rule\][^{}]*`).find((r) => r.includes("color:"));
+
+  test("both rules are present to assert against", () => {
+    expect(ruleRule).toBeDefined();
+    expect(inkRule).toBeDefined();
+  });
+
+  test("paints the rule as a background, never as a pseudo-element", () => {
+    // The whole point of the mechanism: no node, no ::before, nothing for tables.ts's
+    // child-count settle check to disagree with.
+    expect(ruleRule).toMatch(/background-image:\s*linear-gradient\(/);
+    expect(overrideDecls).not.toMatch(/\[data-md-rule\][^{]*::(?:before|after)/);
+  });
+
+  test("spans the full column at one pixel, centered", () => {
+    expect(ruleRule).toMatch(/background-size:\s*100%\s+1px/);
+    expect(ruleRule).toMatch(/background-position:\s*center/);
+    expect(ruleRule).toMatch(/background-repeat:\s*no-repeat/);
+  });
+
+  test("measures that width against a box the seam pull cannot move", () => {
+    // The seam-fill group pulls a hovered, cursored or selected row 20px left and re-adds
+    // the inset as padding, so a percentage of the PADDING box (the default origin) would
+    // lengthen the divider by 20px for as long as the row is banded. The content box is
+    // invariant under that pull.
+    expect(ruleRule).toMatch(/background-origin:\s*content-box/);
+  });
+
+  test("spends the ink that clears the non-text floor, not a rule token or a chip tint", () => {
+    // The rule tokens are 10% and 16% ink and effectively vanish on the sunk diff surface
+    // (--rule 1.15-1.34, --rule-strong 1.24-1.62 across the nine palettes); --ink-faint is
+    // under 3:1 on two of them. theme.test.ts owns those measurements — this pins only that
+    // the sheet spends what they chose.
+    expect(ruleRule).toMatch(/var\(--ink-soft\)/);
+    expect(ruleRule).not.toContain("--chip-");
+    expect(ruleRule).not.toContain("--rule");
+  });
+
+  test("overdraws the characters rather than deleting them", () => {
+    // The row keeps every character for copy, the comment anchors and the column grid;
+    // only the ink goes. The row itself is covered as well as its tokens, so a line the
+    // library has not yet wrapped in shiki spans shows no glyph either.
+    expect(inkRule).toMatch(/color:\s*transparent/);
+    expect(inkRule).toMatch(/\[data-line\]\[data-md-rule\],/);
+  });
+
+  test("costs the row's height nothing", () => {
+    // One gutter number per row. Anything here that grew the line box would drift the
+    // numbers against the rows long before it read as a divider. Anchored on the start of
+    // a declaration rather than on a word boundary, so `line-height` — the likeliest way
+    // to grow a row while looking harmless — is caught rather than skipped past.
+    expect(ruleRule).not.toMatch(
+      /(?:^|[;{])\s*(?:margin|padding|height|min-height|line-height|border)[a-z-]*\s*:/,
+    );
   });
 });

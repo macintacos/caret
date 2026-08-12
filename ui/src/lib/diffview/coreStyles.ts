@@ -724,6 +724,78 @@ const CARET_OVERRIDES = `
     opacity: ${QUOTE_SUBDUE};
   }
 
+  /* EXC-862: a thematic break — three dashes, asterisks or underscores alone on a line —
+     drawn as a real horizontal rule across the content column. Transform-in-place again,
+     and the same trade the level bars above make: the characters stay in the row, so the
+     gutter number, the hover comment affordance, the cursor and the comment anchors are all
+     untouched and copy carries the real source; the glyphs go transparent and the rule is
+     drawn in the space they vacate. Subduing them instead was the other option and it does
+     not survive all three spellings — underscores sit at the baseline and asterisks sit
+     high, so a centered rule would read as a double line under one spelling and as a
+     strikethrough under another, while a transparent row renders the three identically.
+     Which is what the row IS: one rule, however it was typed.
+
+     Drawn as a background rather than an appended element or a ::before, and that is the
+     load-bearing choice rather than a stylistic one. tables.ts settles a celled row by
+     COUNTING its children, so any pass that appends one inside a table cell disagrees with
+     the count, rebuilds the row, and loops the repaint observer — EXC-870 measured ~10,800
+     childList mutations in two seconds on exactly that. A background paints no node at all,
+     so the loop is impossible by construction rather than by measurement, and unlike a
+     pseudo-element it needs no positioning context, so no stacking order moves.
+
+     It takes --ink-soft, and neither token a divider suggests first survived measurement on
+     the surface this actually renders on. --rule-strong was the obvious pick — the level
+     bars above reject the rule tokens only for a 2px mark, on the grounds that they are
+     "sized for hairlines that span a whole edge", and this IS that hairline — but those
+     tokens are 10% and 16% ink, and composited over --paper-sunk and the row's own 2-8%
+     bands --rule measures 1.15 to 1.34 and --rule-strong 1.24 to 1.62 across the nine
+     palettes. That is barely above the 1.05 this epic treats as indistinguishable: the line
+     is in the DOM and not on the screen. --ink-faint, the marker ink the chip family
+     prescribes, is the other candidate and lands at 2.63 to 4.79 — under WCAG 1.4.11's 3:1
+     floor on catppuccin-latte and github-light, the gap EXC-860 measured for the checkbox.
+
+     That floor binds here, which is the part worth being explicit about rather than
+     inheriting. The glyphs above are transparent, so this line is the ONLY thing carrying
+     "a section break sits here". A decoration beside a legible marker could argue it is
+     ornamental; one that has replaced its marker cannot. --ink-soft bottoms at 4.21 across
+     the nine and is pinned in theme.test.ts against the banded diff surface, the same shape
+     and for the same reason as the checkbox's pin.
+
+     No inset and no margin: the row must keep its height to the character, since the gutter
+     numbers are one per row and a rule that changed the vertical rhythm would be visible as
+     drift long before it was visible as a divider. background-size is the whole geometry —
+     the full width of the box background-origin names, one pixel tall, centered in the row's
+     own line box.
+
+     That origin is CONTENT-BOX rather than the padding-box default, and it is not a detail:
+     the seam-fill group below pulls a banded row 20px left (a negative inline margin with
+     the inset re-added as padding) whenever it is hovered, cursored or selected, which is
+     every time the comment affordance is revealed. A percentage of the padding box would
+     grow with that pull and the divider would lengthen 20px into the gutter lane and snap
+     back. The content box is invariant under the pull — the margin and the padding cancel —
+     so the rule spans the character column and stays that length in every row state. The
+     rule survives those states deliberately: the band is a background-color and this is a
+     background-image over it, the same standing the bars take.
+
+     A vim-search hit landing on a rule row paints ::highlight(caret-search)'s band with no
+     glyph inside it, since that highlight sets background-color alone and the text under it
+     is transparent. Accepted rather than compensated: the mark still shows the reviewer
+     which row matched, which is what a hit on a row of punctuation can usefully say. */
+  [data-content] [data-line][data-md-rule] {
+    background-image: linear-gradient(var(--ink-soft), var(--ink-soft));
+    background-repeat: no-repeat;
+    background-origin: content-box;
+    background-position: center;
+    background-size: 100% 1px;
+  }
+  /* The row and its tokens both, so a repaint that has not yet wrapped the line in shiki
+     spans shows no glyph either — the library's own [data-line] span color rule is what
+     makes the second selector necessary once they exist. */
+  [data-content] [data-line][data-md-rule],
+  [data-content] [data-line][data-md-rule] > * {
+    color: transparent;
+  }
+
   /* EXC-729: an overflowing fenced block is wrapped in one scroll card (codeBlockScroll.ts)
      that is a single native horizontal scroll container — the whole block scrolls as one unit
      (short lines follow the wide ones, one scrollbar at the bottom, no per-row jelly). The card

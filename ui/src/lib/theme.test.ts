@@ -71,6 +71,31 @@ function contrast(a: string, b: string): number {
   return (light + 0.05) / (dark + 0.05);
 }
 
+/** A row of the diff surface: `bg` banded with `pct` of `ink`, the shape
+ * `color-mix(in lab, --paper-sunk, --ink N%)` paints for the cursor and hover bands.
+ * This is the ground every plan-view decoration is really drawn on, as distinct from
+ * the two CHROME surfaces the ink-ramp case measures.
+ *
+ * Mixed in sRGB rather than in lab: the two differ by well under the headroom these
+ * floors are measured with, and matching the browser's space exactly would mean
+ * carrying a lab implementation to pin ratios that clear by more than a point. */
+function banded(bg: string, ink: string, pct: number): string {
+  const [br, bg_, bb] = channels(bg);
+  const [ir, ig, ib] = channels(ink);
+  const mix = (b: number, i: number) => b * (1 - pct) + i * pct;
+  return `#${[mix(br, ir), mix(bg_, ig), mix(bb, ib)]
+    .map((c) =>
+      Math.round(c * 255)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
+}
+
+/** The bands a plan-view row is drawn over: the bare surface, the hover/cursor tint,
+ * and the widest band, which is the darkest ground any decoration sits on. */
+const ROW_BANDS = [0, 0.02, 0.08] as const;
+
 const themeEntries = () => Object.entries(THEMES) as [ThemeId, (typeof THEMES)[ThemeId]][];
 
 describe("THEMES", () => {
@@ -423,30 +448,51 @@ describe("every theme", () => {
   // than about this indicator, and re-tinting a shared token is not EXC-860's to do.
   test("keeps the task checkbox above the non-text floor on every palette", () => {
     const CHECKBOX_INK = "--ink-soft" as const;
-    // The row bands the diff surface with color-mix(in lab, --paper-sunk, --ink N%);
-    // 8% is the widest band, so it is the darkest ground the glyph is drawn on. Mixed in
-    // sRGB here rather than in lab: the two differ by well under the headroom this floor
-    // is measured with, and matching the browser's space exactly would mean carrying a
-    // lab implementation to pin a ratio that clears by more than a point.
-    const banded = (bg: string, ink: string, pct: number): string => {
-      const [br, bg_, bb] = channels(bg);
-      const [ir, ig, ib] = channels(ink);
-      const mix = (b: number, i: number) => b * (1 - pct) + i * pct;
-      return `#${[mix(br, ir), mix(bg_, ig), mix(bb, ib)]
-        .map((c) =>
-          Math.round(c * 255)
-            .toString(16)
-            .padStart(2, "0"),
-        )
-        .join("")}`;
-    };
     for (const [id, theme] of themeEntries()) {
       const sunk = theme.tokens["--paper-sunk"];
-      for (const pct of [0, 0.02, 0.08]) {
+      for (const pct of ROW_BANDS) {
         const ground = banded(sunk, theme.tokens["--ink"], pct);
         expect(
           contrast(theme.tokens[CHECKBOX_INK], ground),
           `${id} checkbox ${CHECKBOX_INK} on --paper-sunk banded ${pct * 100}%`,
+        ).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
+  // EXC-862 draws a thematic break as a full-width hairline and takes the source glyphs
+  // to transparent, so the LINE is the only thing carrying "a section break sits here" —
+  // no legible marker survives beside it to argue the decoration is ornamental. That is
+  // what puts it under the same 3:1 non-text floor as the checkbox above rather than
+  // among the faint structural markers, and on the same surface: the diff body is
+  // --paper-sunk (styles/diffview.css) plus the row bands.
+  //
+  // Both tokens a divider suggests first fail there, which is the whole reason this case
+  // exists. --rule and --rule-strong are 10% and 16% ink; composited over these grounds
+  // they measure 1.15-1.34 and 1.24-1.62 across the nine — barely above the 1.05 this
+  // epic treats as indistinguishable, so the line renders as nothing at all. --ink-faint,
+  // the marker ink, lands at 2.63-4.79 and misses the floor on catppuccin-latte and
+  // github-light, the same two EXC-860 found. Swap RULE_INK to any of the three and this
+  // reds naming the palette.
+  test("keeps the thematic-break rule above the non-text floor on every palette", () => {
+    const RULE_INK = "--ink-soft" as const;
+    // What the line PAINTS, not what its token names. channels() drops an alpha suffix
+    // on purpose — a wash and its hue are one color for the angle tests — but a
+    // translucent paint's contrast is the contrast of what lands on the ground, so the
+    // src-over composite happens here. An opaque token passes through unchanged, which
+    // is why the assertion can be written once for any candidate.
+    const alpha = (hex: string) => {
+      const m = /^#[0-9a-f]{6}([0-9a-f]{2})$/i.exec(hex);
+      return m === null ? 1 : Number.parseInt(m[1] as string, 16) / 255;
+    };
+    const over = (fg: string, bg: string) => banded(bg, fg, alpha(fg));
+    for (const [id, theme] of themeEntries()) {
+      const sunk = theme.tokens["--paper-sunk"];
+      for (const pct of ROW_BANDS) {
+        const ground = banded(sunk, theme.tokens["--ink"], pct);
+        expect(
+          contrast(over(theme.tokens[RULE_INK], ground), ground),
+          `${id} thematic-break rule ${RULE_INK} on --paper-sunk banded ${pct * 100}%`,
         ).toBeGreaterThanOrEqual(3);
       }
     }
