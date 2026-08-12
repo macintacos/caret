@@ -121,7 +121,13 @@ const LIST_PREFIX = /^ {0,3}(?:[-*+]|\d+[.)])\s+(?=>)/;
 // `[X]`, then whitespace or the line's end — `- [x]done` is not a task item.
 // Group 1 is what precedes the brackets, so its length is their offset from the
 // content start rather than from column zero.
-const TASK_MARKER = /^(\s*(?:[-*+]|\d+[.)])\s+)\[([ xX])\](?=\s|$)/;
+//
+// The nine-digit cap is CommonMark's, and it is spelled the same way here as in
+// LIST_MARKER below deliberately: the two scans decide the same question — does
+// this line open a list item — so a run either scan refuses must be refused by
+// both. While this read `\d+` a ten-digit line got a checkbox from here and no
+// marker from there, leaving the row with half a decoration.
+const TASK_MARKER = /^(\s*(?:[-*+]|\d{1,9}[.)])\s+)\[([ xX])\](?=\s|$)/;
 
 // A thematic break: three or more of the SAME marker, spaces or tabs allowed
 // between them, and nothing else on the line. Checked before the list scan
