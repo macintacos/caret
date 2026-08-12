@@ -53,8 +53,8 @@ test("the default heartbeat derives a comfortable idleTimeout", () => {
 // hasKnownFileExtension is the narrowing both runtimes apply on top of the
 // path-shaped gate (EXC-916): the daemon's bounded basename walk fires only for
 // a file-shaped name, and the link layer folds it into a broader test — a
-// `[label](target)` collapses if it is file-shaped or spans more than one
-// segment (EXC-956). Its edges decide whether a reference gets an
+// collapsed `[label](target)` earns a reference only if its target is file-shaped
+// or spans more than one segment (EXC-956). Its edges decide whether a reference gets an
 // affordance and whether a 5,000-dirent walk runs, so they are pinned here.
 describe("hasKnownFileExtension", () => {
   test.each([

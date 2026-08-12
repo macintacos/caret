@@ -290,26 +290,42 @@ describe("buildLinkLayer file-path targets", () => {
   });
 
   test.each([
-    ["an extensionless single segment", "see [docs](guide) for more"],
-    ["the same segment with a trailing slash", "see [docs](guide/) for more"],
-    ["a fragment target", "see [Setup](doc/guide.md#setup) for more"],
-    ["a query target", "see [the page](docs/index?v=1) for more"],
-    ["a scheme-less URL", "see [caret](github.com/macintacos/caret) for more"],
-    ["a home-relative path", "see [the notes](~/notes/plan.md) for more"],
-    ["a path climbing out of cwd", "see [the shared lib](../shared/src) for more"],
-  ])("a target that is not a citable path stays literal (%s)", (_name, input) => {
-    // Four refusals in one shape, each costing nothing but visible markup where
-    // collapsing would cost the destination outright. A single extensionless
-    // segment is a word, not a citation — and adding a slash to it does not make
-    // it one, which is the whole trailing-slash-is-not-a-discriminator rule
-    // applied at its sharpest. A fragment or query makes the target a URL slot
-    // however its head reads. So does a dotted first segment: `github.com/…`
-    // would otherwise collapse to a bare label with its destination nowhere. And
-    // `~` and `../` are targets no resolve could ever answer.
-    const { text, spans, fileRefs } = buildLinkLayer(input);
+    ["an extensionless single segment", "see [docs](guide) for more", "docs"],
+    ["the same segment with a trailing slash", "see [docs](guide/) for more", "docs"],
+    ["a fragment target", "see [Setup](doc/guide.md#setup) for more", "Setup"],
+    ["a query target", "see [the page](docs/index?v=1) for more", "the page"],
+    ["a home-relative path", "see [the notes](~/notes/plan.md) for more", "the notes"],
+    [
+      "a path climbing out of cwd",
+      "see [the shared lib](../shared/src) for more",
+      "the shared lib",
+    ],
+  ])("a path target that is not a citable reference still collapses, under a link run (%s)", (_name, input, label) => {
+    // Collapsing is universal for a path-shaped target; the specificity,
+    // fragment/query and unresolvable narrowings decide only whether a
+    // reference is emitted. What keeps a non-citation from silently losing its
+    // markup is the link run, which marks the label either way.
+    const { text, spans, fileRefs, inline } = buildLinkLayer(input);
+    expect(text).toBe(`see ${label} for more`);
+    // No clickable span: there is no http target to open.
+    expect(spans.get(1) ?? []).toHaveLength(0);
+    expect(fileRefs.size).toBe(0);
+    const runs = inline.get(1) ?? [];
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.link).toBe(true);
+    expect(text.slice(runs[0]?.startCol, runs[0]?.endCol)).toBe(label);
+  });
+
+  test("a scheme-less URL target stays literal — it is a host, not a path", () => {
+    // The one narrowing that still gates collapsing: `github.com/…` names a host,
+    // and collapsing it would leave the label with its destination recorded
+    // nowhere — not in the text, and not in a tooltip either.
+    const input = "see [caret](github.com/macintacos/caret) for more";
+    const { text, spans, fileRefs, inline } = buildLinkLayer(input);
     expect(text).toBe(input);
     expect(spans.get(1) ?? []).toHaveLength(0);
     expect(fileRefs.size).toBe(0);
+    expect(inline.get(1) ?? []).toHaveLength(0);
   });
 
   test("a scoped-package path is still a citable file target", () => {
@@ -376,10 +392,12 @@ describe("buildLinkLayer file-path targets", () => {
     // reason; the link layer rejects the scheme instead. Without the guard these
     // reach the daemon, whose basename fallback would resolve them to an
     // unrelated local file and preview it.
-    const { text, spans, fileRefs } = buildLinkLayer(input);
+    const { text, spans, fileRefs, inline } = buildLinkLayer(input);
     expect(text).toBe(input);
     expect(spans.get(1) ?? []).toHaveLength(0);
     expect(fileRefs.size).toBe(0);
+    // Nothing collapsed, so nothing is marked: the reader sees the real target.
+    expect(inline.get(1) ?? []).toHaveLength(0);
   });
 
   test("a :line target the label does not show gets the tooltip", () => {
@@ -455,6 +473,101 @@ describe("buildLinkLayer backticked-path labels", () => {
     // Positioned on the label's path itself, inside the backticks — not over
     // them — while the span's own path stays the link's target.
     expect(layer.text.slice(refs[0]?.startCol, refs[0]?.endCol)).toBe(covered);
+  });
+});
+
+// The inline-markdown layer (EXC-866): the flat atomic runs the decoration pass
+// turns into sibling elements. buildInlineSpans owns the run math and is tested
+// on its own; these pin how buildLinkLayer composes it — which columns count as
+// a link, which lines are skipped, and that nothing about the display text moved.
+describe("buildLinkLayer inline runs", () => {
+  function runsOnLine(text: string, line: number) {
+    return buildLinkLayer(text).inline.get(line) ?? [];
+  }
+
+  test("a collapsed http label is marked as a link", () => {
+    const { text, inline } = buildLinkLayer("See [the docs](https://example.com) now.");
+    const runs = inline.get(1) ?? [];
+    expect(runs).toEqual([{ startCol: 4, endCol: 12, link: true }]);
+    expect(text.slice(4, 12)).toBe("the docs");
+  });
+
+  test.each([
+    ["a bare URL", "see https://bare.test/x now", "https://bare.test/x"],
+    ["an autolink", "see <https://auto.test> now", "https://auto.test"],
+  ])("%s is marked as a link too", (_name, input, shown) => {
+    const layer = buildLinkLayer(input);
+    const runs = layer.inline.get(1) ?? [];
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.link).toBe(true);
+    expect(layer.text.slice(runs[0]?.startCol, runs[0]?.endCol)).toBe(shown);
+  });
+
+  test("an unsafe-scheme link is left literal and carries no link run", () => {
+    // The safety property, held at the emission layer: nothing marks a target
+    // caret would refuse to open, so no chip can imply it is followable.
+    expect(runsOnLine("do not trust [this](javascript:alert(1)) here", 1)).toEqual([]);
+  });
+
+  test("a bare URL inside a collapsing label is part of the label, not its own link", () => {
+    // The label is consumed by the collapse, so the bare-URL pass never sees it:
+    // the whole label is one link run and the URL inside it is not separately
+    // clickable. Pinned because a visually identical URL elsewhere on the line
+    // still is, and that asymmetry should be chosen rather than discovered.
+    const { text, spans, inline } = buildLinkLayer("[see https://x.test/a](guide)");
+    expect(text).toBe("see https://x.test/a");
+    expect(spans.get(1) ?? []).toHaveLength(0);
+    expect(inline.get(1)).toEqual([{ startCol: 0, endCol: 20, link: true }]);
+  });
+
+  test("a citable path label is a reference, not a link", () => {
+    // EXC-859: only non-path links take the link chip; a path-shaped target
+    // renders as a file reference instead.
+    const { fileRefs, inline } = buildLinkLayer("[a/b.md](a/b.md)");
+    expect(fileRefs.get(1) ?? []).toHaveLength(1);
+    expect(inline.get(1) ?? []).toEqual([]);
+  });
+
+  test("emphasis and inline code are marked in ordinary prose", () => {
+    expect(runsOnLine("a **bold** and `code`", 1)).toEqual([
+      { startCol: 2, endCol: 10, bold: true },
+      { startCol: 15, endCol: 21, code: true },
+    ]);
+  });
+
+  test("a fenced-code interior carries no runs and no depth", () => {
+    const layer = buildLinkLayer("```\n> **not marked**\n```\n");
+    expect(layer.inline.size).toBe(0);
+    expect(layer.quoteDepth.size).toBe(0);
+  });
+
+  test("quote depth is reported per line, unquoted lines absent", () => {
+    const layer = buildLinkLayer("plain\n> one\n> > two\nplain again");
+    expect([...layer.quoteDepth]).toEqual([
+      [2, 1],
+      [3, 2],
+    ]);
+  });
+
+  test("display text is byte-identical to the source when nothing collapses", () => {
+    // The load-bearing column guarantee: with no link collapse on a line, display
+    // columns ARE source columns, so every run's columns index the plan text.
+    const input = [
+      "# Heading with **bold**",
+      "",
+      "- [ ] a task with `code` and *emphasis*",
+      "> a quote with __strong__ text",
+      "> > deeper `**not bold**`",
+      "an escaped \\*marker\\* and a bare https://bare.test/x",
+      "```",
+      "> fenced **passthrough**",
+      "```",
+      "trailing prose",
+    ].join("\n");
+    const layer = buildLinkLayer(input);
+    expect(layer.text).toBe(input);
+    expect(layer.text.split("\n").length).toBe(input.split("\n").length);
+    expect(layer.inline.size).toBeGreaterThan(0);
   });
 });
 

@@ -185,11 +185,12 @@ describe("confinement is the daemon's job, not the parser's", () => {
 });
 
 // classify is the one definition of "path-shaped" in the codebase. It is exported
-// so the link layer applies the SAME gate to a `[label](target)` target before
-// collapsing it (EXC-954) — a second, drifting notion of what looks like a path
-// would let the two decoration paths disagree about the same text. The link layer
-// then narrows further on its own, which is why `guide` classifies here yet still
-// leaves a link literal.
+// so the link layer applies the SAME gate to a `[label](target)` target to decide
+// whether it is a path at all (EXC-954) — a second, drifting notion of what looks
+// like a path would let the two decoration paths disagree about the same text. The
+// link layer then narrows further on its own to decide the REFERENCE rather than
+// the collapse, which is why `guide` classifies here yet earns no citation: its
+// label collapses under a plain link run instead.
 describe("classify", () => {
   test("accepts a path with a known extension", () => {
     expect(classify("a/b.md")).toEqual({ path: "a/b.md", line: undefined });
