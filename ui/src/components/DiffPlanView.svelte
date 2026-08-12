@@ -1418,6 +1418,7 @@
           doc={{ name: "plan.md", text: linkLayer.text }}
           links={linkLayer.spans}
           inline={linkLayer.inline}
+          images={linkLayer.images}
           {fileRefs}
           onFileRefClick={openFileRef}
           annotations={sourceAnnotations}

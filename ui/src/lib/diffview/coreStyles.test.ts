@@ -549,6 +549,62 @@ describe("the inline-code chip (EXC-868)", () => {
   });
 });
 
+// EXC-870: the one element on this surface that is content rather than decoration. It is
+// also the only one whose geometry cannot shift a glyph — display: block takes it out of
+// the inline flow entirely, which is what lets it carry the margins every chip in this
+// sheet is forbidden. The rules are pinned structurally here; that the row track and its
+// gutter cell really grow around it is images.e2e.ts's job.
+describe("the inline image (EXC-870)", () => {
+  const imageRule = rulesFor(String.raw`\[data-md-image\]`)[0] ?? "";
+  const hiddenRule = rulesFor(String.raw`\[data-md-image\]\[hidden\]`)[0] ?? "";
+
+  test("is a block, so it takes its own line inside the row", () => {
+    // Inline, it would sit among shiki's tokens on a white-space: pre line and the
+    // monospace grid would stop matching source columns — the ladder trigger EXC-867
+    // names. Block is also what makes the row track grow to hold it.
+    expect(imageRule).toMatch(/display:\s*block/);
+  });
+
+  test("is capped in both axes and keeps its aspect ratio", () => {
+    // The height cap is what stops one asset owning the plan; the width cap borrows the
+    // fenced panel's own reading measure rather than inventing a second one, with min()
+    // leaving a narrow viewport in charge. Both dimensions stay auto so whichever cap
+    // bites first scales the other — which is also why no object-fit is needed.
+    expect(imageRule).toMatch(/max-width:\s*min\(100%,\s*720px\)/);
+    expect(imageRule).toMatch(/max-height:/);
+    expect(imageRule).toMatch(/width:\s*auto/);
+    expect(imageRule).toMatch(/height:\s*auto/);
+  });
+
+  test("sits on the fenced panel's left rail", () => {
+    // 0.75rem is the panel's margin-inline-start above, so a figure and a code block
+    // read as two kinds of the same embedded block rather than two arbitrary insets.
+    expect(imageRule).toMatch(/margin-inline-start:\s*0\.75rem/);
+    expect(overrideDecls).toMatch(/\[data-code-line\][^{}]*\{[^}]*margin-inline-start:\s*0\.75rem/);
+  });
+
+  test("wears the chip family's radius and a scheme-correct hairline edge", () => {
+    // A screenshot on a white ground dissolves into --paper with no edge, so the border
+    // is legibility rather than decoration. The ink mix is the sheet's own idiom, which
+    // is what makes one declaration correct in both schemes — no literal color.
+    expect(imageRule).toMatch(new RegExp(String.raw`border-radius:\s*${RADIUS}`));
+    expect(imageRule).toMatch(/border:\s*1px solid color-mix\(in lab,/);
+    expect(imageRule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+
+  test("carries no transition", () => {
+    // svelte-rules § Motion: the diff surface swaps state instantly.
+    expect(imageRule).not.toMatch(/transition/);
+  });
+
+  test("a hidden image really collapses", () => {
+    // Not boilerplate: a failed load sets `hidden` rather than removing the element, so
+    // the observer pass stays idempotent — and the UA sheet's own [hidden] rule loses to
+    // the display: block above, so without this line a broken image still holds the row.
+    expect(hiddenRule).toMatch(/display:\s*none/);
+  });
+});
+
 // EXC-729: a fenced-code line wider than the panel must stay INSIDE the card and scroll
 // horizontally, not break out of the background. The EXC-692 panel caps rows at max-width, but
 // the library renders source lines white-space: pre, so an over-wide line overflowed the

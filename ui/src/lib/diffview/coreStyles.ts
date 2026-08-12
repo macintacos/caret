@@ -379,6 +379,56 @@ const CARET_OVERRIDES = `
     border-end-end-radius: var(--radius);
   }
 
+  /* EXC-870: a markdown image, drawn onto the row its image markup sits on
+     (inlineImages.ts). This is the epic's transform-in-place stance applied to the one
+     construct that has something to render: the markup is NOT replaced — it keeps its link
+     chip and stays copyable — and the picture is added below it inside the same row.
+     (No backtick appears in this comment, for the reason the emphasis-chip note above
+     gives: the sheet is a template literal, so one would close it early.)
+
+     display: block is what makes that work, and it is the whole reason this element needs
+     no geometry negotiation with its neighbours. Every other decoration in this sheet is an
+     inline box sharing a line with shiki's tokens, which is where EXC-868 found a chip's
+     padding/margin overhang double-coating the wash beside it. A block-level replaced
+     element leaves the inline flow entirely: the row's text keeps its own line, the image
+     takes the next one, and the rows render white-space: pre either way. So the inline
+     margin here can be positive without shifting a single glyph, and it deliberately
+     matches the fenced panel's 0.75rem inset above — a figure and a code block sit on the
+     same left rail, reading as two kinds of the same embedded block.
+
+     The size caps are the design decision. max-width borrows the panel's own 720px reading
+     measure rather than inventing a number, and min() keeps a narrow viewport in charge;
+     max-height caps the image at roughly fourteen of the library's 20px line boxes, which
+     is enough for a diagram to be read and not enough for one asset to own the plan. Width
+     and height stay auto so the aspect ratio survives whichever cap bites first, which is
+     also why no object-fit is needed — with one axis free there is nothing to letterbox.
+
+     The hairline border is legibility rather than decoration: plan images are overwhelmingly
+     screenshots and diagrams on a white ground, which dissolves into --paper with no edge in
+     the light scheme. The ink mix is the same color-mix idiom the panel fill and the scroll
+     thumb use, so it carries correct contrast in both schemes from one declaration. The
+     radius is the chip family's, so the figure reads as part of the same vocabulary. No
+     transition — the diff surface swaps state instantly (svelte-rules § Motion).
+
+     The [hidden] rule is not boilerplate. A failed load hides the element rather than
+     removing it, so the observer pass stays idempotent (inlineImages.ts), and the UA
+     stylesheet's own [hidden] { display: none } is out-specified by the display: block
+     above — without this line a broken image would still occupy the row. */
+  [data-content] [data-line] [data-md-image] {
+    display: block;
+    max-width: min(100%, 720px);
+    max-height: 18rem;
+    width: auto;
+    height: auto;
+    margin-block: 0.35rem;
+    margin-inline-start: 0.75rem;
+    border: 1px solid color-mix(in lab, var(--paper-sunk), var(--ink) 14%);
+    border-radius: var(--radius);
+  }
+  [data-content] [data-line] [data-md-image][hidden] {
+    display: none;
+  }
+
   /* EXC-729: an overflowing fenced block is wrapped in one scroll card (codeBlockScroll.ts)
      that is a single native horizontal scroll container — the whole block scrolls as one unit
      (short lines follow the wide ones, one scrollbar at the bottom, no per-row jelly). The card

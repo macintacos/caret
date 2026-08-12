@@ -10,7 +10,8 @@
   import type { FileRefSpan, FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
   import { tagFileRefTokens } from "$lib/diffview/fileRefTag.ts";
   import { type ComposedTokenHandlers, composeTokenHandlers } from "$lib/diffview/linkInteractions.ts";
-  import { type LinkSpanMap, openLinkInNewTab } from "$lib/diffview/links.ts";
+  import { type ImageSpanMap, type LinkSpanMap, openLinkInNewTab } from "$lib/diffview/links.ts";
+  import { syncInlineImages } from "$lib/diffview/inlineImages.ts";
   import { type SourceViewGutter, type SourceViewLibOptions, toFileOptions } from "$lib/diffview/options.ts";
   import { followCursorLine, scrollToLine } from "$lib/diffview/scroll.ts";
   import { tagCursorRow } from "$lib/diffview/lineCursor.ts";
@@ -73,6 +74,13 @@
      * at all — it renders SourceDiffView, a different component — since these
      * affordances are single-version only. */
     inline?: InlineSpanMap;
+    /** Opt-in image layer (EXC-870): the drawable images per display line. Each
+     * one is added to its row as an `<img>` that grows the row track, while the
+     * `![alt](url)` that names it stays in the text beside it. Only http/https
+     * targets reach here (links.ts gates them), and a load failure hides the
+     * element so the row falls back to the literal markdown and its link chip.
+     * Omit it to render no images at all. */
+    images?: ImageSpanMap;
     /** Fires once the view's container is bound, handing the parent an
      * imperative API (currently scroll-to-line) that closes over the container.
      * Lets callers jump the view without reaching into the library's DOM. */
@@ -124,6 +132,7 @@
     fileRefs,
     onFileRefClick,
     inline,
+    images,
     onReady,
     gutter,
     onLineComment,
@@ -423,6 +432,7 @@
   // repaint.
   const EMPTY_FILE_REFS: FileRefSpanMap = new Map();
   const EMPTY_INLINE: InlineSpanMap = new Map();
+  const EMPTY_IMAGES: ImageSpanMap = new Map();
   $effect(() => {
     const root = container?.shadowRoot;
     if (root == null) return;
@@ -439,6 +449,9 @@
     const inlineSpans = inline;
     // And the tables, memoized above alongside the code ranges they derive from.
     const tableSpans = tables;
+    // And the images (EXC-870), snapshotted the same way. Memoized by the parent
+    // alongside the link layer, so this too stays a stable reference.
+    const imageSpans = images;
     let raf = 0;
     // Tag the rows, then wrap each overflowing block in its scroll card (EXC-729). Both re-run
     // after every library repaint via the observer below; syncCodeBlockCards is idempotent (an
@@ -465,6 +478,14 @@
       // Always run — the clear-stale pass lives inside tagFileRefTokens, so a
       // populated→empty transition still drops the prior icons.
       tagFileRefTokens(root, refs ?? EMPTY_FILE_REFS);
+      // Draw the plan's images onto their rows (EXC-870). Runs AFTER the two
+      // token passes above: both walk a row's direct children accumulating text
+      // length, and both must see the row as shiki painted it — an appended
+      // <img> contributes no characters, but adding it first would put a
+      // non-token child in front of splitRow's clone-and-replace. Idempotent, so
+      // a settled row costs one comparison rather than an observer loop, and
+      // always run so a populated→empty transition clears the prior images.
+      syncInlineImages(root, imageSpans ?? EMPTY_IMAGES);
       // Re-apply the cursor tag after a repaint from the non-reactive mirror
       // (the reactive effect above owns applying a move).
       tagCursorRow(root, cursorMirror);
