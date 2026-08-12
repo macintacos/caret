@@ -1414,7 +1414,7 @@ const CARET_OVERRIDES = `
      cut the fill with nothing underneath to show through. What it KEEPS is the block
      padding the chip family gives every member, which is what makes the pill one thickness
      end to end, and its hover, which is still the only part of the pill the pointer can
-     press.
+     press — the spread rule below then carries that one state across the rest of the group.
 
      Scoped to a reference the pass tagged as code, so a prose-labelled reference — which
      carries no member at all — keeps the standalone chip this rule is carved out of. */
@@ -1428,6 +1428,33 @@ const CARET_OVERRIDES = `
     border-radius: 0;
   }
   [data-content] [data-line] [data-file-ref][data-md~="code"]:hover {
+    background-color: var(--accent-wash);
+  }
+
+  /* And the hover washes the WHOLE pill, not just the path inside it. The wash is the
+     signal that a chip the reader sees as one object is pressable, so lighting only its
+     middle reads as a chip with a lit core rather than as a lit chip.
+
+     The rest of the group is the backtick token either side, reached as the reference's
+     two ADJACENT siblings — hence the pair of combinators rather than a subtree
+     selector, since there is no element around the group to hang one on. That
+     adjacency is the citation shape's, not every cited group's: the reference is the
+     codespan's whole interior there, so the group is exactly three tokens
+     (inlineDecorate.test.ts pins it). A group carrying a further cut inside it — two
+     resolved paths in one span, which detection deliberately still allows — puts an
+     interior token next to the pointer instead, and that end of the pill stays
+     unwashed. The cost is a partly-lit chip in a shape nobody writes; the alternative
+     is an element around the group, which the split-only pass exists not to create.
+
+     Both halves require the cite member on BOTH tokens, so a reference abutting a
+     codespan it is not inside never lights that codespan.
+
+     background-color, matching the reference's own hover above: the group's resting tint
+     rides a background-IMAGE layer, so the wash lands underneath it and the two
+     translucent fills blend into the single step up. The radius is the group's own, so
+     the wash takes the pill's shape at the ends for free. */
+  [data-content] [data-line] [data-md-cite]:has(+ [data-file-ref][data-md-cite]:hover),
+  [data-content] [data-line] [data-file-ref][data-md-cite]:hover + [data-md-cite] {
     background-color: var(--accent-wash);
   }
 

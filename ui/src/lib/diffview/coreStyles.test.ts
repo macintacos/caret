@@ -641,6 +641,17 @@ describe("the inline-code chip (EXC-868)", () => {
       /background-color:\s*var\(--accent-wash\)/,
     );
   });
+
+  test("that hover washes the whole pill, backticks included", () => {
+    // Lighting only the path reads as a chip with a lit core rather than as a lit chip. The
+    // rest of the group is the token either side of the reference, reached as adjacent
+    // siblings — there is no element around the group to select.
+    const spread =
+      rulesFor(String.raw`\[data-file-ref\]\[data-md-cite\]:hover \+ \[data-md-cite\]`)[0] ?? "";
+    expect(spread).toMatch(/background-color:\s*var\(--accent-wash\)/);
+    // The token BEFORE the reference needs :has — no preceding-sibling combinator exists.
+    expect(spread).toContain("[data-md-cite]:has(+ [data-file-ref][data-md-cite]:hover)");
+  });
 });
 
 // The nested chip's corners. A member whose group sits inside another's takes no cap on the

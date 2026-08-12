@@ -16,7 +16,11 @@
 // `:start-end` range, each also spellable with `#`/`L` as in `#L154-L162`). What
 // a candidate actually IS, file or directory or nothing, is resolved server-side
 // against the review's cwd (EXC-916); a candidate that resolves to neither gets
-// no icon and no affordance.
+// no icon and no affordance. Within that scope only SINGLE-TOKEN spans are
+// scanned: a span holding whitespace is a command or prose rather than a path,
+// and since a candidate can never span a space, scanning one would offer each
+// word on its own — enough for `bun test` to draw a folder glyph over the whole
+// command on the strength of the word `test` (EXC-1065).
 //
 // The scan is not the only source of references: the link layer emits its own
 // over collapsed markdown-link labels, whose paths never survive into the display
@@ -137,6 +141,12 @@ function scanLine(source: string): FileRefSpan[] {
   const spans: FileRefSpan[] = [];
   for (const code of source.matchAll(INLINE_CODE)) {
     const interior = code[2] ?? "";
+    // Whitespace is a property of the SPAN and never of a candidate, since
+    // CANDIDATE_RE cannot match across one — so this aborts the whole interior
+    // rather than masking a range out of it the way the URL exclusion below
+    // does. Trimmed first: CommonMark strips a code span's one padding space
+    // either side, so ` foo.ts ` is a single token (EXC-1065).
+    if (/\s/.test(interior.trim())) continue;
     // Column of the interior's first character in the display line (past the
     // opening backticks), so span columns are absolute.
     const base = code.index + (code[1]?.length ?? 0);
