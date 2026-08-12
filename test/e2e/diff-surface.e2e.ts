@@ -2691,4 +2691,168 @@ test("the inline-code chip draws one pill per span (EXC-868)", async ({ daemon, 
   } finally {
     await proj.cleanup();
   }
+
+// EXC-864: a GFM table renders as a real column-aligned table. Everything asserted
+// below is layout resolved inside the library's shadow root — two nested subgrids,
+// track sizing, and what Chromium's clipboard serializer does with grid items —
+// none of which happy-dom computes. The pure halves are units: the line/cell
+// classification and the DOM restructuring in ui/src/lib/diffview/tables.test.ts,
+// the clipboard rebuild in tableCopy.test.ts, and the sheet in coreStyles.test.ts.
+const TABLE_PLAN = [
+  "# Tables",
+  "",
+  "| Construct | Rendered by | Negative case |",
+  "| :-------- | :---------: | ------------: |",
+  "| emphasis  | the pass    | none          |",
+  "| fences    | the pass    | none          |",
+  "",
+  "Trailing prose.",
+  "",
+].join("\n");
+
+/** Every cell of a table row, as its viewport-left edge. */
+async function cellLefts(page: Page, line: number): Promise<number[]> {
+  return page.evaluate((n) => {
+    const root = document.querySelector(".diffview")?.shadowRoot;
+    const row = root?.querySelector(`[data-table-card] > [data-line="${n}"]`);
+    return [...(row?.querySelectorAll("[data-table-cell]") ?? [])].map((c) =>
+      Math.round(c.getBoundingClientRect().left),
+    );
+  }, line);
+}
+
+test("a table's columns share one left edge across every row", async ({ daemon, page }) => {
+  await daemon.seed({ plan: TABLE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await cellLefts(page, 3)).length).toBe(3);
+
+  // The header, the delimiter row and both body rows resolve to the same three
+  // column positions — which is the whole point of the nested subgrid, and what a
+  // monospace-with-padded-pipes rendering could not guarantee.
+  const header = await cellLefts(page, 3);
+  for (const line of [4, 5, 6]) {
+    expect(await cellLefts(page, line)).toEqual(header);
+  }
+});
+
+test("a table keeps one gutter number per source line", async ({ daemon, page }) => {
+  await daemon.seed({ plan: TABLE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+
+  // The reflow guard: the card collapses a table's rows into ONE child of the
+  // content column, so the gutter is mirrored to match. If either the mirror or
+  // the row subgrid broke, these two counts would diverge.
+  const counts = await page.evaluate(() => {
+    const root = document.querySelector(".diffview")?.shadowRoot;
+    return {
+      rows: root?.querySelectorAll("[data-content] [data-line]").length ?? 0,
+      numbers: root?.querySelectorAll("[data-gutter] [data-column-number]").length ?? 0,
+      cards: root?.querySelectorAll("[data-table-card]").length ?? 0,
+    };
+  });
+  expect(counts.rows).toBe(counts.numbers);
+  // Not vacuous: the plan really did render a carded table. The row COUNT is not
+  // asserted against the seed literal — the daemon reflows a plan on ingest, so the
+  // stored text is the authority on how many lines there are, not this file.
+  expect(counts.cards).toBe(1);
+});
+
+test("a table row and its line number share one row track", async ({ daemon, page }) => {
+  await daemon.seed({ plan: TABLE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+
+  const track = await page.evaluate(() => {
+    const root = document.querySelector(".diffview")?.shadowRoot;
+    const row = root?.querySelector('[data-table-card] > [data-line="5"]');
+    const number = root?.querySelector('[data-gutter] [data-column-number="5"]');
+    const a = row?.getBoundingClientRect();
+    const b = number?.getBoundingClientRect();
+    return { rowTop: Math.round(a?.top ?? -1), numberTop: Math.round(b?.top ?? -2) };
+  });
+  expect(track.rowTop).toBe(track.numberTop);
+});
+
+test("a table too wide to fit scrolls inside its own card", async ({ daemon, page }) => {
+  const wide = [
+    "# Wide",
+    "",
+    `| ${Array.from({ length: 12 }, (_, i) => `column heading ${i}`).join(" | ")} |`,
+    `| ${Array.from({ length: 12 }, () => "---").join(" | ")} |`,
+    `| ${Array.from({ length: 12 }, (_, i) => `value ${i}`).join(" | ")} |`,
+    "",
+  ].join("\n");
+  await daemon.seed({ plan: wide });
+  await page.goto("/");
+  await planSurface(page);
+
+  // max-content tracks never shrink under space pressure, so a wide table overflows
+  // into its card's scroll rather than reflowing into a tall cramped block.
+  const card = await page.evaluate(() => {
+    const el = document
+      .querySelector(".diffview")
+      ?.shadowRoot?.querySelector("[data-table-card]") as HTMLElement | null;
+    if (el === null || el === undefined) return null;
+    const rows = [...el.querySelectorAll(":scope > [data-line]")];
+    return {
+      overflows: el.scrollWidth > el.clientWidth,
+      // One line tall each: the wide table scrolled instead of wrapping.
+      heights: rows.map((r) => Math.round(r.getBoundingClientRect().height)),
+    };
+  });
+  expect(card?.overflows).toBe(true);
+  // Every row is the same height give or take the delimiter row's 1px rule, which
+  // is what "scrolled instead of wrapped" looks like — a wrapped cell would add a
+  // whole line box to its row.
+  const heights = card?.heights ?? [];
+  expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(1);
+});
+
+test("copying a table yields the markdown source it was written as", async ({ daemon, page }) => {
+  await daemon.seed({ plan: TABLE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+
+  // Cells are grid items, so Chromium's own serializer breaks the line at every
+  // cell boundary; SourceView's copy handler rebuilds it. Read what the handler
+  // actually puts on the clipboard rather than the selection's own toString.
+  const copied = await page.evaluate(() => {
+    const root = document.querySelector(".diffview")?.shadowRoot;
+    if (root == null) return null;
+    const selection = (
+      root as ShadowRoot & { getSelection?: () => Selection | null }
+    ).getSelection?.();
+    const range = document.createRange();
+    range.setStartBefore(root.querySelector('[data-line="3"]') as Node);
+    range.setEndAfter(root.querySelector('[data-line="6"]') as Node);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    let text: string | null = null;
+    const onCopy = (event: ClipboardEvent) => {
+      text = event.clipboardData?.getData("text/plain") ?? null;
+    };
+    document.addEventListener("copy", onCopy);
+    document.execCommand("copy");
+    document.removeEventListener("copy", onCopy);
+    return text;
+  });
+  expect(copied).toBe(TABLE_PLAN.split("\n").slice(2, 6).join("\n"));
+});
+
+test("a malformed table stays raw source", async ({ daemon, page }) => {
+  const ragged = ["# Ragged", "", "| a | b |", "| c | d |", "", "Trailing prose.", ""].join("\n");
+  await daemon.seed({ plan: ragged });
+  await page.goto("/");
+  await planSurface(page);
+
+  // No delimiter row, so no table at all — the lines render exactly as written.
+  await expect(page.locator(PLAN_SURFACE)).toBeVisible();
+  const cards = await page.evaluate(
+    () =>
+      document.querySelector(".diffview")?.shadowRoot?.querySelectorAll("[data-table-card]")
+        .length ?? -1,
+  );
+  expect(cards).toBe(0);
 });

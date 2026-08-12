@@ -21,6 +21,7 @@
   import type { InlineSpanMap } from "$lib/diffview/inlineSpans.ts";
   import { syncCodeBlockCards } from "$lib/diffview/codeBlockScroll.ts";
   import { type TableRange, syncTableCards, tableRanges } from "$lib/diffview/tables.ts";
+  import { selectionIn, tableSelectionText } from "$lib/diffview/tableCopy.ts";
   import { preloadFenceLanguages, scanFenceLanguages } from "$lib/diffview/languages.ts";
   import { registerCaretDiffThemes } from "$lib/diffview/theme.ts";
   import type {
@@ -379,6 +380,26 @@
     searchIndexMirror = currentMatchIndex;
     const root = container?.shadowRoot;
     if (root != null) paintSearchHighlights(root, searchMirror, searchIndexMirror);
+  });
+
+  // A table's cells are grid items, so Chromium's clipboard serializer breaks the
+  // line at every cell boundary and a copied table arrives shattered (EXC-864).
+  // tableSelectionText rebuilds it, and stands down for any selection that never
+  // crosses a cell — so copy everywhere else in the view is untouched. The listener
+  // sits on the host because a shadow selection's copy event retargets there;
+  // the RANGE has to come from the shadow root's own selection, since the
+  // document-level one is retargeted to the host and would clone the whole view.
+  $effect(() => {
+    const host = container;
+    if (host == null) return;
+    const onCopy = (event: ClipboardEvent) => {
+      const text = tableSelectionText(selectionIn(host.shadowRoot));
+      if (text === null) return;
+      event.clipboardData?.setData("text/plain", text);
+      event.preventDefault();
+    };
+    host.addEventListener("copy", onCopy);
+    return () => host.removeEventListener("copy", onCopy);
   });
 
   // Clear the document-global search highlights when this view unmounts (compare

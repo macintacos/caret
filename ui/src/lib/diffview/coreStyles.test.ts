@@ -768,8 +768,10 @@ describe("the markdown table (EXC-864)", () => {
   });
 
   test("declares the table's column tracks from the count tables.ts sets", () => {
+    // max-content, so a track never shrinks under space pressure — a wide table
+    // overflows into the scroll rather than reflowing into a tall cramped block.
     expect(cardBody).toMatch(
-      /grid-template-columns:\s*repeat\(var\(--table-columns[^)]*\),\s*minmax\(min-content,\s*max-content\)\)/,
+      /grid-template-columns:\s*repeat\(var\(--table-columns[^)]*\),\s*max-content\)/,
     );
     // start, not stretch: a narrow table keeps its natural width inside the cap.
     expect(cardBody).toMatch(/justify-content:\s*start/);
@@ -788,12 +790,13 @@ describe("the markdown table (EXC-864)", () => {
     expect(rowBody).toMatch(/grid-template-columns:\s*subgrid/);
   });
 
-  test("wraps inside cells only, and never below their min-content floor", () => {
+  test("wraps inside cells only, at the width that says a cell is prose", () => {
     const cellBody =
       overrideDecls.match(/\[data-content\]\s*\[data-table-cell\]\s*\{[^}]*\}/)?.[0] ?? "";
     expect(cellBody).toMatch(/white-space:\s*pre-wrap/);
-    // A min-width: 0 item could shrink past min-content and spill instead of scrolling.
-    expect(cellBody).not.toMatch(/min-width/);
+    // The cap rides the CELL, not the track: capping the track lets the grid squeeze
+    // every column at once, which reflows a wide table instead of scrolling it.
+    expect(cellBody).toMatch(/max-width:\s*44ch/);
     // No padding: the source's own spaces inside a cell are the breathing room.
     expect(cellBody).not.toMatch(/padding/);
   });

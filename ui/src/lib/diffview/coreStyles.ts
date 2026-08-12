@@ -460,13 +460,23 @@ const CARET_OVERRIDES = `
      the parent's row tracks, and display: contents rows would drop the box the library's
      selection band, the hover band, the cursor band and the annotation anchors all need.
 
-     minmax(min-content, max-content) is the entire sizing policy, and it reproduces table
-     behaviour with nothing measured in script: tracks sit at their natural width when the
-     table fits, shrink toward their longest word when it does not — cells are pre-wrap, so
-     they wrap rather than forcing a scroll — and once even that cannot fit, the sum
-     overflows the card and it scrolls as one unit, the code card's precedent.
-     justify-content keeps a narrow table at its natural width rather than stretching it
-     across the cap.
+     The sizing policy is max-content tracks plus a max-width on the CELL, and the split
+     between the two is what separates the issue's two behaviours. A max-content track never
+     shrinks under space pressure — it overflows instead — so a wide table scrolls as one
+     unit rather than reflowing into a tall cramped block, the code card's precedent and
+     what the showcase's wide rows are written to exercise. The cap then rides the cell, so
+     a track resolves to min(its content, the cap): a column of ordinary data keeps its
+     natural width and never wraps, while a genuinely prose-heavy cell hits the cap and
+     wraps inside its own column, growing the row rather than the table. Sizing the TRACKS
+     with minmax(min-content, …) or fit-content() cannot express this — both let the grid
+     squeeze every column at once, so the wide table reflowed and the prose cell did not
+     wrap any sooner. justify-content keeps a narrow table at its natural width rather than
+     stretching it across the cap.
+
+     44ch is the one tuned number here, and it means "a cell wider than this is prose". It
+     was measured against the showcase: every data column of both wide tables sits under it
+     and stays on one line, and the 90-character link cell in the reflow-exemptions table
+     sits well over it and wraps. Same kind of knob as the 720px reading cap above.
 
      No fill and no padding. The table sits on the bare diff surface rather than in a panel:
      a fenced block is a different MODE of reading and earns its own surface, where a table
@@ -477,7 +487,7 @@ const CARET_OVERRIDES = `
     grid-column: 1 / -1;
     display: grid;
     grid-template-rows: subgrid;
-    grid-template-columns: repeat(var(--table-columns, 1), minmax(min-content, max-content));
+    grid-template-columns: repeat(var(--table-columns, 1), max-content);
     justify-content: start;
     overflow-x: auto;
     overflow-y: hidden;
@@ -490,11 +500,11 @@ const CARET_OVERRIDES = `
     grid-template-columns: subgrid;
   }
   /* pre-wrap rather than the library's pre: wrapping is opt-in INSIDE cells only, and stays
-     off everywhere else. Deliberately no min-width: 0 — an item able to shrink below its
-     min-content would let text spill instead of the table scrolling, which is the floor the
-     sizing policy above rests on. */
+     off everywhere else. The max-width is the wrap trigger described above — it caps the
+     cell's max-content contribution, which is what caps the track. */
   [data-content] [data-table-cell] {
     white-space: pre-wrap;
+    max-width: 44ch;
   }
   [data-content] [data-table-cell][data-table-align="center"] { text-align: center; }
   [data-content] [data-table-cell][data-table-align="right"] { text-align: right; }
