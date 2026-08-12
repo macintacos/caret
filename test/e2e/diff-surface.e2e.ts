@@ -23,11 +23,13 @@ import {
   waitPastSafeModeGrace,
 } from "@test/e2e/support/fixtures.ts";
 import {
+  firstGlyphX,
   jumpToHeading,
   lineCenterY,
   PLAN_SURFACE,
   planSurface,
   revealGutterPlus,
+  rowHeights,
 } from "@test/e2e/support/source-view.ts";
 
 // A plan tall enough to scroll the source view past one viewport.
@@ -2948,12 +2950,9 @@ async function bandedLines(page: Page): Promise<{ carded: string[]; plain: strin
  * dragLineBody puts X at the plan surface's horizontal centre, which is past the right
  * edge of a carded table row — the gesture never arms there, so a table needs its own X. */
 async function holdTableBodyDrag(page: Page, startLine: number, endLine: number): Promise<void> {
-  const x = await page.evaluate((n) => {
-    const root = document.querySelector(".diffview")?.shadowRoot;
-    const row = root?.querySelector(`[data-line="${n}"]`) as HTMLElement | null;
-    const b = row?.getBoundingClientRect();
-    return b ? b.left + b.width / 2 : 0;
-  }, startLine);
+  // firstGlyphX is the row's own monospace origin, so a few characters in is inside the
+  // row whatever the table's width — no need to know how wide this one is.
+  const x = ((await firstGlyphX(page, startLine)) ?? 0) + 20;
   await page.mouse.move(x, await lineCenterY(page, startLine));
   await page.mouse.down();
   await page.mouse.move(x, await lineCenterY(page, endLine), { steps: 12 });
@@ -3243,27 +3242,23 @@ test("a comment on a wrapped table row anchors under that row", async ({ daemon,
 
   // The row is taller than one line, so every affordance has to follow the row TRACK
   // rather than a line height — the case the issue calls out as new.
+  const heights = await rowHeights(page, 5);
+  const header = await rowHeights(page, 3);
   const wrapped = await page.evaluate(() => {
     const root = document.querySelector(".diffview")?.shadowRoot;
     const row = root?.querySelector('[data-line="5"]') as HTMLElement | null;
-    const header = root?.querySelector('[data-line="3"]') as HTMLElement | null;
-    const number = root?.querySelector('[data-gutter] [data-column-number="5"]') as HTMLElement;
     const annotation = root?.querySelector("[data-line-annotation]") as HTMLElement | null;
-    if (!row || !header || !annotation) return null;
-    const r = row.getBoundingClientRect();
+    if (!row || !annotation) return null;
     return {
-      taller: Math.round(r.height) > Math.round(header.getBoundingClientRect().height),
-      numberFollows: Math.round(number.getBoundingClientRect().height) === Math.round(r.height),
-      belowItsRow: Math.round(annotation.getBoundingClientRect().top) >= Math.round(r.bottom),
+      belowItsRow:
+        Math.round(annotation.getBoundingClientRect().top) >=
+        Math.round(row.getBoundingClientRect().bottom),
       insideCard: annotation.closest("[data-table-card]") !== null,
     };
   });
-  expect(wrapped).toEqual({
-    taller: true,
-    numberFollows: true,
-    belowItsRow: true,
-    insideCard: true,
-  });
+  expect(heights.row).toBeGreaterThan(header.row);
+  expect(heights.number).toBe(heights.row);
+  expect(wrapped).toEqual({ belowItsRow: true, insideCard: true });
 });
 
 test("a wrapped table row's band covers the whole row track", async ({ daemon, page }) => {
@@ -3289,24 +3284,16 @@ test("a wrapped table row's band covers the whole row track", async ({ daemon, p
   // height shows up as a strip shorter than the row it belongs to.
   await selectGutterRange(page, 5, 5);
   await expect.poll(async () => (await bandedLines(page)).carded).toEqual(["5=single"]);
-  const band = await page.evaluate(() => {
+  const heights = await rowHeights(page, 5);
+  const header = await rowHeights(page, 3);
+  const stripHeight = await page.evaluate(() => {
     const root = document.querySelector(".diffview")?.shadowRoot;
-    const row = root?.querySelector('[data-line="5"]') as HTMLElement;
     const cell = root?.querySelector('[data-gutter] [data-column-number="5"]') as HTMLElement;
-    const header = root?.querySelector('[data-line="3"]') as HTMLElement;
-    const before = getComputedStyle(cell, "::before");
-    return {
-      taller:
-        Math.round(row.getBoundingClientRect().height) >
-        Math.round(header.getBoundingClientRect().height),
-      stripHeight: Math.round(Number.parseFloat(before.height)),
-      cellHeight: Math.round(cell.getBoundingClientRect().height),
-      rowHeight: Math.round(row.getBoundingClientRect().height),
-    };
+    return Math.round(Number.parseFloat(getComputedStyle(cell, "::before").height));
   });
-  expect(band.taller).toBe(true);
-  expect(band.cellHeight).toBe(band.rowHeight);
-  expect(band.stripHeight).toBe(band.rowHeight);
+  expect(heights.row).toBeGreaterThan(header.row);
+  expect(heights.number).toBe(heights.row);
+  expect(stripHeight).toBe(heights.row);
 });
 
 test("a scratch kept on a table line sits in the card like a comment", async ({ daemon, page }) => {
