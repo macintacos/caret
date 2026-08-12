@@ -107,7 +107,6 @@ export type ColorToken =
   // markdown span — bold, italic, code, a collapsed link label, and a resolved file
   // or folder reference. They tint CONTENT, which is what separates them from
   // styles/derived.css's --chip / --chip-hover, the chrome's floating-surface fill.
-  // Markers inside a chip reuse --ink-faint rather than taking a token of their own.
   | "--chip-bold"
   | "--chip-italic"
   | "--chip-code"

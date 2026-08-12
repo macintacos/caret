@@ -182,10 +182,10 @@ export const CARET_COLOR_PLACEMENT: Record<keyof CaretPalette, ColorPlacement> =
   accentBright: "token",
   accentInk: "token",
   // Four hues, not colors the chrome can read: each reaches the page only through an
-  // alpha the recipe applies (--rule, --accent-wash, --mark, --mark-orphan). `neutral`
-  // belongs here for the same reason as the three overrides — there is no --neutral in
-  // ColorToken, and its paths to a surface are the orphaned-comment mark and the code
-  // chip's tint, both alphas the recipe applies.
+  // alpha the recipe applies (--rule, --accent-wash, --mark, --mark-orphan,
+  // --chip-code). `neutral` belongs here for the same reason as the three overrides —
+  // there is no --neutral in ColorToken, and it reaches a surface only through the
+  // orphaned-comment mark and the code chip's tint.
   ruleHue: "derived",
   washHue: "derived",
   markHue: "derived",

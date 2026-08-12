@@ -58,21 +58,7 @@ export interface PaletteInput {
    * palette whose marks and wash share a hue declares it once. */
   markHue?: string;
 
-  // The five plan-view chip tints. Three ride the neutral ramp and only two carry
-  // hue, which is what keeps a paragraph holding several of them quiet. Emphasis is
-  // "more ink": bold takes `ink` and italic the softer `inkSoft`, so bold reads the
-  // heavier of the two in either scheme. Code is verbatim rather than semantic, so
-  // it takes the mid-tone `neutral` — a grey, which is also what holds it apart
-  // from the reference chip. The two that name a destination are the hued pair:
-  // `accentBright` for a link, `ok` for a resolved reference, where green carries
-  // the same "it resolved" reading it already carries on a diff addition.
-  //
-  // The pair is `accentBright` × `ok` rather than any other two because it is the
-  // only pairing that separates in all nine palettes: Catppuccin draws
-  // `accentBright` from lavender and `attention` from blue, eleven degrees apart,
-  // so a link and a reference tinted from those would be the same chip in four
-  // flavors. theme.test.ts holds the surviving pair to a 60-degree floor.
-  // `accent` stays reserved for selection and brand, and `danger` stays semantic.
+  // The five plan-view chip tints ride the hues named at their derivation below.
 
   /** The hue `--chip-bold` rides. Defaults to `ink`. */
   chipBoldHue?: string;
@@ -129,6 +115,22 @@ export function paletteTheme(input: PaletteInput): Theme {
     "--mark": `${markHue}${alpha.mark}`,
     "--mark-active": `${markHue}${alpha.markActive}`,
     "--mark-orphan": `${input.neutral}29`,
+    // The five plan-view chip tints. Only two carry hue, which is what keeps a
+    // paragraph holding several of them quiet: `accentBright` for a link and `ok`
+    // for a resolved reference, where green carries the same "it resolved" reading
+    // it already spends on a diff addition. That pair is not the only one that
+    // separates — `accent` and `danger` clear the same floor against `ok` — it is
+    // the one left once `accent` stays reserved for selection and brand and
+    // `danger` stays semantic. `attention` was the obvious third and is the trap:
+    // Catppuccin draws it and `accentBright` eleven degrees apart, so a link and a
+    // reference would be one chip across four flavors. theme.test.ts pins the
+    // survivors 60 degrees apart and carries the full account.
+    //
+    // The other three ride the neutral ramp, and the tint is NOT what tells them
+    // apart — a vendor's ink-to-inkSoft step is its own editorial call, and in five
+    // of the nine palettes bold and italic composite within a 1.05 contrast ratio
+    // of each other. What separates them is weight, slant, and the mono family,
+    // which EXC-867 supplies; the tint only says "this span is a chip".
     "--chip-bold": `${input.chipBoldHue ?? input.ink}${alpha.chip}`,
     "--chip-italic": `${input.chipItalicHue ?? input.inkSoft}${alpha.chip}`,
     "--chip-code": `${input.chipCodeHue ?? input.neutral}${alpha.chip}`,

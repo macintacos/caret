@@ -147,7 +147,7 @@ stays green under any invocation.
   accent, so a search hit and the current selection are the same family and still
   different jobs. Read the token, not the colour.
 
-  Everything else is neutral: the ink ramp and the chip fills. Two carve-outs are
+  Everything else is neutral: the ink ramp and the chip surface fills. Two carve-outs are
   deliberate. The **chip surface** — `--chip` / `--chip-hover` in `styles/derived.css`,
   the soft-solid fill under `.float-chip` — stays neutral because neutral is what the rule
   prescribes for a control that is neither selection, novelty, nor semantics; the content
@@ -159,9 +159,8 @@ stays green under any invocation.
   content chips are the one listed exception, pinned as read by *nothing* until EXC-867
   renders them, so the exemption fails the suite the moment it is outlived. That suite
   also holds `--chip-link` and `--chip-ref` at least 60 degrees of hue apart in every
-  palette — the pair is `accentBright` × `ok` because it is the only one that separates in
-  all nine (Catppuccin draws `accentBright` and `--attention` eleven degrees apart), so
-  check that pin rather than your eye when adding a palette.
+  palette; check that pin rather than your eye when adding one, and read the comment above
+  it for why that pair and not another.
 - **The diff-view bridge is amber-selection-only.** The single `.diffview` rule in
   `app.css` maps caret's tokens onto `@pierre/diffs`'s `--diffs-*` properties. caret
   adopts the library's surface STRUCTURE — the layered buffer/context/separator depth
