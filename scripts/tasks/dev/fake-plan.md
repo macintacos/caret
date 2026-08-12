@@ -544,7 +544,7 @@ Each bullet below carries exactly one link and no other reference, so whatever i
 - [README.md](README.md) — a bare-path label. The path shows, plainly styled, with **no** icon; clicking the words still opens the preview.
 - [the caret dev workflow](doc/DEVELOPMENT.md) — a prose label: the words survive and the path does not appear at all. Hovering reveals the target in a tooltip, the only way to see where the click goes.
 - [the deep middle of a long file](doc/DEVELOPMENT.md:124) — a target carrying a line number: opens centered on line 124 with both strips showing, and the tooltip carries the line as well as the path.
-- [a stretch of the dev guide](doc/DEVELOPMENT.md:200-212) — a target carrying a **range**: the label hides it entirely, so the tooltip is the only place the span is visible before the click, and the preview washes all thirteen lines.
+- [a stretch of the dev guide](doc/DEVELOPMENT.md:219-231) — a target carrying a **range**: the label hides it entirely, so the tooltip is the only place the span is visible before the click, and the preview washes all thirteen lines.
 - [`mise.toml`](package.json) — a label and target that **disagree**: the click opens the target, never the file the label names. Read the tooltip before clicking. The icon still sits inside the backticks.
 - [a plan that moved](doc/does-not-exist.md) — an unresolved target: the label reads as plain prose with no icon, no chip, and no preview, and its line still opens a comment composer on click.
 - [docs](guide) — a single extensionless segment: the brackets come off like any link's, but it is **not a citation** — no icon, no tooltip, no preview. It could be a directory, but nothing in the text says so, and that is decided before anything resolves.
