@@ -280,12 +280,10 @@ const CARET_OVERRIDES = `
      so the backticks stay visible and subdued (caret-theme.ts colours them apart from the
      code between them) inside one chip. Its tint is --chip-code, the token the fence chip
      above already spends — see that rule's note for why one shared token is right even
-     though the two surfaces do not composite to one colour. And on a backticked citation
-     the reference's own child carries the code member AND [data-file-ref]'s --chip-ref fill
-     below: the two compose, the reference's colour under the code layer, rather than either
-     replacing the other. That is the second reason these are layers. The two boxes are made
-     coincident for it — the reference gives up its padding and its radius inside a codespan,
-     at the bottom of this sheet — so what composes is one shape wearing two washes.
+     though the two surfaces do not composite to one colour. A backticked citation is the
+     one place that tint is not what the layer resolves to: the reference rebinds it for the
+     whole group at the bottom of this sheet, so the pill reads as one reference chip rather
+     than a green middle with code-coloured caps.
 
      No backtick appears in this comment, or anywhere else in CARET_OVERRIDES: the sheet is
      a template literal, so one would close it early.
@@ -320,8 +318,9 @@ const CARET_OVERRIDES = `
      this property rather than chosen: border-radius is one geometric property of the box
      and clips every background layer on it, so it cannot be drawn per layer. Were an inner
      member to cap on its own, it would round the enclosing pill's tint too and punch a
-     notch through its middle. The outermost pill wins. That is why the start/end attributes
-     exist rather than a blanket border-radius, and it is the same
+     notch through its middle. The outermost pill wins on this box; the inner one gets its
+     corners from a box of its own, the pseudo-element below. That is why the start/end
+     attributes exist rather than a blanket border-radius, and it is the same
      shape data-code-start / data-code-end already draw for fenced blocks. Logical
      longhands so the ends follow the writing direction. The selection guard that drops
      these chips on a drag-selected row — exactly as the fence chip above does — sits on
@@ -436,6 +435,98 @@ const CARET_OVERRIDES = `
     border-start-end-radius: var(--radius);
     border-end-end-radius: var(--radius);
     padding-inline-end: var(--chip-pad-inline);
+  }
+
+  /* The NESTED member's own corners, and the whole reason this block exists. The rule
+     above rounds the outermost pill and the pass withholds the cap from a member nested
+     inside another — so a nested tint drew a square-ended rectangle inside a rounded pill,
+     which is the one shape in this family that reads as an accident. The cap cannot simply
+     be handed back: border-radius is one geometric property of the box and clips every
+     background layer on it, so rounding there would cut the enclosing pill's tint too and
+     punch a notch through its middle (the data-md-start note above).
+
+     A second RADIUS needs a second BOX, so the inner tint moves to a pseudo-element. It is
+     sized with inset: 0, which resolves against the token's PADDING box — the chip's own
+     rect, block padding included — so the inner pill matches the outer one's height by
+     construction rather than by a second measurement. data-md-inner-start / -end are the
+     inner group's ends, exactly as the pair above are the outer's, so an inner member
+     fragmented across several tokens still closes once — and they carry the same
+     --chip-pad-inline the outer pill's ends do, on the ELEMENT rather than on the pseudo.
+     A chip tight to its glyphs reads as a highlighter smear whether or not it sits inside
+     another chip, and putting the room on the token is what makes it real space that
+     pushes the enclosing pill's own glyphs aside; padding the pseudo instead would only
+     paint wider and overhang them. The pseudo follows for free, since inset: 0 resolves
+     against the padding box it just grew.
+
+     The z-index pair is load-bearing in both halves. -1 puts the pseudo under the token's
+     glyphs — a positioned descendant paints ABOVE inline content by default, which would
+     wash the very text it is meant to sit behind. z-index: 0 on the token then makes the
+     token a stacking context so that -1 stays INSIDE it; without it the pseudo would sink
+     past the row and disappear under the hover and selection bands, which are backgrounds
+     on the row.
+
+     The tint variables mirror the token's own one level down: --md-<member> is reset to
+     initial so the layer on the element paints nothing (a custom property set to initial
+     is guaranteed-invalid, so var() falls back to transparent), and --nest-<member>
+     carries it here instead. Each member's rule names both halves, so a nested member can
+     never be painted twice — once on the element and once on the pseudo would double its
+     alpha and read as a third tint. The selection policy is carried per member exactly as
+     above and for the same reasons: bold, italic and code are decoration and drop on a
+     drag-selected row, the link chip is an affordance and keeps its tint.
+
+     ::after rather than ::before, and that is not a coin toss: a citation inside a bold
+     element is a file reference that is ALSO a nested code member, and the reference draws
+     its glyph on ::before at the bottom of this sheet. Both rules would land on one
+     pseudo-element and merge — the icon absolutely positioned at inset 0 behind the text
+     it should sit left of, wearing the chip's gradient through its own mask. The two
+     decorations need two slots, and the checkbox is the only other ::after here (a
+     line-start marker, which can never carry an inner member). */
+  [data-content] [data-line]:not([data-selected-line]) [data-md~="bold"][data-md-inner~="bold"] {
+    --md-bold: initial;
+    --nest-bold: var(--chip-bold);
+  }
+  [data-content]
+    [data-line]:not([data-selected-line])
+    [data-md~="italic"][data-md-inner~="italic"] {
+    --md-italic: initial;
+    --nest-italic: var(--chip-italic);
+  }
+  [data-content] [data-line]:not([data-selected-line]) [data-md~="code"][data-md-inner~="code"] {
+    --md-code: initial;
+    --nest-code: var(--chip-code);
+  }
+  [data-content] [data-line] [data-md~="link"][data-md-inner~="link"] {
+    --md-link: initial;
+    --nest-link: var(--chip-link);
+  }
+  [data-content] [data-line] [data-md-inner] {
+    position: relative;
+    z-index: 0;
+  }
+  [data-content] [data-line] [data-md-inner]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background-image:
+      linear-gradient(var(--nest-bold, transparent), var(--nest-bold, transparent)),
+      linear-gradient(var(--nest-italic, transparent), var(--nest-italic, transparent)),
+      linear-gradient(var(--nest-code, transparent), var(--nest-code, transparent)),
+      linear-gradient(var(--nest-link, transparent), var(--nest-link, transparent));
+  }
+  [data-content] [data-line] [data-md-inner-start] {
+    padding-inline-start: var(--chip-pad-inline);
+  }
+  [data-content] [data-line] [data-md-inner-end] {
+    padding-inline-end: var(--chip-pad-inline);
+  }
+  [data-content] [data-line] [data-md-inner-start]::after {
+    border-start-start-radius: var(--radius);
+    border-end-start-radius: var(--radius);
+  }
+  [data-content] [data-line] [data-md-inner-end]::after {
+    border-start-end-radius: var(--radius);
+    border-end-end-radius: var(--radius);
   }
 
   /* EXC-861: the list markers. This is the epic's transform-in-place stance (EXC-855) at
@@ -1298,31 +1389,46 @@ const CARET_OVERRIDES = `
   }
 
   /* A reference INSIDE a codespan — a backticked path behind a link target, the repo's
-     commonest citation — is not a chip beside the code chip but a stretch of hue within one
-     pill. (No backtick is written anywhere in this sheet; see the note above.)
-     Its own box has to give up the three properties that make it a standalone pill, and each
-     would otherwise show as a seam in the middle of that pill (EXC-868).
+     commonest citation — is not a chip beside the code chip but ONE reference chip that
+     happens to have backticks at its ends. (No backtick is written anywhere in this sheet;
+     see the note above.) The two boxes composited before, and the seam showed twice over:
+     the fill changed colour at the backticks, where --chip-code capped a --chip-ref middle,
+     and it changed HEIGHT there too, because the reference's box was the bare text advance
+     while the code chip either side of it carried the family's block padding.
 
-     The breathing room above is measured for a reference sitting on bare surface; here the
-     code chip is already the band around it, and it now carries the same --chip-pad-inline
-     of its own — so keeping the reference's would space the path away from the backticks
-     that are meant to be tight around it, inside a pill already padded at both ends. The
-     block half is the same story on the other axis, leaving the tint proud of its
-     neighbours top and bottom where the code chip's own already covers them.
+     So the whole group takes the reference tint, and it is spelled as a REBIND of
+     --chip-code on the tokens the pass marked data-md-cite rather than as an override of
+     the layer variable. One declaration then reaches every rule that resolves the code
+     tint — the token's own layer above and the nested one on the pseudo-element — with no
+     specificity to lose, which is what a citation inside a bold element needs. The second
+     declaration is the affordance's selection policy, unchanged from the standalone chip
+     below: the code member drops its tint on a drag-selected row, and a citation must not,
+     or the row would claim the path stopped being clickable.
 
-     The radius has to go with them, and in that order: once the box is exactly the text
+     What the reference's own box gives up is what would otherwise show as a seam inside
+     that pill. Its inline padding, because the group is already padded at both ends and
+     the backticks are meant to sit tight around the path. Its fill, because the group's
+     layer now carries it — keeping both would double-coat the middle in the same wash it
+     is trying to match. And its radius, in that order: once the box is exactly the text
      advance it abuts the backticks rather than overlapping them, so a rounded corner would
-     cut the fill with nothing underneath to show through — a real notch where the overlap
-     had been hiding one. Square is also simply the rule the decoration pass already follows
-     (see the data-md-start note above): a member nested inside another does not cap, and the
-     outermost pill wins. Here that pill is the code chip, and its ends are already drawn on
-     the backticks.
+     cut the fill with nothing underneath to show through. What it KEEPS is the block
+     padding the chip family gives every member, which is what makes the pill one thickness
+     end to end, and its hover, which is still the only part of the pill the pointer can
+     press.
 
      Scoped to a reference the pass tagged as code, so a prose-labelled reference — which
      carries no member at all — keeps the standalone chip this rule is carved out of. */
+  [data-content] [data-line] [data-md-cite] {
+    --chip-code: var(--chip-ref);
+    --md-code: var(--chip-ref);
+  }
   [data-content] [data-line] [data-file-ref][data-md~="code"] {
-    padding: 0;
+    padding-inline: 0;
+    background-color: transparent;
     border-radius: 0;
+  }
+  [data-content] [data-line] [data-file-ref][data-md~="code"]:hover {
+    background-color: var(--accent-wash);
   }
 
   /* EXC-832: the vim / search highlights. searchHighlight.ts registers two named

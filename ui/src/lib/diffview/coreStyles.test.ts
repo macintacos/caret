@@ -603,15 +603,172 @@ describe("the inline-code chip (EXC-868)", () => {
 
   test("squares and unpads a file reference sitting inside a codespan", () => {
     // [data-file-ref] is shaped as a STANDALONE pill: the family's breathing room on both
-    // axes, and its own radius. Inside a codespan it is a stretch of hue in someone else's
-    // pill — one already padded at both ends — so its own padding would space the path away
-    // from the backticks meant to sit tight around it, and its radius would notch the fill
-    // it sits in. Both go, together.
-    expect(nestedRef).toMatch(/padding:\s*0;/);
+    // axes, its own fill, and its own radius. Inside a codespan it is not a pill at all but
+    // the middle of the citation's — so its inline padding would space the path away from
+    // the backticks meant to sit tight around it, and its radius would notch the fill it
+    // sits in.
+    expect(nestedRef).toMatch(/padding-inline:\s*0;/);
     expect(nestedRef).toMatch(/border-radius:\s*0;/);
+    // The BLOCK half stays, and that is what makes the pill one thickness end to end: the
+    // group's other tokens carry --chip-pad-block from the family's fill rule, so a
+    // reference that zeroed all four sides drew a thinner middle inside taller caps.
+    expect(nestedRef).not.toMatch(/padding(-block)?:\s*0;/);
     // Scoped to a reference the pass tagged as code: a prose-labelled reference carries
     // no member, so it must keep the standalone chip this rule is carved out of.
     expect(nestedRef).toContain('[data-md~="code"]');
+  });
+
+  test("hands the citation's fill to the group, so the pill is one colour", () => {
+    // The reference used to paint its own --chip-ref under the code layer, which left the
+    // pill green in the middle and code-coloured at the backticks — two tints and a seam
+    // where there is one span of meaning. The group's own tint is rebound instead, on every
+    // token the pass marked data-md-cite, and the reference drops its fill so the wash is
+    // not laid down twice over the path.
+    const cite = rulesFor(String.raw`\[data-md-cite\]`)[0] ?? "";
+    expect(cite).toMatch(/--chip-code:\s*var\(--chip-ref\)/);
+    expect(nestedRef).toMatch(/background-color:\s*transparent/);
+    // A REBIND rather than an override of --md-code: the layer variable is declared once
+    // for the token and once for a nested member (on the pseudo-element), and both resolve
+    // var(--chip-code) — so rebinding the token reaches both with no specificity to lose.
+    expect(cite).not.toMatch(/--md-code:\s*var\(--chip-code\)/);
+    // The affordance's selection policy, unchanged from the standalone chip: the code
+    // member drops its tint on a drag-selected row and a citation must not, or the row
+    // claims the path stopped being clickable.
+    expect(cite).toMatch(/--md-code:\s*var\(--chip-ref\)/);
+    expect(cite).not.toMatch(/:not\(\[data-selected-line\]\)/);
+    // Hover is still the reference's own, since the path is the only pressable part.
+    expect(rulesFor(String.raw`\[data-file-ref\]\[data-md~="code"\]:hover`)[0] ?? "").toMatch(
+      /background-color:\s*var\(--accent-wash\)/,
+    );
+  });
+});
+
+// The nested chip's corners. A member whose group sits inside another's takes no cap on the
+// token — border-radius clips every background layer on the box, so capping there would
+// round the enclosing pill's tint too and notch its middle — and it drew a square-ended
+// rectangle inside a rounded pill, the one shape in this family that reads as an accident.
+// A second radius needs a second box, so the inner tint moves to a pseudo-element that has
+// one of its own.
+describe("the nested chip's own corners", () => {
+  const fillRule = rulesFor(String.raw`\[data-md\]`)[0] ?? "";
+  const nestFill = rulesFor(String.raw`\[data-md-inner\]::after`)[0] ?? "";
+  const nestBox = rulesFor(String.raw`\[data-md-inner\]`).find((r) => r.includes("z-index")) ?? "";
+  const nestStart = rulesFor(String.raw`\[data-md-inner-start\]::after`)[0] ?? "";
+  const nestEnd = rulesFor(String.raw`\[data-md-inner-end\]::after`)[0] ?? "";
+  const nestPadStart = rulesFor(String.raw`\[data-md-inner-start\]`)[0] ?? "";
+  const nestPadEnd = rulesFor(String.raw`\[data-md-inner-end\]`)[0] ?? "";
+  const nestTint = (member: string) =>
+    rulesFor(String.raw`\[data-md-inner~="${member}"\]`).find((r) =>
+      r.includes(`--nest-${member}:`),
+    ) ?? "";
+
+  // Every extraction falls back to "" on a regex miss, over which `not.toMatch` passes
+  // vacuously — pin non-emptiness on all of them before asserting any absence.
+  test("every rule this suite asserts against is present", () => {
+    for (const rule of [
+      fillRule,
+      nestFill,
+      nestBox,
+      nestStart,
+      nestEnd,
+      nestPadStart,
+      nestPadEnd,
+    ]) {
+      expect(rule).not.toBe("");
+    }
+    for (const member of ["bold", "italic", "code", "link"]) {
+      expect(nestTint(member)).not.toBe("");
+    }
+  });
+
+  test("gives the inner pill the family's breathing room at its ends", () => {
+    // A chip tight to its glyphs reads as a highlighter smear whether or not it sits
+    // inside another chip, and the inner one was shipped with none. The room is the
+    // family's own --chip-pad-inline rather than a second number, and it hangs on the
+    // ends only, exactly as the outer pill's does: on every fragment it would space the
+    // inner pill's own glyphs apart from the inside.
+    expect(nestPadStart).toMatch(/padding-inline-start:\s*var\(--chip-pad-inline\)/);
+    expect(nestPadEnd).toMatch(/padding-inline-end:\s*var\(--chip-pad-inline\)/);
+    // On the ELEMENT, not the pseudo. Padding the token is real space that pushes the
+    // enclosing pill's glyphs aside; padding the pseudo would only paint wider and
+    // overhang them. inset: 0 then carries the pseudo along for free.
+    for (const rule of [nestFill, nestStart, nestEnd]) {
+      expect(rule).not.toMatch(/padding/);
+    }
+  });
+
+  test("sizes the inner pill to the chip's own rect", () => {
+    // inset: 0 resolves against the token's PADDING box, which is the chip — the block
+    // padding above is what makes a chip taller than its glyphs and it is included. So the
+    // inner pill matches the outer one's height by construction rather than by a second
+    // measurement that could drift from it.
+    expect(nestFill).toMatch(/position:\s*absolute/);
+    expect(nestFill).toMatch(/inset:\s*0/);
+    expect(nestFill).not.toMatch(/height|padding|margin/);
+  });
+
+  test("keeps the pseudo-element under the glyphs it sits behind", () => {
+    // Both halves of the z-index pair are load-bearing. -1 puts the pseudo under the
+    // token's text — a positioned descendant paints ABOVE inline content by default, which
+    // would wash the very glyphs it is meant to sit behind. z-index: 0 on the token makes
+    // it a stacking context so that -1 stays INSIDE it; without that the pseudo would sink
+    // past the row and disappear under the hover and selection bands, which are backgrounds
+    // on the row.
+    expect(nestFill).toMatch(/z-index:\s*-1/);
+    expect(nestBox).toMatch(/position:\s*relative/);
+    expect(nestBox).toMatch(/z-index:\s*0/);
+  });
+
+  test("draws on ::after, leaving ::before to the file reference's glyph", () => {
+    // A citation inside a bold element is a file reference that is ALSO a nested code
+    // member, and the reference draws its glyph on ::before. Both rules on one
+    // pseudo-element merge: the icon ends up absolutely positioned at inset 0, behind the
+    // text it should sit left of, wearing the chip's gradient through its own mask. Two
+    // decorations, two slots.
+    for (const rule of [nestFill, nestStart, nestEnd]) {
+      expect(rule).toContain("::after");
+      expect(rule).not.toContain("::before");
+    }
+    expect(rulesFor(String.raw`\[data-file-ref\]::before`)[0] ?? "").toMatch(/mask:/);
+  });
+
+  test("rounds only the inner group's ends, so a fragmented member closes once", () => {
+    // The same shape data-md-start / data-md-end draw for the outer pill: an inner member
+    // split across several tokens (shiki cuts a codespan at its backticks) opens and closes
+    // once rather than pinching at every internal seam.
+    expect(nestStart).toMatch(new RegExp(String.raw`border-start-start-radius:\s*${RADIUS}`));
+    expect(nestStart).toMatch(new RegExp(String.raw`border-end-start-radius:\s*${RADIUS}`));
+    expect(nestEnd).toMatch(new RegExp(String.raw`border-start-end-radius:\s*${RADIUS}`));
+    expect(nestEnd).toMatch(new RegExp(String.raw`border-end-end-radius:\s*${RADIUS}`));
+    expect(nestFill).not.toMatch(/border-radius/);
+  });
+
+  test("moves a nested member's tint rather than copying it", () => {
+    // Each member's rule names both halves: --md-<member> is reset to initial so the layer
+    // on the element paints nothing (a custom property set to initial is guaranteed-invalid,
+    // so var() takes its transparent fallback), and --nest-<member> carries it here. Painted
+    // in both places a nested member would double its own alpha and read as a third tint.
+    for (const member of ["bold", "italic", "code", "link"]) {
+      expect(nestTint(member)).toMatch(new RegExp(String.raw`--md-${member}:\s*initial`));
+      expect(nestTint(member)).toMatch(
+        new RegExp(String.raw`--nest-${member}:\s*var\(--chip-${member}\)`),
+      );
+      expect(nestFill).toMatch(new RegExp(String.raw`var\(--nest-${member},\s*transparent\)`));
+    }
+    // Consumed, never redefined: the recipe (EXC-858) derives all five tints for all nine
+    // palettes, so a literal at this level would be a tenth, unreviewed palette.
+    expect(nestFill).not.toMatch(/#[0-9a-fA-F]{3,8}\b|color-mix/);
+  });
+
+  test("carries the family's selection split one level down", () => {
+    // The nested tint takes the same side its own member takes on the token: bold, italic
+    // and code are decoration and drop on a drag-selected row so the band reads as one flat
+    // shape, and the link chip is an affordance that keeps its tint. A nested member that
+    // survived a selection its own outer pill dropped would read as a stray block.
+    for (const member of ["bold", "italic", "code"]) {
+      expect(nestTint(member)).toMatch(/:not\(\[data-selected-line\]\)/);
+    }
+    expect(nestTint("link")).not.toMatch(/:not\(\[data-selected-line\]\)/);
   });
 });
 

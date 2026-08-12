@@ -187,7 +187,18 @@ stays green under any invocation.
   the same pixel column as the same glyphs one row up. Spend `--chip-pad-inline` /
   `--chip-pad-block` (`diffview/coreStyles.ts`), never a fresh number, and hang the inline
   half on `data-md-start` / `data-md-end` rather than on every run: a pill fragmented into
-  several elements would otherwise open a gap around each interior fragment. The plan
+  several elements would otherwise open a gap around each interior fragment.
+  **A chip is one colour and one thickness end to end**, however many elements it is
+  fragmented into — a fill that changes at an interior seam reads as two chips that failed
+  to line up rather than as one. The citation is where that bites: a codespan wrapping a
+  resolved reference is ONE reference chip, so `data-md-cite` rebinds `--chip-code` to
+  `--chip-ref` for the whole group and the reference gives up its own fill and inline
+  padding (it keeps the block half, or the middle renders thinner than the caps). Two
+  members that genuinely nest do stack, and the inner one **rounds on a box of its own**:
+  `border-radius` clips every background layer on an element, so an inner cap would notch
+  the enclosing pill's tint — the pass names the nested members in `data-md-inner` and the
+  sheet paints them on `::after` instead, with `data-md-inner-start` / `-end` as that
+  pill's caps. `::after` and not `::before`, which the file-reference glyph owns. The plan
   surface's `--leading-relaxed` line-height is the other half of the same decision — a
   chip is taller than its glyphs, so stacked chips need the row gap the chrome's leading
   does not give. The chip family is **five members and closed**: a markdown decoration

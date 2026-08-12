@@ -55,14 +55,22 @@ const CACHE_TS = Array.from({ length: CACHE_TS_LINES }, (_, i) => {
  * callers assert against rather than reading through. */
 function refChipStyle(
   page: import("@playwright/test").Page,
-): Promise<{ background: string; cursor: string } | null> {
+): Promise<{ background: string; fill: string; cursor: string } | null> {
   return page.evaluate(() => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
     const tok = sh?.querySelector("[data-file-ref]");
     if (!tok) return null;
     const cs = getComputedStyle(tok);
-    return { background: cs.backgroundColor, cursor: cs.cursor };
+    return { background: cs.backgroundColor, fill: cs.backgroundImage, cursor: cs.cursor };
   });
+}
+
+/** The layers of a background-image stack that actually paint. The chip family
+ * declares one layer per member and lets an absent one resolve to transparent
+ * through its var() fallback, so counting the lit ones is how a test says WHICH
+ * tint is doing the painting rather than merely that a gradient is present. */
+function litLayers(fill: string): string[] {
+  return fill.split(/,\s*(?=linear-gradient)/).filter((l) => !/rgba\(0,\s*0,\s*0,\s*0\)/.test(l));
 }
 
 /** Where the cited (`.fp-target`) row sits inside the preview's scrolling code
@@ -225,10 +233,17 @@ test("marks only references that resolve to a real file", async ({ daemon, page 
     // its chip (EXC-880): a resolved path is tinted where it sits, so which spans
     // can be opened reads at a glance instead of needing a pointer sweep. The token
     // carries the pointer cursor at rest too, signalling it is clickable.
+    //
+    // WHERE that tint lives depends on the shape. This reference is backticked — the
+    // citation — so the pill is the whole codespan and its fill is the group's layer,
+    // rebound to the reference's tint; the reference's own box is transparent, or the
+    // wash would be laid down twice over the path alone and the pill would change
+    // colour at each backtick.
     await page.mouse.move(0, 0);
     const resting = await refChipStyle(page);
     expect(resting?.cursor).toBe("pointer");
-    expect(resting?.background).not.toBe("rgba(0, 0, 0, 0)");
+    expect(litLayers(resting!.fill)).toHaveLength(1);
+    expect(resting?.background).toBe("rgba(0, 0, 0, 0)");
 
     // Hovering a resolved reference reveals no preview — for an inline-code
     // reference like this one hover is highlight-only (EXC-840); the preview
@@ -344,7 +359,10 @@ test("marks references under a vendor palette too", async ({ daemon, page }) => 
     await page.mouse.move(0, 0);
     const resting = await refChipStyle(page);
     expect(resting?.cursor).toBe("pointer");
-    expect(resting?.background).not.toBe("rgba(0, 0, 0, 0)");
+    // Backticked, so the citation's own pill carries the resting tint — see the note
+    // in the resolution spec above.
+    expect(litLayers(resting!.fill)).toHaveLength(1);
+    expect(resting?.background).toBe("rgba(0, 0, 0, 0)");
 
     await page.locator("[data-file-ref]").first().hover();
     const hovered = await refChipStyle(page);

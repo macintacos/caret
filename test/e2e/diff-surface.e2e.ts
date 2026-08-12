@@ -2352,6 +2352,14 @@ function readEmphasis(page: Page, n: number) {
       backgroundImage: getComputedStyle(t).backgroundImage,
       radiusStart: getComputedStyle(t).borderStartStartRadius,
       radiusEnd: getComputedStyle(t).borderEndEndRadius,
+      padBlock: `${getComputedStyle(t).paddingTop} ${getComputedStyle(t).paddingBottom}`,
+      // A member nested inside another paints on ::after, which is the only box in
+      // the token that can round its own ends without clipping the enclosing pill's
+      // tint — so the inner chip's whole render reads off the pseudo-element.
+      inner: t.getAttribute("data-md-inner"),
+      innerImage: getComputedStyle(t, "::after").backgroundImage,
+      innerRadiusStart: getComputedStyle(t, "::after").borderStartStartRadius,
+      innerRadiusEnd: getComputedStyle(t, "::after").borderEndEndRadius,
     });
     return {
       lineText: tokens.map((t) => t.textContent ?? "").join(""),
@@ -2686,14 +2694,26 @@ test("the inline-code chip draws one pill per span (EXC-868)", async ({ daemon, 
             : `${el?.textContent} ${el?.getAttribute("data-md")} ${box.paddingLeft} ${box.borderStartStartRadius}`;
         }),
       )
-      // The reference's child is INSIDE the code pill rather than beside it, and its box
-      // is made to match: the member without a cap, and none of the padding or rounding
-      // that shapes a standalone reference chip into a pill of its own. Left unzeroed,
-      // each drew a seam through the middle of the code pill.
+      // The reference's child is INSIDE the citation's pill rather than beside it, and
+      // its box is made to match: the member without a cap, and none of the inline
+      // padding or rounding that shapes a standalone reference chip into a pill of its
+      // own. Left unzeroed, each drew a seam through the middle of the pill.
       .toBe("src/cache.ts code 0px 0px");
 
     const cited = await readEmphasis(page, 5);
     expect(cited.tagged.map((t) => t.text)).toEqual(["`", "src/cache.ts", "`"]);
+    // ONE CHIP, one colour, one thickness. A codespan wrapping a resolved reference is
+    // not a code chip with a green middle: the group's tint is rebound to the reference's,
+    // so all three children resolve the same layer. Before that, the backticks painted
+    // --chip-code around a --chip-ref path and the pill changed colour twice across its
+    // own width. The block padding is the same story on the other axis — the reference
+    // used to zero all four sides, which drew a thinner middle inside taller caps.
+    expect(new Set(cited.tagged.map((t) => t.backgroundImage)).size).toBe(1);
+    expect(new Set(cited.tagged.map((t) => t.padBlock)).size).toBe(1);
+    // And it is a REAL fill rather than three tokens agreeing on nothing: exactly one of
+    // the four layers paints, which is the code layer carrying the reference's tint.
+    const citedLayers = cited.tagged[0]!.backgroundImage.split(/,\s*(?=linear-gradient)/);
+    expect(citedLayers.filter((l) => !/rgba\(0,\s*0,\s*0,\s*0\)/.test(l))).toHaveLength(1);
     // Stronger than counting caps: WHICH child carries them is the whole invariant. A
     // start on the middle child would also count one, and is exactly the notched pill
     // the cap rule exists to prevent.
@@ -2714,14 +2734,39 @@ test("the inline-code chip draws one pill per span (EXC-868)", async ({ daemon, 
     expect((both!.md ?? "").split(" ").sort()).toEqual(["code", "link"]);
     // No cap on the code member here: the link pill encloses it, and a cap lands only
     // where every member on the child ends. The link's own caps sit on the label's outer
-    // children, so the code tint is a square band inside a rounded link pill.
+    // children, so the code tint cannot round on this box without clipping the link's.
     expect(both!.start).toBeNull();
     expect(both!.end).toBeNull();
     expect(codeCaps(labelled.tagged, "start")).toBe(0);
     expect(codeCaps(labelled.tagged, "end")).toBe(0);
+    // The two members paint on two BOXES, and that split is what lets the inner one
+    // round. The token carries the enclosing link's layer; the nested code member moves
+    // to ::after, which has a radius of its own to spend — square inner ends inside a
+    // rounded outer pill is the artefact the pseudo-element replaces. Both still paint,
+    // which is the original claim here: a member that replaced the stack rather than
+    // adding to it would show up as a missing tint.
     const bothLayers = both!.backgroundImage.split(/,\s*(?=linear-gradient)/);
     expect(bothLayers).toHaveLength(4);
-    expect(bothLayers.filter((l) => !/rgba\(0,\s*0,\s*0,\s*0\)/.test(l))).toHaveLength(2);
+    expect(bothLayers.filter((l) => !/rgba\(0,\s*0,\s*0,\s*0\)/.test(l))).toHaveLength(1);
+    expect(both!.inner).toBe("code");
+    const innerLayers = both!.innerImage.split(/,\s*(?=linear-gradient)/);
+    expect(innerLayers).toHaveLength(4);
+    expect(innerLayers.filter((l) => !/rgba\(0,\s*0,\s*0,\s*0\)/.test(l))).toHaveLength(1);
+    // The whole point: the inner pill closes ONCE, at the code run's own outer ends —
+    // shiki cuts the backticks off as their own tokens, so a per-token radius would
+    // pinch the inner chip at every seam exactly as it would the outer one.
+    const innerRun = labelled.tagged.filter((t) => t.inner === "code");
+    expect(innerRun.map((t) => t.text)).toEqual(["`", "render()", "`"]);
+    expect(innerRun.map((t) => Number.parseFloat(t.innerRadiusStart) > 0)).toEqual([
+      true,
+      false,
+      false,
+    ]);
+    expect(innerRun.map((t) => Number.parseFloat(t.innerRadiusEnd) > 0)).toEqual([
+      false,
+      false,
+      true,
+    ]);
   } finally {
     await proj.cleanup();
   }

@@ -55,6 +55,31 @@ function pieces(
   }));
 }
 
+/** One record per direct child of a row: its text plus the nested-member tags —
+ * the `pieces` shape for the inner pill the sheet draws on a pseudo-element. */
+function nested(
+  host: HTMLElement,
+  line = 1,
+): { text: string; inner: string | null; start: boolean; end: boolean }[] {
+  const rowEl = host.querySelector(`[data-line="${line}"]`);
+  return [...(rowEl?.children ?? [])].map((child) => ({
+    text: child.textContent ?? "",
+    inner: child.getAttribute("data-md-inner"),
+    start: child.hasAttribute("data-md-inner-start"),
+    end: child.hasAttribute("data-md-inner-end"),
+  }));
+}
+
+/** One record per direct child of a row: its text plus whether it belongs to a
+ * codespan the pass found a file reference inside. */
+function cited(host: HTMLElement, line = 1): { text: string; cite: boolean }[] {
+  const rowEl = host.querySelector(`[data-line="${line}"]`);
+  return [...(rowEl?.children ?? [])].map((child) => ({
+    text: child.textContent ?? "",
+    cite: child.hasAttribute("data-md-cite"),
+  }));
+}
+
 /** One record per direct child of a row: its text plus the list-marker value —
  * the `pieces` shape for the valued attribute rather than the token lists. */
 function markers(host: HTMLElement, line = 1): { text: string; list: string | null }[] {
@@ -156,6 +181,75 @@ test("one element fragmented by a nested element draws a single pill", () => {
     { text: "`c`", md: "bold code", start: null, end: null },
     { text: "b**", md: "bold", start: null, end: "bold" },
   ]);
+});
+
+test("names the nested member and caps its own pill", () => {
+  // The same ``**a `c` b**``, read for the inner pill rather than the outer one. The code
+  // group is narrower than the bold group running through the same child, so code is the
+  // NESTED member — and its ends are the ones the sheet rounds on a pseudo-element, since
+  // the child's own radius belongs to the bold pill still passing through it.
+  host = root(row(1, ["**a", "`c`", "b**"]));
+  decorateInlineRuns(
+    host,
+    spanMap([
+      [
+        1,
+        [
+          { startCol: 0, endCol: 3, bold: true },
+          { startCol: 3, endCol: 6, bold: true, code: true },
+          { startCol: 6, endCol: 9, bold: true },
+        ],
+      ],
+    ]),
+    new Map(),
+  );
+  expect(nested(host)).toEqual([
+    { text: "**a", inner: null, start: false, end: false },
+    { text: "`c`", inner: "code", start: true, end: true },
+    { text: "b**", inner: null, start: false, end: false },
+  ]);
+});
+
+test("closes a fragmented inner pill once, at its outer ends", () => {
+  // ``**a `c` b**`` again, with shiki cutting the codespan at its backticks — which it
+  // really does on a row carrying other markup. All three fragments carry the nested
+  // member; only the outer two cap, or the inner pill would pinch at every seam, which is
+  // the same rule the outer pill follows one level up.
+  host = root(row(1, ["**a", "`", "c", "`", "b**"]));
+  decorateInlineRuns(
+    host,
+    spanMap([
+      [
+        1,
+        [
+          { startCol: 0, endCol: 3, bold: true },
+          { startCol: 3, endCol: 6, bold: true, code: true },
+          { startCol: 6, endCol: 9, bold: true },
+        ],
+      ],
+    ]),
+    new Map(),
+  );
+  expect(nested(host)).toEqual([
+    { text: "**a", inner: null, start: false, end: false },
+    { text: "`", inner: "code", start: true, end: false },
+    { text: "c", inner: "code", start: false, end: false },
+    { text: "`", inner: "code", start: false, end: true },
+    { text: "b**", inner: null, start: false, end: false },
+  ]);
+});
+
+test("two members over the same span are one pill, not a nested pair", () => {
+  // `***x***` reaching the pass as a single run carrying both members: their groups have
+  // the same extent, so neither is inside the other and neither moves to the pseudo — the
+  // child caps normally and the two washes composite over one shape.
+  host = root(row(1, ["***x***"]));
+  decorateInlineRuns(
+    host,
+    spanMap([[1, [{ startCol: 0, endCol: 7, bold: true, italic: true }]]]),
+    new Map(),
+  );
+  expect(nested(host)).toEqual([{ text: "***x***", inner: null, start: false, end: false }]);
 });
 
 test("a nested element's own group still caps once it is alone on the child", () => {
@@ -296,6 +390,28 @@ test("cuts a codespan at its file reference without splitting the code pill", ()
   // start and ends inside it, so the glyph lands on the filename.
   tagFileRefTokens(host, refs);
   expect(fileRefs(host)).toEqual(["foo/bar.ts"]);
+  // Every token of that codespan is marked, backticks included, because the pill is one
+  // REFERENCE chip rather than a code chip with a reference inside it — the sheet rebinds
+  // the group's tint off this attribute so it does not change colour at the backticks.
+  expect(cited(host)).toEqual([
+    { text: "`", cite: true },
+    { text: "foo/bar.ts", cite: true },
+    { text: "`", cite: true },
+  ]);
+});
+
+test("leaves a codespan that merely abuts a reference uncited", () => {
+  // `` `x` `` then a bare path: the reference sits outside the code group rather than
+  // inside it, so the codespan keeps its own tint. Containment is the test, not proximity
+  // — a row citing one path and quoting an unrelated symbol must render two colours.
+  const refs = refMap([[1, [{ startCol: 4, endCol: 14, path: "foo/bar.ts" }]]]);
+  host = root(row(1, ["`x`", " foo/bar.ts"]));
+  decorateInlineRuns(host, spanMap([[1, [{ startCol: 0, endCol: 3, code: true }]]]), refs);
+  expect(cited(host)).toEqual([
+    { text: "`x`", cite: false },
+    { text: " ", cite: false },
+    { text: "foo/bar.ts", cite: false },
+  ]);
 });
 
 test("a link label wrapping a codespan still draws one continuous link pill", () => {

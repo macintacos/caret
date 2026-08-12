@@ -40,9 +40,20 @@
 // every background layer on it, so it cannot be drawn per member. A nested member
 // capping on its own would therefore round the enclosing pill's tint too, punching
 // a notch through its middle — `**a `c` b**` would render the bold chip with a
-// rounded hole where the code run sits. The outermost pill wins, and an inner
-// member nested inside another stays square. Where a member is alone on the child,
-// "every member" is just itself and it caps normally.
+// rounded hole where the code run sits. The outermost pill wins on the ELEMENT.
+// Where a member is alone on the child, "every member" is just itself and it caps
+// normally.
+//
+// A nested member gets its corners all the same, from a second BOX: data-md-inner
+// names the members whose group sits inside another's on this child, and
+// data-md-inner-start / -end are that inner pill's ends. The sheet paints those
+// members on a pseudo-element, which has a radius of its own to spend — square
+// inner ends inside a rounded outer pill is the artefact this replaces.
+//
+// The citation shape gets the opposite treatment, and data-md-cite is what asks
+// for it: a codespan wrapping a resolved reference is not two chips but ONE
+// reference chip, so every token of that code group is marked and the sheet
+// rebinds the group's tint rather than capping the reference's end of it.
 //
 // Idempotency is a hard requirement, not a nicety: SourceView.svelte runs this
 // from a MutationObserver watching childList over the whole subtree, so a pass
@@ -76,6 +87,10 @@ const ATTRS = [
   "data-md",
   "data-md-start",
   "data-md-end",
+  "data-md-inner",
+  "data-md-inner-start",
+  "data-md-inner-end",
+  "data-md-cite",
   "data-md-checkbox",
   "data-md-quote",
   "data-md-list",
@@ -127,8 +142,14 @@ function setAttr(child: Element, attr: string, value: string | undefined): void 
 }
 
 /** Tags each of the row's tokens with the run covering it. After splitTokens every
- * token lies wholly inside one run or inside none, so the covering run is a lookup. */
-function tagRow(row: Element, runs: readonly InlineSpan[], groups: Map<Member, ColumnRange[]>) {
+ * token lies wholly inside one run or inside none, so the covering run is a lookup.
+ * `cited` is the code groups that wrap a file reference — see the header. */
+function tagRow(
+  row: Element,
+  runs: readonly InlineSpan[],
+  groups: Map<Member, ColumnRange[]>,
+  cited: readonly ColumnRange[],
+) {
   let col = 0;
   for (const child of [...row.children]) {
     const start = col;
@@ -137,15 +158,37 @@ function tagRow(row: Element, runs: readonly InlineSpan[], groups: Map<Member, C
     const run = runs.find((r) => r.startCol <= start && col <= r.endCol);
     if (run === undefined) continue;
     const members = MEMBERS.filter((member) => run[member] !== undefined);
-    const opens = members.filter((m) => (groups.get(m) ?? []).some((g) => g.startCol === start));
-    const closes = members.filter((m) => (groups.get(m) ?? []).some((g) => g.endCol === col));
+    const covers = (spans: readonly ColumnRange[]) =>
+      spans.find((g) => g.startCol <= start && col <= g.endCol);
+    const group = new Map(members.map((m) => [m, covers(groups.get(m) ?? [])]));
+    const span = (m: Member) => {
+      const g = group.get(m);
+      return g === undefined ? 0 : g.endCol - g.startCol;
+    };
+    const opens = members.filter((m) => group.get(m)?.startCol === start);
+    const closes = members.filter((m) => group.get(m)?.endCol === col);
+    // NESTING is a comparison of extents, and on one child it is that simple: the
+    // members here are nested in each other by construction (markdown cannot
+    // interleave them), so the widest group is the enclosing pill and every
+    // narrower one sits inside it. Equal extents are not nesting — two members
+    // covering the same span are one pill wearing two washes, and both cap.
+    const widest = Math.max(0, ...members.map(span));
+    const inner = members.filter((m) => span(m) < widest);
     setAttr(child, "data-md", list(members));
     // A cap lands only where EVERY member the child carries opens (or closes) —
     // see the header's rounded-ends note. An inner member capping on its own would
     // notch the pill still running through the same element, because border-radius
     // is one geometric property of the box and clips all of its background layers.
+    // Its own corners come from the inner caps below, which the sheet spends on a
+    // pseudo-element rather than on this box.
     setAttr(child, "data-md-start", opens.length === members.length ? list(opens) : undefined);
     setAttr(child, "data-md-end", closes.length === members.length ? list(closes) : undefined);
+    setAttr(child, "data-md-inner", list(inner));
+    if (inner.length > 0) {
+      setAttr(child, "data-md-inner-start", inner.every((m) => opens.includes(m)) ? "" : undefined);
+      setAttr(child, "data-md-inner-end", inner.every((m) => closes.includes(m)) ? "" : undefined);
+    }
+    setAttr(child, "data-md-cite", covers(cited) === undefined ? undefined : "");
     setAttr(child, "data-md-checkbox", run.checkbox);
     setAttr(child, "data-md-list", run.listMarker);
     setAttr(
@@ -221,6 +264,12 @@ export function decorateInlineRuns(
       row,
       [...cuts].sort((a, b) => a - b),
     );
-    tagRow(row, runs, new Map(MEMBERS.map((member) => [member, pillGroups(runs, member)])));
+    const groups = new Map(MEMBERS.map((member) => [member, pillGroups(runs, member)]));
+    // The code groups that WRAP a reference rather than merely touching one, so a
+    // path cited in backticks reads as one reference chip end to end.
+    const cited = (groups.get("code") ?? []).filter((g) =>
+      (refs.get(line) ?? []).some((r) => g.startCol <= r.startCol && r.endCol <= g.endCol),
+    );
+    tagRow(row, runs, groups, cited);
   }
 }
