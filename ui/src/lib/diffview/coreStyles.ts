@@ -76,8 +76,16 @@ const CARET_OVERRIDES = `
      :not([data-selected-line]) yields a selected line to the amber band; declared
      before the code-block rules so a cursor on a fenced line keeps its panel fill.
      The band joins across the gutter→content seam through the shared seam-fill
-     :is() groups below, which list data-caret-cursor alongside hover/selection. */
-  [data-gutter] > [data-column-number][data-caret-cursor]:not([data-selected-line]) {
+     :is() groups below, which list data-caret-cursor alongside hover/selection.
+
+     Descendant rather than child, here and in the three gutter rules that follow it
+     (the selection tick and its ::after, and the divider clearing below). A carded
+     block's gutter cells sit inside a display:contents card — codeBlockScroll.ts's for
+     an overflowing fence, tables.ts's for every table — so a child combinator stops
+     matching them and the row reads half-banded: the content half paints from its own
+     descendant selector while the gutter half, and the 3px caret bar with it, silently
+     drops out. The card has no box, so widening changes nothing else. */
+  [data-gutter] [data-column-number][data-caret-cursor]:not([data-selected-line]) {
     background-color: color-mix(in lab, var(--paper), var(--ink) 7%);
     box-shadow: inset 3px 0 0 0 var(--ink);
   }
@@ -92,10 +100,10 @@ const CARET_OVERRIDES = `
      the "+" lane, so the whole range reads as one selection and it's clear the
      button rides with the pointer. Scoped to :not([data-hovered]) so it never
      doubles up with the real button on the active row. */
-  [data-gutter] > [data-column-number][data-selected-line]:not([data-hovered]) {
+  [data-gutter] [data-column-number][data-selected-line]:not([data-hovered]) {
     position: relative;
   }
-  [data-gutter] > [data-column-number][data-selected-line]:not([data-hovered])::after {
+  [data-gutter] [data-column-number][data-selected-line]:not([data-hovered])::after {
     content: "";
     position: absolute;
     top: 22%;
@@ -458,7 +466,18 @@ const CARET_OVERRIDES = `
      line up across rows while every row keeps its own box. That last part is why a real
      table element was refused rather than merely awkward: table rows cannot participate in
      the parent's row tracks, and display: contents rows would drop the box the library's
-     selection band, the hover band, the cursor band and the annotation anchors all need.
+     selection and hover fills, the cursor band and the annotation anchors all need.
+
+     What a carded row does NOT get is the band's ROUNDED ENDS and the seam-fill pull, both
+     of which select direct children of their column. The seam pull is refused on purpose —
+     it drags a banded row left across the gutter seam, which inside a card with its own
+     inline margin would pull the row out of the card's box. The rounding is a real
+     remainder: a selection wholly inside a table draws square ends. Widening those rules
+     would need them to reason about both card kinds at once (their sibling combinators
+     stop meaning "the next row" once a card is in the way), which is a pass over the whole
+     band rather than a table-shaped patch. The bands themselves, the caret bar and the
+     gutter divider DO reach a carded row — the four gutter rules above are descendant
+     selectors for exactly that reason.
 
      The sizing policy is max-content tracks plus a max-width on the CELL, and the split
      between the two is what separates the issue's two behaviours. A max-content track never
@@ -648,7 +667,7 @@ const CARET_OVERRIDES = `
     padding-inline-start: calc(2ch + var(--caret-seam));
   }
   [data-gutter]
-    > [data-column-number]:is(
+    [data-column-number]:is(
       [data-selected-line],
       [data-hovered],
       [data-line-type="change-addition"],

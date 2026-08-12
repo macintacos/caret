@@ -20,7 +20,12 @@
   import { decorateInlineRuns } from "$lib/diffview/inlineDecorate.ts";
   import type { InlineSpanMap } from "$lib/diffview/inlineSpans.ts";
   import { syncCodeBlockCards } from "$lib/diffview/codeBlockScroll.ts";
-  import { type TableRange, syncTableCards, tableRanges } from "$lib/diffview/tables.ts";
+  import {
+    TABLE_CARD_ATTR,
+    type TableRange,
+    syncTableCards,
+    tableRanges,
+  } from "$lib/diffview/tables.ts";
   import { selectionIn, tableSelectionText } from "$lib/diffview/tableCopy.ts";
   import { preloadFenceLanguages, scanFenceLanguages } from "$lib/diffview/languages.ts";
   import { registerCaretDiffThemes } from "$lib/diffview/theme.ts";
@@ -393,7 +398,12 @@
     const host = container;
     if (host == null) return;
     const onCopy = (event: ClipboardEvent) => {
-      const text = tableSelectionText(selectionIn(host.shadowRoot));
+      // Cheapest possible stand-down for a plan with no tables: tableSelectionText
+      // has to clone the selection's contents before it can tell, and a select-all
+      // copy on a long plan would clone the whole subtree only to discard it.
+      const root = host.shadowRoot;
+      if (root?.querySelector(`[${TABLE_CARD_ATTR}]`) == null) return;
+      const text = tableSelectionText(selectionIn(root));
       if (text === null) return;
       event.clipboardData?.setData("text/plain", text);
       event.preventDefault();
@@ -439,11 +449,11 @@
       tagCodeBlockRows(root, ranges);
       syncCodeBlockCards(root, ranges);
       // Restructure each table's rows into a real column-aligned table (EXC-864).
-      // Before the inline pass, not after: it is what puts a row's tokens inside
-      // cells, and every pass below reaches them through rowTokens.ts's
-      // tokenChildren either way. Idempotent for the same reason the card pass is —
-      // a settled table mutates nothing, so it costs one extra frame rather than
-      // looping the observer.
+      // Before the inline pass, not after: the passes below reach a row's tokens
+      // through rowTokens.ts's tokenChildren either way, but celling first lets a
+      // fresh row settle in one extra frame instead of two. Idempotent for the same
+      // reason the card pass is — a settled table mutates nothing, so it costs that
+      // one frame rather than looping the observer.
       syncTableCards(root, tableSpans);
       // Split each row's tokens on the inline-run and file-reference boundaries and
       // tag them (EXC-867). This MUST precede tagFileRefTokens: it produces the

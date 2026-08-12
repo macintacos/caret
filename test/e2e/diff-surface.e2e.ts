@@ -2691,6 +2691,7 @@ test("the inline-code chip draws one pill per span (EXC-868)", async ({ daemon, 
   } finally {
     await proj.cleanup();
   }
+});
 
 // EXC-864: a GFM table renders as a real column-aligned table. Everything asserted
 // below is layout resolved inside the library's shadow root — two nested subgrids,
@@ -2775,6 +2776,49 @@ test("a table row and its line number share one row track", async ({ daemon, pag
   expect(track.rowTop).toBe(track.numberTop);
 });
 
+test("a wrapping cell grows its row and takes the line number with it", async ({
+  daemon,
+  page,
+}) => {
+  const prose =
+    "a deliberately long prose cell whose text runs well past the width at which a cell stops being data and starts being prose";
+  const wrapping = [
+    "# Wrapping",
+    "",
+    "| kind | detail |",
+    "| ---- | ------ |",
+    `| prose | ${prose} |`,
+    "",
+  ].join("\n");
+  await daemon.seed({ plan: wrapping });
+  await page.goto("/");
+  await planSurface(page);
+
+  // The cell hits its max-width and wraps, which grows the row's track. The gutter
+  // number follows through the row subgrid alone — there is no ResizeObserver and no
+  // per-row height syncing anywhere in this feature, so this is the assertion that
+  // whole design decision rests on.
+  const grown = await page.evaluate(() => {
+    const root = document.querySelector(".diffview")?.shadowRoot;
+    const row = root?.querySelector('[data-table-card] > [data-line="5"]');
+    const number = root?.querySelector('[data-gutter] [data-column-number="5"]');
+    const header = root?.querySelector('[data-table-card] > [data-line="3"]');
+    const a = row?.getBoundingClientRect();
+    const b = number?.getBoundingClientRect();
+    const c = header?.getBoundingClientRect();
+    return {
+      rowHeight: Math.round(a?.height ?? 0),
+      oneLine: Math.round(c?.height ?? 0),
+      numberHeight: Math.round(b?.height ?? 0),
+      rowTop: Math.round(a?.top ?? -1),
+      numberTop: Math.round(b?.top ?? -2),
+    };
+  });
+  expect(grown.rowHeight).toBeGreaterThan(grown.oneLine);
+  expect(grown.numberHeight).toBe(grown.rowHeight);
+  expect(grown.numberTop).toBe(grown.rowTop);
+});
+
 test("a table too wide to fit scrolls inside its own card", async ({ daemon, page }) => {
   const wide = [
     "# Wide",
@@ -2829,16 +2873,29 @@ test("copying a table yields the markdown source it was written as", async ({ da
     range.setEndAfter(root.querySelector('[data-line="6"]') as Node);
     selection?.removeAllRanges();
     selection?.addRange(range);
-    let text: string | null = null;
+    // A box rather than a bare `let`: TypeScript cannot see the listener assign to
+    // it, so a plain local narrows to `null` and every use of the result is `never`.
+    const captured: { text: string | null } = { text: null };
     const onCopy = (event: ClipboardEvent) => {
-      text = event.clipboardData?.getData("text/plain") ?? null;
+      captured.text = event.clipboardData?.getData("text/plain") ?? null;
     };
     document.addEventListener("copy", onCopy);
     document.execCommand("copy");
     document.removeEventListener("copy", onCopy);
-    return text;
+    return captured.text;
   });
-  expect(copied).toBe(TABLE_PLAN.split("\n").slice(2, 6).join("\n"));
+  // Compared against the RENDERED rows rather than the seed literal: the daemon
+  // reflows a plan on ingest, so the stored text is the authority. This is also the
+  // stronger claim — one clipboard line per row, each carrying that row's full text,
+  // which is exactly what the cell boundaries were breaking.
+  const rendered = await page.evaluate(() => {
+    const root = document.querySelector(".diffview")?.shadowRoot;
+    return [3, 4, 5, 6]
+      .map((n) => root?.querySelector(`[data-line="${n}"]`)?.textContent ?? "")
+      .join("\n");
+  });
+  expect(copied).toBe(rendered);
+  expect(copied?.split("\n")).toHaveLength(4);
 });
 
 test("a malformed table stays raw source", async ({ daemon, page }) => {

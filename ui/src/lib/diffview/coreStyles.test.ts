@@ -145,9 +145,12 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
     // 1ch, so a banded row in those modes re-adds 2ch + the seam.
     expect(overrideDecls).toMatch(/padding-inline-start:\s*calc\(2ch \+ var\(--caret-seam\)\)/);
     // The gutter column's per-row divider is dropped for the same banded rows so
-    // the two halves join with no 2px gap.
+    // the two halves join with no 2px gap. A DESCENDANT selector, not a child one:
+    // a carded block's gutter cells sit inside a display:contents card (EXC-729's
+    // for an overflowing fence, EXC-864's for every table), which a child combinator
+    // stops matching — the row would keep its divider and read with a gap.
     const border = overrideDecls.match(
-      /\[data-gutter\]\s*>\s*\[data-column-number\]:is\(([\s\S]*?)\)\s*\{([\s\S]*?)\}/,
+      /\[data-gutter\]\s+\[data-column-number\]:is\(([\s\S]*?)\)\s*\{([\s\S]*?)\}/,
     );
     expect(border).not.toBeNull();
     for (const state of BANDED) expect(border![1]).toContain(state);

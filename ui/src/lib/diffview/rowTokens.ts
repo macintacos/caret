@@ -22,9 +22,13 @@ export const CELL_ATTR = "data-table-cell";
  * running-length arithmetic rests on.
  */
 export function tokenChildren(row: Element): Element[] {
-  const cells = row.querySelectorAll(`:scope > [${CELL_ATTR}]`);
-  if (cells.length === 0) return [...row.children];
-  return [...cells].flatMap((cell) => [...cell.children]);
+  // The first-child probe rather than a selector query, because this sits on the hot
+  // path of three passes that each walk every row of a document on every repaint —
+  // and all but a handful of those rows are not table rows. It is exact, not a
+  // heuristic: tables.ts moves EVERY token into a cell before appending the cells, so
+  // a celled row's children are its cells and nothing else.
+  if (row.firstElementChild?.hasAttribute(CELL_ATTR) !== true) return [...row.children];
+  return [...row.children].flatMap((cell) => [...cell.children]);
 }
 
 /**

@@ -141,6 +141,14 @@ function alignments(line: string, cells: TableCell[]): (TableAlign | undefined)[
  * mismatched delimiter row voids the table outright, while a ragged body row merely
  * ENDS it, so a well-formed prefix still renders and only the ragged line falls
  * back.
+ *
+ * Four shapes fall back, and the fourth is the non-obvious one. A quoted table and a
+ * fenced one are excluded by NOT_A_ROW and by `codeRanges`; a ragged one ends early.
+ * The fourth is a ONE-column table written with only a trailing pipe — `a |` over
+ * `- |`. With a single pipe there is nothing to distinguish a trailing delimiter from
+ * a separator, so rowCells reads two cells, the second is empty, and the delimiter
+ * test fails. Valid GFM, rendered as raw source; the leading-pipe and bare forms of
+ * the same table (`| a |`, `a`) both parse.
  */
 export function tableRanges(text: string, codeRanges: CodeBlockRange[]): TableRange[] {
   const lines = text.split("\n");
@@ -235,16 +243,21 @@ function cellCuts(text: string, cells: TableCell[]): number[] {
  * count and text length rather than by rebuilding: an already-correct row must
  * mutate nothing, or SourceView's MutationObserver would re-fire every frame. */
 function isCelled(row: Element, cells: TableCell[]): boolean {
-  const existing = row.querySelectorAll(`:scope > [${CELL_ATTR}]`);
+  const existing = row.children;
   if (existing.length !== cells.length) return false;
   return cells.every(
-    (cell, i) => (existing[i]?.textContent ?? "").length === cell.endCol - cell.startCol,
+    (cell, i) =>
+      existing[i]?.hasAttribute(CELL_ATTR) === true &&
+      (existing[i]?.textContent ?? "").length === cell.endCol - cell.startCol,
   );
 }
 
-/** Returns a row's tokens to the row itself and drops the cells. */
+/** Returns a row's tokens to the row itself and drops the cells. A no-op on a row that
+ * was never celled, which the retire pass below calls it on for every line of the
+ * document — hence the first-child probe rather than a query. */
 function unCell(row: Element): void {
-  for (const cell of row.querySelectorAll(`:scope > [${CELL_ATTR}]`)) {
+  if (row.firstElementChild?.hasAttribute(CELL_ATTR) !== true) return;
+  for (const cell of [...row.children]) {
     while (cell.firstChild !== null) row.insertBefore(cell.firstChild, cell);
     cell.remove();
   }
@@ -258,8 +271,9 @@ function buildCells(row: Element, text: string, cells: TableCell[]): void {
   const built = cells.map(() => row.ownerDocument.createElement("span"));
   let col = 0;
   for (const token of tokenChildren(row)) {
-    const index = cells.findIndex((cell) => col >= cell.startCol && col < cell.endCol);
-    (built[index === -1 ? built.length - 1 : index] ?? built[0])?.appendChild(token);
+    // The cells tile [0, line.length) and the caller has already matched the row's
+    // text length to the last cell's end, so every token lands in exactly one.
+    built[cells.findIndex((cell) => col >= cell.startCol && col < cell.endCol)]?.appendChild(token);
     col += token.textContent?.length ?? 0;
   }
   for (const cell of built) {
@@ -274,15 +288,16 @@ function buildCells(row: Element, text: string, cells: TableCell[]): void {
   }
 }
 
-/** Puts each column's declared alignment on the row's matching cell. Re-applied on
- * every pass rather than only at build, so a delimiter row edited to move a marker
- * lands even on rows whose cells are otherwise unchanged. */
+/** Puts each column's declared alignment on the row's matching cell. Applied on every
+ * pass rather than only at build because the observer does not watch attributes, so
+ * writing them unconditionally is free and costs one code path instead of two. */
 function applyAlign(row: Element, align: (TableAlign | undefined)[]): void {
-  row.querySelectorAll(`:scope > [${CELL_ATTR}]`).forEach((cell, i) => {
-    const value = align[i];
+  let i = 0;
+  for (const cell of row.querySelectorAll(`:scope > [${CELL_ATTR}]`)) {
+    const value = align[i++];
     if (value === undefined) cell.removeAttribute(ALIGN_ATTR);
     else cell.setAttribute(ALIGN_ATTR, value);
-  });
+  }
 }
 
 /** A range's content rows, wherever they currently sit — direct children before the
@@ -293,8 +308,23 @@ function rowElements(root: ParentNode, range: TableRange): (HTMLElement | null)[
   );
 }
 
-/** Whether `card` still holds exactly the range's rows, in order. A table that grew
- * or shrank keeps its header line as its key, so the key alone cannot say. */
+/** A range's rows as DIRECT children of the content column, which is what the wrap
+ * path needs: `insertBefore` places the card relative to a child of `content`, and
+ * passing it a row nested somewhere else throws `NotFoundError`. That throw would
+ * escape the whole repaint pass and take every decoration below this one with it, so
+ * the wrap is gated on a complete direct-child set rather than on the descendant
+ * lookup above. Returns `null` unless every row is present and unwrapped. */
+function unwrappedRows(content: Element, range: TableRange): HTMLElement[] | null {
+  const rows = range.rows
+    .map((row) => content.querySelector<HTMLElement>(`:scope > [data-line="${row.line}"]`))
+    .filter((row): row is HTMLElement => row !== null);
+  return rows.length === range.rows.length ? rows : null;
+}
+
+/** Whether `card` still holds exactly the range's rows, in order. Defensive: a card
+ * is keyed by its header line, so the key alone cannot say whether the table under it
+ * grew or shrank. In practice a content change recreates the view outright, so this is
+ * belt and braces rather than a path with a known trigger. */
 function cardHoldsRange(card: Element, range: TableRange): boolean {
   const rows = card.querySelectorAll(":scope > [data-line]");
   if (rows.length !== range.rows.length) return false;
@@ -322,12 +352,14 @@ function wrapCard(content: Element, key: string, rows: HTMLElement[], columns: n
 }
 
 /** Mirrors a table's card into the gutter column so the two columns keep matching
- * direct-child counts (see TABLE_GUTTER_CARD_ATTR). */
+ * direct-child counts (see TABLE_GUTTER_CARD_ATTR). Refuses on anything short of the
+ * range's full set of cells: a partial mirror is the very divergence this exists to
+ * prevent, so a missing cell must leave the gutter flat rather than half-carded. */
 function wrapGutterCard(gutter: Element, key: string, range: TableRange): void {
   const cells = range.rows
     .map((row) => gutter.querySelector<HTMLElement>(`:scope > [data-column-number="${row.line}"]`))
     .filter((cell): cell is HTMLElement => cell !== null);
-  if (cells.length === 0) return;
+  if (cells.length !== range.rows.length) return;
   const card = gutter.ownerDocument.createElement("div");
   card.setAttribute(TABLE_GUTTER_CARD_ATTR, key);
   card.style.display = "contents";
@@ -349,10 +381,12 @@ function wrapGutterCard(gutter: Element, key: string, range: TableRange): void {
  * still holds its range and a row that already carries its cells are both left
  * completely untouched.
  *
- * A row whose painted text is not the line that parsed is skipped rather than
- * celled — the library repaints asynchronously, so a row can be mid-flight — and
- * the next repaint brings this pass back to finish it. Its siblings are celled
- * regardless, so one unpainted row cannot stall the table.
+ * A row whose painted text is not the line that parsed is skipped rather than celled,
+ * and the next repaint brings this pass back to finish it. That is a guard on the two
+ * inputs agreeing rather than a known race: `ranges` is derived from the rendered text
+ * and the rows are the library's, so a mismatch means they came from different content
+ * and celling on those columns would cut in the wrong places. Its siblings are celled
+ * regardless, so one such row cannot stall the table.
  */
 export function syncTableCards(root: ParentNode, ranges: TableRange[]): void {
   const content = root.querySelector<HTMLElement>("[data-content]");
@@ -362,13 +396,21 @@ export function syncTableCards(root: ParentNode, ranges: TableRange[]): void {
   const headLines = new Set(ranges.map((r) => r.start));
   const ruleLines = new Set(ranges.map((r) => r.rule));
 
+  // The keys that actually carry a content card, which is what the gutter mirrors.
+  // Mirroring `wanted` instead would card the gutter for a table whose content card
+  // was never made, and a gutter card with no content counterpart is exactly the
+  // child-count divergence TABLE_GUTTER_CARD_ATTR exists to prevent.
+  const carded = new Map<string, TableRange>();
   for (const [key, range] of wanted) {
     const card = content.querySelector<HTMLElement>(`:scope > [${TABLE_CARD_ATTR}="${key}"]`);
-    if (card !== null && !cardHoldsRange(card, range)) unwrapCard(content, card);
-    if (card === null || !cardHoldsRange(card, range)) {
-      const rows = rowElements(root, range).filter((row): row is HTMLElement => row !== null);
-      if (rows.length === range.rows.length) {
+    if (card !== null && cardHoldsRange(card, range)) {
+      carded.set(key, range);
+    } else {
+      if (card !== null) unwrapCard(content, card);
+      const rows = unwrappedRows(content, range);
+      if (rows !== null) {
         wrapCard(content, key, rows, range.align.length);
+        carded.set(key, range);
       }
     }
     for (const [i, row] of rowElements(root, range).entries()) {
@@ -395,11 +437,11 @@ export function syncTableCards(root: ParentNode, ranges: TableRange[]): void {
 
   const gutter = root.querySelector<HTMLElement>("[data-gutter]");
   if (gutter === null) return;
-  for (const [key, range] of wanted) {
+  for (const [key, range] of carded) {
     if (gutter.querySelector(`:scope > [${TABLE_GUTTER_CARD_ATTR}="${key}"]`) !== null) continue;
     wrapGutterCard(gutter, key, range);
   }
   for (const card of gutter.querySelectorAll<HTMLElement>(`:scope > [${TABLE_GUTTER_CARD_ATTR}]`)) {
-    if (!wanted.has(card.getAttribute(TABLE_GUTTER_CARD_ATTR) ?? "")) unwrapCard(gutter, card);
+    if (!carded.has(card.getAttribute(TABLE_GUTTER_CARD_ATTR) ?? "")) unwrapCard(gutter, card);
   }
 }

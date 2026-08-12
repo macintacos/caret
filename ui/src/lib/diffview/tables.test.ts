@@ -112,6 +112,14 @@ describe("tableRanges", () => {
     expect(tableRanges(text, NO_CODE)).toHaveLength(1);
   });
 
+  test("falls back on a one-column table written with only a trailing pipe", () => {
+    // With a single pipe there is nothing to tell a trailing delimiter from a
+    // separator, so the delimiter row reads as two cells and fails. Valid GFM,
+    // rendered as raw source — the leading-pipe form of the same table parses.
+    expect(tableRanges(lines("a |", "- |"), NO_CODE)).toEqual([]);
+    expect(tableRanges(lines("| a |", "| - |"), NO_CODE)).toHaveLength(1);
+  });
+
   test("does not detect a blockquote-prefixed table", () => {
     // A quoted table renders as raw source: the `>` prefix would need a column
     // track of its own, and nothing in the epic asks for one yet.

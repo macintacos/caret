@@ -6,11 +6,13 @@
 // which is what keeps display columns equal to source columns and copy honest.
 //
 // Flat runs are a requirement rather than a style. The decoration pass (EXC-867)
-// turns each run into a sibling element, and tagTokenAt (fileRefTag.ts) and
-// tagLanguageToken / tagFenceToken (codeBlocks.ts) all walk a row's DIRECT
-// children accumulating text length. A nested wrapper would break that partition
-// and put data-file-ref on an element spanning more than the reference — the exact
-// case tagTokenAt's two-bound check exists to refuse.
+// turns each run into a sibling element, and every pass that then locates a token
+// walks the row accumulating text length: tagLanguageToken / tagFenceToken
+// (codeBlocks.ts) over the row's direct children, tagTokenAt (fileRefTag.ts) over
+// rowTokens.ts's tokenChildren — the row's own children, or a table row's cells'
+// children one level down. A nested wrapper would break that partition and put
+// data-file-ref on an element spanning more than the reference — the exact case
+// tagTokenAt's two-bound check exists to refuse.
 //
 // Abutting elements are NOT fused into one run even when their attributes match.
 // `*a*_b_` is two italic runs, and two adjacent links are two link runs: the
