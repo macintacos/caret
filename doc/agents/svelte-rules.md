@@ -163,10 +163,10 @@ stays green under any invocation.
   That suite also holds `--chip-link` and `--chip-ref` at least 60 degrees of hue apart in
   every palette; check that pin rather than your eye when adding one, and read the comment
   above it for why that pair and not another. A third pin measures something else for a
-  different pair: `--chip-ref` sits above a shared saturation floor and `--chip-code` below
-  it, since those two render side by side and a near-neutral's hue angle carries no design
-  intent to compare against. Read that test's comment before choosing `chipCodeHue` or
-  `chipRefHue`.
+  different pair: `--chip-ref` sits above a shared saturation floor and `--chip-code`
+  below it, since those two render side by side and a near-neutral's hue angle carries no
+  design intent to compare against. Read that test's comment before choosing `chipCodeHue`
+  or `chipRefHue`.
 - **The diff-view bridge is amber-selection-only.** The single `.diffview` rule in
   `app.css` maps caret's tokens onto `@pierre/diffs`'s `--diffs-*` properties. caret
   adopts the library's surface STRUCTURE — the layered buffer/context/separator depth

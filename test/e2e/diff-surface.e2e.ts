@@ -2594,6 +2594,8 @@ const INLINE_CODE_PLAN = `# Inline code plan
 A bare span: \`render()\` here.
 
 See [\`src/cache.ts\`](src/cache.ts) for the detail.
+
+Read [the \`render()\` helper](https://example.com/docs) first.
 `;
 
 /** How many of a decorated row's tokens open (or close) the `code` pill. */
@@ -2629,7 +2631,7 @@ test("the inline-code chip draws one pill per span (EXC-868)", async ({ daemon, 
     // pins that --chip-code itself derived. A token that failed to derive leaves the
     // gradient invalid and background-image computing to "none".
     const layers = content!.backgroundImage.split(/,\s*(?=linear-gradient)/);
-    expect(layers).toHaveLength(3);
+    expect(layers).toHaveLength(4);
     expect(layers.filter((l) => !/rgba\(0,\s*0,\s*0,\s*0\)/.test(l))).toHaveLength(1);
     expect(Number.parseFloat(marker!.radiusStart)).toBeGreaterThan(0);
     // Backticks kept AND subdued: caret-theme.ts colours them off the code between them,
@@ -2663,6 +2665,29 @@ test("the inline-code chip draws one pill per span (EXC-868)", async ({ daemon, 
     // the cap rule exists to prevent.
     expect(cited.tagged.map((t) => t.start)).toEqual(["code", null, null]);
     expect(cited.tagged.map((t) => t.end)).toEqual([null, null, "code"]);
+
+    // A codespan inside a COLLAPSED LINK LABEL — where this chip meets EXC-859's. The
+    // label collapses to prose, so the code run sits wholly inside the link run and the
+    // middle child carries both members. Two things have to be true at once, and only a
+    // browser can say so: both layers paint (one property, four layers, so a member that
+    // replaced the stack rather than adding to it would show up as a missing tint), and
+    // the code member takes NO cap there, because the link pill encloses it and only the
+    // outermost pill caps.
+    const labelled = await readEmphasis(page, 7);
+    expect(labelled.lineText).toBe("Read the `render()` helper first.");
+    const both = labelled.tagged.find((t) => t.text === "render()");
+    expect(both).toBeDefined();
+    expect((both!.md ?? "").split(" ").sort()).toEqual(["code", "link"]);
+    // No cap on the code member here: the link pill encloses it, and a cap lands only
+    // where every member on the child ends. The link's own caps sit on the label's outer
+    // children, so the code tint is a square band inside a rounded link pill.
+    expect(both!.start).toBeNull();
+    expect(both!.end).toBeNull();
+    expect(codeCaps(labelled.tagged, "start")).toBe(0);
+    expect(codeCaps(labelled.tagged, "end")).toBe(0);
+    const bothLayers = both!.backgroundImage.split(/,\s*(?=linear-gradient)/);
+    expect(bothLayers).toHaveLength(4);
+    expect(bothLayers.filter((l) => !/rgba\(0,\s*0,\s*0,\s*0\)/.test(l))).toHaveLength(2);
   } finally {
     await proj.cleanup();
   }

@@ -408,7 +408,7 @@ describe("the inline emphasis chips (EXC-867)", () => {
     }
   });
 
-  test("drops the bold and italic tints on a selected row so a drag reads as one flat band", () => {
+  test("drops the decoration tints on a selected row so a drag reads as one flat band", () => {
     // The guard rides each member's own tint VARIABLE rather than the shared fill rule,
     // because the members disagree about it: the link chip (EXC-859) keeps its tint through
     // a selection. background-image is one property, so a second unguarded rule would
@@ -416,6 +416,9 @@ describe("the inline emphasis chips (EXC-867)", () => {
     // back to transparent is what lets one stack carry two policies.
     expect(tintRule("bold")).toMatch(/:not\(\[data-selected-line\]\)/);
     expect(tintRule("italic")).toMatch(/:not\(\[data-selected-line\]\)/);
+    // Code sides with them (EXC-868): it marks a span rather than offering an action, the
+    // same call the fence chip makes with the same token.
+    expect(tintRule("code")).toMatch(/:not\(\[data-selected-line\]\)/);
     expect(fillRule).not.toMatch(/:not\(\[data-selected-line\]\)/);
   });
 });
@@ -500,21 +503,17 @@ describe("the link chip (EXC-859)", () => {
 // column" and "drops the chip on a selected row" pins above already cover it and are not
 // repeated here.
 describe("the inline-code chip (EXC-868)", () => {
-  const fillRule = overrideDecls.match(/\[data-content\][^{}]*\[data-md\]\s*\{[^}]*\}/)?.[0] ?? "";
-  const codeMember =
-    overrideDecls.match(/\[data-content\][^{}]*\[data-md~="code"\]\s*\{[^}]*\}/)?.[0] ?? "";
-  const fenceRule =
-    overrideDecls.match(
-      /\[data-content\][^{}]*\[data-code-line\][^{}]*\[data-code-fence\]\s*\{[^}]*\}/,
-    )?.[0] ?? "";
-  const nestedRef =
-    overrideDecls.match(/\[data-file-ref\]\[data-md~="code"\]\s*\{[^}]*\}/)?.[0] ?? "";
+  const fillRule = rulesFor(String.raw`\[data-md\]`)[0] ?? "";
+  const fenceRule = rulesFor(String.raw`\[data-code-fence\]`).find((r) =>
+    r.includes("background-color:"),
+  );
+  const nestedRef = rulesFor(String.raw`\[data-file-ref\]\[data-md~="code"\]`)[0] ?? "";
 
   test("spends the family's inline-code tint through a layer of its own", () => {
     // A layer rather than a background-color, for the reason bold and italic are layers:
     // the middle run of a bold element wrapping inline code carries bold AND code, and a
     // single background-color would let one rule win and punch a gap through the bold pill.
-    expect(codeMember).toMatch(/--md-code:\s*var\(--chip-code\)/);
+    expect(tintRule("code")).toMatch(/--md-code:\s*var\(--chip-code\)/);
     expect(fillRule).toMatch(/var\(--md-code,\s*transparent\)/);
     // The transparent fallback is what paints nothing when the member is absent, so no
     // default declaration is needed and nothing has to out-specify the member rule.
@@ -527,8 +526,8 @@ describe("the inline-code chip (EXC-868)", () => {
     // the token out of each rule and compare, so this fails on a second value being
     // introduced anywhere rather than on --chip-code specifically being named.
     const token = (rule: string) => rule.match(/var\((--chip-[a-z]+)\)/)?.[1];
-    expect(token(fenceRule)).toBe("--chip-code");
-    expect(token(codeMember)).toBe(token(fenceRule));
+    expect(token(fenceRule ?? "")).toBe("--chip-code");
+    expect(token(tintRule("code"))).toBe(token(fenceRule ?? ""));
   });
 
   test("squares and unpads a file reference sitting inside a codespan", () => {
