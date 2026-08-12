@@ -178,7 +178,13 @@ describe("task-list checkboxes", () => {
     ["a paren-ordered item", "2) [x] task", 3, "checked" as const],
     ["a nested item", "    - [ ] task", 6, "unchecked" as const],
   ])("%s marks its bracket run", (_name, line, startCol, checkbox) => {
-    expect(runs(line)).toEqual([{ startCol, endCol: startCol + 3, checkbox }]);
+    // Filtered rather than compared whole, because every line here also opens a
+    // list item and so carries a marker run of its own (EXC-861). Those columns
+    // are pinned in the "list markers" describe below; restating them per row here
+    // would pin the same thing twice and in the harder-to-read place.
+    expect(runs(line).filter((span) => span.checkbox !== undefined)).toEqual([
+      { startCol, endCol: startCol + 3, checkbox },
+    ]);
   });
 
   test.each([
@@ -193,8 +199,76 @@ describe("task-list checkboxes", () => {
 
   test("a checkbox coexists with inline chips later on the line", () => {
     expect(runs("- [x] ship **now**")).toEqual([
+      { startCol: 0, endCol: 1, listMarker: "task" },
       { startCol: 2, endCol: 5, checkbox: "checked" },
       { startCol: 11, endCol: 18, bold: true },
+    ]);
+  });
+});
+
+describe("list markers", () => {
+  test.each([
+    ["a dash bullet", "- item", 0, 1, "bullet" as const],
+    ["a star bullet", "* item", 0, 1, "bullet" as const],
+    ["a plus bullet", "+ item", 0, 1, "bullet" as const],
+    ["a dotted number", "1. item", 0, 2, "ordered" as const],
+    ["a paren number", "2) item", 0, 2, "ordered" as const],
+    ["a multi-digit number", "10. item", 0, 3, "ordered" as const],
+    ["a second-level bullet", "  - item", 2, 3, "bullet" as const],
+    ["a third-level bullet", "    - item", 4, 5, "bullet" as const],
+    ["an ordered item nested under a bullet", "   1. item", 3, 5, "ordered" as const],
+    ["a marker with no content", "-", 0, 1, "bullet" as const],
+  ])("%s marks its marker columns and nothing else", (_name, line, startCol, endCol, kind) => {
+    expect(runs(line)).toEqual([{ startCol, endCol, listMarker: kind }]);
+  });
+
+  test.each([
+    ["a thematic break of dashes", "---"],
+    ["a spaced dash break", "- - -"],
+    ["a thematic break of stars", "***"],
+    ["a spaced star break", "* * *"],
+    ["an underscore break", "___"],
+    ["an indented spaced break", "   * * * *"],
+    ["emphasis opening the line", "*italic* text"],
+    ["bold opening the line", "**bold** text"],
+    ["a hyphen mid-word", "a well-known case"],
+    ["a table delimiter row", "| --- | --- |"],
+    ["a minus sign in prose", "3 - 1 = 2"],
+    ["a bare number with no delimiter", "42 items"],
+  ])("%s emits no list marker", (_name, line) => {
+    expect(runs(line).filter((span) => span.listMarker !== undefined)).toEqual([]);
+  });
+
+  test("a task item's marker is a task, so the checkbox is the item's only glyph", () => {
+    // EXC-861's "not double-styled" criterion, decided in the data rather than in
+    // CSS: the marker column of a task line is never a bullet, so EXC-860's
+    // checkbox is the one treatment the row carries.
+    expect(runs("- [x] task")).toEqual([
+      { startCol: 0, endCol: 1, listMarker: "task" },
+      { startCol: 2, endCol: 5, checkbox: "checked" },
+    ]);
+  });
+
+  test("an ordered task item's marker is a task too", () => {
+    expect(runs("1. [ ] task")).toEqual([
+      { startCol: 0, endCol: 2, listMarker: "task" },
+      { startCol: 3, endCol: 6, checkbox: "unchecked" },
+    ]);
+  });
+
+  test("a quoted marker sits past the quote prefix, not at column zero", () => {
+    // EXC-866 recorded that TASK_MARKER's group-1 offset is wrong inside a quote;
+    // this scan takes its columns off contentStart for the same reason.
+    expect(runs("> - item")).toEqual([
+      { startCol: 0, endCol: 1, quoteMarker: 1 },
+      { startCol: 2, endCol: 3, listMarker: "bullet" },
+    ]);
+  });
+
+  test("a marker coexists with inline chips later on the line", () => {
+    expect(runs("- ship **now**")).toEqual([
+      { startCol: 0, endCol: 1, listMarker: "bullet" },
+      { startCol: 7, endCol: 14, bold: true },
     ]);
   });
 });
@@ -245,6 +319,7 @@ describe("blockquote depth and markers", () => {
   test("a quoted task item marks both the quote and the checkbox", () => {
     expect(runs("> - [ ] task")).toEqual([
       { startCol: 0, endCol: 1, quoteMarker: 1 },
+      { startCol: 2, endCol: 3, listMarker: "task" },
       { startCol: 4, endCol: 7, checkbox: "unchecked" },
     ]);
   });
