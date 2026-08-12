@@ -579,13 +579,13 @@ EXC-956: a link whose target is a **directory** collapses on exactly the same te
 
 Plain text, then **bold**, then *italic*, then ***bold italic***, then ~~strikethrough~~, then **bold with *italic* nested inside it** — all in one sentence, so the boundary between two adjacent runs is visible rather than inferred.
 
-Bold and italic draw from the same per-scheme alpha family, and on several palettes they do not separate on tint alone; weight and slant are what tell them apart until the shared decoration pass gives each its own treatment. Strikethrough is the odd one out and is here for exactly that reason: `del` carries no attribute today, so `~~…~~` draws nothing at all and its tildes read as plain text.
+Bold and italic draw from the same per-scheme alpha family, so tint alone does not separate them on every palette — what does is weight and slant, which caret declares itself off the decoration pass's own attributes rather than leaving to the highlighter. Bold should read heavier and italic should read slanted here, in every palette, and a row where both look identical is the regression. Strikethrough is the odd one out and is here for exactly that reason: `del` carries no attribute at all, so `~~…~~` draws nothing and its tildes read as plain text.
 
 ### Inline code
 
 A plain span: `renderPlan(markdown)`. A span holding a path: `ui/src/lib/diffview/inlineSpans.ts`. A span holding a shell line: `bun test --conditions browser`. A span whose interior is itself markdown, which must stay literal: `**not bold**, *not italic*`.
 
-- [`ui/src/lib/markdown.ts`](ui/src/lib/markdown.ts) — a backticked path behind a link target, the citation shape caret's own plans use most. It resolves, so the glyph and the tint both land. The code span's run covers its backticks while the reference sits inside them, and where those two cut is still being settled — read this row as the open question it is rather than as finished output.
+- [`ui/src/lib/markdown.ts`](ui/src/lib/markdown.ts) — a backticked path behind a link target, the citation shape caret's own plans use most, and the row most worth a baseline screenshot. The code span's run covers its backticks while the reference sits inside them: the reference's boundary cuts the row without breaking the pill, so what draws is **one** continuous code chip with the file glyph on the child in the middle of it. Two chips with a seam between them is the regression.
 
 ### Links
 
@@ -673,7 +673,7 @@ Wide enough that it has to scroll sideways inside the panel rather than reflow:
 
 | id  | construct  | seeded from | draws            | resting tint | on hover       | negative case         | first covered | owner surface                        |
 | --- | ---------- | ----------- | ---------------- | ------------ | -------------- | --------------------- | ------------- | ------------------------------------ |
-| 1   | emphasis   | the fixture | a span per run   | shared alpha | unchanged      | strikethrough is bare | this section  | `ui/src/lib/diffview/inlineSpans.ts` |
+| 1   | emphasis   | the fixture | weight and slant | shared alpha | unchanged      | strikethrough is bare | this section  | `ui/src/lib/diffview/inlineSpans.ts` |
 | 2   | code spans | the fixture | a span per run   | shared alpha | unchanged      | markdown left literal | this section  | `ui/src/lib/diffview/inlineSpans.ts` |
 | 3   | fences     | the fixture | a chip per fence | shared alpha | unchanged      | a bare fence row      | this section  | `ui/src/lib/diffview/codeBlocks.ts`  |
 | 4   | references | the daemon  | a glyph + a tint | shared alpha | an accent wash | a path off disk       | this section  | `ui/src/lib/diffview/fileRefs.ts`    |
