@@ -404,10 +404,11 @@ test("a prose-labelled directory link collapses and still opens the tree", async
     await planSurface(page);
 
     // The label survives verbatim — it is never rewritten to the path — and the
-    // markup around it is gone. The glyph lands because the label is the whole
-    // line and so is its own token; put prose beside it and the line becomes one
-    // coarse run that tagFileRefTokens refuses, which is the documented shape a
-    // prose label usually has (see links.ts).
+    // markup around it is gone. The glyph lands on the label wherever it sits:
+    // the decoration pass cuts each row at the reference's own columns, so prose
+    // beside the label no longer costs it the icon (EXC-867, see links.ts). The
+    // label being the whole line here is a convenience of the fixture, not a
+    // condition the glyph depends on.
     await expect(page.locator(".diffview").getByText("](src/lib)")).toHaveCount(0);
     await expect(page.locator('[data-file-ref="directory"]')).toHaveText("the library tree");
 

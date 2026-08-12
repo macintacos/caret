@@ -246,8 +246,13 @@ const CARET_OVERRIDES = `
      paragraph — the failure mode EXC-855 names.
 
      Rounded ends ride the GROUP, not the run: an element fragmented into several runs
-     gets its radius on the first and last only, so the pill closes once. That is why the
-     start/end attributes exist rather than a blanket border-radius, and it is the same
+     gets its radius on the first and last only, so the pill closes once. The pass also
+     withholds the cap from a member nested inside another, and that asymmetry is forced by
+     this property rather than chosen: border-radius is one geometric property of the box
+     and clips every background layer on it, so it cannot be drawn per layer. Were an inner
+     member to cap on its own, it would round the enclosing pill's tint too and punch a
+     notch through its middle. The outermost pill wins. That is why the start/end attributes
+     exist rather than a blanket border-radius, and it is the same
      shape data-code-start / data-code-end already draw for fenced blocks. Logical
      longhands so the ends follow the writing direction. The :not() guard drops the chip on
      a selected row, so a drag-selection reads as one flat band — exactly as the fence chip
@@ -278,10 +283,10 @@ const CARET_OVERRIDES = `
     font-style: italic;
   }
 
-  [data-md~="bold"] {
+  [data-content] [data-line] [data-md~="bold"] {
     --md-bold: var(--chip-bold);
   }
-  [data-md~="italic"] {
+  [data-content] [data-line] [data-md~="italic"] {
     --md-italic: var(--chip-italic);
   }
   [data-content] [data-line]:not([data-selected-line]) [data-md] {

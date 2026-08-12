@@ -120,7 +120,12 @@ test("two abutting runs with identical attributes draw two pills", () => {
 test("one element fragmented by a nested element draws a single pill", () => {
   // ``**a `c` b**`` — three runs, one bold ELEMENT. Their attribute sets differ,
   // so the bold group spans all three and the pill opens once and closes once.
-  // The code run inside gets its own pill.
+  //
+  // The nested code run takes NO cap, even though its own group both opens and
+  // closes on it. border-radius is one geometric property of the box and clips
+  // every background layer on it, so capping there would round the bold tint too
+  // and punch a notch through the middle of the bold pill. A cap lands only where
+  // every member the child carries ends, which is why the outermost pill wins.
   host = root(row(1, ["**a", "`c`", "b**"]));
   decorateInlineRuns(
     host,
@@ -138,8 +143,21 @@ test("one element fragmented by a nested element draws a single pill", () => {
   );
   expect(pieces(host)).toEqual([
     { text: "**a", md: "bold", start: "bold", end: null },
-    { text: "`c`", md: "bold code", start: "code", end: "code" },
+    { text: "`c`", md: "bold code", start: null, end: null },
     { text: "b**", md: "bold", start: null, end: "bold" },
+  ]);
+});
+
+test("a nested element's own group still caps once it is alone on the child", () => {
+  // The same code run, this time NOT inside anything: `x` then plain prose. Its
+  // group is the only member on the child, so "every member ends here" is just
+  // itself and the pill caps normally. This is the other half of the rule above —
+  // the suppression is about nesting, not about inner members never capping.
+  host = root(row(1, ["`x`", " after"]));
+  decorateInlineRuns(host, spanMap([[1, [{ startCol: 0, endCol: 3, code: true }]]]), new Map());
+  expect(pieces(host)).toEqual([
+    { text: "`x`", md: "code", start: "code", end: "code" },
+    { text: " after", md: null, start: null, end: null },
   ]);
 });
 

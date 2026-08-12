@@ -2451,7 +2451,7 @@ test("emphasis costs the monospace grid nothing (EXC-867)", async ({ daemon, pag
   // The issue's de-escalation ladder names the grid as the likeliest trigger: if a
   // chip's padding or the mono font's bold/italic advance width shifted columns,
   // vim motions, drag-range selection and the search highlights would all stop
-  // matching source columns. Lines 11 and 13 are the same 21 characters, one styled
+  // matching source columns. Lines 11 and 13 are the same 22 characters, one styled
   // and one not, so an equal painted width is the grid holding.
   await daemon.seed({ plan: EMPHASIS_PLAN });
   await page.goto("/");
@@ -2493,4 +2493,82 @@ test("a backticked file citation keeps its glyph through the decoration pass (EX
   } finally {
     await proj.cleanup();
   }
+});
+
+test("the decoration pass leaves the row's other consumers intact (EXC-867)", async ({
+  daemon,
+  page,
+}) => {
+  // The issue's "what must not break" list. Splitting a row into more elements —
+  // and so more text nodes — is exactly what could break the passes that walk them,
+  // and every one of these needs a real browser: rangeForSpan resolves a DOM Range
+  // over the live text nodes, and the decoration only exists after the library's
+  // async repaint.
+  await daemon.seed({ plan: EMPHASIS_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await readEmphasis(page, 5)).tagged.length).toBeGreaterThan(0);
+
+  // Search highlights (rangeForSpan) still land on exactly the matched columns of a
+  // SPLIT row. "bold text" sits inside the emphasis run on line 5, so its range is
+  // resolved across the tokens the pass produced rather than one flat token.
+  // Safe mode swallows shortcuts for its grace window, so `/` needs it past first.
+  await waitPastSafeModeGrace(page);
+  await page.keyboard.press("/");
+  await page.keyboard.type("bold text");
+  // Both registries: the sole match is the CURRENT one, so it paints in
+  // caret-search-current and the caret-search underlay is empty.
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        ["caret-search", "caret-search-current"].flatMap((name) =>
+          [...(CSS.highlights.get(name) ?? [])].map((r) => r.toString()),
+        ),
+      ),
+    )
+    .toContain("bold text");
+  await page.keyboard.press("Escape");
+
+  // Decoration survives a repaint. The 2s poll re-renders the view, which is the
+  // same row rewrite a version switch or resolve landing causes.
+  await waitForTwoPollTicks(page);
+  expect((await readEmphasis(page, 5)).tagged.length).toBeGreaterThan(0);
+
+  // A fenced code block is never visited: links.ts emits no runs for in-code lines,
+  // so the block's rows and its fence markers reach codeBlocks.ts untouched. Asserted
+  // as absence because a split fence token would carry a duplicated data-code-fence.
+  const inCode = await page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+    return {
+      taggedInCode: sh?.querySelectorAll("[data-code-line] [data-md]").length ?? -1,
+      fenceMarkers: sh?.querySelectorAll("[data-code-fence]").length ?? -1,
+    };
+  });
+  expect(inCode.taggedInCode).toBe(0);
+  expect(inCode.fenceMarkers).toBe(0); // this plan has no fences; the query resolves
+});
+
+test("compare mode never reaches the decoration pass (EXC-867)", async ({ daemon, page }) => {
+  // Scope boundary EXC-855 draws for the whole epic: these affordances are
+  // single-version only. Compare renders SourceDiffView, which is passed no inline
+  // layer, so this is an absence assertion rather than a styling one — toHaveCount(0)
+  // says "not offered here", which toBeHidden could not distinguish from "painted
+  // nothing".
+  await daemon.seedVersions(2, [
+    EMPHASIS_PLAN,
+    `${EMPHASIS_PLAN}\nA second version with **more bold**.\n`,
+  ]);
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await readEmphasis(page, 5)).tagged.length).toBeGreaterThan(0);
+
+  await page.getByRole("button", { name: "Compare versions" }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+        return sh?.querySelectorAll("[data-md]").length ?? -1;
+      }),
+    )
+    .toBe(0);
 });

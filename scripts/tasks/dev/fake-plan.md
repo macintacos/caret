@@ -496,7 +496,7 @@ If anything in the paragraph above escapes the sanitizer — an alert fires, an 
 
 ## Filename references
 
-EXC-687: a filename written in **inline code** that resolves to a real file under the review's working directory gets a small file icon to its left, and clicking the reference opens a syntax-highlighted excerpt of that file — the head of the file, or a window framed on the lines the reference cites when it carries a `:line` or a `:start-end` range. A bare path in prose is not detected here — it renders as one coarse token with nowhere to hang the icon — and a path that does not resolve stays completely inert — no icon, no preview — so a made-up reference never masquerades as a link. Inline code is one of two ways to write a reference; markdown links are the other, below.
+EXC-687: a filename written in **inline code** that resolves to a real file under the review's working directory gets a small file icon to its left, and clicking the reference opens a syntax-highlighted excerpt of that file — the head of the file, or a window framed on the lines the reference cites when it carries a `:line` or a `:start-end` range. A bare path in prose is not detected here — backticks are how a plan says "this is a path", and scanning bare prose would tag ordinary words — and a path that does not resolve stays completely inert — no icon, no preview — so a made-up reference never masquerades as a link. Inline code is one of two ways to write a reference; markdown links are the other, below.
 
 The list below points at long-lived files, and leans on paths and line numbers that stay meaningful as their contents drift, so the check keeps working as the tree around it changes. Every path needs a known extension to be tagged at all, which is why extensionless files like `LICENSE` are absent. Click each to verify:
 
@@ -535,7 +535,7 @@ EXC-938: a reference can cite a **span** rather than a single line, and the prev
 
 EXC-954: a markdown link whose **target** is a path is a reference too. The link collapses to its label — brackets and parens gone, the path never written twice — and the label becomes the click target for the same preview. Nothing here is a web link: a filesystem path is never handed to the browser, so none of these open a tab.
 
-Where the **icon** lands is the thing to look at, and it follows the token the label leaves behind. A backticked label keeps its backticks, so the path stays its own token and takes the icon anywhere on the line. A bare-path or prose label collapses into ordinary prose, which is one coarse token running to the end of the line — marking that would drag the icon and its hover chip across the whole sentence, so those get the click without the icon.
+Where the **icon** lands is the thing to look at, and it follows the token the label leaves behind. A backticked label keeps its backticks, so the path stays its own token and takes the icon anywhere on the line. A bare-path or prose label collapses into ordinary prose, and it takes the icon too: the decoration pass cuts the row at the reference's own columns, so the label is its own element and the chip hugs it rather than the sentence.
 
 Each bullet below carries exactly one link and no other reference, so whatever icons you count on a line came from that link alone. Hover each to confirm the chip hugs the filename and never the sentence:
 

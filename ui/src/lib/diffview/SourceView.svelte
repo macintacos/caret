@@ -63,8 +63,9 @@
     /** Opt-in inline-markdown layer (EXC-855, EXC-867): the flat atomic runs per
      * display line. Each row's tokens are split so none straddles a run, then
      * tagged data-md so the override sheet draws the emphasis chips. Omit it to
-     * leave rows as the library painted them — which is what the compare view
-     * does, since these affordances are single-version only. */
+     * leave rows as the library painted them. Compare mode never reaches this pass
+     * at all — it renders SourceDiffView, a different component — since these
+     * affordances are single-version only. */
     inline?: InlineSpanMap;
     /** Fires once the view's container is bound, handing the parent an
      * imperative API (currently scroll-to-line) that closes over the container.

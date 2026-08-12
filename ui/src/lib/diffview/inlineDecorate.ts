@@ -30,12 +30,22 @@
 // the reference's start and ends within it. Adding the reference's columns to the
 // cut set makes that child exist by construction rather than by shiki happening
 // to tokenize the backticks apart — and it is what lets a prose-labelled
-// reference, which shiki emits as one coarse run, take the glyph at all (the
-// upgrade path the `ponytail:` note in links.ts points here for).
+// reference, which shiki emits as one coarse run, take the glyph at all rather
+// than only the click and the tooltip.
 //
 // Those cuts feed the cut set ONLY, never the grouping above. A reference cut
 // inside a codespan would otherwise split it into three runs and three pills
 // instead of one — a bug the inline-code chip (EXC-868) would inherit.
+//
+// The ROUNDED ENDS (data-md-start / data-md-end) mark where a pill closes, and a
+// child gets one only where every member it carries opens (or closes) there. The
+// constraint is CSS: border-radius is one geometric property of the box and clips
+// every background layer on it, so it cannot be drawn per member. A nested member
+// capping on its own would therefore round the enclosing pill's tint too, punching
+// a notch through its middle — `**a `c` b**` would render the bold chip with a
+// rounded hole where the code run sits. The outermost pill wins, and an inner
+// member nested inside another stays square. Where a member is alone on the child,
+// "every member" is just itself and it caps normally.
 //
 // Idempotency is a hard requirement, not a nicety: SourceView.svelte runs this
 // from a MutationObserver watching childList over the whole subtree, so a pass
@@ -47,8 +57,8 @@
 import type { FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 import type { ColumnRange, InlineSpan, InlineSpanMap } from "$lib/diffview/inlineSpans.ts";
 
-// The inline-markup attributes that ride in the `data-md` token list, in the
-// order they are listed. A token list rather than an attribute per member so CSS
+// The inline-markup attributes that ride in the `data-md` token list, which is
+// emitted in this array's order. A token list rather than an attribute per member so CSS
 // reaches one with `[data-md~="bold"]` and a new decoration costs one rule, not a
 // new attribute name. `checkbox` and `quoteMarker` carry values, so they stay
 // their own valued attributes.
@@ -94,8 +104,13 @@ function pillGroups(runs: readonly InlineSpan[], member: Member): ColumnRange[] 
 
 /** Replaces every direct child a cut falls strictly inside with one clone per
  * piece, so no child straddles a boundary. A child with no interior cut is left
- * as-is — the idempotency guarantee. A child holding elements of its own is
- * skipped defensively; a shiki token holds a single text node. */
+ * as-is — the idempotency guarantee.
+ *
+ * A child holding elements of its own is skipped defensively; a shiki token holds
+ * a single text node, so there is no known trigger. The landing if one ever
+ * appears is silence rather than breakage: the child keeps straddling a boundary,
+ * tagRow's covering-run lookup finds none, and the element goes untagged — no
+ * chip and no glyph on that stretch, with every other row unaffected. */
 function splitRow(row: Element, cuts: number[]): void {
   let col = 0;
   for (const child of [...row.children]) {
@@ -118,6 +133,16 @@ function splitRow(row: Element, cuts: number[]): void {
   }
 }
 
+/** A member list as its attribute value, or undefined when nothing applies. */
+function list(members: readonly Member[]): string | undefined {
+  return members.length > 0 ? members.join(" ") : undefined;
+}
+
+/** Sets `attr` when there is a value, leaving it absent rather than empty. */
+function setAttr(child: Element, attr: string, value: string | undefined): void {
+  if (value !== undefined) child.setAttribute(attr, value);
+}
+
 /** Tags each direct child with the run covering it. After splitRow every child
  * lies wholly inside one run or inside none, so the covering run is a lookup. */
 function tagRow(row: Element, runs: readonly InlineSpan[], groups: Map<Member, ColumnRange[]>) {
@@ -128,21 +153,22 @@ function tagRow(row: Element, runs: readonly InlineSpan[], groups: Map<Member, C
     if (col === start) continue;
     const run = runs.find((r) => r.startCol <= start && col <= r.endCol);
     if (run === undefined) continue;
-    const list = (members: Member[]) => (members.length > 0 ? members.join(" ") : undefined);
-    const set = (attr: string, value: string | undefined) => {
-      if (value !== undefined) child.setAttribute(attr, value);
-    };
-    set("data-md", list(MEMBERS.filter((member) => run[member] !== undefined)));
-    set(
-      "data-md-start",
-      list(MEMBERS.filter((m) => (groups.get(m) ?? []).some((g) => g.startCol === start))),
+    const members = MEMBERS.filter((member) => run[member] !== undefined);
+    const opens = members.filter((m) => (groups.get(m) ?? []).some((g) => g.startCol === start));
+    const closes = members.filter((m) => (groups.get(m) ?? []).some((g) => g.endCol === col));
+    setAttr(child, "data-md", list(members));
+    // A cap lands only where EVERY member the child carries opens (or closes) —
+    // see the header's rounded-ends note. An inner member capping on its own would
+    // notch the pill still running through the same element, because border-radius
+    // is one geometric property of the box and clips all of its background layers.
+    setAttr(child, "data-md-start", opens.length === members.length ? list(opens) : undefined);
+    setAttr(child, "data-md-end", closes.length === members.length ? list(closes) : undefined);
+    setAttr(child, "data-md-checkbox", run.checkbox);
+    setAttr(
+      child,
+      "data-md-quote",
+      run.quoteMarker === undefined ? undefined : String(run.quoteMarker),
     );
-    set(
-      "data-md-end",
-      list(MEMBERS.filter((m) => (groups.get(m) ?? []).some((g) => g.endCol === col))),
-    );
-    set("data-md-checkbox", run.checkbox);
-    set("data-md-quote", run.quoteMarker === undefined ? undefined : String(run.quoteMarker));
   }
 }
 
@@ -169,13 +195,23 @@ export function decorateInlineRuns(
   for (const stale of root.querySelectorAll(STALE)) {
     for (const attr of ATTRS) stale.removeAttribute(attr);
   }
+  // Index the rows once and read the line number off each, rather than a
+  // querySelector per marked line. Unlike the file-reference and link maps — a
+  // handful of entries per plan — this map is DENSE: links.ts records a line for
+  // any emphasis, inline code, link, checkbox or quote marker, so it names most
+  // of a prose document, and a per-line lookup would walk the whole subtree
+  // hundreds of times on every repaint. Descendant, not child: an overflowing
+  // code block's rows get moved into a scroll card (codeBlockScroll.ts), so they
+  // are no longer direct children of [data-content]. Same shape as
+  // tagCodeBlockRows.
+  const rows = new Map<number, Element>();
+  for (const row of root.querySelectorAll("[data-content] [data-line]")) {
+    const line = Number(row.getAttribute("data-line"));
+    if (Number.isFinite(line)) rows.set(line, row);
+  }
   for (const line of new Set([...spans.keys(), ...refs.keys()])) {
-    // Descendant, not child: an overflowing code block's rows get moved into a
-    // scroll card (codeBlockScroll.ts), so they are no longer direct children of
-    // [data-content]. The same query tagCodeBlockRows uses finds them wherever
-    // they sit.
-    const row = root.querySelector(`[data-content] [data-line="${line}"]`);
-    if (row === null) continue;
+    const row = rows.get(line);
+    if (row === undefined) continue;
     const runs = spans.get(line) ?? [];
     const cuts = new Set<number>();
     for (const run of runs) {

@@ -17,7 +17,7 @@ import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
 // (EXC-730) — at module load.
 //
 // These tests pin what the resolver adds on top of that lookup: caret's three
-// structural marker rules, appended last for every registered theme. The two
+// appended markdown rules, added last for every registered theme. The two
 // halves' own contracts sit either side of it — caret's own pair spends the named
 // color set and nothing else, and a vendor palette carries its upstream rule set
 // whole.
@@ -53,7 +53,7 @@ const VENDOR_PALETTES = THEME_IDS.flatMap((id) => {
 });
 
 /** How many rules caret appends over the theme a palette names — the three structural
- * markers plus the three emphasis rules (caret-theme.ts's `structuralMarkerRules`). */
+ * markers plus the four emphasis rules (caret-theme.ts's `caretMarkdownRules`). */
 const APPENDED_RULES = 7;
 
 const FENCE_MARKERS = "markup.fenced_code.block.markdown punctuation.definition.markdown";
@@ -183,7 +183,7 @@ describe("caret's own shiki themes", () => {
       });
 
       test("leaves the structural markers to the resolver", () => {
-        // The resolver appends structuralMarkerRules to every theme, and
+        // The resolver appends caretMarkdownRules to every theme, and
         // appended-last is what makes them win. A copy carried here would sit
         // among the rules it is supposed to beat.
         const scopes = (theme.settings ?? []).flatMap((rule) => rule.scope ?? []);
@@ -254,9 +254,9 @@ describe("caret-theme ↔ THEMES palette sync", () => {
 });
 
 // AC 3's structural half. There is one resolution path now, so every registered
-// theme takes the same six rules — and shiki is last-match-wins, so appending them
+// theme takes the same seven rules — and shiki is last-match-wins, so appending them
 // is what makes them beat whatever the theme underneath says about those scopes.
-describe("caret's structural marker rules", () => {
+describe("caret's appended markdown rules", () => {
   for (const id of THEME_IDS) {
     // Resolved fresh rather than read off the cached object, for the reason the
     // vendor block above spells out: shiki's normalizeTheme mutates the array it is
@@ -272,7 +272,7 @@ describe("caret's structural marker rules", () => {
       expect(language?.settings.fontStyle).toBe("bold");
       expect(raw?.scope).toEqual([INLINE_RAW]);
       expect(raw?.settings.foreground).toBe(tokens["--ink-soft"]);
-      // The emphasis pair carries fontStyle and NOTHING else, so each palette's own
+      // Each emphasis rule carries fontStyle and NOTHING else, so each palette's own
       // ink survives; only the markers take a color of their own.
       expect(bold?.scope).toEqual([BOLD]);
       expect(bold?.settings).toEqual({ fontStyle: "bold" });

@@ -367,7 +367,7 @@ describe("every theme", () => {
 
   // shiki resolves token colors at highlight time and takes plain 6-digit hex; an
   // alpha suffix on any of these would reach the highlighter as an invalid color.
-  // Only the three caret-theme.ts's structural marker rules read reach shiki through
+  // Only the tokens caret-theme.ts's appended markdown rules read reach shiki through
   // the tokens: caret's own themes take their colors from the named set (covered
   // by "names every color as alpha-free 6-digit hex" above), and a vendor palette
   // highlights with its own upstream `colors`.

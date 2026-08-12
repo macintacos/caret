@@ -441,7 +441,13 @@ test("marks a markdown link whose target is a file, exactly once", async ({ daem
     await page.keyboard.press("Escape");
 
     // On the label itself — the reference opens, and it is the label's own file.
-    await page.locator("[data-file-ref]").nth(0).click();
+    // Still a COORDINATE click, so it proves the pointer pipeline hit-tests the
+    // label's real screen position; a locator click would only prove the tagged
+    // element is clickable, which the nth(1) click above already covers. The box
+    // comes from the reference element because the split moved the label out of
+    // the sentence's box, which is what `sentence` now measures.
+    const label = await page.locator("[data-file-ref]").nth(0).boundingBox();
+    await page.mouse.click(label!.x + label!.width / 2, label!.y + label!.height / 2);
     await expect(preview).toBeVisible();
     await expect(preview).toContainText("src/cache.ts");
   } finally {
