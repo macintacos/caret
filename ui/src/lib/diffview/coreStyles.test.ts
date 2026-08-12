@@ -430,13 +430,16 @@ describe("the folder-reference glyph (EXC-918)", () => {
   });
 });
 
-// EXC-840: the file reference opens its preview on click; hover highlights it.
-// The highlight is CSS — a faint amber wash on the tagged token, the same warm
-// hue as its inline-code text — so the pins here keep it warm (not grey), roomy
-// (a chip around the reference, no layout shift), and motionless. A reference
-// carrying a link target also shows a tooltip on hover (EXC-954); that one is
-// rendered in JS and out of scope for these CSS pins.
-describe("the filename-reference hover highlight (EXC-840)", () => {
+// The filename reference's chip. It RESTS in --chip-ref — the reference member of
+// the chip family EXC-855 fixed and EXC-858 derived — so which spans are
+// previewable is legible without sweeping the pointer across the plan (EXC-880);
+// hover swaps the fill to the warm accent wash (EXC-840) so pressing one still
+// reads as a change of state. The pins here keep the resting tint a DERIVED token
+// rather than a literal, keep the two states on different tokens, and keep the
+// chip roomy (no layout shift) and motionless. A reference carrying a link target
+// also shows a tooltip on hover (EXC-954); that one is rendered in JS and out of
+// scope for these CSS pins.
+describe("the filename-reference chip (EXC-840, tinted EXC-880)", () => {
   const tokenRule =
     overrideDecls.match(/\[data-content\]\s*\[data-file-ref\]\s*\{[^}]*\}/)?.[0] ?? "";
   const hoverRule =
@@ -446,16 +449,28 @@ describe("the filename-reference hover highlight (EXC-840)", () => {
     expect(tokenRule).toContain("cursor: pointer");
   });
 
-  test("the token reserves breathing room so the wash reads as a chip, not cramped", () => {
-    // Padding widens the wash out past the glyphs; a matching negative inline
+  test("the token reserves breathing room so the fill reads as a chip, not cramped", () => {
+    // Padding widens the fill out past the glyphs; a matching negative inline
     // margin offsets it so the surrounding backticks never shift.
     expect(tokenRule).toMatch(/padding/);
     expect(tokenRule).toMatch(/margin-inline:\s*-/);
   });
 
-  test("hover paints the faint amber accent wash with the control radius", () => {
+  test("the chip rests in the derived reference tint, with the control radius", () => {
+    // The tint is the ColorToken EXC-858 derived, never a literal — that is what
+    // makes all nine palettes supply it by construction. The radius rides the
+    // resting rule too, so the chip is one shape the hover only re-fills.
+    expect(tokenRule).toMatch(/background-color:\s*var\(--chip-ref\)/);
+    expect(tokenRule).toMatch(/border-radius:\s*var\(--radius\)/);
+    // The positive pin alone would still pass with a literal declared after it, which
+    // would win the cascade — so hold the whole rule clear of both escape hatches.
+    expect(tokenRule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(tokenRule).not.toMatch(/color-mix/);
+  });
+
+  test("hover swaps the fill to the accent wash, so it stays a visible step up", () => {
     expect(hoverRule).toMatch(/background-color:\s*var\(--accent-wash\)/);
-    expect(hoverRule).toMatch(/border-radius:\s*var\(--radius\)/);
+    expect(hoverRule).not.toMatch(/var\(--chip-ref\)/);
   });
 
   test("the hover swap is instant — the diff surface stays motionless", () => {

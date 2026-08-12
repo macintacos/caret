@@ -155,12 +155,16 @@ stays green under any invocation.
   The **keycap** derives from `currentColor` because it has no job of its own and inherits
   its container's — which is why a key on the amber Approve button reads light and a key
   on a neutral chip reads grey. `theme.test.ts` asserts every `ColorToken` has at least
-  one `var()` reader under `ui/src`, so a token can't stay declared for nobody; the five
-  content chips are the one listed exception, pinned as read by *nothing* until EXC-867
-  renders them, so the exemption fails the suite the moment it is outlived. That suite
-  also holds `--chip-link` and `--chip-ref` at least 60 degrees of hue apart in every
-  palette; check that pin rather than your eye when adding one, and read the comment above
-  it for why that pair and not another.
+  one `var()` reader under `ui/src`, so a token can't stay declared for nobody; the three
+  content chips still awaiting the ticket that renders them — `--chip-bold`,
+  `--chip-italic`, `--chip-link` — are the one listed exception, pinned as read by
+  *nothing*, so the exemption fails the suite the moment it is outlived. The other two
+  have already outlived theirs, both in `diffview/coreStyles.ts`: `--chip-code` fills the
+  fence-marker chip and `--chip-ref` the resting file-reference chip, so both are held to
+  the same floor as every other token. That suite also holds `--chip-link` and
+  `--chip-ref` at least 60 degrees of hue apart in every palette; check that pin rather
+  than your eye when adding one, and read the comment above it for why that pair and not
+  another.
 - **The diff-view bridge is amber-selection-only.** The single `.diffview` rule in
   `app.css` maps caret's tokens onto `@pierre/diffs`'s `--diffs-*` properties. caret
   adopts the library's surface STRUCTURE — the layered buffer/context/separator depth

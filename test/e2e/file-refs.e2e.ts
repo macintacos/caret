@@ -1,8 +1,9 @@
 // Filename references in the plan (EXC-687, click-to-open since EXC-840). The
 // plan renders as markdown source through @pierre/diffs; a path-shaped token
 // that resolves to a real file in the review's cwd gets a file icon (its token
-// tagged data-file-ref in the shadow root) and a hover highlight, and CLICKING
-// it opens a syntax-highlighted excerpt popover — hovering alone never does.
+// tagged data-file-ref in the shadow root) plus a resting chip that hover steps up
+// from (EXC-880), and CLICKING it opens a syntax-highlighted excerpt popover —
+// hovering alone never does.
 // A path written as a markdown link's target counts as a reference too
 // (EXC-954), which is what the link spec below covers.
 // The popover is a click-opened card that stays put: moving the pointer away
@@ -16,7 +17,10 @@
 // token tagging + real hover/click only
 // exist in a browser against a real daemon reading a real cwd, so they are
 // exercised here too; the pure detection, resolution, and excerpt math stay
-// units (fileRefs / fileRefTag / plan-files / api tests).
+// units (fileRefs / fileRefTag / plan-files / api tests), as do the chip's CSS
+// declarations themselves (diffview/coreStyles.test.ts) — what needs a browser is
+// that those declarations resolve their tokens across the shadow boundary and that
+// hover beats rest in the live cascade.
 //
 // The daemon is a real subprocess reading the local filesystem, so each test
 // writes a synthetic project dir and seeds a review whose cwd points at it. The
@@ -42,6 +46,24 @@ const CACHE_TS = Array.from({ length: CACHE_TS_LINES }, (_, i) => {
   if (n === 150) return 'const deepKey = "MARKER_LINE_DEEP"; // line 150';
   return `const line${n} = ${n};`;
 }).join("\n");
+
+/** The first tagged reference's computed chip fill and cursor, read from inside the
+ * shadow root. The rule lives in an adopted stylesheet while the tokens it spends are
+ * declared on the host document, so only a real browser can say the `var()` resolves
+ * across that boundary at all — and only a real :hover can say the hover rule beats
+ * the resting one in the live cascade. Null when no reference is tagged, which the
+ * callers assert against rather than reading through. */
+function refChipStyle(
+  page: import("@playwright/test").Page,
+): Promise<{ background: string; cursor: string } | null> {
+  return page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const tok = sh?.querySelector("[data-file-ref]");
+    if (!tok) return null;
+    const cs = getComputedStyle(tok);
+    return { background: cs.backgroundColor, cursor: cs.cursor };
+  });
+}
 
 /** Where the cited (`.fp-target`) row sits inside the preview's scrolling code
  * region, plus the region's own scroll state — the geometry the scroll specs
@@ -199,6 +221,15 @@ test("marks only references that resolve to a real file", async ({ daemon, page 
     // missing one never does, so the count settles at 1 (not 2).
     await expect.poll(() => fileRefCount(page)).toBe(1);
 
+    // At REST — pointer parked away from the token — the reference already carries
+    // its chip (EXC-880): a resolved path is tinted where it sits, so which spans
+    // can be opened reads at a glance instead of needing a pointer sweep. The token
+    // carries the pointer cursor at rest too, signalling it is clickable.
+    await page.mouse.move(0, 0);
+    const resting = await refChipStyle(page);
+    expect(resting?.cursor).toBe("pointer");
+    expect(resting?.background).not.toBe("rgba(0, 0, 0, 0)");
+
     // Hovering a resolved reference reveals no preview — for an inline-code
     // reference like this one hover is highlight-only (EXC-840); the preview
     // waits for a click. Give the pointer pipeline a beat, then assert nothing
@@ -208,18 +239,32 @@ test("marks only references that resolve to a real file", async ({ daemon, page 
     await page.waitForFunction((t) => performance.now() > t + 300, t0);
     await expect(page.locator("[data-file-preview]")).toHaveCount(0);
 
-    // The hover affordance is the highlight itself: with the pointer parked on
-    // the token, the real :hover state paints the background wash, and the token
-    // carries the pointer cursor signalling it is clickable.
-    const style = await page.evaluate(() => {
+    // The hover affordance is the highlight itself, and it has to stay legible now
+    // that the resting state is tinted too: with the pointer on the token the real
+    // :hover state swaps the fill to a DIFFERENT color than the resting chip, so
+    // hover still reads as a change of state rather than as nothing happening.
+    // Pin the read non-null first — both assertions below are negative, so they
+    // would pass vacuously on the `undefined` a missing token reads back as.
+    const hovered = await refChipStyle(page);
+    expect(hovered).not.toBeNull();
+    expect(hovered?.background).not.toBe("rgba(0, 0, 0, 0)");
+    expect(hovered?.background).not.toBe(resting?.background);
+
+    // The tint is a RESOLUTION signal, so the unresolvable `src/ghost.ts` beside it
+    // must carry none — it is never tagged, so the rule cannot reach it. Asserted
+    // here because "untagged" and "untinted" are different claims, and only the
+    // second is what a reader actually sees.
+    const ghost = await page.evaluate(() => {
       const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-      const tok = sh?.querySelector("[data-file-ref]");
-      if (!tok) return null;
-      const cs = getComputedStyle(tok);
-      return { background: cs.backgroundColor, cursor: cs.cursor };
+      const el = [...(sh?.querySelectorAll("[data-content] span") ?? [])].find(
+        (s) => s.textContent === "src/ghost.ts" && s.children.length === 0,
+      );
+      if (!el) return null;
+      return { tagged: el.hasAttribute("data-file-ref"), bg: getComputedStyle(el).backgroundColor };
     });
-    expect(style?.cursor).toBe("pointer");
-    expect(style?.background).not.toBe("rgba(0, 0, 0, 0)");
+    expect(ghost).not.toBeNull();
+    expect(ghost?.tagged).toBe(false);
+    expect(ghost?.bg).toBe("rgba(0, 0, 0, 0)");
   } finally {
     await proj.cleanup();
   }
@@ -296,16 +341,16 @@ test("marks references under a vendor palette too", async ({ daemon, page }) => 
 
     await expect.poll(() => fileRefCount(page)).toBe(1);
 
+    await page.mouse.move(0, 0);
+    const resting = await refChipStyle(page);
+    expect(resting?.cursor).toBe("pointer");
+    expect(resting?.background).not.toBe("rgba(0, 0, 0, 0)");
+
     await page.locator("[data-file-ref]").first().hover();
-    const style = await page.evaluate(() => {
-      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-      const tok = sh?.querySelector("[data-file-ref]");
-      if (!tok) return null;
-      const cs = getComputedStyle(tok);
-      return { background: cs.backgroundColor, cursor: cs.cursor };
-    });
-    expect(style?.cursor).toBe("pointer");
-    expect(style?.background).not.toBe("rgba(0, 0, 0, 0)");
+    const hovered = await refChipStyle(page);
+    expect(hovered).not.toBeNull();
+    expect(hovered?.background).not.toBe("rgba(0, 0, 0, 0)");
+    expect(hovered?.background).not.toBe(resting?.background);
   } finally {
     await proj.cleanup();
   }

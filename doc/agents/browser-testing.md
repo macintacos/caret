@@ -182,7 +182,7 @@ Two rules follow, and both are about direction rather than magnitude:
   the instant its condition is true. A flake is a bug to name, not a run to repeat.
 
 The raising rule has five standing exceptions, all in `file-refs.e2e.ts`: four
-`toPass({ timeout: 20_000 })` (lines 842, 852, 942, 949) and one `30_000` (line 1001),
+`toPass({ timeout: 20_000 })` (lines 887, 897, 987, 994) and one `30_000` (line 1046),
 guarding loops that walk a 300-line file's virtualised preview to both ends through real
 chunked loading. That is product cost, and the fixture's 300 lines — not the budget — is
 the tuning target. They predate the rule; a sixth needs an argument of the same kind.

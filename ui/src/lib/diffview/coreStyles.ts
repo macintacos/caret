@@ -501,7 +501,8 @@ const CARET_OVERRIDES = `
   /* EXC-918: a reference the daemon resolved to a DIRECTORY draws the folder
      glyph instead. The mask is all that changes — the rule above already sized,
      tinted and spaced the box, and every other [data-file-ref] rule below (the
-     pointer cursor, the chip padding, the hover wash) matches a directory token
+     pointer cursor, the chip padding, the resting fill, the hover wash) matches a
+     directory token
      too, because the kind rides on the attribute's value rather than a second
      attribute. So a folder reference reads as the same pressable chip, pointing
      at a different surface. */
@@ -510,23 +511,42 @@ const CARET_OVERRIDES = `
     mask: ${FOLDER_ICON_MASK} no-repeat center / contain;
   }
 
-  /* EXC-840: the reference opens its preview on click, so the token reads as a
-     pressable chip — always the pointer cursor, and on hover a faint amber wash
-     (--accent-wash, the same warm hue as its inline-code text) rounded with the
-     interactive-control radius. Padding gives the wash breathing room so it reads
-     as a chip around the whole reference rather than crowding the glyphs; a
-     matching negative inline margin offsets it so the backticks bracketing the
-     token never shift. The swap is instant: the diff surface is motionless by
-     design, so no transition here. The icon sharpens from faint to full ink
-     alongside it. */
+  /* The reference opens its preview on click, so the token reads as a pressable
+     chip — always the pointer cursor, and always a filled round-rect. It RESTS in
+     --chip-ref (EXC-880), the reference member of the chip family: a resolved path
+     is tinted where it sits, so which spans of a plan can be opened is a glance
+     rather than a pointer sweep. The tint is the derived token, never a literal,
+     which is what makes all nine palettes supply it; it rides a different source
+     hue from --chip-code, so a reference is distinct from ordinary inline code by
+     construction. A file and a directory share the one tint — they are the same
+     class of thing, and the glyph above is what tells them apart.
+
+     Hover then swaps the fill to the warm accent wash (EXC-840) — a change of hue and
+     a touch more alpha, the hue carrying nearly all of it — so pressing one still
+     reads as a change of state. theme.test.ts holds that pair 60 degrees apart in
+     every palette, because the resting state used to be transparent and any wash read
+     against it for free; now it has to be told from a green. Padding gives the fill
+     breathing room so it reads as a chip around the whole reference rather than
+     crowding the glyphs; a matching negative inline margin offsets it so the backticks
+     bracketing the token never shift. The radius sits on the resting rule because the
+     shape is constant — only the fill moves. The swap is instant: the diff surface is
+     motionless by design, so no transition here. The icon sharpens from faint to full
+     ink alongside it.
+
+     Unlike the fence chip above, this one is NOT suppressed on a selected row. The
+     fence chip is decoration, so dropping it lets a drag-selection read as one flat
+     band; this one is an affordance, and hiding it on selection would claim the span
+     stopped being clickable when it hasn't. A green pill inside the selection band is
+     the deliberate cost. */
   [data-content] [data-file-ref] {
     cursor: pointer;
     padding: 0.1em 0.3em;
     margin-inline: -0.3em;
+    background-color: var(--chip-ref);
+    border-radius: var(--radius);
   }
   [data-content] [data-file-ref]:hover {
     background-color: var(--accent-wash);
-    border-radius: var(--radius);
   }
   [data-content] [data-file-ref]:hover::before {
     background-color: var(--ink);
