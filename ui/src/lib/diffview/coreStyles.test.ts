@@ -236,11 +236,20 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
     );
     expect(row).not.toBeNull();
     expect(row?.[1]).toMatch(/grid-column:\s*1\s*\/\s*-1/);
-    // Out of the track sizing: the composer's min-content would otherwise widen the
-    // table's max-content columns to fit a comment.
-    expect(row?.[1]).toMatch(/min-width:\s*0/);
+    // Out of the track sizing: a spanning grid item contributes its own max-content to
+    // every track it covers, and a composer's would push a narrow table into scroll.
+    expect(row?.[1]).toMatch(/contain:\s*inline-size/);
     // And pinned to the card's inline start, so a wide table scrolls under it.
     expect(row?.[1]).toMatch(/position:\s*sticky/);
+    // The drawn width is the card's cap, set on the library's wrapper rather than on
+    // the row — a definite width on a grid item is distributed back into the tracks.
+    const content = overrideDecls.match(
+      /\[data-table-card\]\s*>\s*\[data-line-annotation\]\s*>\s*\[data-annotation-content\]\s*\{([^}]*)\}/,
+    );
+    expect(content?.[1]).toMatch(/max-width:\s*var\(--caret-read-max\)/);
+    // And the library's own sticky offset, meant for the whole view's sideways scroll,
+    // is reset — inside a card it measures against the wrong scroll box.
+    expect(content?.[1]).toMatch(/inset-inline-start:\s*0/);
   });
 });
 
@@ -962,7 +971,10 @@ describe("the markdown table (EXC-864)", () => {
 
   test("scrolls as one unit once even wrapping cannot fit the columns", () => {
     expect(cardBody).toMatch(/overflow-x:\s*auto/);
-    expect(cardBody).toMatch(/max-width:\s*720px/);
+    // The reading cap, named since EXC-865 so the fenced row, the code card, the table
+    // card and a comment anchored inside one cannot drift apart.
+    expect(cardBody).toMatch(/max-width:\s*var\(--caret-read-max\)/);
+    expect(overrideDecls).toMatch(/--caret-read-max:\s*720px/);
     // The code card's bar, shared rather than duplicated — one scrollbar idiom.
     expect(overrideDecls).toMatch(/\[data-table-card\]::-webkit-scrollbar\s*\{/);
     expect(overrideDecls).toMatch(/\[data-table-card\]::-webkit-scrollbar-thumb\s*\{/);

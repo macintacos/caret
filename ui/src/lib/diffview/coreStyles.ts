@@ -61,10 +61,13 @@ const CARET_OVERRIDES = `
      together, so they share one named value rather than coupled literals. */
   :host { --caret-seam: 20px; }
   [data-content] { padding-inline-start: var(--caret-seam); }
-  /* And for how far a card sits in from the content column's own inset. Same
-     reasoning one level down: a card's inline margin and the band extension that
-     reaches across it (EXC-865) have to be the same number or the band stops short. */
-  :host { --caret-card-inset: 0.75rem; }
+  /* Two more of the same kind, one level down (EXC-865). --caret-card-inset is how
+     far a card sits in from the content column, and the band extension that reaches
+     across it must be the same number or the band stops short. --caret-read-max is
+     the reading cap already shared by the fenced-code row, the code card and the
+     table card; a comment anchored inside a card is capped by it too, so the composer
+     cannot outgrow the card that scrolls it. */
+  :host { --caret-card-inset: 0.75rem; --caret-read-max: 720px; }
   [data-utility-button] {
     margin-right: calc(1ch - 1lh - 0.5rem);
     background-color: var(--accent);
@@ -169,7 +172,7 @@ const CARET_OVERRIDES = `
     background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
     margin-inline-start: 0.75rem;
     margin-inline-end: 0.75rem;
-    max-width: 720px;
+    max-width: var(--caret-read-max);
     padding-inline-start: 2ch;
     padding-inline-end: 0.75rem;
     /* EXC-729: the library renders source lines white-space: pre (never wrapping), so a line
@@ -641,7 +644,7 @@ const CARET_OVERRIDES = `
     grid-auto-columns: max-content;
     overflow-x: auto;
     overflow-y: hidden;
-    max-width: 720px;
+    max-width: var(--caret-read-max);
     margin-inline: var(--caret-card-inset);
     background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
     border-radius: var(--radius);
@@ -757,7 +760,7 @@ const CARET_OVERRIDES = `
     justify-content: start;
     overflow-x: auto;
     overflow-y: hidden;
-    max-width: 720px;
+    max-width: var(--caret-read-max);
     margin-inline: var(--caret-card-inset);
   }
   [data-content] > [data-table-card] > [data-line] {
@@ -1088,17 +1091,45 @@ const CARET_OVERRIDES = `
   /* A comment anchored to a table line (EXC-865). Its row rides inside the table's
      card so it lands under the row it belongs to and pushes the rest of the table
      down, rather than after the whole table — but the card is a grid of max-content
-     columns, so the row needs placing in it. Spanning every column keeps the thread
-     the table's width; min-width: 0 keeps it out of the track sizing, since the
-     composer's own min-content would otherwise widen the table's columns to fit a
-     comment. The thread and composer cap themselves at min(46rem, 100%) already, so
-     the span sets the available width rather than the drawn one. Sticky at the card's
-     inline start so a wide table scrolls under the comment instead of carrying it out
-     of view. */
+     columns, so the row needs placing in it, and placing it there must not change the
+     table.
+
+     contain: inline-size is what keeps the table's columns exactly where they were:
+     a spanning grid item otherwise contributes its own max-content to every track it
+     covers, and a composer's is large enough to push a narrow table into horizontal
+     scroll the moment someone comments on it. Containment takes the row's width from
+     the grid instead of from its contents, so opening a comment moves nothing.
+
+     The row's own width then stays the table's, and the width the comment is DRAWN at
+     is set one level down (below) — because the table's width is the wrong answer
+     twice over: a narrow table gives a cramped thread, and a wide one overhangs the
+     card's scroll box and clips the Comment button. Sticky at the card's inline start,
+     so a wide table scrolls under the comment rather than carrying it out of view.
+
+     container-type on the card would express the visible width directly, and is not
+     usable: it brings layout containment, which stops the card's subgrid contributing
+     the comment's height to the parent's row track, and the whole thread collapses to
+     one line. */
   [data-content] > [data-table-card] > [data-line-annotation] {
     grid-column: 1 / -1;
-    min-width: 0;
+    contain: inline-size;
     position: sticky;
+    inset-inline-start: 0;
+  }
+  /* The width the comment is actually drawn at. It cannot be set on the row: a grid
+     item with a definite width distributes it across the tracks it spans, which is the
+     very inflation containment was for. The library's wrapper inside that row is a
+     flex item sizing to its own content, so capping it there sets the drawn width and
+     touches no track.
+
+     Its inline start is reset because the library pins it at the gutter's width
+     (left: --diffs-column-number-width, under data-overflow="scroll") so a comment
+     stays put while the WHOLE view scrolls sideways. Inside a card that offset is
+     measured against the wrong scroll box — the card is its own, and the row above is
+     already sticky within it — so left over it would push the comment off the card's
+     right edge by exactly the gutter's width. */
+  [data-content] > [data-table-card] > [data-line-annotation] > [data-annotation-content] {
+    max-width: var(--caret-read-max);
     inset-inline-start: 0;
   }
 
