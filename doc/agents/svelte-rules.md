@@ -178,7 +178,21 @@ stays green under any invocation.
   therefore exported and pinned by `theme.test.ts` against every palette: `--ink` on
   `--paper-sunk` ranges from 6:1 to 19:1 across the nine, so the flattest ink ramp sets
   how far any of them may fade. Any future paint-time effect on body copy owes the same
-  pin.
+  pin. A decoration that indicates **state** owes something else: tell the states apart by
+  SHAPE, not by hue or by an opacity step, which fails outright for a colour-blind reader
+  whatever a contrast ratio says. The task-list checkbox is the worked example (EXC-860,
+  same file) — an empty ballot box against a ticked one, both on one `--ink-faint`, which
+  is why it needs no subdue constant and no nine-palette test of its own: that token is
+  already held above 3:1 everywhere it renders, and 3:1 is what WCAG 1.4.11 asks of a
+  non-text state indicator.
+- **An overdrawn glyph belongs on the run's FIRST token, not on every tagged one.**
+  `inlineDecorate.ts` tags every shiki token a run covers, and shiki does not always hand
+  a multi-character run over as one token — an uppercase `[X]` comes back cut into three.
+  A one-character decoration like the list bullet can never meet this; anything wider can,
+  and drew one glyph per piece until EXC-860 added
+  `[data-md-checkbox] + [data-md-checkbox]::before { content: none; }`. Suppress on the
+  adjacent-sibling form rather than reordering rules: it wins on selector weight, so a
+  later edit to the block cannot quietly undo it.
 - **The diff-view bridge is amber-selection-only.** The single `.diffview` rule in
   `app.css` maps caret's tokens onto `@pierre/diffs`'s `--diffs-*` properties. caret
   adopts the library's surface STRUCTURE — the layered buffer/context/separator depth
