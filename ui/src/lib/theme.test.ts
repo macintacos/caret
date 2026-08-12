@@ -21,16 +21,35 @@ afterEach(() => {
   document.documentElement.removeAttribute("data-theme");
 });
 
-// WCAG relative luminance, so "is this palette legible" is arithmetic rather than
-// a judgement call. Alpha suffixes are ignored — every token these run on is solid.
-function luminance(hex: string): number {
+/** A color's three channels as 0–1 sRGB. One parse for every measurement below, so
+ * they cannot disagree about what a malformed value is. An alpha suffix is ignored:
+ * a wash and the hue it rides differ only in alpha, so a derived token measures the
+ * same as the color it was mixed from. */
+function channels(hex: string): [number, number, number] {
   const rgb = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(hex);
   if (rgb === null) throw new Error(`expected #rrggbb, got ${hex}`);
-  const [r, g, b] = rgb.slice(1, 4).map((pair) => {
-    const c = Number.parseInt(pair, 16) / 255;
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  }) as [number, number, number];
+  return rgb.slice(1, 4).map((pair) => Number.parseInt(pair, 16) / 255) as [number, number, number];
+}
+
+// WCAG relative luminance, so "is this palette legible" is arithmetic rather than
+// a judgement call.
+function luminance(hex: string): number {
+  const [r, g, b] = channels(hex).map((c) =>
+    c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4,
+  ) as [number, number, number];
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** A color's HSL hue angle in degrees, so "are these two chips the same color" is
+ * arithmetic too. An achromatic input has no angle and answers 0. */
+function hue(hex: string): number {
+  const [r, g, b] = channels(hex);
+  const max = Math.max(r, g, b);
+  const delta = max - Math.min(r, g, b);
+  if (delta === 0) return 0;
+  const sextant =
+    max === r ? (g - b) / delta : max === g ? 2 + (b - r) / delta : 4 + (r - g) / delta;
+  return (((sextant * 60) % 360) + 360) % 360;
 }
 
 /** The WCAG contrast ratio between two solid colors, lighter over darker. */
@@ -91,6 +110,9 @@ describe("THEMES", () => {
       "--rule",
       "--rule-strong",
       "--mark-orphan",
+      "--chip-bold",
+      "--chip-italic",
+      "--chip-code",
     ];
     const tokens = THEMES["caret-light"].tokens;
     for (const token of NEUTRALS) {
@@ -107,8 +129,8 @@ describe("THEMES", () => {
 
   // Neither caret palette has a CSS mirror — app.css's first-paint block is emitted
   // from this record — so each pins its whole token set directly, and nothing else
-  // in the repo pins their decided colors. The six derived values come out of three
-  // lines of the recipe; the thirteen decided ones are read from the named color set
+  // in the repo pins their decided colors. The eleven derived values come out of the
+  // recipe's hue fallbacks; the thirteen decided ones are read from the named color set
   // in themes/caret.ts, so this pin is what catches a slip in either the set or the
   // reading. The three hue overrides are subsumed: each rides a hue that is NOT the
   // token it would otherwise default to — the rules ride bone in dark and a warmer
@@ -132,6 +154,11 @@ describe("THEMES", () => {
       "--mark": "#ffa64d2e",
       "--mark-active": "#ffa64d57",
       "--mark-orphan": "#9a8c7e29",
+      "--chip-bold": "#f7f2ea24",
+      "--chip-italic": "#bcb0a124",
+      "--chip-code": "#9a8c7e24",
+      "--chip-link": "#ffb27724",
+      "--chip-ref": "#4ed05624",
       "--ok": "#4ed056",
       "--danger": "#f65a6f",
       "--attention": "#3fbda9",
@@ -156,6 +183,11 @@ describe("THEMES", () => {
       "--mark": "#e8882e24",
       "--mark-active": "#e8882e47",
       "--mark-orphan": "#7a6f6329",
+      "--chip-bold": "#1913101c",
+      "--chip-italic": "#544b431c",
+      "--chip-code": "#7a6f631c",
+      "--chip-link": "#e06a241c",
+      "--chip-ref": "#1d802a1c",
       "--ok": "#1d802a",
       "--danger": "#c11f30",
       "--attention": "#0a5f57",
@@ -348,6 +380,37 @@ describe("every theme", () => {
     }
   });
 
+  // The two chip tints that carry hue have to stay apart in EVERY palette, not just
+  // caret's — a link and a resolved reference are the pair a reader tells apart by
+  // color alone, and EXC-880 rests on that. Picking the source hues by eye is what
+  // this catches: Catppuccin draws --chip-link's `lavender` and --attention's `blue`
+  // eleven degrees apart, so the obvious "link rides accentBright, ref rides
+  // attention" mapping collapses into one chip across four flavors while every
+  // key-set and contrast test above still passes. 60 degrees is a wide floor
+  // deliberately — the surviving `accentBright` x `ok` pairing clears 76 in the
+  // tightest palette (github-light), so this fires on a mapping mistake, not on a
+  // palette's taste. `accentBright` x `ok` is not the only pairing that would clear
+  // it — `accent` x `ok` bottoms at 75 and `danger` x `ok` at 97 — it is the one
+  // left once `accent` stays reserved for selection and `danger` for semantics.
+  //
+  // Only the hued pair is pinned. The three neutral chips are a lightness ramp, and
+  // a vendor's own ink-to-inkSoft step decides how wide it is: bold and italic
+  // composite within a 1.05 contrast ratio in five of the nine palettes. A floor
+  // there would fail on those palettes' taste rather than on a mistake, and the
+  // tint is not what separates those three anyway — EXC-867's weight, slant, and
+  // mono family are.
+  test("keeps the two hued chip tints at least 60 degrees apart", () => {
+    for (const [id, theme] of themeEntries()) {
+      const separation = Math.abs(
+        hue(theme.tokens["--chip-link"]) - hue(theme.tokens["--chip-ref"]),
+      );
+      expect(
+        Math.min(separation, 360 - separation),
+        `${id} --chip-link vs --chip-ref`,
+      ).toBeGreaterThanOrEqual(60);
+    }
+  });
+
   // --accent is the scarce mark caret spends on the current selection; --attention is
   // the separate "look here" hue (the notification dot, the version-count badge).
   // Collapsing them into one color erases that distinction.
@@ -469,11 +532,36 @@ describe("every ColorToken is read somewhere in ui/src", () => {
     .map((f) => readFileSync(join(UI_SRC, f), "utf8"))
     .join("\n");
 
-  for (const token of Object.keys(THEMES["caret-dark"].tokens)) {
-    test(`${token} is read by at least one var()`, () => {
+  // The five chip tints (EXC-858) land a release ahead of the chip rendering that
+  // spends them (EXC-867), so they are the one set the rule above cannot yet hold.
+  // Listing them here inverts the assertion rather than waiving it: each is pinned
+  // as read by NOTHING, so the first var(--chip-bold) anywhere in ui/src fails this
+  // suite and the entry has to be deleted. The exemption cannot quietly outlive the
+  // gap it was opened for — with one seam: expiry is triggered by a var() reader, so
+  // a consumer that spends a chip through `theme.tokens[…]` in TypeScript, the shape
+  // caret-theme.ts uses for its structural marker rules, would slip past it. The
+  // 8-digit alpha these carry makes that unlikely (the shiki-read pin above demands
+  // alpha-free hex), but it is the hole to check when EXC-867 lands.
+  const PENDING_CONSUMERS: ColorToken[] = [
+    "--chip-bold",
+    "--chip-italic",
+    "--chip-code",
+    "--chip-link",
+    "--chip-ref",
+  ];
+
+  for (const token of Object.keys(THEMES["caret-dark"].tokens) as ColorToken[]) {
+    const pending = PENDING_CONSUMERS.includes(token);
+    const name = pending
+      ? `${token} is still awaiting its consumer (EXC-867)`
+      : `${token} is read by at least one var()`;
+    test(name, () => {
       // The negative lookahead keeps --mark from matching --mark-active and --ink
       // from matching --ink-soft — the same guard ThemePreviewCard.test.ts uses.
-      expect(new RegExp(`var\\(\\s*${token}(?![\\w-])`).test(sources)).toBe(true);
+      expect(
+        new RegExp(`var\\(\\s*${token}(?![\\w-])`).test(sources),
+        pending ? `${token} now has a reader — drop it from PENDING_CONSUMERS` : token,
+      ).toBe(!pending);
     });
   }
 });

@@ -1,13 +1,13 @@
 // The shared shape every palette is mapped through (EXC-752), caret's own two
 // (./caret.ts) included: name the thirteen colors a palette actually decides, and
-// the seven that are always derived (the two rules, the accent wash, the two marks,
-// the orphan mark, the shadow) come out consistent for every theme instead of being
-// re-typed once per palette.
+// the twelve that are always derived (the two rules, the accent wash, the two marks,
+// the orphan mark, the five chip tints, the shadow) come out consistent for every
+// theme instead of being re-typed once per palette.
 //
 // The alpha suffixes and the two shadows are caret-dark's and caret-light's own
 // values, so a vendor theme's hairlines and highlight marks sit at exactly the
 // weight caret's chrome was designed around — only the hue changes. A palette that
-// wants a derived wash on some other hue says so through the three optional
+// wants a derived wash on some other hue says so through the eight optional
 // overrides below rather than by writing its tokens out by hand.
 
 import type { ColorToken, Scheme, ShikiThemeId, Theme, ThemeId } from "$lib/theme.ts";
@@ -45,7 +45,7 @@ export interface PaletteInput {
   attention: string;
 
   // Hue overrides. A derived wash normally rides the color it belongs to; these
-  // three name a different hue for the cases where a palette decides one
+  // eight name a different hue for the cases where a palette decides one
   // separately, so the weight still comes from the recipe and only the hue moves.
 
   /** The hue the two hairline rules ride. Defaults to `ink` — caret's own pair
@@ -57,6 +57,19 @@ export interface PaletteInput {
   /** The hue the two marks ride. Falls back to `washHue`, then `accent`, so a
    * palette whose marks and wash share a hue declares it once. */
   markHue?: string;
+
+  // The five plan-view chip tints ride the hues named at their derivation below.
+
+  /** The hue `--chip-bold` rides. Defaults to `ink`. */
+  chipBoldHue?: string;
+  /** The hue `--chip-italic` rides. Defaults to `inkSoft`. */
+  chipItalicHue?: string;
+  /** The hue `--chip-code` rides. Defaults to `neutral`. */
+  chipCodeHue?: string;
+  /** The hue `--chip-link` rides. Defaults to `accentBright`. */
+  chipLinkHue?: string;
+  /** The hue `--chip-ref` rides. Defaults to `ok`. */
+  chipRefHue?: string;
 
   /** The shiki theme this palette highlights code with: the vendor's own published
    * one (EXC-896), or — for caret's pair — the theme authored for it under the same
@@ -73,10 +86,11 @@ const SHADOW: Record<Scheme, string> = {
 
 // How hard the derived washes sit. A light palette takes the softer set — the same
 // asymmetry caret-light already has, where a tint over a bright surface needs less
-// alpha to read than one over a dark surface.
-const ALPHA: Record<Scheme, { wash: string; mark: string; markActive: string }> = {
-  dark: { wash: "29", mark: "2e", markActive: "57" },
-  light: { wash: "1f", mark: "24", markActive: "47" },
+// alpha to read than one over a dark surface. `chip` sits below the selection wash
+// on purpose: one wash marks one row, while a paragraph can carry a dozen chips.
+const ALPHA: Record<Scheme, { wash: string; mark: string; markActive: string; chip: string }> = {
+  dark: { wash: "29", mark: "2e", markActive: "57", chip: "24" },
+  light: { wash: "1f", mark: "24", markActive: "47", chip: "1c" },
 };
 
 /** Expand a palette's decided colors into caret's full token set. */
@@ -101,6 +115,27 @@ export function paletteTheme(input: PaletteInput): Theme {
     "--mark": `${markHue}${alpha.mark}`,
     "--mark-active": `${markHue}${alpha.markActive}`,
     "--mark-orphan": `${input.neutral}29`,
+    // The five plan-view chip tints. Only two carry hue, which is what keeps a
+    // paragraph holding several of them quiet: `accentBright` for a link and `ok`
+    // for a resolved reference, where green carries the same "it resolved" reading
+    // it already spends on a diff addition. That pair is not the only one that
+    // separates — `accent` and `danger` clear the same floor against `ok` — it is
+    // the one left once `accent` stays reserved for selection and brand and
+    // `danger` stays semantic. `attention` was the obvious third and is the trap:
+    // Catppuccin draws it and `accentBright` eleven degrees apart, so a link and a
+    // reference would be one chip across four flavors. theme.test.ts pins the
+    // survivors 60 degrees apart and carries the full account.
+    //
+    // The other three ride the neutral ramp, and the tint is NOT what tells them
+    // apart — a vendor's ink-to-inkSoft step is its own editorial call, and in five
+    // of the nine palettes bold and italic composite within a 1.05 contrast ratio
+    // of each other. What separates them is weight, slant, and the mono family,
+    // which EXC-867 supplies; the tint only says "this span is a chip".
+    "--chip-bold": `${input.chipBoldHue ?? input.ink}${alpha.chip}`,
+    "--chip-italic": `${input.chipItalicHue ?? input.inkSoft}${alpha.chip}`,
+    "--chip-code": `${input.chipCodeHue ?? input.neutral}${alpha.chip}`,
+    "--chip-link": `${input.chipLinkHue ?? input.accentBright}${alpha.chip}`,
+    "--chip-ref": `${input.chipRefHue ?? input.ok}${alpha.chip}`,
     "--ok": input.ok,
     "--danger": input.danger,
     "--attention": input.attention,

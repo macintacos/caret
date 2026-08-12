@@ -103,6 +103,15 @@ export type ColorToken =
   | "--mark"
   | "--mark-active"
   | "--mark-orphan"
+  // The plan view's five inline chip tints (EXC-858): the wash behind a rendered
+  // markdown span — bold, italic, code, a collapsed link label, and a resolved file
+  // or folder reference. They tint CONTENT, which is what separates them from
+  // styles/derived.css's --chip / --chip-hover, the chrome's floating-surface fill.
+  | "--chip-bold"
+  | "--chip-italic"
+  | "--chip-code"
+  | "--chip-link"
+  | "--chip-ref"
   | "--ok"
   | "--danger"
   | "--attention"
