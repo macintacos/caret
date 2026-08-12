@@ -509,6 +509,17 @@ describe("buildLinkLayer inline runs", () => {
     expect(runsOnLine("do not trust [this](javascript:alert(1)) here", 1)).toEqual([]);
   });
 
+  test("a bare URL inside a collapsing label is part of the label, not its own link", () => {
+    // The label is consumed by the collapse, so the bare-URL pass never sees it:
+    // the whole label is one link run and the URL inside it is not separately
+    // clickable. Pinned because a visually identical URL elsewhere on the line
+    // still is, and that asymmetry should be chosen rather than discovered.
+    const { text, spans, inline } = buildLinkLayer("[see https://x.test/a](guide)");
+    expect(text).toBe("see https://x.test/a");
+    expect(spans.get(1) ?? []).toHaveLength(0);
+    expect(inline.get(1)).toEqual([{ startCol: 0, endCol: 20, link: true }]);
+  });
+
   test("a citable path label is a reference, not a link", () => {
     // EXC-859: only non-path links take the link chip; a path-shaped target
     // renders as a file reference instead.

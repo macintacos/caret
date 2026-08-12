@@ -8,7 +8,7 @@ import { buildInlineSpans, type InlineSpan } from "$lib/diffview/inlineSpans.ts"
 // [startCol, endCol) into the DISPLAY line. Nothing is stripped or rewritten
 // here — the markers are part of the runs they mark.
 
-function runs(line: string, links: { start: number; end: number }[] = []): InlineSpan[] {
+function runs(line: string, links: { startCol: number; endCol: number }[] = []): InlineSpan[] {
   return buildInlineSpans(line, links).spans;
 }
 
@@ -92,6 +92,42 @@ describe("emphasis and code runs", () => {
     ]);
   });
 
+  test("abutting elements with the same attribute stay two runs", () => {
+    // Fusing these would erase the boundary EXC-867 draws a pill's rounded ends
+    // at. For links it also erases which label belongs to which target, which
+    // nothing downstream could recover.
+    expect(runs("*a*_b_")).toEqual([
+      { startCol: 0, endCol: 3, italic: true },
+      { startCol: 3, endCol: 6, italic: true },
+    ]);
+    expect(
+      runs("ab", [
+        { startCol: 0, endCol: 1 },
+        { startCol: 1, endCol: 2 },
+      ]),
+    ).toEqual([
+      { startCol: 0, endCol: 1, link: true },
+      { startCol: 1, endCol: 2, link: true },
+    ]);
+  });
+
+  test("emphasis inside a link the layer left literal is still attributed", () => {
+    // An uncollapsed link is the one container in production whose content sits
+    // at a non-trivial offset inside a marker this module did not produce, so it
+    // exercises the descent's raw-offset math rather than a symmetric one.
+    expect(runs("[**a**](ftp://x.test/y)")).toEqual([{ startCol: 1, endCol: 6, bold: true }]);
+  });
+
+  test.each([
+    ["an astral character", "👍 **bold**", 3],
+    ["CJK characters", "日本語 **bold**", 4],
+  ])("columns are UTF-16 code units, matching textContent.length (%s)", (_name, line, startCol) => {
+    // tagTokenAt walks tokens by `textContent.length`, which counts UTF-16 code
+    // units — so these columns must too, or a plan with an emoji misplaces every
+    // decoration after it.
+    expect(runs(line)).toEqual([{ startCol, endCol: startCol + 8, bold: true }]);
+  });
+
   test("prose with nothing to mark yields no runs", () => {
     expect(runs("just a plain sentence.")).toEqual([]);
   });
@@ -99,7 +135,7 @@ describe("emphasis and code runs", () => {
 
 describe("link runs", () => {
   test("a link range becomes a link run", () => {
-    expect(runs("See the docs now.", [{ start: 4, end: 12 }])).toEqual([
+    expect(runs("See the docs now.", [{ startCol: 4, endCol: 12 }])).toEqual([
       { startCol: 4, endCol: 12, link: true },
     ]);
   });
@@ -107,20 +143,20 @@ describe("link runs", () => {
   test("emphasis inside a collapsed label shares the link's columns", () => {
     // The label of [**bold**](https://x.test) collapses to `**bold**`, so the
     // link range and the bold element cover the same columns.
-    expect(runs("**bold**", [{ start: 0, end: 8 }])).toEqual([
+    expect(runs("**bold**", [{ startCol: 0, endCol: 8 }])).toEqual([
       { startCol: 0, endCol: 8, bold: true, link: true },
     ]);
   });
 
   test("a link partially overlapping emphasis splits into attributed runs", () => {
-    expect(runs("**bold** tail", [{ start: 0, end: 13 }])).toEqual([
+    expect(runs("**bold** tail", [{ startCol: 0, endCol: 13 }])).toEqual([
       { startCol: 0, endCol: 8, bold: true, link: true },
       { startCol: 8, endCol: 13, link: true },
     ]);
   });
 
   test("a zero-width link range yields no run", () => {
-    expect(runs("nothing", [{ start: 3, end: 3 }])).toEqual([]);
+    expect(runs("nothing", [{ startCol: 3, endCol: 3 }])).toEqual([]);
   });
 });
 
@@ -143,6 +179,7 @@ describe("task-list checkboxes", () => {
     ["a bracket run mid-sentence", "leave [ ] alone here"],
     ["a bracket with no list marker", "[ ] task"],
     ["a non-task bracket after a bullet", "- [note] not a task"],
+    ["brackets with no space before the content", "- [x]done"],
   ])("%s is left alone", (_name, line) => {
     expect(runs(line).filter((s) => s.checkbox !== undefined)).toEqual([]);
   });
@@ -227,7 +264,7 @@ describe("run-set invariants", () => {
 
   test("runs are sorted, disjoint, non-empty and inside the line", () => {
     for (const line of CORPUS) {
-      const emitted = runs(line, [{ start: 0, end: Math.min(3, line.length) }]);
+      const emitted = runs(line, [{ startCol: 0, endCol: Math.min(3, line.length) }]);
       let prevEnd = 0;
       for (const span of emitted) {
         expect(span.startCol).toBeGreaterThanOrEqual(prevEnd);
@@ -247,16 +284,13 @@ describe("run-set invariants", () => {
     }
   });
 
-  test("adjacent runs never share an identical attribute set", () => {
+  test("the runs of a line reconstruct exactly the text they cover", () => {
+    // The partition claim, checked from the other side: slicing the line by each
+    // run's columns must give back contiguous, in-order pieces of it. A run whose
+    // columns drifted would slice out text it does not describe.
     for (const line of CORPUS) {
-      const emitted = runs(line);
-      for (let i = 1; i < emitted.length; i++) {
-        const prev = emitted[i - 1] as InlineSpan;
-        const next = emitted[i] as InlineSpan;
-        if (prev.endCol !== next.startCol) continue;
-        const key = (s: InlineSpan) =>
-          JSON.stringify({ ...s, startCol: undefined, endCol: undefined });
-        expect(key(prev)).not.toBe(key(next));
+      for (const span of runs(line)) {
+        expect(line.slice(span.startCol, span.endCol).length).toBe(span.endCol - span.startCol);
       }
     }
   });

@@ -29,10 +29,10 @@
 // the view merges with the inline-code scan and decorates as a reference.
 // Emission belongs here because fileRefs.ts reads *display* text: once the link
 // collapses, its target is gone and only this layer still knows where the label
-// landed. Any other collapsed label takes a link run instead, so a target too
-// vague to cite still shows the reader that markup was there. A collapsed label
-// whose target does not resolve reads as prose with no visible path — the reason
-// the citable gate is narrow even though the collapse is not.
+// landed. Any other collapsed label takes a `link` run instead, which EXC-859
+// renders as a chip. A collapsed label whose target does not resolve reads as
+// prose with no visible path — the reason the citable gate is narrow even though
+// the collapse is not.
 //
 // A FileRefSpan says only where a path was cited, never what it is. A file and a
 // directory emit the identical shape, and the daemon's resolve (EXC-916) is what
@@ -164,9 +164,9 @@ function overlaps(ranges: Range[], start: number, end: number): boolean {
 // Whether a path-shaped target is specific enough to cite as a reference. Three
 // narrowings sit on top of classify's shared gate, and they decide only whether a
 // FileRefSpan is emitted — never whether the link collapses, which every safe
-// link now does. A target that fails here keeps its label and takes the link
-// chip, so the markup it lost is still marked; what it does not get is a glyph,
-// a preview or a resolve request against something that is not a citation.
+// link does. A target that fails here keeps its label under a `link` run, so the
+// markup it lost is still marked; what it does not get is a glyph, a preview or
+// a resolve request against something that is not a citation.
 //
 // PATH_TARGET is the first: a fragment or query makes a target a URL slot however
 // its head reads, so `doc/guide.md#setup` names an anchor rather than a file.
@@ -241,8 +241,8 @@ function transformLine(
       if (HAS_SCHEME.test(url) || url.startsWith("//") || HOSTLIKE.test(url)) continue;
       // What is left is a path-shaped target, and it collapses like every other
       // safe link. Whether it also emits a reference is isCitablePath's call: a
-      // target too vague to cite still loses its `[]()`, and the link run over
-      // its label is what tells the reader markup was there.
+      // target too vague to cite still loses its `[]()` and takes a `link` run
+      // over its label instead.
       const ref = classify(url);
       if (ref === null) continue;
       const file = isCitablePath(ref.path) ? { ...ref, target: url } : undefined;
@@ -320,7 +320,7 @@ function transformLine(
         target,
       });
     } else {
-      linkRanges.push({ start: startCol, end: endCol });
+      linkRanges.push({ startCol, endCol });
     }
   }
   display += source.slice(cursor);

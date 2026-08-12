@@ -1,16 +1,21 @@
 // Pure emission for the plan view's inline-markdown layer (EXC-855, EXC-866).
 // Takes one DISPLAY line and returns the flat atomic runs covering it — one span
-// per maximal stretch of identical attribute set, each carrying every attribute
-// that covers it — plus the line's blockquote depth. Nothing is stripped and
-// nothing is rewritten: markers are part of the runs that mark them, which is
-// what keeps display columns equal to source columns and copy/selection honest.
+// per element-bounded stretch of identical attribute set, each carrying every
+// attribute that covers it — plus the line's blockquote depth. Nothing is
+// stripped and nothing is rewritten: markers are part of the runs that mark them,
+// which is what keeps display columns equal to source columns and copy honest.
 //
-// Flat runs are a requirement rather than a style. The decoration pass turns each
-// run into a sibling element, and tagTokenAt (fileRefTag.ts:47) and
-// tagLanguageToken / tagFenceToken (codeBlocks.ts:70,82) all walk a row's DIRECT
+// Flat runs are a requirement rather than a style. The decoration pass (EXC-867)
+// turns each run into a sibling element, and tagTokenAt (fileRefTag.ts) and
+// tagLanguageToken / tagFenceToken (codeBlocks.ts) all walk a row's DIRECT
 // children accumulating text length. A nested wrapper would break that partition
 // and put data-file-ref on an element spanning more than the reference — the exact
 // case tagTokenAt's two-bound check exists to refuse.
+//
+// Abutting elements are NOT fused into one run even when their attributes match.
+// `*a*_b_` is two italic runs, and two adjacent links are two link runs: the
+// boundary is where EXC-867 draws a pill's rounded end, and for links it is the
+// only record of which label belongs to which target.
 //
 // The inline grammar comes from marked, already a UI dependency (lib/markdown.ts
 // renders comment bodies with it). Reusing its CommonMark delimiter-run pass is
@@ -31,7 +36,7 @@
 
 import { Lexer, type Token } from "marked";
 
-/** One maximal run of identical attributes on a display line. Columns are 0-based,
+/** One run of identical attributes on a display line. Columns are 0-based,
  * half-open [startCol, endCol) into the display line's text. A run always carries
  * at least one attribute — unmarked stretches are simply absent. */
 export interface InlineSpan {
@@ -57,24 +62,20 @@ export interface InlineSpan {
  * are absent from the map. */
 export type InlineSpanMap = Map<number, InlineSpan[]>;
 
-/** A half-open display-column range. */
+/** A half-open range of display columns, spelled like every other column-bearing
+ * type in this directory (`InlineSpan`, `LinkSpan`, `FileRefSpan`). */
 export interface ColumnRange {
-  start: number;
-  end: number;
+  startCol: number;
+  endCol: number;
 }
 
 type Attributes = Omit<InlineSpan, "startCol" | "endCol">;
 
 type Interval = ColumnRange & { attributes: Attributes };
 
-// Every attribute key, in emission order. Also the identity used to decide
-// whether two adjacent runs are the same run — so a new attribute must be added
-// here or it will silently merge runs that differ.
-const ATTRIBUTE_KEYS = ["bold", "italic", "code", "link", "checkbox", "quoteMarker"] as const;
-
-// The token types that ARE an attribute. Everything else marked emits (text,
-// escape, del, html, br, link, autolink) contributes no attribute of its own,
-// but is still descended into so its contents are attributed. Links are absent
+// The token types that ARE an attribute. Everything else marked emits — text,
+// escape, del, html, image, link, br — contributes no attribute of its own, but
+// is still descended into so its contents are attributed. Links are absent
 // deliberately: by the time this reads the display line a collapsed label is
 // plain prose, so link columns arrive from the caller instead.
 const TOKEN_ATTRIBUTES: Record<string, Attributes> = {
@@ -89,8 +90,10 @@ const QUOTE_MARKER = /^ {0,3}>/;
 
 // A task-list item's bracket run, anchored at the start of the line's content
 // (past any quote prefix): a bullet or an ordered marker, then `[ ]`, `[x]` or
-// `[X]`. Group 1 is what precedes the brackets, so its length is their column.
-const TASK_MARKER = /^(\s*(?:[-*+]|\d+[.)])\s+)\[([ xX])\]/;
+// `[X]`, then whitespace or the line's end — `- [x]done` is not a task item.
+// Group 1 is what precedes the brackets, so its length is their offset from the
+// content start rather than from column zero.
+const TASK_MARKER = /^(\s*(?:[-*+]|\d+[.)])\s+)\[([ xX])\](?=\s|$)/;
 
 /** The blockquote prefix: one interval per `>` and the column its content starts
  * at, which is where the task-marker scan begins. */
@@ -101,7 +104,11 @@ function scanQuotePrefix(line: string): { intervals: Interval[]; contentStart: n
     const match = QUOTE_MARKER.exec(line.slice(pos));
     if (match === null) break;
     const at = pos + match[0].length - 1;
-    intervals.push({ start: at, end: at + 1, attributes: { quoteMarker: intervals.length + 1 } });
+    intervals.push({
+      startCol: at,
+      endCol: at + 1,
+      attributes: { quoteMarker: intervals.length + 1 },
+    });
     // One optional space after the marker is part of the prefix, not the content.
     pos = line[at + 1] === " " ? at + 2 : at + 1;
   }
@@ -109,16 +116,19 @@ function scanQuotePrefix(line: string): { intervals: Interval[]; contentStart: n
 }
 
 /** Walks marked's inline token tree, accumulating columns off each token's `raw`.
- * Descent into a container finds its content by locating the children's own raw
- * text inside the parent's — exact for every container marked emits, and the one
- * place the math can fail, so a miss leaves that subtree un-attributed rather
- * than guessing at columns. */
+ * Descent into a container locates its content by finding the children's own raw
+ * text inside the parent's, which is exact for every container marked emits
+ * today. The `-1` branch is a defensive floor with no known trigger, kept because
+ * the alternative when a future grammar breaks the assumption is a whole subtree
+ * of columns silently shifted; leaving it un-attributed is the working
+ * agreement's prescribed landing. */
 function collectTokenIntervals(tokens: Token[], base: number, into: Interval[]): void {
   let col = base;
   for (const token of tokens) {
     const raw = token.raw ?? "";
     const attributes = TOKEN_ATTRIBUTES[token.type];
-    if (attributes !== undefined) into.push({ start: col, end: col + raw.length, attributes });
+    if (attributes !== undefined)
+      into.push({ startCol: col, endCol: col + raw.length, attributes });
     const children = (token as { tokens?: Token[] }).tokens;
     if (children !== undefined && children.length > 0) {
       const inner = children.map((child) => child.raw ?? "").join("");
@@ -129,43 +139,30 @@ function collectTokenIntervals(tokens: Token[], base: number, into: Interval[]):
   }
 }
 
-/** A run's identity: its attribute values in a fixed order. Two adjacent runs
- * merge only when their keys match, and `|` separates them because no attribute
- * value contains one — so quote levels 1 and 11 can never collide. */
-function attributeKey(attributes: Attributes): string {
-  return ATTRIBUTE_KEYS.map((key) => attributes[key] ?? "").join("|");
-}
-
-const EMPTY_KEY = attributeKey({});
-
-/** Cuts the intervals at every boundary they introduce, keeps the stretches some
- * interval covers, and merges neighbours that ended up identical — the atomic-run
- * partition the decoration pass consumes. */
+/** Cuts the intervals at every boundary they introduce and keeps the stretches
+ * some interval covers — the atomic-run partition the decoration pass consumes.
+ * Cells are never fused across a boundary, so a run is always bounded by the
+ * elements that produced it. */
 function flatten(intervals: Interval[]): InlineSpan[] {
   const bounds = new Set<number>();
   for (const interval of intervals) {
-    if (interval.end <= interval.start) continue;
-    bounds.add(interval.start);
-    bounds.add(interval.end);
+    if (interval.endCol <= interval.startCol) continue;
+    bounds.add(interval.startCol);
+    bounds.add(interval.endCol);
   }
-  const cuts = [...bounds].sort((a, b) => a - b);
   const spans: InlineSpan[] = [];
-  for (let i = 0; i + 1 < cuts.length; i++) {
-    const start = cuts[i] as number;
-    const end = cuts[i + 1] as number;
-    const attributes: Attributes = {};
-    for (const interval of intervals) {
-      if (interval.start <= start && interval.end >= end)
-        Object.assign(attributes, interval.attributes);
+  let startCol: number | undefined;
+  for (const endCol of [...bounds].sort((a, b) => a - b)) {
+    if (startCol !== undefined) {
+      const attributes: Attributes = {};
+      for (const interval of intervals) {
+        if (interval.startCol <= startCol && interval.endCol >= endCol) {
+          Object.assign(attributes, interval.attributes);
+        }
+      }
+      if (Object.keys(attributes).length > 0) spans.push({ startCol, endCol, ...attributes });
     }
-    const key = attributeKey(attributes);
-    if (key === EMPTY_KEY) continue;
-    const previous = spans[spans.length - 1];
-    if (previous !== undefined && previous.endCol === start && attributeKey(previous) === key) {
-      previous.endCol = end;
-      continue;
-    }
-    spans.push({ startCol: start, endCol: end, ...attributes });
+    startCol = endCol;
   }
   return spans;
 }
@@ -183,10 +180,10 @@ export function buildInlineSpans(
 
   const task = TASK_MARKER.exec(display.slice(quote.contentStart));
   if (task !== null) {
-    const start = quote.contentStart + (task[1] as string).length;
+    const startCol = quote.contentStart + (task[1] ?? "").length;
     intervals.push({
-      start,
-      end: start + 3,
+      startCol,
+      endCol: startCol + 3,
       attributes: { checkbox: task[2] === " " ? "unchecked" : "checked" },
     });
   }
@@ -194,7 +191,7 @@ export function buildInlineSpans(
   collectTokenIntervals(Lexer.lexInline(display, { gfm: true }), 0, intervals);
 
   for (const range of linkRanges) {
-    intervals.push({ start: range.start, end: range.end, attributes: { link: true } });
+    intervals.push({ startCol: range.startCol, endCol: range.endCol, attributes: { link: true } });
   }
 
   return { spans: flatten(intervals), quoteDepth: quote.intervals.length };
