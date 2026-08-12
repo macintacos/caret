@@ -24,12 +24,14 @@ import {
 } from "@test/e2e/support/fixtures.ts";
 import {
   firstGlyphX,
+  gridCounts,
   jumpToHeading,
   lineCenterY,
   PLAN_SURFACE,
   planSurface,
   revealGutterPlus,
   rowHeights,
+  settledMutations,
 } from "@test/e2e/support/source-view.ts";
 
 // A plan tall enough to scroll the source view past one viewport.
@@ -3534,3 +3536,188 @@ for (const colorScheme of ["light", "dark"] as const) {
     expect(counts.numbers).toBe(counts.rows);
   });
 }
+
+// EXC-862: thematic breaks. The pure halves are already pinned as units — which lines are
+// breaks in ui/src/lib/diffview/thematicBreaks.test.ts (including every look-alike), the
+// selectors in coreStyles.test.ts, and the ink's floor across all nine palettes in
+// ui/src/lib/theme.test.ts. What only a browser can answer is whether the line PAINTS: the
+// rule is a background-image built from a custom property, so a token that failed to derive
+// leaves the declaration invalid and the row simply has no line — indistinguishable from a
+// missing rule in any stylesheet regex, and invisible to happy-dom, which reports no
+// computed background at all.
+//
+// It also answers something no unit can: what INGEST leaves for the view to render. The
+// daemon reflows every plan through rumdl (src/plan/rumdl.ts), which normalizes all three
+// CommonMark spellings to `---` and rewrites a setext heading to ATX. So the spellings are
+// a renderer contract the units own, while the browser's job is the shapes that survive the
+// pipeline — and the three look-alikes that do survive it are here.
+//
+// Both schemes, for the same reason the blockquote case above runs in both: the rule's whole
+// constraint is contrast against the surface, and the surface is what a scheme changes.
+const RULE_PLAN = `---
+title: front matter
+---
+
+# Rule plan
+
+Prose above the break.
+
+---
+
+Prose below the break.
+
+***
+
+Prose below the second break.
+
+___
+
+| head | cell |
+| ---- | ---- |
+| body | cell |
+
+\`\`\`text
+--- inside a fence
+\`\`\`
+`;
+
+/** Every rendered row, with the rule tag and what the row actually paints. Rows are read
+ * whole rather than addressed by a line number counted off RULE_PLAN, because ingest
+ * reflows it (see `lineOf` in the harness) — the assertions below describe the document
+ * by its own text instead. */
+function readRuleRows(page: Page) {
+  return page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+    return [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].map((row) => {
+      const el = row as HTMLElement;
+      const style = getComputedStyle(el);
+      return {
+        line: Number(el.getAttribute("data-line")),
+        text: el.textContent ?? "",
+        rule: el.hasAttribute("data-md-rule"),
+        background: style.backgroundImage,
+        ink: style.color,
+        tokenInks: [...el.children].map((c) => getComputedStyle(c as HTMLElement).color),
+      };
+    });
+  });
+}
+
+const TRANSPARENT = "rgba(0, 0, 0, 0)";
+
+for (const colorScheme of ["light", "dark"] as const) {
+  test(`thematic breaks draw a rule and the look-alikes do not in ${colorScheme} (EXC-862)`, async ({
+    daemon,
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme });
+    await daemon.seed({ plan: RULE_PLAN });
+    await page.goto("/");
+    await planSurface(page);
+    await expect.poll(async () => (await readRuleRows(page)).some((r) => r.rule)).toBe(true);
+
+    const rows = await readRuleRows(page);
+    const ruled = rows.filter((r) => r.rule);
+
+    // Three breaks were written in three spellings and three breaks are drawn. They all read
+    // `---` because ingest normalized them, which is the finding worth pinning: the view is
+    // asked to render one spelling in production however many the author typed, and the
+    // other two are the units' business.
+    expect(ruled.map((r) => r.text)).toEqual(["---", "---", "---"]);
+
+    // The line is really painted. An underived --ink-soft would leave the declaration
+    // invalid and the row with no background layer at all.
+    for (const row of ruled) {
+      expect(row.background).toContain("linear-gradient");
+      // Overdrawn, not deleted: the row and every token it holds are transparent while the
+      // characters stay in the DOM.
+      expect(row.ink).toBe(TRANSPARENT);
+      expect([...new Set(row.tokenInks)]).toEqual([TRANSPARENT]);
+    }
+
+    // And nothing else is. A prose row has no background layer and keeps its ink, so the
+    // rule is the tagged row's rather than the sheet's.
+    const prose = rows.find((r) => r.text === "Prose above the break.");
+    expect(prose?.background).toBe("none");
+    expect(prose?.ink).not.toBe(TRANSPARENT);
+
+    // The three look-alikes that survive ingest. Each is spelled with the same characters a
+    // break is spelled with, and converting any of them is a wrong render rather than a
+    // plainer one — a table would lose its header separator, a fence would stop being
+    // literal, and a document would lose its front matter.
+    const untagged = rows.filter((r) => !r.rule).map((r) => r.text);
+    expect(untagged).toContain("| ---- | ---- |");
+    expect(untagged).toContain("--- inside a fence");
+    // The front-matter pair is the two `---` rows standing above the plan's first heading.
+    const firstHeading = rows.findIndex((r) => r.text.startsWith("#"));
+    expect(firstHeading).toBeGreaterThan(0);
+    expect(
+      rows
+        .slice(0, firstHeading)
+        .filter((r) => r.text === "---")
+        .map((r) => r.rule),
+    ).toEqual([false, false]);
+
+    // The monospace grid is untouched. A background paints no box and takes no inline
+    // advance, so the row's left edge and its height are the ordinary row's — which is what
+    // keeps the gutter numbers, the vim motions and the comment anchors on the same grid.
+    const ruledLine = ruled[0]?.line as number;
+    expect(await firstGlyphX(page, ruledLine)).toBe(await firstGlyphX(page, prose?.line as number));
+    const ruledHeights = await rowHeights(page, ruledLine);
+    expect(ruledHeights.row).toBe((await rowHeights(page, prose?.line as number)).row);
+    // The row and its own gutter cell share a grid track, so a rule that grew the row would
+    // show up here first.
+    expect(ruledHeights.number).toBe(ruledHeights.row);
+
+    // The standing reflow guard: one gutter number per row, over a contiguous range.
+    const counts = await gridCounts(page);
+    expect(counts.numbers).toBe(counts.rows);
+    expect(counts.highestLine).toBe(counts.rows);
+  });
+}
+
+test("the repaint settles with a rule beside a table (EXC-862)", async ({ daemon, page }) => {
+  // The claim every decoration pass in this epic owes. tables.ts settles a celled row by
+  // comparing its child count to its cell count, so a pass that APPENDED a node inside one
+  // would rebuild it on every repaint — the runaway EXC-870 measured at ~10,800 mutations in
+  // two seconds. A background-image adds no node, so this is zero by construction; RULE_PLAN
+  // carries a table directly under the breaks so the construction is what is being read.
+  await daemon.seed({ plan: RULE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await readRuleRows(page)).some((r) => r.rule)).toBe(true);
+  expect(await settledMutations(page)).toBe(0);
+});
+
+test("copying a rule's row yields the source characters (EXC-862)", async ({
+  context,
+  daemon,
+  page,
+}) => {
+  // The epic's copy contract, read off the REAL clipboard. Selection.toString() takes a
+  // different path through Blink and showed nothing wrong in EXC-870 while the clipboard
+  // carried an image's alt text, so only this assertion means anything. A rule row is the
+  // shape that could break it in either direction: the characters are invisible, so a
+  // treatment that removed them (or that let the drawn line contribute text of its own)
+  // would corrupt the copied markdown without changing anything a reader can see.
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await daemon.seed({ plan: RULE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await readRuleRows(page)).some((r) => r.rule)).toBe(true);
+
+  const copied = await page.evaluate(async () => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+    const row = sh?.querySelector("[data-content] [data-line][data-md-rule]") ?? null;
+    if (sh == null || row == null) return { selection: "", clipboard: "<no rule row>" };
+    const range = document.createRange();
+    range.selectNodeContents(row);
+    const sel = (sh as unknown as { getSelection?: () => Selection | null }).getSelection?.();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    document.execCommand("copy");
+    return { selection: sel?.toString() ?? "", clipboard: await navigator.clipboard.readText() };
+  });
+  expect(copied.clipboard).toBe("---");
+  expect(copied.selection).toBe("---");
+});
