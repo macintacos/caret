@@ -5,6 +5,7 @@ import { bootDaemon, type TestDaemon } from "@test/support/daemon.ts";
 import { setupTempStateDir } from "@test/support/env.ts";
 import { waitFor } from "@test/support/poll.ts";
 import { expectNeverLogsBody } from "@test/support/redaction.ts";
+import { codeBlockRanges } from "@ui/src/lib/diffview/codeBlocks.ts";
 import { EXCERPT_RADIUS, MAX_CITED_SPAN_LINES, PLAN_REJECTED_MESSAGE } from "@/config/constants.ts";
 import { setLogLevel } from "@/lib/log.ts";
 import { hasUntaggedCodeBlock } from "@/plan/format.ts";
@@ -167,7 +168,11 @@ test("demoVersions returns exactly count plans, oldest first, ending at the fina
 });
 
 test("demoVersions makes every consecutive pair a non-empty, varied diff (not append-only)", () => {
-  const plans = demoVersions(PLAN_V1, 4);
+  // Sized off the group count, not the default: each group is applied to the
+  // output of the ones before it, so a group whose `to` swallowed a later
+  // group's `from` would be a silent no-op that the drift guard — which tests
+  // every `from` against the FINAL plan — cannot see.
+  const plans = demoVersions(PLAN_V1, DEMO_EDIT_GROUPS.length + 1);
   // No two adjacent versions are equal — each edit group actually lands.
   for (let i = 1; i < plans.length; i++) {
     expect(plans[i]).not.toBe(plans[i - 1]);
@@ -209,6 +214,17 @@ test("every DEMO_EDIT_GROUPS `from` span still exists in the fixture", () => {
       expect(PLAN_V1.includes(from)).toBe(true);
     }
   }
+});
+
+// Fence-parity guard: the plan view toggles in and out of code on every fence
+// line (codeBlockRanges), so an odd number of them anywhere in the fixture puts
+// every line from the last fence to EOF inside a code panel — the closing
+// section, and every revision the driver threads onto it. Nothing else runs the
+// fixture through that detection, and the damage is invisible to the format gate.
+test("no fixture code block runs to the end of the file (fence lines pair up)", () => {
+  const last = codeBlockRanges(PLAN_V1).at(-1);
+  expect(last).toBeDefined();
+  expect(last!.end).toBeLessThan(PLAN_V1.split("\n").length);
 });
 
 // ---- demoAnnotations ----

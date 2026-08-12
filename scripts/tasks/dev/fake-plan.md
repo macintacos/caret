@@ -17,6 +17,17 @@ testing anything.
 
 The plan view shows stored plan text as markdown SOURCE, so this comment is visible in
 the UI. That is fine — it belongs to the fixture.
+
+Two invariants bind edits to this file, both enforced by test/scripts/dev-driver.test.ts:
+
+1. The COUNT OF FENCE LINES must stay even. codeBlockRanges (ui/src/lib/diffview/
+codeBlocks.ts) toggles in and out of code on every line matching /^\s*(`{3,}|~{3,})/,
+without regard to length or fence character, so an odd count leaves everything from the
+last fence to the end of this file rendering inside a code panel.
+
+2. Some spans of this file are reproduced VERBATIM in DEMO_EDITS (scripts/tasks/dev/
+protocol.ts), which rewrites them to build the earlier draft versions. Editing one means
+editing that copy in the same change; the drift guard fails loudly if you don't.
 -->
 
 
@@ -544,7 +555,7 @@ Each bullet below carries exactly one link and no other reference, so whatever i
 - [README.md](README.md) — a bare-path label. The path shows, plainly styled, with **no** icon; clicking the words still opens the preview.
 - [the caret dev workflow](doc/DEVELOPMENT.md) — a prose label: the words survive and the path does not appear at all. Hovering reveals the target in a tooltip, the only way to see where the click goes.
 - [the deep middle of a long file](doc/DEVELOPMENT.md:124) — a target carrying a line number: opens centered on line 124 with both strips showing, and the tooltip carries the line as well as the path.
-- [a stretch of the dev guide](doc/DEVELOPMENT.md:200-212) — a target carrying a **range**: the label hides it entirely, so the tooltip is the only place the span is visible before the click, and the preview washes all thirteen lines.
+- [a stretch of the dev guide](doc/DEVELOPMENT.md:226-238) — a target carrying a **range**: the label hides it entirely, so the tooltip is the only place the span is visible before the click, and the preview washes all thirteen lines.
 - [`mise.toml`](package.json) — a label and target that **disagree**: the click opens the target, never the file the label names. Read the tooltip before clicking. The icon still sits inside the backticks.
 - [a plan that moved](doc/does-not-exist.md) — an unresolved target: the label reads as plain prose with no icon, no chip, and no preview, and its line still opens a comment composer on click.
 - [docs](guide) — a single extensionless segment: the brackets come off like any link's, but it is **not a citation** — no icon, no tooltip, no preview. It could be a directory, but nothing in the text says so, and that is decided before anything resolves.
@@ -559,6 +570,147 @@ EXC-956: a link whose target is a **directory** collapses on exactly the same te
 - [the source root](src) and [the same root](src/) — one bare segment that really is a directory, spelled both ways: neither is **cited**, for the reason `guide` above is not. The slash changes nothing, which is the point; widening far enough to catch either would put an icon and a preview on every prose link whose target happens to be one word.
 - [Setup](doc/DEVELOPMENT.md#setup) — a target carrying a fragment: **not cited** either. That is a link to an anchor within a document, not a citation of the document.
 - [the caret repo, again](github.com/macintacos/caret) — a scheme-less URL: **literal**. It reads as a multi-segment path, but collapsing it would leave the label with its destination recorded nowhere — not in the text, and not in a tooltip either, since only a resolved reference gets one.
+
+## Rendering showcase
+
+**Read this section as the baseline.** The sections above each walk one rendering path at length, in prose, which is the right shape for learning a behaviour and the wrong shape for noticing that it changed. This one is the labelled grid: one sub-heading per construct, each short enough to screenshot whole, so a change to how the plan view draws markdown has a fixed surface to be compared against. Every PR that changes the plan view names the sub-heading its change is responsible for, so a reviewer can go from the diff straight to the rows it draws. Add a sub-heading when a new construct starts being decorated; do not fold one into an existing row.
+
+### Emphasis
+
+Plain text, then **bold**, then *italic*, then ***bold italic***, then ~~strikethrough~~, then **bold with *italic* nested inside it** — all in one sentence, so the boundary between two adjacent runs is visible rather than inferred.
+
+Bold and italic draw from the same per-scheme alpha family, so tint alone does not separate them on every palette — what does is weight and slant, which caret declares itself off the decoration pass's own attributes rather than leaving to the highlighter. Bold should read heavier and italic should read slanted here, in every palette, and a row where both look identical is the regression. Strikethrough is the odd one out and is here for exactly that reason: `del` carries no attribute at all, so `~~…~~` draws nothing and its tildes read as plain text.
+
+### Inline code
+
+A plain span: `renderPlan(markdown)`. A span holding a path: `ui/src/lib/diffview/inlineSpans.ts`. A span holding a shell line: `bun test --conditions browser`. A span whose interior is itself markdown, which must stay literal: `**not bold**, *not italic*`.
+
+- [`ui/src/lib/markdown.ts`](ui/src/lib/markdown.ts) — a backticked path behind a link target, the citation shape caret's own plans use most, and the row most worth a baseline screenshot. The code span's run covers its backticks while the reference sits inside them: the reference's boundary cuts the row without breaking the pill, so what draws is **one** continuous code chip with the file glyph on the child in the middle of it. Two chips with a seam between them is the regression.
+
+### Links
+
+- [an internal anchor](#tabular-data) — a same-document target: it collapses to its label like any link, but the label is not clickable, because a fragment is not a destination this view hands to the browser.
+- [an external link](https://example.com/docs/showcase) — collapses to its label and opens a tab on click.
+- https://example.com/showcase/autolink?q=1&scheme=both — written bare here, but the ingest reflow wraps a bare URL in angle brackets, so what the stored plan carries is an autolink, and what you see is that autolink collapsed back to the URL itself.
+- [the notes](~/notes/plan.md) — a path-shaped target: collapses to bare label text, and is never handed to the browser.
+- [`doc/agents/`](doc/agents/) — a folder target behind a backticked label, so the glyph has a token of its own.
+- [do not run this](javascript:alert(1)) — stays literal, brackets and parens included: a reader has to be able to see what an unsafe scheme would do.
+- [an inline payload](data:text/html,hello) — literal for the same reason.
+- [mail nobody](mailto:nobody@example.com) — literal: neither a web scheme nor a path.
+- [an old archive](ftp://example.com/showcase.ts) — literal even though it ends in a known extension.
+- [a protocol-relative host](//example.com/showcase) — literal: collapsed, its destination would survive nowhere.
+
+### File and folder references
+
+- `package.json` — a file that resolves: the file glyph, a resting tint, and an excerpt on click.
+- `doc/agents` — a directory that resolves: the folder glyph, the same tint, and a tree on click.
+- `src/no-such-module.ts` — a path that does not resolve: no glyph, no tint, no preview. This is the row that regresses silently, so read it every time.
+- `doc/no-such-folder/` — the directory half of that negative case.
+
+### Fenced blocks
+
+Tagged, the ordinary case:
+
+```ts
+export function showcase(): string {
+  return "one labelled row per construct";
+}
+```
+
+A four-backtick fence holding a nested triple. The plan view walks fence lines statelessly and toggles on each one, so it sees two blocks here where the markdown parser sees a single block with a literal triple inside it — the nested opener closes the outer block, and the outer closer opens another:
+
+````text
+```ts
+const nested = "content to the parser, a delimiter to the view";
+```
+````
+
+Three further shapes cannot be seeded from a plan at all, so they are named rather than armed: an **untagged** fence (` ``` ` with no language) is refused by the plan-format gate before a review is ever created; a **tilde** fence (` ~~~ts `) is rewritten to backticks by the ingest reflow; and an **unclosed** fence is closed by that same reflow — and arming one would put every line after it, this plan's closing section and every revision the dev driver threads on, inside a code panel. Their rendering is covered by unit tests instead, in `ui/src/lib/diffview/codeBlocks.test.ts`.
+
+### Task lists
+
+- [x] Land the showcase in the dev fixture
+- [x] Cite it from the pull requests that render it
+- [ ] Sweep every construct against it before the epic closes
+- [ ] Retire the throwaway fixtures each change grew its own copy of
+
+### Bullet and ordered lists
+
+Bullets, nested three deep:
+
+- A top-level item carrying **emphasis**
+  - A second-level item carrying `inline code`
+    - A third-level item carrying [a link](#emphasis)
+- A second top-level item, back at the outer margin
+
+Ordered, with a nested ordered level:
+
+1. Read the sub-heading the change is responsible for
+2. Change one renderer
+   1. Re-read the same sub-heading
+   2. Screenshot it in both schemes
+3. Cite the sub-heading in the pull request
+
+### Quoted text
+
+> One level, carrying **bold**, an `inline code` span, and [a link](#links).
+
+> Two levels, opening here.
+>
+> > And continuing one level deeper, where the marker column doubles and the ink subdues again.
+
+### Tabular data
+
+Narrow, three columns:
+
+| Construct  | Rendered by        | Negative case                |
+| ---------- | ------------------ | ---------------------------- |
+| emphasis   | the span pass      | strikethrough, which is bare |
+| fences     | the fence pass     | an unclosed block            |
+| references | the reference pass | a path off disk              |
+
+Wide enough that it has to scroll sideways inside the panel rather than reflow:
+
+| id  | construct  | seeded from | draws            | resting tint | on hover       | negative case         | first covered | owner surface                        |
+| --- | ---------- | ----------- | ---------------- | ------------ | -------------- | --------------------- | ------------- | ------------------------------------ |
+| 1   | emphasis   | the fixture | weight and slant | shared alpha | unchanged      | strikethrough is bare | this section  | `ui/src/lib/diffview/inlineSpans.ts` |
+| 2   | code spans | the fixture | a span per run   | shared alpha | unchanged      | markdown left literal | this section  | `ui/src/lib/diffview/inlineSpans.ts` |
+| 3   | fences     | the fixture | a chip per fence | shared alpha | unchanged      | a bare fence row      | this section  | `ui/src/lib/diffview/codeBlocks.ts`  |
+| 4   | references | the daemon  | a glyph + a tint | shared alpha | an accent wash | a path off disk       | this section  | `ui/src/lib/diffview/fileRefs.ts`    |
+
+Carrying inline markup inside the cells, which is where a cell-level renderer and an inline one disagree:
+
+| Cell kind | Content                 |
+| --------- | ----------------------- |
+| bold      | **a bold cell**         |
+| italic    | *an italic cell*        |
+| code      | `a code cell`           |
+| link      | [a linked cell](#links) |
+| reference | `mise.toml`             |
+
+### Rules and separators
+
+Text above the showcase's own rule.
+
+---
+
+Text below it, so the rule has a paragraph on each side to be measured against.
+
+### Images
+
+Neither URL loads — no image is ever fetched here. What separates the two rows is the title, and it changes the outcome completely.
+
+With a title:
+
+![the showcase placeholder](https://example.com/img/showcase.png "Hover title")
+
+The link grammar allows no space inside a target, so this one never matches: the whole `![…](…)` stays literal source, and the only clickable thing on the line is the bare URL inside it.
+
+Without a title:
+
+![a showcase asset that is not there](https://example.com/img/absent.png)
+
+This one collapses, and lands on the known gap: the exclamation mark sits outside the clickable span, so the label reads as `!a showcase asset that is not there`. The shared decoration pass owns that, and the row is here so it stays visible rather than remembered.
 
 ---
 

@@ -181,6 +181,32 @@ Every user-facing UI setting the browser persists is built through `definePref` 
 it. `knownPrefKeys()` derives from those registrations, and `prefKeys.test.ts` fails if a
 persisted key isn't registered.
 
+#### The markdown showcase
+
+The seed plan (`scripts/tasks/dev/fake-plan.md`) carries a `## Rendering showcase` section
+near its end: one sub-heading per markdown construct — `Emphasis`, `Inline code`, `Links`,
+`File and folder references`, `Fenced blocks`, `Task lists`, `Bullet and ordered lists`,
+`Quoted text`, `Tabular data`, `Rules and separators`, `Images` — each short enough to
+screenshot whole. It is the fixed surface plan-view rendering is compared against, so a
+change to how a plan is drawn has a shared baseline instead of each change growing a
+throwaway fixture and reverting it.
+
+Two of those sub-sections do double duty: `DEMO_EDITS` in `scripts/tasks/dev/protocol.ts`
+reproduces the bodies of `Task lists` and `Rules and separators` verbatim so it can stub
+them out in an older draft, which is what puts the showcase in the version-compare picker
+as a block-shaped diff. Editing either body means editing that copy in the same change —
+`test/scripts/dev-driver.test.ts` fails loudly if you don't.
+
+The convention that goes with it: **a pull request that changes how the plan view renders
+markdown names the showcase sub-heading its change is responsible for**, so a reviewer can
+go from the diff straight to the rows it draws. Add a sub-heading when a new construct
+starts being decorated rather than folding one into an existing row.
+
+Three fence shapes are named there rather than armed, because a seeded plan cannot carry
+them: an untagged fence is refused by the plan-format gate, and both a tilde fence and an
+unclosed one are rewritten by the ingest reflow before the review is ever created. Their
+rendering is covered by `ui/src/lib/diffview/codeBlocks.test.ts` instead.
+
 ### `mise run build --install`
 
 The install loop: it swaps your agents over to this checkout. After building, it runs
