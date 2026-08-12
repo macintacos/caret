@@ -184,11 +184,18 @@ persisted key isn't registered.
 #### The markdown showcase
 
 The seed plan (`scripts/tasks/dev/fake-plan.md`) carries a `## Rendering showcase` section
-near its end: one sub-heading per markdown construct — emphasis, inline code, links, file
-and folder references, fenced blocks, task lists, bullet and ordered lists, quoted text,
-tables, rules, images — each short enough to screenshot whole. It is the fixed surface
-plan-view rendering is compared against, so a change to how a plan is drawn has a shared
-baseline instead of each change growing a throwaway fixture and reverting it.
+near its end: one sub-heading per markdown construct — `Emphasis`, `Inline code`, `Links`,
+`File and folder references`, `Fenced blocks`, `Task lists`, `Bullet and ordered lists`,
+`Quoted text`, `Tabular data`, `Rules and separators`, `Images` — each short enough to
+screenshot whole. It is the fixed surface plan-view rendering is compared against, so a
+change to how a plan is drawn has a shared baseline instead of each change growing a
+throwaway fixture and reverting it.
+
+Two of those sub-sections do double duty: `DEMO_EDITS` in `scripts/tasks/dev/protocol.ts`
+reproduces the bodies of `Task lists` and `Rules and separators` verbatim so it can stub
+them out in an older draft, which is what puts the showcase in the version-compare picker
+as a block-shaped diff. Editing either body means editing that copy in the same change —
+`test/scripts/dev-driver.test.ts` fails loudly if you don't.
 
 The convention that goes with it: **a pull request that changes how the plan view renders
 markdown names the showcase sub-heading its change is responsible for**, so a reviewer can

@@ -17,6 +17,17 @@ testing anything.
 
 The plan view shows stored plan text as markdown SOURCE, so this comment is visible in
 the UI. That is fine — it belongs to the fixture.
+
+Two invariants bind edits to this file, both enforced by test/scripts/dev-driver.test.ts:
+
+1. The COUNT OF FENCE LINES must stay even. codeBlockRanges (ui/src/lib/diffview/
+codeBlocks.ts) toggles in and out of code on every line matching /^\s*(`{3,}|~{3,})/,
+without regard to length or fence character, so an odd count leaves everything from the
+last fence to the end of this file rendering inside a code panel.
+
+2. Some spans of this file are reproduced VERBATIM in DEMO_EDITS (scripts/tasks/dev/
+protocol.ts), which rewrites them to build the earlier draft versions. Editing one means
+editing that copy in the same change; the drift guard fails loudly if you don't.
 -->
 
 
@@ -544,7 +555,7 @@ Each bullet below carries exactly one link and no other reference, so whatever i
 - [README.md](README.md) — a bare-path label. The path shows, plainly styled, with **no** icon; clicking the words still opens the preview.
 - [the caret dev workflow](doc/DEVELOPMENT.md) — a prose label: the words survive and the path does not appear at all. Hovering reveals the target in a tooltip, the only way to see where the click goes.
 - [the deep middle of a long file](doc/DEVELOPMENT.md:124) — a target carrying a line number: opens centered on line 124 with both strips showing, and the tooltip carries the line as well as the path.
-- [a stretch of the dev guide](doc/DEVELOPMENT.md:219-231) — a target carrying a **range**: the label hides it entirely, so the tooltip is the only place the span is visible before the click, and the preview washes all thirteen lines.
+- [a stretch of the dev guide](doc/DEVELOPMENT.md:226-238) — a target carrying a **range**: the label hides it entirely, so the tooltip is the only place the span is visible before the click, and the preview washes all thirteen lines.
 - [`mise.toml`](package.json) — a label and target that **disagree**: the click opens the target, never the file the label names. Read the tooltip before clicking. The icon still sits inside the backticks.
 - [a plan that moved](doc/does-not-exist.md) — an unresolved target: the label reads as plain prose with no icon, no chip, and no preview, and its line still opens a comment composer on click.
 - [docs](guide) — a single extensionless segment: the brackets come off like any link's, but it is **not a citation** — no icon, no tooltip, no preview. It could be a directory, but nothing in the text says so, and that is decided before anything resolves.
@@ -568,19 +579,19 @@ EXC-956: a link whose target is a **directory** collapses on exactly the same te
 
 Plain text, then **bold**, then *italic*, then ***bold italic***, then ~~strikethrough~~, then **bold with *italic* nested inside it** — all in one sentence, so the boundary between two adjacent runs is visible rather than inferred.
 
-Bold and italic draw from the same per-scheme alpha family, and on several palettes they do not separate on tint alone; weight and slant are what tell them apart until the shared decoration pass gives each its own treatment.
+Bold and italic draw from the same per-scheme alpha family, and on several palettes they do not separate on tint alone; weight and slant are what tell them apart until the shared decoration pass gives each its own treatment. Strikethrough is the odd one out and is here for exactly that reason: `del` carries no attribute today, so `~~…~~` draws nothing at all and its tildes read as plain text.
 
 ### Inline code
 
 A plain span: `renderPlan(markdown)`. A span holding a path: `ui/src/lib/diffview/inlineSpans.ts`. A span holding a shell line: `bun test --conditions browser`. A span whose interior is itself markdown, which must stay literal: `**not bold**, *not italic*`.
 
-- [`ui/src/lib/render.ts`](ui/src/lib/render.ts) — a backticked path behind a link target, the citation shape caret's own plans use most. The code span's run covers its backticks while the reference sits inside them, and where those two cut is still being settled — read this row as the open question it is rather than as finished output.
+- [`ui/src/lib/markdown.ts`](ui/src/lib/markdown.ts) — a backticked path behind a link target, the citation shape caret's own plans use most. It resolves, so the glyph and the tint both land. The code span's run covers its backticks while the reference sits inside them, and where those two cut is still being settled — read this row as the open question it is rather than as finished output.
 
 ### Links
 
-- [an internal jump](#tabular-data) — a same-document anchor, collapsed to its label.
+- [an internal anchor](#tabular-data) — a same-document target: it collapses to its label like any link, but the label is not clickable, because a fragment is not a destination this view hands to the browser.
 - [an external link](https://example.com/docs/showcase) — collapses to its label and opens a tab on click.
-- https://example.com/showcase/autolink?q=1&scheme=both — a bare URL, left in place rather than collapsed.
+- https://example.com/showcase/autolink?q=1&scheme=both — written bare here, but the ingest reflow wraps a bare URL in angle brackets, so what the stored plan carries is an autolink, and what you see is that autolink collapsed back to the URL itself.
 - [the notes](~/notes/plan.md) — a path-shaped target: collapses to bare label text, and is never handed to the browser.
 - [`doc/agents/`](doc/agents/) — a folder target behind a backticked label, so the glyph has a token of its own.
 - [do not run this](javascript:alert(1)) — stays literal, brackets and parens included: a reader has to be able to see what an unsafe scheme would do.
@@ -652,30 +663,30 @@ Ordered, with a nested ordered level:
 
 Narrow, three columns:
 
-| Construct  | Rendered by  | Negative case            |
-| ---------- | ------------ | ------------------------ |
-| emphasis   | the span pass | none — emphasis always draws |
-| fences     | the fence pass | an unclosed block      |
-| references | the reference pass | a path off disk    |
+| Construct  | Rendered by        | Negative case                |
+| ---------- | ------------------ | ---------------------------- |
+| emphasis   | the span pass      | strikethrough, which is bare |
+| fences     | the fence pass     | an unclosed block            |
+| references | the reference pass | a path off disk              |
 
 Wide enough that it has to scroll sideways inside the panel rather than reflow:
 
-| id  | construct  | seeded from     | draws            | resting tint | on hover     | negative case        | first covered | owner surface                          |
-| --- | ---------- | --------------- | ---------------- | ------------ | ------------ | -------------------- | ------------- | -------------------------------------- |
-| 1   | emphasis   | the fixture     | a span per run   | shared alpha | unchanged    | none                 | this section  | `ui/src/lib/diffview/inlineSpans.ts`   |
-| 2   | code spans | the fixture     | a span per run   | shared alpha | unchanged    | markdown left literal | this section | `ui/src/lib/diffview/inlineSpans.ts`   |
-| 3   | fences     | the fixture     | a chip per fence | shared alpha | unchanged    | a bare fence row     | this section  | `ui/src/lib/diffview/codeBlocks.ts`    |
-| 4   | references | the daemon      | a glyph + a tint | shared alpha | an accent wash | a path off disk    | this section  | `ui/src/lib/diffview/fileRefs.ts`      |
+| id  | construct  | seeded from | draws            | resting tint | on hover       | negative case         | first covered | owner surface                        |
+| --- | ---------- | ----------- | ---------------- | ------------ | -------------- | --------------------- | ------------- | ------------------------------------ |
+| 1   | emphasis   | the fixture | a span per run   | shared alpha | unchanged      | strikethrough is bare | this section  | `ui/src/lib/diffview/inlineSpans.ts` |
+| 2   | code spans | the fixture | a span per run   | shared alpha | unchanged      | markdown left literal | this section  | `ui/src/lib/diffview/inlineSpans.ts` |
+| 3   | fences     | the fixture | a chip per fence | shared alpha | unchanged      | a bare fence row      | this section  | `ui/src/lib/diffview/codeBlocks.ts`  |
+| 4   | references | the daemon  | a glyph + a tint | shared alpha | an accent wash | a path off disk       | this section  | `ui/src/lib/diffview/fileRefs.ts`    |
 
 Carrying inline markup inside the cells, which is where a cell-level renderer and an inline one disagree:
 
-| Cell kind | Content                  |
-| --------- | ------------------------ |
-| bold      | **a bold cell**          |
-| italic    | *an italic cell*         |
-| code      | `a code cell`            |
-| link      | [a linked cell](#links)  |
-| reference | `mise.toml`              |
+| Cell kind | Content                 |
+| --------- | ----------------------- |
+| bold      | **a bold cell**         |
+| italic    | *an italic cell*        |
+| code      | `a code cell`           |
+| link      | [a linked cell](#links) |
+| reference | `mise.toml`             |
 
 ### Rules and separators
 
@@ -687,15 +698,19 @@ Text below it, so the rule has a paragraph on each side to be measured against.
 
 ### Images
 
-One that resolves:
+Neither URL loads — no image is ever fetched here. What separates the two rows is the title, and it changes the outcome completely.
+
+With a title:
 
 ![the showcase placeholder](https://example.com/img/showcase.png "Hover title")
 
-One that does not:
+The link grammar allows no space inside a target, so this one never matches: the whole `![…](…)` stays literal source, and the only clickable thing on the line is the bare URL inside it.
+
+Without a title:
 
 ![a showcase asset that is not there](https://example.com/img/absent.png)
 
-Both currently render with the exclamation mark sitting outside the clickable span; that is a known gap the shared decoration pass owns, and the row is here so it stays visible rather than remembered.
+This one collapses, and lands on the known gap: the exclamation mark sits outside the clickable span, so the label reads as `!a showcase asset that is not there`. The shared decoration pass owns that, and the row is here so it stays visible rather than remembered.
 
 ---
 

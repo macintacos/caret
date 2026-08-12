@@ -46,11 +46,11 @@ export function appendRevision(plan: string, feedback: string, n: number): strin
 }
 
 /** Default number of versions the primary dev review opens with — the final plan
- * plus three earlier drafts, one per kind of diff `demoVersions` produces (a
- * single targeted change, a few mid-sentence rewrites, and a block-shaped one
- * that grows whole sub-sections of the rendering showcase), so the
- * version-compare picker has all three flavors to show at a glance. Overridable
- * via `mise run dev --num-versions <n>`. */
+ * plus the three newest drafts, which is DEMO_EDITS groups 0 through 2: a single
+ * targeted change, a few mid-sentence rewrites, and a block-shaped one. That is
+ * three of the four kinds the picker can show at a glance; the scattered-word
+ * kind sits further back, so seeing every kind takes
+ * `mise run dev --num-versions 6`. */
 export const DEFAULT_NUM_VERSIONS = 4;
 
 /** Resolve the `--num-versions <n>` dev flag from argv: how many versions the
@@ -92,10 +92,10 @@ interface DemoEdit {
  * while older pairs get progressively larger:
  *   0. a single targeted change (one table cell),
  *   1. a few mid-sentence rewrites,
- *   2. a block-shaped change: whole sub-sections of the rendering showcase are
- *      stubs in the older draft and full rows in the newer one (EXC-1063), which
- *      is the one diff kind the picker never had — every other group rewrites
- *      words in place,
+ *   2. a block-shaped change (EXC-1063): whole sub-sections of the rendering
+ *      showcase are stubs in the older draft and full rows in the newer one. The
+ *      only group that adds and removes lines rather than rewriting words in
+ *      place; it opens with the one-sentence trim that motivates the stubs,
  *   3. many scattered word changes across the file (only reached at higher
  *      --num-versions),
  *   4. a further scattered pass (likewise).
@@ -118,27 +118,19 @@ const DEMO_EDITS: readonly (readonly DemoEdit[])[] = [
       to: "More rows to come.",
     },
     {
-      from: `### Task lists
-
-- [x] Land the showcase in the dev fixture
+      from: `- [x] Land the showcase in the dev fixture
 - [x] Cite it from the pull requests that render it
 - [ ] Sweep every construct against it before the epic closes
 - [ ] Retire the throwaway fixtures each change grew its own copy of`,
-      to: `### Task lists
-
-Still to write.`,
+      to: "Still to write.",
     },
     {
-      from: `### Rules and separators
-
-Text above the showcase's own rule.
+      from: `Text above the showcase's own rule.
 
 ---
 
 Text below it, so the rule has a paragraph on each side to be measured against.`,
-      to: `### Rules and separators
-
-Still to write.`,
+      to: "Still to write.",
     },
   ],
   [
