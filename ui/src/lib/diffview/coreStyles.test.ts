@@ -302,9 +302,11 @@ describe("the fence-marker chip (EXC-869)", () => {
   test("fills the fence markers with the family's inline-code chip token", () => {
     // The tint is CONSUMED, never redefined here: --chip-code is the chip family's shared
     // token, derived for all nine palettes by the recipe (EXC-858), so the fence chip and
-    // the inline-code chip are one tint by construction rather than by a matched value.
-    // A bare var() with no fallback is the point — a fallback would silently paint a
-    // second, unreviewed tint if the token ever stopped resolving.
+    // the inline-code chip (EXC-868) spend one token rather than a matched value. One
+    // token, not one rendered colour — the two composite over different grounds, which
+    // EXC-868's suite below pins as the deliberate call it is. A bare var() with no
+    // fallback is the point here — a fallback would silently paint a second, unreviewed
+    // tint if the token ever stopped resolving.
     expect(chipRule).toMatch(/background-color:\s*var\(--chip-code\)/);
     expect(chipRule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(chipRule).not.toMatch(/color-mix/);
@@ -482,6 +484,49 @@ describe("the link chip (EXC-859)", () => {
     for (const rule of [inkRule, linkTint]) {
       expect(rule).not.toMatch(/padding/);
       expect(rule).not.toMatch(/margin/);
+    }
+  });
+});
+
+// EXC-868: the inline-code chip, the third prose member of the EXC-855 chip family. The
+// decoration pass already tags a codespan data-md~="code" and already closes its pill once
+// per ELEMENT (EXC-867), so the whole render is one layer variable and one gradient — which
+// is all this suite has to pin, plus the one call the ticket had to make: that the tint is
+// the same token the fence chip spends rather than a second value corrected for the surface.
+// The geometry the code member rides is shared with bold and italic, so the "shifts no
+// column" and "drops the chip on a selected row" pins above already cover it and are not
+// repeated here.
+describe("the inline-code chip (EXC-868)", () => {
+  const fillRule = overrideDecls.match(/\[data-content\][^{}]*\[data-md\]\s*\{[^}]*\}/)?.[0] ?? "";
+  const codeMember = overrideDecls.match(/\[data-md~="code"\]\s*\{[^}]*\}/)?.[0] ?? "";
+  const fenceRule =
+    overrideDecls.match(
+      /\[data-content\][^{}]*\[data-code-line\][^{}]*\[data-code-fence\]\s*\{[^}]*\}/,
+    )?.[0] ?? "";
+
+  test("spends the family's inline-code tint through a layer of its own", () => {
+    // A layer rather than a background-color, for the reason bold and italic are layers:
+    // the middle run of a bold element wrapping inline code carries bold AND code, and a
+    // single background-color would let one rule win and punch a gap through the bold pill.
+    expect(codeMember).toMatch(/--md-code:\s*var\(--chip-code\)/);
+    expect(fillRule).toMatch(/var\(--md-code,\s*transparent\)/);
+    // The transparent fallback is what paints nothing when the member is absent, so no
+    // default declaration is needed and nothing has to out-specify the member rule.
+    expect(fillRule).not.toMatch(/--md-code:\s/);
+  });
+
+  test("spends the same token as the fence chip, not a surface-corrected second tint", () => {
+    // The two chips sit on DIFFERENT surfaces — the fence markers on the code panel,
+    // inline code on the bare diff surface — so one translucent token does not composite
+    // to one rendered colour, and this pins the deliberate decision not to chase that.
+    // Sharing the token is what makes "inline code is tinted like fenced code" hold as a
+    // rule across all nine palettes; a panel-corrected literal on either side would be a
+    // tenth, unreviewed palette declared by hand. So both read a bare var(--chip-code).
+    expect(fenceRule).toMatch(/var\(--chip-code\)/);
+    expect(codeMember).toMatch(/var\(--chip-code\)/);
+    for (const rule of [fenceRule, codeMember]) {
+      expect(rule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+      expect(rule).not.toMatch(/color-mix/);
     }
   });
 });

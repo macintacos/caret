@@ -190,11 +190,15 @@ const CARET_OVERRIDES = `
      so a drag-selection reads as one flat band.
 
      The tint is --chip-code itself, the family's inline-code token (EXC-858 derives all five
-     in the palette recipe), so the fence chip and the inline-code chip are the same tint by
-     construction rather than by a matched value. Nothing is declared here. The token is a
-     translucent wash rather than an opaque mix, which is what lets one tint serve both
-     surfaces: it composites over the code panel here and over the bare diff surface where
-     inline code sits, reading the same on each.
+     in the palette recipe), so the fence chip and the inline-code chip (EXC-868) spend the
+     same TOKEN by construction rather than a matched value. Nothing is declared here. Not
+     the same rendered colour, though, and the difference is worth being exact about: the
+     token is a translucent wash, so it composites over the code panel here — already
+     --paper-sunk plus 6% ink — and over the bare diff surface where inline code sits, which
+     are two grounds and therefore two results. That is accepted rather than corrected. A
+     panel-matched second value would be a tenth palette declared by hand, where one shared
+     token keeps "inline code is tinted like fenced code" true across all nine and lets each
+     chip carry the same relationship to whatever it sits on.
 
      The markers keep the --ink-faint ink caret-theme.ts already gives them, which is the ink
      the chip family prescribes for markers.
@@ -223,14 +227,25 @@ const CARET_OVERRIDES = `
      ratio in five of the nine palettes. The tint says "this span is a chip"; the glyph
      says which one it is.
 
-     Two background LAYERS rather than one background-color, because a run can carry two
-     members at once and both must show. Triple-starred text is genuinely bold and italic,
-     and the middle run of a bold element wrapping inline code is bold and code — with a
-     single background-color the more specific rule would win and punch a visible gap
-     through the middle of the bold pill. Each layer resolves to transparent through the
-     var() fallback when its member is absent, so no default declaration is needed and
-     nothing has to out-specify anything. The link chip (EXC-859) is the third layer; a
-     later member (EXC-868) adds one line here and one layer above.
+     Background LAYERS rather than one background-color, because a run can carry two members
+     at once and both must show. Triple-starred text is genuinely bold and italic, and the
+     middle run of a bold element wrapping inline code is bold and code — with a single
+     background-color the more specific rule would win and punch a visible gap through the
+     middle of the bold pill. Each layer resolves to transparent through the var() fallback
+     when its member is absent, so no default declaration is needed and nothing has to
+     out-specify anything. The four layers are ordered as inlineDecorate.ts orders MEMBERS,
+     so the sheet and the pass read against each other; with the code chip (EXC-868) and the
+     link chip (EXC-859) the family is complete and no member is outstanding.
+
+     EXC-868 is the code member, and it needed nothing beyond one line here and one layer
+     above: the pass already tags a codespan and already closes its pill once per element,
+     so the backticks stay visible and subdued (caret-theme.ts colours them apart from the
+     code between them) inside one chip. Its tint is --chip-code, the token the fence chip
+     above already spends — see that rule's note for why one shared token is right even
+     though the two surfaces do not composite to one colour. And on a backticked citation
+     the reference's own child carries the code member AND [data-file-ref]'s --chip-ref fill
+     below: the two compose, the reference's colour under the code layer, rather than either
+     replacing the other. That is the second reason these are layers.
 
      No backtick appears in this comment, or anywhere else in CARET_OVERRIDES: the sheet is
      a template literal, so one would close it early.
@@ -305,8 +320,12 @@ const CARET_OVERRIDES = `
   }
 
   /* The guard rides each member's own tint VARIABLE rather than the shared fill rule
-     below, because the members disagree about it. Bold and italic are decoration, so they
-     drop on a row the reviewer has drag-selected and the band reads as one flat shape.
+     below, because the members disagree about it. Bold, italic and code are decoration, so
+     they drop on a row the reviewer has drag-selected and the band reads as one flat shape.
+     Code sides with them rather than with the link because it marks a span instead of
+     offering an action, which is the same call the fence chip above already makes with the
+     same token (EXC-868); the file reference inside a codespan keeps its own fill either
+     way, so a selected citation still shows where it can be opened.
      The link chip does not, and the reason is consistency across the family rather than
      necessity: EXC-880 keeps the file-reference chip lit under a selection because an
      affordance's chip is not decoration to be tidied away, and a link chip vanishing
@@ -323,6 +342,9 @@ const CARET_OVERRIDES = `
   [data-content] [data-line]:not([data-selected-line]) [data-md~="italic"] {
     --md-italic: var(--chip-italic);
   }
+  [data-content] [data-line]:not([data-selected-line]) [data-md~="code"] {
+    --md-code: var(--chip-code);
+  }
   [data-content] [data-line] [data-md~="link"] {
     --md-link: var(--chip-link);
   }
@@ -330,6 +352,7 @@ const CARET_OVERRIDES = `
     background-image:
       linear-gradient(var(--md-bold, transparent), var(--md-bold, transparent)),
       linear-gradient(var(--md-italic, transparent), var(--md-italic, transparent)),
+      linear-gradient(var(--md-code, transparent), var(--md-code, transparent)),
       linear-gradient(var(--md-link, transparent), var(--md-link, transparent));
   }
   /* No selection guard, matching the link tint above: the link chip has to keep its

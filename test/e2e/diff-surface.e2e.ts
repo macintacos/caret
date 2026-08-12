@@ -2572,3 +2572,84 @@ test("compare mode never reaches the decoration pass (EXC-867)", async ({ daemon
     )
     .toBe(0);
 });
+
+// EXC-868: the inline-code chip. The pill GROUPING is pure and already pinned in
+// ui/src/lib/diffview/inlineDecorate.test.ts; what cannot live there is whether the chip
+// actually paints. --chip-code and --radius are custom properties, so only a live cascade
+// resolves them — a token that failed to derive leaves the gradient invalid and
+// background-image computing to "none" — and the subdued backticks are a computed colour
+// that shiki only produces in a real highlight. The second row is the shape the epic cares
+// about most: a backticked citation whose file reference cuts the row underneath the pill,
+// which must still draw ONE chip rather than three.
+const INLINE_CODE_PLAN = `# Inline code plan
+
+A bare span: \`render()\` here.
+
+See [\`src/cache.ts\`](src/cache.ts) for the detail.
+`;
+
+/** How many of a decorated row's tokens open (or close) the `code` pill. */
+function codeCaps(
+  tagged: { start: string | null; end: string | null }[],
+  edge: "start" | "end",
+): number {
+  return tagged.filter((t) => (t[edge] ?? "").split(" ").includes("code")).length;
+}
+
+test("the inline-code chip draws one pill per span (EXC-868)", async ({ daemon, page }) => {
+  const proj = await makeProject({ "src/cache.ts": "export const cache = 1;\n" });
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: INLINE_CODE_PLAN });
+    await page.goto("/");
+    await planSurface(page);
+    await expect.poll(async () => (await readEmphasis(page, 3)).tagged.length).toBeGreaterThan(0);
+
+    const bare = await readEmphasis(page, 3);
+    // Nothing is stripped: the backticks are still in the text, inside the chip.
+    expect(bare.lineText).toBe("A bare span: `render()` here.");
+    expect(codeCaps(bare.tagged, "start")).toBe(1);
+    expect(codeCaps(bare.tagged, "end")).toBe(1);
+
+    const content = bare.tagged.find((t) => t.text === "render()");
+    const marker = bare.tagged.find((t) => t.text === "`");
+    expect(content).toBeDefined();
+    expect(marker).toBeDefined();
+    // The tint resolved end to end through the live cascade, and it is the CODE layer
+    // doing the painting. One layer per member, and on a codespan the bold and italic two
+    // resolve to transparent through their var() fallback — so "contains a gradient" would
+    // have passed before this chip existed, and only "exactly one layer is not transparent"
+    // pins that --chip-code itself derived. A token that failed to derive leaves the
+    // gradient invalid and background-image computing to "none".
+    const layers = content!.backgroundImage.split(/,\s*(?=linear-gradient)/);
+    expect(layers).toHaveLength(3);
+    expect(layers.filter((l) => !/rgba\(0,\s*0,\s*0,\s*0\)/.test(l))).toHaveLength(1);
+    expect(Number.parseFloat(marker!.radiusStart)).toBeGreaterThan(0);
+    // Backticks kept AND subdued: caret-theme.ts colours them off the code between them,
+    // which is also the token boundary the file glyph depends on (caret-theme.ts's
+    // punctuation.definition.raw.markdown rule).
+    expect(marker!.color).not.toBe(content!.color);
+
+    // The citation row. The reference resolves against the real cwd through the daemon,
+    // so poll until the glyph lands before reading the pill.
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+          const el = sh?.querySelector("[data-content] [data-file-ref]") as HTMLElement | null;
+          return el === null || el === undefined
+            ? null
+            : `${el.textContent} ${el.getAttribute("data-md")}`;
+        }),
+      )
+      // The reference's own child is INSIDE the code pill rather than beside it: it carries
+      // the member but neither cap, so the chip runs continuously through it.
+      .toBe("src/cache.ts code");
+
+    const cited = await readEmphasis(page, 5);
+    expect(cited.tagged.map((t) => t.text)).toEqual(["`", "src/cache.ts", "`"]);
+    expect(codeCaps(cited.tagged, "start")).toBe(1);
+    expect(codeCaps(cited.tagged, "end")).toBe(1);
+  } finally {
+    await proj.cleanup();
+  }
+});
