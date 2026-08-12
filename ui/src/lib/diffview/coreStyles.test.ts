@@ -208,6 +208,12 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
     );
     // inherit rather than a named fill, so one rule covers selection, hover and cursor.
     expect(extension?.[1]).toMatch(/background-color:\s*inherit/);
+    // Offset from the cell's BORDER box. 100% alone resolves against the padding box,
+    // which on a gutter cell is two pixels short of the card — the strip would leave a
+    // hairline in the very seam it exists to fill.
+    expect(extension?.[1]).toMatch(
+      /inset-inline-start:\s*calc\(100%\s*\+\s*var\(--caret-gutter-divider\)\)/,
+    );
     // And the card's own inset reads the same token, so the two cannot drift.
     expect(overrideDecls).toMatch(
       /\[data-content\]\s*>\s*\[data-table-card\]\s*\{[^}]*margin-inline:\s*var\(--caret-card-inset\)/,
@@ -222,11 +228,18 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
       const card = corner.endsWith("left")
         ? String.raw`\[data-table-card-gutter\], \[data-code-card-gutter\]`
         : String.raw`\[data-table-card\], \[data-code-card\]`;
-      expect(overrideDecls).toMatch(
-        new RegExp(
-          String.raw`\[data-${column}\][^{}]*:is\(${card}\)[^{}]*\{[^}]*border-${corner}-radius:\s*0`,
-        ),
+      const override = new RegExp(
+        String.raw`\[data-${column}\][^{}]*:is\(${card}\)[^{}]*\{[^}]*border-${corner}-radius:\s*0`,
       );
+      expect(overrideDecls).toMatch(override);
+      // The override ties with the widened rule on specificity and wins on source order
+      // alone, so the order is the contract: reversed, the square-ends bug comes back
+      // with every assertion above still green.
+      const widened = new RegExp(
+        String.raw`\[data-${column}\]\s*\n?\s*\[data-(?:column-number|line)\]\[data-selected-line\][^{}]*\{[^}]*border-${corner}-radius:\s*var\(--radius\)`,
+      );
+      expect(overrideDecls.search(widened)).toBeGreaterThan(-1);
+      expect(overrideDecls.search(override)).toBeGreaterThan(overrideDecls.search(widened));
     }
   });
 
@@ -239,14 +252,22 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
     // Out of the track sizing: a spanning grid item contributes its own max-content to
     // every track it covers, and a composer's would push a narrow table into scroll.
     expect(row?.[1]).toMatch(/contain:\s*inline-size/);
-    // And pinned to the card's inline start, so a wide table scrolls under it.
-    expect(row?.[1]).toMatch(/position:\s*sticky/);
-    // The drawn width is the card's cap, set on the library's wrapper rather than on
-    // the row — a definite width on a grid item is distributed back into the tracks.
+    // The drawn width and the sticky position both belong on the library's wrapper, not
+    // on the row: the row is stretched to its whole grid area, so it has no slack to
+    // stick within, and a definite width on it is distributed back into the tracks.
+    expect(row?.[1]).not.toMatch(/position:\s*sticky/);
     const content = overrideDecls.match(
       /\[data-table-card\]\s*>\s*\[data-line-annotation\]\s*>\s*\[data-annotation-content\]\s*\{([^}]*)\}/,
     );
-    expect(content?.[1]).toMatch(/max-width:\s*var\(--caret-read-max\)/);
+    // Capped by BOTH the reading measure and the card's own visible width. The reading
+    // measure alone is right only while the pane is wide enough for the card to reach
+    // it; below that the comment overhangs the card and the Comment button lands beyond
+    // its scroll edge.
+    expect(content?.[1]).toMatch(/max-width:\s*min\(/);
+    expect(content?.[1]).toMatch(/var\(--caret-read-max\)/);
+    expect(content?.[1]).toMatch(/var\(--diffs-column-content-width/);
+    expect(content?.[1]).toMatch(/var\(--caret-seam\)/);
+    expect(content?.[1]).toMatch(/var\(--caret-card-inset\)/);
     // And the library's own sticky offset, meant for the whole view's sideways scroll,
     // is reset — inside a card it measures against the wrong scroll box.
     expect(content?.[1]).toMatch(/inset-inline-start:\s*0/);
@@ -634,7 +655,7 @@ describe("the inline image (EXC-870)", () => {
     // fenced panel's own reading measure rather than inventing a second one, with min()
     // leaving a narrow viewport in charge. Both dimensions stay auto so whichever cap
     // bites first scales the other — which is also why no object-fit is needed.
-    expect(imageRule).toMatch(/max-width:\s*min\(100%,\s*720px\)/);
+    expect(imageRule).toMatch(/max-width:\s*min\(100%,\s*var\(--caret-read-max\)\)/);
     expect(imageRule).toMatch(/max-height:/);
     expect(imageRule).toMatch(/width:\s*auto/);
     expect(imageRule).toMatch(/height:\s*auto/);
@@ -644,9 +665,12 @@ describe("the inline image (EXC-870)", () => {
     // Same VALUE, deliberately, so the two things a plan embeds are indented alike
     // rather than by two arbitrary numbers — not the same pixel rail, since the
     // panel's margin moves the row box while this one sits inside that box's own
-    // text padding. Pinned as a pair so one cannot drift without the other.
-    expect(imageRule).toMatch(/margin-inline-start:\s*0\.75rem/);
-    expect(overrideDecls).toMatch(/\[data-code-line\][^{}]*\{[^}]*margin-inline-start:\s*0\.75rem/);
+    // text padding. Both read --caret-card-inset (EXC-865), so the pairing this used to
+    // assert by comparing two literals is now carried by the value itself.
+    expect(imageRule).toMatch(/margin-inline-start:\s*var\(--caret-card-inset\)/);
+    expect(overrideDecls).toMatch(
+      /\[data-code-line\][^{}]*\{[^}]*margin-inline-start:\s*var\(--caret-card-inset\)/,
+    );
   });
 
   test("wears the chip family's radius and a scheme-correct hairline edge", () => {

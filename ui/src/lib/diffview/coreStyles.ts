@@ -61,13 +61,27 @@ const CARET_OVERRIDES = `
      together, so they share one named value rather than coupled literals. */
   :host { --caret-seam: 20px; }
   [data-content] { padding-inline-start: var(--caret-seam); }
-  /* Two more of the same kind, one level down (EXC-865). --caret-card-inset is how
-     far a card sits in from the content column, and the band extension that reaches
-     across it must be the same number or the band stops short. --caret-read-max is
-     the reading cap already shared by the fenced-code row, the code card and the
-     table card; a comment anchored inside a card is capped by it too, so the composer
-     cannot outgrow the card that scrolls it. */
-  :host { --caret-card-inset: 0.75rem; --caret-read-max: 720px; }
+  /* Three more of the same kind, one level down (EXC-865).
+
+     --caret-card-inset is how far the content column's own indented surfaces sit in
+     from it — the fenced-code row, the code card and the table card all spend it — and
+     the band extension that reaches across it must be the same number or the band
+     stops short. --caret-read-max is the reading cap those same three share; a comment
+     anchored inside a card is capped by it too, so the composer cannot outgrow the card
+     that scrolls it. EXC-870's inline image spends both as well — its own comments
+     already said it borrowed them, and a test pinned the two indents as a pair by
+     comparing literals; the token is what that pairing wanted to be.
+
+     --caret-gutter-divider is NOT caret's: it restates the library's own
+     border-right on a gutter cell (2px, its --diffs-gap-style default, which caret
+     never overrides). The band extension is positioned from the cell's PADDING box, so
+     without adding the border back it lands 2px short of the card and leaves a
+     surface-coloured hairline in the seam it exists to fill. */
+  :host {
+    --caret-card-inset: 0.75rem;
+    --caret-read-max: 720px;
+    --caret-gutter-divider: 2px;
+  }
   [data-utility-button] {
     margin-right: calc(1ch - 1lh - 0.5rem);
     background-color: var(--accent);
@@ -170,8 +184,8 @@ const CARET_OVERRIDES = `
      via :not(~) since a plan may hold several blocks. */
   [data-content] > [data-line][data-code-line]:not([data-selected-line]) {
     background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
-    margin-inline-start: 0.75rem;
-    margin-inline-end: 0.75rem;
+    margin-inline-start: var(--caret-card-inset);
+    margin-inline-end: var(--caret-card-inset);
     max-width: var(--caret-read-max);
     padding-inline-start: 2ch;
     padding-inline-end: 0.75rem;
@@ -491,8 +505,8 @@ const CARET_OVERRIDES = `
      a caret rule to a library metric is the fragility the utility-button note above
      already warns about.
 
-     The size caps are the design decision. max-width borrows the panel's own 720px reading
-     measure rather than inventing a number, and min() keeps a narrow viewport in charge;
+     The size caps are the design decision. max-width borrows the panel's own --caret-read-max
+     reading measure rather than inventing a number, and min() keeps a narrow viewport in charge;
      max-height caps the image at roughly fourteen of the library's 20px line boxes, which
      is enough for a diagram to be read and not enough for one asset to own the plan. Width
      and height stay auto so the aspect ratio survives whichever cap bites first, which is
@@ -524,12 +538,12 @@ const CARET_OVERRIDES = `
   [data-content] [data-line] [data-md-image] {
     display: block;
     user-select: none;
-    max-width: min(100%, 720px);
+    max-width: min(100%, var(--caret-read-max));
     max-height: 18rem;
     width: auto;
     height: auto;
     margin-block: 0.35rem;
-    margin-inline-start: 0.75rem;
+    margin-inline-start: var(--caret-card-inset);
     border: 1px solid color-mix(in lab, var(--paper-sunk), var(--ink) 14%);
     border-radius: var(--radius);
   }
@@ -745,7 +759,7 @@ const CARET_OVERRIDES = `
      44ch is the one tuned number here, and it means "a cell wider than this is prose". It
      was measured against the showcase: every data column of both wide tables sits under it
      and stays on one line, and the 90-character link cell in the reflow-exemptions table
-     sits well over it and wraps. Same kind of knob as the 720px reading cap above.
+     sits well over it and wraps. Same knob as --caret-read-max above.
 
      No fill and no padding. The table sits on the bare diff surface rather than in a panel:
      a fenced block is a different MODE of reading and earns its own surface, where a table
@@ -938,16 +952,18 @@ const CARET_OVERRIDES = `
      cursor tint without naming any of them, and follows the library if it recolors.
      ::before rather than ::after: the multi-line selection tick above owns ::after on
      these same cells. Reached through the gutter card, which is display: contents and
-     so does not disturb matching; both card kinds have the gap, so both are listed. */
-  [data-gutter]
-    :is([data-table-card-gutter], [data-code-card-gutter])
-    > [data-column-number]:is(
-      [data-selected-line],
-      [data-hovered],
-      [data-line-type="change-addition"],
-      [data-line-type="change-deletion"],
-      [data-caret-cursor]
-    ) {
+     so does not disturb matching; both card kinds have the gap, so both are listed.
+
+     The offset starts at the cell's BORDER box, not its padding box. An absolutely
+     positioned pseudo resolves 100% against the padding box, and a gutter cell carries
+     the library's 2px border-right, so 100% alone lands the strip two pixels early —
+     re-painting two pixels the cell's own background already covers (its border is
+     transparent on a banded row) and leaving two unpainted in the seam.
+
+     position: relative is set unconditionally rather than on the same state list: it
+     costs nothing on an unbanded cell, and two copies of a six-state list is a rule
+     that silently mispositions the strip the day someone extends one of them. */
+  [data-gutter] :is([data-table-card-gutter], [data-code-card-gutter]) > [data-column-number] {
     position: relative;
   }
   [data-gutter]
@@ -963,7 +979,7 @@ const CARET_OVERRIDES = `
     position: absolute;
     top: 0;
     bottom: 0;
-    inset-inline-start: 100%;
+    inset-inline-start: calc(100% + var(--caret-gutter-divider));
     width: calc(var(--caret-seam) + var(--caret-card-inset));
     background-color: inherit;
     pointer-events: none;
@@ -1100,11 +1116,11 @@ const CARET_OVERRIDES = `
      scroll the moment someone comments on it. Containment takes the row's width from
      the grid instead of from its contents, so opening a comment moves nothing.
 
-     The row's own width then stays the table's, and the width the comment is DRAWN at
-     is set one level down (below) — because the table's width is the wrong answer
-     twice over: a narrow table gives a cramped thread, and a wide one overhangs the
-     card's scroll box and clips the Comment button. Sticky at the card's inline start,
-     so a wide table scrolls under the comment rather than carrying it out of view.
+     The row's own width then stays the table's, and both the width the comment is DRAWN
+     at and where it sits while the table scrolls are set one level down (below) —
+     because the table's width is the wrong answer twice over: a narrow table gives a
+     cramped thread, and a wide one overhangs the card's scroll box and clips the Comment
+     button.
 
      container-type on the card would express the visible width directly, and is not
      usable: it brings layout containment, which stops the card's subgrid contributing
@@ -1113,23 +1129,35 @@ const CARET_OVERRIDES = `
   [data-content] > [data-table-card] > [data-line-annotation] {
     grid-column: 1 / -1;
     contain: inline-size;
-    position: sticky;
-    inset-inline-start: 0;
   }
-  /* The width the comment is actually drawn at. It cannot be set on the row: a grid
-     item with a definite width distributes it across the tracks it spans, which is the
-     very inflation containment was for. The library's wrapper inside that row is a
-     flex item sizing to its own content, so capping it there sets the drawn width and
-     touches no track.
+  /* The width the comment is actually drawn at, and where it sits while the table
+     scrolls under it. Neither can be set on the row above: a grid item with a definite
+     width distributes it back across the tracks it spans (the inflation containment was
+     for), and the row is stretched to its whole grid area, so a sticky row has no slack
+     to move within. Both belong on the library's own wrapper, which carries an explicit
+     width (--diffs-column-content-width, the full content column) and is already
+     position: sticky.
 
-     Its inline start is reset because the library pins it at the gutter's width
-     (left: --diffs-column-number-width, under data-overflow="scroll") so a comment
-     stays put while the WHOLE view scrolls sideways. Inside a card that offset is
-     measured against the wrong scroll box — the card is its own, and the row above is
-     already sticky within it — so left over it would push the comment off the card's
-     right edge by exactly the gutter's width. */
+     So the cap is a MINIMUM of two things, and both are load-bearing: the reading cap,
+     and the card's own visible width, which is the content column less the seam and the
+     card's two insets. Capping at the reading measure alone is right only while the pane
+     is wide enough for the card to reach it — below that the wrapper is wider than the
+     card, and the card being overflow-x: auto turns the overhang into a scrollbar with
+     the Comment button beyond its right edge.
+
+     The library's inline start is reset for a related reason: it pins the wrapper at the
+     gutter's width so a comment stays put while the WHOLE view scrolls sideways, and
+     inside a card that offset is measured against the wrong scroll box — the card is its
+     own. Left as the library sets it, the comment starts a gutter's width into the card
+     and overhangs by the same amount. */
   [data-content] > [data-table-card] > [data-line-annotation] > [data-annotation-content] {
-    max-width: var(--caret-read-max);
+    max-width: min(
+      var(--caret-read-max),
+      calc(
+        var(--diffs-column-content-width, 100%) - var(--caret-seam) - 2 *
+          var(--caret-card-inset)
+      )
+    );
     inset-inline-start: 0;
   }
 

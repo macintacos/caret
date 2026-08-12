@@ -814,6 +814,24 @@ test("a drag selection still highlights when the plan has an overflowing code-bl
   // column-mismatch error never fired.
   await expect.poll(selectedLineCount).toBeGreaterThan(0);
   expect(pageErrors.filter((m) => /renderSelection|children dont match/.test(m))).toEqual([]);
+
+  // And INSIDE the card. The library's walk skips a card whole, so its rows used to take no
+  // band at all — an accepted trade-off until EXC-865 gave both card kinds the same mirror.
+  // The fence spans 5–8, so 6–7 is the block's own code.
+  await selectGutterRange(page, 6, 7);
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        [
+          ...(document
+            .querySelector(".diffview")
+            ?.shadowRoot?.querySelectorAll("[data-code-card] > [data-line][data-selected-line]") ??
+            []),
+        ].map((el) => `${el.getAttribute("data-line")}=${el.getAttribute("data-selected-line")}`),
+      ),
+    )
+    .toEqual(["6=first", "7=last"]);
+  expect(pageErrors.filter((m) => /renderSelection|children dont match/.test(m))).toEqual([]);
 });
 
 // A plan with a fenced code block: heading (1), blank (2), prose (3), blank (4),
@@ -2925,6 +2943,22 @@ async function bandedLines(page: Page): Promise<{ carded: string[]; plain: strin
   });
 }
 
+/** Press and drag across the code BODY from `startLine` to `endLine`, holding X inside
+ * the row's own box, and leave the button down so the live band can be read.
+ * dragLineBody puts X at the plan surface's horizontal centre, which is past the right
+ * edge of a carded table row — the gesture never arms there, so a table needs its own X. */
+async function holdTableBodyDrag(page: Page, startLine: number, endLine: number): Promise<void> {
+  const x = await page.evaluate((n) => {
+    const root = document.querySelector(".diffview")?.shadowRoot;
+    const row = root?.querySelector(`[data-line="${n}"]`) as HTMLElement | null;
+    const b = row?.getBoundingClientRect();
+    return b ? b.left + b.width / 2 : 0;
+  }, startLine);
+  await page.mouse.move(x, await lineCenterY(page, startLine));
+  await page.mouse.down();
+  await page.mouse.move(x, await lineCenterY(page, endLine), { steps: 12 });
+}
+
 test("a table row's comment button appears on that row", async ({ daemon, page }) => {
   await daemon.seed({ plan: TABLE_PLAN });
   await page.goto("/");
@@ -2961,6 +2995,58 @@ test("a drag inside a table bands every row it crosses", async ({ daemon, page }
   await expect
     .poll(async () => (await bandedLines(page)).carded)
     .toEqual(["4=first", "5=", "6=last"]);
+});
+
+test("a BODY drag inside a table bands the rows it crosses", async ({ daemon, page }) => {
+  await daemon.seed({ plan: TABLE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await cellLefts(page, 3)).length).toBe(3);
+
+  // caret's own range gesture, not the library's. It never reaches the library's
+  // selection callbacks — setSelectedLines renders synchronously and reports nothing —
+  // so the cards' band has to be driven from the preview itself. Asserted live, with the
+  // button still down: on release a composer opens and takes over the highlight, which
+  // would mask a preview that painted nothing.
+  await holdTableBodyDrag(page, 4, 6);
+  await expect
+    .poll(async () => (await bandedLines(page)).carded)
+    .toEqual(["4=first", "5=", "6=last"]);
+  await page.mouse.up();
+});
+
+test("a drag out of a table into prose bands both halves", async ({ daemon, page }) => {
+  await daemon.seed({ plan: TABLE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await cellLefts(page, 3)).length).toBe(3);
+
+  // The mirror image of the spec below: the range's first row is carded and its last is
+  // not, so the "last" marker must land outside the card and "first" inside it.
+  await selectGutterRange(page, 5, 8);
+  await expect
+    .poll(async () => await bandedLines(page))
+    .toEqual({
+      plain: ["7=", "8=last"],
+      carded: ["5=first", "6="],
+    });
+});
+
+test("a click on a table row bands it", async ({ daemon, page }) => {
+  await daemon.seed({ plan: TABLE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await cellLefts(page, 3)).length).toBe(3);
+
+  // The composer's own highlight, which reaches the cards by a third route again: the
+  // selectedRange prop rather than a drag.
+  const row = page.locator(PLAN_SURFACE);
+  await row.evaluate((el) => {
+    const target = el.querySelector(".diffview")?.shadowRoot?.querySelector('[data-line="5"]');
+    (target as HTMLElement | null)?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
+  await expect.poll(async () => (await bandedLines(page)).carded).toEqual(["5=first"]);
 });
 
 test("a drag from prose into a table bands the table's rows too", async ({ daemon, page }) => {
@@ -3065,6 +3151,44 @@ test("a comment on a mid-table line renders between that row and the next", asyn
   expect(await cellLefts(page, 5)).toEqual(before);
 });
 
+test("an open composer neither moves a table's columns nor overhangs its card", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: TABLE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await cellLefts(page, 3)).length).toBe(3);
+  const before = await cellLefts(page, 5);
+
+  // The COMPOSER, not a submitted card: it is the wider of the two, so it is the real
+  // track-inflation risk, and it is what a reviewer sees first.
+  const plus = await revealGutterPlus(page, 5);
+  await plus.click();
+  await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
+  expect(await cellLefts(page, 5)).toEqual(before);
+
+  // Narrow the pane below the card's reading cap. The comment is capped by BOTH that cap
+  // and the card's own width; with only the cap it would keep its full width here and
+  // push the Comment button past the card's scroll edge.
+  await page.setViewportSize({ width: 760, height: 900 });
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const root = document.querySelector(".diffview")?.shadowRoot;
+        const card = root?.querySelector("[data-table-card]") as HTMLElement;
+        const content = root?.querySelector(
+          "[data-line-annotation] [data-annotation-content]",
+        ) as HTMLElement | null;
+        if (content == null) return 1;
+        return Math.round(
+          content.getBoundingClientRect().right - card.getBoundingClientRect().right,
+        );
+      }),
+    )
+    .toBeLessThanOrEqual(0);
+});
+
 test("a table's gutter still matches its content with a comment open", async ({ daemon, page }) => {
   await daemon.seed({ plan: TABLE_PLAN });
   await page.goto("/");
@@ -3140,6 +3264,91 @@ test("a comment on a wrapped table row anchors under that row", async ({ daemon,
     belowItsRow: true,
     insideCard: true,
   });
+});
+
+test("a wrapped table row's band covers the whole row track", async ({ daemon, page }) => {
+  const prose =
+    "a deliberately long prose cell whose text runs well past the width at which a cell stops being data and starts being prose";
+  const wrapping = [
+    "# Wrapping",
+    "",
+    "| kind | detail |",
+    "| ---- | ------ |",
+    `| prose | ${prose} |`,
+    "| short | brief |",
+    "",
+  ].join("\n");
+  await daemon.seed({ plan: wrapping });
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await cellLefts(page, 3)).length).toBe(2);
+
+  // The criterion the issue calls new: a row taller than one line. Every part of the
+  // band has to follow the row TRACK — the seam strip is inset block 0/0 and the gutter
+  // cell grows with the row through the subgrid, so a wrong assumption about line
+  // height shows up as a strip shorter than the row it belongs to.
+  await selectGutterRange(page, 5, 5);
+  await expect.poll(async () => (await bandedLines(page)).carded).toEqual(["5=single"]);
+  const band = await page.evaluate(() => {
+    const root = document.querySelector(".diffview")?.shadowRoot;
+    const row = root?.querySelector('[data-line="5"]') as HTMLElement;
+    const cell = root?.querySelector('[data-gutter] [data-column-number="5"]') as HTMLElement;
+    const header = root?.querySelector('[data-line="3"]') as HTMLElement;
+    const before = getComputedStyle(cell, "::before");
+    return {
+      taller:
+        Math.round(row.getBoundingClientRect().height) >
+        Math.round(header.getBoundingClientRect().height),
+      stripHeight: Math.round(Number.parseFloat(before.height)),
+      cellHeight: Math.round(cell.getBoundingClientRect().height),
+      rowHeight: Math.round(row.getBoundingClientRect().height),
+    };
+  });
+  expect(band.taller).toBe(true);
+  expect(band.cellHeight).toBe(band.rowHeight);
+  expect(band.stripHeight).toBe(band.rowHeight);
+});
+
+test("a scratch kept on a table line sits in the card like a comment", async ({ daemon, page }) => {
+  await daemon.seed({ plan: TABLE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await cellLefts(page, 3)).length).toBe(3);
+  await waitPastSafeModeGrace(page);
+
+  // A scratch is projected into the SAME library annotation row a comment is, so it
+  // inherits the placement — asserted rather than argued, since that inheritance is the
+  // only reason this criterion needs no code of its own.
+  const plus = await revealGutterPlus(page, 5);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+  await composerInput(composer).fill("come back to this row");
+  await composer.getByRole("button", { name: "Keep for later" }).click();
+  await expect(composer).toHaveCount(0);
+
+  const marker = scratchMarker(page);
+  await expect(marker).toBeVisible();
+  await expect(marker).toContainText("Resume");
+  expect(
+    await marker.evaluate(
+      (el) => el.closest("[data-annotation-slot]") != null && el.getBoundingClientRect().width > 0,
+    ),
+  ).toBe(true);
+  const placed = await page.evaluate(() => {
+    const root = document.querySelector(".diffview")?.shadowRoot;
+    const annotation = root?.querySelector("[data-line-annotation]") as HTMLElement | null;
+    const row = root?.querySelector('[data-line="5"]') as HTMLElement | null;
+    const next = root?.querySelector('[data-line="6"]') as HTMLElement | null;
+    if (!annotation || !row || !next) return null;
+    const a = annotation.getBoundingClientRect();
+    return {
+      insideCard: annotation.closest("[data-table-card]") !== null,
+      belowItsRow: Math.round(a.top) >= Math.round(row.getBoundingClientRect().bottom),
+      aboveTheNextRow: Math.round(a.bottom) <= Math.round(next.getBoundingClientRect().top),
+    };
+  });
+  expect(placed).toEqual({ insideCard: true, belowItsRow: true, aboveTheNextRow: true });
 });
 
 test("a comment on a table line is stored against that line", async ({ daemon, page }) => {

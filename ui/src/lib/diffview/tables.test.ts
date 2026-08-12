@@ -318,6 +318,29 @@ test("carries the comment's gutter buffer into the mirror at the same index", ()
   expect(slotOrder(mirror, "data-column-number")).toEqual(["2", "3", "4", "annotation", "5"]);
 });
 
+test("carries a comment on the table's LAST row into the card too", () => {
+  // Left outside, it would still land in the right place — but it would be drawn at the
+  // uncarded width, so two comments on one table would not match.
+  const { root, ranges } = build(TWO_BODY);
+  openComment(root, 5);
+  syncTableCards(root, ranges);
+  const card = root.querySelector(`[data-content] > [${TABLE_CARD_ATTR}="2"]`);
+  expect(slotOrder(card, "data-line")).toEqual(["2", "3", "4", "5", "annotation"]);
+  const mirror = root.querySelector(`[${TABLE_GUTTER_CARD_ATTR}="2"]`);
+  expect(slotOrder(mirror, "data-column-number")).toEqual(["2", "3", "4", "5", "annotation"]);
+});
+
+test("re-cards a table whose card no longer spans what it holds", () => {
+  // grid-row is what maps the card's children onto the parent's row tracks, so a card
+  // holding the right rows at the wrong span draws the table a track short.
+  const { root, ranges } = build(TWO_BODY);
+  syncTableCards(root, ranges);
+  const card = root.querySelector<HTMLElement>(`[${TABLE_CARD_ATTR}="2"]`);
+  card?.appendChild(document.createElement("div"));
+  syncTableCards(root, ranges);
+  expect(root.querySelector<HTMLElement>(`[${TABLE_CARD_ATTR}="2"]`)?.style.gridRow).toBe("span 4");
+});
+
 test("keeps the two columns matching with a mid-table comment open", () => {
   const { root, ranges } = build(TWO_BODY);
   openComment(root, 4);

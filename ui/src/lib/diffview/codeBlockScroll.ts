@@ -35,8 +35,9 @@ export const CARD_ATTR = "data-code-card";
  * grid-row) so it is purely structural — its cells still map to the shared subgrid row tracks
  * and keep their library styling (descendant-selector based) — and it lands at the same child
  * index as its content card, so the library's walk skips both (a card has no line index) and
- * stays balanced. Trade-off: a carded block's own code lines are not highlighted while dragging
- * across them, which keeps the rest of the selection working. */
+ * stays balanced. That the walk skips them is also why a carded block's own code lines get no
+ * selection band from the library; cardSelection.ts re-applies it inside both card kinds
+ * (EXC-865), so they highlight while dragging like any other row. */
 export const GUTTER_CARD_ATTR = "data-code-card-gutter";
 
 /** The layout metrics that decide whether a block overflows its card. For an unwrapped block

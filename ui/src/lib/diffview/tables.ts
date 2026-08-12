@@ -336,7 +336,7 @@ function lineNumbers(range: TableRange): number[] {
  * construction rather than by two separately-derived lists happening to agree, which
  * is the divergence TABLE_GUTTER_CARD_ATTR exists to prevent.
  *
- * Walked by sibling rather than queried per line: one query plus a walk of the
+ep. Walked by sibling rather than queried per line: one query plus a walk of the
  * table's own length, where a query per row is what EXC-864 measured at ~2,800
  * selector matches per repaint. */
 function unwrappedSlice(column: Element, attr: string, lines: number[]): Element[] | null {
@@ -353,18 +353,36 @@ function unwrappedSlice(column: Element, attr: string, lines: number[]): Element
     if (key !== null) keyed.push(key);
     if (key !== String(last)) continue;
     if (keyed.length !== lines.length) return null;
-    return keyed.every((k, i) => k === String(lines[i])) ? slice : null;
+    if (!keyed.every((k, i) => k === String(lines[i]))) return null;
+    // Past the last row, take any comment anchored TO it: the library emits that row
+    // after its own, so stopping at `last` would leave a comment on the table's final
+    // row outside the card while one on any other row is inside it — two comments on
+    // one table, drawn at two different widths. Nothing else can follow, since the run
+    // is bounded by the table's own lines.
+    while (
+      el.nextElementSibling !== null &&
+      !el.nextElementSibling.hasAttribute(attr) &&
+      el.nextElementSibling.matches("[data-line-annotation], [data-gutter-buffer]")
+    ) {
+      el = el.nextElementSibling;
+      slice.push(el);
+    }
+    return slice;
   }
   return null;
 }
 
-/** Whether `card` still holds exactly the range's rows, in order. Defensive: a card
- * is keyed by its header line, so the key alone cannot say whether the table under it
- * grew or shrank. In practice a content change recreates the view outright, so this is
- * belt and braces rather than a path with a known trigger. */
-function cardHoldsRange(card: Element, range: TableRange): boolean {
+/** Whether `card` still holds exactly the range's rows, in order, and is still sized
+ * for everything it holds. The row check is defensive — a card is keyed by its header
+ * line, so the key alone cannot say whether the table under it grew or shrank, and in
+ * practice a content change recreates the view outright. The span check is what keeps
+ * `grid-row` honest now that the card also carries the library's comment rows: those
+ * arrive and leave through a full re-render, so this is likewise belt and braces, but
+ * it is the only thing standing between a stale span and a table drawn one track short. */
+function cardHoldsRange(card: HTMLElement, range: TableRange): boolean {
   const rows = card.querySelectorAll(":scope > [data-line]");
   if (rows.length !== range.rows.length) return false;
+  if (card.style.gridRow !== `span ${card.children.length}`) return false;
   return range.rows.every((row, i) => rows[i]?.getAttribute("data-line") === String(row.line));
 }
 

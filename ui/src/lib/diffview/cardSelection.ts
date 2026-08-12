@@ -30,8 +30,9 @@
 import { CARD_ATTR, GUTTER_CARD_ATTR } from "$lib/diffview/codeBlockScroll.ts";
 import { TABLE_CARD_ATTR, TABLE_GUTTER_CARD_ATTR } from "$lib/diffview/tables.ts";
 
-/** An ascending, inclusive, 1-based line range — the shape both caret's composer and
- * the library's drag report. */
+/** An ascending, inclusive, 1-based line range. Ascending is this module's contract,
+ * not its callers' — the library reports a gutter drag in gesture order, so SourceView
+ * normalizes before calling in. */
 export interface SelectedLines {
   start: number;
   end: number;
@@ -63,8 +64,9 @@ type Marker = [content: string | null, gutter: string | null];
 /**
  * The marker each child of a card should carry, by index.
  *
- * Follows InteractionManager.renderSelection exactly, including where that is
- * asymmetric. A row inside the range takes `single` / `first` / `last` / `""` in both
+ * Follows InteractionManager.renderSelection's own branch, including where that is
+ * asymmetric. Its parallel data-merge-conflict-actions case is left out: a source view
+ * renders no merge conflicts, so there is nothing for it to match. A row inside the range takes `single` / `first` / `last` / `""` in both
  * columns; but where the next child is the library's annotation row, the trailing
  * marker moves onto it and the CONTENT row alone is demoted — the gutter cell keeps
  * what it had. Faithful rather than tidied: the point of this pass is that a carded row

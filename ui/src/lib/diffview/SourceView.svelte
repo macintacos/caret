@@ -224,10 +224,12 @@
     paintCardSelection(container?.shadowRoot ?? null, selectionMirror);
   }
 
-  // The library's own drag callbacks, wrapped so the cards keep up with it. A drag
-  // that stays INSIDE a card mutates no attribute at all — the library skips every
-  // row it crosses — so the observer below never fires for it and these are the only
-  // signal that the range moved. The host's own callbacks still run, unchanged.
+  // The library's own drag callbacks, wrapped so the cards keep up with it. On its
+  // FIRST frame a drag that stays inside a card mutates no attribute at all — the
+  // library skips every row it crosses — so the observer below has nothing to fire on
+  // and these are the only signal that the range moved. (From the second frame the
+  // library's clear removes what this pass wrote, so the observer does fire.) The
+  // host's own callbacks still run, unchanged.
   const trackedGutter = $derived.by(() => {
     if (gutter == null) return undefined;
     const host = gutter;
@@ -315,7 +317,13 @@
     const drag = createLineDrag({
       lineFromPoint: lineAtPoint,
       onPreview: (range) => {
-        lifecycle.select(range == null ? null : { start: range.startLine, end: range.endLine });
+        const lines = range == null ? null : { start: range.startLine, end: range.endLine };
+        lifecycle.select(lines);
+        // The cards' share of that band, from the same range. setSelectedLines renders
+        // synchronously and fires none of the library's selection callbacks, so this is
+        // the body drag's only route into the mirror — and the body drag is caret's own
+        // range gesture, not the library's.
+        trackSelection(lines);
         onLineRangePreview?.(range);
       },
       onCommit: (range) => {
