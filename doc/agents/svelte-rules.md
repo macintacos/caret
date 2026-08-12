@@ -131,7 +131,7 @@ stays green under any invocation.
   the e2e smoke. When a magic number couples TS to config, name it once and test the
   coupling.
 - **Every hue has a job; everything else is neutral.** The palette recipe
-  (`ui/src/lib/themes/recipe.ts`) draws a four-way split, and the chrome obeys it — a
+  (`ui/src/lib/themes/recipe.ts`) draws a five-way split, and the chrome obeys it — a
   reviewer should be able to predict a surface's hue from the job it does.
 
   | Job | Token | What it marks |
@@ -140,6 +140,7 @@ stays green under any invocation.
   | Novelty | `--attention` | "look here" — new, unread, worth a glance. Every count that asks to be noticed: the TopBar pending badges, the compare picker's other-version count, the status strip's tallies |
   | Semantics | `--ok` / `--danger` | added / removed, succeeded / failed |
   | Content highlight | `--mark`, `--mark-active`, `--mark-orphan` | a marked region of the document — plan-search hits, with `-active` the current one and `-orphan` the same mark with its anchor gone |
+  | Content chip | `--chip-bold`, `--chip-italic`, `--chip-code`, `--chip-link`, `--chip-ref` | the tint behind a rendered markdown span — three neutral, hue only on the two destinations |
 
   The split is by **token**, not by hue: a palette may draw two jobs from one hue family
   at different value and alpha. caret's own does — `markHue` is a lighter amber than the
@@ -147,12 +148,20 @@ stays green under any invocation.
   different jobs. Read the token, not the colour.
 
   Everything else is neutral: the ink ramp and the chip fills. Two carve-outs are
-  deliberate. The **chip vocabulary** stays neutral because neutral is what the rule
-  prescribes for a control that is neither selection, novelty, nor semantics. The
-  **keycap** derives from `currentColor` because it has no job of its own and inherits its
-  container's — which is why a key on the amber Approve button reads light and a key on a
-  neutral chip reads grey. `theme.test.ts` asserts every `ColorToken` has at least one
-  `var()` reader under `ui/src`, so a token can't stay declared for nobody.
+  deliberate. The **chip surface** — `--chip` / `--chip-hover` in `styles/derived.css`,
+  the soft-solid fill under `.float-chip` — stays neutral because neutral is what the rule
+  prescribes for a control that is neither selection, novelty, nor semantics; the content
+  chips in the table above are a different vocabulary and tint content rather than chrome.
+  The **keycap** derives from `currentColor` because it has no job of its own and inherits
+  its container's — which is why a key on the amber Approve button reads light and a key
+  on a neutral chip reads grey. `theme.test.ts` asserts every `ColorToken` has at least
+  one `var()` reader under `ui/src`, so a token can't stay declared for nobody; the five
+  content chips are the one listed exception, pinned as read by *nothing* until EXC-867
+  renders them, so the exemption fails the suite the moment it is outlived. That suite
+  also holds `--chip-link` and `--chip-ref` at least 60 degrees of hue apart in every
+  palette — the pair is `accentBright` × `ok` because it is the only one that separates in
+  all nine (Catppuccin draws `accentBright` and `--attention` eleven degrees apart), so
+  check that pin rather than your eye when adding a palette.
 - **The diff-view bridge is amber-selection-only.** The single `.diffview` rule in
   `app.css` maps caret's tokens onto `@pierre/diffs`'s `--diffs-*` properties. caret
   adopts the library's surface STRUCTURE — the layered buffer/context/separator depth

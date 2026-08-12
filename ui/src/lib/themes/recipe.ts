@@ -1,13 +1,13 @@
 // The shared shape every palette is mapped through (EXC-752), caret's own two
 // (./caret.ts) included: name the thirteen colors a palette actually decides, and
-// the seven that are always derived (the two rules, the accent wash, the two marks,
-// the orphan mark, the shadow) come out consistent for every theme instead of being
-// re-typed once per palette.
+// the twelve that are always derived (the two rules, the accent wash, the two marks,
+// the orphan mark, the five chip tints, the shadow) come out consistent for every
+// theme instead of being re-typed once per palette.
 //
 // The alpha suffixes and the two shadows are caret-dark's and caret-light's own
 // values, so a vendor theme's hairlines and highlight marks sit at exactly the
 // weight caret's chrome was designed around — only the hue changes. A palette that
-// wants a derived wash on some other hue says so through the three optional
+// wants a derived wash on some other hue says so through the eight optional
 // overrides below rather than by writing its tokens out by hand.
 
 import type { ColorToken, Scheme, ShikiThemeId, Theme, ThemeId } from "$lib/theme.ts";
@@ -45,7 +45,7 @@ export interface PaletteInput {
   attention: string;
 
   // Hue overrides. A derived wash normally rides the color it belongs to; these
-  // three name a different hue for the cases where a palette decides one
+  // eight name a different hue for the cases where a palette decides one
   // separately, so the weight still comes from the recipe and only the hue moves.
 
   /** The hue the two hairline rules ride. Defaults to `ink` — caret's own pair
@@ -57,6 +57,33 @@ export interface PaletteInput {
   /** The hue the two marks ride. Falls back to `washHue`, then `accent`, so a
    * palette whose marks and wash share a hue declares it once. */
   markHue?: string;
+
+  // The five plan-view chip tints. Three ride the neutral ramp and only two carry
+  // hue, which is what keeps a paragraph holding several of them quiet. Emphasis is
+  // "more ink": bold takes `ink` and italic the softer `inkSoft`, so bold reads the
+  // heavier of the two in either scheme. Code is verbatim rather than semantic, so
+  // it takes the mid-tone `neutral` — a grey, which is also what holds it apart
+  // from the reference chip. The two that name a destination are the hued pair:
+  // `accentBright` for a link, `ok` for a resolved reference, where green carries
+  // the same "it resolved" reading it already carries on a diff addition.
+  //
+  // The pair is `accentBright` × `ok` rather than any other two because it is the
+  // only pairing that separates in all nine palettes: Catppuccin draws
+  // `accentBright` from lavender and `attention` from blue, eleven degrees apart,
+  // so a link and a reference tinted from those would be the same chip in four
+  // flavors. theme.test.ts holds the surviving pair to a 60-degree floor.
+  // `accent` stays reserved for selection and brand, and `danger` stays semantic.
+
+  /** The hue `--chip-bold` rides. Defaults to `ink`. */
+  chipBoldHue?: string;
+  /** The hue `--chip-italic` rides. Defaults to `inkSoft`. */
+  chipItalicHue?: string;
+  /** The hue `--chip-code` rides. Defaults to `neutral`. */
+  chipCodeHue?: string;
+  /** The hue `--chip-link` rides. Defaults to `accentBright`. */
+  chipLinkHue?: string;
+  /** The hue `--chip-ref` rides. Defaults to `ok`. */
+  chipRefHue?: string;
 
   /** The shiki theme this palette highlights code with: the vendor's own published
    * one (EXC-896), or — for caret's pair — the theme authored for it under the same
@@ -73,10 +100,11 @@ const SHADOW: Record<Scheme, string> = {
 
 // How hard the derived washes sit. A light palette takes the softer set — the same
 // asymmetry caret-light already has, where a tint over a bright surface needs less
-// alpha to read than one over a dark surface.
-const ALPHA: Record<Scheme, { wash: string; mark: string; markActive: string }> = {
-  dark: { wash: "29", mark: "2e", markActive: "57" },
-  light: { wash: "1f", mark: "24", markActive: "47" },
+// alpha to read than one over a dark surface. `chip` sits below the selection wash
+// on purpose: one wash marks one row, while a paragraph can carry a dozen chips.
+const ALPHA: Record<Scheme, { wash: string; mark: string; markActive: string; chip: string }> = {
+  dark: { wash: "29", mark: "2e", markActive: "57", chip: "24" },
+  light: { wash: "1f", mark: "24", markActive: "47", chip: "1c" },
 };
 
 /** Expand a palette's decided colors into caret's full token set. */
@@ -101,6 +129,11 @@ export function paletteTheme(input: PaletteInput): Theme {
     "--mark": `${markHue}${alpha.mark}`,
     "--mark-active": `${markHue}${alpha.markActive}`,
     "--mark-orphan": `${input.neutral}29`,
+    "--chip-bold": `${input.chipBoldHue ?? input.ink}${alpha.chip}`,
+    "--chip-italic": `${input.chipItalicHue ?? input.inkSoft}${alpha.chip}`,
+    "--chip-code": `${input.chipCodeHue ?? input.neutral}${alpha.chip}`,
+    "--chip-link": `${input.chipLinkHue ?? input.accentBright}${alpha.chip}`,
+    "--chip-ref": `${input.chipRefHue ?? input.ok}${alpha.chip}`,
     "--ok": input.ok,
     "--danger": input.danger,
     "--attention": input.attention,
