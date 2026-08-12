@@ -12,7 +12,8 @@
 // record is where both halves live, and its `sunk` / `ink` are the same values
 // `--paper-sunk` / `--ink` carry.
 //
-// The three structural marker rules are deliberately ABSENT. caret-theme.ts appends them
+// caret's appended markdown rules — the structural markers and EXC-867's emphasis
+// set — are deliberately ABSENT. caret-theme.ts appends them
 // to every theme it resolves, and appended-last is what makes them win; a copy here would
 // sit among the rules it exists to beat.
 //

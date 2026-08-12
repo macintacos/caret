@@ -17,7 +17,7 @@ import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
 // (EXC-730) — at module load.
 //
 // These tests pin what the resolver adds on top of that lookup: caret's three
-// structural marker rules, appended last for every registered theme. The two
+// appended markdown rules, added last for every registered theme. The two
 // halves' own contracts sit either side of it — caret's own pair spends the named
 // color set and nothing else, and a vendor palette carries its upstream rule set
 // whole.
@@ -52,15 +52,20 @@ const VENDOR_PALETTES = THEME_IDS.flatMap((id) => {
   return isCaretOwn(shikiTheme) ? [] : [{ id, shikiTheme }];
 });
 
-/** How many rules caret appends over the theme a palette names — the two EXC-692 fence
- * rules plus the inline-code backtick (caret-theme.ts's `structuralMarkerRules`). */
-const STRUCTURAL_RULES = 3;
+/** How many rules caret appends over the theme a palette names — the three structural
+ * markers plus the four emphasis rules (caret-theme.ts's `caretMarkdownRules`). */
+const APPENDED_RULES = 7;
 
 const FENCE_MARKERS = "markup.fenced_code.block.markdown punctuation.definition.markdown";
 const FENCE_LANGUAGE = "fenced_code.block.language";
 const INLINE_RAW = "punctuation.definition.raw.markdown";
+const BOLD = "markup.bold.markdown";
+const ITALIC = "markup.italic.markdown";
+const NESTED_EMPHASIS = "markup.bold.markdown markup.italic.markdown";
+const BOLD_MARKERS = "punctuation.definition.bold.markdown";
+const ITALIC_MARKERS = "punctuation.definition.italic.markdown";
 
-/** The scopes those three rules own, in the order the resolver appends them. */
+/** The scopes the three structural rules own, in the order the resolver appends them. */
 const STRUCTURAL_SCOPES = [FENCE_MARKERS, FENCE_LANGUAGE, INLINE_RAW];
 
 /** The half of the named color set nothing but the highlighter spends (EXC-902).
@@ -178,7 +183,7 @@ describe("caret's own shiki themes", () => {
       });
 
       test("leaves the structural markers to the resolver", () => {
-        // The resolver appends structuralMarkerRules to every theme, and
+        // The resolver appends caretMarkdownRules to every theme, and
         // appended-last is what makes them win. A copy carried here would sit
         // among the rules it is supposed to beat.
         const scopes = (theme.settings ?? []).flatMap((rule) => rule.scope ?? []);
@@ -225,7 +230,7 @@ describe("caret-theme ↔ THEMES palette sync", () => {
         // Same precedence withStructuralOverrides applies, so the expected length is
         // computed the way production computes it rather than paraphrasing it.
         const upstreamRules = upstream.settings ?? upstream.tokenColors ?? [];
-        expect(theme.settings).toHaveLength(upstreamRules.length + STRUCTURAL_RULES);
+        expect(theme.settings).toHaveLength(upstreamRules.length + APPENDED_RULES);
       });
 
       test("emits colors caret's own set does not name", () => {
@@ -249,9 +254,9 @@ describe("caret-theme ↔ THEMES palette sync", () => {
 });
 
 // AC 3's structural half. There is one resolution path now, so every registered
-// theme takes the same three rules — and shiki is last-match-wins, so appending them
+// theme takes the same seven rules — and shiki is last-match-wins, so appending them
 // is what makes them beat whatever the theme underneath says about those scopes.
-describe("caret's structural marker rules", () => {
+describe("caret's appended markdown rules", () => {
   for (const id of THEME_IDS) {
     // Resolved fresh rather than read off the cached object, for the reason the
     // vendor block above spells out: shiki's normalizeTheme mutates the array it is
@@ -259,7 +264,7 @@ describe("caret's structural marker rules", () => {
     test(`${id} carries them last, in order`, () => {
       const tokens = THEMES[id].tokens;
       const rules = shikiThemeForPalette(THEMES[id]).settings ?? [];
-      const [markers, language, raw] = rules.slice(-STRUCTURAL_RULES);
+      const [markers, language, raw, bold, italic, nested, emphasis] = rules.slice(-APPENDED_RULES);
       expect(markers?.scope).toEqual([FENCE_MARKERS]);
       expect(markers?.settings.foreground).toBe(tokens["--ink-faint"]);
       expect(language?.scope).toEqual([FENCE_LANGUAGE]);
@@ -267,6 +272,19 @@ describe("caret's structural marker rules", () => {
       expect(language?.settings.fontStyle).toBe("bold");
       expect(raw?.scope).toEqual([INLINE_RAW]);
       expect(raw?.settings.foreground).toBe(tokens["--ink-soft"]);
+      // Each emphasis rule carries fontStyle and NOTHING else, so each palette's own
+      // ink survives; only the markers take a color of their own.
+      expect(bold?.scope).toEqual([BOLD]);
+      expect(bold?.settings).toEqual({ fontStyle: "bold" });
+      expect(italic?.scope).toEqual([ITALIC]);
+      expect(italic?.settings).toEqual({ fontStyle: "italic" });
+      // The nested rule sits after both, and carries BOTH styles: textmate reads
+      // fontStyle off the single most-specific match rather than OR-ing the ancestors,
+      // so without it `***x***` resolves against markup.italic.markdown alone.
+      expect(nested?.scope).toEqual([NESTED_EMPHASIS]);
+      expect(nested?.settings).toEqual({ fontStyle: "bold italic" });
+      expect(emphasis?.scope).toEqual([BOLD_MARKERS, ITALIC_MARKERS]);
+      expect(emphasis?.settings.foreground).toBe(tokens["--ink-faint"]);
     });
   }
 });
@@ -358,6 +376,54 @@ describe("inline-code file references stay tokenized for fileRefTag", () => {
         col += token.content.length;
       }
       expect(starts).toContain(PATH_COL);
+    });
+  }
+});
+
+// EXC-867: bold reads bold and italic reads italic in the plan view, whatever theme
+// a reviewer picked — caret's own pair styles `markup.bold` / `markup.italic` itself,
+// but no vendor theme is obliged to, so the rendered claim has to be checked against
+// every registered palette rather than against caret's two.
+//
+// The marker assertion is the load-bearing one, for the same reason the inline-code
+// backtick above is: shiki merges adjacent tokens that style identically, so while the
+// `**` markers and the content between them share a style, `**bold**` arrives as ONE
+// token. Giving the markers their own ink is what splits it into `**` / `bold` / `**`,
+// which is the boundary the decoration pass tags from.
+describe("markdown emphasis", () => {
+  const SAMPLE = ["**bold**", "*italic*", "***both***"].join("\n");
+
+  let shared: Awaited<ReturnType<typeof createHighlighterCore>> | undefined;
+  async function tokenizeEmphasis(id: ThemeId) {
+    shared ??= await createHighlighterCore({
+      themes: THEME_IDS.map(shikiThemeFor),
+      langs: [import("shiki/langs/markdown.mjs")],
+      engine: createCaretRegexEngine(),
+    });
+    return shared.codeToTokensBase(SAMPLE, {
+      lang: "markdown",
+      theme: id,
+      ...CARET_TOKENIZE_OPTIONS,
+    });
+  }
+
+  for (const id of THEME_IDS) {
+    test(`${id} renders emphasis in its font style and subdues the markers`, async () => {
+      const [boldLine = [], italicLine = [], bothLine = []] = await tokenizeEmphasis(id);
+      const faint = expectedPalette(id).comment;
+      // shiki's fontStyle is a bitmask (1 italic, 2 bold, 4 underline) and a marker
+      // sitting inside emphasis carries several bits at once, so read it with AND.
+      expect((boldLine.find((t) => t.content === "bold")?.fontStyle ?? 0) & 2).toBe(2);
+      expect((italicLine.find((t) => t.content === "italic")?.fontStyle ?? 0) & 1).toBe(1);
+      expect(boldLine.find((t) => t.content === "**")?.color?.toLowerCase()).toBe(faint);
+      expect(italicLine.find((t) => t.content === "*")?.color?.toLowerCase()).toBe(faint);
+      // Bold INSIDE italic reads as both (bitmask 3), the case textmate gets wrong on
+      // its own: it resolves fontStyle from one most-specific rule instead of OR-ing
+      // the ancestors, so without the nested rule `***both***` renders italic-only.
+      expect((bothLine.find((t) => t.content === "both")?.fontStyle ?? 0) & 3).toBe(3);
+      // The split itself, which no color assertion can see: without the marker rule
+      // the whole `**bold**` is a single token and there is nothing to decorate.
+      expect(boldLine.length).toBeGreaterThan(1);
     });
   }
 });

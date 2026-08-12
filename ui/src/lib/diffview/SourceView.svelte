@@ -18,6 +18,8 @@
   import { clearSearchHighlights, paintSearchHighlights } from "$lib/diffview/searchHighlight.ts";
   import type { SearchMatch } from "$lib/diffview/planSearch.ts";
   import { type CodeBlockRange, codeBlockRanges, tagCodeBlockRows } from "$lib/diffview/codeBlocks.ts";
+  import { decorateInlineRuns } from "$lib/diffview/inlineDecorate.ts";
+  import type { InlineSpanMap } from "$lib/diffview/inlineSpans.ts";
   import { syncCodeBlockCards } from "$lib/diffview/codeBlockScroll.ts";
   import { preloadFenceLanguages, scanFenceLanguages } from "$lib/diffview/languages.ts";
   import { registerCaretDiffThemes } from "$lib/diffview/theme.ts";
@@ -58,6 +60,13 @@
     /** A token over a file reference was clicked, with the token element to
      * anchor the preview to. */
     onFileRefClick?: (ref: FileRefSpan, tokenElement: HTMLElement) => void;
+    /** Opt-in inline-markdown layer (EXC-855, EXC-867): the flat atomic runs per
+     * display line. Each row's tokens are split so none straddles a run, then
+     * tagged data-md so the override sheet draws the emphasis chips. Omit it to
+     * leave rows as the library painted them. Compare mode never reaches this pass
+     * at all — it renders SourceDiffView, a different component — since these
+     * affordances are single-version only. */
+    inline?: InlineSpanMap;
     /** Fires once the view's container is bound, handing the parent an
      * imperative API (currently scroll-to-line) that closes over the container.
      * Lets callers jump the view without reaching into the library's DOM. */
@@ -108,6 +117,7 @@
     openUrl = openLinkInNewTab,
     fileRefs,
     onFileRefClick,
+    inline,
     onReady,
     gutter,
     onLineComment,
@@ -373,6 +383,7 @@
   // each repaint.
   const EMPTY_FILE_REFS: FileRefSpanMap = new Map();
   const EMPTY_LINKS: LinkSpanMap = new Map();
+  const EMPTY_INLINE: InlineSpanMap = new Map();
   $effect(() => {
     const root = container?.shadowRoot;
     if (root == null) return;
@@ -387,6 +398,9 @@
     // alongside the tags after every repaint. `links` is memoized by the parent, so
     // this stays a stable reference and doesn't re-arm the observer each render.
     const linkSpans = links;
+    // And the inline-markdown runs (EXC-867). Memoized by the parent alongside the
+    // link layer they come from, so this stays a stable reference too.
+    const inlineSpans = inline;
     let raf = 0;
     // Tag the rows, then wrap each overflowing block in its scroll card (EXC-729). Both re-run
     // after every library repaint via the observer below; syncCodeBlockCards is idempotent (an
@@ -396,6 +410,13 @@
     const tag = () => {
       tagCodeBlockRows(root, ranges);
       syncCodeBlockCards(root, ranges);
+      // Split each row's tokens on the inline-run and file-reference boundaries and
+      // tag them (EXC-867). This MUST precede tagFileRefTokens: it produces the
+      // partition that pass walks, and the cut at a reference's own columns is what
+      // lets the glyph land on a token bounded by the reference rather than on a
+      // coarse prose run tagTokenAt would refuse. Idempotent — a settled row mutates
+      // nothing — so it costs one extra frame rather than looping the observer.
+      decorateInlineRuns(root, inlineSpans ?? EMPTY_INLINE, refs ?? EMPTY_FILE_REFS);
       // Always run — the clear-stale pass lives inside tagFileRefTokens, so a
       // populated→empty transition still drops the prior icons.
       tagFileRefTokens(root, refs ?? EMPTY_FILE_REFS);

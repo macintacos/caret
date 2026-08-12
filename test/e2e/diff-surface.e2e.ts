@@ -15,6 +15,7 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { discardConfirm, unsentRows } from "@test/e2e/support/chrome.ts";
+import { makeProject } from "@test/e2e/support/file-refs.ts";
 import {
   expect,
   test,
@@ -2300,3 +2301,274 @@ for (const colorScheme of ["light", "dark"] as const) {
     expect(alpha).toBeLessThan(1);
   });
 }
+
+// EXC-867: inline bold and italic render as real glyphs inside the chip family's
+// round-rects, markers kept and subdued. Everything below needs a real browser and
+// could not be a unit: the decoration pass runs inside the library's shadow root
+// after an async repaint, the chip tints and radius are custom properties that only
+// a live cascade resolves (a token that failed to derive computes to nothing at
+// all), the weight/slant separation is a computed font style, and the monospace
+// grid check is real font metrics. The pure half — the run grouping, the pill
+// boundaries and the file-reference cut — is ui/src/lib/diffview/inlineDecorate.test.ts,
+// and the theme rules are ui/src/lib/caret-theme.test.ts.
+const EMPHASIS_PLAN = `# Emphasis Plan
+
+Plain prose on its own line here.
+
+This line has **bold text** and *italic text* on it.
+
+Nested ***both at once*** sits here.
+
+Bold wrapping code: **before \`inline()\` after** ends here.
+
+**AAAA** and *BB* here
+
+xxAAAAxx and xBBx here
+`;
+
+/** Reads the decorated row `n` out of the source view's shadow root. */
+function readEmphasis(page: Page, n: number) {
+  return page.evaluate((line) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+    const row = sh?.querySelector(`[data-content] [data-line="${line}"]`) ?? null;
+    const tokens = [...(row?.children ?? [])] as HTMLElement[];
+    const tagged = tokens.filter((t) => t.hasAttribute("data-md"));
+    const withText = (t: HTMLElement) => ({
+      text: t.textContent ?? "",
+      md: t.getAttribute("data-md"),
+      start: t.getAttribute("data-md-start"),
+      end: t.getAttribute("data-md-end"),
+      weight: getComputedStyle(t).fontWeight,
+      style: getComputedStyle(t).fontStyle,
+      color: getComputedStyle(t).color,
+      backgroundImage: getComputedStyle(t).backgroundImage,
+      radiusStart: getComputedStyle(t).borderStartStartRadius,
+      radiusEnd: getComputedStyle(t).borderEndEndRadius,
+    });
+    return {
+      lineText: tokens.map((t) => t.textContent ?? "").join(""),
+      tokens: tokens.map(withText),
+      tagged: tagged.map(withText),
+      boldStarts: tagged.filter((t) =>
+        (t.getAttribute("data-md-start") ?? "").split(" ").includes("bold"),
+      ).length,
+      boldEnds: tagged.filter((t) =>
+        (t.getAttribute("data-md-end") ?? "").split(" ").includes("bold"),
+      ).length,
+    };
+  }, n);
+}
+
+/** The painted width of a row's text, measured over its text nodes so the grid
+ * comparison reads glyph advance rather than the full-width grid cell. */
+function rowTextWidth(page: Page, n: number) {
+  return page.evaluate((line) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+    const row = sh?.querySelector(`[data-content] [data-line="${line}"]`);
+    if (row === null || row === undefined) return null;
+    const range = document.createRange();
+    range.selectNodeContents(row);
+    return range.getBoundingClientRect().width;
+  }, n);
+}
+
+for (const colorScheme of ["light", "dark"] as const) {
+  test(`inline emphasis chips resolve their tint, radius and glyphs in ${colorScheme}`, async ({
+    daemon,
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme });
+    await daemon.seed({ plan: EMPHASIS_PLAN });
+    await page.goto("/");
+    await planSurface(page);
+    await expect(page.getByText("Plain prose on its own line here.")).toBeVisible();
+
+    // The decoration lands after the library's async highlight repaints the rows,
+    // so poll until line 5 carries its tags rather than reading once.
+    await expect.poll(async () => (await readEmphasis(page, 5)).tagged.length).toBeGreaterThan(0);
+
+    const bold = await readEmphasis(page, 5);
+    // The markers stay in the text — nothing is hidden or rewritten.
+    expect(bold.lineText).toBe("This line has **bold text** and *italic text* on it.");
+
+    const boldContent = bold.tagged.find((t) => t.text === "bold text");
+    const boldMarker = bold.tagged.find((t) => t.text === "**");
+    const italicContent = bold.tagged.find((t) => t.text === "italic text");
+    expect(boldContent).toBeDefined();
+    expect(boldMarker).toBeDefined();
+    expect(italicContent).toBeDefined();
+
+    // EXC-858 measured the bold and italic TINTS within a 1.05 contrast ratio in
+    // five of nine palettes, so the tint cannot be the separator — the weight and
+    // slant are, and they come from shiki. This is that assertion.
+    expect(Number(boldContent!.weight)).toBeGreaterThanOrEqual(700);
+    expect(italicContent!.style).toBe("italic");
+    const plain = await readEmphasis(page, 3);
+    expect(Number(plain.tokens[0]!.weight)).toBeLessThan(700);
+
+    // The markers read as markers: their own subdued ink, distinct from the content.
+    expect(boldMarker!.color).not.toBe(boldContent!.color);
+
+    // The chip resolved end to end. --chip-bold and --radius are custom properties;
+    // a token that failed to derive leaves the gradient invalid and background-image
+    // computes to "none", so this cannot pass on a broken cascade.
+    expect(boldContent!.backgroundImage).toContain("linear-gradient");
+    expect(boldContent!.backgroundImage).not.toBe("none");
+    expect(Number.parseFloat(boldMarker!.radiusStart)).toBeGreaterThan(0);
+  });
+}
+
+test("a fragmented emphasis element still draws exactly one pill (EXC-867)", async ({
+  daemon,
+  page,
+}) => {
+  // `**before `inline()` after**` fragments into three runs once the inline-code
+  // run is split out, but it is ONE bold element and must close its pill once.
+  await daemon.seed({ plan: EMPHASIS_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await readEmphasis(page, 9)).tagged.length).toBeGreaterThan(0);
+
+  const row = await readEmphasis(page, 9);
+  expect(row.boldStarts).toBe(1);
+  expect(row.boldEnds).toBe(1);
+  // Several tokens carry the member; only the outer two carry the rounded ends.
+  expect(row.tagged.filter((t) => (t.md ?? "").split(" ").includes("bold")).length).toBeGreaterThan(
+    1,
+  );
+
+  // Nested emphasis is both at once, and textmate needs the descendant rule to say so.
+  await expect.poll(async () => (await readEmphasis(page, 7)).tagged.length).toBeGreaterThan(0);
+  const nested = await readEmphasis(page, 7);
+  const both = nested.tagged.find((t) => t.text === "both at once");
+  expect(both).toBeDefined();
+  expect((both!.md ?? "").split(" ").sort()).toEqual(["bold", "italic"]);
+  expect(Number(both!.weight)).toBeGreaterThanOrEqual(700);
+  expect(both!.style).toBe("italic");
+});
+
+test("emphasis costs the monospace grid nothing (EXC-867)", async ({ daemon, page }) => {
+  // The issue's de-escalation ladder names the grid as the likeliest trigger: if a
+  // chip's padding or the mono font's bold/italic advance width shifted columns,
+  // vim motions, drag-range selection and the search highlights would all stop
+  // matching source columns. Lines 11 and 13 are the same 22 characters, one styled
+  // and one not, so an equal painted width is the grid holding.
+  await daemon.seed({ plan: EMPHASIS_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await readEmphasis(page, 11)).tagged.length).toBeGreaterThan(0);
+
+  const styled = await rowTextWidth(page, 11);
+  const plain = await rowTextWidth(page, 13);
+  expect(styled).not.toBeNull();
+  expect(plain).not.toBeNull();
+  expect(Math.abs((styled as number) - (plain as number))).toBeLessThan(1);
+});
+
+test("a backticked file citation keeps its glyph through the decoration pass (EXC-867)", async ({
+  daemon,
+  page,
+}) => {
+  // The cross-issue regression this pass had to avoid. The codespan run covers the
+  // backticks while the merged reference sits inside them, so the two partitions
+  // interleave; tagTokenAt needs a token bounded by the reference. Nothing about
+  // this shape may regress — it is the repo's commonest citation.
+  const proj = await makeProject({ "src/cache.ts": "export const cache = 1;\n" });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nSee [`src/cache.ts`](src/cache.ts) for the detail.\n",
+    });
+    await page.goto("/");
+    await planSurface(page);
+
+    const glyph = () =>
+      page.evaluate(() => {
+        const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+        const el = sh?.querySelector("[data-content] [data-file-ref]") as HTMLElement | null;
+        return el?.textContent ?? null;
+      });
+    // The reference resolves against the real cwd through the daemon, so poll.
+    await expect.poll(glyph).toBe("src/cache.ts");
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("the decoration pass leaves the row's other consumers intact (EXC-867)", async ({
+  daemon,
+  page,
+}) => {
+  // The issue's "what must not break" list. Splitting a row into more elements —
+  // and so more text nodes — is exactly what could break the passes that walk them,
+  // and every one of these needs a real browser: rangeForSpan resolves a DOM Range
+  // over the live text nodes, and the decoration only exists after the library's
+  // async repaint.
+  await daemon.seed({ plan: EMPHASIS_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await readEmphasis(page, 5)).tagged.length).toBeGreaterThan(0);
+
+  // Search highlights (rangeForSpan) still land on exactly the matched columns of a
+  // SPLIT row. "bold text" sits inside the emphasis run on line 5, so its range is
+  // resolved across the tokens the pass produced rather than one flat token.
+  // Safe mode swallows shortcuts for its grace window, so `/` needs it past first.
+  await waitPastSafeModeGrace(page);
+  await page.keyboard.press("/");
+  await page.keyboard.type("bold text");
+  // Both registries: the sole match is the CURRENT one, so it paints in
+  // caret-search-current and the caret-search underlay is empty.
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        ["caret-search", "caret-search-current"].flatMap((name) =>
+          [...(CSS.highlights.get(name) ?? [])].map((r) => r.toString()),
+        ),
+      ),
+    )
+    .toContain("bold text");
+  await page.keyboard.press("Escape");
+
+  // Decoration survives a repaint. The 2s poll re-renders the view, which is the
+  // same row rewrite a version switch or resolve landing causes.
+  await waitForTwoPollTicks(page);
+  expect((await readEmphasis(page, 5)).tagged.length).toBeGreaterThan(0);
+
+  // A fenced code block is never visited: links.ts emits no runs for in-code lines,
+  // so the block's rows and its fence markers reach codeBlocks.ts untouched. Asserted
+  // as absence because a split fence token would carry a duplicated data-code-fence.
+  const inCode = await page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+    return {
+      taggedInCode: sh?.querySelectorAll("[data-code-line] [data-md]").length ?? -1,
+      fenceMarkers: sh?.querySelectorAll("[data-code-fence]").length ?? -1,
+    };
+  });
+  expect(inCode.taggedInCode).toBe(0);
+  expect(inCode.fenceMarkers).toBe(0); // this plan has no fences; the query resolves
+});
+
+test("compare mode never reaches the decoration pass (EXC-867)", async ({ daemon, page }) => {
+  // Scope boundary EXC-855 draws for the whole epic: these affordances are
+  // single-version only. Compare renders SourceDiffView, which is passed no inline
+  // layer, so this is an absence assertion rather than a styling one — toHaveCount(0)
+  // says "not offered here", which toBeHidden could not distinguish from "painted
+  // nothing".
+  await daemon.seedVersions(2, [
+    EMPHASIS_PLAN,
+    `${EMPHASIS_PLAN}\nA second version with **more bold**.\n`,
+  ]);
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await readEmphasis(page, 5)).tagged.length).toBeGreaterThan(0);
+
+  await page.getByRole("button", { name: "Compare versions" }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+        return sh?.querySelectorAll("[data-md]").length ?? -1;
+      }),
+    )
+    .toBe(0);
+});

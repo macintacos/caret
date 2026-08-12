@@ -18,19 +18,20 @@ import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
 // included: an upstream theme's code background is inert on every caret surface,
 // so overwriting it with --paper-sunk would be a deviation that buys nothing.
 //
-// What the resolver adds is caret's three structural marker rules, appended last —
-// last-match-wins is what makes them beat whatever the theme underneath says. They
-// are painted from the palette's own tokens in theme.ts, the single source of truth
-// for every color the UI paints (EXC-730; supersedes the hand-copied duplication of
-// EXC-370). shiki resolves token colors at highlight time and can't read CSS custom
-// properties, so the values are read out of THEMES here rather than re-typed.
+// What the resolver adds is caret's own markdown rules — three structural markers and
+// four for emphasis — appended last, because last-match-wins is what makes them beat
+// whatever the theme underneath says. They are painted from the palette's own tokens in
+// theme.ts, the single source of truth for every color the UI paints (EXC-730;
+// supersedes the hand-copied duplication of EXC-370). shiki resolves token colors at
+// highlight time and can't read CSS custom properties, so the values are read out of
+// THEMES here rather than re-typed.
 interface Palette {
-  comment: string; // --ink-faint: the fence markers
+  comment: string; // --ink-faint: the fence markers and the ** / _ emphasis markers
   punctuation: string; // --ink-soft: the inline-code backtick
   keyword: string; // --accent: the fence's language tag
 }
 
-// The three tokens structuralMarkerRules paints with. They are plain 6-digit hex
+// The three tokens caretMarkdownRules paints with. They are plain 6-digit hex
 // (no alpha), which is what shiki accepts.
 function paletteFromTheme(t: Theme): Palette {
   const k = t.tokens;
@@ -41,22 +42,48 @@ function paletteFromTheme(t: Theme): Palette {
   };
 }
 
-/** The markdown structural markers caret styles itself, whatever theme colors the
+/** The markdown markers and emphasis caret styles itself, whatever theme colors the
  * code underneath. Every theme takes them appended last, which is how they beat
  * whatever the theme underneath says about those scopes.
  *
- * The first two are EXC-692 — subdue the ``` / ~~~ fence markers and make the language
+ * The fence pair is EXC-692 — subdue the ``` / ~~~ fence markers and make the language
  * info-string prominent, so a code block reads as its own element in the plan view.
  *
- * The third is load-bearing beyond its color. fileRefTag.ts tags the token that BEGINS
- * at a file reference (the column past the opening backtick), and shiki merges adjacent
- * tokens that style identically. Every upstream theme colors the backtick exactly like
- * the code between them, which collapses `` `path` `` into a single token and silently
- * drops the file icon, pointer cursor, and hover chip while leaving the click target
- * alive (EXC-687, EXC-840). Coloring the backtick separately keeps the boundary. Under
- * caret's own themes it also lifts the backtick off the generic `punctuation` hue, so
- * the boundary holds by color rather than by rule order alone. */
-function structuralMarkerRules(p: Palette): NonNullable<ThemeRegistrationRaw["settings"]> {
+ * The backtick rule is load-bearing beyond its color. fileRefTag.ts tags the token that
+ * BEGINS at a file reference (the column past the opening backtick), and shiki merges
+ * adjacent tokens that style identically. Every upstream theme colors the backtick
+ * exactly like the code between them, which collapses `` `path` `` into a single token
+ * and silently drops the file icon, pointer cursor, and hover chip while leaving the
+ * click target alive (EXC-687, EXC-840). Coloring the backtick separately keeps the
+ * boundary. Under caret's own themes it also lifts the backtick off the generic
+ * `punctuation` hue, so the boundary holds by color rather than by rule order alone.
+ *
+ * The last four are EXC-867, and they divide by which half of the render they reach.
+ *
+ * The MARKER rule is the one the plan view depends on, and it is load-bearing well beyond
+ * its color — the same boundary trick as the backtick above. The grammar scopes the `**` /
+ * `_` markers apart from the content, but shiki merges the three back into ONE token while
+ * they style identically, so giving the markers their own ink is what splits `**bold**`
+ * into `**` / `bold` / `**`. The decoration pass tags those pieces; subduing the markers is
+ * what a reader wants of them anyway.
+ *
+ * The three `fontStyle` rules do NOT reach the plan view, and it is worth knowing why
+ * before deleting them. @pierre/diffs carries a token's font style into the DOM as a custom
+ * property and consumes it with `font-weight: light-dark(…)`, which is invalid — light-dark()
+ * is defined over `<color>` — so the library renders every token at one weight whatever the
+ * theme says. The plan view's weight and slant are therefore declared in
+ * `diffview/coreStyles.ts` off the decoration pass's own attributes instead. These rules
+ * still reach the OTHER shiki surface: the excerpt preview (`diffview/highlight.ts`) renders
+ * through shiki's own codeToHast, which honours `fontStyle`, so a cited markdown file's
+ * excerpt shows real emphasis. Keeping them is what makes the theme honest on its own terms
+ * rather than shaped around one consumer's bug.
+ *
+ * The nested rule is not redundant with the two beside it. textmate resolves `fontStyle`
+ * from the single most-specific matching rule rather than OR-ing what the ancestor scopes
+ * say, so `***both***` — whose content carries `markup.bold.markdown` AND
+ * `markup.italic.markdown` — otherwise resolves against `markup.italic.markdown` alone and
+ * renders italic with no weight. The descendant scope is more specific than either. */
+function caretMarkdownRules(p: Palette): NonNullable<ThemeRegistrationRaw["settings"]> {
   return [
     {
       scope: ["markup.fenced_code.block.markdown punctuation.definition.markdown"],
@@ -69,6 +96,22 @@ function structuralMarkerRules(p: Palette): NonNullable<ThemeRegistrationRaw["se
     {
       scope: ["punctuation.definition.raw.markdown"],
       settings: { foreground: p.punctuation },
+    },
+    {
+      scope: ["markup.bold.markdown"],
+      settings: { fontStyle: "bold" },
+    },
+    {
+      scope: ["markup.italic.markdown"],
+      settings: { fontStyle: "italic" },
+    },
+    {
+      scope: ["markup.bold.markdown markup.italic.markdown"],
+      settings: { fontStyle: "bold italic" },
+    },
+    {
+      scope: ["punctuation.definition.bold.markdown", "punctuation.definition.italic.markdown"],
+      settings: { foreground: p.comment },
     },
   ];
 }
@@ -86,10 +129,7 @@ function withStructuralOverrides(theme: Theme, source: ThemeRegistrationRaw): Th
   return {
     ...rest,
     name: theme.id,
-    settings: [
-      ...(settings ?? tokenColors ?? []),
-      ...structuralMarkerRules(paletteFromTheme(theme)),
-    ],
+    settings: [...(settings ?? tokenColors ?? []), ...caretMarkdownRules(paletteFromTheme(theme))],
   };
 }
 

@@ -6,9 +6,11 @@
 // view's per-line data-line.
 //
 // Detection is scoped to inline-code spans (`…`), which is where caret's plans
-// cite files and — decisively — the only place a path renders as its own shiki
-// token: prose is tokenized as one coarse run, so a path inside it has no token
-// boundary to hang the icon on or to hit-test a click against. Within a span a
+// cite files. The scope is about what may be GUESSED at, not about what can be
+// decorated: backticks are the author saying "this is a path", and scanning bare
+// prose for path-shaped runs would tag ordinary words. Where a reference is known
+// rather than guessed — a markdown link's target — the decoration pass cuts the row
+// at its columns so it decorates wherever it sits (inlineDecorate.ts). Within a span a
 // token qualifies on a bare plausibility floor — its last segment holds a letter
 // — optionally trailed by a line reference (`:line`, `:line:col`, or a
 // `:start-end` range, each also spellable with `#`/`L` as in `#L154-L162`). What

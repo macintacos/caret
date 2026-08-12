@@ -297,14 +297,13 @@ function transformLine(
       spans.push({ startCol, endCol, href: rw.href, label: rw.display });
     }
     if (rw.file != null) {
-      // ponytail: a reference gets the glyph only where its columns coincide
-      // with a shiki token. Backticks always give the label one, so a
-      // backticked-path label takes the glyph wherever it sits; a bare-path or
-      // prose label takes it only when the label is the whole line, since
-      // anything else on the line puts it inside one coarse prose run that
-      // tagFileRefTokens refuses (tagging that would chip the whole sentence).
-      // Those get the click and the tooltip without the glyph. The decoration
-      // pass giving every run its own element is the upgrade path (EXC-867).
+      // Every reference takes the glyph, wherever its label sits. That is the
+      // decoration pass's doing (inlineDecorate.ts): it cuts each row at the
+      // reference's own columns before tagFileRefTokens runs, so a bare-path or
+      // prose label gets an element bounded by the reference exactly as a
+      // backticked one does. Before that cut existed a collapsed prose label was
+      // one coarse run and tagTokenAt refused it, since the glyph and its hover
+      // chip would have wrapped the whole sentence (EXC-867).
       //
       // The target rides along only when the label hides it. Testing the raw
       // target, not the path, is what keeps `[a/b.md](a/b.md:42)` — whose label

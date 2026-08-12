@@ -48,11 +48,13 @@ function openCalls(page: import("@playwright/test").Page): Promise<unknown[][]> 
 /** Viewport points on the link's row: the centre of the link label itself, and a
  * spot on the same row well past the label but still over its rendered text.
  *
- * Shiki emits the collapsed prose line as ONE token, so the label and the rest of
- * the sentence share a single token element — a click anywhere on the row reaches
- * the same token handler and only the pointer position separates them. The label's
- * box comes from the caret-link highlight, whose range covers exactly the link's
- * columns; the off-label point sits just inside the end of the token's own box. */
+ * The decoration pass (inlineDecorate.ts) cuts the row at the link's own columns,
+ * so the label and the prose after it are separate token elements. Both still route
+ * through the library's one per-token pointer pipeline, so what separates them is
+ * still the pointer position rather than two different handlers — which is what
+ * these points exist to drive. The label's box comes from the caret-link highlight,
+ * whose range covers exactly the link's columns; the off-label point sits just
+ * inside the end of the row's rendered text. */
 async function rowPoints(
   page: import("@playwright/test").Page,
 ): Promise<{ onLabel: { x: number; y: number }; offLabel: { x: number; y: number } }> {
@@ -86,8 +88,8 @@ test("clicking a link token opens its http URL in a new tab", async ({ daemon, p
 
   // A real click on the label runs the library's pointer pipeline, which
   // hit-tests the pointer against the link span and calls the new-tab opener.
-  // Aimed at the label's own columns, not the token's centre — the token is the
-  // whole sentence, whose centre is ordinary prose.
+  // Aimed at the label's own columns. The row is split at those columns, so this
+  // is the label's own element rather than a point inside a sentence-wide token.
   const { onLabel } = await rowPoints(page);
   await page.mouse.click(onLabel.x, onLabel.y);
 
@@ -147,10 +149,11 @@ test("clicking the link's row away from its label opens no tab, only the compose
   await expect(page.getByText("the cache docs")).toBeVisible();
   await stubWindowOpen(page);
 
-  // The whole sentence is one shiki token, so this click reaches the same token
-  // handler the label's click does — only the pointer position says it is not on
-  // the link. It must fall through to the row, exactly as a click on a row with
-  // no link at all does.
+  // Past the label. This still reaches the same per-token pointer handler the
+  // label's click does — the row is split, but the library routes every token
+  // through one pipeline — and only the pointer position says it is not on the
+  // link. It must fall through to the row, exactly as a click on a row with no
+  // link at all does.
   const { offLabel } = await rowPoints(page);
   await page.mouse.click(offLabel.x, offLabel.y);
 
@@ -192,7 +195,7 @@ test("hovering a link token reveals a caret tooltip with the full href, not a na
   // A real hover runs the library's per-token pointer pipeline, which hit-tests
   // the pointer against the link span and reveals the caret tooltip carrying the
   // full URL — inside the shadow root, on caret's surface. Aimed at the label's
-  // own columns: the token under it is the whole sentence.
+  // own columns, which after the decoration pass are its own element.
   const { onLabel } = await rowPoints(page);
   await page.mouse.move(onLabel.x, onLabel.y);
   await expect.poll(() => tooltipHref(page)).toBe(SAFE_URL);
@@ -232,9 +235,11 @@ test("a link is marked before any hover, over its label only", async ({ daemon, 
     page.evaluate(() => [...(CSS.highlights.get("caret-link") ?? [])].map((r) => r.toString()));
   await expect.poll(marked).toContain("the cache docs");
 
-  // Over the label ONLY. The line is one shiki token, so a mark that leaked to
-  // the token would underline the whole sentence — the reason this is a highlight
-  // and not a data-attribute tag like data-file-ref.
+  // Over the label ONLY: the highlight's range is the link's columns, so a mark
+  // that leaked past them would underline the sentence too. The row now carries a
+  // data-md~="link" run on the same columns, but the resting mark stays a CSS
+  // Custom Highlight — it paints without mutating the DOM, so it never fights the
+  // library's row repaints. --chip-link is the attribute's own ticket, not this.
   expect(await marked()).not.toContain("See the cache docs for the warm-restart design.");
 
   // The javascript:-scheme link is not clickable, so it is not marked either —

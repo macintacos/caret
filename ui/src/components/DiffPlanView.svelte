@@ -1417,6 +1417,7 @@
         <SourceView
           doc={{ name: "plan.md", text: linkLayer.text }}
           links={linkLayer.spans}
+          inline={linkLayer.inline}
           {fileRefs}
           onFileRefClick={openFileRef}
           annotations={sourceAnnotations}

@@ -307,6 +307,85 @@ describe("the fence-marker chip (EXC-869)", () => {
   });
 });
 
+// EXC-867: the inline emphasis chips, the first prose members of the EXC-855 chip family.
+// The real weight and slant come from shiki (caret-theme.ts) — EXC-858 measured bold's and
+// italic's tints within a 1.05 contrast ratio in five of nine palettes, so the tint alone
+// cannot be the separator. What this suite pins is the chip's shape and, above all, that it
+// costs the monospace grid nothing.
+describe("the inline emphasis chips (EXC-867)", () => {
+  const fillRule = overrideDecls.match(/\[data-content\][^{}]*\[data-md\]\s*\{[^}]*\}/)?.[0] ?? "";
+  const startRule =
+    overrideDecls.match(/\[data-content\][^{}]*\[data-md-start\]\s*\{[^}]*\}/)?.[0] ?? "";
+  const endRule =
+    overrideDecls.match(/\[data-content\][^{}]*\[data-md-end\]\s*\{[^}]*\}/)?.[0] ?? "";
+
+  test("declares the weight and slant itself, ungated by selection", () => {
+    // @pierre/diffs carries shiki's font style into the DOM as a custom property and then
+    // consumes it with font-weight: light-dark(…), which is invalid — light-dark() is
+    // defined over <color> only — so the library renders every token at one weight. caret
+    // declares both off the decoration pass's own attributes instead.
+    const weight =
+      overrideDecls.match(/\[data-content\][^{}]*\[data-md~="bold"\]\s*\{[^}]*\}/)?.[0] ?? "";
+    const slant =
+      overrideDecls.match(/\[data-content\][^{}]*\[data-md~="italic"\]\s*\{[^}]*\}/)?.[0] ?? "";
+    expect(weight).toMatch(/font-weight:\s*bold/);
+    expect(slant).toMatch(/font-style:\s*italic/);
+    // Weight and slant are what the text IS, so unlike the tint they survive selection.
+    expect(weight).not.toMatch(/:not\(\[data-selected-line\]\)/);
+    expect(slant).not.toMatch(/:not\(\[data-selected-line\]\)/);
+  });
+
+  test("spends the family's own bold and italic tints, and declares neither", () => {
+    // Consumed, never redefined: the recipe (EXC-858) derives all five tints for all nine
+    // palettes, so a literal here would be a tenth, unreviewed palette.
+    expect(overrideDecls).toMatch(/\[data-md~="bold"\]\s*\{[^}]*var\(--chip-bold\)/);
+    expect(overrideDecls).toMatch(/\[data-md~="italic"\]\s*\{[^}]*var\(--chip-italic\)/);
+    expect(fillRule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(fillRule).not.toMatch(/color-mix/);
+  });
+
+  test("layers the tints so a run carrying two members shows both", () => {
+    // ***x*** is genuinely bold AND italic, and the middle run of **a `c` b** is bold and
+    // code. A single background-color would let the more specific rule win and punch a gap
+    // through the middle of the bold pill, so each member gets its own layer.
+    expect(fillRule).toMatch(/background-image:/);
+    expect(fillRule).toMatch(/var\(--md-bold,\s*transparent\)/);
+    expect(fillRule).toMatch(/var\(--md-italic,\s*transparent\)/);
+    // The transparent fallback is what makes an absent member paint nothing without any
+    // default declaration having to out-specify the member rules above.
+    expect(fillRule).not.toMatch(/--md-bold:\s/);
+  });
+
+  test("rounds only the ends of a group, so a fragmented element draws one pill", () => {
+    // An element split across several runs closes its pill once — the same shape
+    // data-code-start / data-code-end already draw for a fenced block.
+    expect(startRule).toMatch(new RegExp(String.raw`border-start-start-radius:\s*${RADIUS}`));
+    expect(startRule).toMatch(new RegExp(String.raw`border-end-start-radius:\s*${RADIUS}`));
+    expect(endRule).toMatch(new RegExp(String.raw`border-start-end-radius:\s*${RADIUS}`));
+    expect(endRule).toMatch(new RegExp(String.raw`border-end-end-radius:\s*${RADIUS}`));
+    // A blanket border-radius on every run would close the pill at every internal seam.
+    expect(fillRule).not.toMatch(/border-radius/);
+  });
+
+  test("shifts no column: the chip carries no padding or margin at all", () => {
+    // The issue's own de-escalation ladder names the monospace grid as the likeliest
+    // trigger. Rows render white-space: pre, so inline padding moves every glyph after the
+    // chip and vim motions, drag ranges and search highlights stop matching source columns.
+    // [data-file-ref]'s cancelled padding/negative-margin pair is not available here —
+    // emphasis chips can abut, so the negative margins would overlap.
+    for (const rule of [fillRule, startRule, endRule]) {
+      expect(rule).not.toMatch(/padding/);
+      expect(rule).not.toMatch(/margin/);
+    }
+  });
+
+  test("drops the chip on a selected row so a drag reads as one flat band", () => {
+    for (const rule of [fillRule, startRule, endRule]) {
+      expect(rule).toMatch(/:not\(\[data-selected-line\]\)/);
+    }
+  });
+});
+
 // EXC-729: a fenced-code line wider than the panel must stay INSIDE the card and scroll
 // horizontally, not break out of the background. The EXC-692 panel caps rows at max-width, but
 // the library renders source lines white-space: pre, so an over-wide line overflowed the
