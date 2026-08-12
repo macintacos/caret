@@ -29,6 +29,7 @@
     tableRanges,
   } from "$lib/diffview/tables.ts";
   import { selectionIn, tableSelectionText } from "$lib/diffview/tableCopy.ts";
+  import { tagThematicBreakRows, thematicBreakLines } from "$lib/diffview/thematicBreaks.ts";
   import { preloadFenceLanguages, scanFenceLanguages } from "$lib/diffview/languages.ts";
   import { registerCaretDiffThemes } from "$lib/diffview/theme.ts";
   import type {
@@ -452,6 +453,19 @@
     return tablesMemo.tables;
   });
 
+  // The thematic breaks (EXC-862), memoized on the same rendered text and for the same
+  // reason: a fresh Set each poll tick would re-arm the observer effect below. Detection
+  // is whole-document rather than per-line — what makes a `---` a rule rather than a
+  // setext underline is the block structure around it — so it takes no code ranges of its
+  // own; the lexer it delegates to has already decided a fenced line is code.
+  let breaksMemo: { text: string; breaks: Set<number> } | undefined;
+  const thematicBreaks = $derived.by(() => {
+    if (breaksMemo?.text !== doc.text) {
+      breaksMemo = { text: doc.text, breaks: thematicBreakLines(doc.text) };
+    }
+    return breaksMemo.breaks;
+  });
+
   // The keyboard cursor's line (EXC-788). Mirrored into a plain (non-reactive)
   // let so the repaint observer's tag() below re-applies the cursor tag after a
   // library row rewrite WITHOUT re-arming the observer on every cursor move —
@@ -532,6 +546,8 @@
     const inlineSpans = inline;
     // And the tables, memoized above alongside the code ranges they derive from.
     const tableSpans = tables;
+    // And the thematic breaks (EXC-862), memoized on the same text.
+    const breaks = thematicBreaks;
     // And the images (EXC-870), snapshotted the same way. Memoized by the parent
     // alongside the link layer, so this too stays a stable reference.
     const imageSpans = images;
@@ -546,6 +562,10 @@
     // before they are moved into a card.
     const tag = () => {
       tagCodeBlockRows(root, ranges);
+      // Mark the rows that ARE a horizontal rule (EXC-862). Beside the code-block tagging
+      // because it is the same kind of pass — one attribute per row, no nodes — and it
+      // depends on nothing else here, so its position costs no frame either way.
+      tagThematicBreakRows(root, breaks);
       syncCodeBlockCards(root, ranges);
       // Restructure each table's rows into a real column-aligned table (EXC-864).
       // Before the inline pass, not after: the passes below reach a row's tokens

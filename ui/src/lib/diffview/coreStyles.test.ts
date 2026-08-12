@@ -1224,3 +1224,55 @@ describe("blockquote level bars (EXC-863)", () => {
     expect(subdueRule).toMatch(/:not\(\[data-md-quote\]\)/);
   });
 });
+
+// EXC-862: thematic breaks. Transform-in-place like the level bars above — the `---`
+// stays in the row and the rule is drawn over it — but the mechanism is the load-bearing
+// half here, and it is the one thing a stylesheet regex can actually pin. A pass that
+// APPENDED a node would loop the repaint observer inside a table cell (EXC-870), and a
+// declaration that changed the row's height would drift the gutter numbers; both failures
+// are invisible in a diff and obvious in this suite.
+describe("thematic breaks (EXC-862)", () => {
+  const ruleRule = rulesFor(String.raw`\[data-md-rule\]`).find((r) =>
+    r.includes("background-image:"),
+  );
+  const inkRule = rulesFor(String.raw`\[data-md-rule\][^{}]*`).find((r) => r.includes("color:"));
+
+  test("both rules are present to assert against", () => {
+    expect(ruleRule).toBeDefined();
+    expect(inkRule).toBeDefined();
+  });
+
+  test("paints the rule as a background, never as a pseudo-element", () => {
+    // The whole point of the mechanism: no node, no ::before, nothing for tables.ts's
+    // child-count settle check to disagree with.
+    expect(ruleRule).toMatch(/background-image:\s*linear-gradient\(/);
+    expect(overrideDecls).not.toMatch(/\[data-md-rule\][^{]*::(?:before|after)/);
+  });
+
+  test("spans the full column at one pixel, centered", () => {
+    expect(ruleRule).toMatch(/background-size:\s*100%\s+1px/);
+    expect(ruleRule).toMatch(/background-position:\s*center/);
+    expect(ruleRule).toMatch(/background-repeat:\s*no-repeat/);
+  });
+
+  test("spends a rule token, not a chip tint or a new constant", () => {
+    // A hairline spanning a whole edge is what the rule tokens are for — the level
+    // bars' own note says so while rejecting them for a 2px mark.
+    expect(ruleRule).toMatch(/var\(--rule-strong\)/);
+    expect(ruleRule).not.toContain("--chip-");
+  });
+
+  test("overdraws the characters rather than deleting them", () => {
+    // The row keeps every character for copy, the comment anchors and the column grid;
+    // only the ink goes. The row itself is covered as well as its tokens, so a line the
+    // library has not yet wrapped in shiki spans shows no glyph either.
+    expect(inkRule).toMatch(/color:\s*transparent/);
+    expect(inkRule).toMatch(/\[data-line\]\[data-md-rule\],/);
+  });
+
+  test("costs the row's height nothing", () => {
+    // One gutter number per row. Anything here that grew the line box would drift the
+    // numbers against the rows long before it read as a divider.
+    expect(ruleRule).not.toMatch(/(?:^|[^-\w])(?:margin|padding|height|border)(?:-\w+)*:/);
+  });
+});

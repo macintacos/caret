@@ -724,6 +724,53 @@ const CARET_OVERRIDES = `
     opacity: ${QUOTE_SUBDUE};
   }
 
+  /* EXC-862: a thematic break — three dashes, asterisks or underscores alone on a line —
+     drawn as a real horizontal rule across the content column. Transform-in-place again,
+     and the same trade the level bars above make: the characters stay in the row, so the
+     gutter number, the hover comment affordance, the cursor and the comment anchors are all
+     untouched and copy carries the real source; the glyphs go transparent and the rule is
+     drawn in the space they vacate. Subduing them instead was the other option and it does
+     not survive all three spellings — underscores sit at the baseline and asterisks sit
+     high, so a centered rule would read as a double line under one spelling and as a
+     strikethrough under another, while a transparent row renders the three identically.
+     Which is what the row IS: one rule, however it was typed.
+
+     Drawn as a background rather than an appended element or a ::before, and that is the
+     load-bearing choice rather than a stylistic one. tables.ts settles a celled row by
+     COUNTING its children, so any pass that appends one inside a table cell disagrees with
+     the count, rebuilds the row, and loops the repaint observer — EXC-870 measured ~10,800
+     childList mutations in two seconds on exactly that. A background paints no node at all,
+     so the loop is impossible by construction rather than by measurement, and unlike a
+     pseudo-element it needs no positioning context, so no stacking order moves.
+
+     It takes --rule-strong, not the --ink-faint the chip family prescribes for markers, and
+     the level bars above are why. That note rejects the rule tokens for a 2px mark on the
+     grounds that they are "sized for hairlines that span a whole edge, where length carries
+     the signal" — this is that hairline, so the same reasoning points the other way here.
+     No new constant either: unlike QUOTE_SUBDUE this spends a token every border in the app
+     already wears, so all nine palettes derive it by construction.
+
+     No inset and no margin: the row must keep its height to the character, since the gutter
+     numbers are one per row and a rule that changed the vertical rhythm would be visible as
+     drift long before it was visible as a divider. background-size is the whole geometry —
+     the full width of the cell (padding included, so it spans the column exactly as the
+     table delimiter's border does), one pixel tall, centered in the row's own line box. The
+     rule survives a selected or hovered row deliberately: the band is a background-color and
+     this is a background-image over it, the same standing the bars take. */
+  [data-content] [data-line][data-md-rule] {
+    background-image: linear-gradient(var(--rule-strong), var(--rule-strong));
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 100% 1px;
+  }
+  /* The row and its tokens both, so a repaint that has not yet wrapped the line in shiki
+     spans shows no glyph either — the library's own [data-line] span color rule is what
+     makes the second selector necessary once they exist. */
+  [data-content] [data-line][data-md-rule],
+  [data-content] [data-line][data-md-rule] > * {
+    color: transparent;
+  }
+
   /* EXC-729: an overflowing fenced block is wrapped in one scroll card (codeBlockScroll.ts)
      that is a single native horizontal scroll container — the whole block scrolls as one unit
      (short lines follow the wide ones, one scrollbar at the bottom, no per-row jelly). The card
