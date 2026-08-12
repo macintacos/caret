@@ -616,6 +616,64 @@ describe("the inline image (EXC-870)", () => {
   });
 });
 
+describe("the list markers (EXC-861)", () => {
+  const anyMarker = rulesFor(String.raw`\[data-md-list\]`)[0] ?? "";
+  const bulletRule = rulesFor(String.raw`\[data-md-list="bullet"\]`)[0] ?? "";
+  const glyphRule = rulesFor(String.raw`\[data-md-list="bullet"\]::before`)[0] ?? "";
+
+  test("marks every kind with the ink the other structural markers wear", () => {
+    // A marker is ink, not a chip: --ink-faint is what caret-theme.ts already gives the
+    // fence markers and the ** / _ emphasis markers, so a list marker joins that family
+    // rather than spending a sixth --chip-* token on a single dash.
+    expect(anyMarker).toMatch(/color:\s*var\(--ink-faint\)/);
+    expect(anyMarker).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(anyMarker).not.toMatch(/--chip-/);
+  });
+
+  test("hands the bullet's own cell to the glyph drawn over it", () => {
+    // Transform-in-place (EXC-855): the dash is still in the DOM and still copied — it
+    // is only made invisible so the bullet can occupy the column it already had.
+    expect(bulletRule).toMatch(/color:\s*transparent/);
+    expect(glyphRule).toMatch(/content:\s*"•"/);
+  });
+
+  test("draws the glyph out of flow so no column moves", () => {
+    // Rows render white-space: pre, so a pseudo-element in flow would push every glyph
+    // after it and the monospace grid would stop matching the source columns vim
+    // motions, drag-ranges and the search highlights all resolve against. Absolute with
+    // NO inset lands the box at its static position — over the marker, on the same
+    // baseline — and contributes no advance. An inset would position it against some
+    // ancestor instead, and padding or margin would cost width; both are the drift this
+    // pins.
+    expect(glyphRule).toMatch(/position:\s*absolute/);
+    expect(glyphRule).not.toMatch(/\b(top|left|right|bottom|inset[a-z-]*)\s*:/);
+    expect(glyphRule).not.toMatch(/\b(padding|margin)[a-z-]*\s*:/);
+  });
+
+  test("keeps the glyph out of the clipboard", () => {
+    // The epic's copy contract. Blink emits generated content into the plain-text
+    // flavour of a copied selection the same way EXC-870 found it emitting an image's
+    // alt — invisible to Selection.toString(), visible only in the real clipboard, which
+    // lists.e2e.ts reads. This pins the declaration that keeps it out.
+    expect(glyphRule).toMatch(/user-select:\s*none/);
+  });
+
+  test("gives a task item's marker the ink and not the glyph", () => {
+    // One treatment per row: a checkbox IS a task item's marker, so a bullet beside it
+    // would be two markers arguing. The kind is settled in the emission (inlineSpans.ts
+    // tags it "task"), which is why the glyph selector can name "bullet" exactly rather
+    // than carving the task case back out here — and why the sheet needs no task rule of
+    // its own until EXC-860 draws the checkbox.
+    expect(glyphRule).toContain('[data-md-list="bullet"]');
+    expect(rulesFor(String.raw`\[data-md-list="task"\]`)).toEqual([]);
+  });
+
+  test("carries no transition", () => {
+    // svelte-rules § Motion: the diff surface swaps state instantly.
+    expect(`${anyMarker}${bulletRule}${glyphRule}`).not.toMatch(/transition/);
+  });
+});
+
 // EXC-729: a fenced-code line wider than the panel must stay INSIDE the card and scroll
 // horizontally, not break out of the background. The EXC-692 panel caps rows at max-width, but
 // the library renders source lines white-space: pre, so an over-wide line overflowed the

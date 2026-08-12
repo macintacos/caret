@@ -78,6 +78,28 @@ export function rowHeights(page: Page, line: number): Promise<{ row: number; num
   }, line);
 }
 
+/** The viewport x of the first glyph on a 1-based source line, rounded; `null`
+ * when the line is not rendered.
+ *
+ * The monospace grid's left edge for that row, and the probe every decoration
+ * that draws INTO a row is measured against: rows render `white-space: pre`, so
+ * anything taking width inside one shifts the source columns that vim motions,
+ * drag-range selection and the search highlights all resolve against. A
+ * decoration is proven to cost nothing by reading this on the decorated row and
+ * on an ordinary one and finding them equal. Shared rather than copied per spec
+ * (typescript-rules.md § Shared-helper policy), the same reason `rowHeights`
+ * above is here. */
+export function firstGlyphX(page: Page, line: number): Promise<number | null> {
+  return page.evaluate((ln) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const row = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].find(
+      (r) => r.getAttribute("data-line") === String(ln),
+    );
+    const first = row?.firstElementChild;
+    return first ? Math.round(first.getBoundingClientRect().x) : null;
+  }, line);
+}
+
 /** Reveal the gutter `+` on `line` by moving the mouse over its left edge. The
  * source view's gutter sits at the left of the plan surface — so
  * anchor the hover to that container's left edge rather than the viewport's,

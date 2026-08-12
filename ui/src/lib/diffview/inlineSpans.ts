@@ -35,6 +35,13 @@
 // things: the whole-line depth rides the row (EXC-863 subdues a quoted line's ink
 // there), while each `>` gets its own run so the level bars can be drawn over the
 // marker columns.
+//
+// A LIST MARKER (EXC-861) is a run over the marker characters alone, never over
+// the indentation before them: the marker is overdrawn where it sits, and the
+// columns to its left are what spell the nesting depth. Its kind is settled here
+// rather than in CSS, because a task item's `-` and its `[ ]` would otherwise both
+// claim to be the item's marker — so a marker whose item is a task is emitted as
+// `task`, leaving EXC-860's checkbox as the row's one treatment.
 
 import { Lexer, type Token } from "marked";
 
@@ -61,6 +68,13 @@ export interface InlineSpan {
   /** The 1-based nesting level of the `>` marker this run IS. Marker runs only —
    * the line's depth is reported separately, since it belongs to the row. */
   quoteMarker?: number;
+  /** The list-item marker run this IS — the `-` / `*` / `+`, or the `1.` / `2)`,
+   * and only those characters (EXC-861). `task` is a marker whose item also
+   * carries a checkbox: the two would otherwise compete for the same row, and the
+   * checkbox is the marker of a task item, so the kind is decided here rather than
+   * left to CSS to unpick. Indentation is NOT part of the run — the marker is
+   * overdrawn where it sits, and the columns before it are what carry the nesting. */
+  listMarker?: "bullet" | "ordered" | "task";
 }
 
 /** Per-line inline runs, keyed by 1-based display line number. Lines with no runs
@@ -108,6 +122,31 @@ const LIST_PREFIX = /^ {0,3}(?:[-*+]|\d+[.)])\s+(?=>)/;
 // Group 1 is what precedes the brackets, so its length is their offset from the
 // content start rather than from column zero.
 const TASK_MARKER = /^(\s*(?:[-*+]|\d+[.)])\s+)\[([ xX])\](?=\s|$)/;
+
+// A thematic break: three or more of the SAME marker, spaces or tabs allowed
+// between them, and nothing else on the line. Checked before the list scan
+// because `- - -` and `* * *` satisfy both shapes and CommonMark gives the break
+// precedence — EXC-862 owns what a break draws, and this is what keeps a list
+// marker off it. `_` never opens a list item, so it is here only to spell the
+// construct completely.
+const THEMATIC_BREAK = /^\s*([-*_])[ \t]*(?:\1[ \t]*){2,}$/;
+
+// A list-item marker at the start of the line's content (past any quote prefix):
+// indentation, then a bullet or an ordered marker, then whitespace or the line's
+// end. The trailing lookahead is the whole negative half — it is what refuses
+// `---`, `**bold**`, `*italic*` and a hyphen mid-word, none of which put a space
+// after the character. Group 1 is the indentation, so its length is the marker's
+// offset from the content start; group 2 is the marker itself. Nine digits is
+// CommonMark's cap on an ordered marker.
+//
+// This layer reads one line with no block context beyond the quote prefix, so the
+// one shape it over-matches is a `- item` inside a FOUR-SPACE-INDENTED code block,
+// which CommonMark reads as code and this reads as a nested list. Telling them
+// apart needs block-level parsing the whole module deliberately does not do —
+// indentation is also how nesting is spelled — and the fenced form, which is how
+// caret's plans actually carry code, never reaches here at all (links.ts passes
+// fenced lines through untouched).
+const LIST_MARKER = /^(\s*)([-*+]|\d{1,9}[.)])(?=\s|$)/;
 
 /** The blockquote prefix: one interval per `>` and the column its content starts
  * at, which is where the task-marker scan begins. `labelRanges` are the display
@@ -190,6 +229,26 @@ function flatten(intervals: Interval[]): InlineSpan[] {
   return spans;
 }
 
+/** Pushes the list-marker interval opening at `offset`, if one does. A thematic
+ * break is refused first, and the kind is decided from the SAME slice the marker
+ * came from: a marker is `task` only when the brackets belong to its own item, so
+ * a bullet outside a quote does not inherit the taskness of a bullet inside it. */
+function listMarkerAt(display: string, offset: number, into: Interval[]): void {
+  const slice = display.slice(offset);
+  if (THEMATIC_BREAK.test(slice)) return;
+  const list = LIST_MARKER.exec(slice);
+  if (list === null) return;
+  const marker = list[2] ?? "";
+  const startCol = offset + (list[1] ?? "").length;
+  into.push({
+    startCol,
+    endCol: startCol + marker.length,
+    attributes: {
+      listMarker: TASK_MARKER.test(slice) ? "task" : /\d/.test(marker) ? "ordered" : "bullet",
+    },
+  });
+}
+
 /** The flat atomic runs covering one display line, plus its blockquote depth.
  * `linkRanges` are display columns the caller already resolved — every clickable
  * link span plus every collapsed label that carries no file reference — and become
@@ -205,7 +264,9 @@ export function buildInlineSpans(
   const quote = scanQuotePrefix(display, labelRanges);
   const intervals: Interval[] = [...quote.intervals];
 
-  const task = TASK_MARKER.exec(display.slice(quote.contentStart));
+  const content = display.slice(quote.contentStart);
+
+  const task = TASK_MARKER.exec(content);
   if (task !== null) {
     const startCol = quote.contentStart + (task[1] ?? "").length;
     intervals.push({
@@ -214,6 +275,16 @@ export function buildInlineSpans(
       attributes: { checkbox: task[2] === " " ? "unchecked" : "checked" },
     });
   }
+
+  // BOTH ends of the quote prefix are scanned, because the two constructs nest
+  // either way round and each order hides a marker from the other scan. In
+  // `> - item` the marker sits past the prefix; in `- > quoted` it sits before it,
+  // where the quote scan counted it as the indentation CommonMark says it is. The
+  // two offsets can never name the same marker — a prefix that moved the content
+  // start consumed a `>`, which is not a marker character — so `- > - item` marks
+  // both of its bullets and an unquoted line scans once.
+  listMarkerAt(display, 0, intervals);
+  if (quote.contentStart > 0) listMarkerAt(display, quote.contentStart, intervals);
 
   collectTokenIntervals(Lexer.lexInline(display, { gfm: true }), 0, intervals);
 

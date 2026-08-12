@@ -398,6 +398,72 @@ const CARET_OVERRIDES = `
     border-end-end-radius: var(--radius);
   }
 
+  /* EXC-861: the list markers. This is the epic's transform-in-place stance (EXC-855) at
+     its most literal — the marker characters are never removed, and the bullet is drawn
+     ON TOP of the one they occupy. inlineSpans.ts emits a run over the marker characters
+     alone and never over the indentation before them, so what reaches the sheet is a child
+     exactly one character cell wide for a bullet, sitting at the column the source puts it
+     at. Every column downstream — the comment anchors, vim motions, drag-range selection,
+     the search highlights — therefore never learns that anything was drawn.
+
+     A marker is INK rather than a chip, and it spends --ink-faint: the token caret-theme.ts
+     already gives the fence markers and the ** / _ emphasis markers, because a list marker
+     is the same class of thing. No --chip-* token is added here, and the sheet grows no new
+     background layer — a pill around a single dash would read as confetti, which is the
+     failure mode EXC-855 names.
+
+     THE GLYPH IS A PSEUDO-ELEMENT, not an appended node, and that is a correctness
+     requirement rather than a preference. tables.ts settles a row by comparing its child
+     count to its cell count, so a pass that appended a bullet to a celled row would have
+     every repaint rebuild the row and never adopt the bullet — the loop EXC-870 measured at
+     ~10,800 childList mutations in two seconds with an image. Generated content is invisible
+     to that count, so a list inside a table cell costs nothing at all, and the only DOM this
+     decoration causes is the token split inlineDecorate.ts was already performing.
+
+     Two independent declarations carry the placement, and they are worth reading apart.
+     position: absolute is what keeps the advance at zero — an out-of-flow box contributes
+     nothing to the line, insets or no insets. The ABSENCE of insets is what keeps the box
+     over the marker: with every inset auto it lands at its static position rather than
+     against the nearest positioned ancestor. The zero advance matters more here than
+     anywhere else in this sheet, because the alternative spellings all cost width: rows
+     render white-space: pre, so a pseudo-element in flow would shift every glyph after it,
+     which is precisely the no-inline-padding rule the emphasis chips above obey.
+
+     The glyph shares the row's baseline because it inherits the token's font and
+     line-height and so builds an identical line box — not because absolute positioning put
+     it there. Giving this pseudo-element a font-size or line-height of its own is therefore
+     the one edit that would silently break the alignment.
+
+     user-select: none is the copy contract, and it is load-bearing rather than tidy. Blink
+     emits generated content into the plain-text flavour of a copied selection the same way
+     EXC-870 found it emitting an image's alt — invisible to Selection.toString(), which
+     takes a different path, and visible only in the real clipboard. A bullet leaking into a
+     copied plan would corrupt the markdown the epic exists to keep honest, so lists.e2e.ts
+     reads navigator.clipboard rather than the selection. Should a future engine emit it
+     anyway, the fallback is a radial-gradient dot painted as a background, which cannot
+     reach a selection because it is paint rather than content.
+
+     A TASK item's marker takes the ink and not the glyph, and that decision is made in the
+     emission (inlineSpans.ts tags it "task", never "bullet") rather than unpicked here. The
+     issue asks for one treatment per row: a checkbox IS the marker of a task item, so a
+     bullet beside it would be two markers arguing. EXC-860 draws that checkbox over
+     [data-md-checkbox]; if it wants the bullet back, this rule's selector is the one line to
+     change.
+
+     No transition — the diff surface swaps state instantly (svelte-rules § Motion). */
+  [data-content] [data-line] [data-md-list] {
+    color: var(--ink-faint);
+  }
+  [data-content] [data-line] [data-md-list="bullet"] {
+    color: transparent;
+  }
+  [data-content] [data-line] [data-md-list="bullet"]::before {
+    content: "•";
+    position: absolute;
+    color: var(--ink-faint);
+    user-select: none;
+  }
+
   /* EXC-870: a markdown image, drawn onto the row its image markup sits on
      (inlineImages.ts). This is the epic's transform-in-place stance applied to the one
      construct that has something to render: the markup is NOT replaced — it keeps its link

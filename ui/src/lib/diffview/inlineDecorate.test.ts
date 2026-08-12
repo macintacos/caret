@@ -56,6 +56,16 @@ function pieces(
   }));
 }
 
+/** One record per direct child of a row: its text plus the list-marker value —
+ * the `pieces` shape for the valued attribute rather than the token lists. */
+function markers(host: HTMLElement, line = 1): { text: string; list: string | null }[] {
+  const rowEl = host.querySelector(`[data-line="${line}"]`);
+  return [...(rowEl?.children ?? [])].map((child) => ({
+    text: child.textContent ?? "",
+    list: child.getAttribute("data-md-list"),
+  }));
+}
+
 function fileRefs(host: HTMLElement): string[] {
   return [...host.querySelectorAll("[data-file-ref]")].map((el) => el.textContent ?? "");
 }
@@ -206,6 +216,67 @@ test("carries the checkbox and quote-marker values on their own runs", () => {
   ]);
   // Neither is an inline-markup member, so neither run gets a data-md list.
   expect(host.querySelectorAll("[data-md]").length).toBe(0);
+});
+
+test("carries the list-marker kind on the marker run alone", () => {
+  // EXC-861. The marker run covers the `-` and not the space after it, so the
+  // coarse token shiki paints has to be cut — which is the same split every other
+  // run here relies on, and what keeps the glyph over one character cell.
+  host = root(row(1, ["  ", "- ", "item"]));
+  decorateInlineRuns(
+    host,
+    spanMap([[1, [{ startCol: 2, endCol: 3, listMarker: "bullet" }]]]),
+    new Map(),
+  );
+  expect(markers(host)).toEqual([
+    { text: "  ", list: null },
+    { text: "-", list: "bullet" },
+    { text: " ", list: null },
+    { text: "item", list: null },
+  ]);
+  // A marker is not an inline-markup member, so it takes no data-md token list
+  // and none of the chip layers.
+  expect(host.querySelectorAll("[data-md]").length).toBe(0);
+});
+
+test("a task item's marker and its checkbox each carry their own value", () => {
+  // The pair EXC-860 builds on: one treatment per row, decided in the emission
+  // (the marker is `task`, never `bullet`) and readable here as two attributes on
+  // two different children.
+  host = root(row(1, ["- ", "[x]", " done"]));
+  decorateInlineRuns(
+    host,
+    spanMap([
+      [
+        1,
+        [
+          { startCol: 0, endCol: 1, listMarker: "task" },
+          { startCol: 2, endCol: 5, checkbox: "checked" },
+        ],
+      ],
+    ]),
+    new Map(),
+  );
+  const rowEl = host.querySelector("[data-line]");
+  expect(markers(host).map((m) => m.list)).toEqual(["task", null, null, null]);
+  expect([...(rowEl?.children ?? [])].map((c) => c.getAttribute("data-md-checkbox"))).toEqual([
+    null,
+    null,
+    "checked",
+    null,
+  ]);
+});
+
+test("drops a stale list marker when the line stops carrying one", () => {
+  host = root(row(1, ["- ", "item"]));
+  decorateInlineRuns(
+    host,
+    spanMap([[1, [{ startCol: 0, endCol: 1, listMarker: "bullet" }]]]),
+    new Map(),
+  );
+  expect(markers(host).map((m) => m.list)).toEqual(["bullet", null, null]);
+  decorateInlineRuns(host, new Map(), new Map());
+  expect(markers(host).map((m) => m.list)).toEqual([null, null, null]);
 });
 
 test("cuts a codespan at its file reference without splitting the code pill", () => {

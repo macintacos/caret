@@ -61,8 +61,8 @@ import { splitTokens, tokenChildren } from "$lib/diffview/rowTokens.ts";
 // The inline-markup attributes that ride in the `data-md` token list, which is
 // emitted in this array's order. A token list rather than an attribute per member so CSS
 // reaches one with `[data-md~="bold"]` and a new decoration costs one rule, not a
-// new attribute name. `checkbox` and `quoteMarker` carry values, so they stay
-// their own valued attributes.
+// new attribute name. `checkbox`, `quoteMarker` and `listMarker` carry values, so
+// they stay their own valued attributes.
 const MEMBERS = ["bold", "italic", "code", "link"] as const;
 
 type Member = (typeof MEMBERS)[number];
@@ -80,6 +80,7 @@ const ATTRS = [
   "data-md-end",
   "data-md-checkbox",
   "data-md-quote",
+  "data-md-list",
   "data-quote-depth",
 ];
 
@@ -89,7 +90,7 @@ const STALE = ATTRS.map((attr) => `[${attr}]`).join(",");
  * equal keys are two elements rather than one fragmented element — the
  * distinction pillGroups breaks a group on. */
 function attributeKey(span: InlineSpan): string {
-  return `${span.bold}|${span.italic}|${span.code}|${span.link}|${span.checkbox}|${span.quoteMarker}`;
+  return `${span.bold}|${span.italic}|${span.code}|${span.link}|${span.checkbox}|${span.quoteMarker}|${span.listMarker}`;
 }
 
 /** The column extents of `member`'s pill groups: maximal stretches of
@@ -148,6 +149,7 @@ function tagRow(row: Element, runs: readonly InlineSpan[], groups: Map<Member, C
     setAttr(child, "data-md-start", opens.length === members.length ? list(opens) : undefined);
     setAttr(child, "data-md-end", closes.length === members.length ? list(closes) : undefined);
     setAttr(child, "data-md-checkbox", run.checkbox);
+    setAttr(child, "data-md-list", run.listMarker);
     setAttr(
       child,
       "data-md-quote",
@@ -161,10 +163,10 @@ function tagRow(row: Element, runs: readonly InlineSpan[], groups: Map<Member, C
  * file-reference boundary, then tags every token with the markup covering it:
  * `data-md` (a `bold italic code link` token list), `data-md-start` /
  * `data-md-end` for the members whose pill opens or closes there, and the valued
- * `data-md-checkbox` / `data-md-quote`. Stale tags are cleared first, so a
- * populated→empty transition drops the old ones. `root` is the source view's
- * shadow root (or any container holding the `[data-content] [data-line]` rows).
- * Idempotent and safe to call on every repaint.
+ * `data-md-checkbox` / `data-md-quote` / `data-md-list`. Stale tags are cleared
+ * first, so a populated→empty transition drops the old ones. `root` is the source
+ * view's shadow root (or any container holding the `[data-content] [data-line]`
+ * rows). Idempotent and safe to call on every repaint.
  *
  * Rows are visited for every line either map names: a prose-labelled reference
  * produces a file-reference span but no inline run at all (links.ts emits no
