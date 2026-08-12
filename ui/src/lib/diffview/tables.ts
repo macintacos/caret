@@ -204,6 +204,11 @@ export const TABLE_CARD_ATTR = "data-table-card";
  * its cells still map to the shared subgrid row tracks and keep their library
  * styling — and it lands at the same child index as its content card.
  *
+ * Both cards take a contiguous RUN of their column's children rather than the keyed
+ * cells alone (see unwrappedSlice), so an open comment's annotation row and its
+ * gutter buffer ride inside their card at the same index in both columns. That is
+ * what keeps the counts equal by construction rather than by coincidence.
+ *
  * codeBlockScroll.ts mirrors its own cards the same way and the two are deliberately
  * NOT folded together: that pass cards a block only while it overflows, measured
  * through an injected reader, where a table is carded unconditionally. Merging them
@@ -308,17 +313,49 @@ function rowElements(root: ParentNode, range: TableRange): (HTMLElement | null)[
   );
 }
 
-/** A range's rows as DIRECT children of the content column, which is what the wrap
- * path needs: `insertBefore` places the card relative to a child of `content`, and
- * passing it a row nested somewhere else throws `NotFoundError`. That throw would
- * escape the whole repaint pass and take every decoration below this one with it, so
- * the wrap is gated on a complete direct-child set rather than on the descendant
- * lookup above. Returns `null` unless every row is present and unwrapped. */
-function unwrappedRows(content: Element, range: TableRange): HTMLElement[] | null {
-  const rows = range.rows
-    .map((row) => content.querySelector<HTMLElement>(`:scope > [data-line="${row.line}"]`))
-    .filter((row): row is HTMLElement => row !== null);
-  return rows.length === range.rows.length ? rows : null;
+/** A range's source lines, the key both columns are walked by. */
+function lineNumbers(range: TableRange): number[] {
+  return range.rows.map((row) => row.line);
+}
+
+/** A range's DIRECT children of one column, from its first keyed cell through its
+ * last — the whole contiguous run, not just the keyed cells in it.
+ *
+ * Direct children because that is what the wrap path needs: `insertBefore` places the
+ * card relative to a child of the column, and passing it a cell nested somewhere else
+ * throws `NotFoundError`, which would escape the repaint pass and take every
+ * decoration below this one with it. Returns `null` unless every one of `lines` is
+ * present, unwrapped, and in order.
+ *
+ * The whole run because the library interleaves its own rows between a table's:
+ * a comment on line N emits an annotation row right after N's row in the content
+ * column and a `data-gutter-buffer` right after N's cell in the gutter
+ * (FileRenderer.processFileResult). Moving only the keyed cells would strand those
+ * behind the card, so a mid-table comment would render below the whole table
+ * (EXC-865). Taking the run also keeps the two columns index-parallel by
+ * construction rather than by two separately-derived lists happening to agree, which
+ * is the divergence TABLE_GUTTER_CARD_ATTR exists to prevent.
+ *
+ * Walked by sibling rather than queried per line: one query plus a walk of the
+ * table's own length, where a query per row is what EXC-864 measured at ~2,800
+ * selector matches per repaint. */
+function unwrappedSlice(column: Element, attr: string, lines: number[]): Element[] | null {
+  const first = lines[0];
+  const last = lines[lines.length - 1];
+  if (first === undefined || last === undefined) return null;
+  const head = column.querySelector(`:scope > [${attr}="${first}"]`);
+  if (head === null) return null;
+  const slice: Element[] = [];
+  const keyed: string[] = [];
+  for (let el: Element | null = head; el !== null; el = el.nextElementSibling) {
+    slice.push(el);
+    const key = el.getAttribute(attr);
+    if (key !== null) keyed.push(key);
+    if (key !== String(last)) continue;
+    if (keyed.length !== lines.length) return null;
+    return keyed.every((k, i) => k === String(lines[i])) ? slice : null;
+  }
+  return null;
 }
 
 /** Whether `card` still holds exactly the range's rows, in order. Defensive: a card
@@ -338,33 +375,31 @@ function unwrapCard(column: Element, card: HTMLElement): void {
   card.remove();
 }
 
-/** Wraps `rows` in a fresh card at their position. The card spans the table's row
- * tracks (grid-row) so its subgrid maps them back to the shared tracks and the
- * gutter numbers stay aligned, and carries the column count the sheet builds its
- * track list from. */
-function wrapCard(content: Element, key: string, rows: HTMLElement[], columns: number): void {
+/** Wraps `slice` in a fresh card at its position. The card spans one parent row track
+ * per child it takes — its own rows plus any annotation row among them — so its
+ * subgrid maps them back to the shared tracks and the gutter numbers stay aligned,
+ * and carries the column count the sheet builds its track list from. */
+function wrapCard(content: Element, key: string, slice: Element[], columns: number): void {
   const card = content.ownerDocument.createElement("div");
   card.setAttribute(TABLE_CARD_ATTR, key);
-  card.style.gridRow = `span ${rows.length}`;
+  card.style.gridRow = `span ${slice.length}`;
   card.style.setProperty("--table-columns", String(columns));
-  content.insertBefore(card, rows[0] ?? null);
-  for (const row of rows) card.appendChild(row);
+  content.insertBefore(card, slice[0] ?? null);
+  for (const child of slice) card.appendChild(child);
 }
 
 /** Mirrors a table's card into the gutter column so the two columns keep matching
  * direct-child counts (see TABLE_GUTTER_CARD_ATTR). Refuses on anything short of the
- * range's full set of cells: a partial mirror is the very divergence this exists to
+ * range's full run of cells: a partial mirror is the very divergence this exists to
  * prevent, so a missing cell must leave the gutter flat rather than half-carded. */
-function wrapGutterCard(gutter: Element, key: string, range: TableRange): void {
-  const cells = range.rows
-    .map((row) => gutter.querySelector<HTMLElement>(`:scope > [data-column-number="${row.line}"]`))
-    .filter((cell): cell is HTMLElement => cell !== null);
-  if (cells.length !== range.rows.length) return;
+function wrapGutterCard(gutter: Element, key: string, lines: number[]): void {
+  const slice = unwrappedSlice(gutter, "data-column-number", lines);
+  if (slice === null) return;
   const card = gutter.ownerDocument.createElement("div");
   card.setAttribute(TABLE_GUTTER_CARD_ATTR, key);
   card.style.display = "contents";
-  gutter.insertBefore(card, cells[0] ?? null);
-  for (const cell of cells) card.appendChild(cell);
+  gutter.insertBefore(card, slice[0] ?? null);
+  for (const cell of slice) card.appendChild(cell);
 }
 
 /**
@@ -407,9 +442,9 @@ export function syncTableCards(root: ParentNode, ranges: TableRange[]): void {
       carded.set(key, range);
     } else {
       if (card !== null) unwrapCard(content, card);
-      const rows = unwrappedRows(content, range);
-      if (rows !== null) {
-        wrapCard(content, key, rows, range.align.length);
+      const slice = unwrappedSlice(content, "data-line", lineNumbers(range));
+      if (slice !== null) {
+        wrapCard(content, key, slice, range.align.length);
         carded.set(key, range);
       }
     }
@@ -439,7 +474,7 @@ export function syncTableCards(root: ParentNode, ranges: TableRange[]): void {
   if (gutter === null) return;
   for (const [key, range] of carded) {
     if (gutter.querySelector(`:scope > [${TABLE_GUTTER_CARD_ATTR}="${key}"]`) !== null) continue;
-    wrapGutterCard(gutter, key, range);
+    wrapGutterCard(gutter, key, lineNumbers(range));
   }
   for (const card of gutter.querySelectorAll<HTMLElement>(`:scope > [${TABLE_GUTTER_CARD_ATTR}]`)) {
     if (!carded.has(card.getAttribute(TABLE_GUTTER_CARD_ATTR) ?? "")) unwrapCard(gutter, card);
