@@ -782,6 +782,8 @@ describe("the task-list checkbox (EXC-860)", () => {
   const glyphRule = rulesFor(String.raw`\[data-md-checkbox\]::before`)[0] ?? "";
   const uncheckedRule = rulesFor(String.raw`\[data-md-checkbox="unchecked"\]::before`)[0] ?? "";
   const checkedRule = rulesFor(String.raw`\[data-md-checkbox="checked"\]::before`)[0] ?? "";
+  const suppressRule =
+    rulesFor(String.raw`\[data-md-checkbox\] \+ \[data-md-checkbox\]::before`)[0] ?? "";
 
   test("hands the bracket run's own cells to the glyph drawn over them", () => {
     // Transform-in-place (EXC-855): the brackets are still in the DOM and still copied —
@@ -838,6 +840,21 @@ describe("the task-list checkbox (EXC-860)", () => {
     // clipboard, which tasks.e2e.ts reads. A leaked box would make a copied plan read
     // `☐- [ ] item` and corrupt the markdown the epic exists to keep honest.
     expect(glyphRule).toMatch(/user-select:\s*none/);
+  });
+
+  test("draws one box per run, however many tokens shiki cut the run into", () => {
+    // The one structural difference from the bullet, and it is a real defect rather than
+    // a hypothetical: a bullet is a single character and can never be split, but shiki
+    // tokenizes `[X]` — and `[x]` on some rows — into three tokens, and inlineDecorate's
+    // tagRow tags EVERY token a run covers. Three tagged tokens meant three boxes drawn
+    // side by side. Suppressing the glyph on a tagged token that directly follows another
+    // leaves it on the run's first token only, which is where the run starts and so where
+    // the centring offset is measured from. This is the same problem `data-md` solves with
+    // pillGroups and data-md-start/end caps; a pseudo-element needs only the one rule.
+    expect(suppressRule).toMatch(/content:\s*none/);
+    // It has to out-specify the two state rules that supply the content, and it does so on
+    // selector weight rather than on source order: four attribute selectors against three.
+    expect(suppressRule).toContain("[data-md-checkbox] + [data-md-checkbox]");
   });
 
   test("inherits the row's type metrics so the glyph keeps the baseline", () => {

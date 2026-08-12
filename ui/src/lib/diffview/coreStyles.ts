@@ -494,7 +494,19 @@ const CARET_OVERRIDES = `
      insets is what holds the advance at zero, and why user-select: none is the copy contract
      rather than tidiness applies here unchanged and is not repeated.
 
-     TWO things are genuinely new, and both are worth reading.
+     THREE things are genuinely new, and all three are worth reading.
+
+     ONE BOX PER RUN. A bullet is a single character, so its run can never be cut in two;
+     a three-character run can, and shiki really does cut it — an uppercase bracket run
+     comes back as three tokens, as does a lowercase one on a row carrying other inline
+     markup. inlineDecorate's tagRow
+     tags EVERY token a run covers, so without the suppression rule below the sheet drew
+     three boxes side by side rather than one. The rule leaves the glyph on the run's first
+     token, which is the token the run starts at and therefore the one the centring offset
+     is measured from. It wins on selector weight rather than on source order — four
+     attribute selectors against the state rules' three — so it cannot be undone by
+     someone reordering this block. The data-md members solve the same problem with
+     pillGroups and the data-md-start / data-md-end caps; a pseudo-element needs only this.
 
      The CENTRING. A bullet needs no offset because it overdraws the single cell it was
      already sitting on; a one-cell glyph over a three-cell run would sit on the opening
@@ -536,6 +548,9 @@ const CARET_OVERRIDES = `
   }
   [data-content] [data-line] [data-md-checkbox="checked"]::before {
     content: "☑\\FE0E";
+  }
+  [data-content] [data-line] [data-md-checkbox] + [data-md-checkbox]::before {
+    content: none;
   }
 
   /* EXC-870: a markdown image, drawn onto the row its image markup sits on
