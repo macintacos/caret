@@ -128,6 +128,43 @@ test("every construct the epic draws renders on one document", async ({ daemon, 
   expect(counts.filter((line) => line.endsWith(": 0") || line.endsWith(": -1"))).toEqual([]);
 });
 
+test("every replacement marker really does hide the character it draws over", async ({
+  daemon,
+  page,
+}) => {
+  await openShowcase(page, daemon);
+  // The claim the whole replacement/supplementary split rests on: these four take their
+  // source glyph to `transparent` and draw in the column it vacated, which is what puts
+  // them under WCAG 1.4.11 rather than among the merely-tinted markers.
+  //
+  // It is asserted HERE, against a live cascade, because the text-scanning pins in
+  // coreStyles.test.ts cannot see a rule that never reached the sheet. EXC-871 shipped a
+  // comment with a second `*/` in it; CSS error recovery ate the `{…}` block after the
+  // prose it left behind, `[data-md-quote] { color: transparent }` silently vanished, and
+  // every source-level assertion still passed. The quote markers were visible in the
+  // browser for exactly as long as nobody looked.
+  const hidden = await page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const read = (selector: string) => {
+      const el = sh?.querySelector(selector) as HTMLElement | null;
+      return el === null || el === undefined ? "<missing>" : getComputedStyle(el).color;
+    };
+    return {
+      quote: read("[data-content] [data-line] [data-md-quote]"),
+      bullet: read('[data-content] [data-line] [data-md-list="bullet"]'),
+      checkbox: read("[data-content] [data-line] [data-md-checkbox]"),
+      // The rule row takes the whole line's ink, tokens and all.
+      rule: read("[data-content] [data-line][data-md-rule]"),
+    };
+  });
+  expect(hidden).toEqual({
+    quote: "rgba(0, 0, 0, 0)",
+    bullet: "rgba(0, 0, 0, 0)",
+    checkbox: "rgba(0, 0, 0, 0)",
+    rule: "rgba(0, 0, 0, 0)",
+  });
+});
+
 test("the combined surface settles instead of repainting forever", async ({ daemon, page }) => {
   await openShowcase(page, daemon);
   // tables.ts settles a row by counting its children, so a pass that appends one inside

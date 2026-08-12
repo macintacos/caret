@@ -42,6 +42,23 @@ test("the override sheet closes where it should, with no stray backtick inside i
   expect(overrides.length).toBe(closed - (opened + "const CARET_OVERRIDES = `".length) + 1);
 });
 
+// The sibling of the backtick trap above, and a quieter one. A comment that carries a
+// SECOND `*/` — the usual way is editing a long block and terminating the paragraph you
+// rewrote rather than the block — closes early, and the prose after it is then read as a
+// selector prelude. CSS error recovery consumes that prelude together with the next `{…}`
+// block, so exactly ONE rule vanishes from the parsed sheet while the source still reads
+// perfectly and every text-scanning assertion in this file still passes. EXC-871 lost
+// `[data-md-quote] { color: transparent }` that way and only caught it in a browser, from
+// a `>` that should have been invisible.
+//
+// Counting terminators catches both directions: an extra `*/` and a missing one. Nothing
+// legitimate unbalances them, because CSS comments do not nest.
+test("every comment in the override sheet closes exactly once", () => {
+  const opens = overrides.match(/\/\*/g)?.length ?? 0;
+  const closes = overrides.match(/\*\//g)?.length ?? 0;
+  expect(closes, `${opens} comment openers, ${closes} terminators`).toBe(opens);
+});
+
 // The override body with /* … */ comments stripped. The comments legitimately name
 // [data-gutter]/[data-content] and corner properties in prose, which would let a
 // selector regex span from a comment into an unrelated rule — so structural

@@ -668,7 +668,7 @@ const CARET_OVERRIDES = `
      catppuccin-latte and 2.97 on github-light against --paper-sunk and the row's 2-8% ink
      bands, under the 3:1 floor; --ink-soft bottoms at 4.21 across the nine. theme.test.ts
      pins the whole replacement family — this bar, the list bullet, the task checkbox — on
-     that surface, and it reds naming the palette if any of them is stepped back down. */
+     that surface, and it reds naming the palette if any of them is stepped back down.
 
      Depth reads off the BAR COUNT, and that comes free: the decoration pass gives every
      marker its own child at its own source column (data-md-quote carries the level), so a
