@@ -91,7 +91,16 @@ const TOKEN_ATTRIBUTES: Record<string, Attributes> = {
 
 // A blockquote marker: `>` preceded by up to three spaces, per CommonMark's
 // indentation allowance. A fourth space makes the line indented content instead.
+// Deliberately NOT widened to accept a leading tab: a tab expands to the next
+// tab stop, which is four columns of indent and therefore indented content.
 const QUOTE_MARKER = /^ {0,3}>/;
+
+// A list marker standing in front of the first `>`: `- > quoted` is a blockquote
+// inside a list item, and CommonMark counts the marker as that item's indentation.
+// The lookahead is what makes this safe to consume unconditionally — with no `>`
+// behind it nothing matches, so `contentStart` on an ordinary list line (and with
+// it the TASK_MARKER scan below) is exactly where it was.
+const LIST_PREFIX = /^ {0,3}(?:[-*+]|\d+[.)])\s+(?=>)/;
 
 // A task-list item's bracket run, anchored at the start of the line's content
 // (past any quote prefix): a bullet or an ordered marker, then `[ ]`, `[x]` or
@@ -101,21 +110,28 @@ const QUOTE_MARKER = /^ {0,3}>/;
 const TASK_MARKER = /^(\s*(?:[-*+]|\d+[.)])\s+)\[([ xX])\](?=\s|$)/;
 
 /** The blockquote prefix: one interval per `>` and the column its content starts
- * at, which is where the task-marker scan begins. */
-function scanQuotePrefix(line: string): { intervals: Interval[]; contentStart: number } {
+ * at, which is where the task-marker scan begins. `linkRanges` are the caller's
+ * already-resolved link columns; a `>` inside one belongs to a collapsed label
+ * rather than to a quote (`[> x](url)` displays as `> x`) and ends the scan. */
+function scanQuotePrefix(
+  line: string,
+  linkRanges: readonly ColumnRange[],
+): { intervals: Interval[]; contentStart: number } {
   const intervals: Interval[] = [];
-  let pos = 0;
+  let pos = LIST_PREFIX.exec(line)?.[0].length ?? 0;
   for (;;) {
     const match = QUOTE_MARKER.exec(line.slice(pos));
     if (match === null) break;
     const at = pos + match[0].length - 1;
+    if (linkRanges.some((r) => r.startCol <= at && at < r.endCol)) break;
     intervals.push({
       startCol: at,
       endCol: at + 1,
       attributes: { quoteMarker: intervals.length + 1 },
     });
-    // One optional space after the marker is part of the prefix, not the content.
-    pos = line[at + 1] === " " ? at + 2 : at + 1;
+    // One optional space OR TAB after the marker is part of the prefix, not the
+    // content — a tab separates two levels exactly as a space does.
+    pos = line[at + 1] === " " || line[at + 1] === "\t" ? at + 2 : at + 1;
   }
   return { intervals, contentStart: pos };
 }
@@ -180,7 +196,7 @@ export function buildInlineSpans(
   display: string,
   linkRanges: readonly ColumnRange[],
 ): { spans: InlineSpan[]; quoteDepth: number } {
-  const quote = scanQuotePrefix(display);
+  const quote = scanQuotePrefix(display, linkRanges);
   const intervals: Interval[] = [...quote.intervals];
 
   const task = TASK_MARKER.exec(display.slice(quote.contentStart));

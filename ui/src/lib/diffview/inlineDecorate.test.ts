@@ -391,3 +391,49 @@ test("splits a token inside a cell when a run boundary falls within it", () => {
     { text: " b", md: null },
   ]);
 });
+
+// EXC-863: the whole-line half of the quote seam. Subduing a quote is a property
+// of the ROW rather than of any run on it, so the depth lands on the row element
+// and the sheet reaches every token on the line through one descendant selector.
+function depths(host: HTMLElement): (string | null)[] {
+  return [...host.querySelectorAll("[data-line]")].map((r) => r.getAttribute("data-quote-depth"));
+}
+
+test("tags each quoted row with its own depth", () => {
+  host = root(row(1, ["> ", "one"]), row(2, ["> > ", "two"]), row(3, ["plain"]));
+  decorateInlineRuns(
+    host,
+    spanMap([
+      [1, [{ startCol: 0, endCol: 1, quoteMarker: 1 }]],
+      [
+        2,
+        [
+          { startCol: 0, endCol: 1, quoteMarker: 1 },
+          { startCol: 2, endCol: 3, quoteMarker: 2 },
+        ],
+      ],
+    ]),
+    new Map(),
+    new Map([
+      [1, 1],
+      [2, 2],
+    ]),
+  );
+  expect(depths(host)).toEqual(["1", "2", null]);
+});
+
+test("tags a quoted row the run map does not otherwise name", () => {
+  // The depth map is the authority on which rows are quoted, so a row reachable
+  // only through it still gets its tag.
+  host = root(row(1, ["> ", "quoted"]));
+  decorateInlineRuns(host, new Map(), new Map(), new Map([[1, 1]]));
+  expect(depths(host)).toEqual(["1"]);
+});
+
+test("drops the depth when a repaint no longer quotes the line", () => {
+  host = root(row(1, ["> ", "quoted"]));
+  decorateInlineRuns(host, new Map(), new Map(), new Map([[1, 1]]));
+  expect(depths(host)).toEqual(["1"]);
+  decorateInlineRuns(host, new Map(), new Map(), new Map());
+  expect(depths(host)).toEqual([null]);
+});
