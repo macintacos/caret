@@ -76,8 +76,16 @@ const CARET_OVERRIDES = `
      :not([data-selected-line]) yields a selected line to the amber band; declared
      before the code-block rules so a cursor on a fenced line keeps its panel fill.
      The band joins across the gutter→content seam through the shared seam-fill
-     :is() groups below, which list data-caret-cursor alongside hover/selection. */
-  [data-gutter] > [data-column-number][data-caret-cursor]:not([data-selected-line]) {
+     :is() groups below, which list data-caret-cursor alongside hover/selection.
+
+     Descendant rather than child, here and in the three gutter rules that follow it
+     (the selection tick and its ::after, and the divider clearing below). A carded
+     block's gutter cells sit inside a display:contents card — codeBlockScroll.ts's for
+     an overflowing fence, tables.ts's for every table — so a child combinator stops
+     matching them and the row reads half-banded: the content half paints from its own
+     descendant selector while the gutter half, and the 3px caret bar with it, silently
+     drops out. The card has no box, so widening changes nothing else. */
+  [data-gutter] [data-column-number][data-caret-cursor]:not([data-selected-line]) {
     background-color: color-mix(in lab, var(--paper), var(--ink) 7%);
     box-shadow: inset 3px 0 0 0 var(--ink);
   }
@@ -92,10 +100,10 @@ const CARET_OVERRIDES = `
      the "+" lane, so the whole range reads as one selection and it's clear the
      button rides with the pointer. Scoped to :not([data-hovered]) so it never
      doubles up with the real button on the active row. */
-  [data-gutter] > [data-column-number][data-selected-line]:not([data-hovered]) {
+  [data-gutter] [data-column-number][data-selected-line]:not([data-hovered]) {
     position: relative;
   }
-  [data-gutter] > [data-column-number][data-selected-line]:not([data-hovered])::after {
+  [data-gutter] [data-column-number][data-selected-line]:not([data-hovered])::after {
     content: "";
     position: absolute;
     top: 22%;
@@ -417,15 +425,19 @@ const CARET_OVERRIDES = `
      back in Chromium, where caret renders); the thumb is a caret-neutral ink mix — no amber,
      the diff surface reserves amber for selection — inset by a transparent border so it reads
      as a thin pill in the lane. */
-  [data-content] > [data-code-card]::-webkit-scrollbar { height: 12px; }
-  [data-content] > [data-code-card]::-webkit-scrollbar-track { background: transparent; }
-  [data-content] > [data-code-card]::-webkit-scrollbar-thumb {
+  [data-content] > [data-code-card]::-webkit-scrollbar,
+  [data-content] > [data-table-card]::-webkit-scrollbar { height: 12px; }
+  [data-content] > [data-code-card]::-webkit-scrollbar-track,
+  [data-content] > [data-table-card]::-webkit-scrollbar-track { background: transparent; }
+  [data-content] > [data-code-card]::-webkit-scrollbar-thumb,
+  [data-content] > [data-table-card]::-webkit-scrollbar-thumb {
     background: color-mix(in lab, var(--paper-sunk), var(--ink) 45%);
     border: 3px solid transparent;
     border-radius: var(--radius);
     background-clip: content-box;
   }
-  [data-content] > [data-code-card]::-webkit-scrollbar-thumb:hover {
+  [data-content] > [data-code-card]::-webkit-scrollbar-thumb:hover,
+  [data-content] > [data-table-card]::-webkit-scrollbar-thumb:hover {
     background: color-mix(in lab, var(--paper-sunk), var(--ink) 60%);
     background-clip: content-box;
   }
@@ -438,6 +450,117 @@ const CARET_OVERRIDES = `
   [data-content] > [data-code-card] > [data-line][data-code-start]:not([data-selected-line]) [data-code-lang] {
     position: relative;
     top: -0.12em;
+  }
+
+  /* EXC-864: a GFM table renders as a real column-aligned table. This is the one place
+     in the epic that restructures DOM instead of overdrawing in place, because the source
+     pipe columns do not line up with a table's columns — alignment has to come from layout.
+     tables.ts moves a table's rows into a card and groups each row's tokens into cells;
+     these rules are the whole visual treatment.
+
+     TWO NESTED SUBGRIDS, and both are load-bearing. The card takes its ROWS from the
+     parent, exactly as the code card above does, so a table's rows still map to the shared
+     row tracks and the gutter numbers stay aligned — including when a cell wraps and grows
+     its track, which is why there is no ResizeObserver and no per-row height syncing here.
+     The card declares the COLUMN tracks, and each row takes those from the card, so cells
+     line up across rows while every row keeps its own box. That last part is why a real
+     table element was refused rather than merely awkward: table rows cannot participate in
+     the parent's row tracks, and display: contents rows would drop the box the library's
+     selection and hover fills, the cursor band and the annotation anchors all need.
+
+     What a carded row does NOT get is the band's ROUNDED ENDS and the seam-fill pull, both
+     of which select direct children of their column. The seam pull is refused on purpose —
+     it drags a banded row left across the gutter seam, which inside a card with its own
+     inline margin would pull the row out of the card's box. The rounding is a real
+     remainder: a selection wholly inside a table draws square ends. Widening those rules
+     would need them to reason about both card kinds at once (their sibling combinators
+     stop meaning "the next row" once a card is in the way), which is a pass over the whole
+     band rather than a table-shaped patch. The bands themselves, the caret bar and the
+     gutter divider DO reach a carded row — the four gutter rules above are descendant
+     selectors for exactly that reason.
+
+     The sizing policy is max-content tracks plus a max-width on the CELL, and the split
+     between the two is what separates the issue's two behaviours. A max-content track never
+     shrinks under space pressure — it overflows instead — so a wide table scrolls as one
+     unit rather than reflowing into a tall cramped block, the code card's precedent and
+     what the showcase's wide rows are written to exercise. The cap then rides the cell, so
+     a track resolves to min(its content, the cap): a column of ordinary data keeps its
+     natural width and never wraps, while a genuinely prose-heavy cell hits the cap and
+     wraps inside its own column, growing the row rather than the table. Sizing the TRACKS
+     with minmax(min-content, …) or fit-content() cannot express this — both let the grid
+     squeeze every column at once, so the wide table reflowed and the prose cell did not
+     wrap any sooner. justify-content keeps a narrow table at its natural width rather than
+     stretching it across the cap.
+
+     44ch is the one tuned number here, and it means "a cell wider than this is prose". It
+     was measured against the showcase: every data column of both wide tables sits under it
+     and stays on one line, and the 90-character link cell in the reflow-exemptions table
+     sits well over it and wraps. Same kind of knob as the 720px reading cap above.
+
+     No fill and no padding. The table sits on the bare diff surface rather than in a panel:
+     a fenced block is a different MODE of reading and earns its own surface, where a table
+     is prose-adjacent data. And a cell needs no padding because the source already carries
+     it — a written cell has its own spaces, so the breathing room inside one is text the
+     author typed. The chip family's no-padding rule (EXC-867, EXC-869) lands here free. */
+  [data-content] > [data-table-card] {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-rows: subgrid;
+    grid-template-columns: repeat(var(--table-columns, 1), max-content);
+    justify-content: start;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 720px;
+    margin-inline: 0.75rem;
+  }
+  [data-content] > [data-table-card] > [data-line] {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: subgrid;
+  }
+  /* pre-wrap rather than the library's pre: wrapping is opt-in INSIDE cells only, and stays
+     off everywhere else. The max-width is the wrap trigger described above — it caps the
+     cell's max-content contribution, which is what caps the track. */
+  [data-content] [data-table-cell] {
+    white-space: pre-wrap;
+    max-width: 44ch;
+  }
+  [data-content] [data-table-cell][data-table-align="center"] { text-align: center; }
+  [data-content] [data-table-cell][data-table-align="right"] { text-align: right; }
+
+  /* THE PIPES ARE THE BORDERS. Every other renderer hides them and draws rules in their
+     place; here each cell opens with its own pipe and the cells butt against each other in
+     the shared column tracks, so the pipes stack into continuous vertical dividers on their
+     own. Nothing is drawn that is not a character in the file, which is what keeps copy,
+     the search highlights, vim motions and comment anchors resolving against the same
+     column space as everywhere else — and it is the epic's rule (EXC-869 kept the fence
+     backticks) rather than a compromise. They take --ink-faint, the ink the chip family
+     prescribes for markers. The selector outranks the library's own [data-line] span color
+     rule, which is where a token's shiki ink is applied. */
+  [data-content] [data-line] [data-table-pipe] {
+    color: var(--ink-faint);
+  }
+
+  /* The header row is bold, and the weight is declared HERE rather than routed through
+     shiki's fontStyle — @pierre/diffs carries that into an invalid font-weight:
+     light-dark(...) and drops it, so every token renders at one weight whatever the theme
+     says (EXC-867's standing upstream finding). */
+  [data-content] [data-line][data-table-head] {
+    font-weight: bold;
+  }
+
+  /* The delimiter row keeps its line AND its gutter number: one source line is one table
+     row, which is correctness rather than look — EXC-865's comment anchors rest on it. What
+     it gets instead is both halves of the epic's thesis at once. The dashes and colons are
+     SUBDUED, not hidden, exactly as the emphasis markers and the fence backticks are, so
+     the alignment markers stay legible and stay copyable; and the row draws the header's
+     separator as a real full-width rule, which the dashes cannot do because they are only
+     as long as someone wrote them. Source and render, on the same row. */
+  [data-content] [data-line][data-table-rule] {
+    border-block-end: 1px solid var(--rule);
+  }
+  [data-content] [data-line][data-table-rule] [data-table-cell] > * {
+    color: var(--ink-faint);
   }
 
   /* EXC-788: a banded row — the focused-line cursor OR a pointer hover — ON a
@@ -544,7 +667,7 @@ const CARET_OVERRIDES = `
     padding-inline-start: calc(2ch + var(--caret-seam));
   }
   [data-gutter]
-    > [data-column-number]:is(
+    [data-column-number]:is(
       [data-selected-line],
       [data-hovered],
       [data-line-type="change-addition"],

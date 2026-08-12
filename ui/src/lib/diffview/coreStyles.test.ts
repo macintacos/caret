@@ -145,9 +145,12 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
     // 1ch, so a banded row in those modes re-adds 2ch + the seam.
     expect(overrideDecls).toMatch(/padding-inline-start:\s*calc\(2ch \+ var\(--caret-seam\)\)/);
     // The gutter column's per-row divider is dropped for the same banded rows so
-    // the two halves join with no 2px gap.
+    // the two halves join with no 2px gap. A DESCENDANT selector, not a child one:
+    // a carded block's gutter cells sit inside a display:contents card (EXC-729's
+    // for an overflowing fence, EXC-864's for every table), which a child combinator
+    // stops matching — the row would keep its divider and read with a gap.
     const border = overrideDecls.match(
-      /\[data-gutter\]\s*>\s*\[data-column-number\]:is\(([\s\S]*?)\)\s*\{([\s\S]*?)\}/,
+      /\[data-gutter\]\s+\[data-column-number\]:is\(([\s\S]*?)\)\s*\{([\s\S]*?)\}/,
     );
     expect(border).not.toBeNull();
     for (const state of BANDED) expect(border![1]).toContain(state);
@@ -616,13 +619,15 @@ describe("the single per-block code scrollbar (EXC-729)", () => {
     // Setting scrollbar-width/color on the card would let Chromium pull back the auto-hiding
     // platform scrollbar; the custom ::-webkit-* thumb is what keeps the single bar shown.
     expect(cardBody).not.toMatch(/scrollbar-width:|scrollbar-color:/);
-    expect(overrideDecls).toMatch(/\[data-code-card\]::-webkit-scrollbar-thumb\s*\{/);
+    // [^{]* rather than \s*: the table card (EXC-864) shares this bar, so the rule heads a
+    // selector LIST. The code card still has to be in it for this to match.
+    expect(overrideDecls).toMatch(/\[data-code-card\]::-webkit-scrollbar-thumb[^{]*\{/);
   });
 
   test("keeps the thumb a caret-neutral ink mix, not amber", () => {
     // The diff surface reserves amber for selection, so the bar is a neutral paper→ink mix.
     const thumb =
-      overrideDecls.match(/\[data-code-card\]::-webkit-scrollbar-thumb\s*\{[^}]*\}/)?.[0] ?? "";
+      overrideDecls.match(/\[data-code-card\]::-webkit-scrollbar-thumb[^{]*\{[^}]*\}/)?.[0] ?? "";
     expect(thumb).toMatch(/color-mix\(in lab, var\(--paper-sunk\), var\(--ink\) \d+%\)/);
     expect(thumb).toMatch(/border-radius:\s*var\(--radius\)/);
   });
@@ -743,5 +748,88 @@ describe("the plan-search highlights (EXC-832, rehued EXC-905)", () => {
   test("neither spends the selection hue", () => {
     expect(allMatches).not.toContain("--accent");
     expect(currentMatch).not.toContain("--accent");
+  });
+});
+
+// EXC-864: a GFM table renders as a real column-aligned table. tables.ts moves its rows
+// into a card and groups each row's tokens into cells; these rules are the whole visual
+// treatment. The two nested subgrids are the load-bearing part — rows from the parent so
+// the gutter numbers stay aligned, columns from the card so cells line up across rows —
+// and the pipes are left in place to BE the borders rather than replaced by drawn ones.
+// This suite pins the CSS side; the rendered layout is covered by e2e.
+describe("the markdown table (EXC-864)", () => {
+  const cardBody =
+    overrideDecls.match(/\[data-content\]\s*>\s*\[data-table-card\]\s*\{[^}]*\}/)?.[0] ?? "";
+  const rowBody =
+    overrideDecls.match(
+      /\[data-content\]\s*>\s*\[data-table-card\]\s*>\s*\[data-line\]\s*\{[^}]*\}/,
+    )?.[0] ?? "";
+
+  test("takes its row tracks from the parent so the gutter stays aligned", () => {
+    expect(cardBody).toMatch(/display:\s*grid/);
+    expect(cardBody).toMatch(/grid-template-rows:\s*subgrid/);
+  });
+
+  test("declares the table's column tracks from the count tables.ts sets", () => {
+    // max-content, so a track never shrinks under space pressure — a wide table
+    // overflows into the scroll rather than reflowing into a tall cramped block.
+    expect(cardBody).toMatch(
+      /grid-template-columns:\s*repeat\(var\(--table-columns[^)]*\),\s*max-content\)/,
+    );
+    // start, not stretch: a narrow table keeps its natural width inside the cap.
+    expect(cardBody).toMatch(/justify-content:\s*start/);
+  });
+
+  test("scrolls as one unit once even wrapping cannot fit the columns", () => {
+    expect(cardBody).toMatch(/overflow-x:\s*auto/);
+    expect(cardBody).toMatch(/max-width:\s*720px/);
+    // The code card's bar, shared rather than duplicated — one scrollbar idiom.
+    expect(overrideDecls).toMatch(/\[data-table-card\]::-webkit-scrollbar\s*\{/);
+    expect(overrideDecls).toMatch(/\[data-table-card\]::-webkit-scrollbar-thumb\s*\{/);
+  });
+
+  test("makes each row a subgrid of the card's columns, so cells align across rows", () => {
+    expect(rowBody).toMatch(/display:\s*grid/);
+    expect(rowBody).toMatch(/grid-template-columns:\s*subgrid/);
+  });
+
+  test("wraps inside cells only, at the width that says a cell is prose", () => {
+    const cellBody =
+      overrideDecls.match(/\[data-content\]\s*\[data-table-cell\]\s*\{[^}]*\}/)?.[0] ?? "";
+    expect(cellBody).toMatch(/white-space:\s*pre-wrap/);
+    // The cap rides the CELL, not the track: capping the track lets the grid squeeze
+    // every column at once, which reflows a wide table instead of scrolling it.
+    expect(cellBody).toMatch(/max-width:\s*44ch/);
+    // No padding: the source's own spaces inside a cell are the breathing room.
+    expect(cellBody).not.toMatch(/padding/);
+  });
+
+  test("respects the delimiter row's alignment markers", () => {
+    expect(overrideDecls).toMatch(/\[data-table-align="center"\]\s*\{\s*text-align:\s*center/);
+    expect(overrideDecls).toMatch(/\[data-table-align="right"\]\s*\{\s*text-align:\s*right/);
+  });
+
+  test("inks the pipes as the borders rather than drawing rules in their place", () => {
+    expect(overrideDecls).toMatch(/\[data-table-pipe\]\s*\{\s*color:\s*var\(--ink-faint\)/);
+    // No drawn column dividers anywhere: the characters do that job.
+    expect(cardBody).not.toMatch(/border-inline/);
+    expect(rowBody).not.toMatch(/border-inline/);
+  });
+
+  test("declares the header row's weight rather than routing it through shiki", () => {
+    // @pierre/diffs drops shiki's fontStyle into an invalid font-weight: light-dark(...),
+    // so a theme-side bold would never land (EXC-867's standing upstream finding).
+    expect(overrideDecls).toMatch(/\[data-line\]\[data-table-head\]\s*\{\s*font-weight:\s*bold/);
+  });
+
+  test("subdues the delimiter row's dashes and draws the header's rule under it", () => {
+    expect(overrideDecls).toMatch(
+      /\[data-line\]\[data-table-rule\]\s*\{\s*border-block-end:\s*1px solid var\(--rule\)/,
+    );
+    // Subdued, not hidden: the alignment markers stay legible and stay copyable.
+    expect(overrideDecls).toMatch(
+      /\[data-table-rule\]\s*\[data-table-cell\]\s*>\s*\*\s*\{\s*color:\s*var\(--ink-faint\)/,
+    );
+    expect(overrideDecls).not.toMatch(/\[data-table-rule\][^{]*\{[^}]*display:\s*none/);
   });
 });
