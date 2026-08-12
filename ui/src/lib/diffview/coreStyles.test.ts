@@ -260,6 +260,55 @@ describe("the fenced code-block panel (EXC-692)", () => {
   });
 });
 
+// EXC-869: the ``` / ~~~ delimiters stay visible and take the EXC-855 chip family's
+// round-rect treatment, so a fenced block reads as a deliberate element. Nothing is
+// hidden, so this suite pins the chip's shape rather than any row's absence.
+describe("the fence-marker chip (EXC-869)", () => {
+  // Matched from [data-content] so the assertions below can read the COMBINATOR, not
+  // just the body. [^{}] can cross neither brace, so the match stays inside one rule's
+  // selector; [data-code-line] is what separates the chip from the EXC-692 centering
+  // rules, which name [data-code-fence] under [data-code-end] instead.
+  const chipRule =
+    overrideDecls.match(
+      /\[data-content\][^{}]*\[data-code-line\][^{}]*\[data-code-fence\]\s*\{[^}]*\}/,
+    )?.[0] ?? "";
+
+  test("fills the fence markers with the family's inline-code chip token", () => {
+    // The tint is CONSUMED, never redefined here: --chip-code is the chip family's
+    // shared token (EXC-858 lands it in the palette recipe), so the fence chip matches
+    // the inline-code chip by construction rather than by a hand-matched value.
+    expect(chipRule).toMatch(/background-color:\s*var\(--chip-code,/);
+  });
+
+  test("falls back to a derived mix, never a colour literal", () => {
+    // Until --chip-code exists the fallback must still be palette-derived, so all nine
+    // palettes and both schemes stay correct — the same in-lab idiom as the panel fill.
+    expect(chipRule).toMatch(
+      /var\(--chip-code,\s*color-mix\(in lab, var\(--paper-sunk\), var\(--ink\) \d+%\)\)/,
+    );
+    expect(chipRule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+
+  test("wears the family's shared radius", () => {
+    expect(chipRule).toMatch(new RegExp(String.raw`border-radius:\s*${RADIUS}`));
+  });
+
+  test("shifts no column — block padding only", () => {
+    // Rows render white-space: pre, so inline padding or margin on a token would move
+    // every glyph after it (and slide the tint under the opening row's language tag).
+    // Vertical padding on an inline box never changes the line box, so it is free.
+    expect(chipRule).toMatch(/padding-block:/);
+    expect(chipRule).not.toMatch(/padding-inline|margin-inline|padding-left|padding-right/);
+  });
+
+  test("reaches the scroll card's rows as well as the direct-child rows", () => {
+    // An overflowing block's rows are re-parented into [data-code-card], so a child
+    // combinator would chip only the fitting blocks. The selector is a descendant one.
+    expect(chipRule).not.toMatch(/\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]/);
+    expect(chipRule).toMatch(/\[data-content\]\s+\[data-line\]\[data-code-line\]/);
+  });
+});
+
 // EXC-729: a fenced-code line wider than the panel must stay INSIDE the card and scroll
 // horizontally, not break out of the background. The EXC-692 panel caps rows at max-width, but
 // the library renders source lines white-space: pre, so an over-wide line overflowed the

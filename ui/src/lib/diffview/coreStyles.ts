@@ -164,9 +164,10 @@ const CARET_OVERRIDES = `
      reads as too high when the row is not top-padded. The opening markers already
      look centered (their row carries padding-block-start), so they are left alone;
      only the closing markers and the opening language tag are shifted to their row's
-     vertical center. shiki attaches no classes, so codeBlocks.ts tags the two tokens
-     (data-code-fence on the closing markers, data-code-lang on the language) and each
-     is shifted with position: relative, which moves the glyph without touching the
+     vertical center. shiki attaches no classes, so codeBlocks.ts tags the fence-line
+     tokens (data-code-fence on each fence's markers, data-code-lang on the language);
+     the two shifted here are the CLOSING markers and the language, each moved with
+     position: relative, which moves the glyph without touching the
      panel background or the row layout. The closing markers move down; the language,
      a baseline word that its row's top padding has pushed low, moves up. Both offsets
      are em-relative eyeball values — the two knobs to tune if either token looks off
@@ -178,6 +179,26 @@ const CARET_OVERRIDES = `
   [data-content] > [data-line][data-code-start]:not([data-selected-line]) [data-code-lang] {
     position: relative;
     top: -0.12em;
+  }
+
+  /* EXC-869: the fence markers wear the chip family's round-rect treatment (EXC-855), so a
+     block's delimiters read as deliberate punctuation rather than stray backticks. Both
+     fences are tagged, so the block reads the same at top and bottom. ONE descendant
+     selector covers both card paths — direct-child rows and the rows an overflowing block's
+     scroll card re-parents (codeBlockScroll.ts) — for the same reason tagCodeBlockRows
+     queries by descendant rather than by child. The tint names the family's inline-code
+     token with a derived fallback, so the chip matches the inline-code chip by construction
+     once --chip-code lands and stays palette- and scheme-correct until then, off the same
+     in-lab mix the panel fill above uses. The markers keep the --ink-faint ink caret-theme.ts
+     already gives them, which is the ink the chip family prescribes for markers. Padding is
+     BLOCK-ONLY on purpose: rows render white-space: pre, so inline padding would shift every
+     glyph after the markers, and on the opening row it would slide the tint under the
+     language tag — which keeps its own prominent treatment. Vertical padding on an inline box
+     never changes the line box, so the chip gains height without moving a column. */
+  [data-content] [data-line][data-code-line]:not([data-selected-line]) [data-code-fence] {
+    background-color: var(--chip-code, color-mix(in lab, var(--paper-sunk), var(--ink) 14%));
+    border-radius: var(--radius);
+    padding-block: 0.15em;
   }
 
   /* EXC-729: an overflowing fenced block is wrapped in one scroll card (codeBlockScroll.ts)
