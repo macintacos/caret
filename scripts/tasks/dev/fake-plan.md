@@ -617,6 +617,16 @@ A plain span: `renderPlan(markdown)`. A span holding a path: `ui/src/lib/diffvie
 - `src/no-such-module.ts` — a path that does not resolve: no glyph, no preview, and no reference tint. It still wears the neutral inline-code chip every span carries, so what separates it from the two rows above is hue rather than the presence of a chip. This is the row that regresses silently, so read it every time.
 - `doc/no-such-folder/` — the directory half of that negative case.
 
+### Paths that look like markup
+
+EXC-1066: a path **is** the markup. When a collapsed link's label carries characters CommonMark would otherwise read as emphasis, the reference owns the whole label, and what draws is one plain path rather than a bolded or slanted fragment of one. None of the paths below exist, so no row here draws a glyph, a chip tint, or a preview — the claim is the narrower one, that no row draws **emphasis** either. Read it beside the [`ui/src/lib/markdown.ts`](ui/src/lib/markdown.ts) row under **Inline code** above, which is the same layer on a path that does resolve, and the continuous-chip baseline these rows are the plain half of.
+
+- [jobs/shared/zeus/__init__.py](jobs/shared/zeus/__init__.py) — `__init__` is a valid CommonMark `strong` run, and none of it may draw bold. The regression is the reference cut into three tokens: `jobs/shared/zeus/`, a bold `__init__` pill, and `.py`.
+- [src/_a_/b.ts](src/_a_/b.ts) — the same collision through `em` rather than `strong`: `_a_` stays literal, and a slanted middle segment is the regression.
+- [src/_private.py](src/_private.py) — the negative control: a single intraword `_` opens nothing, so this row is not at risk from either side, and it must read identically to the two above.
+- [doc/~snapshot~.md](doc/~snapshot~.md) — GFM reads `~snapshot~` as `del`, which carries no attribute, so it draws nothing here for the same reason `~~…~~` draws nothing under **Emphasis**. It sits under `doc/` deliberately: a target that starts with `~` is unresolvable in principle, so the same filename written alone would not be a citation at all.
+- `a*b.ts` — written as inline code rather than as a link, because `*` is not one of the characters a citable target may hold: a link pointing here could never be a reference, so a code span is the only spelling of this path the pass ever sees, and its interior stays literal like every other span's.
+
 ### Fenced blocks
 
 Tagged, the ordinary case:
