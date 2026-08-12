@@ -114,14 +114,21 @@ const QUOTE_MARKER = /^ {0,3}>/;
 // The lookahead is what makes this safe to consume unconditionally — with no `>`
 // behind it nothing matches, so `contentStart` on an ordinary list line (and with
 // it the TASK_MARKER scan below) is exactly where it was.
-const LIST_PREFIX = /^ {0,3}(?:[-*+]|\d+[.)])\s+(?=>)/;
+const LIST_PREFIX = /^ {0,3}(?:[-*+]|\d{1,9}[.)])\s+(?=>)/;
 
 // A task-list item's bracket run, anchored at the start of the line's content
 // (past any quote prefix): a bullet or an ordered marker, then `[ ]`, `[x]` or
 // `[X]`, then whitespace or the line's end — `- [x]done` is not a task item.
 // Group 1 is what precedes the brackets, so its length is their offset from the
 // content start rather than from column zero.
-const TASK_MARKER = /^(\s*(?:[-*+]|\d+[.)])\s+)\[([ xX])\](?=\s|$)/;
+//
+// The nine-digit cap is CommonMark's, and all THREE scans in this file that read an
+// ordered marker — LIST_PREFIX above, this one, and LIST_MARKER below — spell it the
+// same way, because they decide the same question: does this line open a list item. A
+// digit run past the cap opens none, so every scan must refuse it. One scan reading
+// further than another leaves the row carrying half a decoration: a checkbox with no
+// marker tagged beside it, or a quote prefix measured past an indent that is not one.
+const TASK_MARKER = /^(\s*(?:[-*+]|\d{1,9}[.)])\s+)\[([ xX])\](?=\s|$)/;
 
 // A thematic break: three or more of the SAME marker, spaces or tabs allowed
 // between them, and nothing else on the line. Checked before the list scan

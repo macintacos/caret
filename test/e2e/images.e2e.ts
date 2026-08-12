@@ -32,9 +32,11 @@
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import {
   firstGlyphX,
+  gridCounts,
   planSurface,
   revealGutterPlus,
   rowHeights,
+  settledMutations,
 } from "@test/e2e/support/source-view.ts";
 
 // A 900x700 1-bit PNG, solid black. The size is the point: 700px intrinsic height
@@ -132,18 +134,6 @@ async function imageDecoded(page: import("@playwright/test").Page): Promise<void
   await expect
     .poll(async () => (await shadowImages(page)).find((i) => i.src === GOOD)?.naturalHeight)
     .toBeGreaterThan(0);
-}
-
-/** The rendered row and gutter-number counts. One number per row, always, however
- * tall a row grows — the epic's standing reflow guard. */
-function gridCounts(page: import("@playwright/test").Page) {
-  return page.evaluate(() => {
-    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    return {
-      rows: (sh?.querySelectorAll("[data-content] [data-line]") ?? []).length,
-      numbers: (sh?.querySelectorAll("[data-line-number-content]") ?? []).length,
-    };
-  });
 }
 
 /** Route the assets, seed `plan`, and open it. Every test opens exactly one plan;
@@ -327,46 +317,21 @@ test("an image in a table cell draws nothing, and the repaint settles", async ({
   // because it places tokens by column and an image sits past the last cell's end.
   // Measured before the fix: ~10,800 childList mutations in two seconds, climbing;
   // the same window with a plain table, or with the image outside one, was zero.
-  // The mutation count is read twice below rather than once because a settled view
-  // must hold still, and only a second equal reading can say that it does.
   await open(page, daemon, TABLE_PLAN);
-  await page.evaluate(() => {
-    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    const w = window as unknown as { __mutations: number };
-    w.__mutations = 0;
-    new MutationObserver((records) => {
-      w.__mutations += records.length;
-    }).observe(sh as unknown as Node, { childList: true, subtree: true });
-  });
-  // Settling is asserted by polling for the counter to STOP moving rather than by
-  // sampling a fixed window: auto-retrying is the suite's timing discipline, and it
-  // is the stronger claim of the two — a loop never yields two equal readings, so
-  // this fails on churn of any rate rather than only on churn above some threshold.
-  let previous = -1;
-  await expect
-    .poll(async () => {
-      const now = await page.evaluate(
-        () => (window as unknown as { __mutations: number }).__mutations,
-      );
-      const unchanged = now === previous;
-      previous = now;
-      return unchanged;
-    })
-    .toBe(true);
+  const mutations = await settledMutations(page);
   const settled = await page.evaluate((ln) => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
     const row = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].find(
       (r) => r.getAttribute("data-line") === String(ln),
     );
     return {
-      mutations: (window as unknown as { __mutations: number }).__mutations,
       images: (sh?.querySelectorAll("img[data-md-image]") ?? []).length,
       celled: row?.querySelector(":scope > [data-table-cell]") !== null,
     };
   }, TABLE_BODY_LINE);
   expect(settled.celled).toBe(true);
   expect(settled.images).toBe(0);
-  expect(settled.mutations).toBe(0);
+  expect(mutations).toBe(0);
   // The cell still reads as its markup, which is the rung this descends to.
   await expect(page.locator(".diffview")).toContainText(`![a shot](${GOOD})`);
 });

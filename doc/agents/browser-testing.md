@@ -36,7 +36,7 @@ body:
 
 - **Browser dependence behind a helper.** `createAnnotation`
   (`test/e2e/diff-surface.e2e.ts:1616`) reads as a few lines of intent, but it routes
-  through `revealGutterPlus` (`test/e2e/support/source-view.ts:86`), which does
+  through `revealGutterPlus` (`test/e2e/support/source-view.ts:238`), which does
   `getBoundingClientRect()` and then `page.mouse.move()`. Inline the helper before
   concluding a spec is pure logic.
 - **Browser dependence declared in the config.** `playwright.config.ts:78` emulates

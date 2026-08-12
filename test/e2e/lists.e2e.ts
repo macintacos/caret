@@ -30,7 +30,16 @@
 // resolve across the shadow boundary and produce the right boxes.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
-import { firstGlyphX, planSurface, revealGutterPlus } from "@test/e2e/support/source-view.ts";
+import {
+  cellWidth,
+  firstGlyphX,
+  gridCounts,
+  lineOf,
+  planSurface,
+  revealGutterPlus,
+  settledMutations,
+  taggedRuns,
+} from "@test/e2e/support/source-view.ts";
 
 // Bullets three deep, an ordered list with a nested ordered level, a task list, a
 // quoted list, and every shape that looks like a marker and is not — a thematic
@@ -90,79 +99,6 @@ const EMPHASIS_LINE = "*emphasis opening the line, which is not a marker*";
 const BREAK = "---";
 const FENCED_BULLET = "- fenced and literal";
 
-/** The 1-based display line of the row whose text is exactly `text`. Throws when
- * no row matches, so a stale fixture string fails here rather than as a puzzling
- * miss on whatever line the number happened to name. */
-async function lineOf(page: import("@playwright/test").Page, text: string): Promise<number> {
-  const line = await page.evaluate((want) => {
-    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    const row = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].find(
-      (r) => (r.textContent ?? "") === want,
-    );
-    return row ? Number(row.getAttribute("data-line")) : null;
-  }, text);
-  if (line === null) throw new Error(`no rendered row reads exactly ${JSON.stringify(text)}`);
-  return line;
-}
-
-/** Every marker token the decoration pass tagged, as the text of the row it sits
- * on, its kind, and its own characters. Keyed by row text for the reason above;
- * reading the marker's text back is what makes "the marker columns and nothing
- * else" a claim about the DOM rather than about the emitter's unit test. */
-function markers(page: import("@playwright/test").Page) {
-  return page.evaluate(() => {
-    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    return [...(sh?.querySelectorAll("[data-content] [data-line] [data-md-list]") ?? [])].map(
-      (el) => ({
-        row: el.closest("[data-line]")?.textContent ?? "",
-        kind: el.getAttribute("data-md-list") ?? "",
-        marker: el.textContent ?? "",
-      }),
-    );
-  });
-}
-
-/** One character cell's advance, in viewport px, measured off a row of ordinary
- * prose. A Range over the row's text rather than the row's own box, because the
- * row is a grid cell that stretches past its content — the Range measures the
- * glyphs, and the rows render `white-space: pre` in a monospace face, so the text
- * width divided by its length is exactly one cell.
- *
- * This is what makes the marker's own width a falsifiable claim: an in-flow glyph
- * would make the marker element two cells wide, which no left-edge probe can see. */
-async function cellWidth(page: import("@playwright/test").Page, text: string): Promise<number> {
-  const width = await page.evaluate((want) => {
-    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    const row = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].find(
-      (r) => (r.textContent ?? "") === want,
-    );
-    if (row == null) return null;
-    const range = document.createRange();
-    range.selectNodeContents(row);
-    return range.getBoundingClientRect().width / want.length;
-  }, text);
-  if (width === null) throw new Error(`no rendered row reads exactly ${JSON.stringify(text)}`);
-  return width;
-}
-
-/** The rendered row and gutter-number counts, plus the highest line the rows
- * claim. One number per row and a contiguous 1..N of lines is the epic's standing
- * reflow guard, and the thing a marker that changed a column width would break
- * first. The high-water line is asserted instead of the seeded string's line count
- * because ingest reflows the plan (see the constants above), so the invariant to
- * hold is that the rendered rows tile their own range with no gaps. */
-function gridCounts(page: import("@playwright/test").Page) {
-  return page.evaluate(() => {
-    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    const rows = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])];
-    return {
-      rows: rows.length,
-      numbers: (sh?.querySelectorAll("[data-line-number-content]") ?? []).length,
-      highestLine: Math.max(...rows.map((r) => Number(r.getAttribute("data-line")))),
-    };
-  });
-}
-
 /** Seed `plan` and open it. */
 async function open(
   page: import("@playwright/test").Page,
@@ -176,28 +112,28 @@ async function open(
 
 test("each marker is tagged with its kind, over its own characters", async ({ page, daemon }) => {
   await open(page, daemon, LIST_PLAN);
-  await expect.poll(async () => (await markers(page)).length).toBeGreaterThan(0);
-  expect(await markers(page)).toEqual([
-    { row: BULLET, kind: "bullet", marker: "-" },
-    { row: "  - A second-level item carrying `inline code`", kind: "bullet", marker: "-" },
-    { row: BULLET_DEEP, kind: "bullet", marker: "-" },
-    { row: "- A second top-level item, back at the outer margin", kind: "bullet", marker: "-" },
+  await expect.poll(async () => (await taggedRuns(page, "data-md-list")).length).toBeGreaterThan(0);
+  expect(await taggedRuns(page, "data-md-list")).toEqual([
+    { row: BULLET, value: "bullet", text: "-" },
+    { row: "  - A second-level item carrying `inline code`", value: "bullet", text: "-" },
+    { row: BULLET_DEEP, value: "bullet", text: "-" },
+    { row: "- A second top-level item, back at the outer margin", value: "bullet", text: "-" },
     // An ordered list nested inside an unordered one — the shape the issue names
     // for its screenshot, and the one where a marker's kind and its indent could
     // disagree.
-    { row: "  1. An ordered step nested inside a bullet", kind: "ordered", marker: "1." },
-    { row: ORDERED, kind: "ordered", marker: "1." },
-    { row: "2. Second step", kind: "ordered", marker: "2." },
-    { row: "   1. A nested ordered step", kind: "ordered", marker: "1." },
-    { row: "3. Third step", kind: "ordered", marker: "3." },
+    { row: "  1. An ordered step nested inside a bullet", value: "ordered", text: "1." },
+    { row: ORDERED, value: "ordered", text: "1." },
+    { row: "2. Second step", value: "ordered", text: "2." },
+    { row: "   1. A nested ordered step", value: "ordered", text: "1." },
+    { row: "3. Third step", value: "ordered", text: "3." },
     // A task item's marker is a task, never a bullet: the checkbox EXC-860 draws
     // is the item's marker, so the dash beside it takes the ink and no glyph.
-    { row: "- [x] A finished task", kind: "task", marker: "-" },
-    { row: "- [ ] An unfinished task", kind: "task", marker: "-" },
+    { row: "- [x] A finished task", value: "task", text: "-" },
+    { row: "- [ ] An unfinished task", value: "task", text: "-" },
     // Inside a quote the marker's columns come off the content start, not column
     // zero — the offset EXC-866 recorded the task scan getting wrong.
-    { row: "> - A quoted bullet", kind: "bullet", marker: "-" },
-    { row: "> 1. A quoted number", kind: "ordered", marker: "1." },
+    { row: "> - A quoted bullet", value: "bullet", text: "-" },
+    { row: "> 1. A quoted number", value: "ordered", text: "1." },
   ]);
 });
 
@@ -205,7 +141,7 @@ test("the bullet is painted over the dash, which is still in the row", async ({ 
   await open(page, daemon, LIST_PLAN);
   // The decoration passes run from a MutationObserver a frame behind the rows, so
   // every read of a marker waits for one to exist rather than racing the paint.
-  await expect.poll(async () => (await markers(page)).length).toBeGreaterThan(0);
+  await expect.poll(async () => (await taggedRuns(page, "data-md-list")).length).toBeGreaterThan(0);
   const drawn = await page.evaluate(
     (ln: number) => {
       const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
@@ -245,7 +181,7 @@ test("the bullet is painted over the dash, which is still in the row", async ({ 
 
 test("an ordered marker and a task marker take the ink and no glyph", async ({ page, daemon }) => {
   await open(page, daemon, LIST_PLAN);
-  await expect.poll(async () => (await markers(page)).length).toBeGreaterThan(0);
+  await expect.poll(async () => (await taggedRuns(page, "data-md-list")).length).toBeGreaterThan(0);
   const kinds = await page.evaluate(
     (lines) => {
       const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
@@ -285,7 +221,7 @@ test("copying a marked row yields the source markers, not the glyph", async ({
 }) => {
   await open(page, daemon, LIST_PLAN);
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  await expect.poll(async () => (await markers(page)).length).toBeGreaterThan(0);
+  await expect.poll(async () => (await taggedRuns(page, "data-md-list")).length).toBeGreaterThan(0);
   const copied = await page.evaluate(
     async (lines) => {
       const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot as
@@ -337,7 +273,7 @@ test("the monospace grid does not move on a marked row or its neighbours", async
   daemon,
 }) => {
   await open(page, daemon, LIST_PLAN);
-  await expect.poll(async () => (await markers(page)).length).toBeGreaterThan(0);
+  await expect.poll(async () => (await taggedRuns(page, "data-md-list")).length).toBeGreaterThan(0);
   const [above, bullet, deep, ordered, below] = await Promise.all(
     [PROSE_ABOVE, BULLET, BULLET_DEEP, ORDERED, PROSE_BELOW].map(async (text) =>
       firstGlyphX(page, await lineOf(page, text)),
@@ -355,7 +291,7 @@ test("the monospace grid does not move on a marked row or its neighbours", async
 
 test("every row still has exactly one gutter number", async ({ page, daemon }) => {
   await open(page, daemon, LIST_PLAN);
-  await expect.poll(async () => (await markers(page)).length).toBeGreaterThan(0);
+  await expect.poll(async () => (await taggedRuns(page, "data-md-list")).length).toBeGreaterThan(0);
   const counts = await gridCounts(page);
   expect(counts.numbers).toBe(counts.rows);
   expect(counts.rows).toBe(counts.highestLine);
@@ -368,7 +304,7 @@ test("a marked row still opens the comment composer from its gutter", async ({ p
   // thing on its affected row, and a criterion nobody checks is a criterion nobody
   // notices breaking.
   await open(page, daemon, LIST_PLAN);
-  await expect.poll(async () => (await markers(page)).length).toBeGreaterThan(0);
+  await expect.poll(async () => (await taggedRuns(page, "data-md-list")).length).toBeGreaterThan(0);
   const plus = await revealGutterPlus(page, await lineOf(page, BULLET));
   await plus.click();
   await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
@@ -377,8 +313,8 @@ test("a marked row still opens the comment composer from its gutter", async ({ p
 
 test("nothing that merely looks like a marker draws one", async ({ page, daemon }) => {
   await open(page, daemon, LIST_PLAN);
-  await expect.poll(async () => (await markers(page)).length).toBeGreaterThan(0);
-  const marked = new Set((await markers(page)).map((m) => m.row));
+  await expect.poll(async () => (await taggedRuns(page, "data-md-list")).length).toBeGreaterThan(0);
+  const marked = new Set((await taggedRuns(page, "data-md-list")).map((m) => m.row));
   // A thematic break belongs to EXC-862 and takes no marker here; emphasis opening
   // a line is not a marker at all; and a fenced list stays literal, since links.ts
   // passes fenced lines through with no layers. Each row is resolved first, so a row
@@ -419,34 +355,11 @@ test("the repaint settles over a quoted list and a table", async ({ page, daemon
 Trailing prose.
 `,
   );
-  await page.evaluate(() => {
-    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    const w = window as unknown as { __mutations: number };
-    w.__mutations = 0;
-    new MutationObserver((records) => {
-      w.__mutations += records.length;
-    }).observe(sh as unknown as Node, { childList: true, subtree: true });
-  });
-  // Polled for the counter to STOP moving rather than sampled over a fixed window:
-  // auto-retrying is the suite's timing discipline, and it is the stronger claim of
-  // the two — a loop never yields two equal readings, so this fails on churn of any
-  // rate rather than only on churn above some threshold.
-  let previous = -1;
-  await expect
-    .poll(async () => {
-      const now = await page.evaluate(
-        () => (window as unknown as { __mutations: number }).__mutations,
-      );
-      const unchanged = now === previous;
-      previous = now;
-      return unchanged;
-    })
-    .toBe(true);
+  const mutations = await settledMutations(page);
   const settled = await page.evaluate(() => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
     const rows = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])];
     return {
-      mutations: (window as unknown as { __mutations: number }).__mutations,
       marked: rows.filter((r) => r.querySelector("[data-md-list]")).map((r) => r.textContent ?? ""),
       celled: rows.filter((r) => r.querySelector(":scope > [data-table-cell]") !== null).length,
       celledMarked: rows.some(
@@ -456,7 +369,7 @@ Trailing prose.
       ),
     };
   });
-  expect(settled.mutations).toBe(0);
+  expect(mutations).toBe(0);
   // The quoted pair and the plain bullet are marked; the dash inside the table cell
   // is not, because a marker is only a marker at the start of a line and a table
   // row starts with its pipe. So the celled row this could have looped on never

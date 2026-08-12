@@ -750,8 +750,8 @@ describe("the list markers (EXC-861)", () => {
     // One treatment per row: a checkbox IS a task item's marker, so a bullet beside it
     // would be two markers arguing. The kind is settled in the emission (inlineSpans.ts
     // tags it "task"), which is why the glyph selector can name "bullet" exactly rather
-    // than carving the task case back out here — and why the sheet needs no task rule of
-    // its own until EXC-860 draws the checkbox.
+    // than carving the task case back out here. EXC-860's checkbox hangs off a different
+    // attribute (data-md-checkbox), so the sheet needs no data-md-list="task" rule at all.
     expect(glyphRule).toContain('[data-md-list="bullet"]');
     expect(rulesFor(String.raw`\[data-md-list="task"\]`)).toEqual([]);
   });
@@ -759,6 +759,121 @@ describe("the list markers (EXC-861)", () => {
   test("carries no transition", () => {
     // svelte-rules § Motion: the diff surface swaps state instantly.
     expect(`${anyMarker}${bulletRule}${glyphRule}`).not.toMatch(/transition/);
+  });
+});
+
+// EXC-860: the task-list checkbox, drawn over the `[ ]` / `[x]` run inlineSpans.ts already
+// tags. Structurally this is the list marker one block up scaled from one character cell to
+// three, so the assertions are deliberately its assertions — what differs is the centring
+// offset the extra two cells need, and that state is told by SHAPE rather than by colour.
+// That the run really measures three cells and that the glyph really paints is tasks.e2e.ts's
+// job; this suite pins the declarations.
+describe("the task-list checkbox (EXC-860)", () => {
+  const runRule = rulesFor(String.raw`\[data-md-checkbox\]`)[0] ?? "";
+  const glyphRule = rulesFor(String.raw`\[data-md-checkbox\]::before`)[0] ?? "";
+  const uncheckedRule = rulesFor(String.raw`\[data-md-checkbox="unchecked"\]::before`)[0] ?? "";
+  const checkedRule = rulesFor(String.raw`\[data-md-checkbox="checked"\]::before`)[0] ?? "";
+  const suppressRule =
+    rulesFor(String.raw`\[data-md-checkbox\] ~ \[data-md-checkbox\]::before`)[0] ?? "";
+
+  test("hands the bracket run's own cells to the glyph drawn over them", () => {
+    // Transform-in-place (EXC-855): the brackets are still in the DOM and still copied —
+    // they are only made invisible so the checkbox can occupy the columns they already had.
+    expect(runRule).toMatch(/color:\s*transparent/);
+  });
+
+  test("tells the two states apart by shape, not by colour", () => {
+    // Both states spend the SAME ink and differ only in the glyph, so the distinction
+    // survives a reader who cannot separate the two by hue (EXC-863 records the same
+    // failure one rule family over). The sheet's own block carries the full argument.
+    expect(uncheckedRule).toMatch(/content:/);
+    expect(checkedRule).toMatch(/content:/);
+    expect(uncheckedRule.match(/content:[^;]*/)?.[0]).not.toBe(
+      checkedRule.match(/content:[^;]*/)?.[0],
+    );
+    expect(`${uncheckedRule}${checkedRule}`).not.toMatch(/color|opacity/);
+  });
+
+  test("pins the checked box to its text presentation", () => {
+    // VARIATION SELECTOR-15. Without it a platform carrying a colour emoji font may
+    // substitute a picture for U+2611, and an emoji ignores `color` — the box would stop
+    // taking the theme's ink, which is precisely the failure the ink test below cannot
+    // see. U+2610 needs no pin: it carries no Emoji property, so nothing may substitute.
+    expect(checkedRule).toContain(String.raw`\\FE0E`);
+    expect(uncheckedRule).not.toContain(String.raw`\\FE0E`);
+  });
+
+  test("spends one step above the faint marker ink, which the floor requires", () => {
+    // Not the --ink-faint the structural markers spend. A checkbox reports STATE, so WCAG
+    // 1.4.11's 3:1 floor for a non-text indicator binds it — and on the surface it renders
+    // on (--paper-sunk and the row's ink bands, not the --paper / --paper-raised the ramp
+    // test measures) --ink-faint falls under that floor on two of the nine palettes.
+    // theme.test.ts pins the ink chosen here against all nine on that surface; this only
+    // holds the sheet to the same token, so the two cannot drift apart.
+    expect(glyphRule).toMatch(/color:\s*var\(--ink-soft\)/);
+    expect(glyphRule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(glyphRule).not.toMatch(/--chip-/);
+    expect(glyphRule).not.toMatch(/opacity/);
+  });
+
+  test("draws the glyph out of flow so no column moves", () => {
+    // Identical reasoning to the bullet: rows render white-space: pre, so a pseudo-element
+    // in flow would push every glyph after it. Absolute with NO inset lands the box at its
+    // static position; an inset would resolve it against some ancestor instead, and padding
+    // or margin would cost width.
+    expect(glyphRule).toMatch(/position:\s*absolute/);
+    expect(glyphRule).not.toMatch(/\b(top|left|right|bottom|inset[a-z-]*)\s*:/);
+    expect(glyphRule).not.toMatch(/\b(padding|margin)[a-z-]*\s*:/);
+  });
+
+  test("centres over three cells with transform, which costs no advance", () => {
+    // The one place this cannot copy the bullet. A bullet overdraws ONE cell and needs no
+    // offset; the brackets are THREE, so a one-cell glyph left at its static position would
+    // sit over the opening bracket rather than over the run. translateX moves the box from
+    // its own static position and is not a layout property, so the centring is free — which
+    // is exactly why it is spelled this way rather than with an inset.
+    expect(glyphRule).toMatch(/transform:\s*translateX\(1ch\)/);
+  });
+
+  test("keeps the glyph out of the clipboard", () => {
+    // The epic's copy contract. Blink emits generated content into the plain-text flavour
+    // of a copied selection, invisible to Selection.toString() and visible only in the real
+    // clipboard, which tasks.e2e.ts reads. A leaked box would make a copied plan read
+    // `☐- [ ] item` and corrupt the markdown the epic exists to keep honest.
+    expect(glyphRule).toMatch(/user-select:\s*none/);
+  });
+
+  test("draws one box per run, however many tokens shiki cut the run into", () => {
+    // A real defect rather than a hypothetical: shiki cuts a three-character run into
+    // three tokens on some rows, inlineDecorate tags every one, and the sheet drew three
+    // boxes. The sheet's block carries the reasoning; what is pinned here is the rule's
+    // two load-bearing properties.
+    expect(suppressRule).toMatch(/content:\s*none/);
+    // GENERAL sibling, not adjacent: tagRow leaves a zero-length token untagged, which
+    // would sit between two tagged ones and break an adjacent-only chain into two boxes.
+    expect(suppressRule).toContain("[data-md-checkbox] ~ [data-md-checkbox]");
+    // And it out-specifies the state rules that supply the content on WEIGHT rather than
+    // on source order, so reordering this block cannot undo it. Counted rather than
+    // asserted by spelling: one more attribute selector than the rule it has to beat.
+    const attrs = (rule: string) => (rule.match(/\[/g) ?? []).length;
+    expect(attrs(suppressRule)).toBeGreaterThan(attrs(checkedRule));
+  });
+
+  test("inherits the row's type metrics so the glyph keeps the baseline", () => {
+    // The glyph shares the row's baseline because it inherits the token's font and
+    // line-height and so builds an identical line box. Giving this pseudo-element a
+    // font-size or line-height of its own is the one edit that would silently break the
+    // alignment, which is why it is pinned rather than merely commented.
+    expect(glyphRule).not.toBe("");
+    expect(glyphRule).not.toMatch(/font-size|line-height|font-family/);
+  });
+
+  test("carries no transition", () => {
+    // svelte-rules § Motion: the diff surface swaps state instantly. The non-empty guard is
+    // what keeps this from passing on four selectors that resolved to nothing.
+    const all = [runRule, glyphRule, uncheckedRule, checkedRule];
+    expect(all.filter((rule) => rule !== "")).toHaveLength(4);
+    expect(all.join("")).not.toMatch(/transition/);
   });
 });
 

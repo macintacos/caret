@@ -634,6 +634,16 @@ Three further shapes cannot be seeded from a plan at all, so they are named rath
 - [ ] Sweep every construct against it before the epic closes
 - [ ] Retire the throwaway fixtures each change grew its own copy of
 
+An uppercase mark, a task nested under a task, and one carrying inline chips:
+
+- [X] An uppercase mark, which reads exactly as a lowercase one does
+  - [ ] A second-level task, nested under a task rather than under a bullet
+- [x] A task carrying `inline code` and [a link](#emphasis)
+
+Quoted, so the checkbox and the level bar are drawn on the same row:
+
+> - [ ] A quoted task, one level in
+
 ### Bullet and ordered lists
 
 Bullets, nested three deep:

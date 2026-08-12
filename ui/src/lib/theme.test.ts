@@ -405,6 +405,53 @@ describe("every theme", () => {
     }
   });
 
+  // EXC-860 draws the task-list checkbox, which is the one member of the plan view's
+  // marker family that reports STATE rather than marking structure — so WCAG 1.4.11's
+  // 3:1 floor for a non-text indicator binds it, and the ramp test above cannot speak to
+  // it: that one measures --paper and --paper-raised, the two CHROME surfaces, while a
+  // marker renders on the diff surface (--diffs-bg is --paper-sunk, styles/diffview.css)
+  // and on the 2-8% ink mixes the row bands lay over it.
+  //
+  // That gap is why the checkbox spends --ink-soft and not the --ink-faint every other
+  // marker spends. Falsifiable, and it really does bite: swap CHECKBOX_INK to
+  // "--ink-faint" and catppuccin-latte drops to 2.90 and github-light to 2.97 against the
+  // banded row, both under the floor. --ink-soft bottoms at 4.21 across the nine.
+  //
+  // Only the checkbox is pinned here. The faint structural markers — the fence markers,
+  // the emphasis markers, EXC-861's list bullets — sit below 3:1 on the same surface in
+  // those two palettes, which is a real gap but an epic-wide one about decoration rather
+  // than about this indicator, and re-tinting a shared token is not EXC-860's to do.
+  test("keeps the task checkbox above the non-text floor on every palette", () => {
+    const CHECKBOX_INK = "--ink-soft" as const;
+    // The row bands the diff surface with color-mix(in lab, --paper-sunk, --ink N%);
+    // 8% is the widest band, so it is the darkest ground the glyph is drawn on. Mixed in
+    // sRGB here rather than in lab: the two differ by well under the headroom this floor
+    // is measured with, and matching the browser's space exactly would mean carrying a
+    // lab implementation to pin a ratio that clears by more than a point.
+    const banded = (bg: string, ink: string, pct: number): string => {
+      const [br, bg_, bb] = channels(bg);
+      const [ir, ig, ib] = channels(ink);
+      const mix = (b: number, i: number) => b * (1 - pct) + i * pct;
+      return `#${[mix(br, ir), mix(bg_, ig), mix(bb, ib)]
+        .map((c) =>
+          Math.round(c * 255)
+            .toString(16)
+            .padStart(2, "0"),
+        )
+        .join("")}`;
+    };
+    for (const [id, theme] of themeEntries()) {
+      const sunk = theme.tokens["--paper-sunk"];
+      for (const pct of [0, 0.02, 0.08]) {
+        const ground = banded(sunk, theme.tokens["--ink"], pct);
+        expect(
+          contrast(theme.tokens[CHECKBOX_INK], ground),
+          `${id} checkbox ${CHECKBOX_INK} on --paper-sunk banded ${pct * 100}%`,
+        ).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
   test("keeps --accent-ink readable on --accent", () => {
     for (const [id, theme] of themeEntries()) {
       expect(

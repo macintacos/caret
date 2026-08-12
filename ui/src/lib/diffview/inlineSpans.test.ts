@@ -204,6 +204,35 @@ describe("task-list checkboxes", () => {
       { startCol: 11, endCol: 18, bold: true },
     ]);
   });
+
+  // CommonMark caps an ordered marker at nine digits, so a ten-digit run opens no
+  // list item and therefore no task item either. The two scans have to agree on
+  // that cap: with the task scan reading more digits than the list scan, a
+  // ten-digit line emitted a checkbox with no marker tagged beside it — a row
+  // carrying half a decoration, which is worse than carrying none.
+  test("an ordered task item at CommonMark's nine-digit cap is still a task", () => {
+    expect(runs("123456789. [x] task")).toEqual([
+      { startCol: 0, endCol: 10, listMarker: "task" },
+      { startCol: 11, endCol: 14, checkbox: "checked" },
+    ]);
+  });
+
+  test("a ten-digit ordered run is no list item, so it is no task item either", () => {
+    expect(runs("1234567890. [x] task")).toEqual([]);
+  });
+
+  test("a ten-digit ordered run is no indent either, so it opens no quote", () => {
+    // The third scan that reads an ordered marker. LIST_PREFIX steps over a marker
+    // standing in front of a `>` as the indentation CommonMark says it is — but only
+    // for a run that really opens a list item. Past the cap the line is a paragraph
+    // whose text happens to contain a `>`, so no quote marker is emitted and the row
+    // keeps its ordinary ink.
+    expect(runs("1234567890. > quoted")).toEqual([]);
+    expect(runs("123456789. > quoted")).toEqual([
+      { startCol: 0, endCol: 10, listMarker: "ordered" },
+      { startCol: 11, endCol: 12, quoteMarker: 1 },
+    ]);
+  });
 });
 
 describe("list markers", () => {
