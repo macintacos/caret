@@ -34,6 +34,23 @@ const overrides = caretOverrides(coreStyles);
 // assertions scan the declarations alone (same approach as css-bridge.test.ts).
 const overrideDecls = overrides.replace(/\/\*[\s\S]*?\*\//g, "");
 
+/** Every declaration block under a `[data-content] … <tail>` selector, in source order.
+ * A bare `.match()` yields only the first, and each decoration-pass member carries two
+ * rules under one selector — the properties the text intrinsically has, then its tint
+ * variable — so picking by position pins the wrong half as the file grows. */
+function rulesFor(tail: string): string[] {
+  const pattern = new RegExp(String.raw`\[data-content\][^{}]*${tail}\s*\{[^}]*\}`, "g");
+  return [...overrideDecls.matchAll(pattern)].map((m) => m[0]);
+}
+
+/** A `data-md` member's tint rule — the one declaring its `--md-<member>` layer variable,
+ * as opposed to the rule carrying the member's intrinsic properties. */
+function tintRule(member: string): string {
+  return (
+    rulesFor(String.raw`\[data-md~="${member}"\]`).find((r) => r.includes(`--md-${member}:`)) ?? ""
+  );
+}
+
 const RADIUS = String.raw`var\(--radius\)`;
 
 describe("the drag-to-comment selection band (EXC-664)", () => {
@@ -379,9 +396,83 @@ describe("the inline emphasis chips (EXC-867)", () => {
     }
   });
 
-  test("drops the chip on a selected row so a drag reads as one flat band", () => {
-    for (const rule of [fillRule, startRule, endRule]) {
-      expect(rule).toMatch(/:not\(\[data-selected-line\]\)/);
+  test("drops the bold and italic tints on a selected row so a drag reads as one flat band", () => {
+    // The guard rides each member's own tint VARIABLE rather than the shared fill rule,
+    // because the members disagree about it: the link chip (EXC-859) is an affordance and
+    // stays lit through a selection. background-image is one property, so a second
+    // unguarded rule would replace the whole stack rather than add a layer to it — an
+    // unset variable falling back to transparent is what lets one stack carry two
+    // policies.
+    expect(tintRule("bold")).toMatch(/:not\(\[data-selected-line\]\)/);
+    expect(tintRule("italic")).toMatch(/:not\(\[data-selected-line\]\)/);
+    expect(fillRule).not.toMatch(/:not\(\[data-selected-line\]\)/);
+  });
+});
+
+// EXC-859: the link chip, the family's fifth member and the compensating half of EXC-866.
+// That ticket generalized the collapse of [label](target) to every safe link, so the bare
+// label is now the ONLY thing on the row saying a link is there — the target survives
+// nowhere in the display text. Which is why this member takes EXC-880's side of the
+// family's selection split rather than EXC-869's: a fence chip is decoration and drops on
+// a drag-selected row so the band reads flat, but a link chip is an affordance, and hiding
+// it would claim the span stopped opening a URL when it hasn't.
+describe("the link chip (EXC-859)", () => {
+  const linkRules = rulesFor(String.raw`\[data-md~="link"\]`);
+  const inkRule = linkRules.find((r) => r.includes("text-decoration")) ?? "";
+  const linkTint = tintRule("link");
+  const fillRule = rulesFor(String.raw`\[data-md\]`)[0] ?? "";
+  const startRule = rulesFor(String.raw`\[data-md-start\]`)[0] ?? "";
+  const endRule = rulesFor(String.raw`\[data-md-end\]`)[0] ?? "";
+
+  // Both extractions fall back to "" on a regex miss, over which `not.toMatch` passes
+  // vacuously — pin non-emptiness before asserting absence.
+  test("both link rules are present to assert against", () => {
+    expect(inkRule).not.toBe("");
+    expect(linkTint).not.toBe("");
+  });
+
+  test("keeps the ink and dotted underline the retired highlight painted", () => {
+    // These two declarations moved verbatim off ::highlight(caret-link), which the
+    // decoration pass made redundant. A link is a control the reader can act on, so it
+    // marks itself the way body text does — the glyphs take the color and the underline
+    // sits under them — and the chip is what the collapse added on top. The tint is a
+    // minority mix of the accent into --ink, never the accent itself: amber stays scarce
+    // and brand-reserved, so a paragraph of links never reads as a page of selections.
+    expect(inkRule).toMatch(/color:\s*color-mix\([^)]*var\(--ink\)[^)]*var\(--accent\)/);
+    expect(inkRule).toMatch(/text-decoration:\s*underline dotted/);
+    expect(inkRule).not.toMatch(/color:\s*var\(--accent[^)]*\)\s*;/);
+  });
+
+  test("spends the family's own link tint through its own layer, and declares none", () => {
+    // Consumed, never redefined: the recipe (EXC-858) derives all five tints for all nine
+    // palettes, so a literal here would be a tenth, unreviewed palette. A layer rather
+    // than a background-color so a bold link shows both members at once, exactly as a
+    // bold-italic run does.
+    expect(linkTint).toMatch(/--md-link:\s*var\(--chip-link\)/);
+    expect(fillRule).toMatch(/var\(--md-link,\s*transparent\)/);
+    expect(linkTint).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+
+  test("stays lit on a selected row — it is an affordance, not decoration", () => {
+    // EXC-880's precedent for the reference chip, arrived at for the same reason. The
+    // radius rules shed their guard alongside the fill: a token on a selected row carries
+    // no background of its own (the amber band is on the ROW), so rounding one painted
+    // nothing there anyway, and without the shed the link chip would read as a square
+    // block inside a drag-selection.
+    for (const rule of [inkRule, linkTint, startRule, endRule]) {
+      expect(rule).not.toMatch(/:not\(\[data-selected-line\]\)/);
+    }
+  });
+
+  test("shifts no column: the chip carries no padding or margin at all", () => {
+    // Same constraint the emphasis chips carry, for the same reason — rows render
+    // white-space: pre, so inline padding moves every glyph after the chip and vim
+    // motions, drag ranges and search highlights stop matching source columns. A link
+    // label can abut the prose around it, so [data-file-ref]'s cancelled
+    // padding/negative-margin pair is not available here either.
+    for (const rule of [inkRule, linkTint]) {
+      expect(rule).not.toMatch(/padding/);
+      expect(rule).not.toMatch(/margin/);
     }
   });
 });

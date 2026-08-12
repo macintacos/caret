@@ -554,36 +554,18 @@ describe("every ColorToken is read somewhere in ui/src", () => {
     .map((f) => readFileSync(join(UI_SRC, f), "utf8"))
     .join("\n");
 
-  // The chip tints (EXC-858) land ahead of the chip rendering that spends them, so the
-  // ones still unspent are the set the rule above cannot yet hold. Listing them here
-  // inverts the assertion rather than waiving it: each is pinned as read by NOTHING, so
-  // the first var(--chip-bold) anywhere in ui/src fails this suite and the entry has to
-  // be deleted. The exemption cannot quietly outlive the gap it was opened for — with
-  // one seam: expiry is triggered by a var() reader, so a consumer that spends a chip
-  // through `theme.tokens[…]` in TypeScript, the shape caret-theme.ts uses for its
-  // structural marker rules, would slip past it. The 8-digit alpha these carry makes
-  // that unlikely (the shiki-read pin above demands alpha-free hex), but it is the hole
-  // to re-check as each remaining consumer lands.
-  //
-  // Four are already spent, all in diffview/coreStyles.ts: --chip-code fills the
-  // fence-marker chip, --chip-ref the resting file-reference chip, and --chip-bold /
-  // --chip-italic the two inline emphasis chips (EXC-867), each through its own
-  // --md-* layer variable. Only link is left, and it awaits its own ticket. The test
-  // name carries no issue id because one id never covered the whole list.
-  const PENDING_CONSUMERS: ColorToken[] = ["--chip-link"];
-
+  // The five chip tints (EXC-858) landed ahead of the chip rendering that spends them, so
+  // this rule carried an inverted exemption list while they waited — each unspent tint
+  // pinned as read by NOTHING, so its first var() reader failed the suite and forced the
+  // entry out. All five are spent now, all in diffview/coreStyles.ts: --chip-code fills
+  // the fence-marker chip, --chip-ref the resting file-reference chip, and --chip-bold /
+  // --chip-italic / --chip-link the three inline chips, each through its own --md-* layer
+  // variable. With the list empty the exemption machinery went with it.
   for (const token of Object.keys(THEMES["caret-dark"].tokens) as ColorToken[]) {
-    const pending = PENDING_CONSUMERS.includes(token);
-    const name = pending
-      ? `${token} is still awaiting its consumer`
-      : `${token} is read by at least one var()`;
-    test(name, () => {
+    test(`${token} is read by at least one var()`, () => {
       // The negative lookahead keeps --mark from matching --mark-active and --ink
       // from matching --ink-soft — the same guard ThemePreviewCard.test.ts uses.
-      expect(
-        new RegExp(`var\\(\\s*${token}(?![\\w-])`).test(sources),
-        pending ? `${token} now has a reader — drop it from PENDING_CONSUMERS` : token,
-      ).toBe(!pending);
+      expect(new RegExp(`var\\(\\s*${token}(?![\\w-])`).test(sources), token).toBe(true);
     });
   }
 });
