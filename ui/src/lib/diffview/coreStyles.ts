@@ -766,7 +766,7 @@ const CARET_OVERRIDES = `
      bars above reject the rule tokens only for a 2px mark, on the grounds that they are
      "sized for hairlines that span a whole edge", and this IS that hairline — but those
      tokens are 10% and 16% ink, and composited over --paper-sunk and the row's own 2-8%
-     bands --rule measures 1.15 to 1.34 and --rule-strong 1.24 to 1.62 across the nine
+     bands --rule measures 1.15 to 1.37 and --rule-strong 1.24 to 1.64 across the nine
      palettes. That is barely above the 1.05 this epic treats as indistinguishable: the line
      is in the DOM and not on the screen. --ink-faint, the marker ink the chip family
      prescribes, is the other candidate and lands at 2.63 to 4.79 — under WCAG 1.4.11's 3:1

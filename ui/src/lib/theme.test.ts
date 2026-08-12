@@ -441,21 +441,24 @@ describe("every theme", () => {
   //
   // That gap is why every member spends --ink-soft and not the --ink-faint the epic
   // prescribed for markers generally. Falsifiable, and it really does bite: swap MARKER_INK
-  // to "--ink-faint" and catppuccin-latte drops to 2.90 and github-light to 2.97 against the
-  // banded row, both under the floor. --ink-soft bottoms at 4.21 across the nine.
+  // to "--ink-faint" and this reds on the FIRST band it reaches, catppuccin-latte at 2.99,
+  // with github-light behind it at 2.97; the ink bottoms at 2.63 across the nine and
+  // --ink-soft at 4.21. doc/agents/svelte-rules.md § chips carries the full ranges.
   //
   // EXC-860 opened this case for the checkbox alone and left the rest of the family faint,
   // correctly — re-tinting a shared token is not one ticket's call. EXC-871 made it across
   // the whole epic and the list is now closed by a rule rather than by inspection: a marker
   // whose glyph SURVIVES is supplementary and stays on --ink-faint (the fence markers, the
-  // ** / _ emphasis markers, an ordered item's `1.`, the table pipes and the delimiter row's
-  // dashes), and only a marker that has been replaced appears below. The thematic break is
-  // the fourth member and is measured separately, one test down, because its paint can carry
-  // an alpha suffix that has to composite before it is measured.
+  // ** / _ emphasis markers, an ordered item's number, the table pipes and the delimiter
+  // row's dashes), and only a marker that has been replaced appears below. The thematic
+  // break is the fourth member and is measured separately, one test down, because its paint
+  // can carry an alpha suffix that has to composite before it is measured.
+  //
   // One assertion rather than one per member: all three draw in the same token, so a
   // per-marker loop would run the identical arithmetic three times for a longer message.
-  // What binds them to this test is coreStyles.test.ts, which pins each rule's declaration
-  // by name — so a fourth replacement marker added on --ink-faint reds there, not here.
+  // Which SELECTORS spend it is coreStyles.test.ts's job — it pins the four this epic drew
+  // by name. Neither file can catch a FIFTH replacement marker shipped on --ink-faint; that
+  // gap is real and named here rather than papered over.
   test("keeps every replacement marker above the non-text floor on every palette", () => {
     const MARKER_INK = "--ink-soft" as const;
     for (const [id, theme] of themeEntries()) {
@@ -464,7 +467,7 @@ describe("every theme", () => {
         const ground = banded(sunk, theme.tokens["--ink"], pct);
         expect(
           contrast(theme.tokens[MARKER_INK], ground),
-          `${id} checkbox/bullet/quote-bar ${MARKER_INK} on --paper-sunk banded ${pct * 100}%`,
+          `${id} replacement marker ${MARKER_INK} on --paper-sunk banded ${pct * 100}%`,
         ).toBeGreaterThanOrEqual(3);
       }
     }
@@ -479,7 +482,7 @@ describe("every theme", () => {
   //
   // Both tokens a divider suggests first fail there, which is the whole reason this case
   // exists. --rule and --rule-strong are 10% and 16% ink; composited over these grounds
-  // they measure 1.15-1.34 and 1.24-1.62 across the nine — barely above the 1.05 this
+  // they measure 1.15-1.37 and 1.24-1.64 across the nine — barely above the 1.05 this
   // epic treats as indistinguishable, so the line renders as nothing at all. --ink-faint,
   // the marker ink, lands at 2.63-4.79 and misses the floor on catppuccin-latte and
   // github-light, the same two EXC-860 found. Swap RULE_INK to any of the three and this

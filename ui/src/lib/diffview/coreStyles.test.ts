@@ -1200,7 +1200,7 @@ describe("the markdown table (EXC-864)", () => {
   test("subdues the delimiter row's dashes and draws the header's rule under it", () => {
     // One ink for both halves of the row, which is EXC-871 correcting EXC-864's token
     // rather than restating its intent. --rule is 10% ink; composited over --paper-sunk
-    // and the row bands it measures 1.15-1.34 across the nine palettes, against the 1.05
+    // and the row bands it measures 1.15-1.37 across the nine palettes, against the 1.05
     // this epic calls indistinguishable — on the committed showcase there was no line on
     // the screen, only one in the DOM. The dashes' own ink is what the drawn separator
     // continues to full width. It stays FAINT rather than climbing to the --ink-soft the
@@ -1222,17 +1222,18 @@ test("spends no --rule token anywhere on the diff body", () => {
   // than a note: --rule and --rule-strong draw hairlines on the CHROME surfaces, where
   // they are 10% and 16% ink over --paper / --paper-raised and read correctly. The diff
   // body is --paper-sunk plus 2-8% ink row bands, and over that ground they measure
-  // 1.15-1.34 and 1.24-1.62 across the nine — a line that is in the DOM and not on the
+  // 1.15-1.37 and 1.24-1.64 across the nine — a line that is in the DOM and not on the
   // screen. Every mark this epic draws there spends the ink ramp instead. Scanned over
   // the declarations, so the prose above (and this comment) can keep naming the tokens.
   expect(overrideDecls).not.toContain("--rule");
 });
 
 // EXC-863: blockquote level bars. The bar belongs to the epic's transform-in-place
-// category rather than to the chip family: it overdraws the marker it replaces
-// instead of tinting a run, so it spends the marker ink EXC-855 already fixed and
-// mints nothing new. The subdue is the whole-line half, and where it is anchored is
-// the load-bearing part — see the rule's own note in coreStyles.ts.
+// category rather than to the chip family: it overdraws the marker it replaces instead of
+// tinting a run, so it spends ink from the ramp and mints nothing new. WHICH ink is
+// EXC-871's replacement/supplementary split — the `>` under it is transparent, so the bar
+// is the only carrier and takes --ink-soft. The subdue is the whole-line half, and where it
+// is anchored is the load-bearing part — see the rule's own note in coreStyles.ts.
 describe("blockquote level bars (EXC-863)", () => {
   const markerRule = rulesFor(String.raw`\[data-md-quote\]`).find((r) => r.includes("color:"));
   const barRule = rulesFor(String.raw`\[data-md-quote\]::before`)[0] ?? "";
@@ -1333,7 +1334,7 @@ describe("thematic breaks (EXC-862)", () => {
 
   test("spends the ink that clears the non-text floor, not a rule token or a chip tint", () => {
     // The rule tokens are 10% and 16% ink and effectively vanish on the sunk diff surface
-    // (--rule 1.15-1.34, --rule-strong 1.24-1.62 across the nine palettes); --ink-faint is
+    // (--rule 1.15-1.37, --rule-strong 1.24-1.64 across the nine palettes); --ink-faint is
     // under 3:1 on two of them. theme.test.ts owns those measurements — this pins only that
     // the sheet spends what they chose.
     expect(ruleRule).toMatch(/var\(--ink-soft\)/);

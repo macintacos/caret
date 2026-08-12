@@ -4,6 +4,13 @@
 // partly or wholly absent — so nothing until now has asserted what happens when all
 // fourteen draw on one document at once.
 //
+// Every case here needs a real browser for the same reason its own spec did, compounded:
+// the decorations are pseudo-elements and background layers over transparent characters,
+// so they exist only where generated content is painted, custom properties resolve
+// through a shadow boundary, and a clipboard exists. happy-dom has none of the three. The
+// settle case additionally needs the MutationObserver loop SourceView drives its passes
+// from, which only a mounted view has.
+//
 // This spec seeds the committed fixture itself — scripts/tasks/dev/fake-plan.md, whose
 // `## Rendering showcase` section is the visual baseline every PR in the epic cites —
 // rather than a plan literal of its own. That is the point rather than a convenience: a
@@ -12,22 +19,24 @@
 // diff can red this spec, which the preflight gate does not narrow to `test e2e`; that is
 // recorded rather than worked around.
 //
-// Rows are located by the DECORATION they carry, never by their prose, so editing the
-// fixture's wording cannot break anything below. Deleting a construct from it can, and
-// should — the showcase's own contract is that it grows a sub-heading per decorated
-// construct and never folds one away.
+// Rows are located STRUCTURALLY — by the decoration they carry and by their position
+// relative to each other — with one deliberate exception: the search case types
+// "Rendering showcase", which is a heading the fixture's own contract keeps. Everything
+// else is found by what it draws, so rewording the fixture's prose is free and deleting a
+// construct from the showcase is not.
 //
 // Every question below lives here and nowhere else, and each is one of this issue's
 // acceptance criteria:
 //
-//   1. every construct the epic draws still draws, together, on one document, and the
-//      combined repaint settles instead of looping;
+//   1. every construct the epic draws still draws, together, on one document; each
+//      replacement marker really hides the character it draws over; and the combined
+//      repaint settles instead of looping;
 //   2. compare mode offers none of them — asserted for the WHOLE attribute set rather
 //      than for the `data-md` subset EXC-867 could see at the time;
-//   3. copy carries the real plan text with its markers, across a span that crosses four
-//      marker families at once;
-//   4. commenting and the drag range still reach a row that carries decorations, and a
-//      row carrying THREE of them still costs the monospace grid nothing;
+//   3. copy carries the real plan text with its markers;
+//   4. the gutter `+`, a row click, a drag range, the search anchor and the line cursor
+//      all still reach a row that carries decorations, and a row carrying THREE of them
+//      still costs the monospace grid nothing;
 //   5. a vendor palette resolves every decoration's paint.
 //
 // Everything narrower stays where it already is: which characters are a marker is
@@ -38,7 +47,9 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { expect, test } from "@test/e2e/support/fixtures.ts";
+import type { Page } from "@playwright/test";
+
+import { type Daemon, expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import {
   firstGlyphX,
   lineCenterY,
@@ -76,13 +87,12 @@ const DECORATIONS = [
   ["data-code-fence", "fence markers (EXC-869)"],
   ["data-table-cell", "table cells (EXC-864)"],
   ["data-table-pipe", "table pipes (EXC-864)"],
+  ["data-table-card", "the scroll card a wide table gets (EXC-864)"],
+  ["data-code-card", "the scroll card an overflowing fence gets (EXC-729)"],
   ["data-file-ref", "file and folder references (EXC-687, EXC-918, EXC-880)"],
 ] as const;
 
-async function openShowcase(
-  page: import("@playwright/test").Page,
-  daemon: { seed: (input: { plan: string; cwd: string }) => Promise<string> },
-): Promise<void> {
+async function openShowcase(page: Page, daemon: Daemon): Promise<void> {
   await daemon.seed({ plan: SHOWCASE_PLAN, cwd: REPO_ROOT });
   await page.goto("/");
   await planSurface(page);
@@ -98,34 +108,35 @@ async function openShowcase(
 /** Scroll a source line into the middle of the plan surface. The fixture is ~970 rows,
  * so anything the showcase draws is far below the fold — and `revealGutterPlus` hovers a
  * viewport coordinate, which silently misses a row that is not on screen. */
-async function scrollToLine(page: import("@playwright/test").Page, line: number): Promise<void> {
+async function scrollToLine(page: Page, line: number): Promise<void> {
   await page.evaluate((ln) => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
     sh?.querySelector(`[data-content] [data-line="${ln}"]`)?.scrollIntoView({ block: "center" });
   }, line);
 }
 
-/** How many elements in the source view's shadow root carry `attribute`. */
-function decorationCount(
-  page: import("@playwright/test").Page,
-  attribute: string,
-): Promise<number> {
+/** How many elements in the content column carry `attribute`, or -1 when the source view
+ * is not mounted at all. Scoped to `[data-content]` so a gutter cell or an annotation's
+ * own copy of a row can never be counted as a decorated line. */
+function decorationCount(page: Page, attribute: string): Promise<number> {
   return page.evaluate((attr) => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    return sh?.querySelectorAll(`[${attr}]`).length ?? -1;
+    return sh?.querySelectorAll(`[data-content] [${attr}]`).length ?? -1;
   }, attribute);
 }
 
 test("every construct the epic draws renders on one document", async ({ daemon, page }) => {
   await openShowcase(page, daemon);
   const counts = await Promise.all(
-    DECORATIONS.map(
-      async ([attr, who]) => `${attr} (${who}): ${await decorationCount(page, attr)}`,
-    ),
+    DECORATIONS.map(async ([attr, who]) => ({
+      attr,
+      who,
+      count: await decorationCount(page, attr),
+    })),
   );
   // Reported as one array so a missing construct names itself in the failure rather
   // than reding on the first attribute and hiding the rest.
-  expect(counts.filter((line) => line.endsWith(": 0") || line.endsWith(": -1"))).toEqual([]);
+  expect(counts.filter((c) => c.count <= 0)).toEqual([]);
 });
 
 test("every replacement marker really does hide the character it draws over", async ({
@@ -202,23 +213,29 @@ test("compare mode offers none of the decorations", async ({ daemon, page }) => 
   // renders raw source, unchanged" actually claims.
   await daemon.seedVersions(2, [SHOWCASE_PLAN, `${SHOWCASE_PLAN}\nA second version.\n`]);
   await page.goto("/");
-  // seedVersions carries the fixture's default cwd, so the reference layer is quieter
-  // here than above — which is why the wait below is on a construct the daemon does not
-  // have to resolve. The absence assertions read the whole set either way.
   await planSurface(page);
   await expect
     .poll(async () => (await taggedRuns(page, "data-md-image")).length)
     .toBeGreaterThan(0);
 
   await page.getByRole("button", { name: "Compare versions" }).click();
+  // The positive anchor first, and it is what makes the absences mean anything. Both
+  // views mount a host with class `diffview`, so once compare has swapped one in for the
+  // other every count below reads 0 — including on a compare view that rendered nothing
+  // at all. Anchoring on the raw source being THERE is what distinguishes "not offered
+  // here" from "not painted yet" (browser-testing.md § absence assertions).
+  //
+  // The anchor is the appended line rather than a row count, because compare renders the
+  // CHANGED hunk and its context rather than the whole plan — about ten rows here, not
+  // the fixture's ~970 — so a row count large enough to mean anything would be wrong.
+  await expect(page.locator(".diffview")).toContainText("A second version.");
+  await expect.poll(() => decorationCount(page, "data-line")).toBeGreaterThan(3);
   for (const [attr, who] of DECORATIONS) {
-    // toHaveCount(0)'s shape rather than toBeHidden: "not offered here" is the claim,
-    // and a hidden element would satisfy "painted nothing" without satisfying it.
     await expect.poll(() => decorationCount(page, attr), { message: `${attr} — ${who}` }).toBe(0);
   }
 });
 
-test("copying a span across four marker families yields the source verbatim", async ({
+test("copying across the marker families yields the source verbatim", async ({
   context,
   daemon,
   page,
@@ -226,10 +243,18 @@ test("copying a span across four marker families yields the source verbatim", as
   await openShowcase(page, daemon);
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
 
-  // A contiguous run of rows chosen by what they CARRY: the first row holding a quote
-  // marker and a checkbox at once, through the next thematic break. That span crosses
-  // the level bar, the checkbox, the list marker and the rule — every decoration in the
-  // epic that takes its source character to transparent and draws over the column.
+  // The span is chosen by what its rows CARRY, and it deliberately stops short of the
+  // first table cell. That boundary is the whole test: SourceView hands a selection that
+  // crosses a carded table to tableCopy.ts, which rebuilds the clipboard from TEXT NODES
+  // only — and a pseudo-element is not a text node, so on that path a leaked glyph is
+  // impossible by construction and the equality below would prove nothing. Blink's own
+  // serializer runs on a table-free span, and that one really can emit generated content,
+  // exactly as EXC-870 found it emitting an image's alt.
+  //
+  // What the span still crosses: the quoted task's level bar and checkbox, the bullets
+  // and ordered markers under "Bullet and ordered lists", and the nested quote bars under
+  // "Quoted text" — three of the four replacement markers plus the list marker family.
+  // The thematic break is copied separately below, since it sits past the tables.
   const copied = await page.evaluate(async () => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot as
       | (ShadowRoot & { getSelection?: () => Selection | null })
@@ -240,8 +265,9 @@ test("copying a span across four marker families yields the source verbatim", as
         r.querySelector("[data-md-quote]") !== null &&
         r.querySelector("[data-md-checkbox]") !== null,
     );
-    const to = rows.findIndex((r, i) => i > from && r.hasAttribute("data-md-rule"));
-    if (sh == null || from < 0 || to < 0) return { span: [from, to], clipboard: "", rows: [] };
+    const firstCell = rows.findIndex((r, i) => i > from && r.querySelector("[data-table-cell]"));
+    const to = (firstCell < 0 ? rows.length : firstCell) - 1;
+    if (sh == null || from < 0 || to <= from) return { span: [from, to], clipboard: "", rows: [] };
     const range = document.createRange();
     range.setStartBefore(rows[from] as Node);
     range.setEndAfter(rows[to] as Node);
@@ -262,21 +288,49 @@ test("copying a span across four marker families yields the source verbatim", as
   });
 
   expect(copied.span[0]).toBeGreaterThanOrEqual(0);
-  expect(copied.span[1]).toBeGreaterThan(copied.span[0] as number);
+  expect(copied.rows.length).toBeGreaterThan(10);
   // textContent excludes generated content and the clipboard does not, so equality here
-  // is the whole claim in one line: no drawn bullet, checkbox, bar or rule reached the
+  // is the whole claim in one line: no drawn bullet, checkbox, bar or dot reached the
   // copy, and no transparent source character was dropped from it either.
   expect(copied.clipboard).toBe(copied.rows.join("\n"));
+  // The markers really are in there, which is what the epic reversed its original spec to
+  // guarantee: the source is what a reviewer pastes back to the agent.
   expect(copied.clipboard).toContain("[ ]");
+  expect(copied.clipboard).toContain("> ");
 });
 
-test("a decorated row still opens a comment composer", async ({ daemon, page }) => {
+test("copying a thematic break yields its dashes, not the drawn line", async ({
+  context,
+  daemon,
+  page,
+}) => {
   await openShowcase(page, daemon);
-  // The quoted task row: a level bar and a checkbox drawn on the same line, which is the
-  // densest row the fixture has. Both decorations are absolutely-positioned pseudo
-  // elements over transparent characters, so neither can move the gutter's hit target —
-  // this is what proves it.
-  const line = await page.evaluate(() => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  // The rule's own row, alone and table-free so Blink serializes it. Every character on
+  // it is transparent and the line itself is a background layer, so the risk here is the
+  // mirror of the one above: the row copying as an empty line rather than as its dashes.
+  const copied = await page.evaluate(async () => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot as
+      | (ShadowRoot & { getSelection?: () => Selection | null })
+      | null;
+    const row = sh?.querySelector("[data-content] [data-line][data-md-rule]") as HTMLElement | null;
+    if (sh == null || row == null) return { clipboard: "", source: "" };
+    const range = document.createRange();
+    range.selectNodeContents(row);
+    const sel = sh.getSelection?.() ?? getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    document.execCommand("copy");
+    return { clipboard: await navigator.clipboard.readText(), source: row.textContent ?? "" };
+  });
+  expect(copied.source.trim()).toMatch(/^-{3,}$/);
+  expect(copied.clipboard).toBe(copied.source);
+});
+
+/** The densest row the fixture draws: a quoted task, carrying a level bar, a suppressed
+ * list marker and a checkbox in one line box. Every gesture below is aimed at it. */
+function densestRow(page: Page): Promise<number> {
+  return page.evaluate(() => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
     const row = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].find(
       (r) =>
@@ -285,30 +339,59 @@ test("a decorated row still opens a comment composer", async ({ daemon, page }) 
     );
     return Number(row?.getAttribute("data-line") ?? -1);
   });
-  expect(line).toBeGreaterThan(0);
+}
 
+test("a decorated row still opens a comment composer, from the gutter and from the row", async ({
+  daemon,
+  page,
+}) => {
+  await openShowcase(page, daemon);
+  // Both decorations on this row are absolutely-positioned pseudo elements over
+  // transparent characters, so neither can move the gutter's hit target or the row's —
+  // this is what proves it, for both gestures the issue names.
+  const line = await densestRow(page);
+  expect(line).toBeGreaterThan(0);
   await scrollToLine(page, line);
+
   const plus = await revealGutterPlus(page, line);
   await plus.click();
   const composer = page.getByRole("dialog", { name: "Add a comment" });
   await expect(composer).toBeVisible();
   await expect(composer.getByRole("textbox", { name: "Comment" })).toBeVisible();
+  // Two Escapes, not one: the first blurs the editor and the second dismisses the
+  // composer (diff-surface.e2e.ts pins that pair).
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await expect(composer).toHaveCount(0);
+
+  // The row click, the second gesture: pressing the line's own content opens the same
+  // composer for the same line.
+  const y = await lineCenterY(page, line);
+  const x = await page
+    .locator(".diff-plan")
+    .evaluate((el) => el.getBoundingClientRect().x + el.getBoundingClientRect().width / 2);
+  await page.mouse.click(x, y);
+  await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
 });
 
 test("a drag range crosses the decorated rows and bands each one", async ({ daemon, page }) => {
   await openShowcase(page, daemon);
-  // The task-list block, which the fixture writes as four consecutive checkbox rows. A
-  // drag is the gesture most exposed to a decoration that took room in the line box: the
-  // band is painted per row, and a row whose height or column origin had moved would
-  // band short or band the wrong span.
+  // A CONTIGUOUS run of checkbox rows, found by walking forward from the first one rather
+  // than by taking the first four in the document: the fixture carries task lists in two
+  // sections, and `slice(0, 4)` would silently span a paragraph break between them and
+  // then assert a banding that never had to hold.
   const lines = await page.evaluate(() => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    return [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])]
-      .filter((r) => r.querySelector("[data-md-checkbox]") !== null)
-      .map((r) => Number(r.getAttribute("data-line")))
-      .slice(0, 4);
+    const rows = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])];
+    const start = rows.findIndex((r) => r.querySelector("[data-md-checkbox]") !== null);
+    const run: number[] = [];
+    for (let i = start; i < rows.length; i++) {
+      if (rows[i]?.querySelector("[data-md-checkbox]") === null) break;
+      run.push(Number(rows[i]?.getAttribute("data-line")));
+    }
+    return run;
   });
-  expect(lines).toHaveLength(4);
+  expect(lines.length).toBeGreaterThanOrEqual(3);
 
   await scrollToLine(page, lines[1] as number);
   const gutterX = await page
@@ -316,7 +399,7 @@ test("a drag range crosses the decorated rows and bands each one", async ({ daem
     .evaluate((el) => el.getBoundingClientRect().x + 6);
   await page.mouse.move(gutterX, await lineCenterY(page, lines[0] as number));
   await page.mouse.down();
-  await page.mouse.move(gutterX, await lineCenterY(page, lines[3] as number), { steps: 12 });
+  await page.mouse.move(gutterX, await lineCenterY(page, lines.at(-1) as number), { steps: 12 });
   await page.mouse.up();
 
   const banded = await page.evaluate(() => {
@@ -326,6 +409,49 @@ test("a drag range crosses the decorated rows and bands each one", async ({ daem
     );
   });
   expect(banded).toEqual(lines);
+});
+
+test("the search anchor and the line cursor still land on decorated rows", async ({
+  daemon,
+  page,
+}) => {
+  await openShowcase(page, daemon);
+  await waitPastSafeModeGrace(page);
+  const cursor = page.locator(".diffview [data-content] [data-line][data-caret-cursor]");
+
+  // Both features count CHARACTERS: the search highlight resolves a match's columns
+  // against the row's own text, and j/k walks rendered rows. A decoration that took room
+  // in a line box, or that removed a character from a row, would put both off by one on
+  // exactly the rows the epic draws. `showcase` occurs only inside the section this
+  // epic added, and every row it matches there carries a decoration.
+  await page.keyboard.press("/");
+  await page.locator("input[aria-label='Search plan']").fill("Rendering showcase");
+  await expect.poll(() => cursor.count()).toBe(0);
+  await page.keyboard.press("Enter");
+  await expect(cursor).toHaveCount(1);
+  const parked = Number(await cursor.getAttribute("data-line"));
+  expect(parked).toBeGreaterThan(0);
+  expect(((await cursor.textContent()) ?? "").toLowerCase()).toContain("rendering showcase");
+
+  // Then walk it down into the section's decorated rows with the vim motion, one row per
+  // press, and land on something the epic drew.
+  await page.keyboard.press("Escape");
+  const seen: number[] = [];
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press("j");
+    await expect
+      .poll(async () => Number(await cursor.getAttribute("data-line")))
+      .toBe(parked + i + 1);
+    seen.push(parked + i + 1);
+  }
+  const decorated = await page.evaluate((rows) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    return rows.filter((ln) => {
+      const row = sh?.querySelector(`[data-content] [data-line="${ln}"]`);
+      return row?.querySelector("[data-md], [data-md-list], [data-code-fence]") != null;
+    }).length;
+  }, seen);
+  expect(decorated).toBeGreaterThan(0);
 });
 
 test("a decorated row keeps the monospace grid the source columns are read from", async ({
@@ -339,36 +465,29 @@ test("a decorated row keeps the monospace grid the source columns are read from"
   // THREE decorations on one row still cost nothing, which is the quoted task — a level
   // bar, a suppressed list marker and a checkbox, all drawn over transparent characters
   // in the same line box.
-  const rows = await page.evaluate(() => {
+  const dense = await densestRow(page);
+  expect(dense).toBeGreaterThan(0);
+  // The plain row is found structurally: the nearest row ABOVE the dense one that carries
+  // no decoration at all and starts at the outer margin. Naming it by its prose would put
+  // the fixture's wording back on this spec's critical path.
+  const plain = await page.evaluate((denseLine) => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    const all = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])];
-    const num = (r: Element | undefined) => Number(r?.getAttribute("data-line") ?? -1);
-    return {
-      dense: num(
-        all.find(
-          (r) =>
-            r.querySelector("[data-md-quote]") !== null &&
-            r.querySelector("[data-md-checkbox]") !== null,
-        ),
-      ),
-      // A plain prose row from the same section, to measure the dense one against.
-      plain: num(
-        all.find(
-          (r) =>
-            r.querySelectorAll("[data-md], [data-md-list], [data-md-quote], [data-md-checkbox]")
-              .length === 0 && (r.textContent ?? "").startsWith("Quoted, so the checkbox"),
-        ),
-      ),
-    };
-  });
-  expect(rows.dense).toBeGreaterThan(0);
-  expect(rows.plain).toBeGreaterThan(0);
+    const rows = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])];
+    const at = rows.findIndex((r) => Number(r.getAttribute("data-line")) === denseLine);
+    for (let i = at - 1; i >= 0; i--) {
+      const row = rows[i];
+      if (row === undefined) continue;
+      const text = row.textContent ?? "";
+      if (row.querySelectorAll("[data-md], [data-md-list], [data-md-quote]").length > 0) continue;
+      if (text.trim().length < 20 || /^\s/.test(text)) continue;
+      return Number(row.getAttribute("data-line"));
+    }
+    return -1;
+  }, dense);
+  expect(plain).toBeGreaterThan(0);
 
-  const [dense, plain] = await Promise.all([
-    firstGlyphX(page, rows.dense),
-    firstGlyphX(page, rows.plain),
-  ]);
-  expect(dense).toBe(plain);
+  const [denseX, plainX] = await Promise.all([firstGlyphX(page, dense), firstGlyphX(page, plain)]);
+  expect(denseX).toBe(plainX);
 });
 
 test("a vendor palette resolves every decoration's paint", async ({ daemon, page }) => {
@@ -381,13 +500,15 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
   // where --ink-faint falls under WCAG 1.4.11's floor on the diff body, which is why the
   // replacement markers moved to --ink-soft (theme.test.ts owns those numbers across all
   // nine). What a browser adds is the half arithmetic cannot reach: that a DERIVED
-  // vendor token actually resolves through the shadow boundary. A tint that failed to
-  // derive leaves its gradient invalid and background-image computing to "none".
+  // vendor token actually resolves through the shadow boundary and into the sheet.
   await page.getByRole("button", { name: "Settings" }).click();
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
   await page.getByRole("button", { name: "Light theme" }).click();
   await page.getByRole("menuitemradio", { name: "Catppuccin Latte" }).click();
   await page.keyboard.press("Escape");
+  // The identity anchor: this really is Latte and not whichever palette was live before.
+  // It is the one hard-coded colour here, and it is what stops the token comparisons
+  // below from being tautologies.
   await expect(page.locator("html")).toHaveAttribute("style", /--paper-sunk:\s*#dce0e8/i);
 
   const paint = await page.evaluate(() => {
@@ -396,28 +517,58 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
       const el = sh?.querySelector(selector) as HTMLElement | null;
       return el === null || el === undefined ? null : read(el);
     };
+    // What the palette's own tokens resolve to inside this shadow root, measured rather
+    // than transcribed — a hex copied into this file is a second place a flavour bump has
+    // to be edited, and it reds naming a colour instead of a token.
+    const probe = (token: string) => {
+      const el = document.createElement("span");
+      el.style.color = `var(${token})`;
+      sh?.appendChild(el);
+      const resolved = getComputedStyle(el).color;
+      el.remove();
+      return resolved;
+    };
     return {
-      chip: pick("[data-md]", (el) => getComputedStyle(el).backgroundImage),
-      bullet: pick('[data-md-list="bullet"]', (el) => getComputedStyle(el, "::before").color),
-      quoteBar: pick("[data-md-quote]", (el) => getComputedStyle(el, "::before").backgroundColor),
-      checkbox: pick("[data-md-checkbox]", (el) => getComputedStyle(el, "::before").color),
-      rule: pick("[data-md-rule]", (el) => getComputedStyle(el).backgroundImage),
-      separator: pick("[data-table-rule]", (el) => getComputedStyle(el).borderBottomColor),
+      inkSoft: probe("--ink-soft"),
+      inkFaint: probe("--ink-faint"),
+      chip: pick('[data-content] [data-line] [data-md~="code"]', (el) => {
+        return getComputedStyle(el).backgroundImage;
+      }),
+      bullet: pick('[data-content] [data-line] [data-md-list="bullet"]', (el) => {
+        return getComputedStyle(el, "::before").color;
+      }),
+      quoteBar: pick("[data-content] [data-line] [data-md-quote]", (el) => {
+        return getComputedStyle(el, "::before").backgroundColor;
+      }),
+      checkbox: pick("[data-content] [data-line] [data-md-checkbox]", (el) => {
+        return getComputedStyle(el, "::before").color;
+      }),
+      rule: pick("[data-content] [data-line][data-md-rule]", (el) => {
+        return getComputedStyle(el).backgroundImage;
+      }),
+      separator: pick("[data-content] [data-line][data-table-rule]", (el) => {
+        return getComputedStyle(el).borderBottomColor;
+      }),
     };
   });
 
-  // The three replacement markers land on Latte's --ink-soft (#5c5f77) and the
-  // supplementary separator on its --ink-faint (#7c7f93) — one assertion per side of
-  // EXC-871's rule, on the palette that made the rule necessary. Opaque on both sides:
+  // One assertion per side of EXC-871's replacement/supplementary rule, on the palette
+  // that made the rule necessary: the four replacement marks land on this palette's
+  // --ink-soft, the supplementary separator on its --ink-faint. Opaque on both sides —
   // the separator spent a 10%-alpha --rule until this sweep, and an alpha suffix here
   // would be that regression coming back.
-  expect(paint.bullet).toBe("rgb(92, 95, 119)");
-  expect(paint.quoteBar).toBe("rgb(92, 95, 119)");
-  expect(paint.checkbox).toBe("rgb(92, 95, 119)");
-  expect(paint.separator).toBe("rgb(124, 127, 147)");
-  // The two painted as gradients resolved to real colours rather than to "none", which
-  // is what an underived tint would leave behind.
-  expect(paint.chip).toMatch(/linear-gradient\(/);
-  expect(paint.chip).not.toContain("none");
-  expect(paint.rule).toMatch(/linear-gradient\(/);
+  expect(paint.inkSoft).not.toBe(paint.inkFaint);
+  expect(paint.bullet).toBe(paint.inkSoft);
+  expect(paint.quoteBar).toBe(paint.inkSoft);
+  expect(paint.checkbox).toBe(paint.inkSoft);
+  expect(paint.rule).toContain(paint.inkSoft);
+  expect(paint.separator).toBe(paint.inkFaint);
+
+  // The chip is four background layers, one per member, each resolving to `transparent`
+  // through its var() fallback when its member is absent — so "contains a gradient" would
+  // pass on a palette where no tint derived at all. Counting the layers that are NOT
+  // transparent is what pins that --chip-code itself came out of the recipe.
+  const layers = (paint.chip ?? "").split(/,\s*(?=linear-gradient)/);
+  expect(layers).toHaveLength(4);
+  expect(layers.filter((l) => !/rgba\(0,\s*0,\s*0,\s*0\)/.test(l))).toHaveLength(1);
 });

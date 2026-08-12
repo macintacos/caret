@@ -166,19 +166,34 @@ stays green under any invocation.
   different pair: `--chip-ref` sits above a shared saturation floor and `--chip-code`
   below it, since those two render side by side and a near-neutral's hue angle carries no
   design intent to compare against. Read that test's comment before choosing `chipCodeHue`
-  or `chipRefHue`. The chip family is **five members and closed**: a markdown decoration
-  that overdraws a marker rather than tinting a span takes ink from the ramp, never a
-  sixth chip. WHICH ink is settled, epic-wide, by one question —
-  **does the source character survive?** — and EXC-871 swept every marker the epic draws
-  onto one side or the other of it. A **supplementary** decoration leaves a legible glyph
-  beside it and takes `--ink-faint`: the fence markers, the `**` / `_` emphasis markers,
-  an ordered item's `1.`, the table pipes, the delimiter row's dashes, the file and folder
-  glyphs. A **replacement** decoration takes its character to `transparent` and draws in
-  the column it vacated, so it is the only thing left carrying that character's meaning —
-  which is WCAG 1.4.11's own test for a graphical object required to understand the
-  content. It therefore owes that clause's 3:1 floor and spends `--ink-soft`: the
-  task-list checkbox (EXC-860), the list bullet (EXC-861), the blockquote level bar
-  (EXC-863) and the thematic break (EXC-862), all in `diffview/coreStyles.ts`.
+  or `chipRefHue`. **`--chip-link` marks link SYNTAX, not clickability.** Five shapes wear
+  it and are not followable — an internal anchor, an unresolvable path, a fragment target,
+  a bare-word target, and an image — and that is the contract rather than a gap (EXC-871
+  settled it). What the chip announces is that the run is link grammar the view collapsed,
+  which is the thing that needs announcing: a collapsed label with no chip is
+  indistinguishable from prose, and this view's whole thesis is that the source stays
+  visible. Whether a click goes anywhere is a separate signal carried by the pointer
+  cursor, which `linkInteractions.ts` sets only on a span it will actually open. The chip
+  family is **five members and closed**: a markdown decoration that overdraws a marker
+  rather than tinting a span takes ink from the ramp, never a sixth chip. WHICH ink is
+  settled, epic-wide, by one question — **does the source character survive?** — and
+  EXC-871 swept every marker the epic draws onto one side or the other of it. A
+  **supplementary** decoration leaves a legible glyph beside it and takes `--ink-faint`:
+  the fence markers, the `**` / `_` emphasis markers, an ordered item's `1.`, the table
+  pipes, the delimiter row's dashes. A **replacement** decoration takes its character to
+  `transparent` and draws in the column it vacated, so it is the only thing left carrying
+  that character's meaning — which is WCAG 1.4.11's own test for a graphical object
+  required to understand the content. It therefore owes that clause's 3:1 floor and spends
+  `--ink-soft`: the task-list checkbox (EXC-860), the list bullet (EXC-861), the
+  blockquote level bar (EXC-863) and the thematic break (EXC-862), all in
+  `diffview/coreStyles.ts`. There is a **third case, and it is open**: a decoration that
+  replaces nothing because it was never in the source at all. The file and folder glyphs
+  (EXC-687 / EXC-918) are the instance — they are added beside a fully legible path, which
+  is why they sit on `--ink-faint` today, but the file-vs-directory distinction is carried
+  by the glyph alone and by nothing else in the row, so 1.4.11 arguably binds them too.
+  They predate this epic and EXC-871 did not re-tint them; an ADDED indicator carrying
+  information no surviving character carries owes the same floor, and closing that is its
+  own change. Do not read the two-way split above as covering it.
   **The floor binds on the surface the decoration actually renders on**, and that is the
   trap the rule exists to close. `theme.test.ts`'s ink-ramp case measures `--paper` and
   `--paper-raised`, the two chrome surfaces, while the diff view binds `--diffs-bg` to
@@ -188,25 +203,30 @@ stays green under any invocation.
   `theme.test.ts` pins the replacement family against exactly that ground and reds naming
   the palette if a member is stepped back down. **`--rule` and `--rule-strong` are
   chrome-surface tokens and are spent nowhere on the diff body.** At 10% and 16% ink over
-  those grounds they measure 1.14–1.36 and 1.24–1.64 — against the 1.05 this epic calls
+  those grounds they measure 1.15–1.37 and 1.24–1.64 — against the 1.05 this epic calls
   indistinguishable, which is a line in the DOM and not on the screen. EXC-864's table
   header separator was the last reader and EXC-871 moved it onto `--ink-faint`, the ink
   its own row's dashes take, so the drawn rule reads as that mark continued to full width;
-  `coreStyles.test.ts` asserts the whole sheet names neither token. The separator stays
-  faint rather than climbing: its dashes survive, so it reinforces rather than carries. It
-  is painted as a **background layer** rather than as a `::before`, which clears both
-  traps in the bullet below at once — paint is not content, so there is no node for
-  `tables.ts` to count and no per-token glyph to suppress. The quoted line's ink is
-  subdued with opacity rather than a tint, which is what lets the chips inside a quote
-  keep their treatment instead of being overpainted by it — and because opacity composites
-  at paint time, no token assertion can see it. `QUOTE_SUBDUE` in `diffview/coreStyles.ts`
-  is therefore exported and pinned by `theme.test.ts` against every palette: `--ink` on
-  `--paper-sunk` ranges from 6:1 to 19:1 across the nine, so the flattest ink ramp sets
-  how far any of them may fade. Any future paint-time effect on body copy owes the same
-  pin. A decoration that indicates **state** owes one thing more: tell the states apart by
-  SHAPE, not by hue or by an opacity step, which fails outright for a colour-blind reader
-  whatever a contrast ratio says. The task-list checkbox is the worked example — an empty
-  ballot box against a ticked one, on one ink, so it needs no subdue constant.
+  `coreStyles.test.ts` asserts no DECLARATION in the sheet names either token (the
+  comments still name them, deliberately, which is why that assertion scans the
+  comment-stripped body). The separator stays faint rather than climbing: its dashes
+  survive, so it reinforces rather than carries.
+  **These four ranges are stated here and nowhere else** — the sheet's own comments point
+  at this paragraph rather than restating them, because six copies of a measured number
+  drift apart and three of them already had. It is painted as a **background layer**
+  rather than as a `::before`, which clears both traps in the bullet below at once — paint
+  is not content, so there is no node for `tables.ts` to count and no per-token glyph to
+  suppress. The quoted line's ink is subdued with opacity rather than a tint, which is
+  what lets the chips inside a quote keep their treatment instead of being overpainted by
+  it — and because opacity composites at paint time, no token assertion can see it.
+  `QUOTE_SUBDUE` in `diffview/coreStyles.ts` is therefore exported and pinned by
+  `theme.test.ts` against every palette: `--ink` on `--paper-sunk` ranges from 6:1 to 19:1
+  across the nine, so the flattest ink ramp sets how far any of them may fade. Any future
+  paint-time effect on body copy owes the same pin. A decoration that indicates **state**
+  owes one thing more: tell the states apart by SHAPE, not by hue or by an opacity step,
+  which fails outright for a colour-blind reader whatever a contrast ratio says. The
+  task-list checkbox is the worked example — an empty ballot box against a ticked one, on
+  one ink, so it needs no subdue constant.
 - **An overdrawn glyph belongs on the run's FIRST token, not on every tagged one.**
   `inlineDecorate.ts` tags every shiki token a run covers, and shiki does not always hand
   a multi-character run over as one token — an uppercase `[X]` comes back cut into three.

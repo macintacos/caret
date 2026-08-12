@@ -3387,8 +3387,9 @@ test("a malformed table stays raw source", async ({ daemon, page }) => {
 // prove reaches a real row. The grid check is real font metrics, and the gutter count is the
 // reflow guard a leading decoration most threatens.
 //
-// Both schemes, unlike the inline-code chip above. Not for the bar's fill — --ink-faint is a
-// ramp token the emphasis loop above already proves resolves in both — but for the subdue,
+// Both schemes, unlike the inline-code chip above. Not for the bar's fill — --ink-soft is a
+// ramp token with no derivation of its own, resolved in both by construction — but for the
+// subdue,
 // whose whole constraint is contrast against the surface, and the surface is what a scheme
 // changes. A fade that reads as a step in one and as nothing (or as unreadable) in the other
 // is exactly the failure the issue's ladder is about.
@@ -3462,7 +3463,7 @@ for (const colorScheme of ["light", "dark"] as const) {
     expect(rows[2]?.bars.map((b) => b.level)).toEqual(["1", "2", "3"]);
 
     for (const bar of rows.flatMap((r) => r.bars)) {
-      // The token resolved through the live cascade. An underived --ink-faint leaves the
+      // The token resolved through the live cascade. An underived --ink-soft leaves the
       // declaration invalid and the box transparent, which is a bar that is not there.
       expect(bar.background).not.toBe("rgba(0, 0, 0, 0)");
       expect(bar.width).toBeGreaterThan(0);

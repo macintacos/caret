@@ -31,11 +31,13 @@ protocol.ts), which rewrites them to build the earlier draft versions. Editing o
 editing that copy in the same change; the drift guard fails loudly if you don't.
 
 3. This file is SEEDED BY AN E2E SPEC (test/e2e/showcase.e2e.ts), which drives it in a real
-browser and asserts that every construct the plan view decorates still draws. It reads rows
-by the decoration they carry rather than by their prose, so rewording anything here is
-free — but deleting a construct from the Rendering showcase reds it. Note that the
-preflight gate does NOT run `test e2e` for a Markdown-only diff, so that red arrives on the
-full gate rather than on the narrowed one.
+browser and asserts that every construct the plan view decorates still draws. It finds its
+rows by the decoration they carry and by where they sit relative to each other, never by
+their wording, with ONE exception: its search case types the heading "Rendering showcase".
+So rewording prose is free, renaming that heading is not, and deleting a construct from the
+Rendering showcase reds the spec — which is the point. Note that the preflight gate does
+NOT run `test e2e` for a Markdown-only diff, so that red arrives on the full gate rather
+than on the narrowed one.
 -->
 
 
@@ -573,7 +575,7 @@ Each bullet below carries exactly one link and no other reference, so whatever i
 EXC-956: a link whose target is a **directory** collapses on exactly the same terms, and the click opens the folder tree rather than a file preview. Kind is never read off the target's spelling — `doc/agents` and `doc/agents/` are one citation, and the daemon is what tells a directory from a file. What this layer decides, before anything resolves, is only whether the target is a citable path: made of path characters alone, resolvable in principle, and specific enough to be worth an icon and a preview — which means more than one segment, or one segment naming a file by extension. A path-shaped target that fails that test still collapses; it just reads as an ordinary link rather than a reference.
 
 - [`doc/agents/`](doc/agents/) — a backticked-path directory label: the **folder** glyph rather than the file one, and a click that opens the tree rooted there. Set it beside the file rows above; nothing differs but the glyph and the surface.
-- [the agent rules](doc/agents) — the same directory behind a prose label and written without the slash: the same card on click, and the path visible only in the tooltip. The **folder** glyph lands here too, on the label's own token rather than on the sentence — which is the row that shows the glyph follows the reference's columns and not the shape of its label.
+- [the agent rules](doc/agents) — the same directory behind a prose label and written without the slash: the same card on click, and the path visible only in the tooltip. The **folder** glyph lands here too: the decoration pass cuts the row at the reference's own columns, and for a collapsed label those columns are the label, so the glyph hugs the words and never the sentence around them.
 - [a folder that moved](doc/nowhere/) — an unresolved directory target: the brackets go, and nothing else arrives. The existence gate does not care which kind it was going to be.
 - [the source root](src) and [the same root](src/) — one bare segment that really is a directory, spelled both ways: neither is **cited**, for the reason `guide` above is not. The slash changes nothing, which is the point; widening far enough to catch either would put an icon and a preview on every prose link whose target happens to be one word.
 - [Setup](doc/DEVELOPMENT.md#setup) — a target carrying a fragment: **not cited** either. That is a link to an anchor within a document, not a citation of the document.
