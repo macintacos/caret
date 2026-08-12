@@ -1536,6 +1536,7 @@
           line={openRef.line}
           endLine={openRef.endLine}
           {showShortcutHints}
+          onClose={dismissFilePreview}
         />
       {/snippet}
     </FileDrawer>

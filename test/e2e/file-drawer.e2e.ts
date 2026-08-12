@@ -497,11 +497,9 @@ test("the lane wipes out again when the preview is dismissed", async ({ daemon, 
       );
     });
 
-    // Dismiss by clicking a plain plan line, well outside the lane.
-    await page
-      .locator(".diffview")
-      .getByText("Just some plain prose here.", { exact: false })
-      .click();
+    // Dismiss through the header's close circle — the pointer's only route out
+    // since EXC-1067 stopped an outside click closing anything.
+    await page.getByRole("button", { name: "Close preview" }).click();
 
     // The collapse starts on the lane, and the excerpt is still inside it.
     await expect

@@ -147,27 +147,37 @@ stays green under any invocation.
   accent, so a search hit and the current selection are the same family and still
   different jobs. Read the token, not the colour.
 
-  Everything else is neutral: the ink ramp and the chip surface fills. Two carve-outs are
-  deliberate. The **chip surface** — `--chip` / `--chip-hover` in `styles/derived.css`,
-  the soft-solid fill under `.float-chip` — stays neutral because neutral is what the rule
-  prescribes for a control that is neither selection, novelty, nor semantics; the content
-  chips in the table above are a different vocabulary and tint content rather than chrome.
-  The **keycap** derives from `currentColor` because it has no job of its own and inherits
-  its container's — which is why a key on the amber Approve button reads light and a key
-  on a neutral chip reads grey. `theme.test.ts` asserts every `ColorToken` has at least
-  one `var()` reader under `ui/src`, so a token can't stay declared for nobody — and every
-  content chip clears that floor, all in `diffview/coreStyles.ts`: `--chip-ref` fills the
-  resting file-reference chip, and `--chip-bold` / `--chip-italic` / `--chip-code` /
-  `--chip-link` the four inline chips, each through its own `--md-*` layer variable. (The
-  fence markers took `--chip-code` too until they lost their chip: a chip tints a span of
-  CONTENT, and a fence row is all marker and no content, so the tint drew an empty pill
-  inside the code panel.) That suite also holds `--chip-link` and `--chip-ref` at least 60
-  degrees of hue apart in every palette; check that pin rather than your eye when adding
-  one, and read the comment above it for why that pair and not another. A third pin
-  measures something else for a different pair: `--chip-ref` sits above a shared
-  saturation floor and `--chip-code` below it, since those two render side by side and a
-  near-neutral's hue angle carries no design intent to compare against. Read that test's
-  comment before choosing `chipCodeHue` or `chipRefHue`.
+  Everything else is neutral: the ink ramp and the chip surface fills. Three carve-outs
+  are deliberate. The **chip surface** — `--chip` / `--chip-hover` in
+  `styles/derived.css`, the soft-solid fill under `.float-chip` — stays neutral because
+  neutral is what the rule prescribes for a control that is neither selection, novelty,
+  nor semantics; the content chips in the table above are a different vocabulary and tint
+  content rather than chrome. The **keycap** derives from `currentColor` because it has no
+  job of its own and inherits its container's — which is why a key on the amber Approve
+  button reads light and a key on a neutral chip reads grey. The
+  **file preview's close circle** (`.fp-close`, EXC-1067) is the third and the only one
+  that spends a *hued* token outside its job: `--danger` is declared for semantics
+  (removed / failed) and this is chrome. The macOS traffic light is a platform idiom a
+  reader decodes before reading anything, and a neutral disc would read as a generic dot
+  rather than as a close control — so the hue is carrying the affordance, which is the one
+  thing that buys an exception. It stays bounded by being measured: the disc's glyph is
+  held back until hover, so shape alone carries it and WCAG 1.4.11's 3:1 floor binds,
+  which `theme.test.ts` pins against `--paper` for every palette. Reach for this precedent
+  only where a hue is the affordance; a control that merely wants to look important is
+  neutral. `theme.test.ts` asserts every `ColorToken` has at least one `var()` reader
+  under `ui/src`, so a token can't stay declared for nobody — and every content chip
+  clears that floor, all in `diffview/coreStyles.ts`: `--chip-ref` fills the resting
+  file-reference chip, and `--chip-bold` / `--chip-italic` / `--chip-code` / `--chip-link`
+  the four inline chips, each through its own `--md-*` layer variable. (The fence markers
+  took `--chip-code` too until they lost their chip: a chip tints a span of CONTENT, and a
+  fence row is all marker and no content, so the tint drew an empty pill inside the code
+  panel.) That suite also holds `--chip-link` and `--chip-ref` at least 60 degrees of hue
+  apart in every palette; check that pin rather than your eye when adding one, and read
+  the comment above it for why that pair and not another. A third pin measures something
+  else for a different pair: `--chip-ref` sits above a shared saturation floor and
+  `--chip-code` below it, since those two render side by side and a near-neutral's hue
+  angle carries no design intent to compare against. Read that test's comment before
+  choosing `chipCodeHue` or `chipRefHue`.
   **`--chip-link` marks link SYNTAX, not clickability.** Five shapes wear it and are not
   followable — an internal anchor, an unresolvable path, a fragment target, a bare-word
   target, and an image — and that is the contract rather than a gap (EXC-871 settled it).

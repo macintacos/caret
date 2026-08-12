@@ -527,8 +527,10 @@ test("clicking a real reference reveals a highlighted excerpt centered on its li
     // once the panel has scrolled to the cited line (EXC-970).
     await expect(preview.getByRole("status")).toHaveText(`lines 12–72 of ${CACHE_TS_LINES}`);
     // And there is nothing at either boundary to click — the strips are gone,
-    // so a reintroduced one fails here rather than only looking wrong.
-    await expect(preview.locator("button")).toHaveCount(0);
+    // so a reintroduced one fails here rather than only looking wrong. Scoped to
+    // the code region: the header's close circle is a way OUT of the preview, not
+    // a way further into the file.
+    await expect(preview.locator(".fp-code button")).toHaveCount(0);
 
     // The referenced line itself (42) is the one highlighted, so the eye lands on it.
     await expect(preview.locator(".fp-target")).toHaveCount(1);
@@ -818,6 +820,32 @@ test("pressing Escape dismisses the open preview", async ({ daemon, page }) => {
   }
 });
 
+test("clicking the close circle dismisses the open preview", async ({ daemon, page }) => {
+  // The pointer's way out, beside Escape's (EXC-1067). It has to exist: with the
+  // outside click no longer dismissing, the keyboard would otherwise be the only
+  // route out of a lane a reader opened with the mouse.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
+    });
+    await page.goto("/");
+    await planSurface(page);
+
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+    await page.locator("[data-file-ref]").first().click();
+
+    const preview = page.locator("[data-file-preview]");
+    await expect(preview).toBeVisible();
+
+    await page.getByRole("button", { name: "Close preview" }).click();
+    await expect(preview).toHaveCount(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
 test("the preview fills its lane and pages inside itself", async ({ daemon, page }) => {
   // The opening window is large enough to judge a plan against (EXC-756), so
   // against a big file the excerpt has more rows — and longer lines — than the
@@ -919,7 +947,7 @@ test("scrolling walks the preview to both ends of the file", async ({ daemon, pa
     const preview = page.locator("[data-file-preview]");
     await expect(preview).toBeVisible();
     await settleDrawer(page);
-    await expect(preview.locator("button")).toHaveCount(0);
+    await expect(preview.locator(".fp-code button")).toHaveCount(0);
 
     // Walk upward until the region starts at line 1. One scroll per attempt,
     // retried — a scroll landing while the previous chunk is still in flight is
@@ -1045,7 +1073,7 @@ test("a keyboard reader walks the preview to both ends with no pointer", async (
     // are the wrong thing to announce.
     await expect(preview.getByRole("status")).toHaveText(`${CACHE_TS_LINES} lines`);
     // And nothing was put back at the boundaries to achieve any of it.
-    await expect(preview.locator("button")).toHaveCount(0);
+    await expect(preview.locator(".fp-code button")).toHaveCount(0);
 
     // Escape still closes the preview from inside the region, where focus sits.
     await expect(async () => {
