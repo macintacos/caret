@@ -379,6 +379,72 @@ const CARET_OVERRIDES = `
     border-end-end-radius: var(--radius);
   }
 
+  /* EXC-870: a markdown image, drawn onto the row its image markup sits on
+     (inlineImages.ts). This is the epic's transform-in-place stance applied to the one
+     construct that has something to render: the markup is NOT replaced — it keeps its link
+     chip and stays copyable — and the picture is added below it inside the same row.
+
+     display: block is what makes that work, and it is the whole reason this element needs
+     no geometry negotiation with its neighbours. Every other decoration in this sheet is an
+     inline box sharing a line with shiki's tokens, which is where EXC-868 found a chip's
+     padding/margin overhang double-coating the wash beside it. A block-level replaced
+     element leaves the inline flow entirely: the row's text keeps its own line, the image
+     takes the next one, and the rows render white-space: pre either way. So the inline
+     margin here can be positive without shifting a single glyph, and it spends the same
+     0.75rem the fenced panel above spends — the same indent for the same reason, a block
+     the plan embedded rather than prose it wrote. Same VALUE, not the same pixel rail:
+     the panel's margin moves the whole row box, while this one sits inside that box's own
+     1ch text padding, so the image's edge lands about a character to the panel's right.
+     Aligning them exactly would mean subtracting the library's padding here, and coupling
+     a caret rule to a library metric is the fragility the utility-button note above
+     already warns about.
+
+     The size caps are the design decision. max-width borrows the panel's own 720px reading
+     measure rather than inventing a number, and min() keeps a narrow viewport in charge;
+     max-height caps the image at roughly fourteen of the library's 20px line boxes, which
+     is enough for a diagram to be read and not enough for one asset to own the plan. Width
+     and height stay auto so the aspect ratio survives whichever cap bites first, which is
+     also why no object-fit is needed — with one axis free there is nothing to letterbox.
+
+     The hairline border is legibility rather than decoration: plan images are overwhelmingly
+     screenshots and diagrams on a white ground, which dissolves into --paper with no edge in
+     the light scheme. The ink mix is the same color-mix idiom the panel fill and the scroll
+     thumb use, so it carries correct contrast in both schemes from one declaration. The
+     radius is the chip family's, so the figure reads as part of the same vocabulary. No
+     transition — the diff surface swaps state instantly (svelte-rules § Motion).
+
+     user-select: none is the one declaration here that is not about looks, and it is
+     load-bearing: without it the epic's copy contract breaks. Blink emits an image's alt
+     text into the plain-text flavour of a copied selection, so selecting the image's row
+     and copying yielded the source markdown with the accessible name stapled to its end —
+     while Selection.toString(), which takes a different path, showed nothing wrong. The
+     row's text is what the reader is copying; the picture is a rendering of markup that
+     row already spells out, so excluding it from the selection is what the element IS
+     rather than a workaround. Doing it here also keeps the alt attribute, which stays the
+     accessible name; moving the name to aria-label with an empty alt cleans the clipboard
+     the same way but leans on the presentational-role conflict rule to do it.
+     images.e2e.ts reads the real clipboard, which is the only place this is visible.
+
+     The [hidden] rule is not boilerplate. A failed load hides the element rather than
+     removing it, so the observer pass stays idempotent (inlineImages.ts), and the UA
+     stylesheet's own [hidden] { display: none } is overridden by the display: block
+     above — without this line a broken image would still occupy the row. */
+  [data-content] [data-line] [data-md-image] {
+    display: block;
+    user-select: none;
+    max-width: min(100%, 720px);
+    max-height: 18rem;
+    width: auto;
+    height: auto;
+    margin-block: 0.35rem;
+    margin-inline-start: 0.75rem;
+    border: 1px solid color-mix(in lab, var(--paper-sunk), var(--ink) 14%);
+    border-radius: var(--radius);
+  }
+  [data-content] [data-line] [data-md-image][hidden] {
+    display: none;
+  }
+
   /* EXC-729: an overflowing fenced block is wrapped in one scroll card (codeBlockScroll.ts)
      that is a single native horizontal scroll container — the whole block scrolls as one unit
      (short lines follow the wide ones, one scrollbar at the bottom, no per-row jelly). The card

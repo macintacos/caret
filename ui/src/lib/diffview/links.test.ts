@@ -571,6 +571,133 @@ describe("buildLinkLayer inline runs", () => {
   });
 });
 
+// The image layer (EXC-870). An image is the one shape in this file that keeps
+// its markup verbatim: nothing collapses, so display columns are source columns
+// and what the reader copies is the real `![alt](url)`. The exclamation mark is
+// what distinguishes it from a link, and getting that wrong is what left it
+// orphaned outside a collapsed label before this layer existed.
+describe("buildLinkLayer images", () => {
+  test("an http image keeps its markup and emits an image span", () => {
+    const input = "before ![a chart](https://cdn.test/chart.png) after";
+    const { text, images, spans } = buildLinkLayer(input);
+    expect(text).toBe(input);
+    expect(images.get(1)).toEqual([{ url: "https://cdn.test/chart.png", alt: "a chart" }]);
+    // Nothing on an image row is clickable: the picture is the affordance, and
+    // the URL inside the parens must not become a bare-URL span of its own.
+    expect(spans.get(1) ?? []).toHaveLength(0);
+    expect(text.slice(7, 45)).toBe("![a chart](https://cdn.test/chart.png)");
+  });
+
+  test("an image takes one link run over its whole shape", () => {
+    // EXC-859's chip means "this was link syntax", which an image is. It doubles
+    // as the failed-load rung: an image that never draws still reads as a chip.
+    const { inline } = buildLinkLayer("![a chart](https://cdn.test/chart.png)");
+    expect(inline.get(1)).toEqual([{ startCol: 0, endCol: 38, link: true }]);
+  });
+
+  test("an unsafe-scheme image draws nothing but stays literal and chipped", () => {
+    const input = "![inline](data:image/png;base64,AAAA)";
+    const { text, images, inline, spans } = buildLinkLayer(input);
+    expect(text).toBe(input);
+    expect(images.size).toBe(0);
+    expect(spans.get(1) ?? []).toHaveLength(0);
+    expect(inline.get(1)).toEqual([{ startCol: 0, endCol: 37, link: true }]);
+  });
+
+  test("a path-target image emits no image and no file reference", () => {
+    // A real behaviour change, and a deliberate one: this shape used to collapse
+    // to `!the diagram` and take the reference glyph, so a click opened the
+    // excerpt preview — a surface that renders text, and so could only ever show
+    // an image file as bytes. What replaces the glyph is the path itself, now
+    // visible in the row instead of hidden behind a label.
+    const input = "![the diagram](doc/diagram.png)";
+    const { text, images, fileRefs } = buildLinkLayer(input);
+    expect(text).toBe(input);
+    expect(images.size).toBe(0);
+    expect(fileRefs.size).toBe(0);
+  });
+
+  test("an empty alt is carried through as an empty accessible name", () => {
+    expect(buildLinkLayer("![](https://cdn.test/x.png)").images.get(1)).toEqual([
+      { url: "https://cdn.test/x.png", alt: "" },
+    ]);
+  });
+
+  test("a bare image filename in prose is never an image", () => {
+    // The `![]()` syntax is the whole trigger. A filename mentioned in a sentence
+    // stays prose — or a file reference when it resolves, which is fileRefs.ts's
+    // call and not this layer's — because drawing a picture where the author only
+    // named one would be a rewrite rather than a decoration.
+    const input = "see diagram.png and doc/arch.svg for the shape";
+    const { text, images } = buildLinkLayer(input);
+    expect(text).toBe(input);
+    expect(images.size).toBe(0);
+  });
+
+  test("an escaped exclamation mark still draws an image", () => {
+    // Pinned as current behaviour rather than endorsed. CommonMark reads
+    // `\![a](url)` as an escaped bang followed by a link; INLINE_LINK is blind to
+    // backslash escapes throughout (it honours `\[` no better), so the lookbehind
+    // inherits that blindness rather than introducing it. Recorded here so the
+    // next reader knows the case was considered, not missed.
+    expect(buildLinkLayer("\\![alt](https://cdn.test/x.png)").images.size).toBe(1);
+  });
+
+  test("a titled image matches nothing and stays wholly literal", () => {
+    // The link grammar allows no space inside a target, so `![a](url "t")` never
+    // reaches the image branch. Pinned as current behaviour rather than a wish:
+    // widening the target grammar would move every link the layer sees.
+    const input = '![a chart](https://cdn.test/chart.png "Hover title")';
+    const { text, images, inline } = buildLinkLayer(input);
+    expect(text).toBe(input);
+    expect(images.size).toBe(0);
+    // Only the bare URL inside it is marked, exactly as in any other prose row.
+    expect(inline.get(1)).toEqual([{ startCol: 11, endCol: 37, link: true }]);
+  });
+
+  test("an image inside inline code is left literal and draws nothing", () => {
+    const input = "write `![alt](https://cdn.test/x.png)` to embed one";
+    const { text, images } = buildLinkLayer(input);
+    expect(text).toBe(input);
+    expect(images.size).toBe(0);
+  });
+
+  test("an image inside a fenced block draws nothing", () => {
+    expect(buildLinkLayer("```\n![alt](https://cdn.test/x.png)\n```\n").images.size).toBe(0);
+  });
+
+  test("an ordinary link on the same line still collapses", () => {
+    // The regression the exclamation-mark lookbehind could introduce: a link is
+    // still a link when an image shares its row.
+    const { text, images, spans } = buildLinkLayer(
+      "![p](https://cdn.test/p.png) and [the docs](https://docs.test/x)",
+    );
+    expect(text).toBe("![p](https://cdn.test/p.png) and the docs");
+    expect(images.get(1)).toHaveLength(1);
+    expect(spans.get(1)).toEqual([
+      { startCol: 33, endCol: 41, href: "https://docs.test/x", label: "the docs" },
+    ]);
+  });
+
+  test("markup inside an alt is marked, nested inside the image's one link run", () => {
+    // marked descends into an image's alt, so a codespan there emits its own run —
+    // and every run on the shape also carries `link`. That is what the decoration
+    // pass needs to draw ONE link pill across the whole image (consecutive link
+    // runs, abutting, differing attribute sets) with the code chip (EXC-868) square
+    // inside it, since a member nested in another never takes the rounded cap.
+    expect(buildLinkLayer("![a `id` chart](https://cdn.test/c.png)").inline.get(1)).toEqual([
+      { startCol: 0, endCol: 4, link: true },
+      { startCol: 4, endCol: 8, code: true, link: true },
+      { startCol: 8, endCol: 39, link: true },
+    ]);
+  });
+
+  test("two images on one line are emitted in source order", () => {
+    const images = buildLinkLayer("![a](https://c.test/a.png)![b](https://c.test/b.png)").images;
+    expect((images.get(1) ?? []).map((i) => i.alt)).toEqual(["a", "b"]);
+  });
+});
+
 // The opener is the only window-touching effect of the link layer. Together
 // with the scheme filtering above (only http/https hrefs ever reach a span, so
 // only those can be opened) it is the link layer's navigation-safety contract:
