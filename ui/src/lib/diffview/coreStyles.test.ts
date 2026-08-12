@@ -900,3 +900,60 @@ describe("the markdown table (EXC-864)", () => {
     expect(overrideDecls).not.toMatch(/\[data-table-rule\][^{]*\{[^}]*display:\s*none/);
   });
 });
+
+// EXC-863: blockquote level bars. The bar belongs to the epic's transform-in-place
+// category rather than to the chip family: it overdraws the marker it replaces
+// instead of tinting a run, so it spends the hairline-rule token and mints nothing
+// new. The subdue is the whole-line half, and where it is anchored is the
+// load-bearing part — see the rule's own note in coreStyles.ts.
+describe("blockquote level bars (EXC-863)", () => {
+  const markerRule = rulesFor(String.raw`\[data-md-quote\]`).find((r) => r.includes("color:"));
+  const barRule = rulesFor(String.raw`\[data-md-quote\]::before`)[0] ?? "";
+  const subdueRule = rulesFor(String.raw`\[data-quote-depth\][^{}]*`).find((r) =>
+    r.includes("opacity:"),
+  );
+
+  test("all three rules are present to assert against", () => {
+    expect(markerRule).toBeDefined();
+    expect(barRule).not.toBe("");
+    expect(subdueRule).toBeDefined();
+  });
+
+  test("overdraws the marker rather than deleting it", () => {
+    // The `>` stays in the text — copy, selection and the column grid all depend on
+    // it — so the glyph goes transparent and the bar is drawn where it sat.
+    expect(markerRule).toMatch(/color:\s*transparent/);
+    expect(markerRule).toMatch(/position:\s*relative/);
+    expect(barRule).toMatch(/position:\s*absolute/);
+  });
+
+  test("spends the rule token, not a chip tint", () => {
+    expect(barRule).toMatch(/background-color:\s*var\(--rule-strong\)/);
+    expect(barRule).not.toContain("--chip-");
+  });
+
+  test("draws a round-rect on the family's own radius", () => {
+    expect(barRule).toMatch(new RegExp(String.raw`border-radius:\s*${RADIUS}`));
+  });
+
+  test("costs the monospace grid nothing", () => {
+    // Out of flow and sized in ch, so the bar takes no room in the line box and
+    // cannot shift a column. Anything participating in flow here would move every
+    // glyph after the markers, since rows render white-space: pre.
+    expect(barRule).not.toMatch(/(?:^|[^-\w])margin(?:-\w+)*:/);
+    expect(barRule).not.toMatch(/(?:^|[^-\w])padding(?:-\w+)*:/);
+  });
+
+  test("subdues the row's tokens rather than the row", () => {
+    // The amber selection band and the hover band are background-colors on
+    // [data-line] itself, so fading the ROW would fade them too and a selected
+    // quoted row would read differently from a selected unquoted one.
+    expect(subdueRule).toMatch(/\[data-line\]\[data-quote-depth\]\s*>/);
+  });
+
+  test("leaves the bar out of the subdue", () => {
+    // The marker child carries the bar; fading it with the ink it replaced would
+    // dim the one thing that has to stay legible at depth.
+    expect(subdueRule).toMatch(/:not\(\[data-md-quote\]\)/);
+  });
+});

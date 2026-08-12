@@ -445,6 +445,66 @@ const CARET_OVERRIDES = `
     display: none;
   }
 
+  /* EXC-863: blockquote level bars. This is EXC-855's OTHER category — transform-in-place
+     rather than keep-and-chip — so nothing here is a chip and nothing here spends a
+     --chip-* token. A level bar is a rule, so it takes --rule-strong, the same hairline
+     token the surface's own rules ride; the chip family stays five members.
+
+     The bar overdraws the marker instead of sitting beside it. The marker glyph is still
+     in the text — copy, drag-selection, vim motions, search columns and the comment anchors all
+     read the real source, which is the whole point of keeping the characters — so the
+     glyph goes transparent and the bar is drawn in the column it vacated. Deleting the
+     character would have been the other way to get one bar per level, and it would have
+     broken every one of those in the same stroke.
+
+     Depth reads off the BAR COUNT, and that comes free: the decoration pass gives every
+     marker its own child at its own source column (data-md-quote carries the level), so a
+     two-level quote draws two bars 2ch apart with no nesting logic here and no per-level
+     rule — the source's own indentation is the spacing. Nothing
+     participates in flow — the bar is absolutely positioned and sized in ch — so the
+     monospace grid is untouched by construction, not by cancellation. That matters more
+     here than for the emphasis chips: a leading decoration is exactly the shape that
+     shifts every glyph on the line, and the gutter's line numbers would drift with it.
+
+     The radius clamps to a pill at this width, which is what makes it a round-rect rather
+     than a hairline: one bar per ROW, ends visible, so a quote reads as a stack of marks
+     the way the level bar in a rendered blockquote does. The small block bleed closes most
+     of the gap between consecutive rows without letting a bar escape its line box. */
+  [data-content] [data-line] [data-md-quote] {
+    position: relative;
+    color: transparent;
+  }
+  [data-content] [data-line] [data-md-quote]::before {
+    content: "";
+    position: absolute;
+    inset-block: -0.1em;
+    inset-inline-start: 0.375ch;
+    width: 0.25ch;
+    border-radius: var(--radius);
+    background-color: var(--rule-strong);
+  }
+
+  /* The subdue, and it rides the row's TOKENS rather than the row. Opacity is the
+     mechanism because the alternative is not available: token colour arrives from the
+     library's own [data-line] span rule, so an unlayered colour here would win — and win
+     too hard, flattening every syntax hue on the line to one value. Fading instead keeps
+     each token's own colour and carries the inline chips down with it, which is what the
+     issue asks for: a link, a codespan or a bold pill inside a quote keeps its treatment,
+     quieter, rather than losing it.
+
+     It cannot ride [data-line] itself. The amber drag-selection band and the hover band
+     are background-colors on that element, so a row-level opacity would fade them too and
+     a selected quoted row would read differently from a selected unquoted one. Anchored on
+     the row and its children rather than reaching further down, so the depth is read once
+     where it is written. The marker child is exempt: it carries the bar, and dimming the
+     bar with the ink it replaced would cost exactly the legibility the bar exists for.
+
+     Descendant rather than child at the [data-content] end, so a row that a scroll or
+     table card has re-parented still matches (EXC-864). */
+  [data-content] [data-line][data-quote-depth] > :not([data-md-quote]) {
+    opacity: 0.72;
+  }
+
   /* EXC-729: an overflowing fenced block is wrapped in one scroll card (codeBlockScroll.ts)
      that is a single native horizontal scroll container — the whole block scrolls as one unit
      (short lines follow the wide ones, one scrollbar at the bottom, no per-row jelly). The card
