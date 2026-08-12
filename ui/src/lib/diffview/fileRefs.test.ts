@@ -163,6 +163,25 @@ describe("exclusions", () => {
     expect(buildFileRefLayer("see `https://example.com/app.ts` docs").size).toBe(0);
   });
 
+  test("does not detect anything inside a code span that holds spaces", () => {
+    // `bun test <blah>` is a command, not a path — but `test` is a real
+    // directory, so per-word candidates made the whole span read as a folder.
+    expect(buildFileRefLayer("run `bun test <blah>` first").size).toBe(0);
+    expect(buildFileRefLayer("run `cd src` first").size).toBe(0);
+  });
+
+  test("skips only the spacey span, not the whole line", () => {
+    const spans = only("see `bun test` and `src/foo.ts` here");
+    expect(spans.map((s) => s.path)).toEqual(["src/foo.ts"]);
+  });
+
+  test("still detects a path padded by CommonMark's code-span spaces", () => {
+    // ``` ` foo.ts ` ``` renders as `foo.ts`; the padding is not a word break.
+    // The needle is the SPAN's text, and the span covers the candidate only —
+    // the padding sits outside it, as it does for any prose around a reference.
+    expect(spanFor("look at ` foo.ts ` now", "foo.ts")?.path).toBe("foo.ts");
+  });
+
   test("does not detect references inside a fenced code block", () => {
     const text = [
       "```ts",
