@@ -293,12 +293,15 @@ describe("the fence-marker chip (EXC-869)", () => {
     expect(chipRule).toMatch(new RegExp(String.raw`border-radius:\s*${RADIUS}`));
   });
 
-  test("shifts no column — block padding only", () => {
-    // Rows render white-space: pre, so inline padding or margin on a token would move
-    // every glyph after it (and slide the tint under the opening row's language tag).
-    // Vertical padding on an inline box never changes the line box, so it is free.
-    expect(chipRule).toMatch(/padding-block:/);
-    expect(chipRule).not.toMatch(/padding-inline|margin-inline|padding-left|padding-right/);
+  test("shifts no column: any inline padding is cancelled by an equal negative margin", () => {
+    // Rows render white-space: pre, so UNCANCELLED inline padding on a token moves every
+    // glyph after it. Inline padding is allowed only paired with an equal negative margin —
+    // the escape hatch [data-file-ref] already uses in this sheet — so this pins the
+    // column-parity invariant rather than banning the technique.
+    expect(chipRule).not.toMatch(/padding-left|padding-right|margin-left|margin-right/);
+    const pad = chipRule.match(/padding-inline:\s*([\d.]+)em/)?.[1];
+    const margin = chipRule.match(/margin-inline:\s*-([\d.]+)em/)?.[1];
+    expect(pad).toBe(margin); // both absent, or equal and opposite
   });
 
   test("reaches the scroll card's rows as well as the direct-child rows", () => {

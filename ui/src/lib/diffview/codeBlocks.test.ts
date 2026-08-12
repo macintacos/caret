@@ -234,14 +234,39 @@ describe("tagCodeBlockRows token tagging", () => {
     expect(fenceOf(root, 3)?.textContent).toBe("~~~");
   });
 
-  test("tags a fence longer than three markers", () => {
+  test("tags a longer fence's delimiters, and leaves an interior fence alone", () => {
+    // Only a block's own start/end rows are scanned, so the ``` shown INSIDE a ````
+    // block is content and never takes the chip.
     const root = buildContent(3);
     setRowTokens(root, 1, ["````", "md"]);
     setRowTokens(root, 2, ["```"]);
     setRowTokens(root, 3, ["````"]);
     tagCodeBlockRows(root, [{ start: 1, end: 3 }]);
     expect(fenceOf(root, 1)?.textContent).toBe("````");
+    expect(fenceOf(root, 2)).toBeNull();
     expect(fenceOf(root, 3)?.textContent).toBe("````");
+  });
+
+  test("tags an indented fence's markers", () => {
+    const root = buildContent(2);
+    setRowTokens(root, 1, ["   ```", "ts"]);
+    setRowTokens(root, 2, ["   ```"]);
+    tagCodeBlockRows(root, [{ start: 1, end: 2 }]);
+    expect(fenceOf(root, 1)?.textContent).toBe("   ```");
+    expect(fenceOf(root, 2)?.textContent).toBe("   ```");
+  });
+
+  test("tags no markers when shiki merges the fence and its language into one token", () => {
+    // The marker span must be markers alone. Were the two ever to tokenize as one
+    // (they do not today — caret-theme.ts colors them apart), skipping the chip beats
+    // painting it under the language tag, which keeps its own prominent treatment.
+    const root = buildContent(2);
+    setRowTokens(root, 1, ["```ts"]);
+    setRowTokens(root, 2, ["```"]);
+    tagCodeBlockRows(root, [{ start: 1, end: 2 }]);
+    expect(fenceOf(root, 1)).toBeNull();
+    expect(langOf(root, 1)?.textContent).toBe("```ts");
+    expect(fenceOf(root, 2)?.textContent).toBe("```");
   });
 
   test("tags no language when the opening fence has none", () => {
@@ -255,10 +280,8 @@ describe("tagCodeBlockRows token tagging", () => {
     expect(fenceOf(root, 2)?.textContent).toBe("```");
   });
 
-  // An unclosed block runs to the last line of the document (codeBlockRanges), so
-  // its data-code-end row is ordinary prose rather than a fence. Scanning it for a
-  // marker glyph would tag an inline backtick — a real code token — which would then
-  // wear the chip and the centering nudge. The row's own text is the gate.
+  // An unclosed block runs to the last line of the document (codeBlockRanges), so its
+  // data-code-end row is prose rather than a fence.
   test("tags no fence markers on an unclosed block's non-fence last row", () => {
     const root = buildContent(2);
     setRowTokens(root, 1, ["```", "ts"]);

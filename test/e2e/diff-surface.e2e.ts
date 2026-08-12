@@ -860,7 +860,16 @@ test("renders a fenced code block as a tagged, darker panel on its own rows (EXC
           `[data-content] > [data-line="${n}"] [${attr}]`,
         ) as HTMLElement | null) ?? null;
       const lang = tokenIn(5, "data-code-lang"); // opening fence "```ts" → language token
+      const openFence = tokenIn(5, "data-code-fence"); // opening fence "```" → markers
       const fence = tokenIn(8, "data-code-fence"); // closing fence "```" → markers
+      // How far the closing chip's painted box escapes its row's box. The closing
+      // markers carry BOTH the chip's block padding and the EXC-692 downward nudge,
+      // so this row is where the two stack worst.
+      const chipOverflow =
+        fence && row(8)
+          ? fence.getBoundingClientRect().bottom -
+            (row(8) as HTMLElement).getBoundingClientRect().bottom
+          : null;
       return {
         codeLines: [5, 6, 7, 8].map((n) => has(n, "data-code-line")),
         start: has(5, "data-code-start"),
@@ -875,6 +884,11 @@ test("renders a fenced code block as a tagged, darker panel on its own rows (EXC
         langTop: lang ? getComputedStyle(lang).top : null,
         fenceText: fence?.textContent ?? null,
         fenceTop: fence ? getComputedStyle(fence).top : null,
+        openFenceText: openFence?.textContent ?? null,
+        openFenceBg: openFence ? getComputedStyle(openFence).backgroundColor : null,
+        fenceBg: fence ? getComputedStyle(fence).backgroundColor : null,
+        fenceRadius: fence ? getComputedStyle(fence).borderTopLeftRadius : null,
+        chipOverflow,
       };
     });
 
@@ -912,6 +926,20 @@ test("renders a fenced code block as a tagged, darker panel on its own rows (EXC
   expect(Number.parseFloat(panel.langTop as string)).toBeLessThan(0);
   expect(panel.fenceText?.trim()).toBe("```");
   expect(Number.parseFloat(panel.fenceTop as string)).toBeGreaterThan(0);
+  // EXC-869: BOTH delimiters carry the marker chip, and it resolves end to end — the
+  // --chip-code fallback is a color-mix() and the radius a token, either of which
+  // would compute to nothing if the custom properties failed to reach the shadow root.
+  expect(panel.openFenceText?.trim()).toBe("```");
+  expect(panel.openFenceBg).toBe(panel.fenceBg);
+  expect(panel.fenceBg).not.toBeNull();
+  expect(panel.fenceBg).not.toBe("rgba(0, 0, 0, 0)");
+  // The chip is tinted OFF the panel it sits on, not merely inheriting it.
+  expect(panel.fenceBg).not.toBe(panel.codeBg);
+  expect(Number.parseFloat(panel.fenceRadius as string)).toBeGreaterThan(0);
+  // The chip stays inside its row, so it never overhangs the panel's rounded bottom
+  // edge — the block padding and the EXC-692 nudge together must fit the line box.
+  expect(panel.chipOverflow).not.toBeNull();
+  expect(panel.chipOverflow as number).toBeLessThanOrEqual(0);
 });
 
 test("hovering a code block reveals a copy button that copies the code (EXC-692)", async ({

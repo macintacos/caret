@@ -76,18 +76,22 @@ function tagLanguageToken(row: Element): void {
   }
 }
 
-/** Tags the fence-marker token on a fence line's row (the first span holding a
- * backtick or tilde) so the panel CSS can draw the marker chip on it, and nudge the
+/** Tags the fence-marker token on a fence line's row (the first span that is
+ * markers alone) so the panel CSS can draw the marker chip on it, and nudge the
  * closing glyphs down to center.
  *
- * The row's own text is the gate. An unclosed block ends at the last line of the
- * document rather than at a fence (codeBlockRanges), so its `data-code-end` row is
- * ordinary prose — and scanning that for a marker glyph would tag an inline backtick,
- * dressing a real code token as a delimiter. */
+ * Two conditions, each ruling out a different mis-tag. The row's own text must be a
+ * fence line: an unclosed block ends at the last line of the document rather than at
+ * a fence (codeBlockRanges), so its `data-code-end` row is ordinary prose, and
+ * scanning that for a marker glyph would dress an inline backtick as a delimiter.
+ * The span must then be markers and whitespace ALONE — the same FENCE_ONLY test
+ * tagLanguageToken inverts — so that if shiki ever merges ``` and its language into
+ * one token, the chip is skipped rather than painted under the language tag. */
 function tagFenceToken(row: Element): void {
   if (!FENCE.test(row.textContent ?? "")) return;
   for (const span of row.children) {
-    if (/[`~]/.test(span.textContent ?? "")) {
+    const text = span.textContent ?? "";
+    if (/[`~]/.test(text) && FENCE_ONLY.test(text)) {
       span.setAttribute("data-code-fence", "");
       return;
     }
@@ -100,8 +104,7 @@ function tagFenceToken(row: Element): void {
  * `[data-content] > [data-line]` cell inside a block, plus `data-code-start` /
  * `data-code-end` on each block's first / last line. Also tags the two fence-line
  * token kinds the panel CSS styles: `data-code-lang` on the opening line's language
- * tag, and `data-code-fence` on each fence line's markers — both delimiters, so the
- * chip reads the same at the block's top and bottom (EXC-869). The panel CSS shifts
+ * tag, and `data-code-fence` on each fence line's markers. The panel CSS shifts
  * the language tag and the closing markers to their row's vertical center
  * (EXC-692). The library owns these rows and repaints them, so this is re-run after
  * every repaint (see SourceView.svelte); it is idempotent and clears rows and
