@@ -393,6 +393,9 @@ test("cuts a codespan at its file reference without splitting the code pill", ()
   // Every token of that codespan is marked, backticks included, because the pill is one
   // REFERENCE chip rather than a code chip with a reference inside it — the sheet rebinds
   // the group's tint off this attribute so it does not change colour at the backticks.
+  // This three-token shape is also what the sheet's hover spread selects through: with no
+  // element around the group, it reaches the backticks as the reference's two ADJACENT
+  // siblings, so a tokenization that put anything between them would strand the wash.
   expect(cited(host)).toEqual([
     { text: "`", cite: true },
     { text: "foo/bar.ts", cite: true },

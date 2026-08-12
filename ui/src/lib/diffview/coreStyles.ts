@@ -1414,7 +1414,7 @@ const CARET_OVERRIDES = `
      cut the fill with nothing underneath to show through. What it KEEPS is the block
      padding the chip family gives every member, which is what makes the pill one thickness
      end to end, and its hover, which is still the only part of the pill the pointer can
-     press.
+     press — the last rule below then spreads that one state across the rest of the group.
 
      Scoped to a reference the pass tagged as code, so a prose-labelled reference — which
      carries no member at all — keeps the standalone chip this rule is carved out of. */
@@ -1428,6 +1428,28 @@ const CARET_OVERRIDES = `
     border-radius: 0;
   }
   [data-content] [data-line] [data-file-ref][data-md~="code"]:hover {
+    background-color: var(--accent-wash);
+  }
+
+  /* And the hover washes the WHOLE pill, not just the path inside it. The wash is the
+     signal that a chip the reader sees as one object is pressable, so lighting only its
+     middle read as a chip with a lit core rather than a lit chip.
+
+     The rest of the group is the backtick token either side, and those are the
+     reference's immediate siblings by construction: the group WRAPS the reference (that
+     is what data-md-cite means) and the pass cut a token boundary at each of the
+     reference's columns, so one token spans the gap to the group's start and one spans
+     the gap to its end. Hence the adjacent-sibling pair rather than a subtree selector —
+     there is no element around the group to hang one on. Both halves require the cite
+     member on BOTH tokens, so a reference abutting a codespan it is not inside never
+     lights that codespan.
+
+     background-color, matching the reference's own hover above: the group's resting tint
+     rides a background-IMAGE layer, so the wash lands underneath it and the two
+     translucent fills blend into the single step up. The radius is the group's own, so
+     the wash takes the pill's shape at the ends for free. */
+  [data-content] [data-line] [data-md-cite]:has(+ [data-file-ref][data-md-cite]:hover),
+  [data-content] [data-line] [data-file-ref][data-md-cite]:hover + [data-md-cite] {
     background-color: var(--accent-wash);
   }
 

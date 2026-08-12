@@ -265,6 +265,21 @@ test("marks only references that resolve to a real file", async ({ daemon, page 
     expect(hovered?.background).not.toBe("rgba(0, 0, 0, 0)");
     expect(hovered?.background).not.toBe(resting?.background);
 
+    // And the wash covers the WHOLE pill, backticks included. Lighting the path alone
+    // read as a lit core inside an unlit chip rather than as one pressed object, and
+    // the backticks are their own tokens with no element around the group — so this is
+    // the sheet's adjacent-sibling spread resolving in the live cascade, which is the
+    // only place its `:has()` and `+` can be said to work at all.
+    const ends = await page.evaluate(() => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+      const tok = sh?.querySelector("[data-file-ref]");
+      return [tok?.previousElementSibling, tok?.nextElementSibling].map((s) =>
+        s == null ? null : { text: s.textContent, bg: getComputedStyle(s).backgroundColor },
+      );
+    });
+    expect(ends.map((e) => e?.text)).toEqual(["`", "`"]);
+    expect(ends.map((e) => e?.bg)).toEqual([hovered?.background, hovered?.background]);
+
     // The tint is a RESOLUTION signal, so the unresolvable `src/ghost.ts` beside it
     // must carry none — it is never tagged, so the rule cannot reach it. Asserted
     // here because "untagged" and "untinted" are different claims, and only the
