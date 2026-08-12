@@ -258,12 +258,7 @@ test("a task item's marker and its checkbox each carry their own value", () => {
     new Map(),
   );
   const rowEl = host.querySelector("[data-line]");
-  expect([...(rowEl?.children ?? [])].map((c) => c.getAttribute("data-md-list"))).toEqual([
-    "task",
-    null,
-    null,
-    null,
-  ]);
+  expect(markers(host).map((m) => m.list)).toEqual(["task", null, null, null]);
   expect([...(rowEl?.children ?? [])].map((c) => c.getAttribute("data-md-checkbox"))).toEqual([
     null,
     null,

@@ -163,10 +163,10 @@ function tagRow(row: Element, runs: readonly InlineSpan[], groups: Map<Member, C
  * file-reference boundary, then tags every token with the markup covering it:
  * `data-md` (a `bold italic code link` token list), `data-md-start` /
  * `data-md-end` for the members whose pill opens or closes there, and the valued
- * `data-md-checkbox` / `data-md-quote` / `data-md-list`. Stale tags are cleared first, so a
- * populated→empty transition drops the old ones. `root` is the source view's
- * shadow root (or any container holding the `[data-content] [data-line]` rows).
- * Idempotent and safe to call on every repaint.
+ * `data-md-checkbox` / `data-md-quote` / `data-md-list`. Stale tags are cleared
+ * first, so a populated→empty transition drops the old ones. `root` is the source
+ * view's shadow root (or any container holding the `[data-content] [data-line]`
+ * rows). Idempotent and safe to call on every repaint.
  *
  * Rows are visited for every line either map names: a prose-labelled reference
  * produces a file-reference span but no inline run at all (links.ts emits no

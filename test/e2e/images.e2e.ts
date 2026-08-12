@@ -30,7 +30,12 @@
 // the same path a dead remote asset would take.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
-import { planSurface, revealGutterPlus, rowHeights } from "@test/e2e/support/source-view.ts";
+import {
+  firstGlyphX,
+  planSurface,
+  revealGutterPlus,
+  rowHeights,
+} from "@test/e2e/support/source-view.ts";
 
 // A 900x700 1-bit PNG, solid black. The size is the point: 700px intrinsic height
 // is well past the 18rem (288px) cap, so the cap has to bind for the assertions
@@ -139,19 +144,6 @@ function gridCounts(page: import("@playwright/test").Page) {
       numbers: (sh?.querySelectorAll("[data-line-number-content]") ?? []).length,
     };
   });
-}
-
-/** The viewport x of the first glyph on a row — the monospace grid's left edge for
- * that line. The image must not move it on any row, its own included. */
-function firstGlyphX(page: import("@playwright/test").Page, line: number) {
-  return page.evaluate((ln) => {
-    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    const row = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].find(
-      (r) => r.getAttribute("data-line") === String(ln),
-    );
-    const first = row?.firstElementChild;
-    return first ? Math.round(first.getBoundingClientRect().x) : null;
-  }, line);
 }
 
 /** Route the assets, seed `plan`, and open it. Every test opens exactly one plan;

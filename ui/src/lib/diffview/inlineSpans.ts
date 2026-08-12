@@ -283,9 +283,8 @@ export function buildInlineSpans(
   // two offsets can never name the same marker — a prefix that moved the content
   // start consumed a `>`, which is not a marker character — so `- > - item` marks
   // both of its bullets and an unquoted line scans once.
-  for (const offset of quote.contentStart === 0 ? [0] : [0, quote.contentStart]) {
-    listMarkerAt(display, offset, intervals);
-  }
+  listMarkerAt(display, 0, intervals);
+  if (quote.contentStart > 0) listMarkerAt(display, quote.contentStart, intervals);
 
   collectTokenIntervals(Lexer.lexInline(display, { gfm: true }), 0, intervals);
 

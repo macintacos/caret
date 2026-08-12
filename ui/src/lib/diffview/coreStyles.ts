@@ -406,8 +406,6 @@ const CARET_OVERRIDES = `
      at. Every column downstream — the comment anchors, vim motions, drag-range selection,
      the search highlights — therefore never learns that anything was drawn.
 
-     No backtick appears in this comment either; see the emphasis-chip note above for why.
-
      A marker is INK rather than a chip, and it spends --ink-faint: the token caret-theme.ts
      already gives the fence markers and the ** / _ emphasis markers, because a list marker
      is the same class of thing. No --chip-* token is added here, and the sheet grows no new
@@ -422,12 +420,19 @@ const CARET_OVERRIDES = `
      to that count, so a list inside a table cell costs nothing at all, and the only DOM this
      decoration causes is the token split inlineDecorate.ts was already performing.
 
-     position: absolute with NO insets is what keeps the advance at zero: with every inset
-     auto the box sits at its static position — over the marker it replaces, on the same
-     baseline, in the same font — and contributes nothing to the line. That matters more here
-     than anywhere else in this sheet, because the alternative spellings all cost width:
-     rows render white-space: pre, so a pseudo-element in flow would shift every glyph after
-     it, which is precisely the no-inline-padding rule the emphasis chips above obey.
+     Two independent declarations carry the placement, and they are worth reading apart.
+     position: absolute is what keeps the advance at zero — an out-of-flow box contributes
+     nothing to the line, insets or no insets. The ABSENCE of insets is what keeps the box
+     over the marker: with every inset auto it lands at its static position rather than
+     against the nearest positioned ancestor. The zero advance matters more here than
+     anywhere else in this sheet, because the alternative spellings all cost width: rows
+     render white-space: pre, so a pseudo-element in flow would shift every glyph after it,
+     which is precisely the no-inline-padding rule the emphasis chips above obey.
+
+     The glyph shares the row's baseline because it inherits the token's font and
+     line-height and so builds an identical line box — not because absolute positioning put
+     it there. Giving this pseudo-element a font-size or line-height of its own is therefore
+     the one edit that would silently break the alignment.
 
      user-select: none is the copy contract, and it is load-bearing rather than tidy. Blink
      emits generated content into the plain-text flavour of a copied selection the same way

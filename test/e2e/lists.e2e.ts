@@ -30,7 +30,7 @@
 // resolve across the shadow boundary and produce the right boxes.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
-import { planSurface } from "@test/e2e/support/source-view.ts";
+import { firstGlyphX, planSurface, revealGutterPlus } from "@test/e2e/support/source-view.ts";
 
 // Bullets three deep, an ordered list with a nested ordered level, a task list, a
 // quoted list, and every shape that looks like a marker and is not — a thematic
@@ -45,6 +45,7 @@ Prose above the list, on a row with no marker at all.
   - A second-level item carrying \`inline code\`
     - A third-level item carrying more text
 - A second top-level item, back at the outer margin
+  1. An ordered step nested inside a bullet
 
 Prose below the list, also unmarked.
 
@@ -84,6 +85,7 @@ const BULLET = "- A top-level item carrying **emphasis**";
 const BULLET_DEEP = "    - A third-level item carrying more text";
 const PROSE_BELOW = "Prose below the list, also unmarked.";
 const ORDERED = "1. First step";
+const TASK = "- [x] A finished task";
 const EMPHASIS_LINE = "*emphasis opening the line, which is not a marker*";
 const BREAK = "---";
 const FENCED_BULLET = "- fenced and literal";
@@ -120,18 +122,27 @@ function markers(page: import("@playwright/test").Page) {
   });
 }
 
-/** The viewport x of the first glyph on a row — the monospace grid's left edge for
- * that line. Overdrawing a marker must not move it on any row, its own included.
- * Same probe images.e2e.ts uses for the same guarantee. */
-function firstGlyphX(page: import("@playwright/test").Page, line: number) {
-  return page.evaluate((ln) => {
+/** One character cell's advance, in viewport px, measured off a row of ordinary
+ * prose. A Range over the row's text rather than the row's own box, because the
+ * row is a grid cell that stretches past its content — the Range measures the
+ * glyphs, and the rows render `white-space: pre` in a monospace face, so the text
+ * width divided by its length is exactly one cell.
+ *
+ * This is what makes the marker's own width a falsifiable claim: an in-flow glyph
+ * would make the marker element two cells wide, which no left-edge probe can see. */
+async function cellWidth(page: import("@playwright/test").Page, text: string): Promise<number> {
+  const width = await page.evaluate((want) => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
     const row = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].find(
-      (r) => r.getAttribute("data-line") === String(ln),
+      (r) => (r.textContent ?? "") === want,
     );
-    const first = row?.firstElementChild;
-    return first ? Math.round(first.getBoundingClientRect().x) : null;
-  }, line);
+    if (row == null) return null;
+    const range = document.createRange();
+    range.selectNodeContents(row);
+    return range.getBoundingClientRect().width / want.length;
+  }, text);
+  if (width === null) throw new Error(`no rendered row reads exactly ${JSON.stringify(text)}`);
+  return width;
 }
 
 /** The rendered row and gutter-number counts, plus the highest line the rows
@@ -171,6 +182,10 @@ test("each marker is tagged with its kind, over its own characters", async ({ pa
     { row: "  - A second-level item carrying `inline code`", kind: "bullet", marker: "-" },
     { row: BULLET_DEEP, kind: "bullet", marker: "-" },
     { row: "- A second top-level item, back at the outer margin", kind: "bullet", marker: "-" },
+    // An ordered list nested inside an unordered one — the shape the issue names
+    // for its screenshot, and the one where a marker's kind and its indent could
+    // disagree.
+    { row: "  1. An ordered step nested inside a bullet", kind: "ordered", marker: "1." },
     { row: ORDERED, kind: "ordered", marker: "1." },
     { row: "2. Second step", kind: "ordered", marker: "2." },
     { row: "   1. A nested ordered step", kind: "ordered", marker: "1." },
@@ -188,6 +203,9 @@ test("each marker is tagged with its kind, over its own characters", async ({ pa
 
 test("the bullet is painted over the dash, which is still in the row", async ({ page, daemon }) => {
   await open(page, daemon, LIST_PLAN);
+  // The decoration passes run from a MutationObserver a frame behind the rows, so
+  // every read of a marker waits for one to exist rather than racing the paint.
+  await expect.poll(async () => (await markers(page)).length).toBeGreaterThan(0);
   const drawn = await page.evaluate(
     (ln: number) => {
       const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
@@ -214,10 +232,50 @@ test("the bullet is painted over the dash, which is still in the row", async ({ 
   expect(drawn?.content).toBe('"•"');
   expect(drawn?.position).toBe("absolute");
   expect(drawn?.glyphColor).not.toBe(drawn?.color);
-  // One character cell wide: the run covers the marker and not the space after it,
-  // so a widened box would mean the emitter had claimed columns it does not own.
-  expect(drawn?.width).toBeGreaterThan(0);
+  // Exactly one character cell wide, measured against a prose row rather than
+  // asserted to be merely positive — the tautology this replaced would have passed
+  // on any box at all. Paired with the `position` assertion above it, that is what
+  // holds the zero-advance claim: an in-flow glyph would make this box two cells,
+  // and the left-edge probe in the grid test below cannot see it, because the
+  // marker IS the row's first child and an inline box's left edge does not move
+  // when content is added inside it.
+  expect(drawn?.width).toBeCloseTo(await cellWidth(page, PROSE_ABOVE), 0);
   await expect(page.locator(".diffview")).toContainText(BULLET);
+});
+
+test("an ordered marker and a task marker take the ink and no glyph", async ({ page, daemon }) => {
+  await open(page, daemon, LIST_PLAN);
+  await expect.poll(async () => (await markers(page)).length).toBeGreaterThan(0);
+  const kinds = await page.evaluate(
+    (lines) => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+      const read = (ln: number) => {
+        const el = sh?.querySelector(`[data-content] [data-line="${ln}"] [data-md-list]`);
+        if (el == null) return null;
+        return {
+          color: getComputedStyle(el).color,
+          glyph: getComputedStyle(el, "::before").content,
+        };
+      };
+      return { bullet: read(lines.bullet), ordered: read(lines.ordered), task: read(lines.task) };
+    },
+    {
+      bullet: await lineOf(page, BULLET),
+      ordered: await lineOf(page, ORDERED),
+      task: await lineOf(page, TASK),
+    },
+  );
+  // The "not double-styled" criterion, read off the rendered page rather than
+  // inferred from the absence of a rule. A task item's dash keeps its own glyphs
+  // and takes the marker ink, so the checkbox EXC-860 draws over the brackets is
+  // the row's only glyph; if this ever grows a bullet, that ticket's first
+  // screenshot is two markers arguing.
+  expect(kinds.ordered?.glyph).toBe("none");
+  expect(kinds.task?.glyph).toBe("none");
+  // Both wear the same marker ink the bullet's glyph does — one family, whatever
+  // the kind — and neither is the transparent the bullet's own character takes.
+  expect(kinds.ordered?.color).toBe(kinds.task?.color);
+  expect(kinds.ordered?.color).not.toBe(kinds.bullet?.color);
 });
 
 test("copying a marked row yields the source markers, not the glyph", async ({
@@ -301,6 +359,20 @@ test("every row still has exactly one gutter number", async ({ page, daemon }) =
   const counts = await gridCounts(page);
   expect(counts.numbers).toBe(counts.rows);
   expect(counts.rows).toBe(counts.highestLine);
+});
+
+test("a marked row still opens the comment composer from its gutter", async ({ page, daemon }) => {
+  // An acceptance criterion of its own: the marker must not cost the row its hover
+  // affordance or its reachability. Nothing here appends a node or changes a row's
+  // height, so the risk is low — but the sibling image pass asserted the same
+  // thing on its affected row, and a criterion nobody checks is a criterion nobody
+  // notices breaking.
+  await open(page, daemon, LIST_PLAN);
+  await expect.poll(async () => (await markers(page)).length).toBeGreaterThan(0);
+  const plus = await revealGutterPlus(page, await lineOf(page, BULLET));
+  await plus.click();
+  await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
+  await expect(page.locator(".diffview")).toContainText(BULLET);
 });
 
 test("nothing that merely looks like a marker draws one", async ({ page, daemon }) => {
