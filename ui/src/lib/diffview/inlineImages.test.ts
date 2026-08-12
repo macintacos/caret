@@ -134,3 +134,44 @@ test("a line with no rendered row is skipped", () => {
   syncInlineImages(host, map([[9, [span("https://cdn.test/c.png")]]]));
   expect(images(host)).toHaveLength(0);
 });
+
+/** A row after tables.ts has restructured it into cells (EXC-864). */
+function celledRow(line: number, cells: string[]): HTMLElement {
+  const el = document.createElement("div");
+  el.setAttribute("data-line", String(line));
+  for (const text of cells) {
+    const cell = document.createElement("span");
+    cell.setAttribute("data-table-cell", "");
+    const token = document.createElement("span");
+    token.textContent = text;
+    cell.appendChild(token);
+    el.appendChild(cell);
+  }
+  return el;
+}
+
+test("a table row gets no image", () => {
+  // tables.ts settles a row by comparing its child count to its cell count, so an
+  // appended image makes every repaint rebuild it and never match again. Skipping
+  // is what keeps the observer from looping; images.e2e.ts pins the settle in a
+  // real browser, where the loop is what would actually be felt.
+  const host = root(celledRow(1, ["| one ", "| ![a](https://cdn.test/a.png) |"]));
+  syncInlineImages(host, map([[1, [span("https://cdn.test/a.png")]]]));
+  expect(images(host)).toHaveLength(0);
+});
+
+test("an image on a row that later becomes a table row is dropped", () => {
+  // The ordering that makes the skip alone insufficient: the image lands while the
+  // row is still plain, and the celling arrives on a later frame. Without the sweep
+  // the row keeps the orphan and never settles.
+  const host = root(row(1, "| one | ![a](https://cdn.test/a.png) |"));
+  const spans = map([[1, [span("https://cdn.test/a.png")]]]);
+  syncInlineImages(host, spans);
+  expect(images(host)).toHaveLength(1);
+  const plain = host.querySelector("[data-line]") as HTMLElement;
+  const cell = document.createElement("span");
+  cell.setAttribute("data-table-cell", "");
+  plain.insertBefore(cell, plain.firstChild);
+  syncInlineImages(host, spans);
+  expect(images(host)).toHaveLength(0);
+});

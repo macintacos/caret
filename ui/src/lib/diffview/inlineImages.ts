@@ -49,8 +49,30 @@
 // CSP today.
 
 import type { ImageSpan, ImageSpanMap } from "$lib/diffview/links.ts";
+import { CELL_ATTR } from "$lib/diffview/rowTokens.ts";
 
 const IMAGE_ATTR = "data-md-image";
+
+/** Whether the row has been restructured into table cells (EXC-864).
+ *
+ * A table row gets NO picture, and that is a correctness requirement before it is
+ * a taste call. tables.ts decides a row is settled by comparing its CHILD COUNT to
+ * its cell count, so an appended image makes every repaint rebuild the row — and
+ * the rebuild never adopts the image, because it places tokens by column and an
+ * image sits at the line's end, outside the last cell's half-open range. The count
+ * therefore never matches again: measured at roughly 5,400 childList mutations per
+ * second, indefinitely. Skipping is also what the row wants visually, since a
+ * block-level picture inside a fixed column track would pull the table's grid
+ * apart. A cell's image reads as its markup and link chip — the rung below a drawn
+ * picture, taken on that evidence.
+ *
+ * The attribute comes from rowTokens.ts, which owns it precisely so that a pass can
+ * recognise a celled row without importing the module that builds one. Queried
+ * rather than probed at firstElementChild, because a row celled while it already
+ * held an image has that image among its children in an order neither pass fixes. */
+function isCelled(row: Element): boolean {
+  return row.querySelector(`:scope > [${CELL_ATTR}]`) !== null;
+}
 
 /** The images this module owns on a row, in document order. */
 function imagesIn(row: Element): Element[] {
@@ -93,16 +115,20 @@ function createImage(doc: Document, image: ImageSpan): HTMLImageElement {
  * Idempotent and safe to call on every repaint.
  */
 export function syncInlineImages(root: ParentNode, images: ImageSpanMap): void {
-  // Drop every image whose line the map no longer names, so a plan edit that
-  // removed one removes its picture. A line the map still names is left to the
-  // settle check below, which is what keeps an unchanged row untouched.
+  // Drop every image the map no longer wants where it is: one whose line is gone
+  // from the map, and one whose row has since become a table row. The row is
+  // resolved with closest rather than parentElement because a row celled after the
+  // image landed can leave it nested a level down. A line the map still names on an
+  // ordinary row is left to the settle check below, which is what keeps an
+  // unchanged row untouched.
   for (const img of root.querySelectorAll(`[${IMAGE_ATTR}]`)) {
-    const line = Number(img.parentElement?.getAttribute("data-line"));
-    if (!Number.isFinite(line) || !images.has(line)) img.remove();
+    const row = img.closest("[data-line]");
+    const line = Number(row?.getAttribute("data-line"));
+    if (row === null || !Number.isFinite(line) || !images.has(line) || isCelled(row)) img.remove();
   }
   for (const [line, wanted] of images) {
     const row = root.querySelector(`[data-content] [data-line="${line}"]`);
-    if (row === null) continue;
+    if (row === null || isCelled(row)) continue;
     const present = imagesIn(row);
     if (settled(present, wanted)) continue;
     for (const stale of present) stale.remove();

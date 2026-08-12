@@ -6,7 +6,10 @@
 // clipboard still carries the source markdown once a replaced element sits inside
 // the selection, that the comment affordance still reaches the taller row, and
 // that a load failure leaves no broken-image box. None of that has an answer under
-// happy-dom, which reports zero for every layout metric and has no clipboard.
+// happy-dom, which reports zero for every layout metric and has no clipboard. One
+// spec here is about neither geometry nor platform: the table case asserts that the
+// repaint SETTLES, which needs the real MutationObserver loop SourceView runs the
+// decoration passes from — a loop that only exists in a mounted browser view.
 //
 // The clipboard case is the one worth naming: it is not a restatement of the DOM
 // text, which is untouched by construction. Blink can emit an image's alt text
@@ -68,10 +71,23 @@ Prose below the diagram, also ordinary.
 Trailing prose.
 `;
 
+// A table whose cell holds an image. Its own plan, because what it asserts is that
+// the repaint SETTLES rather than anything on screen, and a settle test has to own
+// the whole document it watches.
+const TABLE_PLAN = `# Table Plan
+
+| Case | Shot |
+| ---- | ---- |
+| one  | ![a shot](${GOOD}) |
+
+Trailing prose.
+`;
+
 const IMAGE_LINE = 5;
 const PROSE_ABOVE = 3;
 const PROSE_BELOW = 7;
 const BROKEN_LINE = 9;
+const TABLE_BODY_LINE = 5;
 
 /** Serve every intercepted asset from this file: the good URL as a real PNG, the
  * missing one as a 404. Installed before the page loads so no request escapes. */
@@ -138,14 +154,24 @@ function firstGlyphX(page: import("@playwright/test").Page, line: number) {
   }, line);
 }
 
-test.beforeEach(async ({ page, daemon }) => {
+/** Route the assets, seed `plan`, and open it. Every test opens exactly one plan;
+ * the routing is what keeps the two asset URLs off the network in all of them. */
+async function open(
+  page: import("@playwright/test").Page,
+  daemon: { seed: (input: { plan: string }) => Promise<string> },
+  plan: string,
+): Promise<void> {
   await routeAssets(page);
-  await daemon.seed({ plan: IMAGE_PLAN });
+  await daemon.seed({ plan });
   await page.goto("/");
   await planSurface(page);
-});
+}
 
-test("a safe image renders on its source line and the markup stays put", async ({ page }) => {
+test("a safe image renders on its source line and the markup stays put", async ({
+  page,
+  daemon,
+}) => {
+  await open(page, daemon, IMAGE_PLAN);
   await imageDecoded(page);
   const drawn = (await shadowImages(page)).find((i) => i.src === GOOD);
   // The alt is the accessible name, and it is the alt as written — not the whole
@@ -162,7 +188,9 @@ test("a safe image renders on its source line and the markup stays put", async (
 test("copying the image's row yields the source markdown, not the alt text", async ({
   page,
   context,
+  daemon,
 }) => {
+  await open(page, daemon, IMAGE_PLAN);
   // The criterion that forced images not to collapse. An <img alt> inside the
   // selection is exactly what could add `the cache topology` to the copied text.
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
@@ -193,7 +221,8 @@ test("copying the image's row yields the source markdown, not the alt text", asy
   expect(copied.clipboard).toBe(IMAGE_MARKUP);
 });
 
-test("the image's row grows, and its gutter number grows with it", async ({ page }) => {
+test("the image's row grows, and its gutter number grows with it", async ({ page, daemon }) => {
+  await open(page, daemon, IMAGE_PLAN);
   await imageDecoded(page);
   const imageRow = await rowHeights(page, IMAGE_LINE);
   const proseRow = await rowHeights(page, PROSE_ABOVE);
@@ -204,14 +233,19 @@ test("the image's row grows, and its gutter number grows with it", async ({ page
   expect(imageRow.number).toBe(imageRow.row);
 });
 
-test("every row still has exactly one gutter number", async ({ page }) => {
+test("every row still has exactly one gutter number", async ({ page, daemon }) => {
+  await open(page, daemon, IMAGE_PLAN);
   await imageDecoded(page);
   const counts = await gridCounts(page);
   expect(counts.rows).toBe(IMAGE_PLAN.trimEnd().split("\n").length);
   expect(counts.numbers).toBe(counts.rows);
 });
 
-test("the monospace grid does not move on the image's row or its neighbours", async ({ page }) => {
+test("the monospace grid does not move on the image's row or its neighbours", async ({
+  page,
+  daemon,
+}) => {
+  await open(page, daemon, IMAGE_PLAN);
   await imageDecoded(page);
   const [above, onIt, below] = await Promise.all([
     firstGlyphX(page, PROSE_ABOVE),
@@ -226,7 +260,8 @@ test("the monospace grid does not move on the image's row or its neighbours", as
   expect(below).toBe(above);
 });
 
-test("the size cap binds against a real intrinsic size", async ({ page }) => {
+test("the size cap binds against a real intrinsic size", async ({ page, daemon }) => {
+  await open(page, daemon, IMAGE_PLAN);
   await imageDecoded(page);
   const drawn = (await shadowImages(page)).find((i) => i.src === GOOD);
   // 900x700 intrinsic: the height cap is what bites (aspect is under the 2.5 that
@@ -251,7 +286,8 @@ test("the size cap binds against a real intrinsic size", async ({ page }) => {
   expect(contained).toEqual({ insideTop: true, insideBottom: true });
 });
 
-test("the comment affordance still reaches the image's taller row", async ({ page }) => {
+test("the comment affordance still reaches the image's taller row", async ({ page, daemon }) => {
+  await open(page, daemon, IMAGE_PLAN);
   // The gutter "+" is positioned by the library against the row it hovers, and the
   // composer anchors to the line's annotation slot. A row several hundred pixels
   // tall is the case that could put the button somewhere unreachable or open the
@@ -264,7 +300,8 @@ test("the comment affordance still reaches the image's taller row", async ({ pag
   await expect(page.locator(".diffview")).toContainText(IMAGE_MARKUP);
 });
 
-test("a failed load leaves no broken-image chrome", async ({ page }) => {
+test("a failed load leaves no broken-image chrome", async ({ page, daemon }) => {
+  await open(page, daemon, IMAGE_PLAN);
   await expect
     .poll(async () => (await shadowImages(page)).find((i) => i.src === GONE)?.hidden)
     .toBe(true);
@@ -288,7 +325,49 @@ test("a failed load leaves no broken-image chrome", async ({ page }) => {
   expect(chipped.marked).toBe(`![an asset that is not there](${GONE})`);
 });
 
-test("a non-http target draws nothing, and a fenced one stays literal text", async ({ page }) => {
+test("an image in a table cell draws nothing, and the repaint settles", async ({
+  page,
+  daemon,
+}) => {
+  // A regression test for a hang, not for a look. tables.ts (EXC-864) decides a row
+  // is settled by comparing its child count to its cell count, so an appended image
+  // made every repaint rebuild the row — and the rebuild never adopted the image,
+  // because it places tokens by column and an image sits past the last cell's end.
+  // Measured before the fix: ~10,800 childList mutations in two seconds, climbing;
+  // the same window with a plain table, or with the image outside one, was zero.
+  await open(page, daemon, TABLE_PLAN);
+  await page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const w = window as unknown as { __mutations: number };
+    w.__mutations = 0;
+    new MutationObserver((records) => {
+      w.__mutations += records.length;
+    }).observe(sh as unknown as Node, { childList: true, subtree: true });
+  });
+  await page.waitForTimeout(750);
+  const settled = await page.evaluate((ln) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const row = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].find(
+      (r) => r.getAttribute("data-line") === String(ln),
+    );
+    return {
+      mutations: (window as unknown as { __mutations: number }).__mutations,
+      images: (sh?.querySelectorAll("img[data-md-image]") ?? []).length,
+      celled: row?.querySelector(":scope > [data-table-cell]") !== null,
+    };
+  }, TABLE_BODY_LINE);
+  expect(settled.celled).toBe(true);
+  expect(settled.images).toBe(0);
+  expect(settled.mutations).toBe(0);
+  // The cell still reads as its markup, which is the rung this descends to.
+  await expect(page.locator(".diffview")).toContainText(`![a shot](${GOOD})`);
+});
+
+test("a non-http target draws nothing, and a fenced one stays literal text", async ({
+  page,
+  daemon,
+}) => {
+  await open(page, daemon, IMAGE_PLAN);
   await imageDecoded(page);
   const drawn = await shadowImages(page);
   // Two images exist — the good one and the 404 — and neither the data: payload
