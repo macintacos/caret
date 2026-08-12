@@ -456,12 +456,14 @@
   // The thematic breaks (EXC-862), memoized on the same rendered text and for the same
   // reason: a fresh Set each poll tick would re-arm the observer effect below. Detection
   // is whole-document rather than per-line — what makes a `---` a rule rather than a
-  // setext underline is the block structure around it — so it takes no code ranges of its
-  // own; the lexer it delegates to has already decided a fenced line is code.
+  // setext underline is the block structure around it. Derived from codeRanges like the
+  // tables above: the module's own lexer already excludes a fenced line, but caret's
+  // fence scan is wider than CommonMark's, and a rule must never land on a row the panel
+  // paints as code.
   let breaksMemo: { text: string; breaks: Set<number> } | undefined;
   const thematicBreaks = $derived.by(() => {
     if (breaksMemo?.text !== doc.text) {
-      breaksMemo = { text: doc.text, breaks: thematicBreakLines(doc.text) };
+      breaksMemo = { text: doc.text, breaks: thematicBreakLines(doc.text, codeRanges) };
     }
     return breaksMemo.breaks;
   });

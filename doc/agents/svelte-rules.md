@@ -200,10 +200,13 @@ stays green under any invocation.
   what the level-bar note above left open — `--rule` and `--rule-strong` are 10% and 16%
   ink, and composited over the diff body they measure 1.15–1.34 and 1.24–1.62 across the
   nine, barely past the 1.05 this epic calls indistinguishable. Those tokens draw
-  hairlines on the CHROME surfaces; nothing in the plan view can spend one and be seen.
-  The rule itself is painted as a **background layer** rather than as a `::before`, which
-  is what keeps it clear of both traps in the bullet below at once: paint is not content,
-  so there is no node for `tables.ts` to count and no per-token glyph to suppress.
+  hairlines on the CHROME surfaces; on the diff body they are for **reinforcement**, never
+  for the only thing carrying a meaning. EXC-864's table header separator is the standing
+  example of the permitted side — it spends `--rule` on that surface and is legible enough
+  because a bold header row and its pipes already mark the boundary it restates. The rule
+  itself is painted as a **background layer** rather than as a `::before`, which is what
+  keeps it clear of both traps in the bullet below at once: paint is not content, so there
+  is no node for `tables.ts` to count and no per-token glyph to suppress.
 - **An overdrawn glyph belongs on the run's FIRST token, not on every tagged one.**
   `inlineDecorate.ts` tags every shiki token a run covers, and shiki does not always hand
   a multi-character run over as one token — an uppercase `[X]` comes back cut into three.

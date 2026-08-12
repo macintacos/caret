@@ -28,6 +28,20 @@ function caretOverrides(src: string): string {
 
 const overrides = caretOverrides(coreStyles);
 
+// CARET_OVERRIDES is a template literal, so one backtick anywhere inside it — most often
+// in a CSS comment quoting markdown syntax — closes it early. Every assertion below then
+// scans a truncated sheet and dozens fail at once, naming rules that are perfectly fine;
+// three tickets in a row have spent a debugging cycle on that cascade. This is the one
+// assertion that says what actually happened, and it runs before any of them.
+test("the override sheet closes where it should, with no stray backtick inside it", () => {
+  const opened = coreStyles.indexOf("const CARET_OVERRIDES = `");
+  const closed = coreStyles.indexOf("\n`;", opened);
+  expect(opened).toBeGreaterThan(-1);
+  // The captured body reaches the sheet's real end rather than stopping at a backtick
+  // partway through it.
+  expect(overrides.length).toBe(closed - (opened + "const CARET_OVERRIDES = `".length) + 1);
+});
+
 // The override body with /* … */ comments stripped. The comments legitimately name
 // [data-gutter]/[data-content] and corner properties in prose, which would let a
 // selector regex span from a comment into an unrelated rule — so structural
@@ -1255,10 +1269,19 @@ describe("thematic breaks (EXC-862)", () => {
     expect(ruleRule).toMatch(/background-repeat:\s*no-repeat/);
   });
 
+  test("measures that width against a box the seam pull cannot move", () => {
+    // The seam-fill group pulls a hovered, cursored or selected row 20px left and re-adds
+    // the inset as padding, so a percentage of the PADDING box (the default origin) would
+    // lengthen the divider by 20px for as long as the row is banded. The content box is
+    // invariant under that pull.
+    expect(ruleRule).toMatch(/background-origin:\s*content-box/);
+  });
+
   test("spends the ink that clears the non-text floor, not a rule token or a chip tint", () => {
     // The rule tokens are 10% and 16% ink and effectively vanish on the sunk diff surface
-    // (1.21-1.62 across the nine palettes); --ink-faint is under 3:1 on two of them.
-    // theme.test.ts owns that measurement — this pins that the sheet spends what it chose.
+    // (--rule 1.15-1.34, --rule-strong 1.24-1.62 across the nine palettes); --ink-faint is
+    // under 3:1 on two of them. theme.test.ts owns those measurements — this pins only that
+    // the sheet spends what they chose.
     expect(ruleRule).toMatch(/var\(--ink-soft\)/);
     expect(ruleRule).not.toContain("--chip-");
     expect(ruleRule).not.toContain("--rule");
@@ -1274,7 +1297,11 @@ describe("thematic breaks (EXC-862)", () => {
 
   test("costs the row's height nothing", () => {
     // One gutter number per row. Anything here that grew the line box would drift the
-    // numbers against the rows long before it read as a divider.
-    expect(ruleRule).not.toMatch(/(?:^|[^-\w])(?:margin|padding|height|border)(?:-\w+)*:/);
+    // numbers against the rows long before it read as a divider. Anchored on the start of
+    // a declaration rather than on a word boundary, so `line-height` — the likeliest way
+    // to grow a row while looking harmless — is caught rather than skipped past.
+    expect(ruleRule).not.toMatch(
+      /(?:^|[;{])\s*(?:margin|padding|height|min-height|line-height|border)[a-z-]*\s*:/,
+    );
   });
 });

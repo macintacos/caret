@@ -1,6 +1,7 @@
 import "@ui/test-setup.ts";
 import { describe, expect, test } from "bun:test";
 
+import { codeBlockRanges } from "$lib/diffview/codeBlocks.ts";
 import { tagThematicBreakRows, thematicBreakLines } from "$lib/diffview/thematicBreaks.ts";
 
 // thematicBreakLines decides which lines of a rendered plan are real thematic
@@ -9,7 +10,10 @@ import { tagThematicBreakRows, thematicBreakLines } from "$lib/diffview/thematic
 // underline, a YAML front-matter delimiter, and (inside pipes) a table delimiter
 // row, and converting any of those is a wrong render rather than a taste call.
 describe("thematicBreakLines", () => {
-  const lines = (text: string) => [...thematicBreakLines(text)].sort((a, b) => a - b);
+  // The fenced ranges the view would pass, derived the same way SourceView derives
+  // them, so a case written here is a case the production wiring really produces.
+  const lines = (text: string) =>
+    [...thematicBreakLines(text, codeBlockRanges(text))].sort((a, b) => a - b);
 
   test("finds nothing in prose", () => {
     expect(lines("just prose\nmore prose\n")).toEqual([]);
@@ -49,15 +53,39 @@ describe("thematicBreakLines", () => {
     expect(lines(["---", "title: x", "...", "", "prose"].join("\n"))).toEqual([]);
   });
 
-  test("leaves a front-matter closer that follows a blank line alone", () => {
-    // With a blank line before it the closer is no longer read as a setext
-    // underline, so nothing but the front-matter guard suppresses it.
-    expect(lines(["---", "title: x", "", "---", "", "prose"].join("\n"))).toEqual([]);
+  test("reads front matter carrying a blank line as two rules, not as front matter", () => {
+    // The deliberate cost of bounding the closer scan at the first blank line. The
+    // delimiters draw rules, which is local and visible; the unbounded scan's
+    // failure — claiming a distant `---` as the closer — is neither.
+    expect(lines(["---", "title: x", "", "---", "", "prose"].join("\n"))).toEqual([1, 4]);
   });
 
   test("keeps a leading --- that never closes", () => {
     // Unclosed is not front matter; a document that opens on a rule still gets one.
     expect(lines(["---", "", "prose"].join("\n"))).toEqual([1]);
+  });
+
+  test("keeps a distant break when the document opens on one", () => {
+    // The falsifying case for the front-matter guard: an unbounded search for the
+    // closer would claim line 7 and delete both, losing a rule six lines away from
+    // anything the guard is about.
+    expect(lines(["---", "", "# Title", "", "prose", "", "---"].join("\n"))).toEqual([1, 7]);
+  });
+
+  test("keeps an indented leading break, which front matter cannot be", () => {
+    expect(lines(["  ---", "", "prose", "", "---"].join("\n"))).toEqual([1, 5]);
+  });
+
+  test("leaves a line the panel calls code alone, even when CommonMark disagrees", () => {
+    // caret's fence scan toggles on every ``` line, so on nested fences it and marked
+    // disagree about which rows are code; the row a reader sees inside a code panel
+    // must not also carry a rule. Deferring to the panel costs the break at line 5.
+    const text = ["````", "```", "````", "", "---", "", "prose"].join("\n");
+    expect(codeBlockRanges(text)).toEqual([
+      { start: 1, end: 2 },
+      { start: 3, end: 7 },
+    ]);
+    expect(lines(text)).toEqual([]);
   });
 
   test("keeps a --- that interrupts a list", () => {

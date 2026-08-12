@@ -3673,8 +3673,47 @@ for (const colorScheme of ["light", "dark"] as const) {
     const counts = await gridCounts(page);
     expect(counts.numbers).toBe(counts.rows);
     expect(counts.highestLine).toBe(counts.rows);
+
+    // The row is still a row: hovering its gutter reveals the comment `+`, which is the
+    // affordance the issue asks for by name and the one a decoration that swallowed the
+    // row's box would take away. Nothing about it is drawn by this feature, which is the
+    // point — the characters stayed, so the row kept everything hanging off them.
+    await expect(await revealGutterPlus(page, ruledLine)).toBeVisible();
   });
 }
+
+test("the rule's ink follows the colour scheme (EXC-862)", async ({ daemon, page }) => {
+  // What the two-scheme loop above cannot claim on its own: every assertion in it holds
+  // whichever scheme it ran under, so a token that resolved to one fixed colour would
+  // satisfy both runs. The line has to be drawn in the ink of the scheme it is read in,
+  // and the resolved gradient stop is where that is visible. theme.test.ts owns whether
+  // the ink CLEARS its contrast floor in all nine palettes; this owns only that the live
+  // cascade delivers the scheme's own value rather than a frozen one.
+  const stop = async () => {
+    const background = await page.evaluate(() => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+      const row = sh?.querySelector("[data-content] [data-line][data-md-rule]") ?? null;
+      return row === null ? "" : getComputedStyle(row as HTMLElement).backgroundImage;
+    });
+    return /rgba?\([^)]*\)/.exec(background)?.[0] ?? "";
+  };
+
+  await page.emulateMedia({ colorScheme: "light" });
+  await daemon.seed({ plan: RULE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await readRuleRows(page)).some((r) => r.rule)).toBe(true);
+  const light = await stop();
+
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect.poll(stop).not.toBe(light);
+  const dark = await stop();
+
+  for (const resolved of [light, dark]) {
+    expect(resolved).toMatch(/^rgba?\(/);
+    expect(resolved).not.toBe(TRANSPARENT);
+  }
+});
 
 test("the repaint settles with a rule beside a table (EXC-862)", async ({ daemon, page }) => {
   // The claim every decoration pass in this epic owes. tables.ts settles a celled row by

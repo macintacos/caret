@@ -22,10 +22,17 @@
 // previous-line scan gets backwards.
 //
 // YAML front matter is the one case marked has no concept of, so it is the one
-// case handled here: an opening `---` on line 1 lexes as an `hr`, and so does a
-// closer that follows a blank line. Both are suppressed, and only when the
-// document really opens on a closed front-matter block — an unclosed leading
-// `---` is a rule like any other.
+// case handled here: an opening `---` on line 1 lexes as an `hr`, and so does its
+// closer. Both are suppressed, and only when the document really opens on a
+// closed front-matter block — an unclosed leading `---` is a rule like any other.
+//
+// The fenced ranges are taken as a parameter for the same reason tableRanges takes
+// them: caret's own fence scan (codeBlocks.ts) toggles on EVERY line of three or
+// more backticks, which CommonMark does not, so on a plan quoting nested fences it
+// and marked disagree about which rows are code. marked is right, but the panel is
+// what the reader sees, and a rule drawn inside one would read as this pass
+// ignoring the fence. Deferring to the panel where they disagree costs a break
+// that marked would have drawn and keeps the two views of the row consistent.
 //
 // A break nested inside a blockquote or a list item is deliberately not found:
 // those arrive as nested tokens whose `raw` has the container's markers stripped,
@@ -37,21 +44,35 @@
 
 import { Lexer } from "marked";
 
+import type { CodeBlockRange } from "$lib/diffview/codeBlocks.ts";
+
 /** The document's own opening delimiter, and the two spellings that close it.
- * Exact rather than CommonMark-loose: front matter is a whole-line convention
- * with no indentation allowance, and a `  ---` on line 1 is a thematic break. */
+ * Matched exactly rather than CommonMark-loose: front matter is a whole-line
+ * convention with no indentation allowance, so a `  ---` on line 1 is a thematic
+ * break and a `--- ` is one too. */
 const FRONT_MATTER_OPEN = "---";
 const FRONT_MATTER_CLOSE = ["---", "..."];
 
 /** The 1-based lines of a closed YAML front-matter block's two delimiters, or an
  * empty array when the document does not open on one. Both are returned because
  * either can reach `hr`: the opener always does, and the closer does whenever a
- * blank line before it stops marked reading it as a setext underline. */
+ * blank line before it stops marked reading it as a setext underline.
+ *
+ * The scan stops at the first BLANK line rather than running to the end of the
+ * document, and that bound is what keeps this from eating real breaks. Without it
+ * any document opening on a genuine thematic break claims the NEXT `---` in the
+ * file as its closer, however far away, and suppresses both — the far one being a
+ * rule that has nothing to do with the top of the file. Bounding it inverts the
+ * error: front matter carrying a blank line inside is no longer recognised, so its
+ * two delimiters draw rules. That is the cheaper mistake by a wide margin — it is
+ * local, visible, and rare, where the other silently deletes a rule elsewhere. */
 function frontMatterLines(text: string): number[] {
   const lines = text.split("\n");
-  if (lines[0]?.trim() !== FRONT_MATTER_OPEN) return [];
+  if (lines[0] !== FRONT_MATTER_OPEN) return [];
   for (let i = 1; i < lines.length; i++) {
-    if (FRONT_MATTER_CLOSE.includes(lines[i]?.trim() ?? "")) return [1, i + 1];
+    const line = lines[i] ?? "";
+    if (line.trim() === "") return [];
+    if (FRONT_MATTER_CLOSE.includes(line)) return [1, i + 1];
   }
   return [];
 }
@@ -62,9 +83,14 @@ function frontMatterLines(text: string): number[] {
  * `***`, `___`, with three or more markers, optional internal spaces and up to
  * three leading spaces — and every look-alike is excluded: a setext heading
  * underline, a GFM table's delimiter row, any line inside a fenced block, and
- * both delimiters of a YAML front-matter block.
+ * both delimiters of a YAML front-matter block. `codeRanges` names the blocks the
+ * panel paints, which is a wider notion of "fenced" than marked's; a line either
+ * of them calls code is left alone.
  */
-export function thematicBreakLines(text: string): Set<number> {
+export function thematicBreakLines(
+  text: string,
+  codeRanges: readonly CodeBlockRange[],
+): Set<number> {
   const breaks = new Set<number>();
   let line = 1;
   for (const token of Lexer.lex(text)) {
@@ -72,6 +98,9 @@ export function thematicBreakLines(text: string): Set<number> {
     line += (token.raw.match(/\n/g) ?? []).length;
   }
   for (const n of frontMatterLines(text)) breaks.delete(n);
+  for (const range of codeRanges) {
+    for (let n = range.start; n <= range.end; n++) breaks.delete(n);
+  }
   return breaks;
 }
 

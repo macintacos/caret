@@ -748,11 +748,11 @@ const CARET_OVERRIDES = `
      bars above reject the rule tokens only for a 2px mark, on the grounds that they are
      "sized for hairlines that span a whole edge", and this IS that hairline — but those
      tokens are 10% and 16% ink, and composited over --paper-sunk and the row's own 2-8%
-     bands they measure 1.21 to 1.62 across the nine palettes. That is barely above the 1.05
-     this epic treats as indistinguishable: the line is in the DOM and not on the screen.
-     --ink-faint, the marker ink the chip family prescribes, is the other candidate and lands
-     at 2.63 to 4.79 — under WCAG 1.4.11's 3:1 floor on catppuccin-latte and github-light,
-     the gap EXC-860 measured for the checkbox.
+     bands --rule measures 1.15 to 1.34 and --rule-strong 1.24 to 1.62 across the nine
+     palettes. That is barely above the 1.05 this epic treats as indistinguishable: the line
+     is in the DOM and not on the screen. --ink-faint, the marker ink the chip family
+     prescribes, is the other candidate and lands at 2.63 to 4.79 — under WCAG 1.4.11's 3:1
+     floor on catppuccin-latte and github-light, the gap EXC-860 measured for the checkbox.
 
      That floor binds here, which is the part worth being explicit about rather than
      inheriting. The glyphs above are transparent, so this line is the ONLY thing carrying
@@ -764,13 +764,27 @@ const CARET_OVERRIDES = `
      No inset and no margin: the row must keep its height to the character, since the gutter
      numbers are one per row and a rule that changed the vertical rhythm would be visible as
      drift long before it was visible as a divider. background-size is the whole geometry —
-     the full width of the cell (padding included, so it spans the column exactly as the
-     table delimiter's border does), one pixel tall, centered in the row's own line box. The
-     rule survives a selected or hovered row deliberately: the band is a background-color and
-     this is a background-image over it, the same standing the bars take. */
+     the full width of the box background-origin names, one pixel tall, centered in the row's
+     own line box.
+
+     That origin is CONTENT-BOX rather than the padding-box default, and it is not a detail:
+     the seam-fill group below pulls a banded row 20px left (a negative inline margin with
+     the inset re-added as padding) whenever it is hovered, cursored or selected, which is
+     every time the comment affordance is revealed. A percentage of the padding box would
+     grow with that pull and the divider would lengthen 20px into the gutter lane and snap
+     back. The content box is invariant under the pull — the margin and the padding cancel —
+     so the rule spans the character column and stays that length in every row state. The
+     rule survives those states deliberately: the band is a background-color and this is a
+     background-image over it, the same standing the bars take.
+
+     A vim-search hit landing on a rule row paints ::highlight(caret-search)'s band with no
+     glyph inside it, since that highlight sets background-color alone and the text under it
+     is transparent. Accepted rather than compensated: the mark still shows the reviewer
+     which row matched, which is what a hit on a row of punctuation can usefully say. */
   [data-content] [data-line][data-md-rule] {
     background-image: linear-gradient(var(--ink-soft), var(--ink-soft));
     background-repeat: no-repeat;
+    background-origin: content-box;
     background-position: center;
     background-size: 100% 1px;
   }
