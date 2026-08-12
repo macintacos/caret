@@ -461,6 +461,23 @@ test("splits a prose-labelled reference out of its coarse token", () => {
   expect(fileRefs(host)).toEqual(["the config"]);
 });
 
+test("draws a path spelling emphasis as one reference token", () => {
+  // EXC-1066, the user-visible half: `[jobs/shared/zeus/__init__.py](…)` collapses
+  // to the bare path, and `__init__` is a valid CommonMark strong run. The
+  // emission layer suppresses it, so the maps that arrive here carry NO inline run
+  // — the row is cut at the reference's own columns and nowhere else. Cut by a
+  // bold run as well, this would be three children with the middle one wearing
+  // data-md="bold", which draws as a bold pill between two plain halves.
+  const path = "jobs/shared/zeus/__init__.py";
+  const refs = refMap([[1, [{ startCol: 0, endCol: path.length, path }]]]);
+  host = root(row(1, [path]));
+  decorateInlineRuns(host, new Map(), refs);
+  expect(pieces(host).map((p) => p.text)).toEqual([path]);
+  expect(host.querySelectorAll("[data-md]").length).toBe(0);
+  tagFileRefTokens(host, refs);
+  expect(fileRefs(host)).toEqual([path]);
+});
+
 test("decorates a row that a scroll card re-parented", () => {
   // An overflowing code block's rows are moved into a scroll card, so they are no
   // longer direct children of [data-content] — the same descendant query
