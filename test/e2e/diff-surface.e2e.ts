@@ -926,9 +926,9 @@ test("renders a fenced code block as a tagged, darker panel on its own rows (EXC
   expect(Number.parseFloat(panel.langTop as string)).toBeLessThan(0);
   expect(panel.fenceText?.trim()).toBe("```");
   expect(Number.parseFloat(panel.fenceTop as string)).toBeGreaterThan(0);
-  // EXC-869: BOTH delimiters carry the marker chip, and it resolves end to end — the
-  // --chip-code fallback is a color-mix() and the radius a token, either of which
-  // would compute to nothing if the custom properties failed to reach the shadow root.
+  // EXC-869: BOTH delimiters carry the marker chip, and it resolves end to end. Both the
+  // --chip-code tint and the radius are custom properties, which compute to nothing if the
+  // palette fails to reach the shadow root — this is what catches that.
   expect(panel.openFenceText?.trim()).toBe("```");
   expect(panel.openFenceBg).toBe(panel.fenceBg);
   expect(panel.fenceBg).not.toBeNull();

@@ -274,19 +274,14 @@ describe("the fence-marker chip (EXC-869)", () => {
     )?.[0] ?? "";
 
   test("fills the fence markers with the family's inline-code chip token", () => {
-    // The tint is CONSUMED, never redefined here: --chip-code is the chip family's
-    // shared token (EXC-858 lands it in the palette recipe), so the fence chip matches
-    // the inline-code chip by construction rather than by a hand-matched value.
-    expect(chipRule).toMatch(/background-color:\s*var\(--chip-code,/);
-  });
-
-  test("falls back to a derived mix, never a colour literal", () => {
-    // Until --chip-code exists the fallback must still be palette-derived, so all nine
-    // palettes and both schemes stay correct — the same in-lab idiom as the panel fill.
-    expect(chipRule).toMatch(
-      /var\(--chip-code,\s*color-mix\(in lab, var\(--paper-sunk\), var\(--ink\) \d+%\)\)/,
-    );
+    // The tint is CONSUMED, never redefined here: --chip-code is the chip family's shared
+    // token, derived for all nine palettes by the recipe (EXC-858), so the fence chip and
+    // the inline-code chip are one tint by construction rather than by a matched value.
+    // A bare var() with no fallback is the point — a fallback would silently paint a
+    // second, unreviewed tint if the token ever stopped resolving.
+    expect(chipRule).toMatch(/background-color:\s*var\(--chip-code\)/);
     expect(chipRule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(chipRule).not.toMatch(/color-mix/);
   });
 
   test("wears the family's shared radius", () => {

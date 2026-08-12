@@ -189,13 +189,12 @@ const CARET_OVERRIDES = `
      a row fill, so it never competes): it drops the chip on a row the reviewer has selected,
      so a drag-selection reads as one flat band.
 
-     The tint names the family's inline-code token, --chip-code, which EXC-858 lands in the
-     palette recipe; until then the fallback is a derived in-lab mix off the same tokens the
-     panel fill above uses, so every palette and both schemes stay correct with no literal.
-     Note the two chips sit on DIFFERENT surfaces — inline code on the bare diff surface, these
-     markers on the panel, which is already --paper-sunk + 6% ink — so one shared token buys a
-     smaller ink delta here. EXC-858 should re-check this surface rather than assume parity,
-     and once it lands this fallback should collapse to a bare var(--chip-code).
+     The tint is --chip-code itself, the family's inline-code token (EXC-858 derives all five
+     in the palette recipe), so the fence chip and the inline-code chip are the same tint by
+     construction rather than by a matched value. Nothing is declared here. The token is a
+     translucent wash rather than an opaque mix, which is what lets one tint serve both
+     surfaces: it composites over the code panel here and over the bare diff surface where
+     inline code sits, reading the same on each.
 
      The markers keep the --ink-faint ink caret-theme.ts already gives them, which is the ink
      the chip family prescribes for markers.
@@ -212,7 +211,7 @@ const CARET_OVERRIDES = `
      The inline content box is already most of the line box, so the chip reads as a round-rect
      without it. diff-surface.e2e.ts pins the containment in a real browser. */
   [data-content] [data-line][data-code-line]:not([data-selected-line]) [data-code-fence] {
-    background-color: var(--chip-code, color-mix(in lab, var(--paper-sunk), var(--ink) 14%));
+    background-color: var(--chip-code);
     border-radius: var(--radius);
   }
 

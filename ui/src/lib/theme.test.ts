@@ -532,20 +532,21 @@ describe("every ColorToken is read somewhere in ui/src", () => {
     .map((f) => readFileSync(join(UI_SRC, f), "utf8"))
     .join("\n");
 
-  // The five chip tints (EXC-858) land a release ahead of the chip rendering that
-  // spends them (EXC-867), so they are the one set the rule above cannot yet hold.
-  // Listing them here inverts the assertion rather than waiving it: each is pinned
-  // as read by NOTHING, so the first var(--chip-bold) anywhere in ui/src fails this
-  // suite and the entry has to be deleted. The exemption cannot quietly outlive the
-  // gap it was opened for — with one seam: expiry is triggered by a var() reader, so
-  // a consumer that spends a chip through `theme.tokens[…]` in TypeScript, the shape
-  // caret-theme.ts uses for its structural marker rules, would slip past it. The
-  // 8-digit alpha these carry makes that unlikely (the shiki-read pin above demands
-  // alpha-free hex), but it is the hole to check when EXC-867 lands.
+  // The chip tints (EXC-858) land ahead of the chip rendering that spends them, so the
+  // ones still unspent are the set the rule above cannot yet hold. Listing them here
+  // inverts the assertion rather than waiving it: each is pinned as read by NOTHING, so
+  // the first var(--chip-bold) anywhere in ui/src fails this suite and the entry has to
+  // be deleted. The exemption cannot quietly outlive the gap it was opened for — with
+  // one seam: expiry is triggered by a var() reader, so a consumer that spends a chip
+  // through `theme.tokens[…]` in TypeScript, the shape caret-theme.ts uses for its
+  // structural marker rules, would slip past it. The 8-digit alpha these carry makes
+  // that unlikely (the shiki-read pin above demands alpha-free hex), but it is the hole
+  // to re-check as each remaining consumer lands.
+  //
+  // --chip-code is spent: the fence-marker chip reads it in diffview/coreStyles.ts.
   const PENDING_CONSUMERS: ColorToken[] = [
     "--chip-bold",
     "--chip-italic",
-    "--chip-code",
     "--chip-link",
     "--chip-ref",
   ];
