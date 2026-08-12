@@ -20,8 +20,7 @@
 // SourceView runs the decoration passes from — a loop that only exists in a
 // mounted browser view. It is cheap insurance rather than a known bug: this change
 // appends nothing, but it does put rows the pass never visited before into its
-// working set, and tables.ts's child-count settle check is the trap EXC-870
-// recorded for exactly that neighbourhood.
+// working set.
 //
 // The pure halves stay units. Which characters are a marker, and which look like
 // one and are not, is inlineSpans.test.ts; the attribute landing on the right
@@ -333,21 +332,16 @@ test("nothing that merely looks like a marker draws one", async ({ page, daemon 
   }
 });
 
-test("the repaint settles over a quoted list and a table", async ({ page, daemon }) => {
-  // A regression test for a hang, not for a look. tables.ts (EXC-864) decides a row
-  // is settled by comparing its child count to its cell count, so a pass that added
-  // a child to a celled row made every repaint rebuild it — ~10,800 childList
-  // mutations in two seconds when EXC-870 hit it with an image. This decoration
-  // appends nothing, but it does put rows the pass never visited into its working
-  // set, so the claim is worth holding rather than assuming.
+test("the repaint settles over a quoted list", async ({ page, daemon }) => {
+  // A regression test for a hang, not for a look. A pass that adds a child to a row a
+  // settle check counts makes every repaint rebuild it — ~10,800 childList mutations in
+  // two seconds when EXC-870 hit that with an image. This decoration appends nothing,
+  // but it does put rows the pass never visited into its working set, so the claim is
+  // worth holding rather than assuming.
   await open(
     page,
     daemon,
     `# Settle Plan
-
-| Case | Content   |
-| ---- | --------- |
-| cell | - in cell |
 
 > - a quoted bullet
 > 1. a quoted number
@@ -363,26 +357,12 @@ Trailing prose.
     const rows = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])];
     return {
       marked: rows.filter((r) => r.querySelector("[data-md-list]")).map((r) => r.textContent ?? ""),
-      celled: rows.filter((r) => r.querySelector(":scope > [data-table-cell]") !== null).length,
-      celledMarked: rows.some(
-        (r) =>
-          r.querySelector(":scope > [data-table-cell]") !== null &&
-          r.querySelector("[data-md-list]") !== null,
-      ),
     };
   });
   expect(mutations).toBe(0);
-  // The quoted pair and the plain bullet are marked; the dash inside the table cell
-  // is not, because a marker is only a marker at the start of a line and a table
-  // row starts with its pipe. So the celled row this could have looped on never
-  // carries the decoration in the first place — asserted alongside the cell count,
-  // so a table that stopped being carded cannot make this pass by vacuum.
   expect(settled.marked).toEqual([
     "> - a quoted bullet",
     "> 1. a quoted number",
     "- a plain bullet",
   ]);
-  expect(settled.celled).toBeGreaterThan(0);
-  expect(settled.celledMarked).toBe(false);
-  await expect(page.locator(".diffview")).toContainText("| cell | - in cell |");
 });

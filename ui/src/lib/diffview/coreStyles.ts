@@ -64,7 +64,7 @@ const CARET_OVERRIDES = `
   /* Three more of the same kind, one level down (EXC-865).
 
      --caret-card-inset is how far the content column's own indented surfaces sit in
-     from it — the fenced-code row, the code card and the table card all spend it — and
+     from it — the fenced-code row and the code card both spend it — and
      the band extension that reaches across it must be the same number or the band
      stops short. --caret-read-max is the reading cap those same three share; a comment
      anchored inside a card is capped by it too, so the composer cannot outgrow the card
@@ -81,6 +81,26 @@ const CARET_OVERRIDES = `
     --caret-card-inset: 0.75rem;
     --caret-read-max: 720px;
     --caret-gutter-divider: 2px;
+  }
+  /* The chip family's breathing room, stated once for every member that has any: the
+     inline-markup pills (EXC-867/868/859) and the file reference (EXC-687/880). Two
+     numbers rather than one because the axes are bounded differently — the inline half
+     is real space that pushes the next glyph along, so it is what keeps two abutting
+     chips from sharing a cell, while the block half only paints (padding on an inline
+     box never grows its line box) and is held under the line box's own slack so a dense
+     paragraph does not read as confetti. Both are em-relative, so they track the type
+     scale rather than a fixed pixel that would crowd at one size and gape at another. */
+  :host {
+    --chip-pad-inline: 0.32em;
+    --chip-pad-block: 0.16em;
+  }
+  /* The drawn task-list checkbox's size (EXC-860), which its box and its tick both
+     measure from. Held a little under 1em so the control sits inside the row's line box
+     rather than filling it, and em-relative so it tracks the type scale — the three
+     source columns it is drawn over are a fixed 3ch, so a fixed pixel would drift out of
+     the middle of them at any other size. */
+  :host {
+    --checkbox-size: 0.92em;
   }
   [data-utility-button] {
     margin-right: calc(1ch - 1lh - 0.5rem);
@@ -121,7 +141,7 @@ const CARET_OVERRIDES = `
      Descendant rather than child, here and in the three gutter rules that follow it
      (the selection tick and its ::after, and the divider clearing below). A carded
      block's gutter cells sit inside a display:contents card — codeBlockScroll.ts's for
-     an overflowing fence, tables.ts's for every table — so a child combinator stops
+     an overflowing fence — so a child combinator stops
      matching them and the row reads half-banded: the content half paints from its own
      descendant selector while the gutter half, and the 3px caret bar with it, silently
      drops out. The card has no box, so widening changes nothing else. */
@@ -228,44 +248,14 @@ const CARET_OVERRIDES = `
     top: -0.12em;
   }
 
-  /* EXC-869: the fence markers wear the chip family's round-rect treatment (EXC-855), so a
-     block's delimiters read as deliberate punctuation rather than stray backticks. ONE
-     descendant selector covers both card paths — direct-child rows and the rows an
-     overflowing block's scroll card re-parents (codeBlockScroll.ts) — the same form the
-     hover/cursor band below already uses, rather than the duplicated pair the EXC-692 nudges
-     above still carry. The :not() guard is not about the amber band (this paints a token, not
-     a row fill, so it never competes): it drops the chip on a row the reviewer has selected,
-     so a drag-selection reads as one flat band.
-
-     The tint is --chip-code itself, the family's inline-code token (EXC-858 derives all five
-     in the palette recipe), so the fence chip and the inline-code chip (EXC-868) spend the
-     same TOKEN by construction rather than a matched value. Nothing is declared here. Not
-     the same rendered colour, though, and the difference is worth being exact about: the
-     token is a translucent wash, so it composites over the code panel here — already
-     --paper-sunk plus 6% ink — and over the bare diff surface where inline code sits, which
-     are two grounds and therefore two results. That is accepted rather than corrected. A
-     panel-matched second value would be a tenth palette declared by hand, where one shared
-     token keeps "inline code is tinted like fenced code" true across all nine and lets each
-     chip carry the same relationship to whatever it sits on.
-
-     The markers keep the --ink-faint ink caret-theme.ts already gives them, which is the ink
-     the chip family prescribes for markers.
-
-     The chip carries NO padding, in either axis, and each axis is refused for its own reason.
-     Inline padding would shift every glyph after the markers (rows render white-space: pre)
-     and on the opening row would slide the tint under the language tag, which keeps its own
-     prominent treatment — a cancelled padding/negative-margin pair, as [data-file-ref] below
-     uses, is the escape hatch if the chip ever needs breathing room. Block padding is free of
-     that hazard (padding on an inline box never grows the line box) but has nowhere to go on
-     the CLOSING row, which spends its slack twice over: the panel's own padding-block-end is
-     only 0.1rem there, and the markers additionally carry the EXC-692 downward nudge. Padded,
-     the chip escaped that row's box and drew a sliver under the panel's rounded bottom edge.
-     The inline content box is already most of the line box, so the chip reads as a round-rect
-     without it. diff-surface.e2e.ts pins the containment in a real browser. */
-  [data-content] [data-line][data-code-line]:not([data-selected-line]) [data-code-fence] {
-    background-color: var(--chip-code);
-    border-radius: var(--radius);
-  }
+  /* The fence markers take NO chip. EXC-869 gave them the family's round-rect and it was
+     the one member that never read as one: a chip is a tint around a span of CONTENT, and a
+     fence row has no content — the markers are the whole line, so the tint drew a small
+     empty pill floating in the code panel rather than marking anything within it. They keep
+     the --ink-faint ink caret-theme.ts gives them, which is the ink the family prescribes
+     for markers, and the panel around them is what already says where the block begins and
+     ends. The EXC-692 glyph-centering nudges above stay: those are about where the marker
+     sits in its line box, which is a separate question from whether it is tinted. */
 
   /* EXC-867: the inline emphasis chips, the first prose members of the chip family
      (EXC-855). inlineDecorate.ts splits each row's tokens so none straddles an element
@@ -300,15 +290,29 @@ const CARET_OVERRIDES = `
      No backtick appears in this comment, or anywhere else in CARET_OVERRIDES: the sheet is
      a template literal, so one would close it early.
 
-     NO PADDING, in either axis, and here the inline half is not a preference but the
-     issue's stated ladder trigger. Rows render white-space: pre, so inline padding shifts
-     every glyph after the chip and the monospace grid stops matching the source columns —
-     which is what vim motions, drag-range selection and the search highlights all resolve
-     against. The cancelled padding/negative-margin pair [data-file-ref] uses works there
-     only because a reference is an isolated token; emphasis chips can abut, so the
-     negative margins would overlap. Block padding is refused for the reason EXC-869 gives
-     just above, and because a chip taller than its line box reads as confetti in a dense
-     paragraph — the failure mode EXC-855 names.
+     PADDING, on all four sides, and REAL padding — nothing cancels it. EXC-867 and EXC-868
+     shipped these chips with none, on the reasoning that inline padding shifts every glyph
+     after it (rows render white-space: pre) and the monospace grid stops matching the source
+     columns. The shift is real and is now the intended behaviour: an unpadded tint sits so
+     tight to its glyphs that it reads as a highlighter smear rather than as a chip, and the
+     breathing room has to come from somewhere. What the grid claim overstated is the cost.
+     Nothing that resolves a column resolves it in PIXELS: the comment anchors, vim motions
+     and the drag-range gestures are all line- and character-indexed, and the search marks
+     are painted through the CSS Custom Highlight API over real DOM ranges, so every one of
+     them follows the layout wherever the padding puts it. What actually changes is that a
+     chip's glyphs no longer sit on the same pixel column as the same glyphs one row up,
+     which is a look rather than a broken affordance — and it is the look the padding buys.
+
+     The negative margin [data-file-ref] used to cancel its own padding with is gone for the
+     same reason (below): a cancelled pair spends the fill UNDER the neighbouring character,
+     so two chips either side of one glyph — the citation shape, a slash between two paths —
+     double-coat that glyph's cell in translucent wash. Real padding pushes the neighbour out
+     of the way instead, which is what makes abutting chips read as two separate pills.
+
+     Block padding is bounded by the failure mode EXC-855 names: a chip taller than its line
+     box reads as confetti in a dense paragraph. It is smaller than the inline half for that
+     reason, and both are stated once, here, as the two --chip-pad-* customs the file-ref
+     chip below reads too — so the family cannot drift apart one rule at a time.
 
      Rounded ends ride the GROUP, not the run: an element fragmented into several runs
      gets its radius on the first and last only, so the pill closes once. The pass also
@@ -404,19 +408,34 @@ const CARET_OVERRIDES = `
       linear-gradient(var(--md-italic, transparent), var(--md-italic, transparent)),
       linear-gradient(var(--md-code, transparent), var(--md-code, transparent)),
       linear-gradient(var(--md-link, transparent), var(--md-link, transparent));
+    padding-block: var(--chip-pad-block);
   }
   /* No selection guard, matching the link tint above: the link chip has to keep its
      round-rect inside a drag-selection. Ungated costs the other members nothing — a bold
      or italic token on a selected row has no tint at all (the rule above withholds it) and
      the amber band is painted on the ROW rather than the token, so there is no background
-     for a radius to clip. */
+     for a radius to clip.
+
+     The INLINE padding rides these same two attributes rather than [data-md] above, and
+     that pairing is load-bearing rather than tidy. A pill fragmented into several runs is
+     several elements — a bold element wrapping a codespan is three — and inline padding on
+     each of them would open a gap around every interior fragment, spacing the pill's own
+     glyphs apart from the inside. data-md-start / data-md-end are precisely the outer ends of the pill (the
+     pass withholds them from a member nested inside another, for the radius's sake), so
+     hanging the padding there gives the pill breathing room at its two edges and none in
+     its middle. The block half above needs no such care: it is on the cross axis, where
+     every fragment shares one line box and the padding only paints.
+
+     No backtick appears in this comment; see the note above. */
   [data-content] [data-line] [data-md-start] {
     border-start-start-radius: var(--radius);
     border-end-start-radius: var(--radius);
+    padding-inline-start: var(--chip-pad-inline);
   }
   [data-content] [data-line] [data-md-end] {
     border-start-end-radius: var(--radius);
     border-end-end-radius: var(--radius);
+    padding-inline-end: var(--chip-pad-inline);
   }
 
   /* EXC-861: the list markers. This is the epic's transform-in-place stance (EXC-855) at
@@ -443,12 +462,11 @@ const CARET_OVERRIDES = `
      4.21 across the nine and theme.test.ts pins the whole replacement family there.
 
      THE GLYPH IS A PSEUDO-ELEMENT, not an appended node, and that is a correctness
-     requirement rather than a preference. tables.ts settles a row by comparing its child
-     count to its cell count, so a pass that appended a bullet to a celled row would have
-     every repaint rebuild the row and never adopt the bullet — the loop EXC-870 measured at
-     ~10,800 childList mutations in two seconds with an image. Generated content is invisible
-     to that count, so a list inside a table cell costs nothing at all, and the only DOM this
-     decoration causes is the token split inlineDecorate.ts was already performing.
+     requirement rather than a preference. A pass that APPENDS a node to a row is one a
+     repaint-settling check can disagree with, and the loop that follows is expensive —
+     EXC-870 measured ~10,800 childList mutations in two seconds with an image. Generated
+     content is invisible to any such count, so the only DOM this decoration causes is the
+     token split inlineDecorate.ts was already performing.
 
      Two independent declarations carry the placement, and they are worth reading apart.
      position: absolute is what keeps the advance at zero — an out-of-flow box contributes
@@ -522,13 +540,33 @@ const CARET_OVERRIDES = `
      pseudo-element needs only this.
 
      The CENTRING. A bullet needs no offset because it overdraws the single cell it was
-     already sitting on; a one-cell glyph over a three-cell run would sit on the opening
-     bracket instead of over the run. translateX(1ch) moves it by exactly one cell, which
-     centres it in three. It is spelled as a transform rather than as an inset on purpose:
-     transform is not a layout property, so the offset is free, while an inset would abandon
-     the static position and resolve against whatever ancestor happens to be positioned. 1ch
-     is the width of the zero glyph, which on this monospace surface is the cell width — the
-     same unit the grid is built from, so the centring cannot drift from the columns.
+     already sitting on; a box drawn over a three-cell run has to be placed in it. The
+     inline half is arithmetic on the run: 1.5ch is the run's middle, and half the box's own
+     width brings its left edge back to centre it there. 1ch is the width of the zero glyph,
+     which on this monospace surface is the cell width — the same unit the grid is built
+     from, so the centring cannot drift from the columns. It is spelled as a transform
+     rather than as an inset on purpose: transform is not a layout property, so the offset
+     is free, while an inset would abandon the static position and resolve against whatever
+     ancestor happens to be positioned. The block half is a nudge rather than a calculation
+     — the static position is the top of the font's content box, which sits a little above
+     the row's optical middle — and it is small enough that no metric it could be derived
+     from would be more honest than the number.
+
+     IT IS DRAWN, NOT TYPED, and that is the change EXC-871 left on the table. A checkbox
+     spelled with U+2610 / U+2611 is a GLYPH: its weight, its corner radius, its tick and
+     its size all come from whichever font the platform resolves, it renders at the text's
+     own stroke weight beside prose set in the same face, and it reads as ASCII art of a
+     checkbox rather than as a control — which is exactly what a reviewer sees. Two
+     pseudo-elements draw it instead: ::before is the box, a square with the family's own
+     border radius, and ::after is the tick, a rectangle with two of its four borders and a
+     45-degree rotation, which is the smallest thing that draws a checkmark with no font, no
+     asset and no extra node. Both are sized in em, so the control tracks the type scale.
+
+     Two properties survive the swap unchanged and both are load-bearing. The box is square
+     by construction (one length for both axes) rather than by the font's advance width, and
+     nothing here participates in flow — an absolutely positioned box contributes nothing to
+     the line, so the three source columns keep their advance and the monospace grid never
+     learns that anything was drawn.
 
      The INK AND THE STATE. This is the one member of the marker family that WCAG 1.4.11
      binds, because it reports STATE rather than merely marking structure, and that is why
@@ -541,37 +579,56 @@ const CARET_OVERRIDES = `
      structure rather than state and are left as they are; that gap is real but it is the
      epic's, not this rule's.
 
-     The two states are then told apart by SHAPE — an empty ballot box against a ticked one,
-     on one ink. Separating them by hue or by an opacity step instead would fail outright for
-     a colour-blind reader whatever a contrast ratio said about it (the failure mode EXC-863
-     records one rule family over), so shape is what makes the distinction palette-independent
-     and is why this block still needs no subdue constant.
-
-     The trailing escape is VARIATION SELECTOR-15, which pins U+2611 to its TEXT
-     presentation. Without it a platform carrying a colour emoji font is free to substitute
-     one, and an emoji ignores color — the box would stop taking the theme's ink and start
-     being a picture. U+2610 above needs no such pin: it carries no Emoji property at all, so
-     no font may substitute for it. The escape is written with two backslashes because this
-     sheet is a template literal, where a lone backslash-F is not a recognised escape and
-     collapses to F.
+     The two states are then told apart by SHAPE — an empty outline against a filled box
+     carrying a tick, on one ink. Separating them by hue or by an opacity step instead would
+     fail outright for a colour-blind reader whatever a contrast ratio said about it (the
+     failure mode EXC-863 records one rule family over), so shape is what makes the
+     distinction palette-independent and is why this block still needs no subdue constant.
+     The tick is --paper rather than a second ink: it is knocked out of the --ink-soft fill
+     it sits on, so the pair carries the same ratio theme.test.ts already pins, from the
+     other side.
 
      No transition — the diff surface swaps state instantly (svelte-rules § Motion). */
   [data-content] [data-line] [data-md-checkbox] {
+    position: relative;
     color: transparent;
   }
+  /* The box. */
   [data-content] [data-line] [data-md-checkbox]::before {
+    content: "";
     position: absolute;
-    color: var(--ink-soft);
-    transform: translateX(1ch);
+    box-sizing: border-box;
+    inset-inline-start: calc(1.5ch - var(--checkbox-size) / 2);
+    inset-block-start: calc((100% - var(--checkbox-size)) / 2);
+    width: var(--checkbox-size);
+    height: var(--checkbox-size);
+    border: 0.1em solid var(--ink-soft);
+    border-radius: 0.22em;
     user-select: none;
   }
-  [data-content] [data-line] [data-md-checkbox="unchecked"]::before {
-    content: "☐";
-  }
   [data-content] [data-line] [data-md-checkbox="checked"]::before {
-    content: "☑\\FE0E";
+    background-color: var(--ink-soft);
   }
-  [data-content] [data-line] [data-md-checkbox] ~ [data-md-checkbox]::before {
+  /* The tick, knocked out of the fill above: two borders of a rectangle, turned 45
+     degrees, which is the smallest checkmark that needs no font and no asset. Centred on
+     the same 1.5ch the box is, then lifted a hair — a checkmark's optical centre sits
+     below its bounding box's, so a geometrically centred one reads as low. */
+  [data-content] [data-line] [data-md-checkbox="checked"]::after {
+    content: "";
+    position: absolute;
+    box-sizing: border-box;
+    inset-inline-start: calc(1.5ch - var(--checkbox-size) / 5.2);
+    inset-block-start: calc((100% - var(--checkbox-size) / 1.55) / 2 - 0.04em);
+    width: calc(var(--checkbox-size) / 2.6);
+    height: calc(var(--checkbox-size) / 1.55);
+    transform: rotate(45deg);
+    border: 0.11em solid var(--paper);
+    border-block-start: 0;
+    border-inline-start: 0;
+    user-select: none;
+  }
+  [data-content] [data-line] [data-md-checkbox] ~ [data-md-checkbox]::before,
+  [data-content] [data-line] [data-md-checkbox] ~ [data-md-checkbox]::after {
     content: none;
   }
 
@@ -679,12 +736,23 @@ const CARET_OVERRIDES = `
      chips: a leading decoration is exactly the shape that shifts every glyph on the line,
      and the gutter's line numbers would drift with it.
 
-     The radius clamps to a pill at this width, which is what makes it a round-rect rather
-     than a hairline: one bar per ROW, ends visible, so a quote reads as a stack of marks
-     the way the level bar in a rendered blockquote does. The block bleed is what closes
-     most of the gap between one row's bar and the next — it is stated as a bleed rather
-     than as a height because the height it produces is a function of the font's content
-     box and --diffs-line-height, and would drift silently with either.
+     ONE CONTINUOUS BAR down the quote, not one mark per row, and that is what the block
+     inset spells. A bar is drawn per row because a marker is per row, so the rows have to
+     close up exactly or the seams read as a dotted line — which is what EXC-863's fixed
+     -0.1em bleed left: it covered most of the gap and stopped 1.75px short of it, once per
+     row, all the way down. The gap cannot be closed by a bigger constant, because its size
+     is the difference between two things neither rule owns — the row's line box, and the
+     font's own content box, which is what an absolutely positioned pseudo-element resolves
+     a percentage against. So the inset MEASURES that difference instead: 1lh is the row's
+     line box and 100% is the containing block the bar already sits in, so half their
+     difference, negated, is exactly the bleed that makes the bar the height of its row.
+     Whatever the font metrics or --diffs-line-height do, it stays exact.
+
+     The extra half-pixel each side is for the radius rather than the arithmetic. The radius
+     clamps to a pill at this width, which is what keeps the bar a round-rect rather than a
+     hairline — and rounded ends that merely TOUCH pinch visibly at every row seam, so the
+     bars overlap by a pixel and the pinch closes. What is left is the intended shape: round
+     ends at the top and bottom of the quote, one unbroken line between them.
 
      No selection guard, and deliberately: the emphasis chips drop their tint on a
      drag-selected row because a tint is decoration, but this bar is what the marker IS —
@@ -697,7 +765,7 @@ const CARET_OVERRIDES = `
   [data-content] [data-line] [data-md-quote]::before {
     content: "";
     position: absolute;
-    inset-block: -0.1em;
+    inset-block: calc((1lh - 100%) / -2 - 0.5px);
     inset-inline-start: 0.375ch;
     width: 0.25ch;
     border-radius: var(--radius);
@@ -719,11 +787,9 @@ const CARET_OVERRIDES = `
      would cost exactly the legibility the bar exists for.
 
      The two combinators are chosen separately and neither is free. DESCENDANT at the
-     [data-content] end, so a row a scroll or table card has re-parented still matches
-     (EXC-864, where four gutter rules using direct children silently stopped matching
-     carded rows). CHILD at the row end, and that one is load-bearing: opacity is not
-     idempotent, so a descendant selector would apply again to any nested element and
-     compound to 0.88^2, and inside a table cell it would reach the bar as well. The bar
+     [data-content] end, so a row a scroll card has re-parented still matches. CHILD at
+     the row end, and that one is load-bearing: opacity is not idempotent, so a descendant
+     selector would apply again to any nested element and compound to 0.88^2. The bar
      survives here only because it hangs off the marker child this excludes.
 
      How deep the fade goes is not a taste call and is not declared here — see
@@ -754,12 +820,12 @@ const CARET_OVERRIDES = `
      Which is what the row IS: one rule, however it was typed.
 
      Drawn as a background rather than an appended element or a ::before, and that is the
-     load-bearing choice rather than a stylistic one. tables.ts settles a celled row by
-     COUNTING its children, so any pass that appends one inside a table cell disagrees with
-     the count, rebuilds the row, and loops the repaint observer — EXC-870 measured ~10,800
-     childList mutations in two seconds on exactly that. A background paints no node at all,
-     so the loop is impossible by construction rather than by measurement, and unlike a
-     pseudo-element it needs no positioning context, so no stacking order moves.
+     load-bearing choice rather than a stylistic one. A pass that appends a node to a row
+     can disagree with a repaint-settling check, rebuild the row, and loop the repaint
+     observer — EXC-870 measured ~10,800 childList mutations in two seconds on exactly that.
+     A background paints no node at all, so the loop is impossible by construction rather
+     than by measurement, and unlike a pseudo-element it needs no positioning context, so no
+     stacking order moves.
 
      It takes --ink-soft, and neither token a divider suggests first survived measurement on
      the surface this actually renders on. --rule-strong was the obvious pick — the level
@@ -860,19 +926,15 @@ const CARET_OVERRIDES = `
      back in Chromium, where caret renders); the thumb is a caret-neutral ink mix — no amber,
      the diff surface reserves amber for selection — inset by a transparent border so it reads
      as a thin pill in the lane. */
-  [data-content] > [data-code-card]::-webkit-scrollbar,
-  [data-content] > [data-table-card]::-webkit-scrollbar { height: 12px; }
-  [data-content] > [data-code-card]::-webkit-scrollbar-track,
-  [data-content] > [data-table-card]::-webkit-scrollbar-track { background: transparent; }
-  [data-content] > [data-code-card]::-webkit-scrollbar-thumb,
-  [data-content] > [data-table-card]::-webkit-scrollbar-thumb {
+  [data-content] > [data-code-card]::-webkit-scrollbar { height: 12px; }
+  [data-content] > [data-code-card]::-webkit-scrollbar-track { background: transparent; }
+  [data-content] > [data-code-card]::-webkit-scrollbar-thumb {
     background: color-mix(in lab, var(--paper-sunk), var(--ink) 45%);
     border: 3px solid transparent;
     border-radius: var(--radius);
     background-clip: content-box;
   }
-  [data-content] > [data-code-card]::-webkit-scrollbar-thumb:hover,
-  [data-content] > [data-table-card]::-webkit-scrollbar-thumb:hover {
+  [data-content] > [data-code-card]::-webkit-scrollbar-thumb:hover {
     background: color-mix(in lab, var(--paper-sunk), var(--ink) 60%);
     background-clip: content-box;
   }
@@ -885,135 +947,6 @@ const CARET_OVERRIDES = `
   [data-content] > [data-code-card] > [data-line][data-code-start]:not([data-selected-line]) [data-code-lang] {
     position: relative;
     top: -0.12em;
-  }
-
-  /* EXC-864: a GFM table renders as a real column-aligned table. This is the one place
-     in the epic that restructures DOM instead of overdrawing in place, because the source
-     pipe columns do not line up with a table's columns — alignment has to come from layout.
-     tables.ts moves a table's rows into a card and groups each row's tokens into cells;
-     these rules are the whole visual treatment.
-
-     TWO NESTED SUBGRIDS, and both are load-bearing. The card takes its ROWS from the
-     parent, exactly as the code card above does, so a table's rows still map to the shared
-     row tracks and the gutter numbers stay aligned — including when a cell wraps and grows
-     its track, which is why there is no ResizeObserver and no per-row height syncing here.
-     The card declares the COLUMN tracks, and each row takes those from the card, so cells
-     line up across rows while every row keeps its own box. That last part is why a real
-     table element was refused rather than merely awkward: table rows cannot participate in
-     the parent's row tracks, and display: contents rows would drop the box the library's
-     selection and hover fills, the cursor band and the annotation anchors all need.
-
-     A carded row reads as a banded row everywhere a prose one does, and the band gets
-     there by three different routes because the card blocks two of them. The bands, the
-     caret bar and the gutter divider ride descendant selectors (the four gutter rules
-     above). The band's rounded ends ride descendant selectors too, plus four overrides
-     that take a corner back off where the band continues past the card. And the seam
-     fill is painted from the GUTTER cell rather than pulled from the content one: the
-     card is an overflow-x: auto scroll container, so a carded row cannot paint outside
-     it at all, which is why the seam-fill pull below stays a direct-child rule and
-     EXC-865's ::before covers the carded case. What the library will not do is band a
-     carded row in the first place — cardSelection.ts owns that.
-
-     The sizing policy is max-content tracks plus a max-width on the CELL, and the split
-     between the two is what separates the issue's two behaviours. A max-content track never
-     shrinks under space pressure — it overflows instead — so a wide table scrolls as one
-     unit rather than reflowing into a tall cramped block, the code card's precedent and
-     what the showcase's wide rows are written to exercise. The cap then rides the cell, so
-     a track resolves to min(its content, the cap): a column of ordinary data keeps its
-     natural width and never wraps, while a genuinely prose-heavy cell hits the cap and
-     wraps inside its own column, growing the row rather than the table. Sizing the TRACKS
-     with minmax(min-content, …) or fit-content() cannot express this — both let the grid
-     squeeze every column at once, so the wide table reflowed and the prose cell did not
-     wrap any sooner. justify-content keeps a narrow table at its natural width rather than
-     stretching it across the cap.
-
-     44ch is the one tuned number here, and it means "a cell wider than this is prose". It
-     was measured against the showcase: every data column of both wide tables sits under it
-     and stays on one line, and the 90-character link cell in the reflow-exemptions table
-     sits well over it and wraps. Same knob as --caret-read-max above.
-
-     No fill and no padding. The table sits on the bare diff surface rather than in a panel:
-     a fenced block is a different MODE of reading and earns its own surface, where a table
-     is prose-adjacent data. And a cell needs no padding because the source already carries
-     it — a written cell has its own spaces, so the breathing room inside one is text the
-     author typed. The chip family's no-padding rule (EXC-867, EXC-869) lands here free. */
-  [data-content] > [data-table-card] {
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-rows: subgrid;
-    grid-template-columns: repeat(var(--table-columns, 1), max-content);
-    justify-content: start;
-    overflow-x: auto;
-    overflow-y: hidden;
-    max-width: var(--caret-read-max);
-    margin-inline: var(--caret-card-inset);
-  }
-  [data-content] > [data-table-card] > [data-line] {
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: subgrid;
-  }
-  /* pre-wrap rather than the library's pre: wrapping is opt-in INSIDE cells only, and stays
-     off everywhere else. The max-width is the wrap trigger described above — it caps the
-     cell's max-content contribution, which is what caps the track. */
-  [data-content] [data-table-cell] {
-    white-space: pre-wrap;
-    max-width: 44ch;
-  }
-  [data-content] [data-table-cell][data-table-align="center"] { text-align: center; }
-  [data-content] [data-table-cell][data-table-align="right"] { text-align: right; }
-
-  /* THE PIPES ARE THE BORDERS. Every other renderer hides them and draws rules in their
-     place; here each cell opens with its own pipe and the cells butt against each other in
-     the shared column tracks, so the pipes stack into continuous vertical dividers on their
-     own. Nothing is drawn that is not a character in the file, which is what keeps copy,
-     the search highlights, vim motions and comment anchors resolving against the same
-     column space as everywhere else — and it is the epic's rule (EXC-869 kept the fence
-     backticks) rather than a compromise. They take --ink-faint, the ink the chip family
-     prescribes for markers. The selector outranks the library's own [data-line] span color
-     rule, which is where a token's shiki ink is applied. */
-  [data-content] [data-line] [data-table-pipe] {
-    color: var(--ink-faint);
-  }
-
-  /* The header row is bold, and the weight is declared HERE rather than routed through
-     shiki's fontStyle — @pierre/diffs carries that into an invalid font-weight:
-     light-dark(...) and drops it, so every token renders at one weight whatever the theme
-     says (EXC-867's standing upstream finding). */
-  [data-content] [data-line][data-table-head] {
-    font-weight: bold;
-  }
-
-  /* The delimiter row keeps its line AND its gutter number: one source line is one table
-     row, which is correctness rather than look — EXC-865's comment anchors rest on it. What
-     it gets instead is both halves of the epic's thesis at once. The dashes and colons are
-     SUBDUED, not hidden, exactly as the emphasis markers and the fence backticks are, so
-     the alignment markers stay legible and stay copyable; and the row draws the header's
-     separator as a real full-width rule, which the dashes cannot do because they are only
-     as long as someone wrote them. Source and render, on the same row.
-
-     The separator spends the SAME ink as the dashes it stands in for, and that is EXC-871
-     correcting a token rather than restating a preference. EXC-864 drew it in --rule; that
-     token is 10% ink, and composited over --paper-sunk and the row's bands it measures 1.15
-     to 1.34 across the nine — against the 1.05 this epic calls indistinguishable, so on the
-     showcase there was no line on the screen at all, only one in the DOM. --ink-faint is
-     what the row's own dashes take one rule below, which makes the drawn separator read as
-     the same mark continued to full width rather than as a second, competing one.
-
-     It stays FAINT rather than climbing to the --ink-soft the thematic break takes, and the
-     difference is the epic's replacement/supplementary line (svelte-rules.md § chips): the
-     break's own dashes go transparent, so its line is the only carrier and WCAG 1.4.11's
-     3:1 floor binds it. Here the dashes stay legible, the header above is bold and the pipes
-     stack into column dividers — three things already saying where the header ends — so this
-     line reinforces rather than carries, and only has to be visible. --rule was not.
-
-     Nothing else on the diff body spends --rule or --rule-strong after this change; both are
-     chrome-surface tokens. */
-  [data-content] [data-line][data-table-rule] {
-    border-block-end: 1px solid var(--ink-faint);
-  }
-  [data-content] [data-line][data-table-rule] [data-table-cell] > * {
-    color: var(--ink-faint);
   }
 
   /* EXC-788: a banded row — the focused-line cursor OR a pointer hover — ON a
@@ -1141,7 +1074,7 @@ const CARET_OVERRIDES = `
      cursor tint without naming any of them, and follows the library if it recolors.
      ::before rather than ::after: the multi-line selection tick above owns ::after on
      these same cells. Reached through the gutter card, which is display: contents and
-     so does not disturb matching; both card kinds have the gap, so both are listed.
+     so does not disturb matching.
 
      The offset starts at the cell's BORDER box, not its padding box. An absolutely
      positioned pseudo resolves 100% against the padding box, and a gutter cell carries
@@ -1152,11 +1085,11 @@ const CARET_OVERRIDES = `
      position: relative is set unconditionally rather than on the same state list: it
      costs nothing on an unbanded cell, and two copies of a six-state list is a rule
      that silently mispositions the strip the day someone extends one of them. */
-  [data-gutter] :is([data-table-card-gutter], [data-code-card-gutter]) > [data-column-number] {
+  [data-gutter] [data-code-card-gutter] > [data-column-number] {
     position: relative;
   }
   [data-gutter]
-    :is([data-table-card-gutter], [data-code-card-gutter])
+    [data-code-card-gutter]
     > [data-column-number]:is(
       [data-selected-line],
       [data-hovered],
@@ -1216,9 +1149,9 @@ const CARET_OVERRIDES = `
   }
   /* The band's outer corners. Descendant rather than child (EXC-865): a carded row is
      no longer a child of its column, and left on a child combinator a selection inside
-     a table drew square ends while every other selection rounded. Widening works
+     a card drew square ends while every other selection rounded. Widening works
      because the sibling logic is column-relative — inside a card the row's siblings ARE
-     the table's other rows, so :not(~) still finds that card's first selected row and
+     the block's other rows, so :not(~) still finds that card's first selected row and
      :not(:has(~)) its last. What widening cannot see is the band continuing PAST the
      card, so the two overrides below take those corners back off: a card preceded by a
      selected line is not where the band starts, and one followed by a selected line is
@@ -1246,33 +1179,30 @@ const CARET_OVERRIDES = `
   }
   [data-gutter]
     > [data-column-number][data-selected-line]
-    ~ :is([data-table-card-gutter], [data-code-card-gutter])
+    ~ [data-code-card-gutter]
     > [data-column-number][data-selected-line] {
     border-top-left-radius: 0;
   }
   [data-content]
     > [data-line][data-selected-line]
-    ~ :is([data-table-card], [data-code-card])
+    ~ [data-code-card]
     > [data-line][data-selected-line] {
     border-top-right-radius: 0;
   }
   [data-gutter]
-    > :is([data-table-card-gutter], [data-code-card-gutter]):has(
-      ~ [data-column-number][data-selected-line]
-    )
+    > [data-code-card-gutter]:has(~ [data-column-number][data-selected-line])
     > [data-column-number][data-selected-line] {
     border-bottom-left-radius: 0;
   }
   [data-content]
-    > :is([data-table-card], [data-code-card]):has(~ [data-line][data-selected-line])
+    > [data-code-card]:has(~ [data-line][data-selected-line])
     > [data-line][data-selected-line] {
     border-bottom-right-radius: 0;
   }
   /* The composer/annotation row the library also flags selected is NOT part of the
      band: clear its selection fill (both columns) so the surface background shows
-     through to the left of the composer card. Descendant since EXC-865 — a comment on
-     a table line puts that row inside the table's card, with its buffer inside the
-     gutter mirror. */
+     through to the left of the composer card. Descendant since EXC-865 — a carded row's
+     comment sits inside the card, with its buffer inside the gutter mirror. */
   [data-gutter] [data-gutter-buffer][data-selected-line],
   [data-content] [data-line-annotation][data-selected-line] {
     background-color: transparent;
@@ -1291,63 +1221,6 @@ const CARET_OVERRIDES = `
   [data-gutter] [data-gutter-buffer="annotation"],
   [data-content] [data-line-annotation] {
     --diffs-annotation-bg: var(--diffs-bg);
-  }
-
-  /* A comment anchored to a table line (EXC-865). Its row rides inside the table's
-     card so it lands under the row it belongs to and pushes the rest of the table
-     down, rather than after the whole table — but the card is a grid of max-content
-     columns, so the row needs placing in it, and placing it there must not change the
-     table.
-
-     contain: inline-size is what keeps the table's columns exactly where they were:
-     a spanning grid item otherwise contributes its own max-content to every track it
-     covers, and a composer's is large enough to push a narrow table into horizontal
-     scroll the moment someone comments on it. Containment takes the row's width from
-     the grid instead of from its contents, so opening a comment moves nothing.
-
-     The row's own width then stays the table's, and both the width the comment is DRAWN
-     at and where it sits while the table scrolls are set one level down (below) —
-     because the table's width is the wrong answer twice over: a narrow table gives a
-     cramped thread, and a wide one overhangs the card's scroll box and clips the Comment
-     button.
-
-     container-type on the card would express the visible width directly, and is not
-     usable: it brings layout containment, which stops the card's subgrid contributing
-     the comment's height to the parent's row track, and the whole thread collapses to
-     one line. */
-  [data-content] > [data-table-card] > [data-line-annotation] {
-    grid-column: 1 / -1;
-    contain: inline-size;
-  }
-  /* The width the comment is actually drawn at, and where it sits while the table
-     scrolls under it. Neither can be set on the row above: a grid item with a definite
-     width distributes it back across the tracks it spans (the inflation containment was
-     for), and the row is stretched to its whole grid area, so a sticky row has no slack
-     to move within. Both belong on the library's own wrapper, which carries an explicit
-     width (--diffs-column-content-width, the full content column) and is already
-     position: sticky.
-
-     So the cap is a MINIMUM of two things, and both are load-bearing: the reading cap,
-     and the card's own visible width, which is the content column less the seam and the
-     card's two insets. Capping at the reading measure alone is right only while the pane
-     is wide enough for the card to reach it — below that the wrapper is wider than the
-     card, and the card being overflow-x: auto turns the overhang into a scrollbar with
-     the Comment button beyond its right edge.
-
-     The library's inline start is reset for a related reason: it pins the wrapper at the
-     gutter's width so a comment stays put while the WHOLE view scrolls sideways, and
-     inside a card that offset is measured against the wrong scroll box — the card is its
-     own. Left as the library sets it, the comment starts a gutter's width into the card
-     and overhangs by the same amount. */
-  [data-content] > [data-table-card] > [data-line-annotation] > [data-annotation-content] {
-    max-width: min(
-      var(--caret-read-max),
-      calc(
-        var(--diffs-column-content-width, 100%) - var(--caret-seam) - 2 *
-          var(--caret-card-inset)
-      )
-    );
-    inset-inline-start: 0;
   }
 
   /* EXC-687: a resolved filename reference in the plan carries a small file icon
@@ -1395,9 +1268,13 @@ const CARET_OVERRIDES = `
      reads as a change of state. theme.test.ts holds that pair 60 degrees apart in
      every palette, because the resting state used to be transparent and any wash read
      against it for free; now it has to be told from a green. Padding gives the fill
-     breathing room so it reads as a chip around the whole reference rather than
-     crowding the glyphs; a matching negative inline margin offsets it so the backticks
-     bracketing the token never shift. The radius sits on the resting rule because the
+     breathing room so it reads as a chip around the whole reference rather than crowding
+     the glyphs, and it is the family's own --chip-pad-* pair rather than a second set of
+     numbers. EXC-880 cancelled the inline half with a matching negative margin so the
+     backticks bracketing a citation never shifted; that is gone, because a cancelled pair
+     spends the fill under the neighbouring glyph and two chips either side of one
+     character double-coat its cell. The reference shifts its neighbours now, exactly as
+     the inline chips above do. The radius sits on the resting rule because the
      shape is constant — only the fill moves. The swap is instant: the diff surface is
      motionless by design, so no transition here. The icon sharpens from faint to full
      ink alongside it.
@@ -1409,8 +1286,7 @@ const CARET_OVERRIDES = `
      the deliberate cost. */
   [data-content] [data-file-ref] {
     cursor: pointer;
-    padding: 0.1em 0.3em;
-    margin-inline: -0.3em;
+    padding: var(--chip-pad-block) var(--chip-pad-inline);
     background-color: var(--chip-ref);
     border-radius: var(--radius);
   }
@@ -1428,13 +1304,11 @@ const CARET_OVERRIDES = `
      would otherwise show as a seam in the middle of that pill (EXC-868).
 
      The breathing room above is measured for a reference sitting on bare surface; here the
-     code chip is already the band around it, so the padding buys nothing and the negative
-     margin that cancels it spends the fill 0.3em UNDER each bracketing backtick — which now
-     carries the same translucent --chip-code. Two coats of one wash composite to roughly
-     double strength, so the overhang draws a darker bar at each backtick-to-path junction:
-     the very seam the showcase row names as the regression to watch. The block padding is
-     the same story on the other axis, leaving the tint a tenth of an em proud of its
-     neighbours top and bottom.
+     code chip is already the band around it, and it now carries the same --chip-pad-inline
+     of its own — so keeping the reference's would space the path away from the backticks
+     that are meant to be tight around it, inside a pill already padded at both ends. The
+     block half is the same story on the other axis, leaving the tint proud of its
+     neighbours top and bottom where the code chip's own already covers them.
 
      The radius has to go with them, and in that order: once the box is exactly the text
      advance it abuts the backticks rather than overlapping them, so a rounded corner would
@@ -1448,7 +1322,6 @@ const CARET_OVERRIDES = `
      carries no member at all — keeps the standalone chip this rule is carved out of. */
   [data-content] [data-line] [data-file-ref][data-md~="code"] {
     padding: 0;
-    margin-inline: 0;
     border-radius: 0;
   }
 

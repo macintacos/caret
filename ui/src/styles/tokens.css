@@ -21,7 +21,12 @@
      The --leading-* tokens are role-keyed (not one-per-step): --none for
      single-line badges/glyphs, --tight for dense multi-line labels, --snug for
      comment/annotation body copy, --normal for base reading text (it matches the
-     body line-height below, so the body and the diff view share it). */
+     body line-height below), and --relaxed for the plan surface, which sets its
+     rows one step looser than the chrome. That last one is a decoration
+     requirement rather than a taste: the plan view draws inline chips around
+     emphasis, code and links, and a chip is taller than the glyphs inside it, so
+     rows set at the chrome's rhythm put a chip on one row a hair from the chip
+     on the next. The extra leading is the gap between them. */
   --text-2xs: 0.65rem;
   --text-xs: 0.7rem;
   --text-sm: 0.78rem;
@@ -34,6 +39,7 @@
   --leading-tight: 1.3;
   --leading-snug: 1.45;
   --leading-normal: 1.55;
+  --leading-relaxed: 1.7;
 
   /* Motion. A small functional vocabulary for the chrome's ONE-SHOT reveals:
      two durations and two easings, so a reveal tunes from a single lever instead

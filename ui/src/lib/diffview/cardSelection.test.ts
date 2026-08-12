@@ -3,32 +3,25 @@ import { expect, test } from "bun:test";
 
 import { paintCardSelection } from "$lib/diffview/cardSelection.ts";
 import { CARD_ATTR, GUTTER_CARD_ATTR } from "$lib/diffview/codeBlockScroll.ts";
-import { TABLE_CARD_ATTR, TABLE_GUTTER_CARD_ATTR } from "$lib/diffview/tables.ts";
 
 // paintCardSelection re-applies the library's own [data-selected-line] marks to the
 // rows a card hides from it. @pierre/diffs' renderSelection walks [data-content]'s
-// DIRECT children and skips anything with no line index, so a card — table or code —
-// is skipped whole and every row inside it goes unbanded (EXC-865). What is asserted
+// DIRECT children and skips anything with no line index, so a card is skipped whole and every row inside it goes unbanded (EXC-865). What is asserted
 // here is the attribute vocabulary and the write discipline; that the band then
 // PAINTS is layout, and lives in test/e2e/diff-surface.e2e.ts.
 
 /** The library's grid for `total` lines, with `carded` (1-based, inclusive) moved into
- * a card and mirrored into the gutter — the shape tables.ts and codeBlockScroll.ts
- * both leave behind. */
-function build(
-  total: number,
-  carded: { start: number; end: number },
-  attrs: [content: string, gutter: string] = [TABLE_CARD_ATTR, TABLE_GUTTER_CARD_ATTR],
-): HTMLElement {
+ * a card and mirrored into the gutter — the shape codeBlockScroll.ts leaves behind. */
+function build(total: number, carded: { start: number; end: number }): HTMLElement {
   const root = document.createElement("div");
   const gutter = document.createElement("div");
   gutter.setAttribute("data-gutter", "");
   const content = document.createElement("div");
   content.setAttribute("data-content", "");
   const card = document.createElement("div");
-  card.setAttribute(attrs[0], String(carded.start));
+  card.setAttribute(CARD_ATTR, String(carded.start));
   const mirror = document.createElement("div");
-  mirror.setAttribute(attrs[1], String(carded.start));
+  mirror.setAttribute(GUTTER_CARD_ATTR, String(carded.start));
   for (let line = 1; line <= total; line++) {
     const row = document.createElement("div");
     row.setAttribute("data-line", String(line));
@@ -96,12 +89,6 @@ test("bands only the carded part of a range that ends outside the card", () => {
   expect(selected(root)).toEqual(["6=first", "7=", "6=first", "7="]);
 });
 
-test("bands a code block's carded rows too", () => {
-  const root = build(8, { start: 3, end: 7 }, [CARD_ATTR, GUTTER_CARD_ATTR]);
-  paintCardSelection(root, { start: 4, end: 5 });
-  expect(selected(root)).toEqual(["4=first", "5=last", "4=first", "5=last"]);
-});
-
 test("clears a carded row the range no longer covers", () => {
   const root = build(8, { start: 3, end: 7 });
   paintCardSelection(root, { start: 4, end: 6 });
@@ -153,7 +140,7 @@ test("leaves a card whose mirror has diverged completely alone", () => {
   // A divergence is the state the library throws on; this pass must not paint into it
   // and make the two columns disagree about which rows are banded.
   const root = build(8, { start: 3, end: 7 });
-  root.querySelector(`[${TABLE_GUTTER_CARD_ATTR}]`)?.lastElementChild?.remove();
+  root.querySelector(`[${GUTTER_CARD_ATTR}]`)?.lastElementChild?.remove();
   paintCardSelection(root, { start: 4, end: 6 });
   expect(selected(root)).toEqual([]);
 });

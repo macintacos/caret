@@ -22,13 +22,7 @@
   import type { InlineSpanMap } from "$lib/diffview/inlineSpans.ts";
   import { syncCodeBlockCards } from "$lib/diffview/codeBlockScroll.ts";
   import { paintCardSelection, type SelectedLines } from "$lib/diffview/cardSelection.ts";
-  import {
-    TABLE_CARD_ATTR,
-    type TableRange,
-    syncTableCards,
-    tableRanges,
-  } from "$lib/diffview/tables.ts";
-  import { selectionIn, tableSelectionText } from "$lib/diffview/tableCopy.ts";
+  import { selectionIn, selectionText } from "$lib/diffview/selectionCopy.ts";
   import { tagThematicBreakRows, thematicBreakLines } from "$lib/diffview/thematicBreaks.ts";
   import { preloadFenceLanguages, scanFenceLanguages } from "$lib/diffview/languages.ts";
   import { registerCaretDiffThemes } from "$lib/diffview/theme.ts";
@@ -408,7 +402,7 @@
   // so every library write shows up here and is answered. paintCardSelection writes
   // only where the value differs, so its own writes settle in one further callback
   // instead of looping. Deliberately NOT folded into the repaint observer below: that
-  // one would re-run the table, inline-decoration and file-reference passes on every
+  // one would re-run the inline-decoration and file-reference passes on every
   // frame of a drag.
   $effect(() => {
     const root = container?.shadowRoot;
@@ -442,24 +436,12 @@
     return rangesMemo.ranges;
   });
 
-  // The GFM tables (EXC-864), memoized on the same rendered text and for the same
-  // reason: a fresh array each poll tick would re-arm the observer effect below.
-  // Derived from codeRanges so a table written inside a fence stays code.
-  let tablesMemo: { text: string; tables: TableRange[] } | undefined;
-  const tables = $derived.by(() => {
-    if (tablesMemo?.text !== doc.text) {
-      tablesMemo = { text: doc.text, tables: tableRanges(doc.text, codeRanges) };
-    }
-    return tablesMemo.tables;
-  });
-
   // The thematic breaks (EXC-862), memoized on the same rendered text and for the same
   // reason: a fresh Set each poll tick would re-arm the observer effect below. Detection
   // is whole-document rather than per-line — what makes a `---` a rule rather than a
-  // setext underline is the block structure around it. Derived from codeRanges like the
-  // tables above: the module's own lexer already excludes a fenced line, but caret's
-  // fence scan is wider than CommonMark's, and a rule must never land on a row the panel
-  // paints as code.
+  // setext underline is the block structure around it. Derived from codeRanges: the
+  // module's own lexer already excludes a fenced line, but caret's fence scan is wider
+  // than CommonMark's, and a rule must never land on a row the panel paints as code.
   let breaksMemo: { text: string; breaks: Set<number> } | undefined;
   const thematicBreaks = $derived.by(() => {
     if (breaksMemo?.text !== doc.text) {
@@ -494,23 +476,19 @@
     if (root != null) paintSearchHighlights(root, searchMirror, searchIndexMirror);
   });
 
-  // A table's cells are grid items, so Chromium's clipboard serializer breaks the
-  // line at every cell boundary and a copied table arrives shattered (EXC-864).
-  // tableSelectionText rebuilds it, and stands down for any selection that never
-  // crosses a cell — so copy everywhere else in the view is untouched. The listener
-  // sits on the host because a shadow selection's copy event retargets there;
-  // the RANGE has to come from the shadow root's own selection, since the
-  // document-level one is retargeted to the host and would clone the whole view.
+  // Rebuild the copied text from the selection's own rows (selectionCopy.ts), because
+  // Chromium's serializer reads the layout tree and a blank source line has no line box
+  // for it to find — a selection spanning two paragraphs would otherwise come back with
+  // them fused. The listener sits on the host because a shadow selection's copy event
+  // retargets there; the RANGE has to come from the shadow root's own selection, since
+  // the document-level one is retargeted to the host and would clone the whole view.
   $effect(() => {
     const host = container;
     if (host == null) return;
     const onCopy = (event: ClipboardEvent) => {
-      // Cheapest possible stand-down for a plan with no tables: tableSelectionText
-      // has to clone the selection's contents before it can tell, and a select-all
-      // copy on a long plan would clone the whole subtree only to discard it.
       const root = host.shadowRoot;
-      if (root?.querySelector(`[${TABLE_CARD_ATTR}]`) == null) return;
-      const text = tableSelectionText(selectionIn(root));
+      if (root == null) return;
+      const text = selectionText(selectionIn(root));
       if (text === null) return;
       event.clipboardData?.setData("text/plain", text);
       event.preventDefault();
@@ -546,8 +524,6 @@
     // parent alongside the link layer they come from, so this stays a stable
     // reference and doesn't re-arm the observer each render.
     const inlineSpans = inline;
-    // And the tables, memoized above alongside the code ranges they derive from.
-    const tableSpans = tables;
     // And the thematic breaks (EXC-862), memoized on the same text.
     const breaks = thematicBreaks;
     // And the images (EXC-870), snapshotted the same way. Memoized by the parent
@@ -569,13 +545,6 @@
       // depends on nothing else here, so its position costs no frame either way.
       tagThematicBreakRows(root, breaks);
       syncCodeBlockCards(root, ranges);
-      // Restructure each table's rows into a real column-aligned table (EXC-864).
-      // Before the inline pass, not after: the passes below reach a row's tokens
-      // through rowTokens.ts's tokenChildren either way, but celling first lets a
-      // fresh row settle in one extra frame instead of two. Idempotent for the same
-      // reason the card pass is — a settled table mutates nothing, so it costs that
-      // one frame rather than looping the observer.
-      syncTableCards(root, tableSpans);
       // Split each row's tokens on the inline-run and file-reference boundaries and
       // tag them (EXC-867). This MUST precede tagFileRefTokens: it produces the
       // partition that pass walks, and the cut at a reference's own columns is what

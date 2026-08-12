@@ -6,10 +6,7 @@
 // clipboard still carries the source markdown once a replaced element sits inside
 // the selection, that the comment affordance still reaches the taller row, and
 // that a load failure leaves no broken-image box. None of that has an answer under
-// happy-dom, which reports zero for every layout metric and has no clipboard. One
-// spec here is about neither geometry nor platform: the table case asserts that the
-// repaint SETTLES, which needs the real MutationObserver loop SourceView runs the
-// decoration passes from — a loop that only exists in a mounted browser view.
+// happy-dom, which reports zero for every layout metric and has no clipboard.
 //
 // The clipboard case is the one worth naming: it is not a restatement of the DOM
 // text, which is untouched by construction. Blink can emit an image's alt text
@@ -36,7 +33,6 @@ import {
   planSurface,
   revealGutterPlus,
   rowHeights,
-  settledMutations,
 } from "@test/e2e/support/source-view.ts";
 
 // A 900x700 1-bit PNG, solid black. The size is the point: 700px intrinsic height
@@ -78,23 +74,10 @@ Prose below the diagram, also ordinary.
 Trailing prose.
 `;
 
-// A table whose cell holds an image. Its own plan, because what it asserts is that
-// the repaint SETTLES rather than anything on screen, and a settle test has to own
-// the whole document it watches.
-const TABLE_PLAN = `# Table Plan
-
-| Case | Shot |
-| ---- | ---- |
-| one  | ![a shot](${GOOD}) |
-
-Trailing prose.
-`;
-
 const IMAGE_LINE = 5;
 const PROSE_ABOVE = 3;
 const PROSE_BELOW = 7;
 const BROKEN_LINE = 9;
-const TABLE_BODY_LINE = 5;
 
 /** Serve every intercepted asset from this file: the good URL as a real PNG, the
  * missing one as a 404. Installed before the page loads so no request escapes. */
@@ -305,35 +288,6 @@ test("a failed load leaves no broken-image chrome", async ({ page, daemon }) => 
   }, BROKEN_LINE);
   expect(chipped.rowText).toBe(`![an asset that is not there](${GONE})`);
   expect(chipped.marked).toBe(`![an asset that is not there](${GONE})`);
-});
-
-test("an image in a table cell draws nothing, and the repaint settles", async ({
-  page,
-  daemon,
-}) => {
-  // A regression test for a hang, not for a look. tables.ts (EXC-864) decides a row
-  // is settled by comparing its child count to its cell count, so an appended image
-  // made every repaint rebuild the row — and the rebuild never adopted the image,
-  // because it places tokens by column and an image sits past the last cell's end.
-  // Measured before the fix: ~10,800 childList mutations in two seconds, climbing;
-  // the same window with a plain table, or with the image outside one, was zero.
-  await open(page, daemon, TABLE_PLAN);
-  const mutations = await settledMutations(page);
-  const settled = await page.evaluate((ln) => {
-    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    const row = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].find(
-      (r) => r.getAttribute("data-line") === String(ln),
-    );
-    return {
-      images: (sh?.querySelectorAll("img[data-md-image]") ?? []).length,
-      celled: row?.querySelector(":scope > [data-table-cell]") !== null,
-    };
-  }, TABLE_BODY_LINE);
-  expect(settled.celled).toBe(true);
-  expect(settled.images).toBe(0);
-  expect(mutations).toBe(0);
-  // The cell still reads as its markup, which is the rung this descends to.
-  await expect(page.locator(".diffview")).toContainText(`![a shot](${GOOD})`);
 });
 
 test("a non-http target draws nothing, and a fenced one stays literal text", async ({

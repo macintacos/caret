@@ -1,35 +1,8 @@
-// The token walk every decoration pass over a rendered row shares. shiki paints a
-// source line as a sequence of classless token spans whose text concatenates to the
-// line, and inlineDecorate.ts, fileRefTag.ts and tables.ts all locate a token by
-// walking that sequence and accumulating text length. This module owns what "that
-// sequence" means and how it is refined.
-//
-// It exists because a table row (EXC-864) groups its tokens into cell elements, so
-// the sequence sits one level down for those rows and at the top level for every
-// other. Both halves live here so no pass has to know which kind of row it is
-// looking at, and so tables.ts can refine a row without importing the pass that
-// decorates it — the import that would otherwise be a cycle.
-
-/** Marks a table cell. Declared here rather than in tables.ts because it is what
- * `tokenChildren` reads: a pass recognises a celled row without depending on the
- * module that built it. */
-export const CELL_ATTR = "data-table-cell";
-
-/**
- * A row's token elements in column order: its own children, or — when the row has
- * been split into table cells — the cells' children concatenated. Their text
- * concatenates to the row's text either way, which is the invariant every caller's
- * running-length arithmetic rests on.
- */
-export function tokenChildren(row: Element): Element[] {
-  // The first-child probe rather than a selector query, because this sits on the hot
-  // path of three passes that each walk every row of a document on every repaint —
-  // and all but a handful of those rows are not table rows. It is exact, not a
-  // heuristic: tables.ts moves EVERY token into a cell before appending the cells, so
-  // a celled row's children are its cells and nothing else.
-  if (row.firstElementChild?.hasAttribute(CELL_ATTR) !== true) return [...row.children];
-  return [...row.children].flatMap((cell) => [...cell.children]);
-}
+// The token refinement every decoration pass over a rendered row shares. shiki paints
+// a source line as a sequence of classless token spans whose text concatenates to the
+// line, and inlineDecorate.ts and fileRefTag.ts both locate a token by walking the
+// row's children and accumulating text length. This module owns how that sequence is
+// refined so a pass can rely on the boundaries it needs being real element edges.
 
 /**
  * Replaces every token a cut falls strictly inside with one clone per piece, so no
@@ -52,7 +25,7 @@ export function tokenChildren(row: Element): Element[] {
  */
 export function splitTokens(row: Element, cuts: number[]): void {
   let col = 0;
-  for (const child of tokenChildren(row)) {
+  for (const child of [...row.children]) {
     const text = child.textContent ?? "";
     const end = col + text.length;
     const inside = cuts.filter((cut) => cut > col && cut < end);

@@ -29,10 +29,9 @@
 // Selection.toString() takes a different path through Blink and cannot show it, so
 // only navigator.clipboard can say which way it goes.
 //
-// The settle case is cheap insurance rather than a known bug: EXC-865 established that
-// caret's annotation machinery adds a SIBLING row rather than a child of a row, so
-// tables.ts's child-count settle check is not tripped by it, and generated content is
-// invisible to a child count anyway. Zero is the expectation, not a hunt for a workaround.
+// The settle case is cheap insurance rather than a known bug: this decoration appends
+// nothing, and EXC-865 established that caret's annotation machinery adds a SIBLING row
+// rather than a child of a row. Zero is the expectation, not a hunt for a workaround.
 //
 // The pure halves stay units. Which characters are a task marker, and which merely
 // look like one, is inlineSpans.test.ts; the attribute landing on the right token is
@@ -125,10 +124,16 @@ function drawnRun(page: import("@playwright/test").Page, line: number) {
       proseCursor: prose == null ? null : getComputedStyle(prose).cursor,
       content: glyph.content,
       position: glyph.position,
-      transform: glyph.transform,
-      // Resolved across the shadow boundary: a token that failed to resolve would come
-      // back as the initial color rather than the palette's faint ink.
-      glyphColor: glyph.color,
+      // The box is DRAWN, so what carries it is its border, its fill and its size rather
+      // than a glyph's color. Resolved across the shadow boundary: a token that failed to
+      // resolve would come back as the initial color rather than the palette's ink.
+      boxBorder: glyph.borderTopColor,
+      boxFill: glyph.backgroundColor,
+      boxWidth: Number.parseFloat(glyph.width),
+      boxInsetStart: Number.parseFloat(glyph.insetInlineStart),
+      // The tick is the checked state's other half, and absent entirely when unchecked.
+      tick: getComputedStyle(first, "::after").content,
+      tickBorder: getComputedStyle(first, "::after").borderBottomColor,
       width:
         Math.round(
           (Math.max(...rects.map((r) => r.right)) - Math.min(...rects.map((r) => r.left))) * 100,
@@ -206,21 +211,26 @@ test("the box is painted over the brackets, which are still in the row", async (
 }) => {
   await open(page, daemon, TASK_PLAN);
   await decorated(page);
+  const cell = await cellWidth(page, PROSE_ABOVE);
   const box = await drawnRun(page, await lineOf(page, CHECKED));
   expect(box?.text).toBe("[x]");
   expect(box?.color).toBe("rgba(0, 0, 0, 0)");
-  expect(box?.content).toContain("☑");
   expect(box?.position).toBe("absolute");
-  expect(box?.glyphColor).not.toBe(box?.color);
+  // DRAWN rather than typed: the pseudo-element carries no character at all, and what
+  // makes it a checkbox is its border — which also proves the ink token resolved across
+  // the shadow boundary, since an unresolved one would come back as the initial color.
+  expect(box?.content).toBe('""');
+  expect(box?.boxBorder).not.toBe("rgba(0, 0, 0, 0)");
+  expect(box?.boxWidth).toBeGreaterThan(0);
   // Exactly THREE character cells wide, measured against a prose row rather than
   // asserted to be merely positive. Paired with the `position` assertion above, this
-  // is what holds the zero-advance claim: a glyph in flow would make this run a
-  // fourth cell wider, and the left-edge probe in the grid test below cannot see it.
-  expect(box?.width).toBeCloseTo(3 * (await cellWidth(page, PROSE_ABOVE)), 0);
-  // The centring is a transform rather than an inset, so it is a matrix here and not
-  // a used inset value — a non-none transform is what proves the declaration resolved
-  // across the shadow boundary at all.
-  expect(box?.transform).not.toBe("none");
+  // is what holds the zero-advance claim: a box in flow would make this run a fourth
+  // cell wider, and the left-edge probe in the grid test below cannot see it.
+  expect(box?.width).toBeCloseTo(3 * cell, 0);
+  // And the drawn box is centred in those three cells rather than merely present, which
+  // is the half of the placement no sheet assertion can see: the inset plus half the
+  // box's own width has to land on the run's middle.
+  expect((box?.boxInsetStart ?? 0) + (box?.boxWidth ?? 0) / 2).toBeCloseTo(1.5 * cell, 0);
   await expect(page.locator(".diffview")).toContainText(CHECKED);
 });
 
@@ -259,12 +269,18 @@ test("checked and unchecked differ in shape, not in colour", async ({ page, daem
   // The accessibility claim of this ticket, read off the rendered page rather than
   // inferred from the sheet. A state indicator separated only by a hue or an opacity
   // step fails for a colour-blind reader whatever the contrast maths says, so the two
-  // states are one ink and two glyphs.
-  expect(checked?.content).not.toBe(unchecked?.content);
-  expect(unchecked?.content).toContain("☐");
-  expect(checked?.glyphColor).toBe(unchecked?.glyphColor);
+  // states are one ink and two shapes: an outline, and that same outline filled with a
+  // tick in it.
+  expect(checked?.boxBorder).toBe(unchecked?.boxBorder);
+  expect(checked?.boxFill).not.toBe(unchecked?.boxFill);
+  expect(unchecked?.boxFill).toBe("rgba(0, 0, 0, 0)");
+  // The tick exists on one state and not on the other, and is knocked out of the fill —
+  // so it carries the same measured ratio from the other side.
+  expect(checked?.tick).toBe('""');
+  expect(unchecked?.tick).toBe("none");
+  expect(checked?.tickBorder).not.toBe(checked?.boxFill);
   // And both really resolved the theme token rather than falling back to initial ink.
-  expect(checked?.glyphColor).not.toBe(checked?.color);
+  expect(checked?.boxBorder).not.toBe(checked?.color);
 });
 
 test("the checkbox is not interactive", async ({ page, daemon }) => {
@@ -418,21 +434,16 @@ test("nothing that merely looks like a checkbox draws one", async ({ page, daemo
   }
 });
 
-test("the repaint settles over a quoted task list and a table", async ({ page, daemon }) => {
-  // A regression test for a hang, not for a look. tables.ts (EXC-864) decides a row is
-  // settled by comparing its child count to its cell count, so a pass that added a
-  // child to a celled row made every repaint rebuild it — ~10,800 childList mutations
-  // in two seconds when EXC-870 hit it with an image. This decoration appends nothing,
+test("the repaint settles over a quoted task list", async ({ page, daemon }) => {
+  // A regression test for a hang, not for a look. A pass that adds a child to a row a
+  // settle check counts makes every repaint rebuild it — ~10,800 childList mutations in
+  // two seconds when EXC-870 hit that with an image. This decoration appends nothing,
   // and EXC-865 established that the annotation machinery adds a sibling row rather
   // than a child, so zero is the expectation rather than the hope.
   await open(
     page,
     daemon,
     `# Settle Plan
-
-| Case | Content     |
-| ---- | ----------- |
-| cell | - [x] cell  |
 
 > - [ ] a quoted task
 
@@ -449,21 +460,8 @@ Trailing prose.
       tagged: rows
         .filter((r) => r.querySelector("[data-md-checkbox]"))
         .map((r) => r.textContent ?? ""),
-      celled: rows.filter((r) => r.querySelector(":scope > [data-table-cell]") !== null).length,
-      celledTagged: rows.some(
-        (r) =>
-          r.querySelector(":scope > [data-table-cell]") !== null &&
-          r.querySelector("[data-md-checkbox]") !== null,
-      ),
     };
   });
   expect(mutations).toBe(0);
-  // The quoted task and the plain task are tagged; the bracket run inside the table
-  // cell is not, because a task marker is only a task marker at the start of a line and
-  // a table row starts with its pipe. So the celled row this could have looped on never
-  // carries the decoration in the first place — asserted alongside the cell count, so a
-  // table that stopped being carded cannot make this pass by vacuum.
   expect(settled.tagged).toEqual(["> - [ ] a quoted task", "- [x] a plain task"]);
-  expect(settled.celled).toBeGreaterThan(0);
-  expect(settled.celledTagged).toBe(false);
 });

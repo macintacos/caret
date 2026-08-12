@@ -85,9 +85,6 @@ const DECORATIONS = [
   ["data-md-rule", "thematic breaks (EXC-862)"],
   ["data-md-image", "inline images (EXC-870)"],
   ["data-code-fence", "fence markers (EXC-869)"],
-  ["data-table-cell", "table cells (EXC-864)"],
-  ["data-table-pipe", "table pipes (EXC-864)"],
-  ["data-table-card", "the scroll card a wide table gets (EXC-864)"],
   ["data-code-card", "the scroll card an overflowing fence gets (EXC-729)"],
   ["data-file-ref", "file and folder references (EXC-687, EXC-918, EXC-880)"],
 ] as const;
@@ -178,31 +175,23 @@ test("every replacement marker really does hide the character it draws over", as
 
 test("the combined surface settles instead of repainting forever", async ({ daemon, page }) => {
   await openShowcase(page, daemon);
-  // tables.ts settles a row by counting its children, so a pass that appends one inside
-  // a celled row loops the repaint observer — ~10,800 childList mutations in two seconds
-  // when EXC-870 met it. Every pass has shown its own zero in isolation; this is the
-  // first time all of them run over one document, and over the fixture's SEVEN carded
-  // tables rather than the one or two a purpose-built plan carries.
+  // A pass that appends a node to a row a settle check counts loops the repaint observer
+  // — ~10,800 childList mutations in two seconds when EXC-870 met it. Every pass has
+  // shown its own zero in isolation; this is the first time all of them run over one
+  // document.
   const mutations = await settledMutations(page);
   const settled = await page.evaluate(() => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
     const rows = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])];
     return {
       rows: rows.length,
-      celled: rows.filter((r) => r.querySelector(":scope > [data-table-cell]") !== null).length,
-      decoratedInsideCells: rows.filter(
-        (r) =>
-          r.querySelector(":scope > [data-table-cell]") !== null &&
-          r.querySelector("[data-md], [data-file-ref]") !== null,
-      ).length,
+      decorated: rows.filter((r) => r.querySelector("[data-md], [data-file-ref]") !== null).length,
     };
   });
   expect(mutations).toBe(0);
-  // Not a vacuous zero: the celled rows really are there, and some of them really do
-  // carry a decoration — the arrangement the child-count trap needs to fire at all.
+  // Not a vacuous zero: the rows really are there, and they really do carry decorations.
   expect(settled.rows).toBeGreaterThan(500);
-  expect(settled.celled).toBeGreaterThan(0);
-  expect(settled.decoratedInsideCells).toBeGreaterThan(0);
+  expect(settled.decorated).toBeGreaterThan(0);
 });
 
 test("compare mode offers none of the decorations", async ({ daemon, page }) => {
@@ -243,18 +232,13 @@ test("copying across the marker families yields the source verbatim", async ({
   await openShowcase(page, daemon);
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
 
-  // The span is chosen by what its rows CARRY, and it deliberately stops short of the
-  // first table cell. That boundary is the whole test: SourceView hands a selection that
-  // crosses a carded table to tableCopy.ts, which rebuilds the clipboard from TEXT NODES
-  // only — and a pseudo-element is not a text node, so on that path a leaked glyph is
-  // impossible by construction and the equality below would prove nothing. Blink's own
-  // serializer runs on a table-free span, and that one really can emit generated content,
-  // exactly as EXC-870 found it emitting an image's alt.
-  //
-  // What the span still crosses: the quoted task's level bar and checkbox, the bullets
-  // and ordered markers under "Bullet and ordered lists", and the nested quote bars under
-  // "Quoted text" — three of the four replacement markers plus the list marker family.
-  // The thematic break is copied separately below, since it sits past the tables.
+  // The span is chosen by what its rows CARRY, at both ends: it opens on the quoted task's
+  // row and closes on the last row of the quoted-text section below it, so what it crosses
+  // is that first row's level bar and checkbox, the bullets and ordered markers under
+  // "Bullet and ordered lists", and the nested bars under "Quoted text" — three of the four
+  // replacement markers plus the list marker family. Blink's own serializer really can emit
+  // generated content, exactly as EXC-870 found it emitting an image's alt. The thematic
+  // break is copied separately below.
   const copied = await page.evaluate(async () => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot as
       | (ShadowRoot & { getSelection?: () => Selection | null })
@@ -265,8 +249,11 @@ test("copying across the marker families yields the source verbatim", async ({
         r.querySelector("[data-md-quote]") !== null &&
         r.querySelector("[data-md-checkbox]") !== null,
     );
-    const firstCell = rows.findIndex((r, i) => i > from && r.querySelector("[data-table-cell]"));
-    const to = (firstCell < 0 ? rows.length : firstCell) - 1;
+    // The last quoted row within reach of the opening one. Bounded rather than "the last
+    // quote row on the page" so a construct added further down the fixture cannot silently
+    // stretch the span into one whose failure would be about something else.
+    const reach = rows.slice(from + 1, from + 41);
+    const to = from + 1 + reach.findLastIndex((r) => r.querySelector("[data-md-quote]") !== null);
     if (sh == null || from < 0 || to <= from) return { span: [from, to], clipboard: "", rows: [] };
     const range = document.createRange();
     range.setStartBefore(rows[from] as Node);
@@ -306,7 +293,7 @@ test("copying a thematic break yields its dashes, not the drawn line", async ({
 }) => {
   await openShowcase(page, daemon);
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  // The rule's own row, alone and table-free so Blink serializes it. Every character on
+  // The rule's own row, alone so Blink serializes it. Every character on
   // it is transparent and the line itself is a background layer, so the risk here is the
   // mirror of the one above: the row copying as an empty line rather than as its dashes.
   const copied = await page.evaluate(async () => {
@@ -540,29 +527,25 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
       quoteBar: pick("[data-content] [data-line] [data-md-quote]", (el) => {
         return getComputedStyle(el, "::before").backgroundColor;
       }),
+      // The checkbox is drawn rather than typed, so its ink rides the box's border.
       checkbox: pick("[data-content] [data-line] [data-md-checkbox]", (el) => {
-        return getComputedStyle(el, "::before").color;
+        return getComputedStyle(el, "::before").borderTopColor;
       }),
       rule: pick("[data-content] [data-line][data-md-rule]", (el) => {
         return getComputedStyle(el).backgroundImage;
       }),
-      separator: pick("[data-content] [data-line][data-table-rule]", (el) => {
-        return getComputedStyle(el).borderBottomColor;
-      }),
     };
   });
 
-  // One assertion per side of EXC-871's replacement/supplementary rule, on the palette
-  // that made the rule necessary: the four replacement marks land on this palette's
-  // --ink-soft, the supplementary separator on its --ink-faint. Opaque on both sides —
-  // the separator spent a 10%-alpha --rule until this sweep, and an alpha suffix here
-  // would be that regression coming back.
+  // EXC-871's replacement/supplementary rule, on the palette that made it necessary: a
+  // mark that REPLACES its source glyph lands on this palette's --ink-soft, a step above
+  // the --ink-faint the markers that survive take. Opaque throughout — an alpha suffix
+  // here would be the 10%-alpha --rule regression coming back.
   expect(paint.inkSoft).not.toBe(paint.inkFaint);
   expect(paint.bullet).toBe(paint.inkSoft);
   expect(paint.quoteBar).toBe(paint.inkSoft);
   expect(paint.checkbox).toBe(paint.inkSoft);
   expect(paint.rule).toContain(paint.inkSoft);
-  expect(paint.separator).toBe(paint.inkFaint);
 
   // The chip is four background layers, one per member, each resolving to `transparent`
   // through its var() fallback when its member is absent — so "contains a gradient" would

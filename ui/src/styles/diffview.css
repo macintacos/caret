@@ -39,12 +39,19 @@
      draws --text-base (≈13.12px at the 16px root) where .mono draws --text-sm
      (≈12.48px). The two are different surfaces — the diff is a dense reading
      grid where the larger step reads crisper and matches @pierre/diffs's ~13px
-     host reference, so it earns its own step rather than sharing .mono's. Line-
-     height stays --leading-normal (1.55), so the diff shares the body's reading
-     rhythm; at this size that resolves to ≈20.34px, near the library's 20px
-     reference. Both stay well above the ~11.5px legibility floor. */
+     host reference, so it earns its own step rather than sharing .mono's.
+
+     Line-height takes --leading-relaxed (1.7) rather than the --leading-normal
+     the chrome reads at, and the step is the markdown decorations' rather than a
+     preference: the plan view draws inline chips around emphasis, code, links
+     and references, and a chip is taller than the glyphs it wraps. At the
+     chrome's rhythm a chip on one row nearly touched the chip on the next. One
+     step looser resolves to ≈22.3px here, against ≈20.34px before and the
+     library's 20px reference — enough to separate two stacked chips, small
+     enough that a long plan does not read as double-spaced. Both stay well above
+     the ~11.5px legibility floor. */
   --diffs-font-size: var(--text-base);
-  --diffs-line-height: var(--leading-normal);
+  --diffs-line-height: var(--leading-relaxed);
   --diffs-tab-size: 2;
   /* Tabular figures for the line-number column and the +N/-N header counts. The
      library passes this straight into font-feature-settings on its :host, so the

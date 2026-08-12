@@ -31,6 +31,7 @@ const LEADING_TOKENS: Record<string, string> = {
   "--leading-tight": "1.3",
   "--leading-snug": "1.45",
   "--leading-normal": "1.55",
+  "--leading-relaxed": "1.7",
 };
 
 describe("the --text-*/--leading-* type scale in app.css", () => {
@@ -70,13 +71,14 @@ describe("the --text-*/--leading-* type scale in app.css", () => {
   // EXC-621's committed per-surface decision. The diff mono is stepped UP to the
   // --text-base step (0.82rem ≈ 13.12px at the 16px root) — the library's ~13px
   // reference — for crispness, decoupled from the .mono inline-chrome step
-  // (--text-sm ≈ 12.48px). Diff line-height stays --leading-normal so the diff
-  // shares the chrome's reading rhythm. Pinning the exact step makes the
-  // size/line-height choice falsifiable, not just prose.
+  // (--text-sm ≈ 12.48px). Its line-height is stepped up too, to --leading-relaxed:
+  // the plan view draws inline chips, and a chip is taller than its glyphs, so two
+  // stacked chips need the extra leading between the rows. Pinning both exact steps
+  // makes the size/line-height choice falsifiable, not just prose.
   test("the .diffview bridge commits the diff-mono step-up to --text-base", () => {
     const rule = appCss.match(/\.diffview\s*\{([\s\S]*?)\}/)?.[1] ?? "";
     expect(rule).toMatch(/--diffs-font-size:\s*var\(--text-base\);/);
-    expect(rule).toMatch(/--diffs-line-height:\s*var\(--leading-normal\);/);
+    expect(rule).toMatch(/--diffs-line-height:\s*var\(--leading-relaxed\);/);
   });
 
   // The chrome reading base is held at 15px (EXC-621). It is an absolute-px

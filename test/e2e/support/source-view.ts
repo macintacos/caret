@@ -191,11 +191,10 @@ export function taggedRuns(
 /** Watch the source view's shadow root for childList mutations, then resolve with the
  * count once it has stopped moving.
  *
- * The claim every decoration pass owes: that the repaint SETTLES. `tables.ts` decides a
- * row is settled by comparing its child count to its cell count, so a pass that adds a
- * child to a celled row makes every repaint rebuild it — the runaway EXC-870 measured at
- * ~10,800 mutations in two seconds with an image. Every pass since has had to show its
- * own zero.
+ * The claim every decoration pass owes: that the repaint SETTLES. A pass that adds a
+ * child to a row another pass then rebuilds — because its own settle check counts that
+ * row's children — loops the repaint observer, the runaway EXC-870 measured at ~10,800
+ * mutations in two seconds with an image. Every pass since has had to show its own zero.
  *
  * Settling is asserted by polling for the counter to STOP moving rather than by sampling
  * a fixed window: auto-retrying is the suite's timing discipline (`waitForTimeout` is

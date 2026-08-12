@@ -748,7 +748,11 @@
     overflow-anchor: none;
     font-family: var(--font-mono);
     font-size: var(--text-base);
-    line-height: var(--leading-normal);
+    /* Both metrics are the plan surface's, not the chrome's: the excerpt reads as a
+       window onto the same grid, so it takes the same step-up in leading the plan
+       view takes (styles/diffview.css carries why). file-refs.e2e.ts compares the
+       two computed styles axis for axis, so they cannot drift apart silently. */
+    line-height: var(--leading-relaxed);
     font-feature-settings: "tnum";
     color: var(--ink);
     /* A whole screen of code arriving in one frame reads as a cut. It settles up

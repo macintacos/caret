@@ -2,11 +2,10 @@
 // — the amber drag-select band, and the composer's own highlight — and applies it in
 // InteractionManager.renderSelection, which walks [data-content]'s DIRECT children and
 // `continue`s past anything carrying no line index. A card carries none, so the library
-// skips it whole and every row inside it goes unbanded: a gutter drag entirely within a
-// table marks nothing at all, and one that runs from prose into a table stops dead at
-// the card while the range readout keeps counting. Both card kinds have the defect —
-// tables.ts's and codeBlockScroll.ts's — because the card is what causes it, not the
-// table.
+// skips it whole and every row inside it goes unbanded: a gutter drag entirely within an
+// overflowing fenced block marks nothing at all, and one that runs from prose into it
+// stops dead at the card while the range readout keeps counting. The card is what causes
+// the defect, not what is inside it.
 //
 // This pass re-applies the library's own marks inside each card, from the range caret
 // already holds. It deliberately mirrors renderSelection's algorithm rather than
@@ -28,7 +27,6 @@
 // shape tagCursorRow and paintSearchHighlights already use.
 
 import { CARD_ATTR, GUTTER_CARD_ATTR } from "$lib/diffview/codeBlockScroll.ts";
-import { TABLE_CARD_ATTR, TABLE_GUTTER_CARD_ATTR } from "$lib/diffview/tables.ts";
 
 /** An ascending, inclusive, 1-based line range. Ascending is this module's contract,
  * not its callers' — the library reports a gutter drag in gesture order, so SourceView
@@ -39,12 +37,6 @@ export interface SelectedLines {
 }
 
 const SELECTED = "data-selected-line";
-
-/** Each card kind as its content attribute and the gutter attribute that mirrors it. */
-const CARD_KINDS: [content: string, gutter: string][] = [
-  [TABLE_CARD_ATTR, TABLE_GUTTER_CARD_ATTR],
-  [CARD_ATTR, GUTTER_CARD_ATTR],
-];
 
 /** Writes `value` (or clears it, for `null`) only when it differs from what is there. */
 function mark(el: Element | undefined, value: string | null): void {
@@ -71,8 +63,7 @@ type Marker = [content: string | null, gutter: string | null];
  * marker moves onto it and the CONTENT row alone is demoted — the gutter cell keeps
  * what it had. Faithful rather than tidied: the point of this pass is that a carded row
  * and an uncarded one are marked identically, so an inconsistency belongs upstream, not
- * here. The annotation row now sits inside the card with its own row (tables.ts's
- * unwrappedSlice), which is what brings that branch within reach at all.
+ * here.
  */
 function markers(children: Element[], range: SelectedLines | null): Marker[] {
   const wanted: Marker[] = children.map(() => [null, null]);
@@ -117,18 +108,16 @@ export function paintCardSelection(root: ParentNode | null, range: SelectedLines
   const content = root?.querySelector("[data-content]");
   const gutter = root?.querySelector("[data-gutter]");
   if (content == null || gutter == null) return;
-  for (const [contentAttr, gutterAttr] of CARD_KINDS) {
-    for (const card of content.querySelectorAll(`:scope > [${contentAttr}]`)) {
-      const key = card.getAttribute(contentAttr) ?? "";
-      const mirror = gutter.querySelector(`:scope > [${gutterAttr}="${key}"]`);
-      if (mirror === null) continue;
-      const rows = [...card.children];
-      const cells = [...mirror.children];
-      if (rows.length !== cells.length) continue;
-      for (const [i, [inContent, inGutter]] of markers(rows, range).entries()) {
-        mark(rows[i], inContent);
-        mark(cells[i], inGutter);
-      }
+  for (const card of content.querySelectorAll(`:scope > [${CARD_ATTR}]`)) {
+    const key = card.getAttribute(CARD_ATTR) ?? "";
+    const mirror = gutter.querySelector(`:scope > [${GUTTER_CARD_ATTR}="${key}"]`);
+    if (mirror === null) continue;
+    const rows = [...card.children];
+    const cells = [...mirror.children];
+    if (rows.length !== cells.length) continue;
+    for (const [i, [inContent, inGutter]] of markers(rows, range).entries()) {
+      mark(rows[i], inContent);
+      mark(cells[i], inGutter);
     }
   }
 }

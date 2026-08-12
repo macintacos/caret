@@ -108,7 +108,15 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
     // should be, and squaring a nested member is how a pill stays one shape (EXC-868
     // squares a file reference sitting inside a codespan). Any other literal still
     // fails, so the token discipline this test exists for is intact.
-    const radiusRules = overrideDecls.match(/border-[a-z-]*radius:\s*[^;]+;/g) ?? [];
+    //
+    // The drawn checkbox is exempt and is filtered out rather than admitted: --radius is
+    // the CHROME radius, sized for panels and chips, and a checkbox is a control roughly
+    // one em across — at that size the shared token rounds it most of the way to a circle.
+    // Its corner is part of the shape being drawn, the way its border width and its size
+    // are, so it is measured in the same em the rest of the control is.
+    const radiusRules = (overrideDecls.match(/[^{}]*\{[^{}]*border-[a-z-]*radius:[^{}]*\}/g) ?? [])
+      .filter((block) => !block.includes("checkbox"))
+      .flatMap((block) => block.match(/border-[a-z-]*radius:\s*[^;]+;/g) ?? []);
     expect(radiusRules.length).toBeGreaterThan(0);
     for (const rule of radiusRules) {
       expect(rule).toMatch(/:\s*(var\(--radius\)|0);/);
@@ -229,7 +237,7 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
     // scroll container, so anything painted outside that box is clipped. The strip is
     // painted from the gutter cell instead, which nothing clips.
     const extension = overrideDecls.match(
-      /\[data-gutter\]\s+:is\(\[data-table-card-gutter\], \[data-code-card-gutter\]\)\s*>\s*\[data-column-number\]:is\([^)]*\)::before\s*\{([^}]*)\}/,
+      /\[data-gutter\]\s+\[data-code-card-gutter\]\s*>\s*\[data-column-number\]:is\([^)]*\)::before\s*\{([^}]*)\}/,
     );
     expect(extension).not.toBeNull();
     // Its width is exactly the two insets it has to cover, both named rather than
@@ -247,7 +255,7 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
     );
     // And the card's own inset reads the same token, so the two cannot drift.
     expect(overrideDecls).toMatch(
-      /\[data-content\]\s*>\s*\[data-table-card\]\s*\{[^}]*margin-inline:\s*var\(--caret-card-inset\)/,
+      /\[data-content\]\s*>\s*\[data-code-card\]\s*\{[^}]*margin-inline:\s*var\(--caret-card-inset\)/,
     );
   });
 
@@ -257,10 +265,10 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
     for (const corner of ["top-left", "top-right", "bottom-left", "bottom-right"]) {
       const column = corner.endsWith("left") ? "gutter" : "content";
       const card = corner.endsWith("left")
-        ? String.raw`\[data-table-card-gutter\], \[data-code-card-gutter\]`
-        : String.raw`\[data-table-card\], \[data-code-card\]`;
+        ? String.raw`\[data-code-card-gutter\]`
+        : String.raw`\[data-code-card\]`;
       const override = new RegExp(
-        String.raw`\[data-${column}\][^{}]*:is\(${card}\)[^{}]*\{[^}]*border-${corner}-radius:\s*0`,
+        String.raw`\[data-${column}\][^{}]*${card}[^{}]*\{[^}]*border-${corner}-radius:\s*0`,
       );
       expect(overrideDecls).toMatch(override);
       // The override ties with the widened rule on specificity and wins on source order
@@ -272,36 +280,6 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
       expect(overrideDecls.search(widened)).toBeGreaterThan(-1);
       expect(overrideDecls.search(override)).toBeGreaterThan(overrideDecls.search(widened));
     }
-  });
-
-  test("places a carded comment's row across the table's columns", () => {
-    const row = overrideDecls.match(
-      /\[data-content\]\s*>\s*\[data-table-card\]\s*>\s*\[data-line-annotation\]\s*\{([^}]*)\}/,
-    );
-    expect(row).not.toBeNull();
-    expect(row?.[1]).toMatch(/grid-column:\s*1\s*\/\s*-1/);
-    // Out of the track sizing: a spanning grid item contributes its own max-content to
-    // every track it covers, and a composer's would push a narrow table into scroll.
-    expect(row?.[1]).toMatch(/contain:\s*inline-size/);
-    // The drawn width and the sticky position both belong on the library's wrapper, not
-    // on the row: the row is stretched to its whole grid area, so it has no slack to
-    // stick within, and a definite width on it is distributed back into the tracks.
-    expect(row?.[1]).not.toMatch(/position:\s*sticky/);
-    const content = overrideDecls.match(
-      /\[data-table-card\]\s*>\s*\[data-line-annotation\]\s*>\s*\[data-annotation-content\]\s*\{([^}]*)\}/,
-    );
-    // Capped by BOTH the reading measure and the card's own visible width. The reading
-    // measure alone is right only while the pane is wide enough for the card to reach
-    // it; below that the comment overhangs the card and the Comment button lands beyond
-    // its scroll edge.
-    expect(content?.[1]).toMatch(/max-width:\s*min\(/);
-    expect(content?.[1]).toMatch(/var\(--caret-read-max\)/);
-    expect(content?.[1]).toMatch(/var\(--diffs-column-content-width/);
-    expect(content?.[1]).toMatch(/var\(--caret-seam\)/);
-    expect(content?.[1]).toMatch(/var\(--caret-card-inset\)/);
-    // And the library's own sticky offset, meant for the whole view's sideways scroll,
-    // is reset — inside a card it measures against the wrong scroll box.
-    expect(content?.[1]).toMatch(/inset-inline-start:\s*0/);
   });
 });
 
@@ -409,52 +387,17 @@ describe("the fenced code-block panel (EXC-692)", () => {
   });
 });
 
-// EXC-869: the ``` / ~~~ delimiters stay visible and take the EXC-855 chip family's
-// round-rect treatment, so a fenced block reads as a deliberate element. Nothing is
-// hidden, so this suite pins the chip's shape rather than any row's absence.
-describe("the fence-marker chip (EXC-869)", () => {
-  // Matched from [data-content] so the assertions below can read the COMBINATOR, not
-  // just the body. [^{}] can cross neither brace, so the match stays inside one rule's
-  // selector; [data-code-line] is what separates the chip from the EXC-692 centering
-  // rules, which name [data-code-fence] under [data-code-end] instead.
-  const chipRule =
-    overrideDecls.match(
-      /\[data-content\][^{}]*\[data-code-line\][^{}]*\[data-code-fence\]\s*\{[^}]*\}/,
-    )?.[0] ?? "";
-
-  test("fills the fence markers with the family's inline-code chip token", () => {
-    // The tint is CONSUMED, never redefined here: --chip-code is the chip family's shared
-    // token, derived for all nine palettes by the recipe (EXC-858), so the fence chip and
-    // the inline-code chip (EXC-868) spend one token rather than a matched value — one
-    // token, not one rendered colour, for the reasons the rule itself carries. A bare
-    // var() with no fallback is the point here: a fallback would silently paint a second,
-    // unreviewed tint if the token ever stopped resolving.
-    expect(chipRule).toMatch(/background-color:\s*var\(--chip-code\)/);
-    expect(chipRule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
-    expect(chipRule).not.toMatch(/color-mix/);
-  });
-
-  test("wears the family's shared radius", () => {
-    expect(chipRule).toMatch(new RegExp(String.raw`border-radius:\s*${RADIUS}`));
-  });
-
-  test("shifts no column: any inline padding is cancelled by an equal negative margin", () => {
-    // Rows render white-space: pre, so UNCANCELLED inline padding on a token moves every
-    // glyph after it. Inline padding is allowed only paired with an equal negative margin —
-    // the escape hatch [data-file-ref] already uses in this sheet — so this pins the
-    // column-parity invariant rather than banning the technique.
-    expect(chipRule).not.toMatch(/padding-left|padding-right|margin-left|margin-right/);
-    const pad = chipRule.match(/padding-inline:\s*([\d.]+)em/)?.[1];
-    const margin = chipRule.match(/margin-inline:\s*-([\d.]+)em/)?.[1];
-    expect(pad).toBe(margin); // both absent, or equal and opposite
-  });
-
-  test("reaches the scroll card's rows as well as the direct-child rows", () => {
-    // An overflowing block's rows are re-parented into [data-code-card], so a child
-    // combinator would chip only the fitting blocks. The selector is a descendant one.
-    expect(chipRule).not.toMatch(/\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]/);
-    expect(chipRule).toMatch(/\[data-content\]\s+\[data-line\]\[data-code-line\]/);
-  });
+// The fence markers take NO chip. EXC-869 gave them one and it was the family member that
+// never read as one — a chip tints a span of CONTENT, and a fence row is all marker and no
+// content, so the tint drew a small empty pill inside the code panel. What they keep is
+// their ink (caret-theme.ts) and the EXC-692 centering nudges, which are about where the
+// marker sits in its line box rather than about tinting it.
+test("draws no chip on the fence markers", () => {
+  const fenceRules = rulesFor(String.raw`\[data-code-fence\]`).join("\n");
+  expect(fenceRules).not.toMatch(/background|border-radius/);
+  // Asserted against the centering rules still being there, so this cannot pass by the
+  // selector having vanished from the sheet altogether.
+  expect(fenceRules).toMatch(/top:\s*-?[\d.]+em/);
 });
 
 // EXC-867: the inline emphasis chips, the first prose members of the EXC-855 chip family.
@@ -515,14 +458,26 @@ describe("the inline emphasis chips (EXC-867)", () => {
     expect(fillRule).not.toMatch(/border-radius/);
   });
 
-  test("shifts no column: the chip carries no padding or margin at all", () => {
-    // The issue's own de-escalation ladder names the monospace grid as the likeliest
-    // trigger. Rows render white-space: pre, so inline padding moves every glyph after the
-    // chip and vim motions, drag ranges and search highlights stop matching source columns.
-    // [data-file-ref]'s cancelled padding/negative-margin pair is not available here —
-    // emphasis chips can abut, so the negative margins would overlap.
+  test("pads at the pill's ends only, so an interior fragment opens no gap", () => {
+    // A pill fragmented into several runs is several ELEMENTS, and inline padding on each
+    // would space the pill's own glyphs apart from the inside. data-md-start / data-md-end
+    // are exactly the pill's outer ends (the pass withholds them from a nested member, for
+    // the radius's sake), so the inline half hangs there and the fill rule carries only the
+    // block half — which is on the cross axis, where every fragment shares one line box.
+    expect(fillRule).toMatch(/padding-block:\s*var\(--chip-pad-block\)/);
+    expect(fillRule).not.toMatch(/padding-inline|padding-left|padding-right/);
+    expect(startRule).toMatch(/padding-inline-start:\s*var\(--chip-pad-inline\)/);
+    expect(endRule).toMatch(/padding-inline-end:\s*var\(--chip-pad-inline\)/);
+  });
+
+  test("shifts its neighbours rather than cancelling the padding under them", () => {
+    // EXC-867 shipped these unpadded and EXC-880 cancelled the reference's padding with a
+    // negative margin, both to keep the monospace grid matching the source columns. The
+    // shift is now intended: nothing resolves a column in pixels (anchors and motions are
+    // character-indexed, the search marks paint over DOM ranges), and a cancelled pair
+    // spends the fill UNDER the neighbouring glyph — so two chips either side of one
+    // character double-coat its cell, which is the look this replaces.
     for (const rule of [fillRule, startRule, endRule]) {
-      expect(rule).not.toMatch(/padding/);
       expect(rule).not.toMatch(/margin/);
     }
   });
@@ -623,9 +578,6 @@ describe("the link chip (EXC-859)", () => {
 // repeated here.
 describe("the inline-code chip (EXC-868)", () => {
   const fillRule = rulesFor(String.raw`\[data-md\]`)[0] ?? "";
-  const fenceRule = rulesFor(String.raw`\[data-code-fence\]`).find((r) =>
-    r.includes("background-color:"),
-  );
   const nestedRef = rulesFor(String.raw`\[data-file-ref\]\[data-md~="code"\]`)[0] ?? "";
 
   test("spends the family's inline-code tint through a layer of its own", () => {
@@ -639,25 +591,23 @@ describe("the inline-code chip (EXC-868)", () => {
     expect(fillRule).not.toMatch(/--md-code:\s/);
   });
 
-  test("spends whatever token the fence chip spends, rather than a second value", () => {
-    // The account of WHY one token serves two surfaces lives on the rule itself in
-    // coreStyles.ts; what is pinned here is only that the two never drift apart. Read
-    // the token out of each rule and compare, so this fails on a second value being
-    // introduced anywhere rather than on --chip-code specifically being named.
-    const token = (rule: string) => rule.match(/var\((--chip-[a-z]+)\)/)?.[1];
-    expect(token(fenceRule ?? "")).toBe("--chip-code");
-    expect(token(tintRule("code"))).toBe(token(fenceRule ?? ""));
+  test("spends the family's derived code token, never a second value", () => {
+    // The tint is CONSUMED, never redefined here: --chip-code is derived for all nine
+    // palettes by the recipe (EXC-858), so the code chip carries the same relationship to
+    // whatever ground it sits on in every one of them. A literal — or a color-mix spelled
+    // out here — would be a tenth palette declared by hand.
+    expect(tintRule("code")).toMatch(/var\(--chip-code\)/);
+    expect(tintRule("code")).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(tintRule("code")).not.toMatch(/color-mix/);
   });
 
   test("squares and unpads a file reference sitting inside a codespan", () => {
-    // [data-file-ref] is shaped as a STANDALONE pill: 0.3em of inline breathing room
-    // cancelled by a negative margin, 0.1em of block padding, and its own radius. Inside
-    // a codespan it is a stretch of hue in someone else's pill, and each of those three
-    // draws a seam — the overhang double-coats the translucent chip under each backtick,
-    // the block padding leaves the tint proud, and the radius notches the fill once the
-    // box no longer overlaps its neighbours. All three go, together.
+    // [data-file-ref] is shaped as a STANDALONE pill: the family's breathing room on both
+    // axes, and its own radius. Inside a codespan it is a stretch of hue in someone else's
+    // pill — one already padded at both ends — so its own padding would space the path away
+    // from the backticks meant to sit tight around it, and its radius would notch the fill
+    // it sits in. Both go, together.
     expect(nestedRef).toMatch(/padding:\s*0;/);
-    expect(nestedRef).toMatch(/margin-inline:\s*0;/);
     expect(nestedRef).toMatch(/border-radius:\s*0;/);
     // Scoped to a reference the pass tagged as code: a prose-labelled reference carries
     // no member, so it must keep the standalone chip this rule is carved out of.
@@ -808,17 +758,20 @@ describe("the list markers (EXC-861)", () => {
 
 // EXC-860: the task-list checkbox, drawn over the `[ ]` / `[x]` run inlineSpans.ts already
 // tags. Structurally this is the list marker one block up scaled from one character cell to
-// three, so the assertions are deliberately its assertions — what differs is the centring
-// offset the extra two cells need, and that state is told by SHAPE rather than by colour.
-// That the run really measures three cells and that the glyph really paints is tasks.e2e.ts's
-// job; this suite pins the declarations.
+// three, and it is DRAWN rather than typed: a box (::before) and, on a done item, a tick
+// (::after). A glyph took its weight, its corner radius and its size from whichever font
+// the platform resolved, which is what made the U+2610 / U+2611 pair read as ASCII art of a
+// checkbox rather than as a control. That the run really measures three cells and that the
+// box really paints is tasks.e2e.ts's job; this suite pins the declarations.
 describe("the task-list checkbox (EXC-860)", () => {
   const runRule = rulesFor(String.raw`\[data-md-checkbox\]`)[0] ?? "";
   const glyphRule = rulesFor(String.raw`\[data-md-checkbox\]::before`)[0] ?? "";
-  const uncheckedRule = rulesFor(String.raw`\[data-md-checkbox="unchecked"\]::before`)[0] ?? "";
   const checkedRule = rulesFor(String.raw`\[data-md-checkbox="checked"\]::before`)[0] ?? "";
+  const tickRule = rulesFor(String.raw`\[data-md-checkbox="checked"\]::after`)[0] ?? "";
+  // Anchored on ::after because the rule lists both pseudo-elements and rulesFor matches
+  // the selector that immediately precedes the brace.
   const suppressRule =
-    rulesFor(String.raw`\[data-md-checkbox\] ~ \[data-md-checkbox\]::before`)[0] ?? "";
+    rulesFor(String.raw`\[data-md-checkbox\] ~ \[data-md-checkbox\]::after`)[0] ?? "";
 
   test("hands the bracket run's own cells to the glyph drawn over them", () => {
     // Transform-in-place (EXC-855): the brackets are still in the DOM and still copied —
@@ -827,24 +780,32 @@ describe("the task-list checkbox (EXC-860)", () => {
   });
 
   test("tells the two states apart by shape, not by colour", () => {
-    // Both states spend the SAME ink and differ only in the glyph, so the distinction
-    // survives a reader who cannot separate the two by hue (EXC-863 records the same
-    // failure one rule family over). The sheet's own block carries the full argument.
-    expect(uncheckedRule).toMatch(/content:/);
-    expect(checkedRule).toMatch(/content:/);
-    expect(uncheckedRule.match(/content:[^;]*/)?.[0]).not.toBe(
-      checkedRule.match(/content:[^;]*/)?.[0],
-    );
-    expect(`${uncheckedRule}${checkedRule}`).not.toMatch(/color|opacity/);
+    // The unchecked state is the outlined box alone; the checked one fills that same box
+    // and adds the tick. Neither introduces a hue or an opacity step of its own, so the
+    // distinction survives a reader who cannot separate two colours (EXC-863 records the
+    // same failure one rule family over).
+    expect(checkedRule).toMatch(/background-color:\s*var\(--ink-soft\)/);
+    expect(tickRule).toMatch(/border:/);
+    expect(tickRule).toMatch(/transform:\s*rotate\(45deg\)/);
+    // The tick is knocked out of the fill rather than tinted: --paper is the ground the
+    // pinned --ink-soft ratio is already measured against, so the pair needs no second
+    // measurement of its own.
+    expect(tickRule).toMatch(/var\(--paper\)/);
+    expect(checkedRule).not.toMatch(/opacity/);
   });
 
-  test("pins the checked box to its text presentation", () => {
-    // VARIATION SELECTOR-15. Without it a platform carrying a colour emoji font may
-    // substitute a picture for U+2611, and an emoji ignores `color` — the box would stop
-    // taking the theme's ink, which is precisely the failure the ink test below cannot
-    // see. U+2610 needs no pin: it carries no Emoji property, so nothing may substitute.
-    expect(checkedRule).toContain(String.raw`\\FE0E`);
-    expect(uncheckedRule).not.toContain(String.raw`\\FE0E`);
+  test("is drawn rather than typed, so no font decides how it looks", () => {
+    // The whole point of the shape. A glyph renders at the text's own stroke weight in
+    // whichever face the platform resolved — and a colour emoji font may substitute a
+    // picture outright, which ignores color. An empty content string with a border, a
+    // radius and an explicit size is the same control in every font and every palette.
+    for (const rule of [glyphRule, tickRule]) {
+      expect(rule).toMatch(/content:\s*""/);
+      expect(rule).toMatch(/box-sizing:\s*border-box/);
+    }
+    expect(glyphRule).toMatch(/border-radius:/);
+    // Sized in em, so the control tracks the type scale rather than one viewport's pixels.
+    expect(overrideDecls).toMatch(/--checkbox-size:\s*[\d.]+em/);
   });
 
   test("spends one step above the faint marker ink, which the floor requires", () => {
@@ -854,37 +815,46 @@ describe("the task-list checkbox (EXC-860)", () => {
     // test measures) --ink-faint falls under that floor on two of the nine palettes.
     // theme.test.ts pins the ink chosen here against all nine on that surface; this only
     // holds the sheet to the same token, so the two cannot drift apart.
-    expect(glyphRule).toMatch(/color:\s*var\(--ink-soft\)/);
+    expect(glyphRule).toMatch(/border:[^;]*var\(--ink-soft\)/);
     expect(glyphRule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(glyphRule).not.toMatch(/--chip-/);
     expect(glyphRule).not.toMatch(/opacity/);
   });
 
-  test("draws the glyph out of flow so no column moves", () => {
+  test("draws out of flow so no column moves", () => {
     // Identical reasoning to the bullet: rows render white-space: pre, so a pseudo-element
-    // in flow would push every glyph after it. Absolute with NO inset lands the box at its
-    // static position; an inset would resolve it against some ancestor instead, and padding
-    // or margin would cost width.
-    expect(glyphRule).toMatch(/position:\s*absolute/);
-    expect(glyphRule).not.toMatch(/\b(top|left|right|bottom|inset[a-z-]*)\s*:/);
-    expect(glyphRule).not.toMatch(/\b(padding|margin)[a-z-]*\s*:/);
+    // in flow would push every glyph after it. Absolutely positioned, it contributes
+    // nothing to the line whatever its size, so the three source columns keep their
+    // advance and no margin is needed (or allowed) to claw any back.
+    for (const rule of [glyphRule, tickRule]) {
+      expect(rule).toMatch(/position:\s*absolute/);
+      expect(rule).not.toMatch(/\bmargin[a-z-]*\s*:/);
+    }
   });
 
-  test("centres over three cells with transform, which costs no advance", () => {
-    // The one place this cannot copy the bullet. A bullet overdraws ONE cell and needs no
-    // offset; the brackets are THREE, so a one-cell glyph left at its static position would
-    // sit over the opening bracket rather than over the run. translateX moves the box from
-    // its own static position and is not a layout property, so the centring is free — which
-    // is exactly why it is spelled this way rather than with an inset.
-    expect(glyphRule).toMatch(/transform:\s*translateX\(1ch\)/);
+  test("centres both halves on the same point in the three-cell run", () => {
+    // A bullet overdraws ONE cell and needs no offset; the brackets are THREE, so the box
+    // has to be placed in them — 1.5ch is the run's middle, and half the box's own width
+    // brings its edge back to centre it there. The tick measures from the same 1.5ch and
+    // the same --checkbox-size, so the two cannot drift apart. Both are anchored to the
+    // MARKER SPAN (position: relative), because ::after's static position is past the
+    // run's three characters and would otherwise land the tick beside the box.
+    expect(runRule).toMatch(/position:\s*relative/);
+    for (const rule of [glyphRule, tickRule]) {
+      expect(rule).toMatch(/inset-inline-start:\s*calc\(1\.5ch/);
+      expect(rule).toMatch(/var\(--checkbox-size\)/);
+    }
   });
 
-  test("keeps the glyph out of the clipboard", () => {
+  test("keeps the drawn box out of the clipboard", () => {
     // The epic's copy contract. Blink emits generated content into the plain-text flavour
     // of a copied selection, invisible to Selection.toString() and visible only in the real
-    // clipboard, which tasks.e2e.ts reads. A leaked box would make a copied plan read
-    // `☐- [ ] item` and corrupt the markdown the epic exists to keep honest.
-    expect(glyphRule).toMatch(/user-select:\s*none/);
+    // clipboard, which tasks.e2e.ts reads. A drawn box cannot leak a character the way the
+    // ☐ glyph could, but generated content is still content, so both halves stay out of
+    // the selection outright.
+    for (const rule of [glyphRule, tickRule]) {
+      expect(rule).toMatch(/user-select:\s*none/);
+    }
   });
 
   test("draws one box per run, however many tokens shiki cut the run into", () => {
@@ -893,6 +863,9 @@ describe("the task-list checkbox (EXC-860)", () => {
     // boxes. The sheet's block carries the reasoning; what is pinned here is the rule's
     // two load-bearing properties.
     expect(suppressRule).toMatch(/content:\s*none/);
+    // Both halves are suppressed, or a second run would draw a stray tick beside the box.
+    expect(suppressRule).toContain("::before");
+    expect(suppressRule).toContain("::after");
     // GENERAL sibling, not adjacent: tagRow leaves a zero-length token untagged, which
     // would sit between two tagged ones and break an adjacent-only chain into two boxes.
     expect(suppressRule).toContain("[data-md-checkbox] ~ [data-md-checkbox]");
@@ -903,19 +876,20 @@ describe("the task-list checkbox (EXC-860)", () => {
     expect(attrs(suppressRule)).toBeGreaterThan(attrs(checkedRule));
   });
 
-  test("inherits the row's type metrics so the glyph keeps the baseline", () => {
-    // The glyph shares the row's baseline because it inherits the token's font and
-    // line-height and so builds an identical line box. Giving this pseudo-element a
-    // font-size or line-height of its own is the one edit that would silently break the
-    // alignment, which is why it is pinned rather than merely commented.
+  test("carries no type metrics of its own, so the em sizes track the row", () => {
+    // Both halves are sized from --checkbox-size, which is em-relative — so they resolve
+    // against the token's own inherited font-size. Declaring one here would silently
+    // decouple the control from the type scale the row is set in.
     expect(glyphRule).not.toBe("");
-    expect(glyphRule).not.toMatch(/font-size|line-height|font-family/);
+    for (const rule of [glyphRule, tickRule]) {
+      expect(rule).not.toMatch(/font-size|line-height|font-family/);
+    }
   });
 
   test("carries no transition", () => {
     // svelte-rules § Motion: the diff surface swaps state instantly. The non-empty guard is
     // what keeps this from passing on four selectors that resolved to nothing.
-    const all = [runRule, glyphRule, uncheckedRule, checkedRule];
+    const all = [runRule, glyphRule, checkedRule, tickRule];
     expect(all.filter((rule) => rule !== "")).toHaveLength(4);
     expect(all.join("")).not.toMatch(/transition/);
   });
@@ -1066,10 +1040,14 @@ describe("the filename-reference chip (EXC-840, tinted EXC-880)", () => {
   });
 
   test("the token reserves breathing room so the fill reads as a chip, not cramped", () => {
-    // Padding widens the fill out past the glyphs; a matching negative inline
-    // margin offsets it so the surrounding backticks never shift.
-    expect(tokenRule).toMatch(/padding/);
-    expect(tokenRule).toMatch(/margin-inline:\s*-/);
+    // Padding widens the fill out past the glyphs, and it is the chip family's own pair
+    // rather than a second set of numbers — a reference and a codespan beside it have to
+    // be spaced alike. EXC-880 cancelled the inline half with a negative margin so the
+    // backticks around a citation never shifted; that spends the fill UNDER the
+    // neighbouring glyph, so it is gone and the reference shifts its neighbours like
+    // every other chip.
+    expect(tokenRule).toMatch(/padding:\s*var\(--chip-pad-block\) var\(--chip-pad-inline\)/);
+    expect(tokenRule).not.toMatch(/margin/);
   });
 
   test("the chip rests in the derived reference tint, with the control radius", () => {
@@ -1120,100 +1098,6 @@ describe("the plan-search highlights (EXC-832, rehued EXC-905)", () => {
   test("neither spends the selection hue", () => {
     expect(allMatches).not.toContain("--accent");
     expect(currentMatch).not.toContain("--accent");
-  });
-});
-
-// EXC-864: a GFM table renders as a real column-aligned table. tables.ts moves its rows
-// into a card and groups each row's tokens into cells; these rules are the whole visual
-// treatment. The two nested subgrids are the load-bearing part — rows from the parent so
-// the gutter numbers stay aligned, columns from the card so cells line up across rows —
-// and the pipes are left in place to BE the borders rather than replaced by drawn ones.
-// This suite pins the CSS side; the rendered layout is covered by e2e.
-describe("the markdown table (EXC-864)", () => {
-  const cardBody =
-    overrideDecls.match(/\[data-content\]\s*>\s*\[data-table-card\]\s*\{[^}]*\}/)?.[0] ?? "";
-  const rowBody =
-    overrideDecls.match(
-      /\[data-content\]\s*>\s*\[data-table-card\]\s*>\s*\[data-line\]\s*\{[^}]*\}/,
-    )?.[0] ?? "";
-
-  test("takes its row tracks from the parent so the gutter stays aligned", () => {
-    expect(cardBody).toMatch(/display:\s*grid/);
-    expect(cardBody).toMatch(/grid-template-rows:\s*subgrid/);
-  });
-
-  test("declares the table's column tracks from the count tables.ts sets", () => {
-    // max-content, so a track never shrinks under space pressure — a wide table
-    // overflows into the scroll rather than reflowing into a tall cramped block.
-    expect(cardBody).toMatch(
-      /grid-template-columns:\s*repeat\(var\(--table-columns[^)]*\),\s*max-content\)/,
-    );
-    // start, not stretch: a narrow table keeps its natural width inside the cap.
-    expect(cardBody).toMatch(/justify-content:\s*start/);
-  });
-
-  test("scrolls as one unit once even wrapping cannot fit the columns", () => {
-    expect(cardBody).toMatch(/overflow-x:\s*auto/);
-    // The reading cap, named since EXC-865 so the fenced row, the code card, the table
-    // card and a comment anchored inside one cannot drift apart.
-    expect(cardBody).toMatch(/max-width:\s*var\(--caret-read-max\)/);
-    expect(overrideDecls).toMatch(/--caret-read-max:\s*720px/);
-    // The code card's bar, shared rather than duplicated — one scrollbar idiom.
-    expect(overrideDecls).toMatch(/\[data-table-card\]::-webkit-scrollbar\s*\{/);
-    expect(overrideDecls).toMatch(/\[data-table-card\]::-webkit-scrollbar-thumb\s*\{/);
-  });
-
-  test("makes each row a subgrid of the card's columns, so cells align across rows", () => {
-    expect(rowBody).toMatch(/display:\s*grid/);
-    expect(rowBody).toMatch(/grid-template-columns:\s*subgrid/);
-  });
-
-  test("wraps inside cells only, at the width that says a cell is prose", () => {
-    const cellBody =
-      overrideDecls.match(/\[data-content\]\s*\[data-table-cell\]\s*\{[^}]*\}/)?.[0] ?? "";
-    expect(cellBody).toMatch(/white-space:\s*pre-wrap/);
-    // The cap rides the CELL, not the track: capping the track lets the grid squeeze
-    // every column at once, which reflows a wide table instead of scrolling it.
-    expect(cellBody).toMatch(/max-width:\s*44ch/);
-    // No padding: the source's own spaces inside a cell are the breathing room.
-    expect(cellBody).not.toMatch(/padding/);
-  });
-
-  test("respects the delimiter row's alignment markers", () => {
-    expect(overrideDecls).toMatch(/\[data-table-align="center"\]\s*\{\s*text-align:\s*center/);
-    expect(overrideDecls).toMatch(/\[data-table-align="right"\]\s*\{\s*text-align:\s*right/);
-  });
-
-  test("inks the pipes as the borders rather than drawing rules in their place", () => {
-    expect(overrideDecls).toMatch(/\[data-table-pipe\]\s*\{\s*color:\s*var\(--ink-faint\)/);
-    // No drawn column dividers anywhere: the characters do that job.
-    expect(cardBody).not.toMatch(/border-inline/);
-    expect(rowBody).not.toMatch(/border-inline/);
-  });
-
-  test("declares the header row's weight rather than routing it through shiki", () => {
-    // @pierre/diffs drops shiki's fontStyle into an invalid font-weight: light-dark(...),
-    // so a theme-side bold would never land (EXC-867's standing upstream finding).
-    expect(overrideDecls).toMatch(/\[data-line\]\[data-table-head\]\s*\{\s*font-weight:\s*bold/);
-  });
-
-  test("subdues the delimiter row's dashes and draws the header's rule under it", () => {
-    // One ink for both halves of the row, which is EXC-871 correcting EXC-864's token
-    // rather than restating its intent. --rule is 10% ink; composited over --paper-sunk
-    // and the row bands it measures 1.15-1.37 across the nine palettes, against the 1.05
-    // this epic calls indistinguishable — on the committed showcase there was no line on
-    // the screen, only one in the DOM. The dashes' own ink is what the drawn separator
-    // continues to full width. It stays FAINT rather than climbing to the --ink-soft the
-    // thematic break takes: the dashes here survive, the bold header and the stacked pipes
-    // already mark the boundary, so this line reinforces rather than carries.
-    expect(overrideDecls).toMatch(
-      /\[data-line\]\[data-table-rule\]\s*\{\s*border-block-end:\s*1px solid var\(--ink-faint\)/,
-    );
-    // Subdued, not hidden: the alignment markers stay legible and stay copyable.
-    expect(overrideDecls).toMatch(
-      /\[data-table-rule\]\s*\[data-table-cell\]\s*>\s*\*\s*\{\s*color:\s*var\(--ink-faint\)/,
-    );
-    expect(overrideDecls).not.toMatch(/\[data-table-rule\][^{]*\{[^}]*display:\s*none/);
   });
 });
 
@@ -1312,8 +1196,8 @@ describe("thematic breaks (EXC-862)", () => {
   });
 
   test("paints the rule as a background, never as a pseudo-element", () => {
-    // The whole point of the mechanism: no node, no ::before, nothing for tables.ts's
-    // child-count settle check to disagree with.
+    // The whole point of the mechanism: no node, no ::before, nothing a child-count
+    // settle check can disagree with.
     expect(ruleRule).toMatch(/background-image:\s*linear-gradient\(/);
     expect(overrideDecls).not.toMatch(/\[data-md-rule\][^{]*::(?:before|after)/);
   });

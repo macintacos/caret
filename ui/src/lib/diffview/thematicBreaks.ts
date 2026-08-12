@@ -6,8 +6,7 @@
 // character stays in the DOM, so the row keeps its gutter number, its hover
 // comment affordance and its cursor reachability, and copy carries the real
 // `---`. The DOM tagging lives here rather than in the component so it is
-// unit-testable against a constructed fixture, mirroring codeBlocks.ts and
-// tables.ts.
+// unit-testable against a constructed fixture, mirroring codeBlocks.ts.
 //
 // The hard half is the NEGATIVE cases, and marked's own block lexer answers all
 // of them. `---` is spelled identically to a setext heading underline, a table
@@ -113,11 +112,10 @@ export function thematicBreakLines(
  * re-trigger the childList observer that schedules it, and it clears rows that
  * are no longer breaks.
  *
- * Descendant, not child: a row a scroll or table card has re-parented is no
- * longer a direct child of `[data-content]` (codeBlockScroll.ts, tables.ts), and
- * four gutter rules written the other way silently stopped matching carded rows
- * (EXC-864). A break never lands inside either card today; the selector is the
- * house form regardless.
+ * Descendant, not child: a row a scroll card has re-parented is no longer a
+ * direct child of `[data-content]` (codeBlockScroll.ts), and four gutter rules
+ * written the other way silently stopped matching carded rows. A break never
+ * lands inside a card today; the selector is the house form regardless.
  */
 export function tagThematicBreakRows(root: ParentNode, lines: ReadonlySet<number>): void {
   for (const row of root.querySelectorAll<HTMLElement>("[data-content] [data-line]")) {

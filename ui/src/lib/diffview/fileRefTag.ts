@@ -9,7 +9,6 @@
 
 import type { FileRefKind } from "@core/lib/types";
 import type { FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
-import { tokenChildren } from "$lib/diffview/rowTokens.ts";
 
 const FILE_REF_ATTR = "data-file-ref";
 
@@ -18,9 +17,9 @@ const FILE_REF_ATTR = "data-file-ref";
  * shadow root (or any container holding the `[data-content] [data-line]`
  * rows). Idempotent and safe to call on every repaint.
  *
- * Descendant, not child: an over-wide fenced block or a table is re-parented into
- * a card (codeBlockScroll.ts, tables.ts), so its rows are no longer direct
- * children of [data-content]. Same shape as tagCodeBlockRows. */
+ * Descendant, not child: an over-wide fenced block is re-parented into a card
+ * (codeBlockScroll.ts), so its rows are no longer direct children of
+ * [data-content]. Same shape as tagCodeBlockRows. */
 export function tagFileRefTokens(root: ParentNode, spanMap: FileRefSpanMap): void {
   for (const stale of root.querySelectorAll(`[${FILE_REF_ATTR}]`)) {
     stale.removeAttribute(FILE_REF_ATTR);
@@ -35,9 +34,7 @@ export function tagFileRefTokens(root: ParentNode, spanMap: FileRefSpanMap): voi
 }
 
 // Tags the row's token that BEGINS at `startCol` and stays within `endCol`.
-// Tokens partition the line, so a running length locates the boundary — and
-// tokenChildren is what makes that partition the same sequence whether the row is
-// ordinary or has been split into table cells.
+// Tokens partition the line, so a running length locates the boundary.
 // Both bounds are required so the icon never lands on a coarse token that spans
 // more than the path: one merely CONTAINING the reference starts too early, and
 // a collapsed link's prose token starts exactly at it but runs to the end of the
@@ -59,7 +56,7 @@ function tagTokenAt(
 ): void {
   const value = kind === "directory" ? "directory" : "";
   let col = 0;
-  for (const token of tokenChildren(rowEl)) {
+  for (const token of rowEl.children) {
     const len = token.textContent?.length ?? 0;
     if (col === startCol) {
       if (col + len <= endCol) token.setAttribute(FILE_REF_ATTR, value);

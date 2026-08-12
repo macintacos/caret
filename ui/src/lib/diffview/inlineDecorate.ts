@@ -5,13 +5,11 @@
 // it. Everything downstream — the emphasis ink, the pills, the checkbox and
 // blockquote decorations — is then one CSS rule against an attribute.
 //
-// The refining itself is rowTokens.ts's splitTokens, which is shared with the
-// table pass and carries the split-only rule and its reasoning. What matters here
-// is that it only ever refines, so every boundary shiki drew survives and every
-// column tagTokenAt (fileRefTag.ts), tagLanguageToken and tagFenceToken
-// (codeBlocks.ts) look for is still a token boundary. The same module's
-// tokenChildren is how a row's tokens are reached, which is one level down for a
-// table row (EXC-864) and the row's own children for every other.
+// The refining itself is rowTokens.ts's splitTokens, which carries the split-only
+// rule and its reasoning. What matters here is that it only ever refines, so every
+// boundary shiki drew survives and every column tagTokenAt (fileRefTag.ts),
+// tagLanguageToken and tagFenceToken (codeBlocks.ts) look for is still a token
+// boundary.
 //
 // Pill grouping follows inlineSpans.ts's abutting-elements contract. A pill is
 // drawn per ELEMENT, not per run, so consecutive runs are grouped — but the
@@ -56,7 +54,7 @@
 
 import type { FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 import type { ColumnRange, InlineSpan, InlineSpanMap } from "$lib/diffview/inlineSpans.ts";
-import { splitTokens, tokenChildren } from "$lib/diffview/rowTokens.ts";
+import { splitTokens } from "$lib/diffview/rowTokens.ts";
 
 // The inline-markup attributes that ride in the `data-md` token list, which is
 // emitted in this array's order. A token list rather than an attribute per member so CSS
@@ -132,7 +130,7 @@ function setAttr(child: Element, attr: string, value: string | undefined): void 
  * token lies wholly inside one run or inside none, so the covering run is a lookup. */
 function tagRow(row: Element, runs: readonly InlineSpan[], groups: Map<Member, ColumnRange[]>) {
   let col = 0;
-  for (const child of tokenChildren(row)) {
+  for (const child of [...row.children]) {
     const start = col;
     col += child.textContent?.length ?? 0;
     if (col === start) continue;
