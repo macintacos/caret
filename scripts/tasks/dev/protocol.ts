@@ -47,9 +47,10 @@ export function appendRevision(plan: string, feedback: string, n: number): strin
 
 /** Default number of versions the primary dev review opens with — the final plan
  * plus three earlier drafts, one per kind of diff `demoVersions` produces (a
- * single targeted change, a few mid-sentence rewrites, and many scattered
- * changes), so the version-compare picker has all three flavors to show at a
- * glance. Overridable via `mise run dev --num-versions <n>`. */
+ * single targeted change, a few mid-sentence rewrites, and a block-shaped one
+ * that grows whole sub-sections of the rendering showcase), so the
+ * version-compare picker has all three flavors to show at a glance. Overridable
+ * via `mise run dev --num-versions <n>`. */
 export const DEFAULT_NUM_VERSIONS = 4;
 
 /** Resolve the `--num-versions <n>` dev flag from argv: how many versions the
@@ -91,17 +92,54 @@ interface DemoEdit {
  * while older pairs get progressively larger:
  *   0. a single targeted change (one table cell),
  *   1. a few mid-sentence rewrites,
- *   2. many scattered word changes across the file,
- *   3. a further scattered pass (only reached at higher --num-versions).
+ *   2. a block-shaped change: whole sub-sections of the rendering showcase are
+ *      stubs in the older draft and full rows in the newer one (EXC-1063), which
+ *      is the one diff kind the picker never had — every other group rewrites
+ *      words in place,
+ *   3. many scattered word changes across the file (only reached at higher
+ *      --num-versions),
+ *   4. a further scattered pass (likewise).
  * Every `from` must exist verbatim in fake-plan.md; the dev-driver unit suite
  * asserts this, so a future edit to the fixture that strands one fails loudly
- * rather than silently flattening a diff back to empty. */
+ * rather than silently flattening a diff back to empty. A block `from` carries no
+ * fence line on purpose: fenced-code detection in the plan view toggles on every
+ * fence, so a group that removed an odd number of them would leave the older
+ * draft's tail inside a code panel. */
 const DEMO_EDITS: readonly (readonly DemoEdit[])[] = [
   [{ from: "92%", to: "88%" }],
   [
     { from: "show up at a glance", to: "are obvious at a glance" },
     { from: "often rendered close to body size", to: "usually rendered near body size" },
     { from: "there is nothing to approve here", to: "there is nothing here to approve" },
+  ],
+  [
+    {
+      from: "Add a sub-heading when a new construct starts being decorated; do not fold one into an existing row.",
+      to: "More rows to come.",
+    },
+    {
+      from: `### Task lists
+
+- [x] Land the showcase in the dev fixture
+- [x] Cite it from the pull requests that render it
+- [ ] Sweep every construct against it before the epic closes
+- [ ] Retire the throwaway fixtures each change grew its own copy of`,
+      to: `### Task lists
+
+Still to write.`,
+    },
+    {
+      from: `### Rules and separators
+
+Text above the showcase's own rule.
+
+---
+
+Text below it, so the rule has a paragraph on each side to be measured against.`,
+      to: `### Rules and separators
+
+Still to write.`,
+    },
   ],
   [
     { from: "strict allowlist", to: "tight allowlist" },
