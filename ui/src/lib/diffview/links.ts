@@ -1,35 +1,51 @@
-// Pure transform for the source view's link layer. Takes plan source text and
-// returns display text plus a per-line map of clickable link spans. The
-// transform is strictly per-line: it processes each line independently and
-// rejoins with "\n", so the output always has the same line count as the input
-// (the line-parity guarantee the annotation/feedback line numbers depend on).
+// The source view's one per-line pass over plan text. It returns display text
+// plus four layers keyed by display line: clickable link spans, file references,
+// flat inline-markdown runs, and blockquote depth. The transform is strictly
+// per-line — each line is processed independently and rejoined with "\n" — so the
+// output always has the same line count as the input (the line-parity guarantee
+// the annotation/feedback line numbers depend on).
 //
-// Two display rewrites happen, both line-local:
-//   - inline links `[label](url)` collapse to `label`
+// The LINK COLLAPSE is the only display rewrite, and the only reason a display
+// column ever differs from its source column:
+//   - inline links `[label](target)` collapse to `label`
 //   - autolinks `<url>` collapse to `url`
-// A bare `http(s)://…` URL is left in place. Every recorded span carries the
-// http/https href; all other schemes (javascript:, data:, mailto:, …) are left
-// as literal source text and produce no span. Fenced code blocks and inline
-// code spans are passed through untouched for source fidelity.
+//   - a bare `http(s)://…` URL is left in place
+// Everything else — emphasis markers, backticks, task brackets, quote markers —
+// stays in the text and is marked rather than removed (EXC-855), so what the
+// reader copies is the real plan text. Fenced code blocks pass through with no
+// layers at all, and a link written inside inline code stays literal.
 //
-// A link whose target is path-shaped is the third case: it collapses like any
-// link but records NO clickable span — openUrl must never be handed a filesystem
-// path — and instead emits a FileRefSpan over the collapsed label (EXC-954,
-// EXC-956), which the view merges with the inline-code
-// scan and decorates as a reference. Emission belongs here because fileRefs.ts
-// reads *display* text: once the link collapses, its target is gone and only this
-// layer still knows where the label landed. Two consequences worth knowing before
-// changing this: collapsing is decided on shape alone, so a target that does NOT
-// resolve leaves its label as bare prose with no affordance and no visible path;
-// and a target carrying a fragment or query (`doc/guide.md#setup`) is a URL slot
-// rather than a path, so that link stays literal.
+// WHICH LINKS COLLAPSE. A safe `http`/`https` target does, and records a
+// clickable span carrying its href. A path-shaped target does too, but records NO
+// clickable span — openUrl must never be handed a filesystem path. Everything
+// else stays literal source text: a target naming any other scheme
+// (`javascript:`, `data:`, `mailto:`), the protocol-relative `//host/…` form, and
+// a scheme-less host like `github.com/…`, whose destination would survive nowhere
+// once collapsed. Leaving an unsafe scheme visible is a safety property — a
+// reader can see what the link would actually do — not a styling one.
 //
-// The span says only where a path was cited, never what it is. A file and a
+// WHAT MARKS A COLLAPSED LABEL. A path-shaped target specific enough to cite
+// (isCitablePath) emits a FileRefSpan over the label (EXC-954, EXC-956), which
+// the view merges with the inline-code scan and decorates as a reference.
+// Emission belongs here because fileRefs.ts reads *display* text: once the link
+// collapses, its target is gone and only this layer still knows where the label
+// landed. Any other collapsed label takes a link run instead, so a target too
+// vague to cite still shows the reader that markup was there. A collapsed label
+// whose target does not resolve reads as prose with no visible path — the reason
+// the citable gate is narrow even though the collapse is not.
+//
+// A FileRefSpan says only where a path was cited, never what it is. A file and a
 // directory emit the identical shape, and the daemon's resolve (EXC-916) is what
 // later decides which glyph the token draws and which surface a click opens.
 
 import { hasKnownFileExtension } from "@core/config/constants";
 import { classify, type FileRefSpan, type FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
+import {
+  buildInlineSpans,
+  type ColumnRange,
+  type InlineSpan,
+  type InlineSpanMap,
+} from "$lib/diffview/inlineSpans.ts";
 
 /** A clickable link range on a single display line. Columns are 0-based,
  * half-open [startCol, endCol) into the display line's text. */
@@ -56,6 +72,13 @@ export interface LinkLayer {
    * never be re-found — the link layer is the only place that still knows where
    * it landed. */
   fileRefs: FileRefSpanMap;
+  /** Flat atomic inline-markdown runs per display line (EXC-866). Fenced-code
+   * lines are absent, as they are from every other map here. */
+  inline: InlineSpanMap;
+  /** Blockquote nesting depth per 1-based display line. Unquoted lines are
+   * absent; this rides the ROW rather than the runs, since subduing a quote is a
+   * whole-line property (EXC-863). */
+  quoteDepth: Map<number, number>;
 }
 
 const SAFE_SCHEME = /^https?:\/\//i;
@@ -138,13 +161,43 @@ function overlaps(ranges: Range[], start: number, end: number): boolean {
   return ranges.some((r) => start < r.end && end > r.start);
 }
 
+// Whether a path-shaped target is specific enough to cite as a reference. Three
+// narrowings sit on top of classify's shared gate, and they decide only whether a
+// FileRefSpan is emitted — never whether the link collapses, which every safe
+// link now does. A target that fails here keeps its label and takes the link
+// chip, so the markup it lost is still marked; what it does not get is a glyph,
+// a preview or a resolve request against something that is not a citation.
+//
+// PATH_TARGET is the first: a fragment or query makes a target a URL slot however
+// its head reads, so `doc/guide.md#setup` names an anchor rather than a file.
+// UNRESOLVABLE is the second — a target no resolve could ever answer. The third
+// is specificity: a multi-segment path, or a single segment naming a file by
+// extension. A bare `guide` is a word, not a citation.
+//
+// None of them reads the trailing slash, which is why it comes off before the
+// specificity test — `src` and `src/` name one thing, so they take one branch, and
+// whether that thing is a file or a directory is the daemon's answer to give
+// (EXC-916) rather than this layer's to guess. The path itself keeps the slash,
+// since the resolve response is keyed by the string that was requested.
+function isCitablePath(path: string): boolean {
+  if (!PATH_TARGET.test(path) || UNRESOLVABLE.test(path)) return false;
+  const bare = path.replace(/\/+$/, "");
+  return bare.includes("/") || hasKnownFileExtension(bare);
+}
+
 // Builds the display line and its spans from one source line. `inCode` lines
 // (fenced) are returned verbatim with no spans.
 function transformLine(
   source: string,
   inCode: boolean,
-): { display: string; spans: LinkSpan[]; fileRefs: FileRefSpan[] } {
-  if (inCode) return { display: source, spans: [], fileRefs: [] };
+): {
+  display: string;
+  spans: LinkSpan[];
+  fileRefs: FileRefSpan[];
+  inline: InlineSpan[];
+  quoteDepth: number;
+} {
+  if (inCode) return { display: source, spans: [], fileRefs: [], inline: [], quoteDepth: 0 };
 
   // Mask inline-code regions so their contents are never rewritten or linked.
   const codeRanges: Range[] = [];
@@ -186,29 +239,14 @@ function transformLine(
       // resolve against the project's own lib.ts. The scan masks URLs inside
       // code for the same reason; this is that guard on the link side.
       if (HAS_SCHEME.test(url) || url.startsWith("//") || HOSTLIKE.test(url)) continue;
-      // A path-shaped target is a reference; anything else stays literal with no
-      // rewrite. Three narrowings sit on top of classify's shared gate at this
-      // call site alone, because collapsing `[]()` happens before anything
-      // resolves, and a target that turns out to be nothing has already lost its
-      // markup where an unresolved inline-code candidate loses nothing.
-      //
-      // PATH_TARGET is the first: a fragment or query makes a target a URL slot
-      // however its head reads, so `doc/guide.md#setup` stays a link to an anchor.
-      // UNRESOLVABLE is the second — a target no resolve could ever answer.
-      // The third is specificity: a multi-segment path, or a single segment
-      // naming a file by extension. A bare `guide` is a word, not a citation.
-      //
-      // None of them reads the trailing slash, which is why it comes off before
-      // the specificity test — `src` and `src/` name one thing, so they take one
-      // branch, and whether that thing is a file or a directory is the daemon's
-      // answer to give (EXC-916) rather than this layer's to guess. The path
-      // itself keeps the slash, since the resolve response is keyed by the
-      // string that was requested.
+      // What is left is a path-shaped target, and it collapses like every other
+      // safe link. Whether it also emits a reference is isCitablePath's call: a
+      // target too vague to cite still loses its `[]()`, and the link run over
+      // its label is what tells the reader markup was there.
       const ref = classify(url);
-      if (ref === null || !PATH_TARGET.test(ref.path) || UNRESOLVABLE.test(ref.path)) continue;
-      const bare = ref.path.replace(/\/+$/, "");
-      if (!bare.includes("/") && !hasKnownFileExtension(bare)) continue;
-      rewrites.push({ start, end, display: label, href: null, file: { ...ref, target: url } });
+      if (ref === null) continue;
+      const file = isCitablePath(ref.path) ? { ...ref, target: url } : undefined;
+      rewrites.push({ start, end, display: label, href: null, file });
       consumed.push({ start, end });
       continue;
     }
@@ -238,14 +276,17 @@ function transformLine(
     consumed.push({ start, end });
   }
 
-  if (rewrites.length === 0) return { display: source, spans: [], fileRefs: [] };
-
   rewrites.sort((a, b) => a.start - b.start);
 
   let display = "";
   let cursor = 0; // position in source consumed so far
   const spans: LinkSpan[] = [];
   const fileRefs: FileRefSpan[] = [];
+  // Display columns of everything the inline layer should mark as a link: the
+  // clickable spans, plus a collapsed label that emitted no reference. A label
+  // that DID emit one is a reference rather than a link (EXC-859), and a link
+  // left literal is marked by nothing at all.
+  const linkRanges: ColumnRange[] = [];
   for (const rw of rewrites) {
     display += source.slice(cursor, rw.start);
     const startCol = display.length;
@@ -262,8 +303,8 @@ function transformLine(
       // prose label takes it only when the label is the whole line, since
       // anything else on the line puts it inside one coarse prose run that
       // tagFileRefTokens refuses (tagging that would chip the whole sentence).
-      // Those get the click and the tooltip without the glyph. Painting exact
-      // columns the way linkHighlight.ts does is the upgrade path (EXC-866).
+      // Those get the click and the tooltip without the glyph. The decoration
+      // pass giving every run its own element is the upgrade path (EXC-867).
       //
       // The target rides along only when the label hides it. Testing the raw
       // target, not the path, is what keeps `[a/b.md](a/b.md:42)` — whose label
@@ -278,10 +319,13 @@ function transformLine(
         endLine: rw.file.endLine,
         target,
       });
+    } else {
+      linkRanges.push({ start: startCol, end: endCol });
     }
   }
   display += source.slice(cursor);
-  return { display, spans, fileRefs };
+  const { spans: inline, quoteDepth } = buildInlineSpans(display, linkRanges);
+  return { display, spans, fileRefs, inline, quoteDepth };
 }
 
 /** Production link opener: a new tab with noopener,noreferrer so the opened
@@ -296,6 +340,8 @@ export function buildLinkLayer(text: string): LinkLayer {
   const lines = text.split("\n");
   const spans: LinkSpanMap = new Map();
   const fileRefs: FileRefSpanMap = new Map();
+  const inline: InlineSpanMap = new Map();
+  const quoteDepth = new Map<number, number>();
   let inCode = false;
   const out: string[] = [];
 
@@ -305,12 +351,14 @@ export function buildLinkLayer(text: string): LinkLayer {
     // A fence line itself is "code" (passed through verbatim, no links), and it
     // flips the state for subsequent lines.
     const lineInCode = inCode || isFence;
-    const { display, spans: lineSpans, fileRefs: lineRefs } = transformLine(source, lineInCode);
-    out.push(display);
-    if (lineSpans.length > 0) spans.set(i + 1, lineSpans);
-    if (lineRefs.length > 0) fileRefs.set(i + 1, lineRefs);
+    const line = transformLine(source, lineInCode);
+    out.push(line.display);
+    if (line.spans.length > 0) spans.set(i + 1, line.spans);
+    if (line.fileRefs.length > 0) fileRefs.set(i + 1, line.fileRefs);
+    if (line.inline.length > 0) inline.set(i + 1, line.inline);
+    if (line.quoteDepth > 0) quoteDepth.set(i + 1, line.quoteDepth);
     if (isFence) inCode = !inCode;
   }
 
-  return { text: out.join("\n"), spans, fileRefs };
+  return { text: out.join("\n"), spans, fileRefs, inline, quoteDepth };
 }

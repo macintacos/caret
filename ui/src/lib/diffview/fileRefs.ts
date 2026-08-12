@@ -84,7 +84,8 @@ const CANDIDATE_RE = /[A-Za-z0-9._/~-]+(?:(?::L?|:?#L)\d+(?:[-–]L?\d+|:\d+)?)?
 // bare `#` before the digits: `#` alone introduces a URL fragment, and
 // `doc/guide.md#3` is a link to a numbered anchor rather than a citation of
 // line 3. Requiring the `L` there is what keeps a fragment target inert, the
-// same guarantee links.ts documents for `doc/guide.md#setup`.
+// same guarantee links.ts holds for `doc/guide.md#setup`, which collapses like
+// any link but cites nothing.
 const LINE_SUFFIX = /^(.+?)(?::L?|:?#L)(\d+)(?:[-–]L?(\d+)|:\d+)?$/;
 
 /** Classifies a raw candidate run into a path + optional cited line or range, or
@@ -94,17 +95,17 @@ const LINE_SUFFIX = /^(.+?)(?::L?|:?#L)(\d+)(?:[-–]L?(\d+)|:\d+)?$/;
  *
  * The one definition of "path-shaped" in the codebase: the scan below applies it
  * to runs inside inline code, and the link layer applies it to a `[label](target)`
- * target before collapsing it (EXC-954). A second, drifting notion would let the
- * two decoration paths disagree about the same text. The floor is deliberately
- * low — one letter in the last segment, trailing slashes ignored — because the
- * filesystem is what knows whether a token is a file, a directory, or nothing
- * (EXC-916), and a shape test that guessed would keep `src/daemon/` invisible.
- * What it does buy is silence on the tokens no filesystem could answer for:
- * `3.14`, `42`, `1.2.3`.
+ * target to decide whether it is a path at all (EXC-954). A second, drifting
+ * notion would let the two decoration paths disagree about the same text. The
+ * floor is deliberately low — one letter in the last segment, trailing slashes
+ * ignored — because the filesystem is what knows whether a token is a file, a
+ * directory, or nothing (EXC-916), and a shape test that guessed would keep
+ * `src/daemon/` invisible. What it does buy is silence on the tokens no
+ * filesystem could answer for: `3.14`, `42`, `1.2.3`.
  *
  * A caller that needs a stricter gate narrows on top, and the link layer does,
- * since collapsing a link's `[]()` on a guess is visible where an unresolved
- * candidate is not; links.ts owns those clauses. Each caller also adds its own
+ * since a reference draws a glyph and opens a preview where an un-cited label
+ * costs nothing; links.ts owns those clauses. Each caller also adds its own
  * URL exclusion first, since this judges a run by its last segment and a URL's
  * tail can read as a path: the scan masks URLs inside code, the link layer
  * rejects a target that names a scheme or a host. */
