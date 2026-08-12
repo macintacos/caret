@@ -43,11 +43,20 @@ function rulesFor(tail: string): string[] {
   return [...overrideDecls.matchAll(pattern)].map((m) => m[0]);
 }
 
-/** A `data-md` member's tint rule — the one declaring its `--md-<member>` layer variable,
- * as opposed to the rule carrying the member's intrinsic properties. */
+/** A `data-md` member's tint rule — the one declaring its `--md-<member>` layer variable. */
 function tintRule(member: string): string {
   return (
     rulesFor(String.raw`\[data-md~="${member}"\]`).find((r) => r.includes(`--md-${member}:`)) ?? ""
+  );
+}
+
+/** A `data-md` member's other rule — the one carrying the properties the text intrinsically
+ * has (bold's weight, italic's slant, a link's ink). Defined as the complement of
+ * `tintRule` rather than by sniffing for a property name, so it stays correct when a
+ * member's intrinsic set changes. */
+function propsRule(member: string): string {
+  return (
+    rulesFor(String.raw`\[data-md~="${member}"\]`).find((r) => !r.includes(`--md-${member}:`)) ?? ""
   );
 }
 
@@ -341,10 +350,8 @@ describe("the inline emphasis chips (EXC-867)", () => {
     // consumes it with font-weight: light-dark(…), which is invalid — light-dark() is
     // defined over <color> only — so the library renders every token at one weight. caret
     // declares both off the decoration pass's own attributes instead.
-    const weight =
-      overrideDecls.match(/\[data-content\][^{}]*\[data-md~="bold"\]\s*\{[^}]*\}/)?.[0] ?? "";
-    const slant =
-      overrideDecls.match(/\[data-content\][^{}]*\[data-md~="italic"\]\s*\{[^}]*\}/)?.[0] ?? "";
+    const weight = propsRule("bold");
+    const slant = propsRule("italic");
     expect(weight).toMatch(/font-weight:\s*bold/);
     expect(slant).toMatch(/font-style:\s*italic/);
     // Weight and slant are what the text IS, so unlike the tint they survive selection.
@@ -398,37 +405,39 @@ describe("the inline emphasis chips (EXC-867)", () => {
 
   test("drops the bold and italic tints on a selected row so a drag reads as one flat band", () => {
     // The guard rides each member's own tint VARIABLE rather than the shared fill rule,
-    // because the members disagree about it: the link chip (EXC-859) is an affordance and
-    // stays lit through a selection. background-image is one property, so a second
-    // unguarded rule would replace the whole stack rather than add a layer to it — an
-    // unset variable falling back to transparent is what lets one stack carry two
-    // policies.
+    // because the members disagree about it: the link chip (EXC-859) keeps its tint through
+    // a selection. background-image is one property, so a second unguarded rule would
+    // replace the whole stack rather than add a layer to it — an unset variable falling
+    // back to transparent is what lets one stack carry two policies.
     expect(tintRule("bold")).toMatch(/:not\(\[data-selected-line\]\)/);
     expect(tintRule("italic")).toMatch(/:not\(\[data-selected-line\]\)/);
     expect(fillRule).not.toMatch(/:not\(\[data-selected-line\]\)/);
   });
 });
 
-// EXC-859: the link chip, the family's fifth member and the compensating half of EXC-866.
-// That ticket generalized the collapse of [label](target) to every safe link, so the bare
-// label is now the ONLY thing on the row saying a link is there — the target survives
-// nowhere in the display text. Which is why this member takes EXC-880's side of the
-// family's selection split rather than EXC-869's: a fence chip is decoration and drops on
-// a drag-selected row so the band reads flat, but a link chip is an affordance, and hiding
-// it would claim the span stopped opening a URL when it hasn't.
+// EXC-859: the link chip, the family's fifth member and the compensating half of EXC-866 —
+// that ticket generalized the collapse of [label](target) to every safe link, leaving the
+// bare label where the markup used to be. This member takes EXC-880's side of the family's
+// selection split rather than EXC-869's: a fence chip is decoration and drops on a
+// drag-selected row so the band reads flat, while the reference chip stays lit because an
+// affordance's chip is not decoration to be tidied away — and a link chip vanishing beside
+// a reference chip on the same selected row would read as a glitch rather than a policy.
+// The link's ink and underline are ungated for a different reason again: like bold's
+// weight, they are what the text IS. What only a real browser can say is that the cascade
+// actually resolves that way, which is diff-surface e2e's half (links.e2e.ts).
 describe("the link chip (EXC-859)", () => {
-  const linkRules = rulesFor(String.raw`\[data-md~="link"\]`);
-  const inkRule = linkRules.find((r) => r.includes("text-decoration")) ?? "";
+  const inkRule = propsRule("link");
   const linkTint = tintRule("link");
   const fillRule = rulesFor(String.raw`\[data-md\]`)[0] ?? "";
   const startRule = rulesFor(String.raw`\[data-md-start\]`)[0] ?? "";
   const endRule = rulesFor(String.raw`\[data-md-end\]`)[0] ?? "";
 
-  // Both extractions fall back to "" on a regex miss, over which `not.toMatch` passes
-  // vacuously — pin non-emptiness before asserting absence.
-  test("both link rules are present to assert against", () => {
-    expect(inkRule).not.toBe("");
-    expect(linkTint).not.toBe("");
+  // Every extraction falls back to "" on a regex miss, over which `not.toMatch` passes
+  // vacuously — pin non-emptiness on all of them before asserting any absence.
+  test("every rule this suite asserts against is present", () => {
+    for (const rule of [inkRule, linkTint, fillRule, startRule, endRule]) {
+      expect(rule).not.toBe("");
+    }
   });
 
   test("tints the glyphs and dots the underline", () => {
@@ -454,12 +463,11 @@ describe("the link chip (EXC-859)", () => {
     expect(linkTint).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
 
-  test("stays lit on a selected row — it is an affordance, not decoration", () => {
-    // EXC-880's precedent for the reference chip, arrived at for the same reason. The
-    // radius rules shed their guard alongside the fill: a token on a selected row carries
-    // no background of its own (the amber band is on the ROW), so rounding one painted
-    // nothing there anyway, and without the shed the link chip would read as a square
-    // block inside a drag-selection.
+  test("carries no selection guard, so the chip survives a drag-select intact", () => {
+    // The radius rules are ungated alongside the tint, and that costs the other members
+    // nothing: a bold or italic token on a selected row has no tint at all, and the amber
+    // band is painted on the ROW rather than the token, so there is no background for a
+    // radius to clip. Gated, the link chip would read as a square block inside the band.
     for (const rule of [inkRule, linkTint, startRule, endRule]) {
       expect(rule).not.toMatch(/:not\(\[data-selected-line\]\)/);
     }

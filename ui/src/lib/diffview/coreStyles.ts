@@ -307,13 +307,16 @@ const CARET_OVERRIDES = `
   /* The guard rides each member's own tint VARIABLE rather than the shared fill rule
      below, because the members disagree about it. Bold and italic are decoration, so they
      drop on a row the reviewer has drag-selected and the band reads as one flat shape.
-     The link chip does not: EXC-866 collapsed [label](target) to its bare label, so this
-     tint is the only thing left on the row saying a link is there, and hiding it on
-     selection would claim the span stopped opening a URL. That is EXC-880's reference-chip
-     reasoning — an affordance's chip is not decoration to be tidied away — reached here
-     from the other side of the same split. background-image is ONE property, so a second
-     unguarded rule would replace the whole stack rather than add a layer to it; an unset
-     variable falling back to transparent is what lets one stack carry two policies. */
+     The link chip does not, and the reason is consistency across the family rather than
+     necessity: EXC-880 keeps the file-reference chip lit under a selection because an
+     affordance's chip is not decoration to be tidied away, and a link chip vanishing
+     beside a reference chip on the SAME selected row reads as a glitch rather than as a
+     policy. (Not because the tint is the only mark a link has — the ink and dotted
+     underline above are ungated too, for the separate reason that they are what the text
+     IS, the same footing bold's weight sits on.) background-image is ONE property, so a
+     second unguarded rule would replace the whole stack rather than add a layer to it; an
+     unset variable falling back to transparent is what lets one stack carry two
+     policies. */
   [data-content] [data-line]:not([data-selected-line]) [data-md~="bold"] {
     --md-bold: var(--chip-bold);
   }
@@ -329,10 +332,11 @@ const CARET_OVERRIDES = `
       linear-gradient(var(--md-italic, transparent), var(--md-italic, transparent)),
       linear-gradient(var(--md-link, transparent), var(--md-link, transparent));
   }
-  /* Ungated by selection alongside the link tint, and the shed costs the other members
-     nothing: a token on a selected row carries no background of its own — the amber band
-     is on the ROW — so a radius there clipped nothing. Gated, the link chip would have
-     read as a square block inside a drag-selection. */
+  /* No selection guard, matching the link tint above: the link chip has to keep its
+     round-rect inside a drag-selection. Ungated costs the other members nothing — a bold
+     or italic token on a selected row has no tint at all (the rule above withholds it) and
+     the amber band is painted on the ROW rather than the token, so there is no background
+     for a radius to clip. */
   [data-content] [data-line] [data-md-start] {
     border-start-start-radius: var(--radius);
     border-end-start-radius: var(--radius);

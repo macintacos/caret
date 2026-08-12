@@ -554,13 +554,10 @@ describe("every ColorToken is read somewhere in ui/src", () => {
     .map((f) => readFileSync(join(UI_SRC, f), "utf8"))
     .join("\n");
 
-  // The five chip tints (EXC-858) landed ahead of the chip rendering that spends them, so
-  // this rule carried an inverted exemption list while they waited — each unspent tint
-  // pinned as read by NOTHING, so its first var() reader failed the suite and forced the
-  // entry out. All five are spent now, all in diffview/coreStyles.ts: --chip-code fills
+  // All five chip tints (EXC-858) are spent in diffview/coreStyles.ts: --chip-code fills
   // the fence-marker chip, --chip-ref the resting file-reference chip, and --chip-bold /
   // --chip-italic / --chip-link the three inline chips, each through its own --md-* layer
-  // variable. With the list empty the exemption machinery went with it.
+  // variable. So the rule below holds over every token with no exemptions.
   for (const token of Object.keys(THEMES["caret-dark"].tokens) as ColorToken[]) {
     test(`${token} is read by at least one var()`, () => {
       // The negative lookahead keeps --mark from matching --mark-active and --ink
