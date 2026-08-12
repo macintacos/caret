@@ -215,6 +215,63 @@ const CARET_OVERRIDES = `
     border-radius: var(--radius);
   }
 
+  /* EXC-867: the inline emphasis chips, the first prose members of the chip family
+     (EXC-855). inlineDecorate.ts splits each row's tokens so none straddles an element
+     boundary and tags them data-md; these rules are the whole visual treatment, and the
+     REAL weight and slant come from shiki (caret-theme.ts) rather than from here — which
+     matters, because EXC-858 measured bold's and italic's tints within a 1.05 contrast
+     ratio in five of the nine palettes. The tint says "this span is a chip"; the glyph
+     says which one it is.
+
+     Two background LAYERS rather than one background-color, because a run can carry two
+     members at once and both must show. Triple-starred text is genuinely bold and italic,
+     and the middle run of a bold element wrapping inline code is bold and code — with a
+     single background-color the more specific rule would win and punch a visible gap
+     through the middle of the bold pill. Each layer resolves to transparent through the
+     var() fallback when its member is absent, so no default declaration is needed and
+     nothing has to out-specify anything. A later member (EXC-868, EXC-859, EXC-880) adds
+     one line here and one layer above.
+
+     No backtick appears in this comment, or anywhere else in CARET_OVERRIDES: the sheet is
+     a template literal, so one would close it early.
+
+     NO PADDING, in either axis, and here the inline half is not a preference but the
+     issue's stated ladder trigger. Rows render white-space: pre, so inline padding shifts
+     every glyph after the chip and the monospace grid stops matching the source columns —
+     which is what vim motions, drag-range selection and the search highlights all resolve
+     against. The cancelled padding/negative-margin pair [data-file-ref] uses works there
+     only because a reference is an isolated token; emphasis chips can abut, so the
+     negative margins would overlap. Block padding is refused for the reason EXC-869 gives
+     just above, and because a chip taller than its line box reads as confetti in a dense
+     paragraph — the failure mode EXC-855 names.
+
+     Rounded ends ride the GROUP, not the run: an element fragmented into several runs
+     gets its radius on the first and last only, so the pill closes once. That is why the
+     start/end attributes exist rather than a blanket border-radius, and it is the same
+     shape data-code-start / data-code-end already draw for fenced blocks. Logical
+     longhands so the ends follow the writing direction. The :not() guard drops the chip on
+     a selected row, so a drag-selection reads as one flat band — exactly as the fence chip
+     above does. */
+  [data-md~="bold"] {
+    --md-bold: var(--chip-bold);
+  }
+  [data-md~="italic"] {
+    --md-italic: var(--chip-italic);
+  }
+  [data-content] [data-line]:not([data-selected-line]) [data-md] {
+    background-image:
+      linear-gradient(var(--md-bold, transparent), var(--md-bold, transparent)),
+      linear-gradient(var(--md-italic, transparent), var(--md-italic, transparent));
+  }
+  [data-content] [data-line]:not([data-selected-line]) [data-md-start] {
+    border-start-start-radius: var(--radius);
+    border-end-start-radius: var(--radius);
+  }
+  [data-content] [data-line]:not([data-selected-line]) [data-md-end] {
+    border-start-end-radius: var(--radius);
+    border-end-end-radius: var(--radius);
+  }
+
   /* EXC-729: an overflowing fenced block is wrapped in one scroll card (codeBlockScroll.ts)
      that is a single native horizontal scroll container — the whole block scrolls as one unit
      (short lines follow the wide ones, one scrollbar at the bottom, no per-row jelly). The card
