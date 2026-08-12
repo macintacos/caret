@@ -2898,6 +2898,271 @@ test("copying a table yields the markdown source it was written as", async ({ da
   expect(copied?.split("\n")).toHaveLength(4);
 });
 
+// EXC-865: commenting on a table row works exactly as it does on a prose row. This
+// block is e2e and not a unit for two separate reasons, and both are the whole point.
+// The gestures are real ones — a stepped pointer drag down the number column, a click
+// that opens a composer — and what they have to produce is LAYOUT: a band that reaches
+// across the gutter seam and rounds its ends, a comment row that lands between its own
+// row and the next, a table whose columns do not move when one opens. happy-dom
+// computes none of it. The pure halves are units: the DOM restructuring in
+// ui/src/lib/diffview/tables.test.ts, the band's attribute vocabulary in
+// cardSelection.test.ts, and the sheet in coreStyles.test.ts.
+
+/** Every element carrying the library's selection mark, as `<line>=<marker>`, split by
+ * whether a card hides it from the library's own walk. */
+async function bandedLines(page: Page): Promise<{ carded: string[]; plain: string[] }> {
+  return page.evaluate(() => {
+    const root = document.querySelector(".diffview")?.shadowRoot;
+    const carded: string[] = [];
+    const plain: string[] = [];
+    for (const el of root?.querySelectorAll("[data-content] [data-selected-line]") ?? []) {
+      const line = el.getAttribute("data-line");
+      if (line === null) continue;
+      const entry = `${line}=${el.getAttribute("data-selected-line")}`;
+      (el.closest("[data-table-card]") === null ? plain : carded).push(entry);
+    }
+    return { carded, plain };
+  });
+}
+
+test("a table row's comment button appears on that row", async ({ daemon, page }) => {
+  await daemon.seed({ plan: TABLE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+
+  // The library resolves a pointer target by walking the composed path for [data-line],
+  // which a card sits above rather than between — so this is the affordance the card
+  // was never going to break. Asserted anyway: it is the first acceptance criterion,
+  // and "we reasoned it was fine" is not a check.
+  const plus = await revealGutterPlus(page, 5);
+  await expect(plus).toBeVisible();
+  const aligned = await page.evaluate(() => {
+    const root = document.querySelector(".diffview")?.shadowRoot;
+    const row = root?.querySelector('[data-table-card] > [data-line="5"]')?.getBoundingClientRect();
+    const button = (
+      root?.querySelector("[data-utility-button]") as HTMLElement | null
+    )?.getBoundingClientRect();
+    if (!row || !button) return null;
+    return Math.abs(row.top + row.height / 2 - (button.top + button.height / 2)) < row.height;
+  });
+  expect(aligned).toBe(true);
+});
+
+test("a drag inside a table bands every row it crosses", async ({ daemon, page }) => {
+  await daemon.seed({ plan: TABLE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await cellLefts(page, 3)).length).toBe(3);
+
+  // Wholly inside the card: the library's own walk reads [data-content]'s direct
+  // children, so before EXC-865 this drag marked NOTHING at all and the reviewer got
+  // no feedback while the readout counted the rows.
+  await selectGutterRange(page, 4, 6);
+  await expect
+    .poll(async () => (await bandedLines(page)).carded)
+    .toEqual(["4=first", "5=", "6=last"]);
+});
+
+test("a drag from prose into a table bands the table's rows too", async ({ daemon, page }) => {
+  await daemon.seed({ plan: TABLE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await cellLefts(page, 3)).length).toBe(3);
+
+  // The band used to stop dead where the card began; the two halves have to read as
+  // one range across that boundary.
+  await selectGutterRange(page, 1, 5);
+  await expect
+    .poll(async () => await bandedLines(page))
+    .toEqual({
+      plain: ["1=first", "2="],
+      carded: ["3=", "4=", "5=last"],
+    });
+});
+
+test("a banded table row reaches the gutter seam and rounds its outer end", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: TABLE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await cellLefts(page, 3)).length).toBe(3);
+  await selectGutterRange(page, 4, 6);
+  await expect.poll(async () => (await bandedLines(page)).carded.length).toBe(3);
+
+  const band = await page.evaluate(() => {
+    const root = document.querySelector(".diffview")?.shadowRoot;
+    const cell = root?.querySelector('[data-gutter] [data-column-number="4"]') as HTMLElement;
+    const row = root?.querySelector('[data-table-card] > [data-line="4"]') as HTMLElement;
+    const last = root?.querySelector('[data-table-card] > [data-line="6"]') as HTMLElement;
+    const before = getComputedStyle(cell, "::before");
+    return {
+      // The strip that carries the band across the seam, painted from the gutter side
+      // because the card clips anything a row paints outside it.
+      extensionWidth: Math.round(Number.parseFloat(before.width)),
+      extensionFill: before.backgroundColor,
+      cellFill: getComputedStyle(cell).backgroundColor,
+      gap: Math.round(
+        (root?.querySelector("[data-table-card]") as HTMLElement).getBoundingClientRect().left -
+          cell.getBoundingClientRect().right,
+      ),
+      firstRadius: Math.round(Number.parseFloat(getComputedStyle(row).borderTopRightRadius)),
+      lastRadius: Math.round(Number.parseFloat(getComputedStyle(last).borderBottomRightRadius)),
+    };
+  });
+  // The extension covers exactly the gap it exists for, and wears the row's own fill,
+  // so selection, hover and cursor all read continuous without naming a colour.
+  expect(band.extensionWidth).toBe(band.gap);
+  expect(band.extensionFill).toBe(band.cellFill);
+  // And the band's ends are rounded, as they are on any other row.
+  expect(band.firstRadius).toBeGreaterThan(0);
+  expect(band.lastRadius).toBeGreaterThan(0);
+});
+
+test("a comment on a mid-table line renders between that row and the next", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: TABLE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await cellLefts(page, 3)).length).toBe(3);
+
+  const before = await cellLefts(page, 5);
+  await createAnnotation(page, 5, "This row needs a negative case.");
+  await expect(page.locator("[data-annotation-card]")).toBeVisible();
+
+  const placed = await page.evaluate(() => {
+    const root = document.querySelector(".diffview")?.shadowRoot;
+    const annotation = root?.querySelector("[data-line-annotation]") as HTMLElement | null;
+    const row = root?.querySelector('[data-line="5"]') as HTMLElement | null;
+    const next = root?.querySelector('[data-line="6"]') as HTMLElement | null;
+    const card = root?.querySelector("[data-table-card]") as HTMLElement | null;
+    if (!annotation || !row || !next || !card) return null;
+    const a = annotation.getBoundingClientRect();
+    const content = annotation.querySelector("[data-annotation-content]") as HTMLElement;
+    return {
+      insideCard: annotation.closest("[data-table-card]") === card,
+      belowItsRow: Math.round(a.top) >= Math.round(row.getBoundingClientRect().bottom),
+      aboveTheNextRow: Math.round(a.bottom) <= Math.round(next.getBoundingClientRect().top),
+      // Drawn inside the card's scroll box, so the Comment button is never cut off.
+      withinCard:
+        Math.round(content.getBoundingClientRect().right) <=
+        Math.round(card.getBoundingClientRect().right) + 1,
+    };
+  });
+  expect(placed).toEqual({
+    insideCard: true,
+    belowItsRow: true,
+    aboveTheNextRow: true,
+    withinCard: true,
+  });
+
+  // And the table it sits in did not move: the comment's row spans every column, so
+  // without containment its own width would be distributed back into the tracks and a
+  // narrow table would start scrolling the moment someone commented on it.
+  expect(await cellLefts(page, 5)).toEqual(before);
+});
+
+test("a table's gutter still matches its content with a comment open", async ({ daemon, page }) => {
+  await daemon.seed({ plan: TABLE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await cellLefts(page, 3)).length).toBe(3);
+  await createAnnotation(page, 5, "Anchored mid-table.");
+  await expect(page.locator("[data-annotation-card]")).toBeVisible();
+
+  // The count whose divergence makes the library throw and kill drag-selection for the
+  // whole view. A comment adds a row to BOTH columns, and the card takes the whole run
+  // of its column's children, so the two move together by construction.
+  const counts = await page.evaluate(() => {
+    const root = document.querySelector(".diffview")?.shadowRoot;
+    return {
+      contentKids: root?.querySelector("[data-content]")?.children.length ?? -1,
+      gutterKids: root?.querySelector("[data-gutter]")?.children.length ?? -1,
+      rows: root?.querySelectorAll("[data-content] [data-line]").length ?? 0,
+      numbers: root?.querySelectorAll("[data-gutter] [data-column-number]").length ?? 0,
+      buffers:
+        root?.querySelectorAll('[data-gutter] [data-gutter-buffer="annotation"]').length ?? 0,
+    };
+  });
+  expect(counts.contentKids).toBe(counts.gutterKids);
+  expect(counts.rows).toBe(counts.numbers);
+  // Not vacuous: the comment's own pair really is in there.
+  expect(counts.buffers).toBe(1);
+
+  // A drag still works afterwards — the throw would take it out view-wide.
+  await selectGutterRange(page, 1, 2);
+  await expect.poll(async () => (await bandedLines(page)).plain).toEqual(["1=first", "2=last"]);
+});
+
+test("a comment on a wrapped table row anchors under that row", async ({ daemon, page }) => {
+  const prose =
+    "a deliberately long prose cell whose text runs well past the width at which a cell stops being data and starts being prose";
+  const wrapping = [
+    "# Wrapping",
+    "",
+    "| kind | detail |",
+    "| ---- | ------ |",
+    `| prose | ${prose} |`,
+    "| short | brief |",
+    "",
+  ].join("\n");
+  await daemon.seed({ plan: wrapping });
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await cellLefts(page, 3)).length).toBe(2);
+
+  await createAnnotation(page, 5, "Split this cell.");
+  await expect(page.locator("[data-annotation-card]")).toBeVisible();
+
+  // The row is taller than one line, so every affordance has to follow the row TRACK
+  // rather than a line height — the case the issue calls out as new.
+  const wrapped = await page.evaluate(() => {
+    const root = document.querySelector(".diffview")?.shadowRoot;
+    const row = root?.querySelector('[data-line="5"]') as HTMLElement | null;
+    const header = root?.querySelector('[data-line="3"]') as HTMLElement | null;
+    const number = root?.querySelector('[data-gutter] [data-column-number="5"]') as HTMLElement;
+    const annotation = root?.querySelector("[data-line-annotation]") as HTMLElement | null;
+    if (!row || !header || !annotation) return null;
+    const r = row.getBoundingClientRect();
+    return {
+      taller: Math.round(r.height) > Math.round(header.getBoundingClientRect().height),
+      numberFollows: Math.round(number.getBoundingClientRect().height) === Math.round(r.height),
+      belowItsRow: Math.round(annotation.getBoundingClientRect().top) >= Math.round(r.bottom),
+      insideCard: annotation.closest("[data-table-card]") !== null,
+    };
+  });
+  expect(wrapped).toEqual({
+    taller: true,
+    numberFollows: true,
+    belowItsRow: true,
+    insideCard: true,
+  });
+});
+
+test("a comment on a table line is stored against that line", async ({ daemon, page }) => {
+  const id = await daemon.seed({ plan: TABLE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await cellLefts(page, 3)).length).toBe(3);
+  await createAnnotation(page, 5, "Anchored to the emphasis row.");
+  await expect(page.locator("[data-annotation-card]")).toBeVisible();
+
+  // The anchor is what survives the session; the delimiter row keeping its own line
+  // number (EXC-864) is what keeps this arithmetic honest. Polled because autosave
+  // debounces the write rather than because anything here is slow.
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
+    .toBe(1);
+  expect((await daemon.getReview(id)).body?.annotations?.[0]).toMatchObject({
+    startLine: 5,
+    endLine: 5,
+    comment: "Anchored to the emphasis row.",
+  });
+});
+
 test("a malformed table stays raw source", async ({ daemon, page }) => {
   const ragged = ["# Ragged", "", "| a | b |", "| c | d |", "", "Trailing prose.", ""].join("\n");
   await daemon.seed({ plan: ragged });
