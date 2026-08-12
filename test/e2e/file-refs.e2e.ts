@@ -6,10 +6,11 @@
 // hovering alone never does.
 // A path written as a markdown link's target counts as a reference too
 // (EXC-954), which is what the link spec below covers.
-// The popover is a click-opened card that stays put: moving the pointer away
-// never dismisses it (EXC-840 dropped EXC-799's hover-intent tracker); it closes
-// only on Escape or a click outside it, and that dismissing click is swallowed so
-// it doesn't also do its normal thing (open a line comment). Reading past the
+// The preview is a click-opened lane that stays put: moving the pointer away
+// never dismisses it (EXC-840 dropped EXC-799's hover-intent tracker), and
+// neither does clicking outside it (EXC-1067) — it docks beside the plan rather
+// than covering it, so a click in the plan does its own job while the excerpt
+// stays open. It closes on Escape or on the header's close circle. Reading past the
 // opening window costs no click either: scrolling near an end of the code region
 // loads the next chunk toward it (EXC-969), which needs real layout and so lives
 // here — as does reaching the same ends from the keyboard (EXC-972), which needs
@@ -744,15 +745,16 @@ test("the preview omits the esc-to-close hint when shortcut hints are off", asyn
   }
 });
 
-test("clicking outside the preview dismisses it, swallowing that first click", async ({
+test("clicking outside the preview leaves it open and does its normal thing", async ({
   daemon,
   page,
 }) => {
-  // The preview is a click-opened popover: a click anywhere outside it closes it,
-  // and — since it took a click to open — that first outside click is SWALLOWED
-  // (EXC-840). So clicking a plan line while the preview is open only dismisses the
-  // preview; it does NOT also open that line's comment composer. A second click
-  // then opens the composer as usual, proving only the first click was consumed.
+  // The preview is a docked lane, not a popover: it takes layout space beside the
+  // plan rather than covering it, so there is no "outside" to click away from and a
+  // click there is not a dismissal (EXC-1067). Clicking a plan line while the
+  // preview is open opens that line's comment composer on that one click, and the
+  // preview stays put beside it — the reader is meant to work in the plan WITH the
+  // excerpt open. Dismissal is Escape or the close button, both specced below.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
     await daemon.seed({
@@ -770,24 +772,16 @@ test("clicking outside the preview dismisses it, swallowing that first click", a
     const preview = page.locator("[data-file-preview]");
     await expect(preview).toBeVisible();
 
-    // First click on the plain line: the preview dismisses…
+    // One click on the plain line opens the composer — the click is not spent
+    // closing anything.
     const proseLine = page.locator(".diffview").getByText("Just some plain prose here.", {
       exact: false,
     });
     await proseLine.click();
-    await expect(preview).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
 
-    // …and that click was swallowed, so no composer opened. No positive event to
-    // await, so give the pipeline a beat then assert it stayed shut.
-    const composer = page.getByRole("dialog", { name: "Add a comment" });
-    const t0 = await page.evaluate(() => performance.now());
-    await page.waitForFunction((t) => performance.now() > t + 300, t0);
-    await expect(composer).toHaveCount(0);
-
-    // With the preview gone, a second click on the same line opens the composer
-    // normally — the swallow was one-shot, tied to the open preview.
-    await proseLine.click();
-    await expect(composer).toBeVisible();
+    // …and the excerpt is still there to write the comment against.
+    await expect(preview).toBeVisible();
   } finally {
     await proj.cleanup();
   }

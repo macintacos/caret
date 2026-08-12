@@ -21,8 +21,11 @@
   // windowing; the header's line range is what still names the whole of it, and
   // is a live region besides, so a landed chunk is announced as one sentence
   // rather than as rows that may not even be mounted. It carries the "esc to
-  // close" hint too. The panel stays put until dismissed (Escape, or a click
-  // away; DiffPlanView owns that).
+  // close" hint too, and the close circle at its left. The panel stays put until
+  // dismissed — Escape, which DiffPlanView owns, or that button, which reports
+  // through `onClose` to the same dismissal there. A click outside the lane
+  // dismisses nothing (EXC-1067): the lane sits beside the plan rather than over
+  // it, so the reader is meant to keep working with the excerpt open.
   import { tick, untrack } from "svelte";
 
   import { EXCERPT_RADIUS, MAX_CITED_SPAN_LINES } from "@core/config/constants";
