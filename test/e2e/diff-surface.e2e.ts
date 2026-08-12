@@ -2913,3 +2913,117 @@ test("a malformed table stays raw source", async ({ daemon, page }) => {
   );
   expect(cards).toBe(0);
 });
+
+// EXC-863: blockquote level bars. The pure halves are already pinned as units — the depth
+// scan in ui/src/lib/diffview/inlineSpans.test.ts, the row tag in inlineDecorate.test.ts,
+// the selectors in coreStyles.test.ts. What only a browser can answer is whether the bar
+// PAINTS: it is a pseudo-element whose fill and radius are custom properties, so a
+// --rule-strong that failed to derive leaves a box with no background rather than a
+// missing rule, and no unit could tell the difference. The grid check is real font
+// metrics, and the gutter count is the reflow guard a leading decoration most threatens.
+//
+// Both schemes, unlike the inline-code chip above: --rule-strong is derived per scheme and
+// this is the first surface to spend it on a pseudo-element, so a bar that resolves in one
+// and vanishes in the other is exactly the failure the issue's ladder is about.
+const QUOTE_PLAN = `# Quote plan
+
+Plain prose sits on this line here.
+
+> One level with **bold** and \`code\` in it.
+
+> > Two levels open on this row.
+
+> > > Three levels open on this row.
+
+x One level with xxboldxx and xcodex in it.
+`;
+
+/** Every quote marker on row `n`: its level, whether the glyph was overdrawn, and the
+ * bar's own painted box read off the ::before. */
+function readQuoteRow(page: Page, n: number) {
+  return page.evaluate((line) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+    const row = sh?.querySelector(`[data-content] [data-line="${line}"]`) ?? null;
+    const markers = [...(row?.querySelectorAll("[data-md-quote]") ?? [])] as HTMLElement[];
+    return {
+      depth: row?.getAttribute("data-quote-depth") ?? null,
+      text: [...(row?.children ?? [])].map((t) => t.textContent ?? "").join(""),
+      bars: markers.map((m) => {
+        const bar = getComputedStyle(m, "::before");
+        return {
+          level: m.getAttribute("data-md-quote"),
+          glyph: getComputedStyle(m).color,
+          background: bar.backgroundColor,
+          radius: Number.parseFloat(bar.borderStartStartRadius),
+          width: Number.parseFloat(bar.width),
+          left: Math.round(m.getBoundingClientRect().left),
+        };
+      }),
+    };
+  }, n);
+}
+
+for (const colorScheme of ["light", "dark"] as const) {
+  test(`blockquote level bars paint one bar per level in ${colorScheme} (EXC-863)`, async ({
+    daemon,
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme });
+    await daemon.seed({ plan: QUOTE_PLAN });
+    await page.goto("/");
+    await planSurface(page);
+    await expect.poll(async () => (await readQuoteRow(page, 5)).depth).toBe("1");
+
+    const rows = [
+      await readQuoteRow(page, 5),
+      await readQuoteRow(page, 7),
+      await readQuoteRow(page, 9),
+    ];
+    expect(rows.map((r) => r.depth)).toEqual(["1", "2", "3"]);
+    // Depth reads off the bar COUNT, which is the ticket's whole claim.
+    expect(rows.map((r) => r.bars.length)).toEqual([1, 2, 3]);
+    expect(rows[2]?.bars.map((b) => b.level)).toEqual(["1", "2", "3"]);
+
+    for (const bar of rows.flatMap((r) => r.bars)) {
+      // The token resolved through the live cascade. An underived --rule-strong leaves
+      // the declaration invalid and the box transparent, which is a bar that is not there.
+      expect(bar.background).not.toBe("rgba(0, 0, 0, 0)");
+      expect(bar.width).toBeGreaterThan(0);
+      // Round-rect, not a hairline: --radius clamps to a pill at this width.
+      expect(bar.radius).toBeGreaterThan(0);
+      // Overdrawn, not doubled — the glyph is gone but the character is not.
+      expect(bar.glyph).toBe("rgba(0, 0, 0, 0)");
+    }
+
+    // Nesting is the source's own indentation: each level sits one marker column right of
+    // the one outside it, so the bars stack rather than piling up in one column.
+    const deepest = rows[2]?.bars.map((b) => b.left) ?? [];
+    expect(deepest[1]).toBeGreaterThan(deepest[0] as number);
+    expect(deepest[2]).toBeGreaterThan(deepest[1] as number);
+
+    // The characters are still there for copy, selection and the comment anchors.
+    expect(rows[0]?.text).toBe("> One level with **bold** and `code` in it.");
+
+    // The monospace grid. Line 11 is line 5's twin — the same 43 characters, none of them
+    // markup, the leading marker mirrored by a plain glyph — so any difference in painted
+    // width is the decoration's. A bar that took room in the line box, or a marker whose
+    // advance changed, would drag every column after it off the source grid, and the
+    // search highlights, vim motions and drag-ranges all resolve against those columns.
+    const quoted = await rowTextWidth(page, 5);
+    const plain = await rowTextWidth(page, 11);
+    expect(quoted).not.toBeNull();
+    expect(Math.abs((quoted as number) - (plain as number))).toBeLessThan(1);
+
+    // The reflow guard: a leading decoration is the shape that wraps a row in two, and a
+    // wrapped row would leave the gutter one number short of the lines it labels.
+    const counts = await page.evaluate(() => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+      return {
+        rows: sh?.querySelectorAll("[data-content] [data-line]").length ?? -1,
+        numbers: sh?.querySelectorAll("[data-gutter] [data-column-number]").length ?? -1,
+      };
+    });
+    expect(counts.rows).toBeGreaterThan(0);
+    expect(counts.numbers).toBe(counts.rows);
+  });
+}
